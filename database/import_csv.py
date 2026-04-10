@@ -216,7 +216,7 @@ def import_csv(full_path, table_name):
     errors = 0
 
     with open(full_path, "r", encoding="utf-8-sig") as fin, \
-         open(temp_path, "w", encoding="utf-8-sig", newline="") as fout:
+         open(temp_path, "w", encoding="utf-8", newline="") as fout:
         reader = csv.reader(fin, delimiter=";", quotechar='"')
         writer = csv.writer(fout, delimiter="\t", quotechar='"', quoting=csv.QUOTE_MINIMAL)
 
