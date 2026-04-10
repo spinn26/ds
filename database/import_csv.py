@@ -14,7 +14,7 @@ DB_USER = "newds"
 DB_HOST = "127.0.0.1"
 DB_PASSWORD = "Rfghbtkjd%22"
 
-BASE_DIR = "/var/www/newds/Db"
+BASE_DIR = "/var/www/newds/Db/Db"
 
 # Map CSV filename (without .csv) to actual table name
 # Only needed when they differ
