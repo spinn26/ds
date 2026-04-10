@@ -73,11 +73,6 @@ const TopBar: React.FC<TopBarProps> = ({ onMenuToggle }) => {
             <MenuItem onClick={() => { setAnchorEl(null); navigate('/profile'); }}>
               {t('nav.profile')}
             </MenuItem>
-            {isAdmin && (
-              <MenuItem onClick={() => { setAnchorEl(null); window.location.href = '/admin'; }}>
-                {t('topbar.filamentAdmin')}
-              </MenuItem>
-            )}
             <MenuItem onClick={() => { setAnchorEl(null); logout(); }}>
               {t('auth.logout')}
             </MenuItem>

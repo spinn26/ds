@@ -2,16 +2,13 @@
 
 namespace App\Models;
 
-use Filament\Models\Contracts\FilamentUser;
-use Filament\Models\Contracts\HasName;
-use Filament\Panel;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\Hash;
 use Laravel\Sanctum\HasApiTokens;
 
-class User extends Authenticatable implements FilamentUser, HasName
+class User extends Authenticatable
 {
     use HasApiTokens, HasFactory, Notifiable;
 
@@ -49,15 +46,14 @@ class User extends Authenticatable implements FilamentUser, HasName
         ];
     }
 
-    public function getFilamentName(): string
+    public function getNameAttribute(): string
     {
         return trim("{$this->firstName} {$this->lastName}");
     }
 
-    public function canAccessPanel(Panel $panel): bool
+    public function isAdmin(): bool
     {
         $roles = explode(',', $this->role ?? '');
-
         return in_array('admin', $roles) || in_array('backoffice', $roles);
     }
 

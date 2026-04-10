@@ -3,55 +3,64 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
-use Illuminate\Http\RedirectResponse;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Session;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class ImpersonateController extends Controller
 {
-    public function impersonate(User $user): RedirectResponse
+    /**
+     * Impersonate user — creates Sanctum token and returns it.
+     */
+    public function impersonate(Request $request, User $user): JsonResponse
     {
-        $currentUser = Auth::user();
+        $currentUser = $request->user();
 
-        if (! $currentUser || ! $currentUser->canAccessPanel(app(\Filament\Panel::class))) {
-            abort(403);
+        if (! $currentUser || ! $currentUser->isAdmin()) {
+            return response()->json(['message' => 'Forbidden'], 403);
         }
 
-        Session::put('impersonator_id', $currentUser->id);
-        Auth::loginUsingId($user->id);
+        $token = $user->createToken('impersonate')->plainTextToken;
 
-        return redirect('/admin');
+        return response()->json([
+            'token' => $token,
+            'user' => [
+                'id' => $user->id,
+                'email' => $user->email,
+                'firstName' => $user->firstName,
+                'lastName' => $user->lastName,
+                'role' => $user->role,
+            ],
+            'impersonator_id' => $currentUser->id,
+        ]);
     }
 
     /**
-     * Impersonate into SPA — creates Sanctum token and redirects with it.
+     * Leave impersonation — return to original admin.
      */
-    public function impersonateSpa(User $user): RedirectResponse
+    public function leave(Request $request): JsonResponse
     {
-        $currentUser = Auth::user();
-
-        if (! $currentUser || ! $currentUser->canAccessPanel(app(\Filament\Panel::class))) {
-            abort(403);
-        }
-
-        Session::put('impersonator_id', $currentUser->id);
-
-        // Create Sanctum token for SPA
-        $token = $user->createToken('impersonate')->plainTextToken;
-
-        return redirect('/?impersonate_token=' . $token);
-    }
-
-    public function leave(): RedirectResponse
-    {
-        $impersonatorId = Session::pull('impersonator_id');
+        $impersonatorId = $request->input('impersonator_id');
 
         if (! $impersonatorId) {
-            return redirect('/admin');
+            return response()->json(['message' => 'No impersonator'], 400);
         }
 
-        Auth::loginUsingId($impersonatorId);
+        $admin = User::find($impersonatorId);
+        if (! $admin || ! $admin->isAdmin()) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
 
-        return redirect('/admin');
+        $token = $admin->createToken('return')->plainTextToken;
+
+        return response()->json([
+            'token' => $token,
+            'user' => [
+                'id' => $admin->id,
+                'email' => $admin->email,
+                'firstName' => $admin->firstName,
+                'lastName' => $admin->lastName,
+                'role' => $admin->role,
+            ],
+        ]);
     }
 }

@@ -22,7 +22,7 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
 
-            composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
+            COMPOSER_ALLOW_SUPERUSER=1 composer update --no-dev --no-interaction --prefer-dist --optimize-autoloader
 
             # Build React SPA
             cd /var/www/newds/frontend
