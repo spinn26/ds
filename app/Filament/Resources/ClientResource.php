@@ -17,6 +17,7 @@ class ClientResource extends Resource
     protected static ?string $navigationLabel = 'Клиенты';
     protected static ?string $modelLabel = 'Клиент';
     protected static ?string $pluralModelLabel = 'Клиенты';
+    protected static ?string $navigationGroup = 'Партнёры';
     protected static ?int $navigationSort = 2;
 
     public static function table(Table $table): Table
@@ -37,13 +38,22 @@ class ClientResource extends Resource
                 Tables\Columns\TextColumn::make('source')
                     ->label('Источник'),
                 Tables\Columns\TextColumn::make('dateCreated')
-                    ->label('Дата создания')
+                    ->label('Создан')
                     ->dateTime('d.m.Y')
                     ->sortable(),
             ])
             ->filters([
                 Tables\Filters\TernaryFilter::make('active')
                     ->label('Активен'),
+            ])
+            ->actions([
+                Tables\Actions\EditAction::make(),
+                Tables\Actions\DeleteAction::make(),
+            ])
+            ->bulkActions([
+                Tables\Actions\BulkActionGroup::make([
+                    Tables\Actions\DeleteBulkAction::make(),
+                ]),
             ])
             ->defaultSort('id', 'desc');
     }
@@ -52,13 +62,23 @@ class ClientResource extends Resource
     {
         return $form
             ->schema([
-                Forms\Components\TextInput::make('personName')
-                    ->label('ФИО')
-                    ->disabled(),
-                Forms\Components\Toggle::make('active')
-                    ->label('Активен'),
-                Forms\Components\Textarea::make('comment')
-                    ->label('Комментарий'),
+                Forms\Components\Section::make('Основное')
+                    ->columns(2)
+                    ->schema([
+                        Forms\Components\TextInput::make('personName')
+                            ->label('ФИО'),
+                        Forms\Components\TextInput::make('source')
+                            ->label('Источник'),
+                        Forms\Components\Toggle::make('active')
+                            ->label('Активен'),
+                        Forms\Components\Toggle::make('leadDs')
+                            ->label('Лид DS'),
+                    ]),
+                Forms\Components\Section::make('Прочее')
+                    ->schema([
+                        Forms\Components\Textarea::make('comment')
+                            ->label('Комментарий'),
+                    ]),
             ]);
     }
 
@@ -66,6 +86,7 @@ class ClientResource extends Resource
     {
         return [
             'index' => Pages\ListClients::route('/'),
+            'create' => Pages\CreateClient::route('/create'),
             'edit' => Pages\EditClient::route('/{record}/edit'),
         ];
     }

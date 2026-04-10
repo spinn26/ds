@@ -17,6 +17,7 @@ class ContractResource extends Resource
     protected static ?string $navigationLabel = 'Контракты';
     protected static ?string $modelLabel = 'Контракт';
     protected static ?string $pluralModelLabel = 'Контракты';
+    protected static ?string $navigationGroup = 'Бизнес';
     protected static ?int $navigationSort = 3;
 
     public static function table(Table $table): Table
@@ -35,19 +36,32 @@ class ContractResource extends Resource
                     ->searchable(),
                 Tables\Columns\TextColumn::make('productName')
                     ->label('Продукт'),
-                Tables\Columns\TextColumn::make('programName')
-                    ->label('Программа'),
                 Tables\Columns\TextColumn::make('statusRelation.name')
-                    ->label('Статус'),
+                    ->label('Статус')
+                    ->badge(),
                 Tables\Columns\TextColumn::make('ammount')
                     ->label('Сумма')
                     ->numeric(2),
                 Tables\Columns\TextColumn::make('currencyRelation.symbol')
-                    ->label('Валюта'),
+                    ->label('Вал.'),
                 Tables\Columns\TextColumn::make('openDate')
-                    ->label('Дата открытия')
+                    ->label('Открыт')
                     ->dateTime('d.m.Y')
                     ->sortable(),
+            ])
+            ->filters([
+                Tables\Filters\SelectFilter::make('status')
+                    ->label('Статус')
+                    ->relationship('statusRelation', 'name'),
+            ])
+            ->actions([
+                Tables\Actions\EditAction::make(),
+                Tables\Actions\DeleteAction::make(),
+            ])
+            ->bulkActions([
+                Tables\Actions\BulkActionGroup::make([
+                    Tables\Actions\DeleteBulkAction::make(),
+                ]),
             ])
             ->defaultSort('id', 'desc');
     }
@@ -56,16 +70,32 @@ class ContractResource extends Resource
     {
         return $form
             ->schema([
-                Forms\Components\TextInput::make('number')
-                    ->label('Номер'),
-                Forms\Components\TextInput::make('clientName')
-                    ->label('Клиент')
-                    ->disabled(),
-                Forms\Components\TextInput::make('consultantName')
-                    ->label('Консультант')
-                    ->disabled(),
-                Forms\Components\Textarea::make('comment')
-                    ->label('Комментарий'),
+                Forms\Components\Section::make('Основное')
+                    ->columns(2)
+                    ->schema([
+                        Forms\Components\TextInput::make('number')
+                            ->label('Номер контракта'),
+                        Forms\Components\TextInput::make('clientName')
+                            ->label('Клиент'),
+                        Forms\Components\TextInput::make('consultantName')
+                            ->label('Консультант'),
+                        Forms\Components\TextInput::make('productName')
+                            ->label('Продукт'),
+                        Forms\Components\TextInput::make('programName')
+                            ->label('Программа'),
+                        Forms\Components\TextInput::make('ammount')
+                            ->label('Сумма')
+                            ->numeric(),
+                        Forms\Components\DatePicker::make('openDate')
+                            ->label('Дата открытия'),
+                        Forms\Components\DatePicker::make('closeDate')
+                            ->label('Дата закрытия'),
+                    ]),
+                Forms\Components\Section::make('Прочее')
+                    ->schema([
+                        Forms\Components\Textarea::make('comment')
+                            ->label('Комментарий'),
+                    ]),
             ]);
     }
 
@@ -73,6 +103,7 @@ class ContractResource extends Resource
     {
         return [
             'index' => Pages\ListContracts::route('/'),
+            'create' => Pages\CreateContract::route('/create'),
             'edit' => Pages\EditContract::route('/{record}/edit'),
         ];
     }

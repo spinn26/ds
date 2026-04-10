@@ -17,6 +17,7 @@ class ConsultantResource extends Resource
     protected static ?string $navigationLabel = 'Консультанты';
     protected static ?string $modelLabel = 'Консультант';
     protected static ?string $pluralModelLabel = 'Консультанты';
+    protected static ?string $navigationGroup = 'Партнёры';
     protected static ?int $navigationSort = 1;
 
     public static function table(Table $table): Table
@@ -36,19 +37,34 @@ class ConsultantResource extends Resource
                 Tables\Columns\TextColumn::make('countryRelation.countryNameRu')
                     ->label('Страна'),
                 Tables\Columns\TextColumn::make('personalVolume')
-                    ->label('Личный объём')
-                    ->numeric(2),
+                    ->label('ЛО')
+                    ->numeric(0),
                 Tables\Columns\TextColumn::make('groupVolume')
-                    ->label('Групповой объём')
-                    ->numeric(2),
+                    ->label('ГО')
+                    ->numeric(0),
+                Tables\Columns\TextColumn::make('groupVolumeCumulative')
+                    ->label('ГОН')
+                    ->numeric(0),
+                Tables\Columns\TextColumn::make('participantCode')
+                    ->label('Код')
+                    ->searchable(),
                 Tables\Columns\TextColumn::make('dateCreated')
-                    ->label('Дата создания')
+                    ->label('Создан')
                     ->dateTime('d.m.Y')
                     ->sortable(),
             ])
             ->filters([
                 Tables\Filters\TernaryFilter::make('active')
                     ->label('Активен'),
+            ])
+            ->actions([
+                Tables\Actions\EditAction::make(),
+                Tables\Actions\DeleteAction::make(),
+            ])
+            ->bulkActions([
+                Tables\Actions\BulkActionGroup::make([
+                    Tables\Actions\DeleteBulkAction::make(),
+                ]),
             ])
             ->defaultSort('id', 'desc');
     }
@@ -57,13 +73,36 @@ class ConsultantResource extends Resource
     {
         return $form
             ->schema([
-                Forms\Components\TextInput::make('personName')
-                    ->label('ФИО')
-                    ->disabled(),
-                Forms\Components\Toggle::make('active')
-                    ->label('Активен'),
-                Forms\Components\Textarea::make('comment')
-                    ->label('Комментарий'),
+                Forms\Components\Section::make('Основное')
+                    ->columns(2)
+                    ->schema([
+                        Forms\Components\TextInput::make('personName')
+                            ->label('ФИО'),
+                        Forms\Components\TextInput::make('participantCode')
+                            ->label('Код участника'),
+                        Forms\Components\Toggle::make('active')
+                            ->label('Активен'),
+                        Forms\Components\Toggle::make('isStudent')
+                            ->label('Студент'),
+                    ]),
+                Forms\Components\Section::make('Объёмы')
+                    ->columns(3)
+                    ->schema([
+                        Forms\Components\TextInput::make('personalVolume')
+                            ->label('Личный объём')
+                            ->numeric(),
+                        Forms\Components\TextInput::make('groupVolume')
+                            ->label('Групповой объём')
+                            ->numeric(),
+                        Forms\Components\TextInput::make('groupVolumeCumulative')
+                            ->label('ГО накопительный')
+                            ->numeric(),
+                    ]),
+                Forms\Components\Section::make('Прочее')
+                    ->schema([
+                        Forms\Components\Textarea::make('comment')
+                            ->label('Комментарий'),
+                    ]),
             ]);
     }
 
@@ -76,6 +115,7 @@ class ConsultantResource extends Resource
     {
         return [
             'index' => Pages\ListConsultants::route('/'),
+            'create' => Pages\CreateConsultant::route('/create'),
             'edit' => Pages\EditConsultant::route('/{record}/edit'),
         ];
     }
