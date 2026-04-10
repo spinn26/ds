@@ -16,6 +16,7 @@ class User extends Authenticatable implements FilamentUser, HasName
 
     protected $table = 'WebUser';
     public $timestamps = false;
+    protected $rememberTokenName = null; // WebUser has no remember_token column
 
     protected $fillable = [
         'firstName',
