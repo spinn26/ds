@@ -4,7 +4,9 @@ import {
   useMediaQuery, useTheme,
 } from '@mui/material';
 import { Notifications, Menu as MenuIcon } from '@mui/icons-material';
+import { useNavigate } from 'react-router-dom';
 import { DRAWER_WIDTH } from './Sidebar';
+import { useAuth } from '../../hooks/useAuth';
 
 interface TopBarProps {
   onMenuToggle: () => void;
@@ -14,6 +16,14 @@ const TopBar: React.FC<TopBarProps> = ({ onMenuToggle }) => {
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const initials = user
+    ? `${user.firstName?.[0] || ''}${user.lastName?.[0] || ''}`.toUpperCase()
+    : '?';
+
+  const isAdmin = user?.role?.includes('admin') || user?.role?.includes('backoffice');
 
   return (
     <AppBar
@@ -41,20 +51,33 @@ const TopBar: React.FC<TopBarProps> = ({ onMenuToggle }) => {
           )}
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          {isAdmin && (
+            <Chip label="Администратор" color="secondary" size="small" />
+          )}
           <Chip label="Активный" color="success" size="small" variant="outlined" />
+          {!isMobile && user && (
+            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+              {user.firstName} {user.lastName}
+            </Typography>
+          )}
           <IconButton size="small">
             <Notifications sx={{ color: 'text.secondary' }} />
           </IconButton>
           <IconButton size="small" onClick={(e) => setAnchorEl(e.currentTarget)}>
-            <Avatar sx={{ width: 32, height: 32, bgcolor: 'primary.main', fontSize: 14 }}>
-              ДК
+            <Avatar sx={{ width: 32, height: 32, bgcolor: isAdmin ? 'secondary.main' : 'primary.main', fontSize: 14 }}>
+              {initials}
             </Avatar>
           </IconButton>
           <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={() => setAnchorEl(null)}>
-            <MenuItem onClick={() => { setAnchorEl(null); window.location.href = '/partner/profile'; }}>
+            <MenuItem onClick={() => { setAnchorEl(null); navigate('/profile'); }}>
               Профиль
             </MenuItem>
-            <MenuItem onClick={() => { localStorage.removeItem('auth_token'); window.location.href = '/login'; }}>
+            {isAdmin && (
+              <MenuItem onClick={() => { setAnchorEl(null); window.location.href = '/admin'; }}>
+                Filament Админка
+              </MenuItem>
+            )}
+            <MenuItem onClick={() => { setAnchorEl(null); logout(); }}>
               Выйти
             </MenuItem>
           </Menu>
