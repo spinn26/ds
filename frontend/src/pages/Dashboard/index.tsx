@@ -68,12 +68,21 @@ const Dashboard: React.FC = () => {
   const [levelsOpen, setLevelsOpen] = useState(false);
   const [levels, setLevels] = useState<StatusLevel[]>([]);
 
+  const emptyData: DashboardData = {
+    consultant: { id: 0, personName: '—', participantCode: null, active: false, statusName: 'Резидент', ambassadorProducts: null },
+    qualification: { nominalLevel: null, nextLevel: null },
+    volumes: { personalVolume: 0, groupVolume: 0, groupVolumeCumulative: 0, prevPersonalVolume: 0, prevGroupVolume: 0, prevGroupVolumeCumulative: 0 },
+    team: { myClients: 0, teamClients: 0, firstLineResidents: 0, totalResidents: 0, firstLineConsultants: 0, totalConsultants: 0, capitalUsd: 0 },
+    period: period,
+  };
+
   useEffect(() => {
     setLoading(true);
     dashboardApi.get(period)
       .then((res) => setData(res.data))
-      .catch(() => {})
+      .catch(() => setData(emptyData))
       .finally(() => setLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [period]);
 
   const openLevels = async () => {
