@@ -242,7 +242,15 @@ class AuthController extends Controller
 
     public function logout(Request $request): JsonResponse
     {
+        // Delete Sanctum token
         $request->user()->currentAccessToken()->delete();
+
+        // Also destroy web session (Filament admin)
+        if ($request->hasSession()) {
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+        }
+        auth('web')->logout();
 
         return response()->json(['message' => 'OK']);
     }
