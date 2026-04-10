@@ -14,6 +14,7 @@ import {
   AdminPanelSettings, PersonSearch, EventNote, School,
 } from '@mui/icons-material';
 import { useAuth } from '../../hooks/useAuth';
+import { t } from '../../i18n';
 
 const DRAWER_WIDTH = 260;
 
@@ -29,57 +30,54 @@ type MenuItem = {
   requireRole?: string;
 };
 
-const menuItems: MenuItem[] = [
-  // === Education (for registered users) ===
-  { label: 'Обучение', icon: <School />, path: '/education' },
+const getMenuItems = (): MenuItem[] => [
+  { label: t('nav.education'), icon: <School />, path: '/education' },
 
-  // === Partner sections (require consultant role) ===
-  { label: 'Дашборд', icon: <Dashboard />, path: '/', requireRole: 'consultant' },
-  { label: 'Рефералки', icon: <Share />, path: '/referrals', requireRole: 'consultant' },
-  { group: 'Финансы', requireRole: 'consultant' },
-  { label: 'Отчёт начислений', icon: <AccountBalance />, path: '/finance/report', requireRole: 'consultant' },
-  { label: 'Калькулятор объёмов', icon: <Calculate />, path: '/finance/calculator', requireRole: 'consultant' },
-  { group: 'Клиенты', requireRole: 'consultant' },
-  { label: 'Список клиентов', icon: <People />, path: '/clients', requireRole: 'consultant' },
-  { group: 'Контракты', requireRole: 'consultant' },
-  { label: 'Контракты клиентов', icon: <Description />, path: '/contracts', requireRole: 'consultant' },
-  { label: 'Контракты команды', icon: <FolderShared />, path: '/contracts/team', requireRole: 'consultant' },
-  { group: 'Структура', requireRole: 'consultant' },
-  { label: 'Структура', icon: <AccountTree />, path: '/structure', requireRole: 'consultant' },
-  { label: 'Продукты', icon: <Inventory />, path: '/products', requireRole: 'consultant' },
-  { label: 'Инсмарт', icon: <Security />, path: '/inssmart', requireRole: 'consultant' },
-  { group: 'Конкурсы', requireRole: 'consultant' },
-  { label: 'Список конкурсов', icon: <EmojiEvents />, path: '/contests', requireRole: 'consultant' },
-  { group: 'Помощь' },
-  { label: 'Инструкции', icon: <Help />, path: '/help' },
-  { label: 'Коммуникация', icon: <Chat />, path: '/communication' },
+  { label: t('nav.dashboard'), icon: <Dashboard />, path: '/', requireRole: 'consultant' },
+  { label: t('nav.referrals'), icon: <Share />, path: '/referrals', requireRole: 'consultant' },
+  { group: t('nav.finance'), requireRole: 'consultant' },
+  { label: t('nav.report'), icon: <AccountBalance />, path: '/finance/report', requireRole: 'consultant' },
+  { label: t('nav.calculator'), icon: <Calculate />, path: '/finance/calculator', requireRole: 'consultant' },
+  { group: t('nav.clients'), requireRole: 'consultant' },
+  { label: t('nav.clientList'), icon: <People />, path: '/clients', requireRole: 'consultant' },
+  { group: t('nav.contracts'), requireRole: 'consultant' },
+  { label: t('nav.myContracts'), icon: <Description />, path: '/contracts', requireRole: 'consultant' },
+  { label: t('nav.teamContracts'), icon: <FolderShared />, path: '/contracts/team', requireRole: 'consultant' },
+  { group: t('nav.structure'), requireRole: 'consultant' },
+  { label: t('nav.teamStructure'), icon: <AccountTree />, path: '/structure', requireRole: 'consultant' },
+  { label: t('nav.products'), icon: <Inventory />, path: '/products', requireRole: 'consultant' },
+  { label: t('nav.inssmart'), icon: <Security />, path: '/inssmart', requireRole: 'consultant' },
+  { group: t('nav.contests'), requireRole: 'consultant' },
+  { label: t('nav.contestList'), icon: <EmojiEvents />, path: '/contests', requireRole: 'consultant' },
+  { group: t('nav.help') },
+  { label: t('nav.instructions'), icon: <Help />, path: '/help' },
+  { label: t('nav.communication'), icon: <Chat />, path: '/communication' },
 
-  // === Admin sections ===
-  { group: 'Данные партнёров', adminOnly: true },
-  { label: 'Менеджер контрактов', icon: <Description />, path: '/admin/contracts', adminOnly: true },
-  { label: 'Загрузка контрактов', icon: <Upload />, path: '/admin/contracts/upload', adminOnly: true },
-  { label: 'Партнёры', icon: <PersonSearch />, path: '/admin/partners', adminOnly: true },
-  { label: 'Статусы партнёров', icon: <EventNote />, path: '/admin/partners/statuses', adminOnly: true },
-  { label: 'Клиенты', icon: <People />, path: '/admin/clients', adminOnly: true },
-  { label: 'Акцепт документов', icon: <CheckCircle />, path: '/admin/acceptance', adminOnly: true },
-  { label: 'Реквизиты партнёров', icon: <CreditCard />, path: '/admin/requisites', adminOnly: true },
-  { label: 'История перестановок', icon: <History />, path: '/admin/transfers', adminOnly: true },
+  { group: t('nav.adminData'), adminOnly: true },
+  { label: t('nav.contractManager'), icon: <Description />, path: '/admin/contracts', adminOnly: true },
+  { label: t('nav.contractUpload'), icon: <Upload />, path: '/admin/contracts/upload', adminOnly: true },
+  { label: t('nav.partners'), icon: <PersonSearch />, path: '/admin/partners', adminOnly: true },
+  { label: t('nav.partnerStatuses'), icon: <EventNote />, path: '/admin/partners/statuses', adminOnly: true },
+  { label: t('nav.clients'), icon: <People />, path: '/admin/clients', adminOnly: true },
+  { label: t('nav.acceptance'), icon: <CheckCircle />, path: '/admin/acceptance', adminOnly: true },
+  { label: t('nav.requisites'), icon: <CreditCard />, path: '/admin/requisites', adminOnly: true },
+  { label: t('nav.transfers'), icon: <History />, path: '/admin/transfers', adminOnly: true },
 
-  { group: 'Транзакции и объёмы', adminOnly: true },
-  { label: 'Импорт транзакций', icon: <Upload />, path: '/admin/transactions/import', adminOnly: true },
-  { label: 'Транзакции', icon: <SwapHoriz />, path: '/admin/transactions', adminOnly: true },
-  { label: 'Комиссии', icon: <Receipt />, path: '/admin/commissions', adminOnly: true },
-  { label: 'Пул', icon: <Paid />, path: '/admin/pool', adminOnly: true },
-  { label: 'Квалификации', icon: <BarChart />, path: '/admin/qualifications', adminOnly: true },
+  { group: t('nav.transactionsVolumes'), adminOnly: true },
+  { label: t('nav.transactionImport'), icon: <Upload />, path: '/admin/transactions/import', adminOnly: true },
+  { label: t('nav.transactions'), icon: <SwapHoriz />, path: '/admin/transactions', adminOnly: true },
+  { label: t('nav.commissions'), icon: <Receipt />, path: '/admin/commissions', adminOnly: true },
+  { label: t('nav.pool'), icon: <Paid />, path: '/admin/pool', adminOnly: true },
+  { label: t('nav.qualifications'), icon: <BarChart />, path: '/admin/qualifications', adminOnly: true },
 
-  { group: 'Начисления и выплаты', adminOnly: true },
-  { label: 'Прочие начисления', icon: <AccountBalance />, path: '/admin/charges', adminOnly: true },
-  { label: 'Реестр выплат', icon: <Paid />, path: '/admin/payments', adminOnly: true },
+  { group: t('nav.chargesPayments'), adminOnly: true },
+  { label: t('nav.charges'), icon: <AccountBalance />, path: '/admin/charges', adminOnly: true },
+  { label: t('nav.payments'), icon: <Paid />, path: '/admin/payments', adminOnly: true },
 
-  { group: 'Отчёты и настройки', adminOnly: true },
-  { label: 'Отчёты', icon: <Assessment />, path: '/admin/reports', adminOnly: true },
-  { label: 'Доступность отчётов', icon: <Settings />, path: '/admin/reports/availability', adminOnly: true },
-  { label: 'Валюты и НДС', icon: <CurrencyExchange />, path: '/admin/currencies', adminOnly: true },
+  { group: t('nav.reportsSettings'), adminOnly: true },
+  { label: t('nav.reports'), icon: <Assessment />, path: '/admin/reports', adminOnly: true },
+  { label: t('nav.reportAvailability'), icon: <Settings />, path: '/admin/reports/availability', adminOnly: true },
+  { label: t('nav.currencies'), icon: <CurrencyExchange />, path: '/admin/currencies', adminOnly: true },
 ];
 
 interface SidebarProps {
@@ -96,6 +94,7 @@ const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onClose }) => {
 
   const isAdmin = user?.role?.includes('admin') || user?.role?.includes('backoffice');
   const isConsultant = user?.role?.includes('consultant') || isAdmin;
+  const menuItems = getMenuItems();
   const visibleItems = menuItems.filter((item) => {
     if ('adminOnly' in item && item.adminOnly) return isAdmin;
     if ('requireRole' in item && item.requireRole === 'consultant') return isConsultant;
@@ -107,10 +106,10 @@ const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onClose }) => {
       <Toolbar sx={{ px: 2, py: 1.5 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <Typography variant="h6" sx={{ color: 'primary.main', fontWeight: 800 }}>
-            DS
+            {t('brand.name')}
           </Typography>
           <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 500 }}>
-            PLATFORM
+            {t('brand.subtitle')}
           </Typography>
           {isAdmin && (
             <AdminPanelSettings sx={{ color: 'secondary.main', fontSize: 18, ml: 0.5 }} />

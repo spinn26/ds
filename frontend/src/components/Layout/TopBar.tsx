@@ -7,6 +7,7 @@ import { Notifications, Menu as MenuIcon } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { DRAWER_WIDTH } from './Sidebar';
 import { useAuth } from '../../hooks/useAuth';
+import { t } from '../../i18n';
 
 interface TopBarProps {
   onMenuToggle: () => void;
@@ -52,9 +53,9 @@ const TopBar: React.FC<TopBarProps> = ({ onMenuToggle }) => {
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           {isAdmin && (
-            <Chip label="Администратор" color="secondary" size="small" />
+            <Chip label={t('topbar.administrator')} color="secondary" size="small" />
           )}
-          <Chip label="Активный" color="success" size="small" variant="outlined" />
+          <Chip label={t('topbar.active')} color="success" size="small" variant="outlined" />
           {!isMobile && user && (
             <Typography variant="body2" sx={{ color: 'text.secondary' }}>
               {user.firstName} {user.lastName}
@@ -70,15 +71,15 @@ const TopBar: React.FC<TopBarProps> = ({ onMenuToggle }) => {
           </IconButton>
           <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={() => setAnchorEl(null)}>
             <MenuItem onClick={() => { setAnchorEl(null); navigate('/profile'); }}>
-              Профиль
+              {t('nav.profile')}
             </MenuItem>
             {isAdmin && (
               <MenuItem onClick={() => { setAnchorEl(null); window.location.href = '/admin'; }}>
-                Filament Админка
+                {t('topbar.filamentAdmin')}
               </MenuItem>
             )}
             <MenuItem onClick={() => { setAnchorEl(null); logout(); }}>
-              Выйти
+              {t('auth.logout')}
             </MenuItem>
           </Menu>
         </Box>
