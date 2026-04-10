@@ -132,7 +132,7 @@ const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onClose }) => {
 
           const isActive = item.path === '/'
             ? location.pathname === '/'
-            : location.pathname.startsWith(item.path || '');
+            : location.pathname === item.path;
 
           return (
             <ListItemButton
