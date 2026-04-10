@@ -166,7 +166,7 @@ def import_csv(full_path, table_name):
         return False
 
     # Read CSV header
-    with open(full_path, "r", encoding="utf-8") as f:
+    with open(full_path, "r", encoding="utf-8-sig") as f:
         reader = csv.reader(f, delimiter=";", quotechar='"')
         try:
             csv_header = next(reader)
@@ -215,8 +215,8 @@ def import_csv(full_path, table_name):
     row_count = 0
     errors = 0
 
-    with open(full_path, "r", encoding="utf-8") as fin, \
-         open(temp_path, "w", encoding="utf-8", newline="") as fout:
+    with open(full_path, "r", encoding="utf-8-sig") as fin, \
+         open(temp_path, "w", encoding="utf-8-sig", newline="") as fout:
         reader = csv.reader(fin, delimiter=";", quotechar='"')
         writer = csv.writer(fout, delimiter="\t", quotechar='"', quoting=csv.QUOTE_MINIMAL)
 
