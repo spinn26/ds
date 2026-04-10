@@ -30,7 +30,6 @@ COLUMN_RENAME = {
     ("country", "order"): "order_field",
     ("changeConsultantStructureTrigger", "user"): "user_field",
     ("user_status_log", "user"): "user_field",
-    ("temp_password_creation", "webUser"): "person",
 }
 
 # Files to skip (no matching table in DB)
@@ -214,11 +213,12 @@ def import_csv(full_path, table_name):
     temp_path = f"/tmp/import_{table_name}.csv"
     row_count = 0
     errors = 0
+    seen_ids = set()
 
     with open(full_path, "r", encoding="utf-8-sig") as fin, \
          open(temp_path, "w", encoding="utf-8", newline="") as fout:
         reader = csv.reader(fin, delimiter=";", quotechar='"')
-        writer = csv.writer(fout, delimiter="\t", quotechar='"', quoting=csv.QUOTE_MINIMAL)
+        writer = csv.writer(fout, delimiter="\t", quotechar='"', quoting=csv.QUOTE_ALL)
 
         next(reader)  # skip header
 
@@ -236,9 +236,15 @@ def import_csv(full_path, table_name):
             # Skip rows where id is empty (if table has id as PK)
             if has_id:
                 id_idx = next(j for j, (_, db_col, _) in enumerate(col_mapping) if db_col == "id")
-                if not new_row[id_idx]:
+                id_val = new_row[id_idx]
+                if not id_val:
                     errors += 1
                     continue
+                # Skip duplicate ids
+                if id_val in seen_ids:
+                    errors += 1
+                    continue
+                seen_ids.add(id_val)
 
             writer.writerow(new_row)
             row_count += 1
@@ -253,8 +259,8 @@ def import_csv(full_path, table_name):
     db_cols = [db_col for _, db_col, _ in col_mapping]
     cols_str = ", ".join(f'"{c}"' for c in db_cols)
 
-    # Use COPY with tab delimiter (safer than semicolon for data containing semicolons)
-    copy_sql = f"\\copy \"{table_name}\" ({cols_str}) FROM '{temp_path}' WITH (FORMAT text, DELIMITER E'\\t', NULL '')"
+    # Use COPY with CSV format (handles quotes, newlines in data properly)
+    copy_sql = f"\\copy \"{table_name}\" ({cols_str}) FROM '{temp_path}' WITH (FORMAT csv, DELIMITER E'\\t', QUOTE '\"', NULL '')"
 
     result = subprocess.run(
         ["psql", "-U", DB_USER, "-d", DB_NAME, "-h", DB_HOST, "-c", copy_sql],
