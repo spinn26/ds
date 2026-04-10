@@ -14,7 +14,7 @@ Route::middleware('auth')->group(function () {
 Route::get('/{any?}', function () {
     $path = public_path('spa/index.html');
     if (file_exists($path)) {
-        return file_get_contents($path);
+        return response()->file($path, ['Content-Type' => 'text/html']);
     }
     return response('SPA not built yet. Run: cd frontend && npm run build', 404);
-})->where('any', '^(?!admin|api|livewire|sanctum).*$');
+})->where('any', '^(?!admin|api|livewire|sanctum|static|spa).*$');
