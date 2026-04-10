@@ -4,6 +4,8 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ClientController;
 use App\Http\Controllers\Api\ContractController;
 use App\Http\Controllers\Api\DashboardController;
+use App\Http\Controllers\Api\ProfileController;
+use App\Http\Controllers\Api\StructureController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
@@ -23,5 +25,12 @@ Route::prefix('v1')->group(function () {
         Route::get('/clients', [ClientController::class, 'index']);
         Route::get('/contracts/my', [ContractController::class, 'myContracts']);
         Route::get('/contracts/team', [ContractController::class, 'teamContracts']);
+
+        Route::get('/profile', [ProfileController::class, 'show']);
+        Route::put('/profile', [ProfileController::class, 'update']);
+        Route::post('/profile/password', [ProfileController::class, 'changePassword']);
+
+        Route::get('/structure', [StructureController::class, 'index']);
+        Route::get('/structure/{consultantId}/children', [StructureController::class, 'children']);
     });
 });
