@@ -24,6 +24,15 @@ jobs:
 
             composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
 
+            # Build React SPA
+            cd /var/www/newds/frontend
+            npm install --production=false
+            npm run build
+            rm -rf /var/www/newds/public/spa
+            cp -r /var/www/newds/frontend/build /var/www/newds/public/spa
+
+            cd /var/www/newds
+            php artisan migrate --force
             php artisan config:cache
             php artisan route:cache
             php artisan view:cache
