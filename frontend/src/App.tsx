@@ -7,6 +7,9 @@ import MainLayout from './components/Layout/MainLayout';
 import Login from './pages/Auth/Login';
 import Register from './pages/Auth/Register';
 
+// Education
+import Education from './pages/Education';
+
 // Partner pages
 import Dashboard from './pages/Dashboard';
 import Referrals from './pages/Referrals';
@@ -45,7 +48,12 @@ import Currencies from './pages/Admin/Currencies';
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, loading } = useAuth();
   if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}><CircularProgress /></Box>;
-  return user ? <>{children}</> : <Navigate to="/login" replace />;
+  if (!user) return <Navigate to="/login" replace />;
+  // Registered-only users can only access /education, /help, /communication, /profile
+  if (user.role === 'registered' && !['/education', '/help', '/communication', '/profile'].some(p => window.location.pathname === p)) {
+    return <Navigate to="/education" replace />;
+  }
+  return <>{children}</>;
 };
 
 const GuestRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -60,6 +68,9 @@ const AppRoutes: React.FC = () => (
     <Route path="/register" element={<GuestRoute><Register /></GuestRoute>} />
 
     <Route element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
+      {/* Education (available for all) */}
+      <Route path="/education" element={<Education />} />
+
       {/* Partner */}
       <Route path="/" element={<Dashboard />} />
       <Route path="/referrals" element={<Referrals />} />

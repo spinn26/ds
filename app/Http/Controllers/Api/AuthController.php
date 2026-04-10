@@ -204,6 +204,37 @@ class AuthController extends Controller
         ], 201);
     }
 
+    /**
+     * Activate account after passing education tests.
+     * Changes role from 'registered' to 'consultant' and sets 90-day deadline.
+     */
+    public function activate(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        if ($user->role !== 'registered') {
+            return response()->json(['message' => 'Аккаунт уже активирован'], 400);
+        }
+
+        // Set role to consultant
+        $user->role = 'registered,consultant';
+        $user->saveQuietly();
+
+        // Set 90-day activation deadline on consultant record
+        $consultant = Consultant::where('person', $user->id)->first();
+        if ($consultant) {
+            $consultant->dateActivity = now();
+            $consultant->dateDeterministic = now()->addDays(90);
+            $consultant->dateDeterministicPlan = now()->addDays(90);
+            $consultant->save();
+        }
+
+        return response()->json([
+            'message' => 'Аккаунт активирован',
+            'user' => $this->userResponse($user),
+        ]);
+    }
+
     public function me(Request $request): JsonResponse
     {
         return response()->json($this->userResponse($request->user()));

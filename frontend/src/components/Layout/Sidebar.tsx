@@ -11,7 +11,7 @@ import {
   Help, Chat, Upload, SwapHoriz, Receipt,
   Paid, BarChart, Assessment, CheckCircle,
   CreditCard, History, CurrencyExchange, Settings,
-  AdminPanelSettings, PersonSearch, EventNote,
+  AdminPanelSettings, PersonSearch, EventNote, School,
 } from '@mui/icons-material';
 import { useAuth } from '../../hooks/useAuth';
 
@@ -22,29 +22,34 @@ type MenuItem = {
   icon: React.ReactNode;
   path?: string;
   adminOnly?: boolean;
+  requireRole?: string; // 'consultant' = not for 'registered'
 } | {
   group: string;
   adminOnly?: boolean;
+  requireRole?: string;
 };
 
 const menuItems: MenuItem[] = [
-  // === Partner sections ===
-  { label: 'Дашборд', icon: <Dashboard />, path: '/' },
-  { label: 'Рефералки', icon: <Share />, path: '/referrals' },
-  { group: 'Финансы' },
-  { label: 'Отчёт начислений', icon: <AccountBalance />, path: '/finance/report' },
-  { label: 'Калькулятор объёмов', icon: <Calculate />, path: '/finance/calculator' },
-  { group: 'Клиенты' },
-  { label: 'Список клиентов', icon: <People />, path: '/clients' },
-  { group: 'Контракты' },
-  { label: 'Контракты клиентов', icon: <Description />, path: '/contracts' },
-  { label: 'Контракты команды', icon: <FolderShared />, path: '/contracts/team' },
-  { group: 'Структура' },
-  { label: 'Структура', icon: <AccountTree />, path: '/structure' },
-  { label: 'Продукты', icon: <Inventory />, path: '/products' },
-  { label: 'Инсмарт', icon: <Security />, path: '/inssmart' },
-  { group: 'Конкурсы' },
-  { label: 'Список конкурсов', icon: <EmojiEvents />, path: '/contests' },
+  // === Education (for registered users) ===
+  { label: 'Обучение', icon: <School />, path: '/education' },
+
+  // === Partner sections (require consultant role) ===
+  { label: 'Дашборд', icon: <Dashboard />, path: '/', requireRole: 'consultant' },
+  { label: 'Рефералки', icon: <Share />, path: '/referrals', requireRole: 'consultant' },
+  { group: 'Финансы', requireRole: 'consultant' },
+  { label: 'Отчёт начислений', icon: <AccountBalance />, path: '/finance/report', requireRole: 'consultant' },
+  { label: 'Калькулятор объёмов', icon: <Calculate />, path: '/finance/calculator', requireRole: 'consultant' },
+  { group: 'Клиенты', requireRole: 'consultant' },
+  { label: 'Список клиентов', icon: <People />, path: '/clients', requireRole: 'consultant' },
+  { group: 'Контракты', requireRole: 'consultant' },
+  { label: 'Контракты клиентов', icon: <Description />, path: '/contracts', requireRole: 'consultant' },
+  { label: 'Контракты команды', icon: <FolderShared />, path: '/contracts/team', requireRole: 'consultant' },
+  { group: 'Структура', requireRole: 'consultant' },
+  { label: 'Структура', icon: <AccountTree />, path: '/structure', requireRole: 'consultant' },
+  { label: 'Продукты', icon: <Inventory />, path: '/products', requireRole: 'consultant' },
+  { label: 'Инсмарт', icon: <Security />, path: '/inssmart', requireRole: 'consultant' },
+  { group: 'Конкурсы', requireRole: 'consultant' },
+  { label: 'Список конкурсов', icon: <EmojiEvents />, path: '/contests', requireRole: 'consultant' },
   { group: 'Помощь' },
   { label: 'Инструкции', icon: <Help />, path: '/help' },
   { label: 'Коммуникация', icon: <Chat />, path: '/communication' },
@@ -90,9 +95,10 @@ const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onClose }) => {
   const { user } = useAuth();
 
   const isAdmin = user?.role?.includes('admin') || user?.role?.includes('backoffice');
-
+  const isConsultant = user?.role?.includes('consultant') || isAdmin;
   const visibleItems = menuItems.filter((item) => {
     if ('adminOnly' in item && item.adminOnly) return isAdmin;
+    if ('requireRole' in item && item.requireRole === 'consultant') return isConsultant;
     return true;
   });
 
