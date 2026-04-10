@@ -15,6 +15,7 @@ class User extends Authenticatable implements FilamentUser, HasName
     use HasFactory, Notifiable;
 
     protected $table = 'WebUser';
+    public $timestamps = false;
 
     protected $fillable = [
         'firstName',
