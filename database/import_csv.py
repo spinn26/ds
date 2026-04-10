@@ -260,7 +260,9 @@ def import_csv(full_path, table_name):
     cols_str = ", ".join(f'"{c}"' for c in db_cols)
 
     # Use COPY with CSV format (handles quotes, newlines in data properly)
-    copy_sql = f"\\copy \"{table_name}\" ({cols_str}) FROM '{temp_path}' WITH (FORMAT csv, DELIMITER E'\\t', QUOTE '\"', NULL '')"
+    # FORCE_NULL treats quoted empty strings "" as NULL (needed because QUOTE_ALL wraps everything)
+    force_null_str = ", ".join(f'"{c}"' for c in db_cols)
+    copy_sql = f"\\copy \"{table_name}\" ({cols_str}) FROM '{temp_path}' WITH (FORMAT csv, DELIMITER E'\\t', QUOTE '\"', NULL '', FORCE_NULL ({force_null_str}))"
 
     result = subprocess.run(
         ["psql", "-U", DB_USER, "-d", DB_NAME, "-h", DB_HOST, "-c", copy_sql],
