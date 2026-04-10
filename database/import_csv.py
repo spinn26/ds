@@ -193,6 +193,10 @@ def import_csv(full_path, table_name):
 
         if db_col in table_cols:
             col_type = col_types.get(db_col, "varchar")
+            # Skip JSON columns entirely
+            if col_type == "json" or col_type == "jsonb":
+                skipped_cols.append(csv_col)
+                continue
             col_mapping.append((i, db_col, col_type))
         else:
             skipped_cols.append(csv_col)
