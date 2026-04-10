@@ -68,10 +68,16 @@ class UserResource extends Resource
             ])
             ->actions([
                 Tables\Actions\Action::make('impersonate')
-                    ->label('Войти как')
+                    ->label('В админку')
                     ->icon('heroicon-o-arrow-right-on-rectangle')
                     ->color('warning')
                     ->url(fn ($record) => route('impersonate', $record))
+                    ->visible(fn ($record) => $record->id !== auth()->id()),
+                Tables\Actions\Action::make('impersonate_spa')
+                    ->label('На сайт')
+                    ->icon('heroicon-o-globe-alt')
+                    ->color('success')
+                    ->url(fn ($record) => route('impersonate.spa', $record))
                     ->visible(fn ($record) => $record->id !== auth()->id()),
                 Tables\Actions\EditAction::make(),
                 Tables\Actions\DeleteAction::make(),

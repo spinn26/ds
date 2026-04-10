@@ -6,6 +6,8 @@ use Illuminate\Support\Facades\Route;
 Route::middleware('auth')->group(function () {
     Route::get('/admin/impersonate/{user}', [ImpersonateController::class, 'impersonate'])
         ->name('impersonate');
+    Route::get('/admin/impersonate-spa/{user}', [ImpersonateController::class, 'impersonateSpa'])
+        ->name('impersonate.spa');
     Route::get('/admin/impersonate-leave', [ImpersonateController::class, 'leave'])
         ->name('impersonate.leave');
 });

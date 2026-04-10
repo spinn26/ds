@@ -16,6 +16,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   const fetchUser = useCallback(async () => {
+    // Check for impersonate token in URL
+    const params = new URLSearchParams(window.location.search);
+    const impersonateToken = params.get('impersonate_token');
+    if (impersonateToken) {
+      localStorage.setItem('auth_token', impersonateToken);
+      // Clean URL
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+
     const token = localStorage.getItem('auth_token');
     if (!token) {
       setLoading(false);
