@@ -3,6 +3,7 @@
 namespace App\Providers\Filament;
 
 use Filament\Http\Middleware\Authenticate;
+use Filament\Navigation\MenuItem;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
@@ -40,6 +41,19 @@ class AdminPanelProvider extends PanelProvider
                 Widgets\AccountWidget::class,
                 Widgets\FilamentInfoWidget::class,
             ])
+            ->userMenuItems([
+                MenuItem::make()
+                    ->label('Вернуться в свой аккаунт')
+                    ->icon('heroicon-o-arrow-uturn-left')
+                    ->url(fn () => route('impersonate.leave'))
+                    ->visible(fn () => session()->has('impersonator_id')),
+            ])
+            ->renderHook(
+                'panels::body.start',
+                fn () => session()->has('impersonator_id')
+                    ? view('filament.impersonate-banner')
+                    : ''
+            )
             ->middleware([
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,

@@ -67,6 +67,12 @@ class UserResource extends Resource
                     ->label('Заблокирован'),
             ])
             ->actions([
+                Tables\Actions\Action::make('impersonate')
+                    ->label('Войти как')
+                    ->icon('heroicon-o-arrow-right-on-rectangle')
+                    ->color('warning')
+                    ->url(fn ($record) => route('impersonate', $record))
+                    ->visible(fn ($record) => $record->id !== auth()->id()),
                 Tables\Actions\EditAction::make(),
                 Tables\Actions\DeleteAction::make(),
             ])
