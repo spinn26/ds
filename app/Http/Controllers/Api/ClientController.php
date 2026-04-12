@@ -39,7 +39,7 @@ class ClientController extends Controller
 
                 // client.person → person table (данные клиента: телефон, email, ДР, город)
                 if ($c->person) {
-                    $personData = DB::table('WebUser')->where('id', $c->person)->first();
+                    $personData = DB::table('person')->where('id', $c->person)->first();
                 }
 
                 // Город из person.city → city.cityNameRu
