@@ -25,7 +25,7 @@
         <v-icon color="green">mdi-wallet</v-icon>
         <div class="text-body-2 text-medium-emphasis">Баланс</div>
       </div>
-      <div class="text-h4 font-weight-bold text-green mt-1">{{ fmt(data.balance) }} RUB</div>
+      <div class="text-h4 font-weight-bold text-green mt-1">{{ fmt(data.balance?.amountRUB ?? data.balance?.amount) }} RUB</div>
     </v-card>
 
     <!-- Tabs -->
@@ -76,12 +76,15 @@ const data = ref({});
 
 const fmt = (n) => Number(n || 0).toLocaleString('ru-RU', { minimumFractionDigits: 2 });
 
-const summaryCards = computed(() => [
-  { label: 'Итого начислений (RUB)', value: fmt(data.value.totalAmountRUB), color: 'primary' },
-  { label: 'Личный объём', value: fmt(data.value.totalPersonalVolume), color: 'green' },
-  { label: 'Групповой объём', value: fmt(data.value.totalGroupVolume), color: 'blue' },
-  { label: 'Групповой бонус', value: fmt(data.value.totalGroupBonus), color: 'orange' },
-]);
+const summaryCards = computed(() => {
+  const s = data.value.summary || {};
+  return [
+    { label: 'Итого начислений (RUB)', value: fmt(s.totalAmountRUB), color: 'primary' },
+    { label: 'Личный объём', value: fmt(s.totalPersonalVolume), color: 'green' },
+    { label: 'Групповой объём', value: fmt(s.totalGroupVolume), color: 'blue' },
+    { label: 'Групповой бонус', value: fmt(s.totalGroupBonus), color: 'orange' },
+  ];
+});
 
 const commHeaders = [
   { title: 'Дата', key: 'date', width: 120 },
