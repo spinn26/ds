@@ -61,7 +61,7 @@ class AuthController extends Controller
         // Check email in WebUser (exclude terminated)
         $existingUser = User::where('email', $request->email)->first();
         if ($existingUser) {
-            $consultant = Consultant::where('person', $existingUser->id)->first();
+            $consultant = Consultant::where('webUser', $existingUser->id)->first();
             $isTerminated = $consultant && $consultant->statusRelation && $consultant->statusRelation->title === 'Терминирован';
 
             if (! $isTerminated) {
@@ -221,7 +221,7 @@ class AuthController extends Controller
         $user->saveQuietly();
 
         // Set 90-day activation deadline on consultant record
-        $consultant = Consultant::where('person', $user->id)->first();
+        $consultant = Consultant::where('webUser', $user->id)->first();
         if ($consultant) {
             $consultant->dateActivity = now();
             $consultant->dateDeterministic = now()->addDays(90);

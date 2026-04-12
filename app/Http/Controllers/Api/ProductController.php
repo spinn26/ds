@@ -18,7 +18,7 @@ class ProductController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
-        $consultant = Consultant::where('person', $user->id)->first();
+        $consultant = Consultant::where('webUser', $user->id)->first();
 
         // Проверка условий доступа
         $accessCheck = $this->checkAccess($consultant);

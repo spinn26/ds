@@ -27,7 +27,7 @@ class ProfileController extends Controller
     public function show(Request $request): JsonResponse
     {
         $user = $request->user();
-        $consultant = Consultant::where('person', $user->id)->first();
+        $consultant = Consultant::where('webUser', $user->id)->first();
 
         $country = $user->taxResidency
             ? DB::table('country')->where('id', $user->taxResidency)->value('countryNameRu')
@@ -132,7 +132,7 @@ class ProfileController extends Controller
     public function updateRequisites(Request $request): JsonResponse
     {
         $user = $request->user();
-        $consultant = Consultant::where('person', $user->id)->first();
+        $consultant = Consultant::where('webUser', $user->id)->first();
 
         if (! $consultant) {
             return response()->json(['message' => 'Консультант не найден'], 404);
@@ -186,7 +186,7 @@ class ProfileController extends Controller
     public function updateBankRequisites(Request $request): JsonResponse
     {
         $user = $request->user();
-        $consultant = Consultant::where('person', $user->id)->first();
+        $consultant = Consultant::where('webUser', $user->id)->first();
 
         if (! $consultant) {
             return response()->json(['message' => 'Консультант не найден'], 404);

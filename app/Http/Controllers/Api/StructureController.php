@@ -18,7 +18,7 @@ class StructureController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
-        $consultant = Consultant::where('person', $user->id)->first();
+        $consultant = Consultant::where('webUser', $user->id)->first();
 
         if (! $consultant) {
             return response()->json(['data' => []]);

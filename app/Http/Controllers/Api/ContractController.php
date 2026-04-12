@@ -19,7 +19,7 @@ class ContractController extends Controller
     public function myContracts(Request $request): JsonResponse
     {
         $user = $request->user();
-        $consultant = Consultant::where('person', $user->id)->first();
+        $consultant = Consultant::where('webUser', $user->id)->first();
 
         if (! $consultant) {
             return response()->json(['data' => [], 'total' => 0]);
@@ -49,7 +49,7 @@ class ContractController extends Controller
     public function teamContracts(Request $request): JsonResponse
     {
         $user = $request->user();
-        $consultant = Consultant::where('person', $user->id)->first();
+        $consultant = Consultant::where('webUser', $user->id)->first();
 
         if (! $consultant) {
             return response()->json(['data' => [], 'total' => 0]);

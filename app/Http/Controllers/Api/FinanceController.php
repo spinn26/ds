@@ -17,7 +17,7 @@ class FinanceController extends Controller
     public function report(Request $request): JsonResponse
     {
         $user = $request->user();
-        $consultant = Consultant::where('person', $user->id)->first();
+        $consultant = Consultant::where('webUser', $user->id)->first();
 
         if (! $consultant) {
             return response()->json(['commissions' => [], 'payments' => [], 'summary' => null]);
@@ -101,7 +101,7 @@ class FinanceController extends Controller
     public function calculator(Request $request): JsonResponse
     {
         $user = $request->user();
-        $consultant = Consultant::where('person', $user->id)->first();
+        $consultant = Consultant::where('webUser', $user->id)->first();
 
         if (! $consultant) {
             return response()->json(['message' => 'Консультант не найден'], 404);
