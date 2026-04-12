@@ -22,19 +22,50 @@ class StructureController extends Controller
         $isStaff = array_intersect($userRoles, ['admin', 'backoffice', 'support', 'head', 'calculations', 'corrections']);
         $consultant = Consultant::where('webUser', $user->id)->first();
 
-        // Staff without consultant role → show ALL top-level consultants
+        // Staff without consultant role → show ALL consultants with server-side pagination
         if ($isStaff && ! in_array('consultant', $userRoles)) {
-            $query = Consultant::whereNull('dateDeleted');
+            $query = DB::table('consultant')->whereNull('dateDeleted');
 
             if ($request->filled('search')) {
                 $query->where('personName', 'ilike', '%' . $request->search . '%');
             }
+            if ($request->filled('activity')) {
+                $activityIds = is_array($request->activity) ? $request->activity : explode(',', $request->activity);
+                $query->whereIn('activity', $activityIds);
+            }
 
-            $members = $query->orderByDesc('id')->limit(50)->get()
-                ->map(fn ($c) => $this->formatMember($c));
+            $total = $query->count();
+            $page = (int) $request->input('page', 1);
+            $perPage = 25;
 
-            $members = $this->applyFilters($members, $request);
-            return response()->json(['data' => $members->values()]);
+            $rows = $query->orderBy('personName')
+                ->offset(($page - 1) * $perPage)
+                ->limit($perPage)
+                ->get()
+                ->map(function ($c) {
+                    $statusLevel = $c->status_and_lvl
+                        ? DB::table('status_levels')->where('id', $c->status_and_lvl)->first()
+                        : null;
+                    $activityName = $c->activity
+                        ? DB::table('directory_of_activities')->where('id', $c->activity)->value('name')
+                        : null;
+
+                    return [
+                        'id' => $c->id,
+                        'personName' => $c->personName,
+                        'active' => (bool) $c->active,
+                        'activityId' => $c->activity,
+                        'activityName' => $activityName ?? '—',
+                        'qualification' => $statusLevel ? ['level' => $statusLevel->level, 'title' => $statusLevel->title] : null,
+                        'personalVolume' => round((float) ($c->personalVolume ?? 0), 2),
+                        'groupVolume' => round((float) ($c->groupVolume ?? 0), 2),
+                        'groupVolumeCumulative' => round((float) ($c->groupVolumeCumulative ?? 0), 2),
+                        'dateActivity' => $c->dateActivity,
+                        'hasChildren' => false,
+                    ];
+                });
+
+            return response()->json(['data' => $rows, 'total' => $total]);
         }
 
         // Consultant → show own team

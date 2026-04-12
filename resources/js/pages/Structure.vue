@@ -89,6 +89,9 @@
           </tr>
         </tbody>
       </v-table>
+      <div v-if="total > 25" class="d-flex justify-center pa-3">
+        <v-pagination v-model="page" :length="Math.ceil(total / 25)" density="compact" @update:model-value="loadData" />
+      </div>
     </v-card>
   </div>
 </template>
@@ -100,6 +103,8 @@ import api from '../api';
 const loading = ref(false);
 const showAdvanced = ref(false);
 const items = ref([]);
+const total = ref(0);
+const page = ref(1);
 const qualificationOptions = ref([]);
 const statusOptions = [
   { title: 'Зарегистрирован', value: 'registered' },
@@ -177,7 +182,7 @@ function debouncedLoad() {
 async function loadData() {
   loading.value = true;
   try {
-    const params = {};
+    const params = { page: page.value };
     if (filters.value.search) params.search = filters.value.search;
     if (filters.value.qualification?.length) params.qualification = filters.value.qualification.join(',');
     if (filters.value.levels?.length) params.levels = filters.value.levels.join(',');
@@ -195,7 +200,9 @@ async function loadData() {
     if (filters.value.termination_to) params.termination_to = filters.value.termination_to;
     const { data } = await api.get('/structure', { params });
     uidCounter = 0;
-    items.value = enrichRows(data.data || data);
+    const responseData = data.data || data;
+    items.value = enrichRows(responseData);
+    total.value = data.total || responseData.length;
   } catch {}
   loading.value = false;
 }
