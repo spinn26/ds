@@ -8,19 +8,15 @@ use App\Models\Requisite;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class ProductController extends Controller
 {
-    /**
-     * Список продуктов с проверкой доступа.
-     * Продукт доступен если: пройден тест + реквизиты верифицированы + акцепт документов.
-     */
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
         $consultant = Consultant::where('webUser', $user->id)->first();
 
-        // Проверка условий доступа
         $accessCheck = $this->checkAccess($consultant);
 
         $query = DB::table('product')->where('active', true);
@@ -28,45 +24,29 @@ class ProductController extends Controller
         if ($request->filled('search')) {
             $query->where('name', 'ilike', '%' . $request->search . '%');
         }
-        if ($request->filled('category')) {
-            $query->where('type', $request->category);
-        }
 
         $products = $query->orderBy('name')->get()->map(function ($p) use ($consultant) {
-            // Проверяем, пройден ли тест по этому продукту
             $testPassed = $consultant
-                ? $this->isTestPassedForProduct($consultant->id, $p->id)
+                ? $this->isTestPassedForProduct($consultant, $p->id)
                 : false;
 
             return [
                 'id' => $p->id,
                 'name' => $p->name,
                 'description' => $p->description ?? null,
-                'type' => $p->type ?? null,
-                'typeName' => $p->type ? DB::table('productType')->where('id', $p->type)->value('name') : null,
                 'active' => (bool) $p->active,
-                'accessible' => $testPassed,
+                'accessible' => $testPassed && ($this->checkAccess($consultant)['hasAccess'] ?? false),
                 'testPassed' => $testPassed,
-                'visibleToResident' => (bool) ($p->visibleToResident ?? false),
             ];
         });
 
-        // Категории продуктов
-        $categories = DB::table('productType')
-            ->orderBy('name')
-            ->get()
-            ->map(fn ($c) => ['id' => $c->id, 'name' => $c->name]);
-
         return response()->json([
             'products' => $products,
-            'categories' => $categories,
+            'categories' => [],
             'accessCheck' => $accessCheck,
         ]);
     }
 
-    /**
-     * Проверка условий доступа к разделу Продукты.
-     */
     private function checkAccess(?Consultant $consultant): array
     {
         if (! $consultant) {
@@ -78,17 +58,19 @@ class ProductController extends Controller
             ];
         }
 
-        // 1. Пройден ли хотя бы один тест
-        $testsPassed = $this->hasAnyTestPassed($consultant->id);
+        $testsPassed = ! empty($consultant->soldProducts);
 
-        // 2. Реквизиты верифицированы
-        $requisite = Requisite::where('consultant', $consultant->id)
-            ->active()
-            ->where('verified', true)
-            ->first();
-        $requisitesVerified = $requisite !== null;
+        // Реквизиты: проверяем через statusRequisites = 3 (verified) на консультанте
+        $requisitesVerified = ((int) $consultant->statusRequisites) === 3;
 
-        // 3. Акцепт документов
+        // Если нет — пробуем через таблицу requisites
+        if (! $requisitesVerified && Schema::hasTable('requisites')) {
+            $requisitesVerified = Requisite::where('consultant', $consultant->id)
+                ->whereNull('deletedAt')
+                ->where('verified', true)
+                ->exists();
+        }
+
         $documentsAccepted = (bool) $consultant->acceptance;
 
         return [
@@ -101,25 +83,14 @@ class ProductController extends Controller
         ];
     }
 
-    private function hasAnyTestPassed(int $consultantId): bool
+    private function isTestPassedForProduct(Consultant $consultant, int $productId): bool
     {
-        // Проверяем soldProducts у консультанта (список пройденных продуктов)
-        $consultant = Consultant::find($consultantId);
         $soldProducts = $consultant->soldProducts ?? '';
-
-        return ! empty($soldProducts);
-    }
-
-    private function isTestPassedForProduct(int $consultantId, int $productId): bool
-    {
-        $consultant = Consultant::find($consultantId);
-        $soldProducts = $consultant->soldProducts ?? '';
-
         if (empty($soldProducts)) {
             return false;
         }
 
-        $passedIds = array_map('intval', explode(',', $soldProducts));
+        $passedIds = array_map('intval', explode(',', (string) $soldProducts));
 
         return in_array($productId, $passedIds);
     }

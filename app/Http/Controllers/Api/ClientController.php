@@ -11,11 +11,6 @@ use Illuminate\Support\Facades\DB;
 
 class ClientController extends Controller
 {
-    /**
-     * Список клиентов партнёра.
-     * По спеке: ФИО, дата рождения, место жительства, телефон, email, открытые продукты.
-     * Убрано: кнопка добавить, капитал, активность, статус, последний контакт.
-     */
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
@@ -27,7 +22,6 @@ class ClientController extends Controller
 
         $query = Client::where('consultant', $consultant->id);
 
-        // Фильтр по ФИО
         if ($request->filled('search')) {
             $query->where('personName', 'ilike', '%' . $request->search . '%');
         }
@@ -40,50 +34,41 @@ class ClientController extends Controller
             ->limit(25)
             ->get()
             ->map(function ($c) {
-                // Person data from WebUser (birthDate, city, phone, email)
-                $person = $c->person
-                    ? DB::table('WebUser')->where('id', $c->person)->first()
-                    : null;
+                // Try multiple sources for person data:
+                // 1. client.person → person table
+                // 2. client.person → WebUser table (person and WebUser share IDs in some cases)
+                // 3. Fallback: search WebUser by email match with personName
+                $personData = null;
+                $cityName = null;
 
-                $cityName = $person && $person->city
-                    ? DB::table('city')->where('id', $person->city)->value('cityNameRu')
-                    : null;
+                if ($c->person) {
+                    // Try person table first
+                    $personData = DB::table('person')->where('id', $c->person)->first();
 
-                // Open products via contracts
-                $products = DB::table('contract')
-                    ->where('client', $c->id)
-                    ->whereNull('deletedAt')
-                    ->whereNotNull('product')
-                    ->join('product', 'contract.product', '=', 'product.id')
-                    ->distinct()
-                    ->pluck('product.name')
-                    ->toArray();
+                    // If person table has no contact data, try WebUser
+                    if (! $personData || (! $personData->email && ! $personData->phone)) {
+                        $webUserData = DB::table('WebUser')->where('id', $c->person)->first();
+                        if ($webUserData && ($webUserData->email || $webUserData->phone)) {
+                            $personData = $webUserData;
+                        }
+                    }
+                }
 
-                // Contract count
-                $contractCount = DB::table('contract')
-                    ->where('client', $c->id)
-                    ->whereNull('deletedAt')
-                    ->count();
-
-                // Is partner — check if person exists in consultant table
-                $isPartner = $c->person
-                    ? DB::table('consultant')->where('person', $c->person)->whereNull('dateDeleted')->exists()
-                    : false;
+                // Get city from person data
+                if ($personData) {
+                    $cityId = $personData->city ?? null;
+                    if ($cityId) {
+                        $cityName = DB::table('city')->where('id', $cityId)->value('cityNameRu');
+                    }
+                }
 
                 return [
                     'id' => $c->id,
-                    'dsId' => $c->idDs,
                     'personName' => $c->personName,
-                    'birthDate' => $person?->birthDate ?? null,
+                    'birthDate' => $personData?->birthDate ?? null,
                     'city' => $cityName,
-                    'phone' => $person?->phone ?? null,
-                    'email' => $person?->email ?? null,
-                    'products' => $products,
-                    'workSince' => $c->workSince?->format('d.m.Y'),
-                    'contractCount' => $contractCount,
-                    'isPartner' => $isPartner,
-                    'comment' => $c->comment,
-                    'consultantName' => $c->consultantName,
+                    'phone' => $personData?->phone ?? null,
+                    'email' => $personData?->email ?? null,
                 ];
             });
 
