@@ -137,6 +137,28 @@ const ru = {
     consultantsTotal: 'Всего финконсультантов',
     teamClients: 'Клиенты команды',
     capitalUnderManagement: 'Капитал в управлении',
+    // Partner statuses
+    partners: 'Партнёры',
+    partnersTotal: 'Всего партнёров',
+    partnersRegistered: 'Зарегистрированы',
+    partnersActive: 'Активны',
+    partnersTerminated: 'Терминированы',
+    partnersExcluded: 'Исключены',
+    // Status info
+    activityStatus: 'Статус активности',
+    daysRemaining: 'дн. осталось',
+    activationDeadline: 'Срок активации',
+    yearPeriodEnd: 'Окончание годового периода',
+    requiredPoints: 'Необходимо баллов',
+    // Qualification table columns
+    qualLevel: 'Ур.',
+    qualTitle: 'Квалификация',
+    qualPercent: '%',
+    qualNGP: 'НГП',
+    qualOP: 'ОП',
+    qualGapGP: 'Отрыв ГП',
+    qualPool: 'Пул',
+    qualDsShare: 'Доля DS',
   },
 
   // Education

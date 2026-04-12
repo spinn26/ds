@@ -3,12 +3,14 @@ import {
   Box, Grid, Card, CardContent, Typography, LinearProgress, Chip, Button,
   CircularProgress, Dialog, DialogTitle, DialogContent, DialogActions,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
-  TextField,
+  TextField, Alert,
 } from '@mui/material';
 import {
   TrendingUp, TrendingDown, People, AccountBalance, Remove,
+  Groups, PersonAdd, PersonOff, Block, Timer,
 } from '@mui/icons-material';
 import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import { dashboardApi, DashboardData, StatusLevel } from '../../api/dashboard';
 import { t } from '../../i18n';
 
@@ -25,17 +27,27 @@ const changePercent = (current: number, prev: number): { value: string; type: 'u
   };
 };
 
+const changeDiff = (current: number, prev: number): { value: string; type: 'up' | 'down' | 'neutral' } => {
+  const diff = current - prev;
+  if (diff === 0) return { value: '0', type: 'neutral' };
+  return { value: `${diff > 0 ? '+' : ''}${diff}`, type: diff > 0 ? 'up' : 'down' };
+};
+
 interface StatCardProps {
   title: string;
   value: string;
   change?: { value: string; type: 'up' | 'down' | 'neutral' };
   icon: React.ReactNode;
   color: string;
+  onClick?: () => void;
 }
 
-const StatCard: React.FC<StatCardProps> = ({ title, value, change, icon, color }) => (
+const StatCard: React.FC<StatCardProps> = ({ title, value, change, icon, color, onClick }) => (
   <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-    <Card>
+    <Card
+      sx={{ cursor: onClick ? 'pointer' : 'default', '&:hover': onClick ? { boxShadow: 6 } : {} }}
+      onClick={onClick}
+    >
       <CardContent sx={{ p: 3 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <Box>
@@ -67,12 +79,16 @@ const Dashboard: React.FC = () => {
   const [period, setPeriod] = useState(new Date().toISOString().slice(0, 7));
   const [levelsOpen, setLevelsOpen] = useState(false);
   const [levels, setLevels] = useState<StatusLevel[]>([]);
+  const navigate = useNavigate();
 
   const emptyData: DashboardData = {
     consultant: { id: 0, personName: '—', participantCode: null, active: false, statusName: 'Резидент', ambassadorProducts: null },
+    statusInfo: { activityId: 4, activityName: 'Зарегистрирован', hasAccess: true, canInvite: false, terminationCount: 0, maxTerminations: 3 },
     qualification: { nominalLevel: null, nextLevel: null },
     volumes: { personalVolume: 0, groupVolume: 0, groupVolumeCumulative: 0, prevPersonalVolume: 0, prevGroupVolume: 0, prevGroupVolumeCumulative: 0 },
     team: { myClients: 0, teamClients: 0, firstLineResidents: 0, totalResidents: 0, firstLineConsultants: 0, totalConsultants: 0, capitalUsd: 0 },
+    partners: { total: 0, registered: 0, active: 0, inactive: 0, terminated: 0, excluded: 0 },
+    prevPartners: { total: 0, registered: 0, active: 0, inactive: 0, terminated: 0, excluded: 0 },
     period: period,
   };
 
@@ -101,12 +117,17 @@ const Dashboard: React.FC = () => {
     return <Typography color="error">{t('common.loading')}...</Typography>;
   }
 
-  const { consultant, qualification, volumes, team } = data;
+  const { consultant, statusInfo, qualification, volumes, team, partners, prevPartners } = data;
   const level = qualification.nominalLevel;
   const nextLvl = qualification.nextLevel;
 
   const nqpProgress = nextLvl && nextLvl.groupVolumeCumulative > 0
     ? Math.min((volumes.groupVolumeCumulative / nextLvl.groupVolumeCumulative) * 100, 100)
+    : 0;
+
+  // Activation progress for status bar
+  const activationProgress = statusInfo.requiredPoints && statusInfo.requiredPoints > 0
+    ? Math.min(((statusInfo.currentPoints ?? 0) / statusInfo.requiredPoints) * 100, 100)
     : 0;
 
   return (
@@ -123,13 +144,53 @@ const Dashboard: React.FC = () => {
         />
       </Box>
 
+      {/* Status alert with countdown */}
+      {statusInfo.daysRemaining !== undefined && statusInfo.daysRemaining <= 90 && (
+        <Alert
+          severity={statusInfo.daysRemaining <= 30 ? 'warning' : 'info'}
+          icon={<Timer />}
+          sx={{ mb: 3 }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+            <Box>
+              <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                {statusInfo.activityName} — {statusInfo.daysRemaining} {t('dashboard.daysRemaining')}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                {t('dashboard.requiredPoints')}: {statusInfo.requiredPoints}
+                {' | '}
+                Набрано: {fmtInt(statusInfo.currentPoints ?? 0)}
+              </Typography>
+            </Box>
+            <LinearProgress
+              variant="determinate"
+              value={activationProgress}
+              sx={{ flexGrow: 1, minWidth: 120, height: 8, borderRadius: 4 }}
+              color={statusInfo.daysRemaining <= 30 ? 'warning' : 'primary'}
+            />
+          </Box>
+        </Alert>
+      )}
+
       {/* Qualification header */}
       <Card sx={{ mb: 3 }}>
         <CardContent sx={{ p: 3 }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
-            <Box>
-              <Typography variant="body2" color="text.secondary">{t('dashboard.status')}</Typography>
-              <Typography variant="h6">{consultant.statusName}</Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Box>
+                <Typography variant="body2" color="text.secondary">{t('dashboard.status')}</Typography>
+                <Typography variant="h6">{consultant.statusName}</Typography>
+              </Box>
+              <Chip
+                label={statusInfo.activityName}
+                size="small"
+                color={
+                  statusInfo.activityId === 1 ? 'success' :
+                  statusInfo.activityId === 4 ? 'info' :
+                  statusInfo.activityId === 3 ? 'warning' :
+                  statusInfo.activityId === 5 ? 'error' : 'default'
+                }
+              />
             </Box>
             <Button variant="outlined" color="secondary" onClick={openLevels}>
               {t('dashboard.transitionConditions')}
@@ -217,37 +278,75 @@ const Dashboard: React.FC = () => {
         </Grid>
       </Grid>
 
+      {/* Partner counts by status */}
+      <Typography variant="h6" sx={{ mb: 2 }}>{t('dashboard.partners')}</Typography>
+      <Grid container spacing={3} sx={{ mb: 3 }}>
+        <Grid size={{ xs: 6, md: 3 }}>
+          <StatCard
+            title={t('dashboard.partnersTotal')}
+            value={fmtInt(partners.total)}
+            change={changeDiff(partners.total, prevPartners.total)}
+            icon={<Groups />}
+            color="#673AB7"
+            onClick={() => navigate('/structure')}
+          />
+        </Grid>
+        <Grid size={{ xs: 6, md: 3 }}>
+          <StatCard
+            title={t('dashboard.partnersRegistered')}
+            value={fmtInt(partners.registered)}
+            change={changeDiff(partners.registered, prevPartners.registered)}
+            icon={<PersonAdd />}
+            color="#2196F3"
+            onClick={() => navigate('/structure')}
+          />
+        </Grid>
+        <Grid size={{ xs: 6, md: 3 }}>
+          <StatCard
+            title={t('dashboard.partnersActive')}
+            value={fmtInt(partners.active)}
+            change={changeDiff(partners.active, prevPartners.active)}
+            icon={<People />}
+            color="#4CAF50"
+            onClick={() => navigate('/structure')}
+          />
+        </Grid>
+        <Grid size={{ xs: 6, md: 3 }}>
+          <StatCard
+            title={t('dashboard.partnersTerminated')}
+            value={fmtInt(partners.terminated)}
+            change={changeDiff(partners.terminated, prevPartners.terminated)}
+            icon={<PersonOff />}
+            color="#FF9800"
+            onClick={() => navigate('/structure')}
+          />
+        </Grid>
+      </Grid>
+
       {/* Team stats */}
       <Grid container spacing={3}>
-        {[
-          { label: t('dashboard.residentsLine1'), value: fmtInt(team.firstLineResidents), color: 'primary.main' },
-          { label: t('dashboard.residentsTotal'), value: fmtInt(team.totalResidents), color: 'primary.main' },
-          { label: t('dashboard.consultantsLine1'), value: fmtInt(team.firstLineConsultants), color: 'secondary.main' },
-          { label: t('dashboard.consultantsTotal'), value: fmtInt(team.totalConsultants), color: 'secondary.main' },
-        ].map((stat, idx) => (
-          <Grid size={{ xs: 6, md: 3 }} key={stat.label}>
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 + idx * 0.05 }}>
-              <Card>
-                <CardContent sx={{ textAlign: 'center', p: 3 }}>
-                  <Typography variant="body2" color="text.secondary" gutterBottom>{stat.label}</Typography>
-                  <Typography variant="h3" sx={{ fontWeight: 700, color: stat.color }}>{stat.value}</Typography>
-                </CardContent>
-              </Card>
-            </motion.div>
-          </Grid>
-        ))}
-        <Grid size={{ xs: 12, md: 6 }}>
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}>
-            <Card>
+        <Grid size={{ xs: 6, md: 3 }}>
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+            <Card sx={{ cursor: 'pointer', '&:hover': { boxShadow: 6 } }} onClick={() => navigate('/clients')}>
+              <CardContent sx={{ textAlign: 'center', p: 3 }}>
+                <Typography variant="body2" color="text.secondary" gutterBottom>{t('nav.clientList')}</Typography>
+                <Typography variant="h3" sx={{ fontWeight: 700, color: 'primary.main' }}>{fmtInt(team.myClients)}</Typography>
+              </CardContent>
+            </Card>
+          </motion.div>
+        </Grid>
+        <Grid size={{ xs: 6, md: 3 }}>
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}>
+            <Card sx={{ cursor: 'pointer', '&:hover': { boxShadow: 6 } }} onClick={() => navigate('/clients')}>
               <CardContent sx={{ textAlign: 'center', p: 3 }}>
                 <Typography variant="body2" color="text.secondary" gutterBottom>{t('dashboard.teamClients')}</Typography>
-                <Typography variant="h3" sx={{ fontWeight: 700 }}>{fmtInt(team.teamClients)}</Typography>
+                <Typography variant="h3" sx={{ fontWeight: 700, color: 'primary.main' }}>{fmtInt(team.teamClients)}</Typography>
               </CardContent>
             </Card>
           </motion.div>
         </Grid>
         <Grid size={{ xs: 12, md: 6 }}>
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.55 }}>
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
             <Card>
               <CardContent sx={{ textAlign: 'center', p: 3 }}>
                 <Typography variant="body2" color="text.secondary" gutterBottom>{t('dashboard.capitalUnderManagement')}</Typography>
@@ -259,19 +358,21 @@ const Dashboard: React.FC = () => {
       </Grid>
 
       {/* Status levels dialog */}
-      <Dialog open={levelsOpen} onClose={() => setLevelsOpen(false)} maxWidth="md" fullWidth>
+      <Dialog open={levelsOpen} onClose={() => setLevelsOpen(false)} maxWidth="lg" fullWidth>
         <DialogTitle>{t('dashboard.transitionConditions')}</DialogTitle>
         <DialogContent>
           <TableContainer component={Paper} variant="outlined">
             <Table size="small">
               <TableHead>
                 <TableRow sx={{ bgcolor: '#f5f5f5' }}>
-                  <TableCell>№</TableCell>
-                  <TableCell>Квалификация</TableCell>
-                  <TableCell align="right">%</TableCell>
-                  <TableCell align="right">ГП</TableCell>
-                  <TableCell align="right">НГП</TableCell>
-                  <TableCell align="right">Пул</TableCell>
+                  <TableCell>{t('dashboard.qualLevel')}</TableCell>
+                  <TableCell>{t('dashboard.qualTitle')}</TableCell>
+                  <TableCell align="right">{t('dashboard.qualPercent')}</TableCell>
+                  <TableCell align="right">{t('dashboard.qualNGP')}</TableCell>
+                  <TableCell align="right">{t('dashboard.qualOP')}</TableCell>
+                  <TableCell align="right">{t('dashboard.qualGapGP')}</TableCell>
+                  <TableCell align="right">{t('dashboard.qualPool')}</TableCell>
+                  <TableCell align="right">{t('dashboard.qualDsShare')}</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -280,7 +381,6 @@ const Dashboard: React.FC = () => {
                     key={lv.id}
                     sx={{
                       bgcolor: level && lv.level === level.level ? 'rgba(76,175,80,0.1)' : 'inherit',
-                      fontWeight: level && lv.level === level.level ? 700 : 400,
                     }}
                   >
                     <TableCell>{lv.level}</TableCell>
@@ -291,9 +391,11 @@ const Dashboard: React.FC = () => {
                       )}
                     </TableCell>
                     <TableCell align="right">{lv.percent}%</TableCell>
-                    <TableCell align="right">{fmtInt(lv.groupVolume)}</TableCell>
                     <TableCell align="right">{fmtInt(lv.groupVolumeCumulative)}</TableCell>
-                    <TableCell align="right">{lv.pool}%</TableCell>
+                    <TableCell align="right">{lv.personalVolume > 0 ? fmtInt(lv.personalVolume) : '—'}</TableCell>
+                    <TableCell align="right">{lv.otrif > 0 ? `${lv.otrif}%` : '—'}</TableCell>
+                    <TableCell align="right">{lv.pool > 0 ? `${lv.pool}%` : '—'}</TableCell>
+                    <TableCell align="right">{lv.dsShare > 0 ? `${lv.dsShare}%` : '—'}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

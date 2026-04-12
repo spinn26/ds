@@ -2,16 +2,22 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Enums\PartnerActivity;
 use App\Http\Controllers\Controller;
 use App\Models\Client;
 use App\Models\Consultant;
 use App\Models\QualificationLog;
+use App\Services\PartnerStatusService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class DashboardController extends Controller
 {
+    public function __construct(
+        private readonly PartnerStatusService $statusService,
+    ) {}
+
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
@@ -55,7 +61,7 @@ class DashboardController extends Controller
             ->where('active', true)
             ->count();
 
-        // Team clients (consultants in structure)
+        // Team consultants (structure)
         $teamConsultantIds = DB::table('consultantStructure')
             ->where('parent', $consultant->id)
             ->pluck('child')
@@ -70,7 +76,7 @@ class DashboardController extends Controller
         $capitalUsd = DB::table('clientsIndicators')
             ->join('client', 'clientsIndicators.client', '=', 'client.id')
             ->whereIn('client.consultant', $teamConsultantIds)
-            ->where('clientsIndicators.indicator', 1) // assuming indicator 1 = capital
+            ->where('clientsIndicators.indicator', 1)
             ->sum('clientsIndicators.valueUsd');
 
         // Status level info
@@ -107,6 +113,12 @@ class DashboardController extends Controller
         $prevGroupVolume = $prevQLog->groupVolume ?? 0;
         $prevGroupVolumeCumulative = $prevQLog->groupVolumeCumulative ?? 0;
 
+        // --- Partner counts by activity status (new) ---
+        $partnerCounts = $this->getPartnerCountsByStatus($consultant->id, $teamConsultantIds);
+
+        // Previous period partner counts for comparison
+        $prevPartnerCounts = $this->getPrevPartnerCounts($consultant->id, $teamConsultantIds, $prevPeriodEnd);
+
         // First-line counts
         $firstLineResidents = DB::table('consultantStructure')
             ->join('consultant', 'consultantStructure.child', '=', 'consultant.id')
@@ -126,6 +138,9 @@ class DashboardController extends Controller
             ->where('active', true)
             ->count();
 
+        // Status info (countdown, deadlines)
+        $statusInfo = $this->statusService->getStatusInfo($consultant);
+
         return response()->json([
             'consultant' => [
                 'id' => $consultant->id,
@@ -135,6 +150,7 @@ class DashboardController extends Controller
                 'statusName' => $statusName ?? 'Резидент',
                 'ambassadorProducts' => $ambassadorProducts,
             ],
+            'statusInfo' => $statusInfo,
             'qualification' => [
                 'nominalLevel' => $statusLevel ? [
                     'id' => $statusLevel->id,
@@ -143,7 +159,10 @@ class DashboardController extends Controller
                     'percent' => $statusLevel->percent,
                     'groupVolume' => $statusLevel->groupVolume ?? 0,
                     'groupVolumeCumulative' => $statusLevel->groupVolumeCumulative ?? 0,
+                    'personalVolume' => $statusLevel->personalVolume ?? 0,
+                    'otrif' => $statusLevel->otrif ?? 0,
                     'pool' => $statusLevel->pool ?? 0,
+                    'dsShare' => $statusLevel->dsShare ?? 0,
                 ] : null,
                 'nextLevel' => $nextLevel ? [
                     'id' => $nextLevel->id,
@@ -152,7 +171,10 @@ class DashboardController extends Controller
                     'percent' => $nextLevel->percent,
                     'groupVolume' => $nextLevel->groupVolume ?? 0,
                     'groupVolumeCumulative' => $nextLevel->groupVolumeCumulative ?? 0,
+                    'personalVolume' => $nextLevel->personalVolume ?? 0,
+                    'otrif' => $nextLevel->otrif ?? 0,
                     'pool' => $nextLevel->pool ?? 0,
+                    'dsShare' => $nextLevel->dsShare ?? 0,
                 ] : null,
             ],
             'volumes' => [
@@ -172,6 +194,8 @@ class DashboardController extends Controller
                 'totalConsultants' => $totalConsultants,
                 'capitalUsd' => round((float) $capitalUsd, 2),
             ],
+            'partners' => $partnerCounts,
+            'prevPartners' => $prevPartnerCounts,
             'period' => $month,
         ]);
     }
@@ -186,11 +210,60 @@ class DashboardController extends Controller
                 'level' => $l->level,
                 'title' => $l->title,
                 'percent' => $l->percent,
+                'personalVolume' => $l->personalVolume ?? 0,
                 'groupVolume' => $l->groupVolume ?? 0,
                 'groupVolumeCumulative' => $l->groupVolumeCumulative ?? 0,
+                'otrif' => $l->otrif ?? 0,
                 'pool' => $l->pool ?? 0,
+                'dsShare' => $l->dsShare ?? 0,
             ]);
 
         return response()->json($levels);
+    }
+
+    /**
+     * Счётчики партнёров в команде по статусу активности.
+     */
+    private function getPartnerCountsByStatus(int $consultantId, array $teamIds): array
+    {
+        $counts = Consultant::whereIn('id', $teamIds)
+            ->where('id', '!=', $consultantId)
+            ->select('activity', DB::raw('count(*) as cnt'))
+            ->groupBy('activity')
+            ->pluck('cnt', 'activity')
+            ->toArray();
+
+        return [
+            'total' => array_sum($counts),
+            'registered' => $counts[PartnerActivity::Registered->value] ?? 0,
+            'active' => $counts[PartnerActivity::Active->value] ?? 0,
+            'inactive' => $counts[PartnerActivity::Inactive->value] ?? 0,
+            'terminated' => $counts[PartnerActivity::Terminated->value] ?? 0,
+            'excluded' => $counts[PartnerActivity::Excluded->value] ?? 0,
+        ];
+    }
+
+    /**
+     * Счётчики партнёров на конец предыдущего периода (для сравнения).
+     * Упрощённая версия: считаем текущих с dateCreated до конца прошлого периода.
+     */
+    private function getPrevPartnerCounts(int $consultantId, array $teamIds, \Carbon\Carbon $prevEnd): array
+    {
+        $counts = Consultant::whereIn('id', $teamIds)
+            ->where('id', '!=', $consultantId)
+            ->where('dateCreated', '<=', $prevEnd)
+            ->select('activity', DB::raw('count(*) as cnt'))
+            ->groupBy('activity')
+            ->pluck('cnt', 'activity')
+            ->toArray();
+
+        return [
+            'total' => array_sum($counts),
+            'registered' => $counts[PartnerActivity::Registered->value] ?? 0,
+            'active' => $counts[PartnerActivity::Active->value] ?? 0,
+            'inactive' => $counts[PartnerActivity::Inactive->value] ?? 0,
+            'terminated' => $counts[PartnerActivity::Terminated->value] ?? 0,
+            'excluded' => $counts[PartnerActivity::Excluded->value] ?? 0,
+        ];
     }
 }
