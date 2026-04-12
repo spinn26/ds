@@ -24,14 +24,9 @@ jobs:
 
             COMPOSER_ALLOW_SUPERUSER=1 composer update --no-dev --no-interaction --prefer-dist --optimize-autoloader
 
-            # Build React SPA
-            cd /var/www/newds/frontend
-            npm install --production=false
+            npm install
             npm run build
-            rm -rf /var/www/newds/public/spa
-            cp -r /var/www/newds/frontend/build /var/www/newds/public/spa
 
-            cd /var/www/newds
             php artisan migrate --force
             php artisan config:clear
             php artisan route:clear

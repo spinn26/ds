@@ -23,4 +23,4 @@ Homestead.json
 Homestead.yaml
 Thumbs.db
 /Db
-/public/spa
+/public/build
