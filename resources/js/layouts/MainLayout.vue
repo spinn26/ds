@@ -146,15 +146,22 @@ const isStaff = computed(() =>
   userRoles.value.some(r => ['admin', 'backoffice', 'support', 'finance', 'head', 'calculations', 'corrections'].includes(r))
 );
 
-// Cabinet sections per role
+// Cabinet sections per role — exact mapping from spec docs
 const cabinetSections = {
-  admin: ['partners', 'statuses', 'clients', 'contracts', 'upload', 'acceptance', 'requisites', 'transfers', 'transactions', 'import', 'commissions', 'pool', 'qualifications', 'charges', 'payments', 'reports', 'currencies', 'communication', 'products', 'education'],
-  backoffice: ['partners', 'statuses', 'clients', 'contracts', 'upload', 'acceptance', 'requisites', 'transfers', 'transactions', 'import', 'commissions', 'pool', 'qualifications', 'charges', 'payments', 'reports', 'currencies', 'communication', 'products', 'education'],
-  support: ['partners', 'statuses', 'clients', 'contracts', 'acceptance', 'communication'],
-  head: ['partners', 'statuses', 'clients', 'contracts', 'acceptance', 'transfers', 'reports', 'communication'],
-  finance: ['requisites', 'charges', 'payments', 'reports', 'communication'],
-  calculations: ['commissions', 'qualifications', 'pool', 'transactions', 'import', 'currencies'],
-  corrections: ['clients', 'contracts', 'partners'],
+  // Администратор — всё
+  admin: ['calculator', 'structure', 'partners', 'statuses', 'clients', 'contracts', 'upload', 'acceptance', 'requisites', 'transfers', 'transactions', 'import', 'commissions', 'pool', 'qualifications', 'charges', 'payments', 'products', 'education', 'contests', 'communication', 'reports', 'currencies'],
+  // Кабинет БЭК — контракты CRUD, клиенты, партнёры, загрузка, структура, продукты, конкурсы
+  backoffice: ['calculator', 'structure', 'partners', 'statuses', 'clients', 'contracts', 'upload', 'acceptance', 'requisites', 'transfers', 'products', 'contests', 'communication', 'reports'],
+  // Кабинет Техподдержки — просмотр партнёров/клиентов/контрактов + коммуникация
+  support: ['partners', 'statuses', 'structure', 'clients', 'contracts', 'acceptance', 'products', 'communication', 'calculator'],
+  // Кабинет Руководителя — полный просмотр
+  head: ['calculator', 'structure', 'partners', 'statuses', 'clients', 'contracts', 'acceptance', 'transfers', 'products', 'contests', 'communication', 'reports'],
+  // Кабинет Фин.менеджера — калькулятор, выплаты, начисления, реквизиты
+  finance: ['calculator', 'requisites', 'charges', 'payments', 'reports', 'communication'],
+  // Кабинет Руководителя по расчётам — комиссии, квалификации, транзакции, продукты, валюты
+  calculations: ['calculator', 'commissions', 'qualifications', 'pool', 'transactions', 'import', 'products', 'reports', 'currencies'],
+  // Кабинет сотрудника Правки — клиенты, контракты, партнёры
+  corrections: ['calculator', 'clients', 'contracts', 'partners'],
 };
 
 const availableSections = computed(() => {
@@ -196,6 +203,12 @@ const menuItems = [
   { label: 'Список конкурсов', icon: 'mdi-trophy', path: '/contests', partner: true },
   { group: 'Помощь' },
   { label: 'Обратная связь', icon: 'mdi-chat', path: '/communication' },
+
+  // Staff-only sections (visible per role even without 'consultant')
+  { group: 'Инструменты', adminSection: 'calculator' },
+  { label: 'Калькулятор объёмов', icon: 'mdi-calculator', path: '/finance/calculator', adminSection: 'calculator' },
+  { label: 'Структура (полная)', icon: 'mdi-sitemap', path: '/structure', adminSection: 'structure' },
+  { label: 'Конкурсы и события', icon: 'mdi-trophy', path: '/contests', adminSection: 'contests' },
 
   // Admin/staff sections
   { group: 'Данные партнёров', adminSection: 'partners' },
