@@ -3,36 +3,42 @@
     <div class="d-flex align-center ga-2 mb-4">
       <v-icon size="32" color="primary">mdi-calendar-clock</v-icon>
       <h5 class="text-h5 font-weight-bold">Статусы партнёров</h5>
+      <v-chip size="small" color="primary">{{ totalCount }}</v-chip>
     </div>
 
     <v-row class="mb-4">
-      <v-col v-for="card in summaryCards" :key="card.label" cols="12" sm="6" md="3">
-        <v-card class="pa-4 text-center">
-          <div class="text-body-2 text-medium-emphasis">{{ card.label }}</div>
-          <div class="text-h3 font-weight-bold" :class="`text-${card.color}`">{{ card.value }}</div>
+      <v-col v-for="status in statuses" :key="status.id" cols="12" sm="6" md="3">
+        <v-card class="pa-4 text-center" :color="statusCardColor(status.id)" variant="tonal">
+          <div class="text-body-2 text-medium-emphasis">{{ status.name }}</div>
+          <div class="text-h3 font-weight-bold">{{ status.count }}</div>
         </v-card>
       </v-col>
     </v-row>
 
-    <v-card v-if="details.length" class="pa-4">
-      <div class="text-subtitle-1 font-weight-bold mb-3">Детализация по статусам</div>
+    <v-card class="pa-4">
+      <div class="text-subtitle-1 font-weight-bold mb-3">Сводка</div>
       <v-table density="compact">
         <thead>
           <tr>
-            <th>Статус</th>
-            <th class="text-right">Всего</th>
-            <th class="text-right">Активных</th>
-            <th class="text-right">Неактивных</th>
-            <th class="text-right">Просрочено</th>
+            <th>ID</th>
+            <th>Статус активности</th>
+            <th class="text-right">Количество</th>
+            <th class="text-right">% от общего</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="row in details" :key="row.status">
-            <td>{{ row.status }}</td>
-            <td class="text-right">{{ row.total }}</td>
-            <td class="text-right text-success">{{ row.active }}</td>
-            <td class="text-right text-error">{{ row.inactive }}</td>
-            <td class="text-right text-warning">{{ row.expired }}</td>
+          <tr v-for="s in statuses" :key="s.id">
+            <td>{{ s.id }}</td>
+            <td>
+              <v-chip size="x-small" :color="statusCardColor(s.id)">{{ s.name }}</v-chip>
+            </td>
+            <td class="text-right font-weight-bold">{{ s.count }}</td>
+            <td class="text-right">{{ totalCount ? ((s.count / totalCount) * 100).toFixed(1) : 0 }}%</td>
+          </tr>
+          <tr class="font-weight-bold">
+            <td colspan="2">Итого</td>
+            <td class="text-right">{{ totalCount }}</td>
+            <td class="text-right">100%</td>
           </tr>
         </tbody>
       </v-table>
@@ -49,22 +55,20 @@ import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
 
 const loading = ref(true);
-const data = ref({});
-const details = ref([]);
+const statuses = ref([]);
 
-const summaryCards = computed(() => [
-  { label: 'Всего партнёров', value: data.value.total ?? 0, color: 'primary' },
-  { label: 'Активных', value: data.value.active ?? 0, color: 'success' },
-  { label: 'Неактивных', value: data.value.inactive ?? 0, color: 'error' },
-  { label: 'Истекает скоро', value: data.value.expiringSoon ?? 0, color: 'warning' },
-]);
+const totalCount = computed(() => statuses.value.reduce((sum, s) => sum + (s.count || 0), 0));
+
+function statusCardColor(id) {
+  const colors = { 1: 'success', 2: 'warning', 3: 'error', 4: 'info', 5: 'error' };
+  return colors[id] || 'grey';
+}
 
 async function loadData() {
   loading.value = true;
   try {
-    const { data: d } = await api.get('/admin/partner-statuses');
-    data.value = d;
-    details.value = d.details || [];
+    const { data } = await api.get('/admin/partner-statuses');
+    statuses.value = Array.isArray(data) ? data : [];
   } catch {}
   loading.value = false;
 }
