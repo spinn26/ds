@@ -6,8 +6,7 @@
         <h5 class="text-h5 font-weight-bold">Отчёт начислений и выплат</h5>
       </div>
       <div class="d-flex align-center ga-2">
-        <v-text-field v-model="month" type="month" density="compact" variant="outlined"
-          style="max-width:200px" hide-details @update:model-value="loadData" />
+        <MonthPicker v-model="month" @update:model-value="loadData" />
       </div>
     </div>
 
@@ -231,6 +230,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
+import MonthPicker from '../../components/MonthPicker.vue';
 
 const loading = ref(true);
 const month = ref(new Date().toISOString().slice(0, 7));

@@ -2,8 +2,7 @@
   <div>
     <div class="d-flex justify-space-between align-center mb-4 flex-wrap ga-2">
       <h5 class="text-h5 font-weight-bold">Дашборд партнёра</h5>
-      <v-text-field v-model="period" type="month" density="compact" variant="outlined"
-        style="max-width: 200px" hide-details @update:model-value="loadData" />
+      <MonthPicker v-model="period" @update:model-value="loadData" />
     </div>
 
     <!-- Status Info Alert -->
@@ -230,6 +229,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import api from '../api';
+import MonthPicker from '../components/MonthPicker.vue';
 
 const loading = ref(true);
 const period = ref(new Date().toISOString().slice(0, 7));
