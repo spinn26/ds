@@ -5,7 +5,7 @@
       <div class="d-flex align-center pa-4">
         <span class="text-h6 font-weight-black text-primary">DS</span>
         <span class="text-caption text-medium-emphasis ml-2">ПЛАТФОРМА</span>
-        <v-icon v-if="auth.isAdmin" color="secondary" size="small" class="ml-1">mdi-shield-crown</v-icon>
+        <v-icon v-if="isStaff" color="secondary" size="small" class="ml-1">mdi-shield-crown</v-icon>
       </div>
       <v-chip v-if="cabinetName" size="x-small" color="primary" variant="outlined" class="mx-4 mb-2">{{ cabinetName }}</v-chip>
       <v-divider />
@@ -16,7 +16,7 @@
             {{ item.group }}
           </v-list-subheader>
           <v-list-item v-else :to="item.path" :prepend-icon="item.icon"
-            :title="item.label" :active="$route.path === item.path"
+            :title="item.label" :active="isActivePath(item.path)"
             :color="item.adminSection ? 'secondary' : 'primary'"
             rounded="lg" class="mb-1" @click="mobile && (drawer = false)" />
         </template>
@@ -27,14 +27,40 @@
     <v-app-bar flat border="b" :style="{ background: '#fff' }">
       <v-app-bar-nav-icon v-if="mobile" @click="drawer = !drawer" />
       <v-spacer />
-      <v-btn v-if="auth.isAdmin" to="/admin/users" color="secondary" variant="flat" size="small" prepend-icon="mdi-account-cog" class="mr-2">
+
+      <!-- Referral link copy button (only for active partners) -->
+      <v-btn v-if="statusInfo?.canInvite && statusInfo?.referralCode" size="small" variant="tonal" color="primary"
+        class="mr-2" prepend-icon="mdi-link-variant" @click="copyReferral">
+        {{ copied ? 'Скопировано!' : 'Реф. ссылка' }}
+      </v-btn>
+
+      <!-- Status chip with activity -->
+      <v-chip :color="statusColor" size="small" variant="outlined" class="mr-2">
+        {{ statusInfo?.activityName || 'Загрузка...' }}
+      </v-chip>
+
+      <!-- Countdown to status change -->
+      <v-chip v-if="statusInfo?.daysRemaining != null && statusInfo.daysRemaining <= 90"
+        :color="statusInfo.daysRemaining <= 30 ? 'error' : 'warning'" size="small" variant="tonal" class="mr-2">
+        <v-icon start size="14">mdi-timer-outline</v-icon>
+        {{ statusInfo.daysRemaining }} дн.
+      </v-chip>
+
+      <!-- Admin button -->
+      <v-btn v-if="auth.isAdmin" to="/admin/users" color="secondary" variant="flat" size="small"
+        prepend-icon="mdi-account-cog" class="mr-2">
         Пользователи
       </v-btn>
-      <v-chip color="success" size="small" variant="outlined" class="mr-2">Активный</v-chip>
+
+      <!-- User name -->
       <span v-if="!mobile" class="text-body-2 text-medium-emphasis mr-2">
         {{ auth.user?.firstName }} {{ auth.user?.lastName }}
       </span>
+
+      <!-- Notifications -->
       <v-btn icon="mdi-bell-outline" size="small" class="mr-1" />
+
+      <!-- User menu -->
       <v-menu>
         <template #activator="{ props }">
           <v-avatar v-bind="props" :color="auth.isAdmin ? 'secondary' : 'primary'" size="32" class="cursor-pointer">
@@ -58,17 +84,57 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useDisplay } from 'vuetify';
+import { useRoute } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
+import api from '../api';
 
 const auth = useAuthStore();
+const route = useRoute();
 const { mobile } = useDisplay();
 const drawer = ref(true);
+const copied = ref(false);
+const statusInfo = ref(null);
 
 const initials = computed(() =>
   `${auth.user?.firstName?.[0] || ''}${auth.user?.lastName?.[0] || ''}`.toUpperCase()
 );
+
+// Load status info for TopBar
+onMounted(async () => {
+  try {
+    const { data } = await api.get('/profile');
+    statusInfo.value = {
+      ...data.statusInfo,
+      referralCode: data.referral?.referralCode,
+      referralLink: data.referral?.referralLink,
+      canInvite: data.referral?.canInvite,
+    };
+  } catch {}
+});
+
+const statusColor = computed(() => {
+  const id = statusInfo.value?.activityId;
+  if (id === 1) return 'success';   // Активен
+  if (id === 4) return 'info';      // Зарегистрирован
+  if (id === 3) return 'warning';   // Терминирован
+  if (id === 5) return 'error';     // Исключен
+  return 'default';
+});
+
+function copyReferral() {
+  if (statusInfo.value?.referralLink) {
+    navigator.clipboard.writeText(statusInfo.value.referralLink);
+    copied.value = true;
+    setTimeout(() => copied.value = false, 2000);
+  }
+}
+
+function isActivePath(path) {
+  if (path === '/') return route.path === '/';
+  return route.path.startsWith(path);
+}
 
 // Parse user roles
 const userRoles = computed(() => {
@@ -76,10 +142,19 @@ const userRoles = computed(() => {
   return role.split(',').map(r => r.trim()).filter(Boolean);
 });
 
-// Cabinet sections available per role
+const isStaff = computed(() =>
+  userRoles.value.some(r => ['admin', 'backoffice', 'support', 'finance', 'head', 'calculations', 'corrections'].includes(r))
+);
+
+// Cabinet sections per role
 const cabinetSections = {
-  admin: ['partners', 'statuses', 'clients', 'contracts', 'acceptance', 'requisites', 'transfers', 'transactions', 'import', 'commissions', 'pool', 'qualifications', 'charges', 'payments', 'reports', 'currencies'],
-  backoffice: ['partners', 'statuses', 'clients', 'contracts', 'acceptance', 'requisites', 'transfers', 'transactions', 'import', 'commissions', 'pool', 'qualifications', 'charges', 'payments', 'reports', 'currencies'],
+  admin: ['partners', 'statuses', 'clients', 'contracts', 'upload', 'acceptance', 'requisites', 'transfers', 'transactions', 'import', 'commissions', 'pool', 'qualifications', 'charges', 'payments', 'reports', 'currencies', 'communication'],
+  backoffice: ['partners', 'statuses', 'clients', 'contracts', 'upload', 'acceptance', 'requisites', 'transfers', 'transactions', 'import', 'commissions', 'pool', 'qualifications', 'charges', 'payments', 'reports', 'currencies', 'communication'],
+  support: ['partners', 'statuses', 'clients', 'contracts', 'acceptance', 'communication'],
+  head: ['partners', 'statuses', 'clients', 'contracts', 'acceptance', 'transfers', 'reports', 'communication'],
+  finance: ['requisites', 'charges', 'payments', 'reports', 'communication'],
+  calculations: ['commissions', 'qualifications', 'pool', 'transactions', 'import', 'currencies'],
+  corrections: ['clients', 'contracts', 'partners'],
 };
 
 const availableSections = computed(() => {
@@ -93,34 +168,39 @@ const availableSections = computed(() => {
 
 const cabinetName = computed(() => {
   if (userRoles.value.includes('admin')) return 'Администратор';
-  if (userRoles.value.includes('backoffice')) return 'Бэкофис';
+  if (userRoles.value.includes('backoffice')) return 'Кабинет БЭК';
+  if (userRoles.value.includes('support')) return 'Техподдержка';
+  if (userRoles.value.includes('head')) return 'Руководитель';
+  if (userRoles.value.includes('finance')) return 'Фин. менеджер';
+  if (userRoles.value.includes('calculations')) return 'Расчёты';
+  if (userRoles.value.includes('corrections')) return 'Правки';
   return null;
 });
 
+// Menu items — ORDER per spec "Кабинет партнера"
 const menuItems = [
+  // Partner menu — order per spec
+  { label: 'Дашборд', icon: 'mdi-view-dashboard', path: '/', partner: true },
+  { group: 'Финансы', partner: true },
+  { label: 'Отчёт начислений', icon: 'mdi-bank', path: '/finance/report', partner: true },
+  { label: 'Калькулятор объёмов', icon: 'mdi-calculator', path: '/finance/calculator', partner: true },
+  { group: 'Клиенты', partner: true },
+  { label: 'Список моих клиентов', icon: 'mdi-account-group', path: '/clients', partner: true },
+  { group: 'Контракты', partner: true },
+  { label: 'Контракты моих клиентов', icon: 'mdi-file-document', path: '/contracts', partner: true },
+  { label: 'Контракты моей команды', icon: 'mdi-folder-account', path: '/contracts/team', partner: true },
+  { label: 'Структура', icon: 'mdi-sitemap', path: '/structure', partner: true },
   { label: 'Обучение', icon: 'mdi-school', path: '/education' },
-  { label: 'Дашборд', icon: 'mdi-view-dashboard', path: '/', requireRole: 'consultant' },
-  { label: 'Рефералки', icon: 'mdi-share-variant', path: '/referrals', requireRole: 'consultant' },
-  { group: 'Финансы', requireRole: 'consultant' },
-  { label: 'Отчёт начислений', icon: 'mdi-bank', path: '/finance/report', requireRole: 'consultant' },
-  { label: 'Калькулятор объёмов', icon: 'mdi-calculator', path: '/finance/calculator', requireRole: 'consultant' },
-  { group: 'Клиенты', requireRole: 'consultant' },
-  { label: 'Список клиентов', icon: 'mdi-account-group', path: '/clients', requireRole: 'consultant' },
-  { group: 'Контракты', requireRole: 'consultant' },
-  { label: 'Контракты клиентов', icon: 'mdi-file-document', path: '/contracts', requireRole: 'consultant' },
-  { label: 'Контракты команды', icon: 'mdi-folder-account', path: '/contracts/team', requireRole: 'consultant' },
-  { group: 'Структура', requireRole: 'consultant' },
-  { label: 'Структура команды', icon: 'mdi-sitemap', path: '/structure', requireRole: 'consultant' },
-  { label: 'Продукты', icon: 'mdi-package-variant', path: '/products', requireRole: 'consultant' },
-  { label: 'Инсмарт', icon: 'mdi-shield-check', path: '/inssmart', requireRole: 'consultant' },
-  { group: 'Конкурсы', requireRole: 'consultant' },
-  { label: 'Список конкурсов', icon: 'mdi-trophy', path: '/contests', requireRole: 'consultant' },
+  { label: 'Продукты', icon: 'mdi-package-variant', path: '/products', partner: true },
+  { group: 'Конкурсы и события', partner: true },
+  { label: 'Список конкурсов', icon: 'mdi-trophy', path: '/contests', partner: true },
   { group: 'Помощь' },
-  { label: 'Инструкции', icon: 'mdi-help-circle', path: '/help' },
-  { label: 'Коммуникация', icon: 'mdi-chat', path: '/communication' },
-  // Admin sections (in partner layout)
+  { label: 'Обратная связь', icon: 'mdi-chat', path: '/communication' },
+
+  // Admin/staff sections
   { group: 'Данные партнёров', adminSection: 'partners' },
   { label: 'Менеджер контрактов', icon: 'mdi-file-document-edit', path: '/manage/contracts', adminSection: 'contracts' },
+  { label: 'Загрузка контрактов', icon: 'mdi-upload', path: '/manage/contracts/upload', adminSection: 'upload' },
   { label: 'Партнёры', icon: 'mdi-account-search', path: '/manage/partners', adminSection: 'partners' },
   { label: 'Статусы партнёров', icon: 'mdi-calendar-clock', path: '/manage/partners/statuses', adminSection: 'statuses' },
   { label: 'Клиенты', icon: 'mdi-account-group', path: '/manage/clients', adminSection: 'clients' },
@@ -143,7 +223,7 @@ const menuItems = [
 
 const visibleMenu = computed(() => menuItems.filter((item) => {
   if (item.adminSection) return availableSections.value.has(item.adminSection);
-  if (item.requireRole === 'consultant') return auth.isConsultant || auth.isAdmin;
+  if (item.partner) return auth.isConsultant || auth.isAdmin;
   return true;
 }));
 </script>
