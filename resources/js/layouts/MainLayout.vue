@@ -148,8 +148,8 @@ const isStaff = computed(() =>
 
 // Cabinet sections per role
 const cabinetSections = {
-  admin: ['partners', 'statuses', 'clients', 'contracts', 'upload', 'acceptance', 'requisites', 'transfers', 'transactions', 'import', 'commissions', 'pool', 'qualifications', 'charges', 'payments', 'reports', 'currencies', 'communication'],
-  backoffice: ['partners', 'statuses', 'clients', 'contracts', 'upload', 'acceptance', 'requisites', 'transfers', 'transactions', 'import', 'commissions', 'pool', 'qualifications', 'charges', 'payments', 'reports', 'currencies', 'communication'],
+  admin: ['partners', 'statuses', 'clients', 'contracts', 'upload', 'acceptance', 'requisites', 'transfers', 'transactions', 'import', 'commissions', 'pool', 'qualifications', 'charges', 'payments', 'reports', 'currencies', 'communication', 'products', 'education'],
+  backoffice: ['partners', 'statuses', 'clients', 'contracts', 'upload', 'acceptance', 'requisites', 'transfers', 'transactions', 'import', 'commissions', 'pool', 'qualifications', 'charges', 'payments', 'reports', 'currencies', 'communication', 'products', 'education'],
   support: ['partners', 'statuses', 'clients', 'contracts', 'acceptance', 'communication'],
   head: ['partners', 'statuses', 'clients', 'contracts', 'acceptance', 'transfers', 'reports', 'communication'],
   finance: ['requisites', 'charges', 'payments', 'reports', 'communication'],
@@ -216,6 +216,9 @@ const menuItems = [
   { group: 'Начисления и выплаты', adminSection: 'charges' },
   { label: 'Прочие начисления', icon: 'mdi-bank', path: '/manage/charges', adminSection: 'charges' },
   { label: 'Реестр выплат', icon: 'mdi-cash', path: '/manage/payments', adminSection: 'payments' },
+  { group: 'Контент', adminSection: 'products' },
+  { label: 'Продукты (ред.)', icon: 'mdi-package-variant-closed', path: '/manage/products', adminSection: 'products' },
+  { label: 'Обучение (ред.)', icon: 'mdi-school', path: '/manage/education', adminSection: 'education' },
   { group: 'Отчёты и настройки', adminSection: 'reports' },
   { label: 'Отчёты', icon: 'mdi-file-chart', path: '/manage/reports', adminSection: 'reports' },
   { label: 'Валюты и НДС', icon: 'mdi-currency-usd', path: '/manage/currencies', adminSection: 'currencies' },
