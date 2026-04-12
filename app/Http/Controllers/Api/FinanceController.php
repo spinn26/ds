@@ -171,17 +171,20 @@ class FinanceController extends Controller
                 ->values();
         }
 
-        // Currency rates for the period
+        // Currency rates for the period — latest rate per currency
         $currencyRates = DB::table('currencyRate')
-            ->where('date', '>=', $periodStart)
-            ->where('date', '<=', $periodEnd)
-            ->orderByDesc('date')
+            ->join('currency', 'currencyRate.currency', '=', 'currency.id')
+            ->where('currencyRate.date', '>=', $periodStart)
+            ->where('currencyRate.date', '<=', $periodEnd)
+            ->select('currency.symbol', 'currency.nameRu', 'currencyRate.rate', 'currencyRate.date')
+            ->orderByDesc('currencyRate.date')
             ->get()
-            ->map(fn ($r) => [
-                'currency' => $r->currency,
-                'rate' => round((float) $r->rate, 4),
-                'date' => $r->date,
-            ]);
+            ->groupBy('symbol')
+            ->map(fn ($rates) => [
+                'currency' => $rates->first()->symbol ?? $rates->first()->nameRu,
+                'rate' => round((float) $rates->first()->rate, 4),
+            ])
+            ->values();
 
         // Summary cards
         $personalSalesPoints = $personalCommissions->sum(fn ($c) => (float) ($c->personalVolume ?? 0));
