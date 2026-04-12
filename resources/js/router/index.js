@@ -35,7 +35,8 @@ const routes = [
         component: () => import('../layouts/AdminLayout.vue'),
         meta: { auth: true, admin: true },
         children: [
-            { path: '', redirect: '/admin/partners' },
+            { path: '', redirect: '/admin/users' },
+            { path: 'users', component: () => import('../pages/Admin/Users.vue') },
             { path: 'contracts', component: () => import('../pages/Admin/ContractManager.vue') },
             { path: 'partners', component: () => import('../pages/Admin/Partners.vue') },
             { path: 'partners/statuses', component: () => import('../pages/Admin/PartnerStatuses.vue') },

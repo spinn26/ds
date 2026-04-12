@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\AdminUserController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ClientController;
 use App\Http\Controllers\Api\ContractController;
@@ -34,8 +35,13 @@ Route::prefix('v1')->group(function () {
         Route::get('/structure', [StructureController::class, 'index']);
         Route::get('/structure/{consultantId}/children', [StructureController::class, 'children']);
 
-        // Admin: impersonate
+        // Admin
         Route::post('/impersonate/{user}', [ImpersonateController::class, 'impersonate']);
         Route::post('/impersonate/leave', [ImpersonateController::class, 'leave']);
+
+        Route::get('/admin/users', [AdminUserController::class, 'index']);
+        Route::post('/admin/users', [AdminUserController::class, 'store']);
+        Route::put('/admin/users/{id}', [AdminUserController::class, 'update']);
+        Route::delete('/admin/users/{id}', [AdminUserController::class, 'destroy']);
     });
 });

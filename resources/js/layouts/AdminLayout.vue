@@ -65,6 +65,7 @@ const initials = computed(() =>
 );
 
 const menuItems = [
+  { label: 'Пользователи', icon: 'mdi-account-cog', path: '/admin/users' },
   { group: 'Партнёры и клиенты' },
   { label: 'Партнёры', icon: 'mdi-account-search', path: '/admin/partners' },
   { label: 'Статусы партнёров', icon: 'mdi-calendar-clock', path: '/admin/partners/statuses' },
