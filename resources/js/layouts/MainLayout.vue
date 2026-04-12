@@ -7,16 +7,17 @@
         <span class="text-caption text-medium-emphasis ml-2">ПЛАТФОРМА</span>
         <v-icon v-if="auth.isAdmin" color="secondary" size="small" class="ml-1">mdi-shield-crown</v-icon>
       </div>
+      <v-chip v-if="cabinetName" size="x-small" color="primary" variant="outlined" class="mx-4 mb-2">{{ cabinetName }}</v-chip>
       <v-divider />
 
       <v-list density="compact" nav>
         <template v-for="(item, i) in visibleMenu" :key="i">
-          <v-list-subheader v-if="item.group" :class="item.adminOnly ? 'text-secondary font-weight-bold' : ''">
+          <v-list-subheader v-if="item.group" :class="item.adminSection ? 'text-secondary font-weight-bold' : ''">
             {{ item.group }}
           </v-list-subheader>
           <v-list-item v-else :to="item.path" :prepend-icon="item.icon"
             :title="item.label" :active="$route.path === item.path"
-            :color="item.adminOnly ? 'secondary' : 'primary'"
+            :color="item.adminSection ? 'secondary' : 'primary'"
             rounded="lg" class="mb-1" @click="mobile && (drawer = false)" />
         </template>
       </v-list>
@@ -69,6 +70,33 @@ const initials = computed(() =>
   `${auth.user?.firstName?.[0] || ''}${auth.user?.lastName?.[0] || ''}`.toUpperCase()
 );
 
+// Parse user roles
+const userRoles = computed(() => {
+  const role = auth.user?.role || '';
+  return role.split(',').map(r => r.trim()).filter(Boolean);
+});
+
+// Cabinet sections available per role
+const cabinetSections = {
+  admin: ['partners', 'statuses', 'clients', 'contracts', 'acceptance', 'requisites', 'transfers', 'transactions', 'import', 'commissions', 'pool', 'qualifications', 'charges', 'payments', 'reports', 'currencies'],
+  backoffice: ['partners', 'statuses', 'clients', 'contracts', 'acceptance', 'requisites', 'transfers', 'transactions', 'import', 'commissions', 'pool', 'qualifications', 'charges', 'payments', 'reports', 'currencies'],
+};
+
+const availableSections = computed(() => {
+  const sections = new Set();
+  for (const role of userRoles.value) {
+    const s = cabinetSections[role];
+    if (s) s.forEach(sec => sections.add(sec));
+  }
+  return sections;
+});
+
+const cabinetName = computed(() => {
+  if (userRoles.value.includes('admin')) return 'Администратор';
+  if (userRoles.value.includes('backoffice')) return 'Бэкофис';
+  return null;
+});
+
 const menuItems = [
   { label: 'Обучение', icon: 'mdi-school', path: '/education' },
   { label: 'Дашборд', icon: 'mdi-view-dashboard', path: '/', requireRole: 'consultant' },
@@ -91,30 +119,30 @@ const menuItems = [
   { label: 'Инструкции', icon: 'mdi-help-circle', path: '/help' },
   { label: 'Коммуникация', icon: 'mdi-chat', path: '/communication' },
   // Admin sections (in partner layout)
-  { group: 'Данные партнёров', adminOnly: true },
-  { label: 'Менеджер контрактов', icon: 'mdi-file-document-edit', path: '/manage/contracts', adminOnly: true },
-  { label: 'Партнёры', icon: 'mdi-account-search', path: '/manage/partners', adminOnly: true },
-  { label: 'Статусы партнёров', icon: 'mdi-calendar-clock', path: '/manage/partners/statuses', adminOnly: true },
-  { label: 'Клиенты', icon: 'mdi-account-group', path: '/manage/clients', adminOnly: true },
-  { label: 'Акцепт документов', icon: 'mdi-check-circle', path: '/manage/acceptance', adminOnly: true },
-  { label: 'Реквизиты', icon: 'mdi-credit-card', path: '/manage/requisites', adminOnly: true },
-  { label: 'Перестановки', icon: 'mdi-history', path: '/manage/transfers', adminOnly: true },
-  { group: 'Транзакции и объёмы', adminOnly: true },
-  { label: 'Импорт транзакций', icon: 'mdi-upload', path: '/manage/transactions/import', adminOnly: true },
-  { label: 'Транзакции', icon: 'mdi-swap-horizontal', path: '/manage/transactions', adminOnly: true },
-  { label: 'Комиссии', icon: 'mdi-receipt', path: '/manage/commissions', adminOnly: true },
-  { label: 'Пул', icon: 'mdi-cash-multiple', path: '/manage/pool', adminOnly: true },
-  { label: 'Квалификации', icon: 'mdi-chart-bar', path: '/manage/qualifications', adminOnly: true },
-  { group: 'Начисления и выплаты', adminOnly: true },
-  { label: 'Прочие начисления', icon: 'mdi-bank', path: '/manage/charges', adminOnly: true },
-  { label: 'Реестр выплат', icon: 'mdi-cash', path: '/manage/payments', adminOnly: true },
-  { group: 'Отчёты и настройки', adminOnly: true },
-  { label: 'Отчёты', icon: 'mdi-file-chart', path: '/manage/reports', adminOnly: true },
-  { label: 'Валюты и НДС', icon: 'mdi-currency-usd', path: '/manage/currencies', adminOnly: true },
+  { group: 'Данные партнёров', adminSection: 'partners' },
+  { label: 'Менеджер контрактов', icon: 'mdi-file-document-edit', path: '/manage/contracts', adminSection: 'contracts' },
+  { label: 'Партнёры', icon: 'mdi-account-search', path: '/manage/partners', adminSection: 'partners' },
+  { label: 'Статусы партнёров', icon: 'mdi-calendar-clock', path: '/manage/partners/statuses', adminSection: 'statuses' },
+  { label: 'Клиенты', icon: 'mdi-account-group', path: '/manage/clients', adminSection: 'clients' },
+  { label: 'Акцепт документов', icon: 'mdi-check-circle', path: '/manage/acceptance', adminSection: 'acceptance' },
+  { label: 'Реквизиты', icon: 'mdi-credit-card', path: '/manage/requisites', adminSection: 'requisites' },
+  { label: 'Перестановки', icon: 'mdi-history', path: '/manage/transfers', adminSection: 'transfers' },
+  { group: 'Транзакции и объёмы', adminSection: 'transactions' },
+  { label: 'Импорт транзакций', icon: 'mdi-upload', path: '/manage/transactions/import', adminSection: 'import' },
+  { label: 'Транзакции', icon: 'mdi-swap-horizontal', path: '/manage/transactions', adminSection: 'transactions' },
+  { label: 'Комиссии', icon: 'mdi-receipt', path: '/manage/commissions', adminSection: 'commissions' },
+  { label: 'Пул', icon: 'mdi-cash-multiple', path: '/manage/pool', adminSection: 'pool' },
+  { label: 'Квалификации', icon: 'mdi-chart-bar', path: '/manage/qualifications', adminSection: 'qualifications' },
+  { group: 'Начисления и выплаты', adminSection: 'charges' },
+  { label: 'Прочие начисления', icon: 'mdi-bank', path: '/manage/charges', adminSection: 'charges' },
+  { label: 'Реестр выплат', icon: 'mdi-cash', path: '/manage/payments', adminSection: 'payments' },
+  { group: 'Отчёты и настройки', adminSection: 'reports' },
+  { label: 'Отчёты', icon: 'mdi-file-chart', path: '/manage/reports', adminSection: 'reports' },
+  { label: 'Валюты и НДС', icon: 'mdi-currency-usd', path: '/manage/currencies', adminSection: 'currencies' },
 ];
 
 const visibleMenu = computed(() => menuItems.filter((item) => {
-  if (item.adminOnly) return auth.isAdmin;
+  if (item.adminSection) return availableSections.value.has(item.adminSection);
   if (item.requireRole === 'consultant') return auth.isConsultant || auth.isAdmin;
   return true;
 }));
