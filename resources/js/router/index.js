@@ -2,16 +2,11 @@ import { createRouter, createWebHistory } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 
 const routes = [
-    {
-        path: '/login',
-        component: () => import('../pages/Auth/Login.vue'),
-        meta: { guest: true },
-    },
-    {
-        path: '/register',
-        component: () => import('../pages/Auth/Register.vue'),
-        meta: { guest: true },
-    },
+    // === Guest ===
+    { path: '/login', component: () => import('../pages/Auth/Login.vue'), meta: { guest: true } },
+    { path: '/register', component: () => import('../pages/Auth/Register.vue'), meta: { guest: true } },
+
+    // === Partner SPA ===
     {
         path: '/',
         component: () => import('../layouts/MainLayout.vue'),
@@ -31,25 +26,35 @@ const routes = [
             { path: 'communication', component: () => import('../pages/Communication.vue') },
             { path: 'help', component: () => import('../pages/Help.vue') },
             { path: 'profile', component: () => import('../pages/Profile.vue') },
-            // Admin
-            { path: 'admin/contracts', component: () => import('../pages/Admin/ContractManager.vue') },
-            { path: 'admin/partners', component: () => import('../pages/Admin/Partners.vue') },
-            { path: 'admin/clients', component: () => import('../pages/Admin/Clients.vue') },
-            { path: 'admin/partners/statuses', component: () => import('../pages/Admin/PartnerStatuses.vue') },
-            { path: 'admin/acceptance', component: () => import('../pages/Admin/Acceptance.vue') },
-            { path: 'admin/requisites', component: () => import('../pages/Admin/Requisites.vue') },
-            { path: 'admin/transfers', component: () => import('../pages/Admin/Transfers.vue') },
-            { path: 'admin/transactions/import', component: () => import('../pages/Admin/TransactionImport.vue') },
-            { path: 'admin/transactions', component: () => import('../pages/Admin/Transactions.vue') },
-            { path: 'admin/commissions', component: () => import('../pages/Admin/Commissions.vue') },
-            { path: 'admin/pool', component: () => import('../pages/Admin/Pool.vue') },
-            { path: 'admin/qualifications', component: () => import('../pages/Admin/Qualifications.vue') },
-            { path: 'admin/charges', component: () => import('../pages/Admin/Charges.vue') },
-            { path: 'admin/payments', component: () => import('../pages/Admin/Payments.vue') },
-            { path: 'admin/reports', component: () => import('../pages/Admin/Reports.vue') },
-            { path: 'admin/currencies', component: () => import('../pages/Admin/Currencies.vue') },
         ],
     },
+
+    // === Admin (отдельный layout) ===
+    {
+        path: '/admin',
+        component: () => import('../layouts/AdminLayout.vue'),
+        meta: { auth: true, admin: true },
+        children: [
+            { path: '', redirect: '/admin/partners' },
+            { path: 'contracts', component: () => import('../pages/Admin/ContractManager.vue') },
+            { path: 'partners', component: () => import('../pages/Admin/Partners.vue') },
+            { path: 'partners/statuses', component: () => import('../pages/Admin/PartnerStatuses.vue') },
+            { path: 'clients', component: () => import('../pages/Admin/Clients.vue') },
+            { path: 'acceptance', component: () => import('../pages/Admin/Acceptance.vue') },
+            { path: 'requisites', component: () => import('../pages/Admin/Requisites.vue') },
+            { path: 'transfers', component: () => import('../pages/Admin/Transfers.vue') },
+            { path: 'transactions/import', component: () => import('../pages/Admin/TransactionImport.vue') },
+            { path: 'transactions', component: () => import('../pages/Admin/Transactions.vue') },
+            { path: 'commissions', component: () => import('../pages/Admin/Commissions.vue') },
+            { path: 'pool', component: () => import('../pages/Admin/Pool.vue') },
+            { path: 'qualifications', component: () => import('../pages/Admin/Qualifications.vue') },
+            { path: 'charges', component: () => import('../pages/Admin/Charges.vue') },
+            { path: 'payments', component: () => import('../pages/Admin/Payments.vue') },
+            { path: 'reports', component: () => import('../pages/Admin/Reports.vue') },
+            { path: 'currencies', component: () => import('../pages/Admin/Currencies.vue') },
+        ],
+    },
+
     { path: '/:pathMatch(.*)*', redirect: '/' },
 ];
 
@@ -61,15 +66,14 @@ const router = createRouter({
 router.beforeEach(async (to) => {
     const auth = useAuthStore();
 
-    if (!auth.initialized) {
-        await auth.fetchUser();
-    }
+    if (!auth.initialized) await auth.fetchUser();
 
     if (to.meta.auth && !auth.user) return '/login';
     if (to.meta.guest && auth.user) return '/';
+    if (to.meta.admin && !auth.isAdmin) return '/';
 
-    // Registered users can only access education
-    if (auth.user?.role === 'registered' && to.path !== '/education' && to.path !== '/profile' && to.path !== '/help') {
+    // Registered-only → education
+    if (auth.user?.role === 'registered' && !['education', 'profile', 'help'].some(p => to.path.includes(p))) {
         return '/education';
     }
 });
