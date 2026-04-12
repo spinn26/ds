@@ -22,50 +22,35 @@ class StructureController extends Controller
         $isStaff = array_intersect($userRoles, ['admin', 'backoffice', 'support', 'head', 'calculations', 'corrections']);
         $consultant = Consultant::where('webUser', $user->id)->first();
 
-        // Staff without consultant role → show ALL consultants with server-side pagination
+        // Staff without consultant role → show top-level consultants (no inviter) as tree roots
         if ($isStaff && ! in_array('consultant', $userRoles)) {
-            $query = DB::table('consultant')->whereNull('dateDeleted');
-
+            // If searching — flat search across all consultants
             if ($request->filled('search')) {
-                $query->where('personName', 'ilike', '%' . $request->search . '%');
-            }
-            if ($request->filled('activity')) {
-                $activityIds = is_array($request->activity) ? $request->activity : explode(',', $request->activity);
-                $query->whereIn('activity', $activityIds);
+                $query = Consultant::whereNull('dateDeleted')
+                    ->where('personName', 'ilike', '%' . $request->search . '%');
+
+                if ($request->filled('activity')) {
+                    $activityIds = explode(',', $request->activity);
+                    $query->whereIn('activity', $activityIds);
+                }
+
+                $members = $query->orderBy('personName')->limit(50)->get()
+                    ->map(fn ($c) => $this->formatMember($c));
+
+                return response()->json(['data' => $members->values()]);
             }
 
-            $total = $query->count();
-            $page = (int) $request->input('page', 1);
-            $perPage = 25;
-
-            $rows = $query->orderBy('personName')
-                ->offset(($page - 1) * $perPage)
-                ->limit($perPage)
+            // No search → show top-level structure (consultants without inviter)
+            $topLevel = Consultant::whereNull('dateDeleted')
+                ->where(function ($q) {
+                    $q->whereNull('inviter')->orWhere('inviter', 0);
+                })
+                ->orderBy('personName')
                 ->get()
-                ->map(function ($c) {
-                    $statusLevel = $c->status_and_lvl
-                        ? DB::table('status_levels')->where('id', $c->status_and_lvl)->first()
-                        : null;
-                    $activityName = $c->activity
-                        ? DB::table('directory_of_activities')->where('id', $c->activity)->value('name')
-                        : null;
+                ->map(fn ($c) => $this->formatMember($c));
 
-                    return [
-                        'id' => $c->id,
-                        'personName' => $c->personName,
-                        'active' => (bool) $c->active,
-                        'activityId' => $c->activity,
-                        'activityName' => $activityName ?? '—',
-                        'qualification' => $statusLevel ? ['level' => $statusLevel->level, 'title' => $statusLevel->title] : null,
-                        'personalVolume' => round((float) ($c->personalVolume ?? 0), 2),
-                        'groupVolume' => round((float) ($c->groupVolume ?? 0), 2),
-                        'groupVolumeCumulative' => round((float) ($c->groupVolumeCumulative ?? 0), 2),
-                        'dateActivity' => $c->dateActivity,
-                        'hasChildren' => false,
-                    ];
-                });
-
-            return response()->json(['data' => $rows, 'total' => $total]);
+            $members = $this->applyFilters($topLevel, $request);
+            return response()->json(['data' => $members->values()]);
         }
 
         // Consultant → show own team
