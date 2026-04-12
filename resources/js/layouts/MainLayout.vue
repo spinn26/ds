@@ -26,8 +26,8 @@
     <v-app-bar flat border="b" :style="{ background: '#fff' }">
       <v-app-bar-nav-icon v-if="mobile" @click="drawer = !drawer" />
       <v-spacer />
-      <v-btn v-if="auth.isAdmin" to="/admin" color="secondary" variant="flat" size="small" prepend-icon="mdi-shield-crown" class="mr-2">
-        Админка
+      <v-btn v-if="auth.isAdmin" to="/admin/users" color="secondary" variant="flat" size="small" prepend-icon="mdi-account-cog" class="mr-2">
+        Пользователи
       </v-btn>
       <v-chip color="success" size="small" variant="outlined" class="mr-2">Активный</v-chip>
       <span v-if="!mobile" class="text-body-2 text-medium-emphasis mr-2">
@@ -90,9 +90,31 @@ const menuItems = [
   { group: 'Помощь' },
   { label: 'Инструкции', icon: 'mdi-help-circle', path: '/help' },
   { label: 'Коммуникация', icon: 'mdi-chat', path: '/communication' },
+  // Admin sections (in partner layout)
+  { group: 'Данные партнёров', adminOnly: true },
+  { label: 'Менеджер контрактов', icon: 'mdi-file-document-edit', path: '/manage/contracts', adminOnly: true },
+  { label: 'Партнёры', icon: 'mdi-account-search', path: '/manage/partners', adminOnly: true },
+  { label: 'Статусы партнёров', icon: 'mdi-calendar-clock', path: '/manage/partners/statuses', adminOnly: true },
+  { label: 'Клиенты', icon: 'mdi-account-group', path: '/manage/clients', adminOnly: true },
+  { label: 'Акцепт документов', icon: 'mdi-check-circle', path: '/manage/acceptance', adminOnly: true },
+  { label: 'Реквизиты', icon: 'mdi-credit-card', path: '/manage/requisites', adminOnly: true },
+  { label: 'Перестановки', icon: 'mdi-history', path: '/manage/transfers', adminOnly: true },
+  { group: 'Транзакции и объёмы', adminOnly: true },
+  { label: 'Импорт транзакций', icon: 'mdi-upload', path: '/manage/transactions/import', adminOnly: true },
+  { label: 'Транзакции', icon: 'mdi-swap-horizontal', path: '/manage/transactions', adminOnly: true },
+  { label: 'Комиссии', icon: 'mdi-receipt', path: '/manage/commissions', adminOnly: true },
+  { label: 'Пул', icon: 'mdi-cash-multiple', path: '/manage/pool', adminOnly: true },
+  { label: 'Квалификации', icon: 'mdi-chart-bar', path: '/manage/qualifications', adminOnly: true },
+  { group: 'Начисления и выплаты', adminOnly: true },
+  { label: 'Прочие начисления', icon: 'mdi-bank', path: '/manage/charges', adminOnly: true },
+  { label: 'Реестр выплат', icon: 'mdi-cash', path: '/manage/payments', adminOnly: true },
+  { group: 'Отчёты и настройки', adminOnly: true },
+  { label: 'Отчёты', icon: 'mdi-file-chart', path: '/manage/reports', adminOnly: true },
+  { label: 'Валюты и НДС', icon: 'mdi-currency-usd', path: '/manage/currencies', adminOnly: true },
 ];
 
 const visibleMenu = computed(() => menuItems.filter((item) => {
+  if (item.adminOnly) return auth.isAdmin;
   if (item.requireRole === 'consultant') return auth.isConsultant || auth.isAdmin;
   return true;
 }));
