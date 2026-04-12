@@ -9,9 +9,8 @@
     <v-card class="mb-4 pa-4">
       <v-row dense>
         <v-col cols="12" sm="6" md="3">
-          <v-select v-model="form.qualification" :items="matrix.levels" item-title="title" item-value="id"
-            label="Квалификация" density="compact" variant="outlined" :loading="matrixLoading"
-            :item-props="lvlProps" />
+          <v-select v-model="form.qualification" :items="lvlItems" item-title="title" item-value="id"
+            label="Квалификация" density="compact" variant="outlined" :loading="matrixLoading" />
         </v-col>
         <v-col cols="12" sm="6" md="3">
           <v-select v-model="form.productType" :items="filteredTypes" item-title="name" item-value="id"
@@ -144,7 +143,10 @@ const form = reactive({
   calcProperty: null, termContract: null, amount: null, currency: 67, // RUB
 });
 
-const lvlProps = (item) => ({ subtitle: `${item.raw.level} — ${item.raw.percent}%` });
+// Format qualification label
+const lvlItems = computed(() =>
+  matrix.levels.map(l => ({ ...l, title: `${l.level} [${l.title}] — ${l.percent}%` }))
+);
 
 // Cascading filters
 const filteredTypes = computed(() =>
