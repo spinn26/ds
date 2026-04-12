@@ -1,10 +1,24 @@
 import React from 'react';
-import { Box, Typography } from '@mui/material';
+import { Box, Card, CardContent, Typography } from '@mui/material';
+import { AddCard } from '@mui/icons-material';
 
 const Charges: React.FC = () => (
   <Box>
-    <Typography variant="h5" sx={{ mb: 3 }}>Прочие начисления</Typography>
-    <Typography color="text.secondary">Раздел в разработке</Typography>
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+      <AddCard color="primary" />
+      <Typography variant="h5" sx={{ fontWeight: 600 }}>Прочие начисления</Typography>
+    </Box>
+    <Card sx={{ maxWidth: 600 }}>
+      <CardContent sx={{ textAlign: 'center', py: 6 }}>
+        <AddCard sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
+        <Typography variant="h6" color="text.secondary">
+          Прочие начисления — в разработке
+        </Typography>
+        <Typography variant="body2" color="text.disabled" sx={{ mt: 1 }}>
+          Функционал будет доступен в ближайшем обновлении
+        </Typography>
+      </CardContent>
+    </Card>
   </Box>
 );
 

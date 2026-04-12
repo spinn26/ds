@@ -1,0 +1,210 @@
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+
+class AdminFinanceController extends Controller
+{
+    /** Транзакции */
+    public function transactions(Request $request): JsonResponse
+    {
+        $query = DB::table('transaction')->whereNull('deletedAt');
+
+        if ($request->filled('search')) {
+            $query->where('id', 'ilike', '%' . $request->search . '%');
+        }
+        if ($request->filled('month')) {
+            $query->where('dateMonth', $request->month);
+        }
+
+        $total = $query->count();
+        $data = $query->orderByDesc('date')
+            ->offset(($request->input('page', 1) - 1) * 25)
+            ->limit(25)
+            ->get()
+            ->map(fn ($t) => [
+                'id' => $t->id,
+                'contract' => $t->contract,
+                'amount' => round((float) ($t->amount ?? 0), 2),
+                'amountRUB' => round((float) ($t->amountRUB ?? 0), 2),
+                'amountUSD' => round((float) ($t->amountUSD ?? 0), 2),
+                'date' => $t->date,
+                'currencySymbol' => $t->currency ? DB::table('currency')->where('id', $t->currency)->value('symbol') : null,
+            ]);
+
+        return response()->json(['data' => $data, 'total' => $total]);
+    }
+
+    /** Комиссии */
+    public function commissions(Request $request): JsonResponse
+    {
+        $query = DB::table('commission')->whereNull('deletedAt');
+
+        if ($request->filled('consultant')) {
+            $query->where('consultant', $request->consultant);
+        }
+        if ($request->filled('month')) {
+            $query->where('dateMonth', $request->month);
+        }
+
+        $total = $query->count();
+        $data = $query->orderByDesc('date')
+            ->offset(($request->input('page', 1) - 1) * 25)
+            ->limit(25)
+            ->get()
+            ->map(fn ($c) => [
+                'id' => $c->id,
+                'consultant' => $c->consultant,
+                'consultantName' => $c->consultant ? DB::table('consultant')->where('id', $c->consultant)->value('personName') : null,
+                'type' => $c->type,
+                'amountRUB' => round((float) ($c->amountRUB ?? 0), 2),
+                'personalVolume' => round((float) ($c->personalVolume ?? 0), 2),
+                'groupVolume' => round((float) ($c->groupVolume ?? 0), 2),
+                'groupBonusRub' => round((float) ($c->groupBonusRub ?? 0), 2),
+                'percent' => $c->percent,
+                'date' => $c->date,
+            ]);
+
+        return response()->json(['data' => $data, 'total' => $total]);
+    }
+
+    /** Пул */
+    public function pool(Request $request): JsonResponse
+    {
+        $query = DB::table('poolLog');
+
+        if ($request->filled('month')) {
+            // filter by date range if month provided
+            $start = $request->month . '-01';
+            $end = date('Y-m-t', strtotime($start));
+            $query->whereBetween('date', [$start, $end]);
+        }
+
+        $total = $query->count();
+        $data = $query->orderByDesc('date')
+            ->offset(($request->input('page', 1) - 1) * 25)
+            ->limit(25)
+            ->get();
+
+        return response()->json(['data' => $data, 'total' => $total]);
+    }
+
+    /** Квалификации */
+    public function qualifications(Request $request): JsonResponse
+    {
+        $query = DB::table('qualificationLog')
+            ->whereNull('dateDeleted');
+
+        if ($request->filled('search')) {
+            $query->where('consultantPersonName', 'ilike', '%' . $request->search . '%');
+        }
+        if ($request->filled('month')) {
+            $start = $request->month . '-01';
+            $end = date('Y-m-t', strtotime($start));
+            $query->whereBetween('date', [$start, $end]);
+        }
+
+        $total = $query->count();
+        $data = $query->orderByDesc('date')
+            ->offset(($request->input('page', 1) - 1) * 25)
+            ->limit(25)
+            ->get()
+            ->map(fn ($q) => [
+                'id' => $q->id,
+                'consultant' => $q->consultant,
+                'consultantName' => $q->consultantPersonName,
+                'personalVolume' => round((float) ($q->personalVolume ?? 0), 2),
+                'groupVolume' => round((float) ($q->groupVolume ?? 0), 2),
+                'groupVolumeCumulative' => round((float) ($q->groupVolumeCumulative ?? 0), 2),
+                'nominalLevel' => $q->nominalLevel,
+                'calculationLevel' => $q->calculationLevel,
+                'levelNew' => $q->levelNew,
+                'levelPrevious' => $q->levelPrevious,
+                'result' => $q->result,
+                'date' => $q->date,
+            ]);
+
+        return response()->json(['data' => $data, 'total' => $total]);
+    }
+
+    /** Прочие начисления */
+    public function charges(Request $request): JsonResponse
+    {
+        // Placeholder — таблица дополнительных начислений
+        return response()->json(['data' => [], 'total' => 0, 'message' => 'В разработке']);
+    }
+
+    /** Реестр выплат */
+    public function payments(Request $request): JsonResponse
+    {
+        $query = DB::table('consultantPayment')
+            ->join('consultantBalance', 'consultantPayment.consultantBalance', '=', 'consultantBalance.id')
+            ->join('consultant', 'consultantBalance.consultant', '=', 'consultant.id')
+            ->select(
+                'consultantPayment.id',
+                'consultantPayment.amount',
+                'consultantPayment.paymentDate',
+                'consultantPayment.status',
+                'consultantPayment.comment',
+                'consultant.personName',
+                'consultant.id as consultantId'
+            );
+
+        if ($request->filled('search')) {
+            $query->where('consultant.personName', 'ilike', '%' . $request->search . '%');
+        }
+
+        $total = $query->count();
+        $data = $query->orderByDesc('consultantPayment.paymentDate')
+            ->offset(($request->input('page', 1) - 1) * 25)
+            ->limit(25)
+            ->get()
+            ->map(fn ($p) => [
+                'id' => $p->id,
+                'consultantName' => $p->personName,
+                'amount' => round((float) $p->amount, 2),
+                'paymentDate' => $p->paymentDate,
+                'status' => $p->status,
+                'comment' => $p->comment,
+            ]);
+
+        return response()->json(['data' => $data, 'total' => $total]);
+    }
+
+    /** Отчёты */
+    public function reports(): JsonResponse
+    {
+        return response()->json(['data' => [], 'message' => 'В разработке']);
+    }
+
+    /** Доступность отчётов */
+    public function reportAvailability(): JsonResponse
+    {
+        return response()->json(['data' => [], 'message' => 'В разработке']);
+    }
+
+    /** Валюты и НДС */
+    public function currencies(): JsonResponse
+    {
+        $currencies = DB::table('currency')->orderBy('id')->get()
+            ->map(fn ($c) => [
+                'id' => $c->id,
+                'name' => $c->name,
+                'symbol' => $c->symbol,
+            ]);
+
+        $vat = DB::table('vat')->orderBy('id')->get();
+
+        return response()->json(['currencies' => $currencies, 'vat' => $vat]);
+    }
+
+    /** Импорт транзакций — placeholder */
+    public function transactionImport(): JsonResponse
+    {
+        return response()->json(['data' => [], 'message' => 'В разработке']);
+    }
+}

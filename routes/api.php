@@ -66,5 +66,26 @@ Route::prefix('v1')->group(function () {
         Route::post('/admin/users', [AdminUserController::class, 'store']);
         Route::put('/admin/users/{id}', [AdminUserController::class, 'update']);
         Route::delete('/admin/users/{id}', [AdminUserController::class, 'destroy']);
+
+        Route::get('/admin/partners', [\App\Http\Controllers\Api\AdminDataController::class, 'partners']);
+        Route::post('/admin/partners/{id}/status', [\App\Http\Controllers\Api\AdminDataController::class, 'changePartnerStatus']);
+        Route::get('/admin/partner-statuses', [\App\Http\Controllers\Api\AdminDataController::class, 'partnerStatuses']);
+        Route::get('/admin/clients', [\App\Http\Controllers\Api\AdminDataController::class, 'clients']);
+        Route::get('/admin/requisites', [\App\Http\Controllers\Api\AdminDataController::class, 'requisites']);
+        Route::post('/admin/requisites/{id}/verify', [\App\Http\Controllers\Api\AdminDataController::class, 'verifyRequisites']);
+        Route::get('/admin/acceptance', [\App\Http\Controllers\Api\AdminDataController::class, 'acceptance']);
+        Route::get('/admin/contracts', [\App\Http\Controllers\Api\AdminDataController::class, 'contracts']);
+        Route::get('/admin/transfers', [\App\Http\Controllers\Api\AdminDataController::class, 'transfers']);
+
+        Route::get('/admin/transactions', [\App\Http\Controllers\Api\AdminFinanceController::class, 'transactions']);
+        Route::get('/admin/commissions', [\App\Http\Controllers\Api\AdminFinanceController::class, 'commissions']);
+        Route::get('/admin/pool', [\App\Http\Controllers\Api\AdminFinanceController::class, 'pool']);
+        Route::get('/admin/qualifications', [\App\Http\Controllers\Api\AdminFinanceController::class, 'qualifications']);
+        Route::get('/admin/charges', [\App\Http\Controllers\Api\AdminFinanceController::class, 'charges']);
+        Route::get('/admin/payments', [\App\Http\Controllers\Api\AdminFinanceController::class, 'payments']);
+        Route::get('/admin/reports', [\App\Http\Controllers\Api\AdminFinanceController::class, 'reports']);
+        Route::get('/admin/report-availability', [\App\Http\Controllers\Api\AdminFinanceController::class, 'reportAvailability']);
+        Route::get('/admin/currencies', [\App\Http\Controllers\Api\AdminFinanceController::class, 'currencies']);
+        Route::get('/admin/transaction-import', [\App\Http\Controllers\Api\AdminFinanceController::class, 'transactionImport']);
     });
 });

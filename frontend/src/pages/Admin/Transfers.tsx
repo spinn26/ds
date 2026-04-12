@@ -1,11 +1,21 @@
 import React from 'react';
-import { Box, Typography } from '@mui/material';
+import { SwapHoriz } from '@mui/icons-material';
+import AdminTable, { Column } from '../../components/AdminTable';
+import { adminApi } from '../../api/admin';
+
+const columns: Column[] = [
+  { key: 'personName', label: 'ФИО' },
+  { key: 'dateCreated', label: 'Дата' },
+];
 
 const Transfers: React.FC = () => (
-  <Box>
-    <Typography variant="h5" sx={{ mb: 3 }}>История перестановок</Typography>
-    <Typography color="text.secondary">Раздел в разработке</Typography>
-  </Box>
+  <AdminTable
+    title="История перестановок"
+    icon={<SwapHoriz color="primary" />}
+    columns={columns}
+    fetchData={adminApi.transfers}
+    searchPlaceholder="Поиск по ФИО..."
+  />
 );
 
 export default Transfers;
