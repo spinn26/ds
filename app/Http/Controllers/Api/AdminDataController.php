@@ -44,7 +44,7 @@ class AdminDataController extends Controller
                     ? DB::table('WebUser')->where('id', $c->webUser)->first()
                     : null;
                 $personData = $c->person
-                    ? DB::table('person')->where('id', $c->person)->first()
+                    ? DB::table('WebUser')->where('id', $c->person)->first()
                     : $webUser;
 
                 // Check if person is also a client
@@ -139,7 +139,7 @@ class AdminDataController extends Controller
             ->map(function ($c) {
                 // Person data from WebUser
                 $person = $c->person
-                    ? DB::table('person')->where('id', $c->person)->first()
+                    ? DB::table('WebUser')->where('id', $c->person)->first()
                     : null;
 
                 $contractCount = DB::table('contract')

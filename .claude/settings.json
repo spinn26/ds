@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C c:/Users/ENCODE/Desktop/ds commit -m 'Fix: person table does not exist, use WebUser for all person lookups:*)"
+    ]
+  }
+}
