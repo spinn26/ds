@@ -34,32 +34,22 @@ class ClientController extends Controller
             ->limit(25)
             ->get()
             ->map(function ($c) {
-                // Try multiple sources for person data:
-                // 1. client.person → person table
-                // 2. client.person → WebUser table (person and WebUser share IDs in some cases)
-                // 3. Fallback: search WebUser by email match with personName
                 $personData = null;
                 $cityName = null;
 
+                // Get person data from WebUser table via client.person field
                 if ($c->person) {
-                    // Try person table first
-                    $personData = DB::table('person')->where('id', $c->person)->first();
-
-                    // If person table has no contact data, try WebUser
-                    if (! $personData || (! $personData->email && ! $personData->phone)) {
-                        $webUserData = DB::table('WebUser')->where('id', $c->person)->first();
-                        if ($webUserData && ($webUserData->email || $webUserData->phone)) {
-                            $personData = $webUserData;
-                        }
+                    try {
+                        $personData = DB::table('WebUser')->where('id', $c->person)->first();
+                    } catch (\Exception $e) {
+                        // table may not be accessible
                     }
                 }
 
-                // Get city from person data
-                if ($personData) {
-                    $cityId = $personData->city ?? null;
-                    if ($cityId) {
-                        $cityName = DB::table('city')->where('id', $cityId)->value('cityNameRu');
-                    }
+                if ($personData && ($personData->city ?? null)) {
+                    try {
+                        $cityName = DB::table('city')->where('id', $personData->city)->value('cityNameRu');
+                    } catch (\Exception $e) {}
                 }
 
                 return [
