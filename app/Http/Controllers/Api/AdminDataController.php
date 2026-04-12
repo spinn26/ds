@@ -68,9 +68,9 @@ class AdminDataController extends Controller
                     'participantCode' => $c->participantCode,
                     'dateCreated' => $c->dateCreated?->format('d.m.Y'),
                     'terminationCount' => $c->terminationCount ?? 0,
-                    'email' => $personData->email ?? null,
-                    'phone' => $personData->phone ?? null,
-                    'birthDate' => $personData->birthDate ?? null,
+                    'email' => $personData?->email ?? null,
+                    'phone' => $personData?->phone ?? null,
+                    'birthDate' => $personData?->birthDate ?? null,
                     'inviterName' => $c->inviterName,
                     'isClient' => $isClient,
                     'platformAccess' => $platformAccess,
@@ -164,9 +164,9 @@ class AdminDataController extends Controller
                     'contractCount' => $contractCount,
                     'isPartner' => $isPartner,
                     'comment' => $c->comment,
-                    'email' => $person->email ?? null,
-                    'phone' => $person->phone ?? null,
-                    'birthDate' => $person->birthDate ?? null,
+                    'email' => $person?->email ?? null,
+                    'phone' => $person?->phone ?? null,
+                    'birthDate' => $person?->birthDate ?? null,
                 ];
             });
 

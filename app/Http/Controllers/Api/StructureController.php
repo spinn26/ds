@@ -116,8 +116,8 @@ class StructureController extends Controller
         $person = $c->person
             ? DB::table('WebUser')->where('id', $c->person)->first()
             : null;
-        $birthDate = $person->birthDate ?? null;
-        $cityName = $person && $person->city
+        $birthDate = $person?->birthDate ?? null;
+        $cityName = $person && $person?->city
             ? DB::table('city')->where('id', $person->city)->value('cityNameRu')
             : null;
 

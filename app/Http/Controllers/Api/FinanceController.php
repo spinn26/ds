@@ -276,7 +276,7 @@ class FinanceController extends Controller
 
         $tx = DB::table('transaction')->where('id', $transactionId)->first();
         if (! $tx || ! $tx->contract) {
-            return ['contractNumber' => null, 'clientName' => null, 'productName' => null, 'programName' => null, 'amount' => $tx->amount ?? null];
+            return ['contractNumber' => null, 'clientName' => null, 'productName' => null, 'programName' => null, 'amount' => $tx?->amount ?? null];
         }
 
         $contract = DB::table('contract')->where('id', $tx->contract)->first();
