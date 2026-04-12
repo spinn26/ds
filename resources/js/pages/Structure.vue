@@ -42,12 +42,15 @@
           <tr>
             <th style="width:40px"></th>
             <th>ФИО</th>
+            <th>Уровень</th>
             <th>Квалификация</th>
             <th>Активность</th>
             <th>Дата активности</th>
             <th class="text-right">ЛП</th>
             <th class="text-right">ГП</th>
             <th class="text-right">НГП</th>
+            <th class="text-right">Резиденты</th>
+            <th class="text-right">ФК</th>
             <th class="text-right">Клиенты</th>
           </tr>
         </thead>
@@ -61,6 +64,7 @@
                 </v-btn>
               </td>
               <td :style="{ paddingLeft: (row._depth * 20 + 8) + 'px' }">{{ row.personName }}</td>
+              <td>{{ row.level ?? '—' }}</td>
               <td>
                 <v-chip v-if="row.qualification" size="x-small" color="secondary">{{ row.qualification }}</v-chip>
                 <span v-else>—</span>
@@ -73,11 +77,13 @@
               <td class="text-right">{{ fmt(row.personalVolume) }}</td>
               <td class="text-right">{{ fmt(row.groupVolume) }}</td>
               <td class="text-right">{{ fmt(row.groupVolumeCumulative) }}</td>
+              <td class="text-right">{{ row.residentCount ?? 0 }}</td>
+              <td class="text-right">{{ row.fcCount ?? 0 }}</td>
               <td class="text-right">{{ row.clientCount ?? 0 }}</td>
             </tr>
           </template>
           <tr v-if="!flatRows.length && !loading">
-            <td colspan="9" class="text-center text-medium-emphasis pa-4">Данные не найдены</td>
+            <td colspan="12" class="text-center text-medium-emphasis pa-4">Данные не найдены</td>
           </tr>
         </tbody>
       </v-table>

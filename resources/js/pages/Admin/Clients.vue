@@ -16,6 +16,9 @@
     <v-data-table-server :items="items" :items-length="total" :loading="loading"
       :headers="headers" :items-per-page="25" @update:options="onOptions"
       density="compact" hover no-data-text="Клиенты не найдены">
+      <template #item.isPartner="{ value }">
+        <v-icon v-if="value" color="success" size="small">mdi-check-circle</v-icon>
+      </template>
       <template #item.products="{ value }">
         <v-chip v-for="p in (value || [])" :key="p" size="x-small" class="mr-1" color="primary" variant="outlined">{{ p }}</v-chip>
       </template>
@@ -35,12 +38,18 @@ const page = ref(1);
 
 const headers = [
   { title: 'ID', key: 'id', width: 60 },
+  { title: 'DS ID', key: 'dsId', width: 80 },
+  { title: 'Person ID', key: 'personId', width: 90 },
   { title: 'ФИО', key: 'personName' },
+  { title: 'Email', key: 'email' },
+  { title: 'Телефон', key: 'phone' },
   { title: 'Дата рождения', key: 'birthDate', width: 130 },
   { title: 'Город', key: 'city' },
-  { title: 'Телефон', key: 'phone' },
-  { title: 'Email', key: 'email' },
+  { title: 'Работаем с', key: 'workSince', width: 130 },
+  { title: 'Контракты', key: 'contractCount', width: 110, align: 'end' },
+  { title: 'Партнёр?', key: 'isPartner', width: 90, sortable: false },
   { title: 'Консультант', key: 'consultantName' },
+  { title: 'Комментарий', key: 'comment' },
   { title: 'Продукты', key: 'products', sortable: false },
 ];
 

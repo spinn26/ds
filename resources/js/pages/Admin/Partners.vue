@@ -32,6 +32,14 @@
           {{ value ? 'mdi-check-circle' : 'mdi-minus-circle' }}
         </v-icon>
       </template>
+      <template #item.isClient="{ value }">
+        <v-icon v-if="value" color="success" size="small">mdi-check-circle</v-icon>
+        <v-icon v-else color="grey" size="small">mdi-minus-circle</v-icon>
+      </template>
+      <template #item.platformAccess="{ value }">
+        <v-icon v-if="value" color="success" size="small">mdi-lock-open-variant</v-icon>
+        <v-icon v-else color="grey" size="small">mdi-lock</v-icon>
+      </template>
     </v-data-table-server>
   </div>
 </template>
@@ -59,12 +67,19 @@ const statusOptions = [
 
 const headers = [
   { title: 'ID', key: 'id', width: 60 },
+  { title: 'Person ID', key: 'personId', width: 90 },
   { title: 'ФИО', key: 'personName' },
+  { title: 'Email', key: 'email' },
+  { title: 'Телефон', key: 'phone', width: 140 },
+  { title: 'Дата рождения', key: 'birthDate', width: 130 },
   { title: 'Статус', key: 'statusName', width: 140 },
   { title: 'Активность', key: 'activityName', width: 130 },
   { title: 'Активен', key: 'active', width: 80 },
   { title: 'Код', key: 'participantCode', width: 100 },
+  { title: 'Пригласивший', key: 'inviterName' },
   { title: 'Куратор', key: 'curatorName' },
+  { title: 'Клиент?', key: 'isClient', width: 80, sortable: false },
+  { title: 'Доступ', key: 'platformAccess', width: 80, sortable: false },
   { title: 'Дата регистрации', key: 'createdAt', width: 140 },
 ];
 

@@ -102,22 +102,41 @@ class StructureController extends Controller
             ->whereNull('deletedAt')
             ->count();
 
-        $subCount = DB::table('consultantStructure')
+        $childIds = DB::table('consultantStructure')
             ->where('parent', $c->id)
-            ->count();
+            ->pluck('child')
+            ->toArray();
+        $subCount = count($childIds);
 
         $activityName = $c->activity
             ? (is_object($c->activity) ? $c->activity->label() : DB::table('directory_of_activities')->where('id', $c->activity)->value('name'))
             : null;
 
-        // Person data for birth date and city
+        // Person data from WebUser for birth date and city
         $person = $c->person
-            ? DB::table('person')->where('id', $c->person)->first()
+            ? DB::table('WebUser')->where('id', $c->person)->first()
             : null;
         $birthDate = $person->birthDate ?? null;
         $cityName = $person && $person->city
             ? DB::table('city')->where('id', $person->city)->value('cityNameRu')
             : null;
+
+        // Count subordinate residents and financial consultants
+        $residentCount = 0;
+        $fcCount = 0;
+        if ($subCount > 0) {
+            $residentCount = DB::table('consultant')
+                ->whereIn('id', $childIds)
+                ->where('active', true)
+                ->count();
+
+            $fcCount = DB::table('consultant')
+                ->join('status', 'consultant.status', '=', 'status.id')
+                ->whereIn('consultant.id', $childIds)
+                ->where('consultant.active', true)
+                ->where('status.title', 'Финансовый консультант')
+                ->count();
+        }
 
         return [
             'id' => $c->id,
@@ -129,12 +148,16 @@ class StructureController extends Controller
                 'level' => $statusLevel->level,
                 'title' => $statusLevel->title,
             ] : null,
+            'level' => $c->structureLevel,
             'personalVolume' => round((float) ($qLog->personalVolume ?? $c->personalVolume ?? 0), 2),
             'groupVolume' => round((float) ($qLog->groupVolume ?? $c->groupVolume ?? 0), 2),
             'groupVolumeCumulative' => round((float) ($qLog->groupVolumeCumulative ?? $c->groupVolumeCumulative ?? 0), 2),
             'clientCount' => $clientCount,
             'contractCount' => $contractCount,
             'hasChildren' => $subCount > 0,
+            'residentCount' => $residentCount,
+            'fcCount' => $fcCount,
+            'inviterName' => $c->inviterName,
             'birthDate' => $birthDate,
             'city' => $cityName,
             'dateActivity' => $c->dateActivity?->format('d.m.Y'),

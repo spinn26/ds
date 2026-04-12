@@ -82,6 +82,32 @@
       </v-col>
     </v-row>
 
+    <!-- Breakaway -->
+    <v-card v-if="data.breakaway" class="mb-4 pa-4" color="amber-lighten-5" variant="tonal">
+      <div class="d-flex align-center ga-2 mb-2">
+        <v-icon color="amber-darken-2">mdi-alert-decagram</v-icon>
+        <span class="text-h6 font-weight-bold text-amber-darken-3">Отрыв зафиксирован</span>
+      </div>
+      <v-row>
+        <v-col cols="12" sm="6" md="3">
+          <div class="text-body-2 text-medium-emphasis">Ветка</div>
+          <div class="font-weight-medium">{{ data.breakaway.branchWithGapName || '—' }}</div>
+        </v-col>
+        <v-col cols="12" sm="6" md="3">
+          <div class="text-body-2 text-medium-emphasis">ГП ветки</div>
+          <div class="font-weight-medium">{{ fmt(data.breakaway.branchWithGapGroupVolume) }}</div>
+        </v-col>
+        <v-col cols="12" sm="6" md="3">
+          <div class="text-body-2 text-medium-emphasis">Разница (баллы)</div>
+          <div class="font-weight-medium">{{ fmt(data.breakaway.gapValue) }}</div>
+        </v-col>
+        <v-col cols="12" sm="6" md="3">
+          <div class="text-body-2 text-medium-emphasis">Разница (%)</div>
+          <div class="font-weight-medium">{{ data.breakaway.gapValuePercentage ?? 0 }}%</div>
+        </v-col>
+      </v-row>
+    </v-card>
+
     <!-- Partners section -->
     <h6 class="text-h6 mb-3">Партнёры</h6>
     <v-row class="mb-4">

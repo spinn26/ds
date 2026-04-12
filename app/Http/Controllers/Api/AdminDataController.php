@@ -38,19 +38,44 @@ class AdminDataController extends Controller
             ->offset(($request->input('page', 1) - 1) * 25)
             ->limit(25)
             ->get()
-            ->map(fn ($c) => [
-                'id' => $c->id,
-                'personName' => $c->personName,
-                'active' => $c->active,
-                'activityName' => $c->activityLabel(),
-                'activityId' => $c->activity?->value,
-                'statusName' => $c->status ? DB::table('status')->where('id', $c->status)->value('title') : null,
-                'personalVolume' => round((float) ($c->personalVolume ?? 0), 2),
-                'groupVolumeCumulative' => round((float) ($c->groupVolumeCumulative ?? 0), 2),
-                'participantCode' => $c->participantCode,
-                'dateCreated' => $c->dateCreated?->format('d.m.Y'),
-                'terminationCount' => $c->terminationCount ?? 0,
-            ]);
+            ->map(function ($c) {
+                // Person data from WebUser
+                $webUser = $c->webUser
+                    ? DB::table('WebUser')->where('id', $c->webUser)->first()
+                    : null;
+                $personData = $c->person
+                    ? DB::table('WebUser')->where('id', $c->person)->first()
+                    : $webUser;
+
+                // Check if person is also a client
+                $isClient = $c->person
+                    ? DB::table('client')->where('person', $c->person)->exists()
+                    : false;
+
+                // Platform access: webUser exists and not blocked
+                $platformAccess = $webUser && ! ($webUser->isBlocked ?? false);
+
+                return [
+                    'id' => $c->id,
+                    'personId' => $c->person,
+                    'personName' => $c->personName,
+                    'active' => $c->active,
+                    'activityName' => $c->activityLabel(),
+                    'activityId' => $c->activity?->value,
+                    'statusName' => $c->status ? DB::table('status')->where('id', $c->status)->value('title') : null,
+                    'personalVolume' => round((float) ($c->personalVolume ?? 0), 2),
+                    'groupVolumeCumulative' => round((float) ($c->groupVolumeCumulative ?? 0), 2),
+                    'participantCode' => $c->participantCode,
+                    'dateCreated' => $c->dateCreated?->format('d.m.Y'),
+                    'terminationCount' => $c->terminationCount ?? 0,
+                    'email' => $personData->email ?? null,
+                    'phone' => $personData->phone ?? null,
+                    'birthDate' => $personData->birthDate ?? null,
+                    'inviterName' => $c->inviterName,
+                    'isClient' => $isClient,
+                    'platformAccess' => $platformAccess,
+                ];
+            });
 
         return response()->json(['data' => $partners, 'total' => $total]);
     }
@@ -111,14 +136,39 @@ class AdminDataController extends Controller
             ->offset(($request->input('page', 1) - 1) * 25)
             ->limit(25)
             ->get()
-            ->map(fn ($c) => [
-                'id' => $c->id,
-                'personName' => $c->personName,
-                'active' => (bool) $c->active,
-                'consultantId' => $c->consultant,
-                'consultantName' => $c->consultant ? DB::table('consultant')->where('id', $c->consultant)->value('personName') : null,
-                'dateCreated' => $c->dateCreated,
-            ]);
+            ->map(function ($c) {
+                // Person data from WebUser
+                $person = $c->person
+                    ? DB::table('WebUser')->where('id', $c->person)->first()
+                    : null;
+
+                $contractCount = DB::table('contract')
+                    ->where('client', $c->id)
+                    ->whereNull('deletedAt')
+                    ->count();
+
+                $isPartner = $c->person
+                    ? DB::table('consultant')->where('person', $c->person)->whereNull('dateDeleted')->exists()
+                    : false;
+
+                return [
+                    'id' => $c->id,
+                    'dsId' => $c->idDs,
+                    'personId' => $c->person,
+                    'personName' => $c->personName,
+                    'active' => (bool) $c->active,
+                    'consultantId' => $c->consultant,
+                    'consultantName' => $c->consultant ? DB::table('consultant')->where('id', $c->consultant)->value('personName') : null,
+                    'dateCreated' => $c->dateCreated,
+                    'workSince' => $c->workSince,
+                    'contractCount' => $contractCount,
+                    'isPartner' => $isPartner,
+                    'comment' => $c->comment,
+                    'email' => $person->email ?? null,
+                    'phone' => $person->phone ?? null,
+                    'birthDate' => $person->birthDate ?? null,
+                ];
+            });
 
         return response()->json(['data' => $clients, 'total' => $total]);
     }

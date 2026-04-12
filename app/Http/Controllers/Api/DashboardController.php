@@ -103,6 +103,22 @@ class DashboardController extends Controller
         // Ambassador products
         $ambassadorProducts = $consultant->ambassadorProductNames;
 
+        // Breakaway info (отрыв) from qualificationLog
+        $breakaway = null;
+        if ($currentQLog && $currentQLog->gap) {
+            $branchName = $currentQLog->branchWithGap
+                ? DB::table('consultant')->where('id', $currentQLog->branchWithGap)->value('personName')
+                : null;
+            $breakaway = [
+                'gap' => true,
+                'gapValue' => round((float) ($currentQLog->gapValue ?? 0), 2),
+                'gapValuePercentage' => round((float) ($currentQLog->gapValuePercentage ?? 0), 2),
+                'branchWithGap' => $currentQLog->branchWithGap,
+                'branchWithGapName' => $branchName,
+                'branchWithGapGroupVolume' => round((float) ($currentQLog->branchWithGapGroupVolume ?? 0), 2),
+            ];
+        }
+
         // Personal/Group volumes for period
         $personalVolume = $periodQLog->personalVolume ?? $consultant->personalVolume ?? 0;
         $groupVolume = $periodQLog->groupVolume ?? $consultant->groupVolume ?? 0;
@@ -196,6 +212,7 @@ class DashboardController extends Controller
             ],
             'partners' => $partnerCounts,
             'prevPartners' => $prevPartnerCounts,
+            'breakaway' => $breakaway,
             'period' => $month,
         ]);
     }

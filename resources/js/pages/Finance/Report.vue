@@ -5,59 +5,222 @@
         <v-icon size="32" color="primary">mdi-bank</v-icon>
         <h5 class="text-h5 font-weight-bold">Отчёт начислений и выплат</h5>
       </div>
-      <v-text-field v-model="month" type="month" density="compact" variant="outlined"
-        style="max-width:200px" hide-details @update:model-value="loadData" />
+      <div class="d-flex align-center ga-2">
+        <v-text-field v-model="month" type="month" density="compact" variant="outlined"
+          style="max-width:200px" hide-details @update:model-value="loadData" />
+      </div>
     </div>
 
-    <!-- Summary Cards -->
+    <!-- Currency Rates -->
+    <div v-if="data.currencyRates && data.currencyRates.length" class="d-flex ga-2 mb-4 flex-wrap">
+      <v-chip v-for="rate in data.currencyRates" :key="rate.currency" size="small" variant="outlined" color="secondary">
+        {{ rate.currency }}: {{ fmtRate(rate.rate) }}
+      </v-chip>
+    </div>
+
+    <!-- Row 1: Qualification + Commission + Volumes -->
     <v-row class="mb-4">
-      <v-col v-for="card in summaryCards" :key="card.label" cols="12" sm="6" md="3">
-        <v-card class="pa-4">
-          <div class="text-body-2 text-medium-emphasis">{{ card.label }}</div>
-          <div class="text-h5 font-weight-bold" :class="`text-${card.color}`">{{ card.value }}</div>
+      <v-col cols="12" sm="6" md="3">
+        <v-card class="pa-4 h-100">
+          <div class="text-body-2 text-medium-emphasis">Квалификация</div>
+          <div class="d-flex align-center ga-2 mt-1">
+            <v-chip size="small" color="grey">{{ summary.qualificationPrev?.title || '—' }}</v-chip>
+            <v-icon size="16">mdi-arrow-right</v-icon>
+            <v-chip size="small" color="primary">{{ summary.qualificationCurrent?.title || '—' }}</v-chip>
+          </div>
+        </v-card>
+      </v-col>
+      <v-col cols="12" sm="6" md="3">
+        <v-card class="pa-4 h-100">
+          <div class="text-body-2 text-medium-emphasis">Уровень комиссии</div>
+          <div class="text-h4 font-weight-bold text-primary mt-1">{{ summary.commissionLevel?.percent ?? 0 }}%</div>
+          <div class="text-caption text-medium-emphasis">{{ summary.commissionLevel?.title || '' }}</div>
+        </v-card>
+      </v-col>
+      <v-col cols="12" sm="6" md="2">
+        <v-card class="pa-4 h-100">
+          <div class="text-body-2 text-medium-emphasis">ЛП</div>
+          <div class="text-h5 font-weight-bold text-green mt-1">{{ fmt(summary.volumes?.lp) }}</div>
+        </v-card>
+      </v-col>
+      <v-col cols="12" sm="6" md="2">
+        <v-card class="pa-4 h-100">
+          <div class="text-body-2 text-medium-emphasis">ГП</div>
+          <div class="text-h5 font-weight-bold text-blue mt-1">{{ fmt(summary.volumes?.gp) }}</div>
+        </v-card>
+      </v-col>
+      <v-col cols="12" sm="6" md="2">
+        <v-card class="pa-4 h-100">
+          <div class="text-body-2 text-medium-emphasis">НГП</div>
+          <div class="text-h5 font-weight-bold text-orange mt-1">{{ fmt(summary.volumes?.ngp) }}</div>
         </v-card>
       </v-col>
     </v-row>
 
-    <!-- Balance Card -->
-    <v-card v-if="data.balance != null" class="pa-4 mb-4">
-      <div class="d-flex align-center ga-2">
-        <v-icon color="green">mdi-wallet</v-icon>
-        <div class="text-body-2 text-medium-emphasis">Баланс</div>
+    <!-- Row 2: Sales totals -->
+    <v-row class="mb-4">
+      <v-col cols="12" sm="6" md="3">
+        <v-card class="pa-4 h-100">
+          <div class="d-flex align-center ga-1 mb-2">
+            <v-icon size="18" color="green">mdi-account</v-icon>
+            <span class="text-body-2 text-medium-emphasis">Личные продажи</span>
+          </div>
+          <div class="text-body-2"><span class="font-weight-medium">Баллы:</span> {{ fmt(summary.personalSales?.points) }}</div>
+          <div class="text-body-2"><span class="font-weight-medium">Бонус:</span> {{ fmt(summary.personalSales?.bonus) }}</div>
+          <div class="text-body-2"><span class="font-weight-medium">Бонус (руб):</span> {{ fmt2(summary.personalSales?.bonusRub) }}</div>
+          <div class="text-body-2"><span class="font-weight-medium">Клиентские платежи:</span> {{ fmt2(summary.personalSales?.clientPaymentsRub) }}</div>
+        </v-card>
+      </v-col>
+      <v-col cols="12" sm="6" md="3">
+        <v-card class="pa-4 h-100">
+          <div class="d-flex align-center ga-1 mb-2">
+            <v-icon size="18" color="blue">mdi-account-group</v-icon>
+            <span class="text-body-2 text-medium-emphasis">Групповые продажи</span>
+          </div>
+          <div class="text-body-2"><span class="font-weight-medium">Баллы:</span> {{ fmt(summary.groupSales?.points) }}</div>
+          <div class="text-body-2"><span class="font-weight-medium">Бонус:</span> {{ fmt(summary.groupSales?.bonus) }}</div>
+          <div class="text-body-2"><span class="font-weight-medium">Бонус (руб):</span> {{ fmt2(summary.groupSales?.bonusRub) }}</div>
+          <div class="text-body-2"><span class="font-weight-medium">Клиентские платежи:</span> {{ fmt2(summary.groupSales?.clientPaymentsRub) }}</div>
+        </v-card>
+      </v-col>
+      <v-col cols="12" sm="6" md="3">
+        <v-card class="pa-4 h-100">
+          <div class="d-flex align-center ga-1 mb-2">
+            <v-icon size="18" color="orange">mdi-sigma</v-icon>
+            <span class="text-body-2 text-medium-emphasis">Итого продажи</span>
+          </div>
+          <div class="text-body-2"><span class="font-weight-medium">Бонус:</span> {{ fmt(summary.totalSales?.bonus) }}</div>
+          <div class="text-body-2"><span class="font-weight-medium">Бонус (руб):</span> {{ fmt2(summary.totalSales?.bonusRub) }}</div>
+          <div class="text-body-2"><span class="font-weight-medium">Пул (руб):</span> {{ fmt2(summary.totalSales?.poolRub) }}</div>
+          <div class="text-body-2 font-weight-bold"><span class="font-weight-medium">Всего (руб):</span> {{ fmt2(summary.totalSales?.totalRub) }}</div>
+        </v-card>
+      </v-col>
+      <v-col cols="12" sm="6" md="3">
+        <v-card class="pa-4 h-100">
+          <div class="d-flex align-center ga-1 mb-2">
+            <v-icon size="18" color="purple">mdi-calendar-check</v-icon>
+            <span class="text-body-2 text-medium-emphasis">Итог за месяц</span>
+          </div>
+          <div class="text-body-2"><span class="font-weight-medium">Баланс на начало:</span> {{ fmt2(summary.monthEnd?.balanceStart) }}</div>
+          <div class="text-body-2"><span class="font-weight-medium">Прочие (баллы):</span> {{ fmt(summary.monthEnd?.otherAccrualsPoints) }}</div>
+          <div class="text-body-2"><span class="font-weight-medium">Прочие (руб):</span> {{ fmt2(summary.monthEnd?.otherAccrualsRub) }}</div>
+          <div class="text-body-2"><span class="font-weight-medium">Итого начислено:</span> {{ fmt2(summary.monthEnd?.totalAccrued) }}</div>
+          <div class="text-body-2 font-weight-bold"><span class="font-weight-medium">К выплате:</span> {{ fmt2(summary.monthEnd?.totalPayable) }}</div>
+        </v-card>
+      </v-col>
+    </v-row>
+
+    <!-- Breakaway card -->
+    <v-card v-if="summary.breakaway" class="mb-4 pa-4" color="amber-lighten-5" variant="tonal">
+      <div class="d-flex align-center ga-2 mb-2">
+        <v-icon color="amber-darken-2">mdi-alert-decagram</v-icon>
+        <span class="font-weight-bold text-amber-darken-3">Отрыв</span>
       </div>
-      <div class="text-h4 font-weight-bold text-green mt-1">{{ fmt(data.balance?.amountRUB ?? data.balance?.amount) }} RUB</div>
+      <v-row>
+        <v-col cols="6" md="3">
+          <div class="text-body-2 text-medium-emphasis">Разница</div>
+          <div class="font-weight-medium">{{ fmt(summary.breakaway.gapValue) }} ({{ summary.breakaway.gapValuePercentage ?? 0 }}%)</div>
+        </v-col>
+        <v-col cols="6" md="3">
+          <div class="text-body-2 text-medium-emphasis">Ветка</div>
+          <div class="font-weight-medium">{{ summary.breakaway.branchWithGapName || '—' }}</div>
+        </v-col>
+      </v-row>
     </v-card>
 
-    <!-- Tabs -->
-    <v-tabs v-model="tab" color="primary" class="mb-4">
-      <v-tab value="commissions">Комиссии</v-tab>
-      <v-tab value="payments">Выплаты</v-tab>
-    </v-tabs>
-
-    <v-tabs-window v-model="tab">
-      <v-tabs-window-item value="commissions">
-        <v-card>
-          <v-data-table :items="data.commissions || []" :headers="commHeaders" density="compact"
+    <!-- Expandable Tables -->
+    <v-expansion-panels variant="accordion" class="mb-4">
+      <!-- Personal Sales -->
+      <v-expansion-panel>
+        <v-expansion-panel-title>
+          <v-icon class="mr-2" size="20">mdi-account</v-icon>
+          Личные продажи
+          <v-chip v-if="tables.personalSales?.length" size="x-small" class="ml-2" color="primary">{{ tables.personalSales.length }}</v-chip>
+        </v-expansion-panel-title>
+        <v-expansion-panel-text>
+          <v-data-table :items="tables.personalSales || []" :headers="personalSalesHeaders" density="compact"
             hover no-data-text="Нет данных">
-            <template #item.amount="{ value }">{{ fmt(value) }}</template>
+            <template #item.points="{ value }">{{ fmt(value) }}</template>
+            <template #item.bonus="{ value }">{{ fmt(value) }}</template>
+            <template #item.bonusRub="{ value }">{{ fmt2(value) }}</template>
+            <template #item.clientPaymentsRub="{ value }">{{ fmt2(value) }}</template>
           </v-data-table>
-        </v-card>
-      </v-tabs-window-item>
+        </v-expansion-panel-text>
+      </v-expansion-panel>
 
-      <v-tabs-window-item value="payments">
-        <v-card>
-          <v-data-table :items="data.payments || []" :headers="payHeaders" density="compact"
+      <!-- Group Sales -->
+      <v-expansion-panel>
+        <v-expansion-panel-title>
+          <v-icon class="mr-2" size="20">mdi-account-group</v-icon>
+          Групповые продажи
+          <v-chip v-if="tables.groupSales?.length" size="x-small" class="ml-2" color="primary">{{ tables.groupSales.length }}</v-chip>
+        </v-expansion-panel-title>
+        <v-expansion-panel-text>
+          <v-data-table :items="tables.groupSales || []" :headers="groupSalesHeaders" density="compact"
             hover no-data-text="Нет данных">
-            <template #item.amount="{ value }">{{ fmt(value) }}</template>
+            <template #item.points="{ value }">{{ fmt(value) }}</template>
+            <template #item.bonus="{ value }">{{ fmt(value) }}</template>
+            <template #item.bonusRub="{ value }">{{ fmt2(value) }}</template>
+            <template #item.clientPaymentsRub="{ value }">{{ fmt2(value) }}</template>
+          </v-data-table>
+        </v-expansion-panel-text>
+      </v-expansion-panel>
+
+      <!-- Other Accruals -->
+      <v-expansion-panel>
+        <v-expansion-panel-title>
+          <v-icon class="mr-2" size="20">mdi-plus-circle-outline</v-icon>
+          Прочие начисления
+          <v-chip v-if="tables.otherAccruals?.length" size="x-small" class="ml-2" color="primary">{{ tables.otherAccruals.length }}</v-chip>
+        </v-expansion-panel-title>
+        <v-expansion-panel-text>
+          <v-data-table :items="tables.otherAccruals || []" :headers="otherAccrualsHeaders" density="compact"
+            hover no-data-text="Нет данных">
+            <template #item.points="{ value }">{{ fmt(value) }}</template>
+            <template #item.amountRub="{ value }">{{ fmt2(value) }}</template>
+          </v-data-table>
+        </v-expansion-panel-text>
+      </v-expansion-panel>
+
+      <!-- Breakaway Detail -->
+      <v-expansion-panel v-if="tables.breakaway">
+        <v-expansion-panel-title>
+          <v-icon class="mr-2" size="20">mdi-alert-decagram</v-icon>
+          Детали отрыва
+        </v-expansion-panel-title>
+        <v-expansion-panel-text>
+          <v-table density="compact">
+            <tbody>
+              <tr><td class="text-medium-emphasis">Разница (gap)</td><td>{{ tables.breakaway.gap ?? '—' }}</td></tr>
+              <tr><td class="text-medium-emphasis">Значение</td><td>{{ fmt(tables.breakaway.gapValue) }}</td></tr>
+              <tr><td class="text-medium-emphasis">Процент</td><td>{{ tables.breakaway.gapValuePercentage ?? 0 }}%</td></tr>
+              <tr><td class="text-medium-emphasis">Ветка</td><td>{{ tables.breakaway.branchWithGapName || '—' }}</td></tr>
+              <tr><td class="text-medium-emphasis">ГП ветки</td><td>{{ fmt(tables.breakaway.branchWithGapGroupVolume) }}</td></tr>
+            </tbody>
+          </v-table>
+        </v-expansion-panel-text>
+      </v-expansion-panel>
+
+      <!-- Payments -->
+      <v-expansion-panel>
+        <v-expansion-panel-title>
+          <v-icon class="mr-2" size="20">mdi-cash-multiple</v-icon>
+          Выплаты
+          <v-chip v-if="tables.payments?.length" size="x-small" class="ml-2" color="primary">{{ tables.payments.length }}</v-chip>
+        </v-expansion-panel-title>
+        <v-expansion-panel-text>
+          <v-data-table :items="tables.payments || []" :headers="paymentsHeaders" density="compact"
+            hover no-data-text="Нет данных">
+            <template #item.amount="{ value }">{{ fmt2(value) }}</template>
             <template #item.status="{ value }">
               <v-chip size="x-small" :color="value === 'paid' ? 'success' : 'warning'">
                 {{ value === 'paid' ? 'Выплачено' : value }}
               </v-chip>
             </template>
           </v-data-table>
-        </v-card>
-      </v-tabs-window-item>
-    </v-tabs-window>
+        </v-expansion-panel-text>
+      </v-expansion-panel>
+    </v-expansion-panels>
 
     <v-overlay v-model="loading" class="align-center justify-center" persistent>
       <v-progress-circular indeterminate size="64" />
@@ -71,33 +234,48 @@ import api from '../../api';
 
 const loading = ref(true);
 const month = ref(new Date().toISOString().slice(0, 7));
-const tab = ref('commissions');
 const data = ref({});
 
-const fmt = (n) => Number(n || 0).toLocaleString('ru-RU', { minimumFractionDigits: 2 });
+const fmt = (n) => Number(n || 0).toLocaleString('ru-RU', { minimumFractionDigits: 0 });
+const fmt2 = (n) => Number(n || 0).toLocaleString('ru-RU', { minimumFractionDigits: 2 });
+const fmtRate = (n) => Number(n || 0).toLocaleString('ru-RU', { minimumFractionDigits: 4 });
 
-const summaryCards = computed(() => {
-  const s = data.value.summary || {};
-  return [
-    { label: 'Итого начислений (RUB)', value: fmt(s.totalAmountRUB), color: 'primary' },
-    { label: 'Личный объём', value: fmt(s.totalPersonalVolume), color: 'green' },
-    { label: 'Групповой объём', value: fmt(s.totalGroupVolume), color: 'blue' },
-    { label: 'Групповой бонус', value: fmt(s.totalGroupBonus), color: 'orange' },
-  ];
-});
+const summary = computed(() => data.value.summary || {});
+const tables = computed(() => data.value.tables || {});
 
-const commHeaders = [
-  { title: 'Дата', key: 'date', width: 120 },
+const personalSalesHeaders = [
+  { title: 'Контракт', key: 'contractNumber' },
+  { title: 'Клиент', key: 'clientName' },
+  { title: 'Продукт', key: 'productName' },
+  { title: 'Баллы', key: 'points', align: 'end', width: 100 },
+  { title: 'Бонус', key: 'bonus', align: 'end', width: 100 },
+  { title: 'Бонус (руб)', key: 'bonusRub', align: 'end', width: 120 },
+  { title: 'Клиентские платежи (руб)', key: 'clientPaymentsRub', align: 'end', width: 180 },
+];
+
+const groupSalesHeaders = [
+  { title: 'Партнёр', key: 'partnerName' },
+  { title: 'Контракт', key: 'contractNumber' },
+  { title: 'Клиент', key: 'clientName' },
+  { title: 'Продукт', key: 'productName' },
+  { title: 'Баллы', key: 'points', align: 'end', width: 100 },
+  { title: 'Бонус', key: 'bonus', align: 'end', width: 100 },
+  { title: 'Бонус (руб)', key: 'bonusRub', align: 'end', width: 120 },
+  { title: 'Клиентские платежи (руб)', key: 'clientPaymentsRub', align: 'end', width: 180 },
+];
+
+const otherAccrualsHeaders = [
+  { title: 'Описание', key: 'description' },
   { title: 'Тип', key: 'type' },
+  { title: 'Баллы', key: 'points', align: 'end', width: 100 },
+  { title: 'Сумма (руб)', key: 'amountRub', align: 'end', width: 140 },
+];
+
+const paymentsHeaders = [
+  { title: 'Дата', key: 'date', width: 120 },
   { title: 'Описание', key: 'description' },
   { title: 'Сумма', key: 'amount', align: 'end', width: 140 },
   { title: 'Валюта', key: 'currency', width: 80 },
-];
-
-const payHeaders = [
-  { title: 'Дата', key: 'date', width: 120 },
-  { title: 'Описание', key: 'description' },
-  { title: 'Сумма', key: 'amount', align: 'end', width: 140 },
   { title: 'Статус', key: 'status', width: 120 },
 ];
 

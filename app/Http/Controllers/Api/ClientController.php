@@ -40,9 +40,9 @@ class ClientController extends Controller
             ->limit(25)
             ->get()
             ->map(function ($c) {
-                // Person data (birthDate, city, phone, email)
+                // Person data from WebUser (birthDate, city, phone, email)
                 $person = $c->person
-                    ? DB::table('person')->where('id', $c->person)->first()
+                    ? DB::table('WebUser')->where('id', $c->person)->first()
                     : null;
 
                 $cityName = $person && $person->city
@@ -59,14 +59,31 @@ class ClientController extends Controller
                     ->pluck('product.name')
                     ->toArray();
 
+                // Contract count
+                $contractCount = DB::table('contract')
+                    ->where('client', $c->id)
+                    ->whereNull('deletedAt')
+                    ->count();
+
+                // Is partner — check if person exists in consultant table
+                $isPartner = $c->person
+                    ? DB::table('consultant')->where('person', $c->person)->whereNull('dateDeleted')->exists()
+                    : false;
+
                 return [
                     'id' => $c->id,
+                    'dsId' => $c->idDs,
                     'personName' => $c->personName,
                     'birthDate' => $person->birthDate ?? null,
                     'city' => $cityName,
                     'phone' => $person->phone ?? null,
                     'email' => $person->email ?? null,
                     'products' => $products,
+                    'workSince' => $c->workSince?->format('d.m.Y'),
+                    'contractCount' => $contractCount,
+                    'isPartner' => $isPartner,
+                    'comment' => $c->comment,
+                    'consultantName' => $c->consultantName,
                 ];
             });
 

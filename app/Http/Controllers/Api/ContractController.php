@@ -152,6 +152,27 @@ class ContractController extends Controller
             ? DB::table('currency')->where('id', $c->currency)->value('symbol')
             : null;
 
+        // Vendor/provider names from program table
+        $vendorName = null;
+        $providerName = null;
+        if ($c->program) {
+            $program = DB::table('program')->where('id', $c->program)->first();
+            if ($program) {
+                $vendorName = $program->vendorName
+                    ?? ($program->vendor ? DB::table('counterparty')->where('id', $program->vendor)->value('counterpartyName') : null);
+                $providerName = $program->providerName
+                    ?? ($program->provider ? DB::table('counterparty')->where('id', $program->provider)->value('counterpartyName') : null);
+            }
+        }
+
+        // Points accrual status — check if commissions exist for this contract's transactions
+        $hasPoints = DB::table('commission')
+            ->whereIn('transaction', function ($q) use ($c) {
+                $q->select('id')->from('transaction')->where('contract', $c->id)->whereNull('deletedAt');
+            })
+            ->whereNull('deletedAt')
+            ->exists();
+
         $data = [
             'id' => $c->id,
             'number' => $c->number,
@@ -163,6 +184,12 @@ class ContractController extends Controller
             'ammount' => $c->ammount,
             'currencySymbol' => $currencyName,
             'openDate' => $c->openDate?->format('d.m.Y'),
+            'createDate' => $c->createDate?->format('d.m.Y'),
+            'vendorName' => $vendorName,
+            'providerName' => $providerName,
+            'counterpartyContractId' => $c->counterpartyContractId,
+            'comment' => $c->comment,
+            'pointsStatus' => $hasPoints ? 'accrued' : 'pending',
         ];
 
         if ($includeConsultant) {

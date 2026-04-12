@@ -14,6 +14,9 @@
     <v-data-table-server :items="items" :items-length="total" :loading="loading"
       :headers="headers" :items-per-page="25" @update:options="onOptions"
       density="compact" hover no-data-text="Клиенты не найдены">
+      <template #item.isPartner="{ value }">
+        <v-icon v-if="value" color="success" size="small">mdi-check-circle</v-icon>
+      </template>
       <template #item.products="{ value }">
         <v-chip v-for="p in (value || [])" :key="p" size="x-small" class="mr-1" color="primary" variant="outlined">{{ p }}</v-chip>
       </template>
@@ -33,10 +36,14 @@ const page = ref(1);
 
 const headers = [
   { title: 'ФИО', key: 'personName' },
+  { title: 'Партнёр', key: 'consultantName' },
   { title: 'Дата рождения', key: 'birthDate', width: 130 },
+  { title: 'Работаем с', key: 'workSince', width: 130 },
   { title: 'Город', key: 'city' },
   { title: 'Телефон', key: 'phone' },
   { title: 'Email', key: 'email' },
+  { title: 'Контракты', key: 'contractCount', width: 110, align: 'end' },
+  { title: 'Партнёр?', key: 'isPartner', width: 90, sortable: false },
   { title: 'Продукты', key: 'products', sortable: false },
 ];
 

@@ -24,7 +24,7 @@
 
     <v-data-table-server :items="items" :items-length="total" :loading="loading"
       :headers="headers" :items-per-page="25" @update:options="onOptions"
-      density="compact" hover no-data-text="Контракты не найдены">
+      density="compact" hover no-data-text="Контракты не найдены" @click:row="onRowClick">
       <template #item.ammount="{ item }">
         {{ fmt(item.ammount) }} {{ item.currencySymbol }}
       </template>
@@ -32,6 +32,27 @@
         <v-chip size="x-small" :color="statusColor(value)">{{ value }}</v-chip>
       </template>
     </v-data-table-server>
+
+    <!-- Detail dialog -->
+    <v-dialog v-model="showDetail" max-width="500">
+      <v-card v-if="selectedItem">
+        <v-card-title>Контракт {{ selectedItem.number }}</v-card-title>
+        <v-card-text>
+          <v-table density="compact">
+            <tbody>
+              <tr><td class="text-medium-emphasis">Клиент</td><td>{{ selectedItem.clientName }}</td></tr>
+              <tr><td class="text-medium-emphasis">Дата заключения</td><td>{{ selectedItem.createDate || '—' }}</td></tr>
+              <tr><td class="text-medium-emphasis">Вендор</td><td>{{ selectedItem.vendorName || '—' }}</td></tr>
+              <tr><td class="text-medium-emphasis">Провайдер</td><td>{{ selectedItem.providerName || '—' }}</td></tr>
+              <tr><td class="text-medium-emphasis">ID контрагента</td><td>{{ selectedItem.counterpartyContractId || '—' }}</td></tr>
+              <tr><td class="text-medium-emphasis">Статус баллов</td><td>{{ selectedItem.pointsStatus || '—' }}</td></tr>
+              <tr><td class="text-medium-emphasis">Комментарий</td><td>{{ selectedItem.comment || '—' }}</td></tr>
+            </tbody>
+          </v-table>
+        </v-card-text>
+        <v-card-actions><v-btn @click="showDetail = false">Закрыть</v-btn></v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
@@ -48,9 +69,18 @@ const productOptions = ref([]);
 const loadingProducts = ref(false);
 const filters = ref({ search: '', status: null, product: null, date_from: '', date_to: '' });
 
+const selectedItem = ref(null);
+const showDetail = ref(false);
+
+function onRowClick(_e, { item }) {
+  selectedItem.value = item;
+  showDetail.value = true;
+}
+
 const headers = [
   { title: 'Номер', key: 'number', width: 120 },
   { title: 'Клиент', key: 'clientName' },
+  { title: 'Дата заключения', key: 'createDate', width: 130 },
   { title: 'Дата открытия', key: 'openDate', width: 120 },
   { title: 'Продукт', key: 'productName' },
   { title: 'Программа', key: 'programName' },
