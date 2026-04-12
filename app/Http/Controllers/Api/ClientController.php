@@ -37,19 +37,14 @@ class ClientController extends Controller
                 $personData = null;
                 $cityName = null;
 
-                // Get person data from WebUser table via client.person field
+                // client.person → person table (данные клиента: телефон, email, ДР, город)
                 if ($c->person) {
-                    try {
-                        $personData = DB::table('WebUser')->where('id', $c->person)->first();
-                    } catch (\Exception $e) {
-                        // table may not be accessible
-                    }
+                    $personData = DB::table('person')->where('id', $c->person)->first();
                 }
 
+                // Город из person.city → city.cityNameRu
                 if ($personData && ($personData->city ?? null)) {
-                    try {
-                        $cityName = DB::table('city')->where('id', $personData->city)->value('cityNameRu');
-                    } catch (\Exception $e) {}
+                    $cityName = DB::table('city')->where('id', $personData->city)->value('cityNameRu');
                 }
 
                 return [
