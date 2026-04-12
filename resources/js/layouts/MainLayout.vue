@@ -31,19 +31,19 @@
       <v-app-bar-nav-icon v-if="mobile" @click="drawer = !drawer" />
       <v-spacer />
 
-      <!-- Referral link copy button (only for active partners) -->
-      <v-btn v-if="statusInfo?.canInvite && statusInfo?.referralCode" size="small" variant="tonal" color="primary"
+      <!-- Referral link copy button (only for consultants with active status) -->
+      <v-btn v-if="isConsultant && statusInfo?.canInvite && statusInfo?.referralCode" size="small" variant="tonal" color="primary"
         class="mr-2" prepend-icon="mdi-link-variant" @click="copyReferral">
         {{ copied ? 'Скопировано!' : 'Реф. ссылка' }}
       </v-btn>
 
-      <!-- Status chip with activity (hidden until loaded) -->
-      <v-chip v-if="statusInfo?.activityName" :color="statusColor" size="small" variant="outlined" class="mr-2">
+      <!-- Status chip (only for consultants) -->
+      <v-chip v-if="isConsultant && statusInfo?.activityName" :color="statusColor" size="small" variant="outlined" class="mr-2">
         {{ statusInfo.activityName }}
       </v-chip>
 
-      <!-- Countdown to status change -->
-      <v-chip v-if="statusInfo?.daysRemaining != null && statusInfo.daysRemaining <= 90"
+      <!-- Countdown to status change (consultants only) -->
+      <v-chip v-if="isConsultant && statusInfo?.daysRemaining != null && statusInfo.daysRemaining <= 90"
         :color="statusInfo.daysRemaining <= 30 ? 'error' : 'warning'" size="small" variant="tonal" class="mr-2">
         <v-icon start size="14">mdi-timer-outline</v-icon>
         {{ statusInfo.daysRemaining }} дн.
@@ -249,9 +249,11 @@ const menuItems = [
   { label: 'Валюты и НДС', icon: 'mdi-currency-usd', path: '/manage/currencies', adminSection: 'currencies' },
 ];
 
+const isConsultant = computed(() => userRoles.value.includes('consultant'));
+
 const visibleMenu = computed(() => menuItems.filter((item) => {
-  if (item.adminSection) return availableSections.value.has(item.adminSection);
-  if (item.partner) return auth.isConsultant || auth.isStaff;
+  if (item.adminSection) return isStaff.value && availableSections.value.has(item.adminSection);
+  if (item.partner) return isConsultant.value;
   return true;
 }));
 </script>
