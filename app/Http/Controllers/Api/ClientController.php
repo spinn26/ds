@@ -28,8 +28,17 @@ class ClientController extends Controller
 
         $total = $query->count();
 
+        // Server-side sorting
+        $sortBy = $request->input('sort_by', 'personName');
+        $sortDir = $request->input('sort_dir', 'asc');
+        $allowedSort = ['personName', 'id'];
+        if (in_array($sortBy, $allowedSort)) {
+            $query->orderBy($sortBy, $sortDir === 'desc' ? 'desc' : 'asc');
+        } else {
+            $query->orderBy('personName', $sortDir === 'desc' ? 'desc' : 'asc');
+        }
+
         $clients = $query
-            ->orderByDesc('id')
             ->offset(($request->input('page', 1) - 1) * 25)
             ->limit(25)
             ->get()
@@ -37,12 +46,10 @@ class ClientController extends Controller
                 $personData = null;
                 $cityName = null;
 
-                // client.person → person table (данные клиента: телефон, email, ДР, город)
                 if ($c->person) {
                     $personData = DB::table('person')->where('id', $c->person)->first();
                 }
 
-                // Город из person.city → city.cityNameRu
                 if ($personData && ($personData->city ?? null)) {
                     $cityName = DB::table('city')->where('id', $personData->city)->value('cityNameRu');
                 }

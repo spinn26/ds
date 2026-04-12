@@ -12,8 +12,8 @@
     </v-card>
 
     <v-data-table-server :items="items" :items-length="total" :loading="loading"
-      :headers="headers" :items-per-page="25" @update:options="onOptions"
-      density="compact" hover no-data-text="Клиенты не найдены" />
+      :headers="headers" :items-per-page="25" :sort-by="sortBy"
+      @update:options="onOptions" density="compact" hover no-data-text="Клиенты не найдены" />
   </div>
 </template>
 
@@ -26,13 +26,14 @@ const total = ref(0);
 const loading = ref(false);
 const search = ref('');
 const page = ref(1);
+const sortBy = ref([]);
 
 const headers = [
-  { title: 'ФИО клиента', key: 'personName' },
-  { title: 'Дата рождения', key: 'birthDate', width: 140 },
-  { title: 'Место жительства', key: 'city' },
-  { title: 'Телефон', key: 'phone', width: 160 },
-  { title: 'Email', key: 'email', width: 220 },
+  { title: 'ФИО клиента', key: 'personName', sortable: true },
+  { title: 'Дата рождения', key: 'birthDate', width: 140, sortable: true },
+  { title: 'Место жительства', key: 'city', sortable: true },
+  { title: 'Телефон', key: 'phone', width: 160, sortable: false },
+  { title: 'Email', key: 'email', width: 220, sortable: false },
 ];
 
 let debounceTimer;
@@ -43,6 +44,7 @@ function debouncedLoad() {
 
 function onOptions(opts) {
   page.value = opts.page;
+  sortBy.value = opts.sortBy || [];
   loadData();
 }
 
@@ -51,6 +53,10 @@ async function loadData() {
   try {
     const params = { page: page.value };
     if (search.value) params.search = search.value;
+    if (sortBy.value.length) {
+      params.sort_by = sortBy.value[0].key;
+      params.sort_dir = sortBy.value[0].order || 'asc';
+    }
     const { data } = await api.get('/clients', { params });
     items.value = data.data;
     total.value = data.total;
