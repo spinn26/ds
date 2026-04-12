@@ -1,0 +1,56 @@
+<template>
+  <div>
+    <div class="d-flex align-center ga-2 mb-4">
+      <v-icon size="32" color="primary">mdi-trophy</v-icon>
+      <h5 class="text-h5 font-weight-bold">Конкурсы и события</h5>
+      <v-chip size="small" color="primary">{{ total }}</v-chip>
+    </div>
+
+    <v-card class="mb-3 pa-3">
+      <v-text-field v-model="search" placeholder="Поиск..." density="compact" variant="outlined"
+        prepend-inner-icon="mdi-magnify" hide-details style="max-width:300px" @update:model-value="loadData" />
+    </v-card>
+
+    <v-data-table-server :items="items" :items-length="total" :loading="loading"
+      :headers="headers" :items-per-page="25" @update:options="onOptions" density="compact" hover>
+      <template #item.status="{ value }">
+        <v-chip size="x-small" :color="value == 1 ? 'success' : value == 2 ? 'warning' : 'grey'">
+          {{ value == 1 ? 'Активный' : value == 2 ? 'Завершён' : 'Архив' }}
+        </v-chip>
+      </template>
+    </v-data-table-server>
+  </div>
+</template>
+
+<script setup>
+import { ref, onMounted } from 'vue';
+import api from '../../api';
+
+const items = ref([]);
+const total = ref(0);
+const loading = ref(false);
+const search = ref('');
+const page = ref(1);
+
+const headers = [
+  { title: 'Название', key: 'name' },
+  { title: 'Тип', key: 'typeName' },
+  { title: 'Статус', key: 'status', width: 120 },
+  { title: 'Начало', key: 'start', width: 120 },
+  { title: 'Окончание', key: 'end', width: 120 },
+];
+
+function onOptions(opts) { page.value = opts.page; loadData(); }
+
+async function loadData() {
+  loading.value = true;
+  try {
+    const { data } = await api.get('/contests', { params: { search: search.value || undefined } });
+    items.value = data.contests || [];
+    total.value = items.value.length;
+  } catch {}
+  loading.value = false;
+}
+
+onMounted(loadData);
+</script>
