@@ -5,126 +5,238 @@
       <h5 class="text-h5 font-weight-bold">Калькулятор объёмов</h5>
     </div>
 
-    <!-- Current Volumes -->
-    <v-row class="mb-4">
-      <v-col cols="12" sm="4">
-        <v-card class="pa-4">
-          <div class="text-body-2 text-medium-emphasis">Личный объём (ЛП)</div>
-          <div class="text-h5 font-weight-bold text-green">{{ fmt(data.personalVolume) }}</div>
-        </v-card>
-      </v-col>
-      <v-col cols="12" sm="4">
-        <v-card class="pa-4">
-          <div class="text-body-2 text-medium-emphasis">Групповой объём (ГП)</div>
-          <div class="text-h5 font-weight-bold text-blue">{{ fmt(data.groupVolume) }}</div>
-        </v-card>
-      </v-col>
-      <v-col cols="12" sm="4">
-        <v-card class="pa-4">
-          <div class="text-body-2 text-medium-emphasis">Накопленный ГП (НГП)</div>
-          <div class="text-h5 font-weight-bold text-orange">{{ fmt(data.groupVolumeCumulative) }}</div>
-        </v-card>
-      </v-col>
-    </v-row>
+    <!-- Input form -->
+    <v-card class="mb-4 pa-4">
+      <v-row dense>
+        <v-col cols="12" sm="6" md="3">
+          <v-select v-model="form.qualification" :items="matrix.levels" item-title="title" item-value="id"
+            label="Квалификация" density="compact" variant="outlined" :loading="matrixLoading"
+            :item-props="lvlProps" />
+        </v-col>
+        <v-col cols="12" sm="6" md="3">
+          <v-select v-model="form.productType" :items="filteredTypes" item-title="name" item-value="id"
+            label="Тип продукта" density="compact" variant="outlined" clearable
+            @update:model-value="form.product = null; form.program = null" />
+        </v-col>
+        <v-col cols="12" sm="6" md="3">
+          <v-select v-model="form.product" :items="filteredProducts" item-title="name" item-value="id"
+            label="Продукт" density="compact" variant="outlined" clearable
+            @update:model-value="form.program = null" />
+        </v-col>
+        <v-col cols="12" sm="6" md="3">
+          <v-select v-model="form.program" :items="filteredPrograms" item-title="name" item-value="id"
+            label="Программа" density="compact" variant="outlined" clearable
+            @update:model-value="onProgramChange" />
+        </v-col>
+        <v-col cols="12" sm="6" md="3">
+          <v-select v-model="form.calcProperty" :items="matrix.properties" item-title="title" item-value="id"
+            label="Свойство продукта" density="compact" variant="outlined" />
+        </v-col>
+        <v-col cols="12" sm="6" md="3" v-if="availableTerms.length">
+          <v-select v-model="form.termContract" :items="availableTerms" item-title="label" item-value="id"
+            label="Срок контракта (лет)" density="compact" variant="outlined" clearable />
+        </v-col>
+        <v-col cols="12" sm="6" md="3">
+          <v-text-field v-model.number="form.amount" label="Сумма взноса" type="number"
+            density="compact" variant="outlined" />
+        </v-col>
+        <v-col cols="12" sm="6" md="3">
+          <v-select v-model="form.currency" :items="matrix.currencies" item-title="symbol" item-value="id"
+            label="Валюта" density="compact" variant="outlined" />
+        </v-col>
+      </v-row>
 
-    <!-- NGP Projection -->
-    <v-card class="pa-4 mb-4">
-      <div class="text-subtitle-1 font-weight-bold mb-3">Прогноз НГП</div>
-      <div class="text-body-2 text-medium-emphasis mb-2">Предполагаемый ежемесячный ГП</div>
-      <v-slider v-model="projectedGP" :min="0" :max="maxSlider" :step="100" thumb-label="always" color="primary">
-        <template #thumb-label="{ modelValue }">{{ fmt(modelValue) }}</template>
-      </v-slider>
-      <div class="text-body-2 mt-2">
-        Прогноз НГП через 12 мес: <strong class="text-primary">{{ fmt(projectedNGP) }}</strong>
+      <div class="d-flex ga-2 mt-2">
+        <v-btn color="primary" prepend-icon="mdi-calculator" :loading="calculating" @click="calculate"
+          :disabled="!canCalculate">
+          Рассчитать
+        </v-btn>
+        <v-btn variant="text" prepend-icon="mdi-refresh" @click="resetForm">
+          Сбросить параметры
+        </v-btn>
       </div>
+
+      <v-alert type="info" density="compact" variant="tonal" class="mt-3" icon="mdi-information">
+        Расчёт комиссионных и объёмов указан для вновь открываемых контрактов и с учётом НДС
+      </v-alert>
     </v-card>
 
-    <!-- Qualification Forecast -->
-    <v-card class="pa-4 mb-4">
-      <div class="text-subtitle-1 font-weight-bold mb-3">Прогноз квалификации</div>
-      <div v-if="data.currentQualification" class="mb-2">
-        Текущая: <v-chip size="small" color="secondary">{{ data.currentQualification.title }}</v-chip>
-      </div>
-      <div v-if="forecastQualification" class="mb-3">
-        Прогнозируемая: <v-chip size="small" color="primary">{{ forecastQualification.title }}</v-chip>
-        <v-progress-linear :model-value="forecastProgress" height="10" rounded color="primary" class="mt-2" />
-        <div class="text-body-2 mt-1">{{ fmt(projectedNGP) }} / {{ fmt(forecastQualification.groupVolumeCumulative) }}</div>
-      </div>
+    <!-- Results -->
+    <v-card v-if="result" class="mb-4 pa-4">
+      <v-row>
+        <v-col cols="12" md="6">
+          <div class="text-body-2 text-medium-emphasis">Комиссия</div>
+          <div class="text-h4 font-weight-bold text-primary">{{ fmt(result.commission) }} руб.</div>
+        </v-col>
+        <v-col cols="12" md="6">
+          <div class="text-body-2 text-medium-emphasis">Личные продажи (ЛП)</div>
+          <div class="text-h4 font-weight-bold text-green">{{ fmt(result.personalVolume) }} баллов</div>
+        </v-col>
+      </v-row>
+      <v-divider class="my-3" />
+      <v-row dense>
+        <v-col cols="6" md="2">
+          <div class="text-caption text-medium-emphasis">Сумма (RUB)</div>
+          <div class="text-body-2 font-weight-medium">{{ fmt(result.amountRub) }}</div>
+        </v-col>
+        <v-col cols="6" md="2">
+          <div class="text-caption text-medium-emphasis">Без НДС</div>
+          <div class="text-body-2 font-weight-medium">{{ fmt(result.amountNoVat) }}</div>
+        </v-col>
+        <v-col cols="6" md="2">
+          <div class="text-caption text-medium-emphasis">%DS</div>
+          <div class="text-body-2 font-weight-medium">{{ result.dsCommissionPercent }}%</div>
+        </v-col>
+        <v-col cols="6" md="2">
+          <div class="text-caption text-medium-emphasis">НДС</div>
+          <div class="text-body-2 font-weight-medium">{{ result.vatPercent }}%</div>
+        </v-col>
+        <v-col cols="6" md="2">
+          <div class="text-caption text-medium-emphasis">Курс</div>
+          <div class="text-body-2 font-weight-medium">{{ result.currencyRate }}</div>
+        </v-col>
+        <v-col cols="6" md="2">
+          <div class="text-caption text-medium-emphasis">Гр. бонус (руб)</div>
+          <div class="text-body-2 font-weight-medium">{{ fmt(result.groupBonusRub) }}</div>
+        </v-col>
+      </v-row>
     </v-card>
 
-    <!-- Qualification Table -->
-    <v-card>
-      <v-card-title class="text-subtitle-1 font-weight-bold">Таблица квалификаций</v-card-title>
-      <v-table density="compact">
-        <thead>
-          <tr>
-            <th>Уровень</th><th>Квалификация</th><th class="text-right">%</th>
-            <th class="text-right">ГП</th><th class="text-right">НГП</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="lv in data.levels || []" :key="lv.level"
-            :class="lv.level === data.currentQualification?.level ? 'bg-green-lighten-5' : (lv.level === forecastQualification?.level ? 'bg-blue-lighten-5' : '')">
-            <td>{{ lv.level }}</td>
-            <td>
-              {{ lv.title }}
-              <v-chip v-if="lv.level === data.currentQualification?.level" size="x-small" color="success" class="ml-1">Текущий</v-chip>
-              <v-chip v-if="lv.level === forecastQualification?.level && lv.level !== data.currentQualification?.level" size="x-small" color="info" class="ml-1">Прогноз</v-chip>
-            </td>
-            <td class="text-right">{{ lv.percent }}%</td>
-            <td class="text-right">{{ fmt(lv.groupVolume) }}</td>
-            <td class="text-right">{{ fmt(lv.groupVolumeCumulative) }}</td>
-          </tr>
-        </tbody>
-      </v-table>
+    <!-- History -->
+    <v-card class="pa-4">
+      <div class="d-flex justify-space-between align-center mb-3">
+        <div class="text-subtitle-1 font-weight-bold">Предыдущие расчёты</div>
+        <v-btn size="small" variant="text" prepend-icon="mdi-broom" @click="clearHistory"
+          :disabled="!history.length">Очистить историю</v-btn>
+      </div>
+      <v-data-table :items="history" :headers="historyHeaders" density="compact" hover
+        no-data-text="Нет сохранённых расчётов" :items-per-page="10">
+        <template #item.personalVolume="{ value }">{{ fmt(value) }}</template>
+        <template #item.groupBonusRub="{ value }">{{ fmt(value) }}</template>
+        <template #item.amount="{ value }">{{ fmt(value) }}</template>
+      </v-data-table>
     </v-card>
 
-    <v-overlay v-model="loading" class="align-center justify-center" persistent>
+    <v-overlay v-model="matrixLoading" class="align-center justify-center" persistent>
       <v-progress-circular indeterminate size="64" />
     </v-overlay>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, reactive, computed, onMounted } from 'vue';
 import api from '../../api';
 
-const loading = ref(true);
-const data = ref({});
-const projectedGP = ref(0);
+const fmt = (n) => Number(n || 0).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-const fmt = (n) => Number(n || 0).toLocaleString('ru-RU');
+const matrixLoading = ref(true);
+const calculating = ref(false);
+const result = ref(null);
+const history = ref([]);
 
-const maxSlider = computed(() => Math.max(50000, (data.value.groupVolume || 0) * 3));
-
-const projectedNGP = computed(() => {
-  return (data.value.groupVolumeCumulative || 0) + projectedGP.value * 12;
+const matrix = reactive({
+  categories: [], types: [], products: [], programs: [],
+  properties: [], terms: [], levels: [], currencies: [],
 });
 
-const forecastQualification = computed(() => {
-  const levels = data.value.levels || [];
-  let best = null;
-  for (const lv of levels) {
-    if (projectedNGP.value >= (lv.groupVolumeCumulative || 0)) best = lv;
-  }
-  return best;
+const form = reactive({
+  qualification: null, productType: null, product: null, program: null,
+  calcProperty: null, termContract: null, amount: null, currency: 67, // RUB
 });
 
-const forecastProgress = computed(() => {
-  if (!forecastQualification.value) return 0;
-  const target = forecastQualification.value.groupVolumeCumulative || 1;
-  return Math.min((projectedNGP.value / target) * 100, 100);
+const lvlProps = (item) => ({ subtitle: `${item.raw.level} — ${item.raw.percent}%` });
+
+// Cascading filters
+const filteredTypes = computed(() =>
+  matrix.types
+);
+
+const filteredProducts = computed(() => {
+  if (!form.productType) return matrix.products;
+  return matrix.products.filter(p => p.typeId == form.productType);
 });
 
-async function loadData() {
-  loading.value = true;
-  try {
-    const { data: d } = await api.get('/finance/calculator');
-    data.value = d;
-    projectedGP.value = d.groupVolume || 0;
-  } catch {}
-  loading.value = false;
+const filteredPrograms = computed(() => {
+  if (!form.product) return matrix.programs;
+  return matrix.programs.filter(p => p.productId == form.product);
+});
+
+const availableTerms = computed(() =>
+  matrix.terms.map(t => ({ ...t, label: `${t.term} лет` }))
+);
+
+const canCalculate = computed(() =>
+  form.qualification && form.program && form.calcProperty && form.amount > 0 && form.currency
+);
+
+function onProgramChange() {
+  form.calcProperty = null;
+  form.termContract = null;
 }
 
-onMounted(loadData);
+function resetForm() {
+  form.qualification = null;
+  form.productType = null;
+  form.product = null;
+  form.program = null;
+  form.calcProperty = null;
+  form.termContract = null;
+  form.amount = null;
+  form.currency = 67;
+  result.value = null;
+}
+
+async function calculate() {
+  if (!canCalculate.value) return;
+  calculating.value = true;
+  result.value = null;
+  try {
+    const { data } = await api.post('/calculator/calculate', {
+      qualification: form.qualification,
+      program: form.program,
+      calcProperty: form.calcProperty,
+      amount: form.amount,
+      currency: form.currency,
+      termContract: form.termContract,
+    });
+    result.value = data;
+    loadHistory();
+  } catch (e) {
+    result.value = { error: e.response?.data?.error || 'Ошибка расчёта' };
+  }
+  calculating.value = false;
+}
+
+async function loadHistory() {
+  try {
+    const { data } = await api.get('/calculator/history');
+    history.value = data;
+  } catch {}
+}
+
+async function clearHistory() {
+  try {
+    await api.delete('/calculator/history');
+    history.value = [];
+  } catch {}
+}
+
+const historyHeaders = [
+  { title: 'Квалификация', key: 'qualification', width: 140 },
+  { title: 'Продукт', key: 'productName' },
+  { title: 'Программа', key: 'programName' },
+  { title: 'Свойство', key: 'property', width: 120 },
+  { title: 'Сумма', key: 'amount', align: 'end', width: 120 },
+  { title: 'ЛП', key: 'personalVolume', align: 'end', width: 100 },
+  { title: 'Бонус (руб)', key: 'groupBonusRub', align: 'end', width: 120 },
+];
+
+onMounted(async () => {
+  try {
+    const { data } = await api.get('/calculator/product-matrix');
+    Object.assign(matrix, data);
+  } catch {}
+  matrixLoading.value = false;
+  loadHistory();
+});
 </script>

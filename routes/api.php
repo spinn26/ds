@@ -54,6 +54,10 @@ Route::prefix('v1')->group(function () {
 
         Route::get('/finance/report', [FinanceController::class, 'report']);
         Route::get('/finance/calculator', [FinanceController::class, 'calculator']);
+        Route::get('/calculator/product-matrix', [\App\Http\Controllers\Api\CalculatorController::class, 'productMatrix']);
+        Route::post('/calculator/calculate', [\App\Http\Controllers\Api\CalculatorController::class, 'calculate']);
+        Route::get('/calculator/history', [\App\Http\Controllers\Api\CalculatorController::class, 'history']);
+        Route::delete('/calculator/history', [\App\Http\Controllers\Api\CalculatorController::class, 'clearHistory']);
 
         Route::get('/products', [ProductController::class, 'index']);
         Route::get('/contests', [ContestController::class, 'index']);

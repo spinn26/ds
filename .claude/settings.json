@@ -11,7 +11,9 @@
       "Bash(ls -lh \"c:\\\\Users\\\\ENCODE\\\\Desktop\\\\.claude\"/*.md)",
       "Bash(file \"c:\\\\Users\\\\ENCODE\\\\Desktop\\\\.claude\\\\Кабинеты\"/*.md)",
       "Bash(wc -l \"c:\\\\Users\\\\ENCODE\\\\Desktop\\\\.claude\\\\Кабинеты\"/*.md)",
-      "Bash(xxd \"/c/Users/ENCODE/Desktop/.claude/Кабинеты/Кабинет партнера.md\")"
+      "Bash(xxd \"/c/Users/ENCODE/Desktop/.claude/Кабинеты/Кабинет партнера.md\")",
+      "Bash(powershell -Command \"Get-Item 'C:\\\\Users\\\\ENCODE\\\\Desktop\\\\.claude\\\\Кабинеты\\\\Кабинет партнера.md' | Select-Object FullName, Length\")",
+      "Bash(powershell -Command \"Get-Content 'C:\\\\Users\\\\ENCODE\\\\Desktop\\\\.claude\\\\Кабинеты\\\\Кабинет партнера.md' -Encoding UTF8\")"
     ]
   }
 }
