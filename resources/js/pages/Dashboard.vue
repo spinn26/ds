@@ -23,6 +23,7 @@
         :color="data.statusInfo.daysRemaining <= 30 ? 'warning' : 'primary'" class="mt-2" />
     </v-alert>
 
+    <!-- Status + Qualification -->
     <v-card class="mb-4 pa-4">
       <div class="d-flex justify-space-between align-center mb-3 flex-wrap ga-2">
         <div>
@@ -57,6 +58,7 @@
       </v-row>
     </v-card>
 
+    <!-- Volumes -->
     <h6 class="text-h6 mb-3">Показатели</h6>
     <v-row class="mb-4">
       <v-col v-for="card in volumeCards" :key="card.title" cols="12" md="4">
@@ -108,7 +110,7 @@
       </v-row>
     </v-card>
 
-    <!-- Partners section -->
+    <!-- Partners block -->
     <h6 class="text-h6 mb-3">Партнёры</h6>
     <v-row class="mb-4">
       <v-col v-for="card in partnerCards" :key="card.label" cols="12" sm="6" md="3">
@@ -121,7 +123,7 @@
                 {{ card.diff >= 0 ? 'mdi-trending-up' : 'mdi-trending-down' }}
               </v-icon>
               <span class="text-caption" :class="card.diff >= 0 ? 'text-success' : 'text-error'">
-                {{ card.diff >= 0 ? '+' : '' }}{{ card.diff }}
+                {{ card.diff >= 0 ? '+' : '' }}{{ card.diff }} к прошлому периоду
               </span>
             </div>
           </v-card>
@@ -129,18 +131,61 @@
       </v-col>
     </v-row>
 
-    <v-row>
-      <v-col v-for="stat in teamStats" :key="stat.label" :cols="stat.cols || 6" :md="stat.md || 3">
-        <component :is="stat.link ? 'router-link' : 'div'" :to="stat.link" style="text-decoration: none; color: inherit">
-          <v-card class="text-center pa-4" :hover="!!stat.link">
-            <div class="text-body-2 text-medium-emphasis">{{ stat.label }}</div>
-            <div class="text-h3 font-weight-bold" :class="`text-${stat.color}`">{{ stat.value }}</div>
+    <!-- Clients block -->
+    <h6 class="text-h6 mb-3">Клиенты</h6>
+    <v-row class="mb-4">
+      <v-col cols="12" sm="6">
+        <router-link to="/clients" style="text-decoration: none; color: inherit">
+          <v-card class="pa-4 text-center" hover>
+            <v-icon size="32" color="primary" class="mb-2">mdi-account-multiple</v-icon>
+            <div class="text-body-2 text-medium-emphasis">Мои клиенты</div>
+            <div class="text-h3 font-weight-bold text-primary">{{ data.team.myClients }}</div>
           </v-card>
-        </component>
+        </router-link>
+      </v-col>
+      <v-col cols="12" sm="6">
+        <router-link to="/clients" style="text-decoration: none; color: inherit">
+          <v-card class="pa-4 text-center" hover>
+            <v-icon size="32" color="secondary" class="mb-2">mdi-account-group</v-icon>
+            <div class="text-body-2 text-medium-emphasis">Клиенты команды</div>
+            <div class="text-h3 font-weight-bold text-secondary">{{ data.team.teamClients }}</div>
+          </v-card>
+        </router-link>
       </v-col>
     </v-row>
 
-    <!-- Levels dialog -->
+    <!-- Qualification transition table -->
+    <h6 class="text-h6 mb-3">Таблица квалификаций</h6>
+    <v-card class="mb-4">
+      <v-table density="compact" hover>
+        <thead>
+          <tr>
+            <th>Уровень</th>
+            <th>Квалификация</th>
+            <th class="text-right">НГП</th>
+            <th class="text-right">ГП</th>
+            <th class="text-right">ЛП</th>
+            <th class="text-right">Кол-во партнёров</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="lv in levels" :key="lv.id"
+            :class="lv.level === data.qualification.nominalLevel?.level ? 'bg-green-lighten-5' : ''">
+            <td>{{ lv.level }}</td>
+            <td class="font-weight-medium">
+              {{ lv.title }}
+              <v-chip v-if="lv.level === data.qualification.nominalLevel?.level" size="x-small" color="success" class="ml-1">Текущий</v-chip>
+            </td>
+            <td class="text-right">{{ fmt(lv.groupVolumeCumulative) }}</td>
+            <td class="text-right">{{ fmt(lv.groupVolume) }}</td>
+            <td class="text-right">{{ fmt(lv.personalVolume ?? 0) }}</td>
+            <td class="text-right">{{ lv.partnersCount ?? '—' }}</td>
+          </tr>
+        </tbody>
+      </v-table>
+    </v-card>
+
+    <!-- Levels dialog (full conditions) -->
     <v-dialog v-model="showLevels" max-width="900">
       <v-card>
         <v-card-title>Условия перехода</v-card-title>
@@ -149,7 +194,7 @@
             <thead>
               <tr>
                 <th>No.</th><th>Квалификация</th><th class="text-right">%</th>
-                <th class="text-right">ОП</th><th class="text-right">ГП</th>
+                <th class="text-right">ЛП</th><th class="text-right">ГП</th>
                 <th class="text-right">НГП</th><th class="text-right">Отрыв</th>
                 <th class="text-right">Пул</th><th class="text-right">Доля DS</th>
               </tr>
@@ -195,7 +240,7 @@ const empty = {
   consultant: { id: 0, personName: '—', statusName: 'Резидент', participantCode: null, active: false, ambassadorProducts: null, activityName: null },
   qualification: { nominalLevel: null, nextLevel: null },
   volumes: { personalVolume: 0, groupVolume: 0, groupVolumeCumulative: 0, prevPersonalVolume: 0, prevGroupVolume: 0, prevGroupVolumeCumulative: 0 },
-  team: { myClients: 0, teamClients: 0, firstLineResidents: 0, totalResidents: 0, firstLineConsultants: 0, totalConsultants: 0, capitalUsd: 0 },
+  team: { myClients: 0, teamClients: 0 },
   statusInfo: null,
   partners: { total: 0, registered: 0, active: 0, terminated: 0 },
   prevPartners: { total: 0, registered: 0, active: 0, terminated: 0 },
@@ -223,9 +268,9 @@ const volumeCards = computed(() => {
   const gp = pct(v.groupVolume, v.prevGroupVolume);
   const ngp = pct(v.groupVolumeCumulative, v.prevGroupVolumeCumulative);
   return [
-    { title: 'Личные продажи', value: v.personalVolume, change: lp.value, changeType: lp.type, icon: 'mdi-bank', color: 'green' },
-    { title: 'Групповые продажи', value: v.groupVolume, change: gp.value, changeType: gp.type, icon: 'mdi-account-group', color: 'blue' },
-    { title: 'Накопленные ГП', value: v.groupVolumeCumulative, change: ngp.value, changeType: ngp.type, icon: 'mdi-trending-up', color: 'orange' },
+    { title: 'Личные продажи (ЛП)', value: v.personalVolume, change: lp.value, changeType: lp.type, icon: 'mdi-bank', color: 'green' },
+    { title: 'Групповые продажи (ГП)', value: v.groupVolume, change: gp.value, changeType: gp.type, icon: 'mdi-account-group', color: 'blue' },
+    { title: 'Накопленные ГП (НГП)', value: v.groupVolumeCumulative, change: ngp.value, changeType: ngp.type, icon: 'mdi-trending-up', color: 'orange' },
   ];
 });
 
@@ -236,25 +281,13 @@ const partnerCards = computed(() => {
     { label: 'Всего партнёров', value: p.total ?? 0, color: 'primary', diff: (p.total ?? 0) - (pp.total ?? 0) },
     { label: 'Зарегистрировано', value: p.registered ?? 0, color: 'info', diff: (p.registered ?? 0) - (pp.registered ?? 0) },
     { label: 'Активных', value: p.active ?? 0, color: 'success', diff: (p.active ?? 0) - (pp.active ?? 0) },
-    { label: 'Расторгнутых', value: p.terminated ?? 0, color: 'error', diff: (p.terminated ?? 0) - (pp.terminated ?? 0) },
+    { label: 'Терминированных', value: p.terminated ?? 0, color: 'error', diff: (p.terminated ?? 0) - (pp.terminated ?? 0) },
   ];
 });
 
 const nqpProgress = computed(() => {
   const target = data.value.qualification.nextLevel?.groupVolumeCumulative || 1;
   return Math.min((data.value.volumes.groupVolumeCumulative / target) * 100, 100);
-});
-
-const teamStats = computed(() => {
-  const t = data.value.team;
-  return [
-    { label: 'Резиденты 1 линии', value: t.firstLineResidents, color: 'primary' },
-    { label: 'Всего резидентов', value: t.totalResidents, color: 'primary' },
-    { label: 'ФК 1 линии', value: t.firstLineConsultants, color: 'secondary' },
-    { label: 'Всего ФК', value: t.totalConsultants, color: 'secondary' },
-    { label: 'Клиенты команды', value: t.teamClients, color: '', cols: 12, md: 6, link: '/clients' },
-    { label: 'Капитал в управлении', value: `${fmt(t.capitalUsd)} USD`, color: '', cols: 12, md: 6 },
-  ];
 });
 
 async function loadData() {

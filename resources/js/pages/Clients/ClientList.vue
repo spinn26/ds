@@ -2,7 +2,7 @@
   <div>
     <div class="d-flex align-center ga-2 mb-4">
       <v-icon size="32" color="primary">mdi-account-group</v-icon>
-      <h5 class="text-h5 font-weight-bold">Список клиентов</h5>
+      <h5 class="text-h5 font-weight-bold">Мои клиенты</h5>
       <v-chip size="small" color="primary">{{ total }}</v-chip>
     </div>
 
@@ -13,14 +13,7 @@
 
     <v-data-table-server :items="items" :items-length="total" :loading="loading"
       :headers="headers" :items-per-page="25" @update:options="onOptions"
-      density="compact" hover no-data-text="Клиенты не найдены">
-      <template #item.isPartner="{ value }">
-        <v-icon v-if="value" color="success" size="small">mdi-check-circle</v-icon>
-      </template>
-      <template #item.products="{ value }">
-        <v-chip v-for="p in (value || [])" :key="p" size="x-small" class="mr-1" color="primary" variant="outlined">{{ p }}</v-chip>
-      </template>
-    </v-data-table-server>
+      density="compact" hover no-data-text="Клиенты не найдены" />
   </div>
 </template>
 
@@ -35,16 +28,11 @@ const search = ref('');
 const page = ref(1);
 
 const headers = [
-  { title: 'ФИО', key: 'personName' },
-  { title: 'Партнёр', key: 'consultantName' },
-  { title: 'Дата рождения', key: 'birthDate', width: 130 },
-  { title: 'Работаем с', key: 'workSince', width: 130 },
-  { title: 'Город', key: 'city' },
-  { title: 'Телефон', key: 'phone' },
-  { title: 'Email', key: 'email' },
-  { title: 'Контракты', key: 'contractCount', width: 110, align: 'end' },
-  { title: 'Партнёр?', key: 'isPartner', width: 90, sortable: false },
-  { title: 'Продукты', key: 'products', sortable: false },
+  { title: 'ФИО клиента', key: 'personName' },
+  { title: 'Дата рождения', key: 'birthDate', width: 140 },
+  { title: 'Место жительства', key: 'city' },
+  { title: 'Телефон', key: 'phone', width: 160 },
+  { title: 'Email', key: 'email', width: 220 },
 ];
 
 let debounceTimer;

@@ -2,11 +2,11 @@
   <div>
     <div class="d-flex justify-space-between align-center mb-4 flex-wrap ga-2">
       <div class="d-flex align-center ga-2">
-        <v-icon size="32" color="primary">mdi-chat</v-icon>
-        <h5 class="text-h5 font-weight-bold">Коммуникация</h5>
+        <v-icon size="32" color="primary">mdi-message-text</v-icon>
+        <h5 class="text-h5 font-weight-bold">Обратная связь</h5>
         <v-badge v-if="unreadCount > 0" :content="unreadCount" color="error" inline />
       </div>
-      <v-btn color="primary" prepend-icon="mdi-pencil" @click="openSendDialog">Написать</v-btn>
+      <v-btn color="primary" prepend-icon="mdi-pencil" @click="openSendDialog">Написать сообщение</v-btn>
     </div>
 
     <v-card class="mb-3 pa-3">
@@ -32,9 +32,9 @@
             <template #append>
               <div class="d-flex flex-column ga-1">
                 <v-btn v-if="msg.direction === 'ds2p' && !msg.readAt" size="x-small" variant="outlined" color="primary"
-                  @click="markRead(msg)">Прочитано</v-btn>
+                  prepend-icon="mdi-check" @click="markRead(msg)">Прочитано</v-btn>
                 <v-btn v-if="msg.direction === 'ds2p'" size="x-small" variant="outlined"
-                  @click="openReply(msg)">Ответить</v-btn>
+                  prepend-icon="mdi-reply" @click="openReply(msg)">Ответить</v-btn>
               </div>
             </template>
           </v-list-item>
@@ -53,7 +53,10 @@
     <!-- Send / Reply Dialog -->
     <v-dialog v-model="sendDialog" max-width="600" persistent>
       <v-card>
-        <v-card-title>{{ replyTo ? 'Ответ на сообщение' : 'Новое сообщение' }}</v-card-title>
+        <v-card-title class="d-flex align-center ga-2">
+          <v-icon color="primary">{{ replyTo ? 'mdi-reply' : 'mdi-pencil' }}</v-icon>
+          {{ replyTo ? 'Ответ на сообщение' : 'Новое сообщение' }}
+        </v-card-title>
         <v-card-text>
           <v-select v-model="sendForm.category_id" :items="categoryOptions" label="Категория" density="compact"
             class="mb-3" />
@@ -63,7 +66,7 @@
         <v-card-actions>
           <v-spacer />
           <v-btn @click="sendDialog = false">Отмена</v-btn>
-          <v-btn color="primary" :loading="sending" @click="sendMessage">Отправить</v-btn>
+          <v-btn color="primary" :loading="sending" @click="sendMessage" prepend-icon="mdi-send">Отправить</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
