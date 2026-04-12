@@ -1,8 +1,16 @@
 <template>
-  <v-container class="fill-height" fluid>
+  <div class="register-page">
+    <div class="bg-animated">
+      <div class="bg-gradient"></div>
+      <div class="bg-circles">
+        <div v-for="n in 12" :key="n" class="circle" :style="circleStyle(n)"></div>
+      </div>
+      <div class="bg-grid"></div>
+    </div>
+  <v-container class="fill-height position-relative" fluid style="z-index:1">
     <v-row justify="center" align="center">
       <v-col cols="12" sm="10" md="7" lg="5">
-        <v-card class="pa-6" elevation="8" rounded="xl">
+        <v-card class="pa-6 register-card" elevation="16" rounded="xl">
           <div class="text-center mb-4">
             <div class="text-h3 font-weight-black text-primary">DS</div>
             <div class="text-caption text-medium-emphasis" style="letter-spacing: 4px">КОНСАЛТИНГ ПЛАТФОРМА</div>
@@ -83,6 +91,7 @@
       </v-col>
     </v-row>
   </v-container>
+  </div>
 </template>
 
 <script setup>
@@ -144,4 +153,28 @@ async function handleRegister() {
     error.value = e.response?.data?.message || 'Ошибка регистрации';
   } finally { loading.value = false; }
 }
+
+function circleStyle(n) {
+  const size = 40 + Math.random() * 120;
+  return {
+    width: `${size}px`, height: `${size}px`,
+    left: `${Math.random() * 100}%`, top: `${Math.random() * 100}%`,
+    animationDuration: `${15 + Math.random() * 25}s`,
+    animationDelay: `${Math.random() * -20}s`,
+    opacity: 0.03 + Math.random() * 0.08,
+  };
+}
 </script>
+
+<style scoped>
+.register-page { position: relative; min-height: 100vh; overflow: hidden; }
+.bg-animated { position: fixed; inset: 0; z-index: 0; }
+.bg-gradient { position: absolute; inset: 0; background: linear-gradient(135deg, #0d1b2a 0%, #1b2d45 30%, #1a3a2a 60%, #0d2818 100%); animation: gradientShift 20s ease infinite; background-size: 400% 400%; }
+@keyframes gradientShift { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+.bg-circles { position: absolute; inset: 0; }
+.circle { position: absolute; border-radius: 50%; background: radial-gradient(circle, rgba(76,175,80,0.6) 0%, transparent 70%); animation: float linear infinite; pointer-events: none; }
+@keyframes float { 0% { transform: translate(0,0) scale(1); } 25% { transform: translate(30px,-50px) scale(1.1); } 50% { transform: translate(-20px,-100px) scale(0.9); } 75% { transform: translate(40px,-50px) scale(1.05); } 100% { transform: translate(0,0) scale(1); } }
+.bg-grid { position: absolute; inset: 0; background-image: linear-gradient(rgba(76,175,80,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(76,175,80,0.05) 1px, transparent 1px); background-size: 60px 60px; animation: gridPan 30s linear infinite; }
+@keyframes gridPan { 0% { transform: translate(0,0); } 100% { transform: translate(60px,60px); } }
+.register-card { backdrop-filter: blur(20px); background: rgba(255,255,255,0.95) !important; border: 1px solid rgba(76,175,80,0.15); }
+</style>
