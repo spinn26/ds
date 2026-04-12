@@ -86,7 +86,7 @@
             </v-col>
             <v-col cols="12" sm="6">
               <v-text-field v-model="editUser.password" label="Новый пароль" type="password"
-                :placeholder="editUser.id ? 'оставьте пустым'" />
+                :placeholder="editUser.id ? 'оставьте пустым' : ''" />
             </v-col>
             <v-col cols="12" sm="6">
               <v-select v-model="editUser.gender" label="Пол" :items="['Мужской', 'Женский']" clearable />
