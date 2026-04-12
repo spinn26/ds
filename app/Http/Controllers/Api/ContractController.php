@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\DB;
 
 class ContractController extends Controller
 {
+    use Concerns\HasTeamTree;
     /**
      * Контракты моих клиентов.
      * Фильтры: ФИО клиента, статус контракта, дата открытия, продукт.
@@ -55,11 +56,7 @@ class ContractController extends Controller
             return response()->json(['data' => [], 'total' => 0]);
         }
 
-        $teamIds = DB::table('consultantStructure')
-            ->where('parent', $consultant->id)
-            ->pluck('child')
-            ->toArray();
-        $teamIds[] = $consultant->id;
+        $teamIds = $this->getTeamIds($consultant->id);
 
         $query = Contract::whereIn('consultant', $teamIds)
             ->whereNull('deletedAt');

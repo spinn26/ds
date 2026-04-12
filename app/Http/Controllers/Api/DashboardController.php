@@ -14,6 +14,8 @@ use Illuminate\Support\Facades\DB;
 
 class DashboardController extends Controller
 {
+    use Concerns\HasTeamTree;
+
     public function __construct(
         private readonly PartnerStatusService $statusService,
     ) {}
@@ -61,11 +63,8 @@ class DashboardController extends Controller
             ->where('active', true)
             ->count();
 
-        // Team consultants (structure)
-        $teamConsultantIds = DB::table('consultantStructure')
-            ->where('parent', $consultant->id)
-            ->pluck('child')
-            ->toArray();
+        // Team consultants (full tree — all levels deep)
+        $teamConsultantIds = $this->getAllDescendants($consultant->id);
         $teamConsultantIds[] = $consultant->id;
 
         $teamClientsCount = Client::whereIn('consultant', $teamConsultantIds)
@@ -283,4 +282,5 @@ class DashboardController extends Controller
             'excluded' => $counts[PartnerActivity::Excluded->value] ?? 0,
         ];
     }
+
 }
