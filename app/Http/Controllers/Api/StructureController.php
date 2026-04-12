@@ -18,8 +18,26 @@ class StructureController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
+        $userRoles = array_map('trim', explode(',', $user->role ?? ''));
+        $isStaff = array_intersect($userRoles, ['admin', 'backoffice', 'support', 'head', 'calculations', 'corrections']);
         $consultant = Consultant::where('webUser', $user->id)->first();
 
+        // Staff without consultant role → show ALL top-level consultants
+        if ($isStaff && ! in_array('consultant', $userRoles)) {
+            $query = Consultant::whereNull('dateDeleted');
+
+            if ($request->filled('search')) {
+                $query->where('personName', 'ilike', '%' . $request->search . '%');
+            }
+
+            $members = $query->orderByDesc('id')->limit(50)->get()
+                ->map(fn ($c) => $this->formatMember($c));
+
+            $members = $this->applyFilters($members, $request);
+            return response()->json(['data' => $members->values()]);
+        }
+
+        // Consultant → show own team
         if (! $consultant) {
             return response()->json(['data' => []]);
         }

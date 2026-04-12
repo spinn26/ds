@@ -256,22 +256,26 @@ class AdminDataController extends Controller
     public function acceptance(Request $request): JsonResponse
     {
         $query = DB::table('logAcceptance')
-            ->join('consultant', 'logAcceptance.consultant', '=', 'consultant.id')
+            ->joinSub(
+                DB::table('consultant')->select('id', 'personName', 'acceptance'),
+                'c',
+                fn ($join) => $join->on('logAcceptance.consultant', '=', DB::raw('c.id::text'))
+            )
             ->select(
                 'logAcceptance.id',
                 'logAcceptance.consultant',
                 'logAcceptance.dateAccepted',
                 'logAcceptance.source',
-                'consultant.personName',
-                'consultant.acceptance'
+                'c.personName',
+                'c.acceptance'
             );
 
         if ($request->filled('search')) {
-            $query->where('consultant.personName', 'ilike', '%' . $request->search . '%');
+            $query->where('c.personName', 'ilike', '%' . $request->search . '%');
         }
 
         $total = $query->count();
-        $data = $query->orderByDesc('logAcceptance.dateAccepted')
+        $data = $query->orderByDesc('logAcceptance.id')
             ->offset(($request->input('page', 1) - 1) * 25)
             ->limit(25)
             ->get();
@@ -320,20 +324,24 @@ class AdminDataController extends Controller
     /** История перестановок */
     public function transfers(Request $request): JsonResponse
     {
-        $query = DB::table('chageConsultanStatusLog')
-            ->join('consultant', 'chageConsultanStatusLog.consultant', '=', 'consultant.id')
-            ->select(
-                'chageConsultanStatusLog.id',
-                'chageConsultanStatusLog.consultant',
-                'chageConsultanStatusLog.dateCreated',
-                'consultant.personName'
-            );
+        $query = DB::table('changeConsultantInviterLog');
+
+        if ($request->filled('search')) {
+            $query->where('consultantName', 'ilike', '%' . $request->search . '%');
+        }
 
         $total = $query->count();
-        $data = $query->orderByDesc('chageConsultanStatusLog.dateCreated')
+        $data = $query->orderByDesc('dateCreated')
             ->offset(($request->input('page', 1) - 1) * 25)
             ->limit(25)
-            ->get();
+            ->get()
+            ->map(fn ($r) => [
+                'id' => $r->id,
+                'dateCreated' => $r->dateCreated,
+                'consultantName' => $r->consultantName,
+                'inviterOldName' => $r->inviterOldName,
+                'inviterNewName' => $r->inviterNewName,
+            ]);
 
         return response()->json(['data' => $data, 'total' => $total]);
     }

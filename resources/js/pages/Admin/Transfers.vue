@@ -7,21 +7,13 @@
     </div>
 
     <v-card class="mb-3 pa-3">
-      <div class="d-flex ga-2 flex-wrap align-center">
-        <v-text-field v-model="search" placeholder="Поиск по партнёру..." density="compact" variant="outlined"
-          prepend-inner-icon="mdi-magnify" hide-details style="max-width:300px" @update:model-value="debouncedLoad" />
-      </div>
+      <v-text-field v-model="search" placeholder="Поиск по партнёру..." density="compact" variant="outlined"
+        prepend-inner-icon="mdi-magnify" hide-details style="max-width:300px" @update:model-value="debouncedLoad" />
     </v-card>
 
     <v-data-table-server :items="items" :items-length="total" :loading="loading"
       :headers="headers" :items-per-page="25" @update:options="onOptions"
-      density="compact" hover no-data-text="Перестановки не найдены">
-      <template #item.status="{ value }">
-        <v-chip size="x-small" :color="value === 'completed' ? 'success' : value === 'pending' ? 'warning' : 'grey'">
-          {{ value === 'completed' ? 'Выполнено' : value === 'pending' ? 'В ожидании' : value }}
-        </v-chip>
-      </template>
-    </v-data-table-server>
+      density="compact" hover no-data-text="Перестановки не найдены" />
   </div>
 </template>
 
@@ -36,13 +28,10 @@ const search = ref('');
 const page = ref(1);
 
 const headers = [
-  { title: 'ID', key: 'id', width: 60 },
-  { title: 'Партнёр', key: 'partnerName' },
-  { title: 'Откуда (куратор)', key: 'fromCuratorName' },
-  { title: 'Куда (куратор)', key: 'toCuratorName' },
-  { title: 'Дата', key: 'createdAt', width: 150 },
-  { title: 'Статус', key: 'status', width: 120 },
-  { title: 'Комментарий', key: 'comment' },
+  { title: 'Дата', key: 'dateCreated', width: 180 },
+  { title: 'Партнёр', key: 'consultantName' },
+  { title: 'Прежний наставник', key: 'inviterOldName' },
+  { title: 'Новый наставник', key: 'inviterNewName' },
 ];
 
 let debounceTimer;
