@@ -63,11 +63,11 @@ class FinanceController extends Controller
             ->orderByDesc('date')
             ->get();
 
-        // Personal sales: chainOrder = 0 (own sales)
-        $personalCommissions = $allCommissions->where('chainOrder', 0);
-        // Group sales: chainOrder > 0
-        $groupCommissions = $allCommissions->where('chainOrder', '>', 0);
-        // Other accruals: no transaction linked
+        // Personal sales: chainOrder = 1 (direct sale by this consultant)
+        $personalCommissions = $allCommissions->where('chainOrder', 1)->whereNotNull('transaction');
+        // Group sales: chainOrder > 1 (sales by downstream partners)
+        $groupCommissions = $allCommissions->where('chainOrder', '>', 1)->whereNotNull('transaction');
+        // Other accruals: no transaction linked (manual bonuses/penalties)
         $otherAccruals = $allCommissions->whereNull('transaction');
 
         // Format personal sales with transaction details
@@ -201,15 +201,11 @@ class FinanceController extends Controller
             'summary' => [
                 'qualificationPrev' => $qLogPrev ? [
                     'level' => $qLogPrev->calculationLevel ?? $qLogPrev->nominalLevel,
-                    'personalVolume' => round((float) ($qLogPrev->personalVolume ?? 0), 2),
-                    'groupVolume' => round((float) ($qLogPrev->groupVolume ?? 0), 2),
-                    'groupVolumeCumulative' => round((float) ($qLogPrev->groupVolumeCumulative ?? 0), 2),
+                    'title' => DB::table('status_levels')->where('id', $qLogPrev->calculationLevel ?? $qLogPrev->nominalLevel)->value('title'),
                 ] : null,
                 'qualificationCurrent' => $qLogCurrent ? [
                     'level' => $qLogCurrent->calculationLevel ?? $qLogCurrent->nominalLevel,
-                    'personalVolume' => round((float) ($qLogCurrent->personalVolume ?? 0), 2),
-                    'groupVolume' => round((float) ($qLogCurrent->groupVolume ?? 0), 2),
-                    'groupVolumeCumulative' => round((float) ($qLogCurrent->groupVolumeCumulative ?? 0), 2),
+                    'title' => $commissionLevel?->title,
                 ] : null,
                 'commissionLevel' => $commissionLevel ? [
                     'level' => $commissionLevel->level,
@@ -217,9 +213,9 @@ class FinanceController extends Controller
                     'percent' => $commissionLevel->percent,
                 ] : null,
                 'volumes' => [
-                    'personalVolume' => round((float) ($qLogCurrent->personalVolume ?? $consultant->personalVolume ?? 0), 2),
-                    'groupVolume' => round((float) ($qLogCurrent->groupVolume ?? $consultant->groupVolume ?? 0), 2),
-                    'groupVolumeCumulative' => round((float) ($qLogCurrent->groupVolumeCumulative ?? $consultant->groupVolumeCumulative ?? 0), 2),
+                    'lp' => round((float) ($qLogCurrent->personalVolume ?? $consultant->personalVolume ?? 0), 2),
+                    'gp' => round((float) ($qLogCurrent->groupVolume ?? $consultant->groupVolume ?? 0), 2),
+                    'ngp' => round((float) ($qLogCurrent->groupVolumeCumulative ?? $consultant->groupVolumeCumulative ?? 0), 2),
                 ],
                 'personalSales' => [
                     'points' => round($personalSalesPoints, 2),
