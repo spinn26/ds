@@ -148,9 +148,8 @@ function copyReferral() {
 }
 
 function isActivePath(path) {
-  if (path === '/') return route.path === '/';
-  // Exact match or path followed by / (prevents /manage/partners matching /manage/partners/statuses)
-  return route.path === path || route.path.startsWith(path + '/');
+  if (!path) return false;
+  return route.path === path;
 }
 
 // Parse user roles
