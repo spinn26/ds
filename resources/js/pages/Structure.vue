@@ -71,7 +71,7 @@
               </td>
               <td :style="{ paddingLeft: (row._depth * 20 + 8) + 'px' }">{{ row.personName }}</td>
               <td>
-                <v-chip v-if="row.qualification" size="x-small" color="secondary">{{ row.qualification }}</v-chip>
+                <v-chip v-if="row.qualification" size="x-small" color="secondary">{{ row.qualification.level }} [{{ row.qualification.title }}]</v-chip>
                 <span v-else>—</span>
               </td>
               <td>
@@ -162,7 +162,7 @@ async function toggleExpand(row) {
   row._loadingChildren = true;
   try {
     const { data } = await api.get(`/structure/${row.id}/children`);
-    row._children = enrichRows(data, row._depth + 1);
+    row._children = enrichRows(data.data || data, row._depth + 1);
     row._expanded = true;
   } catch {}
   row._loadingChildren = false;
@@ -195,7 +195,7 @@ async function loadData() {
     if (filters.value.termination_to) params.termination_to = filters.value.termination_to;
     const { data } = await api.get('/structure', { params });
     uidCounter = 0;
-    items.value = enrichRows(data);
+    items.value = enrichRows(data.data || data);
   } catch {}
   loading.value = false;
 }
