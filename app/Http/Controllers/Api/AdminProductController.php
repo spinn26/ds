@@ -32,6 +32,10 @@ class AdminProductController extends Controller
                 'id' => $p->id,
                 'name' => $p->name,
                 'description' => $p->description,
+                'imageUrl' => $p->imageUrl,
+                'educationUrl' => $p->educationUrl,
+                'instructionUrl' => $p->instructionUrl,
+                'openProductUrl' => $p->openProductUrl,
                 'active' => (bool) $p->active,
                 'noComission' => (bool) $p->noComission,
                 'visibleToResident' => (bool) $p->visibleToResident,
@@ -52,6 +56,10 @@ class AdminProductController extends Controller
         $product = Product::create([
             'name' => $request->name,
             'description' => $request->description,
+            'imageUrl' => $request->imageUrl,
+            'educationUrl' => $request->educationUrl,
+            'instructionUrl' => $request->instructionUrl,
+            'openProductUrl' => $request->openProductUrl,
             'active' => $request->boolean('active', true),
             'noComission' => $request->boolean('noComission', false),
             'visibleToResident' => $request->boolean('visibleToResident', false),
@@ -70,6 +78,10 @@ class AdminProductController extends Controller
 
         $product->name = $request->name;
         $product->description = $request->description;
+        $product->imageUrl = $request->imageUrl;
+        $product->educationUrl = $request->educationUrl;
+        $product->instructionUrl = $request->instructionUrl;
+        $product->openProductUrl = $request->openProductUrl;
         $product->active = $request->boolean('active');
         $product->noComission = $request->boolean('noComission');
         $product->visibleToResident = $request->boolean('visibleToResident');

@@ -110,7 +110,27 @@
               <v-text-field v-model="editProduct.name" label="Название *" :rules="[v => !!v || 'Обязательное поле']" />
             </v-col>
             <v-col cols="12">
-              <v-textarea v-model="editProduct.description" label="Описание" rows="3" auto-grow />
+              <v-textarea v-model="editProduct.description" label="Краткое описание" rows="3" auto-grow
+                hint="Отображается в карточке продукта" persistent-hint />
+            </v-col>
+            <v-col cols="12">
+              <v-text-field v-model="editProduct.imageUrl" label="URL картинки"
+                prepend-inner-icon="mdi-image" hint="Ссылка на изображение продукта" persistent-hint />
+            </v-col>
+            <v-col cols="12" v-if="editProduct.imageUrl">
+              <v-img :src="editProduct.imageUrl" height="120" class="rounded border" contain />
+            </v-col>
+            <v-col cols="12">
+              <v-text-field v-model="editProduct.educationUrl" label="Ссылка на обучение"
+                prepend-inner-icon="mdi-school" hint="Кнопка 'Перейти к обучению'" persistent-hint />
+            </v-col>
+            <v-col cols="12">
+              <v-text-field v-model="editProduct.instructionUrl" label="Инструкция по открытию"
+                prepend-inner-icon="mdi-file-document" hint="Ссылка на инструкцию по открытию продукта" persistent-hint />
+            </v-col>
+            <v-col cols="12">
+              <v-text-field v-model="editProduct.openProductUrl" label="Ссылка 'Открыть продукт'"
+                prepend-inner-icon="mdi-open-in-new" hint="Куда ведёт кнопка 'Открыть продукт' (форма БЭКа)" persistent-hint />
             </v-col>
             <v-col cols="6">
               <v-checkbox v-model="editProduct.active" label="Активен" density="compact" />
@@ -297,7 +317,7 @@ async function loadPrograms(productId) {
 
 // Product CRUD
 function openCreateProduct() {
-  editProduct.value = { name: '', description: '', active: true, noComission: false, visibleToResident: true, visibleToCalculator: true };
+  editProduct.value = { name: '', description: '', imageUrl: '', educationUrl: '', instructionUrl: '', openProductUrl: '', active: true, noComission: false, visibleToResident: true, visibleToCalculator: true };
   productError.value = '';
   productDialog.value = true;
 }
