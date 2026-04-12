@@ -87,5 +87,29 @@ Route::prefix('v1')->group(function () {
         Route::get('/admin/report-availability', [\App\Http\Controllers\Api\AdminFinanceController::class, 'reportAvailability']);
         Route::get('/admin/currencies', [\App\Http\Controllers\Api\AdminFinanceController::class, 'currencies']);
         Route::get('/admin/transaction-import', [\App\Http\Controllers\Api\AdminFinanceController::class, 'transactionImport']);
+
+        // Admin Products CRUD
+        Route::get('/admin/products', [\App\Http\Controllers\Api\AdminProductController::class, 'index']);
+        Route::post('/admin/products', [\App\Http\Controllers\Api\AdminProductController::class, 'store']);
+        Route::put('/admin/products/{id}', [\App\Http\Controllers\Api\AdminProductController::class, 'update']);
+        Route::delete('/admin/products/{id}', [\App\Http\Controllers\Api\AdminProductController::class, 'destroy']);
+        Route::get('/admin/products/{id}/programs', [\App\Http\Controllers\Api\AdminProductController::class, 'programs']);
+        Route::post('/admin/products/{id}/programs', [\App\Http\Controllers\Api\AdminProductController::class, 'storeProgram']);
+        Route::put('/admin/products/{id}/programs/{programId}', [\App\Http\Controllers\Api\AdminProductController::class, 'updateProgram']);
+        Route::delete('/admin/products/{id}/programs/{programId}', [\App\Http\Controllers\Api\AdminProductController::class, 'destroyProgram']);
+
+        // Admin Education CRUD
+        Route::get('/admin/education/courses', [\App\Http\Controllers\Api\AdminEducationController::class, 'courses']);
+        Route::post('/admin/education/courses', [\App\Http\Controllers\Api\AdminEducationController::class, 'storeCourse']);
+        Route::put('/admin/education/courses/{id}', [\App\Http\Controllers\Api\AdminEducationController::class, 'updateCourse']);
+        Route::delete('/admin/education/courses/{id}', [\App\Http\Controllers\Api\AdminEducationController::class, 'destroyCourse']);
+        Route::get('/admin/education/courses/{id}/lessons', [\App\Http\Controllers\Api\AdminEducationController::class, 'lessons']);
+        Route::post('/admin/education/courses/{id}/lessons', [\App\Http\Controllers\Api\AdminEducationController::class, 'storeLesson']);
+        Route::put('/admin/education/courses/{id}/lessons/{lessonId}', [\App\Http\Controllers\Api\AdminEducationController::class, 'updateLesson']);
+        Route::delete('/admin/education/courses/{id}/lessons/{lessonId}', [\App\Http\Controllers\Api\AdminEducationController::class, 'destroyLesson']);
+        Route::get('/admin/education/courses/{id}/tests', [\App\Http\Controllers\Api\AdminEducationController::class, 'tests']);
+        Route::post('/admin/education/courses/{id}/tests', [\App\Http\Controllers\Api\AdminEducationController::class, 'storeTest']);
+        Route::put('/admin/education/courses/{id}/tests/{testId}', [\App\Http\Controllers\Api\AdminEducationController::class, 'updateTest']);
+        Route::delete('/admin/education/courses/{id}/tests/{testId}', [\App\Http\Controllers\Api\AdminEducationController::class, 'destroyTest']);
     });
 });

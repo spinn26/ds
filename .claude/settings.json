@@ -5,7 +5,9 @@
       "Read(//tmp/**)",
       "Bash(git -C c:/Users/ENCODE/Desktop/ds commit -m 'Add csv:import artisan command for bulk CSV import:*)",
       "Bash(git -C c:/Users/ENCODE/Desktop/ds commit -m 'Restore person table lookups \\(table now imported via csv:import\\):*)",
-      "Bash(git -C c:/Users/ENCODE/Desktop/ds commit -m 'Add server-side sorting for clients table:*)"
+      "Bash(git -C c:/Users/ENCODE/Desktop/ds commit -m 'Add server-side sorting for clients table:*)",
+      "Bash(git -C c:/Users/ENCODE/Desktop/ds commit -m 'Fix Structure page: parse API response data.data, fix qualification display:*)",
+      "Bash(git -C c:/Users/ENCODE/Desktop/ds commit -m 'Fix Structure: parse data.data, fix qualification display:*)"
     ]
   }
 }

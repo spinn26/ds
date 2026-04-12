@@ -45,6 +45,8 @@ const routes = [
             { path: 'manage/payments', component: () => import('../pages/Admin/Payments.vue'), meta: { admin: true } },
             { path: 'manage/reports', component: () => import('../pages/Admin/Reports.vue'), meta: { admin: true } },
             { path: 'manage/currencies', component: () => import('../pages/Admin/Currencies.vue'), meta: { admin: true } },
+            { path: 'manage/products', component: () => import('../pages/Admin/Products.vue'), meta: { admin: true } },
+            { path: 'manage/education', component: () => import('../pages/Admin/Education.vue'), meta: { admin: true } },
         ],
     },
 
