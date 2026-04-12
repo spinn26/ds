@@ -7,7 +7,11 @@
       "Bash(git -C c:/Users/ENCODE/Desktop/ds commit -m 'Restore person table lookups \\(table now imported via csv:import\\):*)",
       "Bash(git -C c:/Users/ENCODE/Desktop/ds commit -m 'Add server-side sorting for clients table:*)",
       "Bash(git -C c:/Users/ENCODE/Desktop/ds commit -m 'Fix Structure page: parse API response data.data, fix qualification display:*)",
-      "Bash(git -C c:/Users/ENCODE/Desktop/ds commit -m 'Fix Structure: parse data.data, fix qualification display:*)"
+      "Bash(git -C c:/Users/ENCODE/Desktop/ds commit -m 'Fix Structure: parse data.data, fix qualification display:*)",
+      "Bash(ls -lh \"c:\\\\Users\\\\ENCODE\\\\Desktop\\\\.claude\"/*.md)",
+      "Bash(file \"c:\\\\Users\\\\ENCODE\\\\Desktop\\\\.claude\\\\Кабинеты\"/*.md)",
+      "Bash(wc -l \"c:\\\\Users\\\\ENCODE\\\\Desktop\\\\.claude\\\\Кабинеты\"/*.md)",
+      "Bash(xxd \"/c/Users/ENCODE/Desktop/.claude/Кабинеты/Кабинет партнера.md\")"
     ]
   }
 }

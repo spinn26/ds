@@ -8,17 +8,28 @@ import 'vuetify/styles';
 import router from './router';
 import App from './App.vue';
 
+const savedTheme = localStorage.getItem('theme') || 'light';
+
 const vuetify = createVuetify({
     components,
     directives,
     theme: {
-        defaultTheme: 'light',
+        defaultTheme: savedTheme,
         themes: {
             light: {
                 colors: {
                     primary: '#4CAF50',
                     secondary: '#FF9800',
                     background: '#f5f5f5',
+                },
+            },
+            dark: {
+                dark: true,
+                colors: {
+                    primary: '#66BB6A',
+                    secondary: '#FFB74D',
+                    background: '#121212',
+                    surface: '#1E1E1E',
                 },
             },
         },

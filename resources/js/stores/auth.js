@@ -8,7 +8,14 @@ export const useAuthStore = defineStore('auth', {
         initialized: false,
     }),
     getters: {
-        isAdmin: (state) => state.user?.role?.includes('admin') || state.user?.role?.includes('backoffice'),
+        isAdmin: (state) => {
+            const roles = (state.user?.role || '').split(',').map(r => r.trim());
+            return roles.includes('admin');
+        },
+        isStaff: (state) => {
+            const roles = (state.user?.role || '').split(',').map(r => r.trim());
+            return roles.some(r => ['admin', 'backoffice', 'support', 'finance', 'head', 'calculations', 'corrections'].includes(r));
+        },
         isConsultant: (state) => state.user?.role?.includes('consultant'),
         isRegistered: (state) => state.user?.role === 'registered',
     },

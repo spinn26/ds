@@ -28,25 +28,27 @@ const routes = [
             { path: 'help', component: () => import('../pages/Help.vue') },
             { path: 'profile', component: () => import('../pages/Profile.vue') },
 
-            // Admin management pages (inside main layout, admin-only)
-            { path: 'manage/contracts', component: () => import('../pages/Admin/ContractManager.vue'), meta: { admin: true } },
-            { path: 'manage/partners', component: () => import('../pages/Admin/Partners.vue'), meta: { admin: true } },
-            { path: 'manage/partners/statuses', component: () => import('../pages/Admin/PartnerStatuses.vue'), meta: { admin: true } },
-            { path: 'manage/clients', component: () => import('../pages/Admin/Clients.vue'), meta: { admin: true } },
-            { path: 'manage/acceptance', component: () => import('../pages/Admin/Acceptance.vue'), meta: { admin: true } },
-            { path: 'manage/requisites', component: () => import('../pages/Admin/Requisites.vue'), meta: { admin: true } },
-            { path: 'manage/transfers', component: () => import('../pages/Admin/Transfers.vue'), meta: { admin: true } },
-            { path: 'manage/transactions/import', component: () => import('../pages/Admin/TransactionImport.vue'), meta: { admin: true } },
-            { path: 'manage/transactions', component: () => import('../pages/Admin/Transactions.vue'), meta: { admin: true } },
-            { path: 'manage/commissions', component: () => import('../pages/Admin/Commissions.vue'), meta: { admin: true } },
-            { path: 'manage/pool', component: () => import('../pages/Admin/Pool.vue'), meta: { admin: true } },
-            { path: 'manage/qualifications', component: () => import('../pages/Admin/Qualifications.vue'), meta: { admin: true } },
-            { path: 'manage/charges', component: () => import('../pages/Admin/Charges.vue'), meta: { admin: true } },
-            { path: 'manage/payments', component: () => import('../pages/Admin/Payments.vue'), meta: { admin: true } },
-            { path: 'manage/reports', component: () => import('../pages/Admin/Reports.vue'), meta: { admin: true } },
-            { path: 'manage/currencies', component: () => import('../pages/Admin/Currencies.vue'), meta: { admin: true } },
-            { path: 'manage/products', component: () => import('../pages/Admin/Products.vue'), meta: { admin: true } },
-            { path: 'manage/education', component: () => import('../pages/Admin/Education.vue'), meta: { admin: true } },
+            // Staff management pages (inside main layout, staff-only)
+            { path: 'manage/contracts', component: () => import('../pages/Admin/ContractManager.vue'), meta: { staff: true } },
+            { path: 'manage/contracts/upload', component: () => import('../pages/Admin/ContractManager.vue'), meta: { staff: true } },
+            { path: 'manage/partners', component: () => import('../pages/Admin/Partners.vue'), meta: { staff: true } },
+            { path: 'manage/partners/statuses', component: () => import('../pages/Admin/PartnerStatuses.vue'), meta: { staff: true } },
+            { path: 'manage/clients', component: () => import('../pages/Admin/Clients.vue'), meta: { staff: true } },
+            { path: 'manage/acceptance', component: () => import('../pages/Admin/Acceptance.vue'), meta: { staff: true } },
+            { path: 'manage/requisites', component: () => import('../pages/Admin/Requisites.vue'), meta: { staff: true } },
+            { path: 'manage/transfers', component: () => import('../pages/Admin/Transfers.vue'), meta: { staff: true } },
+            { path: 'manage/transactions/import', component: () => import('../pages/Admin/TransactionImport.vue'), meta: { staff: true } },
+            { path: 'manage/transactions', component: () => import('../pages/Admin/Transactions.vue'), meta: { staff: true } },
+            { path: 'manage/commissions', component: () => import('../pages/Admin/Commissions.vue'), meta: { staff: true } },
+            { path: 'manage/pool', component: () => import('../pages/Admin/Pool.vue'), meta: { staff: true } },
+            { path: 'manage/qualifications', component: () => import('../pages/Admin/Qualifications.vue'), meta: { staff: true } },
+            { path: 'manage/charges', component: () => import('../pages/Admin/Charges.vue'), meta: { staff: true } },
+            { path: 'manage/payments', component: () => import('../pages/Admin/Payments.vue'), meta: { staff: true } },
+            { path: 'manage/reports', component: () => import('../pages/Admin/Reports.vue'), meta: { staff: true } },
+            { path: 'manage/currencies', component: () => import('../pages/Admin/Currencies.vue'), meta: { staff: true } },
+            { path: 'manage/products', component: () => import('../pages/Admin/Products.vue'), meta: { staff: true } },
+            { path: 'manage/contests', component: () => import('../pages/Admin/Contests.vue'), meta: { staff: true } },
+            { path: 'manage/communication', component: () => import('../pages/Communication.vue'), meta: { staff: true } },
         ],
     },
 
@@ -95,6 +97,7 @@ router.beforeEach(async (to) => {
     if (to.meta.auth && !auth.user) return '/login';
     if (to.meta.guest && auth.user) return '/';
     if (to.meta.admin && !auth.isAdmin) return '/';
+    if (to.meta.staff && !auth.isStaff) return '/';
 
     if (auth.user?.role === 'registered' && !['education', 'profile', 'help'].some(p => to.path.includes(p))) {
         return '/education';
