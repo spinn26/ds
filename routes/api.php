@@ -7,7 +7,9 @@ use App\Http\Controllers\Api\ContractController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\CommunicationController;
+use App\Http\Controllers\Api\ContestController;
 use App\Http\Controllers\Api\FinanceController;
+use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\StructureController;
 use App\Http\Controllers\ImpersonateController;
 use Illuminate\Support\Facades\Route;
@@ -52,6 +54,9 @@ Route::prefix('v1')->group(function () {
 
         Route::get('/finance/report', [FinanceController::class, 'report']);
         Route::get('/finance/calculator', [FinanceController::class, 'calculator']);
+
+        Route::get('/products', [ProductController::class, 'index']);
+        Route::get('/contests', [ContestController::class, 'index']);
 
         // Admin
         Route::post('/impersonate/{user}', [ImpersonateController::class, 'impersonate']);
