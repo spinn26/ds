@@ -27,6 +27,8 @@ Route::prefix('v1')->group(function () {
         Route::get('/clients', [ClientController::class, 'index']);
         Route::get('/contracts/my', [ContractController::class, 'myContracts']);
         Route::get('/contracts/team', [ContractController::class, 'teamContracts']);
+        Route::get('/contracts/statuses', [ContractController::class, 'statuses']);
+        Route::get('/contracts/products', [ContractController::class, 'products']);
 
         Route::get('/profile', [ProfileController::class, 'show']);
         Route::put('/profile', [ProfileController::class, 'update']);
@@ -37,6 +39,8 @@ Route::prefix('v1')->group(function () {
 
         Route::get('/structure', [StructureController::class, 'index']);
         Route::get('/structure/{consultantId}/children', [StructureController::class, 'children']);
+        Route::get('/structure/qualification-levels', [StructureController::class, 'qualificationLevels']);
+        Route::get('/structure/activity-statuses', [StructureController::class, 'activityStatuses']);
 
         // Admin
         Route::post('/impersonate/{user}', [ImpersonateController::class, 'impersonate']);

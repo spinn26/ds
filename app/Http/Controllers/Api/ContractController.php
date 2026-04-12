@@ -11,6 +11,11 @@ use Illuminate\Support\Facades\DB;
 
 class ContractController extends Controller
 {
+    /**
+     * Контракты моих клиентов.
+     * Фильтры: ФИО клиента, статус контракта, дата открытия, продукт.
+     * Таблица: номер, ФИО клиента, дата открытия, продукт, программа, срок, сумма+валюта, статус.
+     */
     public function myContracts(Request $request): JsonResponse
     {
         $user = $request->user();
@@ -20,17 +25,10 @@ class ContractController extends Controller
             return response()->json(['data' => [], 'total' => 0]);
         }
 
-        $query = Contract::where('consultant', $consultant->id);
+        $query = Contract::where('consultant', $consultant->id)
+            ->whereNull('deletedAt');
 
-        if ($request->filled('search')) {
-            $query->where(function ($q) use ($request) {
-                $q->where('clientName', 'ilike', '%' . $request->search . '%')
-                  ->orWhere('number', 'ilike', '%' . $request->search . '%');
-            });
-        }
-        if ($request->filled('status')) {
-            $query->where('status', $request->status);
-        }
+        $this->applyContractFilters($query, $request);
 
         $total = $query->count();
 
@@ -39,23 +37,15 @@ class ContractController extends Controller
             ->offset(($request->input('page', 1) - 1) * 25)
             ->limit(25)
             ->get()
-            ->map(fn ($c) => [
-                'id' => $c->id,
-                'number' => $c->number,
-                'clientName' => $c->clientName,
-                'consultantName' => $c->consultantName,
-                'productName' => $c->productName,
-                'programName' => $c->programName,
-                'statusName' => DB::table('contractStatus')->where('id', $c->status)->value('name'),
-                'ammount' => $c->ammount,
-                'currencySymbol' => DB::table('currency')->where('id', $c->currency)->value('symbol'),
-                'openDate' => $c->openDate?->format('d.m.Y'),
-                'closeDate' => $c->closeDate?->format('d.m.Y'),
-            ]);
+            ->map(fn ($c) => $this->formatContract($c));
 
         return response()->json(['data' => $contracts, 'total' => $total]);
     }
 
+    /**
+     * Контракты команды.
+     * Дополнительно: фильтр ФИО ФК + колонка ФИО ФК.
+     */
     public function teamContracts(Request $request): JsonResponse
     {
         $user = $request->user();
@@ -71,14 +61,14 @@ class ContractController extends Controller
             ->toArray();
         $teamIds[] = $consultant->id;
 
-        $query = Contract::whereIn('consultant', $teamIds);
+        $query = Contract::whereIn('consultant', $teamIds)
+            ->whereNull('deletedAt');
 
-        if ($request->filled('search')) {
-            $query->where(function ($q) use ($request) {
-                $q->where('clientName', 'ilike', '%' . $request->search . '%')
-                  ->orWhere('consultantName', 'ilike', '%' . $request->search . '%')
-                  ->orWhere('number', 'ilike', '%' . $request->search . '%');
-            });
+        $this->applyContractFilters($query, $request);
+
+        // Фильтр по ФИО ФК
+        if ($request->filled('consultant_search')) {
+            $query->where('consultantName', 'ilike', '%' . $request->consultant_search . '%');
         }
 
         $total = $query->count();
@@ -88,19 +78,97 @@ class ContractController extends Controller
             ->offset(($request->input('page', 1) - 1) * 25)
             ->limit(25)
             ->get()
-            ->map(fn ($c) => [
-                'id' => $c->id,
-                'number' => $c->number,
-                'clientName' => $c->clientName,
-                'consultantName' => $c->consultantName,
-                'productName' => $c->productName,
-                'programName' => $c->programName,
-                'statusName' => DB::table('contractStatus')->where('id', $c->status)->value('name'),
-                'ammount' => $c->ammount,
-                'currencySymbol' => DB::table('currency')->where('id', $c->currency)->value('symbol'),
-                'openDate' => $c->openDate?->format('d.m.Y'),
-            ]);
+            ->map(fn ($c) => $this->formatContract($c, true));
 
         return response()->json(['data' => $contracts, 'total' => $total]);
+    }
+
+    /**
+     * Список статусов контрактов (для фильтра).
+     */
+    public function statuses(): JsonResponse
+    {
+        $statuses = DB::table('contractStatus')
+            ->orderBy('id')
+            ->get()
+            ->map(fn ($s) => ['id' => $s->id, 'name' => $s->name]);
+
+        return response()->json($statuses);
+    }
+
+    /**
+     * Список продуктов (для фильтра-автокомплита).
+     */
+    public function products(Request $request): JsonResponse
+    {
+        $query = DB::table('product')->where('active', true);
+
+        if ($request->filled('q')) {
+            $query->where('name', 'ilike', '%' . $request->q . '%');
+        }
+
+        $products = $query->orderBy('name')->limit(20)
+            ->get()
+            ->map(fn ($p) => ['id' => $p->id, 'name' => $p->name]);
+
+        return response()->json($products);
+    }
+
+    private function applyContractFilters($query, Request $request): void
+    {
+        // ФИО клиента
+        if ($request->filled('search')) {
+            $query->where(function ($q) use ($request) {
+                $q->where('clientName', 'ilike', '%' . $request->search . '%')
+                  ->orWhere('number', 'ilike', '%' . $request->search . '%');
+            });
+        }
+
+        // Статус контракта
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+
+        // Продукт
+        if ($request->filled('product')) {
+            $query->where('product', $request->product);
+        }
+
+        // Дата открытия — диапазон
+        if ($request->filled('date_from')) {
+            $query->where('openDate', '>=', $request->date_from);
+        }
+        if ($request->filled('date_to')) {
+            $query->where('openDate', '<=', $request->date_to);
+        }
+    }
+
+    private function formatContract(Contract $c, bool $includeConsultant = false): array
+    {
+        $statusName = $c->status
+            ? DB::table('contractStatus')->where('id', $c->status)->value('name')
+            : null;
+        $currencyName = $c->currency
+            ? DB::table('currency')->where('id', $c->currency)->value('symbol')
+            : null;
+
+        $data = [
+            'id' => $c->id,
+            'number' => $c->number,
+            'clientName' => $c->clientName,
+            'productName' => $c->productName,
+            'programName' => $c->programName,
+            'term' => $c->term ?? null,
+            'statusName' => $statusName,
+            'ammount' => $c->ammount,
+            'currencySymbol' => $currencyName,
+            'openDate' => $c->openDate?->format('d.m.Y'),
+        ];
+
+        if ($includeConsultant) {
+            $data['consultantName'] = $c->consultantName;
+        }
+
+        return $data;
     }
 }

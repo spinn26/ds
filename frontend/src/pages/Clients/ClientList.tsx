@@ -3,7 +3,6 @@ import {
   Box, Typography, TextField, Card, CardContent, Chip,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   Paper, TablePagination, CircularProgress, InputAdornment,
-  ToggleButton, ToggleButtonGroup,
 } from '@mui/material';
 import { Search, People } from '@mui/icons-material';
 import { motion } from 'framer-motion';
@@ -13,10 +12,11 @@ import { t } from '../../i18n';
 interface ClientItem {
   id: number;
   personName: string;
-  active: boolean;
-  source: string | null;
-  comment: string | null;
-  dateCreated: string | null;
+  birthDate: string | null;
+  city: string | null;
+  phone: string | null;
+  email: string | null;
+  products: string[];
 }
 
 const ClientList: React.FC = () => {
@@ -24,20 +24,18 @@ const ClientList: React.FC = () => {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
   const [search, setSearch] = useState('');
-  const [activeFilter, setActiveFilter] = useState<string>('all');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     setLoading(true);
     const params: any = { page: page + 1 };
     if (search) params.search = search;
-    if (activeFilter !== 'all') params.active = activeFilter;
 
     api.get('/clients', { params })
       .then((res) => { setClients(res.data.data); setTotal(res.data.total); })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [page, search, activeFilter]);
+  }, [page, search]);
 
   return (
     <Box>
@@ -48,21 +46,13 @@ const ClientList: React.FC = () => {
       </Box>
 
       <Card sx={{ mb: 2 }}>
-        <CardContent sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center', py: 2 }}>
+        <CardContent sx={{ py: 2 }}>
           <TextField
             size="small" placeholder="Поиск по ФИО..." value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(0); }}
-            sx={{ minWidth: 250 }}
+            sx={{ minWidth: 300 }}
             slotProps={{ input: { startAdornment: <InputAdornment position="start"><Search /></InputAdornment> } }}
           />
-          <ToggleButtonGroup
-            value={activeFilter} exclusive size="small"
-            onChange={(_, val) => { setActiveFilter(val); setPage(0); }}
-          >
-            <ToggleButton value="all">Все</ToggleButton>
-            <ToggleButton value="true">Активные</ToggleButton>
-            <ToggleButton value="false">Неактивные</ToggleButton>
-          </ToggleButtonGroup>
         </CardContent>
       </Card>
 
@@ -74,28 +64,34 @@ const ClientList: React.FC = () => {
             <Table size="small">
               <TableHead>
                 <TableRow sx={{ bgcolor: '#f5f5f5' }}>
-                  <TableCell>ID</TableCell>
-                  <TableCell>ФИО</TableCell>
-                  <TableCell>Статус</TableCell>
-                  <TableCell>Источник</TableCell>
-                  <TableCell>Дата создания</TableCell>
+                  <TableCell>ФИО клиента</TableCell>
+                  <TableCell>Дата рождения</TableCell>
+                  <TableCell>Место жительства</TableCell>
+                  <TableCell>Телефон</TableCell>
+                  <TableCell>Email</TableCell>
+                  <TableCell>Открытые продукты</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {clients.map((c) => (
                   <TableRow key={c.id} hover>
-                    <TableCell>{c.id}</TableCell>
                     <TableCell sx={{ fontWeight: 600 }}>{c.personName}</TableCell>
+                    <TableCell>{c.birthDate || '—'}</TableCell>
+                    <TableCell>{c.city || '—'}</TableCell>
+                    <TableCell>{c.phone || '—'}</TableCell>
+                    <TableCell>{c.email || '—'}</TableCell>
                     <TableCell>
-                      <Chip label={c.active ? 'Активен' : 'Неактивен'} size="small"
-                        color={c.active ? 'success' : 'default'} />
+                      {c.products.length > 0
+                        ? c.products.map((p) => (
+                            <Chip key={p} label={p} size="small" variant="outlined" sx={{ mr: 0.5, mb: 0.5 }} />
+                          ))
+                        : '—'
+                      }
                     </TableCell>
-                    <TableCell>{c.source || '—'}</TableCell>
-                    <TableCell>{c.dateCreated || '—'}</TableCell>
                   </TableRow>
                 ))}
                 {clients.length === 0 && (
-                  <TableRow><TableCell colSpan={5} sx={{ textAlign: 'center', py: 4, color: 'text.secondary' }}>
+                  <TableRow><TableCell colSpan={6} sx={{ textAlign: 'center', py: 4, color: 'text.secondary' }}>
                     Клиенты не найдены
                   </TableCell></TableRow>
                 )}
