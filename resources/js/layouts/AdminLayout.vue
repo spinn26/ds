@@ -13,35 +13,8 @@
         <v-divider class="mb-2" />
 
         <v-list-item to="/admin/users" prepend-icon="mdi-account-cog" title="Пользователи" color="secondary" rounded="lg" class="mb-1" />
-
-        <v-list-subheader class="text-secondary font-weight-bold mt-2">Данные партнёров</v-list-subheader>
-        <v-list-item to="/admin/partners" prepend-icon="mdi-account-search" title="Партнёры" color="secondary" rounded="lg" class="mb-1" />
-        <v-list-item to="/admin/partners/statuses" prepend-icon="mdi-calendar-clock" title="Статусы партнёров" color="secondary" rounded="lg" class="mb-1" />
-        <v-list-item to="/admin/clients" prepend-icon="mdi-account-group" title="Клиенты" color="secondary" rounded="lg" class="mb-1" />
-        <v-list-item to="/admin/contracts" prepend-icon="mdi-file-document-edit" title="Менеджер контрактов" color="secondary" rounded="lg" class="mb-1" />
-        <v-list-item to="/admin/acceptance" prepend-icon="mdi-check-circle" title="Акцепт документов" color="secondary" rounded="lg" class="mb-1" />
-        <v-list-item to="/admin/requisites" prepend-icon="mdi-credit-card" title="Реквизиты" color="secondary" rounded="lg" class="mb-1" />
-        <v-list-item to="/admin/transfers" prepend-icon="mdi-history" title="Перестановки" color="secondary" rounded="lg" class="mb-1" />
-
-        <v-list-subheader class="text-secondary font-weight-bold mt-2">Транзакции и объёмы</v-list-subheader>
-        <v-list-item to="/admin/transactions/import" prepend-icon="mdi-upload" title="Импорт транзакций" color="secondary" rounded="lg" class="mb-1" />
-        <v-list-item to="/admin/transactions" prepend-icon="mdi-swap-horizontal" title="Транзакции" color="secondary" rounded="lg" class="mb-1" />
-        <v-list-item to="/admin/commissions" prepend-icon="mdi-receipt" title="Комиссии" color="secondary" rounded="lg" class="mb-1" />
-        <v-list-item to="/admin/pool" prepend-icon="mdi-cash-multiple" title="Пул" color="secondary" rounded="lg" class="mb-1" />
-        <v-list-item to="/admin/qualifications" prepend-icon="mdi-chart-bar" title="Квалификации" color="secondary" rounded="lg" class="mb-1" />
-
-        <v-list-subheader class="text-secondary font-weight-bold mt-2">Начисления и выплаты</v-list-subheader>
-        <v-list-item to="/admin/charges" prepend-icon="mdi-bank" title="Прочие начисления" color="secondary" rounded="lg" class="mb-1" />
-        <v-list-item to="/admin/payments" prepend-icon="mdi-cash" title="Реестр выплат" color="secondary" rounded="lg" class="mb-1" />
-
-        <v-list-subheader class="text-secondary font-weight-bold mt-2">Контент</v-list-subheader>
         <v-list-item to="/admin/products" prepend-icon="mdi-package-variant" title="Продукты" color="secondary" rounded="lg" class="mb-1" />
-        <v-list-item to="/admin/education" prepend-icon="mdi-school" title="Обучение" color="secondary" rounded="lg" class="mb-1" />
-        <v-list-item to="/admin/contests" prepend-icon="mdi-trophy" title="Конкурсы" color="secondary" rounded="lg" class="mb-1" />
-
-        <v-list-subheader class="text-secondary font-weight-bold mt-2">Настройки</v-list-subheader>
-        <v-list-item to="/admin/reports" prepend-icon="mdi-file-chart" title="Отчёты" color="secondary" rounded="lg" class="mb-1" />
-        <v-list-item to="/admin/currencies" prepend-icon="mdi-currency-usd" title="Валюты и НДС" color="secondary" rounded="lg" class="mb-1" />
+        <v-list-item to="/admin/education" prepend-icon="mdi-school" title="Обучение и тесты" color="secondary" rounded="lg" class="mb-1" />
       </v-list>
     </v-navigation-drawer>
 
