@@ -103,7 +103,9 @@ class AdminDataController extends Controller
     /** Статусы партнёров — сводка */
     public function partnerStatuses(): JsonResponse
     {
-        $counts = Consultant::whereNull('dateDeleted')
+        // Use raw DB query to avoid enum casting issues
+        $counts = DB::table('consultant')
+            ->whereNull('dateDeleted')
             ->select('activity', DB::raw('count(*) as cnt'))
             ->groupBy('activity')
             ->pluck('cnt', 'activity')
