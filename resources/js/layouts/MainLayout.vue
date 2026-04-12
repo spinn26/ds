@@ -37,9 +37,9 @@
         {{ copied ? 'Скопировано!' : 'Реф. ссылка' }}
       </v-btn>
 
-      <!-- Status chip with activity -->
-      <v-chip :color="statusColor" size="small" variant="outlined" class="mr-2">
-        {{ statusInfo?.activityName || 'Загрузка...' }}
+      <!-- Status chip with activity (hidden until loaded) -->
+      <v-chip v-if="statusInfo?.activityName" :color="statusColor" size="small" variant="outlined" class="mr-2">
+        {{ statusInfo.activityName }}
       </v-chip>
 
       <!-- Countdown to status change -->
