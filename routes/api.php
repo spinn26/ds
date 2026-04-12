@@ -6,6 +6,8 @@ use App\Http\Controllers\Api\ClientController;
 use App\Http\Controllers\Api\ContractController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\ProfileController;
+use App\Http\Controllers\Api\CommunicationController;
+use App\Http\Controllers\Api\FinanceController;
 use App\Http\Controllers\Api\StructureController;
 use App\Http\Controllers\ImpersonateController;
 use Illuminate\Support\Facades\Route;
@@ -41,6 +43,15 @@ Route::prefix('v1')->group(function () {
         Route::get('/structure/{consultantId}/children', [StructureController::class, 'children']);
         Route::get('/structure/qualification-levels', [StructureController::class, 'qualificationLevels']);
         Route::get('/structure/activity-statuses', [StructureController::class, 'activityStatuses']);
+
+        Route::get('/communication', [CommunicationController::class, 'index']);
+        Route::get('/communication/unread-count', [CommunicationController::class, 'unreadCount']);
+        Route::post('/communication', [CommunicationController::class, 'send']);
+        Route::post('/communication/{id}/read', [CommunicationController::class, 'markRead']);
+        Route::get('/communication/categories', [CommunicationController::class, 'categories']);
+
+        Route::get('/finance/report', [FinanceController::class, 'report']);
+        Route::get('/finance/calculator', [FinanceController::class, 'calculator']);
 
         // Admin
         Route::post('/impersonate/{user}', [ImpersonateController::class, 'impersonate']);
