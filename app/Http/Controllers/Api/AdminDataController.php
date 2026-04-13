@@ -100,10 +100,10 @@ class AdminDataController extends Controller
         return response()->json(['message' => $result]);
     }
 
-    /** Статусы партнёров — сводка */
-    public function partnerStatuses(): JsonResponse
+    /** Статусы партнёров — сводка + детальный список */
+    public function partnerStatuses(Request $request): JsonResponse
     {
-        // Use raw DB query to avoid enum casting issues
+        // Сводка по статусам
         $counts = DB::table('consultant')
             ->whereNull('dateDeleted')
             ->select('activity', DB::raw('count(*) as cnt'))
@@ -118,7 +118,52 @@ class AdminDataController extends Controller
                 'count' => $counts[$s->id] ?? 0,
             ]);
 
-        return response()->json($statuses);
+        // Детальный список с дедлайнами
+        $detailQuery = DB::table('consultant')->whereNull('dateDeleted');
+
+        if ($request->filled('search')) {
+            $detailQuery->where('personName', 'ilike', '%' . $request->search . '%');
+        }
+        if ($request->filled('activity')) {
+            $detailQuery->where('activity', $request->activity);
+        }
+
+        $detailTotal = $detailQuery->count();
+        $details = $detailQuery->orderBy('personName')
+            ->offset(($request->input('page', 1) - 1) * 25)
+            ->limit(25)
+            ->get()
+            ->map(function ($c) {
+                $activityName = $c->activity
+                    ? DB::table('directory_of_activities')->where('id', $c->activity)->value('name')
+                    : '—';
+
+                // Рассчитать "будет терминирован" для активных
+                $willTerminate = null;
+                if ($c->activity == 1 && $c->dateActivity) { // Активный
+                    $willTerminate = \Carbon\Carbon::parse($c->dateActivity)->addYear()->format('Y-m-d');
+                }
+
+                return [
+                    'id' => $c->id,
+                    'personName' => $c->personName,
+                    'activityId' => $c->activity,
+                    'activityName' => $activityName,
+                    'dateActivity' => $c->dateActivity,
+                    'dateDeactivity' => $c->dateDeactivity,
+                    'dateDeterministic' => $c->dateDeterministic,
+                    'dateDeterministicPlan' => $c->dateDeterministicPlan,
+                    'willTerminate' => $willTerminate,
+                    'terminationCount' => $c->terminationCount ?? 0,
+                    'personalVolume' => round((float) ($c->personalVolume ?? 0), 2),
+                ];
+            });
+
+        return response()->json([
+            'summary' => $statuses,
+            'data' => $details,
+            'total' => $detailTotal,
+        ]);
     }
 
     /** Клиенты — админ-список всех клиентов */

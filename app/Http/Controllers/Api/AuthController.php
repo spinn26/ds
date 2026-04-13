@@ -257,6 +257,12 @@ class AuthController extends Controller
 
     private function userResponse(User $user): array
     {
+        // Get activity status from consultant
+        $consultant = Consultant::where('webUser', $user->id)->first();
+        $activityId = $consultant?->activity;
+        // Handle enum or integer
+        $activityValue = is_object($activityId) ? $activityId->value : $activityId;
+
         return [
             'id' => $user->id,
             'email' => $user->email,
@@ -265,6 +271,7 @@ class AuthController extends Controller
             'patronymic' => $user->patronymic,
             'phone' => $user->phone,
             'role' => $user->role,
+            'activityStatus' => $activityValue,
         ];
     }
 }

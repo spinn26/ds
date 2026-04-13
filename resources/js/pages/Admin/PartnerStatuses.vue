@@ -3,46 +3,56 @@
     <div class="d-flex align-center ga-2 mb-4">
       <v-icon size="32" color="primary">mdi-calendar-clock</v-icon>
       <h5 class="text-h5 font-weight-bold">Статусы партнёров</h5>
-      <v-chip size="small" color="primary">{{ totalCount }}</v-chip>
     </div>
 
+    <!-- Summary cards -->
     <v-row class="mb-4">
-      <v-col v-for="status in statuses" :key="status.id" cols="12" sm="6" md="3">
-        <v-card class="pa-4 text-center" :color="statusCardColor(status.id)" variant="tonal">
-          <div class="text-body-2 text-medium-emphasis">{{ status.name }}</div>
-          <div class="text-h3 font-weight-bold">{{ status.count }}</div>
+      <v-col v-for="s in summary" :key="s.id" cols="12" sm="6" :md="12 / Math.max(summary.length, 1)">
+        <v-card class="pa-4 text-center" :color="statusColor(s.id)" variant="tonal"
+          style="cursor:pointer" @click="filterByActivity(s.id)">
+          <div class="text-body-2 text-medium-emphasis">{{ s.name }}</div>
+          <div class="text-h3 font-weight-bold">{{ s.count }}</div>
         </v-card>
       </v-col>
     </v-row>
 
-    <v-card class="pa-4">
-      <div class="text-subtitle-1 font-weight-bold mb-3">Сводка</div>
-      <v-table density="compact">
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Статус активности</th>
-            <th class="text-right">Количество</th>
-            <th class="text-right">% от общего</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="s in statuses" :key="s.id">
-            <td>{{ s.id }}</td>
-            <td>
-              <v-chip size="x-small" :color="statusCardColor(s.id)">{{ s.name }}</v-chip>
-            </td>
-            <td class="text-right font-weight-bold">{{ s.count }}</td>
-            <td class="text-right">{{ totalCount ? ((s.count / totalCount) * 100).toFixed(1) : 0 }}%</td>
-          </tr>
-          <tr class="font-weight-bold">
-            <td colspan="2">Итого</td>
-            <td class="text-right">{{ totalCount }}</td>
-            <td class="text-right">100%</td>
-          </tr>
-        </tbody>
-      </v-table>
+    <!-- Filters -->
+    <v-card class="mb-3 pa-3">
+      <div class="d-flex ga-2 flex-wrap align-center">
+        <v-text-field v-model="search" placeholder="ФИО партнёра..." density="compact" variant="outlined"
+          prepend-inner-icon="mdi-magnify" hide-details style="max-width:280px" @update:model-value="debouncedLoad" />
+        <v-select v-model="activityFilter" :items="activityOptions" label="Статус" density="compact" variant="outlined"
+          clearable hide-details style="max-width:220px" @update:model-value="loadData" />
+      </div>
     </v-card>
+
+    <!-- Detail table -->
+    <v-data-table-server :items="items" :items-length="total" :loading="loading"
+      :headers="headers" :items-per-page="25" @update:options="onOptions"
+      density="compact" hover no-data-text="Партнёры не найдены">
+      <template #item.activityName="{ item }">
+        <v-chip size="x-small" :color="statusColor(item.activityId)">{{ item.activityName }}</v-chip>
+      </template>
+      <template #item.dateActivity="{ value }">
+        {{ fmtDate(value) }}
+      </template>
+      <template #item.willTerminate="{ value }">
+        <span v-if="value" :class="isExpiringSoon(value) ? 'text-error font-weight-bold' : ''">
+          {{ fmtDate(value) }}
+        </span>
+        <span v-else>—</span>
+      </template>
+      <template #item.dateDeterministic="{ value }">
+        {{ value ? fmtDate(value) : '—' }}
+      </template>
+      <template #item.personalVolume="{ value }">
+        {{ fmt(value) }}
+      </template>
+      <template #item.terminationCount="{ value }">
+        <v-chip v-if="value > 0" size="x-small" :color="value >= 3 ? 'error' : 'warning'">{{ value }}/3</v-chip>
+        <span v-else>—</span>
+      </template>
+    </v-data-table-server>
 
     <v-overlay v-model="loading" class="align-center justify-center" persistent>
       <v-progress-circular indeterminate size="64" />
@@ -55,20 +65,70 @@ import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
 
 const loading = ref(true);
-const statuses = ref([]);
+const summary = ref([]);
+const items = ref([]);
+const total = ref(0);
+const page = ref(1);
+const search = ref('');
+const activityFilter = ref(null);
 
-const totalCount = computed(() => statuses.value.reduce((sum, s) => sum + (s.count || 0), 0));
+const activityOptions = computed(() =>
+  summary.value.map(s => ({ title: `${s.name} (${s.count})`, value: s.id }))
+);
 
-function statusCardColor(id) {
-  const colors = { 1: 'success', 2: 'warning', 3: 'error', 4: 'info', 5: 'error' };
-  return colors[id] || 'grey';
+const headers = [
+  { title: 'Партнёр', key: 'personName' },
+  { title: 'Статус', key: 'activityName', width: 150 },
+  { title: 'Активен с', key: 'dateActivity', width: 130 },
+  { title: 'Будет терминирован', key: 'willTerminate', width: 170 },
+  { title: 'Терминирован', key: 'dateDeterministic', width: 140 },
+  { title: 'ЛП', key: 'personalVolume', align: 'end', width: 100 },
+  { title: 'Терминаций', key: 'terminationCount', width: 110 },
+];
+
+const fmt = (n) => Number(n || 0).toLocaleString('ru-RU', { minimumFractionDigits: 0 });
+
+function fmtDate(d) {
+  if (!d) return '—';
+  try { return new Date(d).toLocaleDateString('ru-RU'); } catch { return d; }
+}
+
+function isExpiringSoon(d) {
+  if (!d) return false;
+  const diff = (new Date(d) - new Date()) / (1000 * 60 * 60 * 24);
+  return diff <= 60 && diff > 0;
+}
+
+function statusColor(id) {
+  return { 1: 'success', 2: 'warning', 3: 'error', 4: 'info', 5: 'error' }[id] || 'grey';
+}
+
+function filterByActivity(id) {
+  activityFilter.value = id;
+  loadData();
+}
+
+let debounceTimer;
+function debouncedLoad() {
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(loadData, 400);
+}
+
+function onOptions(opts) {
+  page.value = opts.page;
+  loadData();
 }
 
 async function loadData() {
   loading.value = true;
   try {
-    const { data } = await api.get('/admin/partner-statuses');
-    statuses.value = Array.isArray(data) ? data : [];
+    const params = { page: page.value };
+    if (search.value) params.search = search.value;
+    if (activityFilter.value) params.activity = activityFilter.value;
+    const { data } = await api.get('/admin/partner-statuses', { params });
+    summary.value = data.summary || [];
+    items.value = data.data || [];
+    total.value = data.total || 0;
   } catch {}
   loading.value = false;
 }

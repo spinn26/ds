@@ -18,6 +18,8 @@ export const useAuthStore = defineStore('auth', {
         },
         isConsultant: (state) => state.user?.role?.includes('consultant'),
         isRegistered: (state) => state.user?.role === 'registered',
+        isTerminated: (state) => state.user?.activityStatus === 3, // Терминирован
+        isExcluded: (state) => state.user?.activityStatus === 5, // Исключён
     },
     actions: {
         async fetchUser() {

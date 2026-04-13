@@ -14,6 +14,7 @@ const routes = [
         children: [
             // Partner pages
             { path: '', component: () => import('../pages/Dashboard.vue') },
+            { path: 'terminated', component: () => import('../pages/Terminated.vue') },
             { path: 'education', component: () => import('../pages/Education.vue') },
             { path: 'referrals', component: () => import('../pages/Referrals.vue') },
             { path: 'finance/report', component: () => import('../pages/Finance/Report.vue') },
@@ -99,8 +100,17 @@ router.beforeEach(async (to) => {
     if (to.meta.admin && !auth.isAdmin) return '/';
     if (to.meta.staff && !auth.isStaff) return '/';
 
+    // Registered users → only education
     if (auth.user?.role === 'registered' && !['education', 'profile', 'help'].some(p => to.path.includes(p))) {
         return '/education';
+    }
+
+    // Terminated/Excluded → blocked cabinet (only communication, profile, terminated page)
+    if (auth.isConsultant && (auth.isTerminated || auth.isExcluded)) {
+        const allowedPaths = ['terminated', 'communication', 'profile', 'help'];
+        if (!allowedPaths.some(p => to.path.includes(p))) {
+            return '/terminated';
+        }
     }
 });
 
