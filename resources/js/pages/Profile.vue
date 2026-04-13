@@ -93,6 +93,47 @@
 
       <!-- Section 2: Requisites and documents for payments -->
       <v-tabs-window-item value="requisites">
+        <!-- Documents -->
+        <v-card class="pa-4 mb-4">
+          <div class="d-flex align-center ga-2 mb-3">
+            <v-icon color="primary">mdi-file-document-multiple</v-icon>
+            <div class="text-subtitle-1 font-weight-bold">Документы партнёра</div>
+          </div>
+          <v-row dense>
+            <v-col v-for="slot in documentSlots" :key="slot.type" cols="12" sm="4">
+              <v-card variant="outlined" class="pa-3">
+                <div class="d-flex align-center ga-2 mb-2">
+                  <span class="text-body-2 font-weight-medium">{{ slot.label }}</span>
+                  <v-icon v-if="isDocUploaded(slot.type)" color="success" size="20">mdi-check-circle</v-icon>
+                </div>
+                <v-file-input
+                  v-model="docFiles[slot.type]"
+                  accept="image/*,.pdf"
+                  density="compact"
+                  variant="outlined"
+                  :label="isDocUploaded(slot.type) ? 'Загружено' : 'Выберите файл'"
+                  prepend-icon=""
+                  prepend-inner-icon="mdi-paperclip"
+                  hide-details
+                />
+                <v-btn
+                  color="primary"
+                  size="small"
+                  variant="tonal"
+                  class="mt-2"
+                  :loading="docUploading[slot.type]"
+                  :disabled="!docFiles[slot.type]"
+                  prepend-icon="mdi-upload"
+                  @click="uploadDocument(slot.type)"
+                >
+                  Загрузить
+                </v-btn>
+              </v-card>
+            </v-col>
+          </v-row>
+          <v-alert v-if="docMsg" :type="docMsgType" density="compact" class="mt-3" closable @click:close="docMsg = ''">{{ docMsg }}</v-alert>
+        </v-card>
+
         <!-- IP Requisites -->
         <v-card class="pa-4 mb-4">
           <div class="d-flex align-center ga-2 mb-3">
@@ -119,6 +160,12 @@
             </v-col>
             <v-col cols="12">
               <v-text-field v-model="reqForm.address" label="Юридический адрес" />
+            </v-col>
+            <v-col cols="12">
+              <v-checkbox v-model="addressSameAsRegistration" label="Адрес регистрации совпадает с фактическим" density="compact" hide-details />
+            </v-col>
+            <v-col v-if="!addressSameAsRegistration" cols="12">
+              <v-text-field v-model="reqForm.actualAddress" label="Фактический адрес" />
             </v-col>
             <v-col cols="12" sm="6">
               <v-text-field v-model="reqForm.email" label="Email для документов" type="email" />
@@ -231,6 +278,48 @@ const savingBank = ref(false);
 const bankMsg = ref('');
 const bankMsgType = ref('success');
 const copied = ref(false);
+const docFiles = ref({});
+const docUploading = ref({});
+const docMsg = ref('');
+const docMsgType = ref('success');
+const uploadedDocs = ref([]);
+const addressSameAsRegistration = ref(true);
+
+const documentSlots = [
+  { label: 'Паспорт (разворот с фото)', type: 'passportPage1' },
+  { label: 'Паспорт (регистрация)', type: 'passportPage2' },
+  { label: 'Заявление на получение выплат', type: 'applicationForPayment' },
+];
+
+function isDocUploaded(type) {
+  return uploadedDocs.value.some(d => d.type === type);
+}
+
+async function loadDocuments() {
+  try {
+    const { data } = await api.get('/documents');
+    uploadedDocs.value = data;
+  } catch {}
+}
+
+async function uploadDocument(type) {
+  docUploading.value[type] = true;
+  docMsg.value = '';
+  try {
+    const fd = new FormData();
+    fd.append('file', docFiles.value[type]);
+    fd.append('type', type);
+    await api.post('/documents/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+    docMsg.value = 'Документ загружен';
+    docMsgType.value = 'success';
+    docFiles.value[type] = null;
+    await loadDocuments();
+  } catch (e) {
+    docMsg.value = e.response?.data?.message || 'Ошибка загрузки';
+    docMsgType.value = 'error';
+  }
+  docUploading.value[type] = false;
+}
 
 const genderOptions = [
   { title: 'Мужской', value: 'male' },
@@ -274,8 +363,10 @@ async function loadProfile() {
     const r = data.requisites || {};
     reqForm.value = {
       individualEntrepreneur: r.individualEntrepreneur || '', inn: r.inn || '',
-      ogrn: r.ogrn || '', address: r.address || '', email: r.email || '', phone: r.phone || '',
+      ogrn: r.ogrn || '', address: r.address || '', actualAddress: r.actualAddress || '',
+      email: r.email || '', phone: r.phone || '',
     };
+    addressSameAsRegistration.value = !r.actualAddress;
     const b = data.bankRequisites || {};
     bankForm.value = {
       bankName: b.bankName || '', bankBik: b.bankBik || '',
@@ -355,5 +446,8 @@ function copyToClipboard(text) {
   setTimeout(() => { copied.value = false; }, 2000);
 }
 
-onMounted(loadProfile);
+onMounted(() => {
+  loadProfile();
+  loadDocuments();
+});
 </script>

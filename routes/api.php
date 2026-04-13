@@ -52,6 +52,9 @@ Route::prefix('v1')->group(function () {
         Route::post('/communication/{id}/read', [CommunicationController::class, 'markRead']);
         Route::get('/communication/categories', [CommunicationController::class, 'categories']);
 
+        Route::post('/documents/upload', [\App\Http\Controllers\Api\DocumentController::class, 'upload']);
+        Route::get('/documents', [\App\Http\Controllers\Api\DocumentController::class, 'list']);
+
         Route::get('/finance/report', [FinanceController::class, 'report']);
         Route::get('/finance/calculator', [FinanceController::class, 'calculator']);
         Route::get('/calculator/product-matrix', [\App\Http\Controllers\Api\CalculatorController::class, 'productMatrix']);

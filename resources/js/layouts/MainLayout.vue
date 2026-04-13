@@ -21,7 +21,11 @@
           <v-list-item v-else :to="item.path" :prepend-icon="item.icon"
             :title="item.label" :active="isActivePath(item.path)"
             :color="item.adminSection ? 'secondary' : 'primary'"
-            rounded="lg" class="mb-1 menu-item" @click="mobile && (drawer = false)" />
+            rounded="lg" class="mb-1 menu-item" @click="mobile && (drawer = false)">
+            <template #append v-if="item.path === '/communication' && unreadCount > 0">
+              <v-badge :content="unreadCount" color="error" inline />
+            </template>
+          </v-list-item>
         </template>
       </v-list>
     </v-navigation-drawer>
@@ -91,7 +95,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useDisplay, useTheme } from 'vuetify';
 import { useRoute } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
@@ -106,6 +110,15 @@ const copied = ref(false);
 const statusInfo = ref(null);
 
 const isDark = computed(() => theme.global.current.value.dark);
+const unreadCount = ref(0);
+let unreadInterval = null;
+
+async function loadUnreadCount() {
+  try {
+    const { data } = await api.get('/communication/unread-count');
+    unreadCount.value = data.count || 0;
+  } catch {}
+}
 
 function toggleTheme() {
   const newTheme = isDark.value ? 'light' : 'dark';
@@ -128,6 +141,12 @@ onMounted(async () => {
       canInvite: data.referral?.canInvite,
     };
   } catch {}
+  loadUnreadCount();
+  unreadInterval = setInterval(loadUnreadCount, 60000);
+});
+
+onUnmounted(() => {
+  if (unreadInterval) clearInterval(unreadInterval);
 });
 
 const statusColor = computed(() => {
