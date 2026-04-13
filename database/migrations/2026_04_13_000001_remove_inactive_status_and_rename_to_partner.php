@@ -3,57 +3,39 @@
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 
-/**
- * 1. Убираем статус "Неактивный" (id=2) — все с activity=2 переводим в activity=1 (Активный)
- * 2. Переименовываем "Финансовый консультант" и "Резидент" → "Партнёр" в таблице status
- * 3. Обновляем statusesName на consultant
- */
 return new class extends Migration
 {
     public function up(): void
     {
+        // Временно отключить проверку FK
+        DB::statement('SET session_replication_role = replica');
+
         // 1. Перевести всех Неактивных (activity=2) в Активных (activity=1)
-        DB::table('consultant')
-            ->where('activity', 2)
-            ->update(['activity' => 1]);
+        DB::statement("UPDATE consultant SET activity = 1 WHERE activity = 2");
 
         // 2. Переименовать в directory_of_activities
-        DB::table('directory_of_activities')
-            ->where('id', 1)
-            ->update(['name' => 'Активен']);
+        DB::statement("UPDATE directory_of_activities SET name = 'Активен' WHERE id = 1");
+        DB::statement("UPDATE directory_of_activities SET name = 'Неактивный (deprecated)', comment = 'Удалён' WHERE id = 2");
 
-        // Удалить "Неактивный" (id=2) — или переименовать в deprecated
-        DB::table('directory_of_activities')
-            ->where('id', 2)
-            ->update(['name' => 'Неактивный (deprecated)', 'comment' => 'Статус удалён, записи переведены в Активен']);
+        // 3. Переименовать статусы
+        DB::statement("UPDATE status SET title = 'Партнёр' WHERE id = 2");
+        DB::statement("UPDATE status SET title = 'Партнёр' WHERE id = 3");
 
-        // 3. Переименовать статусы в таблице status
-        // "Финансовый консультант" (id=2) → "Партнёр"
-        DB::table('status')
-            ->where('id', 2)
-            ->update(['title' => 'Партнёр']);
+        // 4. Обновить statusesName
+        DB::statement("UPDATE consultant SET \"statusesName\" = 'Партнёр' WHERE \"statusesName\" = 'Финансовый консультант'");
+        DB::statement("UPDATE consultant SET \"statusesName\" = 'Партнёр' WHERE \"statusesName\" = 'Резидент'");
 
-        // "Резидент" (id=3) → "Партнёр"
-        DB::table('status')
-            ->where('id', 3)
-            ->update(['title' => 'Партнёр']);
-
-        // 4. Обновить statusesName на consultant
-        DB::table('consultant')
-            ->where('statusesName', 'Финансовый консультант')
-            ->update(['statusesName' => 'Партнёр']);
-
-        DB::table('consultant')
-            ->where('statusesName', 'Резидент')
-            ->update(['statusesName' => 'Партнёр']);
+        // Включить FK обратно
+        DB::statement('SET session_replication_role = DEFAULT');
     }
 
     public function down(): void
     {
-        // Откатить названия
-        DB::table('directory_of_activities')->where('id', 1)->update(['name' => 'Активный']);
-        DB::table('directory_of_activities')->where('id', 2)->update(['name' => 'Неактивный', 'comment' => null]);
-        DB::table('status')->where('id', 2)->update(['title' => 'Финансовый консультант']);
-        DB::table('status')->where('id', 3)->update(['title' => 'Резидент']);
+        DB::statement('SET session_replication_role = replica');
+        DB::statement("UPDATE directory_of_activities SET name = 'Активный' WHERE id = 1");
+        DB::statement("UPDATE directory_of_activities SET name = 'Неактивный', comment = NULL WHERE id = 2");
+        DB::statement("UPDATE status SET title = 'Финансовый консультант' WHERE id = 2");
+        DB::statement("UPDATE status SET title = 'Резидент' WHERE id = 3");
+        DB::statement('SET session_replication_role = DEFAULT');
     }
 };
