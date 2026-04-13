@@ -57,12 +57,10 @@ const statusFilter = ref(null);
 const page = ref(1);
 
 const activityOptions = [
-  { title: 'Активный', value: 'active' },
-  { title: 'Неактивный', value: 'inactive' },
-];
-const statusOptions = [
-  { title: 'Резидент', value: 'resident' },
-  { title: 'Консультант', value: 'consultant' },
+  { title: 'Активен', value: '1' },
+  { title: 'Терминирован', value: '3' },
+  { title: 'Зарегистрирован', value: '4' },
+  { title: 'Исключён', value: '5' },
 ];
 
 const headers = [
@@ -87,7 +85,7 @@ function activityColor(name) {
   if (!name) return 'grey';
   const l = name.toLowerCase();
   if (l.includes('актив') && !l.includes('не')) return 'success';
-  if (l.includes('неактив') || l.includes('потер')) return 'error';
+  if (l.includes('терминир')) return 'error';
   return 'warning';
 }
 

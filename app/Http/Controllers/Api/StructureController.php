@@ -168,7 +168,7 @@ class StructureController extends Controller
                 ->join('status', 'consultant.status', '=', 'status.id')
                 ->whereIn('consultant.id', $childIds)
                 ->where('consultant.active', true)
-                ->where('status.title', 'Финансовый консультант')
+                ->where('status.title', 'Партнёр')
                 ->count();
         }
 

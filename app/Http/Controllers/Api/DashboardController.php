@@ -146,7 +146,7 @@ class DashboardController extends Controller
             ->join('status', 'consultant.status', '=', 'status.id')
             ->where('consultantStructure.parent', $consultant->id)
             ->where('consultant.active', true)
-            ->where('status.title', 'Финансовый консультант')
+            ->where('status.title', 'Партнёр')
             ->count();
 
         $totalConsultants = Consultant::whereIn('id', $teamConsultantIds)
@@ -162,7 +162,7 @@ class DashboardController extends Controller
                 'personName' => $consultant->personName,
                 'participantCode' => $consultant->participantCode,
                 'active' => $consultant->active,
-                'statusName' => $statusName ?? 'Резидент',
+                'statusName' => $statusName ?? 'Партнёр',
                 'ambassadorProducts' => $ambassadorProducts,
             ],
             'statusInfo' => $statusInfo,
@@ -253,7 +253,7 @@ class DashboardController extends Controller
             'total' => array_sum($counts),
             'registered' => $counts[PartnerActivity::Registered->value] ?? 0,
             'active' => $counts[PartnerActivity::Active->value] ?? 0,
-            'inactive' => $counts[PartnerActivity::Inactive->value] ?? 0,
+            'inactive' => 0, // Статус удалён
             'terminated' => $counts[PartnerActivity::Terminated->value] ?? 0,
             'excluded' => $counts[PartnerActivity::Excluded->value] ?? 0,
         ];
@@ -277,7 +277,7 @@ class DashboardController extends Controller
             'total' => array_sum($counts),
             'registered' => $counts[PartnerActivity::Registered->value] ?? 0,
             'active' => $counts[PartnerActivity::Active->value] ?? 0,
-            'inactive' => $counts[PartnerActivity::Inactive->value] ?? 0,
+            'inactive' => 0, // Статус удалён
             'terminated' => $counts[PartnerActivity::Terminated->value] ?? 0,
             'excluded' => $counts[PartnerActivity::Excluded->value] ?? 0,
         ];

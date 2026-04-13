@@ -139,7 +139,7 @@
               <v-checkbox v-model="editProduct.noComission" label="Без комиссии" density="compact" />
             </v-col>
             <v-col cols="6">
-              <v-checkbox v-model="editProduct.visibleToResident" label="Виден резиденту" density="compact" />
+              <v-checkbox v-model="editProduct.visibleToResident" label="Виден партнёру" density="compact" />
             </v-col>
             <v-col cols="6">
               <v-checkbox v-model="editProduct.visibleToCalculator" label="Виден в калькуляторе" density="compact" />
@@ -174,7 +174,7 @@
               <v-checkbox v-model="editProgram.active" label="Активна" density="compact" />
             </v-col>
             <v-col cols="4">
-              <v-checkbox v-model="editProgram.visibleToResident" label="Виден резиденту" density="compact" />
+              <v-checkbox v-model="editProgram.visibleToResident" label="Виден партнёру" density="compact" />
             </v-col>
             <v-col cols="4">
               <v-checkbox v-model="editProgram.visibleToCalculator" label="В калькуляторе" density="compact" />
@@ -238,7 +238,7 @@ const activeOptions = [
 const headers = [
   { title: 'Название', key: 'name' },
   { title: 'Статус', key: 'active', width: 120 },
-  { title: 'Резидент', key: 'visibleToResident', width: 100 },
+  { title: 'Партнёр', key: 'visibleToResident', width: 100 },
   { title: 'Калькулятор', key: 'visibleToCalculator', width: 110 },
   { title: 'Программ', key: 'programCount', width: 100 },
   { title: 'Действия', key: 'actions', sortable: false, width: 100 },

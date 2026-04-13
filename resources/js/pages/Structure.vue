@@ -149,7 +149,7 @@ const flatRows = computed(() => {
 function activityColor(name) {
   if (!name) return 'grey';
   const l = name.toLowerCase();
-  if (l.includes('актив') && !l.includes('неактив')) return 'success';
+  if (l.includes('актив')) return 'success';
   if (l.includes('терминир') || l.includes('исключ')) return 'error';
   if (l.includes('зарег')) return 'info';
   return 'warning';

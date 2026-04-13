@@ -237,7 +237,7 @@ const showLevels = ref(false);
 const levels = ref([]);
 
 const empty = {
-  consultant: { id: 0, personName: '—', statusName: 'Резидент', participantCode: null, active: false, ambassadorProducts: null, activityName: null },
+  consultant: { id: 0, personName: '—', statusName: 'Партнёр', participantCode: null, active: false, ambassadorProducts: null, activityName: null },
   qualification: { nominalLevel: null, nextLevel: null },
   volumes: { personalVolume: 0, groupVolume: 0, groupVolumeCumulative: 0, prevPersonalVolume: 0, prevGroupVolume: 0, prevGroupVolumeCumulative: 0 },
   team: { myClients: 0, teamClients: 0 },
