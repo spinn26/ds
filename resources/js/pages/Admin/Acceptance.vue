@@ -8,8 +8,10 @@
 
     <v-card class="mb-3 pa-3">
       <div class="d-flex ga-2 flex-wrap align-center">
-        <v-text-field v-model="search" placeholder="Поиск по партнёру, документу..." density="compact" variant="outlined"
+        <v-text-field v-model="search" placeholder="Поиск по ФИО партнёра..." density="compact" variant="outlined"
           prepend-inner-icon="mdi-magnify" hide-details style="max-width:300px" @update:model-value="debouncedLoad" />
+        <v-select v-model="acceptedFilter" :items="acceptedOptions" label="Акцепт" density="compact" variant="outlined"
+          clearable hide-details style="max-width:200px" @update:model-value="loadData" />
       </div>
     </v-card>
 
@@ -17,9 +19,18 @@
       :headers="headers" :items-per-page="25" @update:options="onOptions"
       density="compact" hover no-data-text="Записи не найдены">
       <template #item.accepted="{ value }">
-        <v-icon :color="value ? 'success' : 'grey'" size="small">
-          {{ value ? 'mdi-check-circle' : 'mdi-minus-circle' }}
+        <v-icon :color="value ? 'success' : 'grey'" size="20">
+          {{ value ? 'mdi-checkbox-marked-circle' : 'mdi-checkbox-blank-circle-outline' }}
         </v-icon>
+      </template>
+      <template #item.dateAccepted="{ value }">
+        {{ value ? new Date(value).toLocaleDateString('ru-RU') + ' ' + new Date(value).toLocaleTimeString('ru-RU', {hour:'2-digit',minute:'2-digit'}) : '—' }}
+      </template>
+      <template #item.source="{ value }">
+        <v-chip v-if="value" size="x-small" :color="value === 'platform' ? 'primary' : 'secondary'" variant="tonal">
+          {{ value === 'platform' ? 'Платформа' : value === 'getcourse' ? 'GetCourse' : value }}
+        </v-chip>
+        <span v-else>—</span>
       </template>
     </v-data-table-server>
   </div>
@@ -34,14 +45,18 @@ const total = ref(0);
 const loading = ref(false);
 const search = ref('');
 const page = ref(1);
+const acceptedFilter = ref(null);
+
+const acceptedOptions = [
+  { title: 'Акцептовано', value: 'true' },
+  { title: 'Не акцептовано', value: 'false' },
+];
 
 const headers = [
-  { title: 'ID', key: 'id', width: 60 },
-  { title: 'Партнёр', key: 'partnerName' },
-  { title: 'Документ', key: 'documentName' },
-  { title: 'Акцептован', key: 'accepted', width: 110 },
-  { title: 'Дата акцепта', key: 'acceptedAt', width: 150 },
-  { title: 'IP', key: 'ipAddress', width: 140 },
+  { title: 'Партнёр', key: 'personName' },
+  { title: 'Документы акцептованы', key: 'accepted', width: 180, align: 'center' },
+  { title: 'Дата акцепта', key: 'dateAccepted', width: 180 },
+  { title: 'Источник', key: 'source', width: 140 },
 ];
 
 let debounceTimer;
@@ -60,6 +75,7 @@ async function loadData() {
   try {
     const params = { page: page.value };
     if (search.value) params.search = search.value;
+    if (acceptedFilter.value) params.accepted = acceptedFilter.value;
     const { data } = await api.get('/admin/acceptance', { params });
     items.value = data.data;
     total.value = data.total;

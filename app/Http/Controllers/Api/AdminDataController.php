@@ -253,32 +253,48 @@ class AdminDataController extends Controller
     }
 
     /** Акцепт документов — список */
+    /** Акцепт документов — реестр всех партнёров с фактом акцепта */
     public function acceptance(Request $request): JsonResponse
     {
-        $query = DB::table('logAcceptance')
-            ->joinSub(
-                DB::table('consultant')->select('id', 'personName', 'acceptance'),
-                'c',
-                fn ($join) => $join->on('logAcceptance.consultant', '=', DB::raw('c.id::text'))
-            )
-            ->select(
-                'logAcceptance.id',
-                'logAcceptance.consultant',
-                'logAcceptance.dateAccepted',
-                'logAcceptance.source',
-                'c.personName',
-                'c.acceptance'
-            );
+        $query = DB::table('consultant')
+            ->whereNull('dateDeleted')
+            ->select('id', 'personName', 'acceptance');
 
         if ($request->filled('search')) {
-            $query->where('c.personName', 'ilike', '%' . $request->search . '%');
+            $query->where('personName', 'ilike', '%' . $request->search . '%');
+        }
+
+        // Фильтр: акцепт да/нет
+        if ($request->filled('accepted')) {
+            if ($request->accepted === 'true') {
+                $query->where('acceptance', true);
+            } else {
+                $query->where(function ($q) {
+                    $q->where('acceptance', false)->orWhereNull('acceptance');
+                });
+            }
         }
 
         $total = $query->count();
-        $data = $query->orderByDesc('logAcceptance.id')
+        $data = $query->orderBy('personName')
             ->offset(($request->input('page', 1) - 1) * 25)
             ->limit(25)
-            ->get();
+            ->get()
+            ->map(function ($c) {
+                // Найти дату акцепта из logAcceptance
+                $log = DB::table('logAcceptance')
+                    ->where('consultant', $c->id)
+                    ->orderByDesc('dateAccepted')
+                    ->first();
+
+                return [
+                    'id' => $c->id,
+                    'personName' => $c->personName,
+                    'accepted' => (bool) $c->acceptance,
+                    'dateAccepted' => $log->dateAccepted ?? null,
+                    'source' => $log->source ?? null,
+                ];
+            });
 
         return response()->json(['data' => $data, 'total' => $total]);
     }
