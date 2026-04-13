@@ -176,5 +176,7 @@ function circleStyle(n) {
 @keyframes float { 0% { transform: translate(0,0) scale(1); } 25% { transform: translate(30px,-50px) scale(1.1); } 50% { transform: translate(-20px,-100px) scale(0.9); } 75% { transform: translate(40px,-50px) scale(1.05); } 100% { transform: translate(0,0) scale(1); } }
 .bg-grid { position: absolute; inset: 0; background-image: linear-gradient(rgba(76,175,80,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(76,175,80,0.05) 1px, transparent 1px); background-size: 60px 60px; animation: gridPan 30s linear infinite; }
 @keyframes gridPan { 0% { transform: translate(0,0); } 100% { transform: translate(60px,60px); } }
-.register-card { backdrop-filter: blur(20px); background: rgba(255,255,255,0.95) !important; border: 1px solid rgba(76,175,80,0.15); }
+.register-card { backdrop-filter: blur(20px); background: rgba(255,255,255,0.97) !important; border: 1px solid rgba(76,175,80,0.15); color: #333 !important; }
+.register-card :deep(.v-field__input), .register-card :deep(.v-label), .register-card :deep(.v-field__field) { color: #333 !important; }
+.register-card :deep(.v-icon) { color: #666 !important; }
 </style>

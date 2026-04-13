@@ -160,8 +160,17 @@ async function handleLogin() {
 
 .login-card {
   backdrop-filter: blur(20px);
-  background: rgba(255, 255, 255, 0.95) !important;
+  background: rgba(255, 255, 255, 0.97) !important;
   border: 1px solid rgba(76, 175, 80, 0.15);
+  color: #333 !important;
+}
+.login-card :deep(.v-field__input),
+.login-card :deep(.v-label),
+.login-card :deep(.v-field__field) {
+  color: #333 !important;
+}
+.login-card :deep(.v-icon) {
+  color: #666 !important;
 }
 
 .logo-text {
