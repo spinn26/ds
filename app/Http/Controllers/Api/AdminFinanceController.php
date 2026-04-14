@@ -131,11 +131,72 @@ class AdminFinanceController extends Controller
         return response()->json(['data' => $data, 'total' => $total]);
     }
 
-    /** Прочие начисления */
+    /** Прочие начисления — CRUD */
     public function charges(Request $request): JsonResponse
     {
-        // Placeholder — таблица дополнительных начислений
-        return response()->json(['data' => [], 'total' => 0, 'message' => 'В разработке']);
+        $query = DB::table('other_accruals')
+            ->join('consultant', 'other_accruals.consultant', '=', 'consultant.id')
+            ->select(
+                'other_accruals.*',
+                'consultant.personName as consultantName'
+            );
+
+        if ($request->filled('search')) {
+            $query->where('consultant.personName', 'ilike', '%' . $request->search . '%');
+        }
+        if ($request->filled('type')) {
+            $query->where('other_accruals.type', $request->type);
+        }
+
+        $total = $query->count();
+        $data = $query->orderByDesc('other_accruals.created_at')
+            ->offset(($request->input('page', 1) - 1) * 25)
+            ->limit(25)
+            ->get()
+            ->map(fn ($r) => [
+                'id' => $r->id,
+                'consultantName' => $r->consultantName,
+                'consultant' => $r->consultant,
+                'type' => $r->type,
+                'amount' => round((float) $r->amount, 2),
+                'points' => round((float) $r->points, 2),
+                'comment' => $r->comment,
+                'accrualDate' => $r->accrual_date,
+                'createdAt' => $r->created_at,
+            ]);
+
+        return response()->json(['data' => $data, 'total' => $total]);
+    }
+
+    /** Создать начисление */
+    public function storeCharge(Request $request): JsonResponse
+    {
+        $request->validate([
+            'consultant' => 'required|integer|exists:consultant,id',
+            'type' => 'required|in:bonus,penalty,compensation',
+            'amount' => 'required|numeric',
+        ]);
+
+        $id = DB::table('other_accruals')->insertGetId([
+            'consultant' => $request->consultant,
+            'type' => $request->type,
+            'amount' => $request->amount,
+            'points' => $request->input('points', 0),
+            'comment' => $request->comment,
+            'accrual_date' => $request->input('accrual_date', now()),
+            'created_by' => $request->user()->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return response()->json(['message' => 'Начисление создано', 'id' => $id], 201);
+    }
+
+    /** Удалить начисление */
+    public function deleteCharge(int $id): JsonResponse
+    {
+        DB::table('other_accruals')->where('id', $id)->delete();
+        return response()->json(['message' => 'Начисление удалено']);
     }
 
     /** Реестр выплат */
