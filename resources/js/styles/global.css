@@ -1,0 +1,85 @@
+/* DS Consulting Design System — Global Styles */
+
+/* Smooth transitions for theme switching */
+* {
+  transition: background-color 0.2s ease, color 0.1s ease, border-color 0.2s ease;
+}
+
+/* Card hover effect */
+.v-card:not(.v-card--disabled):hover {
+  transition: box-shadow 0.2s ease;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+/* Dark mode scrollbar */
+.v-theme--dark ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+}
+.v-theme--dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Table row click cursor */
+.v-data-table tbody tr {
+  cursor: default;
+}
+
+/* Consistent page transitions */
+.v-main {
+  min-height: 100vh;
+}
+
+/* Chat bubbles */
+.chat-bubble-incoming {
+  background: rgba(0, 0, 0, 0.06);
+  border-radius: 4px 16px 16px 16px;
+  padding: 8px 12px;
+}
+.chat-bubble-outgoing {
+  background: var(--v-theme-primary);
+  color: white;
+  border-radius: 16px 4px 16px 16px;
+  padding: 8px 12px;
+}
+
+/* Stat cards */
+.stat-card {
+  transition: transform 0.15s ease;
+}
+.stat-card:hover {
+  transform: translateY(-2px);
+}
+
+/* Focus visible for accessibility */
+:focus-visible {
+  outline: 2px solid var(--v-theme-primary);
+  outline-offset: 2px;
+}
+
+/* Print styles */
+@media print {
+  .v-navigation-drawer,
+  .v-app-bar,
+  .v-btn,
+  .v-fab {
+    display: none !important;
+  }
+  .v-main {
+    padding: 0 !important;
+  }
+}

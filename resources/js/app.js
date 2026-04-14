@@ -5,6 +5,7 @@ import * as components from 'vuetify/components';
 import * as directives from 'vuetify/directives';
 import '@mdi/font/css/materialdesignicons.css';
 import 'vuetify/styles';
+import './styles/global.css';
 import router from './router';
 import App from './App.vue';
 
@@ -20,7 +21,12 @@ const vuetify = createVuetify({
                 colors: {
                     primary: '#4CAF50',
                     secondary: '#FF9800',
-                    background: '#f5f5f5',
+                    background: '#FAFAFA',
+                    surface: '#FFFFFF',
+                    info: '#2196F3',
+                    success: '#4CAF50',
+                    warning: '#FF9800',
+                    error: '#F44336',
                 },
             },
             dark: {
@@ -30,9 +36,23 @@ const vuetify = createVuetify({
                     secondary: '#FFB74D',
                     background: '#121212',
                     surface: '#1E1E1E',
+                    info: '#42A5F5',
+                    success: '#66BB6A',
+                    warning: '#FFA726',
+                    error: '#EF5350',
                 },
             },
         },
+    },
+    defaults: {
+        VCard: { elevation: 2, rounded: 'lg' },
+        VBtn: { rounded: 'lg' },
+        VTextField: { variant: 'outlined', density: 'compact' },
+        VSelect: { variant: 'outlined', density: 'compact' },
+        VTextarea: { variant: 'outlined', density: 'compact' },
+        VAutocomplete: { variant: 'outlined', density: 'compact' },
+        VChip: { size: 'small' },
+        VDataTableServer: { density: 'compact', hover: true },
     },
 });
 
