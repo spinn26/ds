@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\DB;
 trait HasTeamTree
 {
     /**
-     * Рекурсивно собрать ВСЕ ID потомков из consultantStructure (все уровни вглубь).
+     * Рекурсивно собрать ВСЕ ID потомков по consultant.inviter (все уровни вглубь).
      */
     protected function getAllDescendants(int $parentId): array
     {
@@ -15,9 +15,10 @@ trait HasTeamTree
         $currentLevel = [$parentId];
 
         for ($i = 0; $i < 20; $i++) {
-            $children = DB::table('consultantStructure')
-                ->whereIn('parent', $currentLevel)
-                ->pluck('child')
+            $children = DB::table('consultant')
+                ->whereIn('inviter', $currentLevel)
+                ->whereNull('dateDeleted')
+                ->pluck('id')
                 ->toArray();
 
             if (empty($children)) {

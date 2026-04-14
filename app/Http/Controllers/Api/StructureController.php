@@ -58,12 +58,9 @@ class StructureController extends Controller
             return response()->json(['data' => []]);
         }
 
-        $children = DB::table('consultantStructure')
-            ->where('parent', $consultant->id)
-            ->pluck('child')
-            ->toArray();
-
-        $members = Consultant::whereIn('id', $children)
+        // Children = consultants whose inviter is this consultant
+        $members = Consultant::where('inviter', $consultant->id)
+            ->whereNull('dateDeleted')
             ->get()
             ->map(fn ($c) => $this->formatMember($c));
 
@@ -75,12 +72,8 @@ class StructureController extends Controller
 
     public function children(Request $request, int $consultantId): JsonResponse
     {
-        $children = DB::table('consultantStructure')
-            ->where('parent', $consultantId)
-            ->pluck('child')
-            ->toArray();
-
-        $members = Consultant::whereIn('id', $children)
+        $members = Consultant::where('inviter', $consultantId)
+            ->whereNull('dateDeleted')
             ->get()
             ->map(fn ($c) => $this->formatMember($c));
 
@@ -136,11 +129,11 @@ class StructureController extends Controller
             ->whereNull('deletedAt')
             ->count();
 
-        $childIds = DB::table('consultantStructure')
-            ->where('parent', $c->id)
-            ->pluck('child')
-            ->toArray();
-        $subCount = count($childIds);
+        // Count children by inviter (not consultantStructure)
+        $subCount = DB::table('consultant')
+            ->where('inviter', $c->id)
+            ->whereNull('dateDeleted')
+            ->count();
 
         $activityName = $c->activity
             ? (is_object($c->activity) ? $c->activity->label() : DB::table('directory_of_activities')->where('id', $c->activity)->value('name'))
@@ -155,22 +148,9 @@ class StructureController extends Controller
             ? DB::table('city')->where('id', $person->city)->value('cityNameRu')
             : null;
 
-        // Count subordinate residents and financial consultants
-        $residentCount = 0;
+        // Count subordinate partners
+        $residentCount = $subCount;
         $fcCount = 0;
-        if ($subCount > 0) {
-            $residentCount = DB::table('consultant')
-                ->whereIn('id', $childIds)
-                ->where('active', true)
-                ->count();
-
-            $fcCount = DB::table('consultant')
-                ->join('status', 'consultant.status', '=', 'status.id')
-                ->whereIn('consultant.id', $childIds)
-                ->where('consultant.active', true)
-                ->where('status.title', 'Партнёр')
-                ->count();
-        }
 
         return [
             'id' => $c->id,
