@@ -37,6 +37,15 @@
         </v-chip>
         <span v-else>—</span>
       </template>
+      <template #item.chat="{ item }">
+        <StartChatButton
+          :consultant-id="item.consultantId || null"
+          :consultant-name="item.personName || ''"
+          context-type="acceptance"
+          :context-id="item.id"
+          :context-label="`Акцепт ${item.personName || ''}`"
+        />
+      </template>
       <template #no-data>
         <div class="text-center pa-4">
           <v-icon size="48" color="grey-lighten-1" class="mb-2">mdi-file-search-outline</v-icon>
@@ -50,6 +59,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
+import StartChatButton from '../../components/StartChatButton.vue';
 
 const items = ref([]);
 const total = ref(0);
@@ -81,6 +91,7 @@ const headers = [
   { title: 'Документы акцептованы', key: 'accepted', width: 180, align: 'center' },
   { title: 'Дата акцепта', key: 'dateAccepted', width: 180 },
   { title: 'Источник', key: 'source', width: 140 },
+  { title: '', key: 'chat', sortable: false, width: 50 },
 ];
 
 let debounceTimer;

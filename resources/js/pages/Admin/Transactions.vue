@@ -35,6 +35,15 @@
       <template #item.date="{ value }">
         {{ fmtDate(value) }}
       </template>
+      <template #item.chat="{ item }">
+        <StartChatButton
+          :consultant-id="null"
+          consultant-name=""
+          context-type="transactions"
+          :context-id="item.id"
+          :context-label="`Транзакция #${item.id}`"
+        />
+      </template>
       <template #no-data>
         <div class="text-center pa-4">
           <v-icon size="48" color="grey-lighten-1" class="mb-2">mdi-file-search-outline</v-icon>
@@ -48,6 +57,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
+import StartChatButton from '../../components/StartChatButton.vue';
 
 const items = ref([]);
 const total = ref(0);
@@ -64,6 +74,7 @@ const headers = [
   { title: 'Сумма (руб)', key: 'amountRUB', align: 'end', width: 140 },
   { title: 'Сумма (USD)', key: 'amountUSD', align: 'end', width: 140 },
   { title: 'Дата', key: 'date', width: 120 },
+  { title: '', key: 'chat', sortable: false, width: 50 },
 ];
 
 const fmt = (n) => Number(n || 0).toLocaleString('ru-RU', { minimumFractionDigits: 2 });

@@ -25,6 +25,15 @@
       <template #item.products="{ value }">
         <v-chip v-for="p in (value || [])" :key="p" size="x-small" class="mr-1" color="primary" variant="outlined">{{ p }}</v-chip>
       </template>
+      <template #item.chat="{ item }">
+        <StartChatButton
+          :consultant-id="item.consultantId || item.id"
+          :consultant-name="item.consultantName || ''"
+          context-type="clients"
+          :context-id="item.id"
+          :context-label="`Клиент ${item.personName || ''}`"
+        />
+      </template>
       <template #item.birthDate="{ value }">
         {{ fmtDate(value) }}
       </template>
@@ -41,6 +50,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
+import StartChatButton from '../../components/StartChatButton.vue';
 
 function fmtDate(d) { if (!d) return '—'; try { return new Date(d).toLocaleDateString('ru-RU'); } catch { return d; } }
 
@@ -65,6 +75,7 @@ const headers = [
   { title: 'Консультант', key: 'consultantName' },
   { title: 'Комментарий', key: 'comment' },
   { title: 'Продукты', key: 'products', sortable: false },
+  { title: '', key: 'chat', sortable: false, width: 50 },
 ];
 
 let debounceTimer;

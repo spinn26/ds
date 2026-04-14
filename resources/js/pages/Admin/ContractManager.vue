@@ -32,6 +32,15 @@
       <template #item.statusName="{ value }">
         <v-chip size="x-small" :color="statusColor(value)">{{ value }}</v-chip>
       </template>
+      <template #item.chat="{ item }">
+        <StartChatButton
+          :consultant-id="item.consultantId || null"
+          :consultant-name="item.consultantName || ''"
+          context-type="contracts"
+          :context-id="item.id"
+          :context-label="`Контракт #${item.number || item.id}`"
+        />
+      </template>
       <template #no-data>
         <div class="text-center pa-4">
           <v-icon size="48" color="grey-lighten-1" class="mb-2">mdi-file-search-outline</v-icon>
@@ -45,6 +54,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
+import StartChatButton from '../../components/StartChatButton.vue';
 
 const items = ref([]);
 const total = ref(0);
@@ -63,6 +73,7 @@ const headers = [
   { title: 'Дата открытия', key: 'openDate', width: 120 },
   { title: 'Сумма', key: 'ammount', width: 140 },
   { title: 'Статус', key: 'statusName', width: 130 },
+  { title: '', key: 'chat', sortable: false, width: 50 },
 ];
 
 const fmt = (n) => Number(n || 0).toLocaleString('ru-RU');
