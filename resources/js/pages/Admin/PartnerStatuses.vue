@@ -20,16 +20,21 @@
     <v-card class="mb-3 pa-3">
       <div class="d-flex ga-2 flex-wrap align-center">
         <v-text-field v-model="search" placeholder="ФИО партнёра..." density="compact" variant="outlined"
-          prepend-inner-icon="mdi-magnify" hide-details style="max-width:280px" @update:model-value="debouncedLoad" />
+          rounded prepend-inner-icon="mdi-magnify" clearable hide-details style="max-width:280px" @update:model-value="debouncedLoad" />
         <v-select v-model="activityFilter" :items="activityOptions" label="Статус" density="compact" variant="outlined"
           clearable hide-details style="max-width:220px" @update:model-value="loadData" />
+        <v-chip v-if="activeFilterCount > 0" size="small" color="info" variant="tonal" class="ml-1">
+          {{ activeFilterCount }} {{ activeFilterCount === 1 ? 'фильтр' : 'фильтра' }}
+        </v-chip>
+        <v-btn v-if="activeFilterCount > 0" size="small" variant="text" color="secondary"
+          prepend-icon="mdi-filter-remove" @click="resetFilters">Сбросить</v-btn>
       </div>
     </v-card>
 
     <!-- Detail table -->
     <v-data-table-server :items="items" :items-length="total" :loading="loading"
       :headers="headers" :items-per-page="25" @update:options="onOptions"
-      density="compact" hover no-data-text="Партнёры не найдены">
+      density="compact" hover>
       <template #item.activityName="{ item }">
         <v-chip size="x-small" :color="statusColor(item.activityId)">{{ item.activityName }}</v-chip>
       </template>
@@ -52,6 +57,12 @@
         <v-chip v-if="value > 0" size="x-small" :color="value >= 3 ? 'error' : 'warning'">{{ value }}/3</v-chip>
         <span v-else>—</span>
       </template>
+      <template #no-data>
+        <div class="text-center pa-4">
+          <v-icon size="48" color="grey-lighten-1" class="mb-2">mdi-file-search-outline</v-icon>
+          <div class="text-medium-emphasis">Данные не найдены</div>
+        </div>
+      </template>
     </v-data-table-server>
 
     <v-overlay v-model="loading" class="align-center justify-center" persistent>
@@ -71,6 +82,19 @@ const total = ref(0);
 const page = ref(1);
 const search = ref('');
 const activityFilter = ref(null);
+
+const activeFilterCount = computed(() => {
+  let c = 0;
+  if (search.value) c++;
+  if (activityFilter.value) c++;
+  return c;
+});
+
+function resetFilters() {
+  search.value = '';
+  activityFilter.value = null;
+  loadData();
+}
 
 const activityOptions = computed(() =>
   summary.value.map(s => ({ title: `${s.name} (${s.count})`, value: s.id }))

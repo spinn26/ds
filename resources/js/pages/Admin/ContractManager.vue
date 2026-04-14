@@ -9,27 +9,41 @@
     <v-card class="mb-3 pa-3">
       <div class="d-flex ga-2 flex-wrap align-center">
         <v-text-field v-model="search" placeholder="Поиск по номеру, клиенту..." density="compact" variant="outlined"
-          prepend-inner-icon="mdi-magnify" hide-details style="max-width:300px" @update:model-value="debouncedLoad" />
+          rounded prepend-inner-icon="mdi-magnify" clearable hide-details style="max-width:300px" @update:model-value="debouncedLoad" />
         <v-select v-model="statusFilter" :items="statusOptions" label="Статус" density="compact" variant="outlined"
           clearable hide-details style="max-width:200px" @update:model-value="loadData" />
+        <v-chip v-if="activeFilterCount > 0" size="small" color="info" variant="tonal" class="ml-1">
+          {{ activeFilterCount }} {{ activeFilterCount === 1 ? 'фильтр' : 'фильтра' }}
+        </v-chip>
+        <v-btn v-if="activeFilterCount > 0" size="small" variant="text" color="secondary"
+          prepend-icon="mdi-filter-remove" @click="resetFilters">Сбросить</v-btn>
       </div>
     </v-card>
 
     <v-data-table-server :items="items" :items-length="total" :loading="loading"
       :headers="headers" :items-per-page="25" @update:options="onOptions"
-      density="compact" hover no-data-text="Контракты не найдены">
+      density="compact" hover>
       <template #item.ammount="{ item }">
         {{ fmt(item.ammount) }} {{ item.currencySymbol }}
       </template>
+      <template #item.openDate="{ value }">
+        {{ fmtDate(value) }}
+      </template>
       <template #item.statusName="{ value }">
         <v-chip size="x-small" :color="statusColor(value)">{{ value }}</v-chip>
+      </template>
+      <template #no-data>
+        <div class="text-center pa-4">
+          <v-icon size="48" color="grey-lighten-1" class="mb-2">mdi-file-search-outline</v-icon>
+          <div class="text-medium-emphasis">Данные не найдены</div>
+        </div>
       </template>
     </v-data-table-server>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
 
 const items = ref([]);
@@ -52,12 +66,27 @@ const headers = [
 ];
 
 const fmt = (n) => Number(n || 0).toLocaleString('ru-RU');
+function fmtDate(d) { if (!d) return '—'; try { return new Date(d).toLocaleDateString('ru-RU'); } catch { return d; } }
+
+const activeFilterCount = computed(() => {
+  let c = 0;
+  if (search.value) c++;
+  if (statusFilter.value) c++;
+  return c;
+});
+
+function resetFilters() {
+  search.value = '';
+  statusFilter.value = null;
+  loadData();
+}
 
 function statusColor(s) {
   if (!s) return 'grey';
   const l = s.toLowerCase();
   if (l.includes('актив') || l.includes('действ')) return 'success';
-  if (l.includes('закр') || l.includes('заверш')) return 'error';
+  if (l.includes('закр') || l.includes('заверш') || l.includes('терминир') || l.includes('исключ')) return 'error';
+  if (l.includes('зарег')) return 'info';
   return 'warning';
 }
 

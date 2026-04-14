@@ -10,7 +10,7 @@
       <v-row dense>
         <v-col cols="12" sm="4">
           <v-text-field v-model="filters.search" label="Поиск по ФИО или email" prepend-inner-icon="mdi-magnify"
-            density="compact" clearable hide-details @update:model-value="debouncedLoad" />
+            density="compact" variant="outlined" rounded clearable hide-details @update:model-value="debouncedLoad" />
         </v-col>
         <v-col cols="12" sm="3">
           <v-select v-model="filters.role" label="Роль" :items="roleOptions" density="compact"
@@ -20,8 +20,12 @@
           <v-select v-model="filters.blocked" label="Заблокирован" :items="blockedOptions" density="compact"
             clearable hide-details @update:model-value="loadUsers" />
         </v-col>
-        <v-col cols="12" sm="2" class="d-flex align-center">
-          <v-chip color="primary" size="small">{{ total }} записей</v-chip>
+        <v-col cols="12" sm="2" class="d-flex align-center ga-1">
+          <v-chip v-if="activeFilterCount > 0" size="small" color="info" variant="tonal">
+            {{ activeFilterCount }} {{ activeFilterCount === 1 ? 'фильтр' : 'фильтра' }}
+          </v-chip>
+          <v-btn v-if="activeFilterCount > 0" size="small" variant="text" color="secondary"
+            prepend-icon="mdi-filter-remove" @click="resetFilters">Сбросить</v-btn>
         </v-col>
       </v-row>
     </v-card>
@@ -37,7 +41,6 @@
         @update:page="page = $event; loadUsers()"
         density="compact"
         hover
-        no-data-text="Пользователи не найдены"
       >
         <template #item.role="{ item }">
           <v-chip v-for="r in (item.role || '').split(',')" :key="r" size="x-small" class="mr-1"
@@ -56,6 +59,12 @@
             @click="impersonate(item)" />
           <v-btn icon="mdi-delete" size="x-small" variant="text" color="error"
             @click="confirmDelete(item)" />
+        </template>
+        <template #no-data>
+          <div class="text-center pa-4">
+            <v-icon size="48" color="grey-lighten-1" class="mb-2">mdi-file-search-outline</v-icon>
+            <div class="text-medium-emphasis">Данные не найдены</div>
+          </div>
         </template>
       </v-data-table-server>
     </v-card>
@@ -127,7 +136,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../../stores/auth';
 import api from '../../api';
@@ -146,6 +155,19 @@ const editError = ref('');
 const editUser = ref({});
 
 const filters = ref({ search: '', role: null, blocked: null });
+
+const activeFilterCount = computed(() => {
+  let c = 0;
+  if (filters.value.search) c++;
+  if (filters.value.role) c++;
+  if (filters.value.blocked) c++;
+  return c;
+});
+
+function resetFilters() {
+  filters.value = { search: '', role: null, blocked: null };
+  loadUsers();
+}
 
 const roleOptions = [
   { title: 'Администратор', value: 'admin' },

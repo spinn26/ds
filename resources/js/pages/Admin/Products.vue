@@ -13,14 +13,18 @@
       <v-row dense>
         <v-col cols="12" sm="4">
           <v-text-field v-model="filters.search" label="Поиск по названию" prepend-inner-icon="mdi-magnify"
-            density="compact" clearable hide-details @update:model-value="debouncedLoad" />
+            density="compact" variant="outlined" rounded clearable hide-details @update:model-value="debouncedLoad" />
         </v-col>
         <v-col cols="12" sm="3">
           <v-select v-model="filters.active" label="Статус" :items="activeOptions" density="compact"
             clearable hide-details @update:model-value="loadProducts" />
         </v-col>
-        <v-col cols="12" sm="2" class="d-flex align-center">
-          <v-chip color="primary" size="small">{{ total }} записей</v-chip>
+        <v-col cols="12" sm="2" class="d-flex align-center ga-1">
+          <v-chip v-if="activeFilterCount > 0" size="small" color="info" variant="tonal">
+            {{ activeFilterCount }} {{ activeFilterCount === 1 ? 'фильтр' : 'фильтра' }}
+          </v-chip>
+          <v-btn v-if="activeFilterCount > 0" size="small" variant="text" color="secondary"
+            prepend-icon="mdi-filter-remove" @click="resetProductFilters">Сбросить</v-btn>
         </v-col>
       </v-row>
     </v-card>
@@ -39,7 +43,6 @@
         @click:row="(e, { item }) => toggleExpand(item)"
         density="compact"
         hover
-        no-data-text="Продукты не найдены"
       >
         <template #item.active="{ item }">
           <v-chip :color="item.active ? 'success' : 'grey'" size="x-small">
@@ -96,6 +99,12 @@
               </v-data-table>
             </td>
           </tr>
+        </template>
+        <template #no-data>
+          <div class="text-center pa-4">
+            <v-icon size="48" color="grey-lighten-1" class="mb-2">mdi-file-search-outline</v-icon>
+            <div class="text-medium-emphasis">Данные не найдены</div>
+          </div>
         </template>
       </v-data-table-server>
     </v-card>
@@ -219,7 +228,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue';
+import { ref, reactive, computed, onMounted } from 'vue';
 import api from '../../api';
 
 const loading = ref(false);
@@ -230,6 +239,18 @@ const page = ref(1);
 const expanded = ref([]);
 
 const filters = ref({ search: '', active: null });
+
+const activeFilterCount = computed(() => {
+  let c = 0;
+  if (filters.value.search) c++;
+  if (filters.value.active) c++;
+  return c;
+});
+
+function resetProductFilters() {
+  filters.value = { search: '', active: null };
+  loadProducts();
+}
 const activeOptions = [
   { title: 'Активные', value: 'true' },
   { title: 'Неактивные', value: 'false' },

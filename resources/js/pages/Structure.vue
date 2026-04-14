@@ -8,7 +8,7 @@
     <v-card class="mb-3 pa-3">
       <div class="d-flex ga-2 flex-wrap align-center">
         <v-text-field v-model="filters.search" placeholder="ФИО партнёра..." density="compact" variant="outlined"
-          prepend-inner-icon="mdi-magnify" hide-details style="max-width:240px" @update:model-value="debouncedLoad" />
+          rounded prepend-inner-icon="mdi-magnify" clearable hide-details style="max-width:240px" @update:model-value="debouncedLoad" />
         <v-select v-model="filters.qualification" :items="qualificationOptions" label="Квалификация" density="compact" variant="outlined"
           multiple clearable hide-details style="max-width:240px" @update:model-value="loadData" />
         <v-select v-model="filters.levels" :items="qualificationOptions" label="Уровни" density="compact" variant="outlined"
@@ -17,6 +17,11 @@
           multiple clearable hide-details style="max-width:240px" @update:model-value="loadData" />
         <v-btn variant="text" size="small" :prepend-icon="showAdvanced ? 'mdi-chevron-up' : 'mdi-chevron-down'"
           @click="showAdvanced = !showAdvanced">Доп. фильтры</v-btn>
+        <v-chip v-if="activeFilterCount > 0" size="small" color="info" variant="tonal" class="ml-1">
+          {{ activeFilterCount }} {{ activeFilterCount === 1 ? 'фильтр' : activeFilterCount < 5 ? 'фильтра' : 'фильтров' }}
+        </v-chip>
+        <v-btn v-if="activeFilterCount > 0" size="small" variant="text" color="secondary"
+          prepend-icon="mdi-filter-remove" @click="resetFilters">Сбросить</v-btn>
       </div>
       <v-expand-transition>
         <div v-if="showAdvanced" class="d-flex ga-2 flex-wrap align-center mt-3">
@@ -85,7 +90,10 @@
             </tr>
           </template>
           <tr v-if="!flatRows.length && !loading">
-            <td colspan="8" class="text-center text-medium-emphasis pa-4">Данные не найдены</td>
+            <td colspan="8" class="text-center pa-6">
+              <v-icon size="48" color="grey-lighten-1" class="mb-2">mdi-file-search-outline</v-icon>
+              <div class="text-medium-emphasis">Данные не найдены</div>
+            </td>
           </tr>
         </tbody>
       </v-table>
@@ -102,6 +110,38 @@ import api from '../api';
 
 const loading = ref(false);
 const showAdvanced = ref(false);
+
+const activeFilterCount = computed(() => {
+  const f = filters.value;
+  let c = 0;
+  if (f.search) c++;
+  if (f.qualification?.length) c++;
+  if (f.levels?.length) c++;
+  if (f.status?.length) c++;
+  if (f.birth_date_from) c++;
+  if (f.birth_date_to) c++;
+  if (f.city) c++;
+  if (f.lp_min) c++;
+  if (f.lp_max) c++;
+  if (f.gp_min) c++;
+  if (f.gp_max) c++;
+  if (f.ngp_min) c++;
+  if (f.ngp_max) c++;
+  if (f.termination_from) c++;
+  if (f.termination_to) c++;
+  return c;
+});
+
+function resetFilters() {
+  filters.value = {
+    search: '', qualification: [], levels: [], status: [],
+    birth_date_from: '', birth_date_to: '',
+    city: '',
+    lp_min: '', lp_max: '', gp_min: '', gp_max: '', ngp_min: '', ngp_max: '',
+    termination_from: '', termination_to: '',
+  };
+  loadData();
+}
 const items = ref([]);
 const total = ref(0);
 const page = ref(1);

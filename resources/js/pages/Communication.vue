@@ -10,8 +10,13 @@
     </div>
 
     <v-card class="mb-3 pa-3">
-      <v-select v-model="categoryFilter" :items="categoryOptions" label="Категория" density="compact" variant="outlined"
-        clearable hide-details style="max-width:260px" @update:model-value="loadMessages" />
+      <div class="d-flex ga-2 flex-wrap align-center">
+        <v-select v-model="categoryFilter" :items="categoryOptions" label="Категория" density="compact" variant="outlined"
+          clearable hide-details style="max-width:260px" @update:model-value="loadMessages" />
+        <v-chip v-if="categoryFilter" size="small" color="info" variant="tonal" class="ml-1">1 фильтр</v-chip>
+        <v-btn v-if="categoryFilter" size="small" variant="text" color="secondary"
+          prepend-icon="mdi-filter-remove" @click="categoryFilter = null; loadMessages()">Сбросить</v-btn>
+      </div>
     </v-card>
 
     <v-card :loading="loading">
@@ -41,7 +46,10 @@
           <v-divider />
         </template>
         <v-list-item v-if="!messages.length && !loading">
-          <v-list-item-title class="text-center text-medium-emphasis">Сообщений нет</v-list-item-title>
+          <div class="text-center pa-4 w-100">
+            <v-icon size="48" color="grey-lighten-1" class="mb-2">mdi-message-off-outline</v-icon>
+            <div class="text-medium-emphasis">Данные не найдены</div>
+          </div>
         </v-list-item>
       </v-list>
 

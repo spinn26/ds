@@ -7,19 +7,36 @@
     </div>
 
     <v-card class="mb-3 pa-3">
-      <v-text-field v-model="search" placeholder="Поиск по партнёру..." density="compact" variant="outlined"
-        prepend-inner-icon="mdi-magnify" hide-details style="max-width:300px" @update:model-value="debouncedLoad" />
+      <div class="d-flex ga-2 flex-wrap align-center">
+        <v-text-field v-model="search" placeholder="Поиск по партнёру..." density="compact" variant="outlined"
+          rounded prepend-inner-icon="mdi-magnify" clearable hide-details style="max-width:300px" @update:model-value="debouncedLoad" />
+        <v-chip v-if="search" size="small" color="info" variant="tonal" class="ml-1">1 фильтр</v-chip>
+        <v-btn v-if="search" size="small" variant="text" color="secondary"
+          prepend-icon="mdi-filter-remove" @click="search = ''; loadData()">Сбросить</v-btn>
+      </div>
     </v-card>
 
     <v-data-table-server :items="items" :items-length="total" :loading="loading"
       :headers="headers" :items-per-page="25" @update:options="onOptions"
-      density="compact" hover no-data-text="Перестановки не найдены" />
+      density="compact" hover>
+      <template #item.dateCreated="{ value }">
+        {{ fmtDate(value) }}
+      </template>
+      <template #no-data>
+        <div class="text-center pa-4">
+          <v-icon size="48" color="grey-lighten-1" class="mb-2">mdi-file-search-outline</v-icon>
+          <div class="text-medium-emphasis">Данные не найдены</div>
+        </div>
+      </template>
+    </v-data-table-server>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
+
+function fmtDate(d) { if (!d) return '—'; try { return new Date(d).toLocaleDateString('ru-RU'); } catch { return d; } }
 
 const items = ref([]);
 const total = ref(0);
