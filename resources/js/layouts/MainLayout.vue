@@ -71,7 +71,42 @@
       </span>
 
       <!-- Notifications -->
-      <v-btn icon="mdi-bell-outline" size="small" class="mr-1" />
+      <v-menu min-width="360" max-height="480" :close-on-content-click="false">
+        <template #activator="{ props }">
+          <v-btn v-bind="props" icon size="small" class="mr-1">
+            <v-badge v-if="notifCount > 0" :content="notifCount" color="error" floating>
+              <v-icon>mdi-bell</v-icon>
+            </v-badge>
+            <v-icon v-else>mdi-bell-outline</v-icon>
+          </v-btn>
+        </template>
+        <v-card>
+          <div class="d-flex justify-space-between align-center pa-3 border-b">
+            <span class="text-subtitle-2 font-weight-bold">Уведомления</span>
+            <v-btn v-if="notifCount > 0" size="x-small" variant="text" color="primary" @click="markAllNotifRead">
+              Прочитать все
+            </v-btn>
+          </div>
+          <v-list v-if="notifications.length" density="compact" class="pa-0" style="max-height: 380px; overflow-y: auto">
+            <v-list-item v-for="n in notifications" :key="n.id" :to="n.link || undefined"
+              :class="n.read ? '' : 'bg-primary-lighten-5'" class="border-b" @click="markNotifRead(n)">
+              <template #prepend>
+                <v-avatar size="32" :color="n.color" variant="tonal">
+                  <v-icon size="16">{{ n.icon }}</v-icon>
+                </v-avatar>
+              </template>
+              <v-list-item-title class="text-body-2">{{ n.title }}</v-list-item-title>
+              <v-list-item-subtitle class="text-caption">{{ n.message }}</v-list-item-subtitle>
+              <template #append>
+                <div class="text-caption text-medium-emphasis" style="font-size:0.6rem">{{ notifTimeAgo(n.createdAt) }}</div>
+              </template>
+            </v-list-item>
+          </v-list>
+          <div v-else class="text-center pa-6 text-medium-emphasis text-caption">
+            Нет уведомлений
+          </div>
+        </v-card>
+      </v-menu>
 
       <!-- User menu -->
       <v-menu min-width="280" :close-on-content-click="false">
@@ -156,6 +191,8 @@ const statusInfo = ref(null);
 
 const isDark = computed(() => theme.global.current.value.dark);
 const unreadCount = ref(0);
+const notifCount = ref(0);
+const notifications = ref([]);
 let unreadInterval = null;
 
 async function loadUnreadCount() {
@@ -163,6 +200,40 @@ async function loadUnreadCount() {
     const { data } = await api.get('/tickets/unread-count');
     unreadCount.value = data.count || 0;
   } catch {}
+}
+
+async function loadNotifications() {
+  try {
+    const [listRes, countRes] = await Promise.all([
+      api.get('/notifications'),
+      api.get('/notifications/unread-count'),
+    ]);
+    notifications.value = listRes.data || [];
+    notifCount.value = countRes.data.count || 0;
+  } catch {}
+}
+
+async function markNotifRead(n) {
+  if (!n.read) {
+    try { await api.post(`/notifications/${n.id}/read`); } catch {}
+    n.read = true;
+    notifCount.value = Math.max(0, notifCount.value - 1);
+  }
+}
+
+async function markAllNotifRead() {
+  try { await api.post('/notifications/read-all'); } catch {}
+  notifications.value.forEach(n => n.read = true);
+  notifCount.value = 0;
+}
+
+function notifTimeAgo(d) {
+  if (!d) return '';
+  const diff = Math.floor((Date.now() - new Date(d).getTime()) / 1000);
+  if (diff < 60) return 'сейчас';
+  if (diff < 3600) return `${Math.floor(diff / 60)}м`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}ч`;
+  return `${Math.floor(diff / 86400)}д`;
 }
 
 function toggleTheme() {
@@ -187,7 +258,8 @@ onMounted(async () => {
     };
   } catch {}
   loadUnreadCount();
-  unreadInterval = setInterval(loadUnreadCount, 60000);
+  loadNotifications();
+  unreadInterval = setInterval(() => { loadUnreadCount(); loadNotifications(); }, 60000);
 });
 
 onUnmounted(() => {

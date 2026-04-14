@@ -29,6 +29,10 @@ Route::prefix('v1')->group(function () {
         Route::post('/auth/activate', [AuthController::class, 'activate']);
 
         Route::get('/workspace', [\App\Http\Controllers\Api\WorkspaceController::class, 'index']);
+        Route::get('/notifications', [\App\Http\Controllers\Api\NotificationController::class, 'index']);
+        Route::get('/notifications/unread-count', [\App\Http\Controllers\Api\NotificationController::class, 'unreadCount']);
+        Route::post('/notifications/{id}/read', [\App\Http\Controllers\Api\NotificationController::class, 'markRead']);
+        Route::post('/notifications/read-all', [\App\Http\Controllers\Api\NotificationController::class, 'markAllRead']);
 
         // Ticket system
         // Tickets — partner + staff use same controller
@@ -104,6 +108,7 @@ Route::prefix('v1')->group(function () {
         });
 
         Route::get('/admin/dashboard', [\App\Http\Controllers\Api\AdminDashboardController::class, 'index']);
+        Route::get('/admin/export/{type}', [\App\Http\Controllers\Api\ExportController::class, 'export']);
         Route::get('/admin/users', [AdminUserController::class, 'index']);
         Route::post('/admin/users', [AdminUserController::class, 'store']);
         Route::put('/admin/users/{id}', [AdminUserController::class, 'update']);

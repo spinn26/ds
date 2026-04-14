@@ -46,7 +46,9 @@
       "Bash(git -C c:/Users/ENCODE/Desktop/ds commit -m 'Add feature tests: Auth, Dashboard, Tickets, AdminAccess:*)",
       "Bash(git -C c:/Users/ENCODE/Desktop/ds commit -m 'Design system: tokens, components, global styles, Vuetify defaults:*)",
       "Bash(git -C c:/Users/ENCODE/Desktop/ds commit -m \"Design system: tokens, components, global styles, Vuetify defaults\")",
-      "Bash(git -C c:/Users/ENCODE/Desktop/ds commit -m 'Apply design system to all 27 pages: -500 lines of duplicated code:*)"
+      "Bash(git -C c:/Users/ENCODE/Desktop/ds commit -m 'Apply design system to all 27 pages: -500 lines of duplicated code:*)",
+      "Bash(git -C c:/Users/ENCODE/Desktop/ds commit -m \"Admin dashboard: KPI, charts, top-10, activity\")",
+      "Bash(git -C c:/Users/ENCODE/Desktop/ds commit -m \"Notifications + Export CSV + Admin Dashboard\")"
     ]
   }
 }
