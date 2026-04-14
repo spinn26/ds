@@ -13,6 +13,7 @@
         <v-divider class="mb-2" />
 
         <v-list-item to="/admin/users" prepend-icon="mdi-account-cog" title="Пользователи" color="secondary" rounded="lg" class="mb-1" />
+        <v-list-item to="/admin/news" prepend-icon="mdi-newspaper" title="Новости" color="secondary" rounded="lg" class="mb-1" />
         <v-list-item to="/admin/products" prepend-icon="mdi-package-variant" title="Продукты" color="secondary" rounded="lg" class="mb-1" />
         <v-list-item to="/admin/education" prepend-icon="mdi-school" title="Обучение и тесты" color="secondary" rounded="lg" class="mb-1" />
       </v-list>

@@ -12,8 +12,10 @@ const routes = [
         component: () => import('../layouts/MainLayout.vue'),
         meta: { auth: true },
         children: [
+            // Workspace = main page for all roles
+            { path: '', component: () => import('../pages/Workspace.vue') },
             // Partner pages
-            { path: '', component: () => import('../pages/Dashboard.vue') },
+            { path: 'dashboard', component: () => import('../pages/Dashboard.vue') },
             { path: 'terminated', component: () => import('../pages/Terminated.vue') },
             { path: 'education', component: () => import('../pages/Education.vue') },
             { path: 'referrals', component: () => import('../pages/Referrals.vue') },
@@ -60,6 +62,7 @@ const routes = [
         meta: { auth: true, admin: true },
         children: [
             { path: '', redirect: '/admin/users' },
+            { path: 'news', component: () => import('../pages/Admin/News.vue') },
             { path: 'users', component: () => import('../pages/Admin/Users.vue') },
             { path: 'partners', component: () => import('../pages/Admin/Partners.vue') },
             { path: 'partners/statuses', component: () => import('../pages/Admin/PartnerStatuses.vue') },

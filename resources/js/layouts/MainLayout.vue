@@ -270,7 +270,8 @@ const cabinetName = computed(() => {
 // Staff sections — grouped per spec, no education editing
 const menuItems = [
   // ---- Partner menu (consultant) ----
-  { label: 'Дашборд', icon: 'mdi-view-dashboard', path: '/', partner: true },
+  { label: 'Рабочий стол', icon: 'mdi-view-dashboard-outline', path: '/' },
+  { label: 'Дашборд', icon: 'mdi-view-dashboard', path: '/dashboard', partner: true },
   { label: 'Отчёт начислений', icon: 'mdi-bank', path: '/finance/report', partner: true },
   { label: 'Калькулятор объёмов', icon: 'mdi-calculator', path: '/finance/calculator', partner: true },
   { label: 'Список моих клиентов', icon: 'mdi-account-group', path: '/clients', partner: true },
