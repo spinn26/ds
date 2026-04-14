@@ -58,22 +58,20 @@ class User extends Authenticatable
     }
 
     /**
-     * Validate password: supports both legacy MD5 and bcrypt.
-     * On successful MD5 login, rehashes to bcrypt.
+     * Validate password: supports bcrypt + legacy MD5 migration.
+     * MD5 support is DEPRECATED — will be removed after full migration.
      */
     public function validatePassword(string $password): bool
     {
-        // Try bcrypt first
         if (Hash::check($password, $this->password)) {
             return true;
         }
 
-        // Try legacy MD5
-        if ($this->password === md5($password)) {
-            // Rehash to bcrypt for future logins
+        // Legacy MD5 migration — rehash to bcrypt on successful login
+        if ($this->password && strlen($this->password) === 32 && $this->password === md5($password)) {
             $this->password = Hash::make($password);
             $this->saveQuietly();
-
+            \Log::info("MD5 password migrated to bcrypt for user {$this->id} ({$this->email})");
             return true;
         }
 

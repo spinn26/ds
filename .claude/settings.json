@@ -40,7 +40,9 @@
       "Bash(ls \"C:/php/php.exe\")",
       "Bash(ls \"C:/laragon/bin/php/\"*/php.exe)",
       "Bash(git -C c:/Users/ENCODE/Desktop/ds add -A)",
-      "Bash(git -C c:/Users/ENCODE/Desktop/ds diff --cached --stat)"
+      "Bash(git -C c:/Users/ENCODE/Desktop/ds diff --cached --stat)",
+      "Bash(git -C c:/Users/ENCODE/Desktop/ds commit -m 'Refactor: extract business logic from 4 controllers into services:*)",
+      "Bash(git -C c:/Users/ENCODE/Desktop/ds commit -m 'Security: rate limiting, md5 hardening, impersonate protection:*)"
     ]
   }
 }

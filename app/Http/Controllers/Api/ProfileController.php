@@ -138,7 +138,7 @@ class ProfileController extends Controller
 
         $user = $request->user();
 
-        if (! Hash::check($request->current_password, $user->password) && $user->password !== md5($request->current_password)) {
+        if (! $user->validatePassword($request->current_password)) {
             return response()->json(['message' => 'Текущий пароль неверен'], 422);
         }
 

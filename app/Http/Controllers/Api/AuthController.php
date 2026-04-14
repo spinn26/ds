@@ -27,14 +27,7 @@ class AuthController extends Controller
             return response()->json(['message' => 'Неверный email или пароль'], 401);
         }
 
-        $valid = false;
-        if (Hash::check($request->password, $user->password)) {
-            $valid = true;
-        } elseif ($user->password === md5($request->password)) {
-            $user->password = Hash::make($request->password);
-            $user->saveQuietly();
-            $valid = true;
-        }
+        $valid = $user->validatePassword($request->password);
 
         if (! $valid) {
             return response()->json(['message' => 'Неверный email или пароль'], 401);

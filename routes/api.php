@@ -15,8 +15,11 @@ use App\Http\Controllers\ImpersonateController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
-    Route::post('/auth/login', [AuthController::class, 'login']);
-    Route::post('/auth/register', [AuthController::class, 'register']);
+    // Auth routes with rate limiting (5 attempts per minute)
+    Route::middleware('throttle:5,1')->group(function () {
+        Route::post('/auth/login', [AuthController::class, 'login']);
+        Route::post('/auth/register', [AuthController::class, 'register']);
+    });
     Route::post('/auth/check-duplicates', [AuthController::class, 'checkDuplicates']);
     Route::post('/auth/check-referral', [AuthController::class, 'checkReferral']);
 
@@ -95,8 +98,10 @@ Route::prefix('v1')->group(function () {
         Route::get('/contests', [ContestController::class, 'index']);
 
         // Admin
-        Route::post('/impersonate/{user}', [ImpersonateController::class, 'impersonate']);
-        Route::post('/impersonate/leave', [ImpersonateController::class, 'leave']);
+        Route::middleware('role:admin')->group(function () {
+            Route::post('/impersonate/{user}', [ImpersonateController::class, 'impersonate']);
+            Route::post('/impersonate/leave', [ImpersonateController::class, 'leave']);
+        });
 
         Route::get('/admin/users', [AdminUserController::class, 'index']);
         Route::post('/admin/users', [AdminUserController::class, 'store']);
