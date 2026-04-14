@@ -50,6 +50,7 @@
         <!-- Status chip (only for consultants) -->
         <v-chip v-if="isConsultant && statusInfo?.activityName" :color="statusColor" size="small" variant="outlined" class="mr-2">
           {{ statusInfo.activityName }}
+          <template v-if="statusInfo.yearPeriodEnd"> до {{ fmtShortDate(statusInfo.yearPeriodEnd) }}</template>
         </v-chip>
 
         <!-- Countdown to status change (consultants only) -->
@@ -198,6 +199,11 @@ import { useRoute } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import api from '../api';
 import ChatWidget from '../components/ChatWidget.vue';
+
+function fmtShortDate(d) {
+  if (!d) return '';
+  return new Date(d).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
 
 const auth = useAuthStore();
 const route = useRoute();
