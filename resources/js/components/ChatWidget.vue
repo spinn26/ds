@@ -342,6 +342,12 @@ watch(chatOpen, (val) => {
   right: 24px;
   z-index: 1000;
 }
+
+@media (max-width: 959px) {
+  .chat-fab {
+    bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+  }
+}
 .border-b {
   border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
 }

@@ -174,6 +174,19 @@
       </v-container>
     </v-main>
 
+    <!-- Mobile bottom navigation -->
+    <v-bottom-navigation v-if="mobile" :model-value="activeBottomNav" grow class="mobile-bottom-nav">
+      <v-btn v-for="item in bottomNavItems" :key="item.key || item.path"
+        :to="item.action ? undefined : item.path" :value="item.path"
+        @click="item.action ? item.action() : null">
+        <v-badge v-if="item.badge" :content="item.badge" color="error" floating>
+          <v-icon>{{ item.icon }}</v-icon>
+        </v-badge>
+        <v-icon v-else>{{ item.icon }}</v-icon>
+        <span class="text-caption">{{ item.label }}</span>
+      </v-btn>
+    </v-bottom-navigation>
+
     <ChatWidget v-if="isConsultant && !route.path.includes('/tickets')" />
   </v-layout>
 </template>
@@ -406,6 +419,31 @@ const menuItems = [
 
 const isConsultant = computed(() => userRoles.value.includes('consultant'));
 
+// Mobile bottom navigation
+const bottomNavItems = computed(() => {
+  if (isConsultant.value) {
+    return [
+      { label: 'Главная', icon: 'mdi-view-dashboard-outline', path: '/' },
+      { label: 'Клиенты', icon: 'mdi-account-group', path: '/clients' },
+      { label: 'Структура', icon: 'mdi-sitemap', path: '/structure' },
+      { label: 'Тикеты', icon: 'mdi-chat', path: '/tickets', badge: unreadCount.value > 0 ? unreadCount.value : null },
+      { label: 'Профиль', icon: 'mdi-account-circle', path: '/profile' },
+    ];
+  }
+  // Staff bottom nav
+  return [
+    { label: 'Главная', icon: 'mdi-view-dashboard-outline', path: '/' },
+    { label: 'Партнёры', icon: 'mdi-account-search', path: '/manage/partners' },
+    { label: 'Тикеты', icon: 'mdi-ticket-confirmation', path: '/manage/tickets', badge: unreadCount.value > 0 ? unreadCount.value : null },
+    { label: 'Отчёты', icon: 'mdi-file-chart', path: '/manage/reports' },
+    { key: 'more', label: 'Ещё', icon: 'mdi-menu', path: '', action: () => { drawer.value = !drawer.value; } },
+  ];
+});
+
+const activeBottomNav = computed(() => {
+  return bottomNavItems.value.find(i => i.path && route.path === i.path)?.path || '';
+});
+
 const visibleMenu = computed(() => menuItems.filter((item) => {
   if (item.adminSection) return isStaff.value && availableSections.value.has(item.adminSection);
   if (item.partner) return isConsultant.value;
@@ -446,5 +484,36 @@ const visibleMenu = computed(() => menuItems.filter((item) => {
   font-size: 0.7rem;
   text-transform: uppercase;
   opacity: 0.7;
+}
+
+/* Mobile bottom navigation */
+.mobile-bottom-nav {
+  position: fixed !important;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  backdrop-filter: blur(16px);
+  background: rgba(var(--v-theme-surface), 0.92) !important;
+  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  height: calc(56px + env(safe-area-inset-bottom, 0px)) !important;
+}
+
+.mobile-bottom-nav .v-btn {
+  min-width: 0 !important;
+  font-size: 0.6rem !important;
+}
+
+.mobile-bottom-nav .v-btn .text-caption {
+  font-size: 0.6rem !important;
+  margin-top: 2px;
+}
+
+/* Add bottom padding to main content on mobile so it doesn't hide behind bottom nav */
+@media (max-width: 959px) {
+  .content-main {
+    padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px)) !important;
+  }
 }
 </style>

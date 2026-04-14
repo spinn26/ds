@@ -145,6 +145,58 @@ class DashboardService
         // Status info (countdown, deadlines)
         $statusInfo = $this->statusService->getStatusInfo($consultant);
 
+        // Mandatory GP plan fulfillment (ОП по ГП) — from Expert onwards
+        $mandatoryPlan = null;
+        if ($statusLevel && ($statusLevel->mandatoryGP ?? 0) > 0) {
+            $mandatoryGP = (float) $statusLevel->mandatoryGP;
+            $currentGP = round((float) $groupVolume, 2);
+            $fulfillment = $mandatoryGP > 0 ? min($currentGP / $mandatoryGP, 1.0) : 1.0;
+            $fulfilled = $currentGP >= $mandatoryGP;
+
+            // Commission reduction when plan not met: 20% reduction from ОП
+            $commissionReduction = 0;
+            if (!$fulfilled) {
+                $commissionReduction = 20;
+            }
+
+            $mandatoryPlan = [
+                'mandatoryGP' => $mandatoryGP,
+                'currentGP' => $currentGP,
+                'fulfillment' => round($fulfillment * 100, 1),
+                'fulfilled' => $fulfilled,
+                'commissionReduction' => $commissionReduction,
+            ];
+        }
+
+        // Pool eligibility (from TOP FC = level 6 onwards)
+        $poolInfo = null;
+        if ($statusLevel && ($statusLevel->pool ?? 0) > 0) {
+            $poolEligible = true;
+            // Must meet 80% of GP plan to qualify for pool
+            if ($mandatoryPlan) {
+                $poolEligible = $mandatoryPlan['fulfillment'] >= 80;
+            }
+            $poolInfo = [
+                'poolPercent' => (float) $statusLevel->pool,
+                'eligible' => $poolEligible,
+                'reason' => $poolEligible ? null : 'План ГП выполнен менее чем на 80%',
+            ];
+        }
+
+        // Breakaway rules (отрыв) — structured info
+        $breakawayRules = null;
+        if ($statusLevel && ($statusLevel->otrif ?? 0) > 0) {
+            $breakawayRules = [
+                'threshold' => (float) $statusLevel->otrif,
+                'tiers' => [
+                    ['branches' => 1, 'points' => 7500, 'reduction' => 75],
+                    ['branches' => 2, 'points' => 5000, 'reduction' => 50],
+                    ['branches' => 3, 'points' => 1000, 'reduction' => 25],
+                    ['branches' => 4, 'points' => 2500, 'reduction' => 25],
+                ],
+            ];
+        }
+
         return [
             'consultant' => [
                 'id' => $consultant->id,
@@ -162,6 +214,7 @@ class DashboardService
                     'title' => $statusLevel->title,
                     'percent' => $statusLevel->percent,
                     'groupVolume' => $statusLevel->groupVolume ?? 0,
+                    'mandatoryGP' => $statusLevel->mandatoryGP ?? 0,
                     'groupVolumeCumulative' => $statusLevel->groupVolumeCumulative ?? 0,
                     'personalVolume' => $statusLevel->personalVolume ?? 0,
                     'otrif' => $statusLevel->otrif ?? 0,
@@ -174,6 +227,7 @@ class DashboardService
                     'title' => $nextLevel->title,
                     'percent' => $nextLevel->percent,
                     'groupVolume' => $nextLevel->groupVolume ?? 0,
+                    'mandatoryGP' => $nextLevel->mandatoryGP ?? 0,
                     'groupVolumeCumulative' => $nextLevel->groupVolumeCumulative ?? 0,
                     'personalVolume' => $nextLevel->personalVolume ?? 0,
                     'otrif' => $nextLevel->otrif ?? 0,
@@ -201,6 +255,9 @@ class DashboardService
             'partners' => $partnerCounts,
             'prevPartners' => $prevPartnerCounts,
             'breakaway' => $breakaway,
+            'breakawayRules' => $breakawayRules,
+            'mandatoryPlan' => $mandatoryPlan,
+            'poolInfo' => $poolInfo,
             'period' => $month,
         ];
     }

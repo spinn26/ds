@@ -41,6 +41,7 @@ class DashboardController extends Controller
                 'percent' => $l->percent,
                 'personalVolume' => $l->personalVolume ?? 0,
                 'groupVolume' => $l->groupVolume ?? 0,
+                'mandatoryGP' => $l->mandatoryGP ?? 0,
                 'groupVolumeCumulative' => $l->groupVolumeCumulative ?? 0,
                 'otrif' => $l->otrif ?? 0,
                 'pool' => $l->pool ?? 0,
