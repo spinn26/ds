@@ -12,6 +12,7 @@
         <v-list-item to="/" prepend-icon="mdi-arrow-left" title="На сайт" color="grey-lighten-1" rounded="lg" class="mb-2" />
         <v-divider class="mb-2" />
 
+        <v-list-item to="/admin/dashboard" prepend-icon="mdi-chart-areaspline" title="Дашборд" color="secondary" rounded="lg" class="mb-1" />
         <v-list-item to="/admin/users" prepend-icon="mdi-account-cog" title="Пользователи" color="secondary" rounded="lg" class="mb-1" />
         <v-list-item to="/admin/news" prepend-icon="mdi-newspaper" title="Новости" color="secondary" rounded="lg" class="mb-1" />
         <v-list-item to="/admin/products" prepend-icon="mdi-package-variant" title="Продукты" color="secondary" rounded="lg" class="mb-1" />

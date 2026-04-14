@@ -63,7 +63,8 @@ const routes = [
         component: () => import('../layouts/AdminLayout.vue'),
         meta: { auth: true, admin: true },
         children: [
-            { path: '', redirect: '/admin/users' },
+            { path: '', redirect: '/admin/dashboard' },
+            { path: 'dashboard', component: () => import('../pages/Admin/Dashboard.vue') },
             { path: 'news', component: () => import('../pages/Admin/News.vue') },
             { path: 'users', component: () => import('../pages/Admin/Users.vue') },
             { path: 'partners', component: () => import('../pages/Admin/Partners.vue') },
