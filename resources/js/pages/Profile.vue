@@ -5,7 +5,7 @@
     <v-tabs v-model="tab" color="primary" class="mb-4" grow>
       <v-tab value="info">Информация о партнере</v-tab>
       <v-tab value="requisites">Реквизиты и документы для выплат</v-tab>
-      <v-tab value="referral">Реферальные с��ылки</v-tab>
+      <v-tab value="referral">Реферальные ссылки</v-tab>
     </v-tabs>
 
     <v-tabs-window v-model="tab">

@@ -6,13 +6,6 @@
       </template>
     </PageHeader>
 
-    <!-- Currency Rates -->
-    <div v-if="data.currencyRates && data.currencyRates.length" class="d-flex ga-2 mb-4 flex-wrap">
-      <v-chip v-for="rate in data.currencyRates" :key="rate.currency" size="small" variant="outlined" color="secondary">
-        {{ rate.currency }}: {{ fmtRate(rate.rate) }}
-      </v-chip>
-    </div>
-
     <!-- Row 1: Qualification + Commission + Volumes -->
     <v-row class="mb-4">
       <v-col cols="12" sm="6" md="3">
