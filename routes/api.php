@@ -28,6 +28,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/workspace', [\App\Http\Controllers\Api\WorkspaceController::class, 'index']);
 
         // Ticket system
+        // Tickets — partner + staff use same controller
         Route::get('/tickets', [\App\Http\Controllers\Api\TicketController::class, 'index']);
         Route::post('/tickets', [\App\Http\Controllers\Api\TicketController::class, 'store']);
         Route::get('/tickets/categories', [\App\Http\Controllers\Api\TicketController::class, 'categories']);
@@ -35,10 +36,23 @@ Route::prefix('v1')->group(function () {
         Route::get('/tickets/stats', [\App\Http\Controllers\Api\TicketController::class, 'stats']);
         Route::get('/tickets/staff', [\App\Http\Controllers\Api\TicketController::class, 'staffList']);
         Route::get('/tickets/{id}', [\App\Http\Controllers\Api\TicketController::class, 'show']);
+        Route::get('/tickets/{id}/messages', [\App\Http\Controllers\Api\TicketController::class, 'show']); // GET messages = show
         Route::post('/tickets/{id}/messages', [\App\Http\Controllers\Api\TicketController::class, 'sendMessage']);
+        Route::post('/tickets/{id}/read', [\App\Http\Controllers\Api\TicketController::class, 'markRead']);
         Route::post('/tickets/{id}/assign', [\App\Http\Controllers\Api\TicketController::class, 'assign']);
         Route::post('/tickets/{id}/participants', [\App\Http\Controllers\Api\TicketController::class, 'addParticipant']);
         Route::post('/tickets/{id}/close', [\App\Http\Controllers\Api\TicketController::class, 'close']);
+
+        // Staff ticket aliases (frontend uses /staff/tickets/*)
+        Route::get('/staff/tickets', [\App\Http\Controllers\Api\TicketController::class, 'index']);
+        Route::get('/staff/tickets/stats', [\App\Http\Controllers\Api\TicketController::class, 'stats']);
+        Route::get('/staff/tickets/{id}', [\App\Http\Controllers\Api\TicketController::class, 'show']);
+        Route::get('/staff/tickets/{id}/messages', [\App\Http\Controllers\Api\TicketController::class, 'show']);
+        Route::post('/staff/tickets/{id}/messages', [\App\Http\Controllers\Api\TicketController::class, 'sendMessage']);
+        Route::post('/staff/tickets/{id}/close', [\App\Http\Controllers\Api\TicketController::class, 'close']);
+        Route::post('/staff/tickets/{id}/assign', [\App\Http\Controllers\Api\TicketController::class, 'assign']);
+        Route::post('/staff/tickets/{id}/participants', [\App\Http\Controllers\Api\TicketController::class, 'addParticipant']);
+        Route::get('/staff/users', [\App\Http\Controllers\Api\TicketController::class, 'staffList']);
         Route::get('/dashboard', [DashboardController::class, 'index']);
         Route::get('/status-levels', [DashboardController::class, 'statusLevels']);
 

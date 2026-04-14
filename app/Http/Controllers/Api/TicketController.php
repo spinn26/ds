@@ -345,6 +345,13 @@ class TicketController extends Controller
         return response()->json($stats);
     }
 
+    /** Отметить тикет прочитанным */
+    public function markRead(Request $request, int $id): JsonResponse
+    {
+        DB::table('tickets')->where('id', $id)->update(['updated_at' => now()]);
+        return response()->json(['message' => 'OK']);
+    }
+
     /** Непрочитанные тикеты */
     public function unreadCount(Request $request): JsonResponse
     {
