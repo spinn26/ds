@@ -5,12 +5,15 @@
   transition: background-color 0.2s ease, color 0.1s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-/* Softer card style — no hard shadows, subtle border */
+/* Softer card style — warm white with gentle border */
 .v-card {
-  border-color: rgba(0, 0, 0, 0.06) !important;
+  border-color: rgba(0, 0, 0, 0.05) !important;
+  background: rgba(255, 255, 255, 0.7) !important;
+  backdrop-filter: blur(8px);
 }
 .v-theme--dark .v-card {
   border-color: rgba(255, 255, 255, 0.06) !important;
+  background: rgba(26, 31, 46, 0.8) !important;
 }
 
 /* Card hover — gentle lift */
@@ -47,24 +50,27 @@
 .v-theme--dark ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.12); }
 .v-theme--dark ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.25); }
 
-/* Navigation drawer — soft shadow */
+/* Navigation drawer — frosted */
 .v-navigation-drawer {
   border-right: none !important;
-  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.04) !important;
+  background: rgba(248, 249, 252, 0.9) !important;
+  backdrop-filter: blur(12px);
+  box-shadow: 2px 0 16px rgba(0, 0, 0, 0.03) !important;
 }
 .v-theme--dark .v-navigation-drawer {
-  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.3) !important;
+  background: rgba(15, 20, 25, 0.95) !important;
+  box-shadow: 2px 0 16px rgba(0, 0, 0, 0.3) !important;
 }
 
-/* App bar — glass effect */
+/* App bar — frosted glass */
 .topbar {
-  backdrop-filter: blur(12px) saturate(180%);
-  background: rgba(255, 255, 255, 0.85) !important;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05) !important;
+  backdrop-filter: blur(16px) saturate(180%);
+  background: rgba(238, 241, 246, 0.75) !important;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.04) !important;
 }
 .v-theme--dark .topbar {
-  background: rgba(15, 20, 25, 0.85) !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+  background: rgba(15, 20, 25, 0.8) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04) !important;
 }
 
 /* Sidebar menu items — rounded and airy */
