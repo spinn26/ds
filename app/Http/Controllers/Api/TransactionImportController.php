@@ -215,6 +215,31 @@ class TransactionImportController extends Controller
         ]);
     }
 
+    /**
+     * Запустить расчёт комиссий для импорта.
+     */
+    public function calculateCommissions(Request $request, int $importId): JsonResponse
+    {
+        $calculator = app(\App\Services\CommissionCalculator::class);
+        $results = $calculator->calculateForImport($importId);
+
+        return response()->json([
+            'message' => "Расчёт завершён: {$results['success']} из {$results['total']}",
+            ...$results,
+        ]);
+    }
+
+    /**
+     * Запустить расчёт для одной транзакции.
+     */
+    public function calculateSingle(Request $request, int $transactionId): JsonResponse
+    {
+        $calculator = app(\App\Services\CommissionCalculator::class);
+        $result = $calculator->calculateForTransaction($transactionId);
+
+        return response()->json($result);
+    }
+
     private function parseCsv(string $path): array
     {
         $rows = [];

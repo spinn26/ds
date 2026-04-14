@@ -100,6 +100,8 @@ Route::prefix('v1')->group(function () {
         Route::post('/admin/transaction-import', [\App\Http\Controllers\Api\TransactionImportController::class, 'import']);
         Route::get('/admin/transaction-import/history', [\App\Http\Controllers\Api\TransactionImportController::class, 'history']);
         Route::post('/admin/transaction-import/{id}/rollback', [\App\Http\Controllers\Api\TransactionImportController::class, 'rollback']);
+        Route::post('/admin/transaction-import/{id}/calculate', [\App\Http\Controllers\Api\TransactionImportController::class, 'calculateCommissions']);
+        Route::post('/admin/transactions/{id}/calculate', [\App\Http\Controllers\Api\TransactionImportController::class, 'calculateSingle']);
 
         // Admin Products CRUD
         Route::get('/admin/products', [\App\Http\Controllers\Api\AdminProductController::class, 'index']);

@@ -56,12 +56,17 @@
         </template>
         <template #item.createdAt="{ value }">{{ fmtDate(value) }}</template>
         <template #item.actions="{ item }">
+          <v-btn v-if="item.status === 'success' || item.status === 'partial'" icon size="x-small" variant="text" color="primary"
+            :loading="calculatingId === item.id" @click="runCalculation(item)">
+            <v-icon>mdi-calculator</v-icon>
+            <v-tooltip activator="parent">Рассчитать комиссии</v-tooltip>
+          </v-btn>
           <v-btn v-if="item.status !== 'rolled_back'" icon size="x-small" variant="text" color="warning"
             @click="confirmRollback(item)">
             <v-icon>mdi-undo</v-icon>
             <v-tooltip activator="parent">Откатить</v-tooltip>
           </v-btn>
-          <v-btn v-if="item.errorDetails?.length" icon size="x-small" variant="text" color="info"
+          <v-btn v-if="item.errors?.length" icon size="x-small" variant="text" color="info"
             @click="showErrors(item)">
             <v-icon>mdi-alert-circle-outline</v-icon>
             <v-tooltip activator="parent">Ошибки</v-tooltip>
@@ -129,6 +134,8 @@ const historyPage = ref(1);
 const rollbackDialog = ref(false);
 const rollbackTarget = ref(null);
 const rolling = ref(false);
+const calculatingId = ref(null);
+const calcResult = ref(null);
 const errorsDialog = ref(false);
 const errorsTarget = ref(null);
 
@@ -193,6 +200,17 @@ async function doRollback() {
     loadHistory();
   } catch {}
   rolling.value = false;
+}
+
+async function runCalculation(item) {
+  calculatingId.value = item.id;
+  try {
+    const { data } = await api.post(`/admin/transaction-import/${item.id}/calculate`);
+    result.value = { message: data.message, success: data.success, errors: data.errors };
+  } catch (e) {
+    result.value = { message: e.response?.data?.message || 'Ошибка расчёта', errors: 1, success: 0 };
+  }
+  calculatingId.value = null;
 }
 
 function showErrors(item) { errorsTarget.value = item; errorsDialog.value = true; }
