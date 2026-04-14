@@ -28,11 +28,10 @@
     <v-card class="mb-4 pa-4">
       <div class="d-flex justify-space-between align-center mb-4 flex-wrap ga-2">
         <div>
-          <div class="text-caption text-medium-emphasis text-uppercase" style="letter-spacing: 1px">Квалификация</div>
-          <div class="d-flex align-center ga-3 mt-1">
-            <span class="text-h5 font-weight-bold">{{ data.qualification.nominalLevel?.title ?? 'Start' }}</span>
-            <v-chip color="primary" size="small" variant="flat">
-              {{ data.qualification.nominalLevel?.percent ?? 15 }}% комиссия
+          <div class="text-caption text-medium-emphasis text-uppercase" style="letter-spacing: 1px">Закрытая квалификация</div>
+          <div class="d-flex align-center ga-3 mt-1 flex-wrap">
+            <v-chip color="secondary" size="default" variant="flat" class="font-weight-bold">
+              {{ data.qualification.nominalLevel?.level ?? '—' }} [{{ data.qualification.nominalLevel?.title ?? 'Start' }}]
             </v-chip>
             <v-chip v-if="data.consultant.activityName" size="small"
               :color="data.consultant.active ? 'success' : 'grey'" variant="tonal">
@@ -45,22 +44,67 @@
         </v-btn>
       </div>
 
-      <!-- Progress to next level (НГП) -->
-      <div v-if="data.qualification.nextLevel" class="mb-3">
+      <!-- НГП progress bar -->
+      <div class="mb-3">
         <div class="d-flex justify-space-between align-center mb-1">
-          <span class="text-body-2 text-medium-emphasis">
-            Прогресс до <strong>{{ data.qualification.nextLevel.title }}</strong>
-          </span>
+          <span class="text-body-2 text-medium-emphasis">НГП</span>
           <span class="text-body-2 font-weight-medium">
-            {{ fmt(data.volumes.groupVolumeCumulative) }} / {{ fmt(data.qualification.nextLevel.groupVolumeCumulative) }} НГП
+            {{ fmt(data.volumes.groupVolumeCumulative) }}
+            <template v-if="data.qualification.nextLevel"> / {{ fmt(data.qualification.nextLevel.groupVolumeCumulative) }}</template>
           </span>
         </div>
-        <v-progress-linear :model-value="nqpProgress" height="12" rounded color="primary" />
-        <div class="text-caption text-medium-emphasis mt-1">
-          Осталось набрать: <strong>{{ fmt(Math.max(0, (data.qualification.nextLevel.groupVolumeCumulative || 0) - data.volumes.groupVolumeCumulative)) }}</strong> баллов НГП
+        <v-progress-linear :model-value="nqpProgress" height="10" rounded color="primary" />
+      </div>
+
+      <!-- Calculation level (if differs from nominal = breakaway) -->
+      <div v-if="data.qualification.levelsDontMatch && data.qualification.calculationLevel" class="mb-3">
+        <div class="d-flex align-center ga-2 flex-wrap">
+          <span class="text-body-2 text-medium-emphasis">Уровень расчёта комиссионных</span>
+          <v-chip color="warning" size="small" variant="flat">
+            {{ data.qualification.calculationLevel.level }} [{{ data.qualification.calculationLevel.title }}]
+          </v-chip>
+          <span class="text-body-2">Комиссия <strong>{{ data.qualification.calculationLevel.percent }}%</strong></span>
         </div>
       </div>
-      <v-chip v-else color="amber" variant="tonal" prepend-icon="mdi-crown">Максимальная квалификация</v-chip>
+      <div v-else class="mb-3">
+        <span class="text-body-2 text-medium-emphasis">Комиссия</span>
+        <span class="text-body-2 font-weight-bold ml-2">{{ data.qualification.nominalLevel?.percent ?? 15 }}%</span>
+      </div>
+
+      <!-- GP progress bar -->
+      <div v-if="data.mandatoryPlan" class="mb-3">
+        <div class="d-flex justify-space-between align-center mb-1">
+          <span class="text-body-2 text-medium-emphasis">ГП</span>
+          <span class="text-body-2 font-weight-medium">
+            {{ fmt(data.mandatoryPlan.currentGP) }} / {{ fmt(data.mandatoryPlan.mandatoryGP) }}
+          </span>
+        </div>
+        <v-progress-linear :model-value="data.mandatoryPlan.fulfillment" height="10" rounded
+          :color="data.mandatoryPlan.fulfilled ? 'success' : data.mandatoryPlan.fulfillment >= 80 ? 'warning' : 'error'" />
+      </div>
+
+      <!-- Breakaway status -->
+      <div class="mb-1">
+        <span class="text-body-2 text-medium-emphasis">Отрыв</span>
+        <span v-if="data.breakaway" class="text-body-2 text-warning font-weight-medium ml-2">
+          Зафиксирован ({{ data.breakaway.gapValuePercentage }}% — ветка {{ data.breakaway.branchWithGapName }})
+        </span>
+        <span v-else class="text-body-2 text-medium-emphasis ml-2">
+          Продажи в дочерних ветках не зафиксированы
+        </span>
+      </div>
+
+      <!-- Next level info -->
+      <div v-if="data.qualification.nextLevel" class="mt-3">
+        <v-divider class="mb-3" />
+        <div class="text-caption text-medium-emphasis">
+          До <strong>{{ data.qualification.nextLevel.title }}</strong>: осталось
+          <strong>{{ fmt(Math.max(0, (data.qualification.nextLevel.groupVolumeCumulative || 0) - data.volumes.groupVolumeCumulative)) }}</strong> баллов НГП
+        </div>
+      </div>
+      <div v-else class="mt-3">
+        <v-chip color="amber" variant="tonal" prepend-icon="mdi-crown" size="small">Максимальная квалификация</v-chip>
+      </div>
     </v-card>
 
     <!-- Volume cards -->
@@ -88,109 +132,72 @@
       </v-col>
     </v-row>
 
-    <!-- Mandatory GP plan (ОП по ГП) — from Expert onwards -->
-    <v-card v-if="data.mandatoryPlan" class="mb-4 pa-4">
-      <div class="d-flex align-center ga-2 mb-3">
-        <v-icon :color="data.mandatoryPlan.fulfilled ? 'success' : 'warning'">
-          {{ data.mandatoryPlan.fulfilled ? 'mdi-check-circle' : 'mdi-alert-circle' }}
-        </v-icon>
-        <span class="text-h6 font-weight-bold">Обязательный план (ОП по ГП)</span>
-      </div>
+    <!-- Показатели -->
+    <h6 class="text-h6 mb-3">Показатели</h6>
 
-      <v-row align="center">
-        <v-col cols="12" md="6">
-          <div class="d-flex justify-space-between mb-1">
-            <span class="text-body-2">Выполнение плана</span>
-            <span class="text-body-2 font-weight-bold" :class="data.mandatoryPlan.fulfilled ? 'text-success' : 'text-warning'">
-              {{ data.mandatoryPlan.fulfillment }}%
-            </span>
-          </div>
-          <v-progress-linear
-            :model-value="data.mandatoryPlan.fulfillment"
-            height="14" rounded
-            :color="data.mandatoryPlan.fulfilled ? 'success' : data.mandatoryPlan.fulfillment >= 80 ? 'warning' : 'error'" />
-          <div class="text-caption text-medium-emphasis mt-1">
-            {{ fmt(data.mandatoryPlan.currentGP) }} / {{ fmt(data.mandatoryPlan.mandatoryGP) }} баллов ГП
-          </div>
-        </v-col>
-        <v-col cols="12" md="6">
-          <v-alert v-if="!data.mandatoryPlan.fulfilled" type="warning" variant="tonal" density="compact">
-            <div class="text-body-2">
-              При невыполнении плана ГП комиссия уменьшается на <strong>{{ data.mandatoryPlan.commissionReduction }}%</strong> от ОП.
-              Баллы объёмов не уменьшаются.
-            </div>
-          </v-alert>
-          <v-alert v-else type="success" variant="tonal" density="compact">
-            <div class="text-body-2">План выполнен. Личные продажи рассчитываются по текущей квалификации.</div>
-          </v-alert>
-        </v-col>
-      </v-row>
-    </v-card>
+    <!-- Team metrics (like legacy platform) -->
+    <v-row class="mb-4">
+      <v-col cols="12" sm="6" md="3">
+        <v-card class="pa-4 text-center">
+          <v-icon size="24" color="blue" class="mb-1">mdi-account-outline</v-icon>
+          <div class="text-caption text-medium-emphasis">Партнёры 1 линии</div>
+          <div class="text-h4 font-weight-bold">{{ data.team.firstLineAll ?? 0 }}</div>
+        </v-card>
+      </v-col>
+      <v-col cols="12" sm="6" md="3">
+        <v-card class="pa-4 text-center">
+          <v-icon size="24" color="blue-darken-2" class="mb-1">mdi-account-group</v-icon>
+          <div class="text-caption text-medium-emphasis">Всего партнёров</div>
+          <div class="text-h4 font-weight-bold">{{ data.team.totalPartners ?? 0 }}</div>
+        </v-card>
+      </v-col>
+      <v-col cols="12" sm="6" md="3">
+        <v-card class="pa-4 text-center">
+          <v-icon size="24" color="green" class="mb-1">mdi-account-check</v-icon>
+          <div class="text-caption text-medium-emphasis">Активных 1 линии</div>
+          <div class="text-h4 font-weight-bold">{{ data.team.firstLineActive ?? 0 }}</div>
+        </v-card>
+      </v-col>
+      <v-col cols="12" sm="6" md="3">
+        <v-card class="pa-4 text-center">
+          <v-icon size="24" color="green-darken-2" class="mb-1">mdi-account-multiple-check</v-icon>
+          <div class="text-caption text-medium-emphasis">Всего активных</div>
+          <div class="text-h4 font-weight-bold">{{ data.team.totalPartnersActive ?? 0 }}</div>
+        </v-card>
+      </v-col>
+    </v-row>
 
-    <!-- Breakaway (Отрыв) -->
-    <v-card v-if="data.breakaway" class="mb-4 pa-4" color="amber-lighten-5" variant="tonal">
-      <div class="d-flex align-center ga-2 mb-3">
-        <v-icon color="amber-darken-2">mdi-alert-decagram</v-icon>
-        <span class="text-h6 font-weight-bold text-amber-darken-3">Отрыв зафиксирован</span>
-      </div>
-      <v-row>
-        <v-col cols="12" sm="6" md="3">
-          <div class="text-body-2 text-medium-emphasis">Ветка</div>
-          <div class="font-weight-medium">{{ data.breakaway.branchWithGapName || '—' }}</div>
-        </v-col>
-        <v-col cols="12" sm="6" md="3">
-          <div class="text-body-2 text-medium-emphasis">ГП ветки</div>
-          <div class="font-weight-medium">{{ fmt(data.breakaway.branchWithGapGroupVolume) }}</div>
-        </v-col>
-        <v-col cols="12" sm="6" md="3">
-          <div class="text-body-2 text-medium-emphasis">Разница (баллы)</div>
-          <div class="font-weight-medium">{{ fmt(data.breakaway.gapValue) }}</div>
-        </v-col>
-        <v-col cols="12" sm="6" md="3">
-          <div class="text-body-2 text-medium-emphasis">% от общего ГП</div>
-          <div class="font-weight-medium text-amber-darken-3">{{ data.breakaway.gapValuePercentage ?? 0 }}%</div>
-        </v-col>
-      </v-row>
-      <v-alert type="info" variant="tonal" density="compact" class="mt-3">
-        <div class="text-body-2">
-          Если одна ветка приносит более <strong>70%</strong> от общего объёма ГП, происходит снижение комиссионного вознаграждения от этой ветки.
-        </div>
-      </v-alert>
-    </v-card>
-
-    <!-- Breakaway rules info (if applicable to current level) -->
-    <v-card v-if="data.breakawayRules && !data.breakaway" class="mb-4 pa-4" variant="outlined">
-      <div class="d-flex align-center ga-2 mb-2">
-        <v-icon color="info" size="20">mdi-information-outline</v-icon>
-        <span class="text-body-1 font-weight-medium">Правила отрыва</span>
-      </div>
-      <div class="text-body-2 text-medium-emphasis">
-        На вашей квалификации действует правило отрыва: если одна ветка приносит более <strong>{{ data.breakawayRules.threshold }}%</strong> от общего ГП,
-        комиссия от этой ветки снижается. Отрыв не зафиксирован.
-      </div>
-    </v-card>
-
-    <!-- Pool info (from TOP FC onwards) -->
-    <v-card v-if="data.poolInfo" class="mb-4 pa-4">
-      <div class="d-flex align-center ga-2 mb-2">
-        <v-icon :color="data.poolInfo.eligible ? 'primary' : 'grey'">mdi-cash-multiple</v-icon>
-        <span class="text-h6 font-weight-bold">Пул</span>
-        <v-chip size="small" :color="data.poolInfo.eligible ? 'success' : 'error'" variant="tonal">
-          {{ data.poolInfo.eligible ? 'Участвуете' : 'Не участвуете' }}
-        </v-chip>
-      </div>
-      <div class="text-body-2 text-medium-emphasis mb-2">
-        Пул — бонус для лидерских квалификаций (от TOP FC). Рассчитывается как
-        <strong>{{ data.poolInfo.poolPercent }}%</strong> от выручки DS без НДС, поделённый на количество
-        финансовых консультантов в соответствующей квалификации.
-      </div>
-      <v-alert v-if="!data.poolInfo.eligible" type="warning" variant="tonal" density="compact">
-        {{ data.poolInfo.reason }}. Для участия в пуле необходимо выполнить план ГП на 80%.
-      </v-alert>
-    </v-card>
+    <!-- Clients block -->
+    <v-row class="mb-4">
+      <v-col cols="12" sm="6" md="4">
+        <router-link to="/clients" style="text-decoration: none; color: inherit">
+          <v-card class="pa-4 text-center" hover>
+            <v-icon size="28" color="primary" class="mb-1">mdi-account-multiple</v-icon>
+            <div class="text-caption text-medium-emphasis">Клиенты команды</div>
+            <div class="text-h4 font-weight-bold text-primary">{{ data.team.teamClients }}</div>
+          </v-card>
+        </router-link>
+      </v-col>
+      <v-col cols="12" sm="6" md="4">
+        <v-card class="pa-4 text-center">
+          <v-icon size="28" color="amber-darken-2" class="mb-1">mdi-cash-multiple</v-icon>
+          <div class="text-caption text-medium-emphasis">Капитал в управлении</div>
+          <div class="text-h4 font-weight-bold">{{ fmtUsd(data.team.capitalUsd) }}</div>
+        </v-card>
+      </v-col>
+      <v-col cols="12" sm="6" md="4">
+        <router-link to="/clients" style="text-decoration: none; color: inherit">
+          <v-card class="pa-4 text-center" hover>
+            <v-icon size="28" color="secondary" class="mb-1">mdi-account</v-icon>
+            <div class="text-caption text-medium-emphasis">Мои клиенты</div>
+            <div class="text-h4 font-weight-bold text-secondary">{{ data.team.myClients }}</div>
+          </v-card>
+        </router-link>
+      </v-col>
+    </v-row>
 
     <!-- Partners block -->
-    <h6 class="text-h6 mb-3">Партнёры</h6>
+    <h6 class="text-h6 mb-3">Партнёры по статусу</h6>
     <v-row class="mb-4">
       <v-col v-for="card in partnerCards" :key="card.label" cols="12" sm="6" md="3">
         <router-link to="/structure" style="text-decoration: none; color: inherit">
@@ -205,29 +212,6 @@
                 {{ card.diff >= 0 ? '+' : '' }}{{ card.diff }} к прошлому периоду
               </span>
             </div>
-          </v-card>
-        </router-link>
-      </v-col>
-    </v-row>
-
-    <!-- Clients block -->
-    <h6 class="text-h6 mb-3">Клиенты</h6>
-    <v-row class="mb-4">
-      <v-col cols="12" sm="6">
-        <router-link to="/clients" style="text-decoration: none; color: inherit">
-          <v-card class="pa-4 text-center" hover>
-            <v-icon size="32" color="primary" class="mb-2">mdi-account-multiple</v-icon>
-            <div class="text-body-2 text-medium-emphasis">Мои клиенты</div>
-            <div class="text-h3 font-weight-bold text-primary">{{ data.team.myClients }}</div>
-          </v-card>
-        </router-link>
-      </v-col>
-      <v-col cols="12" sm="6">
-        <router-link to="/clients" style="text-decoration: none; color: inherit">
-          <v-card class="pa-4 text-center" hover>
-            <v-icon size="32" color="secondary" class="mb-2">mdi-account-group</v-icon>
-            <div class="text-body-2 text-medium-emphasis">Клиенты команды</div>
-            <div class="text-h3 font-weight-bold text-secondary">{{ data.team.teamClients }}</div>
           </v-card>
         </router-link>
       </v-col>
@@ -339,6 +323,11 @@ import MonthPicker from '../components/MonthPicker.vue';
 import PageHeader from '../components/PageHeader.vue';
 import { fmt } from '../composables/useDesign';
 
+function fmtUsd(v) {
+  if (!v) return '0 USD';
+  return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(v) + ' USD';
+}
+
 const loading = ref(true);
 const period = ref(new Date().toISOString().slice(0, 7));
 const showLevels = ref(false);
@@ -348,7 +337,7 @@ const empty = {
   consultant: { id: 0, personName: '—', statusName: 'Партнёр', participantCode: null, active: false, ambassadorProducts: null, activityName: null },
   qualification: { nominalLevel: null, nextLevel: null },
   volumes: { personalVolume: 0, groupVolume: 0, groupVolumeCumulative: 0, prevPersonalVolume: 0, prevGroupVolume: 0, prevGroupVolumeCumulative: 0 },
-  team: { myClients: 0, teamClients: 0 },
+  team: { myClients: 0, myClientsActive: 0, teamClients: 0, teamClientsActive: 0, firstLineAll: 0, firstLineActive: 0, totalPartners: 0, totalPartnersActive: 0, capitalUsd: 0 },
   statusInfo: null,
   partners: { total: 0, registered: 0, active: 0, terminated: 0 },
   prevPartners: { total: 0, registered: 0, active: 0, terminated: 0 },

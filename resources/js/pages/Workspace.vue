@@ -45,6 +45,10 @@
               <div class="text-center">
                 <div class="text-caption text-medium-emphasis">Квалификация</div>
                 <div class="text-body-1 font-weight-bold">{{ data.partnerStats.qualification }}</div>
+                <div v-if="data.partnerStats.levelsDontMatch" class="text-caption text-warning">
+                  Расчёт: {{ data.partnerStats.calcQualification }} ({{ data.partnerStats.calcPercent }}%)
+                </div>
+                <div v-else class="text-caption text-medium-emphasis">{{ data.partnerStats.percent }}%</div>
               </div>
             </v-col>
             <v-col cols="6" sm="4" md="2">

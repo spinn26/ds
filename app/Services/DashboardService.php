@@ -47,18 +47,16 @@ class DashboardService
             ->orderByDesc('date')
             ->first();
 
-        // Client counts
-        $myClientsCount = Client::where('consultant', $consultant->id)
-            ->where('active', true)
-            ->count();
+        // Client counts (all clients, not just active — matches legacy platform)
+        $myClientsCount = Client::where('consultant', $consultant->id)->count();
+        $myClientsActive = Client::where('consultant', $consultant->id)->where('active', true)->count();
 
         // Team consultants (full tree — all levels deep)
         $teamConsultantIds = $this->consultantService->getAllDescendants($consultant->id);
         $teamConsultantIds[] = $consultant->id;
 
-        $teamClientsCount = Client::whereIn('consultant', $teamConsultantIds)
-            ->where('active', true)
-            ->count();
+        $teamClientsCount = Client::whereIn('consultant', $teamConsultantIds)->count();
+        $teamClientsActive = Client::whereIn('consultant', $teamConsultantIds)->where('active', true)->count();
 
         // Capital under management (from clientsIndicators)
         $capitalUsd = DB::table('clientsIndicators')
@@ -67,20 +65,43 @@ class DashboardService
             ->where('clientsIndicators.indicator', 1)
             ->sum('clientsIndicators.valueUsd');
 
-        // Status level info
-        $statusLevel = null;
+        // Status level info — separate nominal (closed qualification) from calculation (commission) level
+        $nominalStatusLevel = null;
+        $calcStatusLevel = null;
         $nextLevel = null;
         if ($currentQLog) {
-            $statusLevel = DB::table('status_levels')
-                ->where('id', $currentQLog->calculationLevel ?? $currentQLog->nominalLevel)
-                ->first();
+            // Nominal level = закрытая квалификация (based on НГП thresholds)
+            if ($currentQLog->nominalLevel) {
+                $nominalStatusLevel = DB::table('status_levels')
+                    ->where('id', $currentQLog->nominalLevel)
+                    ->first();
+            }
 
-            if ($statusLevel) {
+            // Calculation level = уровень расчёта комиссии (may differ due to breakaway/gaps)
+            if ($currentQLog->calculationLevel) {
+                $calcStatusLevel = DB::table('status_levels')
+                    ->where('id', $currentQLog->calculationLevel)
+                    ->first();
+            }
+
+            // Fallback: if only one is set, use it for both
+            if (!$nominalStatusLevel && $calcStatusLevel) {
+                $nominalStatusLevel = $calcStatusLevel;
+            }
+            if (!$calcStatusLevel && $nominalStatusLevel) {
+                $calcStatusLevel = $nominalStatusLevel;
+            }
+
+            // Next level based on nominal (for НГП progress)
+            if ($nominalStatusLevel) {
                 $nextLevel = DB::table('status_levels')
-                    ->where('level', ($statusLevel->level ?? 0) + 1)
+                    ->where('level', ($nominalStatusLevel->level ?? 0) + 1)
                     ->first();
             }
         }
+
+        // Use calcStatusLevel for commission-related calculations (ОП, пул, отрыв)
+        $statusLevel = $calcStatusLevel;
 
         // Consultant status name
         $statusName = null;
@@ -123,22 +144,20 @@ class DashboardService
         // Previous period partner counts for comparison
         $prevPartnerCounts = $this->consultantService->getPrevPartnerCounts($consultant->id, $teamConsultantIds, $prevPeriodEnd);
 
-        // First-line counts
-        $firstLineResidents = DB::table('consultantStructure')
-            ->join('consultant', 'consultantStructure.child', '=', 'consultant.id')
-            ->where('consultantStructure.parent', $consultant->id)
-            ->where('consultant.active', true)
+        // First-line counts (via inviter chain — matches legacy platform)
+        $firstLineAll = DB::table('consultant')
+            ->where('inviter', $consultant->id)
+            ->whereNull('dateDeleted')
             ->count();
 
-        $firstLineConsultants = DB::table('consultantStructure')
-            ->join('consultant', 'consultantStructure.child', '=', 'consultant.id')
-            ->join('status', 'consultant.status', '=', 'status.id')
-            ->where('consultantStructure.parent', $consultant->id)
-            ->where('consultant.active', true)
-            ->where('status.title', 'Партнёр')
+        $firstLineActive = DB::table('consultant')
+            ->where('inviter', $consultant->id)
+            ->whereNull('dateDeleted')
+            ->where('active', true)
             ->count();
 
-        $totalConsultants = Consultant::whereIn('id', $teamConsultantIds)
+        $totalConsultants = count($teamConsultantIds);
+        $totalConsultantsActive = Consultant::whereIn('id', $teamConsultantIds)
             ->where('active', true)
             ->count();
 
@@ -208,19 +227,29 @@ class DashboardService
             ],
             'statusInfo' => $statusInfo,
             'qualification' => [
-                'nominalLevel' => $statusLevel ? [
-                    'id' => $statusLevel->id,
-                    'level' => $statusLevel->level,
-                    'title' => $statusLevel->title,
-                    'percent' => $statusLevel->percent,
-                    'groupVolume' => $statusLevel->groupVolume ?? 0,
-                    'mandatoryGP' => $statusLevel->mandatoryGP ?? 0,
-                    'groupVolumeCumulative' => $statusLevel->groupVolumeCumulative ?? 0,
-                    'personalVolume' => $statusLevel->personalVolume ?? 0,
-                    'otrif' => $statusLevel->otrif ?? 0,
-                    'pool' => $statusLevel->pool ?? 0,
-                    'dsShare' => $statusLevel->dsShare ?? 0,
+                // Закрытая квалификация (по НГП)
+                'nominalLevel' => $nominalStatusLevel ? [
+                    'id' => $nominalStatusLevel->id,
+                    'level' => $nominalStatusLevel->level,
+                    'title' => $nominalStatusLevel->title,
+                    'percent' => $nominalStatusLevel->percent,
+                    'groupVolume' => $nominalStatusLevel->groupVolume ?? 0,
+                    'mandatoryGP' => $nominalStatusLevel->mandatoryGP ?? 0,
+                    'groupVolumeCumulative' => $nominalStatusLevel->groupVolumeCumulative ?? 0,
+                    'personalVolume' => $nominalStatusLevel->personalVolume ?? 0,
+                    'otrif' => $nominalStatusLevel->otrif ?? 0,
+                    'pool' => $nominalStatusLevel->pool ?? 0,
+                    'dsShare' => $nominalStatusLevel->dsShare ?? 0,
                 ] : null,
+                // Уровень расчёта комиссии (может отличаться из-за отрыва)
+                'calculationLevel' => $calcStatusLevel ? [
+                    'id' => $calcStatusLevel->id,
+                    'level' => $calcStatusLevel->level,
+                    'title' => $calcStatusLevel->title,
+                    'percent' => $calcStatusLevel->percent,
+                ] : null,
+                // Уровни не совпадают (отрыв/снижение)
+                'levelsDontMatch' => $currentQLog->levelsDontMatch ?? false,
                 'nextLevel' => $nextLevel ? [
                     'id' => $nextLevel->id,
                     'level' => $nextLevel->level,
@@ -245,11 +274,13 @@ class DashboardService
             ],
             'team' => [
                 'myClients' => $myClientsCount,
+                'myClientsActive' => $myClientsActive,
                 'teamClients' => $teamClientsCount,
-                'firstLineResidents' => $firstLineResidents,
-                'totalResidents' => count($teamConsultantIds),
-                'firstLineConsultants' => $firstLineConsultants,
-                'totalConsultants' => $totalConsultants,
+                'teamClientsActive' => $teamClientsActive,
+                'firstLineAll' => $firstLineAll,
+                'firstLineActive' => $firstLineActive,
+                'totalPartners' => $totalConsultants,
+                'totalPartnersActive' => $totalConsultantsActive,
                 'capitalUsd' => round((float) $capitalUsd, 2),
             ],
             'partners' => $partnerCounts,

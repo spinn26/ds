@@ -126,9 +126,27 @@ class WorkspaceController extends Controller
             ->orderByDesc('date')
             ->first();
 
-        $level = null;
-        if ($consultant->status_and_lvl) {
-            $level = DB::table('status_levels')->where('id', $consultant->status_and_lvl)->first();
+        // Nominal level = закрытая квалификация (by НГП)
+        $nominalLevel = null;
+        if ($qLog && $qLog->nominalLevel) {
+            $nominalLevel = DB::table('status_levels')->where('id', $qLog->nominalLevel)->first();
+        }
+
+        // Calculation level = уровень расчёта комиссии
+        $calcLevel = null;
+        if ($qLog && $qLog->calculationLevel) {
+            $calcLevel = DB::table('status_levels')->where('id', $qLog->calculationLevel)->first();
+        }
+
+        // Fallback to status_and_lvl
+        if (!$nominalLevel && $consultant->status_and_lvl) {
+            $nominalLevel = DB::table('status_levels')->where('id', $consultant->status_and_lvl)->first();
+        }
+        if (!$calcLevel) {
+            $calcLevel = $nominalLevel;
+        }
+        if (!$nominalLevel) {
+            $nominalLevel = $calcLevel;
         }
 
         $clientCount = DB::table('client')
@@ -140,12 +158,17 @@ class WorkspaceController extends Controller
             ->whereNull('dateDeleted')
             ->count();
 
+        $levelsDontMatch = $nominalLevel && $calcLevel && $nominalLevel->id !== $calcLevel->id;
+
         return [
             'personalVolume' => round((float) ($qLog->personalVolume ?? $consultant->personalVolume ?? 0), 2),
             'groupVolume' => round((float) ($qLog->groupVolume ?? $consultant->groupVolume ?? 0), 2),
             'groupVolumeCumulative' => round((float) ($qLog->groupVolumeCumulative ?? $consultant->groupVolumeCumulative ?? 0), 2),
-            'qualification' => $level ? "{$level->level} [{$level->title}]" : '—',
-            'percent' => $level ? $level->percent : 0,
+            'qualification' => $nominalLevel ? "{$nominalLevel->level} [{$nominalLevel->title}]" : '—',
+            'percent' => $calcLevel ? $calcLevel->percent : 0,
+            'calcQualification' => $levelsDontMatch ? "{$calcLevel->level} [{$calcLevel->title}]" : null,
+            'calcPercent' => $calcLevel ? $calcLevel->percent : 0,
+            'levelsDontMatch' => $levelsDontMatch,
             'clientCount' => $clientCount,
             'teamCount' => $childrenCount,
         ];
