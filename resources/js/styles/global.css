@@ -1,107 +1,169 @@
-/* DS Consulting Design System — Global Styles */
+/* DS Consulting Design System — Airy & Rounded */
 
-/* Smooth transitions for theme switching */
+/* Smooth transitions */
 * {
-  transition: background-color 0.2s ease, color 0.1s ease, border-color 0.2s ease;
+  transition: background-color 0.2s ease, color 0.1s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-/* Card hover effect */
-.v-card:not(.v-card--disabled):hover {
-  transition: box-shadow 0.2s ease;
+/* Softer card style — no hard shadows, subtle border */
+.v-card {
+  border-color: rgba(0, 0, 0, 0.06) !important;
+}
+.v-theme--dark .v-card {
+  border-color: rgba(255, 255, 255, 0.06) !important;
 }
 
-/* Scrollbar styling */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.15);
-  border-radius: 3px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.3);
+/* Card hover — gentle lift */
+.v-card--hover:hover,
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08) !important;
 }
 
-/* Dark mode scrollbar */
-.v-theme--dark ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.15);
+/* Softer table */
+.v-data-table {
+  border-radius: 16px !important;
+  overflow: hidden;
 }
-.v-theme--dark ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.3);
+.v-data-table .v-table__wrapper {
+  overflow-x: auto;
+}
+.v-data-table thead th {
+  font-weight: 600 !important;
+  text-transform: uppercase;
+  font-size: 0.7rem !important;
+  letter-spacing: 0.5px;
+  color: rgba(0, 0, 0, 0.5) !important;
+}
+.v-theme--dark .v-data-table thead th {
+  color: rgba(255, 255, 255, 0.5) !important;
 }
 
-/* Table row click cursor */
-.v-data-table tbody tr {
-  cursor: default;
+/* Scrollbar — thin and rounded */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.12); border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(0, 0, 0, 0.25); }
+.v-theme--dark ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.12); }
+.v-theme--dark ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.25); }
+
+/* Navigation drawer — soft shadow */
+.v-navigation-drawer {
+  border-right: none !important;
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.04) !important;
+}
+.v-theme--dark .v-navigation-drawer {
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.3) !important;
 }
 
-/* Consistent page transitions */
-.v-main {
-  min-height: 100vh;
+/* App bar — glass effect */
+.topbar {
+  backdrop-filter: blur(12px) saturate(180%);
+  background: rgba(255, 255, 255, 0.85) !important;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05) !important;
+}
+.v-theme--dark .topbar {
+  background: rgba(15, 20, 25, 0.85) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+}
+
+/* Sidebar menu items — rounded and airy */
+.menu-item {
+  margin-bottom: 2px !important;
+  transition: all 0.15s ease;
+}
+.menu-item:hover {
+  background: rgba(67, 160, 71, 0.06);
+}
+.v-theme--dark .menu-item:hover {
+  background: rgba(102, 187, 106, 0.08);
+}
+
+/* Menu group header */
+.menu-group-header {
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-size: 0.65rem !important;
+  opacity: 0.7;
+  padding-top: 16px !important;
+}
+
+/* Chip — softer look */
+.v-chip {
+  font-weight: 500 !important;
+}
+
+/* Dialog — floating feel */
+.v-dialog > .v-overlay__content > .v-card {
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.12) !important;
+}
+
+/* Input fields — softer border */
+.v-field--variant-outlined .v-field__outline {
+  opacity: 0.3;
+}
+.v-field--variant-outlined:hover .v-field__outline {
+  opacity: 0.5;
+}
+.v-field--variant-outlined.v-field--focused .v-field__outline {
+  opacity: 1;
 }
 
 /* Chat bubbles */
 .chat-bubble-incoming {
-  background: rgba(0, 0, 0, 0.06);
-  border-radius: 4px 16px 16px 16px;
-  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 4px 20px 20px 20px;
+  padding: 10px 14px;
 }
 .chat-bubble-outgoing {
-  background: var(--v-theme-primary);
-  color: white;
-  border-radius: 16px 4px 16px 16px;
-  padding: 8px 12px;
+  border-radius: 20px 4px 20px 20px;
+  padding: 10px 14px;
+}
+
+/* Alert — softer */
+.v-alert {
+  border: none !important;
 }
 
 /* Stat cards */
 .stat-card {
-  transition: transform 0.15s ease;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  cursor: default;
 }
-.stat-card:hover {
-  transform: translateY(-2px);
+
+/* Expansion panels — rounded */
+.v-expansion-panels {
+  border-radius: 16px !important;
+  overflow: hidden;
+}
+
+/* Pagination — rounded */
+.v-pagination__item .v-btn {
+  border-radius: 12px !important;
 }
 
 /* Focus visible for accessibility */
 :focus-visible {
   outline: 2px solid var(--v-theme-primary);
   outline-offset: 2px;
+  border-radius: 8px;
 }
 
-/* Print styles */
-/* Table horizontal scroll on mobile */
-.v-table__wrapper {
-  overflow-x: auto;
-}
-.v-data-table {
-  overflow-x: auto;
-}
-
-/* Responsive font sizes */
+/* Responsive fonts */
 @media (max-width: 600px) {
+  .text-h3 { font-size: 1.75rem !important; }
   .text-h4 { font-size: 1.5rem !important; }
   .text-h5 { font-size: 1.25rem !important; }
-  .text-h3 { font-size: 1.75rem !important; }
 }
 
-/* Touch-friendly minimum button size */
+/* Touch-friendly buttons */
 @media (max-width: 600px) {
-  .v-btn:not(.v-btn--icon) {
-    min-height: 40px;
-  }
+  .v-btn:not(.v-btn--icon) { min-height: 40px; }
 }
 
+/* Print */
 @media print {
-  .v-navigation-drawer,
-  .v-app-bar,
-  .v-btn,
-  .v-fab {
-    display: none !important;
-  }
-  .v-main {
-    padding: 0 !important;
-  }
+  .v-navigation-drawer, .v-app-bar, .v-btn, .v-fab { display: none !important; }
+  .v-main { padding: 0 !important; }
+  .v-card { border: 1px solid #ddd !important; box-shadow: none !important; }
 }
