@@ -1,16 +1,12 @@
 <template>
   <div>
-    <div class="d-flex align-center ga-2 mb-4">
-      <v-icon size="32" color="primary">mdi-file-document-edit</v-icon>
-      <h5 class="text-h5 font-weight-bold">Менеджер контрактов</h5>
-      <v-chip size="small" color="primary">{{ total }}</v-chip>
-    </div>
+    <PageHeader title="Менеджер контрактов" icon="mdi-file-document-edit" :count="total" />
 
     <v-card class="mb-3 pa-3">
       <div class="d-flex ga-2 flex-wrap align-center">
-        <v-text-field v-model="search" placeholder="Поиск по номеру, клиенту..." density="compact" variant="outlined"
+        <v-text-field v-model="search" placeholder="Поиск по номеру, клиенту..."
           rounded prepend-inner-icon="mdi-magnify" clearable hide-details style="max-width:300px" @update:model-value="debouncedLoad" />
-        <v-select v-model="statusFilter" :items="statusOptions" label="Статус" density="compact" variant="outlined"
+        <v-select v-model="statusFilter" :items="statusOptions" label="Статус"
           clearable hide-details style="max-width:200px" @update:model-value="loadData" />
         <v-chip v-if="activeFilterCount > 0" size="small" color="info" variant="tonal" class="ml-1">
           {{ activeFilterCount }} {{ activeFilterCount === 1 ? 'фильтр' : 'фильтра' }}
@@ -21,8 +17,7 @@
     </v-card>
 
     <v-data-table-server :items="items" :items-length="total" :loading="loading"
-      :headers="headers" :items-per-page="25" @update:options="onOptions"
-      density="compact" hover>
+      :headers="headers" :items-per-page="25" @update:options="onOptions">
       <template #item.ammount="{ item }">
         {{ fmt(item.ammount) }} {{ item.currencySymbol }}
       </template>
@@ -41,12 +36,7 @@
           :context-label="`Контракт #${item.number || item.id}`"
         />
       </template>
-      <template #no-data>
-        <div class="text-center pa-4">
-          <v-icon size="48" color="grey-lighten-1" class="mb-2">mdi-file-search-outline</v-icon>
-          <div class="text-medium-emphasis">Данные не найдены</div>
-        </div>
-      </template>
+      <template #no-data><EmptyState /></template>
     </v-data-table-server>
   </div>
 </template>
@@ -55,6 +45,9 @@
 import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
 import StartChatButton from '../../components/StartChatButton.vue';
+import PageHeader from '../../components/PageHeader.vue';
+import EmptyState from '../../components/EmptyState.vue';
+import { fmt, fmtDate } from '../../composables/useDesign';
 
 const items = ref([]);
 const total = ref(0);
@@ -75,9 +68,6 @@ const headers = [
   { title: 'Статус', key: 'statusName', width: 130 },
   { title: '', key: 'chat', sortable: false, width: 50 },
 ];
-
-const fmt = (n) => Number(n || 0).toLocaleString('ru-RU');
-function fmtDate(d) { if (!d) return '—'; try { return new Date(d).toLocaleDateString('ru-RU'); } catch { return d; } }
 
 const activeFilterCount = computed(() => {
   let c = 0;

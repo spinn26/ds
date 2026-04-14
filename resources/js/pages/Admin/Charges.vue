@@ -1,19 +1,16 @@
 <template>
   <div>
-    <div class="d-flex justify-space-between align-center mb-4 flex-wrap ga-2">
-      <div class="d-flex align-center ga-2">
-        <v-icon size="32" color="primary">mdi-cash-plus</v-icon>
-        <h5 class="text-h5 font-weight-bold">Прочие начисления</h5>
-        <v-chip size="small" color="primary">{{ total }}</v-chip>
-      </div>
-      <v-btn color="primary" prepend-icon="mdi-plus" @click="openCreate">Добавить начисление</v-btn>
-    </div>
+    <PageHeader title="Прочие начисления" icon="mdi-cash-plus" :count="total">
+      <template #actions>
+        <v-btn color="primary" prepend-icon="mdi-plus" @click="openCreate">Добавить начисление</v-btn>
+      </template>
+    </PageHeader>
 
     <v-card class="mb-3 pa-3">
       <div class="d-flex ga-2 flex-wrap align-center">
-        <v-text-field v-model="search" placeholder="Поиск по партнёру..." density="compact" variant="outlined"
+        <v-text-field v-model="search" placeholder="Поиск по партнёру..."
           rounded prepend-inner-icon="mdi-magnify" clearable hide-details style="max-width:300px" @update:model-value="debouncedLoad" />
-        <v-select v-model="typeFilter" :items="typeOptions" label="Тип" density="compact" variant="outlined"
+        <v-select v-model="typeFilter" :items="typeOptions" label="Тип"
           clearable hide-details style="max-width:200px" @update:model-value="loadData" />
         <v-chip v-if="activeFilterCount > 0" size="small" color="info" variant="tonal" class="ml-1">
           {{ activeFilterCount }} {{ activeFilterCount === 1 ? 'фильтр' : 'фильтра' }}
@@ -24,7 +21,7 @@
     </v-card>
 
     <v-data-table-server :items="items" :items-length="total" :loading="loading"
-      :headers="headers" :items-per-page="25" @update:options="onOptions" density="compact" hover>
+      :headers="headers" :items-per-page="25" @update:options="onOptions">
       <template #item.type="{ value }">
         <v-chip size="x-small" :color="typeColor(value)">{{ typeLabel(value) }}</v-chip>
       </template>
@@ -36,12 +33,7 @@
       <template #item.actions="{ item }">
         <v-btn icon="mdi-delete" size="x-small" variant="text" color="error" @click="confirmDelete(item)" />
       </template>
-      <template #no-data>
-        <div class="text-center pa-4">
-          <v-icon size="48" color="grey-lighten-1" class="mb-2">mdi-file-search-outline</v-icon>
-          <div class="text-medium-emphasis">Начисления не найдены</div>
-        </div>
-      </template>
+      <template #no-data><EmptyState message="Начисления не найдены" /></template>
     </v-data-table-server>
 
     <!-- Create dialog -->
@@ -50,13 +42,13 @@
         <v-card-title>Новое начисление</v-card-title>
         <v-card-text>
           <v-autocomplete v-model="form.consultant" :items="consultantOptions" item-title="personName" item-value="id"
-            label="Партнёр *" density="compact" variant="outlined" :loading="searchingConsultants"
+            label="Партнёр *" :loading="searchingConsultants"
             @update:search="searchConsultants" no-data-text="Начните вводить ФИО" class="mb-3" />
-          <v-select v-model="form.type" :items="typeOptions" label="Тип *" density="compact" variant="outlined" class="mb-3" />
-          <v-text-field v-model.number="form.amount" label="Сумма (₽) *" type="number" density="compact" variant="outlined" class="mb-3" />
-          <v-text-field v-model.number="form.points" label="Баллы" type="number" density="compact" variant="outlined" class="mb-3" />
-          <v-text-field v-model="form.accrual_date" label="Дата начисления" type="date" density="compact" variant="outlined" class="mb-3" />
-          <v-textarea v-model="form.comment" label="Комментарий" density="compact" variant="outlined" rows="2" />
+          <v-select v-model="form.type" :items="typeOptions" label="Тип *" class="mb-3" />
+          <v-text-field v-model.number="form.amount" label="Сумма (₽) *" type="number" class="mb-3" />
+          <v-text-field v-model.number="form.points" label="Баллы" type="number" class="mb-3" />
+          <v-text-field v-model="form.accrual_date" label="Дата начисления" type="date" class="mb-3" />
+          <v-textarea v-model="form.comment" label="Комментарий" rows="2" />
           <v-alert v-if="formError" type="error" density="compact" class="mt-2">{{ formError }}</v-alert>
         </v-card-text>
         <v-card-actions>
@@ -89,6 +81,9 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
+import PageHeader from '../../components/PageHeader.vue';
+import EmptyState from '../../components/EmptyState.vue';
+import { fmt2 as fmt, fmtDate } from '../../composables/useDesign';
 
 const items = ref([]);
 const total = ref(0);
@@ -123,8 +118,6 @@ const headers = [
   { title: '', key: 'actions', sortable: false, width: 50 },
 ];
 
-const fmt = (n) => Number(n || 0).toLocaleString('ru-RU', { minimumFractionDigits: 2 });
-function fmtDate(d) { if (!d) return '—'; try { return new Date(d).toLocaleDateString('ru-RU'); } catch { return d; } }
 function typeLabel(t) { return { bonus: 'Бонус', penalty: 'Штраф', compensation: 'Компенсация' }[t] || t; }
 function typeColor(t) { return { bonus: 'success', penalty: 'error', compensation: 'info' }[t] || 'grey'; }
 

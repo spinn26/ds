@@ -3,8 +3,9 @@
     <!-- Welcome header -->
     <div class="d-flex justify-space-between align-center mb-4 flex-wrap ga-2">
       <div>
-        <h4 class="text-h4 font-weight-bold">
-          {{ greeting }}, {{ auth.user?.firstName }}! 👋
+        <h4 class="text-h4 font-weight-bold d-flex align-center ga-2">
+          <v-icon size="32" color="primary">mdi-hand-wave</v-icon>
+          {{ greeting }}, {{ auth.user?.firstName }}!
         </h4>
         <div class="text-body-1 text-medium-emphasis">Рабочий стол DS Consulting</div>
       </div>
@@ -255,6 +256,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { useAuthStore } from '../stores/auth';
 import api from '../api';
+import { fmt, fmtDate } from '../composables/useDesign';
 
 const auth = useAuthStore();
 const loading = ref(true);
@@ -270,8 +272,6 @@ const greeting = computed(() => {
   return 'Добрый вечер';
 });
 
-const fmt = (n) => Number(n || 0).toLocaleString('ru-RU');
-function fmtDate(d) { if (!d) return '—'; try { return new Date(d).toLocaleDateString('ru-RU'); } catch { return d; } }
 function copyText(text) { navigator.clipboard.writeText(text); }
 function openTelegram(nick) {
   const clean = nick.replace('@', '');

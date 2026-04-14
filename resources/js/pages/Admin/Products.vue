@@ -1,22 +1,20 @@
 <template>
   <div>
-    <div class="d-flex justify-space-between align-center mb-4 flex-wrap ga-2">
-      <div class="d-flex align-center ga-2">
-        <v-icon size="32" color="primary">mdi-package-variant-closed</v-icon>
-        <h5 class="text-h5 font-weight-bold">Продукты и программы</h5>
-      </div>
-      <v-btn color="primary" prepend-icon="mdi-plus" @click="openCreateProduct">Добавить продукт</v-btn>
-    </div>
+    <PageHeader title="Продукты и программы" icon="mdi-package-variant-closed">
+      <template #actions>
+        <v-btn color="primary" prepend-icon="mdi-plus" @click="openCreateProduct">Добавить продукт</v-btn>
+      </template>
+    </PageHeader>
 
     <!-- Filters -->
     <v-card class="mb-4 pa-3">
       <v-row dense>
         <v-col cols="12" sm="4">
           <v-text-field v-model="filters.search" label="Поиск по названию" prepend-inner-icon="mdi-magnify"
-            density="compact" variant="outlined" rounded clearable hide-details @update:model-value="debouncedLoad" />
+            rounded clearable hide-details @update:model-value="debouncedLoad" />
         </v-col>
         <v-col cols="12" sm="3">
-          <v-select v-model="filters.active" label="Статус" :items="activeOptions" density="compact"
+          <v-select v-model="filters.active" label="Статус" :items="activeOptions"
             clearable hide-details @update:model-value="loadProducts" />
         </v-col>
         <v-col cols="12" sm="2" class="d-flex align-center ga-1">
@@ -41,8 +39,6 @@
         show-expand
         @update:page="page = $event; loadProducts()"
         @click:row="(e, { item }) => toggleExpand(item)"
-        density="compact"
-        hover
       >
         <template #item.active="{ item }">
           <v-chip :color="item.active ? 'success' : 'grey'" size="x-small">
@@ -100,12 +96,7 @@
             </td>
           </tr>
         </template>
-        <template #no-data>
-          <div class="text-center pa-4">
-            <v-icon size="48" color="grey-lighten-1" class="mb-2">mdi-file-search-outline</v-icon>
-            <div class="text-medium-emphasis">Данные не найдены</div>
-          </div>
-        </template>
+        <template #no-data><EmptyState /></template>
       </v-data-table-server>
     </v-card>
 
@@ -230,6 +221,8 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue';
 import api from '../../api';
+import PageHeader from '../../components/PageHeader.vue';
+import EmptyState from '../../components/EmptyState.vue';
 
 const loading = ref(false);
 const saving = ref(false);

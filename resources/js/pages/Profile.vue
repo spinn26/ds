@@ -1,6 +1,6 @@
 <template>
   <div>
-    <h5 class="text-h5 font-weight-bold mb-4">Профиль</h5>
+    <PageHeader title="Профиль" icon="mdi-account" />
 
     <v-tabs v-model="tab" color="primary" class="mb-4">
       <v-tab value="info">Информация о партнере</v-tab>
@@ -261,6 +261,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import api from '../api';
+import PageHeader from '../components/PageHeader.vue';
 
 const loading = ref(true);
 const tab = ref('info');

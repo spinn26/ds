@@ -1,19 +1,16 @@
 <template>
   <div>
-    <div class="d-flex align-center ga-2 mb-4">
-      <v-icon size="32" color="primary">mdi-sitemap</v-icon>
-      <h5 class="text-h5 font-weight-bold">Структура моей команды</h5>
-    </div>
+    <PageHeader title="Структура моей команды" icon="mdi-sitemap" />
 
     <v-card class="mb-3 pa-3">
       <div class="d-flex ga-2 flex-wrap align-center">
-        <v-text-field v-model="filters.search" placeholder="ФИО партнёра..." density="compact" variant="outlined"
+        <v-text-field v-model="filters.search" placeholder="ФИО партнёра..."
           rounded prepend-inner-icon="mdi-magnify" clearable hide-details style="max-width:240px" @update:model-value="debouncedLoad" />
-        <v-select v-model="filters.qualification" :items="qualificationOptions" label="Квалификация" density="compact" variant="outlined"
+        <v-select v-model="filters.qualification" :items="qualificationOptions" label="Квалификация"
           multiple clearable hide-details style="max-width:240px" @update:model-value="loadData" />
-        <v-select v-model="filters.levels" :items="qualificationOptions" label="Уровни" density="compact" variant="outlined"
+        <v-select v-model="filters.levels" :items="qualificationOptions" label="Уровни"
           multiple clearable hide-details style="max-width:240px" @update:model-value="loadData" />
-        <v-select v-model="filters.status" :items="statusOptions" label="Статус" density="compact" variant="outlined"
+        <v-select v-model="filters.status" :items="statusOptions" label="Статус"
           multiple clearable hide-details style="max-width:240px" @update:model-value="loadData" />
         <v-btn variant="text" size="small" :prepend-icon="showAdvanced ? 'mdi-chevron-up' : 'mdi-chevron-down'"
           @click="showAdvanced = !showAdvanced">Доп. фильтры</v-btn>
@@ -25,27 +22,27 @@
       </div>
       <v-expand-transition>
         <div v-if="showAdvanced" class="d-flex ga-2 flex-wrap align-center mt-3">
-          <v-text-field v-model="filters.birth_date_from" label="Дата рождения с" type="date" density="compact" variant="outlined"
+          <v-text-field v-model="filters.birth_date_from" label="Дата рождения с" type="date"
             hide-details style="max-width:170px" @update:model-value="debouncedLoad" />
-          <v-text-field v-model="filters.birth_date_to" label="Дата рождения по" type="date" density="compact" variant="outlined"
+          <v-text-field v-model="filters.birth_date_to" label="Дата рождения по" type="date"
             hide-details style="max-width:170px" @update:model-value="debouncedLoad" />
-          <v-text-field v-model="filters.city" placeholder="Город" density="compact" variant="outlined"
+          <v-text-field v-model="filters.city" placeholder="Город"
             hide-details style="max-width:180px" @update:model-value="debouncedLoad" />
-          <v-text-field v-model="filters.lp_min" placeholder="ЛП от" type="number" density="compact" variant="outlined"
+          <v-text-field v-model="filters.lp_min" placeholder="ЛП от" type="number"
             hide-details style="max-width:110px" @update:model-value="debouncedLoad" />
-          <v-text-field v-model="filters.lp_max" placeholder="ЛП до" type="number" density="compact" variant="outlined"
+          <v-text-field v-model="filters.lp_max" placeholder="ЛП до" type="number"
             hide-details style="max-width:110px" @update:model-value="debouncedLoad" />
-          <v-text-field v-model="filters.gp_min" placeholder="ГП от" type="number" density="compact" variant="outlined"
+          <v-text-field v-model="filters.gp_min" placeholder="ГП от" type="number"
             hide-details style="max-width:110px" @update:model-value="debouncedLoad" />
-          <v-text-field v-model="filters.gp_max" placeholder="ГП до" type="number" density="compact" variant="outlined"
+          <v-text-field v-model="filters.gp_max" placeholder="ГП до" type="number"
             hide-details style="max-width:110px" @update:model-value="debouncedLoad" />
-          <v-text-field v-model="filters.ngp_min" placeholder="НГП от" type="number" density="compact" variant="outlined"
+          <v-text-field v-model="filters.ngp_min" placeholder="НГП от" type="number"
             hide-details style="max-width:110px" @update:model-value="debouncedLoad" />
-          <v-text-field v-model="filters.ngp_max" placeholder="НГП до" type="number" density="compact" variant="outlined"
+          <v-text-field v-model="filters.ngp_max" placeholder="НГП до" type="number"
             hide-details style="max-width:110px" @update:model-value="debouncedLoad" />
-          <v-text-field v-model="filters.termination_from" label="Терминация с" type="date" density="compact" variant="outlined"
+          <v-text-field v-model="filters.termination_from" label="Терминация с" type="date"
             hide-details style="max-width:170px" @update:model-value="debouncedLoad" />
-          <v-text-field v-model="filters.termination_to" label="Терминация по" type="date" density="compact" variant="outlined"
+          <v-text-field v-model="filters.termination_to" label="Терминация по" type="date"
             hide-details style="max-width:170px" @update:model-value="debouncedLoad" />
         </div>
       </v-expand-transition>
@@ -90,10 +87,7 @@
             </tr>
           </template>
           <tr v-if="!flatRows.length && !loading">
-            <td colspan="8" class="text-center pa-6">
-              <v-icon size="48" color="grey-lighten-1" class="mb-2">mdi-file-search-outline</v-icon>
-              <div class="text-medium-emphasis">Данные не найдены</div>
-            </td>
+            <td colspan="8"><EmptyState /></td>
           </tr>
         </tbody>
       </v-table>
@@ -107,6 +101,9 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import api from '../api';
+import PageHeader from '../components/PageHeader.vue';
+import EmptyState from '../components/EmptyState.vue';
+import { fmt } from '../composables/useDesign';
 
 const loading = ref(false);
 const showAdvanced = ref(false);
@@ -159,8 +156,6 @@ const filters = ref({
   lp_min: '', lp_max: '', gp_min: '', gp_max: '', ngp_min: '', ngp_max: '',
   termination_from: '', termination_to: '',
 });
-
-const fmt = (n) => Number(n || 0).toLocaleString('ru-RU');
 
 let uidCounter = 0;
 function enrichRows(rows, depth = 0) {

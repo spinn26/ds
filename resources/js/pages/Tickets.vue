@@ -1,13 +1,11 @@
 <template>
   <div>
-    <div class="d-flex justify-space-between align-center mb-4 flex-wrap ga-2">
-      <div class="d-flex align-center ga-2">
-        <v-icon size="32" color="primary">mdi-ticket-outline</v-icon>
-        <h5 class="text-h5 font-weight-bold">Обратная связь</h5>
-        <v-badge v-if="totalUnread > 0" :content="totalUnread" color="error" inline />
-      </div>
-      <v-btn color="primary" prepend-icon="mdi-plus" @click="openCreateDialog">Новое обращение</v-btn>
-    </div>
+    <PageHeader title="Обратная связь" icon="mdi-ticket-outline">
+      <template #actions>
+        <v-badge v-if="totalUnread > 0" :content="totalUnread" color="error" inline class="mr-2" />
+        <v-btn color="primary" prepend-icon="mdi-plus" @click="openCreateDialog">Новое обращение</v-btn>
+      </template>
+    </PageHeader>
 
     <!-- Mobile: toggle between list and chat -->
     <div v-if="mobile && selectedTicket" class="mb-2">
@@ -71,10 +69,7 @@
               <v-divider />
             </template>
             <v-list-item v-if="!tickets.length && !loadingTickets">
-              <div class="text-center pa-6 w-100">
-                <v-icon size="48" color="grey-lighten-1" class="mb-2">mdi-ticket-outline</v-icon>
-                <div class="text-medium-emphasis">Нет обращений</div>
-              </div>
+              <EmptyState icon="mdi-ticket-outline" message="Нет обращений" />
             </v-list-item>
           </v-list>
 
@@ -141,10 +136,7 @@
                 </div>
               </div>
             </div>
-            <div v-if="!messages.length && !loadingMessages" class="text-center pa-8">
-              <v-icon size="64" color="grey-lighten-1">mdi-message-outline</v-icon>
-              <div class="text-medium-emphasis mt-2">Нет сообщений</div>
-            </div>
+            <EmptyState v-if="!messages.length && !loadingMessages" icon="mdi-message-outline" message="Нет сообщений" />
           </div>
 
           <!-- Input area -->
@@ -156,8 +148,6 @@
                 rows="1"
                 auto-grow
                 max-rows="5"
-                density="compact"
-                variant="outlined"
                 hide-details
                 class="flex-grow-1"
                 @keydown.enter.exact.prevent="sendMessage"
@@ -209,15 +199,11 @@
             v-model="createForm.category"
             :items="categoryOptions"
             label="Категория"
-            density="compact"
-            variant="outlined"
             class="mb-3"
           />
           <v-text-field
             v-model="createForm.subject"
             label="Тема обращения"
-            density="compact"
-            variant="outlined"
             class="mb-3"
           />
           <v-textarea
@@ -225,7 +211,6 @@
             label="Сообщение"
             rows="5"
             auto-grow
-            variant="outlined"
           />
           <v-alert v-if="createError" type="error" density="compact" class="mt-2">{{ createError }}</v-alert>
         </v-card-text>
@@ -245,6 +230,9 @@
 import { ref, nextTick, onMounted, onUnmounted, watch } from 'vue';
 import { useDisplay } from 'vuetify';
 import api from '../api';
+import PageHeader from '../components/PageHeader.vue';
+import EmptyState from '../components/EmptyState.vue';
+import { getInitials, statusColors, statusLabels, categoryLabels, getCategoryColor, getStatusColor } from '../composables/useDesign';
 
 const { mobile } = useDisplay();
 
@@ -281,30 +269,16 @@ const categoryOptions = [
   { title: 'Начисления', value: 'accruals' },
 ];
 
-function categoryColor(cat) {
-  const map = { support: 'blue', backoffice: 'orange', legal: 'purple', accounting: 'green', accruals: 'red' };
-  return map[cat] || 'grey';
-}
-
-function categoryLabel(cat) {
-  const map = { support: 'Техподдержка', backoffice: 'Бэк-офис', legal: 'Юридический', accounting: 'Бухгалтерия', accruals: 'Начисления' };
-  return map[cat] || cat;
-}
+function categoryColor(cat) { return getCategoryColor(cat); }
+function categoryLabel(cat) { return categoryLabels[cat] || cat; }
 
 function categoryIcon(cat) {
   const map = { support: 'mdi-headset', backoffice: 'mdi-briefcase', legal: 'mdi-scale-balance', accounting: 'mdi-calculator', accruals: 'mdi-cash-multiple' };
   return map[cat] || 'mdi-help-circle';
 }
 
-function statusColor(status) {
-  const map = { open: 'info', in_progress: 'warning', resolved: 'success', closed: 'grey' };
-  return map[status] || 'grey';
-}
-
-function statusLabel(status) {
-  const map = { open: 'Открыт', in_progress: 'В работе', resolved: 'Решён', closed: 'Закрыт' };
-  return map[status] || status;
-}
+function statusColor(status) { return getStatusColor(status); }
+function statusLabel(status) { return statusLabels[status] || status; }
 
 function formatDate(dateStr) {
   if (!dateStr) return '';
@@ -313,11 +287,6 @@ function formatDate(dateStr) {
   const isToday = d.toDateString() === now.toDateString();
   if (isToday) return d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
   return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
-}
-
-function getInitials(name) {
-  if (!name) return '?';
-  return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
 }
 
 // Load tickets

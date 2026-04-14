@@ -1,11 +1,6 @@
 <template>
   <div>
-    <div class="d-flex justify-space-between align-center mb-4 flex-wrap ga-2">
-      <div class="d-flex align-center ga-2">
-        <v-icon size="32" color="secondary">mdi-ticket-confirmation</v-icon>
-        <h5 class="text-h5 font-weight-bold">Тикеты</h5>
-      </div>
-    </div>
+    <PageHeader title="Тикеты" icon="mdi-ticket-confirmation" />
 
     <!-- Stats cards -->
     <v-row class="mb-4" dense>
@@ -42,8 +37,6 @@
           v-model="filters.category"
           :items="categoryOptions"
           label="Категория"
-          density="compact"
-          variant="outlined"
           clearable
           hide-details
           style="max-width: 200px"
@@ -52,8 +45,6 @@
           v-model="filters.status"
           :items="statusOptions"
           label="Статус"
-          density="compact"
-          variant="outlined"
           clearable
           hide-details
           style="max-width: 200px"
@@ -68,8 +59,6 @@
         <v-text-field
           v-model="filters.search"
           placeholder="Поиск..."
-          density="compact"
-          variant="outlined"
           prepend-inner-icon="mdi-magnify"
           clearable
           hide-details
@@ -96,12 +85,7 @@
       <v-col cols="12" md="5">
         <v-card class="overflow-y-auto" style="height: 600px" :loading="loading">
           <v-list lines="three" class="pa-0">
-            <template v-if="tickets.length === 0 && !loading">
-              <div class="text-center pa-8">
-                <v-icon size="48" color="grey-lighten-1" class="mb-2">mdi-ticket-outline</v-icon>
-                <div class="text-medium-emphasis">Тикеты не найдены</div>
-              </div>
-            </template>
+            <EmptyState v-if="tickets.length === 0 && !loading" icon="mdi-ticket-outline" message="Тикеты не найдены" />
             <v-list-item
               v-for="ticket in tickets"
               :key="ticket.id"
@@ -259,8 +243,6 @@
                   rows="2"
                   auto-grow
                   max-rows="5"
-                  density="compact"
-                  variant="outlined"
                   hide-details
                   class="flex-grow-1"
                   @keydown="onReplyKeydown"
@@ -300,8 +282,6 @@
             item-title="name"
             item-value="id"
             label="Сотрудник"
-            density="compact"
-            variant="outlined"
             :loading="loadingStaff"
             @update:search="searchStaff"
           />
@@ -325,8 +305,6 @@
             item-title="name"
             item-value="id"
             label="Сотрудник"
-            density="compact"
-            variant="outlined"
             :loading="loadingStaff"
             @update:search="searchStaff"
           />
@@ -344,6 +322,9 @@
 <script setup>
 import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue';
 import api from '../../api';
+import PageHeader from '../../components/PageHeader.vue';
+import EmptyState from '../../components/EmptyState.vue';
+import { getInitials, timeAgo, statusLabels, categoryLabels, getStatusColor, getCategoryColor } from '../../composables/useDesign';
 
 // --- State ---
 const loading = ref(false);
@@ -401,46 +382,10 @@ const statusOptions = [
 ];
 
 // --- Helpers ---
-function categoryColor(cat) {
-  const map = { support: 'blue', backoffice: 'orange', legal: 'purple', accounting: 'green', accruals: 'red' };
-  return map[cat] || 'grey';
-}
-
-function categoryLabel(cat) {
-  const map = { support: 'Техподдержка', backoffice: 'Бэк-офис', legal: 'Юридический', accounting: 'Бухгалтерия', accruals: 'Начисления' };
-  return map[cat] || cat;
-}
-
-function statusColor(status) {
-  const map = { open: 'info', in_progress: 'warning', resolved: 'success', closed: 'grey' };
-  return map[status] || 'grey';
-}
-
-function statusLabel(status) {
-  const map = { open: 'Открыт', in_progress: 'В работе', resolved: 'Решён', closed: 'Закрыт' };
-  return map[status] || status;
-}
-
-function getInitials(name) {
-  if (!name) return '?';
-  return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
-}
-
-function timeAgo(dateStr) {
-  if (!dateStr) return '';
-  const now = new Date();
-  const d = new Date(dateStr);
-  const diffMs = now - d;
-  const diffMin = Math.floor(diffMs / 60000);
-  if (diffMin < 1) return 'только что';
-  if (diffMin < 60) return `${diffMin} мин назад`;
-  const diffHours = Math.floor(diffMin / 60);
-  if (diffHours < 24) return `${diffHours} ч назад`;
-  const diffDays = Math.floor(diffHours / 24);
-  if (diffDays === 1) return 'вчера';
-  if (diffDays < 7) return `${diffDays} дн назад`;
-  return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
-}
+function categoryColor(cat) { return getCategoryColor(cat); }
+function categoryLabel(cat) { return categoryLabels[cat] || cat; }
+function statusColor(status) { return getStatusColor(status); }
+function statusLabel(status) { return statusLabels[status] || status; }
 
 function resetFilters() {
   filters.value = { category: null, status: null, assigned_to_me: false, search: '' };

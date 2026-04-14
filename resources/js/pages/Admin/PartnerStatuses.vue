@@ -1,9 +1,6 @@
 <template>
   <div>
-    <div class="d-flex align-center ga-2 mb-4">
-      <v-icon size="32" color="primary">mdi-calendar-clock</v-icon>
-      <h5 class="text-h5 font-weight-bold">Статусы партнёров</h5>
-    </div>
+    <PageHeader title="Статусы партнёров" icon="mdi-calendar-clock" />
 
     <!-- Summary cards -->
     <v-row class="mb-4">
@@ -19,9 +16,9 @@
     <!-- Filters -->
     <v-card class="mb-3 pa-3">
       <div class="d-flex ga-2 flex-wrap align-center">
-        <v-text-field v-model="search" placeholder="ФИО партнёра..." density="compact" variant="outlined"
+        <v-text-field v-model="search" placeholder="ФИО партнёра..."
           rounded prepend-inner-icon="mdi-magnify" clearable hide-details style="max-width:280px" @update:model-value="debouncedLoad" />
-        <v-select v-model="activityFilter" :items="activityOptions" label="Статус" density="compact" variant="outlined"
+        <v-select v-model="activityFilter" :items="activityOptions" label="Статус"
           clearable hide-details style="max-width:220px" @update:model-value="loadData" />
         <v-chip v-if="activeFilterCount > 0" size="small" color="info" variant="tonal" class="ml-1">
           {{ activeFilterCount }} {{ activeFilterCount === 1 ? 'фильтр' : 'фильтра' }}
@@ -33,8 +30,7 @@
 
     <!-- Detail table -->
     <v-data-table-server :items="items" :items-length="total" :loading="loading"
-      :headers="headers" :items-per-page="25" @update:options="onOptions"
-      density="compact" hover>
+      :headers="headers" :items-per-page="25" @update:options="onOptions">
       <template #item.activityName="{ item }">
         <v-chip size="x-small" :color="statusColor(item.activityId)">{{ item.activityName }}</v-chip>
       </template>
@@ -57,12 +53,7 @@
         <v-chip v-if="value > 0" size="x-small" :color="value >= 3 ? 'error' : 'warning'">{{ value }}/3</v-chip>
         <span v-else>—</span>
       </template>
-      <template #no-data>
-        <div class="text-center pa-4">
-          <v-icon size="48" color="grey-lighten-1" class="mb-2">mdi-file-search-outline</v-icon>
-          <div class="text-medium-emphasis">Данные не найдены</div>
-        </div>
-      </template>
+      <template #no-data><EmptyState /></template>
     </v-data-table-server>
 
     <v-overlay v-model="loading" class="align-center justify-center" persistent>
@@ -74,6 +65,9 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
+import PageHeader from '../../components/PageHeader.vue';
+import EmptyState from '../../components/EmptyState.vue';
+import { fmt, fmtDate } from '../../composables/useDesign';
 
 const loading = ref(true);
 const summary = ref([]);
@@ -109,13 +103,6 @@ const headers = [
   { title: 'ЛП', key: 'personalVolume', align: 'end', width: 100 },
   { title: 'Терминаций', key: 'terminationCount', width: 110 },
 ];
-
-const fmt = (n) => Number(n || 0).toLocaleString('ru-RU', { minimumFractionDigits: 0 });
-
-function fmtDate(d) {
-  if (!d) return '—';
-  try { return new Date(d).toLocaleDateString('ru-RU'); } catch { return d; }
-}
 
 function isExpiringSoon(d) {
   if (!d) return false;

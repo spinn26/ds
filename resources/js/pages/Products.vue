@@ -1,9 +1,6 @@
 <template>
   <div>
-    <div class="d-flex align-center ga-2 mb-4">
-      <v-icon size="32" color="primary">mdi-package-variant</v-icon>
-      <h5 class="text-h5 font-weight-bold">Перечень продуктов</h5>
-    </div>
+    <PageHeader title="Перечень продуктов" icon="mdi-package-variant" />
 
     <!-- Condition 1: Tests not passed -->
     <v-alert v-if="accessChecked && !access.testsPassed" type="warning" variant="tonal" class="mb-4">
@@ -18,9 +15,9 @@
       <!-- Filters -->
       <v-card class="mb-3 pa-3">
         <div class="d-flex ga-2 flex-wrap align-center">
-          <v-text-field v-model="search" placeholder="Поиск по названию..." density="compact" variant="outlined"
+          <v-text-field v-model="search" placeholder="Поиск по названию..."
             prepend-inner-icon="mdi-magnify" hide-details style="max-width:300px" @update:model-value="debouncedFilter" />
-          <v-select v-model="category" :items="categoryOptions" label="Категория" density="compact" variant="outlined"
+          <v-select v-model="category" :items="categoryOptions" label="Категория"
             clearable hide-details style="max-width:240px" @update:model-value="filterProducts" />
         </div>
       </v-card>
@@ -114,6 +111,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import api from '../api';
+import PageHeader from '../components/PageHeader.vue';
 
 const loading = ref(true);
 const products = ref([]);

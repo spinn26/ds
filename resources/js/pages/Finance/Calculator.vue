@@ -1,47 +1,43 @@
 <template>
   <div>
-    <div class="d-flex align-center ga-2 mb-4">
-      <v-icon size="32" color="primary">mdi-calculator</v-icon>
-      <h5 class="text-h5 font-weight-bold">Калькулятор объёмов</h5>
-    </div>
+    <PageHeader title="Калькулятор объёмов" icon="mdi-calculator" />
 
     <!-- Input form -->
     <v-card class="mb-4 pa-4">
       <v-row dense>
         <v-col cols="12" sm="6" md="3">
           <v-select v-model="form.qualification" :items="lvlItems" item-title="title" item-value="id"
-            label="Квалификация" density="compact" variant="outlined" :loading="matrixLoading" />
+            label="Квалификация" :loading="matrixLoading" />
         </v-col>
         <v-col cols="12" sm="6" md="3">
           <v-select v-model="form.productType" :items="filteredTypes" item-title="name" item-value="id"
-            label="Тип продукта" density="compact" variant="outlined" clearable
+            label="Тип продукта" clearable
             @update:model-value="form.product = null; form.program = null" />
         </v-col>
         <v-col cols="12" sm="6" md="3">
           <v-select v-model="form.product" :items="filteredProducts" item-title="name" item-value="id"
-            label="Продукт" density="compact" variant="outlined" clearable
+            label="Продукт" clearable
             @update:model-value="form.program = null" />
         </v-col>
         <v-col cols="12" sm="6" md="3">
           <v-select v-model="form.program" :items="filteredPrograms" item-title="name" item-value="id"
-            label="Программа" density="compact" variant="outlined" clearable
+            label="Программа" clearable
             @update:model-value="onProgramChange" />
         </v-col>
         <v-col cols="12" sm="6" md="3">
           <v-select v-model="form.calcProperty" :items="matrix.properties" item-title="title" item-value="id"
-            label="Свойство продукта" density="compact" variant="outlined" />
+            label="Свойство продукта" />
         </v-col>
         <v-col cols="12" sm="6" md="3" v-if="availableTerms.length">
           <v-select v-model="form.termContract" :items="availableTerms" item-title="label" item-value="id"
-            label="Срок контракта (лет)" density="compact" variant="outlined" clearable />
+            label="Срок контракта (лет)" clearable />
         </v-col>
         <v-col cols="12" sm="6" md="3">
-          <v-text-field v-model.number="form.amount" label="Сумма взноса" type="number"
-            density="compact" variant="outlined" />
+          <v-text-field v-model.number="form.amount" label="Сумма взноса" type="number" />
         </v-col>
         <v-col cols="12" sm="6" md="3">
           <v-select v-model="form.currency" :items="matrix.currencies" item-title="symbol" item-value="id"
-            label="Валюта" density="compact" variant="outlined" />
+            label="Валюта" />
         </v-col>
       </v-row>
 
@@ -125,8 +121,8 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue';
 import api from '../../api';
-
-const fmt = (n) => Number(n || 0).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+import PageHeader from '../../components/PageHeader.vue';
+import { fmt2 as fmt } from '../../composables/useDesign';
 
 const matrixLoading = ref(true);
 const calculating = ref(false);

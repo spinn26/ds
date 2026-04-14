@@ -1,25 +1,21 @@
 <template>
   <div>
-    <div class="d-flex align-center ga-2 mb-4">
-      <v-icon size="32" color="primary">mdi-folder-account</v-icon>
-      <h5 class="text-h5 font-weight-bold">Контракты моей команды</h5>
-      <v-chip size="small" color="primary">{{ total }}</v-chip>
-    </div>
+    <PageHeader title="Контракты моей команды" icon="mdi-folder-account" :count="total" />
 
     <v-card class="mb-3 pa-3">
       <div class="d-flex ga-2 flex-wrap align-center">
-        <v-text-field v-model="filters.search" placeholder="ФИО / номер контракта..." density="compact" variant="outlined"
+        <v-text-field v-model="filters.search" placeholder="ФИО / номер контракта..."
           rounded prepend-inner-icon="mdi-magnify" clearable hide-details style="max-width:240px" @update:model-value="debouncedLoad" />
-        <v-text-field v-model="filters.consultant_search" placeholder="ФИО ФК..." density="compact" variant="outlined"
+        <v-text-field v-model="filters.consultant_search" placeholder="ФИО ФК..."
           rounded prepend-inner-icon="mdi-account-search" clearable hide-details style="max-width:220px" @update:model-value="debouncedLoad" />
-        <v-select v-model="filters.status" :items="statusOptions" label="Статус контракта" density="compact" variant="outlined"
+        <v-select v-model="filters.status" :items="statusOptions" label="Статус контракта"
           clearable hide-details style="max-width:220px" @update:model-value="loadData" />
-        <v-text-field v-model="filters.date_from" label="Дата открытия с" type="date" density="compact" variant="outlined"
+        <v-text-field v-model="filters.date_from" label="Дата открытия с" type="date"
           hide-details style="max-width:170px" @update:model-value="loadData" />
-        <v-text-field v-model="filters.date_to" label="Дата открытия по" type="date" density="compact" variant="outlined"
+        <v-text-field v-model="filters.date_to" label="Дата открытия по" type="date"
           hide-details style="max-width:170px" @update:model-value="loadData" />
         <v-autocomplete v-model="filters.product" :items="productOptions" item-title="name" item-value="id"
-          label="Продукт" density="compact" variant="outlined" clearable hide-details style="max-width:240px"
+          label="Продукт" clearable hide-details style="max-width:240px"
           :loading="loadingProducts" @update:search="searchProducts" @update:model-value="loadData" />
         <v-chip v-if="activeFilterCount > 0" size="small" color="info" variant="tonal" class="ml-1">
           {{ activeFilterCount }} {{ activeFilterCount === 1 ? 'фильтр' : activeFilterCount < 5 ? 'фильтра' : 'фильтров' }}
@@ -30,8 +26,7 @@
     </v-card>
 
     <v-data-table-server :items="items" :items-length="total" :loading="loading"
-      :headers="headers" :items-per-page="25" @update:options="onOptions"
-      density="compact" hover>
+      :headers="headers" :items-per-page="25" @update:options="onOptions">
       <template #item.ammount="{ item }">
         {{ fmt(item.ammount) }} {{ item.currencySymbol }}
       </template>
@@ -41,12 +36,7 @@
       <template #item.statusName="{ value }">
         <v-chip size="x-small" :color="statusColor(value)">{{ value }}</v-chip>
       </template>
-      <template #no-data>
-        <div class="text-center pa-4">
-          <v-icon size="48" color="grey-lighten-1" class="mb-2">mdi-file-search-outline</v-icon>
-          <div class="text-medium-emphasis">Данные не найдены</div>
-        </div>
-      </template>
+      <template #no-data><EmptyState /></template>
     </v-data-table-server>
   </div>
 </template>
@@ -54,6 +44,9 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
+import PageHeader from '../../components/PageHeader.vue';
+import EmptyState from '../../components/EmptyState.vue';
+import { fmt, fmtDate } from '../../composables/useDesign';
 
 const items = ref([]);
 const total = ref(0);
@@ -63,8 +56,6 @@ const statusOptions = ref([]);
 const productOptions = ref([]);
 const loadingProducts = ref(false);
 const filters = ref({ search: '', consultant_search: '', status: null, product: null, date_from: '', date_to: '' });
-
-function fmtDate(d) { if (!d) return '—'; try { return new Date(d).toLocaleDateString('ru-RU'); } catch { return d; } }
 
 const activeFilterCount = computed(() => {
   let c = 0;
@@ -93,8 +84,6 @@ const headers = [
   { title: 'Сумма', key: 'ammount', width: 150 },
   { title: 'Статус контракта', key: 'statusName', width: 150 },
 ];
-
-const fmt = (n) => Number(n || 0).toLocaleString('ru-RU');
 
 function statusColor(s) {
   if (!s) return 'grey';

@@ -1,9 +1,10 @@
 <template>
   <div>
-    <div class="d-flex justify-space-between align-center mb-4 flex-wrap ga-2">
-      <h5 class="text-h5 font-weight-bold">Дашборд партнёра</h5>
-      <MonthPicker v-model="period" @update:model-value="loadData" />
-    </div>
+    <PageHeader title="Дашборд партнёра" icon="mdi-view-dashboard">
+      <template #actions>
+        <MonthPicker v-model="period" @update:model-value="loadData" />
+      </template>
+    </PageHeader>
 
     <!-- Status Info Alert -->
     <v-alert v-if="data.statusInfo && data.statusInfo.daysRemaining != null" :type="data.statusInfo.daysRemaining <= 30 ? 'warning' : 'info'"
@@ -230,6 +231,8 @@
 import { ref, computed, onMounted } from 'vue';
 import api from '../api';
 import MonthPicker from '../components/MonthPicker.vue';
+import PageHeader from '../components/PageHeader.vue';
+import { fmt } from '../composables/useDesign';
 
 const loading = ref(true);
 const period = ref(new Date().toISOString().slice(0, 7));
@@ -246,8 +249,6 @@ const empty = {
   prevPartners: { total: 0, registered: 0, active: 0, terminated: 0 },
 };
 const data = ref({ ...empty });
-
-const fmt = (n) => Number(n || 0).toLocaleString('ru-RU', { minimumFractionDigits: 0 });
 
 function pct(cur, prev) {
   if (!prev && !cur) return { value: '0%', type: 'neutral' };

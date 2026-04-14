@@ -1,19 +1,17 @@
 <template>
   <div>
-    <div class="d-flex justify-space-between align-center mb-4 flex-wrap ga-2">
-      <div class="d-flex align-center ga-2">
-        <v-icon size="32" color="primary">mdi-school</v-icon>
-        <h5 class="text-h5 font-weight-bold">Обучение</h5>
-      </div>
-      <v-btn color="primary" prepend-icon="mdi-plus" @click="openCreateCourse">Добавить курс</v-btn>
-    </div>
+    <PageHeader title="Обучение" icon="mdi-school">
+      <template #actions>
+        <v-btn color="primary" prepend-icon="mdi-plus" @click="openCreateCourse">Добавить курс</v-btn>
+      </template>
+    </PageHeader>
 
     <!-- Filters -->
     <v-card class="mb-4 pa-3">
       <v-row dense>
         <v-col cols="12" sm="4">
           <v-text-field v-model="filters.search" label="Поиск по названию" prepend-inner-icon="mdi-magnify"
-            density="compact" clearable hide-details @update:model-value="debouncedLoad" />
+            clearable hide-details @update:model-value="debouncedLoad" />
         </v-col>
         <v-col cols="12" sm="2" class="d-flex align-center">
           <v-chip color="primary" size="small">{{ total }} записей</v-chip>
@@ -33,8 +31,6 @@
         show-expand
         @update:page="page = $event; loadCourses()"
         @click:row="(e, { item }) => toggleExpand(item)"
-        density="compact"
-        hover
         no-data-text="Курсы не найдены"
       >
         <template #item.active="{ item }">
@@ -284,6 +280,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue';
 import api from '../../api';
+import PageHeader from '../../components/PageHeader.vue';
 
 const loading = ref(false);
 const saving = ref(false);

@@ -1,17 +1,15 @@
 <template>
   <div>
-    <div class="d-flex justify-space-between align-center mb-4 flex-wrap ga-2">
-      <div class="d-flex align-center ga-2">
-        <v-icon size="32" color="primary">mdi-message-text</v-icon>
-        <h5 class="text-h5 font-weight-bold">Обратная связь</h5>
-        <v-badge v-if="unreadCount > 0" :content="unreadCount" color="error" inline />
-      </div>
-      <v-btn color="primary" prepend-icon="mdi-pencil" @click="openSendDialog">Написать сообщение</v-btn>
-    </div>
+    <PageHeader title="Обратная связь" icon="mdi-message-text">
+      <template #actions>
+        <v-badge v-if="unreadCount > 0" :content="unreadCount" color="error" inline class="mr-2" />
+        <v-btn color="primary" prepend-icon="mdi-pencil" @click="openSendDialog">Написать сообщение</v-btn>
+      </template>
+    </PageHeader>
 
     <v-card class="mb-3 pa-3">
       <div class="d-flex ga-2 flex-wrap align-center">
-        <v-select v-model="categoryFilter" :items="categoryOptions" label="Категория" density="compact" variant="outlined"
+        <v-select v-model="categoryFilter" :items="categoryOptions" label="Категория"
           clearable hide-details style="max-width:260px" @update:model-value="loadMessages" />
         <v-chip v-if="categoryFilter" size="small" color="info" variant="tonal" class="ml-1">1 фильтр</v-chip>
         <v-btn v-if="categoryFilter" size="small" variant="text" color="secondary"
@@ -46,10 +44,7 @@
           <v-divider />
         </template>
         <v-list-item v-if="!messages.length && !loading">
-          <div class="text-center pa-4 w-100">
-            <v-icon size="48" color="grey-lighten-1" class="mb-2">mdi-message-off-outline</v-icon>
-            <div class="text-medium-emphasis">Данные не найдены</div>
-          </div>
+          <EmptyState icon="mdi-message-off-outline" />
         </v-list-item>
       </v-list>
 
@@ -66,7 +61,7 @@
           {{ replyTo ? 'Ответ на сообщение' : 'Новое сообщение' }}
         </v-card-title>
         <v-card-text>
-          <v-select v-model="sendForm.category_id" :items="categoryOptions" label="Категория" density="compact"
+          <v-select v-model="sendForm.category_id" :items="categoryOptions" label="Категория"
             class="mb-3" />
           <v-textarea v-model="sendForm.message" label="Сообщение" rows="5" auto-grow />
           <v-alert v-if="sendError" type="error" density="compact" class="mt-2">{{ sendError }}</v-alert>
@@ -84,6 +79,8 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import api from '../api';
+import PageHeader from '../components/PageHeader.vue';
+import EmptyState from '../components/EmptyState.vue';
 
 const loading = ref(false);
 const messages = ref([]);

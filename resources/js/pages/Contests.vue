@@ -1,15 +1,12 @@
 <template>
   <div>
-    <div class="d-flex align-center ga-2 mb-4">
-      <v-icon size="32" color="primary">mdi-trophy</v-icon>
-      <h5 class="text-h5 font-weight-bold">Список конкурсов</h5>
-    </div>
+    <PageHeader title="Список конкурсов" icon="mdi-trophy" />
 
     <v-card class="mb-3 pa-3">
       <div class="d-flex ga-2 flex-wrap align-center">
-        <v-select v-model="filters.status" :items="statusFilterOptions" label="Статус" density="compact" variant="outlined"
+        <v-select v-model="filters.status" :items="statusFilterOptions" label="Статус"
           clearable hide-details style="max-width:200px" @update:model-value="loadData" />
-        <v-select v-model="filters.type" :items="typeFilterOptions" label="Тип" density="compact" variant="outlined"
+        <v-select v-model="filters.type" :items="typeFilterOptions" label="Тип"
           clearable hide-details style="max-width:200px" @update:model-value="loadData" />
       </div>
     </v-card>
@@ -54,6 +51,7 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import api from '../api';
+import PageHeader from '../components/PageHeader.vue';
 
 const loading = ref(true);
 const contests = ref([]);

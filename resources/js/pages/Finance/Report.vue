@@ -1,14 +1,10 @@
 <template>
   <div>
-    <div class="d-flex justify-space-between align-center mb-4 flex-wrap ga-2">
-      <div class="d-flex align-center ga-2">
-        <v-icon size="32" color="primary">mdi-bank</v-icon>
-        <h5 class="text-h5 font-weight-bold">Отчёт начислений и выплат</h5>
-      </div>
-      <div class="d-flex align-center ga-2">
+    <PageHeader title="Отчёт начислений и выплат" icon="mdi-bank">
+      <template #actions>
         <MonthPicker v-model="month" @update:model-value="loadData" />
-      </div>
-    </div>
+      </template>
+    </PageHeader>
 
     <!-- Currency Rates -->
     <div v-if="data.currencyRates && data.currencyRates.length" class="d-flex ga-2 mb-4 flex-wrap">
@@ -231,13 +227,13 @@
 import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
 import MonthPicker from '../../components/MonthPicker.vue';
+import PageHeader from '../../components/PageHeader.vue';
+import { fmt, fmt2 } from '../../composables/useDesign';
 
 const loading = ref(true);
 const month = ref(new Date().toISOString().slice(0, 7));
 const data = ref({});
 
-const fmt = (n) => Number(n || 0).toLocaleString('ru-RU', { minimumFractionDigits: 0 });
-const fmt2 = (n) => Number(n || 0).toLocaleString('ru-RU', { minimumFractionDigits: 2 });
 const fmtRate = (n) => Number(n || 0).toLocaleString('ru-RU', { minimumFractionDigits: 4 });
 
 const summary = computed(() => data.value.summary || {});
