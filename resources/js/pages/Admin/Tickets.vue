@@ -456,7 +456,7 @@ async function sendDrawerReply() {
   drawerSending.value = true;
   try {
     const fd = new FormData();
-    fd.append('text', drawerReplyText.value || '');
+    fd.append('message', drawerReplyText.value || '');
     if (drawerFile.value) fd.append('attachment', drawerFile.value);
     await api.post(`/staff/tickets/${activeTicket.value.id}/messages`, fd);
     drawerReplyText.value = '';

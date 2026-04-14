@@ -377,7 +377,7 @@ async function sendMessage() {
   sendingMessage.value = true;
   try {
     const fd = new FormData();
-    fd.append('text', replyText.value || '');
+    fd.append('message', replyText.value || '');
     if (selectedFile.value) fd.append('attachment', selectedFile.value);
     await api.post(`/tickets/${selectedTicket.value.id}/messages`, fd);
     replyText.value = '';
