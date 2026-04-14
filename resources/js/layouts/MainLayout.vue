@@ -75,15 +75,25 @@
       <v-menu min-width="280" :close-on-content-click="false">
         <template #activator="{ props }">
           <v-avatar v-bind="props" :color="auth.isAdmin ? 'secondary' : 'primary'" size="36" class="cursor-pointer ml-1">
-            <span class="text-caption text-white font-weight-bold">{{ initials }}</span>
+            <v-img v-if="auth.user?.avatarUrl" :src="auth.user.avatarUrl" cover />
+            <span v-else class="text-caption text-white font-weight-bold">{{ initials }}</span>
           </v-avatar>
         </template>
         <v-card rounded="lg" elevation="8">
           <v-card-text class="pa-4">
             <div class="d-flex align-center ga-3 mb-3">
-              <v-avatar :color="auth.isAdmin ? 'secondary' : 'primary'" size="48">
-                <span class="text-h6 text-white font-weight-bold">{{ initials }}</span>
-              </v-avatar>
+              <div class="position-relative">
+                <v-avatar :color="auth.isAdmin ? 'secondary' : 'primary'" size="56">
+                  <v-img v-if="auth.user?.avatarUrl" :src="auth.user.avatarUrl" cover />
+                  <span v-else class="text-h5 text-white font-weight-bold">{{ initials }}</span>
+                </v-avatar>
+                <v-btn icon size="x-small" color="primary" variant="flat"
+                  class="position-absolute" style="bottom:-4px;right:-4px"
+                  @click="$refs.avatarInput.click()">
+                  <v-icon size="14">mdi-camera</v-icon>
+                </v-btn>
+                <input ref="avatarInput" type="file" accept="image/*" hidden @change="uploadAvatar" />
+              </div>
               <div>
                 <div class="text-subtitle-1 font-weight-bold">
                   {{ auth.user?.lastName }} {{ auth.user?.firstName }}
@@ -187,6 +197,19 @@ const statusColor = computed(() => {
   if (id === 5) return 'error';     // Исключен
   return 'default';
 });
+
+async function uploadAvatar(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  const formData = new FormData();
+  formData.append('avatar', file);
+  try {
+    const { data } = await api.post('/profile/avatar', formData);
+    if (data.avatarUrl) {
+      auth.user.avatarUrl = data.avatarUrl;
+    }
+  } catch {}
+}
 
 function copyReferral() {
   if (statusInfo.value?.referralLink) {

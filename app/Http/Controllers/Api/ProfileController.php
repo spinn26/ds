@@ -57,6 +57,7 @@ class ProfileController extends Controller
                 'firstName' => $user->firstName,
                 'lastName' => $user->lastName,
                 'patronymic' => $user->patronymic,
+                'avatarUrl' => $user->avatar ? '/storage/' . $user->avatar : null,
                 'phone' => $user->phone,
                 'nicTG' => $user->nicTG,
                 'gender' => $user->gender,
@@ -105,6 +106,27 @@ class ProfileController extends Controller
         $user->saveQuietly();
 
         return response()->json(['message' => 'Профиль обновлён']);
+    }
+
+    /**
+     * Загрузка аватара.
+     */
+    public function uploadAvatar(Request $request): JsonResponse
+    {
+        $request->validate([
+            'avatar' => 'required|image|max:5120', // max 5MB
+        ]);
+
+        $user = $request->user();
+        $path = $request->file('avatar')->store('avatars', 'public');
+
+        $user->avatar = $path;
+        $user->saveQuietly();
+
+        return response()->json([
+            'message' => 'Аватар обновлён',
+            'avatarUrl' => '/storage/' . $path,
+        ]);
     }
 
     public function changePassword(Request $request): JsonResponse

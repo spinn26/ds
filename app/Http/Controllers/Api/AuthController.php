@@ -272,6 +272,7 @@ class AuthController extends Controller
             'phone' => $user->phone,
             'role' => $user->role,
             'activityStatus' => $activityValue,
+            'avatarUrl' => $user->avatar ? '/storage/' . $user->avatar : null,
         ];
     }
 }
