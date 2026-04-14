@@ -132,7 +132,7 @@
       </v-container>
     </v-main>
 
-    <ChatWidget v-if="isConsultant" />
+    <ChatWidget v-if="isConsultant && !route.path.includes('/tickets')" />
   </v-layout>
 </template>
 

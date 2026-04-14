@@ -152,15 +152,15 @@
             <div class="d-flex ga-2 align-end">
               <v-textarea
                 v-model="replyText"
-                placeholder="Введите сообщение..."
-                rows="2"
+                placeholder="Введите сообщение... (Enter — отправить, Shift+Enter — новая строка)"
+                rows="1"
                 auto-grow
                 max-rows="5"
                 density="compact"
                 variant="outlined"
                 hide-details
                 class="flex-grow-1"
-                @keydown.ctrl.enter="sendMessage"
+                @keydown.enter.exact.prevent="sendMessage"
               />
               <input ref="fileInput" type="file" hidden @change="onFileSelected" />
               <v-btn icon size="small" variant="text" @click="$refs.fileInput.click()">
