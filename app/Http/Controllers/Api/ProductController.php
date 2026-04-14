@@ -25,24 +25,48 @@ class ProductController extends Controller
             $query->where('name', 'ilike', '%' . $request->search . '%');
         }
 
-        $products = $query->orderBy('name')->get()->map(function ($p) use ($consultant) {
+        // Preload productType → productCategory mapping
+        $typeToCategory = DB::table('productType')
+            ->whereNotNull('productTypeCategory')
+            ->pluck('productTypeCategory', 'id');
+
+        $allCategories = DB::table('productCategory')
+            ->get()
+            ->keyBy('id');
+
+        $products = $query->orderBy('name')->get()->map(function ($p) use ($consultant, $typeToCategory, $allCategories) {
             $testPassed = $consultant
                 ? $this->isTestPassedForProduct($consultant, $p->id)
                 : false;
+
+            // Resolve category via productType
+            $categoryId = $p->productType ? ($typeToCategory[$p->productType] ?? null) : null;
+            $cat = $categoryId ? ($allCategories[$categoryId] ?? null) : null;
 
             return [
                 'id' => $p->id,
                 'name' => $p->name,
                 'description' => $p->description ?? null,
+                'typeName' => $p->typeName ?? null,
                 'active' => (bool) $p->active,
                 'accessible' => $testPassed && ($this->checkAccess($consultant)['hasAccess'] ?? false),
                 'testPassed' => $testPassed,
+                'category' => $cat ? [
+                    'id' => $cat->id,
+                    'name' => $cat->productCategoryName,
+                ] : null,
             ];
         });
 
+        // Categories from productCategory table
+        $categories = DB::table('productCategory')
+            ->orderBy('productCategoryName')
+            ->get()
+            ->map(fn ($c) => ['id' => $c->id, 'name' => $c->productCategoryName]);
+
         return response()->json([
             'products' => $products,
-            'categories' => [],
+            'categories' => $categories,
             'accessCheck' => $accessCheck,
         ]);
     }

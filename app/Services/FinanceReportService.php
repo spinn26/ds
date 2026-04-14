@@ -222,14 +222,16 @@ class FinanceReportService
         return [
             'summary' => [
                 'qualificationPrev' => $qLogPrev ? [
-                    'level' => $qLogPrev->calculationLevel ?? $qLogPrev->nominalLevel,
-                    'title' => ($qLogPrev->calculationLevel ?? $qLogPrev->nominalLevel)
-                        ? DB::table('status_levels')->where('id', $qLogPrev->calculationLevel ?? $qLogPrev->nominalLevel)->value('title')
+                    'level' => $qLogPrev->nominalLevel ?? $qLogPrev->calculationLevel,
+                    'title' => ($qLogPrev->nominalLevel ?? $qLogPrev->calculationLevel)
+                        ? DB::table('status_levels')->where('id', $qLogPrev->nominalLevel ?? $qLogPrev->calculationLevel)->value('title')
                         : null,
                 ] : null,
                 'qualificationCurrent' => $qLogCurrent ? [
-                    'level' => $qLogCurrent->calculationLevel ?? $qLogCurrent->nominalLevel,
-                    'title' => $commissionLevel?->title,
+                    'level' => $qLogCurrent->nominalLevel ?? $qLogCurrent->calculationLevel,
+                    'title' => ($qLogCurrent->nominalLevel ?? $qLogCurrent->calculationLevel)
+                        ? DB::table('status_levels')->where('id', $qLogCurrent->nominalLevel ?? $qLogCurrent->calculationLevel)->value('title')
+                        : null,
                 ] : null,
                 'commissionLevel' => $commissionLevel ? [
                     'level' => $commissionLevel->level,

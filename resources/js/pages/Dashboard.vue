@@ -132,91 +132,6 @@
       </v-col>
     </v-row>
 
-    <!-- Показатели -->
-    <h6 class="text-h6 mb-3">Показатели</h6>
-
-    <!-- Team metrics (like legacy platform) -->
-    <v-row class="mb-4">
-      <v-col cols="12" sm="6" md="3">
-        <v-card class="pa-4 text-center">
-          <v-icon size="24" color="blue" class="mb-1">mdi-account-outline</v-icon>
-          <div class="text-caption text-medium-emphasis">Партнёры 1 линии</div>
-          <div class="text-h4 font-weight-bold">{{ data.team.firstLineAll ?? 0 }}</div>
-        </v-card>
-      </v-col>
-      <v-col cols="12" sm="6" md="3">
-        <v-card class="pa-4 text-center">
-          <v-icon size="24" color="blue-darken-2" class="mb-1">mdi-account-group</v-icon>
-          <div class="text-caption text-medium-emphasis">Всего партнёров</div>
-          <div class="text-h4 font-weight-bold">{{ data.team.totalPartners ?? 0 }}</div>
-        </v-card>
-      </v-col>
-      <v-col cols="12" sm="6" md="3">
-        <v-card class="pa-4 text-center">
-          <v-icon size="24" color="green" class="mb-1">mdi-account-check</v-icon>
-          <div class="text-caption text-medium-emphasis">Активных 1 линии</div>
-          <div class="text-h4 font-weight-bold">{{ data.team.firstLineActive ?? 0 }}</div>
-        </v-card>
-      </v-col>
-      <v-col cols="12" sm="6" md="3">
-        <v-card class="pa-4 text-center">
-          <v-icon size="24" color="green-darken-2" class="mb-1">mdi-account-multiple-check</v-icon>
-          <div class="text-caption text-medium-emphasis">Всего активных</div>
-          <div class="text-h4 font-weight-bold">{{ data.team.totalPartnersActive ?? 0 }}</div>
-        </v-card>
-      </v-col>
-    </v-row>
-
-    <!-- Clients block -->
-    <v-row class="mb-4">
-      <v-col cols="12" sm="6" md="4">
-        <router-link to="/clients" style="text-decoration: none; color: inherit">
-          <v-card class="pa-4 text-center" hover>
-            <v-icon size="28" color="primary" class="mb-1">mdi-account-multiple</v-icon>
-            <div class="text-caption text-medium-emphasis">Клиенты команды</div>
-            <div class="text-h4 font-weight-bold text-primary">{{ data.team.teamClients }}</div>
-          </v-card>
-        </router-link>
-      </v-col>
-      <v-col cols="12" sm="6" md="4">
-        <v-card class="pa-4 text-center">
-          <v-icon size="28" color="amber-darken-2" class="mb-1">mdi-cash-multiple</v-icon>
-          <div class="text-caption text-medium-emphasis">Капитал в управлении</div>
-          <div class="text-h4 font-weight-bold">{{ fmtUsd(data.team.capitalUsd) }}</div>
-        </v-card>
-      </v-col>
-      <v-col cols="12" sm="6" md="4">
-        <router-link to="/clients" style="text-decoration: none; color: inherit">
-          <v-card class="pa-4 text-center" hover>
-            <v-icon size="28" color="secondary" class="mb-1">mdi-account</v-icon>
-            <div class="text-caption text-medium-emphasis">Мои клиенты</div>
-            <div class="text-h4 font-weight-bold text-secondary">{{ data.team.myClients }}</div>
-          </v-card>
-        </router-link>
-      </v-col>
-    </v-row>
-
-    <!-- Partners block -->
-    <h6 class="text-h6 mb-3">Партнёры по статусу</h6>
-    <v-row class="mb-4">
-      <v-col v-for="card in partnerCards" :key="card.label" cols="12" sm="6" md="3">
-        <router-link to="/structure" style="text-decoration: none; color: inherit">
-          <v-card class="pa-4 text-center" hover>
-            <div class="text-body-2 text-medium-emphasis">{{ card.label }}</div>
-            <div class="text-h3 font-weight-bold" :class="`text-${card.color}`">{{ card.value }}</div>
-            <div v-if="card.diff != null" class="d-flex align-center justify-center ga-1 mt-1">
-              <v-icon :color="card.diff >= 0 ? 'success' : 'error'" size="14">
-                {{ card.diff >= 0 ? 'mdi-trending-up' : 'mdi-trending-down' }}
-              </v-icon>
-              <span class="text-caption" :class="card.diff >= 0 ? 'text-success' : 'text-error'">
-                {{ card.diff >= 0 ? '+' : '' }}{{ card.diff }} к прошлому периоду
-              </span>
-            </div>
-          </v-card>
-        </router-link>
-      </v-col>
-    </v-row>
-
     <!-- Qualification conditions table -->
     <h6 class="text-h6 mb-3">Условия квалификаций</h6>
     <v-card class="mb-4">
@@ -323,11 +238,6 @@ import MonthPicker from '../components/MonthPicker.vue';
 import PageHeader from '../components/PageHeader.vue';
 import { fmt } from '../composables/useDesign';
 
-function fmtUsd(v) {
-  if (!v) return '0 USD';
-  return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(v) + ' USD';
-}
-
 const loading = ref(true);
 const period = ref(new Date().toISOString().slice(0, 7));
 const showLevels = ref(false);
@@ -337,10 +247,7 @@ const empty = {
   consultant: { id: 0, personName: '—', statusName: 'Партнёр', participantCode: null, active: false, ambassadorProducts: null, activityName: null },
   qualification: { nominalLevel: null, nextLevel: null },
   volumes: { personalVolume: 0, groupVolume: 0, groupVolumeCumulative: 0, prevPersonalVolume: 0, prevGroupVolume: 0, prevGroupVolumeCumulative: 0 },
-  team: { myClients: 0, myClientsActive: 0, teamClients: 0, teamClientsActive: 0, firstLineAll: 0, firstLineActive: 0, totalPartners: 0, totalPartnersActive: 0, capitalUsd: 0 },
   statusInfo: null,
-  partners: { total: 0, registered: 0, active: 0, terminated: 0 },
-  prevPartners: { total: 0, registered: 0, active: 0, terminated: 0 },
   breakaway: null,
   breakawayRules: null,
   mandatoryPlan: null,
@@ -370,17 +277,6 @@ const volumeCards = computed(() => {
     { title: 'Личные продажи (ЛП)', value: v.personalVolume, change: lp.value, changeType: lp.type, icon: 'mdi-bank', color: 'green' },
     { title: 'Групповые продажи (ГП)', value: v.groupVolume, change: gp.value, changeType: gp.type, icon: 'mdi-account-group', color: 'blue' },
     { title: 'Накопленные ГП (НГП)', value: v.groupVolumeCumulative, change: ngp.value, changeType: ngp.type, icon: 'mdi-trending-up', color: 'orange' },
-  ];
-});
-
-const partnerCards = computed(() => {
-  const p = data.value.partners || {};
-  const pp = data.value.prevPartners || {};
-  return [
-    { label: 'Всего партнёров', value: p.total ?? 0, color: 'primary', diff: (p.total ?? 0) - (pp.total ?? 0) },
-    { label: 'Зарегистрировано', value: p.registered ?? 0, color: 'info', diff: (p.registered ?? 0) - (pp.registered ?? 0) },
-    { label: 'Активных', value: p.active ?? 0, color: 'success', diff: (p.active ?? 0) - (pp.active ?? 0) },
-    { label: 'Терминированных', value: p.terminated ?? 0, color: 'error', diff: (p.terminated ?? 0) - (pp.terminated ?? 0) },
   ];
 });
 
