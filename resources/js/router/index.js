@@ -27,7 +27,8 @@ const routes = [
             { path: 'structure', component: () => import('../pages/Structure.vue') },
             { path: 'products', component: () => import('../pages/Products.vue') },
             { path: 'contests', component: () => import('../pages/Contests.vue') },
-            { path: 'communication', component: () => import('../pages/Communication.vue') },
+            { path: 'tickets', component: () => import('../pages/Tickets.vue') },
+            { path: 'communication', redirect: '/tickets' },
             { path: 'help', component: () => import('../pages/Help.vue') },
             { path: 'profile', component: () => import('../pages/Profile.vue') },
 
@@ -51,7 +52,8 @@ const routes = [
             { path: 'manage/currencies', component: () => import('../pages/Admin/Currencies.vue'), meta: { staff: true } },
             { path: 'manage/products', component: () => import('../pages/Admin/Products.vue'), meta: { staff: true } },
             { path: 'manage/contests', component: () => import('../pages/Admin/Contests.vue'), meta: { staff: true } },
-            { path: 'manage/communication', component: () => import('../pages/Communication.vue'), meta: { staff: true } },
+            { path: 'manage/tickets', component: () => import('../pages/Admin/Tickets.vue'), meta: { staff: true } },
+            { path: 'manage/communication', redirect: '/manage/tickets' },
         ],
     },
 
@@ -110,7 +112,7 @@ router.beforeEach(async (to) => {
 
     // Terminated/Excluded → blocked cabinet (only communication, profile, terminated page)
     if (auth.isConsultant && (auth.isTerminated || auth.isExcluded)) {
-        const allowedPaths = ['terminated', 'communication', 'profile', 'help'];
+        const allowedPaths = ['terminated', 'tickets', 'communication', 'profile', 'help'];
         if (!allowedPaths.some(p => to.path.includes(p))) {
             return '/terminated';
         }

@@ -22,7 +22,7 @@
             :title="item.label" :active="isActivePath(item.path)"
             :color="item.adminSection ? 'secondary' : 'primary'"
             rounded="lg" class="mb-1 menu-item" @click="mobile && (drawer = false)">
-            <template #append v-if="item.path === '/communication' && unreadCount > 0">
+            <template #append v-if="item.path === '/tickets' && unreadCount > 0">
               <v-badge :content="unreadCount" color="error" inline />
             </template>
           </v-list-item>
@@ -131,6 +131,8 @@
         <router-view />
       </v-container>
     </v-main>
+
+    <ChatWidget v-if="isConsultant" />
   </v-layout>
 </template>
 
@@ -140,6 +142,7 @@ import { useDisplay, useTheme } from 'vuetify';
 import { useRoute } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import api from '../api';
+import ChatWidget from '../components/ChatWidget.vue';
 
 const auth = useAuthStore();
 const route = useRoute();
@@ -155,7 +158,7 @@ let unreadInterval = null;
 
 async function loadUnreadCount() {
   try {
-    const { data } = await api.get('/communication/unread-count');
+    const { data } = await api.get('/tickets/unread-count');
     unreadCount.value = data.count || 0;
   } catch {}
 }
@@ -281,7 +284,7 @@ const menuItems = [
   { label: 'Обучение', icon: 'mdi-school', path: '/education', partner: true },
   { label: 'Продукты', icon: 'mdi-package-variant', path: '/products', partner: true },
   { label: 'Список конкурсов', icon: 'mdi-trophy', path: '/contests', partner: true },
-  { label: 'Обратная связь', icon: 'mdi-chat', path: '/communication', partner: true },
+  { label: 'Обратная связь', icon: 'mdi-chat', path: '/tickets', partner: true },
 
   // ---- Staff sections (grouped per spec) ----
   // Инструменты
@@ -317,7 +320,7 @@ const menuItems = [
   { group: 'Прочее', adminSection: 'products' },
   { label: 'Продукты', icon: 'mdi-package-variant-closed', path: '/manage/products', adminSection: 'products' },
   { label: 'Конкурсы', icon: 'mdi-trophy', path: '/manage/contests', adminSection: 'contests' },
-  { label: 'Коммуникация', icon: 'mdi-chat', path: '/manage/communication', adminSection: 'communication' },
+  { label: 'Тикеты', icon: 'mdi-ticket-confirmation', path: '/manage/tickets', adminSection: 'communication' },
   { label: 'Отчёты', icon: 'mdi-file-chart', path: '/manage/reports', adminSection: 'reports' },
   { label: 'Валюты и НДС', icon: 'mdi-currency-usd', path: '/manage/currencies', adminSection: 'currencies' },
 ];
