@@ -5,11 +5,16 @@
       class="sidebar-drawer">
       <div class="sidebar-header d-flex align-center pa-4">
         <v-icon color="primary" size="28" class="mr-2">mdi-cube-outline</v-icon>
-        <span class="text-h6 font-weight-black text-primary">DS</span>
-        <span class="text-caption text-medium-emphasis ml-2">ПЛАТФОРМА</span>
-        <v-icon v-if="isStaff" color="secondary" size="small" class="ml-1">mdi-shield-crown</v-icon>
+        <div>
+          <div class="d-flex align-center ga-1">
+            <span class="text-h6 font-weight-black text-primary">DS</span>
+            <span class="text-caption text-medium-emphasis">ПЛАТФОРМА</span>
+          </div>
+          <div v-if="cabinetName" class="text-caption" style="font-size: 0.6rem; letter-spacing: 1px; opacity: 0.6; margin-top: -2px">
+            {{ cabinetName }}
+          </div>
+        </div>
       </div>
-      <v-chip v-if="cabinetName" size="x-small" color="primary" variant="outlined" class="mx-4 mb-2">{{ cabinetName }}</v-chip>
       <v-divider />
 
       <v-list density="compact" nav class="px-2">
@@ -54,10 +59,10 @@
           {{ statusInfo.daysRemaining }} дн.
         </v-chip>
 
-        <!-- Admin button — only for role 'admin' -->
-        <v-btn v-if="auth.isAdmin" to="/admin/users" color="secondary" variant="flat" size="small"
-          prepend-icon="mdi-account-cog" class="mr-2">
-          Пользователи
+        <!-- Admin panel — only for role 'admin' -->
+        <v-btn v-if="auth.isAdmin" to="/admin/dashboard" color="secondary" variant="flat" size="small"
+          prepend-icon="mdi-shield-crown" class="mr-2">
+          Управление
         </v-btn>
       </template>
 

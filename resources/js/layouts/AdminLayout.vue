@@ -2,9 +2,16 @@
   <v-layout>
     <v-navigation-drawer v-model="drawer" :permanent="!mobile" :temporary="mobile" width="280" color="grey-darken-4" theme="dark">
       <div class="d-flex align-center pa-4">
-        <span class="text-h6 font-weight-black text-white">DS</span>
-        <span class="text-caption text-grey-lighten-1 ml-2">АДМИН</span>
-        <v-chip color="red" size="x-small" class="ml-2">ADM</v-chip>
+        <v-icon color="secondary" size="24" class="mr-2">mdi-shield-crown</v-icon>
+        <div>
+          <div class="d-flex align-center ga-1">
+            <span class="text-h6 font-weight-black text-white">DS</span>
+            <span class="text-caption text-grey-lighten-1">УПРАВЛЕНИЕ</span>
+          </div>
+          <div style="font-size: 0.55rem; letter-spacing: 1.5px; color: rgba(255,255,255,0.35); margin-top: -2px">
+            ПАНЕЛЬ УПРАВЛЕНИЯ
+          </div>
+        </div>
       </div>
       <v-divider />
 
@@ -23,7 +30,7 @@
     <v-app-bar flat border="b" color="grey-darken-4" theme="dark">
       <v-app-bar-nav-icon v-if="mobile" @click="drawer = !drawer" />
       <v-toolbar-title class="text-body-1">
-        <v-icon icon="mdi-shield-crown" color="secondary" class="mr-1" /> Панель администратора
+        <v-icon icon="mdi-shield-crown" color="secondary" class="mr-1" /> DS Управление
       </v-toolbar-title>
       <v-spacer />
       <span class="text-body-2 text-grey-lighten-1 mr-3">{{ auth.user?.firstName }} {{ auth.user?.lastName }}</span>
