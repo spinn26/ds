@@ -61,6 +61,60 @@
           </v-row>
         </v-card>
 
+        <!-- Mentor & Network Leader -->
+        <v-row v-if="data.mentor || data.networkLeader" class="mb-4">
+          <v-col v-if="data.mentor" cols="12" :md="data.networkLeader ? 6 : 12">
+            <v-card class="pa-4 h-100" variant="tonal" color="primary">
+              <div class="d-flex align-center ga-3">
+                <v-avatar color="primary" size="48">
+                  <v-icon color="white">mdi-account-star</v-icon>
+                </v-avatar>
+                <div>
+                  <div class="text-caption text-medium-emphasis">Наставник</div>
+                  <div class="text-subtitle-1 font-weight-bold">{{ data.mentor.personName }}</div>
+                  <div class="text-caption">{{ data.mentor.qualification }}</div>
+                </div>
+              </div>
+              <div class="d-flex ga-3 mt-3 flex-wrap">
+                <v-chip v-if="data.mentor.phone" size="small" variant="outlined" prepend-icon="mdi-phone" @click="copyText(data.mentor.phone)">
+                  {{ data.mentor.phone }}
+                </v-chip>
+                <v-chip v-if="data.mentor.email" size="small" variant="outlined" prepend-icon="mdi-email" @click="copyText(data.mentor.email)">
+                  {{ data.mentor.email }}
+                </v-chip>
+                <v-chip v-if="data.mentor.telegram" size="small" variant="outlined" prepend-icon="mdi-send" @click="openTelegram(data.mentor.telegram)">
+                  {{ data.mentor.telegram }}
+                </v-chip>
+              </div>
+            </v-card>
+          </v-col>
+          <v-col v-if="data.networkLeader" cols="12" :md="data.mentor ? 6 : 12">
+            <v-card class="pa-4 h-100" variant="tonal" color="secondary">
+              <div class="d-flex align-center ga-3">
+                <v-avatar color="secondary" size="48">
+                  <v-icon color="white">mdi-crown</v-icon>
+                </v-avatar>
+                <div>
+                  <div class="text-caption text-medium-emphasis">Лидер сети</div>
+                  <div class="text-subtitle-1 font-weight-bold">{{ data.networkLeader.personName }}</div>
+                  <div class="text-caption">{{ data.networkLeader.qualification }}</div>
+                </div>
+              </div>
+              <div class="d-flex ga-3 mt-3 flex-wrap">
+                <v-chip v-if="data.networkLeader.phone" size="small" variant="outlined" prepend-icon="mdi-phone" @click="copyText(data.networkLeader.phone)">
+                  {{ data.networkLeader.phone }}
+                </v-chip>
+                <v-chip v-if="data.networkLeader.email" size="small" variant="outlined" prepend-icon="mdi-email" @click="copyText(data.networkLeader.email)">
+                  {{ data.networkLeader.email }}
+                </v-chip>
+                <v-chip v-if="data.networkLeader.telegram" size="small" variant="outlined" prepend-icon="mdi-send" @click="openTelegram(data.networkLeader.telegram)">
+                  {{ data.networkLeader.telegram }}
+                </v-chip>
+              </div>
+            </v-card>
+          </v-col>
+        </v-row>
+
         <!-- News -->
         <v-card class="mb-4 pa-4">
           <div class="text-subtitle-1 font-weight-bold mb-3">
@@ -218,6 +272,11 @@ const greeting = computed(() => {
 
 const fmt = (n) => Number(n || 0).toLocaleString('ru-RU');
 function fmtDate(d) { if (!d) return '—'; try { return new Date(d).toLocaleDateString('ru-RU'); } catch { return d; } }
+function copyText(text) { navigator.clipboard.writeText(text); }
+function openTelegram(nick) {
+  const clean = nick.replace('@', '');
+  window.open(`https://t.me/${clean}`, '_blank');
+}
 
 onMounted(async () => {
   try {

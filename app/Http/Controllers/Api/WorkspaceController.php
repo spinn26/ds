@@ -34,6 +34,8 @@ class WorkspaceController extends Controller
         if ($isConsultant && $consultant) {
             $data['partnerStats'] = $this->getPartnerStats($consultant);
             $data['teamActivity'] = $this->getTeamActivity($consultant);
+            $data['mentor'] = $this->getMentor($consultant);
+            $data['networkLeader'] = $this->getNetworkLeader($consultant);
         }
 
         // Сотрудники
@@ -177,6 +179,75 @@ class WorkspaceController extends Controller
                 ];
             })
             ->toArray();
+    }
+
+    /** Наставник — тот кто пригласил */
+    private function getMentor(Consultant $consultant): ?array
+    {
+        if (! $consultant->inviter) return null;
+
+        $inviter = DB::table('consultant')->where('id', $consultant->inviter)->first();
+        if (! $inviter) return null;
+
+        $level = $inviter->status_and_lvl
+            ? DB::table('status_levels')->where('id', $inviter->status_and_lvl)->first()
+            : null;
+
+        // Контакты из WebUser
+        $webUser = $inviter->webUser
+            ? DB::table('WebUser')->where('id', $inviter->webUser)->first()
+            : null;
+
+        return [
+            'id' => $inviter->id,
+            'personName' => $inviter->personName,
+            'qualification' => $level ? "{$level->level} [{$level->title}]" : '—',
+            'phone' => $webUser->phone ?? null,
+            'email' => $webUser->email ?? null,
+            'telegram' => $webUser->nicTG ?? null,
+        ];
+    }
+
+    /** Лидер сети — корень ветки (идём вверх по inviter до самого верха) */
+    private function getNetworkLeader(Consultant $consultant): ?array
+    {
+        $currentId = $consultant->inviter;
+        $visited = [$consultant->id];
+        $leader = null;
+
+        // Идём вверх по цепочке inviter до корня
+        for ($i = 0; $i < 50; $i++) {
+            if (! $currentId || in_array($currentId, $visited)) break;
+            $visited[] = $currentId;
+
+            $current = DB::table('consultant')->where('id', $currentId)->first();
+            if (! $current) break;
+
+            $leader = $current; // Запоминаем каждого — последний будет корнем
+            $currentId = $current->inviter;
+        }
+
+        if (! $leader || $leader->id === $consultant->inviter) {
+            // Лидер = наставник (нет глубины), не показываем дубль
+            return null;
+        }
+
+        $level = $leader->status_and_lvl
+            ? DB::table('status_levels')->where('id', $leader->status_and_lvl)->first()
+            : null;
+
+        $webUser = $leader->webUser
+            ? DB::table('WebUser')->where('id', $leader->webUser)->first()
+            : null;
+
+        return [
+            'id' => $leader->id,
+            'personName' => $leader->personName,
+            'qualification' => $level ? "{$level->level} [{$level->title}]" : '—',
+            'phone' => $webUser->phone ?? null,
+            'email' => $webUser->email ?? null,
+            'telegram' => $webUser->nicTG ?? null,
+        ];
     }
 
     /** Задачи для сотрудников */
