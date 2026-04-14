@@ -30,6 +30,8 @@ export const useAuthStore = defineStore('auth', {
             try {
                 const { data } = await api.get('/auth/me');
                 this.user = data;
+                localStorage.setItem('auth_user_id', data.id);
+                localStorage.setItem('auth_user_name', `${data.lastName || ''} ${data.firstName || ''}`.trim());
             } catch {
                 this.token = null;
                 localStorage.removeItem('auth_token');
@@ -41,6 +43,8 @@ export const useAuthStore = defineStore('auth', {
             this.token = data.token;
             this.user = data.user;
             localStorage.setItem('auth_token', data.token);
+            localStorage.setItem('auth_user_id', data.user.id);
+            localStorage.setItem('auth_user_name', `${data.user.lastName || ''} ${data.user.firstName || ''}`.trim());
         },
         async register(form) {
             const { data } = await api.post('/auth/register', form);

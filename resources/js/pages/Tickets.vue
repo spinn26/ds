@@ -386,13 +386,45 @@ async function createTicket() {
   creating.value = false;
 }
 
-// Auto-refresh
+// Real-time via Socket.IO (fallback to polling)
+import { useTicketSocket } from '../composables/useSocket';
+
+let ticketSocket = null;
+
 function startRefresh() {
   stopRefresh();
-  refreshInterval = setInterval(loadTicketMessages, 5000);
+  if (selectedTicket.value) {
+    const { join, leave, emitTyping, connected } = useTicketSocket(
+      selectedTicket.value.id,
+      (msg) => {
+        // Real-time message received
+        const authId = localStorage.getItem('auth_user_id');
+        if (String(msg.userId) !== String(authId)) {
+          messages.value.push({
+            ...msg,
+            is_mine: false,
+            sender_name: msg.userName,
+            is_system: msg.isSystem || false,
+          });
+          scrollToBottom();
+        }
+      },
+      (typingData) => {
+        // Typing indicator (can add UI later)
+      }
+    );
+    ticketSocket = { leave };
+    join();
+  }
+  // Fallback polling every 15s (in case socket disconnects)
+  refreshInterval = setInterval(loadTicketMessages, 15000);
 }
 
 function stopRefresh() {
+  if (ticketSocket) {
+    ticketSocket.leave();
+    ticketSocket = null;
+  }
   if (refreshInterval) {
     clearInterval(refreshInterval);
     refreshInterval = null;

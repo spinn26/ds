@@ -1,0 +1,13 @@
+{
+  "name": "ds-socket-server",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node index.js"
+  },
+  "dependencies": {
+    "socket.io": "^4.7.0",
+    "cors": "^2.8.5"
+  }
+}

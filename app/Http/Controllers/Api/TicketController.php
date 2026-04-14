@@ -273,6 +273,32 @@ class TicketController extends Controller
             DB::table('tickets')->where('id', $id)->update(['updated_at' => now()]);
         }
 
+        // Emit to Socket.IO for real-time delivery
+        try {
+            $socketService = app(\App\Services\SocketService::class);
+            $socketService->emitToTicket($id, 'ticket:new-message', [
+                'id' => $msgId,
+                'ticketId' => $id,
+                'userId' => $user->id,
+                'userName' => trim(($user->lastName ?? '') . ' ' . ($user->firstName ?? '')),
+                'message' => $request->message,
+                'attachmentPath' => $attachmentPath ? '/storage/' . $attachmentPath : null,
+                'attachmentName' => $attachmentName,
+                'isSystem' => false,
+                'createdAt' => now()->toIso8601String(),
+            ]);
+
+            // Notify ticket creator if staff replies
+            if ($ticket && $user->id !== $ticket->created_by) {
+                $socketService->notifyUser($ticket->created_by, 'notification', [
+                    'type' => 'ticket',
+                    'title' => 'Новый ответ в тикете',
+                    'message' => mb_substr($request->message ?? '', 0, 80),
+                    'link' => '/tickets',
+                ]);
+            }
+        } catch (\Exception $e) {}
+
         return response()->json(['message' => 'Отправлено', 'id' => $msgId]);
     }
 
