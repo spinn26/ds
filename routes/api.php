@@ -97,7 +97,9 @@ Route::prefix('v1')->group(function () {
         Route::get('/admin/report-availability', [\App\Http\Controllers\Api\AdminFinanceController::class, 'reportAvailability']);
         Route::get('/admin/currencies', [\App\Http\Controllers\Api\AdminFinanceController::class, 'currencies']);
         Route::get('/admin/transaction-import/form-data', [\App\Http\Controllers\Api\TransactionImportController::class, 'formData']);
+        Route::get('/admin/transaction-import/sheet-names', [\App\Http\Controllers\Api\TransactionImportController::class, 'sheetNames']);
         Route::post('/admin/transaction-import', [\App\Http\Controllers\Api\TransactionImportController::class, 'import']);
+        Route::post('/admin/transaction-import/from-sheets', [\App\Http\Controllers\Api\TransactionImportController::class, 'importFromSheets']);
         Route::get('/admin/transaction-import/history', [\App\Http\Controllers\Api\TransactionImportController::class, 'history']);
         Route::post('/admin/transaction-import/{id}/rollback', [\App\Http\Controllers\Api\TransactionImportController::class, 'rollback']);
         Route::post('/admin/transaction-import/{id}/calculate', [\App\Http\Controllers\Api\TransactionImportController::class, 'calculateCommissions']);

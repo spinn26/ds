@@ -34,7 +34,58 @@ class TransactionImportController extends Controller
     }
 
     /**
-     * Загрузить и обработать CSV/XLSX файл с транзакциями.
+     * Получить список листов из Google Sheets (= список поставщиков).
+     */
+    public function sheetNames(): JsonResponse
+    {
+        $spreadsheetId = config('services.google_sheets.spreadsheet_id', env('GOOGLE_SHEETS_SPREADSHEET_ID'));
+        $apiKey = config('services.google_sheets.api_key', env('GOOGLE_SHEETS_API_KEY'));
+
+        if (! $spreadsheetId || ! $apiKey) {
+            return response()->json(['sheets' => [], 'message' => 'Google Sheets не настроен']);
+        }
+
+        $reader = app(\App\Services\GoogleSheetsReader::class);
+        $sheets = $reader->getSheetNames($spreadsheetId, $apiKey);
+
+        return response()->json(['sheets' => $sheets]);
+    }
+
+    /**
+     * Импорт из Google Sheets — выбрать лист (поставщика) → загрузить данные.
+     */
+    public function importFromSheets(Request $request): JsonResponse
+    {
+        $request->validate([
+            'sheet' => 'required|string',
+            'counterparty' => 'required|integer',
+            'currency' => 'nullable|integer',
+        ]);
+
+        $spreadsheetId = config('services.google_sheets.spreadsheet_id', env('GOOGLE_SHEETS_SPREADSHEET_ID'));
+        $apiKey = config('services.google_sheets.api_key', env('GOOGLE_SHEETS_API_KEY'));
+
+        if (! $spreadsheetId || ! $apiKey) {
+            return response()->json(['message' => 'Google Sheets не настроен. Установите GOOGLE_SHEETS_SPREADSHEET_ID и GOOGLE_SHEETS_API_KEY в .env'], 422);
+        }
+
+        $reader = app(\App\Services\GoogleSheetsReader::class);
+
+        try {
+            $rows = $reader->readSheet($spreadsheetId, $request->sheet, $apiKey);
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Ошибка чтения листа: ' . $e->getMessage()], 422);
+        }
+
+        if (empty($rows)) {
+            return response()->json(['message' => 'Лист пустой или не содержит данных'], 422);
+        }
+
+        return $this->processRows($rows, (int) $request->counterparty, $request->currency ? (int) $request->currency : 67, $request);
+    }
+
+    /**
+     * Загрузить и обработать CSV файл с транзакциями.
      */
     public function import(Request $request): JsonResponse
     {
@@ -44,9 +95,6 @@ class TransactionImportController extends Controller
             'currency' => 'nullable|integer',
         ]);
 
-        $counterpartyId = (int) $request->counterparty;
-        $currencyId = $request->currency ? (int) $request->currency : 67; // default RUB
-
         $file = $request->file('file');
         $rows = $this->parseCsv($file->getPathname());
 
@@ -54,6 +102,14 @@ class TransactionImportController extends Controller
             return response()->json(['message' => 'Файл пустой или неверный формат'], 422);
         }
 
+        return $this->processRows($rows, (int) $request->counterparty, $request->currency ? (int) $request->currency : 67, $request);
+    }
+
+    /**
+     * Общая логика обработки строк (для файла и Google Sheets).
+     */
+    private function processRows(array $rows, int $counterpartyId, int $currencyId, Request $request): JsonResponse
+    {
         $this->ensureImportLogTable();
 
         // Создаём запись лога импорта

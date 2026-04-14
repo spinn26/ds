@@ -7,7 +7,35 @@
 
     <!-- Import form -->
     <v-card class="mb-4 pa-4">
-      <v-row dense>
+      <v-tabs v-model="importMode" class="mb-3">
+        <v-tab value="sheets" prepend-icon="mdi-google-spreadsheet">Google Sheets</v-tab>
+        <v-tab value="file" prepend-icon="mdi-file-upload">Загрузить файл</v-tab>
+      </v-tabs>
+
+      <!-- Google Sheets mode -->
+      <v-row v-if="importMode === 'sheets'" dense>
+        <v-col cols="12" sm="4">
+          <v-select v-model="form.sheet" :items="sheetNames" label="Лист (поставщик) *"
+            density="compact" variant="outlined" :loading="loadingSheets" />
+        </v-col>
+        <v-col cols="12" sm="3">
+          <v-select v-model="form.counterparty" :items="counterparties" item-title="name" item-value="id"
+            label="Поставщик в БД *" density="compact" variant="outlined" />
+        </v-col>
+        <v-col cols="12" sm="3">
+          <v-select v-model="form.currency" :items="currencies" item-title="symbol" item-value="id"
+            label="Валюта" density="compact" variant="outlined" clearable />
+        </v-col>
+        <v-col cols="12" sm="2" class="d-flex align-end">
+          <v-btn color="primary" block prepend-icon="mdi-import" :loading="importing"
+            :disabled="!form.sheet || !form.counterparty" @click="runSheetsImport">
+            Импортировать
+          </v-btn>
+        </v-col>
+      </v-row>
+
+      <!-- File upload mode -->
+      <v-row v-if="importMode === 'file'" dense>
         <v-col cols="12" sm="4">
           <v-select v-model="form.counterparty" :items="counterparties" item-title="name" item-value="id"
             label="Поставщик *" density="compact" variant="outlined" />
@@ -120,9 +148,12 @@ import api from '../../api';
 
 const counterparties = ref([]);
 const currencies = ref([]);
+const sheetNames = ref([]);
+const loadingSheets = ref(false);
 const importing = ref(false);
+const importMode = ref('sheets');
 const result = ref(null);
-const form = ref({ counterparty: null, currency: null, file: null });
+const form = ref({ counterparty: null, currency: null, file: null, sheet: null });
 
 // History
 const history = ref([]);
@@ -157,6 +188,24 @@ function statusColor(s) {
 
 function statusLabel(s) {
   return { success: 'Успешно', partial: 'Частично', error: 'Ошибка', processing: 'В процессе', rolled_back: 'Откачено', pending: 'Ожидание' }[s] || s;
+}
+
+async function runSheetsImport() {
+  if (!form.value.sheet || !form.value.counterparty) return;
+  importing.value = true;
+  result.value = null;
+  try {
+    const { data } = await api.post('/admin/transaction-import/from-sheets', {
+      sheet: form.value.sheet,
+      counterparty: form.value.counterparty,
+      currency: form.value.currency,
+    });
+    result.value = data;
+    loadHistory();
+  } catch (e) {
+    result.value = { message: e.response?.data?.message || 'Ошибка импорта из Google Sheets', errors: 1, success: 0 };
+  }
+  importing.value = false;
 }
 
 async function runImport() {
@@ -221,6 +270,13 @@ onMounted(async () => {
     counterparties.value = data.counterparties;
     currencies.value = data.currencies;
   } catch {}
+  // Load Google Sheets names
+  loadingSheets.value = true;
+  try {
+    const { data } = await api.get('/admin/transaction-import/sheet-names');
+    sheetNames.value = data.sheets || [];
+  } catch {}
+  loadingSheets.value = false;
   loadHistory();
 });
 </script>
