@@ -81,7 +81,7 @@
 
       <!-- Right panel: chat -->
       <v-col :cols="mobile ? 12 : 7" :lg="8" v-show="!mobile || selectedTicket">
-        <v-card v-if="selectedTicket" class="d-flex flex-column" style="height: calc(100vh - 180px); min-height: 500px">
+        <v-card v-if="selectedTicket" class="d-flex flex-column" style="height: calc(100vh - 200px); min-height: 300px; overflow-y: auto">
           <!-- Ticket header -->
           <div class="pa-3 border-b">
             <div class="d-flex align-center ga-2 flex-wrap">
@@ -177,7 +177,7 @@
         </v-card>
 
         <!-- No ticket selected -->
-        <v-card v-else class="d-flex align-center justify-center" style="height: calc(100vh - 180px); min-height: 500px">
+        <v-card v-else class="d-flex align-center justify-center" style="height: calc(100vh - 200px); min-height: 300px; overflow-y: auto">
           <div class="text-center">
             <v-icon size="80" color="grey-lighten-1">mdi-chat-outline</v-icon>
             <div class="text-h6 text-medium-emphasis mt-3">Выберите обращение</div>

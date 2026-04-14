@@ -49,6 +49,7 @@
     </v-card>
 
     <v-card :loading="loading">
+      <div style="overflow-x: auto">
       <v-table density="compact" hover>
         <thead>
           <tr>
@@ -91,6 +92,7 @@
           </tr>
         </tbody>
       </v-table>
+      </div>
       <div v-if="total > 25" class="d-flex justify-center pa-3">
         <v-pagination v-model="page" :length="Math.ceil(total / 25)" density="compact" @update:model-value="loadData" />
       </div>

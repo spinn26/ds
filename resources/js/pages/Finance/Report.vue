@@ -133,6 +133,7 @@
           <v-chip v-if="tables.personalSales?.length" size="x-small" class="ml-2" color="primary">{{ tables.personalSales.length }}</v-chip>
         </v-expansion-panel-title>
         <v-expansion-panel-text>
+          <div style="overflow-x: auto">
           <v-data-table :items="tables.personalSales || []" :headers="personalSalesHeaders" density="compact"
             hover no-data-text="Нет данных">
             <template #item.points="{ value }">{{ fmt(value) }}</template>
@@ -140,6 +141,7 @@
             <template #item.bonusRub="{ value }">{{ fmt2(value) }}</template>
             <template #item.clientPaymentsRub="{ value }">{{ fmt2(value) }}</template>
           </v-data-table>
+          </div>
         </v-expansion-panel-text>
       </v-expansion-panel>
 
@@ -151,6 +153,7 @@
           <v-chip v-if="tables.groupSales?.length" size="x-small" class="ml-2" color="primary">{{ tables.groupSales.length }}</v-chip>
         </v-expansion-panel-title>
         <v-expansion-panel-text>
+          <div style="overflow-x: auto">
           <v-data-table :items="tables.groupSales || []" :headers="groupSalesHeaders" density="compact"
             hover no-data-text="Нет данных">
             <template #item.points="{ value }">{{ fmt(value) }}</template>
@@ -158,6 +161,7 @@
             <template #item.bonusRub="{ value }">{{ fmt2(value) }}</template>
             <template #item.clientPaymentsRub="{ value }">{{ fmt2(value) }}</template>
           </v-data-table>
+          </div>
         </v-expansion-panel-text>
       </v-expansion-panel>
 
@@ -169,11 +173,13 @@
           <v-chip v-if="tables.otherAccruals?.length" size="x-small" class="ml-2" color="primary">{{ tables.otherAccruals.length }}</v-chip>
         </v-expansion-panel-title>
         <v-expansion-panel-text>
+          <div style="overflow-x: auto">
           <v-data-table :items="tables.otherAccruals || []" :headers="otherAccrualsHeaders" density="compact"
             hover no-data-text="Нет данных">
             <template #item.points="{ value }">{{ fmt(value) }}</template>
             <template #item.amountRub="{ value }">{{ fmt2(value) }}</template>
           </v-data-table>
+          </div>
         </v-expansion-panel-text>
       </v-expansion-panel>
 
@@ -204,6 +210,7 @@
           <v-chip v-if="tables.payments?.length" size="x-small" class="ml-2" color="primary">{{ tables.payments.length }}</v-chip>
         </v-expansion-panel-title>
         <v-expansion-panel-text>
+          <div style="overflow-x: auto">
           <v-data-table :items="tables.payments || []" :headers="paymentsHeaders" density="compact"
             hover no-data-text="Нет данных">
             <template #item.amount="{ value }">{{ fmt2(value) }}</template>
@@ -213,6 +220,7 @@
               </v-chip>
             </template>
           </v-data-table>
+          </div>
         </v-expansion-panel-text>
       </v-expansion-panel>
     </v-expansion-panels>

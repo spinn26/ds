@@ -190,6 +190,7 @@
       <v-card>
         <v-card-title>Условия перехода</v-card-title>
         <v-card-text>
+          <div style="overflow-x: auto">
           <v-table density="compact">
             <thead>
               <tr>
@@ -216,6 +217,7 @@
               </tr>
             </tbody>
           </v-table>
+          </div>
         </v-card-text>
         <v-card-actions><v-btn @click="showLevels = false">Закрыть</v-btn></v-card-actions>
       </v-card>

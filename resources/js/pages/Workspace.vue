@@ -3,7 +3,7 @@
     <!-- Welcome header -->
     <div class="d-flex justify-space-between align-center mb-4 flex-wrap ga-2">
       <div>
-        <h4 class="text-h4 font-weight-bold d-flex align-center ga-2">
+        <h4 :class="mobile ? 'text-h6' : 'text-h4'" class="font-weight-bold d-flex align-center ga-2">
           <v-icon size="32" color="primary">mdi-hand-wave</v-icon>
           {{ greeting }}, {{ auth.user?.firstName }}!
         </h4>
@@ -254,8 +254,11 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
+import { useDisplay } from 'vuetify';
 import { useAuthStore } from '../stores/auth';
 import api from '../api';
+
+const { mobile } = useDisplay();
 import { fmt, fmtDate } from '../composables/useDesign';
 
 const auth = useAuthStore();

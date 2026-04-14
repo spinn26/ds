@@ -83,7 +83,7 @@
     <v-row no-gutters style="min-height: 600px">
       <!-- Ticket list (left 40%) -->
       <v-col cols="12" md="5">
-        <v-card class="overflow-y-auto" style="height: 600px" :loading="loading">
+        <v-card class="overflow-y-auto" style="min-height: 400px; max-height: calc(100vh - 250px)" :loading="loading">
           <v-list lines="three" class="pa-0">
             <EmptyState v-if="tickets.length === 0 && !loading" icon="mdi-ticket-outline" message="Тикеты не найдены" />
             <v-list-item
@@ -136,7 +136,7 @@
 
       <!-- Chat panel (right 60%) -->
       <v-col cols="12" md="7">
-        <v-card class="d-flex flex-column" style="height: 600px">
+        <v-card class="d-flex flex-column" style="min-height: 400px; max-height: calc(100vh - 250px)">
           <!-- No ticket selected -->
           <div v-if="!activeTicket" class="d-flex flex-column align-center justify-center flex-grow-1">
             <v-icon size="64" color="grey-lighten-2" class="mb-3">mdi-chat-outline</v-icon>

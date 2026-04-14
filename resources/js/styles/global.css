@@ -72,6 +72,28 @@
 }
 
 /* Print styles */
+/* Table horizontal scroll on mobile */
+.v-table__wrapper {
+  overflow-x: auto;
+}
+.v-data-table {
+  overflow-x: auto;
+}
+
+/* Responsive font sizes */
+@media (max-width: 600px) {
+  .text-h4 { font-size: 1.5rem !important; }
+  .text-h5 { font-size: 1.25rem !important; }
+  .text-h3 { font-size: 1.75rem !important; }
+}
+
+/* Touch-friendly minimum button size */
+@media (max-width: 600px) {
+  .v-btn:not(.v-btn--icon) {
+    min-height: 40px;
+  }
+}
+
 @media print {
   .v-navigation-drawer,
   .v-app-bar,

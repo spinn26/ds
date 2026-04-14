@@ -12,7 +12,7 @@
     <v-container class="fill-height position-relative" fluid style="z-index:1">
       <v-row justify="center" align="center">
         <v-col cols="12" sm="8" md="5" lg="4">
-          <v-card class="pa-8 login-card" elevation="16" rounded="xl">
+          <v-card :class="mobile ? 'pa-4' : 'pa-8'" class="login-card" elevation="16" rounded="xl">
             <div class="text-center mb-6">
               <div class="text-h3 font-weight-black text-primary logo-text">DS</div>
               <div class="text-caption text-medium-emphasis" style="letter-spacing: 4px">КОНСАЛТИНГ ПЛАТФОРМА</div>
@@ -54,7 +54,10 @@
 <script setup>
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
+import { useDisplay } from 'vuetify';
 import { useAuthStore } from '../../stores/auth';
+
+const { mobile } = useDisplay();
 
 const auth = useAuthStore();
 const router = useRouter();
