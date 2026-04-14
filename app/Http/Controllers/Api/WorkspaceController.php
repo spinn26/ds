@@ -162,17 +162,23 @@ class WorkspaceController extends Controller
 
         if (empty($teamIds)) return [];
 
-        return DB::table('commission')
+        $commissions = DB::table('commission')
             ->whereIn('consultant', $teamIds)
             ->where('chainOrder', 1)
             ->whereNull('deletedAt')
             ->orderByDesc('date')
             ->limit(5)
-            ->get()
-            ->map(function ($c) {
-                $name = DB::table('consultant')->where('id', $c->consultant)->value('personName');
+            ->get();
+
+        // Batch load consultant names
+        $consultantIds = $commissions->pluck('consultant')->filter()->unique();
+        $consultantNames = $consultantIds->isNotEmpty()
+            ? DB::table('consultant')->whereIn('id', $consultantIds)->pluck('personName', 'id')
+            : collect();
+
+        return $commissions->map(function ($c) use ($consultantNames) {
                 return [
-                    'partnerName' => $name ?? '—',
+                    'partnerName' => $consultantNames[$c->consultant] ?? '—',
                     'amount' => round((float) ($c->amountRUB ?? 0), 2),
                     'personalVolume' => round((float) ($c->personalVolume ?? 0), 2),
                     'date' => $c->date,

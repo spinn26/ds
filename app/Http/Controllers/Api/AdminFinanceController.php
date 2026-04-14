@@ -22,18 +22,25 @@ class AdminFinanceController extends Controller
         }
 
         $total = $query->count();
-        $data = $query->orderByDesc('date')
+        $rows = $query->orderByDesc('date')
             ->offset(($request->input('page', 1) - 1) * 25)
             ->limit(25)
-            ->get()
-            ->map(fn ($t) => [
+            ->get();
+
+        // Batch load currencies
+        $currencyIds = $rows->pluck('currency')->filter()->unique();
+        $currencies = $currencyIds->isNotEmpty()
+            ? DB::table('currency')->whereIn('id', $currencyIds)->pluck('symbol', 'id')
+            : collect();
+
+        $data = $rows->map(fn ($t) => [
                 'id' => $t->id,
                 'contract' => $t->contract,
                 'amount' => round((float) ($t->amount ?? 0), 2),
                 'amountRUB' => round((float) ($t->amountRUB ?? 0), 2),
                 'amountUSD' => round((float) ($t->amountUSD ?? 0), 2),
                 'date' => $t->date,
-                'currencySymbol' => $t->currency ? DB::table('currency')->where('id', $t->currency)->value('symbol') : null,
+                'currencySymbol' => $t->currency ? ($currencies[$t->currency] ?? null) : null,
             ]);
 
         return response()->json(['data' => $data, 'total' => $total]);
@@ -52,14 +59,21 @@ class AdminFinanceController extends Controller
         }
 
         $total = $query->count();
-        $data = $query->orderByDesc('date')
+        $rows = $query->orderByDesc('date')
             ->offset(($request->input('page', 1) - 1) * 25)
             ->limit(25)
-            ->get()
-            ->map(fn ($c) => [
+            ->get();
+
+        // Batch load consultant names
+        $consultantIds = $rows->pluck('consultant')->filter()->unique();
+        $consultantNames = $consultantIds->isNotEmpty()
+            ? DB::table('consultant')->whereIn('id', $consultantIds)->pluck('personName', 'id')
+            : collect();
+
+        $data = $rows->map(fn ($c) => [
                 'id' => $c->id,
                 'consultant' => $c->consultant,
-                'consultantName' => $c->consultant ? DB::table('consultant')->where('id', $c->consultant)->value('personName') : null,
+                'consultantName' => $c->consultant ? ($consultantNames[$c->consultant] ?? null) : null,
                 'type' => $c->type,
                 'amountRUB' => round((float) ($c->amountRUB ?? 0), 2),
                 'personalVolume' => round((float) ($c->personalVolume ?? 0), 2),

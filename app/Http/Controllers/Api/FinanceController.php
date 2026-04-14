@@ -70,9 +70,39 @@ class FinanceController extends Controller
         // Other accruals: no transaction linked (manual bonuses/penalties)
         $otherAccruals = $allCommissions->whereNull('transaction');
 
+        // Batch load transaction details for all commissions with transactions
+        $allWithTx = $allCommissions->whereNotNull('transaction');
+        $txIds = $allWithTx->pluck('transaction')->filter()->unique();
+        $transactions = $txIds->isNotEmpty()
+            ? DB::table('transaction')->whereIn('id', $txIds)->get()->keyBy('id')
+            : collect();
+        $contractIds = $transactions->pluck('contract')->filter()->unique();
+        $contracts = $contractIds->isNotEmpty()
+            ? DB::table('contract')->whereIn('id', $contractIds)->get()->keyBy('id')
+            : collect();
+
+        // Helper to get tx details from pre-loaded data
+        $getTxData = function (?int $transactionId) use ($transactions, $contracts): array {
+            if (! $transactionId) {
+                return ['contractNumber' => null, 'clientName' => null, 'productName' => null, 'programName' => null, 'amount' => null];
+            }
+            $tx = $transactions[$transactionId] ?? null;
+            if (! $tx || ! $tx->contract) {
+                return ['contractNumber' => null, 'clientName' => null, 'productName' => null, 'programName' => null, 'amount' => $tx?->amount ?? null];
+            }
+            $contract = $contracts[$tx->contract] ?? null;
+            return [
+                'contractNumber' => $contract->number ?? null,
+                'clientName' => $contract->clientName ?? null,
+                'productName' => $contract->productName ?? null,
+                'programName' => $contract->programName ?? null,
+                'amount' => $tx->amount ?? null,
+            ];
+        };
+
         // Format personal sales with transaction details
-        $personalSalesTable = $personalCommissions->map(function ($c) {
-            $txData = $this->getTransactionDetails($c->transaction);
+        $personalSalesTable = $personalCommissions->map(function ($c) use ($getTxData) {
+            $txData = $getTxData($c->transaction);
             return [
                 'id' => $c->id,
                 'date' => $c->date,
@@ -90,16 +120,18 @@ class FinanceController extends Controller
             ];
         })->values();
 
+        // Batch load partner names for group commissions
+        $partnerIds = $groupCommissions->pluck('commissionFromOtherConsultant')->filter()->unique();
+        $partnerNames = $partnerIds->isNotEmpty()
+            ? DB::table('consultant')->whereIn('id', $partnerIds)->pluck('personName', 'id')
+            : collect();
+
         // Format group sales with partner name
-        $groupSalesTable = $groupCommissions->map(function ($c) {
-            $txData = $this->getTransactionDetails($c->transaction);
-            // Get partner name from the commission's consultant chain
-            $partnerName = null;
-            if ($c->commissionFromOtherConsultant) {
-                $partnerName = DB::table('consultant')
-                    ->where('id', $c->commissionFromOtherConsultant)
-                    ->value('personName');
-            }
+        $groupSalesTable = $groupCommissions->map(function ($c) use ($getTxData, $partnerNames) {
+            $txData = $getTxData($c->transaction);
+            $partnerName = $c->commissionFromOtherConsultant
+                ? ($partnerNames[$c->commissionFromOtherConsultant] ?? null)
+                : null;
             return [
                 'id' => $c->id,
                 'date' => $c->date,
@@ -204,7 +236,9 @@ class FinanceController extends Controller
             'summary' => [
                 'qualificationPrev' => $qLogPrev ? [
                     'level' => $qLogPrev->calculationLevel ?? $qLogPrev->nominalLevel,
-                    'title' => DB::table('status_levels')->where('id', $qLogPrev->calculationLevel ?? $qLogPrev->nominalLevel)->value('title'),
+                    'title' => ($qLogPrev->calculationLevel ?? $qLogPrev->nominalLevel)
+                        ? DB::table('status_levels')->where('id', $qLogPrev->calculationLevel ?? $qLogPrev->nominalLevel)->value('title')
+                        : null,
                 ] : null,
                 'qualificationCurrent' => $qLogCurrent ? [
                     'level' => $qLogCurrent->calculationLevel ?? $qLogCurrent->nominalLevel,

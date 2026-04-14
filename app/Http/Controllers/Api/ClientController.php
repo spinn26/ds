@@ -38,21 +38,28 @@ class ClientController extends Controller
             $query->orderBy('personName', $sortDir === 'desc' ? 'desc' : 'asc');
         }
 
-        $clients = $query
+        $clientRows = $query
             ->offset(($request->input('page', 1) - 1) * 25)
             ->limit(25)
-            ->get()
-            ->map(function ($c) {
-                $personData = null;
-                $cityName = null;
+            ->get();
 
-                if ($c->person) {
-                    $personData = DB::table('person')->where('id', $c->person)->first();
-                }
+        // Batch load person data
+        $personIds = $clientRows->pluck('person')->filter()->unique();
+        $persons = $personIds->isNotEmpty()
+            ? DB::table('person')->whereIn('id', $personIds)->get()->keyBy('id')
+            : collect();
 
-                if ($personData && ($personData->city ?? null)) {
-                    $cityName = DB::table('city')->where('id', $personData->city)->value('cityNameRu');
-                }
+        // Batch load cities from person data
+        $cityIds = $persons->pluck('city')->filter()->unique();
+        $cities = $cityIds->isNotEmpty()
+            ? DB::table('city')->whereIn('id', $cityIds)->pluck('cityNameRu', 'id')
+            : collect();
+
+        $clients = $clientRows->map(function ($c) use ($persons, $cities) {
+                $personData = $c->person ? ($persons[$c->person] ?? null) : null;
+                $cityName = ($personData && ($personData->city ?? null))
+                    ? ($cities[$personData->city] ?? null)
+                    : null;
 
                 return [
                     'id' => $c->id,

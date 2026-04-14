@@ -34,25 +34,38 @@ class AdminDataController extends Controller
         }
 
         $total = $query->count();
-        $partners = $query->orderByDesc('id')
+        $rows = $query->orderByDesc('id')
             ->offset(($request->input('page', 1) - 1) * 25)
             ->limit(25)
-            ->get()
-            ->map(function ($c) {
-                // Person data from WebUser
-                $webUser = $c->webUser
-                    ? DB::table('WebUser')->where('id', $c->webUser)->first()
-                    : null;
-                $personData = $c->person
-                    ? DB::table('person')->where('id', $c->person)->first()
-                    : $webUser;
+            ->get();
 
-                // Check if person is also a client
-                $isClient = $c->person
-                    ? DB::table('client')->where('person', $c->person)->exists()
-                    : false;
+        // Batch load WebUser data
+        $webUserIds = $rows->pluck('webUser')->filter()->unique();
+        $webUsers = $webUserIds->isNotEmpty()
+            ? DB::table('WebUser')->whereIn('id', $webUserIds)->get()->keyBy('id')
+            : collect();
 
-                // Platform access: webUser exists and not blocked
+        // Batch load person data
+        $personIds = $rows->pluck('person')->filter()->unique();
+        $persons = $personIds->isNotEmpty()
+            ? DB::table('person')->whereIn('id', $personIds)->get()->keyBy('id')
+            : collect();
+
+        // Batch check which persons are also clients
+        $personClients = $personIds->isNotEmpty()
+            ? DB::table('client')->whereIn('person', $personIds)->pluck('person')->unique()->flip()
+            : collect();
+
+        // Batch load status titles
+        $statusIds = $rows->pluck('status')->filter()->unique();
+        $statusTitles = $statusIds->isNotEmpty()
+            ? DB::table('status')->whereIn('id', $statusIds)->pluck('title', 'id')
+            : collect();
+
+        $partners = $rows->map(function ($c) use ($webUsers, $persons, $personClients, $statusTitles) {
+                $webUser = $c->webUser ? ($webUsers[$c->webUser] ?? null) : null;
+                $personData = $c->person ? ($persons[$c->person] ?? null) : $webUser;
+                $isClient = $c->person ? isset($personClients[$c->person]) : false;
                 $platformAccess = $webUser && ! ($webUser->isBlocked ?? false);
 
                 return [
@@ -62,7 +75,7 @@ class AdminDataController extends Controller
                     'active' => $c->active,
                     'activityName' => $c->activityLabel(),
                     'activityId' => $c->activity?->value,
-                    'statusName' => $c->status ? DB::table('status')->where('id', $c->status)->value('title') : null,
+                    'statusName' => $c->status ? ($statusTitles[$c->status] ?? null) : null,
                     'personalVolume' => round((float) ($c->personalVolume ?? 0), 2),
                     'groupVolumeCumulative' => round((float) ($c->groupVolumeCumulative ?? 0), 2),
                     'participantCode' => $c->participantCode,
@@ -129,14 +142,19 @@ class AdminDataController extends Controller
         }
 
         $detailTotal = $detailQuery->count();
-        $details = $detailQuery->orderBy('personName')
+        $detailRows = $detailQuery->orderBy('personName')
             ->offset(($request->input('page', 1) - 1) * 25)
             ->limit(25)
-            ->get()
-            ->map(function ($c) {
-                $activityName = $c->activity
-                    ? DB::table('directory_of_activities')->where('id', $c->activity)->value('name')
-                    : '—';
+            ->get();
+
+        // Batch load activity names
+        $activityIds = $detailRows->pluck('activity')->filter()->unique();
+        $activityNames = $activityIds->isNotEmpty()
+            ? DB::table('directory_of_activities')->whereIn('id', $activityIds)->pluck('name', 'id')
+            : collect();
+
+        $details = $detailRows->map(function ($c) use ($activityNames) {
+                $activityName = $c->activity ? ($activityNames[$c->activity] ?? '—') : '—';
 
                 // Рассчитать "будет терминирован" для активных
                 $willTerminate = null;
@@ -179,24 +197,40 @@ class AdminDataController extends Controller
         }
 
         $total = $query->count();
-        $clients = $query->orderByDesc('id')
+        $rows = $query->orderByDesc('id')
             ->offset(($request->input('page', 1) - 1) * 25)
             ->limit(25)
-            ->get()
-            ->map(function ($c) {
-                // Person data from WebUser
-                $person = $c->person
-                    ? DB::table('person')->where('id', $c->person)->first()
-                    : null;
+            ->get();
 
-                $contractCount = DB::table('contract')
-                    ->where('client', $c->id)
-                    ->whereNull('deletedAt')
-                    ->count();
+        // Batch load person data
+        $personIds = $rows->pluck('person')->filter()->unique();
+        $persons = $personIds->isNotEmpty()
+            ? DB::table('person')->whereIn('id', $personIds)->get()->keyBy('id')
+            : collect();
 
-                $isPartner = $c->person
-                    ? DB::table('consultant')->where('person', $c->person)->whereNull('dateDeleted')->exists()
-                    : false;
+        // Batch count contracts per client
+        $clientIds = $rows->pluck('id')->filter()->unique();
+        $contractCounts = $clientIds->isNotEmpty()
+            ? DB::table('contract')->whereIn('client', $clientIds)->whereNull('deletedAt')
+                ->select('client', DB::raw('count(*) as cnt'))
+                ->groupBy('client')
+                ->pluck('cnt', 'client')
+            : collect();
+
+        // Batch check which persons are also partners
+        $personPartners = $personIds->isNotEmpty()
+            ? DB::table('consultant')->whereIn('person', $personIds)->whereNull('dateDeleted')
+                ->pluck('person')->unique()->flip()
+            : collect();
+
+        // Batch load consultant names
+        $consultantIds = $rows->pluck('consultant')->filter()->unique();
+        $consultantNames = $consultantIds->isNotEmpty()
+            ? DB::table('consultant')->whereIn('id', $consultantIds)->pluck('personName', 'id')
+            : collect();
+
+        $clients = $rows->map(function ($c) use ($persons, $contractCounts, $personPartners, $consultantNames) {
+                $person = $c->person ? ($persons[$c->person] ?? null) : null;
 
                 return [
                     'id' => $c->id,
@@ -205,11 +239,11 @@ class AdminDataController extends Controller
                     'personName' => $c->personName,
                     'active' => (bool) $c->active,
                     'consultantId' => $c->consultant,
-                    'consultantName' => $c->consultant ? DB::table('consultant')->where('id', $c->consultant)->value('personName') : null,
+                    'consultantName' => $c->consultant ? ($consultantNames[$c->consultant] ?? null) : null,
                     'dateCreated' => $c->dateCreated,
                     'workSince' => $c->workSince,
-                    'contractCount' => $contractCount,
-                    'isPartner' => $isPartner,
+                    'contractCount' => $contractCounts[$c->id] ?? 0,
+                    'isPartner' => $c->person ? isset($personPartners[$c->person]) : false,
                     'comment' => $c->comment,
                     'email' => $person?->email ?? null,
                     'phone' => $person?->phone ?? null,
@@ -237,20 +271,30 @@ class AdminDataController extends Controller
         }
 
         $total = $query->count();
-        $requisites = $query->orderByDesc('id')
+        $rows = $query->orderByDesc('id')
             ->offset(($request->input('page', 1) - 1) * 25)
             ->limit(25)
-            ->get()
-            ->map(function ($r) {
-                $consultantName = $r->consultant
-                    ? DB::table('consultant')->where('id', $r->consultant)->value('personName')
-                    : null;
-                $bankReq = BankRequisite::where('requisites', $r->id)->whereNull('deletedAt')->first();
+            ->get();
+
+        // Batch load consultant names
+        $consultantIds = $rows->pluck('consultant')->filter()->unique();
+        $consultantNames = $consultantIds->isNotEmpty()
+            ? DB::table('consultant')->whereIn('id', $consultantIds)->pluck('personName', 'id')
+            : collect();
+
+        // Batch load bank requisites
+        $reqIds = $rows->pluck('id')->filter()->unique();
+        $bankReqs = $reqIds->isNotEmpty()
+            ? BankRequisite::whereIn('requisites', $reqIds)->whereNull('deletedAt')->get()->keyBy('requisites')
+            : collect();
+
+        $requisites = $rows->map(function ($r) use ($consultantNames, $bankReqs) {
+                $bankReq = $bankReqs[$r->id] ?? null;
 
                 return [
                     'id' => $r->id,
                     'consultantId' => $r->consultant,
-                    'consultantName' => $consultantName,
+                    'consultantName' => $r->consultant ? ($consultantNames[$r->consultant] ?? null) : null,
                     'individualEntrepreneur' => $r->individualEntrepreneur,
                     'inn' => $r->inn,
                     'verified' => $r->verified,
@@ -321,16 +365,31 @@ class AdminDataController extends Controller
         }
 
         $total = $query->count();
-        $data = $query->orderBy('personName')
+        $rows = $query->orderBy('personName')
             ->offset(($request->input('page', 1) - 1) * 25)
             ->limit(25)
-            ->get()
-            ->map(function ($c) {
-                // Найти дату акцепта из logAcceptance
-                $log = DB::table('logAcceptance')
-                    ->where('consultant', $c->id)
-                    ->orderByDesc('dateAccepted')
-                    ->first();
+            ->get();
+
+        // Batch load latest acceptance logs per consultant
+        $consultantIds = $rows->pluck('id')->filter()->unique();
+        $acceptanceLogs = collect();
+        if ($consultantIds->isNotEmpty()) {
+            // Get latest log per consultant using a subquery
+            $latestLogIds = DB::table('logAcceptance')
+                ->whereIn('consultant', $consultantIds)
+                ->selectRaw('MAX(id) as id')
+                ->groupBy('consultant')
+                ->pluck('id');
+            if ($latestLogIds->isNotEmpty()) {
+                $acceptanceLogs = DB::table('logAcceptance')
+                    ->whereIn('id', $latestLogIds)
+                    ->get()
+                    ->keyBy('consultant');
+            }
+        }
+
+        $data = $rows->map(function ($c) use ($acceptanceLogs) {
+                $log = $acceptanceLogs[$c->id] ?? null;
 
                 return [
                     'id' => $c->id,
@@ -362,20 +421,33 @@ class AdminDataController extends Controller
         }
 
         $total = $query->count();
-        $contracts = $query->orderByDesc('id')
+        $rows = $query->orderByDesc('id')
             ->offset(($request->input('page', 1) - 1) * 25)
             ->limit(25)
-            ->get()
-            ->map(fn ($c) => [
+            ->get();
+
+        // Batch load contract statuses
+        $statusIds = $rows->pluck('status')->filter()->unique();
+        $contractStatuses = $statusIds->isNotEmpty()
+            ? DB::table('contractStatus')->whereIn('id', $statusIds)->pluck('name', 'id')
+            : collect();
+
+        // Batch load currencies
+        $currencyIds = $rows->pluck('currency')->filter()->unique();
+        $currencies = $currencyIds->isNotEmpty()
+            ? DB::table('currency')->whereIn('id', $currencyIds)->pluck('symbol', 'id')
+            : collect();
+
+        $contracts = $rows->map(fn ($c) => [
                 'id' => $c->id,
                 'number' => $c->number,
                 'clientName' => $c->clientName,
                 'consultantName' => $c->consultantName,
                 'productName' => $c->productName,
                 'programName' => $c->programName,
-                'statusName' => $c->status ? DB::table('contractStatus')->where('id', $c->status)->value('name') : null,
+                'statusName' => $c->status ? ($contractStatuses[$c->status] ?? null) : null,
                 'ammount' => $c->ammount,
-                'currencySymbol' => $c->currency ? DB::table('currency')->where('id', $c->currency)->value('symbol') : null,
+                'currencySymbol' => $c->currency ? ($currencies[$c->currency] ?? null) : null,
                 'openDate' => $c->openDate,
             ]);
 

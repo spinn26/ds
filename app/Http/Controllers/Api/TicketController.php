@@ -49,22 +49,52 @@ class TicketController extends Controller
         }
 
         $total = $query->count();
-        $tickets = $query->orderByDesc('updated_at')
+        $rows = $query->orderByDesc('updated_at')
             ->offset(($request->input('page', 1) - 1) * 25)
             ->limit(25)
-            ->get()
-            ->map(function ($t) {
-                $creator = DB::table('WebUser')->where('id', $t->created_by)->first();
-                $assignee = $t->assigned_to ? DB::table('WebUser')->where('id', $t->assigned_to)->first() : null;
-                $lastMsg = DB::table('ticket_messages')
-                    ->where('ticket_id', $t->id)
-                    ->orderByDesc('created_at')
-                    ->first();
-                $unread = DB::table('ticket_messages')
-                    ->where('ticket_id', $t->id)
-                    ->where('user_id', '!=', auth()->id())
-                    ->where('created_at', '>', $t->updated_at ?? $t->created_at)
-                    ->count();
+            ->get();
+
+        $ticketIds = $rows->pluck('id')->filter()->unique();
+
+        // Batch load all WebUsers (creators + assignees)
+        $userIds = $rows->pluck('created_by')->merge($rows->pluck('assigned_to'))->filter()->unique();
+        $webUsers = $userIds->isNotEmpty()
+            ? DB::table('WebUser')->whereIn('id', $userIds)->get()->keyBy('id')
+            : collect();
+
+        // Batch load last messages per ticket
+        $lastMessages = collect();
+        if ($ticketIds->isNotEmpty()) {
+            $latestMsgIds = DB::table('ticket_messages')
+                ->whereIn('ticket_id', $ticketIds)
+                ->selectRaw('MAX(id) as id')
+                ->groupBy('ticket_id')
+                ->pluck('id');
+            if ($latestMsgIds->isNotEmpty()) {
+                $lastMessages = DB::table('ticket_messages')
+                    ->whereIn('id', $latestMsgIds)
+                    ->get()
+                    ->keyBy('ticket_id');
+            }
+        }
+
+        // Batch load unread counts per ticket
+        $currentUserId = auth()->id();
+        $unreadCounts = collect();
+        if ($ticketIds->isNotEmpty()) {
+            $unreadCounts = DB::table('ticket_messages')
+                ->whereIn('ticket_id', $ticketIds)
+                ->where('user_id', '!=', $currentUserId)
+                ->whereRaw('"created_at" > (SELECT COALESCE("updated_at", "created_at") FROM tickets WHERE tickets.id = ticket_messages.ticket_id)')
+                ->select('ticket_id', DB::raw('count(*) as cnt'))
+                ->groupBy('ticket_id')
+                ->pluck('cnt', 'ticket_id');
+        }
+
+        $tickets = $rows->map(function ($t) use ($webUsers, $lastMessages, $unreadCounts) {
+                $creator = $webUsers[$t->created_by] ?? null;
+                $assignee = $t->assigned_to ? ($webUsers[$t->assigned_to] ?? null) : null;
+                $lastMsg = $lastMessages[$t->id] ?? null;
 
                 return [
                     'id' => $t->id,
@@ -77,8 +107,8 @@ class TicketController extends Controller
                     'assignedTo' => $assignee ? trim(($assignee->lastName ?? '') . ' ' . ($assignee->firstName ?? '')) : null,
                     'contextType' => $t->context_type,
                     'lastMessage' => $lastMsg ? mb_substr($lastMsg->message ?? '', 0, 80) : null,
-                    'lastMessageAt' => $lastMsg?->created_at,
-                    'unreadCount' => $unread,
+                    'lastMessageAt' => $lastMsg?->created_at ?? null,
+                    'unreadCount' => $unreadCounts[$t->id] ?? 0,
                     'createdAt' => $t->created_at,
                     'updatedAt' => $t->updated_at,
                 ];
@@ -138,12 +168,26 @@ class TicketController extends Controller
         $ticket = DB::table('tickets')->where('id', $id)->first();
         if (! $ticket) return response()->json(['message' => 'Не найден'], 404);
 
-        $messages = DB::table('ticket_messages')
+        $messageRows = DB::table('ticket_messages')
             ->where('ticket_id', $id)
             ->orderBy('created_at')
-            ->get()
-            ->map(function ($m) {
-                $user = DB::table('WebUser')->where('id', $m->user_id)->first();
+            ->get();
+
+        $participantRows = DB::table('ticket_participants')
+            ->where('ticket_id', $id)
+            ->get();
+
+        // Batch load all WebUsers needed (message authors + participants + creator)
+        $allUserIds = $messageRows->pluck('user_id')
+            ->merge($participantRows->pluck('user_id'))
+            ->push($ticket->created_by)
+            ->filter()->unique();
+        $webUsers = $allUserIds->isNotEmpty()
+            ? DB::table('WebUser')->whereIn('id', $allUserIds)->get()->keyBy('id')
+            : collect();
+
+        $messages = $messageRows->map(function ($m) use ($webUsers) {
+                $user = $webUsers[$m->user_id] ?? null;
                 return [
                     'id' => $m->id,
                     'userId' => $m->user_id,
@@ -156,11 +200,8 @@ class TicketController extends Controller
                 ];
             });
 
-        $participants = DB::table('ticket_participants')
-            ->where('ticket_id', $id)
-            ->get()
-            ->map(function ($p) {
-                $user = DB::table('WebUser')->where('id', $p->user_id)->first();
+        $participants = $participantRows->map(function ($p) use ($webUsers) {
+                $user = $webUsers[$p->user_id] ?? null;
                 return [
                     'userId' => $p->user_id,
                     'userName' => $user ? trim(($user->lastName ?? '') . ' ' . ($user->firstName ?? '')) : '—',
@@ -168,7 +209,7 @@ class TicketController extends Controller
                 ];
             });
 
-        $creator = DB::table('WebUser')->where('id', $ticket->created_by)->first();
+        $creator = $webUsers[$ticket->created_by] ?? null;
 
         return response()->json([
             'ticket' => [
