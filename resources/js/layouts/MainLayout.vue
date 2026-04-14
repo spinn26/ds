@@ -72,16 +72,46 @@
       <v-btn icon="mdi-bell-outline" size="small" class="mr-1" />
 
       <!-- User menu -->
-      <v-menu>
+      <v-menu min-width="280" :close-on-content-click="false">
         <template #activator="{ props }">
-          <v-avatar v-bind="props" :color="auth.isAdmin ? 'secondary' : 'primary'" size="32" class="cursor-pointer">
-            <span class="text-caption text-white">{{ initials }}</span>
+          <v-avatar v-bind="props" :color="auth.isAdmin ? 'secondary' : 'primary'" size="36" class="cursor-pointer ml-1">
+            <span class="text-caption text-white font-weight-bold">{{ initials }}</span>
           </v-avatar>
         </template>
-        <v-list density="compact">
-          <v-list-item to="/profile" prepend-icon="mdi-account" title="Профиль" />
-          <v-list-item @click="auth.logout(); $router.push('/login')" prepend-icon="mdi-logout" title="Выйти" />
-        </v-list>
+        <v-card rounded="lg" elevation="8">
+          <v-card-text class="pa-4">
+            <div class="d-flex align-center ga-3 mb-3">
+              <v-avatar :color="auth.isAdmin ? 'secondary' : 'primary'" size="48">
+                <span class="text-h6 text-white font-weight-bold">{{ initials }}</span>
+              </v-avatar>
+              <div>
+                <div class="text-subtitle-1 font-weight-bold">
+                  {{ auth.user?.lastName }} {{ auth.user?.firstName }}
+                </div>
+                <div class="text-caption text-medium-emphasis">{{ auth.user?.email }}</div>
+              </div>
+            </div>
+            <div v-if="statusInfo?.activityName" class="mb-3">
+              <div class="d-flex align-center ga-2">
+                <span class="text-body-2 text-medium-emphasis">Статус</span>
+                <v-chip size="x-small" :color="statusColor">{{ statusInfo.activityName }}</v-chip>
+              </div>
+              <div v-if="statusInfo?.daysRemaining != null" class="text-caption text-medium-emphasis mt-1">
+                Смена статуса {{ statusInfo.daysRemaining > 0
+                  ? 'через ' + statusInfo.daysRemaining + ' дн.'
+                  : 'просрочена' }}
+              </div>
+            </div>
+            <v-divider class="mb-2" />
+            <v-list density="compact" nav class="pa-0">
+              <v-list-item to="/profile" prepend-icon="mdi-account-outline" title="Профиль"
+                rounded="lg" class="mb-1" />
+              <v-list-item @click="auth.logout(); $router.push('/login')"
+                prepend-icon="mdi-logout" title="Выйти" rounded="lg"
+                base-color="error" />
+            </v-list>
+          </v-card-text>
+        </v-card>
       </v-menu>
     </v-app-bar>
 
