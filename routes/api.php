@@ -96,7 +96,10 @@ Route::prefix('v1')->group(function () {
         Route::get('/admin/reports', [\App\Http\Controllers\Api\AdminFinanceController::class, 'reports']);
         Route::get('/admin/report-availability', [\App\Http\Controllers\Api\AdminFinanceController::class, 'reportAvailability']);
         Route::get('/admin/currencies', [\App\Http\Controllers\Api\AdminFinanceController::class, 'currencies']);
-        Route::get('/admin/transaction-import', [\App\Http\Controllers\Api\AdminFinanceController::class, 'transactionImport']);
+        Route::get('/admin/transaction-import/form-data', [\App\Http\Controllers\Api\TransactionImportController::class, 'formData']);
+        Route::post('/admin/transaction-import', [\App\Http\Controllers\Api\TransactionImportController::class, 'import']);
+        Route::get('/admin/transaction-import/history', [\App\Http\Controllers\Api\TransactionImportController::class, 'history']);
+        Route::post('/admin/transaction-import/{id}/rollback', [\App\Http\Controllers\Api\TransactionImportController::class, 'rollback']);
 
         // Admin Products CRUD
         Route::get('/admin/products', [\App\Http\Controllers\Api\AdminProductController::class, 'index']);
