@@ -29,7 +29,7 @@ class ContestController extends Controller
 
         $contests = $query->get()->map(function ($c) {
             $typeName = $c->type
-                ? DB::table('type_contest')->where('id', $c->type)->value('name')
+                ? DB::table('type_contest')->where('id', $c->type)->value('type')
                 : null;
 
             $statusLabel = match ((int) $c->status) {
@@ -56,9 +56,9 @@ class ContestController extends Controller
 
         // Типы конкурсов для фильтра
         $types = DB::table('type_contest')
-            ->orderBy('name')
+            ->orderBy('type')
             ->get()
-            ->map(fn ($t) => ['id' => $t->id, 'name' => $t->name]);
+            ->map(fn ($t) => ['id' => $t->id, 'name' => $t->type]);
 
         return response()->json([
             'contests' => $contests,
