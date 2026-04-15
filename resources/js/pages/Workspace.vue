@@ -67,6 +67,9 @@
         </v-card>
 
         <!-- Mentor & Network Leader -->
+        <v-alert v-if="!data.mentor && data.networkLeader" type="info" variant="tonal" class="mb-4" density="compact">
+          Наставника нет — указан ЛИДЕР СЕТИ
+        </v-alert>
         <v-row v-if="data.mentor || data.networkLeader" class="mb-4">
           <v-col v-if="data.mentor" cols="12" :md="data.networkLeader ? 6 : 12">
             <v-card class="pa-4 h-100" variant="tonal" color="primary">

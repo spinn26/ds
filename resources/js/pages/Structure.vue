@@ -251,7 +251,7 @@ async function loadFilterOptions() {
       api.get('/structure/qualification-levels'),
     ]);
     // activity-statuses can override statusOptions if backend provides them
-    qualificationOptions.value = qual.data.map(q => ({ title: q.name, value: q.id }));
+    qualificationOptions.value = qual.data.map(q => ({ title: `${q.level} [${q.title}]`, value: q.id }));
   } catch {}
 }
 

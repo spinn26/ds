@@ -75,8 +75,8 @@ function resetFilters() {
 
 const headers = [
   { title: 'Номер контракта', key: 'number', width: 140 },
-  { title: 'ФИО клиента', key: 'clientName' },
-  { title: 'ФИО ФК', key: 'consultantName' },
+  { title: 'ФИО клиента', key: 'clientName', cellProps: { style: 'white-space:nowrap' } },
+  { title: 'ФИО ФК', key: 'consultantName', cellProps: { style: 'white-space:nowrap' } },
   { title: 'Дата открытия', key: 'openDate', width: 130 },
   { title: 'Продукт', key: 'productName' },
   { title: 'Программа', key: 'programName' },
@@ -145,5 +145,6 @@ async function loadStatuses() {
 onMounted(() => {
   loadData();
   loadStatuses();
+  searchProducts('');
 });
 </script>

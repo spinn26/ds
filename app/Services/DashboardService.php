@@ -223,6 +223,8 @@ class DashboardService
                 'participantCode' => $consultant->participantCode,
                 'active' => $consultant->active,
                 'statusName' => $statusName ?? 'Партнёр',
+                'activityName' => $consultant->activityLabel(),
+                'activityId' => $consultant->activity?->value,
                 'ambassadorProducts' => $ambassadorProducts,
             ],
             'statusInfo' => $statusInfo,

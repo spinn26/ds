@@ -1,6 +1,6 @@
 <template>
   <div>
-    <PageHeader title="Список конкурсов" icon="mdi-trophy" />
+    <PageHeader title="Список конкурсов и событий" icon="mdi-trophy" />
 
     <v-card class="mb-3 pa-3">
       <div class="d-flex ga-2 flex-wrap align-center">
@@ -38,9 +38,11 @@
       </v-col>
     </v-row>
 
-    <div v-if="!contests.length && !loading" class="text-center text-medium-emphasis pa-6">
-      Конкурсов не найдено
-    </div>
+    <v-card v-if="!contests.length && !loading" class="pa-8 text-center">
+      <v-icon size="64" color="grey-lighten-1" class="mb-3">mdi-trophy-outline</v-icon>
+      <div class="text-h6 text-medium-emphasis mb-1">Конкурсов и событий пока нет</div>
+      <div class="text-body-2 text-medium-emphasis">Следите за обновлениями — скоро здесь появятся новые конкурсы и события</div>
+    </v-card>
 
     <v-overlay v-model="loading" class="align-center justify-center" persistent>
       <v-progress-circular indeterminate size="64" />
@@ -63,7 +65,10 @@ const statusFilterOptions = [
   { title: 'Архив', value: 3 },
 ];
 
-const typeFilterOptions = ref([]);
+const typeFilterOptions = [
+  { title: 'Конкурс', value: 'contest' },
+  { title: 'Событие', value: 'event' },
+];
 
 function contestStatusColor(status) {
   if (status === 1) return 'success';

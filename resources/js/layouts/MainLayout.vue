@@ -381,8 +381,10 @@ const menuItems = [
   { label: 'Структура', icon: 'mdi-sitemap', path: '/structure', partner: true },
   { label: 'Обучение', icon: 'mdi-school', path: '/education', partner: true },
   { label: 'Продукты', icon: 'mdi-package-variant', path: '/products', partner: true },
-  { label: 'Список конкурсов', icon: 'mdi-trophy', path: '/contests', partner: true },
+  { label: 'Список конкурсов и событий', icon: 'mdi-trophy', path: '/contests', partner: true },
   { label: 'Обратная связь', icon: 'mdi-chat', path: '/tickets', partner: true },
+  { label: 'Написать собственнику', icon: 'mdi-email-edit', path: '/tickets?to=owner', partner: true },
+  { label: 'Оставить кейс', icon: 'mdi-briefcase-plus', path: '/tickets?type=case', partner: true },
 
   // ---- Staff sections (grouped per spec) ----
   // Инструменты

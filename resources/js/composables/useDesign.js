@@ -70,9 +70,11 @@ export function fmt2(n) {
 export function fmtDate(d) {
   if (!d) return '—';
   try {
-    return new Date(d).toLocaleDateString('ru-RU');
+    const date = new Date(d);
+    if (isNaN(date.getTime())) return '—';
+    return date.toLocaleDateString('ru-RU');
   } catch {
-    return d;
+    return '—';
   }
 }
 
