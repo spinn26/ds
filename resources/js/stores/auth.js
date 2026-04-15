@@ -48,7 +48,8 @@ export const useAuthStore = defineStore('auth', {
             const { data } = await api.post('/auth/login', { email, password });
             this.token = data.token;
             this.user = data.user;
-            // Socket auth
+            // Legacy + socket compat
+            localStorage.setItem('auth_token', data.token);
             localStorage.setItem('auth_user_id', data.user.id);
             localStorage.setItem('auth_user_name', `${data.user.lastName || ''} ${data.user.firstName || ''}`.trim());
         },
@@ -61,8 +62,10 @@ export const useAuthStore = defineStore('auth', {
             api.post('/auth/logout').catch(() => {});
             this.token = null;
             this.user = null;
+            localStorage.removeItem('auth_token');
             localStorage.removeItem('auth_user_id');
             localStorage.removeItem('auth_user_name');
+            localStorage.removeItem('auth');
         },
     },
 });

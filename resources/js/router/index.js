@@ -27,7 +27,7 @@ const routes = [
             { path: 'structure', component: () => import('../pages/Structure.vue') },
             { path: 'products', component: () => import('../pages/Products.vue') },
             { path: 'contests', component: () => import('../pages/Contests.vue') },
-            { path: 'chat', component: () => import('../pages/Chat/ChatDashboard.vue') },
+            { path: 'chat', component: () => import('../pages/Chat/PartnerChat.vue') },
             { path: 'help', component: () => import('../pages/Help.vue') },
             { path: 'profile', component: () => import('../pages/Profile.vue') },
 

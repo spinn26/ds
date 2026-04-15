@@ -408,6 +408,8 @@ const menuItems = [
   { label: 'Обучение', icon: 'mdi-school', path: '/education', partner: true },
   { label: 'Продукты', icon: 'mdi-package-variant', path: '/products', partner: true },
   { label: 'Список конкурсов и событий', icon: 'mdi-trophy', path: '/contests', partner: true },
+  { label: 'Обратная связь', icon: 'mdi-chat', path: '/chat', partner: true },
+
   // ---- Staff sections (grouped per spec) ----
   // Инструменты
   { group: 'Инструменты', adminSection: 'calculator' },

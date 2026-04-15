@@ -6,8 +6,24 @@ const api = axios.create({
     headers: { 'Accept': 'application/json' },
 });
 
+/**
+ * Read token from pinia-persist storage OR legacy localStorage.
+ */
+function getToken() {
+    // Pinia-persist stores under key 'auth' as JSON
+    try {
+        const stored = localStorage.getItem('auth');
+        if (stored) {
+            const parsed = JSON.parse(stored);
+            if (parsed.token) return parsed.token;
+        }
+    } catch {}
+    // Legacy fallback
+    return localStorage.getItem('auth_token');
+}
+
 api.interceptors.request.use((config) => {
-    const token = localStorage.getItem('auth_token');
+    const token = getToken();
     if (token) config.headers.Authorization = `Bearer ${token}`;
     return config;
 });
@@ -20,14 +36,15 @@ api.interceptors.response.use(
         const { showError } = useSnackbar();
 
         if (status === 401) {
-            if (!url.includes('/auth/login') && !url.includes('/auth/register')) {
+            if (!url.includes('/auth/login') && !url.includes('/auth/register') && !url.includes('/auth/me')) {
+                localStorage.removeItem('auth');
                 localStorage.removeItem('auth_token');
                 window.location.href = '/login';
             }
         } else if (status === 403) {
             showError('Недостаточно прав для этого действия');
         } else if (status === 422) {
-            // Validation errors — let the component handle it
+            // Validation — component handles
         } else if (status === 429) {
             showError('Слишком много запросов. Подождите немного.');
         } else if (status >= 500) {
