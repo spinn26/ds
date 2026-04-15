@@ -292,7 +292,7 @@ const deleteProgramProductId = ref(null);
 const programsByProduct = reactive({});
 const programsLoading = reactive({});
 
-const { debounced: debouncedLoad } = useDebounce(loadData, 400);
+const { debounced: debouncedLoad } = useDebounce(loadProducts, 400);
 
 async function loadProducts() {
   loading.value = true;

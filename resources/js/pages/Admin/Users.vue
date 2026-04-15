@@ -192,7 +192,7 @@ const headers = [
   { title: 'Действия', key: 'actions', sortable: false, width: 120 },
 ];
 
-const { debounced: debouncedLoad } = useDebounce(loadData, 400);
+const { debounced: debouncedLoad } = useDebounce(loadUsers, 400);
 
 async function loadUsers() {
   loading.value = true;

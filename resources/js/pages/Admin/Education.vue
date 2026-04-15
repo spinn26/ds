@@ -366,7 +366,7 @@ const lessonsLoading = reactive({});
 const testsByCourse = reactive({});
 const testsLoading = reactive({});
 
-const { debounced: debouncedLoad } = useDebounce(loadData, 400);
+const { debounced: debouncedLoad } = useDebounce(loadCourses, 400);
 
 async function loadCourses() {
   loading.value = true;
