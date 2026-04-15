@@ -357,7 +357,11 @@ function onMenuClick(item) {
 
 function isActivePath(path) {
   if (!path) return false;
-  return route.path === path || route.path === path.split('?')[0];
+  // Exact match including query params
+  if (path.includes('?')) {
+    return route.fullPath === path;
+  }
+  return route.path === path;
 }
 
 // Parse user roles
