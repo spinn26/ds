@@ -2,6 +2,10 @@
   <div>
     <PageHeader title="Отчёт начислений и выплат" icon="mdi-bank">
       <template #actions>
+        <v-btn variant="outlined" color="primary" size="small" prepend-icon="mdi-download" class="mr-2"
+          :href="`/api/finance/report/download?month=${month}`" target="_blank">
+          Скачать отчёт
+        </v-btn>
         <MonthPicker v-model="month" @update:model-value="loadData" />
       </template>
     </PageHeader>

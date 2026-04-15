@@ -4,11 +4,19 @@
 
     <v-card class="mb-3 pa-3">
       <div class="d-flex ga-2 flex-wrap align-center">
-        <v-text-field v-model="search" placeholder="Поиск по ФИО..."
-          rounded prepend-inner-icon="mdi-magnify" clearable hide-details style="max-width:300px" @update:model-value="debouncedLoad" />
-        <v-chip v-if="search" size="small" color="info" variant="tonal" class="ml-1">1 фильтр</v-chip>
-        <v-btn v-if="search" size="small" variant="text" color="secondary"
-          prepend-icon="mdi-filter-remove" @click="search = ''; loadData()">Сбросить</v-btn>
+        <v-text-field v-model="filters.search" placeholder="Поиск по ФИО..."
+          rounded prepend-inner-icon="mdi-magnify" clearable hide-details style="max-width:240px" @update:model-value="debouncedLoad" />
+        <v-text-field v-model="filters.email" placeholder="Email..."
+          prepend-inner-icon="mdi-email" clearable hide-details style="max-width:220px" @update:model-value="debouncedLoad" />
+        <v-text-field v-model="filters.birth_date_from" label="Дата рождения с" type="date"
+          hide-details style="max-width:170px" @update:model-value="loadData" />
+        <v-text-field v-model="filters.birth_date_to" label="Дата рождения по" type="date"
+          hide-details style="max-width:170px" @update:model-value="loadData" />
+        <v-chip v-if="activeFilterCount > 0" size="small" color="info" variant="tonal" class="ml-1">
+          {{ activeFilterCount }} {{ activeFilterCount === 1 ? 'фильтр' : 'фильтра' }}
+        </v-chip>
+        <v-btn v-if="activeFilterCount > 0" size="small" variant="text" color="secondary"
+          prepend-icon="mdi-filter-remove" @click="resetFilters">Сбросить</v-btn>
       </div>
     </v-card>
 
@@ -33,9 +41,23 @@ import { fmtDate } from '../../composables/useDesign';
 const items = ref([]);
 const total = ref(0);
 const loading = ref(false);
-const search = ref('');
+const filters = ref({ search: '', email: '', birth_date_from: '', birth_date_to: '' });
 const page = ref(1);
 const sortBy = ref([]);
+
+const activeFilterCount = computed(() => {
+  let c = 0;
+  if (filters.value.search) c++;
+  if (filters.value.email) c++;
+  if (filters.value.birth_date_from) c++;
+  if (filters.value.birth_date_to) c++;
+  return c;
+});
+
+function resetFilters() {
+  filters.value = { search: '', email: '', birth_date_from: '', birth_date_to: '' };
+  loadData();
+}
 
 const headers = [
   { title: 'ФИО клиента', key: 'personName', sortable: true },
@@ -61,7 +83,10 @@ async function loadData() {
   loading.value = true;
   try {
     const params = { page: page.value };
-    if (search.value) params.search = search.value;
+    if (filters.value.search) params.search = filters.value.search;
+    if (filters.value.email) params.email = filters.value.email;
+    if (filters.value.birth_date_from) params.birth_date_from = filters.value.birth_date_from;
+    if (filters.value.birth_date_to) params.birth_date_to = filters.value.birth_date_to;
     if (sortBy.value.length) {
       params.sort_by = sortBy.value[0].key;
       params.sort_dir = sortBy.value[0].order || 'asc';

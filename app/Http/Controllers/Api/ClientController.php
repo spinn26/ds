@@ -26,6 +26,20 @@ class ClientController extends Controller
             $query->where('personName', 'ilike', '%' . $request->search . '%');
         }
 
+        if ($request->filled('email') || $request->filled('birth_date_from') || $request->filled('birth_date_to')) {
+            $personQuery = DB::table('person')->select('id');
+            if ($request->filled('email')) {
+                $personQuery->where('email', 'ilike', '%' . $request->email . '%');
+            }
+            if ($request->filled('birth_date_from')) {
+                $personQuery->where('birthDate', '>=', $request->birth_date_from);
+            }
+            if ($request->filled('birth_date_to')) {
+                $personQuery->where('birthDate', '<=', $request->birth_date_to);
+            }
+            $query->whereIn('person', $personQuery->pluck('id'));
+        }
+
         $total = $query->count();
 
         // Server-side sorting

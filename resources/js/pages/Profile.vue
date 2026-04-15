@@ -20,6 +20,17 @@
             <div>
               <div class="text-h6">{{ profile.user?.lastName }} {{ profile.user?.firstName }} {{ profile.user?.patronymic }}</div>
               <div class="text-body-2 text-medium-emphasis">{{ profile.user?.email }}</div>
+              <div v-if="profile.statusInfo" class="d-flex align-center ga-2 mt-1">
+                <v-chip size="small" :color="activityColor(profile.statusInfo.activityId)">
+                  {{ profile.statusInfo.activityName }}
+                </v-chip>
+                <span v-if="profile.statusInfo.yearPeriodEnd" class="text-caption text-medium-emphasis">
+                  до {{ fmtShortDate(profile.statusInfo.yearPeriodEnd) }}
+                </span>
+                <span v-if="profile.statusInfo.activationDeadline" class="text-caption text-medium-emphasis">
+                  Активация до {{ fmtShortDate(profile.statusInfo.activationDeadline) }}
+                </span>
+              </div>
             </div>
           </div>
 
@@ -40,10 +51,10 @@
               <v-select v-model="form.gender" label="Пол" :items="genderOptions" clearable />
             </v-col>
             <v-col cols="12" sm="4">
-              <v-text-field v-model="form.country" label="Страна" />
+              <v-autocomplete v-model="form.country" :items="countryOptions" label="Страна" clearable />
             </v-col>
             <v-col cols="12" sm="4">
-              <v-text-field v-model="form.city" label="Город" />
+              <v-combobox v-model="form.city" :items="cityOptions" label="Город" clearable />
             </v-col>
             <v-col cols="12" sm="4">
               <v-text-field v-model="form.email" label="Email" type="email" prepend-inner-icon="mdi-email" />
@@ -175,7 +186,7 @@
             </v-col>
           </v-row>
           <v-btn color="primary" :loading="savingReq" @click="saveRequisites" class="mt-2" prepend-icon="mdi-content-save">
-            Сохранить ре��визиты
+            Сохранить реквизиты
           </v-btn>
           <v-alert v-if="reqMsg" :type="reqMsgType" density="compact" class="mt-3" closable @click:close="reqMsg = ''">{{ reqMsg }}</v-alert>
         </v-card>
@@ -192,7 +203,7 @@
           </div>
           <v-alert v-if="profile.bankRequisites?.verificationStatus === 'verified'" type="warning" density="compact" class="mb-3" variant="tonal">
             <v-icon class="mr-1">mdi-alert</v-icon>
-            Изменение банков��ких реквизитов сбросит статус верификации
+            Изменение банковских реквизитов сбросит статус верификации
           </v-alert>
           <v-row dense>
             <v-col cols="12" sm="6">
@@ -327,6 +338,33 @@ const genderOptions = [
   { title: 'Женский', value: 'female' },
 ];
 
+const countryOptions = ['Россия', 'Казахстан', 'Беларусь', 'Узбекистан', 'Кыргызстан', 'Таджикистан', 'Армения', 'Грузия', 'Азербайджан', 'Молдова', 'Украина', 'Турция', 'ОАЭ', 'Германия', 'Израиль', 'США', 'Другая'];
+const cityOptions = ref([]);
+
+function activityColor(id) {
+  if (id === 1) return 'success';
+  if (id === 4) return 'info';
+  if (id === 3) return 'warning';
+  if (id === 5) return 'error';
+  return 'grey';
+}
+
+function fmtShortDate(d) {
+  if (!d) return '';
+  const date = new Date(d);
+  if (isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+async function loadCities() {
+  try {
+    const { data } = await api.get('/profile/cities');
+    cityOptions.value = data;
+  } catch {
+    cityOptions.value = ['Москва', 'Санкт-Петербург', 'Краснодар', 'Казань', 'Новосибирск', 'Екатеринбург', 'Нижний Новгород', 'Ростов-на-Дону', 'Самара', 'Уфа', 'Красноярск', 'Воронеж', 'Пермь', 'Волгоград'];
+  }
+}
+
 const form = ref({ phone: '', telegram: '', gender: '', birthDate: '', email: '', country: '', city: '' });
 const pwd = ref({ current_password: '', password: '', password_confirmation: '' });
 const reqForm = ref({ individualEntrepreneur: '', inn: '', ogrn: '', address: '', email: '', phone: '' });
@@ -435,7 +473,7 @@ async function saveBankRequisites() {
     bankMsgType.value = 'success';
     loadProfile();
   } catch (e) {
-    bankMsg.value = e.response?.data?.message || 'Ошибка сохра��ения';
+    bankMsg.value = e.response?.data?.message || 'Ошибка сохранения';
     bankMsgType.value = 'error';
   }
   savingBank.value = false;
@@ -450,5 +488,6 @@ function copyToClipboard(text) {
 onMounted(() => {
   loadProfile();
   loadDocuments();
+  loadCities();
 });
 </script>
