@@ -225,6 +225,7 @@ async function loadChats() {
 
 async function openChat(t) {
   activeChat.value = t;
+  t.unread = 0; // Clear unread immediately
   try {
     const { data } = await api.get(`/chat/tickets/${t.id}`);
     messages.value = data.messages || [];
@@ -248,6 +249,8 @@ async function send() {
     await api.post(`/chat/tickets/${activeChat.value.id}/messages`, fd);
     msgText.value = ''; file.value = null;
     await refreshMessages(); scrollDown();
+    activeChat.value.unread = 0;
+    loadChats(); // Refresh list to update unread badges
   } catch {}
   sending.value = false;
 }
@@ -264,7 +267,10 @@ async function assignTo(userId, name) {
   try { await api.post(`/chat/tickets/${activeChat.value.id}/assign`, { user_id: userId }); activeChat.value.assigned_to = userId; activeChat.value.assigned_name = name; await refreshMessages(); } catch {}
 }
 
-function startPoll() { stopPoll(); poll = setInterval(refreshMessages, 8000); }
+function startPoll() {
+  stopPoll();
+  poll = setInterval(() => { refreshMessages(); loadChats(); }, 8000);
+}
 function stopPoll() { if (poll) clearInterval(poll); }
 
 onMounted(async () => {

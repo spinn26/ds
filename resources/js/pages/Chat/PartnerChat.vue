@@ -204,6 +204,8 @@ async function send() {
     msgText.value = ''; file.value = null;
     await refreshMessages();
     scrollDown();
+    activeChat.value.unread = 0;
+    loadChats(); // Refresh list
   } catch {}
   sending.value = false;
 }
@@ -221,7 +223,10 @@ async function createChat() {
   creating.value = false;
 }
 
-function startPoll() { stopPoll(); poll = setInterval(refreshMessages, 8000); }
+function startPoll() {
+  stopPoll();
+  poll = setInterval(() => { refreshMessages(); loadChats(); }, 8000);
+}
 function stopPoll() { if (poll) { clearInterval(poll); poll = null; } }
 
 onMounted(loadChats);
