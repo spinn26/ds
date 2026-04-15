@@ -3,8 +3,8 @@
     <PageHeader title="Отчёт начислений и выплат" icon="mdi-bank">
       <template #actions>
         <v-btn variant="outlined" color="primary" size="small" prepend-icon="mdi-download" class="mr-2"
-          :href="`/api/finance/report/download?month=${month}`" target="_blank">
-          Скачать отчёт
+          :loading="exporting" @click="downloadXlsx">
+          Скачать XLSX
         </v-btn>
         <MonthPicker v-model="month" @update:model-value="loadData" />
       </template>
@@ -232,11 +232,21 @@
 import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
 import MonthPicker from '../../components/MonthPicker.vue';
+import { exportFinanceReport } from '../../composables/useExport';
 import PageHeader from '../../components/PageHeader.vue';
 import { fmt, fmt2 } from '../../composables/useDesign';
 
 const loading = ref(true);
+const exporting = ref(false);
 const month = ref(new Date().toISOString().slice(0, 7));
+
+async function downloadXlsx() {
+  exporting.value = true;
+  try {
+    await exportFinanceReport(data.value, month.value);
+  } catch {}
+  exporting.value = false;
+}
 const data = ref({});
 
 const fmtRate = (n) => Number(n || 0).toLocaleString('ru-RU', { minimumFractionDigits: 4 });

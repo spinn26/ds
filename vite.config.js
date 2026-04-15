@@ -10,4 +10,14 @@ export default defineConfig({
         }),
         vue(),
     ],
+    build: {
+        rollupOptions: {
+            output: {
+                manualChunks: {
+                    'vuetify': ['vuetify', 'vuetify/components', 'vuetify/directives'],
+                    'vendor': ['vue', 'vue-router', 'pinia', '@tanstack/vue-query', 'vue-i18n'],
+                },
+            },
+        },
+    },
 });

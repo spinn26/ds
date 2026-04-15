@@ -1,6 +1,9 @@
 import { createApp } from 'vue';
 import { createPinia } from 'pinia';
+import piniaPluginPersistedstate from 'pinia-plugin-persistedstate';
+import { VueQueryPlugin } from '@tanstack/vue-query';
 import { createVuetify } from 'vuetify';
+import { createI18n } from 'vue-i18n';
 import * as components from 'vuetify/components';
 import * as directives from 'vuetify/directives';
 import '@mdi/font/css/materialdesignicons.css';
@@ -8,6 +11,18 @@ import 'vuetify/styles';
 import './styles/global.css';
 import router from './router';
 import App from './App.vue';
+import { ru, en } from './i18n';
+
+// Sentry — lazy-loaded in production
+if (import.meta.env.PROD && import.meta.env.VITE_SENTRY_DSN) {
+    import('@sentry/vue').then(Sentry => {
+        Sentry.init({
+            dsn: import.meta.env.VITE_SENTRY_DSN,
+            integrations: [],
+            tracesSampleRate: 0.1,
+        });
+    });
+}
 
 const savedTheme = localStorage.getItem('theme') || 'light';
 
@@ -55,6 +70,7 @@ const vuetify = createVuetify({
         VSelect: { variant: 'outlined', density: 'compact', rounded: 'lg' },
         VTextarea: { variant: 'outlined', density: 'compact', rounded: 'lg' },
         VAutocomplete: { variant: 'outlined', density: 'compact', rounded: 'lg' },
+        VCombobox: { variant: 'outlined', density: 'compact', rounded: 'lg' },
         VFileInput: { variant: 'outlined', density: 'compact', rounded: 'lg' },
         VChip: { size: 'small', rounded: 'lg' },
         VDataTableServer: { density: 'comfortable', hover: true },
@@ -64,8 +80,36 @@ const vuetify = createVuetify({
     },
 });
 
+// Pinia with persistence
+const pinia = createPinia();
+pinia.use(piniaPluginPersistedstate);
+
+// Vue Query config
+const vueQueryOptions = {
+    queryClientConfig: {
+        defaultOptions: {
+            queries: {
+                staleTime: 60_000,        // data fresh for 1 min
+                gcTime: 5 * 60_000,       // keep in cache 5 min
+                retry: 1,
+                refetchOnWindowFocus: false,
+            },
+        },
+    },
+};
+
+// i18n
+const i18n = createI18n({
+    legacy: false,
+    locale: localStorage.getItem('locale') || 'ru',
+    fallbackLocale: 'ru',
+    messages: { ru, en },
+});
+
 const app = createApp(App);
-app.use(createPinia());
+app.use(pinia);
 app.use(vuetify);
 app.use(router);
+app.use(VueQueryPlugin, vueQueryOptions);
+app.use(i18n);
 app.mount('#app');

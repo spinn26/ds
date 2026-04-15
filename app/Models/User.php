@@ -7,10 +7,20 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\Hash;
 use Laravel\Sanctum\HasApiTokens;
+use Spatie\Activitylog\Traits\LogsActivity;
+use Spatie\Activitylog\LogOptions;
 
 class User extends Authenticatable
 {
-    use HasApiTokens, HasFactory, Notifiable;
+    use HasApiTokens, HasFactory, Notifiable, LogsActivity;
+
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->logOnly(['firstName', 'lastName', 'email', 'phone', 'role'])
+            ->logOnlyDirty()
+            ->setDescriptionForEvent(fn (string $eventName) => "User {$eventName}");
+    }
 
     protected $table = 'WebUser';
     public $timestamps = false;
