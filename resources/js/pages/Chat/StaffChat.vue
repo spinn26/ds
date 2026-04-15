@@ -317,7 +317,7 @@ onUnmounted(stopPoll);
 .avatar-circle.staff { background: rgb(var(--v-theme-primary)); }
 .msg-bubble { max-width: 60%; padding: 10px 14px; border-radius: 14px; }
 .msg-bubble.partner { background: rgba(var(--v-theme-surface-variant), 1); border-bottom-left-radius: 4px; }
-.msg-bubble.mine { background: rgb(var(--v-theme-primary)); color: #fff; border-bottom-right-radius: 4px; }
+.msg-bubble.mine { background: #1a3a2e; color: #d1e8d5; border-bottom-right-radius: 4px; }
 .msg-sender { font-size: 11px; font-weight: 700; margin-bottom: 2px; color: #f97316; }
 .msg-text { font-size: 13px; line-height: 1.5; white-space: pre-line; word-break: break-word; }
 .msg-attach { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; margin-top: 4px; }

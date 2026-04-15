@@ -281,11 +281,12 @@ onUnmounted(stopPoll);
 .avatar-circle.mine { background: rgb(var(--v-theme-primary)); }
 .msg-bubble { max-width: 65%; padding: 10px 14px; border-radius: 16px; position: relative; }
 .msg-bubble.agent { background: rgba(var(--v-theme-surface-variant), 1); border-bottom-left-radius: 4px; }
-.msg-bubble.mine { background: rgb(var(--v-theme-primary)); color: #fff; border-bottom-right-radius: 4px; }
-.msg-sender { font-size: 12px; font-weight: 700; margin-bottom: 2px; color: rgb(var(--v-theme-secondary)); }
+.msg-bubble.mine { background: #1a3a2e; color: #d1e8d5; border-bottom-right-radius: 4px; }
+.msg-sender { font-size: 11px; font-weight: 600; margin-bottom: 2px; color: rgba(var(--v-theme-on-surface), 0.6); }
+.msg-bubble.mine .msg-sender { color: rgba(209,232,213,0.7); }
 .msg-text { font-size: 14px; line-height: 1.5; white-space: pre-line; word-break: break-word; }
 .msg-attach { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; margin-top: 6px; }
-.msg-bubble.mine .msg-attach { color: rgba(255,255,255,0.8); }
+.msg-bubble.mine .msg-attach { color: rgba(209,232,213,0.7); }
 .msg-time { font-size: 10px; margin-top: 4px; opacity: 0.5; }
 .msg-bubble.mine .msg-time { text-align: right; }
 
