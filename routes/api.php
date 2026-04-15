@@ -102,6 +102,9 @@ Route::prefix('v1')->group(function () {
 
         Route::get('/products', [ProductController::class, 'index']);
         Route::get('/contests', [ContestController::class, 'index']);
+        Route::get('/education', function () {
+            return response()->json(['videos' => [], 'documents' => []]);
+        });
 
         // Admin — all routes require staff role
         Route::middleware('role:admin')->group(function () {

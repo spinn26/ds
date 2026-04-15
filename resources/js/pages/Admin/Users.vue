@@ -140,6 +140,7 @@ import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../../stores/auth';
 import api from '../../api';
+import { useDebounce } from '../../composables/useDebounce';
 
 const auth = useAuthStore();
 const router = useRouter();

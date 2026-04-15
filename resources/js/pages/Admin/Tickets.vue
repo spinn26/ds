@@ -322,6 +322,7 @@
 <script setup>
 import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue';
 import api from '../../api';
+import { useDebounce } from '../../composables/useDebounce';
 import PageHeader from '../../components/PageHeader.vue';
 import EmptyState from '../../components/EmptyState.vue';
 import { getInitials, timeAgo, statusLabels, categoryLabels, getStatusColor, getCategoryColor } from '../../composables/useDesign';
