@@ -40,6 +40,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/chat/tickets', [\App\Http\Controllers\Api\ChatController::class, 'index']);
         Route::post('/chat/tickets', [\App\Http\Controllers\Api\ChatController::class, 'store']);
         Route::get('/chat/tickets/stats', [\App\Http\Controllers\Api\ChatController::class, 'stats']);
+        Route::get('/chat/unread-count', [\App\Http\Controllers\Api\ChatController::class, 'unreadCount']);
         Route::get('/chat/tickets/staff', [\App\Http\Controllers\Api\ChatController::class, 'staffList']);
         Route::get('/chat/tickets/{id}', [\App\Http\Controllers\Api\ChatController::class, 'show']);
         Route::post('/chat/tickets/{id}/messages', [\App\Http\Controllers\Api\ChatController::class, 'sendMessage']);

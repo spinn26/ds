@@ -25,9 +25,14 @@
           </v-list-subheader>
           <!-- Regular item -->
           <v-list-item v-else :to="item.path" :prepend-icon="item.icon"
-            :title="item.label" :active="isActivePath(item.path)"
+            :active="isActivePath(item.path)"
             :color="item.adminSection ? 'secondary' : 'primary'"
             rounded="lg" class="mb-1 menu-item" @click="onMenuClick(item)">
+            <v-list-item-title>
+              {{ item.label }}
+              <v-badge v-if="item.path === '/chat' && chatUnread > 0" :content="chatUnread" color="error" inline class="ml-1" />
+              <v-badge v-if="item.path === '/manage/chat' && chatUnread > 0" :content="chatUnread" color="error" inline class="ml-1" />
+            </v-list-item-title>
           </v-list-item>
         </template>
       </v-list>
@@ -214,7 +219,14 @@ const notifCount = ref(0);
 const notifications = ref([]);
 let unreadInterval = null;
 
-// Ticket unread count removed — chat system being rebuilt
+const chatUnread = ref(0);
+
+async function loadChatUnread() {
+  try {
+    const { data } = await api.get('/chat/unread-count');
+    chatUnread.value = data.count || 0;
+  } catch {}
+}
 
 async function loadNotifications() {
   try {
@@ -272,7 +284,8 @@ onMounted(async () => {
     };
   } catch {}
   loadNotifications();
-  unreadInterval = setInterval(() => { loadNotifications(); }, 60000);
+  loadChatUnread();
+  unreadInterval = setInterval(() => { loadNotifications(); loadChatUnread(); }, 30000);
 
   // Real-time notifications via Socket.IO
   try {

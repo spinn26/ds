@@ -34,7 +34,11 @@ class ChatController extends Controller
         $query = DB::table('chat_tickets');
 
         if (!$isStaff) {
-            $query->where('created_by', $user->id);
+            // Partner sees chats they created OR chats addressed to them
+            $query->where(function ($q) use ($user) {
+                $q->where('created_by', $user->id)
+                  ->orWhere('recipient_id', $user->id);
+            });
         }
 
         // Filters
@@ -142,8 +146,11 @@ class ChatController extends Controller
         $ticket = DB::table('chat_tickets')->where('id', $id)->first();
         if (!$ticket) return response()->json(['message' => 'Не найден'], 404);
 
-        // Auth check
-        if (!$this->isStaff($request) && (int) $ticket->created_by !== $request->user()->id) {
+        // Auth check — creator, recipient, or staff
+        $userId = $request->user()->id;
+        if (!$this->isStaff($request)
+            && (int) $ticket->created_by !== $userId
+            && (int) ($ticket->recipient_id ?? 0) !== $userId) {
             return response()->json(['message' => 'Доступ запрещён'], 403);
         }
 
@@ -175,7 +182,10 @@ class ChatController extends Controller
         $ticket = DB::table('chat_tickets')->where('id', $id)->first();
         if (!$ticket) return response()->json(['message' => 'Не найден'], 404);
 
-        if (!$this->isStaff($request) && (int) $ticket->created_by !== $request->user()->id) {
+        $userId = $request->user()->id;
+        if (!$this->isStaff($request)
+            && (int) $ticket->created_by !== $userId
+            && (int) ($ticket->recipient_id ?? 0) !== $userId) {
             return response()->json(['message' => 'Доступ запрещён'], 403);
         }
 
@@ -374,6 +384,30 @@ class ChatController extends Controller
             'closed' => DB::table('chat_tickets')->where('status', 'closed')->count(),
             'critical' => DB::table('chat_tickets')->where('priority', 'critical')->whereIn('status', ['new', 'open'])->count(),
         ]);
+    }
+
+    /** Unread messages count for current user */
+    public function unreadCount(Request $request): JsonResponse
+    {
+        $userId = $request->user()->id;
+
+        // Count chats with messages newer than user's last read
+        $count = DB::table('chat_tickets')
+            ->where(function ($q) use ($userId) {
+                $q->where('created_by', $userId)
+                  ->orWhere('recipient_id', $userId);
+            })
+            ->whereIn('status', ['new', 'open', 'pending'])
+            ->whereExists(function ($q) use ($userId) {
+                $q->select(DB::raw(1))
+                  ->from('chat_messages')
+                  ->whereColumn('chat_messages.ticket_id', 'chat_tickets.id')
+                  ->where('chat_messages.sender_id', '!=', $userId)
+                  ->where('chat_messages.is_system', false);
+            })
+            ->count();
+
+        return response()->json(['count' => $count]);
     }
 
     /** Staff list for assignment */
