@@ -61,17 +61,29 @@ class ChatController extends Controller
             ->limit(25)
             ->get();
 
-        // Calculate unread per ticket
+        // Calculate unread per ticket (only messages after last_read_at)
         $ticketIds = $tickets->pluck('id')->filter();
+        $readMap = $ticketIds->isNotEmpty()
+            ? DB::table('chat_read_status')
+                ->where('user_id', $user->id)
+                ->whereIn('ticket_id', $ticketIds)
+                ->pluck('last_read_at', 'ticket_id')
+            : collect();
+
         $unreadMap = collect();
         if ($ticketIds->isNotEmpty()) {
-            $unreadMap = DB::table('chat_messages')
-                ->whereIn('ticket_id', $ticketIds)
-                ->where('sender_id', '!=', $user->id)
-                ->where('is_system', false)
-                ->select('ticket_id', DB::raw('count(*) as cnt'))
-                ->groupBy('ticket_id')
-                ->pluck('cnt', 'ticket_id');
+            // For each ticket, count messages from others after last_read_at
+            foreach ($tickets as $t) {
+                $lastRead = $readMap[$t->id] ?? null;
+                $q = DB::table('chat_messages')
+                    ->where('ticket_id', $t->id)
+                    ->where('sender_id', '!=', $user->id)
+                    ->where('is_system', false);
+                if ($lastRead) {
+                    $q->where('created_at', '>', $lastRead);
+                }
+                $unreadMap[$t->id] = $q->count();
+            }
         }
 
         $data = $tickets->map(function ($t) use ($unreadMap) {
@@ -187,6 +199,12 @@ class ChatController extends Controller
                 'attachmentName' => $m->attachment_name,
                 'createdAt' => $m->created_at,
             ]);
+
+        // Mark as read
+        DB::table('chat_read_status')->updateOrInsert(
+            ['ticket_id' => $id, 'user_id' => $userId],
+            ['last_read_at' => now()]
+        );
 
         return response()->json([
             'ticket' => $ticket,
@@ -408,22 +426,37 @@ class ChatController extends Controller
     public function unreadCount(Request $request): JsonResponse
     {
         $userId = $request->user()->id;
+        $isStaff = $this->isStaff($request);
 
-        // Count chats with messages newer than user's last read
-        $count = DB::table('chat_tickets')
-            ->where(function ($q) use ($userId) {
-                $q->where('created_by', $userId)
-                  ->orWhere('recipient_id', $userId);
-            })
-            ->whereIn('status', ['new', 'open', 'pending'])
-            ->whereExists(function ($q) use ($userId) {
-                $q->select(DB::raw(1))
-                  ->from('chat_messages')
-                  ->whereColumn('chat_messages.ticket_id', 'chat_tickets.id')
-                  ->where('chat_messages.sender_id', '!=', $userId)
-                  ->where('chat_messages.is_system', false);
-            })
-            ->count();
+        $query = DB::table('chat_tickets');
+        if (!$isStaff) {
+            $query->where(function ($q) use ($userId) {
+                $q->where('created_by', $userId)->orWhere('recipient_id', $userId);
+            });
+        }
+
+        $ticketIds = $query->whereIn('status', ['new', 'open', 'pending'])->pluck('id');
+        if ($ticketIds->isEmpty()) {
+            return response()->json(['count' => 0]);
+        }
+
+        $readMap = DB::table('chat_read_status')
+            ->where('user_id', $userId)
+            ->whereIn('ticket_id', $ticketIds)
+            ->pluck('last_read_at', 'ticket_id');
+
+        $count = 0;
+        foreach ($ticketIds as $tid) {
+            $lastRead = $readMap[$tid] ?? null;
+            $q = DB::table('chat_messages')
+                ->where('ticket_id', $tid)
+                ->where('sender_id', '!=', $userId)
+                ->where('is_system', false);
+            if ($lastRead) {
+                $q->where('created_at', '>', $lastRead);
+            }
+            if ($q->exists()) $count++;
+        }
 
         return response()->json(['count' => $count]);
     }
