@@ -28,13 +28,7 @@
         <v-chip size="x-small" :color="statusColor(value)">{{ value }}</v-chip>
       </template>
       <template #item.chat="{ item }">
-        <StartChatButton
-          :consultant-id="item.consultantId || null"
-          :consultant-name="item.consultantName || ''"
-          context-type="contracts"
-          :context-id="item.id"
-          :context-label="`Контракт #${item.number || item.id}`"
-        />
+        
       </template>
       <template #no-data><EmptyState /></template>
     </v-data-table-server>
@@ -45,7 +39,6 @@
 import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
-import StartChatButton from '../../components/StartChatButton.vue';
 import PageHeader from '../../components/PageHeader.vue';
 import EmptyState from '../../components/EmptyState.vue';
 import { fmt, fmtDate } from '../../composables/useDesign';

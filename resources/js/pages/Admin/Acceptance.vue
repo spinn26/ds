@@ -33,13 +33,7 @@
         <span v-else>—</span>
       </template>
       <template #item.chat="{ item }">
-        <StartChatButton
-          :consultant-id="item.consultantId || null"
-          :consultant-name="item.personName || ''"
-          context-type="acceptance"
-          :context-id="item.id"
-          :context-label="`Акцепт ${item.personName || ''}`"
-        />
+        
       </template>
       <template #no-data><EmptyState /></template>
     </v-data-table-server>
@@ -50,7 +44,6 @@
 import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
-import StartChatButton from '../../components/StartChatButton.vue';
 import PageHeader from '../../components/PageHeader.vue';
 import EmptyState from '../../components/EmptyState.vue';
 

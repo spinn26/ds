@@ -31,13 +31,7 @@
         {{ fmtDate(value) }}
       </template>
       <template #item.chat="{ item }">
-        <StartChatButton
-          :consultant-id="null"
-          consultant-name=""
-          context-type="transactions"
-          :context-id="item.id"
-          :context-label="`Транзакция #${item.id}`"
-        />
+        
       </template>
       <template #no-data><EmptyState /></template>
     </v-data-table-server>
@@ -48,7 +42,6 @@
 import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
-import StartChatButton from '../../components/StartChatButton.vue';
 import PageHeader from '../../components/PageHeader.vue';
 import EmptyState from '../../components/EmptyState.vue';
 import { fmt2 as fmt, fmtDate } from '../../composables/useDesign';

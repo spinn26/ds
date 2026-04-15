@@ -28,9 +28,6 @@
             :title="item.label" :active="isActivePath(item.path)"
             :color="item.adminSection ? 'secondary' : 'primary'"
             rounded="lg" class="mb-1 menu-item" @click="onMenuClick(item)">
-            <template #append v-if="item.path === '/tickets' && unreadCount > 0">
-              <v-badge :content="unreadCount" color="error" inline />
-            </template>
           </v-list-item>
         </template>
       </v-list>
@@ -189,7 +186,6 @@
       </v-btn>
     </v-bottom-navigation>
 
-    <ChatWidget v-if="isConsultant && !route.path.includes('/tickets')" />
   </v-layout>
 </template>
 
@@ -199,8 +195,6 @@ import { useDisplay, useTheme } from 'vuetify';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import api from '../api';
-import ChatWidget from '../components/ChatWidget.vue';
-
 function fmtShortDate(d) {
   if (!d) return '';
   return new Date(d).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -216,17 +210,11 @@ const copied = ref(false);
 const statusInfo = ref(null);
 
 const isDark = computed(() => theme.global.current.value.dark);
-const unreadCount = ref(0);
 const notifCount = ref(0);
 const notifications = ref([]);
 let unreadInterval = null;
 
-async function loadUnreadCount() {
-  try {
-    const { data } = await api.get('/tickets/unread-count');
-    unreadCount.value = data.count || 0;
-  } catch {}
-}
+// Ticket unread count removed — chat system being rebuilt
 
 async function loadNotifications() {
   try {
@@ -283,9 +271,8 @@ onMounted(async () => {
       canInvite: data.referral?.canInvite,
     };
   } catch {}
-  loadUnreadCount();
   loadNotifications();
-  unreadInterval = setInterval(() => { loadUnreadCount(); loadNotifications(); }, 60000);
+  unreadInterval = setInterval(() => { loadNotifications(); }, 60000);
 
   // Real-time notifications via Socket.IO
   try {
@@ -421,10 +408,6 @@ const menuItems = [
   { label: 'Обучение', icon: 'mdi-school', path: '/education', partner: true },
   { label: 'Продукты', icon: 'mdi-package-variant', path: '/products', partner: true },
   { label: 'Список конкурсов и событий', icon: 'mdi-trophy', path: '/contests', partner: true },
-  { label: 'Обратная связь', icon: 'mdi-chat', path: '/tickets', partner: true },
-  { label: 'Написать собственнику', icon: 'mdi-email-edit', path: '/tickets?to=owner', partner: true },
-  { label: 'Оставить кейс', icon: 'mdi-briefcase-plus', path: '/tickets?type=case', partner: true },
-
   // ---- Staff sections (grouped per spec) ----
   // Инструменты
   { group: 'Инструменты', adminSection: 'calculator' },
@@ -459,7 +442,6 @@ const menuItems = [
   { group: 'Прочее', adminSection: 'products' },
   { label: 'Продукты', icon: 'mdi-package-variant-closed', path: '/manage/products', adminSection: 'products' },
   { label: 'Конкурсы', icon: 'mdi-trophy', path: '/manage/contests', adminSection: 'contests' },
-  { label: 'Тикеты', icon: 'mdi-ticket-confirmation', path: '/manage/tickets', adminSection: 'communication' },
   { label: 'Отчёты', icon: 'mdi-file-chart', path: '/manage/reports', adminSection: 'reports' },
   { label: 'Валюты и НДС', icon: 'mdi-currency-usd', path: '/manage/currencies', adminSection: 'currencies' },
 ];
@@ -473,7 +455,7 @@ const bottomNavItems = computed(() => {
       { label: 'Главная', icon: 'mdi-view-dashboard-outline', path: '/' },
       { label: 'Клиенты', icon: 'mdi-account-group', path: '/clients' },
       { label: 'Структура', icon: 'mdi-sitemap', path: '/structure' },
-      { label: 'Тикеты', icon: 'mdi-chat', path: '/tickets', badge: unreadCount.value > 0 ? unreadCount.value : null },
+      { label: 'Продукты', icon: 'mdi-package-variant', path: '/products' },
       { label: 'Профиль', icon: 'mdi-account-circle', path: '/profile' },
     ];
   }
@@ -481,7 +463,6 @@ const bottomNavItems = computed(() => {
   return [
     { label: 'Главная', icon: 'mdi-view-dashboard-outline', path: '/' },
     { label: 'Партнёры', icon: 'mdi-account-search', path: '/manage/partners' },
-    { label: 'Тикеты', icon: 'mdi-ticket-confirmation', path: '/manage/tickets', badge: unreadCount.value > 0 ? unreadCount.value : null },
     { label: 'Отчёты', icon: 'mdi-file-chart', path: '/manage/reports' },
     { key: 'more', label: 'Ещё', icon: 'mdi-menu', path: '', action: () => { drawer.value = !drawer.value; } },
   ];
