@@ -442,6 +442,7 @@ class AdminDataController extends Controller
                 'id' => $c->id,
                 'number' => $c->number,
                 'clientName' => $c->clientName,
+                'consultant' => $c->consultant ?? null,
                 'consultantName' => $c->consultantName,
                 'productName' => $c->productName,
                 'programName' => $c->programName,

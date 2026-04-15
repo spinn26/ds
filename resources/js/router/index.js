@@ -34,7 +34,7 @@ const routes = [
 
             // Staff management pages (inside main layout, staff-only)
             { path: 'manage/contracts', component: () => import('../pages/Admin/ContractManager.vue'), meta: { staff: true } },
-            { path: 'manage/contracts/upload', component: () => import('../pages/Admin/ContractManager.vue'), meta: { staff: true } },
+            { path: 'manage/contracts/upload', component: () => import('../pages/Admin/ContractUpload.vue'), meta: { staff: true } },
             { path: 'manage/partners', component: () => import('../pages/Admin/Partners.vue'), meta: { staff: true } },
             { path: 'manage/partners/statuses', component: () => import('../pages/Admin/PartnerStatuses.vue'), meta: { staff: true } },
             { path: 'manage/clients', component: () => import('../pages/Admin/Clients.vue'), meta: { staff: true } },

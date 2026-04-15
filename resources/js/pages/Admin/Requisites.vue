@@ -18,6 +18,10 @@
 
     <v-data-table-server :items="items" :items-length="total" :loading="loading"
       :headers="headers" :items-per-page="25" @update:options="onOptions">
+      <template #item.hasBankRequisites="{ item }">
+        <v-icon v-if="item.hasBankRequisites" color="success" size="18">mdi-check-circle</v-icon>
+        <v-icon v-else color="grey" size="18">mdi-minus-circle-outline</v-icon>
+      </template>
       <template #item.verificationStatus="{ item }">
         <v-chip size="x-small" :color="verifyColor(item.verificationStatus)">
           {{ verifyLabel(item.verificationStatus) }}
@@ -209,11 +213,10 @@ const verifyOptions = [
 
 const headers = [
   { title: 'ID', key: 'id', width: 60 },
-  { title: 'Партнёр', key: 'partnerName' },
+  { title: 'Партнёр', key: 'consultantName' },
   { title: 'ИП', key: 'individualEntrepreneur' },
   { title: 'ИНН', key: 'inn', width: 130 },
-  { title: 'Банк', key: 'bankName' },
-  { title: 'Счёт', key: 'accountNumber', width: 200 },
+  { title: 'Банк реквизиты', key: 'hasBankRequisites', width: 120 },
   { title: 'Статус', key: 'verificationStatus', width: 130 },
   { title: 'Действия', key: 'actions', sortable: false, width: 100 },
 ];
