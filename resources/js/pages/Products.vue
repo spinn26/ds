@@ -138,7 +138,7 @@ const filteredProducts = computed(() => {
   return list;
 });
 
-const { debounced: debouncedLoad } = useDebounce(loadData, 400);
+// debouncedLoad not needed — filtering is client-side via computed
 
 function openProduct(product) {
   if (!access.value.requisitesVerified) {
