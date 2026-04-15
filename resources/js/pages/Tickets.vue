@@ -432,24 +432,28 @@ function stopPolling() {
 // Watchers
 watch(statusFilter, () => { ticketPage.value = 1; loadTickets(); });
 
-// Handle ?to=owner query param
-function checkOwnerQuery() {
-  if (route.query.to === 'owner') {
-    openCreateDialog(true);
-  }
-  if (route.query.type === 'case') {
-    createForm.value.category = 'support';
-    createForm.value.subject = 'Кейс';
+// Watch route query for ?to=owner or ?type=case (works even without remount)
+watch(() => route.query, (q) => {
+  if (q.to === 'owner') openCreateDialog(true);
+  else if (q.type === 'case') {
+    isOwnerChat.value = false;
+    createForm.value = { category: 'support', subject: 'Кейс', message: '' };
+    createError.value = '';
     createDialog.value = true;
   }
-}
+}, { immediate: false });
 
 // Lifecycle
 onMounted(async () => {
   loadTickets();
   loadUnread();
   await initSocket();
-  checkOwnerQuery();
+  // Check initial query
+  if (route.query.to === 'owner') openCreateDialog(true);
+  else if (route.query.type === 'case') {
+    createForm.value = { category: 'support', subject: 'Кейс', message: '' };
+    createDialog.value = true;
+  }
 });
 
 onUnmounted(() => {
@@ -466,4 +470,18 @@ onUnmounted(() => {
 <style scoped>
 .border-b { border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); }
 .border-t { border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); }
+
+/* Chat message bubbles */
+.bg-primary .text-caption { color: rgba(255,255,255,0.7) !important; }
+.bg-grey-lighten-4 { background: rgba(var(--v-theme-surface-variant), 1) !important; }
+
+/* Smooth scroll for messages */
+.overflow-y-auto { scroll-behavior: smooth; }
+
+/* Ticket list hover */
+:deep(.v-list-item:hover) { background: rgba(var(--v-theme-primary), 0.04); }
+:deep(.v-list-item--active) { background: rgba(var(--v-theme-primary), 0.08) !important; }
+
+/* Input area styling */
+.border-t :deep(.v-field) { border-radius: 20px; }
 </style>

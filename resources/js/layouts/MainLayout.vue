@@ -26,7 +26,7 @@
           <v-list-item v-else :to="item.path" :prepend-icon="item.icon"
             :title="item.label" :active="isActivePath(item.path)"
             :color="item.adminSection ? 'secondary' : 'primary'"
-            rounded="lg" class="mb-1 menu-item" @click="mobile && (drawer = false)">
+            rounded="lg" class="mb-1 menu-item" @click="onMenuClick(item)">
             <template #append v-if="item.path === '/tickets' && unreadCount > 0">
               <v-badge :content="unreadCount" color="error" inline />
             </template>
@@ -195,7 +195,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useDisplay, useTheme } from 'vuetify';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import api from '../api';
 import ChatWidget from '../components/ChatWidget.vue';
@@ -207,6 +207,7 @@ function fmtShortDate(d) {
 
 const auth = useAuthStore();
 const route = useRoute();
+const router = useRouter();
 const theme = useTheme();
 const { mobile } = useDisplay();
 const drawer = ref(true);
@@ -343,9 +344,19 @@ function copyReferral() {
   }
 }
 
+function onMenuClick(item) {
+  if (mobile.value) drawer.value = false;
+  // For query-based routes (like /tickets?to=owner), force navigation even if already on /tickets
+  if (item.path && item.path.includes('?')) {
+    const [path, qs] = item.path.split('?');
+    const params = Object.fromEntries(new URLSearchParams(qs));
+    router.push({ path, query: params });
+  }
+}
+
 function isActivePath(path) {
   if (!path) return false;
-  return route.path === path;
+  return route.path === path || route.path === path.split('?')[0];
 }
 
 // Parse user roles
