@@ -51,23 +51,23 @@
 
         <!-- Messages -->
         <div ref="msgsRef" class="chat-messages">
-          <div v-for="msg in messages" :key="msg.id" class="msg-row" :class="{ mine: !msg.isAgent, system: msg.isSystem }">
+          <div v-for="msg in messages" :key="msg.id" class="msg-row" :class="{ mine: isMine(msg), system: msg.isSystem }">
             <template v-if="msg.isSystem">
               <div class="msg-system">{{ msg.content }}</div>
             </template>
             <template v-else>
-              <div class="msg-avatar" v-if="msg.isAgent">
+              <div class="msg-avatar" v-if="!isMine(msg)">
                 <div class="avatar-circle agent">{{ msg.senderName?.[0] || 'С' }}</div>
               </div>
-              <div class="msg-bubble" :class="msg.isAgent ? 'agent' : 'mine'">
-                <div v-if="msg.isAgent" class="msg-sender">{{ msg.senderName }}</div>
+              <div class="msg-bubble" :class="isMine(msg) ? 'mine' : 'agent'">
+                <div class="msg-sender">{{ msg.senderName }}</div>
                 <div class="msg-text">{{ msg.content }}</div>
                 <a v-if="msg.attachmentPath" :href="msg.attachmentPath" target="_blank" class="msg-attach">
                   <v-icon size="14">mdi-paperclip</v-icon> {{ msg.attachmentName || 'Файл' }}
                 </a>
                 <div class="msg-time">{{ fmtTime(msg.createdAt) }}</div>
               </div>
-              <div class="msg-avatar" v-if="!msg.isAgent">
+              <div class="msg-avatar" v-if="isMine(msg)">
                 <div class="avatar-circle mine">{{ msg.senderName?.[0] || 'Я' }}</div>
               </div>
             </template>
@@ -127,8 +127,13 @@
 import { ref, nextTick, onMounted, onUnmounted } from 'vue';
 import { useDisplay } from 'vuetify';
 import api from '../../api';
+import { useAuthStore } from '../../stores/auth';
 
 const { mobile } = useDisplay();
+const auth = useAuthStore();
+const currentUserId = auth.userId;
+
+function isMine(msg) { return String(msg.senderId) === String(currentUserId); }
 const chats = ref([]);
 const loading = ref(false);
 const activeChat = ref(null);
