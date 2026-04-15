@@ -79,6 +79,18 @@ class ChatController extends Controller
         $name = $this->userName($request);
         $now = now();
 
+        // Resolve recipient name
+        $recipientId = $request->input('recipient_id');
+        $recipientName = null;
+        if ($recipientId) {
+            $recipient = DB::table('WebUser')->where('id', $recipientId)->first();
+            $recipientName = $recipient ? trim(($recipient->lastName ?? '') . ' ' . ($recipient->firstName ?? '')) : null;
+            // If no recipient found, check consultant table
+            if (!$recipientName) {
+                $recipientName = DB::table('consultant')->where('id', $recipientId)->value('personName');
+            }
+        }
+
         $ticketId = DB::table('chat_tickets')->insertGetId([
             'subject' => $request->subject,
             'description' => $request->description,
@@ -88,6 +100,10 @@ class ChatController extends Controller
             'created_by' => $user->id,
             'customer_name' => $name,
             'customer_email' => $user->email,
+            'recipient_id' => $recipientId,
+            'recipient_name' => $recipientName,
+            'context_type' => $request->input('context_type'),
+            'context_id' => $request->input('context_id'),
             'tags' => $request->tags ? json_encode($request->tags) : null,
             'messages_count' => 1,
             'last_message_at' => $now,

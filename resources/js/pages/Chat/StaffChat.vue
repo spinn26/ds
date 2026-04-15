@@ -35,6 +35,7 @@
             </div>
             <div class="chat-item-bottom">
               <span>{{ t.customer_name }}</span>
+              <span v-if="t.recipient_name" style="color: #f97316">→ {{ t.recipient_name }}</span>
               <span v-if="t.priority === 'critical'" class="priority-dot critical"></span>
               <span v-if="t.priority === 'high'" class="priority-dot high"></span>
             </div>
@@ -56,8 +57,11 @@
             <div class="chat-header-meta">
               <span>{{ activeChat.customer_name }}</span> ·
               <span :style="{ color: statusClr(activeChat.status) }">{{ statusTxt(activeChat.status) }}</span>
+              <span v-if="activeChat.recipient_name" class="recipient-tag">
+                <v-icon size="12">mdi-arrow-right</v-icon> {{ activeChat.recipient_name }}
+              </span>
               <span v-if="activeChat.context_type" class="context-tag">
-                <v-icon size="12">mdi-link-variant</v-icon> {{ activeChat.context_type }}
+                <v-icon size="12">mdi-link-variant</v-icon> {{ activeChat.context_type }}{{ activeChat.context_id ? ': #' + activeChat.context_id : '' }}
               </span>
             </div>
           </div>
@@ -301,6 +305,7 @@ onUnmounted(stopPoll);
 .chat-header-info { flex: 1; }
 .chat-header-subject { font-size: 14px; font-weight: 700; }
 .chat-header-meta { font-size: 12px; color: rgba(var(--v-theme-on-surface), 0.5); margin-top: 2px; display: flex; gap: 6px; align-items: center; }
+.recipient-tag { background: rgba(249,115,22,0.15); color: #f97316; padding: 1px 8px; border-radius: 4px; font-size: 11px; display: flex; align-items: center; gap: 3px; }
 .context-tag { background: rgba(var(--v-theme-primary), 0.1); color: rgb(var(--v-theme-primary)); padding: 1px 6px; border-radius: 4px; font-size: 11px; }
 .chat-header-actions { display: flex; gap: 4px; }
 .action-btn { background: none; border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); border-radius: 8px; padding: 6px; cursor: pointer; color: inherit; }
