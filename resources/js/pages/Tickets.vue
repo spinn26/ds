@@ -7,15 +7,14 @@
       </template>
     </PageHeader>
 
-    <!-- Mobile: toggle between list and chat -->
+    <!-- Mobile: back button -->
     <div v-if="mobile && selectedTicket" class="mb-2">
       <v-btn variant="text" prepend-icon="mdi-arrow-left" @click="selectedTicket = null">К списку</v-btn>
     </div>
 
     <v-row>
-      <!-- Left panel: ticket list -->
+      <!-- Left: ticket list -->
       <v-col :cols="mobile ? 12 : 5" :lg="4" v-show="!mobile || !selectedTicket">
-        <!-- Status filter -->
         <v-card class="mb-3 pa-3">
           <v-btn-toggle v-model="statusFilter" density="compact" color="primary" divided variant="outlined" mandatory>
             <v-btn value="all" size="small">Все</v-btn>
@@ -28,20 +27,9 @@
         <v-card :loading="loadingTickets">
           <v-list lines="three" class="pa-0">
             <template v-for="ticket in tickets" :key="ticket.id">
-              <v-list-item
-                :active="selectedTicket?.id === ticket.id"
-                @click="selectTicket(ticket)"
-                class="py-3"
-              >
+              <v-list-item :active="selectedTicket?.id === ticket.id" @click="selectTicket(ticket)" class="py-3">
                 <template #prepend>
-                  <v-badge
-                    v-if="ticket.unread_count > 0"
-                    :content="ticket.unread_count"
-                    color="error"
-                    floating
-                    offset-x="-4"
-                    offset-y="-4"
-                  >
+                  <v-badge v-if="ticket.unread_count > 0" :content="ticket.unread_count" color="error" floating offset-x="-4" offset-y="-4">
                     <v-avatar size="40" :color="categoryColor(ticket.category)">
                       <v-icon color="white" size="20">{{ categoryIcon(ticket.category) }}</v-icon>
                     </v-avatar>
@@ -72,17 +60,16 @@
               <EmptyState icon="mdi-ticket-outline" message="Нет обращений" />
             </v-list-item>
           </v-list>
-
           <div v-if="ticketPages > 1" class="d-flex justify-center pa-3">
             <v-pagination v-model="ticketPage" :length="ticketPages" density="compact" @update:model-value="loadTickets" />
           </div>
         </v-card>
       </v-col>
 
-      <!-- Right panel: chat -->
+      <!-- Right: chat -->
       <v-col :cols="mobile ? 12 : 7" :lg="8" v-show="!mobile || selectedTicket">
-        <v-card v-if="selectedTicket" class="d-flex flex-column" style="height: calc(100vh - 200px); min-height: 300px; overflow-y: auto">
-          <!-- Ticket header -->
+        <v-card v-if="selectedTicket" class="d-flex flex-column" style="height: calc(100vh - 200px); min-height: 300px">
+          <!-- Header -->
           <div class="pa-3 border-b">
             <div class="d-flex align-center ga-2 flex-wrap">
               <span class="text-subtitle-1 font-weight-bold">{{ selectedTicket.subject }}</span>
@@ -98,11 +85,9 @@
           <!-- Messages -->
           <div ref="messagesContainer" class="flex-grow-1 overflow-y-auto pa-3" style="min-height: 0">
             <div v-for="msg in messages" :key="msg.id" class="mb-3">
-              <!-- System message -->
               <div v-if="msg.is_system" class="text-center my-2">
                 <v-chip size="small" variant="text" class="text-medium-emphasis font-italic">{{ msg.text }}</v-chip>
               </div>
-              <!-- Regular message -->
               <div v-else :class="['d-flex', msg.is_mine ? 'justify-end' : 'justify-start']">
                 <div class="d-flex ga-2" :class="{ 'flex-row-reverse': msg.is_mine }" style="max-width: 75%">
                   <v-avatar size="32" :color="msg.is_mine ? 'primary' : 'secondary'" class="flex-shrink-0 mt-1">
@@ -110,48 +95,32 @@
                   </v-avatar>
                   <div>
                     <div v-if="!msg.is_mine" class="text-caption font-weight-medium mb-1">{{ msg.sender_name }}</div>
-                    <div
-                      :class="[
-                        'pa-3 rounded-lg',
-                        msg.is_mine ? 'bg-primary text-white' : 'bg-grey-lighten-4',
-                      ]"
-                      style="word-break: break-word"
-                    >
+                    <div :class="['pa-3 rounded-lg', msg.is_mine ? 'bg-primary text-white' : 'bg-grey-lighten-4']" style="word-break: break-word">
                       <div class="text-body-2" style="white-space: pre-line">{{ msg.text }}</div>
                       <div v-if="msg.attachment_url" class="mt-1">
-                        <a
-                          :href="msg.attachment_url"
-                          target="_blank"
-                          :class="msg.is_mine ? 'text-white' : 'text-primary'"
-                          class="text-caption d-flex align-center ga-1"
-                        >
+                        <a :href="msg.attachment_url" target="_blank" :class="msg.is_mine ? 'text-white' : 'text-primary'" class="text-caption d-flex align-center ga-1">
                           <v-icon size="14">mdi-paperclip</v-icon> {{ msg.attachment_name || 'Вложение' }}
                         </a>
                       </div>
                     </div>
-                    <div :class="['text-caption mt-1', msg.is_mine ? 'text-right' : '']" style="color: rgba(0,0,0,0.4)">
-                      {{ msg.created_at }}
-                    </div>
+                    <div :class="['text-caption mt-1', msg.is_mine ? 'text-right' : '']" style="color: rgba(0,0,0,0.4)">{{ msg.created_at }}</div>
                   </div>
                 </div>
               </div>
             </div>
+            <!-- Typing indicator -->
+            <div v-if="typingUser" class="text-caption text-medium-emphasis font-italic mb-2">
+              {{ typingUser }} печатает...
+            </div>
             <EmptyState v-if="!messages.length && !loadingMessages" icon="mdi-message-outline" message="Нет сообщений" />
           </div>
 
-          <!-- Input area -->
+          <!-- Input -->
           <div v-if="selectedTicket.status !== 'closed'" class="pa-3 border-t">
             <div class="d-flex ga-2 align-end">
-              <v-textarea
-                v-model="replyText"
-                placeholder="Введите сообщение... (Enter — отправить, Shift+Enter — новая строка)"
-                rows="1"
-                auto-grow
-                max-rows="5"
-                hide-details
-                class="flex-grow-1"
-                @keydown.enter.exact.prevent="sendMessage"
-              />
+              <v-textarea v-model="replyText" placeholder="Введите сообщение..."
+                rows="1" auto-grow max-rows="5" hide-details class="flex-grow-1"
+                @keydown.enter.exact.prevent="sendMessage" @input="emitTypingThrottled" />
               <input ref="fileInput" type="file" hidden @change="onFileSelected" />
               <v-btn icon size="small" variant="text" @click="$refs.fileInput.click()">
                 <v-icon>mdi-paperclip</v-icon>
@@ -161,23 +130,16 @@
               </v-btn>
             </div>
             <div v-if="selectedFile" class="text-caption text-medium-emphasis mt-1 d-flex align-center ga-1">
-              <v-icon size="14">mdi-file</v-icon>
-              {{ selectedFile.name }}
-              <v-btn icon size="x-small" variant="text" @click="selectedFile = null">
-                <v-icon size="14">mdi-close</v-icon>
-              </v-btn>
+              <v-icon size="14">mdi-file</v-icon> {{ selectedFile.name }}
+              <v-btn icon size="x-small" variant="text" @click="selectedFile = null"><v-icon size="14">mdi-close</v-icon></v-btn>
             </div>
           </div>
           <div v-else class="pa-3 border-t text-center">
-            <v-chip size="small" color="grey" variant="tonal">
-              <v-icon start size="14">mdi-lock</v-icon>
-              Обращение закрыто
-            </v-chip>
+            <v-chip size="small" color="grey" variant="tonal"><v-icon start size="14">mdi-lock</v-icon> Обращение закрыто</v-chip>
           </div>
         </v-card>
 
-        <!-- No ticket selected -->
-        <v-card v-else class="d-flex align-center justify-center" style="height: calc(100vh - 200px); min-height: 300px; overflow-y: auto">
+        <v-card v-else class="d-flex align-center justify-center" style="height: calc(100vh - 200px); min-height: 300px">
           <div class="text-center">
             <v-icon size="80" color="grey-lighten-1">mdi-chat-outline</v-icon>
             <div class="text-h6 text-medium-emphasis mt-3">Выберите обращение</div>
@@ -187,39 +149,23 @@
       </v-col>
     </v-row>
 
-    <!-- Create ticket dialog -->
+    <!-- Create dialog -->
     <v-dialog v-model="createDialog" max-width="560" persistent>
       <v-card>
         <v-card-title class="d-flex align-center ga-2">
           <v-icon color="primary">mdi-plus-circle</v-icon>
-          Новое обращение
+          {{ isOwnerChat ? 'Написать собственнику' : 'Новое обращение' }}
         </v-card-title>
         <v-card-text>
-          <v-select
-            v-model="createForm.category"
-            :items="categoryOptions"
-            label="Категория"
-            class="mb-3"
-          />
-          <v-text-field
-            v-model="createForm.subject"
-            label="Тема обращения"
-            class="mb-3"
-          />
-          <v-textarea
-            v-model="createForm.message"
-            label="Сообщение"
-            rows="5"
-            auto-grow
-          />
+          <v-select v-if="!isOwnerChat" v-model="createForm.category" :items="categoryOptions" label="Категория" class="mb-3" />
+          <v-text-field v-model="createForm.subject" label="Тема обращения" class="mb-3" />
+          <v-textarea v-model="createForm.message" label="Сообщение" rows="5" auto-grow />
           <v-alert v-if="createError" type="error" density="compact" class="mt-2">{{ createError }}</v-alert>
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn variant="text" @click="createDialog = false">Отмена</v-btn>
-          <v-btn color="primary" :loading="creating" prepend-icon="mdi-send" @click="createTicket">
-            Отправить
-          </v-btn>
+          <v-btn variant="text" @click="createDialog = false; isOwnerChat = false">Отмена</v-btn>
+          <v-btn color="primary" :loading="creating" prepend-icon="mdi-send" @click="createTicket">Отправить</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -227,16 +173,18 @@
 </template>
 
 <script setup>
-import { ref, nextTick, onMounted, onUnmounted, watch } from 'vue';
+import { ref, nextTick, onMounted, onUnmounted, watch, computed } from 'vue';
 import { useDisplay } from 'vuetify';
+import { useRoute } from 'vue-router';
 import api from '../api';
 import PageHeader from '../components/PageHeader.vue';
 import EmptyState from '../components/EmptyState.vue';
-import { getInitials, statusColors, statusLabels, categoryLabels, getCategoryColor, getStatusColor } from '../composables/useDesign';
+import { getInitials, statusLabels, categoryLabels, getCategoryColor, getStatusColor } from '../composables/useDesign';
 
 const { mobile } = useDisplay();
+const route = useRoute();
 
-// Ticket list
+// State
 const tickets = ref([]);
 const loadingTickets = ref(false);
 const ticketPage = ref(1);
@@ -244,7 +192,6 @@ const ticketPages = ref(1);
 const statusFilter = ref('all');
 const totalUnread = ref(0);
 
-// Selected ticket & messages
 const selectedTicket = ref(null);
 const messages = ref([]);
 const loadingMessages = ref(false);
@@ -253,13 +200,18 @@ const selectedFile = ref(null);
 const sendingMessage = ref(false);
 const messagesContainer = ref(null);
 const fileInput = ref(null);
-let refreshInterval = null;
+const typingUser = ref(null);
 
-// Create dialog
 const createDialog = ref(false);
 const creating = ref(false);
 const createError = ref('');
 const createForm = ref({ category: 'support', subject: '', message: '' });
+const isOwnerChat = ref(false);
+
+let refreshInterval = null;
+let socket = null;
+let typingTimeout = null;
+let lastTypingEmit = 0;
 
 const categoryOptions = [
   { title: 'Техподдержка', value: 'support' },
@@ -269,27 +221,100 @@ const categoryOptions = [
   { title: 'Начисления', value: 'accruals' },
 ];
 
+// Helpers
 function categoryColor(cat) { return getCategoryColor(cat); }
 function categoryLabel(cat) { return categoryLabels[cat] || cat; }
-
 function categoryIcon(cat) {
   const map = { support: 'mdi-headset', backoffice: 'mdi-briefcase', legal: 'mdi-scale-balance', accounting: 'mdi-calculator', accruals: 'mdi-cash-multiple' };
   return map[cat] || 'mdi-help-circle';
 }
-
-function statusColor(status) { return getStatusColor(status); }
-function statusLabel(status) { return statusLabels[status] || status; }
-
-function formatDate(dateStr) {
-  if (!dateStr) return '';
-  const d = new Date(dateStr);
+function statusColor(s) { return getStatusColor(s); }
+function statusLabel(s) { return statusLabels[s] || s; }
+function formatDate(d) {
+  if (!d) return '';
+  const date = new Date(d);
+  if (isNaN(date.getTime())) return '';
   const now = new Date();
-  const isToday = d.toDateString() === now.toDateString();
-  if (isToday) return d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-  return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
+  if (date.toDateString() === now.toDateString()) return date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  return date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
 }
 
-// Load tickets
+// Socket.IO — initialized once, reused
+async function initSocket() {
+  if (socket?.connected) return socket;
+  try {
+    const { io } = await import('socket.io-client');
+    const host = window.__SOCKET_URL__ || (location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.hostname + ':3001';
+    const userId = localStorage.getItem('auth_user_id');
+    const userName = localStorage.getItem('auth_user_name') || '';
+    socket = io(host, {
+      query: { userId, userName },
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionDelay: 2000,
+      reconnectionAttempts: 10,
+    });
+    socket.on('connect', () => console.log('[Socket] Connected:', socket.id));
+    socket.on('disconnect', () => console.log('[Socket] Disconnected'));
+    // Global notification listener
+    socket.on('notification', (data) => {
+      totalUnread.value = (totalUnread.value || 0) + 1;
+    });
+  } catch (e) {
+    console.warn('[Socket] Failed to connect:', e.message);
+  }
+  return socket;
+}
+
+function joinTicketRoom(ticketId) {
+  if (!socket?.connected) return;
+  socket.emit('ticket:join', ticketId);
+  socket.off('ticket:new-message');
+  socket.off('ticket:typing');
+
+  socket.on('ticket:new-message', (data) => {
+    if (data.ticketId != ticketId) return;
+    const authId = localStorage.getItem('auth_user_id');
+    if (String(data.userId) !== String(authId)) {
+      messages.value.push({
+        id: Date.now(),
+        text: data.message || data.text,
+        sender_name: data.userName,
+        is_mine: false,
+        is_system: data.isSystem || false,
+        attachment_url: data.attachmentUrl,
+        attachment_name: data.attachmentName,
+        created_at: new Date().toLocaleString('ru-RU'),
+      });
+      scrollToBottom();
+    }
+  });
+
+  socket.on('ticket:typing', (data) => {
+    const authId = localStorage.getItem('auth_user_id');
+    if (String(data.userId) === String(authId)) return;
+    typingUser.value = data.userName;
+    clearTimeout(typingTimeout);
+    typingTimeout = setTimeout(() => { typingUser.value = null; }, 3000);
+  });
+}
+
+function leaveTicketRoom(ticketId) {
+  if (!socket?.connected) return;
+  socket.emit('ticket:leave', ticketId);
+  socket.off('ticket:new-message');
+  socket.off('ticket:typing');
+}
+
+function emitTypingThrottled() {
+  if (!socket?.connected || !selectedTicket.value) return;
+  const now = Date.now();
+  if (now - lastTypingEmit < 2000) return;
+  lastTypingEmit = now;
+  socket.emit('ticket:typing', { ticketId: selectedTicket.value.id, isTyping: true });
+}
+
+// API calls
 async function loadTickets() {
   loadingTickets.value = true;
   try {
@@ -309,11 +334,14 @@ async function loadUnread() {
   } catch {}
 }
 
-// Select ticket
 async function selectTicket(ticket) {
+  // Leave previous room
+  if (selectedTicket.value) leaveTicketRoom(selectedTicket.value.id);
   selectedTicket.value = ticket;
   await loadTicketMessages();
-  startRefresh();
+  // Join new room
+  joinTicketRoom(ticket.id);
+  startPolling();
 }
 
 async function loadTicketMessages() {
@@ -323,7 +351,6 @@ async function loadTicketMessages() {
     const { data } = await api.get(`/tickets/${selectedTicket.value.id}/messages`);
     messages.value = data.data || data;
     scrollToBottom();
-    // Mark as read
     if (selectedTicket.value.unread_count > 0) {
       api.post(`/tickets/${selectedTicket.value.id}/read`).catch(() => {});
       selectedTicket.value.unread_count = 0;
@@ -340,7 +367,6 @@ function scrollToBottom() {
   });
 }
 
-// Send message
 async function sendMessage() {
   if (!replyText.value?.trim() && !selectedFile.value) return;
   sendingMessage.value = true;
@@ -356,13 +382,16 @@ async function sendMessage() {
   sendingMessage.value = false;
 }
 
-function onFileSelected(e) {
-  selectedFile.value = e.target.files?.[0] || null;
-}
+function onFileSelected(e) { selectedFile.value = e.target.files?.[0] || null; }
 
 // Create ticket
-function openCreateDialog() {
-  createForm.value = { category: 'support', subject: '', message: '' };
+function openCreateDialog(ownerMode = false) {
+  isOwnerChat.value = ownerMode === true;
+  createForm.value = {
+    category: ownerMode ? 'support' : 'support',
+    subject: ownerMode ? 'Сообщение собственнику' : '',
+    message: '',
+  };
   createError.value = '';
   createDialog.value = true;
 }
@@ -375,83 +404,66 @@ async function createTicket() {
   creating.value = true;
   createError.value = '';
   try {
-    const { data } = await api.post('/tickets', createForm.value);
+    const payload = { ...createForm.value };
+    if (isOwnerChat.value) {
+      payload.category = 'owner';
+      payload.context_type = 'owner_message';
+    }
+    const { data } = await api.post('/tickets', payload);
     createDialog.value = false;
+    isOwnerChat.value = false;
     await loadTickets();
-    const ticket = data.ticket || data;
-    selectTicket(ticket);
+    selectTicket(data.ticket || data);
   } catch (e) {
     createError.value = e.response?.data?.message || 'Ошибка создания обращения';
   }
   creating.value = false;
 }
 
-// Real-time via Socket.IO (fallback to polling)
-import { useTicketSocket } from '../composables/useSocket';
-
-let ticketSocket = null;
-
-function startRefresh() {
-  stopRefresh();
-  if (selectedTicket.value) {
-    const { join, leave, emitTyping, connected } = useTicketSocket(
-      selectedTicket.value.id,
-      (msg) => {
-        // Real-time message received
-        const authId = localStorage.getItem('auth_user_id');
-        if (String(msg.userId) !== String(authId)) {
-          messages.value.push({
-            ...msg,
-            is_mine: false,
-            sender_name: msg.userName,
-            is_system: msg.isSystem || false,
-          });
-          scrollToBottom();
-        }
-      },
-      (typingData) => {
-        // Typing indicator (can add UI later)
-      }
-    );
-    ticketSocket = { leave };
-    join();
-  }
-  // Fallback polling every 15s (in case socket disconnects)
+// Polling fallback
+function startPolling() {
+  stopPolling();
   refreshInterval = setInterval(loadTicketMessages, 15000);
 }
+function stopPolling() {
+  if (refreshInterval) { clearInterval(refreshInterval); refreshInterval = null; }
+}
 
-function stopRefresh() {
-  if (ticketSocket) {
-    ticketSocket.leave();
-    ticketSocket = null;
+// Watchers
+watch(statusFilter, () => { ticketPage.value = 1; loadTickets(); });
+
+// Handle ?to=owner query param
+function checkOwnerQuery() {
+  if (route.query.to === 'owner') {
+    openCreateDialog(true);
   }
-  if (refreshInterval) {
-    clearInterval(refreshInterval);
-    refreshInterval = null;
+  if (route.query.type === 'case') {
+    createForm.value.category = 'support';
+    createForm.value.subject = 'Кейс';
+    createDialog.value = true;
   }
 }
 
-// Watch status filter
-watch(statusFilter, () => {
-  ticketPage.value = 1;
-  loadTickets();
-});
-
-onMounted(() => {
+// Lifecycle
+onMounted(async () => {
   loadTickets();
   loadUnread();
+  await initSocket();
+  checkOwnerQuery();
 });
 
 onUnmounted(() => {
-  stopRefresh();
+  if (selectedTicket.value) leaveTicketRoom(selectedTicket.value.id);
+  stopPolling();
+  if (socket) {
+    socket.off('ticket:new-message');
+    socket.off('ticket:typing');
+    socket.off('notification');
+  }
 });
 </script>
 
 <style scoped>
-.border-b {
-  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-}
-.border-t {
-  border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-}
+.border-b { border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); }
+.border-t { border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); }
 </style>

@@ -284,6 +284,29 @@ onMounted(async () => {
   loadUnreadCount();
   loadNotifications();
   unreadInterval = setInterval(() => { loadUnreadCount(); loadNotifications(); }, 60000);
+
+  // Real-time notifications via Socket.IO
+  try {
+    const { io } = await import('socket.io-client');
+    const host = window.__SOCKET_URL__ || (location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.hostname + ':3001';
+    const userId = localStorage.getItem('auth_user_id');
+    const userName = localStorage.getItem('auth_user_name') || '';
+    const notifSocket = io(host, { query: { userId, userName }, transports: ['websocket', 'polling'], reconnection: true });
+    notifSocket.on('notification', (data) => {
+      // Add to list in real-time
+      notifications.value.unshift({
+        id: Date.now(),
+        title: data.title || 'Уведомление',
+        message: data.message || '',
+        icon: data.icon || 'mdi-bell',
+        color: data.color || 'primary',
+        link: data.link,
+        read: false,
+        createdAt: new Date().toISOString(),
+      });
+      notifCount.value++;
+    });
+  } catch {}
 });
 
 onUnmounted(() => {

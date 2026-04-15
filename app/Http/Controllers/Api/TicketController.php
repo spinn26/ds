@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Consultant;
+use App\Services\SocketService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -11,10 +12,13 @@ use Illuminate\Support\Facades\Storage;
 
 class TicketController extends Controller
 {
+    const OWNER_EMAIL = 'lamakin@dsconsult.ru'; // Александр Ламакин
+
     const CATEGORIES = [
         'support' => 'Техподдержка',
         'backoffice' => 'Бэк-офис',
         'legal' => 'Юрист',
+        'owner' => 'Собственнику',
         'accounting' => 'Бухгалтер',
         'accruals' => 'Начисления',
     ];
@@ -122,12 +126,19 @@ class TicketController extends Controller
     {
         $request->validate([
             'subject' => 'required|string|max:255',
-            'category' => 'required|in:support,backoffice,legal,accounting,accruals',
+            'category' => 'required|in:support,backoffice,legal,accounting,accruals,owner',
             'message' => 'required|string',
         ]);
 
         $user = $request->user();
         $consultant = Consultant::where('webUser', $user->id)->first();
+
+        // Auto-assign owner tickets to Александр Ламакин
+        $assignedTo = null;
+        if ($request->category === 'owner') {
+            $owner = DB::table('WebUser')->where('email', self::OWNER_EMAIL)->first();
+            $assignedTo = $owner?->id;
+        }
 
         $ticketId = DB::table('tickets')->insertGetId([
             'subject' => $request->subject,
@@ -136,6 +147,7 @@ class TicketController extends Controller
             'consultant_id' => $consultant?->id,
             'status' => 'open',
             'priority' => $request->input('priority', 'normal'),
+            'assigned_to' => $assignedTo,
             'context_type' => $request->context_type,
             'context_id' => $request->context_id,
             'context_info' => $request->context_info ? json_encode($request->context_info) : null,
@@ -159,7 +171,41 @@ class TicketController extends Controller
             'created_at' => now(),
         ]);
 
-        return response()->json(['message' => 'Тикет создан', 'id' => $ticketId], 201);
+        // Участник-owner (если назначен)
+        if ($assignedTo) {
+            DB::table('ticket_participants')->insert([
+                'ticket_id' => $ticketId,
+                'user_id' => $assignedTo,
+                'role' => 'assigned',
+                'created_at' => now(),
+            ]);
+
+            // Notify owner via socket
+            try {
+                app(SocketService::class)->notifyUser($assignedTo, 'notification', [
+                    'type' => 'ticket',
+                    'title' => 'Новое сообщение от партнёра',
+                    'message' => $request->subject,
+                    'link' => "/manage/tickets?id={$ticketId}",
+                ]);
+            } catch (\Exception $e) {}
+        }
+
+        // Return full ticket data for frontend
+        $ticket = DB::table('tickets')->where('id', $ticketId)->first();
+
+        return response()->json([
+            'message' => 'Тикет создан',
+            'ticket' => [
+                'id' => $ticket->id,
+                'subject' => $ticket->subject,
+                'category' => $ticket->category,
+                'status' => $ticket->status,
+                'created_at' => $ticket->created_at,
+                'updated_at' => $ticket->updated_at,
+                'unread_count' => 0,
+            ],
+        ], 201);
     }
 
     /** Получить тикет с сообщениями */
