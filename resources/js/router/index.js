@@ -28,6 +28,7 @@ const routes = [
             { path: 'products', component: () => import('../pages/Products.vue') },
             { path: 'contests', component: () => import('../pages/Contests.vue') },
             { path: 'chat', component: () => import('../pages/Chat/PartnerChat.vue') },
+            { path: 'communication', redirect: '/chat' },
             { path: 'help', component: () => import('../pages/Help.vue') },
             { path: 'profile', component: () => import('../pages/Profile.vue') },
 
@@ -47,7 +48,7 @@ const routes = [
             { path: 'manage/qualifications', component: () => import('../pages/Admin/Qualifications.vue'), meta: { staff: true } },
             { path: 'manage/charges', component: () => import('../pages/Admin/Charges.vue'), meta: { staff: true } },
             { path: 'manage/payments', component: () => import('../pages/Admin/Payments.vue'), meta: { staff: true } },
-            { path: 'manage/chat', component: () => import('../pages/Chat/ChatDashboard.vue'), meta: { staff: true } },
+            { path: 'manage/chat', component: () => import('../pages/Chat/StaffChat.vue'), meta: { staff: true } },
             { path: 'manage/reports', component: () => import('../pages/Admin/Reports.vue'), meta: { staff: true } },
             { path: 'manage/currencies', component: () => import('../pages/Admin/Currencies.vue'), meta: { staff: true } },
             { path: 'manage/products', component: () => import('../pages/Admin/Products.vue'), meta: { staff: true } },
