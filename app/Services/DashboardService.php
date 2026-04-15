@@ -65,49 +65,40 @@ class DashboardService
             ->where('clientsIndicators.indicator', 1)
             ->sum('clientsIndicators.valueUsd');
 
-        // Status level info — separate nominal (closed qualification) from calculation (commission) level
+        // Batch-load all status_levels in one query (instead of 3 separate)
         $nominalStatusLevel = null;
         $calcStatusLevel = null;
         $nextLevel = null;
         if ($currentQLog) {
-            // Nominal level = закрытая квалификация (based on НГП thresholds)
+            $levelIds = array_filter([
+                $currentQLog->nominalLevel ?? null,
+                $currentQLog->calculationLevel ?? null,
+            ]);
+            $allLevels = DB::table('status_levels')->get()->keyBy('id');
+
             if ($currentQLog->nominalLevel) {
-                $nominalStatusLevel = DB::table('status_levels')
-                    ->where('id', $currentQLog->nominalLevel)
-                    ->first();
+                $nominalStatusLevel = $allLevels[$currentQLog->nominalLevel] ?? null;
             }
-
-            // Calculation level = уровень расчёта комиссии (may differ due to breakaway/gaps)
             if ($currentQLog->calculationLevel) {
-                $calcStatusLevel = DB::table('status_levels')
-                    ->where('id', $currentQLog->calculationLevel)
-                    ->first();
+                $calcStatusLevel = $allLevels[$currentQLog->calculationLevel] ?? null;
             }
 
-            // Fallback: if only one is set, use it for both
-            if (!$nominalStatusLevel && $calcStatusLevel) {
-                $nominalStatusLevel = $calcStatusLevel;
-            }
-            if (!$calcStatusLevel && $nominalStatusLevel) {
-                $calcStatusLevel = $nominalStatusLevel;
-            }
+            if (!$nominalStatusLevel && $calcStatusLevel) $nominalStatusLevel = $calcStatusLevel;
+            if (!$calcStatusLevel && $nominalStatusLevel) $calcStatusLevel = $nominalStatusLevel;
 
-            // Next level based on nominal (for НГП progress)
             if ($nominalStatusLevel) {
-                $nextLevel = DB::table('status_levels')
-                    ->where('level', ($nominalStatusLevel->level ?? 0) + 1)
-                    ->first();
+                $nextLevelNum = ($nominalStatusLevel->level ?? 0) + 1;
+                $nextLevel = $allLevels->first(fn ($l) => $l->level === $nextLevelNum);
             }
         }
 
-        // Use calcStatusLevel for commission-related calculations (ОП, пул, отрыв)
         $statusLevel = $calcStatusLevel;
 
-        // Consultant status name
-        $statusName = null;
-        if ($consultant->status) {
-            $statusName = DB::table('status')->where('id', $consultant->status)->value('title');
-        }
+        // Consultant status name (batch with breakaway branch name)
+        $lookupIds = array_filter([$consultant->status ? $consultant->status : null]);
+        $statusName = $consultant->status
+            ? DB::table('status')->where('id', $consultant->status)->value('title')
+            : null;
 
         // Ambassador products
         $ambassadorProducts = $consultant->ambassadorProductNames;

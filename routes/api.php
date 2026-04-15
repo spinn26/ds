@@ -20,8 +20,10 @@ Route::prefix('v1')->group(function () {
         Route::post('/auth/login', [AuthController::class, 'login']);
         Route::post('/auth/register', [AuthController::class, 'register']);
     });
-    Route::post('/auth/check-duplicates', [AuthController::class, 'checkDuplicates']);
-    Route::post('/auth/check-referral', [AuthController::class, 'checkReferral']);
+    Route::middleware('throttle:10,1')->group(function () {
+        Route::post('/auth/check-duplicates', [AuthController::class, 'checkDuplicates']);
+        Route::post('/auth/check-referral', [AuthController::class, 'checkReferral']);
+    });
 
     Route::middleware('auth:sanctum')->group(function () {
         Route::get('/auth/me', [AuthController::class, 'me']);
@@ -101,12 +103,13 @@ Route::prefix('v1')->group(function () {
         Route::get('/products', [ProductController::class, 'index']);
         Route::get('/contests', [ContestController::class, 'index']);
 
-        // Admin
+        // Admin — all routes require staff role
         Route::middleware('role:admin')->group(function () {
             Route::post('/impersonate/{user}', [ImpersonateController::class, 'impersonate']);
             Route::post('/impersonate/leave', [ImpersonateController::class, 'leave']);
         });
 
+        Route::middleware('role:admin,backoffice,support,finance,head,calculations,corrections')->group(function () {
         Route::get('/admin/dashboard', [\App\Http\Controllers\Api\AdminDashboardController::class, 'index']);
         Route::get('/admin/export/{type}', [\App\Http\Controllers\Api\ExportController::class, 'export']);
         Route::get('/admin/users', [AdminUserController::class, 'index']);
@@ -173,5 +176,6 @@ Route::prefix('v1')->group(function () {
         Route::post('/admin/education/courses/{id}/tests', [\App\Http\Controllers\Api\AdminEducationController::class, 'storeTest']);
         Route::put('/admin/education/courses/{id}/tests/{testId}', [\App\Http\Controllers\Api\AdminEducationController::class, 'updateTest']);
         Route::delete('/admin/education/courses/{id}/tests/{testId}', [\App\Http\Controllers\Api\AdminEducationController::class, 'destroyTest']);
+        }); // end role:staff
     });
 });

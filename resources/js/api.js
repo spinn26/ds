@@ -14,14 +14,22 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
     (r) => r,
     (error) => {
-        if (error.response?.status === 401) {
-            const url = error.config?.url || '';
-            // Don't redirect on login/register attempts — let the page show the error
+        const status = error.response?.status;
+        const url = error.config?.url || '';
+
+        if (status === 401) {
+            // Don't redirect on login/register attempts
             if (!url.includes('/auth/login') && !url.includes('/auth/register')) {
                 localStorage.removeItem('auth_token');
                 window.location.href = '/login';
             }
         }
+
+        if (status === 403) {
+            // Show notification or redirect — user lacks permission
+            console.warn('[API] Forbidden:', url);
+        }
+
         return Promise.reject(error);
     }
 );

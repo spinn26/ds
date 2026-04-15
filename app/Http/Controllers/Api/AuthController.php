@@ -145,7 +145,7 @@ class AuthController extends Controller
             'telegram' => 'nullable|string|max:100',
             'birthDate' => 'nullable|date',
             'city' => 'nullable|string|max:255',
-            'password' => ['required', 'confirmed', Password::min(6)],
+            'password' => ['required', 'confirmed', Password::min(8)->letters()->numbers()],
             'refCode' => 'nullable|string',
             'consentPersonalData' => 'accepted',
             'consentTerms' => 'accepted',

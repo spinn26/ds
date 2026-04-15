@@ -74,7 +74,8 @@ class TransactionImportController extends Controller
         try {
             $rows = $reader->readSheet($spreadsheetId, $request->sheet, $apiKey);
         } catch (\Exception $e) {
-            return response()->json(['message' => 'Ошибка чтения листа: ' . $e->getMessage()], 422);
+            \Log::error('Sheet read failed: ' . $e->getMessage());
+            return response()->json(['message' => 'Ошибка чтения листа. Проверьте ID и название листа.'], 422);
         }
 
         if (empty($rows)) {
@@ -193,7 +194,8 @@ class TransactionImportController extends Controller
                 ]);
                 $successCount++;
             } catch (\Exception $e) {
-                $errors[] = "Строка " . ($i + 2) . ": ошибка создания — " . $e->getMessage();
+                \Log::warning("Import row " . ($i + 2) . " failed: " . $e->getMessage());
+                $errors[] = "Строка " . ($i + 2) . ": ошибка создания";
                 $errorCount++;
             }
         }

@@ -14,6 +14,40 @@ class TicketController extends Controller
 {
     const OWNER_EMAIL = 'lamakin@dsconsult.ru'; // Александр Ламакин
 
+    private static array $staffRoles = ['admin', 'backoffice', 'support', 'finance', 'head', 'calculations', 'corrections'];
+
+    /**
+     * Check if current user can access a ticket.
+     * Returns true for staff or ticket creator/participant.
+     */
+    private function canAccessTicket(int $ticketId, int $userId): bool
+    {
+        // Staff can access all tickets
+        $user = DB::table('WebUser')->where('id', $userId)->first();
+        if ($user) {
+            $roles = array_map('trim', explode(',', $user->role ?? ''));
+            if (array_intersect($roles, self::$staffRoles)) return true;
+        }
+
+        // Creator can access own tickets
+        $ticket = DB::table('tickets')->where('id', $ticketId)->first();
+        if ($ticket && (int) $ticket->created_by === $userId) return true;
+
+        // Participant can access
+        return DB::table('ticket_participants')
+            ->where('ticket_id', $ticketId)
+            ->where('user_id', $userId)
+            ->exists();
+    }
+
+    private function isStaffUser(int $userId): bool
+    {
+        $user = DB::table('WebUser')->where('id', $userId)->first();
+        if (!$user) return false;
+        $roles = array_map('trim', explode(',', $user->role ?? ''));
+        return (bool) array_intersect($roles, self::$staffRoles);
+    }
+
     const CATEGORIES = [
         'support' => 'Техподдержка',
         'backoffice' => 'Бэк-офис',
@@ -209,10 +243,14 @@ class TicketController extends Controller
     }
 
     /** Получить тикет с сообщениями */
-    public function show(int $id): JsonResponse
+    public function show(Request $request, int $id): JsonResponse
     {
         $ticket = DB::table('tickets')->where('id', $id)->first();
         if (! $ticket) return response()->json(['message' => 'Не найден'], 404);
+
+        if (! $this->canAccessTicket($id, $request->user()->id)) {
+            return response()->json(['message' => 'Доступ запрещён'], 403);
+        }
 
         $messageRows = DB::table('ticket_messages')
             ->where('ticket_id', $id)
@@ -279,9 +317,13 @@ class TicketController extends Controller
     /** Отправить сообщение в тикет */
     public function sendMessage(Request $request, int $id): JsonResponse
     {
+        if (! $this->canAccessTicket($id, $request->user()->id)) {
+            return response()->json(['message' => 'Доступ запрещён'], 403);
+        }
+
         $request->validate([
             'message' => 'nullable|string',
-            'attachment' => 'nullable|file|max:10240',
+            'attachment' => 'nullable|file|mimes:pdf,doc,docx,xls,xlsx,jpg,jpeg,png,webp,gif,zip|max:10240',
         ]);
 
         $user = $request->user();
@@ -351,6 +393,10 @@ class TicketController extends Controller
     /** Назначить тикет на сотрудника */
     public function assign(Request $request, int $id): JsonResponse
     {
+        if (! $this->isStaffUser($request->user()->id)) {
+            return response()->json(['message' => 'Только для сотрудников'], 403);
+        }
+
         $request->validate(['user_id' => 'required|integer']);
 
         $assignee = DB::table('WebUser')->where('id', $request->user_id)->first();
@@ -388,6 +434,10 @@ class TicketController extends Controller
     /** Добавить участника */
     public function addParticipant(Request $request, int $id): JsonResponse
     {
+        if (! $this->isStaffUser($request->user()->id)) {
+            return response()->json(['message' => 'Только для сотрудников'], 403);
+        }
+
         $request->validate(['user_id' => 'required|integer']);
 
         $user = DB::table('WebUser')->where('id', $request->user_id)->first();
@@ -418,6 +468,10 @@ class TicketController extends Controller
     /** Закрыть тикет */
     public function close(Request $request, int $id): JsonResponse
     {
+        if (! $this->canAccessTicket($id, $request->user()->id)) {
+            return response()->json(['message' => 'Доступ запрещён'], 403);
+        }
+
         DB::table('tickets')->where('id', $id)->update([
             'status' => 'closed',
             'closed_at' => now(),
