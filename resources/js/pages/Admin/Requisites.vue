@@ -30,7 +30,8 @@
           title="Подтвердить" :loading="item._verifying" @click="verify(item)" />
         <v-btn v-if="item.verificationStatus !== 'rejected'" icon="mdi-close" size="x-small" variant="text" color="error"
           title="Отклонить" :loading="item._rejecting" @click="reject(item)" />
-        
+        <StartChatButton :partner-id="item.consultantId || item.consultant" :partner-name="item.consultantName || item.personName"
+          context-type="Реквизиты" :context-id="item.id" :context-label="item.individualEntrepreneur || '#' + item.id" />
       </template>
       <template #no-data><EmptyState /></template>
     </v-data-table-server>
@@ -125,6 +126,7 @@ import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
 import PageHeader from '../../components/PageHeader.vue';
 import EmptyState from '../../components/EmptyState.vue';
+import StartChatButton from '../../components/StartChatButton.vue';
 
 const items = ref([]);
 const total = ref(0);

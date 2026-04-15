@@ -21,7 +21,8 @@
         <v-chip v-for="p in (value || [])" :key="p" size="x-small" class="mr-1" color="primary" variant="outlined">{{ p }}</v-chip>
       </template>
       <template #item.chat="{ item }">
-        
+        <StartChatButton :partner-id="item.consultantId || item.consultant" :partner-name="item.consultantName"
+          context-type="Клиент" :context-id="item.id" :context-label="item.personName || '#' + item.id" />
       </template>
       <template #item.birthDate="{ value }">
         {{ fmtDate(value) }}
@@ -37,6 +38,7 @@ import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
 import PageHeader from '../../components/PageHeader.vue';
 import EmptyState from '../../components/EmptyState.vue';
+import StartChatButton from '../../components/StartChatButton.vue';
 import { fmtDate } from '../../composables/useDesign';
 
 const items = ref([]);

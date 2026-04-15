@@ -36,6 +36,10 @@
       <template #item.date="{ value }">
         {{ fmtDate(value) }}
       </template>
+      <template #item.chat="{ item }">
+        <StartChatButton :partner-id="item.consultant" :partner-name="item.consultantName"
+          context-type="Комиссия" :context-id="item.id" :context-label="'#' + item.id" />
+      </template>
       <template #no-data><EmptyState /></template>
     </v-data-table-server>
   </div>
@@ -47,6 +51,7 @@ import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
 import PageHeader from '../../components/PageHeader.vue';
 import EmptyState from '../../components/EmptyState.vue';
+import StartChatButton from '../../components/StartChatButton.vue';
 import { fmt2 as fmt, fmtDate } from '../../composables/useDesign';
 
 const items = ref([]);
@@ -67,6 +72,7 @@ const headers = [
   { title: 'ГП', key: 'groupVolume', align: 'end', width: 110 },
   { title: 'Гр. бонус (руб)', key: 'groupBonusRub', align: 'end', width: 150 },
   { title: 'Дата', key: 'date', width: 120 },
+  { title: '', key: 'chat', sortable: false, width: 50 },
 ];
 
 const activeFilterCount = computed(() => {
