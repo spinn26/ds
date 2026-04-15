@@ -291,11 +291,7 @@ const deleteProgramProductId = ref(null);
 const programsByProduct = reactive({});
 const programsLoading = reactive({});
 
-let debounceTimer;
-function debouncedLoad() {
-  clearTimeout(debounceTimer);
-  debounceTimer = setTimeout(loadProducts, 400);
-}
+const { debounced: debouncedLoad } = useDebounce(loadData, 400);
 
 async function loadProducts() {
   loading.value = true;

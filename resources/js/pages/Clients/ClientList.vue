@@ -67,11 +67,7 @@ const headers = [
   { title: 'Email', key: 'email', width: 220, sortable: false },
 ];
 
-let debounceTimer;
-function debouncedLoad() {
-  clearTimeout(debounceTimer);
-  debounceTimer = setTimeout(loadData, 400);
-}
+const { debounced: debouncedLoad } = useDebounce(loadData, 400);
 
 function onOptions(opts) {
   page.value = opts.page;

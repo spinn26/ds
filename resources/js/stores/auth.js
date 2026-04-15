@@ -3,11 +3,11 @@ import api from '../api';
 
 export const useAuthStore = defineStore('auth', {
     persist: {
-        pick: ['token'],
+        pick: ['token', 'user'],
     },
     state: () => ({
         user: null,
-        token: localStorage.getItem('auth_token'),
+        token: null,
         initialized: false,
     }),
     getters: {
@@ -21,8 +21,10 @@ export const useAuthStore = defineStore('auth', {
         },
         isConsultant: (state) => state.user?.role?.includes('consultant'),
         isRegistered: (state) => state.user?.role === 'registered',
-        isTerminated: (state) => state.user?.activityStatus === 3, // Терминирован
-        isExcluded: (state) => state.user?.activityStatus === 5, // Исключён
+        isTerminated: (state) => state.user?.activityStatus === 3,
+        isExcluded: (state) => state.user?.activityStatus === 5,
+        userId: (state) => state.user?.id,
+        userName: (state) => state.user ? `${state.user.lastName || ''} ${state.user.firstName || ''}`.trim() : '',
     },
     actions: {
         async fetchUser() {
@@ -33,11 +35,12 @@ export const useAuthStore = defineStore('auth', {
             try {
                 const { data } = await api.get('/auth/me');
                 this.user = data;
+                // Socket auth needs these in localStorage
                 localStorage.setItem('auth_user_id', data.id);
                 localStorage.setItem('auth_user_name', `${data.lastName || ''} ${data.firstName || ''}`.trim());
             } catch {
                 this.token = null;
-                localStorage.removeItem('auth_token');
+                this.user = null;
             }
             this.initialized = true;
         },
@@ -45,7 +48,7 @@ export const useAuthStore = defineStore('auth', {
             const { data } = await api.post('/auth/login', { email, password });
             this.token = data.token;
             this.user = data.user;
-            localStorage.setItem('auth_token', data.token);
+            // Socket auth
             localStorage.setItem('auth_user_id', data.user.id);
             localStorage.setItem('auth_user_name', `${data.user.lastName || ''} ${data.user.firstName || ''}`.trim());
         },
@@ -53,13 +56,13 @@ export const useAuthStore = defineStore('auth', {
             const { data } = await api.post('/auth/register', form);
             this.token = data.token;
             this.user = data.user;
-            localStorage.setItem('auth_token', data.token);
         },
         logout() {
             api.post('/auth/logout').catch(() => {});
             this.token = null;
             this.user = null;
-            localStorage.removeItem('auth_token');
+            localStorage.removeItem('auth_user_id');
+            localStorage.removeItem('auth_user_name');
         },
     },
 });

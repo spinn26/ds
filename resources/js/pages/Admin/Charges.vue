@@ -130,8 +130,7 @@ const activeFilterCount = computed(() => {
 
 function resetFilters() { search.value = ''; typeFilter.value = null; loadData(); }
 
-let debounceTimer;
-function debouncedLoad() { clearTimeout(debounceTimer); debounceTimer = setTimeout(loadData, 400); }
+const { debounced: debouncedLoad } = useDebounce(loadData, 400);
 function onOptions(opts) { page.value = opts.page; loadData(); }
 
 async function loadData() {

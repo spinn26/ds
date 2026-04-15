@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { useSnackbar } from './composables/useSnackbar';
 
 const api = axios.create({
     baseURL: '/api/v1',
@@ -16,18 +17,23 @@ api.interceptors.response.use(
     (error) => {
         const status = error.response?.status;
         const url = error.config?.url || '';
+        const { showError } = useSnackbar();
 
         if (status === 401) {
-            // Don't redirect on login/register attempts
             if (!url.includes('/auth/login') && !url.includes('/auth/register')) {
                 localStorage.removeItem('auth_token');
                 window.location.href = '/login';
             }
-        }
-
-        if (status === 403) {
-            // Show notification or redirect — user lacks permission
-            console.warn('[API] Forbidden:', url);
+        } else if (status === 403) {
+            showError('Недостаточно прав для этого действия');
+        } else if (status === 422) {
+            // Validation errors — let the component handle it
+        } else if (status === 429) {
+            showError('Слишком много запросов. Подождите немного.');
+        } else if (status >= 500) {
+            showError('Ошибка сервера. Попробуйте позже.');
+        } else if (!error.response) {
+            showError('Нет связи с сервером');
         }
 
         return Promise.reject(error);

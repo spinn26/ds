@@ -191,11 +191,7 @@ const headers = [
   { title: 'Действия', key: 'actions', sortable: false, width: 120 },
 ];
 
-let debounceTimer;
-function debouncedLoad() {
-  clearTimeout(debounceTimer);
-  debounceTimer = setTimeout(loadUsers, 400);
-}
+const { debounced: debouncedLoad } = useDebounce(loadData, 400);
 
 async function loadUsers() {
   loading.value = true;

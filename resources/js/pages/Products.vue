@@ -16,7 +16,7 @@
       <v-card class="mb-3 pa-3">
         <div class="d-flex ga-2 flex-wrap align-center">
           <v-text-field v-model="search" placeholder="Поиск по названию..."
-            prepend-inner-icon="mdi-magnify" hide-details style="max-width:300px" @update:model-value="debouncedFilter" />
+            prepend-inner-icon="mdi-magnify" hide-details style="max-width:300px" @update:model-value="debouncedLoad" />
           <v-select v-model="category" :items="categoryOptions" label="Категория"
             clearable hide-details style="max-width:240px" @update:model-value="filterProducts" />
         </div>
@@ -137,15 +137,7 @@ const filteredProducts = computed(() => {
   return list;
 });
 
-let debounceTimer;
-function debouncedFilter() {
-  clearTimeout(debounceTimer);
-  debounceTimer = setTimeout(() => {}, 300);
-}
-
-function filterProducts() {
-  // computed handles reactivity
-}
+const { debounced: debouncedLoad } = useDebounce(loadData, 400);
 
 function openProduct(product) {
   if (!access.value.requisitesVerified) {

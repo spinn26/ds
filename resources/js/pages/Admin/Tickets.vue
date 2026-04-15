@@ -392,14 +392,7 @@ function resetFilters() {
 }
 
 // --- API calls ---
-let debounceTimer;
-function debouncedLoad() {
-  clearTimeout(debounceTimer);
-  debounceTimer = setTimeout(() => {
-    page.value = 1;
-    loadTickets();
-  }, 400);
-}
+const { debounced: debouncedLoad } = useDebounce(loadData, 400);
 
 async function loadTickets() {
   loading.value = true;

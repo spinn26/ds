@@ -210,11 +210,7 @@ async function toggleExpand(row) {
   row._loadingChildren = false;
 }
 
-let debounceTimer;
-function debouncedLoad() {
-  clearTimeout(debounceTimer);
-  debounceTimer = setTimeout(loadData, 400);
-}
+const { debounced: debouncedLoad } = useDebounce(loadData, 400);
 
 async function loadData() {
   loading.value = true;

@@ -365,11 +365,7 @@ const lessonsLoading = reactive({});
 const testsByCourse = reactive({});
 const testsLoading = reactive({});
 
-let debounceTimer;
-function debouncedLoad() {
-  clearTimeout(debounceTimer);
-  debounceTimer = setTimeout(loadCourses, 400);
-}
+const { debounced: debouncedLoad } = useDebounce(loadData, 400);
 
 async function loadCourses() {
   loading.value = true;
