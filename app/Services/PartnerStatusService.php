@@ -232,11 +232,18 @@ class PartnerStatusService
             $info['currentPoints'] = (float) ($consultant->personalVolume ?? 0);
         }
 
-        if ($activity === PartnerActivity::Active && $consultant->yearPeriodEnd) {
-            $info['yearPeriodEnd'] = $consultant->yearPeriodEnd->toIso8601String();
-            $info['daysRemaining'] = max(0, (int) Carbon::now()->diffInDays($consultant->yearPeriodEnd, false));
-            $info['requiredPoints'] = PartnerActivity::ACTIVATION_POINTS;
-            $info['currentPoints'] = (float) ($consultant->personalVolume ?? 0);
+        if ($activity === PartnerActivity::Active) {
+            $endDate = $consultant->yearPeriodEnd;
+            // Fallback: if yearPeriodEnd not set, calculate from dateActivity + 1 year
+            if (!$endDate && $consultant->dateActivity) {
+                $endDate = Carbon::parse($consultant->dateActivity)->addYear();
+            }
+            if ($endDate) {
+                $info['yearPeriodEnd'] = $endDate instanceof Carbon ? $endDate->toIso8601String() : Carbon::parse($endDate)->toIso8601String();
+                $info['daysRemaining'] = max(0, (int) Carbon::now()->diffInDays($endDate, false));
+                $info['requiredPoints'] = PartnerActivity::ACTIVATION_POINTS;
+                $info['currentPoints'] = (float) ($consultant->personalVolume ?? 0);
+            }
         }
 
         return $info;
