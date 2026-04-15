@@ -61,8 +61,26 @@ class ChatController extends Controller
             ->limit(25)
             ->get();
 
+        // Calculate unread per ticket
+        $ticketIds = $tickets->pluck('id')->filter();
+        $unreadMap = collect();
+        if ($ticketIds->isNotEmpty()) {
+            $unreadMap = DB::table('chat_messages')
+                ->whereIn('ticket_id', $ticketIds)
+                ->where('sender_id', '!=', $user->id)
+                ->where('is_system', false)
+                ->select('ticket_id', DB::raw('count(*) as cnt'))
+                ->groupBy('ticket_id')
+                ->pluck('cnt', 'ticket_id');
+        }
+
+        $data = $tickets->map(function ($t) use ($unreadMap) {
+            $t->unread = $unreadMap[$t->id] ?? 0;
+            return $t;
+        });
+
         return response()->json([
-            'data' => $tickets,
+            'data' => $data,
             'total' => $total,
             'last_page' => max(1, ceil($total / 25)),
         ]);

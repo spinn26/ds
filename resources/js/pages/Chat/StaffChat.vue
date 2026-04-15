@@ -24,7 +24,7 @@
         <input v-model="filter.search" placeholder="Поиск..." class="sidebar-search" @input="debouncedLoad" />
       </div>
       <div class="sidebar-list">
-        <div v-for="t in chats" :key="t.id" class="chat-item" :class="{ active: activeChat?.id === t.id }" @click="openChat(t)">
+        <div v-for="t in chats" :key="t.id" class="chat-item" :class="{ active: activeChat?.id === t.id, 'has-unread': t.unread > 0 }" @click="openChat(t)">
           <div class="chat-item-avatar" :style="{ background: catColor(t.category || t.department) }">
             <v-icon size="18" color="white">{{ catIcon(t.category || t.department) }}</v-icon>
           </div>
@@ -296,7 +296,9 @@ onUnmounted(stopPoll);
 .priority-dot { width: 8px; height: 8px; border-radius: 50%; }
 .priority-dot.critical { background: #ef4444; }
 .priority-dot.high { background: #f97316; }
-.unread-badge { position: absolute; right: 12px; top: 10px; background: rgb(var(--v-theme-error)); color: #fff; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 10px; }
+.unread-badge { position: absolute; right: 12px; top: 10px; background: rgb(var(--v-theme-error)); color: #fff; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 10px; min-width: 18px; text-align: center; }
+.chat-item.has-unread { background: rgba(var(--v-theme-primary), 0.06); }
+.chat-item.has-unread .chat-item-subject { color: rgb(var(--v-theme-primary)); font-weight: 700; }
 
 .chat-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 .chat-placeholder { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 12px; color: rgba(var(--v-theme-on-surface), 0.3); }

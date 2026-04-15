@@ -7,7 +7,7 @@
         <button class="btn-new" @click="showNew = true"><v-icon size="18">mdi-plus</v-icon> Новый чат</button>
       </div>
       <div class="sidebar-list">
-        <div v-for="t in chats" :key="t.id" class="chat-item" :class="{ active: activeChat?.id === t.id }" @click="openChat(t)">
+        <div v-for="t in chats" :key="t.id" class="chat-item" :class="{ active: activeChat?.id === t.id, 'has-unread': t.unread > 0 }" @click="openChat(t)">
           <div class="chat-item-avatar" :style="{ background: catColor(t.category) }">
             <v-icon size="18" color="white">{{ catIcon(t.category) }}</v-icon>
           </div>
@@ -253,6 +253,8 @@ onUnmounted(stopPoll);
 .chat-item-cat { color: rgba(var(--v-theme-on-surface), 0.5); }
 .chat-item-status { font-weight: 600; }
 .unread-badge { position: absolute; right: 12px; top: 12px; background: rgb(var(--v-theme-error)); color: #fff; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 10px; min-width: 18px; text-align: center; }
+.chat-item.has-unread { background: rgba(var(--v-theme-primary), 0.06); }
+.chat-item.has-unread .chat-item-subject { color: rgb(var(--v-theme-primary)); font-weight: 700; }
 
 /* Main chat area */
 .chat-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
