@@ -23,6 +23,25 @@
             :class="[item.adminSection ? 'text-secondary font-weight-bold' : '', 'menu-group-header mt-2']">
             {{ item.group }}
           </v-list-subheader>
+          <!-- Item with children = expandable group -->
+          <v-list-group v-else-if="item.children" :value="item.label">
+            <template #activator="{ props }">
+              <v-list-item v-bind="props" :prepend-icon="item.icon" :title="item.label"
+                :color="item.adminSection ? 'secondary' : 'primary'" rounded="lg" class="mb-1 menu-item">
+                <template #append>
+                  <v-badge v-if="item.path === '/tickets' && unreadCount > 0" :content="unreadCount" color="error" inline class="mr-2" />
+                </template>
+              </v-list-item>
+            </template>
+            <v-list-item :to="item.path" prepend-icon="mdi-message-text" title="Все обращения"
+              :active="isActivePath(item.path)" color="primary" rounded="lg" class="mb-1 ml-3 menu-item"
+              @click="onMenuClick(item)" />
+            <v-list-item v-for="(child, ci) in item.children" :key="ci"
+              :to="child.path" :prepend-icon="child.icon" :title="child.label"
+              color="primary" rounded="lg" class="mb-1 ml-3 menu-item"
+              @click="onMenuClick(child)" />
+          </v-list-group>
+          <!-- Regular item -->
           <v-list-item v-else :to="item.path" :prepend-icon="item.icon"
             :title="item.label" :active="isActivePath(item.path)"
             :color="item.adminSection ? 'secondary' : 'primary'"
@@ -416,9 +435,10 @@ const menuItems = [
   { label: 'Обучение', icon: 'mdi-school', path: '/education', partner: true },
   { label: 'Продукты', icon: 'mdi-package-variant', path: '/products', partner: true },
   { label: 'Список конкурсов и событий', icon: 'mdi-trophy', path: '/contests', partner: true },
-  { label: 'Обратная связь', icon: 'mdi-chat', path: '/tickets', partner: true },
-  { label: 'Написать собственнику', icon: 'mdi-email-edit', path: '/tickets?to=owner', partner: true },
-  { label: 'Оставить кейс', icon: 'mdi-briefcase-plus', path: '/tickets?type=case', partner: true },
+  { label: 'Обратная связь', icon: 'mdi-chat', path: '/tickets', partner: true, children: [
+    { label: 'Написать собственнику', icon: 'mdi-email-edit', path: '/tickets?to=owner' },
+    { label: 'Оставить кейс', icon: 'mdi-briefcase-plus', path: '/tickets?type=case' },
+  ] },
 
   // ---- Staff sections (grouped per spec) ----
   // Инструменты
