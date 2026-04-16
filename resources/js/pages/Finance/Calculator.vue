@@ -22,31 +22,31 @@
             label="Продукт" clearable @update:model-value="resetFrom('product')" />
         </v-col>
 
-        <!-- 4. Программа — после выбора продукта -->
-        <v-col cols="12" sm="6" md="4" v-if="form.product">
+        <!-- 4. Программа — если есть программы для продукта -->
+        <v-col cols="12" sm="6" md="4" v-if="form.product && filteredPrograms.length">
           <v-select v-model="form.program" :items="filteredPrograms" item-title="name" item-value="id"
             label="Программа" clearable @update:model-value="resetFrom('program')" />
         </v-col>
 
-        <!-- 5. Свойство — после выбора программы (filtered by program) -->
-        <v-col cols="12" sm="6" md="4" v-if="form.program && filteredProperties.length">
+        <!-- 5. Свойство — после программы или сразу если нет программ -->
+        <v-col cols="12" sm="6" md="4" v-if="showRemainingFields && filteredProperties.length">
           <v-select v-model="form.calcProperty" :items="filteredProperties" item-title="title" item-value="id"
             label="Свойство" />
         </v-col>
 
-        <!-- 6. Срок контракта — если программа привязана к сроку -->
-        <v-col cols="12" sm="6" md="4" v-if="form.program && filteredTerms.length">
+        <!-- 6. Срок контракта -->
+        <v-col cols="12" sm="6" md="4" v-if="showRemainingFields && filteredTerms.length">
           <v-select v-model="form.termContract" :items="filteredTerms" item-title="label" item-value="id"
             label="Срок контракта" clearable />
         </v-col>
 
-        <!-- 7. Сумма — после свойства -->
-        <v-col cols="12" sm="6" md="4" v-if="form.calcProperty">
+        <!-- 7. Сумма -->
+        <v-col cols="12" sm="6" md="4" v-if="showRemainingFields">
           <v-text-field v-model.number="form.amount" label="Сумма взноса" type="number" />
         </v-col>
 
-        <!-- 8. Валюта — после суммы -->
-        <v-col cols="12" sm="6" md="4" v-if="form.amount > 0">
+        <!-- 8. Валюта -->
+        <v-col cols="12" sm="6" md="4" v-if="showRemainingFields">
           <v-select v-model="form.currency" :items="allowedCurrencies" item-title="symbol" item-value="id"
             label="Валюта" />
         </v-col>
@@ -197,9 +197,19 @@ const filteredTerms = computed(() => {
   return matrix.terms.map(t => ({ ...t, label: t.term + (t.term > 4 ? ' лет' : t.term > 1 ? ' года' : ' год') }));
 });
 
+// Show remaining fields if program selected OR no programs exist for product
+const showRemainingFields = computed(() => {
+  if (!form.product) return false;
+  // If no programs for this product — show fields immediately
+  if (filteredPrograms.value.length === 0) return true;
+  // If program selected — show fields
+  return !!form.program;
+});
+
 const canCalculate = computed(() => {
+  const needsProgram = filteredPrograms.value.length > 0;
   const needsProperty = filteredProperties.value.length > 0;
-  return form.qualification && form.program && (!needsProperty || form.calcProperty) && form.amount > 0 && form.currency;
+  return form.qualification && form.product && (!needsProgram || form.program) && (!needsProperty || form.calcProperty) && form.amount > 0 && form.currency;
 });
 
 // Reset downstream fields
