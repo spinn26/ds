@@ -166,15 +166,12 @@ const filteredTypes = computed(() => matrix.types);
 
 const filteredProducts = computed(() => {
   if (!form.productType) return [];
-  const byType = matrix.products.filter(p => p.typeId == form.productType);
-  // Fallback: if no products match type (data issue), show all
-  return byType.length ? byType : matrix.products;
+  return matrix.products.filter(p => p.typeId == form.productType);
 });
 
 const filteredPrograms = computed(() => {
   if (!form.product) return [];
-  const byProduct = matrix.programs.filter(p => p.productId == form.product);
-  return byProduct.length ? byProduct : matrix.programs;
+  return matrix.programs.filter(p => p.productId == form.product);
 });
 
 // Filter properties by selected program's commissionCalcProperty
@@ -214,7 +211,14 @@ function resetFrom(field) {
   }
   result.value = null;
 
-  // Auto-select if only one option
+  // Auto-select if only one option available
+  if (field === 'product' && form.product) {
+    const progs = filteredPrograms.value;
+    if (progs.length === 1) {
+      form.program = progs[0].id;
+      resetFrom('program');
+    }
+  }
   if (field === 'program' && form.program) {
     const props = filteredProperties.value;
     if (props.length === 1) form.calcProperty = props[0].id;
