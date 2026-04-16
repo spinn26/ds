@@ -50,6 +50,8 @@ class CalculatorController extends Controller
                 'productId' => $p->product,
                 'term' => $p->term,
                 'currency' => $p->currency,
+                'calcPropertyId' => $p->commissionCalcProperty ?? null,
+                'termContractId' => $p->termContract ?? null,
             ]);
 
         $properties = DB::table('commissionCalcProperty')->orderBy('title')->get()

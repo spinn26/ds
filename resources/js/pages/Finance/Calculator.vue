@@ -28,15 +28,15 @@
             label="Программа" clearable @update:model-value="resetFrom('program')" />
         </v-col>
 
-        <!-- 5. Свойство — после выбора программы -->
-        <v-col cols="12" sm="6" md="4" v-if="form.program">
-          <v-select v-model="form.calcProperty" :items="matrix.properties" item-title="title" item-value="id"
-            label="Свойство продукта" />
+        <!-- 5. Свойство — после выбора программы (filtered by program) -->
+        <v-col cols="12" sm="6" md="4" v-if="form.program && filteredProperties.length">
+          <v-select v-model="form.calcProperty" :items="filteredProperties" item-title="title" item-value="id"
+            label="Свойство" />
         </v-col>
 
-        <!-- 6. Срок контракта — если есть -->
-        <v-col cols="12" sm="6" md="4" v-if="form.program && availableTerms.length">
-          <v-select v-model="form.termContract" :items="availableTerms" item-title="label" item-value="id"
+        <!-- 6. Срок контракта — если программа привязана к сроку -->
+        <v-col cols="12" sm="6" md="4" v-if="form.program && filteredTerms.length">
+          <v-select v-model="form.termContract" :items="filteredTerms" item-title="label" item-value="id"
             label="Срок контракта" clearable />
         </v-col>
 
@@ -177,13 +177,33 @@ const filteredPrograms = computed(() => {
   return byProduct.length ? byProduct : matrix.programs;
 });
 
-const availableTerms = computed(() =>
-  matrix.terms.map(t => ({ ...t, label: t.term + (t.term > 4 ? ' лет' : t.term > 1 ? ' года' : ' год') }))
-);
+// Filter properties by selected program's commissionCalcProperty
+const filteredProperties = computed(() => {
+  if (!form.program) return [];
+  const prog = matrix.programs.find(p => p.id == form.program);
+  if (prog?.calcPropertyId) {
+    // Program has specific property — show only that one
+    return matrix.properties.filter(p => p.id == prog.calcPropertyId);
+  }
+  // No specific property — show all
+  return matrix.properties;
+});
 
-const canCalculate = computed(() =>
-  form.qualification && form.program && form.calcProperty && form.amount > 0 && form.currency
-);
+// Filter terms by selected program
+const filteredTerms = computed(() => {
+  if (!form.program) return [];
+  const prog = matrix.programs.find(p => p.id == form.program);
+  if (prog?.termContractId) {
+    return matrix.terms.filter(t => t.id == prog.termContractId).map(t => ({ ...t, label: t.term + (t.term > 4 ? ' лет' : t.term > 1 ? ' года' : ' год') }));
+  }
+  // Show all terms
+  return matrix.terms.map(t => ({ ...t, label: t.term + (t.term > 4 ? ' лет' : t.term > 1 ? ' года' : ' год') }));
+});
+
+const canCalculate = computed(() => {
+  const needsProperty = filteredProperties.value.length > 0;
+  return form.qualification && form.program && (!needsProperty || form.calcProperty) && form.amount > 0 && form.currency;
+});
 
 // Reset downstream fields
 function resetFrom(field) {
@@ -193,6 +213,14 @@ function resetFrom(field) {
     form[order[i]] = null;
   }
   result.value = null;
+
+  // Auto-select if only one option
+  if (field === 'program' && form.program) {
+    const props = filteredProperties.value;
+    if (props.length === 1) form.calcProperty = props[0].id;
+    const terms = filteredTerms.value;
+    if (terms.length === 1) form.termContract = terms[0].id;
+  }
 }
 
 function resetForm() {
