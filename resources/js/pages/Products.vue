@@ -16,9 +16,9 @@
       <v-card class="mb-3 pa-3">
         <div class="d-flex ga-2 flex-wrap align-center">
           <v-text-field v-model="search" placeholder="Поиск по названию..."
-            prepend-inner-icon="mdi-magnify" hide-details style="max-width:300px" @update:model-value="debouncedLoad" />
+            prepend-inner-icon="mdi-magnify" hide-details style="max-width:300px" clearable />
           <v-select v-model="category" :items="categoryOptions" label="Категория"
-            clearable hide-details style="max-width:240px" @update:model-value="filterProducts" />
+            clearable hide-details style="max-width:240px" />
         </div>
       </v-card>
 
@@ -111,7 +111,6 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import api from '../api';
-import { useDebounce } from '../composables/useDebounce';
 import PageHeader from '../components/PageHeader.vue';
 
 const loading = ref(true);
@@ -133,12 +132,11 @@ const filteredProducts = computed(() => {
     list = list.filter(p => p.name?.toLowerCase().includes(q));
   }
   if (category.value) {
-    list = list.filter(p => p.category?.id === category.value);
+    list = list.filter(p => String(p.category?.id) === String(category.value));
   }
   return list;
 });
 
-// debouncedLoad not needed — filtering is client-side via computed
 
 function openProduct(product) {
   if (!access.value.requisitesVerified) {
