@@ -166,12 +166,15 @@ const filteredTypes = computed(() => matrix.types);
 
 const filteredProducts = computed(() => {
   if (!form.productType) return [];
-  return matrix.products.filter(p => p.typeId == form.productType);
+  const byType = matrix.products.filter(p => p.typeId == form.productType);
+  // Fallback: if no products match type (data issue), show all
+  return byType.length ? byType : matrix.products;
 });
 
 const filteredPrograms = computed(() => {
   if (!form.product) return [];
-  return matrix.programs.filter(p => p.productId == form.product);
+  const byProduct = matrix.programs.filter(p => p.productId == form.product);
+  return byProduct.length ? byProduct : matrix.programs;
 });
 
 const availableTerms = computed(() =>

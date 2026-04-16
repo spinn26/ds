@@ -35,7 +35,7 @@ class CalculatorController extends Controller
             ->map(fn ($p) => [
                 'id' => $p->id,
                 'name' => $p->name,
-                'typeId' => $p->type ?? null,
+                'typeId' => $p->productType ?? null,
             ]);
 
         $programs = DB::table('program')
