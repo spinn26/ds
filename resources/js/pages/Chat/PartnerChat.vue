@@ -6,6 +6,10 @@
         <h3>Мои обращения</h3>
         <button class="btn-new" @click="showNew = true"><v-icon size="18">mdi-plus</v-icon> Новый чат</button>
       </div>
+      <div class="sidebar-quick">
+        <button class="quick-btn" @click="openFounder"><v-icon size="14">mdi-email-edit</v-icon> Написать основателю</button>
+        <button class="quick-btn" @click="openCase"><v-icon size="14">mdi-briefcase-plus</v-icon> Оставить кейс</button>
+      </div>
       <div class="sidebar-list">
         <div v-for="t in chats" :key="t.id" class="chat-item" :class="{ active: activeChat?.id === t.id, 'has-unread': t.unread > 0 }" @click="openChat(t)">
           <div class="chat-item-avatar" :style="{ background: catColor(t.category) }">
@@ -231,6 +235,16 @@ function startPoll() {
 }
 function stopPoll() { if (poll) { clearInterval(poll); poll = null; } }
 
+function openFounder() {
+  newForm.value = { category: 'general', subject: 'Сообщение основателю', message: '' };
+  showNew.value = true;
+}
+
+function openCase() {
+  newForm.value = { category: 'general', subject: 'Кейс', message: '' };
+  showNew.value = true;
+}
+
 function checkQuery() {
   if (route.query.to === 'founder') {
     newForm.value = { category: 'general', subject: 'Сообщение основателю', message: '' };
@@ -256,6 +270,9 @@ onUnmounted(stopPoll);
 .sidebar-head h3 { font-size: 16px; font-weight: 700; margin: 0; }
 .btn-new { display: flex; align-items: center; gap: 4px; padding: 6px 14px; border-radius: 10px; border: none; background: rgb(var(--v-theme-primary)); color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; }
 .btn-new.small { margin-top: 8px; }
+.sidebar-quick { display: flex; gap: 6px; padding: 8px 16px; border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); }
+.quick-btn { display: flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 8px; border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); background: transparent; color: inherit; font-size: 11px; cursor: pointer; white-space: nowrap; }
+.quick-btn:hover { background: rgba(var(--v-theme-primary), 0.08); }
 .sidebar-list { flex: 1; overflow-y: auto; }
 .sidebar-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 48px 16px; gap: 8px; color: rgba(var(--v-theme-on-surface), 0.4); }
 
