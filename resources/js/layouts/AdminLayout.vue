@@ -56,12 +56,23 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
-import { useDisplay } from 'vuetify';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { useDisplay, useTheme } from 'vuetify';
 import { useAuthStore } from '../stores/auth';
 
 const auth = useAuthStore();
 const { mobile } = useDisplay();
+const theme = useTheme();
+
+// Admin always dark
+let prevTheme = '';
+onMounted(() => {
+  prevTheme = theme.global.name.value;
+  theme.global.name.value = 'dark';
+});
+onUnmounted(() => {
+  theme.global.name.value = prevTheme || localStorage.getItem('theme') || 'dark';
+});
 const drawer = ref(true);
 
 const initials = computed(() =>
