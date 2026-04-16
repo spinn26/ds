@@ -3,25 +3,12 @@
     <PageHeader title="Контракты моей команды" icon="mdi-folder-account" :count="total" />
 
     <v-card class="mb-3 pa-3">
-      <div class="d-flex ga-2 flex-wrap align-center">
-        <v-text-field v-model="filters.search" placeholder="ФИО / номер контракта..."
-          rounded prepend-inner-icon="mdi-magnify" clearable hide-details style="max-width:240px" @update:model-value="debouncedLoad" />
-        <v-text-field v-model="filters.consultant_search" placeholder="ФИО ФК..."
-          rounded prepend-inner-icon="mdi-account-search" clearable hide-details style="max-width:220px" @update:model-value="debouncedLoad" />
-        <v-select v-model="filters.status" :items="statusOptions" label="Статус контракта"
-          clearable hide-details style="max-width:220px" @update:model-value="loadData" />
-        <v-text-field v-model="filters.date_from" label="Дата открытия с" type="date"
-          hide-details style="max-width:170px" @update:model-value="loadData" />
-        <v-text-field v-model="filters.date_to" label="Дата открытия по" type="date"
-          hide-details style="max-width:170px" @update:model-value="loadData" />
-        <v-autocomplete v-model="filters.product" :items="productOptions" item-title="name" item-value="id"
-          label="Продукт" clearable hide-details style="max-width:240px"
-          :loading="loadingProducts" @update:search="searchProducts" @update:model-value="loadData" />
-        <v-chip v-if="activeFilterCount > 0" size="small" color="info" variant="tonal" class="ml-1">
-          {{ activeFilterCount }} {{ activeFilterCount === 1 ? 'фильтр' : activeFilterCount < 5 ? 'фильтра' : 'фильтров' }}
-        </v-chip>
-        <v-btn v-if="activeFilterCount > 0" size="small" variant="text" color="secondary"
-          prepend-icon="mdi-filter-remove" @click="resetFilters">Сбросить</v-btn>
+      <div class="d-flex ga-2 align-center">
+        <v-text-field v-model="filters.search" placeholder="Поиск по ФИО, номеру, продукту, консультанту..."
+          rounded prepend-inner-icon="mdi-magnify" clearable hide-details class="flex-grow-1" style="max-width:500px"
+          @update:model-value="debouncedLoad" />
+        <v-btn v-if="filters.search" size="small" variant="text" color="secondary"
+          prepend-icon="mdi-filter-remove" @click="filters.search = ''; loadData()">Сбросить</v-btn>
       </div>
     </v-card>
 
@@ -53,26 +40,8 @@ const items = ref([]);
 const total = ref(0);
 const loading = ref(false);
 const page = ref(1);
-const statusOptions = ref([]);
-const productOptions = ref([]);
-const loadingProducts = ref(false);
-const filters = ref({ search: '', consultant_search: '', status: null, product: null, date_from: '', date_to: '' });
+const filters = ref({ search: '' });
 
-const activeFilterCount = computed(() => {
-  let c = 0;
-  if (filters.value.search) c++;
-  if (filters.value.consultant_search) c++;
-  if (filters.value.status) c++;
-  if (filters.value.product) c++;
-  if (filters.value.date_from) c++;
-  if (filters.value.date_to) c++;
-  return c;
-});
-
-function resetFilters() {
-  filters.value = { search: '', consultant_search: '', status: null, product: null, date_from: '', date_to: '' };
-  loadData();
-}
 
 const headers = [
   { title: 'Номер контракта', key: 'number', width: 140 },
@@ -120,11 +89,6 @@ async function loadData() {
   try {
     const params = { page: page.value };
     if (filters.value.search) params.search = filters.value.search;
-    if (filters.value.consultant_search) params.consultant_search = filters.value.consultant_search;
-    if (filters.value.status) params.status = filters.value.status;
-    if (filters.value.product) params.product = filters.value.product;
-    if (filters.value.date_from) params.date_from = filters.value.date_from;
-    if (filters.value.date_to) params.date_to = filters.value.date_to;
     const { data } = await api.get('/contracts/team', { params });
     items.value = data.data;
     total.value = data.total;
@@ -132,16 +96,5 @@ async function loadData() {
   loading.value = false;
 }
 
-async function loadStatuses() {
-  try {
-    const { data } = await api.get('/contracts/statuses');
-    statusOptions.value = data.map(s => ({ title: s.name, value: s.id }));
-  } catch {}
-}
-
-onMounted(() => {
-  loadData();
-  loadStatuses();
-  searchProducts('');
-});
+onMounted(loadData);
 </script>

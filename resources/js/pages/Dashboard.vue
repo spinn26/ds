@@ -132,6 +132,40 @@
       </v-col>
     </v-row>
 
+    <!-- Обязательные продажи (ОП) -->
+    <v-card v-if="data.mandatoryPlan" class="mb-4 pa-4">
+      <div class="d-flex align-center ga-2 mb-3">
+        <v-icon :color="data.mandatoryPlan.fulfilled ? 'success' : 'warning'">
+          {{ data.mandatoryPlan.fulfilled ? 'mdi-check-circle' : 'mdi-alert-circle' }}
+        </v-icon>
+        <span class="text-subtitle-1 font-weight-bold">Обязательные продажи (ОП по ГП)</span>
+      </div>
+      <v-row align="center">
+        <v-col cols="12" md="6">
+          <div class="d-flex justify-space-between mb-1">
+            <span class="text-body-2">Выполнение плана</span>
+            <span class="text-body-2 font-weight-bold" :class="data.mandatoryPlan.fulfilled ? 'text-success' : 'text-warning'">
+              {{ data.mandatoryPlan.fulfillment }}%
+            </span>
+          </div>
+          <v-progress-linear :model-value="data.mandatoryPlan.fulfillment" height="12" rounded
+            :color="data.mandatoryPlan.fulfilled ? 'success' : data.mandatoryPlan.fulfillment >= 80 ? 'warning' : 'error'" />
+          <div class="text-caption text-medium-emphasis mt-1">
+            {{ fmt(data.mandatoryPlan.currentGP) }} / {{ fmt(data.mandatoryPlan.mandatoryGP) }} баллов ГП за месяц
+          </div>
+        </v-col>
+        <v-col cols="12" md="6">
+          <v-alert v-if="!data.mandatoryPlan.fulfilled" type="warning" variant="tonal" density="compact">
+            При невыполнении ОП комиссия уменьшается на {{ data.mandatoryPlan.commissionReduction }}%.
+            Баллы объёмов не уменьшаются.
+          </v-alert>
+          <v-alert v-else type="success" variant="tonal" density="compact">
+            План выполнен. Комиссия рассчитывается по текущей квалификации.
+          </v-alert>
+        </v-col>
+      </v-row>
+    </v-card>
+
     <!-- Показатели -->
     <h6 class="text-h6 mb-3">Показатели</h6>
     <v-row class="mb-4">

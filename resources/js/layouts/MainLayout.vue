@@ -422,6 +422,8 @@ const menuItems = [
   { label: 'Продукты', icon: 'mdi-package-variant', path: '/products', partner: true },
   { label: 'Список конкурсов и событий', icon: 'mdi-trophy', path: '/contests', partner: true },
   { label: 'Обратная связь', icon: 'mdi-chat', path: '/chat', partner: true },
+  { label: 'Написать основателю', icon: 'mdi-email-edit', path: '/chat?to=founder', partner: true },
+  { label: 'Оставить кейс', icon: 'mdi-briefcase-plus', path: '/chat?type=case', partner: true },
 
   // ---- Staff sections (grouped per spec) ----
   // Инструменты

@@ -124,12 +124,14 @@
 </template>
 
 <script setup>
-import { ref, nextTick, onMounted, onUnmounted } from 'vue';
+import { ref, nextTick, onMounted, onUnmounted, watch } from 'vue';
 import { useDisplay } from 'vuetify';
+import { useRoute } from 'vue-router';
 import api from '../../api';
 import { useAuthStore } from '../../stores/auth';
 
 const { mobile } = useDisplay();
+const route = useRoute();
 const auth = useAuthStore();
 const currentUserId = auth.userId;
 
@@ -229,7 +231,19 @@ function startPoll() {
 }
 function stopPoll() { if (poll) { clearInterval(poll); poll = null; } }
 
-onMounted(loadChats);
+function checkQuery() {
+  if (route.query.to === 'founder') {
+    newForm.value = { category: 'general', subject: 'Сообщение основателю', message: '' };
+    showNew.value = true;
+  } else if (route.query.type === 'case') {
+    newForm.value = { category: 'general', subject: 'Кейс', message: '' };
+    showNew.value = true;
+  }
+}
+
+watch(() => route.query, checkQuery, { immediate: false });
+
+onMounted(() => { loadChats(); checkQuery(); });
 onUnmounted(stopPoll);
 </script>
 
