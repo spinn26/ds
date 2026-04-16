@@ -135,7 +135,7 @@ class ContractService
                 'statusName' => $statusName,
                 'ammount' => $c->ammount,
                 'currencySymbol' => $currencyName,
-                'openDate' => $c->openDate?->format('d.m.Y'),
+                'openDate' => ($c->openDate ?? $c->createDate)?->format('d.m.Y'),
                 'createDate' => $c->createDate?->format('d.m.Y'),
                 'vendorName' => $vendorName,
                 'providerName' => $providerName,

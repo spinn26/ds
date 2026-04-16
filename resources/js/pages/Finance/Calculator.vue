@@ -2,62 +2,73 @@
   <div>
     <PageHeader title="Калькулятор объёмов" icon="mdi-calculator" />
 
-    <!-- Input form -->
     <v-card class="mb-4 pa-4">
       <v-row dense>
-        <v-col cols="12" sm="6" md="3">
+        <!-- 1. Квалификация — всегда видно -->
+        <v-col cols="12" sm="6" md="4">
           <v-select v-model="form.qualification" :items="lvlItems" item-title="title" item-value="id"
             label="Квалификация" :loading="matrixLoading" />
         </v-col>
-        <v-col cols="12" sm="6" md="3">
+
+        <!-- 2. Тип продукта — после выбора квалификации -->
+        <v-col cols="12" sm="6" md="4" v-if="form.qualification">
           <v-select v-model="form.productType" :items="filteredTypes" item-title="name" item-value="id"
-            label="Тип продукта" clearable
-            @update:model-value="form.product = null; form.program = null" />
+            label="Тип продукта" clearable @update:model-value="resetFrom('productType')" />
         </v-col>
-        <v-col cols="12" sm="6" md="3">
+
+        <!-- 3. Продукт — после выбора типа -->
+        <v-col cols="12" sm="6" md="4" v-if="form.productType">
           <v-select v-model="form.product" :items="filteredProducts" item-title="name" item-value="id"
-            label="Продукт" clearable
-            @update:model-value="form.program = null" />
+            label="Продукт" clearable @update:model-value="resetFrom('product')" />
         </v-col>
-        <v-col cols="12" sm="6" md="3">
+
+        <!-- 4. Программа — после выбора продукта -->
+        <v-col cols="12" sm="6" md="4" v-if="form.product">
           <v-select v-model="form.program" :items="filteredPrograms" item-title="name" item-value="id"
-            label="Программа" clearable
-            @update:model-value="onProgramChange" />
+            label="Программа" clearable @update:model-value="resetFrom('program')" />
         </v-col>
-        <v-col cols="12" sm="6" md="3">
+
+        <!-- 5. Свойство — после выбора программы -->
+        <v-col cols="12" sm="6" md="4" v-if="form.program">
           <v-select v-model="form.calcProperty" :items="matrix.properties" item-title="title" item-value="id"
             label="Свойство продукта" />
         </v-col>
-        <v-col cols="12" sm="6" md="3" v-if="availableTerms.length">
+
+        <!-- 6. Срок контракта — если есть -->
+        <v-col cols="12" sm="6" md="4" v-if="form.program && availableTerms.length">
           <v-select v-model="form.termContract" :items="availableTerms" item-title="label" item-value="id"
-            label="Срок контракта (лет)" clearable />
+            label="Срок контракта" clearable />
         </v-col>
-        <v-col cols="12" sm="6" md="3">
+
+        <!-- 7. Сумма — после свойства -->
+        <v-col cols="12" sm="6" md="4" v-if="form.calcProperty">
           <v-text-field v-model.number="form.amount" label="Сумма взноса" type="number" />
         </v-col>
-        <v-col cols="12" sm="6" md="3">
-          <v-select v-model="form.currency" :items="matrix.currencies" item-title="symbol" item-value="id"
+
+        <!-- 8. Валюта — после суммы -->
+        <v-col cols="12" sm="6" md="4" v-if="form.amount > 0">
+          <v-select v-model="form.currency" :items="allowedCurrencies" item-title="symbol" item-value="id"
             label="Валюта" />
         </v-col>
       </v-row>
 
-      <div class="d-flex ga-2 mt-2">
+      <div class="d-flex ga-2 mt-3">
         <v-btn color="primary" prepend-icon="mdi-calculator" :loading="calculating" @click="calculate"
           :disabled="!canCalculate">
           Рассчитать
         </v-btn>
         <v-btn variant="text" prepend-icon="mdi-refresh" @click="resetForm">
-          Сбросить параметры
+          Сбросить
         </v-btn>
       </div>
 
       <v-alert type="info" density="compact" variant="tonal" class="mt-3" icon="mdi-information">
-        Расчёт комиссионных и объёмов указан для вновь открываемых контрактов и с учётом НДС
+        Расчёт комиссионных и объёмов для вновь открываемых контрактов с учётом НДС
       </v-alert>
     </v-card>
 
     <!-- Results -->
-    <v-card v-if="result" class="mb-4 pa-4">
+    <v-card v-if="result && !result.error" class="mb-4 pa-4">
       <v-row>
         <v-col cols="12" md="6">
           <div class="text-body-2 text-medium-emphasis">Комиссия</div>
@@ -96,13 +107,14 @@
         </v-col>
       </v-row>
     </v-card>
+    <v-alert v-if="result?.error" type="error" density="compact" class="mb-4">{{ result.error }}</v-alert>
 
     <!-- History -->
     <v-card class="pa-4">
       <div class="d-flex justify-space-between align-center mb-3">
         <div class="text-subtitle-1 font-weight-bold">Предыдущие расчёты</div>
         <v-btn size="small" variant="text" prepend-icon="mdi-broom" @click="clearHistory"
-          :disabled="!history.length">Очистить историю</v-btn>
+          :disabled="!history.length">Очистить</v-btn>
       </div>
       <v-data-table :items="history" :headers="historyHeaders" density="compact" hover
         no-data-text="Нет сохранённых расчётов" :items-per-page="10">
@@ -136,40 +148,48 @@ const matrix = reactive({
 
 const form = reactive({
   qualification: null, productType: null, product: null, program: null,
-  calcProperty: null, termContract: null, amount: null, currency: 67, // RUB
+  calcProperty: null, termContract: null, amount: null, currency: null,
 });
 
-// Format qualification label
 const lvlItems = computed(() =>
   matrix.levels.map(l => ({ ...l, title: `${l.level} [${l.title}] — ${l.percent}%` }))
 );
 
-// Cascading filters
-const filteredTypes = computed(() =>
-  matrix.types
+// Only show: ₽ (RUB), $ (USD), € (EUR), £ (GBP)
+const allowedSymbols = ['₽', '$', '€', '£', 'RUB', 'USD', 'EUR', 'GBP'];
+const allowedCurrencies = computed(() =>
+  matrix.currencies.filter(c => allowedSymbols.some(s => (c.symbol || '').includes(s) || (c.code || '').includes(s)))
 );
 
+// Cascading filters
+const filteredTypes = computed(() => matrix.types);
+
 const filteredProducts = computed(() => {
-  if (!form.productType) return matrix.products;
+  if (!form.productType) return [];
   return matrix.products.filter(p => p.typeId == form.productType);
 });
 
 const filteredPrograms = computed(() => {
-  if (!form.product) return matrix.programs;
+  if (!form.product) return [];
   return matrix.programs.filter(p => p.productId == form.product);
 });
 
 const availableTerms = computed(() =>
-  matrix.terms.map(t => ({ ...t, label: `${t.term} лет` }))
+  matrix.terms.map(t => ({ ...t, label: t.term + (t.term > 4 ? ' лет' : t.term > 1 ? ' года' : ' год') }))
 );
 
 const canCalculate = computed(() =>
   form.qualification && form.program && form.calcProperty && form.amount > 0 && form.currency
 );
 
-function onProgramChange() {
-  form.calcProperty = null;
-  form.termContract = null;
+// Reset downstream fields
+function resetFrom(field) {
+  const order = ['productType', 'product', 'program', 'calcProperty', 'termContract', 'amount'];
+  const idx = order.indexOf(field);
+  for (let i = idx + 1; i < order.length; i++) {
+    form[order[i]] = null;
+  }
+  result.value = null;
 }
 
 function resetForm() {
@@ -180,7 +200,7 @@ function resetForm() {
   form.calcProperty = null;
   form.termContract = null;
   form.amount = null;
-  form.currency = 67;
+  form.currency = null;
   result.value = null;
 }
 
@@ -233,6 +253,9 @@ onMounted(async () => {
   try {
     const { data } = await api.get('/calculator/product-matrix');
     Object.assign(matrix, data);
+    // Set default currency to RUB
+    const rub = matrix.currencies.find(c => (c.symbol || '').includes('₽') || (c.code || '') === 'RUB');
+    if (rub) form.currency = rub.id;
   } catch {}
   matrixLoading.value = false;
   loadHistory();
