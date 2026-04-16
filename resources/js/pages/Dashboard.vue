@@ -201,7 +201,7 @@
 
     <!-- Клиенты -->
     <v-row class="mb-4">
-      <v-col cols="12" sm="6" md="4">
+      <v-col cols="12" sm="6">
         <router-link to="/clients" style="text-decoration: none; color: inherit">
           <v-card class="pa-4 text-center" hover>
             <v-icon size="28" color="primary" class="mb-1">mdi-account-multiple</v-icon>
@@ -210,14 +210,7 @@
           </v-card>
         </router-link>
       </v-col>
-      <v-col cols="12" sm="6" md="4">
-        <v-card class="pa-4 text-center">
-          <v-icon size="28" color="amber-darken-2" class="mb-1">mdi-cash-multiple</v-icon>
-          <div class="text-caption text-medium-emphasis">Капитал в управлении</div>
-          <div class="text-h4 font-weight-bold">{{ fmtUsd(data.team?.capitalUsd) }}</div>
-        </v-card>
-      </v-col>
-      <v-col cols="12" sm="6" md="4">
+      <v-col cols="12" sm="6">
         <router-link to="/clients" style="text-decoration: none; color: inherit">
           <v-card class="pa-4 text-center" hover>
             <v-icon size="28" color="secondary" class="mb-1">mdi-account</v-icon>
@@ -317,11 +310,6 @@ import api from '../api';
 import MonthPicker from '../components/MonthPicker.vue';
 import PageHeader from '../components/PageHeader.vue';
 import { fmt } from '../composables/useDesign';
-
-function fmtUsd(v) {
-  if (!v) return '0 USD';
-  return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(v) + ' USD';
-}
 
 const loading = ref(true);
 const period = ref(new Date().toISOString().slice(0, 7));
