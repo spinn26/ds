@@ -79,10 +79,10 @@
   transition: all 0.15s ease;
 }
 .menu-item:hover {
-  background: rgba(67, 160, 71, 0.06);
+  background: rgba(var(--v-theme-primary), 0.06);
 }
 .v-theme--dark .menu-item:hover {
-  background: rgba(102, 187, 106, 0.08);
+  background: rgba(var(--v-theme-primary), 0.08);
 }
 
 /* Menu group header */
@@ -115,16 +115,6 @@
   opacity: 1;
 }
 
-/* Chat bubbles */
-.chat-bubble-incoming {
-  background: rgba(0, 0, 0, 0.04);
-  border-radius: 4px 20px 20px 20px;
-  padding: 10px 14px;
-}
-.chat-bubble-outgoing {
-  border-radius: 20px 4px 20px 20px;
-  padding: 10px 14px;
-}
 
 /* Alert — softer */
 .v-alert {
@@ -166,6 +156,15 @@
 @media (max-width: 600px) {
   .v-btn:not(.v-btn--icon) { min-height: 40px; }
 }
+
+/* Utility borders */
+.border-b { border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); }
+.border-t { border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); }
+.border-r { border-right: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); }
+.border-l { border-left: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); }
+
+/* Chat message bubble theme colors */
+.bg-surface-variant { background: rgba(var(--v-theme-surface-variant), 1); }
 
 /* Print */
 @media print {
