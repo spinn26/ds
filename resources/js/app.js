@@ -50,13 +50,13 @@ const vuetify = createVuetify({
             dark: {
                 dark: true,
                 colors: {
-                    primary: '#66BB6A',
+                    primary: '#2E7D32',
                     secondary: '#FFB74D',
                     background: '#0F1419',
                     surface: '#1A1F2E',
                     'surface-variant': '#232838',
                     info: '#42A5F5',
-                    success: '#66BB6A',
+                    success: '#2E7D32',
                     warning: '#FFA726',
                     error: '#EF5350',
                 },
