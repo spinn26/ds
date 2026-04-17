@@ -3,33 +3,29 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\Auth\CheckDuplicatesRequest;
+use App\Http\Requests\Api\Auth\CheckReferralRequest;
+use App\Http\Requests\Api\Auth\LoginRequest;
+use App\Http\Requests\Api\Auth\RegisterRequest;
+use App\Http\Resources\UserResource;
 use App\Models\Client;
 use App\Models\Consultant;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Str;
-use Illuminate\Validation\Rules\Password;
 
 class AuthController extends Controller
 {
-    public function login(Request $request): JsonResponse
+    public function login(LoginRequest $request): JsonResponse
     {
-        $request->validate([
-            'email' => 'required|email',
-            'password' => 'required|string',
-        ]);
-
-        $user = User::where('email', $request->email)->first();
+        $user = User::where('email', $request->input('email'))->first();
 
         if (! $user) {
             return response()->json(['message' => 'Неверный email или пароль'], 401);
         }
 
-        $valid = $user->validatePassword($request->password);
-
-        if (! $valid) {
+        if (! $user->validatePassword($request->input('password'))) {
             return response()->json(['message' => 'Неверный email или пароль'], 401);
         }
 
@@ -37,22 +33,17 @@ class AuthController extends Controller
 
         return response()->json([
             'token' => $token,
-            'user' => $this->userResponse($user),
+            'user' => UserResource::make($user),
         ]);
     }
 
     /**
      * Check for duplicates before registration.
      */
-    public function checkDuplicates(Request $request): JsonResponse
+    public function checkDuplicates(CheckDuplicatesRequest $request): JsonResponse
     {
-        $request->validate([
-            'email' => 'required|email',
-            'phone' => 'nullable|string',
-        ]);
+        $existingUser = User::where('email', $request->input('email'))->first();
 
-        // Check email in WebUser (exclude terminated)
-        $existingUser = User::where('email', $request->email)->first();
         if ($existingUser) {
             $consultant = Consultant::where('webUser', $existingUser->id)->first();
             $isTerminated = $consultant && $consultant->statusRelation && $consultant->statusRelation->title === 'Терминирован';
@@ -66,9 +57,8 @@ class AuthController extends Controller
             }
         }
 
-        // Check phone
-        if ($request->phone) {
-            $phone = preg_replace('/[^0-9]/', '', $request->phone);
+        if ($request->filled('phone')) {
+            $phone = preg_replace('/[^0-9]/', '', $request->input('phone'));
             if ($phone) {
                 $existingByPhone = User::where('phone', 'like', "%{$phone}%")->first();
                 if ($existingByPhone && $existingByPhone->id !== ($existingUser->id ?? null)) {
@@ -81,16 +71,15 @@ class AuthController extends Controller
             }
         }
 
-        // Check if this email exists as a client
-        if ($request->has('refCode')) {
-            $client = Client::where('personName', 'like', '%' . $request->email . '%')
+        if ($request->filled('refCode')) {
+            $client = Client::where('personName', 'like', '%' . $request->input('email') . '%')
                 ->orWhereHas('person', function ($q) use ($request) {
-                    $q->where('email', $request->email);
+                    $q->where('email', $request->input('email'));
                 })->first();
 
             if ($client && $client->consultant) {
                 $assignedConsultant = Consultant::find($client->consultant);
-                if ($assignedConsultant && $assignedConsultant->participantCode !== $request->refCode) {
+                if ($assignedConsultant && $assignedConsultant->participantCode !== $request->input('refCode')) {
                     return response()->json([
                         'duplicate' => true,
                         'type' => 'client_mismatch',
@@ -106,11 +95,9 @@ class AuthController extends Controller
     /**
      * Validate referral code and return mentor info.
      */
-    public function checkReferral(Request $request): JsonResponse
+    public function checkReferral(CheckReferralRequest $request): JsonResponse
     {
-        $request->validate(['code' => 'required|string']);
-
-        $consultant = Consultant::where('participantCode', $request->code)
+        $consultant = Consultant::where('participantCode', $request->input('code'))
             ->where('active', true)
             ->first();
 
@@ -134,58 +121,41 @@ class AuthController extends Controller
     /**
      * Full 2-step registration.
      */
-    public function register(Request $request): JsonResponse
+    public function register(RegisterRequest $request): JsonResponse
     {
-        $request->validate([
-            'firstName' => 'required|string|max:255',
-            'lastName' => 'required|string|max:255',
-            'patronymic' => 'nullable|string|max:255',
-            'email' => 'required|email|unique:WebUser,email',
-            'phone' => 'nullable|string|max:50',
-            'telegram' => 'nullable|string|max:100',
-            'birthDate' => 'nullable|date',
-            'city' => 'nullable|string|max:255',
-            'password' => ['required', 'confirmed', Password::min(8)->letters()->numbers()],
-            'refCode' => 'nullable|string',
-            'consentPersonalData' => 'accepted',
-            'consentTerms' => 'accepted',
-        ]);
-
         $user = User::create([
-            'firstName' => $request->firstName,
-            'lastName' => $request->lastName,
-            'patronymic' => $request->patronymic,
-            'email' => $request->email,
-            'phone' => $request->phone,
-            'nicTG' => $request->telegram,
-            'birthDate' => $request->birthDate,
-            'password' => Hash::make($request->password),
+            'firstName' => $request->input('firstName'),
+            'lastName' => $request->input('lastName'),
+            'patronymic' => $request->input('patronymic'),
+            'email' => $request->input('email'),
+            'phone' => $request->input('phone'),
+            'nicTG' => $request->input('telegram'),
+            'birthDate' => $request->input('birthDate'),
+            'password' => Hash::make($request->input('password')),
             'role' => 'registered',
             'dateCreated' => now()->toIso8601String(),
         ]);
 
-        // Create consultant record
         $inviter = null;
-        if ($request->refCode) {
-            $inviter = Consultant::where('participantCode', $request->refCode)
+        if ($request->filled('refCode')) {
+            $inviter = Consultant::where('participantCode', $request->input('refCode'))
                 ->where('active', true)
                 ->first();
         }
 
         $consultant = new Consultant();
         $consultant->person = $user->id;
-        $consultant->personName = trim("{$request->lastName} {$request->firstName} {$request->patronymic}");
+        $consultant->personName = trim("{$request->input('lastName')} {$request->input('firstName')} {$request->input('patronymic')}");
         $consultant->active = false;
-        $consultant->status = 1; // Default status
+        $consultant->status = 1;
         $consultant->dateCreated = now();
-        $consultant->participantCode = null; // Assigned after activation
+        $consultant->participantCode = null;
         if ($inviter) {
             $consultant->inviter = $inviter->id;
             $consultant->inviterName = $inviter->personName;
         }
         $consultant->save();
 
-        // Link user to consultant
         $user->consultant_id = $consultant->id;
         $user->saveQuietly();
 
@@ -193,7 +163,7 @@ class AuthController extends Controller
 
         return response()->json([
             'token' => $token,
-            'user' => $this->userResponse($user),
+            'user' => UserResource::make($user),
         ], 201);
     }
 
@@ -209,11 +179,9 @@ class AuthController extends Controller
             return response()->json(['message' => 'Аккаунт уже активирован'], 400);
         }
 
-        // Set role to consultant
         $user->role = 'registered,consultant';
         $user->saveQuietly();
 
-        // Set 90-day activation deadline on consultant record
         $consultant = Consultant::where('webUser', $user->id)->first();
         if ($consultant) {
             $consultant->dateActivity = now();
@@ -224,21 +192,19 @@ class AuthController extends Controller
 
         return response()->json([
             'message' => 'Аккаунт активирован',
-            'user' => $this->userResponse($user),
+            'user' => UserResource::make($user),
         ]);
     }
 
     public function me(Request $request): JsonResponse
     {
-        return response()->json($this->userResponse($request->user()));
+        return response()->json(UserResource::make($request->user()));
     }
 
     public function logout(Request $request): JsonResponse
     {
-        // Delete Sanctum token
         $request->user()->currentAccessToken()->delete();
 
-        // Also destroy web session (Filament admin)
         if ($request->hasSession()) {
             $request->session()->invalidate();
             $request->session()->regenerateToken();
@@ -246,26 +212,5 @@ class AuthController extends Controller
         auth('web')->logout();
 
         return response()->json(['message' => 'OK']);
-    }
-
-    private function userResponse(User $user): array
-    {
-        // Get activity status from consultant
-        $consultant = Consultant::where('webUser', $user->id)->first();
-        $activityId = $consultant?->activity;
-        // Handle enum or integer
-        $activityValue = is_object($activityId) ? $activityId->value : $activityId;
-
-        return [
-            'id' => $user->id,
-            'email' => $user->email,
-            'firstName' => $user->firstName,
-            'lastName' => $user->lastName,
-            'patronymic' => $user->patronymic,
-            'phone' => $user->phone,
-            'role' => $user->role,
-            'activityStatus' => $activityValue,
-            'avatarUrl' => $user->avatar ? '/storage/' . $user->avatar : null,
-        ];
     }
 }

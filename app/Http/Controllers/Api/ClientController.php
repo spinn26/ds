@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\ClientListItemResource;
 use App\Models\Client;
 use App\Models\Consultant;
 use Illuminate\Http\JsonResponse;
@@ -23,37 +24,33 @@ class ClientController extends Controller
         $query = Client::where('consultant', $consultant->id);
 
         if ($request->filled('search')) {
-            $query->where('personName', 'ilike', '%' . $request->search . '%');
+            $query->where('personName', 'ilike', '%' . $request->input('search') . '%');
         }
 
         if ($request->filled('email') || $request->filled('birth_date_from') || $request->filled('birth_date_to')) {
             $personQuery = DB::table('person')->select('id');
             if ($request->filled('email')) {
-                $personQuery->where('email', 'ilike', '%' . $request->email . '%');
+                $personQuery->where('email', 'ilike', '%' . $request->input('email') . '%');
             }
             if ($request->filled('birth_date_from')) {
-                $personQuery->where('birthDate', '>=', $request->birth_date_from);
+                $personQuery->where('birthDate', '>=', $request->input('birth_date_from'));
             }
             if ($request->filled('birth_date_to')) {
-                $personQuery->where('birthDate', '<=', $request->birth_date_to);
+                $personQuery->where('birthDate', '<=', $request->input('birth_date_to'));
             }
             $query->whereIn('person', $personQuery->pluck('id'));
         }
 
         $total = $query->count();
 
-        // Server-side sorting
         $sortBy = $request->input('sort_by', 'personName');
-        $sortDir = $request->input('sort_dir', 'asc');
+        $sortDir = $request->input('sort_dir', 'asc') === 'desc' ? 'desc' : 'asc';
         $allowedSort = ['personName', 'id'];
-        if (in_array($sortBy, $allowedSort)) {
-            $query->orderBy($sortBy, $sortDir === 'desc' ? 'desc' : 'asc');
-        } else {
-            $query->orderBy('personName', $sortDir === 'desc' ? 'desc' : 'asc');
-        }
+        $query->orderBy(in_array($sortBy, $allowedSort) ? $sortBy : 'personName', $sortDir);
 
+        $page = max(1, (int) $request->input('page', 1));
         $clientRows = $query
-            ->offset(($request->input('page', 1) - 1) * 25)
+            ->offset(($page - 1) * 25)
             ->limit(25)
             ->get();
 
@@ -63,28 +60,30 @@ class ClientController extends Controller
             ? DB::table('person')->whereIn('id', $personIds)->get()->keyBy('id')
             : collect();
 
-        // Batch load cities from person data
         $cityIds = $persons->pluck('city')->filter()->unique();
         $cities = $cityIds->isNotEmpty()
             ? DB::table('city')->whereIn('id', $cityIds)->pluck('cityNameRu', 'id')
             : collect();
 
-        $clients = $clientRows->map(function ($c) use ($persons, $cities) {
-                $personData = $c->person ? ($persons[$c->person] ?? null) : null;
-                $cityName = ($personData && ($personData->city ?? null))
-                    ? ($cities[$personData->city] ?? null)
-                    : null;
+        $items = $clientRows->map(function ($c) use ($persons, $cities) {
+            $personData = $c->person ? ($persons[$c->person] ?? null) : null;
+            $cityName = ($personData && ($personData->city ?? null))
+                ? ($cities[$personData->city] ?? null)
+                : null;
 
-                return [
-                    'id' => $c->id,
-                    'personName' => $c->personName,
-                    'birthDate' => $personData?->birthDate ?? null,
-                    'city' => $cityName,
-                    'phone' => $personData?->phone ?? null,
-                    'email' => $personData?->email ?? null,
-                ];
-            });
+            return [
+                'id' => $c->id,
+                'personName' => $c->personName,
+                'birthDate' => $personData?->birthDate ?? null,
+                'city' => $cityName,
+                'phone' => $personData?->phone ?? null,
+                'email' => $personData?->email ?? null,
+            ];
+        });
 
-        return response()->json(['data' => $clients, 'total' => $total]);
+        return response()->json([
+            'data' => ClientListItemResource::collection($items),
+            'total' => $total,
+        ]);
     }
 }

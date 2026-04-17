@@ -4,6 +4,14 @@ namespace App\Http\Controllers\Api;
 
 use App\Enums\PartnerActivity;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\Profile\ChangePasswordRequest;
+use App\Http\Requests\Api\Profile\UpdateBankRequisitesRequest;
+use App\Http\Requests\Api\Profile\UpdateProfileRequest;
+use App\Http\Requests\Api\Profile\UpdateRequisitesRequest;
+use App\Http\Requests\Api\Profile\UploadAvatarRequest;
+use App\Http\Resources\AgreementDocumentResource;
+use App\Http\Resources\BankRequisiteResource;
+use App\Http\Resources\RequisiteResource;
 use App\Models\AgreementDocument;
 use App\Models\BankRequisite;
 use App\Models\Consultant;
@@ -37,17 +45,16 @@ class ProfileController extends Controller
             ? DB::table('city')->where('id', $user->city)->value('cityNameRu')
             : null;
 
-        // --- Подраздел 1: Информация о партнёре ---
         $statusInfo = $consultant ? $this->statusService->getStatusInfo($consultant) : null;
-
-        // Подписанные документы
         $signedDocuments = $this->getSignedDocuments($consultant);
 
-        // --- Подраздел 2: Реквизиты ---
-        $requisites = $consultant ? $this->getRequisites($consultant) : null;
-        $bankRequisites = $consultant ? $this->getBankRequisites($consultant) : null;
+        $requisite = $consultant
+            ? Requisite::where('consultant', $consultant->id)->active()->first()
+            : null;
+        $bankReq = $requisite
+            ? BankRequisite::where('requisites', $requisite->id)->active()->first()
+            : null;
 
-        // --- Подраздел 3: Реферальные ссылки ---
         $referralInfo = $consultant ? $this->getReferralInfo($consultant) : null;
 
         return response()->json([
@@ -78,8 +85,8 @@ class ProfileController extends Controller
             ] : null,
             'statusInfo' => $statusInfo,
             'signedDocuments' => $signedDocuments,
-            'requisites' => $requisites,
-            'bankRequisites' => $bankRequisites,
+            'requisites' => $requisite ? RequisiteResource::make($requisite) : null,
+            'bankRequisites' => $bankReq ? BankRequisiteResource::make($bankReq) : null,
             'referral' => $referralInfo,
         ]);
     }
@@ -88,16 +95,9 @@ class ProfileController extends Controller
      * Обновление персональных данных.
      * ФИО заблокировано — изменение только через ТП.
      */
-    public function update(Request $request): JsonResponse
+    public function update(UpdateProfileRequest $request): JsonResponse
     {
         $user = $request->user();
-
-        $request->validate([
-            'phone' => 'nullable|string|max:50',
-            'nicTG' => 'nullable|string|max:100',
-            'gender' => 'nullable|string',
-            'birthDate' => 'nullable|date',
-        ]);
 
         $user->phone = $request->input('phone', $user->phone);
         $user->nicTG = $request->input('nicTG', $user->nicTG);
@@ -111,12 +111,8 @@ class ProfileController extends Controller
     /**
      * Загрузка аватара.
      */
-    public function uploadAvatar(Request $request): JsonResponse
+    public function uploadAvatar(UploadAvatarRequest $request): JsonResponse
     {
-        $request->validate([
-            'avatar' => 'required|image|max:5120', // max 5MB
-        ]);
-
         $user = $request->user();
         $path = $request->file('avatar')->store('avatars', 'public');
 
@@ -129,20 +125,15 @@ class ProfileController extends Controller
         ]);
     }
 
-    public function changePassword(Request $request): JsonResponse
+    public function changePassword(ChangePasswordRequest $request): JsonResponse
     {
-        $request->validate([
-            'current_password' => 'required|string',
-            'password' => 'required|string|min:6|confirmed',
-        ]);
-
         $user = $request->user();
 
-        if (! $user->validatePassword($request->current_password)) {
+        if (! $user->validatePassword($request->input('current_password'))) {
             return response()->json(['message' => 'Текущий пароль неверен'], 422);
         }
 
-        $user->password = Hash::make($request->password);
+        $user->password = Hash::make($request->input('password'));
         $user->saveQuietly();
 
         return response()->json(['message' => 'Пароль изменён']);
@@ -151,7 +142,7 @@ class ProfileController extends Controller
     /**
      * Сохранение/обновление реквизитов ИП.
      */
-    public function updateRequisites(Request $request): JsonResponse
+    public function updateRequisites(UpdateRequisitesRequest $request): JsonResponse
     {
         $user = $request->user();
         $consultant = Consultant::where('webUser', $user->id)->first();
@@ -159,16 +150,6 @@ class ProfileController extends Controller
         if (! $consultant) {
             return response()->json(['message' => 'Консультант не найден'], 404);
         }
-
-        $request->validate([
-            'individualEntrepreneur' => 'required|string|max:255',
-            'inn' => 'required|string|max:20',
-            'ogrn' => 'nullable|string|max:20',
-            'address' => 'nullable|string|max:500',
-            'registrationDate' => 'nullable|date',
-            'email' => 'nullable|email|max:255',
-            'phone' => 'nullable|string|max:50',
-        ]);
 
         $requisite = Requisite::where('consultant', $consultant->id)
             ->active()
@@ -183,8 +164,8 @@ class ProfileController extends Controller
             'registrationDate' => $request->input('registrationDate'),
             'email' => $request->input('email'),
             'phone' => $request->input('phone'),
-            'verified' => false, // сброс верификации при изменении
-            'status' => 2, // consultant — ожидает проверки
+            'verified' => false,
+            'status' => 2,
             'dateChange' => now(),
             'person' => $user->id,
             'webUser' => $user->id,
@@ -198,14 +179,14 @@ class ProfileController extends Controller
 
         return response()->json([
             'message' => 'Реквизиты сохранены. Ожидайте верификации.',
-            'requisites' => $this->formatRequisite($requisite),
+            'requisites' => RequisiteResource::make($requisite),
         ]);
     }
 
     /**
      * Сохранение/обновление банковских реквизитов.
      */
-    public function updateBankRequisites(Request $request): JsonResponse
+    public function updateBankRequisites(UpdateBankRequisitesRequest $request): JsonResponse
     {
         $user = $request->user();
         $consultant = Consultant::where('webUser', $user->id)->first();
@@ -221,14 +202,6 @@ class ProfileController extends Controller
         if (! $requisite) {
             return response()->json(['message' => 'Сначала заполните реквизиты ИП'], 422);
         }
-
-        $request->validate([
-            'bankName' => 'required|string|max:255',
-            'bankBik' => 'required|string|max:20',
-            'accountNumber' => 'required|string|max:30',
-            'correspondentAccount' => 'nullable|string|max:30',
-            'beneficiaryName' => 'required|string|max:255',
-        ]);
 
         $bankReq = BankRequisite::where('requisites', $requisite->id)
             ->active()
@@ -255,7 +228,7 @@ class ProfileController extends Controller
 
         return response()->json([
             'message' => 'Банковские реквизиты сохранены. Ожидайте верификации.',
-            'bankRequisites' => $this->formatBankRequisite($bankReq),
+            'bankRequisites' => BankRequisiteResource::make($bankReq),
         ]);
     }
 
@@ -264,15 +237,9 @@ class ProfileController extends Controller
      */
     public function agreementDocuments(): JsonResponse
     {
-        $docs = AgreementDocument::orderBy('number')->get()
-            ->map(fn ($d) => [
-                'id' => $d->id,
-                'name' => $d->name,
-                'link' => $d->link,
-                'number' => $d->number,
-            ]);
+        $docs = AgreementDocument::orderBy('number')->get();
 
-        return response()->json($docs);
+        return response()->json(AgreementDocumentResource::collection($docs));
     }
 
     // --- Private helpers ---
@@ -299,65 +266,6 @@ class ProfileController extends Controller
             'accepted' => (bool) $consultant->acceptance,
             'acceptedAt' => $acceptance?->dateAccepted?->toIso8601String(),
             'documents' => $documents,
-        ];
-    }
-
-    private function getRequisites(Consultant $consultant): ?array
-    {
-        $requisite = Requisite::where('consultant', $consultant->id)
-            ->active()
-            ->first();
-
-        return $requisite ? $this->formatRequisite($requisite) : null;
-    }
-
-    private function formatRequisite(Requisite $r): array
-    {
-        $statusName = DB::table('status_requisites')
-            ->where('id', $r->status)
-            ->value('name');
-
-        return [
-            'id' => $r->id,
-            'individualEntrepreneur' => $r->individualEntrepreneur,
-            'inn' => $r->inn,
-            'ogrn' => $r->ogrn,
-            'address' => $r->address,
-            'registrationDate' => $r->registrationDate?->toDateString(),
-            'email' => $r->email,
-            'phone' => $r->phone,
-            'verified' => $r->verified,
-            'statusName' => $statusName,
-        ];
-    }
-
-    private function getBankRequisites(Consultant $consultant): ?array
-    {
-        $requisite = Requisite::where('consultant', $consultant->id)
-            ->active()
-            ->first();
-
-        if (! $requisite) {
-            return null;
-        }
-
-        $bankReq = BankRequisite::where('requisites', $requisite->id)
-            ->active()
-            ->first();
-
-        return $bankReq ? $this->formatBankRequisite($bankReq) : null;
-    }
-
-    private function formatBankRequisite(BankRequisite $b): array
-    {
-        return [
-            'id' => $b->id,
-            'bankName' => $b->bankName,
-            'bankBik' => $b->bankBik,
-            'accountNumber' => $b->accountNumber,
-            'correspondentAccount' => $b->correspondentAccount,
-            'beneficiaryName' => $b->beneficiaryName,
-            'verified' => $b->verified,
         ];
     }
 
