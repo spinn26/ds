@@ -85,6 +85,7 @@ const routes = [
             { path: 'contests', component: () => import('../pages/Admin/Contests.vue') },
             { path: 'reports', component: () => import('../pages/Admin/Reports.vue') },
             { path: 'currencies', component: () => import('../pages/Admin/Currencies.vue') },
+            { path: 'references', component: () => import('../pages/Admin/References.vue') },
         ],
     },
 

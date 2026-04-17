@@ -144,6 +144,20 @@ Route::prefix('v1')->group(function () {
         Route::post('/admin/transaction-import/{id}/calculate', [\App\Http\Controllers\Api\TransactionImportController::class, 'calculateCommissions']);
         Route::post('/admin/transactions/{id}/calculate', [\App\Http\Controllers\Api\TransactionImportController::class, 'calculateSingle']);
 
+        // Admin References (generic CRUD for small reference tables)
+        Route::get('/admin/references', [\App\Http\Controllers\Api\AdminReferenceController::class, 'catalogs']);
+        Route::get('/admin/references/{catalog}', [\App\Http\Controllers\Api\AdminReferenceController::class, 'index']);
+        Route::post('/admin/references/{catalog}', [\App\Http\Controllers\Api\AdminReferenceController::class, 'store']);
+        Route::put('/admin/references/{catalog}/{id}', [\App\Http\Controllers\Api\AdminReferenceController::class, 'update']);
+        Route::delete('/admin/references/{catalog}/{id}', [\App\Http\Controllers\Api\AdminReferenceController::class, 'destroy']);
+
+        // Admin Contests CRUD
+        Route::get('/admin/contests', [\App\Http\Controllers\Api\AdminContestController::class, 'index']);
+        Route::get('/admin/contests/references', [\App\Http\Controllers\Api\AdminContestController::class, 'references']);
+        Route::post('/admin/contests', [\App\Http\Controllers\Api\AdminContestController::class, 'store']);
+        Route::put('/admin/contests/{id}', [\App\Http\Controllers\Api\AdminContestController::class, 'update']);
+        Route::delete('/admin/contests/{id}', [\App\Http\Controllers\Api\AdminContestController::class, 'destroy']);
+
         // Admin Products CRUD
         Route::get('/admin/products', [\App\Http\Controllers\Api\AdminProductController::class, 'index']);
         Route::post('/admin/products', [\App\Http\Controllers\Api\AdminProductController::class, 'store']);

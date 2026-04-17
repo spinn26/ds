@@ -24,6 +24,8 @@
         <v-list-item to="/admin/news" prepend-icon="mdi-newspaper" title="Новости" color="secondary" rounded="lg" class="mb-1" />
         <v-list-item to="/admin/products" prepend-icon="mdi-package-variant" title="Продукты" color="secondary" rounded="lg" class="mb-1" />
         <v-list-item to="/admin/education" prepend-icon="mdi-school" title="Обучение и тесты" color="secondary" rounded="lg" class="mb-1" />
+        <v-list-item to="/admin/contests" prepend-icon="mdi-trophy" title="Конкурсы и события" color="secondary" rounded="lg" class="mb-1" />
+        <v-list-item to="/admin/references" prepend-icon="mdi-book-cog" title="Справочники" color="secondary" rounded="lg" class="mb-1" />
       </v-list>
     </v-navigation-drawer>
 
