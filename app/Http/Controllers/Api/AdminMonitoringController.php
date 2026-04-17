@@ -35,33 +35,23 @@ class AdminMonitoringController extends Controller
 
         $pendingJobs = $this->safeCount('jobs');
         $failedJobs = $this->safeCount('failed_jobs');
-        $failed24h = Schema::hasTable('failed_jobs')
-            ? DB::table('failed_jobs')->where('failed_at', '>=', $cutoff)->count()
-            : 0;
+        $failed24h = $this->safeCountWhere('failed_jobs', fn ($q) => $q->where('failed_at', '>=', $cutoff));
 
-        $mail24h = Schema::hasTable('mail_log')
-            ? DB::table('mail_log')->where('created_at', '>=', $cutoff)->count()
-            : 0;
-        $mailFailed24h = Schema::hasTable('mail_log')
-            ? DB::table('mail_log')->where('status', 'failed')->where('created_at', '>=', $cutoff)->count()
-            : 0;
+        $mail24h = $this->safeCountWhere('mail_log', fn ($q) => $q->where('created_at', '>=', $cutoff));
+        $mailFailed24h = $this->safeCountWhere('mail_log', fn ($q) => $q->where('status', 'failed')->where('created_at', '>=', $cutoff));
 
-        $systemErrors24h = Schema::hasTable('SystemException')
-            ? DB::table('SystemException')->where('_dateCreated', '>=', $cutoff)->count()
-            : 0;
-        $n8nErrors24h = Schema::hasTable('errorN8nlog')
-            ? DB::table('errorN8nlog')->where('createdAt', '>=', $cutoff)->count()
-            : 0;
+        $systemErrors24h = $this->safeCountWhere('SystemException', fn ($q) => $q->where('_dateCreated', '>=', $cutoff));
+        $n8nErrors24h = $this->safeCountWhere('errorN8nlog', fn ($q) => $q->where('createdAt', '>=', $cutoff));
 
-        $activeSessions = Schema::hasTable('personal_access_tokens')
-            ? DB::table('personal_access_tokens')
-                ->where('last_used_at', '>=', Carbon::now()->subMinutes(15))
-                ->count()
-            : 0;
+        $activeSessions = $this->safeCountWhere('personal_access_tokens', fn ($q) => $q->where('last_used_at', '>=', Carbon::now()->subMinutes(15)));
 
         // SMTP configured?
-        $mailSettings = Schema::hasTable('mail_settings') ? DB::table('mail_settings')->first() : null;
-        $mailConfigured = $mailSettings && $mailSettings->host && $mailSettings->from_address;
+        $mailSettings = null;
+        try {
+            $mailSettings = Schema::hasTable('mail_settings') ? DB::table('mail_settings')->first() : null;
+        } catch (\Throwable) {
+        }
+        $mailConfigured = $mailSettings && ($mailSettings->host ?? null) && ($mailSettings->from_address ?? null);
 
         // Storage: approximate table sizes on Postgres
         $dbSize = $this->databaseSize();
@@ -126,79 +116,91 @@ class AdminMonitoringController extends Controller
         $items = collect();
 
         if ($source === 'all' || $source === 'failed_jobs') {
-            if (Schema::hasTable('failed_jobs')) {
-                $rows = DB::table('failed_jobs')
-                    ->orderByDesc('failed_at')->limit($limit)
-                    ->get(['id', 'connection', 'queue', 'exception', 'failed_at', 'payload']);
-                foreach ($rows as $r) {
-                    $items->push([
-                        'source' => 'queue',
-                        'id' => 'job-' . $r->id,
-                        'raw_id' => $r->id,
-                        'title' => $this->extractJobName($r->payload),
-                        'message' => $this->firstLine($r->exception),
-                        'detail' => mb_substr($r->exception ?? '', 0, 4000),
-                        'at' => $r->failed_at,
-                    ]);
+            try {
+                if (Schema::hasTable('failed_jobs')) {
+                    $rows = DB::table('failed_jobs')
+                        ->orderByDesc('failed_at')->limit($limit)
+                        ->get(['id', 'connection', 'queue', 'exception', 'failed_at', 'payload']);
+                    foreach ($rows as $r) {
+                        $items->push([
+                            'source' => 'queue',
+                            'id' => 'job-' . $r->id,
+                            'raw_id' => $r->id,
+                            'title' => $this->extractJobName($r->payload),
+                            'message' => $this->firstLine($r->exception),
+                            'detail' => mb_substr($r->exception ?? '', 0, 4000),
+                            'at' => $r->failed_at,
+                        ]);
+                    }
                 }
+            } catch (\Throwable) {
             }
         }
 
         if ($source === 'all' || $source === 'mail') {
-            if (Schema::hasTable('mail_log')) {
-                $rows = DB::table('mail_log')
-                    ->where('status', 'failed')
-                    ->orderByDesc('id')->limit($limit)
-                    ->get(['id', 'recipient_email', 'subject', 'error', 'created_at']);
-                foreach ($rows as $r) {
-                    $items->push([
-                        'source' => 'mail',
-                        'id' => 'mail-' . $r->id,
-                        'raw_id' => $r->id,
-                        'title' => "Email → {$r->recipient_email}",
-                        'message' => $r->error ?: 'Неизвестная ошибка',
-                        'detail' => "Тема: {$r->subject}\n\n" . ($r->error ?? ''),
-                        'at' => $r->created_at,
-                    ]);
+            try {
+                if (Schema::hasTable('mail_log')) {
+                    $rows = DB::table('mail_log')
+                        ->where('status', 'failed')
+                        ->orderByDesc('id')->limit($limit)
+                        ->get(['id', 'recipient_email', 'subject', 'error', 'created_at']);
+                    foreach ($rows as $r) {
+                        $items->push([
+                            'source' => 'mail',
+                            'id' => 'mail-' . $r->id,
+                            'raw_id' => $r->id,
+                            'title' => "Email → {$r->recipient_email}",
+                            'message' => $r->error ?: 'Неизвестная ошибка',
+                            'detail' => "Тема: {$r->subject}\n\n" . ($r->error ?? ''),
+                            'at' => $r->created_at,
+                        ]);
+                    }
                 }
+            } catch (\Throwable) {
             }
         }
 
         if ($source === 'all' || $source === 'system') {
-            if (Schema::hasTable('SystemException')) {
-                $rows = DB::table('SystemException')
-                    ->orderByDesc('_dateCreated')->limit($limit)
-                    ->get(['id', 'msg', 'pilotSysName', 'stepID', 'scenarioName', '_dateCreated']);
-                foreach ($rows as $r) {
-                    $items->push([
-                        'source' => 'system',
-                        'id' => 'sys-' . $r->id,
-                        'raw_id' => $r->id,
-                        'title' => $r->scenarioName ? "Сценарий: {$r->scenarioName}" : 'Системное исключение',
-                        'message' => $this->firstLine($r->msg),
-                        'detail' => $r->msg,
-                        'at' => $r->_dateCreated,
-                    ]);
+            try {
+                if (Schema::hasTable('SystemException')) {
+                    $rows = DB::table('SystemException')
+                        ->orderByDesc('_dateCreated')->limit($limit)
+                        ->get(['id', 'msg', 'pilotSysName', 'stepID', 'scenarioName', '_dateCreated']);
+                    foreach ($rows as $r) {
+                        $items->push([
+                            'source' => 'system',
+                            'id' => 'sys-' . $r->id,
+                            'raw_id' => $r->id,
+                            'title' => $r->scenarioName ? "Сценарий: {$r->scenarioName}" : 'Системное исключение',
+                            'message' => $this->firstLine($r->msg),
+                            'detail' => $r->msg,
+                            'at' => $r->_dateCreated,
+                        ]);
+                    }
                 }
+            } catch (\Throwable) {
             }
         }
 
         if ($source === 'all' || $source === 'n8n') {
-            if (Schema::hasTable('errorN8nlog')) {
-                $rows = DB::table('errorN8nlog')
-                    ->orderByDesc('createdAt')->limit($limit)
-                    ->get();
-                foreach ($rows as $r) {
-                    $items->push([
-                        'source' => 'n8n',
-                        'id' => 'n8n-' . $r->id,
-                        'raw_id' => $r->id,
-                        'title' => $r->workflowName ?? 'n8n ошибка',
-                        'message' => $this->firstLine($r->error ?? ''),
-                        'detail' => $r->error ?? '',
-                        'at' => $r->createdAt,
-                    ]);
+            try {
+                if (Schema::hasTable('errorN8nlog')) {
+                    $rows = DB::table('errorN8nlog')
+                        ->orderByDesc('createdAt')->limit($limit)
+                        ->get();
+                    foreach ($rows as $r) {
+                        $items->push([
+                            'source' => 'n8n',
+                            'id' => 'n8n-' . $r->id,
+                            'raw_id' => $r->id,
+                            'title' => $r->workflowName ?? 'n8n ошибка',
+                            'message' => $this->firstLine($r->error ?? ''),
+                            'detail' => $r->error ?? '',
+                            'at' => $r->createdAt,
+                        ]);
+                    }
                 }
+            } catch (\Throwable) {
             }
         }
 
@@ -268,6 +270,16 @@ class AdminMonitoringController extends Controller
         if (! Schema::hasTable($table)) return 0;
         try {
             return DB::table($table)->count();
+        } catch (\Throwable) {
+            return 0;
+        }
+    }
+
+    private function safeCountWhere(string $table, \Closure $apply): int
+    {
+        if (! Schema::hasTable($table)) return 0;
+        try {
+            return $apply(DB::table($table))->count();
         } catch (\Throwable) {
             return 0;
         }

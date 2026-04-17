@@ -172,7 +172,7 @@ import {
   Title, Tooltip, Legend,
   LineElement, PointElement,
   BarElement, CategoryScale, LinearScale,
-  ArcElement,
+  ArcElement, Filler,
 } from 'chart.js';
 import api from '../../api';
 import PageHeader from '../../components/PageHeader.vue';
@@ -182,7 +182,7 @@ ChartJS.register(
   Title, Tooltip, Legend,
   LineElement, PointElement,
   BarElement, CategoryScale, LinearScale,
-  ArcElement,
+  ArcElement, Filler,
 );
 
 const loading = ref(true);

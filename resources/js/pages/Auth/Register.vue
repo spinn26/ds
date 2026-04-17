@@ -206,18 +206,39 @@ async function handleRegister() {
   filter: blur(60px);
   opacity: 0.7;
   transition: transform 0.18s ease-out;
-  will-change: transform;
+  will-change: transform, filter;
+  animation: blob-drift 18s ease-in-out infinite alternate;
 }
 .blob-a { width: 520px; height: 520px; top: -60px; left: -80px;
-  background: radial-gradient(circle, rgba(110, 232, 122, 0.75) 0%, transparent 70%); }
+  background: radial-gradient(circle, rgba(110, 232, 122, 0.75) 0%, transparent 70%);
+  animation-duration: 16s; }
 .blob-b { width: 440px; height: 440px; bottom: -100px; right: -80px;
-  background: radial-gradient(circle, rgba(110, 232, 122, 0.55) 0%, transparent 70%); }
+  background: radial-gradient(circle, rgba(110, 232, 122, 0.55) 0%, transparent 70%);
+  animation-duration: 22s; animation-delay: -4s; }
 .blob-c { width: 340px; height: 340px; top: 40%; right: 10%;
-  background: radial-gradient(circle, rgba(46, 125, 50, 0.55) 0%, transparent 70%); }
+  background: radial-gradient(circle, rgba(46, 125, 50, 0.55) 0%, transparent 70%);
+  animation-duration: 19s; animation-delay: -8s; }
 .blob-d { width: 260px; height: 260px; bottom: 15%; left: 10%;
-  background: radial-gradient(circle, rgba(168, 244, 180, 0.45) 0%, transparent 70%); }
+  background: radial-gradient(circle, rgba(168, 244, 180, 0.45) 0%, transparent 70%);
+  animation-duration: 24s; animation-delay: -2s; }
 .blob-e { width: 380px; height: 380px; top: 15%; left: 55%;
-  background: radial-gradient(circle, rgba(94, 220, 107, 0.35) 0%, transparent 70%); }
+  background: radial-gradient(circle, rgba(94, 220, 107, 0.35) 0%, transparent 70%);
+  animation-duration: 20s; animation-delay: -10s; }
+
+@keyframes blob-drift {
+  0%   { filter: blur(60px) hue-rotate(0deg); opacity: 0.55; transform: scale(1) translate(0, 0); }
+  50%  { filter: blur(72px) hue-rotate(18deg); opacity: 0.8; transform: scale(1.08) translate(14px, -10px); }
+  100% { filter: blur(64px) hue-rotate(-14deg); opacity: 0.65; transform: scale(0.96) translate(-10px, 12px); }
+}
+
+.bg-base {
+  animation: bg-shift 24s ease-in-out infinite alternate;
+}
+@keyframes bg-shift {
+  0%   { filter: hue-rotate(0deg) brightness(1); }
+  50%  { filter: hue-rotate(12deg) brightness(1.05); }
+  100% { filter: hue-rotate(-8deg) brightness(0.98); }
+}
 .sphere {
   position: absolute;
   right: -120px;
@@ -242,6 +263,7 @@ async function handleRegister() {
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
 }
 @media (prefers-reduced-motion: reduce) {
-  .blob, .sphere { transition: none !important; transform: none !important; }
+  .blob, .sphere { transition: none !important; transform: none !important; animation: none !important; }
+  .bg-base { animation: none !important; }
 }
 </style>
