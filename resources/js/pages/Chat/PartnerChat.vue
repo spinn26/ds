@@ -130,8 +130,27 @@
                   <v-icon v-if="isMine(item.msg) && isSeen(item.msg)" size="12" class="msg-check seen" title="Прочитано">mdi-check-all</v-icon>
                   <v-icon v-else-if="isMine(item.msg)" size="12" class="msg-check" title="Отправлено">mdi-check</v-icon>
                 </div>
+                <!-- Reactions row -->
+                <div v-if="item.msg.reactions && item.msg.reactions.length" class="msg-reactions">
+                  <button v-for="r in item.msg.reactions" :key="r.emoji"
+                    class="reaction-chip" :class="{ mine: r.mine }"
+                    @click.stop="toggleReaction(item.msg, r.emoji)">
+                    <span class="reaction-emoji">{{ r.emoji }}</span>
+                    <span class="reaction-count">{{ r.count }}</span>
+                  </button>
+                </div>
                 <!-- Hover actions -->
                 <div class="msg-actions">
+                  <v-menu location="bottom end">
+                    <template #activator="{ props }">
+                      <button v-bind="props" class="msg-action" title="Реакция" @click.stop><v-icon size="14">mdi-emoticon-happy-outline</v-icon></button>
+                    </template>
+                    <div class="reaction-picker">
+                      <button v-for="emoji in REACTION_PALETTE" :key="emoji"
+                        class="reaction-picker-btn"
+                        @click="toggleReaction(item.msg, emoji)">{{ emoji }}</button>
+                    </div>
+                  </v-menu>
                   <button class="msg-action" title="Ответить" @click="startReply(item.msg)"><v-icon size="14">mdi-reply</v-icon></button>
                   <button v-if="canEdit(item.msg)" class="msg-action" title="Изменить (5 мин)" @click="startEdit(item.msg)"><v-icon size="14">mdi-pencil</v-icon></button>
                 </div>
@@ -301,6 +320,9 @@ const otherLastReadAt = ref(null);
 const replyTo = ref(null); // { id, senderName, content }
 const editing = ref(null); // { id, content }
 const showHotkeys = ref(false);
+
+// Reactions
+const REACTION_PALETTE = ['👍', '❤️', '😂', '🎉', '🙏', '✅'];
 
 // Filters + search
 const searchQuery = ref('');
@@ -587,6 +609,32 @@ async function saveEdit() {
   }
 }
 
+async function toggleReaction(msg, emoji) {
+  // Optimistic update
+  msg.reactions = msg.reactions || [];
+  const existing = msg.reactions.find(r => r.emoji === emoji);
+  if (existing) {
+    if (existing.mine) {
+      existing.count--;
+      existing.mine = false;
+      if (existing.count <= 0) {
+        msg.reactions = msg.reactions.filter(r => r.emoji !== emoji);
+      }
+    } else {
+      existing.count++;
+      existing.mine = true;
+    }
+  } else {
+    msg.reactions.push({ emoji, count: 1, mine: true });
+  }
+  try {
+    await api.post(`/chat/messages/${msg.id}/reactions`, { emoji });
+  } catch {
+    // revert: caller can call refreshMessages to resync
+    refreshMessages();
+  }
+}
+
 async function send() {
   if (!msgText.value?.trim() && !file.value) return;
   sending.value = true;
@@ -698,6 +746,39 @@ async function connectSocket() {
       if (!activeChat.value || Number(e.ticketId) !== Number(activeChat.value.id)) return;
       const m = messages.value.find(x => String(x.id) === String(e.id));
       if (m) { m.content = e.content; m.editedAt = e.editedAt; }
+    });
+
+    socket.on('chat:reaction-toggled', (e) => {
+      if (!activeChat.value || Number(e.ticketId) !== Number(activeChat.value.id)) return;
+      if (String(e.userId) === String(currentUserId)) return; // own action already applied optimistically
+      const msg = messages.value.find(m => String(m.id) === String(e.messageId));
+      if (!msg) return;
+      msg.reactions = msg.reactions || [];
+      const r = msg.reactions.find(x => x.emoji === e.emoji);
+      if (e.action === 'added') {
+        if (r) r.count++;
+        else msg.reactions.push({ emoji: e.emoji, count: 1, mine: false });
+      } else if (e.action === 'removed') {
+        if (r) {
+          r.count--;
+          if (r.count <= 0) msg.reactions = msg.reactions.filter(x => x.emoji !== e.emoji);
+        }
+      }
+    });
+
+    // Staff changed status / priority / assignee on our ticket — reflect it live
+    socket.on('chat:ticket-updated', (e) => {
+      const t = chats.value.find(x => Number(x.id) === Number(e.ticketId));
+      if (t) {
+        if (e.status !== undefined) t.status = e.status;
+        if (e.priority !== undefined) t.priority = e.priority;
+        if (e.assignedName !== undefined) t.assigned_name = e.assignedName;
+      }
+      if (activeChat.value && Number(activeChat.value.id) === Number(e.ticketId)) {
+        if (e.status !== undefined) activeChat.value.status = e.status;
+        if (e.priority !== undefined) activeChat.value.priority = e.priority;
+        if (e.assignedName !== undefined) activeChat.value.assigned_name = e.assignedName;
+      }
     });
   } catch (e) {
     // Socket unavailable — polling keeps the UI alive
@@ -848,6 +929,19 @@ onUnmounted(() => {
 .msg-bubble:hover .msg-actions { display: flex; }
 .msg-action { background: none; border: none; cursor: pointer; color: rgba(var(--v-theme-on-surface), 0.6); padding: 4px; border-radius: 6px; }
 .msg-action:hover { background: rgba(var(--v-theme-primary), 0.1); color: rgb(var(--v-theme-primary)); }
+
+/* Reactions */
+.msg-reactions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.reaction-chip { display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px; border-radius: 12px; border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); background: rgba(var(--v-theme-surface-variant), 0.5); font-size: 11px; cursor: pointer; transition: all 0.15s; }
+.reaction-chip:hover { background: rgba(var(--v-theme-primary), 0.1); border-color: rgba(var(--v-theme-primary), 0.5); }
+.reaction-chip.mine { background: rgba(var(--v-theme-primary), 0.15); border-color: rgb(var(--v-theme-primary)); color: rgb(var(--v-theme-primary)); font-weight: 700; }
+.reaction-emoji { font-size: 13px; line-height: 1; }
+.reaction-count { font-size: 10px; font-weight: 600; }
+.msg-bubble.mine .reaction-chip { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2); color: #d1e8d5; }
+.msg-bubble.mine .reaction-chip.mine { background: rgba(255,255,255,0.25); border-color: rgba(255,255,255,0.5); }
+.reaction-picker { display: flex; gap: 2px; padding: 4px; background: rgb(var(--v-theme-surface)); border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+.reaction-picker-btn { background: none; border: none; cursor: pointer; padding: 4px 6px; border-radius: 6px; font-size: 16px; line-height: 1; transition: background 0.1s; }
+.reaction-picker-btn:hover { background: rgba(var(--v-theme-primary), 0.1); }
 
 /* Inline edit */
 .msg-edit-area { width: 100%; border: 1px solid rgba(var(--v-theme-primary), 0.5); border-radius: 8px; padding: 6px 10px; font-size: 14px; background: rgba(var(--v-theme-surface), 1); color: rgb(var(--v-theme-on-surface)); resize: vertical; font-family: inherit; outline: none; }

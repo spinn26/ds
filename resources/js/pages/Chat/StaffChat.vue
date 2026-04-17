@@ -289,6 +289,10 @@
             <button class="action-btn" :class="{ active: showNotes }" title="Внутренние заметки" @click="toggleNotes">
               <v-icon size="16">mdi-note-text-outline</v-icon>
             </button>
+            <!-- Context panel toggle -->
+            <button class="action-btn" :class="{ active: showContext }" title="Карточка партнёра" @click="showContext = !showContext">
+              <v-icon size="16">mdi-card-account-details-outline</v-icon>
+            </button>
             <!-- Hotkeys -->
             <button class="action-btn" title="Горячие клавиши (?)" @click="showHotkeys = true">
               <v-icon size="16">mdi-keyboard-outline</v-icon>
@@ -377,7 +381,25 @@
                   <v-icon v-if="isMine(item.msg) && isSeen(item.msg)" size="12" class="msg-check seen" title="Прочитано">mdi-check-all</v-icon>
                   <v-icon v-else-if="isMine(item.msg)" size="12" class="msg-check" title="Отправлено">mdi-check</v-icon>
                 </div>
+                <div v-if="item.msg.reactions && item.msg.reactions.length" class="msg-reactions">
+                  <button v-for="r in item.msg.reactions" :key="r.emoji"
+                    class="reaction-chip" :class="{ mine: r.mine }"
+                    @click.stop="toggleReaction(item.msg, r.emoji)">
+                    <span class="reaction-emoji">{{ r.emoji }}</span>
+                    <span class="reaction-count">{{ r.count }}</span>
+                  </button>
+                </div>
                 <div class="msg-actions">
+                  <v-menu location="bottom end">
+                    <template #activator="{ props }">
+                      <button v-bind="props" class="msg-action" title="Реакция" @click.stop><v-icon size="14">mdi-emoticon-happy-outline</v-icon></button>
+                    </template>
+                    <div class="reaction-picker">
+                      <button v-for="emoji in REACTION_PALETTE" :key="emoji"
+                        class="reaction-picker-btn"
+                        @click="toggleReaction(item.msg, emoji)">{{ emoji }}</button>
+                    </div>
+                  </v-menu>
                   <button class="msg-action" title="Ответить" @click="startReply(item.msg)"><v-icon size="14">mdi-reply</v-icon></button>
                   <button v-if="canEdit(item.msg)" class="msg-action" title="Изменить (5 мин)" @click="startEdit(item.msg)"><v-icon size="14">mdi-pencil</v-icon></button>
                 </div>
@@ -459,6 +481,118 @@
         <p>Выберите чат из списка</p>
       </div>
     </main>
+
+    <!-- Right: Partner context panel -->
+    <aside v-if="viewMode === 'list' && activeChat && showContext && partnerContext && !mobile"
+      class="context-panel">
+      <div class="context-head">
+        <v-icon size="14" color="primary">mdi-card-account-details-outline</v-icon>
+        <span>Карточка партнёра</span>
+        <button class="action-btn small" title="Скрыть" @click="showContext = false">
+          <v-icon size="14">mdi-close</v-icon>
+        </button>
+      </div>
+
+      <div class="context-body">
+        <!-- User block -->
+        <div class="ctx-user">
+          <div class="ctx-avatar" :style="{ background: 'rgb(var(--v-theme-primary))' }">
+            <img v-if="partnerContext.user.avatarUrl" :src="partnerContext.user.avatarUrl" alt="" />
+            <span v-else>{{ initials(`${partnerContext.user.lastName || ''} ${partnerContext.user.firstName || ''}`) }}</span>
+          </div>
+          <div class="ctx-user-info">
+            <div class="ctx-name">
+              {{ partnerContext.user.lastName }} {{ partnerContext.user.firstName }}
+              {{ partnerContext.user.patronymic }}
+            </div>
+            <div class="ctx-meta">
+              <a v-if="partnerContext.user.email" :href="`mailto:${partnerContext.user.email}`" class="ctx-link">
+                <v-icon size="11">mdi-email-outline</v-icon> {{ partnerContext.user.email }}
+              </a>
+              <a v-if="partnerContext.user.phone" :href="`tel:${partnerContext.user.phone}`" class="ctx-link">
+                <v-icon size="11">mdi-phone-outline</v-icon> {{ partnerContext.user.phone }}
+              </a>
+            </div>
+          </div>
+        </div>
+
+        <!-- Consultant block -->
+        <template v-if="partnerContext.consultant">
+          <div class="ctx-section-title">Партнёр</div>
+          <div class="ctx-kv">
+            <span>Статус</span>
+            <span class="ctx-chip" :style="{ background: activityChipBg(partnerContext.consultant.activityId), color: activityChipFg(partnerContext.consultant.activityId) }">
+              {{ partnerContext.consultant.activityName || '—' }}
+            </span>
+          </div>
+          <div v-if="partnerContext.consultant.qualificationName" class="ctx-kv">
+            <span>Квалификация</span>
+            <strong>{{ partnerContext.consultant.qualificationName }}</strong>
+          </div>
+          <div class="ctx-kv">
+            <span>Реф-код</span>
+            <code>{{ partnerContext.consultant.participantCode || '—' }}</code>
+          </div>
+          <div class="ctx-kv">
+            <span>ЛП</span>
+            <strong>{{ formatVolume(partnerContext.consultant.personalVolume) }}</strong>
+          </div>
+          <div class="ctx-kv">
+            <span>ГП</span>
+            <strong>{{ formatVolume(partnerContext.consultant.groupVolumeCumulative) }}</strong>
+          </div>
+          <div class="ctx-kv">
+            <span>Клиенты</span>
+            <strong>{{ partnerContext.consultant.clientsCount }}</strong>
+          </div>
+          <div class="ctx-kv">
+            <span>Контракты</span>
+            <strong>{{ partnerContext.consultant.contractsCount }}</strong>
+          </div>
+          <div v-if="partnerContext.consultant.dateActivity" class="ctx-kv">
+            <span>Активен с</span>
+            <span>{{ fmtDate(partnerContext.consultant.dateActivity) }}</span>
+          </div>
+          <div v-if="partnerContext.consultant.yearPeriodEnd" class="ctx-kv">
+            <span>Год до</span>
+            <span>{{ fmtDate(partnerContext.consultant.yearPeriodEnd) }}</span>
+          </div>
+          <div v-if="partnerContext.consultant.activationDeadline" class="ctx-kv">
+            <span>Дедлайн активации</span>
+            <span class="warn">{{ fmtDate(partnerContext.consultant.activationDeadline) }}</span>
+          </div>
+          <div v-if="(partnerContext.consultant.terminationCount || 0) > 0" class="ctx-kv">
+            <span>Терминаций</span>
+            <span class="warn">{{ partnerContext.consultant.terminationCount }} / 3</span>
+          </div>
+          <div v-if="partnerContext.consultant.inviterName" class="ctx-kv">
+            <span>Пригласил</span>
+            <span>{{ partnerContext.consultant.inviterName }}</span>
+          </div>
+
+          <router-link class="ctx-link-btn"
+            :to="`/manage/partners?search=${encodeURIComponent(partnerContext.user.lastName || '')}`">
+            <v-icon size="12">mdi-open-in-new</v-icon> Открыть в админке
+          </router-link>
+        </template>
+        <div v-else class="ctx-note">
+          Пользователь не является партнёром.
+        </div>
+
+        <!-- Recent contracts -->
+        <template v-if="partnerContext.recentContracts && partnerContext.recentContracts.length">
+          <div class="ctx-section-title">Последние контракты</div>
+          <div v-for="c in partnerContext.recentContracts" :key="c.id" class="ctx-contract">
+            <div class="ctx-contract-head">
+              <strong>{{ c.number }}</strong>
+              <span v-if="c.amount">{{ formatVolume(c.amount) }}</span>
+            </div>
+            <div class="ctx-contract-sub">{{ c.clientName }} · {{ c.productName }}</div>
+            <div v-if="c.openDate" class="ctx-contract-date">{{ fmtDate(c.openDate) }}</div>
+          </div>
+        </template>
+      </div>
+    </aside>
 
     <!-- Hotkeys modal -->
     <v-dialog v-model="showHotkeys" max-width="500">
@@ -546,6 +680,14 @@ const newTag = ref('');
 const showNotes = ref(false);
 const notes = ref([]);
 const noteText = ref('');
+
+// Partner context sidebar (right)
+const partnerContext = ref(null);
+const showContext = ref(localStorage.getItem('staff-chat-context') !== '0');
+watch(showContext, v => localStorage.setItem('staff-chat-context', v ? '1' : '0'));
+
+// Reactions
+const REACTION_PALETTE = ['👍', '❤️', '😂', '🎉', '🙏', '✅'];
 
 // View mode (list / kanban)
 const viewMode = ref(localStorage.getItem('staff-chat-view') || 'list');
@@ -825,6 +967,30 @@ function initials(name) {
 }
 function ago(d) { if (!d) return ''; const s = Math.floor((Date.now() - new Date(d).getTime()) / 1000); if (s < 60) return 'сейчас'; if (s < 3600) return Math.floor(s/60) + 'м'; if (s < 86400) return Math.floor(s/3600) + 'ч'; return Math.floor(s/86400) + 'д'; }
 function fmtTime(d) { if (!d) return ''; const dt = new Date(d); if (isNaN(dt)) return ''; return dt.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }); }
+function fmtDate(d) { if (!d) return ''; const dt = new Date(d); if (isNaN(dt)) return ''; return dt.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit' }); }
+function formatVolume(n) {
+  const v = Number(n || 0);
+  if (!v) return '0';
+  if (v >= 1_000_000) return (v / 1_000_000).toFixed(1) + 'M';
+  if (v >= 1_000) return (v / 1_000).toFixed(1) + 'K';
+  return v.toFixed(2);
+}
+function activityChipBg(id) {
+  const v = Number(id);
+  if (v === 1) return 'rgba(52, 211, 153, 0.18)';   // Active
+  if (v === 4) return 'rgba(96, 165, 250, 0.18)';   // Registered
+  if (v === 3) return 'rgba(251, 191, 36, 0.20)';   // Terminated
+  if (v === 5) return 'rgba(239, 68, 68, 0.15)';    // Excluded
+  return 'rgba(107, 114, 128, 0.15)';
+}
+function activityChipFg(id) {
+  const v = Number(id);
+  if (v === 1) return '#059669';
+  if (v === 4) return '#2563eb';
+  if (v === 3) return '#b45309';
+  if (v === 5) return '#b91c1c';
+  return '#4b5563';
+}
 function dateLabel(date) {
   const d = new Date(date);
   const today = new Date();
@@ -989,6 +1155,7 @@ async function openChat(t) {
     const { data } = await api.get(`/chat/tickets/${t.id}`);
     messages.value = data.messages || [];
     otherLastReadAt.value = data.otherLastReadAt || null;
+    partnerContext.value = data.partnerContext || null;
     currentTags.value = parseTags(t.tags);
     scrollDown(true);
   } catch {}
@@ -1052,6 +1219,25 @@ async function saveEdit() {
   } catch (e) {
     alert(e?.response?.data?.message || 'Не удалось изменить');
   }
+}
+
+async function toggleReaction(msg, emoji) {
+  msg.reactions = msg.reactions || [];
+  const existing = msg.reactions.find(r => r.emoji === emoji);
+  if (existing) {
+    if (existing.mine) {
+      existing.count--;
+      existing.mine = false;
+      if (existing.count <= 0) msg.reactions = msg.reactions.filter(r => r.emoji !== emoji);
+    } else {
+      existing.count++;
+      existing.mine = true;
+    }
+  } else {
+    msg.reactions.push({ emoji, count: 1, mine: true });
+  }
+  try { await api.post(`/chat/messages/${msg.id}/reactions`, { emoji }); }
+  catch { refreshMessages(); }
 }
 
 async function send() {
@@ -1204,6 +1390,21 @@ async function connectSocket() {
       if (!activeChat.value || Number(e.ticketId) !== Number(activeChat.value.id)) return;
       const m = messages.value.find(x => String(x.id) === String(e.id));
       if (m) { m.content = e.content; m.editedAt = e.editedAt; }
+    });
+
+    socket.on('chat:reaction-toggled', (e) => {
+      if (!activeChat.value || Number(e.ticketId) !== Number(activeChat.value.id)) return;
+      if (String(e.userId) === String(currentUserId)) return;
+      const msg = messages.value.find(m => String(m.id) === String(e.messageId));
+      if (!msg) return;
+      msg.reactions = msg.reactions || [];
+      const r = msg.reactions.find(x => x.emoji === e.emoji);
+      if (e.action === 'added') {
+        if (r) r.count++;
+        else msg.reactions.push({ emoji: e.emoji, count: 1, mine: false });
+      } else if (e.action === 'removed') {
+        if (r) { r.count--; if (r.count <= 0) msg.reactions = msg.reactions.filter(x => x.emoji !== e.emoji); }
+      }
     });
 
     // Ticket updates from other staff (status / priority / assignee changes)
@@ -1374,6 +1575,19 @@ onUnmounted(() => {
 .msg-action:hover { background: rgba(var(--v-theme-primary), 0.1); color: rgb(var(--v-theme-primary)); }
 
 .msg-edit-area { width: 100%; border: 1px solid rgba(var(--v-theme-primary), 0.5); border-radius: 8px; padding: 6px 10px; font-size: 13px; background: rgba(var(--v-theme-surface), 1); color: rgb(var(--v-theme-on-surface)); resize: vertical; font-family: inherit; outline: none; }
+
+/* Reactions */
+.msg-reactions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.reaction-chip { display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px; border-radius: 12px; border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); background: rgba(var(--v-theme-surface-variant), 0.5); font-size: 11px; cursor: pointer; transition: all 0.15s; }
+.reaction-chip:hover { background: rgba(var(--v-theme-primary), 0.1); border-color: rgba(var(--v-theme-primary), 0.5); }
+.reaction-chip.mine { background: rgba(var(--v-theme-primary), 0.15); border-color: rgb(var(--v-theme-primary)); color: rgb(var(--v-theme-primary)); font-weight: 700; }
+.reaction-emoji { font-size: 13px; line-height: 1; }
+.reaction-count { font-size: 10px; font-weight: 600; }
+.msg-bubble.mine .reaction-chip { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2); color: #d1e8d5; }
+.msg-bubble.mine .reaction-chip.mine { background: rgba(255,255,255,0.25); border-color: rgba(255,255,255,0.5); }
+.reaction-picker { display: flex; gap: 2px; padding: 4px; background: rgb(var(--v-theme-surface)); border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+.reaction-picker-btn { background: none; border: none; cursor: pointer; padding: 4px 6px; border-radius: 6px; font-size: 16px; line-height: 1; transition: background 0.1s; }
+.reaction-picker-btn:hover { background: rgba(var(--v-theme-primary), 0.1); }
 .msg-edit-actions { display: flex; gap: 6px; justify-content: flex-end; margin-top: 6px; }
 .msg-edit-btn { padding: 3px 10px; border-radius: 6px; border: none; cursor: pointer; font-size: 11px; font-weight: 600; }
 .msg-edit-btn.cancel { background: transparent; color: rgba(var(--v-theme-on-surface), 0.6); }
@@ -1494,8 +1708,44 @@ onUnmounted(() => {
 .bulk-slide-enter-active, .bulk-slide-leave-active { transition: transform 0.2s ease, opacity 0.2s ease; }
 .bulk-slide-enter-from, .bulk-slide-leave-to { transform: translateY(100%); opacity: 0; }
 
+/* Partner context panel (right sidebar in list mode) */
+.context-panel { width: 300px; flex-shrink: 0; border-left: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); display: flex; flex-direction: column; background: rgba(var(--v-theme-surface), 1); overflow: hidden; }
+.context-head { display: flex; align-items: center; gap: 6px; padding: 10px 14px; border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); font-size: 12px; font-weight: 700; color: rgba(var(--v-theme-on-surface), 0.8); }
+.context-head span { flex: 1; }
+.action-btn.small { padding: 3px; border: none; }
+.context-body { flex: 1; overflow-y: auto; padding: 12px 14px; }
+
+.ctx-user { display: flex; align-items: center; gap: 10px; padding-bottom: 12px; border-bottom: 1px dashed rgba(var(--v-border-color), 0.3); margin-bottom: 12px; }
+.ctx-avatar { width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 14px; font-weight: 700; color: #fff; overflow: hidden; }
+.ctx-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.ctx-user-info { flex: 1; min-width: 0; }
+.ctx-name { font-size: 13px; font-weight: 700; line-height: 1.2; }
+.ctx-meta { display: flex; flex-direction: column; gap: 3px; margin-top: 4px; }
+.ctx-link { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; color: rgba(var(--v-theme-on-surface), 0.6); text-decoration: none; }
+.ctx-link:hover { color: rgb(var(--v-theme-primary)); }
+
+.ctx-section-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: rgba(var(--v-theme-on-surface), 0.4); margin: 12px 0 6px; }
+.ctx-kv { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 4px 0; font-size: 12px; border-bottom: 1px solid rgba(var(--v-border-color), 0.15); }
+.ctx-kv:last-child { border-bottom: none; }
+.ctx-kv > span:first-child { color: rgba(var(--v-theme-on-surface), 0.5); }
+.ctx-kv strong { font-weight: 700; }
+.ctx-kv code { font-family: ui-monospace, monospace; font-size: 11px; padding: 1px 6px; border-radius: 4px; background: rgba(var(--v-theme-primary), 0.08); color: rgb(var(--v-theme-primary)); }
+.ctx-kv .warn { color: #b45309; font-weight: 600; }
+.ctx-chip { padding: 2px 8px; border-radius: 10px; font-weight: 600; font-size: 11px; }
+
+.ctx-link-btn { display: inline-flex; align-items: center; gap: 4px; padding: 5px 10px; border-radius: 8px; background: rgba(var(--v-theme-primary), 0.1); color: rgb(var(--v-theme-primary)); text-decoration: none; font-size: 11px; font-weight: 600; margin-top: 10px; }
+.ctx-link-btn:hover { background: rgba(var(--v-theme-primary), 0.2); }
+.ctx-note { padding: 10px; border-radius: 8px; background: rgba(var(--v-theme-surface-variant), 0.4); font-size: 12px; color: rgba(var(--v-theme-on-surface), 0.5); text-align: center; }
+
+.ctx-contract { padding: 8px; border-radius: 8px; background: rgba(var(--v-theme-surface-variant), 0.3); margin-bottom: 6px; }
+.ctx-contract-head { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; }
+.ctx-contract-head strong { color: rgb(var(--v-theme-primary)); }
+.ctx-contract-sub { font-size: 11px; color: rgba(var(--v-theme-on-surface), 0.6); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ctx-contract-date { font-size: 10px; color: rgba(var(--v-theme-on-surface), 0.4); margin-top: 2px; }
+
 /* Kanban mode: suppress chat-main, sidebar acts as filter strip */
 .chat-wrap.kanban-mode .chat-main { display: none; }
+.chat-wrap.kanban-mode .context-panel { display: none; }
 
 @media (max-width: 959px) {
   .chat-sidebar { width: 100%; }

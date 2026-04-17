@@ -193,7 +193,16 @@ class ChatController extends Controller
             ? DB::table('chat_messages')->whereIn('id', $replyIds)->get()->keyBy('id')
             : collect();
 
-        $messages = $rawMessages->map(function ($m) use ($replies) {
+        // Batch-load reactions
+        $messageIds = $rawMessages->pluck('id');
+        $reactionsByMessage = $messageIds->isNotEmpty()
+            ? DB::table('chat_message_reactions')
+                ->whereIn('message_id', $messageIds)
+                ->get()
+                ->groupBy('message_id')
+            : collect();
+
+        $messages = $rawMessages->map(function ($m) use ($replies, $reactionsByMessage, $userId) {
             $replyTo = null;
             if ($m->reply_to_id && isset($replies[$m->reply_to_id])) {
                 $r = $replies[$m->reply_to_id];
@@ -203,6 +212,19 @@ class ChatController extends Controller
                     'content' => mb_substr((string) $r->content, 0, 140),
                 ];
             }
+            // Aggregate reactions: { '👍': { count: 3, mine: true }, ... }
+            $rxs = $reactionsByMessage->get($m->id, collect());
+            $reactions = [];
+            foreach ($rxs as $r) {
+                if (! isset($reactions[$r->emoji])) {
+                    $reactions[$r->emoji] = ['emoji' => $r->emoji, 'count' => 0, 'mine' => false];
+                }
+                $reactions[$r->emoji]['count']++;
+                if ((int) $r->user_id === (int) $userId) {
+                    $reactions[$r->emoji]['mine'] = true;
+                }
+            }
+
             return [
                 'id' => $m->id,
                 'content' => $m->content,
@@ -215,6 +237,7 @@ class ChatController extends Controller
                 'createdAt' => $m->created_at,
                 'editedAt' => $m->edited_at ?? null,
                 'replyTo' => $replyTo,
+                'reactions' => array_values($reactions),
             ];
         });
 
@@ -230,11 +253,105 @@ class ChatController extends Controller
             ->where('user_id', '!=', $userId)
             ->max('last_read_at');
 
+        // Partner context — staff-only, lets the agent see who they're talking to
+        $partnerContext = null;
+        if ($this->isStaff($request)) {
+            $partnerContext = $this->buildPartnerContext($ticket);
+        }
+
         return response()->json([
             'ticket' => $ticket,
             'messages' => $messages,
             'otherLastReadAt' => $otherLastReadAt,
+            'partnerContext' => $partnerContext,
         ]);
+    }
+
+    /**
+     * Build a compact partner snapshot for the staff sidebar:
+     * WebUser identity, Consultant activity/qualification, recent contracts.
+     */
+    private function buildPartnerContext($ticket): ?array
+    {
+        $webUserId = $ticket->created_by ?? null;
+        if (! $webUserId) return null;
+
+        $webUser = DB::table('WebUser')->where('id', $webUserId)->first();
+        if (! $webUser) return null;
+
+        $consultant = DB::table('consultant')->where('webUser', $webUserId)->first();
+
+        $activityName = null;
+        if ($consultant && $consultant->activity) {
+            $activityName = DB::table('directory_of_activities')
+                ->where('id', (int) (is_object($consultant->activity) ? $consultant->activity->value : $consultant->activity))
+                ->value('name');
+        }
+
+        $qualificationName = null;
+        if ($consultant && ! empty($consultant->status_and_lvl)) {
+            $qualificationName = DB::table('status_levels')
+                ->where('id', $consultant->status_and_lvl)
+                ->value('title');
+        }
+
+        $recentContracts = [];
+        if ($consultant) {
+            $recentContracts = DB::table('contract')
+                ->where('consultant', $consultant->id)
+                ->whereNull('deletedAt')
+                ->orderByDesc('id')
+                ->limit(5)
+                ->get()
+                ->map(fn ($c) => [
+                    'id' => $c->id,
+                    'number' => $c->number ?? "#{$c->id}",
+                    'clientName' => $c->clientName ?? '—',
+                    'productName' => $c->productName ?? '—',
+                    'amount' => $c->amount ?? null,
+                    'openDate' => $c->openDate ?? null,
+                ])
+                ->toArray();
+
+            $clientsCount = DB::table('client')
+                ->where('consultant', $consultant->id)
+                ->where('active', true)
+                ->count();
+            $contractsCount = DB::table('contract')
+                ->where('consultant', $consultant->id)
+                ->whereNull('deletedAt')
+                ->count();
+        }
+
+        return [
+            'user' => [
+                'id' => $webUser->id,
+                'email' => $webUser->email,
+                'firstName' => $webUser->firstName,
+                'lastName' => $webUser->lastName,
+                'patronymic' => $webUser->patronymic,
+                'phone' => $webUser->phone,
+                'avatarUrl' => $webUser->avatar ? '/storage/' . $webUser->avatar : null,
+                'role' => $webUser->role,
+            ],
+            'consultant' => $consultant ? [
+                'id' => $consultant->id,
+                'participantCode' => $consultant->participantCode,
+                'activityId' => is_object($consultant->activity) ? $consultant->activity->value : $consultant->activity,
+                'activityName' => $activityName,
+                'qualificationName' => $qualificationName,
+                'personalVolume' => round((float) ($consultant->personalVolume ?? 0), 2),
+                'groupVolumeCumulative' => round((float) ($consultant->groupVolumeCumulative ?? 0), 2),
+                'dateActivity' => $consultant->dateActivity ?? null,
+                'yearPeriodEnd' => $consultant->yearPeriodEnd ?? null,
+                'activationDeadline' => $consultant->activationDeadline ?? null,
+                'terminationCount' => $consultant->terminationCount ?? 0,
+                'clientsCount' => $clientsCount ?? 0,
+                'contractsCount' => $contractsCount ?? 0,
+                'inviterName' => $consultant->inviterName ?? null,
+            ] : null,
+            'recentContracts' => $recentContracts,
+        ];
     }
 
     /** Send message to ticket */
@@ -363,6 +480,61 @@ class ChatController extends Controller
         } catch (\Exception $e) {}
 
         return response()->json(['id' => $messageId, 'editedAt' => now()->toIso8601String()]);
+    }
+
+    /**
+     * Toggle a reaction on a message. If the same (message, user, emoji) tuple
+     * exists — remove it; otherwise insert.
+     */
+    public function toggleReaction(Request $request, int $messageId): JsonResponse
+    {
+        $request->validate(['emoji' => 'required|string|max:16']);
+
+        $msg = DB::table('chat_messages')->where('id', $messageId)->first();
+        if (! $msg) return response()->json(['message' => 'Сообщение не найдено'], 404);
+
+        // Authorize: must have access to the ticket
+        $userId = $request->user()->id;
+        $ticket = DB::table('chat_tickets')->where('id', $msg->ticket_id)->first();
+        if (! $ticket) return response()->json(['message' => 'Не найден'], 404);
+        if (! $this->isStaff($request)
+            && (int) $ticket->created_by !== (int) $userId
+            && (int) ($ticket->recipient_id ?? 0) !== (int) $userId) {
+            return response()->json(['message' => 'Доступ запрещён'], 403);
+        }
+
+        $emoji = $request->input('emoji');
+        $existing = DB::table('chat_message_reactions')
+            ->where('message_id', $messageId)
+            ->where('user_id', $userId)
+            ->where('emoji', $emoji)
+            ->first();
+
+        if ($existing) {
+            DB::table('chat_message_reactions')->where('id', $existing->id)->delete();
+            $action = 'removed';
+        } else {
+            DB::table('chat_message_reactions')->insert([
+                'message_id' => $messageId,
+                'user_id' => $userId,
+                'emoji' => $emoji,
+                'created_at' => now(),
+            ]);
+            $action = 'added';
+        }
+
+        // Broadcast so everyone in the room updates live
+        try {
+            app(\App\Services\SocketService::class)->emit('chat:reaction-toggled', "ticket:{$msg->ticket_id}", [
+                'messageId' => $messageId,
+                'ticketId' => $msg->ticket_id,
+                'emoji' => $emoji,
+                'userId' => $userId,
+                'action' => $action,
+            ]);
+        } catch (\Exception $e) {}
+
+        return response()->json(['action' => $action]);
     }
 
     /** Change ticket status */
