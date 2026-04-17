@@ -1,12 +1,21 @@
 <template>
-  <div class="register-page">
-    <div class="bg-brand">
-      <BrandWaves :width="1800" :height="1200" shape="sheet"
-        bg-color="#6EE87A" stroke-color="#ffffff"
-        :rows="32" :columns="42" :amplitude="30" :frequency="1.15"
-        :stroke-opacity="0.9" :stroke-width="1.4" />
+  <div class="register-page" @mousemove="onMouseMove">
+    <div class="bg-base"></div>
+    <div class="parallax">
+      <div class="blob blob-a" :style="layerStyle(0.02, 0.03)"></div>
+      <div class="blob blob-b" :style="layerStyle(-0.035, 0.02)"></div>
+      <div class="blob blob-c" :style="layerStyle(0.025, -0.03)"></div>
+      <div class="blob blob-d" :style="layerStyle(-0.015, -0.02)"></div>
+      <div class="blob blob-e" :style="layerStyle(0.04, 0.015)"></div>
+      <div class="sphere" :style="layerStyle(0.012, 0.008)">
+        <BrandWaves shape="circle" :width="420" :height="420"
+          bg-color="#6EE87A" stroke-color="#ffffff"
+          :rows="14" :columns="18" :amplitude="4" :frequency="1.0"
+          :stroke-width="0.9" :stroke-opacity="0.55" />
+      </div>
     </div>
-  <v-container class="fill-height position-relative" fluid style="z-index:1">
+    <div class="vignette"></div>
+  <v-container class="fill-height position-relative" fluid style="z-index:2">
     <v-row justify="center" align="center">
       <v-col cols="12" sm="10" md="7" lg="5">
         <v-card class="pa-6 register-card" elevation="16" rounded="xl">
@@ -112,6 +121,19 @@ const form = ref({
   consentPersonalData: false, consentTerms: false,
 });
 
+// Parallax mouse tracking
+const mx = ref(0);
+const my = ref(0);
+function onMouseMove(e) {
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  mx.value = (e.clientX - w / 2) / (w / 2);
+  my.value = (e.clientY - h / 2) / (h / 2);
+}
+function layerStyle(sx, sy) {
+  return { transform: `translate3d(${mx.value * sx * 100}px, ${my.value * sy * 100}px, 0)` };
+}
+
 const reviewItems = computed(() => [
   { label: 'Фамилия', value: form.value.lastName },
   { label: 'Имя', value: form.value.firstName },
@@ -157,12 +179,69 @@ async function handleRegister() {
 </script>
 
 <style scoped>
-.register-page { position: relative; min-height: 100vh; overflow: hidden; }
-.bg-brand { position: fixed; inset: 0; z-index: 0; background: rgb(var(--v-theme-brand)); }
-.bg-brand :deep(.brand-waves) { width: 100%; height: 100%; }
+.register-page {
+  position: relative;
+  min-height: 100vh;
+  overflow: hidden;
+  background: #0B1210;
+}
+.bg-base {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background:
+    radial-gradient(1200px 800px at 15% 20%, rgba(110, 232, 122, 0.18), transparent 60%),
+    radial-gradient(900px 700px at 85% 85%, rgba(46, 125, 50, 0.22), transparent 65%),
+    linear-gradient(135deg, #0B1F14 0%, #0E2C1B 50%, #081510 100%);
+}
+.parallax {
+  position: fixed;
+  inset: -60px;
+  z-index: 1;
+  pointer-events: none;
+}
+.blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(60px);
+  opacity: 0.7;
+  transition: transform 0.18s ease-out;
+  will-change: transform;
+}
+.blob-a { width: 520px; height: 520px; top: -60px; left: -80px;
+  background: radial-gradient(circle, rgba(110, 232, 122, 0.75) 0%, transparent 70%); }
+.blob-b { width: 440px; height: 440px; bottom: -100px; right: -80px;
+  background: radial-gradient(circle, rgba(110, 232, 122, 0.55) 0%, transparent 70%); }
+.blob-c { width: 340px; height: 340px; top: 40%; right: 10%;
+  background: radial-gradient(circle, rgba(46, 125, 50, 0.55) 0%, transparent 70%); }
+.blob-d { width: 260px; height: 260px; bottom: 15%; left: 10%;
+  background: radial-gradient(circle, rgba(168, 244, 180, 0.45) 0%, transparent 70%); }
+.blob-e { width: 380px; height: 380px; top: 15%; left: 55%;
+  background: radial-gradient(circle, rgba(94, 220, 107, 0.35) 0%, transparent 70%); }
+.sphere {
+  position: absolute;
+  right: -120px;
+  bottom: -80px;
+  width: 420px;
+  height: 420px;
+  opacity: 0.35;
+  transition: transform 0.18s ease-out;
+  will-change: transform;
+}
+.vignette {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 50%, rgba(0, 0, 0, 0.45) 100%);
+}
 .register-card {
-  backdrop-filter: blur(14px);
-  background: rgba(var(--v-theme-surface), 0.94) !important;
-  border: 1px solid rgba(var(--v-theme-brand), 0.4);
+  backdrop-filter: blur(16px);
+  background: rgba(var(--v-theme-surface), 0.95) !important;
+  border: 1px solid rgba(var(--v-theme-brand), 0.3);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+}
+@media (prefers-reduced-motion: reduce) {
+  .blob, .sphere { transition: none !important; transform: none !important; }
 }
 </style>

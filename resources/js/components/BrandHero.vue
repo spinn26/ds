@@ -1,14 +1,18 @@
 <template>
   <v-card flat rounded="xl" class="brand-hero mb-4 overflow-hidden position-relative">
-    <div class="brand-hero-waves">
+    <!-- Subtle mint gradient background -->
+    <div class="brand-hero-bg"></div>
+
+    <!-- Corner accent: small brand sphere, softly blended, decorative only -->
+    <div class="brand-hero-accent" aria-hidden="true">
       <BrandWaves
-        :width="1400" :height="waveHeight" shape="sheet"
-        :bg-color="bgColor" :stroke-color="strokeColor"
-        :rows="rows" :columns="columns"
-        :amplitude="amplitude" :frequency="frequency"
-        :stroke-opacity="strokeOpacity" :stroke-width="strokeWidth"
+        shape="circle" :width="140" :height="140"
+        bg-color="#6EE87A" stroke-color="#ffffff"
+        :rows="14" :columns="18" :amplitude="3.5" :frequency="1.0"
+        :stroke-width="0.9" :stroke-opacity="0.85"
       />
     </div>
+
     <div class="brand-hero-content d-flex justify-space-between align-center flex-wrap ga-3 pa-5">
       <div class="d-flex align-center ga-3">
         <v-icon v-if="icon" size="28" color="brand-ink">{{ icon }}</v-icon>
@@ -31,23 +35,39 @@ defineProps({
   title: { type: String, required: true },
   subtitle: { type: String, default: null },
   icon: { type: String, default: null },
-  // Brand palette knobs, sensible defaults match identity 2023
-  bgColor: { type: String, default: '#6EE87A' },
-  strokeColor: { type: String, default: '#ffffff' },
-  waveHeight: { type: Number, default: 180 },
-  rows: { type: Number, default: 18 },
-  columns: { type: Number, default: 36 },
-  amplitude: { type: Number, default: 16 },
-  frequency: { type: Number, default: 1.2 },
-  strokeOpacity: { type: Number, default: 0.75 },
-  strokeWidth: { type: Number, default: 1 },
 });
 </script>
 
 <style scoped>
-.brand-hero { border: 1px solid rgba(var(--v-theme-brand), 0.35); }
-.brand-hero-waves { position: absolute; inset: 0; z-index: 0; opacity: 0.95; }
+.brand-hero {
+  border: 1px solid rgba(var(--v-theme-brand), 0.35);
+  min-height: 90px;
+}
+.brand-hero-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background:
+    radial-gradient(at 0% 0%, rgba(110, 232, 122, 0.95) 0%, transparent 60%),
+    linear-gradient(120deg, #5EDC6B 0%, #83EE92 60%, #A8F4B4 100%);
+}
+.brand-hero-accent {
+  position: absolute;
+  right: -28px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 140px;
+  height: 140px;
+  opacity: 0.75;
+  pointer-events: none;
+  filter: drop-shadow(0 4px 12px rgba(10, 43, 16, 0.12));
+  z-index: 0;
+}
 .brand-hero-content { position: relative; z-index: 1; }
-.brand-hero-title { color: rgb(var(--v-theme-brand-ink)); }
+.brand-hero-title { color: rgb(var(--v-theme-brand-ink)); letter-spacing: 0.2px; }
 .brand-hero-subtitle { color: rgba(10, 43, 16, 0.72); }
+
+@media (max-width: 600px) {
+  .brand-hero-accent { display: none; }
+}
 </style>
