@@ -36,6 +36,9 @@ const vuetify = createVuetify({
                 colors: {
                     primary: '#2E7D32',
                     secondary: '#FB8C00',
+                    // Brand mint — from DS identity 2023. Used for hero accents and wave-pattern fills.
+                    brand: '#6EE87A',
+                    'brand-ink': '#0A2B10',
                     background: '#EEF1F6',
                     surface: '#F8F9FC',
                     'surface-variant': '#E8ECF2',
@@ -52,6 +55,8 @@ const vuetify = createVuetify({
                 colors: {
                     primary: '#2E7D32',
                     secondary: '#FFB74D',
+                    brand: '#6EE87A',
+                    'brand-ink': '#0A2B10',
                     background: '#0F1419',
                     surface: '#1A1F2E',
                     'surface-variant': '#232838',

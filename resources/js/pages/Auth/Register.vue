@@ -1,11 +1,10 @@
 <template>
   <div class="register-page">
-    <div class="bg-animated">
-      <div class="bg-gradient"></div>
-      <div class="bg-circles">
-        <div v-for="n in 12" :key="n" class="circle" :style="circleStyle(n)"></div>
-      </div>
-      <div class="bg-grid"></div>
+    <div class="bg-brand">
+      <BrandWaves :width="1800" :height="1200" shape="sheet"
+        bg-color="#6EE87A" stroke-color="#ffffff"
+        :rows="32" :columns="42" :amplitude="30" :frequency="1.15"
+        :stroke-opacity="0.9" :stroke-width="1.4" />
     </div>
   <v-container class="fill-height position-relative" fluid style="z-index:1">
     <v-row justify="center" align="center">
@@ -99,6 +98,7 @@ import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../../stores/auth';
 import api from '../../api';
+import BrandWaves from '../../components/BrandWaves.vue';
 
 const auth = useAuthStore();
 const router = useRouter();
@@ -154,37 +154,15 @@ async function handleRegister() {
   } finally { loading.value = false; }
 }
 
-function circleStyle(n) {
-  const size = 40 + Math.random() * 120;
-  return {
-    width: `${size}px`, height: `${size}px`,
-    left: `${Math.random() * 100}%`, top: `${Math.random() * 100}%`,
-    animationDuration: `${15 + Math.random() * 25}s`,
-    animationDelay: `${Math.random() * -20}s`,
-    opacity: 0.03 + Math.random() * 0.08,
-  };
-}
 </script>
 
 <style scoped>
 .register-page { position: relative; min-height: 100vh; overflow: hidden; }
-.bg-animated { position: fixed; inset: 0; z-index: 0; }
-.bg-gradient {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(135deg,
-    rgba(var(--v-theme-on-surface), 0.86) 0%,
-    rgba(var(--v-theme-on-surface), 0.72) 30%,
-    rgba(var(--v-theme-primary), 0.6) 60%,
-    rgba(var(--v-theme-primary), 0.85) 100%);
-  animation: gradientShift 20s ease infinite;
-  background-size: 400% 400%;
+.bg-brand { position: fixed; inset: 0; z-index: 0; background: rgb(var(--v-theme-brand)); }
+.bg-brand :deep(.brand-waves) { width: 100%; height: 100%; }
+.register-card {
+  backdrop-filter: blur(14px);
+  background: rgba(var(--v-theme-surface), 0.94) !important;
+  border: 1px solid rgba(var(--v-theme-brand), 0.4);
 }
-@keyframes gradientShift { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
-.bg-circles { position: absolute; inset: 0; }
-.circle { position: absolute; border-radius: 50%; background: radial-gradient(circle, rgba(var(--v-theme-primary), 0.55) 0%, transparent 70%); animation: float linear infinite; pointer-events: none; }
-@keyframes float { 0% { transform: translate(0,0) scale(1); } 25% { transform: translate(30px,-50px) scale(1.1); } 50% { transform: translate(-20px,-100px) scale(0.9); } 75% { transform: translate(40px,-50px) scale(1.05); } 100% { transform: translate(0,0) scale(1); } }
-.bg-grid { position: absolute; inset: 0; background-image: linear-gradient(rgba(var(--v-theme-primary), 0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(var(--v-theme-primary), 0.06) 1px, transparent 1px); background-size: 60px 60px; animation: gridPan 30s linear infinite; }
-@keyframes gridPan { 0% { transform: translate(0,0); } 100% { transform: translate(60px,60px); } }
-.register-card { backdrop-filter: blur(20px); background: rgba(var(--v-theme-surface), 0.92) !important; border: 1px solid rgba(var(--v-theme-primary), 0.2); }
 </style>

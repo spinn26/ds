@@ -1,12 +1,11 @@
 <template>
   <div class="login-page">
-    <!-- Animated background -->
-    <div class="bg-animated">
-      <div class="bg-gradient"></div>
-      <div class="bg-circles">
-        <div v-for="n in 12" :key="n" class="circle" :style="circleStyle(n)"></div>
-      </div>
-      <div class="bg-grid"></div>
+    <!-- Brand wave pattern background (DS identity 2023) -->
+    <div class="bg-brand">
+      <BrandWaves :width="1800" :height="1000" shape="sheet"
+        bg-color="#6EE87A" stroke-color="#ffffff"
+        :rows="32" :columns="40" :amplitude="30" :frequency="1.15"
+        :stroke-opacity="0.9" :stroke-width="1.4" />
     </div>
 
     <v-container class="fill-height position-relative" fluid style="z-index:1">
@@ -56,6 +55,7 @@ import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useDisplay } from 'vuetify';
 import { useAuthStore } from '../../stores/auth';
+import BrandWaves from '../../components/BrandWaves.vue';
 
 const { mobile } = useDisplay();
 
@@ -66,24 +66,6 @@ const password = ref('');
 const showPw = ref(false);
 const error = ref('');
 const loading = ref(false);
-
-function circleStyle(n) {
-  const size = 40 + Math.random() * 120;
-  const x = Math.random() * 100;
-  const y = Math.random() * 100;
-  const duration = 15 + Math.random() * 25;
-  const delay = Math.random() * -20;
-  const opacity = 0.03 + Math.random() * 0.08;
-  return {
-    width: `${size}px`,
-    height: `${size}px`,
-    left: `${x}%`,
-    top: `${y}%`,
-    animationDuration: `${duration}s`,
-    animationDelay: `${delay}s`,
-    opacity,
-  };
-}
 
 async function handleLogin() {
   error.value = '';
@@ -106,70 +88,18 @@ async function handleLogin() {
   overflow: hidden;
 }
 
-.bg-animated {
+.bg-brand {
   position: fixed;
   inset: 0;
   z-index: 0;
+  background: rgb(var(--v-theme-brand));
 }
-
-.bg-gradient {
-  position: absolute;
-  inset: 0;
-  background:
-    linear-gradient(135deg,
-      rgba(var(--v-theme-on-surface), 0.86) 0%,
-      rgba(var(--v-theme-on-surface), 0.72) 30%,
-      rgba(var(--v-theme-primary), 0.6) 60%,
-      rgba(var(--v-theme-primary), 0.85) 100%);
-  animation: gradientShift 20s ease infinite;
-  background-size: 400% 400%;
-}
-
-@keyframes gradientShift {
-  0%, 100% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-}
-
-.bg-circles {
-  position: absolute;
-  inset: 0;
-}
-
-.circle {
-  position: absolute;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(var(--v-theme-primary), 0.55) 0%, transparent 70%);
-  animation: float linear infinite;
-  pointer-events: none;
-}
-
-@keyframes float {
-  0% { transform: translate(0, 0) scale(1); }
-  25% { transform: translate(30px, -50px) scale(1.1); }
-  50% { transform: translate(-20px, -100px) scale(0.9); }
-  75% { transform: translate(40px, -50px) scale(1.05); }
-  100% { transform: translate(0, 0) scale(1); }
-}
-
-.bg-grid {
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(rgba(var(--v-theme-primary), 0.06) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(var(--v-theme-primary), 0.06) 1px, transparent 1px);
-  background-size: 60px 60px;
-  animation: gridPan 30s linear infinite;
-}
-
-@keyframes gridPan {
-  0% { transform: translate(0, 0); }
-  100% { transform: translate(60px, 60px); }
-}
+.bg-brand :deep(.brand-waves) { width: 100%; height: 100%; }
 
 .login-card {
-  backdrop-filter: blur(20px);
-  background: rgba(var(--v-theme-surface), 0.92) !important;
-  border: 1px solid rgba(var(--v-theme-primary), 0.2);
+  backdrop-filter: blur(14px);
+  background: rgba(var(--v-theme-surface), 0.94) !important;
+  border: 1px solid rgba(var(--v-theme-brand), 0.4);
 }
 
 .logo-text {
