@@ -291,9 +291,13 @@ onMounted(async () => {
   try {
     const { io } = await import('socket.io-client');
     const host = window.__SOCKET_URL__ || (location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.hostname + ':3001';
-    const userId = localStorage.getItem('auth_user_id');
-    const userName = localStorage.getItem('auth_user_name') || '';
-    const notifSocket = io(host, { query: { userId, userName }, transports: ['websocket', 'polling'], reconnection: true });
+    const token = localStorage.getItem('auth_token');
+    if (!token) return;
+    const notifSocket = io(host, {
+      auth: { token },
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+    });
     notifSocket.on('notification', (data) => {
       // Add to list in real-time
       notifications.value.unshift({

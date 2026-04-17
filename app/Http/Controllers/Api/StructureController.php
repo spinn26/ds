@@ -77,6 +77,9 @@ class StructureController extends Controller
 
     public function children(Request $request, int $consultantId): JsonResponse
     {
+        $target = Consultant::whereNull('dateDeleted')->findOrFail($consultantId);
+        $this->authorize('viewTree', $target);
+
         $rows = Consultant::where('inviter', $consultantId)
             ->whereNull('dateDeleted')
             ->get();
