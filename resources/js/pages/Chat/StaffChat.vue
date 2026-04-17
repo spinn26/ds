@@ -1,7 +1,7 @@
 <template>
-  <div class="chat-wrap">
-    <!-- Left: ticket list -->
-    <aside class="chat-sidebar" :class="{ 'mobile-hidden': mobile && activeChat }">
+  <div class="chat-wrap" :class="{ 'kanban-mode': viewMode === 'kanban' }">
+    <!-- Left: ticket list (hidden in Kanban mode on mobile / collapsed on desktop) -->
+    <aside class="chat-sidebar" :class="{ 'mobile-hidden': mobile && (activeChat || viewMode === 'kanban'), 'compact': viewMode === 'kanban' && !mobile }">
       <div class="sidebar-head">
         <h3>Обращения</h3>
         <div class="sidebar-search-row">
@@ -47,8 +47,71 @@
       </div>
     </aside>
 
-    <!-- Center: messages -->
-    <main class="chat-main" :class="{ 'mobile-hidden': mobile && !activeChat }">
+    <!-- View toggle: floating control above main area -->
+    <div class="view-toggle">
+      <button class="view-toggle-btn" :class="{ active: viewMode === 'list' }" @click="viewMode = 'list'" title="Список">
+        <v-icon size="16">mdi-format-list-bulleted</v-icon>
+        <span class="view-toggle-label">Список</span>
+      </button>
+      <button class="view-toggle-btn" :class="{ active: viewMode === 'kanban' }" @click="viewMode = 'kanban'" title="Канбан">
+        <v-icon size="16">mdi-view-column-outline</v-icon>
+        <span class="view-toggle-label">Доска</span>
+      </button>
+    </div>
+
+    <!-- Kanban board -->
+    <div v-if="viewMode === 'kanban'" class="kanban-board">
+      <div v-for="col in kanbanColumns" :key="col.value"
+        class="kanban-column"
+        :class="{ 'drop-target': dragOverCol === col.value }"
+        :style="{ '--col-color': col.color }"
+        @dragover.prevent="dragOverCol = col.value"
+        @dragleave="dragOverCol === col.value && (dragOverCol = null)"
+        @drop.prevent="onKanbanDrop(col.value)">
+        <div class="kanban-col-head">
+          <v-icon size="14" :color="col.color">{{ col.icon }}</v-icon>
+          <span class="kanban-col-title">{{ col.label }}</span>
+          <span class="kanban-col-count">{{ kanbanGrouped[col.value]?.length || 0 }}</span>
+        </div>
+        <div class="kanban-col-body">
+          <div v-for="t in (kanbanGrouped[col.value] || [])" :key="t.id"
+            class="kanban-card"
+            :class="{ 'is-dragging': draggingId === t.id, stale: isStale(t) }"
+            :style="t.priority && t.priority !== 'medium' ? { borderLeftColor: prioClr(t.priority) } : {}"
+            draggable="true"
+            @dragstart="onKanbanDragStart(t, $event)"
+            @dragend="onKanbanDragEnd"
+            @click="openFromKanban(t)">
+            <div class="kanban-card-head">
+              <div class="kanban-card-avatar" :style="{ background: catColor(t.category || t.department) }">
+                <v-icon size="12" color="white">{{ catIcon(t.category || t.department) }}</v-icon>
+              </div>
+              <div class="kanban-card-subject">{{ t.subject }}</div>
+              <span v-if="t.unread > 0" class="kanban-card-unread">{{ t.unread }}</span>
+            </div>
+            <div class="kanban-card-customer">{{ t.customer_name }}</div>
+            <div class="kanban-card-meta">
+              <span class="kanban-card-time" :class="{ stale: isStale(t) }">
+                <v-icon size="10">mdi-clock-outline</v-icon> {{ ago(t.last_message_at) }}
+              </span>
+              <span v-if="t.assigned_name" class="kanban-card-assignee" :title="'Назначен: ' + t.assigned_name">
+                <v-icon size="10">mdi-account</v-icon> {{ shortName(t.assigned_name) }}
+              </span>
+              <span v-if="t.priority && t.priority !== 'medium'" class="kanban-card-prio" :style="{ color: prioClr(t.priority) }">
+                <v-icon size="10">mdi-flag</v-icon>
+              </span>
+            </div>
+            <div v-if="parseTags(t.tags).length" class="kanban-card-tags">
+              <span v-for="tag in parseTags(t.tags).slice(0, 3)" :key="tag" class="kanban-card-tag">#{{ tag }}</span>
+            </div>
+          </div>
+          <div v-if="!(kanbanGrouped[col.value] || []).length" class="kanban-col-empty">—</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Center: messages (list mode) -->
+    <main v-else class="chat-main" :class="{ 'mobile-hidden': mobile && !activeChat }">
       <template v-if="activeChat">
         <!-- Header with actions -->
         <div class="chat-header">
@@ -376,6 +439,64 @@ const newTag = ref('');
 const showNotes = ref(false);
 const notes = ref([]);
 const noteText = ref('');
+
+// View mode (list / kanban)
+const viewMode = ref(localStorage.getItem('staff-chat-view') || 'list');
+watch(viewMode, v => localStorage.setItem('staff-chat-view', v));
+const draggingId = ref(null);
+const dragOverCol = ref(null);
+const kanbanColumns = [
+  { value: 'new', label: 'Новые', color: '#60a5fa', icon: 'mdi-circle-outline' },
+  { value: 'open', label: 'В работе', color: '#fbbf24', icon: 'mdi-progress-clock' },
+  { value: 'pending', label: 'Ожидание', color: '#f97316', icon: 'mdi-pause-circle' },
+  { value: 'resolved', label: 'Решён', color: '#34d399', icon: 'mdi-check-circle' },
+  { value: 'closed', label: 'Закрыт', color: '#6b7280', icon: 'mdi-lock' },
+];
+const kanbanGrouped = computed(() => {
+  const groups = {};
+  for (const col of kanbanColumns) groups[col.value] = [];
+  for (const t of chats.value) {
+    if (groups[t.status]) groups[t.status].push(t);
+  }
+  return groups;
+});
+function shortName(n) {
+  if (!n) return '';
+  const parts = String(n).trim().split(/\s+/);
+  if (parts.length >= 2) return `${parts[0]} ${(parts[1][0] || '').toUpperCase()}.`;
+  return parts[0];
+}
+
+function onKanbanDragStart(ticket, e) {
+  draggingId.value = ticket.id;
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', String(ticket.id));
+}
+function onKanbanDragEnd() {
+  draggingId.value = null;
+  dragOverCol.value = null;
+}
+async function onKanbanDrop(targetStatus) {
+  dragOverCol.value = null;
+  const id = draggingId.value;
+  draggingId.value = null;
+  if (!id) return;
+  const ticket = chats.value.find(t => t.id === id);
+  if (!ticket || ticket.status === targetStatus) return;
+  // Optimistic move
+  const prevStatus = ticket.status;
+  ticket.status = targetStatus;
+  try {
+    await api.post(`/chat/tickets/${id}/status`, { status: targetStatus });
+  } catch {
+    ticket.status = prevStatus; // rollback on error
+    alert('Не удалось сменить статус');
+  }
+}
+function openFromKanban(t) {
+  viewMode.value = 'list';
+  openChat(t);
+}
 
 function isMine(msg) { return String(msg.senderId) === String(currentUserId); }
 
@@ -983,8 +1104,52 @@ onUnmounted(() => {
 .hotkey-row kbd { display: inline-block; padding: 2px 8px; border-radius: 6px; border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); background: rgba(var(--v-theme-surface-variant), 0.5); font-family: ui-monospace, monospace; font-size: 11px; font-weight: 600; min-width: 24px; text-align: center; }
 .hotkey-row span { flex: 1; color: rgba(var(--v-theme-on-surface), 0.8); }
 
+/* ================== VIEW TOGGLE ================== */
+.view-toggle { position: absolute; top: 12px; right: 16px; z-index: 6; display: flex; gap: 2px; padding: 3px; border-radius: 10px; background: rgba(var(--v-theme-surface-variant), 0.6); backdrop-filter: blur(8px); border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); }
+.view-toggle-btn { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 8px; border: none; background: transparent; color: rgba(var(--v-theme-on-surface), 0.6); cursor: pointer; font-size: 12px; font-weight: 600; transition: all 0.15s; }
+.view-toggle-btn:hover { color: rgb(var(--v-theme-on-surface)); }
+.view-toggle-btn.active { background: rgb(var(--v-theme-primary)); color: #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.1); }
+.view-toggle-label { display: inline; }
+
+/* Sidebar compact variant in Kanban mode — list acts like quick filter preview */
+.chat-sidebar.compact { width: 260px; }
+.chat-sidebar.compact .chat-item-bottom .chat-item-status-chip { display: none; }
+
+/* ================== KANBAN ================== */
+.kanban-board { flex: 1; display: flex; gap: 12px; padding: 56px 16px 16px; overflow-x: auto; background: rgba(var(--v-theme-surface-variant), 0.2); }
+.kanban-column { flex: 1; min-width: 260px; max-width: 320px; display: flex; flex-direction: column; background: rgba(var(--v-theme-surface), 0.9); border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); border-top: 3px solid var(--col-color); border-radius: 12px; overflow: hidden; transition: all 0.15s; }
+.kanban-column.drop-target { background: rgba(var(--v-theme-primary), 0.08); border-color: rgb(var(--v-theme-primary)); border-top-color: rgb(var(--v-theme-primary)); box-shadow: 0 0 0 2px rgba(var(--v-theme-primary), 0.3); }
+.kanban-col-head { display: flex; align-items: center; gap: 6px; padding: 10px 14px; border-bottom: 1px solid rgba(var(--v-border-color), 0.3); background: rgba(var(--v-theme-surface-variant), 0.3); }
+.kanban-col-title { flex: 1; font-size: 13px; font-weight: 700; color: rgba(var(--v-theme-on-surface), 0.8); }
+.kanban-col-count { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: rgba(var(--v-theme-on-surface), 0.08); color: rgba(var(--v-theme-on-surface), 0.6); font-weight: 600; }
+.kanban-col-body { flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+.kanban-col-empty { text-align: center; padding: 20px 0; font-size: 11px; color: rgba(var(--v-theme-on-surface), 0.3); }
+
+.kanban-card { padding: 10px; border-radius: 10px; background: rgb(var(--v-theme-surface)); border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); border-left: 3px solid transparent; cursor: grab; transition: all 0.15s; user-select: none; }
+.kanban-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); transform: translateY(-1px); }
+.kanban-card.is-dragging { opacity: 0.4; cursor: grabbing; }
+.kanban-card.stale { background: rgba(239, 68, 68, 0.04); }
+.kanban-card-head { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.kanban-card-avatar { width: 22px; height: 22px; border-radius: 6px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.kanban-card-subject { flex: 1; font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kanban-card-unread { background: rgb(var(--v-theme-error)); color: #fff; font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 10px; min-width: 16px; text-align: center; }
+.kanban-card-customer { font-size: 11px; color: rgba(var(--v-theme-on-surface), 0.7); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px; }
+.kanban-card-meta { display: flex; align-items: center; gap: 8px; font-size: 10px; color: rgba(var(--v-theme-on-surface), 0.5); }
+.kanban-card-meta > span { display: inline-flex; align-items: center; gap: 2px; }
+.kanban-card-time.stale { color: #ef4444; font-weight: 700; }
+.kanban-card-prio { margin-left: auto; }
+.kanban-card-tags { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 5px; }
+.kanban-card-tag { font-size: 9px; padding: 1px 6px; border-radius: 8px; background: rgba(var(--v-theme-primary), 0.1); color: rgb(var(--v-theme-primary)); font-weight: 600; }
+
+/* Kanban mode: suppress chat-main, sidebar acts as filter strip */
+.chat-wrap.kanban-mode .chat-main { display: none; }
+
 @media (max-width: 959px) {
   .chat-sidebar { width: 100%; }
   .mobile-hidden { display: none !important; }
+  .view-toggle-label { display: none; }
+  .kanban-board { padding: 56px 8px 8px; }
+  .kanban-column { min-width: 220px; }
+  .chat-sidebar.compact { display: none !important; }
 }
 </style>
