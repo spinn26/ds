@@ -41,27 +41,22 @@
     <!-- Top bar -->
     <v-app-bar flat border="b" class="topbar">
       <v-app-bar-nav-icon v-if="mobile" @click="drawer = !drawer" />
+
+      <!-- Brand fallback (visible when sidebar is collapsed or on mobile) -->
+      <router-link to="/" class="topbar-brand d-flex align-center ga-1 ml-2">
+        <v-icon color="primary" size="22">mdi-cube-outline</v-icon>
+        <span class="text-subtitle-2 font-weight-black text-primary">DS</span>
+      </router-link>
+
       <v-spacer />
 
       <template v-if="!mobile">
         <!-- Referral link copy button (only for consultants with active status) -->
         <v-btn v-if="isConsultant && statusInfo?.canInvite && statusInfo?.referralCode" size="small" variant="tonal" color="primary"
-          class="mr-2" prepend-icon="mdi-link-variant" @click="copyReferral">
-          {{ copied ? 'Скопировано!' : 'Реф. ссылка' }}
+          class="mr-2" prepend-icon="mdi-link-variant" :style="{ minWidth: '148px' }"
+          @click="copyReferral">
+          {{ copied ? 'Скопировано' : 'Реф. ссылка' }}
         </v-btn>
-
-        <!-- Status chip (only for consultants) -->
-        <v-chip v-if="isConsultant && statusInfo?.activityName" :color="statusColor" size="small" variant="outlined" class="mr-2">
-          {{ statusInfo.activityName }}
-          <template v-if="statusInfo.yearPeriodEnd"> до {{ fmtShortDate(statusInfo.yearPeriodEnd) }}</template>
-        </v-chip>
-
-        <!-- Countdown to status change (consultants only) -->
-        <v-chip v-if="isConsultant && statusInfo?.daysRemaining != null && statusInfo.daysRemaining <= 90"
-          :color="statusInfo.daysRemaining <= 30 ? 'error' : 'warning'" size="small" variant="tonal" class="mr-2">
-          <v-icon start size="14">mdi-timer-outline</v-icon>
-          {{ statusInfo.daysRemaining }} дн.
-        </v-chip>
 
         <!-- Admin panel — only for role 'admin' -->
         <v-btn v-if="auth.isAdmin" to="/admin/dashboard" color="secondary" variant="flat" size="small"
@@ -69,15 +64,6 @@
           Управление
         </v-btn>
       </template>
-
-      <!-- Theme toggle -->
-      <v-btn :icon="isDark ? 'mdi-weather-sunny' : 'mdi-weather-night'" size="small" variant="text"
-        class="mr-1" @click="toggleTheme" />
-
-      <!-- User name -->
-      <span v-if="!mobile" class="text-body-2 text-medium-emphasis mr-2">
-        {{ auth.user?.firstName }} {{ auth.user?.lastName }}
-      </span>
 
       <!-- Notifications -->
       <v-menu min-width="360" max-height="480" :close-on-content-click="false">
@@ -147,10 +133,19 @@
                 <div class="text-caption text-medium-emphasis">{{ auth.user?.email }}</div>
               </div>
             </div>
-            <div v-if="statusInfo?.activityName" class="mb-3">
-              <div class="d-flex align-center ga-2">
+            <div v-if="isConsultant && statusInfo?.activityName" class="mb-3">
+              <div class="d-flex align-center ga-2 flex-wrap">
                 <span class="text-body-2 text-medium-emphasis">Статус</span>
-                <v-chip size="x-small" :color="statusColor">{{ statusInfo.activityName }}</v-chip>
+                <v-chip size="x-small" :color="statusColor">
+                  {{ statusInfo.activityName }}
+                  <template v-if="statusInfo.yearPeriodEnd"> до {{ fmtShortDate(statusInfo.yearPeriodEnd) }}</template>
+                </v-chip>
+                <v-chip v-if="statusInfo?.daysRemaining != null && statusInfo.daysRemaining <= 90"
+                  size="x-small" variant="tonal"
+                  :color="statusInfo.daysRemaining <= 30 ? 'error' : 'warning'">
+                  <v-icon start size="14">mdi-timer-outline</v-icon>
+                  {{ statusInfo.daysRemaining }} дн.
+                </v-chip>
               </div>
               <div v-if="statusInfo?.daysRemaining != null" class="text-caption text-medium-emphasis mt-1">
                 Смена статуса {{ statusInfo.daysRemaining > 0
@@ -162,6 +157,9 @@
             <v-list density="compact" nav class="pa-0">
               <v-list-item to="/profile" prepend-icon="mdi-account-outline" title="Профиль"
                 rounded="lg" class="mb-1" />
+              <v-list-item :prepend-icon="isDark ? 'mdi-weather-sunny' : 'mdi-weather-night'"
+                :title="isDark ? 'Светлая тема' : 'Тёмная тема'"
+                rounded="lg" class="mb-1" @click="toggleTheme" />
               <v-list-item @click="auth.logout(); $router.push('/login')"
                 prepend-icon="mdi-logout" title="Выйти" rounded="lg"
                 base-color="error" />
@@ -473,20 +471,29 @@ const cabinetName = computed(() => {
 // Staff sections — grouped per spec, no education editing
 const menuItems = [
   // ---- Partner menu (consultant) ----
-  { label: 'Рабочий стол', icon: 'mdi-view-dashboard-outline', path: '/' },
-  { label: 'Дашборд', icon: 'mdi-view-dashboard', path: '/dashboard', partner: true },
-  { label: 'Отчёт начислений', icon: 'mdi-bank', path: '/finance/report', partner: true },
+  // Shown to everyone (partner and staff) — leads to Workspace
+  { label: 'Главная', icon: 'mdi-home-outline', path: '/' },
+
+  { group: 'Обзор', partner: true },
+  { label: 'Дашборд', icon: 'mdi-view-dashboard-outline', path: '/dashboard', partner: true },
+  { label: 'Отчёт начислений', icon: 'mdi-bank-outline', path: '/finance/report', partner: true },
+
+  { group: 'Работа', partner: true },
   { label: 'Калькулятор объёмов', icon: 'mdi-calculator', path: '/finance/calculator', partner: true },
-  { label: 'Список моих клиентов', icon: 'mdi-account-group', path: '/clients', partner: true },
-  { label: 'Контракты моих клиентов', icon: 'mdi-file-document', path: '/contracts', partner: true },
-  { label: 'Контракты моей команды', icon: 'mdi-folder-account', path: '/contracts/team', partner: true },
-  { label: 'Структура', icon: 'mdi-sitemap', path: '/structure', partner: true },
-  { label: 'Обучение', icon: 'mdi-school', path: '/education', partner: true },
-  { label: 'Продукты', icon: 'mdi-package-variant', path: '/products', partner: true },
-  { label: 'Список конкурсов и событий', icon: 'mdi-trophy', path: '/contests', partner: true },
-  { label: 'Обратная связь', icon: 'mdi-chat', path: '/chat', partner: true },
-  { label: 'Написать основателю', icon: 'mdi-email-edit', path: '', partner: true, action: () => openQuickMsg('Сообщение основателю', 'mdi-email-edit') },
-  { label: 'Оставить кейс', icon: 'mdi-briefcase-plus', path: '', partner: true, action: () => openQuickMsg('Кейс', 'mdi-briefcase-plus') },
+  { label: 'Мои клиенты', icon: 'mdi-account-group-outline', path: '/clients', partner: true },
+  { label: 'Контракты клиентов', icon: 'mdi-file-document-outline', path: '/contracts', partner: true },
+  { label: 'Контракты команды', icon: 'mdi-folder-account-outline', path: '/contracts/team', partner: true },
+  { label: 'Структура', icon: 'mdi-sitemap-outline', path: '/structure', partner: true },
+
+  { group: 'Развитие', partner: true },
+  { label: 'Обучение', icon: 'mdi-school-outline', path: '/education', partner: true },
+  { label: 'Продукты', icon: 'mdi-package-variant-closed', path: '/products', partner: true },
+  { label: 'Конкурсы и события', icon: 'mdi-trophy-outline', path: '/contests', partner: true },
+
+  { group: 'Связь', partner: true },
+  { label: 'Обратная связь', icon: 'mdi-chat-outline', path: '/chat', partner: true },
+  { label: 'Написать основателю', icon: 'mdi-email-edit-outline', path: '', partner: true, action: () => openQuickMsg('Сообщение основателю', 'mdi-email-edit-outline') },
+  { label: 'Оставить кейс', icon: 'mdi-briefcase-plus-outline', path: '', partner: true, action: () => openQuickMsg('Кейс', 'mdi-briefcase-plus-outline') },
 
   // ---- Staff sections (grouped per spec) ----
   // Инструменты
@@ -581,11 +588,21 @@ const visibleMenu = computed(() => menuItems.filter((item) => {
 }
 
 .menu-item {
-  transition: transform 0.15s ease, background-color 0.2s ease;
+  transition: background-color 0.15s ease;
 }
 
 .menu-item:hover {
-  transform: scale(1.02);
+  background-color: rgba(var(--v-theme-primary), 0.06);
+}
+
+.topbar-brand {
+  text-decoration: none;
+  opacity: 0.85;
+  transition: opacity 0.15s ease;
+}
+
+.topbar-brand:hover {
+  opacity: 1;
 }
 
 .menu-group-header {

@@ -76,7 +76,7 @@
         </v-col>
         <v-col cols="12" md="6">
           <div class="text-body-2 text-medium-emphasis">Личные продажи (ЛП)</div>
-          <div class="text-h4 font-weight-bold text-green">{{ fmt(result.personalVolume) }} баллов</div>
+          <div class="text-h4 font-weight-bold text-success">{{ fmt(result.personalVolume) }} баллов</div>
         </v-col>
       </v-row>
     </v-card>

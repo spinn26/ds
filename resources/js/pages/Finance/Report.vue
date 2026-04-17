@@ -32,19 +32,19 @@
       <v-col cols="12" sm="6" md="2">
         <v-card class="pa-4 h-100">
           <div class="text-body-2 text-medium-emphasis">ЛП</div>
-          <div class="text-h6 font-weight-bold text-green mt-1" style="white-space:nowrap">{{ fmt(summary.volumes?.lp) }}</div>
+          <div class="text-h6 font-weight-bold text-success mt-1" style="white-space:nowrap">{{ fmt(summary.volumes?.lp) }}</div>
         </v-card>
       </v-col>
       <v-col cols="12" sm="6" md="2">
         <v-card class="pa-4 h-100">
           <div class="text-body-2 text-medium-emphasis">ГП</div>
-          <div class="text-h6 font-weight-bold text-blue mt-1" style="white-space:nowrap">{{ fmt(summary.volumes?.gp) }}</div>
+          <div class="text-h6 font-weight-bold text-info mt-1" style="white-space:nowrap">{{ fmt(summary.volumes?.gp) }}</div>
         </v-card>
       </v-col>
       <v-col cols="12" sm="6" md="2">
         <v-card class="pa-4 h-100">
           <div class="text-body-2 text-medium-emphasis">НГП</div>
-          <div class="text-h6 font-weight-bold text-orange mt-1" style="white-space:nowrap">{{ fmt(summary.volumes?.ngp) }}</div>
+          <div class="text-h6 font-weight-bold text-warning mt-1" style="white-space:nowrap">{{ fmt(summary.volumes?.ngp) }}</div>
         </v-card>
       </v-col>
     </v-row>

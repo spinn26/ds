@@ -26,19 +26,19 @@
             <v-col cols="6" sm="4" md="2">
               <div class="text-center">
                 <div class="text-caption text-medium-emphasis">ЛП</div>
-                <div class="text-subtitle-1 font-weight-bold text-green" style="white-space:nowrap">{{ fmt(data.partnerStats.personalVolume) }}</div>
+                <div class="text-subtitle-1 font-weight-bold text-success" style="white-space:nowrap">{{ fmt(data.partnerStats.personalVolume) }}</div>
               </div>
             </v-col>
             <v-col cols="6" sm="4" md="2">
               <div class="text-center">
                 <div class="text-caption text-medium-emphasis">ГП</div>
-                <div class="text-subtitle-1 font-weight-bold text-blue" style="white-space:nowrap">{{ fmt(data.partnerStats.groupVolume) }}</div>
+                <div class="text-subtitle-1 font-weight-bold text-info" style="white-space:nowrap">{{ fmt(data.partnerStats.groupVolume) }}</div>
               </div>
             </v-col>
             <v-col cols="6" sm="4" md="2">
               <div class="text-center">
                 <div class="text-caption text-medium-emphasis">НГП</div>
-                <div class="text-subtitle-1 font-weight-bold text-orange" style="white-space:nowrap">{{ fmt(data.partnerStats.groupVolumeCumulative) }}</div>
+                <div class="text-subtitle-1 font-weight-bold text-warning" style="white-space:nowrap">{{ fmt(data.partnerStats.groupVolumeCumulative) }}</div>
               </div>
             </v-col>
             <v-col cols="6" sm="4" md="3">
