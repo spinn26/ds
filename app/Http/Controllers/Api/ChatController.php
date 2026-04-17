@@ -182,11 +182,28 @@ class ChatController extends Controller
             return response()->json(['message' => 'Доступ запрещён'], 403);
         }
 
-        $messages = DB::table('chat_messages')
+        $rawMessages = DB::table('chat_messages')
             ->where('ticket_id', $id)
             ->orderBy('created_at')
-            ->get()
-            ->map(fn ($m) => [
+            ->get();
+
+        // Batch-load reply targets to avoid N+1.
+        $replyIds = $rawMessages->pluck('reply_to_id')->filter()->unique();
+        $replies = $replyIds->isNotEmpty()
+            ? DB::table('chat_messages')->whereIn('id', $replyIds)->get()->keyBy('id')
+            : collect();
+
+        $messages = $rawMessages->map(function ($m) use ($replies) {
+            $replyTo = null;
+            if ($m->reply_to_id && isset($replies[$m->reply_to_id])) {
+                $r = $replies[$m->reply_to_id];
+                $replyTo = [
+                    'id' => $r->id,
+                    'senderName' => $r->sender_name,
+                    'content' => mb_substr((string) $r->content, 0, 140),
+                ];
+            }
+            return [
                 'id' => $m->id,
                 'content' => $m->content,
                 'senderId' => $m->sender_id,
@@ -196,17 +213,27 @@ class ChatController extends Controller
                 'attachmentPath' => $m->attachment_path ? '/storage/' . $m->attachment_path : null,
                 'attachmentName' => $m->attachment_name,
                 'createdAt' => $m->created_at,
-            ]);
+                'editedAt' => $m->edited_at ?? null,
+                'replyTo' => $replyTo,
+            ];
+        });
 
-        // Mark as read
+        // Mark current user as read
         DB::table('chat_read_status')->updateOrInsert(
             ['ticket_id' => $id, 'user_id' => $userId],
             ['last_read_at' => now()]
         );
 
+        // Latest last_read_at of any OTHER participant — powers ✓✓ receipts.
+        $otherLastReadAt = DB::table('chat_read_status')
+            ->where('ticket_id', $id)
+            ->where('user_id', '!=', $userId)
+            ->max('last_read_at');
+
         return response()->json([
             'ticket' => $ticket,
             'messages' => $messages,
+            'otherLastReadAt' => $otherLastReadAt,
         ]);
     }
 
@@ -226,6 +253,7 @@ class ChatController extends Controller
         $request->validate([
             'message' => 'nullable|string',
             'attachment' => 'nullable|file|mimes:pdf,doc,docx,xls,xlsx,jpg,jpeg,png,webp,gif,zip|max:10240',
+            'reply_to_id' => 'nullable|integer',
         ]);
 
         $user = $request->user();
@@ -245,6 +273,18 @@ class ChatController extends Controller
             return response()->json(['message' => 'Сообщение или файл обязательны'], 422);
         }
 
+        // Validate reply target belongs to the same ticket
+        $replyToId = null;
+        if ($request->filled('reply_to_id')) {
+            $exists = DB::table('chat_messages')
+                ->where('id', $request->reply_to_id)
+                ->where('ticket_id', $id)
+                ->exists();
+            if ($exists) {
+                $replyToId = (int) $request->reply_to_id;
+            }
+        }
+
         $msgId = DB::table('chat_messages')->insertGetId([
             'ticket_id' => $id,
             'sender_id' => $user->id,
@@ -253,6 +293,7 @@ class ChatController extends Controller
             'is_agent' => $isAgent,
             'attachment_path' => $attachmentPath,
             'attachment_name' => $attachmentName,
+            'reply_to_id' => $replyToId,
             'created_at' => $now,
             'updated_at' => $now,
         ]);
@@ -280,6 +321,48 @@ class ChatController extends Controller
         } catch (\Exception $e) {}
 
         return response()->json(['id' => $msgId]);
+    }
+
+    /**
+     * Edit own message within 5 minutes of creation.
+     */
+    public function editMessage(Request $request, int $messageId): JsonResponse
+    {
+        $request->validate(['content' => 'required|string|max:5000']);
+
+        $msg = DB::table('chat_messages')->where('id', $messageId)->first();
+        if (! $msg) return response()->json(['message' => 'Сообщение не найдено'], 404);
+
+        $userId = $request->user()->id;
+        if ((int) $msg->sender_id !== (int) $userId) {
+            return response()->json(['message' => 'Можно редактировать только свои сообщения'], 403);
+        }
+
+        $createdAt = \Carbon\Carbon::parse($msg->created_at);
+        if ($createdAt->diffInMinutes(now()) > 5) {
+            return response()->json(['message' => 'Изменить можно только в течение 5 минут'], 422);
+        }
+
+        if ($msg->is_system) {
+            return response()->json(['message' => 'Системные сообщения не редактируются'], 422);
+        }
+
+        DB::table('chat_messages')->where('id', $messageId)->update([
+            'content' => $request->content,
+            'edited_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        try {
+            app(\App\Services\SocketService::class)->emit('chat:message-edited', "ticket:{$msg->ticket_id}", [
+                'id' => $messageId,
+                'ticketId' => $msg->ticket_id,
+                'content' => $request->content,
+                'editedAt' => now()->toIso8601String(),
+            ]);
+        } catch (\Exception $e) {}
+
+        return response()->json(['id' => $messageId, 'editedAt' => now()->toIso8601String()]);
     }
 
     /** Change ticket status */

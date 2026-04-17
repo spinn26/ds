@@ -93,7 +93,27 @@
               </div>
               <div class="msg-bubble" :class="isMine(item.msg) ? 'mine' : 'agent'">
                 <div class="msg-sender">{{ item.msg.senderName }}</div>
-                <div v-if="item.msg.content" class="msg-text">{{ item.msg.content }}</div>
+                <!-- Reply quote -->
+                <div v-if="item.msg.replyTo" class="msg-reply-quote">
+                  <v-icon size="12">mdi-reply</v-icon>
+                  <div class="msg-reply-body">
+                    <div class="msg-reply-sender">{{ item.msg.replyTo.senderName }}</div>
+                    <div class="msg-reply-text">{{ item.msg.replyTo.content }}</div>
+                  </div>
+                </div>
+                <!-- Inline edit mode -->
+                <template v-if="editing && editing.id === item.msg.id">
+                  <textarea v-model="editing.content" class="msg-edit-area" rows="2"
+                    @keydown.enter.exact.prevent="saveEdit"
+                    @keydown.esc.prevent="cancelEdit"></textarea>
+                  <div class="msg-edit-actions">
+                    <button class="msg-edit-btn cancel" @click="cancelEdit">Отмена</button>
+                    <button class="msg-edit-btn save" @click="saveEdit">Сохранить</button>
+                  </div>
+                </template>
+                <template v-else>
+                  <div v-if="item.msg.content" class="msg-text">{{ item.msg.content }}</div>
+                </template>
                 <template v-if="item.msg.attachmentPath">
                   <a v-if="isImageAttachment(item.msg.attachmentPath)"
                     :href="item.msg.attachmentPath" target="_blank" class="msg-image-link">
@@ -103,7 +123,18 @@
                     <v-icon size="14">mdi-paperclip</v-icon> {{ item.msg.attachmentName || 'Файл' }}
                   </a>
                 </template>
-                <div class="msg-time">{{ fmtTime(item.msg.createdAt) }}</div>
+                <div class="msg-time">
+                  {{ fmtTime(item.msg.createdAt) }}
+                  <span v-if="item.msg.editedAt" class="msg-edited" title="Сообщение было изменено">· изменено</span>
+                  <!-- Read receipts on own messages -->
+                  <v-icon v-if="isMine(item.msg) && isSeen(item.msg)" size="12" class="msg-check seen" title="Прочитано">mdi-check-all</v-icon>
+                  <v-icon v-else-if="isMine(item.msg)" size="12" class="msg-check" title="Отправлено">mdi-check</v-icon>
+                </div>
+                <!-- Hover actions -->
+                <div class="msg-actions">
+                  <button class="msg-action" title="Ответить" @click="startReply(item.msg)"><v-icon size="14">mdi-reply</v-icon></button>
+                  <button v-if="canEdit(item.msg)" class="msg-action" title="Изменить (5 мин)" @click="startEdit(item.msg)"><v-icon size="14">mdi-pencil</v-icon></button>
+                </div>
               </div>
               <div class="msg-avatar" v-if="isMine(item.msg)">
                 <div class="avatar-circle mine">{{ initials(item.msg.senderName) }}</div>
@@ -125,6 +156,15 @@
           <span v-if="pendingMessages > 0">{{ pendingMessages }}</span>
         </button>
 
+        <!-- Reply preview (above input) -->
+        <div v-if="replyTo && activeChat.status !== 'closed'" class="reply-bar">
+          <v-icon size="16" color="primary">mdi-reply</v-icon>
+          <div class="reply-bar-body">
+            <div class="reply-bar-sender">Ответ на: {{ replyTo.senderName }}</div>
+            <div class="reply-bar-text">{{ replyTo.content }}</div>
+          </div>
+          <button class="reply-bar-close" @click="cancelReply"><v-icon size="14">mdi-close</v-icon></button>
+        </div>
         <!-- Input -->
         <div v-if="activeChat.status !== 'closed'" class="chat-input"
           :class="{ 'drag-over': dragOver }"
@@ -169,6 +209,31 @@
         <p>Выберите чат или создайте новый</p>
       </div>
     </main>
+
+    <!-- Keyboard shortcuts modal -->
+    <v-dialog v-model="showHotkeys" max-width="460">
+      <v-card>
+        <v-card-title class="d-flex align-center ga-2">
+          <v-icon>mdi-keyboard</v-icon>
+          Горячие клавиши
+        </v-card-title>
+        <v-card-text>
+          <div class="hotkey-row"><kbd>Enter</kbd><span>Отправить сообщение</span></div>
+          <div class="hotkey-row"><kbd>Shift</kbd> + <kbd>Enter</kbd><span>Новая строка</span></div>
+          <div class="hotkey-row"><kbd>Esc</kbd><span>Отмена ответа / правки / закрыть чат</span></div>
+          <div class="hotkey-row"><kbd>Ctrl</kbd> + <kbd>/</kbd><span>Показать / скрыть эту панель</span></div>
+          <div class="hotkey-row"><kbd>?</kbd><span>То же (вне поля ввода)</span></div>
+          <v-divider class="my-2" />
+          <div class="text-caption text-medium-emphasis">
+            Наведи курсор на сообщение, чтобы увидеть кнопки «Ответить» и «Изменить» (редактирование в течение 5 мин после отправки).
+          </div>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="showHotkeys = false">Закрыть</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
     <!-- New chat dialog -->
     <v-dialog v-model="showNew" max-width="480" persistent>
@@ -228,6 +293,14 @@ const BASE_TITLE = 'Обращения';
 // Drag-drop + file preview
 const dragOver = ref(false);
 const filePreviewUrl = ref(null);
+
+// Read receipts
+const otherLastReadAt = ref(null);
+
+// Reply-to + edit state
+const replyTo = ref(null); // { id, senderName, content }
+const editing = ref(null); // { id, content }
+const showHotkeys = ref(false);
 
 // Filters + search
 const searchQuery = ref('');
@@ -429,9 +502,12 @@ async function openChat(t) {
 
   activeChat.value = t;
   typingName.value = '';
+  replyTo.value = null;
+  editing.value = null;
   try {
     const { data } = await api.get(`/chat/tickets/${t.id}`);
     messages.value = data.messages || [];
+    otherLastReadAt.value = data.otherLastReadAt || null;
     if (t.unread > 0) { t.unread = 0; }
     scrollDown(true);
   } catch {}
@@ -459,11 +535,56 @@ async function refreshMessages() {
     const wasAtBottom = isAtBottom();
     const prevCount = messages.value.length;
     messages.value = data.messages || [];
+    otherLastReadAt.value = data.otherLastReadAt || null;
     if (messages.value.length > prevCount) {
       if (wasAtBottom) scrollDown(true);
       else pendingMessages.value += messages.value.length - prevCount;
     }
   } catch {}
+}
+
+// Read-receipt check: true if OTHER side has read past this message
+function isSeen(msg) {
+  if (!otherLastReadAt.value || !msg.createdAt) return false;
+  return new Date(otherLastReadAt.value) >= new Date(msg.createdAt);
+}
+
+// Edit window: own message ≤ 5 min old
+function canEdit(msg) {
+  if (!isMine(msg) || msg.isSystem) return false;
+  if (!msg.createdAt) return false;
+  return (Date.now() - new Date(msg.createdAt).getTime()) / 60000 <= 5;
+}
+
+function startReply(msg) {
+  replyTo.value = { id: msg.id, senderName: msg.senderName, content: msg.content };
+  nextTick(() => taRef.value?.focus());
+}
+
+function cancelReply() {
+  replyTo.value = null;
+}
+
+function startEdit(msg) {
+  editing.value = { id: msg.id, content: msg.content };
+}
+
+function cancelEdit() {
+  editing.value = null;
+}
+
+async function saveEdit() {
+  if (!editing.value) return;
+  const newText = editing.value.content.trim();
+  if (!newText) return;
+  try {
+    await api.put(`/chat/messages/${editing.value.id}`, { content: newText });
+    const msg = messages.value.find(m => String(m.id) === String(editing.value.id));
+    if (msg) { msg.content = newText; msg.editedAt = new Date().toISOString(); }
+    editing.value = null;
+  } catch (e) {
+    alert(e?.response?.data?.message || 'Не удалось изменить');
+  }
 }
 
 async function send() {
@@ -473,11 +594,13 @@ async function send() {
     const fd = new FormData();
     fd.append('message', msgText.value || '');
     if (file.value) fd.append('attachment', file.value);
+    if (replyTo.value) fd.append('reply_to_id', String(replyTo.value.id));
     await api.post(`/chat/tickets/${activeChat.value.id}/messages`, fd);
     // Clear draft on successful send
     localStorage.removeItem(draftKey(activeChat.value.id));
     msgText.value = '';
     clearFile();
+    replyTo.value = null;
     nextTick(autoGrow);
     await refreshMessages();
     scrollDown(true);
@@ -570,6 +693,12 @@ async function connectSocket() {
       // Refresh list when a new ticket appears anywhere (staff would see it)
       loadChats();
     });
+
+    socket.on('chat:message-edited', (e) => {
+      if (!activeChat.value || Number(e.ticketId) !== Number(activeChat.value.id)) return;
+      const m = messages.value.find(x => String(x.id) === String(e.id));
+      if (m) { m.content = e.content; m.editedAt = e.editedAt; }
+    });
   } catch (e) {
     // Socket unavailable — polling keeps the UI alive
     console.warn('Chat socket unavailable, falling back to polling:', e?.message);
@@ -578,10 +707,36 @@ async function connectSocket() {
 
 watch(() => route.query, checkQuery, { immediate: false });
 
+// Global keyboard shortcuts
+function onGlobalKey(e) {
+  // Ignore shortcuts when the user is typing inside an input / textarea
+  const tag = e.target?.tagName;
+  const inField = tag === 'INPUT' || tag === 'TEXTAREA' || e.target?.isContentEditable;
+
+  // Ctrl+/ or ? — toggle hotkeys modal
+  if ((e.ctrlKey || e.metaKey) && e.key === '/') {
+    e.preventDefault();
+    showHotkeys.value = !showHotkeys.value;
+    return;
+  }
+  if (!inField && e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    e.preventDefault();
+    showHotkeys.value = !showHotkeys.value;
+    return;
+  }
+  if (e.key === 'Escape') {
+    if (showHotkeys.value) { showHotkeys.value = false; return; }
+    if (editing.value) { cancelEdit(); return; }
+    if (replyTo.value) { cancelReply(); return; }
+    if (activeChat.value && !inField) { closeActiveChat(); return; }
+  }
+}
+
 onMounted(() => {
   loadChats();
   checkQuery();
   connectSocket();
+  window.addEventListener('keydown', onGlobalKey);
 });
 
 onUnmounted(() => {
@@ -589,6 +744,7 @@ onUnmounted(() => {
   if (socket && activeChat.value) socket.emit('ticket:leave', activeChat.value.id);
   socket?.disconnect();
   document.title = BASE_TITLE;
+  window.removeEventListener('keydown', onGlobalKey);
 });
 </script>
 
@@ -672,8 +828,47 @@ onUnmounted(() => {
 .msg-bubble.mine .msg-attach { color: rgba(209,232,213,0.7); }
 .msg-image-link { display: block; margin-top: 6px; border-radius: 10px; overflow: hidden; max-width: 320px; }
 .msg-image { display: block; width: 100%; height: auto; max-height: 280px; object-fit: cover; border-radius: 10px; background: rgba(0,0,0,0.05); }
-.msg-time { font-size: 10px; margin-top: 4px; opacity: 0.5; }
-.msg-bubble.mine .msg-time { text-align: right; }
+.msg-time { font-size: 10px; margin-top: 4px; opacity: 0.5; display: inline-flex; align-items: center; gap: 4px; }
+.msg-bubble.mine .msg-time { text-align: right; justify-content: flex-end; width: 100%; }
+.msg-edited { font-style: italic; opacity: 0.7; }
+.msg-check { opacity: 0.6; }
+.msg-check.seen { color: #4fc3f7 !important; opacity: 1; }
+
+/* Reply quote inside message */
+.msg-reply-quote { display: flex; gap: 6px; padding: 6px 10px; margin-bottom: 6px; background: rgba(0,0,0,0.1); border-left: 3px solid rgba(var(--v-theme-primary), 0.5); border-radius: 6px; font-size: 11px; }
+.msg-bubble.mine .msg-reply-quote { background: rgba(255,255,255,0.1); border-left-color: rgba(255,255,255,0.5); }
+.msg-reply-body { flex: 1; min-width: 0; }
+.msg-reply-sender { font-weight: 700; opacity: 0.9; }
+.msg-reply-text { opacity: 0.7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Hover actions on messages */
+.msg-bubble { transition: box-shadow 0.15s; }
+.msg-actions { position: absolute; top: -12px; right: 8px; display: none; gap: 2px; background: rgb(var(--v-theme-surface)); border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); border-radius: 8px; padding: 2px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); }
+.msg-row.mine .msg-actions { right: auto; left: 8px; }
+.msg-bubble:hover .msg-actions { display: flex; }
+.msg-action { background: none; border: none; cursor: pointer; color: rgba(var(--v-theme-on-surface), 0.6); padding: 4px; border-radius: 6px; }
+.msg-action:hover { background: rgba(var(--v-theme-primary), 0.1); color: rgb(var(--v-theme-primary)); }
+
+/* Inline edit */
+.msg-edit-area { width: 100%; border: 1px solid rgba(var(--v-theme-primary), 0.5); border-radius: 8px; padding: 6px 10px; font-size: 14px; background: rgba(var(--v-theme-surface), 1); color: rgb(var(--v-theme-on-surface)); resize: vertical; font-family: inherit; outline: none; }
+.msg-edit-actions { display: flex; gap: 6px; justify-content: flex-end; margin-top: 6px; }
+.msg-edit-btn { padding: 3px 10px; border-radius: 6px; border: none; cursor: pointer; font-size: 11px; font-weight: 600; }
+.msg-edit-btn.cancel { background: transparent; color: rgba(var(--v-theme-on-surface), 0.6); }
+.msg-edit-btn.save { background: rgb(var(--v-theme-primary)); color: #fff; }
+
+/* Reply preview bar above input */
+.reply-bar { display: flex; align-items: center; gap: 8px; padding: 8px 14px; background: rgba(var(--v-theme-primary), 0.06); border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); border-left: 3px solid rgb(var(--v-theme-primary)); }
+.reply-bar-body { flex: 1; min-width: 0; font-size: 12px; }
+.reply-bar-sender { font-weight: 700; color: rgb(var(--v-theme-primary)); }
+.reply-bar-text { color: rgba(var(--v-theme-on-surface), 0.6); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.reply-bar-close { background: none; border: none; cursor: pointer; color: rgba(var(--v-theme-on-surface), 0.5); padding: 4px; border-radius: 6px; }
+.reply-bar-close:hover { background: rgba(var(--v-theme-error), 0.1); color: rgb(var(--v-theme-error)); }
+
+/* Hotkeys modal rows */
+.hotkey-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px dashed rgba(var(--v-border-color), 0.3); font-size: 13px; }
+.hotkey-row:last-of-type { border-bottom: none; }
+.hotkey-row kbd { display: inline-block; padding: 2px 8px; border-radius: 6px; border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); background: rgba(var(--v-theme-surface-variant), 0.5); font-family: ui-monospace, monospace; font-size: 11px; font-weight: 600; min-width: 24px; text-align: center; }
+.hotkey-row span { flex: 1; color: rgba(var(--v-theme-on-surface), 0.8); }
 
 /* Typing */
 .typing-indicator { display: flex; align-items: center; gap: 8px; padding: 6px 14px; font-size: 12px; color: rgba(var(--v-theme-on-surface), 0.5); font-style: italic; }
