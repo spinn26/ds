@@ -315,8 +315,10 @@ function isDocUploaded(type) {
 async function loadDocuments() {
   try {
     const { data } = await api.get('/documents');
-    uploadedDocs.value = data;
-  } catch {}
+    uploadedDocs.value = Array.isArray(data?.documents) ? data.documents : (Array.isArray(data) ? data : []);
+  } catch {
+    uploadedDocs.value = [];
+  }
 }
 
 async function uploadDocument(type) {

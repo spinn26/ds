@@ -74,6 +74,7 @@ Route::prefix('v1')->group(function () {
         Route::put('/profile/requisites', [ProfileController::class, 'updateRequisites']);
         Route::put('/profile/bank-requisites', [ProfileController::class, 'updateBankRequisites']);
         Route::get('/profile/agreement-documents', [ProfileController::class, 'agreementDocuments']);
+        Route::get('/profile/cities', [ProfileController::class, 'cities']);
 
         Route::get('/structure', [StructureController::class, 'index']);
         Route::get('/structure/{consultantId}/children', [StructureController::class, 'children']);

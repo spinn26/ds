@@ -278,6 +278,23 @@ class ProfileController extends Controller
         return response()->json(AgreementDocumentResource::collection($docs));
     }
 
+    /**
+     * City suggestions for the profile form (plain list of Russian names).
+     */
+    public function cities(Request $request): JsonResponse
+    {
+        $q = trim((string) $request->input('q', ''));
+
+        $query = DB::table('city')->whereNotNull('cityNameRu');
+        if ($q !== '') {
+            $query->where('cityNameRu', 'ILIKE', $q . '%');
+        }
+
+        $cities = $query->orderBy('cityNameRu')->limit(200)->pluck('cityNameRu')->values();
+
+        return response()->json($cities);
+    }
+
     // --- Private helpers ---
 
     private function getSignedDocuments(?Consultant $consultant): array
