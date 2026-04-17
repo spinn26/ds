@@ -16,26 +16,26 @@
       </div>
     </v-card>
 
-    <v-data-table-server :items="items" :items-length="total" :loading="loading"
-      :headers="headers" :items-per-page="25" @update:options="onOptions">
-      <template #item.amount="{ item }">
-        {{ fmt(item.amount) }} {{ item.currencySymbol || '' }}
-      </template>
-      <template #item.amountRUB="{ value }">
-        {{ fmt(value) }}
-      </template>
-      <template #item.amountUSD="{ value }">
-        {{ fmt(value) }}
-      </template>
-      <template #item.date="{ value }">
-        {{ fmtDate(value) }}
-      </template>
+    <DataTableWrapper
+      :items="items"
+      :items-length="total"
+      :loading="loading"
+      :headers="headers"
+      :items-per-page="25"
+      server-side
+      empty-icon="mdi-swap-horizontal-variant"
+      empty-message="Транзакции не найдены"
+      @update:options="onOptions"
+    >
+      <template #item.amount="{ item }">{{ fmt(item.amount) }} {{ item.currencySymbol || '' }}</template>
+      <template #item.amountRUB="{ value }">{{ fmt(value) }}</template>
+      <template #item.amountUSD="{ value }">{{ fmt(value) }}</template>
+      <template #item.date="{ value }">{{ fmtDate(value) }}</template>
       <template #item.chat="{ item }">
         <StartChatButton :partner-id="item.consultantId || item.consultant" :partner-name="item.consultantName"
           context-type="Транзакция" :context-id="item.id" :context-label="'#' + item.id" />
       </template>
-      <template #no-data><EmptyState /></template>
-    </v-data-table-server>
+    </DataTableWrapper>
   </div>
 </template>
 
@@ -44,7 +44,7 @@ import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
 import PageHeader from '../../components/PageHeader.vue';
-import EmptyState from '../../components/EmptyState.vue';
+import DataTableWrapper from '../../components/DataTableWrapper.vue';
 import StartChatButton from '../../components/StartChatButton.vue';
 import { fmt2 as fmt, fmtDate } from '../../composables/useDesign';
 

@@ -298,9 +298,9 @@
       </v-card>
     </v-dialog>
 
-    <v-overlay v-model="loading" class="align-center justify-center" persistent>
-      <v-progress-circular indeterminate size="64" />
-    </v-overlay>
+    <!-- Loading: top progress bar instead of full-page overlay so the page skeleton stays visible -->
+    <v-progress-linear v-if="loading" indeterminate color="primary"
+      style="position: fixed; top: 0; left: 0; right: 0; z-index: 9; height: 3px;" />
   </div>
 </template>
 

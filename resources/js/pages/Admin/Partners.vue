@@ -18,8 +18,17 @@
       </div>
     </v-card>
 
-    <v-data-table-server :items="items" :items-length="total" :loading="loading"
-      :headers="headers" :items-per-page="25" @update:options="onOptions">
+    <DataTableWrapper
+      :items="items"
+      :items-length="total"
+      :loading="loading"
+      :headers="headers"
+      :items-per-page="25"
+      server-side
+      empty-icon="mdi-account-search-outline"
+      empty-message="Партнёры не найдены"
+      @update:options="onOptions"
+    >
       <template #item.activityName="{ value }">
         <v-chip v-if="value" size="x-small" :color="activityColor(value)">{{ value }}</v-chip>
         <span v-else>—</span>
@@ -40,17 +49,12 @@
         <v-icon v-if="value" color="success" size="small">mdi-lock-open-variant</v-icon>
         <v-icon v-else color="grey" size="small">mdi-lock</v-icon>
       </template>
-      <template #item.birthDate="{ value }">
-        {{ fmtDate(value) }}
-      </template>
-      <template #item.createdAt="{ value }">
-        {{ fmtDate(value) }}
-      </template>
+      <template #item.birthDate="{ value }">{{ fmtDate(value) }}</template>
+      <template #item.createdAt="{ value }">{{ fmtDate(value) }}</template>
       <template #item.actions="{ item }">
         <v-btn icon="mdi-pencil" size="x-small" variant="text" @click="openEdit(item)" />
       </template>
-      <template #no-data><EmptyState /></template>
-    </v-data-table-server>
+    </DataTableWrapper>
 
     <!-- Edit dialog -->
     <v-dialog v-model="editDialog" max-width="420" persistent>
@@ -82,7 +86,7 @@ import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
 import PageHeader from '../../components/PageHeader.vue';
-import EmptyState from '../../components/EmptyState.vue';
+import DataTableWrapper from '../../components/DataTableWrapper.vue';
 import { fmtDate } from '../../composables/useDesign';
 
 const items = ref([]);

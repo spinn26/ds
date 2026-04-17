@@ -20,8 +20,17 @@
       </div>
     </v-card>
 
-    <v-data-table-server :items="items" :items-length="total" :loading="loading"
-      :headers="headers" :items-per-page="25" @update:options="onOptions">
+    <DataTableWrapper
+      :items="items"
+      :items-length="total"
+      :loading="loading"
+      :headers="headers"
+      :items-per-page="25"
+      server-side
+      empty-icon="mdi-cash-remove"
+      empty-message="Начисления не найдены"
+      @update:options="onOptions"
+    >
       <template #item.type="{ value }">
         <v-chip size="x-small" :color="typeColor(value)">{{ typeLabel(value) }}</v-chip>
       </template>
@@ -33,8 +42,7 @@
       <template #item.actions="{ item }">
         <v-btn icon="mdi-delete" size="x-small" variant="text" color="error" @click="confirmDelete(item)" />
       </template>
-      <template #no-data><EmptyState message="Начисления не найдены" /></template>
-    </v-data-table-server>
+    </DataTableWrapper>
 
     <!-- Create dialog -->
     <v-dialog v-model="createDialog" max-width="500" persistent>
@@ -83,7 +91,7 @@ import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
 import PageHeader from '../../components/PageHeader.vue';
-import EmptyState from '../../components/EmptyState.vue';
+import DataTableWrapper from '../../components/DataTableWrapper.vue';
 import { fmt2 as fmt, fmtDate } from '../../composables/useDesign';
 
 const items = ref([]);
