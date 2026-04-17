@@ -25,6 +25,46 @@ class PartnerStatusService
     }
 
     /**
+     * Recompute consultant.personalVolume from transaction rows for the current
+     * period, and auto-activate if the threshold is crossed. Safe to call after
+     * every commission calculation — it only writes when the value changes,
+     * and activate() is a no-op for non-Registered partners.
+     *
+     * Returns true if the partner was activated by this call.
+     */
+    public function recomputeVolumeAndActivate(int $consultantId): bool
+    {
+        $consultant = Consultant::find($consultantId);
+        if (! $consultant) {
+            return false;
+        }
+
+        // Sum personalVolume across all non-deleted transactions for contracts
+        // owned by this consultant. For Active partners the period resets on
+        // yearPeriodEnd, so we only count transactions after the previous
+        // period end (= yearPeriodEnd - 1y); for Registered we count since
+        // dateCreated (activation window).
+        $periodStart = $consultant->activity === PartnerActivity::Active && $consultant->yearPeriodEnd
+            ? Carbon::parse($consultant->yearPeriodEnd)->subYear()
+            : ($consultant->dateCreated ?: Carbon::now()->subYears(10));
+
+        $lp = (float) DB::table('transaction as t')
+            ->join('contract as c', 'c.id', '=', 't.contract')
+            ->where('c.consultant', $consultantId)
+            ->whereNull('t.deletedAt')
+            ->whereNull('c.deletedAt')
+            ->where('t.date', '>=', $periodStart)
+            ->sum('t.personalVolume');
+
+        if ((float) ($consultant->personalVolume ?? 0) !== $lp) {
+            $consultant->personalVolume = $lp;
+            $consultant->save();
+        }
+
+        return $this->activate($consultant);
+    }
+
+    /**
      * Активация партнёра: проверяет ЛП >= 500 и переводит в «Активен».
      * Вызывается при достижении порога ЛП или по событию.
      */

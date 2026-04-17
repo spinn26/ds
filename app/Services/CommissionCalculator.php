@@ -14,17 +14,42 @@ use Illuminate\Support\Facades\Log;
  * 3. Пройтись вверх по структуре (inviter цепочка) и рассчитать ГП
  * 4. Рассчитать комиссии по разнице квалификаций
  * 5. Сохранить в таблицу commission
+ * 6. После успешного расчёта — обновить consultant.personalVolume
+ *    и авто-активировать партнёра при переходе порога 500 ЛП.
  */
 class CommissionCalculator
 {
+    public function __construct(
+        private readonly PartnerStatusService $statusService,
+    ) {}
+
+
     /**
      * Рассчитать комиссии для одной транзакции.
      */
     public function calculateForTransaction(int $transactionId): array
     {
-        return DB::transaction(function () use ($transactionId) {
+        $result = DB::transaction(function () use ($transactionId) {
             return $this->calculateInTransaction($transactionId);
         });
+
+        // Side-effect after commit: recompute consultant's LP for the period
+        // and auto-activate if the 500-point threshold has been crossed.
+        // Intentionally outside the transaction so an activation save doesn't
+        // roll back the commission cascade on failure.
+        if (! empty($result['consultantId'])) {
+            try {
+                $this->statusService->recomputeVolumeAndActivate($result['consultantId']);
+            } catch (\Throwable $e) {
+                Log::warning('Auto-activate after commission calc failed', [
+                    'consultant' => $result['consultantId'],
+                    'transaction' => $transactionId,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        return $result;
     }
 
     private function calculateInTransaction(int $transactionId): array
@@ -167,6 +192,7 @@ class CommissionCalculator
         return [
             'success' => true,
             'transactionId' => $transactionId,
+            'consultantId' => (int) $consultantId,
             'personalVolume' => round($personalVolume, 6),
             'commissionsCount' => count($commissions),
         ];

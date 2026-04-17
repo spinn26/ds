@@ -18,6 +18,12 @@ class CheckPartnerStatuses extends Command
     {
         $this->info('Проверка статусов партнёров...');
 
+        // 0. Safety sweep: Registered partners that already crossed 500 LP
+        //    but weren't auto-activated (e.g. import ran before
+        //    CommissionCalculator wired in the trigger).
+        $activated = $this->sweepRegisteredToActive($statusService);
+        $this->info("Авто-активировано: {$activated}");
+
         // 1. Зарегистрированные: 90 дней истекло → терминация
         $expiredRegistrations = $statusService->checkExpiredRegistrations();
         $this->info("Терминировано зарегистрированных (90 дней): {$expiredRegistrations}");
@@ -37,6 +43,28 @@ class CheckPartnerStatuses extends Command
 
         $this->info('Проверка завершена.');
         return 0;
+    }
+
+    /**
+     * For every Registered partner whose LP may have already crossed the
+     * activation threshold, recompute the LP from transactions and activate.
+     * Safety net for partners missed by the real-time trigger in
+     * CommissionCalculator.
+     */
+    private function sweepRegisteredToActive(PartnerStatusService $statusService): int
+    {
+        $registeredIds = DB::table('consultant')
+            ->where('activity', PartnerActivity::Registered->value)
+            ->whereNull('dateDeleted')
+            ->pluck('id');
+
+        $count = 0;
+        foreach ($registeredIds as $id) {
+            if ($statusService->recomputeVolumeAndActivate((int) $id)) {
+                $count++;
+            }
+        }
+        return $count;
     }
 
     /**
