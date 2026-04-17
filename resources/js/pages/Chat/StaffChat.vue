@@ -59,55 +59,162 @@
       </button>
     </div>
 
-    <!-- Kanban board -->
-    <div v-if="viewMode === 'kanban'" class="kanban-board">
-      <div v-for="col in kanbanColumns" :key="col.value"
-        class="kanban-column"
-        :class="{ 'drop-target': dragOverCol === col.value }"
-        :style="{ '--col-color': col.color }"
-        @dragover.prevent="dragOverCol = col.value"
-        @dragleave="dragOverCol === col.value && (dragOverCol = null)"
-        @drop.prevent="onKanbanDrop(col.value)">
-        <div class="kanban-col-head">
-          <v-icon size="14" :color="col.color">{{ col.icon }}</v-icon>
-          <span class="kanban-col-title">{{ col.label }}</span>
-          <span class="kanban-col-count">{{ kanbanGrouped[col.value]?.length || 0 }}</span>
+    <!-- Kanban mode container -->
+    <div v-if="viewMode === 'kanban'" class="kanban-wrap">
+      <!-- Kanban toolbar -->
+      <div class="kanban-toolbar">
+        <label class="toolbar-toggle">
+          <input type="checkbox" v-model="myBoardOnly" />
+          <v-icon size="14">mdi-account-star</v-icon>
+          Только мои
+        </label>
+        <div class="toolbar-group">
+          <span class="toolbar-label">Сортировка:</span>
+          <button class="toolbar-chip" :class="{ active: kanbanSort === 'time' }" @click="kanbanSort = 'time'">Время</button>
+          <button class="toolbar-chip" :class="{ active: kanbanSort === 'priority' }" @click="kanbanSort = 'priority'">Приоритет</button>
+          <button class="toolbar-chip" :class="{ active: kanbanSort === 'assignee' }" @click="kanbanSort = 'assignee'">Исполнитель</button>
         </div>
-        <div class="kanban-col-body">
-          <div v-for="t in (kanbanGrouped[col.value] || [])" :key="t.id"
-            class="kanban-card"
-            :class="{ 'is-dragging': draggingId === t.id, stale: isStale(t) }"
-            :style="t.priority && t.priority !== 'medium' ? { borderLeftColor: prioClr(t.priority) } : {}"
-            draggable="true"
-            @dragstart="onKanbanDragStart(t, $event)"
-            @dragend="onKanbanDragEnd"
-            @click="openFromKanban(t)">
-            <div class="kanban-card-head">
-              <div class="kanban-card-avatar" :style="{ background: catColor(t.category || t.department) }">
-                <v-icon size="12" color="white">{{ catIcon(t.category || t.department) }}</v-icon>
-              </div>
-              <div class="kanban-card-subject">{{ t.subject }}</div>
-              <span v-if="t.unread > 0" class="kanban-card-unread">{{ t.unread }}</span>
-            </div>
-            <div class="kanban-card-customer">{{ t.customer_name }}</div>
-            <div class="kanban-card-meta">
-              <span class="kanban-card-time" :class="{ stale: isStale(t) }">
-                <v-icon size="10">mdi-clock-outline</v-icon> {{ ago(t.last_message_at) }}
-              </span>
-              <span v-if="t.assigned_name" class="kanban-card-assignee" :title="'Назначен: ' + t.assigned_name">
-                <v-icon size="10">mdi-account</v-icon> {{ shortName(t.assigned_name) }}
-              </span>
-              <span v-if="t.priority && t.priority !== 'medium'" class="kanban-card-prio" :style="{ color: prioClr(t.priority) }">
-                <v-icon size="10">mdi-flag</v-icon>
-              </span>
-            </div>
-            <div v-if="parseTags(t.tags).length" class="kanban-card-tags">
-              <span v-for="tag in parseTags(t.tags).slice(0, 3)" :key="tag" class="kanban-card-tag">#{{ tag }}</span>
-            </div>
+        <div class="toolbar-group">
+          <span class="toolbar-label">Ряды:</span>
+          <button class="toolbar-chip" :class="{ active: swimlaneMode === 'none' }" @click="swimlaneMode = 'none'">Нет</button>
+          <button class="toolbar-chip" :class="{ active: swimlaneMode === 'priority' }" @click="swimlaneMode = 'priority'">По приоритету</button>
+          <button class="toolbar-chip" :class="{ active: swimlaneMode === 'assignee' }" @click="swimlaneMode = 'assignee'">По исполнителю</button>
+        </div>
+        <button class="toolbar-chip bulk-toggle" :class="{ active: bulkMode }" @click="toggleBulk">
+          <v-icon size="14">{{ bulkMode ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline' }}</v-icon>
+          Выбор
+        </button>
+      </div>
+
+      <!-- Kanban board -->
+      <div class="kanban-board">
+        <div v-for="col in kanbanColumns" :key="col.value"
+          class="kanban-column"
+          :style="{ '--col-color': col.color }">
+          <div class="kanban-col-head">
+            <v-icon size="14" :color="col.color">{{ col.icon }}</v-icon>
+            <span class="kanban-col-title">{{ col.label }}</span>
+            <span class="kanban-col-count">{{ kanbanGrouped[col.value]?.length || 0 }}</span>
           </div>
-          <div v-if="!(kanbanGrouped[col.value] || []).length" class="kanban-col-empty">—</div>
+          <div class="kanban-col-body">
+            <template v-for="lane in swimlanes" :key="col.value + '-' + lane.key">
+              <div v-if="swimlaneMode !== 'none'" class="swimlane-head" :style="lane.color ? { borderColor: lane.color, color: lane.color } : {}">
+                {{ lane.label }}
+                <span class="swimlane-count">{{ cardsInCell(col.value, lane.key).length }}</span>
+              </div>
+              <div class="swimlane-drop"
+                :class="{ 'drop-target': dragOverCol === cellKey(col.value, lane.key) }"
+                @dragover.prevent="dragOverCol = cellKey(col.value, lane.key)"
+                @dragleave="dragOverCol === cellKey(col.value, lane.key) && (dragOverCol = null)"
+                @drop.prevent="onKanbanDrop(col.value, lane.key)">
+                <div v-for="t in cardsInCell(col.value, lane.key)" :key="t.id"
+                  class="kanban-card"
+                  :class="{ 'is-dragging': draggingId === t.id, stale: isStale(t), selected: selectedIds.has(t.id), 'bulk-mode': bulkMode }"
+                  :style="t.priority && t.priority !== 'medium' ? { borderLeftColor: prioClr(t.priority) } : {}"
+                  :draggable="!bulkMode"
+                  @dragstart="onKanbanDragStart(t, $event)"
+                  @dragend="onKanbanDragEnd"
+                  @click="openFromKanban(t, $event)">
+                  <div class="kanban-card-head">
+                    <input v-if="bulkMode" type="checkbox"
+                      class="kanban-card-check"
+                      :checked="selectedIds.has(t.id)"
+                      @click.stop="toggleCardSelect(t, $event)" />
+                    <div class="kanban-card-avatar" :style="{ background: catColor(t.category || t.department) }">
+                      <v-icon size="12" color="white">{{ catIcon(t.category || t.department) }}</v-icon>
+                    </div>
+                    <div class="kanban-card-subject">{{ t.subject }}</div>
+                    <span v-if="t.unread > 0" class="kanban-card-unread">{{ t.unread }}</span>
+                  </div>
+                  <div class="kanban-card-customer">{{ t.customer_name }}</div>
+                  <div class="kanban-card-meta">
+                    <span class="kanban-card-time" :class="{ stale: isStale(t) }">
+                      <v-icon size="10">mdi-clock-outline</v-icon> {{ ago(t.last_message_at) }}
+                    </span>
+                    <span v-if="t.assigned_name" class="kanban-card-assignee" :title="'Назначен: ' + t.assigned_name">
+                      <v-icon size="10">mdi-account</v-icon> {{ shortName(t.assigned_name) }}
+                    </span>
+                    <span v-if="t.priority && t.priority !== 'medium'" class="kanban-card-prio" :style="{ color: prioClr(t.priority) }">
+                      <v-icon size="10">mdi-flag</v-icon>
+                    </span>
+                  </div>
+                  <div v-if="parseTags(t.tags).length" class="kanban-card-tags">
+                    <span v-for="tag in parseTags(t.tags).slice(0, 3)" :key="tag" class="kanban-card-tag">#{{ tag }}</span>
+                  </div>
+                  <!-- Quick actions on hover -->
+                  <div v-if="!bulkMode" class="kanban-quick-actions">
+                    <button v-if="String(t.assigned_to) !== String(currentUserId)"
+                      class="kanban-qa-btn" title="Взять себе"
+                      @click="quickAssignToMe(t, $event)">
+                      <v-icon size="12">mdi-account-arrow-left</v-icon>
+                    </button>
+                    <v-menu location="bottom end">
+                      <template #activator="{ props }">
+                        <button v-bind="props" class="kanban-qa-btn" title="Приоритет" @click.stop>
+                          <v-icon size="12">mdi-flag-variant</v-icon>
+                        </button>
+                      </template>
+                      <v-list density="compact" style="min-width: 160px">
+                        <v-list-item v-for="p in priorities" :key="p.value" @click="quickSetPriority(t, p.value, $event)">
+                          <template #prepend><v-icon size="12" :color="p.color">mdi-circle</v-icon></template>
+                          <v-list-item-title class="text-caption">{{ p.label }}</v-list-item-title>
+                        </v-list-item>
+                      </v-list>
+                    </v-menu>
+                  </div>
+                </div>
+                <div v-if="!cardsInCell(col.value, lane.key).length" class="kanban-col-empty">—</div>
+              </div>
+            </template>
+          </div>
         </div>
       </div>
+
+      <!-- Bulk action bar -->
+      <transition name="bulk-slide">
+        <div v-if="bulkMode && anySelected" class="bulk-bar">
+          <div class="bulk-count">Выбрано: <strong>{{ selectedIds.size }}</strong></div>
+          <v-menu>
+            <template #activator="{ props }">
+              <button v-bind="props" class="bulk-btn"><v-icon size="14">mdi-arrow-right-bold</v-icon> Статус</button>
+            </template>
+            <v-list density="compact">
+              <v-list-item v-for="s in statuses" :key="s.value" @click="bulkSetStatus(s.value)">
+                <template #prepend><v-icon size="14" :color="s.color">{{ s.icon }}</v-icon></template>
+                <v-list-item-title class="text-body-2">{{ s.label }}</v-list-item-title>
+              </v-list-item>
+            </v-list>
+          </v-menu>
+          <v-menu>
+            <template #activator="{ props }">
+              <button v-bind="props" class="bulk-btn"><v-icon size="14">mdi-flag</v-icon> Приоритет</button>
+            </template>
+            <v-list density="compact">
+              <v-list-item v-for="p in priorities" :key="p.value" @click="bulkSetPriority(p.value)">
+                <template #prepend><v-icon size="14" :color="p.color">mdi-circle</v-icon></template>
+                <v-list-item-title class="text-body-2">{{ p.label }}</v-list-item-title>
+              </v-list-item>
+            </v-list>
+          </v-menu>
+          <v-menu>
+            <template #activator="{ props }">
+              <button v-bind="props" class="bulk-btn"><v-icon size="14">mdi-account-plus</v-icon> Назначить</button>
+            </template>
+            <v-list density="compact" style="max-height: 320px; overflow-y: auto">
+              <v-list-item @click="bulkAssign(currentUserId, currentUserName)">
+                <template #prepend><v-icon size="14">mdi-account-check</v-icon></template>
+                <v-list-item-title class="text-body-2 font-weight-bold">На себя</v-list-item-title>
+              </v-list-item>
+              <v-divider />
+              <v-list-item v-for="s in staffList" :key="s.id" @click="bulkAssign(s.id, s.name)">
+                <v-list-item-title class="text-body-2">{{ s.name }}</v-list-item-title>
+              </v-list-item>
+            </v-list>
+          </v-menu>
+          <button class="bulk-btn cancel" @click="selectedIds = new Set()">Сбросить</button>
+          <button class="bulk-btn cancel" @click="bulkMode = false">Выйти</button>
+        </div>
+      </transition>
     </div>
 
     <!-- Center: messages (list mode) -->
@@ -444,7 +551,7 @@ const noteText = ref('');
 const viewMode = ref(localStorage.getItem('staff-chat-view') || 'list');
 watch(viewMode, v => localStorage.setItem('staff-chat-view', v));
 const draggingId = ref(null);
-const dragOverCol = ref(null);
+const dragOverCol = ref(null); // { col, lane } or col value for backward-compat
 const kanbanColumns = [
   { value: 'new', label: 'Новые', color: '#60a5fa', icon: 'mdi-circle-outline' },
   { value: 'open', label: 'В работе', color: '#fbbf24', icon: 'mdi-progress-clock' },
@@ -452,14 +559,169 @@ const kanbanColumns = [
   { value: 'resolved', label: 'Решён', color: '#34d399', icon: 'mdi-check-circle' },
   { value: 'closed', label: 'Закрыт', color: '#6b7280', icon: 'mdi-lock' },
 ];
+
+// Kanban extensions
+const kanbanSort = ref(localStorage.getItem('kanban-sort') || 'time');
+watch(kanbanSort, v => localStorage.setItem('kanban-sort', v));
+const myBoardOnly = ref(localStorage.getItem('kanban-my-only') === '1');
+watch(myBoardOnly, v => localStorage.setItem('kanban-my-only', v ? '1' : '0'));
+const swimlaneMode = ref(localStorage.getItem('kanban-swimlane') || 'none');
+watch(swimlaneMode, v => localStorage.setItem('kanban-swimlane', v));
+const bulkMode = ref(false);
+const selectedIds = ref(new Set());
+watch(bulkMode, v => { if (!v) selectedIds.value = new Set(); });
+
+const PRIORITY_ORDER = { critical: 0, high: 1, medium: 2, low: 3, undefined: 4, null: 4 };
+
+function cardsMatchingFilters() {
+  let list = chats.value;
+  if (myBoardOnly.value) {
+    list = list.filter(t => String(t.assigned_to) === String(currentUserId));
+  }
+  return list;
+}
+
+function sortCards(cards) {
+  const sorted = [...cards];
+  switch (kanbanSort.value) {
+    case 'priority':
+      sorted.sort((a, b) => (PRIORITY_ORDER[a.priority] ?? 4) - (PRIORITY_ORDER[b.priority] ?? 4));
+      break;
+    case 'assignee':
+      sorted.sort((a, b) => (a.assigned_name || 'я').localeCompare(b.assigned_name || 'я', 'ru'));
+      break;
+    case 'time':
+    default:
+      sorted.sort((a, b) => new Date(b.last_message_at || 0) - new Date(a.last_message_at || 0));
+  }
+  return sorted;
+}
+
 const kanbanGrouped = computed(() => {
   const groups = {};
   for (const col of kanbanColumns) groups[col.value] = [];
-  for (const t of chats.value) {
+  for (const t of cardsMatchingFilters()) {
     if (groups[t.status]) groups[t.status].push(t);
   }
+  for (const k of Object.keys(groups)) groups[k] = sortCards(groups[k]);
   return groups;
 });
+
+// Swimlanes: when enabled, split each column by lane key
+const swimlanes = computed(() => {
+  if (swimlaneMode.value === 'none') return [{ key: 'all', label: '', color: null }];
+
+  if (swimlaneMode.value === 'priority') {
+    return [
+      { key: 'critical', label: 'Критический', color: '#ef4444' },
+      { key: 'high', label: 'Высокий', color: '#f97316' },
+      { key: 'medium', label: 'Средний', color: '#fbbf24' },
+      { key: 'low', label: 'Низкий', color: '#34d399' },
+    ];
+  }
+
+  // assignee: distinct assigned_name values across visible cards + Не назначено
+  const names = new Set();
+  for (const t of cardsMatchingFilters()) {
+    names.add(t.assigned_name || '__unassigned');
+  }
+  const sorted = [...names].sort((a, b) => {
+    if (a === '__unassigned') return 1;
+    if (b === '__unassigned') return -1;
+    return a.localeCompare(b, 'ru');
+  });
+  return sorted.map(n => ({
+    key: n,
+    label: n === '__unassigned' ? 'Не назначено' : n,
+    color: n === '__unassigned' ? '#6b7280' : null,
+  }));
+});
+
+function laneKeyFor(ticket) {
+  if (swimlaneMode.value === 'priority') return ticket.priority || 'medium';
+  if (swimlaneMode.value === 'assignee') return ticket.assigned_name || '__unassigned';
+  return 'all';
+}
+
+function cardsInCell(colValue, laneKey) {
+  const colCards = kanbanGrouped.value[colValue] || [];
+  if (swimlaneMode.value === 'none') return colCards;
+  return colCards.filter(t => laneKeyFor(t) === laneKey);
+}
+
+function toggleBulk() {
+  bulkMode.value = !bulkMode.value;
+}
+function toggleCardSelect(ticket, e) {
+  e.stopPropagation();
+  const ids = new Set(selectedIds.value);
+  if (ids.has(ticket.id)) ids.delete(ticket.id);
+  else ids.add(ticket.id);
+  selectedIds.value = ids;
+}
+const anySelected = computed(() => selectedIds.value.size > 0);
+
+async function bulkSetStatus(status) {
+  const ids = [...selectedIds.value];
+  if (!ids.length) return;
+  if (!confirm(`Сменить статус на «${kanbanColumns.find(c => c.value === status)?.label}» для ${ids.length} тикетов?`)) return;
+  for (const id of ids) {
+    const t = chats.value.find(x => x.id === id);
+    if (!t || t.status === status) continue;
+    const prev = t.status;
+    t.status = status;
+    try { await api.post(`/chat/tickets/${id}/status`, { status }); }
+    catch { t.status = prev; }
+  }
+  selectedIds.value = new Set();
+}
+
+async function bulkAssign(userId, userName) {
+  const ids = [...selectedIds.value];
+  if (!ids.length) return;
+  for (const id of ids) {
+    const t = chats.value.find(x => x.id === id);
+    if (!t) continue;
+    try {
+      await api.post(`/chat/tickets/${id}/assign`, { user_id: userId });
+      t.assigned_to = userId;
+      t.assigned_name = userName;
+    } catch {}
+  }
+  selectedIds.value = new Set();
+}
+
+async function bulkSetPriority(priority) {
+  const ids = [...selectedIds.value];
+  if (!ids.length) return;
+  for (const id of ids) {
+    const t = chats.value.find(x => x.id === id);
+    if (!t || t.priority === priority) continue;
+    const prev = t.priority;
+    t.priority = priority;
+    try { await api.post(`/chat/tickets/${id}/status`, { status: t.status, priority }); }
+    catch { t.priority = prev; }
+  }
+  selectedIds.value = new Set();
+}
+
+async function quickAssignToMe(ticket, e) {
+  e?.stopPropagation();
+  try {
+    await api.post(`/chat/tickets/${ticket.id}/assign`, { user_id: currentUserId });
+    ticket.assigned_to = currentUserId;
+    ticket.assigned_name = currentUserName.value;
+  } catch {}
+}
+
+async function quickSetPriority(ticket, priority, e) {
+  e?.stopPropagation();
+  if (ticket.priority === priority) return;
+  const prev = ticket.priority;
+  ticket.priority = priority;
+  try { await api.post(`/chat/tickets/${ticket.id}/status`, { status: ticket.status, priority }); }
+  catch { ticket.priority = prev; }
+}
 function shortName(n) {
   if (!n) return '';
   const parts = String(n).trim().split(/\s+/);
@@ -468,6 +730,7 @@ function shortName(n) {
 }
 
 function onKanbanDragStart(ticket, e) {
+  if (bulkMode.value) { e.preventDefault(); return; }
   draggingId.value = ticket.id;
   e.dataTransfer.effectAllowed = 'move';
   e.dataTransfer.setData('text/plain', String(ticket.id));
@@ -476,24 +739,56 @@ function onKanbanDragEnd() {
   draggingId.value = null;
   dragOverCol.value = null;
 }
-async function onKanbanDrop(targetStatus) {
+function cellKey(colValue, laneKey) { return `${colValue}::${laneKey}`; }
+async function onKanbanDrop(targetStatus, laneKey) {
   dragOverCol.value = null;
   const id = draggingId.value;
   draggingId.value = null;
   if (!id) return;
   const ticket = chats.value.find(t => t.id === id);
-  if (!ticket || ticket.status === targetStatus) return;
-  // Optimistic move
-  const prevStatus = ticket.status;
-  ticket.status = targetStatus;
+  if (!ticket) return;
+
+  const patches = {};
+  // Column change: status
+  if (ticket.status !== targetStatus) patches.status = targetStatus;
+  // Swimlane change: apply the relevant attribute
+  if (swimlaneMode.value === 'priority' && laneKey && ticket.priority !== laneKey) {
+    patches.priority = laneKey;
+  } else if (swimlaneMode.value === 'assignee' && laneKey && laneKey !== '__unassigned'
+             && ticket.assigned_name !== laneKey) {
+    // Find staff id by display name
+    const staff = staffList.value.find(s => s.name === laneKey);
+    if (staff) patches.assigneeId = staff.id;
+  }
+
+  if (!Object.keys(patches).length) return;
+
+  // Optimistic update
+  const prev = { status: ticket.status, priority: ticket.priority, assigned_to: ticket.assigned_to, assigned_name: ticket.assigned_name };
+  if (patches.status) ticket.status = patches.status;
+  if (patches.priority) ticket.priority = patches.priority;
+  if (patches.assigneeId) {
+    const staff = staffList.value.find(s => s.id === patches.assigneeId);
+    if (staff) { ticket.assigned_to = staff.id; ticket.assigned_name = staff.name; }
+  }
+
   try {
-    await api.post(`/chat/tickets/${id}/status`, { status: targetStatus });
+    if (patches.status !== undefined || patches.priority !== undefined) {
+      await api.post(`/chat/tickets/${id}/status`, {
+        status: ticket.status,
+        priority: ticket.priority || 'medium',
+      });
+    }
+    if (patches.assigneeId !== undefined) {
+      await api.post(`/chat/tickets/${id}/assign`, { user_id: patches.assigneeId });
+    }
   } catch {
-    ticket.status = prevStatus; // rollback on error
-    alert('Не удалось сменить статус');
+    Object.assign(ticket, prev);
+    alert('Не удалось обновить тикет');
   }
 }
-function openFromKanban(t) {
+function openFromKanban(t, e) {
+  if (bulkMode.value) { toggleCardSelect(t, e); return; }
   viewMode.value = 'list';
   openChat(t);
 }
@@ -910,6 +1205,24 @@ async function connectSocket() {
       const m = messages.value.find(x => String(x.id) === String(e.id));
       if (m) { m.content = e.content; m.editedAt = e.editedAt; }
     });
+
+    // Ticket updates from other staff (status / priority / assignee changes)
+    socket.on('chat:ticket-updated', (e) => {
+      const t = chats.value.find(x => Number(x.id) === Number(e.ticketId));
+      if (!t) { loadChats(); return; }
+      if (e.status !== undefined) t.status = e.status;
+      if (e.priority !== undefined) t.priority = e.priority;
+      if (e.assignedTo !== undefined) t.assigned_to = e.assignedTo;
+      if (e.assignedName !== undefined) t.assigned_name = e.assignedName;
+      if (e.tags !== undefined) t.tags = e.tags;
+      // Update the active chat panel if it's the same ticket
+      if (activeChat.value && Number(activeChat.value.id) === Number(e.ticketId)) {
+        if (e.status !== undefined) activeChat.value.status = e.status;
+        if (e.priority !== undefined) activeChat.value.priority = e.priority;
+        if (e.assignedTo !== undefined) activeChat.value.assigned_to = e.assignedTo;
+        if (e.assignedName !== undefined) activeChat.value.assigned_name = e.assignedName;
+      }
+    });
   } catch (e) {
     console.warn('Chat socket unavailable, falling back to polling:', e?.message);
   }
@@ -1116,7 +1429,21 @@ onUnmounted(() => {
 .chat-sidebar.compact .chat-item-bottom .chat-item-status-chip { display: none; }
 
 /* ================== KANBAN ================== */
-.kanban-board { flex: 1; display: flex; gap: 12px; padding: 56px 16px 16px; overflow-x: auto; background: rgba(var(--v-theme-surface-variant), 0.2); }
+.kanban-wrap { flex: 1; display: flex; flex-direction: column; min-width: 0; background: rgba(var(--v-theme-surface-variant), 0.2); }
+
+/* Toolbar */
+.kanban-toolbar { display: flex; align-items: center; gap: 12px; padding: 56px 16px 10px; flex-wrap: wrap; border-bottom: 1px solid rgba(var(--v-border-color), 0.25); }
+.toolbar-toggle { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 8px; font-size: 11px; font-weight: 600; color: rgba(var(--v-theme-on-surface), 0.7); cursor: pointer; user-select: none; }
+.toolbar-toggle input { cursor: pointer; }
+.toolbar-toggle:has(input:checked) { background: rgba(var(--v-theme-primary), 0.12); color: rgb(var(--v-theme-primary)); }
+.toolbar-group { display: inline-flex; align-items: center; gap: 4px; }
+.toolbar-label { font-size: 11px; color: rgba(var(--v-theme-on-surface), 0.5); margin-right: 4px; }
+.toolbar-chip { padding: 3px 9px; border-radius: 12px; border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); background: transparent; color: rgba(var(--v-theme-on-surface), 0.7); font-size: 11px; cursor: pointer; white-space: nowrap; transition: all 0.15s; display: inline-flex; align-items: center; gap: 4px; }
+.toolbar-chip:hover { background: rgba(var(--v-theme-primary), 0.06); }
+.toolbar-chip.active { background: rgb(var(--v-theme-primary)); color: #fff; border-color: rgb(var(--v-theme-primary)); }
+.bulk-toggle { margin-left: auto; }
+
+.kanban-board { flex: 1; display: flex; gap: 12px; padding: 12px 16px; overflow-x: auto; align-items: flex-start; }
 .kanban-column { flex: 1; min-width: 260px; max-width: 320px; display: flex; flex-direction: column; background: rgba(var(--v-theme-surface), 0.9); border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); border-top: 3px solid var(--col-color); border-radius: 12px; overflow: hidden; transition: all 0.15s; }
 .kanban-column.drop-target { background: rgba(var(--v-theme-primary), 0.08); border-color: rgb(var(--v-theme-primary)); border-top-color: rgb(var(--v-theme-primary)); box-shadow: 0 0 0 2px rgba(var(--v-theme-primary), 0.3); }
 .kanban-col-head { display: flex; align-items: center; gap: 6px; padding: 10px 14px; border-bottom: 1px solid rgba(var(--v-border-color), 0.3); background: rgba(var(--v-theme-surface-variant), 0.3); }
@@ -1125,10 +1452,21 @@ onUnmounted(() => {
 .kanban-col-body { flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
 .kanban-col-empty { text-align: center; padding: 20px 0; font-size: 11px; color: rgba(var(--v-theme-on-surface), 0.3); }
 
-.kanban-card { padding: 10px; border-radius: 10px; background: rgb(var(--v-theme-surface)); border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); border-left: 3px solid transparent; cursor: grab; transition: all 0.15s; user-select: none; }
+/* Swimlanes */
+.swimlane-head { display: flex; align-items: center; gap: 6px; padding: 3px 8px; margin: 8px 0 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: rgba(var(--v-theme-on-surface), 0.5); border-left: 3px solid rgba(var(--v-theme-on-surface), 0.2); background: rgba(var(--v-theme-surface-variant), 0.3); border-radius: 0 4px 4px 0; }
+.swimlane-head:first-child { margin-top: 0; }
+.swimlane-count { margin-left: auto; padding: 1px 6px; border-radius: 8px; background: rgba(var(--v-theme-on-surface), 0.08); color: rgba(var(--v-theme-on-surface), 0.6); font-weight: 600; font-size: 9px; letter-spacing: 0; }
+.swimlane-drop { display: flex; flex-direction: column; gap: 6px; min-height: 30px; border-radius: 8px; transition: background 0.15s; padding: 2px; }
+.swimlane-drop.drop-target { background: rgba(var(--v-theme-primary), 0.1); outline: 2px dashed rgba(var(--v-theme-primary), 0.4); outline-offset: -2px; }
+
+.kanban-card { padding: 10px; border-radius: 10px; background: rgb(var(--v-theme-surface)); border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); border-left: 3px solid transparent; cursor: grab; transition: all 0.15s; user-select: none; position: relative; }
 .kanban-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); transform: translateY(-1px); }
+.kanban-card:hover .kanban-quick-actions { opacity: 1; pointer-events: auto; }
 .kanban-card.is-dragging { opacity: 0.4; cursor: grabbing; }
 .kanban-card.stale { background: rgba(239, 68, 68, 0.04); }
+.kanban-card.bulk-mode { cursor: pointer; }
+.kanban-card.selected { border-color: rgb(var(--v-theme-primary)); background: rgba(var(--v-theme-primary), 0.08); box-shadow: 0 0 0 2px rgba(var(--v-theme-primary), 0.3); }
+.kanban-card-check { width: 16px; height: 16px; cursor: pointer; accent-color: rgb(var(--v-theme-primary)); flex-shrink: 0; }
 .kanban-card-head { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
 .kanban-card-avatar { width: 22px; height: 22px; border-radius: 6px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .kanban-card-subject { flex: 1; font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -1140,6 +1478,21 @@ onUnmounted(() => {
 .kanban-card-prio { margin-left: auto; }
 .kanban-card-tags { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 5px; }
 .kanban-card-tag { font-size: 9px; padding: 1px 6px; border-radius: 8px; background: rgba(var(--v-theme-primary), 0.1); color: rgb(var(--v-theme-primary)); font-weight: 600; }
+
+/* Quick actions on card hover */
+.kanban-quick-actions { position: absolute; top: 6px; right: 6px; display: flex; gap: 2px; padding: 2px; border-radius: 6px; background: rgb(var(--v-theme-surface)); border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); box-shadow: 0 2px 6px rgba(0,0,0,0.08); opacity: 0; pointer-events: none; transition: opacity 0.15s; }
+.kanban-qa-btn { background: none; border: none; cursor: pointer; padding: 3px; border-radius: 4px; color: rgba(var(--v-theme-on-surface), 0.6); display: inline-flex; align-items: center; justify-content: center; }
+.kanban-qa-btn:hover { background: rgba(var(--v-theme-primary), 0.1); color: rgb(var(--v-theme-primary)); }
+
+/* Bulk action bar */
+.bulk-bar { position: sticky; bottom: 0; display: flex; align-items: center; gap: 8px; padding: 10px 16px; background: rgb(var(--v-theme-surface)); border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); box-shadow: 0 -4px 16px rgba(0,0,0,0.08); flex-wrap: wrap; }
+.bulk-count { font-size: 13px; color: rgba(var(--v-theme-on-surface), 0.7); margin-right: auto; }
+.bulk-btn { display: inline-flex; align-items: center; gap: 4px; padding: 6px 12px; border-radius: 8px; border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); background: rgb(var(--v-theme-surface)); color: inherit; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+.bulk-btn:hover { background: rgba(var(--v-theme-primary), 0.08); border-color: rgb(var(--v-theme-primary)); }
+.bulk-btn.cancel { background: transparent; color: rgba(var(--v-theme-on-surface), 0.6); }
+.bulk-btn.cancel:hover { background: rgba(var(--v-theme-error), 0.08); border-color: rgba(var(--v-theme-error), 0.4); color: rgb(var(--v-theme-error)); }
+.bulk-slide-enter-active, .bulk-slide-leave-active { transition: transform 0.2s ease, opacity 0.2s ease; }
+.bulk-slide-enter-from, .bulk-slide-leave-to { transform: translateY(100%); opacity: 0; }
 
 /* Kanban mode: suppress chat-main, sidebar acts as filter strip */
 .chat-wrap.kanban-mode .chat-main { display: none; }

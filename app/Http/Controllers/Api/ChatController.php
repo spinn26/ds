@@ -419,6 +419,17 @@ class ChatController extends Controller
             ]);
         }
 
+        // Broadcast so other staff see the change live (Kanban board, ticket list)
+        if ($statusChanged || $priorityChanged || $tagsChanged) {
+            try {
+                $payload = ['ticketId' => $id];
+                if ($statusChanged) $payload['status'] = $request->status;
+                if ($priorityChanged) $payload['priority'] = $request->priority;
+                if ($tagsChanged) $payload['tags'] = $update['tags'];
+                app(\App\Services\SocketService::class)->emit('chat:ticket-updated', null, $payload);
+            } catch (\Exception $e) {}
+        }
+
         return response()->json([
             'message' => 'Обновлено',
             'statusChanged' => $statusChanged,
@@ -456,6 +467,15 @@ class ChatController extends Controller
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+
+        try {
+            app(\App\Services\SocketService::class)->emit('chat:ticket-updated', null, [
+                'ticketId' => $id,
+                'assignedTo' => $request->user_id,
+                'assignedName' => $assigneeName,
+                'status' => 'open',
+            ]);
+        } catch (\Exception $e) {}
 
         return response()->json(['message' => 'Назначен']);
     }
