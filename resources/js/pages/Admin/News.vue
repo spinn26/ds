@@ -30,13 +30,14 @@
     </v-card>
 
     <!-- Create/Edit dialog -->
-    <v-dialog v-model="dialog" max-width="600" persistent>
+    <v-dialog v-model="dialog" max-width="820" persistent scrollable>
       <v-card>
         <v-card-title>{{ form.id ? 'Редактировать' : 'Новая' }} новость</v-card-title>
-        <v-card-text>
+        <v-card-text style="max-height:70vh">
           <v-text-field v-model="form.title" label="Заголовок *" variant="outlined" density="compact" class="mb-3" />
-          <v-textarea v-model="form.content" label="Содержание *" variant="outlined" density="compact" rows="5" class="mb-3" />
-          <v-select v-model="form.type" :items="typeOptions" label="Тип" variant="outlined" density="compact" class="mb-3" />
+          <div class="text-caption text-medium-emphasis mb-1">Содержание *</div>
+          <RichTextEditor v-model="form.content" min-height="260px" />
+          <v-select v-model="form.type" :items="typeOptions" label="Тип" variant="outlined" density="compact" class="mt-3 mb-3" />
           <v-checkbox v-model="form.active" label="Активна (видна всем)" density="compact" />
         </v-card-text>
         <v-card-actions>
@@ -65,6 +66,7 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import api from '../../api';
+import RichTextEditor from '../../components/RichTextEditor.vue';
 
 const items = ref([]);
 const loading = ref(true);

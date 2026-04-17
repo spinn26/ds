@@ -53,17 +53,23 @@
               </div>
               <v-text-field v-model="compose.subject" label="Тема письма *"
                 variant="outlined" density="compact" class="mb-3" />
-              <v-switch v-model="compose.is_html" label="HTML-формат"
+              <v-switch v-model="compose.is_html" label="HTML-формат (используется визуальный редактор)"
                 density="compact" color="primary" inset hide-details class="mb-3" />
-              <v-textarea v-model="compose.body" label="Тело письма *"
+
+              <div v-if="compose.is_html" class="mb-2">
+                <div class="text-caption text-medium-emphasis mb-1">Тело письма *</div>
+                <RichTextEditor v-model="compose.body" min-height="260px" ref="composeEditor" />
+              </div>
+              <v-textarea v-else v-model="compose.body" label="Тело письма *"
                 variant="outlined" rows="12" auto-grow
-                :placeholder="compose.is_html ? '<p>Здравствуйте, {{firstName}}!</p>' : 'Здравствуйте, {{firstName}}!'" />
-              <div class="d-flex flex-wrap ga-1 mt-1">
+                placeholder="Здравствуйте, {{firstName}}!" />
+
+              <div class="d-flex flex-wrap ga-1 mt-2">
                 <v-chip v-for="(label, key) in tokens" :key="key"
                   size="x-small" variant="outlined"
                   style="cursor:pointer"
                   @click="insertToken(key)">
-                  {{ '{{' + key + '}}' }} · {{ label }}
+                  {{ tokenTag(key) }} · {{ label }}
                 </v-chip>
               </div>
 
@@ -201,15 +207,20 @@
             variant="outlined" density="compact" class="mb-3" />
           <v-text-field v-model="templateForm.subject" label="Тема *"
             variant="outlined" density="compact" class="mb-3" />
-          <v-switch v-model="templateForm.is_html" label="HTML-формат" color="primary"
+          <v-switch v-model="templateForm.is_html" label="HTML-формат (визуальный редактор)" color="primary"
             density="compact" inset hide-details class="mb-3" />
-          <v-textarea v-model="templateForm.body" label="Тело письма *"
+
+          <div v-if="templateForm.is_html">
+            <div class="text-caption text-medium-emphasis mb-1">Тело письма *</div>
+            <RichTextEditor v-model="templateForm.body" min-height="260px" ref="templateEditor" />
+          </div>
+          <v-textarea v-else v-model="templateForm.body" label="Тело письма *"
             variant="outlined" rows="10" auto-grow />
           <div class="d-flex flex-wrap ga-1 mt-2">
             <v-chip v-for="(label, key) in tokens" :key="key"
               size="x-small" variant="outlined" style="cursor:pointer"
               @click="insertTokenIntoTemplate(key)">
-              {{ '{{' + key + '}}' }} · {{ label }}
+              {{ tokenTag(key) }} · {{ label }}
             </v-chip>
           </div>
         </v-card-text>
@@ -246,6 +257,7 @@ import { ref, computed, onMounted, watch } from 'vue';
 import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
 import { fmtDateTime } from '../../composables/useDesign';
+import RichTextEditor from '../../components/RichTextEditor.vue';
 
 const tab = ref('compose');
 
@@ -495,12 +507,16 @@ function useTemplateInCompose(item) {
   tab.value = 'compose';
 }
 
+function tokenTag(key) {
+  return '{' + '{' + key + '}' + '}';
+}
+
 function insertToken(key) {
-  compose.value.body += ` {{${key}}}`;
+  compose.value.body += ' ' + tokenTag(key);
 }
 
 function insertTokenIntoTemplate(key) {
-  templateForm.value.body += ` {{${key}}}`;
+  templateForm.value.body += ' ' + tokenTag(key);
 }
 
 // ========== PROGRESS ==========
