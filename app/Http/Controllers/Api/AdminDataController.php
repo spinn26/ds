@@ -319,11 +319,17 @@ class AdminDataController extends Controller
         if ($request->action === 'verify') {
             $requisite->verified = true;
             $requisite->status = 3; // verified
+            $requisite->dateChange = now();
             $requisite->save();
             return response()->json(['message' => 'Реквизиты верифицированы']);
         }
 
+        // Reject: return to consultant for corrections.
+        // status_requisites: 1=backoffice, 2=consultant, 3=verified — no dedicated "rejected" id,
+        // so we use 2 ("returned to consultant"), which is also what ProfileController sets on resubmit.
         $requisite->verified = false;
+        $requisite->status = 2;
+        $requisite->dateChange = now();
         $requisite->save();
 
         // Отправка комментария через коммуникацию

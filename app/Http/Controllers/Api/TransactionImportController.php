@@ -252,24 +252,45 @@ class TransactionImportController extends Controller
     }
 
     /**
-     * Откатить импорт — удалить все транзакции созданные этим импортом.
+     * Откатить импорт — удалить все транзакции созданные этим импортом
+     * ВМЕСТЕ с рассчитанными по ним комиссиями. Всё в одной транзакции,
+     * чтобы rollback не оставил orphan-комиссии если что-то упадёт посередине.
      */
     public function rollback(int $importId): JsonResponse
     {
-        $deleted = DB::table('transaction')
-            ->where('comment', 'Импорт #' . $importId)
-            ->delete();
+        $result = DB::transaction(function () use ($importId) {
+            $txIds = DB::table('transaction')
+                ->where('comment', 'Импорт #' . $importId)
+                ->pluck('id');
 
-        DB::table('transaction_import_log')
-            ->where('id', $importId)
-            ->update([
-                'status' => 'rolled_back',
-                'updated_at' => now(),
-            ]);
+            $deletedCommissions = 0;
+            if ($txIds->isNotEmpty()) {
+                $deletedCommissions = DB::table('commission')
+                    ->whereIn('transaction', $txIds)
+                    ->delete();
+            }
+
+            $deletedTx = DB::table('transaction')
+                ->whereIn('id', $txIds)
+                ->delete();
+
+            DB::table('transaction_import_log')
+                ->where('id', $importId)
+                ->update([
+                    'status' => 'rolled_back',
+                    'updated_at' => now(),
+                ]);
+
+            return [
+                'deleted_transactions' => $deletedTx,
+                'deleted_commissions' => $deletedCommissions,
+            ];
+        });
 
         return response()->json([
-            'message' => "Откат выполнен: удалено {$deleted} транзакций",
-            'deleted' => $deleted,
+            'message' => "Откат выполнен: удалено {$result['deleted_transactions']} транзакций и {$result['deleted_commissions']} комиссий",
+            'deleted' => $result['deleted_transactions'],
+            'deleted_commissions' => $result['deleted_commissions'],
         ]);
     }
 
