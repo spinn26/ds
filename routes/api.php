@@ -45,6 +45,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/chat/tickets/{id}', [\App\Http\Controllers\Api\ChatController::class, 'show']);
         Route::post('/chat/tickets/{id}/messages', [\App\Http\Controllers\Api\ChatController::class, 'sendMessage']);
         Route::put('/chat/messages/{messageId}', [\App\Http\Controllers\Api\ChatController::class, 'editMessage']);
+        Route::post('/chat/messages/{messageId}/reactions', [\App\Http\Controllers\Api\ChatController::class, 'toggleReaction']);
         Route::post('/chat/tickets/{id}/status', [\App\Http\Controllers\Api\ChatController::class, 'updateStatus']);
         Route::post('/chat/tickets/{id}/assign', [\App\Http\Controllers\Api\ChatController::class, 'assign']);
         Route::get('/chat/tickets/{id}/notes', [\App\Http\Controllers\Api\ChatController::class, 'notes']);
@@ -72,6 +73,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/structure/{consultantId}/children', [StructureController::class, 'children']);
         Route::get('/structure/qualification-levels', [StructureController::class, 'qualificationLevels']);
         Route::get('/structure/activity-statuses', [StructureController::class, 'activityStatuses']);
+        Route::get('/structure/cities', [StructureController::class, 'cities']);
 
         Route::get('/communication', [CommunicationController::class, 'index']);
         Route::get('/communication/unread-count', [CommunicationController::class, 'unreadCount']);

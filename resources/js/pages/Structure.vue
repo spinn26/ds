@@ -22,12 +22,22 @@
       </div>
       <v-expand-transition>
         <div v-if="showAdvanced" class="d-flex ga-2 flex-wrap align-center mt-3">
+          <v-text-field v-model="filters.last_name" placeholder="Фамилия"
+            hide-details style="max-width:150px" @update:model-value="debouncedLoad" />
+          <v-text-field v-model="filters.first_name" placeholder="Имя"
+            hide-details style="max-width:150px" @update:model-value="debouncedLoad" />
+          <v-text-field v-model="filters.patronymic" placeholder="Отчество"
+            hide-details style="max-width:170px" @update:model-value="debouncedLoad" />
           <v-text-field v-model="filters.birth_date_from" label="Дата рождения с" type="date"
             hide-details style="max-width:170px" @update:model-value="debouncedLoad" />
           <v-text-field v-model="filters.birth_date_to" label="Дата рождения по" type="date"
             hide-details style="max-width:170px" @update:model-value="debouncedLoad" />
-          <v-text-field v-model="filters.city" placeholder="Город"
-            hide-details style="max-width:180px" @update:model-value="debouncedLoad" />
+          <v-autocomplete v-model="filters.city" :items="cityOptions"
+            :loading="citySearchLoading" placeholder="Город"
+            item-title="name" item-value="name"
+            hide-details hide-no-data clearable
+            @update:search="onCitySearch"
+            style="max-width:220px" @update:model-value="loadData" />
           <v-text-field v-model="filters.lp_min" placeholder="ЛП от" type="number"
             hide-details style="max-width:110px" @update:model-value="debouncedLoad" />
           <v-text-field v-model="filters.lp_max" placeholder="ЛП до" type="number"
@@ -87,7 +97,11 @@
                 <span v-else>—</span>
               </td>
               <td style="white-space:nowrap">
-                {{ statusChangeDate(row) || '—' }}
+                <div>{{ statusChangeDate(row) || '—' }}</div>
+                <div v-if="isActive(row) && row.personalVolumeSinceActivation != null"
+                  class="text-caption" :class="row.personalVolumeSinceActivation < 500 ? 'text-warning' : 'text-success'">
+                  ЛП с активации: {{ fmt(row.personalVolumeSinceActivation) }} / 500
+                </div>
               </td>
               <td class="text-right" style="white-space:nowrap">{{ fmt(row.personalVolume) }}</td>
               <td class="text-right" style="white-space:nowrap">{{ fmt(row.groupVolume) }}</td>
@@ -125,6 +139,9 @@ const activeFilterCount = computed(() => {
   const f = filters.value;
   let c = 0;
   if (f.search) c++;
+  if (f.last_name) c++;
+  if (f.first_name) c++;
+  if (f.patronymic) c++;
   if (f.qualification?.length) c++;
   if (f.levels?.length) c++;
   if (f.status?.length) c++;
@@ -144,7 +161,8 @@ const activeFilterCount = computed(() => {
 
 function resetFilters() {
   filters.value = {
-    search: '', qualification: [], levels: [], status: [],
+    search: '', last_name: '', first_name: '', patronymic: '',
+    qualification: [], levels: [], status: [],
     birth_date_from: '', birth_date_to: '',
     city: '',
     lp_min: '', lp_max: '', gp_min: '', gp_max: '', ngp_min: '', ngp_max: '',
@@ -163,7 +181,8 @@ const statusOptions = [
   { title: 'Исключён', value: 'excluded' },
 ];
 const filters = ref({
-  search: '', qualification: [], levels: [], status: [],
+  search: '', last_name: '', first_name: '', patronymic: '',
+  qualification: [], levels: [], status: [],
   birth_date_from: '', birth_date_to: '',
   city: '',
   lp_min: '', lp_max: '', gp_min: '', gp_max: '', ngp_min: '', ngp_max: '',
@@ -213,6 +232,10 @@ function statusChangeDate(row) {
   return row.dateActivity;
 }
 
+function isActive(row) {
+  return (row.activityName || '').toLowerCase().includes('актив');
+}
+
 async function toggleExpand(row) {
   if (row._expanded) {
     row._expanded = false;
@@ -238,6 +261,9 @@ async function loadData() {
   try {
     const params = { page: page.value };
     if (filters.value.search) params.search = filters.value.search;
+    if (filters.value.last_name) params.last_name = filters.value.last_name;
+    if (filters.value.first_name) params.first_name = filters.value.first_name;
+    if (filters.value.patronymic) params.patronymic = filters.value.patronymic;
     if (filters.value.qualification?.length) params.qualification = filters.value.qualification.join(',');
     if (filters.value.levels?.length) params.levels = filters.value.levels.join(',');
     if (filters.value.status?.length) params.status = filters.value.status.join(',');
@@ -272,8 +298,24 @@ async function loadFilterOptions() {
   } catch {}
 }
 
+const cityOptions = ref([]);
+const citySearchLoading = ref(false);
+let citySearchTimer;
+function onCitySearch(q) {
+  clearTimeout(citySearchTimer);
+  citySearchTimer = setTimeout(async () => {
+    citySearchLoading.value = true;
+    try {
+      const { data } = await api.get('/structure/cities', { params: q ? { q } : {} });
+      cityOptions.value = data;
+    } catch {}
+    citySearchLoading.value = false;
+  }, 250);
+}
+
 onMounted(() => {
   loadData();
   loadFilterOptions();
+  onCitySearch(''); // prefill with first 30 cities
 });
 </script>

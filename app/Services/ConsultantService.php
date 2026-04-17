@@ -71,6 +71,44 @@ class ConsultantService
             ? DB::table('person')->whereIn('id', $personIds)->get()->keyBy('id')
             : collect();
 
+        // Batch: накопленный ЛП с даты активации (chainOrder=1 = личная комиссия)
+        // Возвращаем одним запросом все комиссии ветки и суммируем в PHP
+        // только после consultant.dateActivity. Так избегаем коррелированного
+        // подзапроса и остаёмся совместимы с любой СУБД.
+        $activationMap = $consultants->pluck('dateActivity', 'id');
+        $cumulativeLpByConsultant = [];
+        $activeIds = $activationMap->filter()->keys()->all();
+        if (! empty($activeIds)) {
+            $rows = DB::table('commission')
+                ->whereIn('consultant', $activeIds)
+                ->where('chainOrder', 1)
+                ->whereNull('deletedAt')
+                ->get(['consultant', 'date', 'personalVolume']);
+
+            foreach ($rows as $r) {
+                $activation = $activationMap[$r->consultant] ?? null;
+                if (! $activation) continue;
+                $commissionDate = $r->date ? \Carbon\Carbon::parse($r->date) : null;
+                if (! $commissionDate) continue;
+                $actDate = $activation instanceof \Carbon\Carbon
+                    ? $activation
+                    : \Carbon\Carbon::parse($activation);
+                if ($commissionDate->lt($actDate)) continue;
+
+                $cumulativeLpByConsultant[$r->consultant] =
+                    ($cumulativeLpByConsultant[$r->consultant] ?? 0) + (float) ($r->personalVolume ?? 0);
+            }
+        }
+
+        // Batch load WebUser name parts (firstName/lastName/patronymic)
+        // Used as source of truth for name parts per project rules
+        $webUserIds = $consultants->pluck('webUser')->filter()->unique();
+        $webUsers = $webUserIds->isNotEmpty()
+            ? DB::table('WebUser')->whereIn('id', $webUserIds)
+                ->get(['id', 'firstName', 'lastName', 'patronymic'])
+                ->keyBy('id')
+            : collect();
+
         // Batch load cities
         $cityIds = $persons->pluck('city')->filter()->unique();
         $cities = $cityIds->isNotEmpty()
@@ -80,7 +118,7 @@ class ConsultantService
         // Index status_levels by level number for qualificationLog fallback
         $statusLevelsByLevel = $statusLevels->keyBy('level');
 
-        return $consultants->map(function ($c) use ($statusLevels, $statusLevelsByLevel, $qLogs, $clientCounts, $contractCounts, $subCounts, $activityNames, $persons, $cities) {
+        return $consultants->map(function ($c) use ($statusLevels, $statusLevelsByLevel, $qLogs, $clientCounts, $contractCounts, $subCounts, $activityNames, $persons, $cities, $webUsers, $cumulativeLpByConsultant) {
             $statusLevel = $c->status_and_lvl ? ($statusLevels[$c->status_and_lvl] ?? null) : null;
             $qLog = $qLogs[$c->id] ?? null;
 
@@ -107,9 +145,18 @@ class ConsultantService
             $birthDate = $person?->birthDate ?? null;
             $cityName = ($person && ($person->city ?? null)) ? ($cities[$person->city] ?? null) : null;
 
+            // Name parts via WebUser (source of truth per project rules)
+            $webUser = $c->webUser ? ($webUsers[$c->webUser] ?? null) : null;
+            $firstName = $webUser?->firstName ?? null;
+            $lastName = $webUser?->lastName ?? null;
+            $patronymic = $webUser?->patronymic ?? null;
+
             return [
                 'id' => $c->id,
                 'personName' => $c->personName,
+                'firstName' => $firstName,
+                'lastName' => $lastName,
+                'patronymic' => $patronymic,
                 'active' => $c->active,
                 'activityId' => $activityId,
                 'activityName' => $activityName ?? ($c->active ? 'Активный' : 'Неактивен'),
@@ -121,6 +168,7 @@ class ConsultantService
                 'personalVolume' => round((float) ($qLog->personalVolume ?? $c->personalVolume ?? 0), 2),
                 'groupVolume' => round((float) ($qLog->groupVolume ?? $c->groupVolume ?? 0), 2),
                 'groupVolumeCumulative' => round((float) ($qLog->groupVolumeCumulative ?? $c->groupVolumeCumulative ?? 0), 2),
+                'personalVolumeSinceActivation' => round((float) ($cumulativeLpByConsultant[$c->id] ?? 0), 2),
                 'clientCount' => $clientCount,
                 'contractCount' => $contractCount,
                 'hasChildren' => $subCount > 0,
@@ -142,10 +190,31 @@ class ConsultantService
      */
     public function applyFilters(Collection $members, array $filters): Collection
     {
-        // ФИО
+        // ФИО (общий поиск — по собранной personName)
         if (! empty($filters['search'])) {
             $search = mb_strtolower($filters['search']);
             $members = $members->filter(fn ($m) => str_contains(mb_strtolower($m['personName']), $search));
+        }
+
+        // ФИО (раздельные поля) — ищем в WebUser-частях или в personName как fallback
+        $matchPart = static function ($member, string $part, string $q): bool {
+            $q = mb_strtolower($q);
+            $val = $member[$part] ?? null;
+            if ($val) return str_contains(mb_strtolower($val), $q);
+            // Fallback: в personName как подстрока
+            return str_contains(mb_strtolower($member['personName'] ?? ''), $q);
+        };
+        if (! empty($filters['last_name'])) {
+            $q = $filters['last_name'];
+            $members = $members->filter(fn ($m) => $matchPart($m, 'lastName', $q));
+        }
+        if (! empty($filters['first_name'])) {
+            $q = $filters['first_name'];
+            $members = $members->filter(fn ($m) => $matchPart($m, 'firstName', $q));
+        }
+        if (! empty($filters['patronymic'])) {
+            $q = $filters['patronymic'];
+            $members = $members->filter(fn ($m) => $matchPart($m, 'patronymic', $q));
         }
 
         // Статус активности (множественный) — принимаем ID или строковые алиасы
@@ -203,6 +272,58 @@ class ConsultantService
         if (! empty($filters['city'])) {
             $city = mb_strtolower($filters['city']);
             $members = $members->filter(fn ($m) => $m['city'] && str_contains(mb_strtolower($m['city']), $city));
+        }
+
+        // Дата терминации (range). dateActivity = дата последней смены активности;
+        // для терминированных партнёров это и есть дата терминации.
+        $termFrom = $filters['termination_from'] ?? null;
+        $termTo = $filters['termination_to'] ?? null;
+        if ($termFrom || $termTo) {
+            $terminatedId = \App\Enums\PartnerActivity::Terminated->value;
+            $excludedId = \App\Enums\PartnerActivity::Excluded->value;
+            $parseDate = static function ($s) {
+                if (! $s) return null;
+                try { return \Carbon\Carbon::parse($s); } catch (\Throwable) { return null; }
+            };
+            $from = $parseDate($termFrom);
+            $to = $parseDate($termTo);
+            $members = $members->filter(function ($m) use ($from, $to, $terminatedId, $excludedId) {
+                if (! in_array($m['activityId'], [$terminatedId, $excludedId], true)) return false;
+                if (empty($m['dateActivity'])) return false;
+                try {
+                    $d = \Carbon\Carbon::createFromFormat('d.m.Y', $m['dateActivity']);
+                } catch (\Throwable) {
+                    return false;
+                }
+                if ($from && $d->lt($from)) return false;
+                if ($to && $d->gt($to->copy()->endOfDay())) return false;
+                return true;
+            });
+        }
+
+        // Дата рождения (range) — использует 'birthDate' который может быть Carbon|null
+        $bdFrom = $filters['birth_date_from'] ?? null;
+        $bdTo = $filters['birth_date_to'] ?? null;
+        if ($bdFrom || $bdTo) {
+            $parseDate = static function ($s) {
+                if (! $s) return null;
+                try { return \Carbon\Carbon::parse($s); } catch (\Throwable) { return null; }
+            };
+            $from = $parseDate($bdFrom);
+            $to = $parseDate($bdTo);
+            $members = $members->filter(function ($m) use ($from, $to) {
+                if (empty($m['birthDate'])) return false;
+                try {
+                    $d = $m['birthDate'] instanceof \Carbon\Carbon
+                        ? $m['birthDate']
+                        : \Carbon\Carbon::parse($m['birthDate']);
+                } catch (\Throwable) {
+                    return false;
+                }
+                if ($from && $d->lt($from)) return false;
+                if ($to && $d->gt($to->copy()->endOfDay())) return false;
+                return true;
+            });
         }
 
         return $members;

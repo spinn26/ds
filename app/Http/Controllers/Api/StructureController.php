@@ -110,4 +110,21 @@ class StructureController extends Controller
 
         return response()->json($statuses);
     }
+
+    /**
+     * Автокомплит по городам из справочника city.
+     */
+    public function cities(Request $request): JsonResponse
+    {
+        $q = trim((string) $request->input('q', ''));
+        $query = DB::table('city')->select('id', 'cityNameRu')->orderBy('cityNameRu');
+        if ($q !== '') {
+            $query->where('cityNameRu', 'ilike', '%' . $q . '%');
+        }
+
+        return response()->json(
+            $query->limit(30)->get()
+                ->map(fn ($c) => ['id' => $c->id, 'name' => $c->cityNameRu])
+        );
+    }
 }
