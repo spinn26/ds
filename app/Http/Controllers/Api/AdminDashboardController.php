@@ -92,6 +92,52 @@ class AdminDashboardController extends Controller
             ->orderBy('status_levels.level')
             ->get();
 
+        // Funnel: registered -> activated -> first contract -> TOP FC+
+        $registered = DB::table('consultant')->whereNull('dateDeleted')->count();
+        $activated = DB::table('consultant')->whereNull('dateDeleted')->whereNotNull('dateActivity')->count();
+        $withContract = DB::table('consultant as c')
+            ->whereNull('c.dateDeleted')
+            ->whereExists(function ($q) {
+                $q->select(DB::raw(1))->from('contract')
+                  ->whereColumn('contract.consultant', 'c.id')
+                  ->whereNull('contract.deletedAt');
+            })
+            ->count();
+        $topLevel = DB::table('consultant')
+            ->whereNull('dateDeleted')
+            ->join('status_levels', 'consultant.status_and_lvl', '=', 'status_levels.id')
+            ->where('status_levels.level', '>=', 6) // TOP FC и выше
+            ->count();
+
+        // Revenue by product (top 7 this month)
+        $revenueByProduct = DB::table('commission as c')
+            ->join('transaction as t', 't.id', '=', 'c.transaction')
+            ->leftJoin('contract as ct', 'ct.id', '=', 't.contract')
+            ->where('c.dateMonth', now()->format('Y-m'))
+            ->whereNull('c.deletedAt')
+            ->whereNotNull('ct.productName')
+            ->select('ct.productName as name', DB::raw('sum("c"."amountRUB") as total'))
+            ->groupBy('ct.productName')
+            ->orderByDesc('total')
+            ->limit(7)
+            ->get()
+            ->map(fn ($r) => [
+                'name' => $r->name,
+                'total' => round((float) ($r->total ?? 0), 0),
+            ]);
+
+        // KPI deltas: previous vs current (for period-over-period %)
+        $totalPartnersPrev = DB::table('consultant')->whereNull('dateDeleted')
+            ->where('dateCreated', '<=', $prevMonthEnd)->count();
+        $activePartnersPrev = DB::table('consultant')->whereNull('dateDeleted')
+            ->where('activity', 1)
+            ->where('dateCreated', '<=', $prevMonthEnd)
+            ->count();
+        $newPartnersPrevMonth = DB::table('consultant')->whereNull('dateDeleted')
+            ->whereBetween('dateCreated', [$prevMonthStart, $prevMonthEnd])->count();
+        $totalContractsPrev = DB::table('contract')->whereNull('deletedAt')
+            ->where('createDate', '<=', $prevMonthEnd)->count();
+
         // Recent activity (last 10 events)
         $recentActivity = collect();
 
@@ -129,10 +175,14 @@ class AdminDashboardController extends Controller
         return response()->json([
             'kpi' => [
                 'totalPartners' => $totalPartners,
+                'totalPartnersPrev' => $totalPartnersPrev,
                 'activePartners' => $activePartners,
+                'activePartnersPrev' => $activePartnersPrev,
                 'newPartnersMonth' => $newPartnersMonth,
+                'newPartnersPrevMonth' => $newPartnersPrevMonth,
                 'totalClients' => $totalClients,
                 'totalContracts' => $totalContracts,
+                'totalContractsPrev' => $totalContractsPrev,
                 'openTickets' => $openTickets,
                 'revenueMonth' => round((float) $revenueMonth, 0),
                 'revenuePrevMonth' => round((float) $revenuePrevMonth, 0),
@@ -143,6 +193,13 @@ class AdminDashboardController extends Controller
                 'partnersTrend' => $partnersTrend,
                 'topConsultants' => $topConsultants,
                 'qualDistribution' => $qualDistribution,
+                'revenueByProduct' => $revenueByProduct,
+                'funnel' => [
+                    ['stage' => 'Регистрация', 'count' => $registered],
+                    ['stage' => 'Активация', 'count' => $activated],
+                    ['stage' => 'Первый контракт', 'count' => $withContract],
+                    ['stage' => 'TOP FC и выше', 'count' => $topLevel],
+                ],
             ],
             'recentActivity' => $recentActivity,
         ]);
