@@ -40,6 +40,7 @@ const items = ref([]);
 const total = ref(0);
 const loading = ref(false);
 const page = ref(1);
+const perPage = ref(25);
 const filters = ref({ search: '' });
 
 
@@ -82,13 +83,14 @@ function searchProducts(q) {
 
 function onOptions(opts) {
   page.value = opts.page;
+  if (opts.itemsPerPage) perPage.value = opts.itemsPerPage;
   loadData();
 }
 
 async function loadData() {
   loading.value = true;
   try {
-    const params = { page: page.value };
+    const params = { page: page.value, per_page: perPage.value };
     if (filters.value.search) params.search = filters.value.search;
     const { data } = await api.get('/contracts/team', { params });
     items.value = data.data;

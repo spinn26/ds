@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Enums\PartnerActivity;
+use App\Http\Controllers\Api\Concerns\PaginatesRequests;
 use App\Http\Controllers\Controller;
 use App\Models\BankRequisite;
 use App\Models\Consultant;
@@ -14,6 +15,8 @@ use Illuminate\Support\Facades\DB;
 
 class AdminDataController extends Controller
 {
+    use PaginatesRequests;
+
     public function __construct(
         private readonly PartnerStatusService $statusService,
     ) {}
@@ -35,8 +38,8 @@ class AdminDataController extends Controller
 
         $total = $query->count();
         $rows = $query->orderByDesc('id')
-            ->offset(($request->input('page', 1) - 1) * 25)
-            ->limit(25)
+            ->offset($this->paginationOffset($request))
+            ->limit($this->paginationPerPage($request))
             ->get();
 
         // Batch load WebUser data
@@ -168,8 +171,8 @@ class AdminDataController extends Controller
 
         $detailTotal = $detailQuery->count();
         $detailRows = $detailQuery->orderBy('personName')
-            ->offset(($request->input('page', 1) - 1) * 25)
-            ->limit(25)
+            ->offset($this->paginationOffset($request))
+            ->limit($this->paginationPerPage($request))
             ->get();
 
         // Batch load activity names
@@ -223,8 +226,8 @@ class AdminDataController extends Controller
 
         $total = $query->count();
         $rows = $query->orderByDesc('id')
-            ->offset(($request->input('page', 1) - 1) * 25)
-            ->limit(25)
+            ->offset($this->paginationOffset($request))
+            ->limit($this->paginationPerPage($request))
             ->get();
 
         // Batch load person data
@@ -297,8 +300,8 @@ class AdminDataController extends Controller
 
         $total = $query->count();
         $rows = $query->orderByDesc('id')
-            ->offset(($request->input('page', 1) - 1) * 25)
-            ->limit(25)
+            ->offset($this->paginationOffset($request))
+            ->limit($this->paginationPerPage($request))
             ->get();
 
         // Batch load consultant names
@@ -397,8 +400,8 @@ class AdminDataController extends Controller
 
         $total = $query->count();
         $rows = $query->orderBy('personName')
-            ->offset(($request->input('page', 1) - 1) * 25)
-            ->limit(25)
+            ->offset($this->paginationOffset($request))
+            ->limit($this->paginationPerPage($request))
             ->get();
 
         // Batch load latest acceptance logs per consultant
@@ -453,8 +456,8 @@ class AdminDataController extends Controller
 
         $total = $query->count();
         $rows = $query->orderByDesc('id')
-            ->offset(($request->input('page', 1) - 1) * 25)
-            ->limit(25)
+            ->offset($this->paginationOffset($request))
+            ->limit($this->paginationPerPage($request))
             ->get();
 
         // Batch load contract statuses

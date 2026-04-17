@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Controllers\Api\Concerns\PaginatesRequests;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\Admin\StoreContestRequest;
 use Illuminate\Http\JsonResponse;
@@ -10,6 +11,8 @@ use Illuminate\Support\Facades\DB;
 
 class AdminContestController extends Controller
 {
+    use PaginatesRequests;
+
     /**
      * Paginated list of contests for admin screen.
      */
@@ -33,12 +36,9 @@ class AdminContestController extends Controller
 
         $total = $query->count();
 
-        $perPage = 25;
-        $page = max(1, (int) $request->input('page', 1));
-
         $rows = $query
-            ->offset(($page - 1) * $perPage)
-            ->limit($perPage)
+            ->offset($this->paginationOffset($request))
+            ->limit($this->paginationPerPage($request))
             ->get();
 
         $typeNames = DB::table('type_contest')->pluck('type', 'id');

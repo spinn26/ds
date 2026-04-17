@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Controllers\Api\Concerns\PaginatesRequests;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\ClientListItemResource;
 use App\Models\Client;
@@ -12,6 +13,8 @@ use Illuminate\Support\Facades\DB;
 
 class ClientController extends Controller
 {
+    use PaginatesRequests;
+
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
@@ -66,10 +69,9 @@ class ClientController extends Controller
         $allowedSort = ['personName', 'id'];
         $query->orderBy(in_array($sortBy, $allowedSort) ? $sortBy : 'personName', $sortDir);
 
-        $page = max(1, (int) $request->input('page', 1));
         $clientRows = $query
-            ->offset(($page - 1) * 25)
-            ->limit(25)
+            ->offset($this->paginationOffset($request))
+            ->limit($this->paginationPerPage($request))
             ->get();
 
         // Batch load person data

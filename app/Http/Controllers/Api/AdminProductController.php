@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Controllers\Api\Concerns\PaginatesRequests;
 use App\Http\Controllers\Controller;
 use App\Models\Product;
 use App\Models\Program;
@@ -11,6 +12,8 @@ use Illuminate\Support\Facades\DB;
 
 class AdminProductController extends Controller
 {
+    use PaginatesRequests;
+
     /** Список продуктов */
     public function index(Request $request): JsonResponse
     {
@@ -25,8 +28,8 @@ class AdminProductController extends Controller
 
         $total = $query->count();
         $products = $query->orderBy('name')
-            ->offset(($request->input('page', 1) - 1) * 25)
-            ->limit(25)
+            ->offset($this->paginationOffset($request))
+            ->limit($this->paginationPerPage($request))
             ->get()
             ->map(fn ($p) => [
                 'id' => $p->id,

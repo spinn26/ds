@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Controllers\Api\Concerns\PaginatesRequests;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -9,6 +10,8 @@ use Illuminate\Support\Facades\DB;
 
 class AdminFinanceController extends Controller
 {
+    use PaginatesRequests;
+
     /** Транзакции */
     public function transactions(Request $request): JsonResponse
     {
@@ -23,8 +26,8 @@ class AdminFinanceController extends Controller
 
         $total = $query->count();
         $rows = $query->orderByDesc('date')
-            ->offset(($request->input('page', 1) - 1) * 25)
-            ->limit(25)
+            ->offset($this->paginationOffset($request))
+            ->limit($this->paginationPerPage($request))
             ->get();
 
         // Batch load currencies
@@ -60,8 +63,8 @@ class AdminFinanceController extends Controller
 
         $total = $query->count();
         $rows = $query->orderByDesc('date')
-            ->offset(($request->input('page', 1) - 1) * 25)
-            ->limit(25)
+            ->offset($this->paginationOffset($request))
+            ->limit($this->paginationPerPage($request))
             ->get();
 
         // Batch load consultant names
@@ -100,8 +103,8 @@ class AdminFinanceController extends Controller
 
         $total = $query->count();
         $data = $query->orderByDesc('date')
-            ->offset(($request->input('page', 1) - 1) * 25)
-            ->limit(25)
+            ->offset($this->paginationOffset($request))
+            ->limit($this->paginationPerPage($request))
             ->get();
 
         return response()->json(['data' => $data, 'total' => $total]);

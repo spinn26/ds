@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Controllers\Api\Concerns\PaginatesRequests;
 use App\Http\Controllers\Controller;
 use App\Models\Consultant;
 use App\Models\Contract;
@@ -13,6 +14,8 @@ use Illuminate\Support\Facades\DB;
 
 class ContractController extends Controller
 {
+    use PaginatesRequests;
+
     public function __construct(
         private readonly ContractService $contractService,
         private readonly ConsultantService $consultantService,
@@ -41,8 +44,8 @@ class ContractController extends Controller
 
         $contractRows = $query
             ->orderByDesc('id')
-            ->offset(($request->input('page', 1) - 1) * 25)
-            ->limit(25)
+            ->offset($this->paginationOffset($request))
+            ->limit($this->paginationPerPage($request))
             ->get();
 
         $contracts = $this->contractService->formatContracts($contractRows);
@@ -79,8 +82,8 @@ class ContractController extends Controller
 
         $contractRows = $query
             ->orderByDesc('id')
-            ->offset(($request->input('page', 1) - 1) * 25)
-            ->limit(25)
+            ->offset($this->paginationOffset($request))
+            ->limit($this->paginationPerPage($request))
             ->get();
 
         $contracts = $this->contractService->formatContracts($contractRows, true);

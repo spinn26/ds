@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Controllers\Api\Concerns\PaginatesRequests;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
@@ -10,6 +11,8 @@ use Illuminate\Support\Facades\Hash;
 
 class AdminUserController extends Controller
 {
+    use PaginatesRequests;
+
     public function index(Request $request): JsonResponse
     {
         $query = User::query();
@@ -32,8 +35,8 @@ class AdminUserController extends Controller
         $total = $query->count();
 
         $users = $query->orderByDesc('id')
-            ->offset(($request->input('page', 1) - 1) * 25)
-            ->limit(25)
+            ->offset($this->paginationOffset($request))
+            ->limit($this->paginationPerPage($request))
             ->get()
             ->map(fn ($u) => [
                 'id' => $u->id,

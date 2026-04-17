@@ -34,7 +34,9 @@ class ProductController extends Controller
             ->get()
             ->keyBy('id');
 
-        $products = $query->orderBy('name')->get()->map(function ($p) use ($consultant, $typeToCategory, $allCategories) {
+        $hasAccess = $this->checkAccess($consultant)['hasAccess'] ?? false;
+
+        $products = $query->orderBy('name')->get()->map(function ($p) use ($consultant, $typeToCategory, $allCategories, $hasAccess) {
             $testPassed = $consultant
                 ? $this->isTestPassedForProduct($consultant, $p->id)
                 : false;
@@ -43,7 +45,8 @@ class ProductController extends Controller
             $categoryId = $p->productType ? ($typeToCategory[$p->productType] ?? null) : null;
             $cat = $categoryId ? ($allCategories[$categoryId] ?? null) : null;
 
-            $available = $testPassed && ($this->checkAccess($consultant)['hasAccess'] ?? false);
+            // Любой активный ФК может открыть любой продукт
+            $available = $hasAccess;
 
             return [
                 'id' => $p->id,
@@ -90,12 +93,14 @@ class ProductController extends Controller
             ];
         }
 
+        // Любому активному ФК открываем продукты — тестов/реквизитов/акцепта не требуем.
+        // testsPassed/requisitesVerified/documentsAccepted считаем справочно — фронт
+        // их может показывать в подсказках, но гейт теперь только по активности.
+        $isActive = (bool) $consultant->active;
+
         $testsPassed = ! empty($consultant->soldProducts);
 
-        // Реквизиты: проверяем через statusRequisites = 3 (verified) на консультанте
         $requisitesVerified = ((int) $consultant->statusRequisites) === 3;
-
-        // Если нет — пробуем через таблицу requisites
         if (! $requisitesVerified && Schema::hasTable('requisites')) {
             $requisitesVerified = Requisite::where('consultant', $consultant->id)
                 ->whereNull('deletedAt')
@@ -106,12 +111,12 @@ class ProductController extends Controller
         $documentsAccepted = (bool) $consultant->acceptance;
 
         return [
-            'hasAccess' => $testsPassed && $requisitesVerified && $documentsAccepted,
+            'hasAccess' => $isActive,
             'testsPassed' => $testsPassed,
             'requisitesVerified' => $requisitesVerified,
             'documentsAccepted' => $documentsAccepted,
-            'needsRequisites' => $testsPassed && ! $requisitesVerified,
-            'needsAcceptance' => $testsPassed && $requisitesVerified && ! $documentsAccepted,
+            'needsRequisites' => false,
+            'needsAcceptance' => false,
         ];
     }
 

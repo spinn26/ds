@@ -53,6 +53,7 @@ const total = ref(0);
 const loading = ref(false);
 const filters = ref({ search: '', status: null, city: '', email: '', birth_date_from: '', birth_date_to: '' });
 const page = ref(1);
+const perPage = ref(25);
 const sortBy = ref([]);
 
 const statusOptions = [
@@ -89,6 +90,7 @@ const { debounced: debouncedLoad } = useDebounce(loadData, 400);
 
 function onOptions(opts) {
   page.value = opts.page;
+  if (opts.itemsPerPage) perPage.value = opts.itemsPerPage;
   sortBy.value = opts.sortBy || [];
   loadData();
 }
@@ -96,7 +98,7 @@ function onOptions(opts) {
 async function loadData() {
   loading.value = true;
   try {
-    const params = { page: page.value };
+    const params = { page: page.value, per_page: perPage.value };
     if (filters.value.search) params.search = filters.value.search;
     if (filters.value.status) params.status = filters.value.status;
     if (filters.value.city) params.city = filters.value.city;
