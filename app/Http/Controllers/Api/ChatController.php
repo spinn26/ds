@@ -61,29 +61,27 @@ class ChatController extends Controller
             ->limit(25)
             ->get();
 
-        // Calculate unread per ticket (only messages after last_read_at)
+        // Batch unread counts with a single LEFT JOIN to chat_read_status
+        // (was N+1: one COUNT per ticket).
         $ticketIds = $tickets->pluck('id')->filter();
-        $readMap = $ticketIds->isNotEmpty()
-            ? DB::table('chat_read_status')
-                ->where('user_id', $user->id)
-                ->whereIn('ticket_id', $ticketIds)
-                ->pluck('last_read_at', 'ticket_id')
-            : collect();
-
         $unreadMap = collect();
+
         if ($ticketIds->isNotEmpty()) {
-            // For each ticket, count messages from others after last_read_at
-            foreach ($tickets as $t) {
-                $lastRead = $readMap[$t->id] ?? null;
-                $q = DB::table('chat_messages')
-                    ->where('ticket_id', $t->id)
-                    ->where('sender_id', '!=', $user->id)
-                    ->where('is_system', false);
-                if ($lastRead) {
-                    $q->where('created_at', '>', $lastRead);
-                }
-                $unreadMap[$t->id] = $q->count();
-            }
+            $unreadMap = DB::table('chat_messages as cm')
+                ->leftJoin('chat_read_status as rs', function ($join) use ($user) {
+                    $join->on('rs.ticket_id', '=', 'cm.ticket_id')
+                         ->where('rs.user_id', '=', $user->id);
+                })
+                ->whereIn('cm.ticket_id', $ticketIds)
+                ->where('cm.sender_id', '!=', $user->id)
+                ->where('cm.is_system', false)
+                ->where(function ($q) {
+                    $q->whereNull('rs.last_read_at')
+                      ->orWhereColumn('cm.created_at', '>', 'rs.last_read_at');
+                })
+                ->groupBy('cm.ticket_id')
+                ->select('cm.ticket_id', DB::raw('count(*) as unread'))
+                ->pluck('unread', 'cm.ticket_id');
         }
 
         $data = $tickets->map(function ($t) use ($unreadMap) {
