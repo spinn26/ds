@@ -3,18 +3,19 @@
     <!-- Parallax layers: soft mint blobs on a dark base -->
     <div class="bg-base"></div>
     <div class="parallax">
-      <div class="blob blob-a" :style="layerStyle(0.02, 0.03)"></div>
-      <div class="blob blob-b" :style="layerStyle(-0.035, 0.02)"></div>
-      <div class="blob blob-c" :style="layerStyle(0.025, -0.03)"></div>
-      <div class="blob blob-d" :style="layerStyle(-0.015, -0.02)"></div>
-      <div class="blob blob-e" :style="layerStyle(0.04, 0.015)"></div>
-      <div class="sphere" :style="layerStyle(0.012, 0.008)">
+      <div class="blob blob-a" :style="layerStyle(0.10, 0.14)"></div>
+      <div class="blob blob-b" :style="layerStyle(-0.14, 0.10)"></div>
+      <div class="blob blob-c" :style="layerStyle(0.12, -0.13)"></div>
+      <div class="blob blob-d" :style="layerStyle(-0.08, -0.11)"></div>
+      <div class="blob blob-e" :style="layerStyle(0.18, 0.08)"></div>
+      <div class="sphere" :style="layerStyle(0.06, 0.04)">
         <BrandWaves shape="circle" :width="420" :height="420"
           bg-color="#6EE87A" stroke-color="#ffffff"
           :rows="14" :columns="18" :amplitude="4" :frequency="1.0"
           :stroke-width="0.9" :stroke-opacity="0.55" />
       </div>
     </div>
+    <div class="pulse-overlay"></div>
     <div class="vignette"></div>
 
     <v-container class="fill-height position-relative" fluid style="z-index:2">
@@ -139,18 +140,57 @@ async function handleLogin() {
   filter: blur(60px);
   opacity: 0.7;
   transition: transform 0.18s ease-out;
-  will-change: transform;
+  will-change: transform, filter;
+  animation: blob-drift 18s ease-in-out infinite alternate;
 }
 .blob-a { width: 520px; height: 520px; top: -60px; left: -80px;
-  background: radial-gradient(circle, rgba(110, 232, 122, 0.75) 0%, transparent 70%); }
+  background: radial-gradient(circle, rgba(110, 232, 122, 0.75) 0%, transparent 70%);
+  animation-duration: 16s; }
 .blob-b { width: 440px; height: 440px; bottom: -100px; right: -80px;
-  background: radial-gradient(circle, rgba(110, 232, 122, 0.55) 0%, transparent 70%); }
+  background: radial-gradient(circle, rgba(110, 232, 122, 0.55) 0%, transparent 70%);
+  animation-duration: 22s; animation-delay: -4s; }
 .blob-c { width: 340px; height: 340px; top: 40%; right: 10%;
-  background: radial-gradient(circle, rgba(46, 125, 50, 0.55) 0%, transparent 70%); }
+  background: radial-gradient(circle, rgba(46, 125, 50, 0.55) 0%, transparent 70%);
+  animation-duration: 19s; animation-delay: -8s; }
 .blob-d { width: 260px; height: 260px; bottom: 15%; left: 10%;
-  background: radial-gradient(circle, rgba(168, 244, 180, 0.45) 0%, transparent 70%); }
+  background: radial-gradient(circle, rgba(168, 244, 180, 0.45) 0%, transparent 70%);
+  animation-duration: 24s; animation-delay: -2s; }
 .blob-e { width: 380px; height: 380px; top: 15%; left: 55%;
-  background: radial-gradient(circle, rgba(94, 220, 107, 0.35) 0%, transparent 70%); }
+  background: radial-gradient(circle, rgba(94, 220, 107, 0.35) 0%, transparent 70%);
+  animation-duration: 20s; animation-delay: -10s; }
+
+@keyframes blob-drift {
+  0%   { filter: blur(55px) hue-rotate(-6deg); opacity: 0.65; transform: scale(1) translate(0, 0); }
+  50%  { filter: blur(80px) hue-rotate(28deg); opacity: 0.95; transform: scale(1.15) translate(30px, -22px); }
+  100% { filter: blur(60px) hue-rotate(-22deg); opacity: 0.7; transform: scale(0.92) translate(-26px, 28px); }
+}
+
+.bg-base {
+  animation: bg-shift 14s ease-in-out infinite alternate;
+}
+@keyframes bg-shift {
+  0%   { filter: hue-rotate(-8deg) brightness(0.96) saturate(1.0); }
+  50%  { filter: hue-rotate(22deg) brightness(1.1) saturate(1.2); }
+  100% { filter: hue-rotate(-16deg) brightness(0.94) saturate(0.9); }
+}
+
+/* Slow breathing tint layer over the base */
+.pulse-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    radial-gradient(900px 700px at 30% 30%, rgba(110, 232, 122, 0.25), transparent 55%),
+    radial-gradient(700px 600px at 70% 80%, rgba(46, 125, 50, 0.28), transparent 60%);
+  animation: pulse-breath 9s ease-in-out infinite alternate;
+  mix-blend-mode: screen;
+}
+@keyframes pulse-breath {
+  0%   { opacity: 0.55; transform: scale(1); }
+  50%  { opacity: 0.95; transform: scale(1.08); }
+  100% { opacity: 0.65; transform: scale(0.96); }
+}
 
 .sphere {
   position: absolute;
@@ -184,6 +224,7 @@ async function handleLogin() {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .blob, .sphere { transition: none !important; transform: none !important; }
+  .blob, .sphere { transition: none !important; transform: none !important; animation: none !important; }
+  .bg-base, .pulse-overlay { animation: none !important; }
 }
 </style>

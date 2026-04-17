@@ -48,8 +48,8 @@ defineProps({
   inset: 0;
   z-index: 0;
   background:
-    radial-gradient(at 0% 0%, rgba(110, 232, 122, 0.95) 0%, transparent 60%),
-    linear-gradient(120deg, #5EDC6B 0%, #83EE92 60%, #A8F4B4 100%);
+    radial-gradient(at 0% 0%, rgb(183 231 110) 0%, transparent 60%),
+    linear-gradient(120deg, #C1E66B, #83ee92 60%, #a8f4b4);
 }
 .brand-hero-accent {
   position: absolute;
