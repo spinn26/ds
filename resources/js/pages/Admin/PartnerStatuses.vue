@@ -75,6 +75,7 @@ const summary = ref([]);
 const items = ref([]);
 const total = ref(0);
 const page = ref(1);
+const perPage = ref(25);
 const search = ref('');
 const activityFilter = ref(null);
 
@@ -124,13 +125,14 @@ const { debounced: debouncedLoad } = useDebounce(loadData, 400);
 
 function onOptions(opts) {
   page.value = opts.page;
+  if (opts.itemsPerPage) perPage.value = opts.itemsPerPage;
   loadData();
 }
 
 async function loadData() {
   loading.value = true;
   try {
-    const params = { page: page.value };
+    const params = { page: page.value, per_page: perPage.value };
     if (search.value) params.search = search.value;
     if (activityFilter.value) params.activity = activityFilter.value;
     const { data } = await api.get('/admin/partner-statuses', { params });

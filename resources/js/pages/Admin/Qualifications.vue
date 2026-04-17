@@ -46,6 +46,7 @@ const loading = ref(false);
 const search = ref('');
 const month = ref(new Date().toISOString().slice(0, 7));
 const page = ref(1);
+const perPage = ref(25);
 const defaultMonth = new Date().toISOString().slice(0, 7);
 
 const activeFilterCount = computed(() => {
@@ -79,12 +80,16 @@ function resultLabel(r) {
 }
 
 const { debounced: debouncedLoad } = useDebounce(loadData, 400);
-function onOptions(opts) { page.value = opts.page; loadData(); }
+function onOptions(opts) {
+  page.value = opts.page;
+  if (opts.itemsPerPage) perPage.value = opts.itemsPerPage;
+  loadData();
+}
 
 async function loadData() {
   loading.value = true;
   try {
-    const params = { page: page.value };
+    const params = { page: page.value, per_page: perPage.value };
     if (search.value) params.search = search.value;
     if (month.value) params.month = month.value;
     const { data } = await api.get('/admin/qualifications', { params });

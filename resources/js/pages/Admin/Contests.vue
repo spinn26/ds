@@ -190,6 +190,7 @@ const loading = ref(false);
 const saving = ref(false);
 const search = ref('');
 const page = ref(1);
+const perPage = ref(25);
 const filters = ref({ status: null, type: null });
 
 const dialog = ref(false);
@@ -233,6 +234,7 @@ function statusColor(s) {
 
 function onOptions(opts) {
   page.value = opts.page;
+  if (opts.itemsPerPage) perPage.value = opts.itemsPerPage;
   loadData();
 }
 
@@ -252,7 +254,7 @@ async function loadReferences() {
 async function loadData() {
   loading.value = true;
   try {
-    const params = { page: page.value };
+    const params = { page: page.value, per_page: perPage.value };
     if (search.value) params.search = search.value;
     if (filters.value.status) params.status = filters.value.status;
     if (filters.value.type) params.type = filters.value.type;

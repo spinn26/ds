@@ -40,6 +40,7 @@ const total = ref(0);
 const loading = ref(false);
 const month = ref(new Date().toISOString().slice(0, 7));
 const page = ref(1);
+const perPage = ref(25);
 const defaultMonth = new Date().toISOString().slice(0, 7);
 
 // Build headers dynamically from first response row since API returns raw DB columns
@@ -68,13 +69,14 @@ function resetFilters() {
 
 function onOptions(opts) {
   page.value = opts.page;
+  if (opts.itemsPerPage) perPage.value = opts.itemsPerPage;
   loadData();
 }
 
 async function loadData() {
   loading.value = true;
   try {
-    const params = { page: page.value };
+    const params = { page: page.value, per_page: perPage.value };
     if (month.value) params.month = month.value;
     const { data } = await api.get('/admin/pool', { params });
     items.value = data.data;

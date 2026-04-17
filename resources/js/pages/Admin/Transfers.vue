@@ -35,6 +35,7 @@ const total = ref(0);
 const loading = ref(false);
 const search = ref('');
 const page = ref(1);
+const perPage = ref(25);
 
 const headers = [
   { title: 'Дата', key: 'dateCreated', width: 180 },
@@ -47,13 +48,14 @@ const { debounced: debouncedLoad } = useDebounce(loadData, 400);
 
 function onOptions(opts) {
   page.value = opts.page;
+  if (opts.itemsPerPage) perPage.value = opts.itemsPerPage;
   loadData();
 }
 
 async function loadData() {
   loading.value = true;
   try {
-    const params = { page: page.value };
+    const params = { page: page.value, per_page: perPage.value };
     if (search.value) params.search = search.value;
     const { data } = await api.get('/admin/transfers', { params });
     items.value = data.data;

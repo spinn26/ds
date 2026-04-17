@@ -46,6 +46,7 @@ const loading = ref(false);
 const search = ref('');
 const statusFilter = ref(null);
 const page = ref(1);
+const perPage = ref(25);
 
 const activeFilterCount = computed(() => {
   let c = 0;
@@ -75,12 +76,16 @@ const headers = [
 ];
 
 const { debounced: debouncedLoad } = useDebounce(loadData, 400);
-function onOptions(opts) { page.value = opts.page; loadData(); }
+function onOptions(opts) {
+  page.value = opts.page;
+  if (opts.itemsPerPage) perPage.value = opts.itemsPerPage;
+  loadData();
+}
 
 async function loadData() {
   loading.value = true;
   try {
-    const params = { page: page.value };
+    const params = { page: page.value, per_page: perPage.value };
     if (search.value) params.search = search.value;
     if (statusFilter.value) params.status = statusFilter.value;
     const { data } = await api.get('/admin/payments', { params });

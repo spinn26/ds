@@ -52,6 +52,7 @@ const search = ref('');
 const statusFilter = ref(null);
 const statusOptions = ref([]);
 const page = ref(1);
+const perPage = ref(25);
 
 const headers = [
   { title: 'ID', key: 'id', width: 60 },
@@ -91,13 +92,14 @@ const { debounced: debouncedLoad } = useDebounce(loadData, 400);
 
 function onOptions(opts) {
   page.value = opts.page;
+  if (opts.itemsPerPage) perPage.value = opts.itemsPerPage;
   loadData();
 }
 
 async function loadData() {
   loading.value = true;
   try {
-    const params = { page: page.value };
+    const params = { page: page.value, per_page: perPage.value };
     if (search.value) params.search = search.value;
     if (statusFilter.value) params.status = statusFilter.value;
     const { data } = await api.get('/admin/contracts', { params });
