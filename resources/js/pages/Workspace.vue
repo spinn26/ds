@@ -67,7 +67,7 @@
         </v-card>
 
         <!-- Network Leader self-badge: partner is the root of the network -->
-        <v-card v-if="data.isNetworkLeader" class="pa-4 mb-4 h-100" variant="tonal" color="secondary">
+        <v-card v-if="data.isNetworkLeader" class="pa-4 mb-4" variant="tonal" color="secondary">
           <div class="d-flex align-center ga-3">
             <v-avatar color="secondary" size="48">
               <v-icon color="white">mdi-crown</v-icon>
