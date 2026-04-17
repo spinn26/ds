@@ -5,7 +5,7 @@
       color="grey-darken-4" theme="dark" class="admin-drawer">
       <div class="d-flex align-center pa-4 drawer-brand">
         <div class="admin-brand-mark" :class="{ 'mr-2': !rail }">
-          <BrandWaves shape="circle" :width="32" :height="32"
+          <BrandWaves shape="sheet" :width="32" :height="32"
             bg-color="#6EE87A" stroke-color="#000000"
             :rows="10" :columns="14" :amplitude="3" :frequency="1.0"
             :stroke-width="0.8" :stroke-opacity="0.8" />
@@ -121,7 +121,6 @@ const initials = computed(() =>
 .admin-brand-mark {
   width: 32px;
   height: 32px;
-  border-radius: 50%;
   overflow: hidden;
   flex-shrink: 0;
   box-shadow: 0 0 0 2px rgba(var(--v-theme-brand), 0.35);

@@ -6,7 +6,7 @@
       class="sidebar-drawer">
       <div class="sidebar-header d-flex align-center pa-4" :class="{ 'justify-center': rail }">
         <div class="brand-mark" :class="{ 'mr-2': !rail }">
-          <BrandWaves shape="circle" :width="32" :height="32"
+          <BrandWaves shape="sheet" :width="32" :height="32"
             :bg-color="'#6EE87A'" stroke-color="#ffffff"
             :rows="10" :columns="14" :amplitude="3" :frequency="1.0"
             :stroke-width="0.8" :stroke-opacity="0.95" />
@@ -64,7 +64,7 @@
       <!-- Brand fallback (visible when sidebar is collapsed or on mobile) -->
       <router-link to="/" class="topbar-brand d-flex align-center ga-2 ml-2">
         <div class="brand-mark brand-mark-sm">
-          <BrandWaves shape="circle" :width="24" :height="24"
+          <BrandWaves shape="sheet" :width="24" :height="24"
             bg-color="#6EE87A" stroke-color="#ffffff"
             :rows="8" :columns="12" :amplitude="2.5" :frequency="1.0"
             :stroke-width="0.7" :stroke-opacity="0.95" />
@@ -699,7 +699,6 @@ const visibleMenu = computed(() => menuItems.filter((item) => {
 .brand-mark {
   width: 32px;
   height: 32px;
-  border-radius: 50%;
   overflow: hidden;
   flex-shrink: 0;
   box-shadow: 0 0 0 2px rgba(var(--v-theme-brand), 0.25);
