@@ -46,8 +46,34 @@
       <template #item.createdAt="{ value }">
         {{ fmtDate(value) }}
       </template>
+      <template #item.actions="{ item }">
+        <v-btn icon="mdi-pencil" size="x-small" variant="text" @click="openEdit(item)" />
+      </template>
       <template #no-data><EmptyState /></template>
     </v-data-table-server>
+
+    <!-- Edit dialog -->
+    <v-dialog v-model="editDialog" max-width="420" persistent>
+      <v-card>
+        <v-card-title>Редактировать партнёра</v-card-title>
+        <v-card-text>
+          <div class="text-body-2 text-medium-emphasis mb-3">
+            {{ editForm.personName }} (ID {{ editForm.id }})
+          </div>
+          <v-text-field v-model="editForm.participantCode" label="Реф. код (participantCode)"
+            variant="outlined" density="compact" class="mb-2"
+            :error-messages="editErrors.participantCode" />
+          <v-text-field v-model.number="editForm.inviter" type="number" label="Пригласивший (ID консультанта)"
+            variant="outlined" density="compact"
+            :error-messages="editErrors.inviter" />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="editDialog = false">Отмена</v-btn>
+          <v-btn color="primary" :loading="saving" @click="saveEdit">Сохранить</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
@@ -106,6 +132,7 @@ const headers = [
   { title: 'Клиент?', key: 'isClient', width: 80, sortable: false },
   { title: 'Доступ', key: 'platformAccess', width: 80, sortable: false },
   { title: 'Дата регистрации', key: 'createdAt', width: 140 },
+  { title: '', key: 'actions', sortable: false, width: 60 },
 ];
 
 function activityColor(name) {
@@ -136,6 +163,43 @@ async function loadData() {
     total.value = data.total;
   } catch {}
   loading.value = false;
+}
+
+const editDialog = ref(false);
+const editForm = ref({ id: null, personName: '', participantCode: '', inviter: null });
+const editErrors = ref({});
+const saving = ref(false);
+
+function openEdit(item) {
+  editForm.value = {
+    id: item.id,
+    personName: item.personName,
+    participantCode: item.participantCode || '',
+    inviter: item.inviterId ?? null,
+  };
+  editErrors.value = {};
+  editDialog.value = true;
+}
+
+async function saveEdit() {
+  saving.value = true;
+  editErrors.value = {};
+  try {
+    await api.put(`/admin/partners/${editForm.value.id}`, {
+      participantCode: editForm.value.participantCode || null,
+      inviter: editForm.value.inviter || null,
+    });
+    editDialog.value = false;
+    loadData();
+  } catch (e) {
+    if (e.response?.status === 422) {
+      const raw = e.response.data?.errors || {};
+      const mapped = {};
+      for (const k of Object.keys(raw)) mapped[k] = raw[k][0];
+      editErrors.value = mapped;
+    }
+  }
+  saving.value = false;
 }
 
 onMounted(loadData);

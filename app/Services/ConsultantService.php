@@ -126,10 +126,13 @@ class ConsultantService
                 'hasChildren' => $subCount > 0,
                 'residentCount' => $subCount,
                 'fcCount' => 0,
+                'partnersCount' => $subCount,
                 'inviterName' => $c->inviterName,
                 'birthDate' => $birthDate,
                 'city' => $cityName,
                 'dateActivity' => $c->dateActivity?->format('d.m.Y'),
+                'yearPeriodEnd' => $c->yearPeriodEnd?->format('d.m.Y'),
+                'activationDeadline' => $c->activationDeadline?->format('d.m.Y'),
             ];
         });
     }
@@ -145,10 +148,25 @@ class ConsultantService
             $members = $members->filter(fn ($m) => str_contains(mb_strtolower($m['personName']), $search));
         }
 
-        // Статус активности (множественный)
-        if (! empty($filters['activity'])) {
-            $activityIds = is_array($filters['activity']) ? $filters['activity'] : explode(',', $filters['activity']);
-            $members = $members->filter(fn ($m) => in_array($m['activityId'], $activityIds));
+        // Статус активности (множественный) — принимаем ID или строковые алиасы
+        // из UI: 'active', 'registered', 'terminated', 'excluded'
+        $statusAlias = [
+            'active' => \App\Enums\PartnerActivity::Active->value,
+            'registered' => \App\Enums\PartnerActivity::Registered->value,
+            'terminated' => \App\Enums\PartnerActivity::Terminated->value,
+            'excluded' => \App\Enums\PartnerActivity::Excluded->value,
+        ];
+        $rawActivity = $filters['activity'] ?? $filters['status'] ?? null;
+        if (! empty($rawActivity)) {
+            $raw = is_array($rawActivity) ? $rawActivity : explode(',', $rawActivity);
+            $activityIds = array_map(
+                fn ($v) => is_numeric($v) ? (int) $v : ($statusAlias[$v] ?? null),
+                $raw
+            );
+            $activityIds = array_filter($activityIds, fn ($v) => $v !== null);
+            if ($activityIds) {
+                $members = $members->filter(fn ($m) => in_array($m['activityId'], $activityIds));
+            }
         }
 
         // Квалификация (множественный)

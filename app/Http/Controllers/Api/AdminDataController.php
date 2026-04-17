@@ -85,12 +85,37 @@ class AdminDataController extends Controller
                     'phone' => $personData?->phone ?? null,
                     'birthDate' => $personData?->birthDate ?? null,
                     'inviterName' => $c->inviterName,
+                    'inviterId' => $c->inviter,
                     'isClient' => $isClient,
                     'platformAccess' => $platformAccess,
                 ];
             });
 
         return response()->json(['data' => $partners, 'total' => $total]);
+    }
+
+    /** Редактирование партнёра (пока — только реф.код / пригласитель) */
+    public function updatePartner(Request $request, int $id): JsonResponse
+    {
+        $consultant = Consultant::findOrFail($id);
+
+        $data = $request->validate([
+            'participantCode' => ['nullable', 'string', 'max:64',
+                // Unique across consultants excluding current
+                "unique:consultant,participantCode,{$id},id",
+            ],
+            'inviter' => ['nullable', 'integer', 'exists:consultant,id'],
+        ]);
+
+        if (array_key_exists('participantCode', $data)) {
+            $consultant->participantCode = $data['participantCode'] ?: null;
+        }
+        if (array_key_exists('inviter', $data)) {
+            $consultant->inviter = $data['inviter'] ?: null;
+        }
+        $consultant->save();
+
+        return response()->json(['message' => 'Обновлён', 'id' => $consultant->id]);
     }
 
     /** Смена статуса активности партнёра */

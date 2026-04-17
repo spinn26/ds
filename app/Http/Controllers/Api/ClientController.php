@@ -27,8 +27,22 @@ class ClientController extends Controller
             $query->where('personName', 'ilike', '%' . $request->input('search') . '%');
         }
 
-        if ($request->filled('email') || $request->filled('birth_date_from') || $request->filled('birth_date_to')) {
-            $personQuery = DB::table('person')->select('id');
+        if ($request->filled('status')) {
+            $status = $request->input('status');
+            if ($status === 'active') {
+                $query->where('active', true);
+            } elseif ($status === 'inactive') {
+                $query->where('active', false);
+            }
+        }
+
+        $hasPersonFilter = $request->filled('email')
+            || $request->filled('birth_date_from')
+            || $request->filled('birth_date_to')
+            || $request->filled('city');
+
+        if ($hasPersonFilter) {
+            $personQuery = DB::table('person')->select('person.id');
             if ($request->filled('email')) {
                 $personQuery->where('email', 'ilike', '%' . $request->input('email') . '%');
             }
@@ -38,7 +52,11 @@ class ClientController extends Controller
             if ($request->filled('birth_date_to')) {
                 $personQuery->where('birthDate', '<=', $request->input('birth_date_to'));
             }
-            $query->whereIn('person', $personQuery->pluck('id'));
+            if ($request->filled('city')) {
+                $personQuery->join('city', 'city.id', '=', 'person.city')
+                    ->where('city.cityNameRu', 'ilike', '%' . $request->input('city') . '%');
+            }
+            $query->whereIn('person', $personQuery->pluck('person.id'));
         }
 
         $total = $query->count();
@@ -78,6 +96,7 @@ class ClientController extends Controller
                 'city' => $cityName,
                 'phone' => $personData?->phone ?? null,
                 'email' => $personData?->email ?? null,
+                'active' => (bool) $c->active,
             ];
         });
 

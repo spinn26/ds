@@ -66,11 +66,25 @@
           </v-row>
         </v-card>
 
+        <!-- Network Leader self-badge: partner is the root of the network -->
+        <v-card v-if="data.isNetworkLeader" class="pa-4 mb-4 h-100" variant="tonal" color="secondary">
+          <div class="d-flex align-center ga-3">
+            <v-avatar color="secondary" size="48">
+              <v-icon color="white">mdi-crown</v-icon>
+            </v-avatar>
+            <div>
+              <div class="text-caption text-medium-emphasis">Статус</div>
+              <div class="text-subtitle-1 font-weight-bold">Вы — Лидер сети</div>
+              <div class="text-caption">Корень структуры, наставник не назначается</div>
+            </div>
+          </div>
+        </v-card>
+
         <!-- Mentor & Network Leader -->
-        <v-alert v-if="!data.mentor && data.networkLeader" type="info" variant="tonal" class="mb-4" density="compact">
+        <v-alert v-if="!data.isNetworkLeader && !data.mentor && data.networkLeader" type="info" variant="tonal" class="mb-4" density="compact">
           Наставника нет — указан ЛИДЕР СЕТИ
         </v-alert>
-        <v-row v-if="data.mentor || data.networkLeader" class="mb-4">
+        <v-row v-if="!data.isNetworkLeader && (data.mentor || data.networkLeader)" class="mb-4">
           <v-col v-if="data.mentor" cols="12" :md="data.networkLeader ? 6 : 12">
             <v-card class="pa-4 h-100" variant="tonal" color="primary">
               <div class="d-flex align-center ga-3">

@@ -54,13 +54,17 @@
         <thead>
           <tr>
             <th style="width:40px"></th>
-            <th>ФИО</th>
+            <th>Партнёр</th>
+            <th class="text-center" style="width:70px">Уровень</th>
             <th>Квалификация</th>
             <th>Статус</th>
-            <th>Дата смены статуса</th>
-            <th class="text-right">ЛП</th>
-            <th class="text-right">ГП</th>
-            <th class="text-right">НГП</th>
+            <th style="white-space:nowrap">Дата смены статуса</th>
+            <th class="text-right" style="white-space:nowrap">ЛП</th>
+            <th class="text-right" style="white-space:nowrap">ГП</th>
+            <th class="text-right" style="white-space:nowrap">НГП</th>
+            <th class="text-right" style="width:90px">Клиенты</th>
+            <th class="text-right" style="width:100px">Контракты</th>
+            <th class="text-right" style="width:100px">Партнёры</th>
           </tr>
         </thead>
         <tbody>
@@ -72,23 +76,29 @@
                   <v-icon>{{ row._expanded ? 'mdi-chevron-down' : 'mdi-chevron-right' }}</v-icon>
                 </v-btn>
               </td>
-              <td :style="{ paddingLeft: (row._depth * 20 + 8) + 'px' }">{{ row.personName }}</td>
-              <td>
+              <td :style="{ paddingLeft: (row._depth * 20 + 8) + 'px', whiteSpace: 'nowrap' }">{{ row.personName }}</td>
+              <td class="text-center">{{ row.level ?? '—' }}</td>
+              <td style="white-space:nowrap">
                 <v-chip v-if="row.qualification" size="x-small" color="secondary">{{ row.qualification.level }} [{{ row.qualification.title }}]</v-chip>
                 <span v-else>—</span>
               </td>
-              <td>
+              <td style="white-space:nowrap">
                 <v-chip v-if="row.activityName" size="x-small" :color="activityColor(row.activityName)">{{ row.activityName }}</v-chip>
                 <span v-else>—</span>
               </td>
-              <td>{{ row.dateActivity || '—' }}</td>
-              <td class="text-right">{{ fmt(row.personalVolume) }}</td>
-              <td class="text-right">{{ fmt(row.groupVolume) }}</td>
-              <td class="text-right">{{ fmt(row.groupVolumeCumulative) }}</td>
+              <td style="white-space:nowrap">
+                {{ statusChangeDate(row) || '—' }}
+              </td>
+              <td class="text-right" style="white-space:nowrap">{{ fmt(row.personalVolume) }}</td>
+              <td class="text-right" style="white-space:nowrap">{{ fmt(row.groupVolume) }}</td>
+              <td class="text-right" style="white-space:nowrap">{{ fmt(row.groupVolumeCumulative) }}</td>
+              <td class="text-right">{{ row.clientCount ?? 0 }}</td>
+              <td class="text-right">{{ row.contractCount ?? 0 }}</td>
+              <td class="text-right">{{ row.partnersCount ?? 0 }}</td>
             </tr>
           </template>
           <tr v-if="!flatRows.length && !loading">
-            <td colspan="8"><EmptyState /></td>
+            <td colspan="12"><EmptyState /></td>
           </tr>
         </tbody>
       </v-table>
@@ -191,6 +201,16 @@ function activityColor(name) {
   if (l.includes('терминир') || l.includes('исключ')) return 'error';
   if (l.includes('зарег')) return 'info';
   return 'warning';
+}
+
+// "Дата смены статуса" по правилам: Активен → до какого надо набрать 500 ЛП,
+// Зарегистрирован → до какого надо активироваться (90 дней с регистрации),
+// иначе — дата последней смены активности.
+function statusChangeDate(row) {
+  const name = (row.activityName || '').toLowerCase();
+  if (name.includes('актив')) return row.yearPeriodEnd || row.dateActivity;
+  if (name.includes('зарег')) return row.activationDeadline;
+  return row.dateActivity;
 }
 
 async function toggleExpand(row) {

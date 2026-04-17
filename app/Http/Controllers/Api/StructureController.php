@@ -34,13 +34,10 @@ class StructureController extends Controller
                 $query = Consultant::whereNull('dateDeleted')
                     ->where('personName', 'ilike', '%' . $request->search . '%');
 
-                if ($request->filled('activity')) {
-                    $activityIds = explode(',', $request->activity);
-                    $query->whereIn('activity', $activityIds);
-                }
-
-                $rows = $query->orderBy('personName')->limit(50)->get();
+                $rows = $query->orderBy('personName')->limit(100)->get();
                 $members = $this->consultantService->formatMembers($rows);
+                // Let the service map status/activity aliases and other filters
+                $members = $this->consultantService->applyFilters($members, $request->all());
 
                 return response()->json(['data' => $members->values()]);
             }

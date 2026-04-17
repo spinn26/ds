@@ -34,8 +34,10 @@ class WorkspaceController extends Controller
         if ($isConsultant && $consultant) {
             $data['partnerStats'] = $this->getPartnerStats($consultant);
             $data['teamActivity'] = $this->getTeamActivity($consultant);
-            $data['mentor'] = $this->getMentor($consultant);
-            $data['networkLeader'] = $this->getNetworkLeader($consultant);
+            // Консультант сам является Лидером сети, если у него нет пригласителя
+            $data['isNetworkLeader'] = empty($consultant->inviter);
+            $data['mentor'] = $data['isNetworkLeader'] ? null : $this->getMentor($consultant);
+            $data['networkLeader'] = $data['isNetworkLeader'] ? null : $this->getNetworkLeader($consultant);
         }
 
         // Сотрудники

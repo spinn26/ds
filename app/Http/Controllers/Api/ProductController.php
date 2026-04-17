@@ -43,13 +43,21 @@ class ProductController extends Controller
             $categoryId = $p->productType ? ($typeToCategory[$p->productType] ?? null) : null;
             $cat = $categoryId ? ($allCategories[$categoryId] ?? null) : null;
 
+            $available = $testPassed && ($this->checkAccess($consultant)['hasAccess'] ?? false);
+
             return [
                 'id' => $p->id,
                 'name' => $p->name,
                 'description' => $p->description ?? null,
                 'typeName' => $p->typeName ?? null,
                 'active' => (bool) $p->active,
-                'accessible' => $testPassed && ($this->checkAccess($consultant)['hasAccess'] ?? false),
+                'accessible' => $available,
+                // Frontend reads .available and .url; keep .accessible for back-compat
+                'available' => $available,
+                'url' => $p->openProductUrl ?? null,
+                'imageUrl' => $p->imageUrl ?? null,
+                'educationUrl' => $p->educationUrl ?? null,
+                'instructionUrl' => $p->instructionUrl ?? null,
                 'testPassed' => $testPassed,
                 'category' => $cat ? [
                     'id' => $cat->id,
