@@ -115,7 +115,12 @@ async function handleLogin() {
 .bg-gradient {
   position: absolute;
   inset: 0;
-  background: linear-gradient(135deg, #0d1b2a 0%, #1b2d45 30%, #1a3a2a 60%, #0d2818 100%);
+  background:
+    linear-gradient(135deg,
+      rgba(var(--v-theme-on-surface), 0.86) 0%,
+      rgba(var(--v-theme-on-surface), 0.72) 30%,
+      rgba(var(--v-theme-primary), 0.6) 60%,
+      rgba(var(--v-theme-primary), 0.85) 100%);
   animation: gradientShift 20s ease infinite;
   background-size: 400% 400%;
 }
@@ -133,7 +138,7 @@ async function handleLogin() {
 .circle {
   position: absolute;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(76, 175, 80, 0.6) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(var(--v-theme-primary), 0.55) 0%, transparent 70%);
   animation: float linear infinite;
   pointer-events: none;
 }
@@ -150,8 +155,8 @@ async function handleLogin() {
   position: absolute;
   inset: 0;
   background-image:
-    linear-gradient(rgba(76, 175, 80, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(76, 175, 80, 0.05) 1px, transparent 1px);
+    linear-gradient(rgba(var(--v-theme-primary), 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(var(--v-theme-primary), 0.06) 1px, transparent 1px);
   background-size: 60px 60px;
   animation: gridPan 30s linear infinite;
 }
@@ -163,20 +168,11 @@ async function handleLogin() {
 
 .login-card {
   backdrop-filter: blur(20px);
-  background: rgba(255, 255, 255, 0.97) !important;
-  border: 1px solid rgba(76, 175, 80, 0.15);
-  color: #333 !important;
-}
-.login-card :deep(.v-field__input),
-.login-card :deep(.v-label),
-.login-card :deep(.v-field__field) {
-  color: #333 !important;
-}
-.login-card :deep(.v-icon) {
-  color: #666 !important;
+  background: rgba(var(--v-theme-surface), 0.92) !important;
+  border: 1px solid rgba(var(--v-theme-primary), 0.2);
 }
 
 .logo-text {
-  text-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
+  text-shadow: 0 2px 8px rgba(var(--v-theme-primary), 0.35);
 }
 </style>

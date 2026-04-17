@@ -12,8 +12,10 @@ export const statusColors = {
   excluded: 'error',
 
   // Ticket statuses
+  new: 'info',
   open: 'info',
   in_progress: 'warning',
+  pending: 'warning',
   resolved: 'success',
   closed: 'grey',
 
@@ -37,11 +39,32 @@ export const statusColors = {
 
 // === STATUS LABELS ===
 export const statusLabels = {
-  open: 'Открыт',
+  new: 'Новый',
+  open: 'В работе',
   in_progress: 'В работе',
+  pending: 'Ожидание',
   resolved: 'Решён',
   closed: 'Закрыт',
 };
+
+// === PRIORITIES ===
+export const priorityColors = {
+  critical: 'error',
+  high: 'warning',
+  medium: 'info',
+  low: 'success',
+};
+
+export const priorityLabels = {
+  critical: 'Критический',
+  high: 'Высокий',
+  medium: 'Средний',
+  low: 'Низкий',
+};
+
+export function getPriorityColor(p) {
+  return priorityColors[p] || 'default';
+}
 
 export const categoryLabels = {
   support: 'Техподдержка',

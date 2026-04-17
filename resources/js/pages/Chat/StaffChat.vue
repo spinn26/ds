@@ -1832,12 +1832,12 @@ onUnmounted(() => {
 .avatar-circle.staff { background: rgb(var(--v-theme-primary)); }
 .msg-bubble { max-width: 60%; padding: 10px 14px; border-radius: 14px; position: relative; }
 .msg-bubble.partner { background: rgba(var(--v-theme-surface-variant), 1); border-bottom-left-radius: 4px; }
-.msg-bubble.mine { background: #1a3a2e; color: #d1e8d5; border-bottom-right-radius: 4px; }
+.msg-bubble.mine { background: rgb(var(--v-theme-primary)); color: #fff; border-bottom-right-radius: 4px; }
 .msg-sender { font-size: 11px; font-weight: 700; margin-bottom: 2px; color: #f97316; }
-.msg-bubble.mine .msg-sender { color: rgba(209,232,213,0.7); }
+.msg-bubble.mine .msg-sender { color: rgba(255,255,255,0.8); }
 .msg-text { font-size: 13px; line-height: 1.5; white-space: pre-line; word-break: break-word; }
 .msg-attach { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; margin-top: 4px; }
-.msg-bubble.mine .msg-attach { color: rgba(209,232,213,0.7); }
+.msg-bubble.mine .msg-attach { color: rgba(255,255,255,0.85); }
 .msg-image-link { display: block; margin-top: 6px; border-radius: 10px; overflow: hidden; max-width: 320px; }
 .msg-image { display: block; width: 100%; height: auto; max-height: 260px; object-fit: cover; border-radius: 10px; background: rgba(0,0,0,0.05); }
 .msg-time { font-size: 10px; margin-top: 4px; opacity: 0.5; display: inline-flex; align-items: center; gap: 4px; }
@@ -1867,7 +1867,7 @@ onUnmounted(() => {
 .reaction-chip.mine { background: rgba(var(--v-theme-primary), 0.15); border-color: rgb(var(--v-theme-primary)); color: rgb(var(--v-theme-primary)); font-weight: 700; }
 .reaction-emoji { font-size: 13px; line-height: 1; }
 .reaction-count { font-size: 10px; font-weight: 600; }
-.msg-bubble.mine .reaction-chip { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2); color: #d1e8d5; }
+.msg-bubble.mine .reaction-chip { background: rgba(255,255,255,0.15); border-color: rgba(255,255,255,0.3); color: #fff; }
 .msg-bubble.mine .reaction-chip.mine { background: rgba(255,255,255,0.25); border-color: rgba(255,255,255,0.5); }
 .reaction-picker { display: flex; gap: 2px; padding: 4px; background: rgb(var(--v-theme-surface)); border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
 .reaction-picker-btn { background: none; border: none; cursor: pointer; padding: 4px 6px; border-radius: 6px; font-size: 16px; line-height: 1; transition: background 0.1s; }
