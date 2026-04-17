@@ -753,8 +753,127 @@ class ChatController extends Controller
         if ($request->filled('category')) {
             $query->where('category', $request->category);
         }
+        $limit = min(50, max(1, (int) $request->input('limit', 50)));
 
-        return response()->json($query->orderByDesc('views')->get());
+        return response()->json(
+            $query->orderByDesc('views')->limit($limit)->get()
+        );
+    }
+
+    /**
+     * Suggestions for a specific ticket: look up articles whose title or
+     * content overlaps with the ticket subject / category / tags. Returns
+     * up to 5 items ranked by a simple substring count.
+     */
+    public function knowledgeSuggest(Request $request, int $ticketId): JsonResponse
+    {
+        if (! $this->isStaff($request)) {
+            return response()->json(['data' => []]);
+        }
+
+        $ticket = DB::table('chat_tickets')->where('id', $ticketId)->first();
+        if (! $ticket) return response()->json(['data' => []]);
+
+        // Pull keywords from subject + first message
+        $firstMsg = DB::table('chat_messages')
+            ->where('ticket_id', $ticketId)
+            ->where('is_system', false)
+            ->orderBy('created_at')
+            ->value('content');
+
+        $text = trim(($ticket->subject ?? '') . ' ' . mb_substr($firstMsg ?? '', 0, 500));
+        // Strip short/noisy words, keep tokens of length >= 4
+        $tokens = collect(preg_split('/[^\p{L}\p{N}]+/u', $text, -1, PREG_SPLIT_NO_EMPTY))
+            ->map(fn ($w) => mb_strtolower($w))
+            ->filter(fn ($w) => mb_strlen($w) >= 4)
+            ->unique()
+            ->take(8);
+
+        if ($tokens->isEmpty()) {
+            return response()->json(['data' => []]);
+        }
+
+        $articles = DB::table('chat_knowledge_articles')
+            ->where(function ($q) use ($tokens) {
+                foreach ($tokens as $t) {
+                    $q->orWhere('title', 'ilike', '%' . $t . '%')
+                      ->orWhere('content', 'ilike', '%' . $t . '%');
+                }
+            })
+            ->limit(30)
+            ->get();
+
+        // Rank by token hits in title (×3) + content
+        $ranked = $articles->map(function ($a) use ($tokens) {
+            $score = 0;
+            $title = mb_strtolower($a->title ?? '');
+            $content = mb_strtolower($a->content ?? '');
+            foreach ($tokens as $t) {
+                if (mb_strpos($title, $t) !== false) $score += 3;
+                if (mb_strpos($content, $t) !== false) $score += 1;
+            }
+            $a->score = $score;
+            return $a;
+        })
+        ->sortByDesc('score')
+        ->take(5)
+        ->values();
+
+        return response()->json(['data' => $ranked]);
+    }
+
+    /**
+     * Create a KB article from a resolved ticket. Uses subject as title
+     * and concatenates non-system messages as content. Staff-only.
+     */
+    public function saveTicketAsArticle(Request $request, int $ticketId): JsonResponse
+    {
+        if (! $this->isStaff($request)) {
+            return response()->json(['message' => 'Только для сотрудников'], 403);
+        }
+
+        $ticket = DB::table('chat_tickets')->where('id', $ticketId)->first();
+        if (! $ticket) return response()->json(['message' => 'Не найден'], 404);
+
+        $request->validate([
+            'title' => 'nullable|string|max:255',
+            'category' => 'nullable|string|max:64',
+            'content' => 'nullable|string',
+        ]);
+
+        $title = $request->input('title') ?: ($ticket->subject ?? 'Решение тикета #' . $ticketId);
+        $category = $request->input('category') ?: ($ticket->department ?? 'general');
+
+        // Default content: subject + joined non-system messages
+        $content = $request->input('content');
+        if (! $content) {
+            $msgs = DB::table('chat_messages')
+                ->where('ticket_id', $ticketId)
+                ->where('is_system', false)
+                ->orderBy('created_at')
+                ->get();
+            $content = "## Вопрос\n\n";
+            $first = $msgs->first();
+            $content .= $first ? $first->content : ($ticket->subject ?? '');
+            $content .= "\n\n## Решение\n\n";
+            foreach ($msgs->skip(1) as $m) {
+                $author = (bool) $m->is_agent ? 'Сотрудник' : 'Клиент';
+                $content .= "**{$author}** ({$m->sender_name}):\n{$m->content}\n\n";
+            }
+        }
+
+        $articleId = DB::table('chat_knowledge_articles')->insertGetId([
+            'title' => $title,
+            'content' => $content,
+            'category' => $category,
+            'tags' => $ticket->tags ?: null,
+            'views' => 0,
+            'helpful' => 0,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return response()->json(['id' => $articleId, 'title' => $title], 201);
     }
 
     // ==================== STATS ====================

@@ -296,9 +296,21 @@
                 </v-list-item>
               </v-list>
             </v-menu>
+            <!-- Search in chat -->
+            <button class="action-btn" title="Поиск в чате (Ctrl+K)" @click="openMessageSearch">
+              <v-icon size="16">mdi-magnify</v-icon>
+            </button>
+            <!-- Knowledge base -->
+            <button class="action-btn" :class="{ active: showKb }" title="База знаний" @click="toggleKb">
+              <v-icon size="16">mdi-book-open-variant</v-icon>
+            </button>
             <!-- Notes -->
             <button class="action-btn" :class="{ active: showNotes }" title="Внутренние заметки" @click="toggleNotes">
               <v-icon size="16">mdi-note-text-outline</v-icon>
+            </button>
+            <!-- Save to FAQ (only when resolved) -->
+            <button v-if="activeChat.status === 'resolved'" class="action-btn" title="Сохранить решение в базу знаний" @click="openSaveFaq">
+              <v-icon size="16">mdi-content-save-outline</v-icon>
             </button>
             <!-- Pin toggle -->
             <button class="action-btn" :class="{ active: activeChat.pinned_at }" :title="activeChat.pinned_at ? 'Открепить' : 'Закрепить'" @click="togglePin(activeChat, $event)">
@@ -327,6 +339,41 @@
           </button>
           <input v-else v-model="newTag" ref="tagInput" class="tag-input"
             @keydown.enter.prevent="addTag" @keydown.esc="cancelAddTag" @blur="addTag" />
+        </div>
+
+        <!-- In-chat search bar -->
+        <div v-if="messageSearch.open" class="msg-search-bar">
+          <v-icon size="16">mdi-magnify</v-icon>
+          <input class="msg-search-input" v-model="messageSearch.query" placeholder="Поиск по сообщениям этого чата…" />
+          <span class="msg-search-count" v-if="messageSearch.query">Найдено: {{ messageSearchMatches.size }}</span>
+          <button class="msg-search-close" @click="closeMessageSearch"><v-icon size="14">mdi-close</v-icon></button>
+        </div>
+
+        <!-- Knowledge base panel -->
+        <div v-if="showKb" class="kb-panel">
+          <div class="kb-head">
+            <v-icon size="14" color="primary">mdi-book-open-variant</v-icon>
+            <span>База знаний · предложения по теме</span>
+            <button class="action-btn small" @click="loadKbSuggestions" title="Обновить"><v-icon size="12">mdi-refresh</v-icon></button>
+          </div>
+          <div v-if="kbLoading" class="kb-empty">Ищу…</div>
+          <div v-else-if="!kbArticles.length" class="kb-empty">
+            <v-icon size="24" color="grey">mdi-book-off-outline</v-icon>
+            Нет подходящих статей
+          </div>
+          <div v-else class="kb-list">
+            <div v-for="a in kbArticles" :key="a.id" class="kb-item" @click="insertKbArticle(a)">
+              <div class="kb-item-head">
+                <strong>{{ a.title }}</strong>
+                <span v-if="a.category" class="kb-item-category">{{ a.category }}</span>
+              </div>
+              <div class="kb-item-snippet">{{ (a.content || '').slice(0, 180) }}{{ (a.content || '').length > 180 ? '…' : '' }}</div>
+              <div class="kb-item-meta">
+                <span v-if="a.views"><v-icon size="10">mdi-eye</v-icon> {{ a.views }}</span>
+                <span class="kb-item-insert">Вставить ↵</span>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- Notes panel (collapsible) -->
@@ -360,7 +407,7 @@
             <div v-else-if="item.msg.isSystem" class="msg-row system">
               <div class="msg-system">{{ item.msg.content }}</div>
             </div>
-            <div v-else class="msg-row" :class="{ mine: isMine(item.msg) }">
+            <div v-else class="msg-row" :class="{ mine: isMine(item.msg), 'search-hit': messageSearch.open && messageSearchMatches.has(item.msg.id) }">
               <div class="msg-avatar" v-if="!isMine(item.msg)">
                 <div class="avatar-circle partner">{{ initials(item.msg.senderName) }}</div>
               </div>
@@ -613,6 +660,32 @@
       </div>
     </aside>
 
+    <!-- Save to FAQ dialog -->
+    <v-dialog v-model="saveFaqDialog.open" max-width="640" :persistent="saveFaqDialog.saving">
+      <v-card>
+        <v-card-title class="d-flex align-center ga-2">
+          <v-icon>mdi-book-plus-outline</v-icon>
+          Сохранить решение в базу знаний
+        </v-card-title>
+        <v-card-text>
+          <v-text-field v-model="saveFaqDialog.title" label="Заголовок статьи" class="mb-2" density="comfortable" />
+          <v-text-field v-model="saveFaqDialog.category" label="Категория" class="mb-2" density="comfortable" />
+          <v-textarea v-model="saveFaqDialog.content" label="Содержимое"
+            rows="10" auto-grow counter maxlength="8000" density="comfortable" />
+          <div class="text-caption text-medium-emphasis mt-1">
+            Поддерживается простой markdown. По умолчанию подтянуты все сообщения этого тикета — отредактируй перед сохранением.
+          </div>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" :disabled="saveFaqDialog.saving" @click="saveFaqDialog.open = false">Отмена</v-btn>
+          <v-btn color="primary" :loading="saveFaqDialog.saving"
+            :disabled="!saveFaqDialog.title.trim() || !saveFaqDialog.content.trim()"
+            @click="submitSaveFaq">Сохранить</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- Hotkeys modal -->
     <v-dialog v-model="showHotkeys" max-width="500">
       <v-card>
@@ -624,12 +697,13 @@
           <div class="hotkey-row"><kbd>Enter</kbd><span>Отправить ответ</span></div>
           <div class="hotkey-row"><kbd>Shift</kbd> + <kbd>Enter</kbd><span>Новая строка</span></div>
           <div class="hotkey-row"><kbd>Esc</kbd><span>Отмена ответа / правки / закрыть чат</span></div>
+          <div class="hotkey-row"><kbd>Ctrl</kbd> + <kbd>K</kbd><span>Поиск по сообщениям в чате</span></div>
           <div class="hotkey-row"><kbd>Ctrl</kbd> + <kbd>/</kbd><span>Показать / скрыть эту панель</span></div>
           <div class="hotkey-row"><kbd>?</kbd><span>То же (вне поля ввода)</span></div>
           <v-divider class="my-2" />
           <div class="text-caption text-medium-emphasis">
             Наведи курсор на сообщение — появятся кнопки «Ответить» и «Изменить» (редактирование в течение 5 мин).
-            В шапке чата: смена приоритета, назначение, статус, заметки.
+            В шапке чата: смена приоритета, назначение, статус, заметки, база знаний, поиск.
           </div>
         </v-card-text>
         <v-card-actions>
@@ -704,6 +778,85 @@ const noteText = ref('');
 const partnerContext = ref(null);
 const showContext = ref(localStorage.getItem('staff-chat-context') !== '0');
 watch(showContext, v => localStorage.setItem('staff-chat-context', v ? '1' : '0'));
+
+// Knowledge base
+const showKb = ref(false);
+const kbArticles = ref([]);
+const kbLoading = ref(false);
+async function loadKbSuggestions() {
+  if (!activeChat.value) return;
+  kbLoading.value = true;
+  try {
+    const { data } = await api.get(`/chat/tickets/${activeChat.value.id}/knowledge-suggest`);
+    kbArticles.value = data.data || [];
+  } catch { kbArticles.value = []; }
+  kbLoading.value = false;
+}
+function toggleKb() {
+  showKb.value = !showKb.value;
+  if (showKb.value) loadKbSuggestions();
+}
+function insertKbArticle(a) {
+  const content = a.content || '';
+  msgText.value = msgText.value ? `${msgText.value}\n\n${content}` : content;
+  nextTick(() => { taRef.value?.focus(); autoGrow(); });
+  showKb.value = false;
+}
+
+// Save to FAQ
+const saveFaqDialog = ref({ open: false, title: '', category: 'general', content: '', saving: false });
+function openSaveFaq() {
+  if (!activeChat.value) return;
+  const content = messages.value
+    .filter(m => !m.isSystem)
+    .map(m => {
+      const role = m.isAgent ? 'Сотрудник' : 'Клиент';
+      return `**${role}** (${m.senderName}):\n${m.content || ''}`;
+    })
+    .join('\n\n');
+  saveFaqDialog.value = {
+    open: true,
+    title: activeChat.value.subject || '',
+    category: activeChat.value.department || activeChat.value.category || 'general',
+    content,
+    saving: false,
+  };
+}
+async function submitSaveFaq() {
+  if (!saveFaqDialog.value.title.trim() || !saveFaqDialog.value.content.trim()) return;
+  saveFaqDialog.value.saving = true;
+  try {
+    await api.post(`/chat/tickets/${activeChat.value.id}/save-to-kb`, {
+      title: saveFaqDialog.value.title,
+      category: saveFaqDialog.value.category,
+      content: saveFaqDialog.value.content,
+    });
+    saveFaqDialog.value.open = false;
+    alert('Статья добавлена в базу знаний');
+  } catch (e) {
+    alert(e?.response?.data?.message || 'Не удалось сохранить');
+  }
+  saveFaqDialog.value.saving = false;
+}
+
+// In-chat message search
+const messageSearch = ref({ open: false, query: '' });
+const messageSearchMatches = computed(() => {
+  const q = messageSearch.value.query.trim().toLowerCase();
+  if (!q) return new Set();
+  const hits = new Set();
+  for (const m of messages.value) {
+    if ((m.content || '').toLowerCase().includes(q)) hits.add(m.id);
+  }
+  return hits;
+});
+function openMessageSearch() {
+  messageSearch.value.open = true;
+  nextTick(() => document.querySelector('.msg-search-input')?.focus());
+}
+function closeMessageSearch() {
+  messageSearch.value = { open: false, query: '' };
+}
 
 // Reactions
 const REACTION_PALETTE = ['👍', '❤️', '😂', '🎉', '🙏', '✅'];
@@ -1243,6 +1396,7 @@ async function openChat(t) {
   if (socket) socket.emit('ticket:join', t.id);
   startPoll();
   loadNotes();
+  if (showKb.value) loadKbSuggestions();
 }
 
 function closeActiveChat() {
@@ -1527,8 +1681,14 @@ function onGlobalKey(e) {
   const tag = e.target?.tagName;
   const inField = tag === 'INPUT' || tag === 'TEXTAREA' || e.target?.isContentEditable;
   if ((e.ctrlKey || e.metaKey) && e.key === '/') { e.preventDefault(); showHotkeys.value = !showHotkeys.value; return; }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k' && activeChat.value) {
+    e.preventDefault();
+    openMessageSearch();
+    return;
+  }
   if (!inField && e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); showHotkeys.value = !showHotkeys.value; return; }
   if (e.key === 'Escape') {
+    if (messageSearch.value.open) { closeMessageSearch(); return; }
     if (showHotkeys.value) { showHotkeys.value = false; return; }
     if (editing.value) { cancelEdit(); return; }
     if (replyTo.value) { cancelReply(); return; }
@@ -1632,6 +1792,30 @@ onUnmounted(() => {
 .notes-input textarea { flex: 1; border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); border-radius: 8px; padding: 6px 10px; font-size: 12px; background: rgba(var(--v-theme-surface), 0.9); color: inherit; resize: none; outline: none; font-family: inherit; }
 .notes-send { background: rgb(var(--v-theme-primary)); color: #fff; border: none; border-radius: 8px; padding: 6px 10px; cursor: pointer; }
 .notes-send:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* In-chat search bar */
+.msg-search-bar { display: flex; align-items: center; gap: 8px; padding: 8px 16px; border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); background: rgba(var(--v-theme-primary), 0.04); }
+.msg-search-input { flex: 1; border: none; outline: none; background: transparent; font-size: 14px; color: inherit; font-family: inherit; }
+.msg-search-count { font-size: 11px; color: rgba(var(--v-theme-on-surface), 0.5); }
+.msg-search-close { background: none; border: none; cursor: pointer; padding: 2px; border-radius: 4px; color: rgba(var(--v-theme-on-surface), 0.5); }
+.msg-search-close:hover { background: rgba(var(--v-theme-error), 0.1); color: rgb(var(--v-theme-error)); }
+.msg-row.search-hit .msg-bubble { box-shadow: 0 0 0 2px #fbbf24; background: rgba(251,191,36,0.15); }
+
+/* KB suggestions panel */
+.kb-panel { border-bottom: 1px solid rgba(var(--v-border-color), 0.3); background: rgba(var(--v-theme-primary), 0.04); max-height: 260px; display: flex; flex-direction: column; }
+.kb-head { padding: 8px 16px; font-size: 11px; color: rgba(var(--v-theme-on-surface), 0.7); display: flex; align-items: center; gap: 6px; }
+.kb-head span { flex: 1; font-weight: 600; }
+.kb-empty { padding: 20px; text-align: center; font-size: 12px; color: rgba(var(--v-theme-on-surface), 0.4); display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.kb-list { flex: 1; overflow-y: auto; padding: 0 12px 8px; }
+.kb-item { padding: 8px 10px; border-radius: 8px; background: rgb(var(--v-theme-surface)); border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); margin-bottom: 6px; cursor: pointer; transition: all 0.15s; }
+.kb-item:hover { border-color: rgb(var(--v-theme-primary)); background: rgba(var(--v-theme-primary), 0.06); }
+.kb-item-head { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; }
+.kb-item-head strong { flex: 1; font-weight: 700; }
+.kb-item-category { font-size: 10px; padding: 1px 6px; border-radius: 8px; background: rgba(var(--v-theme-primary), 0.12); color: rgb(var(--v-theme-primary)); font-weight: 600; }
+.kb-item-snippet { font-size: 11px; color: rgba(var(--v-theme-on-surface), 0.6); margin-top: 3px; white-space: pre-line; max-height: 48px; overflow: hidden; }
+.kb-item-meta { display: flex; justify-content: space-between; align-items: center; margin-top: 4px; font-size: 10px; color: rgba(var(--v-theme-on-surface), 0.5); }
+.kb-item-meta span { display: inline-flex; align-items: center; gap: 2px; }
+.kb-item-insert { color: rgb(var(--v-theme-primary)); font-weight: 600; }
 
 /* Messages */
 .chat-messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; scroll-behavior: smooth; }
