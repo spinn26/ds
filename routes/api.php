@@ -154,6 +154,14 @@ Route::prefix('v1')->group(function () {
         Route::post('/admin/transaction-import/{id}/calculate', [\App\Http\Controllers\Api\TransactionImportController::class, 'calculateCommissions']);
         Route::post('/admin/transactions/{id}/calculate', [\App\Http\Controllers\Api\TransactionImportController::class, 'calculateSingle']);
 
+        // Admin Mail (SMTP settings, broadcast, send log)
+        Route::get('/admin/mail/settings', [\App\Http\Controllers\Api\AdminMailController::class, 'settings']);
+        Route::put('/admin/mail/settings', [\App\Http\Controllers\Api\AdminMailController::class, 'updateSettings']);
+        Route::post('/admin/mail/test', [\App\Http\Controllers\Api\AdminMailController::class, 'test']);
+        Route::post('/admin/mail/broadcast', [\App\Http\Controllers\Api\AdminMailController::class, 'broadcast']);
+        Route::post('/admin/mail/audience-preview', [\App\Http\Controllers\Api\AdminMailController::class, 'audiencePreview']);
+        Route::get('/admin/mail/log', [\App\Http\Controllers\Api\AdminMailController::class, 'log']);
+
         // Admin References (generic CRUD for small reference tables)
         Route::get('/admin/references', [\App\Http\Controllers\Api\AdminReferenceController::class, 'catalogs']);
         Route::get('/admin/references/{catalog}', [\App\Http\Controllers\Api\AdminReferenceController::class, 'index']);
