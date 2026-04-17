@@ -772,7 +772,12 @@ async function connectSocket() {
   if (!token) return;
   try {
     const { io } = await import('socket.io-client');
-    const host = window.__SOCKET_URL__ || (location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.hostname + ':3001';
+    // Priority: explicit override -> local dev on :3001 -> same-origin (nginx proxy on prod)
+    const isLocal = ['localhost', '127.0.0.1'].includes(location.hostname);
+    const defaultHost = isLocal
+      ? `ws://${location.hostname}:3001`
+      : `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`;
+    const host = window.__SOCKET_URL__ || defaultHost;
     socket = io(host, { auth: { token }, transports: ['websocket', 'polling'], reconnection: true });
 
     socket.on('chat:new-message', (m) => {
