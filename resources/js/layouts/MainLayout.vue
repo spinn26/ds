@@ -214,15 +214,24 @@
       </v-card>
     </v-dialog>
 
+    <!-- Onboarding questionnaire — required for consultants before anything else -->
+    <OnboardingQuestionnaire
+      v-model="showQuestionnaire"
+      :identity-name="questionnaireIdentity.name"
+      :identity-city="questionnaireIdentity.city"
+      @completed="onQuestionnaireCompleted"
+    />
+
   </v-layout>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useDisplay, useTheme } from 'vuetify';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import { useSnackbar } from '../composables/useSnackbar';
+import OnboardingQuestionnaire from '../components/OnboardingQuestionnaire.vue';
 import api from '../api';
 function fmtShortDate(d) {
   if (!d) return '';
@@ -296,6 +305,15 @@ const initials = computed(() =>
   `${auth.user?.firstName?.[0] || ''}${auth.user?.lastName?.[0] || ''}`.toUpperCase()
 );
 
+// Onboarding questionnaire — shown to consultants who haven't filled it yet.
+// Block navigation via router guard below (persistent dialog already blocks UI).
+const showQuestionnaire = ref(false);
+const questionnaireIdentity = ref({ name: '', city: '' });
+
+function onQuestionnaireCompleted() {
+  if (auth.user) auth.user.questionnaireCompleted = true;
+}
+
 // Load status info for TopBar
 onMounted(async () => {
   try {
@@ -306,6 +324,18 @@ onMounted(async () => {
       referralLink: data.referral?.referralLink,
       canInvite: data.referral?.canInvite,
     };
+    // Prefill identity fields for the onboarding questionnaire
+    const u = data.user || {};
+    const fullName = [u.lastName, u.firstName, u.patronymic].filter(Boolean).join(' ');
+    questionnaireIdentity.value = {
+      name: fullName,
+      city: data.location?.city || '',
+    };
+    // Show the onboarding dialog for any non-staff user without a filled questionnaire.
+    // This covers both 'registered' (right after sign-up) and 'consultant' roles.
+    if (!isStaff.value && auth.user && auth.user.questionnaireCompleted === false) {
+      showQuestionnaire.value = true;
+    }
   } catch {}
   loadNotifications();
   loadChatUnread();

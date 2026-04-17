@@ -68,6 +68,7 @@ Route::prefix('v1')->group(function () {
 
         Route::get('/profile', [ProfileController::class, 'show']);
         Route::put('/profile', [ProfileController::class, 'update']);
+        Route::post('/profile/questionnaire', [ProfileController::class, 'saveQuestionnaire']);
         Route::post('/profile/password', [ProfileController::class, 'changePassword']);
         Route::post('/profile/avatar', [ProfileController::class, 'uploadAvatar']);
         Route::put('/profile/requisites', [ProfileController::class, 'updateRequisites']);

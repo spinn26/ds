@@ -37,6 +37,15 @@ class User extends Authenticatable
         'role',
         'gender',
         'birthDate',
+        'workField',
+        'salesExperience',
+        'financeExperience',
+        'hasPotentialClients',
+        'potentialClientsCount',
+        'currentIncome',
+        'weeklyHours',
+        'incomeFactors',
+        'questionnaireCompletedAt',
     ];
 
     protected $hidden = [
@@ -49,6 +58,7 @@ class User extends Authenticatable
             'birthDate' => 'datetime',
             'dateDeleted' => 'datetime',
             'dateChanged' => 'datetime',
+            'questionnaireCompletedAt' => 'datetime',
             'test' => 'boolean',
             'boughtProRost' => 'boolean',
             'agreement' => 'boolean',

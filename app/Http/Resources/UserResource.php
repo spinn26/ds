@@ -26,6 +26,7 @@ class UserResource extends JsonResource
             'role' => $this->role,
             'activityStatus' => $activityValue,
             'avatarUrl' => $this->avatar ? '/storage/' . $this->avatar : null,
+            'questionnaireCompleted' => (bool) $this->questionnaireCompletedAt,
         ];
     }
 }

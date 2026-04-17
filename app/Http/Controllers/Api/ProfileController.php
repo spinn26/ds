@@ -125,6 +125,42 @@ class ProfileController extends Controller
         ]);
     }
 
+    /**
+     * Сохранение онбординг-анкеты партнёра (10 вопросов).
+     * Заполняется один раз после регистрации; без неё остальные разделы
+     * остаются заблокированными (фронт).
+     */
+    public function saveQuestionnaire(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'workField' => ['nullable', 'string', 'max:255'],
+            'salesExperience' => ['required', 'string', 'in:none,<1,1-3,3+'],
+            'financeExperience' => ['nullable', 'string', 'max:4000'],
+            'hasPotentialClients' => ['required', 'string', 'in:yes,partly,no'],
+            'potentialClientsCount' => ['nullable', 'string', 'in:<10,10-30,30-100,100+'],
+            'currentIncome' => ['nullable', 'string', 'max:128'],
+            'weeklyHours' => ['required', 'string', 'in:<10,10-20,20-40,full-time'],
+            'incomeFactors' => ['nullable', 'string', 'max:4000'],
+        ]);
+
+        $user = $request->user();
+        $user->workField = $data['workField'] ?? null;
+        $user->salesExperience = $data['salesExperience'];
+        $user->financeExperience = $data['financeExperience'] ?? null;
+        $user->hasPotentialClients = $data['hasPotentialClients'];
+        $user->potentialClientsCount = $data['potentialClientsCount'] ?? null;
+        $user->currentIncome = $data['currentIncome'] ?? null;
+        $user->weeklyHours = $data['weeklyHours'];
+        $user->incomeFactors = $data['incomeFactors'] ?? null;
+        $user->questionnaireCompletedAt = now();
+        $user->saveQuietly();
+
+        return response()->json([
+            'message' => 'Анкета сохранена',
+            'questionnaireCompleted' => true,
+        ]);
+    }
+
     public function changePassword(ChangePasswordRequest $request): JsonResponse
     {
         $user = $request->user();
