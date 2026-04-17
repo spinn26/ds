@@ -128,6 +128,14 @@ const initials = computed(() =>
 }
 
 /* Remove rounded corners from nav items — square-edge look */
+.admin-drawer :deep(.v-list-item),
+.admin-drawer :deep(.v-list),
+.admin-drawer :deep(.v-navigation-drawer__content) {
+  border-radius: 0 !important;
+}
+.admin-drawer :deep(.v-navigation-drawer) {
+  border-radius: 0 !important;
+}
 .admin-nav-list :deep(.v-list-item) {
   border-radius: 0 !important;
 }

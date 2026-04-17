@@ -89,6 +89,11 @@
         </v-btn>
       </template>
 
+      <!-- Theme toggle -->
+      <v-btn :icon="isDark ? 'mdi-weather-sunny' : 'mdi-weather-night'" size="small"
+        variant="text" class="mr-1" :title="isDark ? 'Светлая тема' : 'Тёмная тема'"
+        @click="toggleTheme" />
+
       <!-- Notifications -->
       <v-menu min-width="360" max-height="480" :close-on-content-click="false">
         <template #activator="{ props }">
@@ -179,13 +184,9 @@
             </div>
             <v-divider class="mb-2" />
             <v-list density="compact" nav class="pa-0">
-              <v-list-item to="/profile" prepend-icon="mdi-account-outline" title="Профиль"
-                rounded="lg" class="mb-1" />
-              <v-list-item :prepend-icon="isDark ? 'mdi-weather-sunny' : 'mdi-weather-night'"
-                :title="isDark ? 'Светлая тема' : 'Тёмная тема'"
-                rounded="lg" class="mb-1" @click="toggleTheme" />
+              <v-list-item to="/profile" prepend-icon="mdi-account-outline" title="Профиль" class="mb-1" />
               <v-list-item @click="auth.logout(); $router.push('/login')"
-                prepend-icon="mdi-logout" title="Выйти" rounded="lg"
+                prepend-icon="mdi-logout" title="Выйти"
                 base-color="error" />
             </v-list>
           </v-card-text>
@@ -665,6 +666,14 @@ const visibleMenu = computed(() => menuItems.filter((item) => {
 }
 
 /* Square-edge items in the sidebar — no Vuetify rounding */
+.sidebar-drawer :deep(.v-list-item),
+.sidebar-drawer :deep(.v-list),
+.sidebar-drawer :deep(.v-navigation-drawer__content) {
+  border-radius: 0 !important;
+}
+.sidebar-drawer :deep(.v-navigation-drawer) {
+  border-radius: 0 !important;
+}
 .main-nav-list :deep(.v-list-item) {
   border-radius: 0 !important;
 }
