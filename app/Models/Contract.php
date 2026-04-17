@@ -5,13 +5,28 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Spatie\Activitylog\LogOptions;
+use Spatie\Activitylog\Traits\LogsActivity;
 
 class Contract extends Model
 {
+    use LogsActivity;
+
     protected $table = 'contract';
     public $timestamps = false;
 
     protected $guarded = ['id'];
+
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->logOnly([
+                'client', 'consultant', 'product', 'program', 'status',
+                'currency', 'amount', 'number', 'openDate', 'closeDate',
+            ])
+            ->logOnlyDirty()
+            ->setDescriptionForEvent(fn (string $eventName) => "Contract {$eventName}");
+    }
 
     protected function casts(): array
     {

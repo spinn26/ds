@@ -7,13 +7,29 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Spatie\Activitylog\LogOptions;
+use Spatie\Activitylog\Traits\LogsActivity;
 
 class Consultant extends Model
 {
+    use LogsActivity;
+
     protected $table = 'consultant';
     public $timestamps = false;
 
     protected $guarded = ['id'];
+
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->logOnly([
+                'personName', 'activity', 'status', 'active', 'acceptance',
+                'participantCode', 'inviter', 'webUser', 'person',
+                'activationDeadline', 'yearPeriodEnd', 'terminationCount',
+            ])
+            ->logOnlyDirty()
+            ->setDescriptionForEvent(fn (string $eventName) => "Consultant {$eventName}");
+    }
 
     protected function casts(): array
     {

@@ -22,6 +22,13 @@ class CommissionCalculator
      */
     public function calculateForTransaction(int $transactionId): array
     {
+        return DB::transaction(function () use ($transactionId) {
+            return $this->calculateInTransaction($transactionId);
+        });
+    }
+
+    private function calculateInTransaction(int $transactionId): array
+    {
         $tx = DB::table('transaction')->where('id', $transactionId)->first();
         if (! $tx) return ['error' => 'Транзакция не найдена'];
 

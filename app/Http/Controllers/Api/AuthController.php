@@ -13,6 +13,7 @@ use App\Models\Consultant;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 
 class AuthController extends Controller
@@ -123,41 +124,45 @@ class AuthController extends Controller
      */
     public function register(RegisterRequest $request): JsonResponse
     {
-        $user = User::create([
-            'firstName' => $request->input('firstName'),
-            'lastName' => $request->input('lastName'),
-            'patronymic' => $request->input('patronymic'),
-            'email' => $request->input('email'),
-            'phone' => $request->input('phone'),
-            'nicTG' => $request->input('telegram'),
-            'birthDate' => $request->input('birthDate'),
-            'password' => Hash::make($request->input('password')),
-            'role' => 'registered',
-            'dateCreated' => now()->toIso8601String(),
-        ]);
+        $user = DB::transaction(function () use ($request) {
+            $user = User::create([
+                'firstName' => $request->input('firstName'),
+                'lastName' => $request->input('lastName'),
+                'patronymic' => $request->input('patronymic'),
+                'email' => $request->input('email'),
+                'phone' => $request->input('phone'),
+                'nicTG' => $request->input('telegram'),
+                'birthDate' => $request->input('birthDate'),
+                'password' => Hash::make($request->input('password')),
+                'role' => 'registered',
+                'dateCreated' => now()->toIso8601String(),
+            ]);
 
-        $inviter = null;
-        if ($request->filled('refCode')) {
-            $inviter = Consultant::where('participantCode', $request->input('refCode'))
-                ->where('active', true)
-                ->first();
-        }
+            $inviter = null;
+            if ($request->filled('refCode')) {
+                $inviter = Consultant::where('participantCode', $request->input('refCode'))
+                    ->where('active', true)
+                    ->first();
+            }
 
-        $consultant = new Consultant();
-        $consultant->person = $user->id;
-        $consultant->personName = trim("{$request->input('lastName')} {$request->input('firstName')} {$request->input('patronymic')}");
-        $consultant->active = false;
-        $consultant->status = 1;
-        $consultant->dateCreated = now();
-        $consultant->participantCode = null;
-        if ($inviter) {
-            $consultant->inviter = $inviter->id;
-            $consultant->inviterName = $inviter->personName;
-        }
-        $consultant->save();
+            $consultant = new Consultant();
+            $consultant->person = $user->id;
+            $consultant->personName = trim("{$request->input('lastName')} {$request->input('firstName')} {$request->input('patronymic')}");
+            $consultant->active = false;
+            $consultant->status = 1;
+            $consultant->dateCreated = now();
+            $consultant->participantCode = null;
+            if ($inviter) {
+                $consultant->inviter = $inviter->id;
+                $consultant->inviterName = $inviter->personName;
+            }
+            $consultant->save();
 
-        $user->consultant_id = $consultant->id;
-        $user->saveQuietly();
+            $user->consultant_id = $consultant->id;
+            $user->saveQuietly();
+
+            return $user;
+        });
 
         $token = $user->createToken('spa')->plainTextToken;
 
@@ -179,16 +184,18 @@ class AuthController extends Controller
             return response()->json(['message' => 'Аккаунт уже активирован'], 400);
         }
 
-        $user->role = 'registered,consultant';
-        $user->saveQuietly();
+        DB::transaction(function () use ($user) {
+            $user->role = 'registered,consultant';
+            $user->saveQuietly();
 
-        $consultant = Consultant::where('webUser', $user->id)->first();
-        if ($consultant) {
-            $consultant->dateActivity = now();
-            $consultant->dateDeterministic = now()->addDays(90);
-            $consultant->dateDeterministicPlan = now()->addDays(90);
-            $consultant->save();
-        }
+            $consultant = Consultant::where('webUser', $user->id)->first();
+            if ($consultant) {
+                $consultant->dateActivity = now();
+                $consultant->dateDeterministic = now()->addDays(90);
+                $consultant->dateDeterministicPlan = now()->addDays(90);
+                $consultant->save();
+            }
+        });
 
         return response()->json([
             'message' => 'Аккаунт активирован',
