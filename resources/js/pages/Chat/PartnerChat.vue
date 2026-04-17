@@ -10,8 +10,25 @@
         <button class="quick-btn" @click="openFounder"><v-icon size="14">mdi-email-edit</v-icon> Написать основателю</button>
         <button class="quick-btn" @click="openCase"><v-icon size="14">mdi-briefcase-plus</v-icon> Оставить кейс</button>
       </div>
+      <!-- Search + filter chips -->
+      <div class="sidebar-search">
+        <v-icon size="16">mdi-magnify</v-icon>
+        <input v-model="searchQuery" type="text" placeholder="Поиск по теме…" />
+        <button v-if="searchQuery" class="clear-btn" @click="searchQuery = ''"><v-icon size="14">mdi-close</v-icon></button>
+      </div>
+      <div class="filter-row">
+        <button v-for="opt in statusFilters" :key="opt.value"
+          class="filter-chip" :class="{ active: statusFilter === opt.value }"
+          @click="statusFilter = opt.value">{{ opt.label }}</button>
+      </div>
+      <div class="filter-row">
+        <button v-for="opt in categoryFilters" :key="opt.value"
+          class="filter-chip small" :class="{ active: categoryFilter === opt.value }"
+          :style="categoryFilter === opt.value ? { background: catColor(opt.value) + '22', color: catColor(opt.value), borderColor: catColor(opt.value) } : {}"
+          @click="categoryFilter = opt.value">{{ opt.label }}</button>
+      </div>
       <div class="sidebar-list">
-        <div v-for="t in chats" :key="t.id" class="chat-item" :class="{ active: activeChat?.id === t.id, 'has-unread': t.unread > 0 }" @click="openChat(t)">
+        <div v-for="t in visibleChats" :key="t.id" class="chat-item" :class="{ active: activeChat?.id === t.id, 'has-unread': t.unread > 0 }" @click="openChat(t)">
           <div class="chat-item-avatar" :style="{ background: catColor(t.category) }">
             <v-icon size="18" color="white">{{ catIcon(t.category) }}</v-icon>
           </div>
@@ -27,10 +44,12 @@
           </div>
           <span v-if="t.unread > 0" class="unread-badge">{{ t.unread }}</span>
         </div>
-        <div v-if="!chats.length && !loading" class="sidebar-empty">
+        <div v-if="!visibleChats.length && !loading" class="sidebar-empty">
           <v-icon size="40" color="grey">mdi-chat-outline</v-icon>
-          <p>Нет обращений</p>
-          <button class="btn-new small" @click="showNew = true">Создать</button>
+          <p v-if="chats.length">Ничего не найдено по фильтрам</p>
+          <p v-else>Нет обращений</p>
+          <button v-if="!chats.length" class="btn-new small" @click="showNew = true">Создать первое</button>
+          <button v-else-if="searchQuery || statusFilter !== 'all' || categoryFilter !== 'all'" class="btn-new small" @click="resetFilters">Сбросить фильтры</button>
         </div>
       </div>
     </aside>
@@ -74,10 +93,16 @@
               </div>
               <div class="msg-bubble" :class="isMine(item.msg) ? 'mine' : 'agent'">
                 <div class="msg-sender">{{ item.msg.senderName }}</div>
-                <div class="msg-text">{{ item.msg.content }}</div>
-                <a v-if="item.msg.attachmentPath" :href="item.msg.attachmentPath" target="_blank" class="msg-attach">
-                  <v-icon size="14">mdi-paperclip</v-icon> {{ item.msg.attachmentName || 'Файл' }}
-                </a>
+                <div v-if="item.msg.content" class="msg-text">{{ item.msg.content }}</div>
+                <template v-if="item.msg.attachmentPath">
+                  <a v-if="isImageAttachment(item.msg.attachmentPath)"
+                    :href="item.msg.attachmentPath" target="_blank" class="msg-image-link">
+                    <img :src="item.msg.attachmentPath" :alt="item.msg.attachmentName || 'Изображение'" class="msg-image" loading="lazy" />
+                  </a>
+                  <a v-else :href="item.msg.attachmentPath" target="_blank" class="msg-attach">
+                    <v-icon size="14">mdi-paperclip</v-icon> {{ item.msg.attachmentName || 'Файл' }}
+                  </a>
+                </template>
                 <div class="msg-time">{{ fmtTime(item.msg.createdAt) }}</div>
               </div>
               <div class="msg-avatar" v-if="isMine(item.msg)">
@@ -101,23 +126,37 @@
         </button>
 
         <!-- Input -->
-        <div v-if="activeChat.status !== 'closed'" class="chat-input">
-          <input ref="fileRef" type="file" hidden @change="e => file = e.target.files?.[0]" />
+        <div v-if="activeChat.status !== 'closed'" class="chat-input"
+          :class="{ 'drag-over': dragOver }"
+          @dragover.prevent="dragOver = true"
+          @dragleave.prevent="dragOver = false"
+          @drop.prevent="onFileDrop">
+          <input ref="fileRef" type="file" hidden @change="e => setFile(e.target.files?.[0])" />
           <button class="input-btn" title="Прикрепить файл" @click="$refs.fileRef.click()"><v-icon size="20">mdi-paperclip</v-icon></button>
           <div class="input-area">
             <textarea ref="taRef" v-model="msgText"
               placeholder="Введите сообщение… (Enter — отправить, Shift+Enter — перенос строки)"
               rows="1"
               @keydown.enter.exact.prevent="send"
-              @input="onInput"></textarea>
-            <div v-if="file" class="input-file">
-              <v-icon size="14">mdi-file</v-icon> {{ file.name }}
-              <button @click="file = null"><v-icon size="14">mdi-close</v-icon></button>
+              @input="onInput"
+              @paste="onPaste"></textarea>
+            <div v-if="file" class="input-file-preview">
+              <img v-if="filePreviewUrl" :src="filePreviewUrl" alt="preview" />
+              <div v-else class="input-file-icon"><v-icon size="16">mdi-file</v-icon></div>
+              <div class="input-file-info">
+                <div class="input-file-name">{{ file.name }}</div>
+                <div class="input-file-size">{{ fmtFileSize(file.size) }}</div>
+              </div>
+              <button class="input-file-remove" @click="clearFile"><v-icon size="14">mdi-close</v-icon></button>
             </div>
           </div>
           <button class="input-send" :disabled="sending || (!msgText.trim() && !file)" title="Отправить (Enter)" @click="send">
             <v-icon size="20">mdi-send</v-icon>
           </button>
+          <div v-if="dragOver" class="drop-overlay">
+            <v-icon size="32">mdi-file-upload</v-icon>
+            <span>Отпустите файл для прикрепления</span>
+          </div>
         </div>
         <div v-else class="chat-closed">
           <v-icon size="16">mdi-lock</v-icon> Чат закрыт
@@ -185,6 +224,44 @@ let typingSendTimer = null;
 const showJumpToBottom = ref(false);
 const pendingMessages = ref(0);
 const BASE_TITLE = 'Обращения';
+
+// Drag-drop + file preview
+const dragOver = ref(false);
+const filePreviewUrl = ref(null);
+
+// Filters + search
+const searchQuery = ref('');
+const statusFilter = ref('all');
+const categoryFilter = ref('all');
+const statusFilters = [
+  { label: 'Все', value: 'all' },
+  { label: 'Новые', value: 'new' },
+  { label: 'В работе', value: 'open' },
+  { label: 'Ожидание', value: 'pending' },
+  { label: 'Решён', value: 'resolved' },
+  { label: 'Закрыт', value: 'closed' },
+];
+const categoryFilters = [
+  { label: 'Все', value: 'all' },
+  { label: 'Техподдержка', value: 'support' },
+  { label: 'Бэк-офис', value: 'backoffice' },
+  { label: 'Начисления', value: 'billing' },
+  { label: 'Юридический', value: 'legal' },
+  { label: 'Общий', value: 'general' },
+];
+function resetFilters() {
+  searchQuery.value = '';
+  statusFilter.value = 'all';
+  categoryFilter.value = 'all';
+}
+const visibleChats = computed(() => {
+  let list = chats.value;
+  if (statusFilter.value !== 'all') list = list.filter(t => t.status === statusFilter.value);
+  if (categoryFilter.value !== 'all') list = list.filter(t => t.category === categoryFilter.value);
+  const q = searchQuery.value.trim().toLowerCase();
+  if (q) list = list.filter(t => String(t.subject || '').toLowerCase().includes(q));
+  return list;
+});
 
 // New chat dialog
 const showNew = ref(false);
@@ -272,6 +349,43 @@ function autoGrow() {
   if (!t) return;
   t.style.height = 'auto';
   t.style.height = Math.min(t.scrollHeight, 120) + 'px';
+}
+
+// File handling
+const IMAGE_EXT = /\.(jpe?g|png|gif|webp|bmp|svg)(\?|$)/i;
+function isImageAttachment(path) {
+  return !!path && IMAGE_EXT.test(path);
+}
+function fmtFileSize(bytes) {
+  if (!bytes) return '';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+}
+function setFile(f) {
+  if (!f) return;
+  file.value = f;
+  if (filePreviewUrl.value) URL.revokeObjectURL(filePreviewUrl.value);
+  filePreviewUrl.value = f.type?.startsWith('image/') ? URL.createObjectURL(f) : null;
+}
+function clearFile() {
+  if (filePreviewUrl.value) URL.revokeObjectURL(filePreviewUrl.value);
+  filePreviewUrl.value = null;
+  file.value = null;
+}
+function onFileDrop(e) {
+  dragOver.value = false;
+  const f = e.dataTransfer?.files?.[0];
+  if (f) setFile(f);
+}
+function onPaste(e) {
+  const items = e.clipboardData?.items || [];
+  for (const it of items) {
+    if (it.kind === 'file') {
+      const f = it.getAsFile();
+      if (f) { setFile(f); e.preventDefault(); return; }
+    }
+  }
 }
 
 // Draft autosave per ticket
@@ -362,7 +476,8 @@ async function send() {
     await api.post(`/chat/tickets/${activeChat.value.id}/messages`, fd);
     // Clear draft on successful send
     localStorage.removeItem(draftKey(activeChat.value.id));
-    msgText.value = ''; file.value = null;
+    msgText.value = '';
+    clearFile();
     nextTick(autoGrow);
     await refreshMessages();
     scrollDown(true);
@@ -490,7 +605,18 @@ onUnmounted(() => {
 .quick-btn { display: flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 8px; border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); background: transparent; color: inherit; font-size: 11px; cursor: pointer; white-space: nowrap; }
 .quick-btn:hover { background: rgba(var(--v-theme-primary), 0.08); }
 .sidebar-list { flex: 1; overflow-y: auto; }
-.sidebar-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 48px 16px; gap: 8px; color: rgba(var(--v-theme-on-surface), 0.4); }
+.sidebar-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 48px 16px; gap: 8px; color: rgba(var(--v-theme-on-surface), 0.4); text-align: center; }
+.sidebar-empty p { margin: 0; font-size: 13px; }
+
+/* Search + filters */
+.sidebar-search { display: flex; align-items: center; gap: 6px; padding: 8px 12px; border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); color: rgba(var(--v-theme-on-surface), 0.5); }
+.sidebar-search input { flex: 1; border: none; outline: none; background: transparent; color: inherit; font-size: 13px; font-family: inherit; }
+.sidebar-search .clear-btn { background: none; border: none; cursor: pointer; color: inherit; padding: 2px; }
+.filter-row { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 10px; border-bottom: 1px solid rgba(var(--v-border-color), 0.15); }
+.filter-chip { padding: 3px 10px; border-radius: 14px; border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); background: transparent; color: rgba(var(--v-theme-on-surface), 0.7); font-size: 11px; cursor: pointer; white-space: nowrap; transition: all 0.15s; }
+.filter-chip:hover { background: rgba(var(--v-theme-primary), 0.06); }
+.filter-chip.active { background: rgb(var(--v-theme-primary)); color: #fff; border-color: rgb(var(--v-theme-primary)); }
+.filter-chip.small { font-size: 10px; padding: 2px 8px; }
 
 /* Chat item */
 .chat-item { display: flex; align-items: center; gap: 12px; padding: 12px 16px; cursor: pointer; border-bottom: 1px solid rgba(var(--v-border-color), 0.3); transition: background 0.1s; position: relative; }
@@ -544,6 +670,8 @@ onUnmounted(() => {
 .msg-text { font-size: 14px; line-height: 1.5; white-space: pre-line; word-break: break-word; }
 .msg-attach { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; margin-top: 6px; }
 .msg-bubble.mine .msg-attach { color: rgba(209,232,213,0.7); }
+.msg-image-link { display: block; margin-top: 6px; border-radius: 10px; overflow: hidden; max-width: 320px; }
+.msg-image { display: block; width: 100%; height: auto; max-height: 280px; object-fit: cover; border-radius: 10px; background: rgba(0,0,0,0.05); }
 .msg-time { font-size: 10px; margin-top: 4px; opacity: 0.5; }
 .msg-bubble.mine .msg-time { text-align: right; }
 
@@ -560,14 +688,22 @@ onUnmounted(() => {
 .jump-to-bottom:hover { opacity: 0.9; }
 
 /* Input */
-.chat-input { display: flex; align-items: flex-end; gap: 8px; padding: 12px 20px; border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); }
+.chat-input { display: flex; align-items: flex-end; gap: 8px; padding: 12px 20px; border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); position: relative; transition: background 0.15s; }
+.chat-input.drag-over { background: rgba(var(--v-theme-primary), 0.08); }
 .input-btn { background: none; border: none; cursor: pointer; color: rgba(var(--v-theme-on-surface), 0.5); padding: 6px; border-radius: 8px; }
 .input-btn:hover { background: rgba(var(--v-theme-primary), 0.1); }
 .input-area { flex: 1; }
 .input-area textarea { width: 100%; border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); border-radius: 12px; padding: 10px 14px; font-size: 14px; resize: none; background: rgba(var(--v-theme-surface-variant), 0.3); color: inherit; outline: none; font-family: inherit; }
 .input-area textarea:focus { border-color: rgb(var(--v-theme-primary)); }
-.input-file { display: flex; align-items: center; gap: 4px; font-size: 12px; margin-top: 4px; color: rgba(var(--v-theme-on-surface), 0.5); }
-.input-file button { background: none; border: none; cursor: pointer; color: inherit; }
+.input-file-preview { display: flex; align-items: center; gap: 8px; margin-top: 6px; padding: 6px 8px; border-radius: 10px; background: rgba(var(--v-theme-primary), 0.08); border: 1px solid rgba(var(--v-theme-primary), 0.2); }
+.input-file-preview img { width: 40px; height: 40px; object-fit: cover; border-radius: 6px; }
+.input-file-icon { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 6px; background: rgba(var(--v-theme-primary), 0.15); color: rgb(var(--v-theme-primary)); }
+.input-file-info { flex: 1; min-width: 0; }
+.input-file-name { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.input-file-size { font-size: 10px; color: rgba(var(--v-theme-on-surface), 0.5); }
+.input-file-remove { background: none; border: none; cursor: pointer; color: rgba(var(--v-theme-on-surface), 0.5); padding: 4px; border-radius: 6px; }
+.input-file-remove:hover { background: rgba(var(--v-theme-error), 0.1); color: rgb(var(--v-theme-error)); }
+.drop-overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; background: rgba(var(--v-theme-primary), 0.15); border: 2px dashed rgb(var(--v-theme-primary)); border-radius: 8px; color: rgb(var(--v-theme-primary)); font-weight: 600; font-size: 13px; pointer-events: none; z-index: 10; }
 .input-send { background: rgb(var(--v-theme-primary)); color: #fff; border: none; border-radius: 10px; padding: 8px 12px; cursor: pointer; transition: opacity 0.15s; }
 .input-send:hover { opacity: 0.9; }
 .input-send:disabled { opacity: 0.4; cursor: not-allowed; }
