@@ -268,7 +268,7 @@ class ChatController extends Controller
 
         // Socket emit
         try {
-            app(\App\Services\SocketService::class)->emit('chat:new-message', "chat:{$id}", [
+            app(\App\Services\SocketService::class)->emit('chat:new-message', "ticket:{$id}", [
                 'id' => $msgId,
                 'ticketId' => $id,
                 'senderId' => $user->id,

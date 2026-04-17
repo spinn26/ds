@@ -22,7 +22,7 @@
             </div>
             <div class="chat-item-bottom">
               <span class="chat-item-cat">{{ catLabel(t.category) }}</span>
-              <span class="chat-item-status" :style="{ color: statusClr(t.status) }">{{ statusTxt(t.status) }}</span>
+              <span class="chat-item-status-chip" :style="{ background: statusClr(t.status) + '22', color: statusClr(t.status) }">{{ statusTxt(t.status) }}</span>
             </div>
           </div>
           <span v-if="t.unread > 0" class="unread-badge">{{ t.unread }}</span>
@@ -40,12 +40,15 @@
       <template v-if="activeChat">
         <!-- Header -->
         <div class="chat-header">
-          <button v-if="mobile" class="btn-back" @click="activeChat = null"><v-icon>mdi-arrow-left</v-icon></button>
+          <button v-if="mobile" class="btn-back" @click="closeActiveChat"><v-icon>mdi-arrow-left</v-icon></button>
           <div class="chat-header-info">
             <div class="chat-header-subject">{{ activeChat.subject }}</div>
             <div class="chat-header-meta">
               <span class="meta-cat" :style="{ background: catColor(activeChat.category) + '22', color: catColor(activeChat.category) }">{{ catLabel(activeChat.category) }}</span>
-              <span class="meta-status" :style="{ color: statusClr(activeChat.status) }">{{ statusTxt(activeChat.status) }}</span>
+              <span class="meta-status-chip" :style="{ background: statusClr(activeChat.status) + '22', color: statusClr(activeChat.status) }">
+                <v-icon size="10">{{ statusIcon(activeChat.status) }}</v-icon>
+                {{ statusTxt(activeChat.status) }}
+              </span>
               <span v-if="activeChat.assigned_name" class="meta-agent">
                 <v-icon size="12">mdi-account</v-icon> {{ activeChat.assigned_name }}
               </span>
@@ -54,44 +57,65 @@
         </div>
 
         <!-- Messages -->
-        <div ref="msgsRef" class="chat-messages">
-          <div v-for="msg in messages" :key="msg.id" class="msg-row" :class="{ mine: isMine(msg), system: msg.isSystem }">
-            <template v-if="msg.isSystem">
-              <div class="msg-system">{{ msg.content }}</div>
-            </template>
-            <template v-else>
-              <div class="msg-avatar" v-if="!isMine(msg)">
-                <div class="avatar-circle agent">{{ msg.senderName?.[0] || 'С' }}</div>
+        <div ref="msgsRef" class="chat-messages" @scroll="onMessagesScroll">
+          <template v-for="item in groupedMessages" :key="item.key">
+            <!-- Date divider -->
+            <div v-if="item.type === 'divider'" class="date-divider">
+              <span>{{ item.label }}</span>
+            </div>
+            <!-- System message -->
+            <div v-else-if="item.msg.isSystem" class="msg-row system">
+              <div class="msg-system">{{ item.msg.content }}</div>
+            </div>
+            <!-- Regular message -->
+            <div v-else class="msg-row" :class="{ mine: isMine(item.msg) }">
+              <div class="msg-avatar" v-if="!isMine(item.msg)">
+                <div class="avatar-circle agent">{{ initials(item.msg.senderName) }}</div>
               </div>
-              <div class="msg-bubble" :class="isMine(msg) ? 'mine' : 'agent'">
-                <div class="msg-sender">{{ msg.senderName }}</div>
-                <div class="msg-text">{{ msg.content }}</div>
-                <a v-if="msg.attachmentPath" :href="msg.attachmentPath" target="_blank" class="msg-attach">
-                  <v-icon size="14">mdi-paperclip</v-icon> {{ msg.attachmentName || 'Файл' }}
+              <div class="msg-bubble" :class="isMine(item.msg) ? 'mine' : 'agent'">
+                <div class="msg-sender">{{ item.msg.senderName }}</div>
+                <div class="msg-text">{{ item.msg.content }}</div>
+                <a v-if="item.msg.attachmentPath" :href="item.msg.attachmentPath" target="_blank" class="msg-attach">
+                  <v-icon size="14">mdi-paperclip</v-icon> {{ item.msg.attachmentName || 'Файл' }}
                 </a>
-                <div class="msg-time">{{ fmtTime(msg.createdAt) }}</div>
+                <div class="msg-time">{{ fmtTime(item.msg.createdAt) }}</div>
               </div>
-              <div class="msg-avatar" v-if="isMine(msg)">
-                <div class="avatar-circle mine">{{ msg.senderName?.[0] || 'Я' }}</div>
+              <div class="msg-avatar" v-if="isMine(item.msg)">
+                <div class="avatar-circle mine">{{ initials(item.msg.senderName) }}</div>
               </div>
-            </template>
-          </div>
+            </div>
+          </template>
           <div v-if="!messages.length" class="chat-empty-msg">Напишите первое сообщение</div>
+
+          <!-- Typing indicator -->
+          <div v-if="typingName" class="typing-indicator">
+            <span class="typing-dots"><span></span><span></span><span></span></span>
+            {{ typingName }} печатает…
+          </div>
         </div>
+
+        <!-- Jump to bottom button -->
+        <button v-if="showJumpToBottom" class="jump-to-bottom" @click="scrollDown(true)">
+          <v-icon size="16">mdi-arrow-down</v-icon>
+          <span v-if="pendingMessages > 0">{{ pendingMessages }}</span>
+        </button>
 
         <!-- Input -->
         <div v-if="activeChat.status !== 'closed'" class="chat-input">
           <input ref="fileRef" type="file" hidden @change="e => file = e.target.files?.[0]" />
-          <button class="input-btn" @click="$refs.fileRef.click()"><v-icon size="20">mdi-paperclip</v-icon></button>
+          <button class="input-btn" title="Прикрепить файл" @click="$refs.fileRef.click()"><v-icon size="20">mdi-paperclip</v-icon></button>
           <div class="input-area">
-            <textarea v-model="msgText" placeholder="Введите сообщение..." rows="1"
-              @keydown.enter.exact.prevent="send" @input="autoGrow"></textarea>
+            <textarea ref="taRef" v-model="msgText"
+              placeholder="Введите сообщение… (Enter — отправить, Shift+Enter — перенос строки)"
+              rows="1"
+              @keydown.enter.exact.prevent="send"
+              @input="onInput"></textarea>
             <div v-if="file" class="input-file">
               <v-icon size="14">mdi-file</v-icon> {{ file.name }}
               <button @click="file = null"><v-icon size="14">mdi-close</v-icon></button>
             </div>
           </div>
-          <button class="input-send" :disabled="sending" @click="send">
+          <button class="input-send" :disabled="sending || (!msgText.trim() && !file)" title="Отправить (Enter)" @click="send">
             <v-icon size="20">mdi-send</v-icon>
           </button>
         </div>
@@ -128,7 +152,7 @@
 </template>
 
 <script setup>
-import { ref, nextTick, onMounted, onUnmounted, watch } from 'vue';
+import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue';
 import { useDisplay } from 'vuetify';
 import { useRoute } from 'vue-router';
 import api from '../../api';
@@ -139,7 +163,6 @@ const route = useRoute();
 const auth = useAuthStore();
 const currentUserId = auth.userId;
 
-function isMine(msg) { return String(msg.senderId) === String(currentUserId); }
 const chats = ref([]);
 const loading = ref(false);
 const activeChat = ref(null);
@@ -149,8 +172,21 @@ const file = ref(null);
 const sending = ref(false);
 const msgsRef = ref(null);
 const fileRef = ref(null);
+const taRef = ref(null);
 let poll = null;
 
+// Socket
+let socket = null;
+const typingName = ref('');
+let typingClearTimer = null;
+let typingSendTimer = null;
+
+// Scroll state
+const showJumpToBottom = ref(false);
+const pendingMessages = ref(0);
+const BASE_TITLE = 'Обращения';
+
+// New chat dialog
 const showNew = ref(false);
 const creating = ref(false);
 const newErr = ref('');
@@ -164,15 +200,108 @@ const categories = [
   { label: 'Общий вопрос', value: 'general' },
 ];
 
+function isMine(msg) { return String(msg.senderId) === String(currentUserId); }
 function catColor(c) { return { support: '#3b82f6', backoffice: '#f97316', billing: '#22c55e', legal: '#a855f7', general: '#6b7280' }[c] || '#6b7280'; }
 function catIcon(c) { return { support: 'mdi-headset', backoffice: 'mdi-briefcase', billing: 'mdi-cash', legal: 'mdi-scale-balance', general: 'mdi-help-circle' }[c] || 'mdi-chat'; }
 function catLabel(c) { return { support: 'Техподдержка', backoffice: 'Бэк-офис', billing: 'Начисления', legal: 'Юридический', general: 'Общий' }[c] || c; }
 function statusClr(s) { return { new: '#60a5fa', open: '#fbbf24', pending: '#f97316', resolved: '#34d399', closed: '#6b7280' }[s] || '#888'; }
 function statusTxt(s) { return { new: 'Новый', open: 'В работе', pending: 'Ожидание', resolved: 'Решён', closed: 'Закрыт' }[s] || s; }
+function statusIcon(s) { return { new: 'mdi-circle-outline', open: 'mdi-progress-clock', pending: 'mdi-pause-circle', resolved: 'mdi-check-circle', closed: 'mdi-lock' }[s] || 'mdi-circle'; }
+function initials(name) {
+  if (!name) return '?';
+  const parts = String(name).trim().split(/\s+/);
+  return (parts[0]?.[0] || '').toUpperCase() + (parts[1]?.[0] || '').toUpperCase();
+}
 function ago(d) { if (!d) return ''; const s = Math.floor((Date.now() - new Date(d).getTime()) / 1000); if (s < 60) return 'сейчас'; if (s < 3600) return Math.floor(s/60) + 'м'; if (s < 86400) return Math.floor(s/3600) + 'ч'; return Math.floor(s/86400) + 'д'; }
-function fmtTime(d) { if (!d) return ''; const dt = new Date(d); if (isNaN(dt)) return ''; const now = new Date(); if (dt.toDateString() === now.toDateString()) return dt.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }); return dt.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' }) + ' ' + dt.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }); }
-function scrollDown() { nextTick(() => { if (msgsRef.value) msgsRef.value.scrollTop = msgsRef.value.scrollHeight; }); }
-function autoGrow(e) { const t = e.target; t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 120) + 'px'; }
+function fmtTime(d) { if (!d) return ''; const dt = new Date(d); if (isNaN(dt)) return ''; return dt.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }); }
+
+function dateLabel(date) {
+  const d = new Date(date);
+  const today = new Date();
+  const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+  if (d.toDateString() === today.toDateString()) return 'Сегодня';
+  if (d.toDateString() === yesterday.toDateString()) return 'Вчера';
+  const diffDays = Math.abs((today - d) / 86400000);
+  if (diffDays < 7) return d.toLocaleDateString('ru-RU', { weekday: 'long' });
+  return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: today.getFullYear() === d.getFullYear() ? undefined : 'numeric' });
+}
+
+// Group messages with date dividers
+const groupedMessages = computed(() => {
+  const out = [];
+  let prevDay = null;
+  for (const msg of messages.value) {
+    const day = msg.createdAt ? new Date(msg.createdAt).toDateString() : null;
+    if (day && day !== prevDay) {
+      out.push({ type: 'divider', key: `d-${day}`, label: dateLabel(msg.createdAt) });
+      prevDay = day;
+    }
+    out.push({ type: 'msg', key: `m-${msg.id}`, msg });
+  }
+  return out;
+});
+
+// Scroll helpers
+function isAtBottom(threshold = 80) {
+  const el = msgsRef.value;
+  if (!el) return true;
+  return el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
+}
+function onMessagesScroll() {
+  if (isAtBottom()) {
+    showJumpToBottom.value = false;
+    pendingMessages.value = 0;
+  } else {
+    showJumpToBottom.value = true;
+  }
+}
+function scrollDown(force = false) {
+  nextTick(() => {
+    const el = msgsRef.value;
+    if (!el) return;
+    if (force || isAtBottom()) {
+      el.scrollTop = el.scrollHeight;
+      pendingMessages.value = 0;
+      showJumpToBottom.value = false;
+    }
+  });
+}
+
+function autoGrow() {
+  const t = taRef.value;
+  if (!t) return;
+  t.style.height = 'auto';
+  t.style.height = Math.min(t.scrollHeight, 120) + 'px';
+}
+
+// Draft autosave per ticket
+function draftKey(ticketId) { return `chat-draft-${ticketId}`; }
+watch(msgText, (v) => {
+  if (activeChat.value) {
+    if (v) localStorage.setItem(draftKey(activeChat.value.id), v);
+    else localStorage.removeItem(draftKey(activeChat.value.id));
+  }
+  nextTick(autoGrow);
+  sendTyping();
+});
+
+// Typing (debounced emit)
+function sendTyping() {
+  if (!socket || !activeChat.value) return;
+  if (typingSendTimer) return; // throttle to once per 2.5s
+  socket.emit('ticket:typing', { ticketId: activeChat.value.id, isTyping: true });
+  typingSendTimer = setTimeout(() => {
+    socket?.emit('ticket:typing', { ticketId: activeChat.value?.id, isTyping: false });
+    typingSendTimer = null;
+  }, 2500);
+}
+
+// Unread counter in browser title
+function updateTitle() {
+  const total = chats.value.reduce((s, t) => s + (t.unread || 0), 0);
+  document.title = total > 0 ? `(${total}) ${BASE_TITLE}` : BASE_TITLE;
+}
+watch(chats, updateTitle, { deep: true });
 
 async function loadChats() {
   loading.value = true;
@@ -181,21 +310,45 @@ async function loadChats() {
 }
 
 async function openChat(t) {
+  // Leave previous ticket room
+  if (socket && activeChat.value) socket.emit('ticket:leave', activeChat.value.id);
+
   activeChat.value = t;
+  typingName.value = '';
   try {
     const { data } = await api.get(`/chat/tickets/${t.id}`);
     messages.value = data.messages || [];
     if (t.unread > 0) { t.unread = 0; }
-    scrollDown();
+    scrollDown(true);
   } catch {}
+
+  // Restore draft
+  msgText.value = localStorage.getItem(draftKey(t.id)) || '';
+  nextTick(() => { taRef.value?.focus(); autoGrow(); });
+
+  // Join new room
+  if (socket) socket.emit('ticket:join', t.id);
+
   startPoll();
+}
+
+function closeActiveChat() {
+  if (socket && activeChat.value) socket.emit('ticket:leave', activeChat.value.id);
+  activeChat.value = null;
+  typingName.value = '';
 }
 
 async function refreshMessages() {
   if (!activeChat.value) return;
   try {
     const { data } = await api.get(`/chat/tickets/${activeChat.value.id}`);
+    const wasAtBottom = isAtBottom();
+    const prevCount = messages.value.length;
     messages.value = data.messages || [];
+    if (messages.value.length > prevCount) {
+      if (wasAtBottom) scrollDown(true);
+      else pendingMessages.value += messages.value.length - prevCount;
+    }
   } catch {}
 }
 
@@ -207,13 +360,21 @@ async function send() {
     fd.append('message', msgText.value || '');
     if (file.value) fd.append('attachment', file.value);
     await api.post(`/chat/tickets/${activeChat.value.id}/messages`, fd);
+    // Clear draft on successful send
+    localStorage.removeItem(draftKey(activeChat.value.id));
     msgText.value = ''; file.value = null;
+    nextTick(autoGrow);
     await refreshMessages();
-    scrollDown();
+    scrollDown(true);
     activeChat.value.unread = 0;
-    loadChats(); // Refresh list
+    loadChats();
+    taRef.value?.focus();
   } catch {}
   sending.value = false;
+}
+
+function onInput() {
+  autoGrow();
 }
 
 async function createChat() {
@@ -231,7 +392,7 @@ async function createChat() {
 
 function startPoll() {
   stopPoll();
-  poll = setInterval(() => { refreshMessages(); loadChats(); }, 8000);
+  poll = setInterval(() => { refreshMessages(); loadChats(); }, 15000); // slower since socket handles real-time
 }
 function stopPoll() { if (poll) { clearInterval(poll); poll = null; } }
 
@@ -255,14 +416,69 @@ function checkQuery() {
   }
 }
 
+// Socket connection
+async function connectSocket() {
+  const token = localStorage.getItem('auth_token');
+  if (!token) return;
+  try {
+    const { io } = await import('socket.io-client');
+    const host = window.__SOCKET_URL__ || (location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.hostname + ':3001';
+    socket = io(host, { auth: { token }, transports: ['websocket', 'polling'], reconnection: true });
+
+    socket.on('chat:new-message', (m) => {
+      if (!activeChat.value || Number(m.ticketId) !== Number(activeChat.value.id)) return;
+      // Dedupe by id (message may arrive via socket + refresh)
+      if (messages.value.some(x => String(x.id) === String(m.id))) return;
+      const wasAtBottom = isAtBottom();
+      messages.value.push({
+        id: m.id,
+        senderId: m.senderId,
+        senderName: m.senderName,
+        content: m.content,
+        isSystem: false,
+        createdAt: m.createdAt,
+      });
+      if (wasAtBottom) scrollDown(true);
+      else pendingMessages.value++;
+      // Refresh list to update last message time
+      loadChats();
+    });
+
+    socket.on('ticket:typing', (e) => {
+      if (!activeChat.value || String(e.userId) === String(currentUserId)) return;
+      typingName.value = e.userName || 'Собеседник';
+      if (typingClearTimer) clearTimeout(typingClearTimer);
+      typingClearTimer = setTimeout(() => { typingName.value = ''; }, 3500);
+    });
+
+    socket.on('chat:new-ticket', () => {
+      // Refresh list when a new ticket appears anywhere (staff would see it)
+      loadChats();
+    });
+  } catch (e) {
+    // Socket unavailable — polling keeps the UI alive
+    console.warn('Chat socket unavailable, falling back to polling:', e?.message);
+  }
+}
+
 watch(() => route.query, checkQuery, { immediate: false });
 
-onMounted(() => { loadChats(); checkQuery(); });
-onUnmounted(stopPoll);
+onMounted(() => {
+  loadChats();
+  checkQuery();
+  connectSocket();
+});
+
+onUnmounted(() => {
+  stopPoll();
+  if (socket && activeChat.value) socket.emit('ticket:leave', activeChat.value.id);
+  socket?.disconnect();
+  document.title = BASE_TITLE;
+});
 </script>
 
 <style scoped>
-.chat-wrap { display: flex; height: calc(100vh - 64px); overflow: hidden; }
+.chat-wrap { display: flex; height: calc(100vh - 64px); overflow: hidden; position: relative; }
 
 /* Sidebar */
 .chat-sidebar { width: 340px; flex-shrink: 0; border-right: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); display: flex; flex-direction: column; background: rgba(var(--v-theme-surface), 1); }
@@ -285,15 +501,15 @@ onUnmounted(stopPoll);
 .chat-item-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .chat-item-subject { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .chat-item-time { font-size: 11px; color: rgba(var(--v-theme-on-surface), 0.4); flex-shrink: 0; }
-.chat-item-bottom { display: flex; gap: 8px; margin-top: 4px; font-size: 11px; }
+.chat-item-bottom { display: flex; gap: 6px; margin-top: 4px; font-size: 11px; align-items: center; }
 .chat-item-cat { color: rgba(var(--v-theme-on-surface), 0.5); }
-.chat-item-status { font-weight: 600; }
+.chat-item-status-chip { padding: 2px 8px; border-radius: 10px; font-weight: 600; font-size: 10px; }
 .unread-badge { position: absolute; right: 12px; top: 12px; background: rgb(var(--v-theme-error)); color: #fff; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 10px; min-width: 18px; text-align: center; }
 .chat-item.has-unread { background: rgba(var(--v-theme-primary), 0.06); }
 .chat-item.has-unread .chat-item-subject { color: rgb(var(--v-theme-primary)); font-weight: 700; }
 
 /* Main chat area */
-.chat-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.chat-main { flex: 1; display: flex; flex-direction: column; min-width: 0; position: relative; }
 .chat-placeholder { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 12px; color: rgba(var(--v-theme-on-surface), 0.3); }
 .chat-placeholder p { font-size: 15px; }
 
@@ -301,20 +517,23 @@ onUnmounted(stopPoll);
 .chat-header { padding: 12px 20px; border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); display: flex; align-items: center; gap: 12px; }
 .btn-back { background: none; border: none; cursor: pointer; color: inherit; padding: 4px; }
 .chat-header-subject { font-size: 15px; font-weight: 700; }
-.chat-header-meta { display: flex; gap: 8px; align-items: center; margin-top: 4px; font-size: 12px; }
+.chat-header-meta { display: flex; gap: 8px; align-items: center; margin-top: 4px; font-size: 12px; flex-wrap: wrap; }
 .meta-cat { padding: 2px 8px; border-radius: 6px; font-weight: 600; }
-.meta-status { font-weight: 600; }
+.meta-status-chip { display: inline-flex; align-items: center; gap: 3px; padding: 2px 8px; border-radius: 10px; font-weight: 600; font-size: 11px; }
 .meta-agent { display: flex; align-items: center; gap: 4px; color: rgba(var(--v-theme-on-surface), 0.5); }
 
 /* Messages */
 .chat-messages { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 12px; scroll-behavior: smooth; }
 .chat-empty-msg { text-align: center; color: rgba(var(--v-theme-on-surface), 0.3); padding: 48px; }
+.date-divider { display: flex; align-items: center; justify-content: center; margin: 8px 0; position: relative; }
+.date-divider::before { content: ''; position: absolute; left: 0; right: 0; top: 50%; border-top: 1px solid rgba(var(--v-border-color), 0.3); z-index: 0; }
+.date-divider span { position: relative; z-index: 1; background: rgb(var(--v-theme-background)); padding: 2px 12px; font-size: 11px; font-weight: 600; color: rgba(var(--v-theme-on-surface), 0.5); text-transform: capitalize; }
 .msg-row { display: flex; align-items: flex-end; gap: 8px; }
 .msg-row.mine { flex-direction: row-reverse; }
 .msg-row.system { justify-content: center; }
 .msg-system { font-size: 12px; color: rgba(var(--v-theme-on-surface), 0.4); font-style: italic; padding: 4px 12px; background: rgba(var(--v-theme-surface-variant), 0.5); border-radius: 12px; }
 .msg-avatar { flex-shrink: 0; }
-.avatar-circle { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: #fff; }
+.avatar-circle { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: #fff; letter-spacing: -0.5px; }
 .avatar-circle.agent { background: rgb(var(--v-theme-secondary)); }
 .avatar-circle.mine { background: rgb(var(--v-theme-primary)); }
 .msg-bubble { max-width: 65%; padding: 10px 14px; border-radius: 16px; position: relative; }
@@ -328,6 +547,18 @@ onUnmounted(stopPoll);
 .msg-time { font-size: 10px; margin-top: 4px; opacity: 0.5; }
 .msg-bubble.mine .msg-time { text-align: right; }
 
+/* Typing */
+.typing-indicator { display: flex; align-items: center; gap: 8px; padding: 6px 14px; font-size: 12px; color: rgba(var(--v-theme-on-surface), 0.5); font-style: italic; }
+.typing-dots { display: inline-flex; gap: 3px; }
+.typing-dots span { width: 5px; height: 5px; border-radius: 50%; background: rgba(var(--v-theme-on-surface), 0.4); animation: typing-blink 1.2s infinite ease-in-out; }
+.typing-dots span:nth-child(2) { animation-delay: 0.15s; }
+.typing-dots span:nth-child(3) { animation-delay: 0.3s; }
+@keyframes typing-blink { 0%, 80%, 100% { opacity: 0.2; } 40% { opacity: 1; } }
+
+/* Jump to bottom */
+.jump-to-bottom { position: absolute; right: 24px; bottom: 90px; display: flex; align-items: center; gap: 4px; padding: 6px 10px; border-radius: 16px; background: rgb(var(--v-theme-primary)); color: #fff; border: none; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.15); font-size: 12px; font-weight: 600; z-index: 5; }
+.jump-to-bottom:hover { opacity: 0.9; }
+
 /* Input */
 .chat-input { display: flex; align-items: flex-end; gap: 8px; padding: 12px 20px; border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); }
 .input-btn { background: none; border: none; cursor: pointer; color: rgba(var(--v-theme-on-surface), 0.5); padding: 6px; border-radius: 8px; }
@@ -337,14 +568,15 @@ onUnmounted(stopPoll);
 .input-area textarea:focus { border-color: rgb(var(--v-theme-primary)); }
 .input-file { display: flex; align-items: center; gap: 4px; font-size: 12px; margin-top: 4px; color: rgba(var(--v-theme-on-surface), 0.5); }
 .input-file button { background: none; border: none; cursor: pointer; color: inherit; }
-.input-send { background: rgb(var(--v-theme-primary)); color: #fff; border: none; border-radius: 10px; padding: 8px 12px; cursor: pointer; }
+.input-send { background: rgb(var(--v-theme-primary)); color: #fff; border: none; border-radius: 10px; padding: 8px 12px; cursor: pointer; transition: opacity 0.15s; }
 .input-send:hover { opacity: 0.9; }
-.input-send:disabled { opacity: 0.5; }
+.input-send:disabled { opacity: 0.4; cursor: not-allowed; }
 .chat-closed { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 16px; border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); color: rgba(var(--v-theme-on-surface), 0.4); font-size: 13px; }
 
 /* Mobile */
 @media (max-width: 959px) {
   .chat-sidebar { width: 100%; }
   .mobile-hidden { display: none !important; }
+  .jump-to-bottom { right: 16px; bottom: 80px; }
 }
 </style>
