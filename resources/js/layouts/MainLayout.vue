@@ -4,7 +4,12 @@
     <v-navigation-drawer v-model="drawer" :permanent="!mobile" :temporary="mobile" width="260"
       class="sidebar-drawer">
       <div class="sidebar-header d-flex align-center pa-4">
-        <v-icon color="primary" size="28" class="mr-2">mdi-cube-outline</v-icon>
+        <div class="brand-mark mr-2">
+          <BrandWaves shape="circle" :width="32" :height="32"
+            :bg-color="'#6EE87A'" stroke-color="#ffffff"
+            :rows="10" :columns="14" :amplitude="3" :frequency="1.0"
+            :stroke-width="0.8" :stroke-opacity="0.95" />
+        </div>
         <div>
           <div class="d-flex align-center ga-1">
             <span class="text-h6 font-weight-black text-primary">DS</span>
@@ -43,8 +48,13 @@
       <v-app-bar-nav-icon v-if="mobile" @click="drawer = !drawer" />
 
       <!-- Brand fallback (visible when sidebar is collapsed or on mobile) -->
-      <router-link to="/" class="topbar-brand d-flex align-center ga-1 ml-2">
-        <v-icon color="primary" size="22">mdi-cube-outline</v-icon>
+      <router-link to="/" class="topbar-brand d-flex align-center ga-2 ml-2">
+        <div class="brand-mark brand-mark-sm">
+          <BrandWaves shape="circle" :width="24" :height="24"
+            bg-color="#6EE87A" stroke-color="#ffffff"
+            :rows="8" :columns="12" :amplitude="2.5" :frequency="1.0"
+            :stroke-width="0.7" :stroke-opacity="0.95" />
+        </div>
         <span class="text-subtitle-2 font-weight-black text-primary">DS</span>
       </router-link>
 
@@ -232,6 +242,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import { useSnackbar } from '../composables/useSnackbar';
 import OnboardingQuestionnaire from '../components/OnboardingQuestionnaire.vue';
+import BrandWaves from '../components/BrandWaves.vue';
 import api from '../api';
 function fmtShortDate(d) {
   if (!d) return '';
@@ -639,6 +650,20 @@ const visibleMenu = computed(() => menuItems.filter((item) => {
 
 .topbar-brand:hover {
   opacity: 1;
+}
+
+.brand-mark {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 2px rgba(var(--v-theme-brand), 0.25);
+}
+.brand-mark-sm {
+  width: 24px;
+  height: 24px;
+  box-shadow: 0 0 0 1.5px rgba(var(--v-theme-brand), 0.3);
 }
 
 .menu-group-header {

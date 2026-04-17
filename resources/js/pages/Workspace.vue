@@ -1,18 +1,26 @@
 <template>
   <div>
-    <!-- Welcome header -->
-    <div class="d-flex justify-space-between align-center mb-4 flex-wrap ga-2">
-      <div>
-        <h4 :class="mobile ? 'text-h6' : 'text-h4'" class="font-weight-bold d-flex align-center ga-2">
-          <v-icon size="32" color="primary">mdi-hand-wave</v-icon>
-          {{ greeting }}, {{ auth.user?.firstName }}!
-        </h4>
-        <div class="text-body-1 text-medium-emphasis">Рабочий стол DS Consulting</div>
+    <!-- Brand hero -->
+    <v-card flat rounded="xl" class="hero-card mb-4 overflow-hidden position-relative">
+      <div class="hero-waves">
+        <BrandWaves :width="1400" :height="260" shape="sheet"
+          bg-color="#6EE87A" stroke-color="#ffffff"
+          :rows="20" :columns="36" :amplitude="18" :frequency="1.2"
+          :stroke-opacity="0.75" :stroke-width="1.1" />
       </div>
-      <div class="text-body-2 text-medium-emphasis">
-        {{ new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) }}
+      <div class="hero-content d-flex justify-space-between align-center flex-wrap ga-3 pa-5">
+        <div>
+          <h4 :class="mobile ? 'text-h6' : 'text-h4'" class="font-weight-bold d-flex align-center ga-2 hero-title">
+            <v-icon size="32">mdi-hand-wave</v-icon>
+            {{ greeting }}, {{ auth.user?.firstName }}!
+          </h4>
+          <div class="text-body-1 hero-subtitle">Рабочий стол DS Consulting</div>
+        </div>
+        <div class="text-body-2 hero-date">
+          {{ new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) }}
+        </div>
       </div>
-    </div>
+    </v-card>
 
     <v-row>
       <!-- Left column -->
@@ -275,6 +283,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import { useDisplay } from 'vuetify';
+import BrandWaves from '../components/BrandWaves.vue';
 import { useAuthStore } from '../stores/auth';
 import api from '../api';
 
@@ -309,3 +318,22 @@ onMounted(async () => {
   loading.value = false;
 });
 </script>
+
+<style scoped>
+.hero-card {
+  border: 1px solid rgba(var(--v-theme-brand), 0.35);
+}
+.hero-waves {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  opacity: 0.95;
+}
+.hero-content {
+  position: relative;
+  z-index: 1;
+}
+.hero-title { color: rgb(var(--v-theme-brand-ink)); }
+.hero-subtitle { color: rgba(10, 43, 16, 0.75); }
+.hero-date { color: rgba(10, 43, 16, 0.65); }
+</style>
