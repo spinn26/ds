@@ -1,6 +1,10 @@
 <template>
   <div>
-    <PageHeader title="Список конкурсов и событий" icon="mdi-trophy" />
+    <BrandHero
+      title="Конкурсы и события"
+      subtitle="Активные конкурсы платформы, награды и условия участия"
+      icon="mdi-trophy"
+    />
 
     <v-card class="mb-3 pa-3">
       <div class="d-flex ga-2 flex-wrap align-center">
@@ -54,6 +58,7 @@
 import { ref, onMounted } from 'vue';
 import api from '../api';
 import PageHeader from '../components/PageHeader.vue';
+import BrandHero from '../components/BrandHero.vue';
 import { fmtDate } from '../composables/useDesign';
 
 const loading = ref(true);

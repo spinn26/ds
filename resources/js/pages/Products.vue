@@ -1,6 +1,10 @@
 <template>
   <div>
-    <PageHeader title="Перечень продуктов" icon="mdi-package-variant" />
+    <BrandHero
+      title="Перечень продуктов"
+      subtitle="Линейка программ и условий — с чем работает DS Consulting"
+      icon="mdi-package-variant"
+    />
 
     <!-- Condition 1: Tests not passed -->
     <v-alert v-if="accessChecked && !access.testsPassed" type="warning" variant="tonal" class="mb-4">
@@ -114,6 +118,7 @@
 import { ref, computed, onMounted } from 'vue';
 import api from '../api';
 import PageHeader from '../components/PageHeader.vue';
+import BrandHero from '../components/BrandHero.vue';
 
 const loading = ref(true);
 const products = ref([]);

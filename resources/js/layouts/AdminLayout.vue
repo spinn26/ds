@@ -2,7 +2,12 @@
   <v-layout>
     <v-navigation-drawer v-model="drawer" :permanent="!mobile" :temporary="mobile" width="280" color="grey-darken-4" theme="dark">
       <div class="d-flex align-center pa-4">
-        <v-icon color="secondary" size="24" class="mr-2">mdi-shield-crown</v-icon>
+        <div class="admin-brand-mark mr-2">
+          <BrandWaves shape="circle" :width="32" :height="32"
+            bg-color="#6EE87A" stroke-color="#000000"
+            :rows="10" :columns="14" :amplitude="3" :frequency="1.0"
+            :stroke-width="0.8" :stroke-opacity="0.8" />
+        </div>
         <div>
           <div class="d-flex align-center ga-1">
             <span class="text-h6 font-weight-black text-white">DS</span>
@@ -62,6 +67,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useDisplay, useTheme } from 'vuetify';
 import { useAuthStore } from '../stores/auth';
+import BrandWaves from '../components/BrandWaves.vue';
 
 const auth = useAuthStore();
 const { mobile } = useDisplay();
@@ -82,3 +88,14 @@ const initials = computed(() =>
   `${auth.user?.firstName?.[0] || ''}${auth.user?.lastName?.[0] || ''}`.toUpperCase()
 );
 </script>
+
+<style scoped>
+.admin-brand-mark {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 2px rgba(var(--v-theme-brand), 0.35);
+}
+</style>

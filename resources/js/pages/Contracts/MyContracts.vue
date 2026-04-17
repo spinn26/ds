@@ -1,6 +1,10 @@
 <template>
   <div>
-    <PageHeader title="Контракты моих клиентов" icon="mdi-file-document" :count="total" />
+    <BrandHero
+      title="Контракты моих клиентов"
+      :subtitle="`Всего: ${total}. Контракты по твоим клиентам с фильтрами по статусу и продукту.`"
+      icon="mdi-file-document"
+    />
 
     <v-card class="mb-3 pa-3">
       <div class="d-flex ga-2 align-center">
@@ -33,6 +37,7 @@ import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
 import PageHeader from '../../components/PageHeader.vue';
+import BrandHero from '../../components/BrandHero.vue';
 import EmptyState from '../../components/EmptyState.vue';
 import { fmt, fmtDate } from '../../composables/useDesign';
 

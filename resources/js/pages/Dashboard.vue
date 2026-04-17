@@ -1,23 +1,14 @@
 <template>
   <div>
-    <v-card flat rounded="xl" class="brand-hero mb-4 overflow-hidden position-relative">
-      <div class="brand-hero-waves">
-        <BrandWaves :width="1400" :height="170" shape="sheet"
-          bg-color="#6EE87A" stroke-color="#ffffff"
-          :rows="18" :columns="36" :amplitude="16" :frequency="1.2"
-          :stroke-opacity="0.75" :stroke-width="1" />
-      </div>
-      <div class="brand-hero-content d-flex justify-space-between align-center flex-wrap ga-3 pa-5">
-        <div class="d-flex align-center ga-2">
-          <v-icon size="28" color="brand-ink">mdi-view-dashboard</v-icon>
-          <div>
-            <div class="text-h5 font-weight-bold" style="color: rgb(var(--v-theme-brand-ink))">Дашборд партнёра</div>
-            <div class="text-body-2" style="color: rgba(10, 43, 16, 0.7)">Твоя квалификация, ЛП / ГП и прогресс по периоду</div>
-          </div>
-        </div>
+    <BrandHero
+      title="Дашборд партнёра"
+      subtitle="Твоя квалификация, ЛП / ГП и прогресс по периоду"
+      icon="mdi-view-dashboard"
+    >
+      <template #actions>
         <MonthPicker v-model="period" @update:model-value="loadData" />
-      </div>
-    </v-card>
+      </template>
+    </BrandHero>
 
     <!-- Status Info Alert (activation period countdown) -->
     <v-alert v-if="data.statusInfo && data.statusInfo.daysRemaining != null"
@@ -322,7 +313,7 @@ import { ref, computed, onMounted } from 'vue';
 import api from '../api';
 import MonthPicker from '../components/MonthPicker.vue';
 import PageHeader from '../components/PageHeader.vue';
-import BrandWaves from '../components/BrandWaves.vue';
+import BrandHero from '../components/BrandHero.vue';
 import { fmt } from '../composables/useDesign';
 
 const loading = ref(true);
@@ -406,8 +397,3 @@ onMounted(async () => {
 });
 </script>
 
-<style scoped>
-.brand-hero { border: 1px solid rgba(var(--v-theme-brand), 0.35); }
-.brand-hero-waves { position: absolute; inset: 0; z-index: 0; opacity: 0.95; }
-.brand-hero-content { position: relative; z-index: 1; }
-</style>

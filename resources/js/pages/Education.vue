@@ -1,20 +1,10 @@
 <template>
   <div>
-    <v-card flat rounded="xl" class="brand-hero mb-4 overflow-hidden position-relative">
-      <div class="brand-hero-waves">
-        <BrandWaves :width="1400" :height="180" shape="sheet"
-          bg-color="#6EE87A" stroke-color="#ffffff"
-          :rows="20" :columns="38" :amplitude="18" :frequency="1.2"
-          :stroke-opacity="0.75" :stroke-width="1" />
-      </div>
-      <div class="brand-hero-content d-flex align-center ga-2 pa-5">
-        <v-icon size="28" color="brand-ink">mdi-school</v-icon>
-        <div>
-          <div class="text-h5 font-weight-bold" style="color: rgb(var(--v-theme-brand-ink))">Обучение</div>
-          <div class="text-body-2" style="color: rgba(10, 43, 16, 0.7)">Видеоматериалы, тесты и документы для партнёров</div>
-        </div>
-      </div>
-    </v-card>
+    <BrandHero
+      title="Обучение"
+      subtitle="Видеоматериалы, тесты и документы для партнёров"
+      icon="mdi-school"
+    />
 
     <!-- Video section -->
     <v-card class="mb-4 pa-4">
@@ -89,7 +79,7 @@
 import { ref, onMounted } from 'vue';
 import api from '../api';
 import PageHeader from '../components/PageHeader.vue';
-import BrandWaves from '../components/BrandWaves.vue';
+import BrandHero from '../components/BrandHero.vue';
 
 const videos = ref([
   { title: 'Введение в DS Consulting', description: 'Знакомство с компанией, миссия и ценности', url: null },
@@ -115,8 +105,3 @@ onMounted(async () => {
 });
 </script>
 
-<style scoped>
-.brand-hero { border: 1px solid rgba(var(--v-theme-brand), 0.35); }
-.brand-hero-waves { position: absolute; inset: 0; z-index: 0; opacity: 0.95; }
-.brand-hero-content { position: relative; z-index: 1; }
-</style>
