@@ -668,13 +668,18 @@ const visibleMenu = computed(() => menuItems.filter((item) => {
 /* Square-edge items in the sidebar — no Vuetify rounding */
 .sidebar-drawer :deep(.v-list-item),
 .sidebar-drawer :deep(.v-list),
-.sidebar-drawer :deep(.v-navigation-drawer__content) {
+.sidebar-drawer :deep(.v-navigation-drawer__content),
+.sidebar-drawer :deep(.v-list-item__overlay),
+.sidebar-drawer :deep(.v-list-item__underlay),
+.sidebar-drawer :deep(.v-list-item::before),
+.sidebar-drawer :deep(.v-list-item::after) {
   border-radius: 0 !important;
 }
 .sidebar-drawer :deep(.v-navigation-drawer) {
   border-radius: 0 !important;
 }
-.main-nav-list :deep(.v-list-item) {
+.main-nav-list :deep(.v-list-item),
+.main-nav-list :deep(.v-list-item__overlay) {
   border-radius: 0 !important;
 }
 
