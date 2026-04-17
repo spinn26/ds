@@ -1,16 +1,17 @@
 <template>
   <v-layout>
     <!-- Sidebar -->
-    <v-navigation-drawer v-model="drawer" :permanent="!mobile" :temporary="mobile" width="260"
+    <v-navigation-drawer v-model="drawer" :permanent="!mobile" :temporary="mobile"
+      :rail="rail && !mobile" :width="260" :rail-width="72"
       class="sidebar-drawer">
-      <div class="sidebar-header d-flex align-center pa-4">
-        <div class="brand-mark mr-2">
+      <div class="sidebar-header d-flex align-center pa-4" :class="{ 'justify-center': rail }">
+        <div class="brand-mark" :class="{ 'mr-2': !rail }">
           <BrandWaves shape="circle" :width="32" :height="32"
             :bg-color="'#6EE87A'" stroke-color="#ffffff"
             :rows="10" :columns="14" :amplitude="3" :frequency="1.0"
             :stroke-width="0.8" :stroke-opacity="0.95" />
         </div>
-        <div>
+        <div v-if="!rail">
           <div class="d-flex align-center ga-1">
             <span class="text-h6 font-weight-black text-primary">DS</span>
             <span class="text-caption text-medium-emphasis">ПЛАТФОРМА</span>
@@ -22,30 +23,43 @@
       </div>
       <v-divider />
 
-      <v-list density="compact" nav class="px-2">
+      <v-list density="compact" nav class="main-nav-list">
         <template v-for="(item, i) in visibleMenu" :key="i">
-          <v-list-subheader v-if="item.group"
+          <v-list-subheader v-if="item.group && !rail"
             :class="[item.adminSection ? 'text-secondary font-weight-bold' : '', 'menu-group-header mt-2']">
             {{ item.group }}
           </v-list-subheader>
+          <v-divider v-else-if="item.group && rail" class="my-1" />
           <!-- Regular item -->
-          <v-list-item v-else :to="item.path || null" :prepend-icon="item.icon"
+          <v-list-item v-if="!item.group" :to="item.path || null" :prepend-icon="item.icon"
             :active="isActivePath(item.path)"
             :color="item.adminSection ? 'secondary' : 'primary'"
-            rounded="lg" class="mb-1 menu-item" @click="onMenuClick(item)">
-            <v-list-item-title>
-              {{ item.label }}
-              <v-badge v-if="item.path === '/chat' && chatUnread > 0" :content="chatUnread" color="error" inline class="ml-1" />
-              <v-badge v-if="item.path === '/manage/chat' && chatUnread > 0" :content="chatUnread" color="error" inline class="ml-1" />
-            </v-list-item-title>
+            :title="item.label"
+            class="menu-item" @click="onMenuClick(item)">
+            <template #append v-if="!rail">
+              <v-badge v-if="item.path === '/chat' && chatUnread > 0" :content="chatUnread" color="error" inline />
+              <v-badge v-if="item.path === '/manage/chat' && chatUnread > 0" :content="chatUnread" color="error" inline />
+            </template>
           </v-list-item>
         </template>
       </v-list>
+
+      <template #append>
+        <v-divider />
+        <v-list density="compact" nav class="main-nav-list">
+          <v-list-item :prepend-icon="rail ? 'mdi-chevron-right' : 'mdi-chevron-left'"
+            :title="rail ? '' : 'Свернуть меню'"
+            color="grey" @click="toggleRail" />
+        </v-list>
+      </template>
     </v-navigation-drawer>
 
     <!-- Top bar -->
     <v-app-bar flat border="b" class="topbar">
       <v-app-bar-nav-icon v-if="mobile" @click="drawer = !drawer" />
+      <v-btn v-else icon size="small" class="mr-1" @click="toggleRail">
+        <v-icon>{{ rail ? 'mdi-menu' : 'mdi-menu-open' }}</v-icon>
+      </v-btn>
 
       <!-- Brand fallback (visible when sidebar is collapsed or on mobile) -->
       <router-link to="/" class="topbar-brand d-flex align-center ga-2 ml-2">
@@ -255,6 +269,13 @@ const router = useRouter();
 const theme = useTheme();
 const { mobile } = useDisplay();
 const drawer = ref(true);
+
+// Rail (minimalist) sidebar — persists across sessions
+const rail = ref(localStorage.getItem('main-nav-rail') === '1');
+function toggleRail() {
+  rail.value = !rail.value;
+  localStorage.setItem('main-nav-rail', rail.value ? '1' : '0');
+}
 const copied = ref(false);
 const statusInfo = ref(null);
 
@@ -636,10 +657,24 @@ const visibleMenu = computed(() => menuItems.filter((item) => {
 
 .menu-item {
   transition: background-color 0.15s ease;
+  border-radius: 0 !important;
 }
 
 .menu-item:hover {
   background-color: rgba(var(--v-theme-primary), 0.06);
+}
+
+/* Square-edge items in the sidebar — no Vuetify rounding */
+.main-nav-list :deep(.v-list-item) {
+  border-radius: 0 !important;
+}
+
+/* Rail mode: compress header to the brand mark alone */
+.sidebar-drawer :deep(.v-navigation-drawer--rail) .sidebar-header {
+  padding: 16px 0 !important;
+}
+.sidebar-drawer :deep(.v-navigation-drawer--rail) .brand-mark {
+  margin-right: 0 !important;
 }
 
 .topbar-brand {
