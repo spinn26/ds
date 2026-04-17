@@ -18,7 +18,40 @@
       </div>
     </v-card>
 
+    <!-- Bulk action bar -->
+    <v-slide-y-transition>
+      <v-card v-if="selected.length" class="mb-3 pa-3" color="primary" variant="tonal">
+        <div class="d-flex align-center flex-wrap ga-2">
+          <v-chip color="primary" variant="flat">
+            <v-icon start size="16">mdi-checkbox-multiple-marked</v-icon>
+            Выбрано: {{ selected.length }}
+          </v-chip>
+          <v-btn size="small" variant="tonal" color="success"
+            prepend-icon="mdi-account-check" @click="bulkRun('activate')">Активировать</v-btn>
+          <v-btn size="small" variant="tonal" color="warning"
+            prepend-icon="mdi-account-cancel" @click="bulkRun('terminate')">Терминировать</v-btn>
+          <v-btn size="small" variant="tonal" color="error"
+            prepend-icon="mdi-account-remove" @click="bulkRun('exclude')">Исключить</v-btn>
+          <v-btn size="small" variant="tonal" color="info"
+            prepend-icon="mdi-account-reactivate" @click="bulkRun('re-register')">Перерегистрировать</v-btn>
+          <v-btn size="small" variant="tonal" color="grey"
+            prepend-icon="mdi-lock" @click="bulkRun('block')">Заблокировать</v-btn>
+          <v-btn size="small" variant="tonal" color="grey"
+            prepend-icon="mdi-lock-open" @click="bulkRun('unblock')">Разблокировать</v-btn>
+          <v-btn size="small" variant="tonal" color="secondary"
+            prepend-icon="mdi-account-supervisor" @click="bulkSetInviter">Сменить наставника</v-btn>
+          <v-spacer />
+          <v-btn size="small" variant="text" prepend-icon="mdi-close" @click="selected = []">Снять выбор</v-btn>
+        </div>
+        <v-alert v-if="bulkMsg" :type="bulkMsgType" density="compact" class="mt-2" closable @click:close="bulkMsg = ''">
+          {{ bulkMsg }}
+        </v-alert>
+      </v-card>
+    </v-slide-y-transition>
+
     <DataTableWrapper
+      v-model:selected="selected"
+      selectable
       :items="items"
       :items-length="total"
       :loading="loading"
@@ -155,6 +188,11 @@ const statusFilter = ref(null);
 const statusOptions = ref([]);
 const page = ref(1);
 const perPage = ref(25);
+
+// Bulk selection
+const selected = ref([]);
+const bulkMsg = ref('');
+const bulkMsgType = ref('success');
 
 const activeFilterCount = computed(() => {
   let c = 0;
@@ -320,6 +358,63 @@ async function saveEdit() {
     }
   }
   saving.value = false;
+}
+
+// ============ BULK ACTIONS ============
+function selectedIds() {
+  return selected.value.map(x => (typeof x === 'object' ? x.id : x));
+}
+
+async function bulkRun(action) {
+  const ids = selectedIds();
+  if (!ids.length) return;
+  const labels = {
+    activate: 'активировать', terminate: 'терминировать', exclude: 'исключить',
+    're-register': 'перерегистрировать', block: 'заблокировать', unblock: 'разблокировать',
+  };
+  if (!confirm(`${ids.length} партнёр(ов) — ${labels[action]}. Продолжить?`)) return;
+
+  let reason = '';
+  if (action === 'terminate' || action === 'exclude') {
+    reason = window.prompt('Причина (необязательно):', '') || '';
+  }
+
+  try {
+    const { data } = await api.post('/admin/partners/bulk', { ids, action, reason });
+    bulkMsg.value = data.message;
+    bulkMsgType.value = data.fail > 0 ? 'warning' : 'success';
+    selected.value = [];
+    loadData();
+  } catch (e) {
+    bulkMsg.value = e.response?.data?.message || 'Ошибка массового действия';
+    bulkMsgType.value = 'error';
+  }
+}
+
+async function bulkSetInviter() {
+  const ids = selectedIds();
+  if (!ids.length) return;
+  const inviterId = window.prompt('Введите ID нового наставника:', '');
+  if (!inviterId) return;
+  const n = parseInt(inviterId, 10);
+  if (!Number.isFinite(n) || n <= 0) {
+    bulkMsg.value = 'Некорректный ID';
+    bulkMsgType.value = 'error';
+    return;
+  }
+  if (!confirm(`${ids.length} партнёр(ов) → новый наставник ID ${n}. Продолжить?`)) return;
+  try {
+    const { data } = await api.post('/admin/partners/bulk', {
+      ids, action: 'set-inviter', inviter: n,
+    });
+    bulkMsg.value = data.message;
+    bulkMsgType.value = data.fail > 0 ? 'warning' : 'success';
+    selected.value = [];
+    loadData();
+  } catch (e) {
+    bulkMsg.value = e.response?.data?.message || 'Ошибка массового действия';
+    bulkMsgType.value = 'error';
+  }
 }
 
 async function changeStatus(action) {

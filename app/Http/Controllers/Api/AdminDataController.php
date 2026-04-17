@@ -205,6 +205,83 @@ class AdminDataController extends Controller
         return response()->json(['message' => 'Обновлён', 'id' => $consultant->id]);
     }
 
+    /**
+     * Массовое действие над выборкой партнёров.
+     * actions:
+     *   - activate / terminate / exclude / re-register (смена статуса)
+     *   - set-inviter (смена наставника, требует inviter)
+     *   - block / unblock (блокировка WebUser)
+     */
+    public function bulkPartners(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'ids' => ['required', 'array', 'min:1'],
+            'ids.*' => ['integer'],
+            'action' => ['required', 'string', 'in:activate,terminate,exclude,re-register,set-inviter,block,unblock'],
+            'reason' => ['nullable', 'string', 'max:500'],
+            'inviter' => ['nullable', 'integer', 'exists:consultant,id'],
+        ]);
+
+        $ok = 0;
+        $fail = 0;
+        $errors = [];
+
+        foreach ($data['ids'] as $cid) {
+            try {
+                $c = Consultant::find($cid);
+                if (! $c) { $fail++; continue; }
+
+                switch ($data['action']) {
+                    case 'activate':
+                        $this->statusService->activate($c) ? $ok++ : $fail++;
+                        break;
+                    case 'terminate':
+                        $this->statusService->terminate($c, $data['reason'] ?? '');
+                        $ok++;
+                        break;
+                    case 'exclude':
+                        $this->statusService->exclude($c, $data['reason'] ?? '');
+                        $ok++;
+                        break;
+                    case 're-register':
+                        $this->statusService->reRegister($c) ? $ok++ : $fail++;
+                        break;
+                    case 'set-inviter':
+                        if (! $request->filled('inviter')) {
+                            throw new \InvalidArgumentException('inviter required');
+                        }
+                        if ((int) $data['inviter'] === $cid) {
+                            throw new \InvalidArgumentException('Нельзя назначить самого себя');
+                        }
+                        $c->inviter = $data['inviter'];
+                        $c->save();
+                        $ok++;
+                        break;
+                    case 'block':
+                    case 'unblock':
+                        if ($c->webUser) {
+                            DB::table('WebUser')->where('id', $c->webUser)
+                                ->update(['isBlocked' => $data['action'] === 'block']);
+                            $ok++;
+                        } else {
+                            $fail++;
+                        }
+                        break;
+                }
+            } catch (\Throwable $e) {
+                $fail++;
+                $errors[] = "ID {$cid}: " . $e->getMessage();
+            }
+        }
+
+        return response()->json([
+            'message' => "Выполнено: {$ok}, не удалось: {$fail}",
+            'ok' => $ok,
+            'fail' => $fail,
+            'errors' => array_slice($errors, 0, 10),
+        ]);
+    }
+
     /** Смена статуса активности партнёра */
     public function changePartnerStatus(Request $request, int $id): JsonResponse
     {
@@ -596,5 +673,52 @@ class AdminDataController extends Controller
             ]);
 
         return response()->json(['data' => $data, 'total' => $total]);
+    }
+
+    /**
+     * Массовая верификация / отклонение реквизитов.
+     */
+    public function bulkRequisites(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'ids' => ['required', 'array', 'min:1'],
+            'ids.*' => ['integer'],
+            'action' => ['required', 'string', 'in:verify,reject'],
+            'comment' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $ok = 0;
+        $fail = 0;
+
+        foreach ($data['ids'] as $rid) {
+            try {
+                $r = Requisite::find($rid);
+                if (! $r) { $fail++; continue; }
+
+                $r->verified = $data['action'] === 'verify';
+                $r->status = $data['action'] === 'verify' ? 3 : 2;
+                $r->dateChange = now();
+                $r->save();
+
+                if ($data['action'] === 'reject' && ! empty($data['comment'])) {
+                    DB::table('platformCommunication')->insert([
+                        'consultant' => $r->consultant,
+                        'category' => 1,
+                        'message' => $data['comment'],
+                        'date' => now(),
+                        'direction' => 'ds2p',
+                        'read' => false,
+                    ]);
+                }
+                $ok++;
+            } catch (\Throwable) {
+                $fail++;
+            }
+        }
+
+        return response()->json([
+            'message' => "Выполнено: {$ok}, не удалось: {$fail}",
+            'ok' => $ok, 'fail' => $fail,
+        ]);
     }
 }

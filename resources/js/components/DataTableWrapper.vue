@@ -47,6 +47,8 @@
       <v-data-table-server
         v-if="serverSide"
         v-model:page="pageProxy"
+        v-model="selectedProxy"
+        :show-select="selectable"
         :items-per-page="itemsPerPage"
         :items-length="itemsLength"
         :items="items"
@@ -54,6 +56,8 @@
         :loading="loading"
         :density="density"
         :row-props="rowProps"
+        :item-value="itemValue"
+        return-object
         hover
         class="dtw-table"
         @update:options="$emit('update:options', $event)"
@@ -65,11 +69,15 @@
 
       <v-data-table
         v-else
+        v-model="selectedProxy"
+        :show-select="selectable"
         :items="items"
         :headers="headers"
         :items-per-page="itemsPerPage"
         :density="density"
         :row-props="rowProps"
+        :item-value="itemValue"
+        return-object
         hover
         class="dtw-table"
       >
@@ -115,9 +123,14 @@ const props = defineProps({
 
   // Skeleton rows count
   skeletonRows: { type: Number, default: 6 },
+
+  // Selection
+  selectable: { type: Boolean, default: false },
+  selected: { type: Array, default: () => [] },
+  itemValue: { type: String, default: 'id' },
 });
 
-const emit = defineEmits(['update:page', 'update:search', 'update:options']);
+const emit = defineEmits(['update:page', 'update:search', 'update:options', 'update:selected']);
 
 const pageProxy = computed({
   get: () => props.page,
@@ -126,6 +139,10 @@ const pageProxy = computed({
 const searchProxy = computed({
   get: () => props.search,
   set: (v) => emit('update:search', v ?? ''),
+});
+const selectedProxy = computed({
+  get: () => props.selected,
+  set: (v) => emit('update:selected', v),
 });
 </script>
 
