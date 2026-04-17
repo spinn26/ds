@@ -26,10 +26,12 @@
       <v-row>
         <v-col v-for="product in filteredProducts" :key="product.id" cols="12" sm="6" md="4" lg="3">
           <v-card class="pa-4 d-flex flex-column" height="100%">
-            <!-- Image placeholder -->
-            <v-img v-if="product.image" :src="product.image" height="140" cover class="rounded mb-3" />
-            <div v-else class="bg-grey-lighten-3 rounded d-flex align-center justify-center mb-3" style="height:140px">
-              <v-icon size="48" color="grey-lighten-1">mdi-image-outline</v-icon>
+            <!-- Image placeholder (same style as video placeholders in Education) -->
+            <div class="rounded d-flex align-center justify-center mb-3" style="height:140px; background: linear-gradient(135deg, #1a1f2e 0%, #2d3748 100%)">
+              <div class="text-center">
+                <v-icon size="48" color="primary" class="mb-2">mdi-package-variant</v-icon>
+                <div class="text-caption text-white">DS Consulting</div>
+              </div>
             </div>
 
             <div class="d-flex justify-space-between align-center mb-2">

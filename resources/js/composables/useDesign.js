@@ -69,6 +69,8 @@ export function fmt2(n) {
 
 export function fmtDate(d) {
   if (!d) return '—';
+  // Already formatted as dd.mm.yyyy by backend (Carbon format('d.m.Y'))
+  if (typeof d === 'string' && /^\d{2}\.\d{2}\.\d{4}$/.test(d)) return d;
   try {
     const date = new Date(d);
     if (isNaN(date.getTime())) return '—';

@@ -94,8 +94,8 @@ const documents = ref([
 onMounted(async () => {
   try {
     const { data } = await api.get('/education');
-    if (data.videos) videos.value = data.videos;
-    if (data.documents) documents.value = data.documents;
+    if (data.videos?.length) videos.value = data.videos;
+    if (data.documents?.length) documents.value = data.documents;
   } catch {}
 });
 </script>

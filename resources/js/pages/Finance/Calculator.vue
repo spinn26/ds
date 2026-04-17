@@ -79,33 +79,6 @@
           <div class="text-h4 font-weight-bold text-green">{{ fmt(result.personalVolume) }} баллов</div>
         </v-col>
       </v-row>
-      <v-divider class="my-3" />
-      <v-row dense>
-        <v-col cols="6" md="2">
-          <div class="text-caption text-medium-emphasis">Сумма (RUB)</div>
-          <div class="text-body-2 font-weight-medium">{{ fmt(result.amountRub) }}</div>
-        </v-col>
-        <v-col cols="6" md="2">
-          <div class="text-caption text-medium-emphasis">Без НДС</div>
-          <div class="text-body-2 font-weight-medium">{{ fmt(result.amountNoVat) }}</div>
-        </v-col>
-        <v-col cols="6" md="2">
-          <div class="text-caption text-medium-emphasis">%DS</div>
-          <div class="text-body-2 font-weight-medium">{{ result.dsCommissionPercent }}%</div>
-        </v-col>
-        <v-col cols="6" md="2">
-          <div class="text-caption text-medium-emphasis">НДС</div>
-          <div class="text-body-2 font-weight-medium">{{ result.vatPercent }}%</div>
-        </v-col>
-        <v-col cols="6" md="2">
-          <div class="text-caption text-medium-emphasis">Курс</div>
-          <div class="text-body-2 font-weight-medium">{{ result.currencyRate }}</div>
-        </v-col>
-        <v-col cols="6" md="2">
-          <div class="text-caption text-medium-emphasis">Гр. бонус (руб)</div>
-          <div class="text-body-2 font-weight-medium">{{ fmt(result.groupBonusRub) }}</div>
-        </v-col>
-      </v-row>
     </v-card>
     <v-alert v-if="result?.error" type="error" density="compact" class="mb-4">{{ result.error }}</v-alert>
 

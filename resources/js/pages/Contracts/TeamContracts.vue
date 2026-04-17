@@ -43,16 +43,17 @@ const page = ref(1);
 const filters = ref({ search: '' });
 
 
+const nowrap = { style: 'white-space:nowrap' };
 const headers = [
-  { title: 'Номер контракта', key: 'number', width: 140 },
-  { title: 'ФИО клиента', key: 'clientName', cellProps: { style: 'white-space:nowrap' } },
-  { title: 'ФИО ФК', key: 'consultantName', cellProps: { style: 'white-space:nowrap' } },
-  { title: 'Дата открытия', key: 'openDate', width: 130 },
-  { title: 'Продукт', key: 'productName' },
-  { title: 'Программа', key: 'programName' },
-  { title: 'Срок контракта', key: 'term', width: 120 },
-  { title: 'Сумма', key: 'ammount', width: 150 },
-  { title: 'Статус контракта', key: 'statusName', width: 150 },
+  { title: 'Номер контракта', key: 'number', width: 140, cellProps: nowrap },
+  { title: 'ФИО клиента', key: 'clientName', cellProps: nowrap },
+  { title: 'ФИО ФК', key: 'consultantName', cellProps: nowrap },
+  { title: 'Дата открытия', key: 'openDate', width: 130, cellProps: nowrap },
+  { title: 'Продукт', key: 'productName', cellProps: nowrap },
+  { title: 'Программа', key: 'programName', cellProps: nowrap },
+  { title: 'Срок контракта', key: 'term', width: 120, cellProps: nowrap },
+  { title: 'Сумма', key: 'ammount', width: 160, align: 'end', cellProps: nowrap },
+  { title: 'Статус контракта', key: 'statusName', width: 170, cellProps: nowrap },
 ];
 
 function statusColor(s) {

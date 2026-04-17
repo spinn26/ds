@@ -26,41 +26,41 @@
             <v-col cols="6" sm="4" md="2">
               <div class="text-center">
                 <div class="text-caption text-medium-emphasis">ЛП</div>
-                <div class="text-h6 font-weight-bold text-green">{{ fmt(data.partnerStats.personalVolume) }}</div>
+                <div class="text-subtitle-1 font-weight-bold text-green" style="white-space:nowrap">{{ fmt(data.partnerStats.personalVolume) }}</div>
               </div>
             </v-col>
             <v-col cols="6" sm="4" md="2">
               <div class="text-center">
                 <div class="text-caption text-medium-emphasis">ГП</div>
-                <div class="text-h6 font-weight-bold text-blue">{{ fmt(data.partnerStats.groupVolume) }}</div>
+                <div class="text-subtitle-1 font-weight-bold text-blue" style="white-space:nowrap">{{ fmt(data.partnerStats.groupVolume) }}</div>
               </div>
             </v-col>
             <v-col cols="6" sm="4" md="2">
               <div class="text-center">
                 <div class="text-caption text-medium-emphasis">НГП</div>
-                <div class="text-h6 font-weight-bold text-orange">{{ fmt(data.partnerStats.groupVolumeCumulative) }}</div>
+                <div class="text-subtitle-1 font-weight-bold text-orange" style="white-space:nowrap">{{ fmt(data.partnerStats.groupVolumeCumulative) }}</div>
               </div>
             </v-col>
-            <v-col cols="6" sm="4" md="2">
+            <v-col cols="6" sm="4" md="3">
               <div class="text-center">
                 <div class="text-caption text-medium-emphasis">Квалификация</div>
-                <div class="text-body-1 font-weight-bold">{{ data.partnerStats.qualification }}</div>
-                <div v-if="data.partnerStats.levelsDontMatch" class="text-caption text-warning">
+                <div class="text-body-2 font-weight-bold" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ data.partnerStats.qualification }}</div>
+                <div v-if="data.partnerStats.levelsDontMatch" class="text-caption text-warning" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
                   Расчёт: {{ data.partnerStats.calcQualification }} ({{ data.partnerStats.calcPercent }}%)
                 </div>
                 <div v-else class="text-caption text-medium-emphasis">{{ data.partnerStats.percent }}%</div>
               </div>
             </v-col>
-            <v-col cols="6" sm="4" md="2">
+            <v-col cols="6" sm="4" md="1">
               <div class="text-center">
                 <div class="text-caption text-medium-emphasis">Клиенты</div>
-                <div class="text-h6 font-weight-bold">{{ data.partnerStats.clientCount }}</div>
+                <div class="text-subtitle-1 font-weight-bold">{{ data.partnerStats.clientCount }}</div>
               </div>
             </v-col>
             <v-col cols="6" sm="4" md="2">
               <div class="text-center">
                 <div class="text-caption text-medium-emphasis">Команда</div>
-                <div class="text-h6 font-weight-bold">{{ data.partnerStats.teamCount }}</div>
+                <div class="text-subtitle-1 font-weight-bold">{{ data.partnerStats.teamCount }}</div>
               </div>
             </v-col>
           </v-row>

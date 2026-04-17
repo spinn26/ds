@@ -15,36 +15,36 @@
       <v-col cols="12" sm="6" md="3">
         <v-card class="pa-4 h-100">
           <div class="text-body-2 text-medium-emphasis">Квалификация</div>
-          <div class="d-flex align-center ga-2 mt-1">
-            <v-chip size="small" color="grey">{{ summary.qualificationPrev?.title || '—' }}</v-chip>
+          <div class="d-flex align-center ga-2 mt-1 flex-wrap">
+            <v-chip size="small" color="grey" class="text-truncate">{{ summary.qualificationPrev?.title || '—' }}</v-chip>
             <v-icon size="16">mdi-arrow-right</v-icon>
-            <v-chip size="small" color="primary">{{ summary.qualificationCurrent?.title || '—' }}</v-chip>
+            <v-chip size="small" color="primary" class="text-truncate">{{ summary.qualificationCurrent?.title || '—' }}</v-chip>
           </div>
         </v-card>
       </v-col>
       <v-col cols="12" sm="6" md="3">
         <v-card class="pa-4 h-100">
           <div class="text-body-2 text-medium-emphasis">Уровень комиссии</div>
-          <div class="text-h4 font-weight-bold text-primary mt-1">{{ summary.commissionLevel?.percent ?? 0 }}%</div>
+          <div class="text-h4 font-weight-bold text-primary mt-1" style="white-space:nowrap">{{ summary.commissionLevel?.percent ?? 0 }}%</div>
           <div class="text-caption text-medium-emphasis">{{ summary.commissionLevel?.title || '' }}</div>
         </v-card>
       </v-col>
       <v-col cols="12" sm="6" md="2">
         <v-card class="pa-4 h-100">
           <div class="text-body-2 text-medium-emphasis">ЛП</div>
-          <div class="text-h5 font-weight-bold text-green mt-1">{{ fmt(summary.volumes?.lp) }}</div>
+          <div class="text-h6 font-weight-bold text-green mt-1" style="white-space:nowrap">{{ fmt(summary.volumes?.lp) }}</div>
         </v-card>
       </v-col>
       <v-col cols="12" sm="6" md="2">
         <v-card class="pa-4 h-100">
           <div class="text-body-2 text-medium-emphasis">ГП</div>
-          <div class="text-h5 font-weight-bold text-blue mt-1">{{ fmt(summary.volumes?.gp) }}</div>
+          <div class="text-h6 font-weight-bold text-blue mt-1" style="white-space:nowrap">{{ fmt(summary.volumes?.gp) }}</div>
         </v-card>
       </v-col>
       <v-col cols="12" sm="6" md="2">
         <v-card class="pa-4 h-100">
           <div class="text-body-2 text-medium-emphasis">НГП</div>
-          <div class="text-h5 font-weight-bold text-orange mt-1">{{ fmt(summary.volumes?.ngp) }}</div>
+          <div class="text-h6 font-weight-bold text-orange mt-1" style="white-space:nowrap">{{ fmt(summary.volumes?.ngp) }}</div>
         </v-card>
       </v-col>
     </v-row>
