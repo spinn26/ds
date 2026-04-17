@@ -52,14 +52,14 @@
       </div>
     </aside>
 
-    <!-- View toggle: floating control above main area -->
+    <!-- View toggle: floating vertical rail on the right edge -->
     <div class="view-toggle">
       <button class="view-toggle-btn" :class="{ active: viewMode === 'list' }" @click="viewMode = 'list'" title="Список">
-        <v-icon size="16">mdi-format-list-bulleted</v-icon>
+        <v-icon size="20">mdi-format-list-bulleted</v-icon>
         <span class="view-toggle-label">Список</span>
       </button>
       <button class="view-toggle-btn" :class="{ active: viewMode === 'kanban' }" @click="viewMode = 'kanban'" title="Канбан">
-        <v-icon size="16">mdi-view-column-outline</v-icon>
+        <v-icon size="20">mdi-view-column-outline</v-icon>
         <span class="view-toggle-label">Доска</span>
       </button>
     </div>
@@ -1916,11 +1916,58 @@ onUnmounted(() => {
 .hotkey-row span { flex: 1; color: rgba(var(--v-theme-on-surface), 0.8); }
 
 /* ================== VIEW TOGGLE ================== */
-.view-toggle { position: absolute; top: 12px; right: 16px; z-index: 6; display: flex; gap: 2px; padding: 3px; border-radius: 10px; background: rgba(var(--v-theme-surface-variant), 0.6); backdrop-filter: blur(8px); border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); }
-.view-toggle-btn { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 8px; border: none; background: transparent; color: rgba(var(--v-theme-on-surface), 0.6); cursor: pointer; font-size: 12px; font-weight: 600; transition: all 0.15s; }
-.view-toggle-btn:hover { color: rgb(var(--v-theme-on-surface)); }
-.view-toggle-btn.active { background: rgb(var(--v-theme-primary)); color: #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.1); }
-.view-toggle-label { display: inline; }
+.view-toggle {
+  position: fixed;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  border-radius: 16px;
+  background: rgba(var(--v-theme-surface), 0.72);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+}
+.view-toggle-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  width: 64px;
+  padding: 10px 6px;
+  border-radius: 12px;
+  border: none;
+  background: transparent;
+  color: rgba(var(--v-theme-on-surface), 0.55);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  transition: all 0.18s ease;
+}
+.view-toggle-btn:hover {
+  color: rgb(var(--v-theme-on-surface));
+  background: rgba(var(--v-theme-on-surface), 0.06);
+}
+.view-toggle-btn.active {
+  background: rgb(var(--v-theme-primary));
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(var(--v-theme-primary), 0.35);
+  transform: scale(1.02);
+}
+.view-toggle-btn.active:hover {
+  background: rgb(var(--v-theme-primary));
+}
+.view-toggle-label {
+  display: inline;
+  line-height: 1;
+}
 
 /* Sidebar compact variant in Kanban mode — list acts like quick filter preview */
 .chat-sidebar.compact { width: 260px; }
@@ -2035,6 +2082,8 @@ onUnmounted(() => {
   .chat-sidebar { width: 100%; }
   .mobile-hidden { display: none !important; }
   .view-toggle-label { display: none; }
+  .view-toggle { right: 8px; padding: 4px; }
+  .view-toggle-btn { width: 44px; padding: 8px 4px; }
   .kanban-board { padding: 56px 8px 8px; }
   .kanban-column { min-width: 220px; }
   .chat-sidebar.compact { display: none !important; }
