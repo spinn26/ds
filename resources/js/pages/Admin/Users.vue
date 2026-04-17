@@ -31,43 +31,37 @@
     </v-card>
 
     <!-- Table -->
-    <v-card>
-      <v-data-table-server
-        :headers="headers"
-        :items="users"
-        :items-length="total"
-        :loading="loading"
-        :items-per-page="25"
-        @update:page="page = $event; loadUsers()"
-        density="compact"
-        hover
-      >
-        <template #item.role="{ item }">
-          <v-chip v-for="r in (item.role || '').split(',')" :key="r" size="x-small" class="mr-1"
-            :color="r.trim() === 'admin' ? 'red' : r.trim() === 'backoffice' ? 'orange' : r.trim() === 'consultant' ? 'green' : 'grey'">
-            {{ r.trim() }}
-          </v-chip>
-        </template>
-        <template #item.isBlocked="{ item }">
-          <v-icon :color="item.isBlocked ? 'error' : 'success'" size="small">
-            {{ item.isBlocked ? 'mdi-lock' : 'mdi-lock-open' }}
-          </v-icon>
-        </template>
-        <template #item.actions="{ item }">
-          <v-btn icon="mdi-pencil" size="x-small" variant="text" @click="openEdit(item)" />
-          <v-btn icon="mdi-login" size="x-small" variant="text" color="secondary" title="Войти как"
-            @click="impersonate(item)" />
-          <v-btn icon="mdi-delete" size="x-small" variant="text" color="error"
-            @click="confirmDelete(item)" />
-        </template>
-        <template #no-data>
-          <div class="text-center pa-4">
-            <v-icon size="48" color="grey-lighten-1" class="mb-2">mdi-file-search-outline</v-icon>
-            <div class="text-medium-emphasis">Данные не найдены</div>
-          </div>
-        </template>
-      </v-data-table-server>
-    </v-card>
+    <DataTableWrapper
+      :items="users"
+      :headers="headers"
+      :loading="loading"
+      server-side
+      :page="page"
+      :items-per-page="25"
+      :items-length="total"
+      empty-icon="mdi-account-search-outline"
+      empty-message="Пользователи не найдены"
+      @update:page="p => { page = p; loadUsers(); }"
+    >
+      <template #item.role="{ item }">
+        <v-chip v-for="r in (item.role || '').split(',')" :key="r" size="x-small" class="mr-1"
+          :color="r.trim() === 'admin' ? 'red' : r.trim() === 'backoffice' ? 'orange' : r.trim() === 'consultant' ? 'green' : 'grey'">
+          {{ r.trim() }}
+        </v-chip>
+      </template>
+      <template #item.isBlocked="{ item }">
+        <v-icon :color="item.isBlocked ? 'error' : 'success'" size="small">
+          {{ item.isBlocked ? 'mdi-lock' : 'mdi-lock-open' }}
+        </v-icon>
+      </template>
+      <template #item.actions="{ item }">
+        <v-btn icon="mdi-pencil" size="x-small" variant="text" @click="openEdit(item)" />
+        <v-btn icon="mdi-login" size="x-small" variant="text" color="secondary" title="Войти как"
+          @click="impersonate(item)" />
+        <v-btn icon="mdi-delete" size="x-small" variant="text" color="error"
+          @click="confirmDelete(item)" />
+      </template>
+    </DataTableWrapper>
 
     <!-- Edit/Create Dialog -->
     <v-dialog v-model="dialog" max-width="600" persistent>
@@ -141,6 +135,7 @@ import { useRouter } from 'vue-router';
 import { useAuthStore } from '../../stores/auth';
 import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
+import DataTableWrapper from '../../components/DataTableWrapper.vue';
 
 const auth = useAuthStore();
 const router = useRouter();
