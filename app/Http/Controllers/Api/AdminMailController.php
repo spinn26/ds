@@ -4,12 +4,15 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Api\Concerns\PaginatesRequests;
 use App\Http\Controllers\Controller;
+use App\Jobs\SendBroadcastEmail;
 use App\Services\MailSettingsService;
+use App\Services\MailTemplateRenderer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
 
 class AdminMailController extends Controller
 {
@@ -17,6 +20,7 @@ class AdminMailController extends Controller
 
     public function __construct(
         private readonly MailSettingsService $mailSettings,
+        private readonly MailTemplateRenderer $renderer,
     ) {}
 
     /**
@@ -103,11 +107,9 @@ class AdminMailController extends Controller
     }
 
     /**
-     * Broadcast email to a target audience of WebUsers.
-     * Audience rules:
-     *   - all: all users with a non-empty email
-     *   - active: linked consultants with activity = Active
-     *   - ids: explicit list of WebUser IDs
+     * Broadcast email to a target audience. Dispatches one queued job per
+     * recipient so the request returns fast even for thousands of emails.
+     * Returns a broadcast_id the UI can poll via /admin/mail/broadcast/{id}/progress.
      */
     public function broadcast(Request $request): JsonResponse
     {
@@ -131,39 +133,100 @@ class AdminMailController extends Controller
             return response()->json(['message' => 'Нет получателей'], 422);
         }
 
-        $sent = 0;
-        $failed = 0;
+        $broadcastId = (string) Str::uuid();
+        $senderId = (int) $request->user()->id;
         $isHtml = (bool) ($data['is_html'] ?? true);
 
         foreach ($recipients as $r) {
-            if (! filter_var($r->email, FILTER_VALIDATE_EMAIL)) {
-                $this->logEntry($request, $r->email ?? '—', $r->id, $data['subject'], $data['body'], 'failed', 'Invalid email');
-                $failed++;
-                continue;
-            }
-
-            try {
-                Mail::send([], [], function ($msg) use ($r, $data, $isHtml) {
-                    $msg->to($r->email)->subject($data['subject']);
-                    if ($isHtml) {
-                        $msg->html($data['body']);
-                    } else {
-                        $msg->text($data['body']);
-                    }
-                });
-                $this->logEntry($request, $r->email, $r->id, $data['subject'], $data['body'], 'sent', null);
-                $sent++;
-            } catch (\Throwable $e) {
-                $this->logEntry($request, $r->email, $r->id, $data['subject'], $data['body'], 'failed', $e->getMessage());
-                $failed++;
-            }
+            SendBroadcastEmail::dispatch(
+                $broadcastId,
+                $senderId,
+                (int) $r->id,
+                $data['subject'],
+                $data['body'],
+                $isHtml,
+            );
         }
 
         return response()->json([
-            'message' => "Отправлено: {$sent}, не доставлено: {$failed}",
-            'sent' => $sent,
-            'failed' => $failed,
-            'total' => $sent + $failed,
+            'message' => 'Рассылка поставлена в очередь',
+            'broadcast_id' => $broadcastId,
+            'total' => $recipients->count(),
+        ]);
+    }
+
+    /**
+     * Poll progress for a broadcast dispatched above.
+     */
+    public function broadcastProgress(string $broadcastId): JsonResponse
+    {
+        $counts = DB::table('mail_log')
+            ->where('broadcast_id', $broadcastId)
+            ->selectRaw('status, COUNT(*) as cnt')
+            ->groupBy('status')
+            ->pluck('cnt', 'status')
+            ->toArray();
+
+        return response()->json([
+            'broadcast_id' => $broadcastId,
+            'sent' => (int) ($counts['sent'] ?? 0),
+            'failed' => (int) ($counts['failed'] ?? 0),
+        ]);
+    }
+
+    // ===== TEMPLATES =====
+
+    public function templates(Request $request): JsonResponse
+    {
+        $query = DB::table('mail_templates');
+        if ($request->filled('search')) {
+            $s = '%' . $request->input('search') . '%';
+            $query->where(fn ($q) => $q->where('name', 'ilike', $s)->orWhere('subject', 'ilike', $s));
+        }
+
+        return response()->json([
+            'data' => $query->orderByDesc('id')->get(),
+            'tokens' => MailTemplateRenderer::availableTokens(),
+        ]);
+    }
+
+    public function storeTemplate(Request $request): JsonResponse
+    {
+        $data = $this->validateTemplate($request);
+        $data['created_at'] = now();
+        $data['updated_at'] = now();
+        $id = DB::table('mail_templates')->insertGetId($data);
+
+        return response()->json(['id' => $id], 201);
+    }
+
+    public function updateTemplate(Request $request, int $id): JsonResponse
+    {
+        $exists = DB::table('mail_templates')->where('id', $id)->exists();
+        if (! $exists) return response()->json(['message' => 'Not found'], 404);
+
+        $data = $this->validateTemplate($request);
+        $data['updated_at'] = now();
+        DB::table('mail_templates')->where('id', $id)->update($data);
+
+        return response()->json(['id' => $id]);
+    }
+
+    public function destroyTemplate(int $id): JsonResponse
+    {
+        $deleted = DB::table('mail_templates')->where('id', $id)->delete();
+        return $deleted
+            ? response()->json(['ok' => true])
+            : response()->json(['message' => 'Not found'], 404);
+    }
+
+    private function validateTemplate(Request $request): array
+    {
+        return $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'subject' => ['required', 'string', 'max:255'],
+            'body' => ['required', 'string'],
+            'is_html' => ['boolean'],
         ]);
     }
 

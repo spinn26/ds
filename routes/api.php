@@ -154,13 +154,18 @@ Route::prefix('v1')->group(function () {
         Route::post('/admin/transaction-import/{id}/calculate', [\App\Http\Controllers\Api\TransactionImportController::class, 'calculateCommissions']);
         Route::post('/admin/transactions/{id}/calculate', [\App\Http\Controllers\Api\TransactionImportController::class, 'calculateSingle']);
 
-        // Admin Mail (SMTP settings, broadcast, send log)
+        // Admin Mail (SMTP settings, broadcast, templates, send log)
         Route::get('/admin/mail/settings', [\App\Http\Controllers\Api\AdminMailController::class, 'settings']);
         Route::put('/admin/mail/settings', [\App\Http\Controllers\Api\AdminMailController::class, 'updateSettings']);
         Route::post('/admin/mail/test', [\App\Http\Controllers\Api\AdminMailController::class, 'test']);
         Route::post('/admin/mail/broadcast', [\App\Http\Controllers\Api\AdminMailController::class, 'broadcast']);
+        Route::get('/admin/mail/broadcast/{id}/progress', [\App\Http\Controllers\Api\AdminMailController::class, 'broadcastProgress']);
         Route::post('/admin/mail/audience-preview', [\App\Http\Controllers\Api\AdminMailController::class, 'audiencePreview']);
         Route::get('/admin/mail/log', [\App\Http\Controllers\Api\AdminMailController::class, 'log']);
+        Route::get('/admin/mail/templates', [\App\Http\Controllers\Api\AdminMailController::class, 'templates']);
+        Route::post('/admin/mail/templates', [\App\Http\Controllers\Api\AdminMailController::class, 'storeTemplate']);
+        Route::put('/admin/mail/templates/{id}', [\App\Http\Controllers\Api\AdminMailController::class, 'updateTemplate']);
+        Route::delete('/admin/mail/templates/{id}', [\App\Http\Controllers\Api\AdminMailController::class, 'destroyTemplate']);
 
         // Admin References (generic CRUD for small reference tables)
         Route::get('/admin/references', [\App\Http\Controllers\Api\AdminReferenceController::class, 'catalogs']);
