@@ -372,30 +372,59 @@ class ChatController extends Controller
             return response()->json(['message' => 'Только для сотрудников'], 403);
         }
 
-        $request->validate(['status' => 'required|in:new,open,pending,resolved,closed']);
+        $request->validate([
+            'status' => 'required|in:new,open,pending,resolved,closed',
+            'priority' => 'nullable|in:critical,high,medium,low',
+            'tags' => 'nullable|array',
+            'tags.*' => 'string|max:64',
+        ]);
 
-        $update = ['status' => $request->status, 'updated_at' => now()];
+        $existing = DB::table('chat_tickets')->where('id', $id)->first();
+        if (! $existing) return response()->json(['message' => 'Не найден'], 404);
+
+        $update = ['updated_at' => now()];
+        $statusChanged = $existing->status !== $request->status;
+        $update['status'] = $request->status;
         if ($request->status === 'closed') {
             $update['closed_at'] = now();
             $update['closed_by'] = $request->user()->id;
         }
 
+        $priorityChanged = false;
+        if ($request->filled('priority') && $request->priority !== $existing->priority) {
+            $update['priority'] = $request->priority;
+            $priorityChanged = true;
+        }
+
+        $tagsChanged = false;
+        if ($request->has('tags')) {
+            $update['tags'] = json_encode(array_values($request->input('tags', [])), JSON_UNESCAPED_UNICODE);
+            $tagsChanged = ($update['tags'] !== ($existing->tags ?? null));
+        }
+
         DB::table('chat_tickets')->where('id', $id)->update($update);
 
-        // System message
-        $statusLabels = ['new' => 'Новый', 'open' => 'Открыт', 'pending' => 'Ожидание', 'resolved' => 'Решён', 'closed' => 'Закрыт'];
-        DB::table('chat_messages')->insert([
-            'ticket_id' => $id,
-            'sender_id' => $request->user()->id,
-            'sender_name' => $this->userName($request),
-            'content' => 'Статус изменён → ' . ($statusLabels[$request->status] ?? $request->status),
-            'is_system' => true,
-            'is_agent' => true,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
+        // System message only for status changes (other changes are silent)
+        if ($statusChanged) {
+            $statusLabels = ['new' => 'Новый', 'open' => 'Открыт', 'pending' => 'Ожидание', 'resolved' => 'Решён', 'closed' => 'Закрыт'];
+            DB::table('chat_messages')->insert([
+                'ticket_id' => $id,
+                'sender_id' => $request->user()->id,
+                'sender_name' => $this->userName($request),
+                'content' => 'Статус изменён → ' . ($statusLabels[$request->status] ?? $request->status),
+                'is_system' => true,
+                'is_agent' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
 
-        return response()->json(['message' => 'Статус обновлён']);
+        return response()->json([
+            'message' => 'Обновлено',
+            'statusChanged' => $statusChanged,
+            'priorityChanged' => $priorityChanged,
+            'tagsChanged' => $tagsChanged,
+        ]);
     }
 
     /** Assign ticket to staff */
@@ -433,14 +462,25 @@ class ChatController extends Controller
 
     // ==================== INTERNAL NOTES ====================
 
-    public function notes(int $id): JsonResponse
+    public function notes(Request $request, int $id): JsonResponse
     {
+        if (! $this->isStaff($request)) {
+            return response()->json(['message' => 'Только для сотрудников'], 403);
+        }
+
         $notes = DB::table('chat_internal_notes')
             ->where('ticket_id', $id)
             ->orderByDesc('created_at')
-            ->get();
+            ->get()
+            ->map(fn ($n) => [
+                'id' => $n->id,
+                'authorId' => $n->author_id,
+                'authorName' => $n->author_name,
+                'content' => $n->content,
+                'createdAt' => $n->created_at,
+            ]);
 
-        return response()->json($notes);
+        return response()->json(['data' => $notes]);
     }
 
     public function addNote(Request $request, int $id): JsonResponse
