@@ -57,19 +57,76 @@
     </DataTableWrapper>
 
     <!-- Edit dialog -->
-    <v-dialog v-model="editDialog" max-width="420" persistent>
-      <v-card>
-        <v-card-title>Редактировать партнёра</v-card-title>
-        <v-card-text>
-          <div class="text-body-2 text-medium-emphasis mb-3">
-            {{ editForm.personName }} (ID {{ editForm.id }})
+    <v-dialog v-model="editDialog" max-width="880" persistent scrollable>
+      <v-card v-if="editForm">
+        <v-card-title class="d-flex align-center ga-2">
+          Редактировать партнёра
+          <v-chip size="small" :color="editActivityColor">{{ editForm.activityName || '—' }}</v-chip>
+          <v-spacer />
+          <span class="text-caption text-medium-emphasis">ID {{ editForm.id }}</span>
+        </v-card-title>
+        <v-card-text style="max-height:70vh">
+          <div v-if="editLoading" class="text-center pa-6">
+            <v-progress-circular indeterminate />
           </div>
-          <v-text-field v-model="editForm.participantCode" label="Реф. код (participantCode)"
-            variant="outlined" density="compact" class="mb-2"
-            :error-messages="editErrors.participantCode" />
-          <v-text-field v-model.number="editForm.inviter" type="number" label="Пригласивший (ID консультанта)"
-            variant="outlined" density="compact"
-            :error-messages="editErrors.inviter" />
+          <template v-else>
+            <v-row dense>
+              <v-col cols="12"><div class="text-subtitle-2 font-weight-bold mb-2">ФИО (WebUser)</div></v-col>
+              <v-col cols="12" sm="4"><v-text-field v-model="editForm.lastName" label="Фамилия" variant="outlined" density="compact" :error-messages="editErrors.lastName" /></v-col>
+              <v-col cols="12" sm="4"><v-text-field v-model="editForm.firstName" label="Имя" variant="outlined" density="compact" :error-messages="editErrors.firstName" /></v-col>
+              <v-col cols="12" sm="4"><v-text-field v-model="editForm.patronymic" label="Отчество" variant="outlined" density="compact" :error-messages="editErrors.patronymic" /></v-col>
+
+              <v-col cols="12" class="mt-2"><div class="text-subtitle-2 font-weight-bold mb-2">Контакты</div></v-col>
+              <v-col cols="12" sm="6"><v-text-field v-model="editForm.email" label="Email" type="email" variant="outlined" density="compact" :error-messages="editErrors.email" /></v-col>
+              <v-col cols="12" sm="3"><v-text-field v-model="editForm.phone" label="Телефон" variant="outlined" density="compact" :error-messages="editErrors.phone" /></v-col>
+              <v-col cols="12" sm="3"><v-text-field v-model="editForm.nicTG" label="Telegram" variant="outlined" density="compact" :error-messages="editErrors.nicTG" /></v-col>
+
+              <v-col cols="12" class="mt-2"><div class="text-subtitle-2 font-weight-bold mb-2">Персональные данные</div></v-col>
+              <v-col cols="12" sm="4"><v-select v-model="editForm.gender" :items="genderOptions" label="Пол" variant="outlined" density="compact" clearable :error-messages="editErrors.gender" /></v-col>
+              <v-col cols="12" sm="4"><v-text-field v-model="editBirthDate" type="date" label="Дата рождения" variant="outlined" density="compact" :error-messages="editErrors.birthDate" /></v-col>
+              <v-col cols="12" sm="4">
+                <v-text-field v-model="editForm.role" label="Роль(и)" hint="Через запятую: consultant, admin, support" persistent-hint variant="outlined" density="compact" :error-messages="editErrors.role" />
+              </v-col>
+
+              <v-col cols="12" class="mt-2"><div class="text-subtitle-2 font-weight-bold mb-2">Сеть</div></v-col>
+              <v-col cols="12" sm="4">
+                <v-text-field v-model="editForm.participantCode" label="Реф. код"
+                  variant="outlined" density="compact" :error-messages="editErrors.participantCode" />
+              </v-col>
+              <v-col cols="12" sm="4">
+                <v-text-field v-model.number="editForm.inviter" type="number" label="Пригласивший (ID)"
+                  :hint="editForm.inviterName ? `Сейчас: ${editForm.inviterName}` : ''" persistent-hint
+                  variant="outlined" density="compact" :error-messages="editErrors.inviter" />
+              </v-col>
+              <v-col cols="12" sm="4">
+                <v-checkbox v-model="editForm.isBlocked" label="Заблокирован" density="compact" hide-details />
+              </v-col>
+
+              <v-col cols="12" class="mt-2"><div class="text-subtitle-2 font-weight-bold mb-2">Смена пароля</div></v-col>
+              <v-col cols="12" sm="6">
+                <v-text-field v-model="editForm.newPassword" type="password"
+                  label="Новый пароль (пусто — не менять)"
+                  variant="outlined" density="compact" :error-messages="editErrors.newPassword" />
+              </v-col>
+            </v-row>
+
+            <v-divider class="my-4" />
+            <div class="text-subtitle-2 font-weight-bold mb-2">Смена статуса</div>
+            <div class="d-flex ga-2 flex-wrap">
+              <v-btn size="small" variant="tonal" color="success" prepend-icon="mdi-account-check"
+                :disabled="editForm.activityId === 1"
+                @click="changeStatus('activate')">Активировать</v-btn>
+              <v-btn size="small" variant="tonal" color="warning" prepend-icon="mdi-account-cancel"
+                @click="changeStatus('terminate')">Терминировать</v-btn>
+              <v-btn size="small" variant="tonal" color="error" prepend-icon="mdi-account-remove"
+                @click="changeStatus('exclude')">Исключить</v-btn>
+              <v-btn size="small" variant="tonal" color="info" prepend-icon="mdi-account-reactivate"
+                @click="changeStatus('re-register')">Перерегистрировать</v-btn>
+            </div>
+            <v-alert v-if="statusMsg" :type="statusMsgType" density="compact" class="mt-3" closable @click:close="statusMsg = ''">
+              {{ statusMsg }}
+            </v-alert>
+          </template>
         </v-card-text>
         <v-card-actions>
           <v-spacer />
@@ -172,28 +229,85 @@ async function loadData() {
 }
 
 const editDialog = ref(false);
-const editForm = ref({ id: null, personName: '', participantCode: '', inviter: null });
+const editLoading = ref(false);
+const editForm = ref(null);
 const editErrors = ref({});
 const saving = ref(false);
+const statusMsg = ref('');
+const statusMsgType = ref('success');
 
-function openEdit(item) {
-  editForm.value = {
-    id: item.id,
-    personName: item.personName,
-    participantCode: item.participantCode || '',
-    inviter: item.inviterId ?? null,
-  };
-  editErrors.value = {};
+const genderOptions = [
+  { title: 'Мужской', value: 'male' },
+  { title: 'Женский', value: 'female' },
+];
+
+const editBirthDate = computed({
+  get: () => editForm.value?.birthDate ? editForm.value.birthDate.split('T')[0] : '',
+  set: (v) => { if (editForm.value) editForm.value.birthDate = v || null; },
+});
+
+const editActivityColor = computed(() => {
+  const id = editForm.value?.activityId;
+  if (id === 1) return 'success';
+  if (id === 4) return 'info';
+  if (id === 3) return 'warning';
+  if (id === 5) return 'error';
+  return 'grey';
+});
+
+async function openEdit(item) {
   editDialog.value = true;
+  editLoading.value = true;
+  editErrors.value = {};
+  statusMsg.value = '';
+  editForm.value = { id: item.id, personName: item.personName };
+  try {
+    const { data } = await api.get(`/admin/partners/${item.id}`);
+    const c = data.consultant || {};
+    const u = data.webUser || {};
+    editForm.value = {
+      id: c.id,
+      personName: c.personName,
+      participantCode: c.participantCode || '',
+      inviter: c.inviter ?? null,
+      inviterName: c.inviterName,
+      activityId: c.activityId,
+      activityName: c.activityName,
+      firstName: u.firstName || '',
+      lastName: u.lastName || '',
+      patronymic: u.patronymic || '',
+      email: u.email || '',
+      phone: u.phone || '',
+      nicTG: u.nicTG || '',
+      gender: u.gender || null,
+      birthDate: u.birthDate || null,
+      role: u.role || '',
+      isBlocked: !!u.isBlocked,
+      newPassword: '',
+    };
+  } catch {}
+  editLoading.value = false;
 }
 
 async function saveEdit() {
   saving.value = true;
   editErrors.value = {};
   try {
-    await api.put(`/admin/partners/${editForm.value.id}`, {
-      participantCode: editForm.value.participantCode || null,
-      inviter: editForm.value.inviter || null,
+    const f = editForm.value;
+    await api.put(`/admin/partners/${f.id}`, {
+      participantCode: f.participantCode || null,
+      inviter: f.inviter || null,
+      firstName: f.firstName || null,
+      lastName: f.lastName || null,
+      patronymic: f.patronymic || null,
+      email: f.email || null,
+      phone: f.phone || null,
+      nicTG: f.nicTG || null,
+      gender: f.gender || null,
+      birthDate: f.birthDate || null,
+      role: f.role || null,
+      isBlocked: !!f.isBlocked,
+      newPassword: f.newPassword || null,
     });
     editDialog.value = false;
     loadData();
@@ -206,6 +320,27 @@ async function saveEdit() {
     }
   }
   saving.value = false;
+}
+
+async function changeStatus(action) {
+  if (!editForm.value) return;
+  let reason = '';
+  if (action === 'terminate' || action === 'exclude') {
+    reason = window.prompt('Причина (необязательно):', '') || '';
+  }
+  try {
+    const { data } = await api.post(`/admin/partners/${editForm.value.id}/status`, { action, reason });
+    statusMsg.value = data.message || 'Статус обновлён';
+    statusMsgType.value = 'success';
+    // Reload partner + list
+    const { data: fresh } = await api.get(`/admin/partners/${editForm.value.id}`);
+    editForm.value.activityId = fresh.consultant.activityId;
+    editForm.value.activityName = fresh.consultant.activityName;
+    loadData();
+  } catch (e) {
+    statusMsg.value = e.response?.data?.message || 'Ошибка смены статуса';
+    statusMsgType.value = 'error';
+  }
 }
 
 onMounted(loadData);

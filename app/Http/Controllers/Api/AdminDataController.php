@@ -97,26 +97,110 @@ class AdminDataController extends Controller
         return response()->json(['data' => $partners, 'total' => $total]);
     }
 
-    /** Редактирование партнёра (пока — только реф.код / пригласитель) */
+    /**
+     * Показать полный профиль партнёра для формы редактирования.
+     */
+    public function showPartner(int $id): JsonResponse
+    {
+        $consultant = Consultant::findOrFail($id);
+        $webUser = $consultant->webUser
+            ? DB::table('WebUser')->where('id', $consultant->webUser)->first()
+            : null;
+
+        return response()->json([
+            'consultant' => [
+                'id' => $consultant->id,
+                'personName' => $consultant->personName,
+                'participantCode' => $consultant->participantCode,
+                'inviter' => $consultant->inviter,
+                'inviterName' => $consultant->inviterName,
+                'activityId' => $consultant->activity?->value,
+                'activityName' => $consultant->activityLabel(),
+                'active' => $consultant->active,
+            ],
+            'webUser' => $webUser ? [
+                'id' => $webUser->id,
+                'firstName' => $webUser->firstName,
+                'lastName' => $webUser->lastName,
+                'patronymic' => $webUser->patronymic,
+                'email' => $webUser->email,
+                'phone' => $webUser->phone,
+                'nicTG' => $webUser->nicTG,
+                'gender' => $webUser->gender,
+                'birthDate' => $webUser->birthDate,
+                'role' => $webUser->role,
+                'isBlocked' => (bool) ($webUser->isBlocked ?? false),
+            ] : null,
+        ]);
+    }
+
+    /**
+     * Редактирование партнёра: обновляем Consultant и связанный WebUser.
+     * Все поля опциональны — обновляются только присланные.
+     */
     public function updatePartner(Request $request, int $id): JsonResponse
     {
         $consultant = Consultant::findOrFail($id);
 
         $data = $request->validate([
+            // consultant fields
             'participantCode' => ['nullable', 'string', 'max:64',
-                // Unique across consultants excluding current
                 "unique:consultant,participantCode,{$id},id",
             ],
             'inviter' => ['nullable', 'integer', 'exists:consultant,id'],
+            // web user fields
+            'firstName' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'lastName' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'patronymic' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'email' => ['sometimes', 'nullable', 'email', 'max:255',
+                ($consultant->webUser ? "unique:WebUser,email,{$consultant->webUser},id" : 'unique:WebUser,email'),
+            ],
+            'phone' => ['sometimes', 'nullable', 'string', 'max:64'],
+            'nicTG' => ['sometimes', 'nullable', 'string', 'max:128'],
+            'gender' => ['sometimes', 'nullable', 'in:male,female'],
+            'birthDate' => ['sometimes', 'nullable', 'date'],
+            'role' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'isBlocked' => ['sometimes', 'boolean'],
+            'newPassword' => ['sometimes', 'nullable', 'string', 'min:6', 'max:255'],
         ]);
 
-        if (array_key_exists('participantCode', $data)) {
-            $consultant->participantCode = $data['participantCode'] ?: null;
-        }
-        if (array_key_exists('inviter', $data)) {
-            $consultant->inviter = $data['inviter'] ?: null;
-        }
-        $consultant->save();
+        DB::transaction(function () use ($consultant, $data, $request) {
+            // --- consultant columns ---
+            if (array_key_exists('participantCode', $data)) {
+                $consultant->participantCode = $data['participantCode'] ?: null;
+            }
+            if (array_key_exists('inviter', $data)) {
+                $consultant->inviter = $data['inviter'] ?: null;
+            }
+
+            // --- WebUser columns ---
+            if ($consultant->webUser) {
+                $userUpdates = [];
+                $map = ['firstName', 'lastName', 'patronymic', 'email', 'phone', 'nicTG', 'gender', 'birthDate', 'role'];
+                foreach ($map as $col) {
+                    if ($request->has($col)) {
+                        $userUpdates[$col] = $data[$col] ?: null;
+                    }
+                }
+                if ($request->has('isBlocked')) {
+                    $userUpdates['isBlocked'] = (bool) $data['isBlocked'];
+                }
+                if (! empty($data['newPassword'])) {
+                    $userUpdates['password'] = \Illuminate\Support\Facades\Hash::make($data['newPassword']);
+                }
+                if (! empty($userUpdates)) {
+                    DB::table('WebUser')->where('id', $consultant->webUser)->update($userUpdates);
+                }
+
+                // Keep consultant.personName in sync with WebUser name parts
+                if (isset($userUpdates['firstName']) || isset($userUpdates['lastName']) || isset($userUpdates['patronymic'])) {
+                    $u = DB::table('WebUser')->where('id', $consultant->webUser)->first();
+                    $consultant->personName = trim("{$u->lastName} {$u->firstName} {$u->patronymic}");
+                }
+            }
+
+            $consultant->save();
+        });
 
         return response()->json(['message' => 'Обновлён', 'id' => $consultant->id]);
     }
