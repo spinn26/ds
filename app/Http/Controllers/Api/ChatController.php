@@ -891,6 +891,221 @@ class ChatController extends Controller
         ]);
     }
 
+    /**
+     * Aggregate analytics for the head/calculations roles.
+     * Period = 'day' | 'week' | 'month' | 'custom' (with from/to).
+     * Returns totals, response-time averages, category/priority breakdowns,
+     * staff load, and a daily trend series.
+     */
+    public function analytics(Request $request): JsonResponse
+    {
+        if (! $this->isStaff($request)) {
+            return response()->json(['message' => 'Только для сотрудников'], 403);
+        }
+
+        $period = $request->input('period', 'week');
+        [$from, $to] = $this->resolvePeriod($request, $period);
+
+        $ticketsInPeriod = DB::table('chat_tickets')
+            ->where('created_at', '>=', $from)
+            ->where('created_at', '<=', $to);
+
+        // Counters by status
+        $counters = [
+            'total' => (clone $ticketsInPeriod)->count(),
+            'new' => (clone $ticketsInPeriod)->where('status', 'new')->count(),
+            'open' => (clone $ticketsInPeriod)->where('status', 'open')->count(),
+            'pending' => (clone $ticketsInPeriod)->where('status', 'pending')->count(),
+            'resolved' => (clone $ticketsInPeriod)->where('status', 'resolved')->count(),
+            'closed' => (clone $ticketsInPeriod)->where('status', 'closed')->count(),
+        ];
+
+        // Average response time (minutes) — per-ticket first partner msg → first staff msg
+        $ticketIds = (clone $ticketsInPeriod)->pluck('id');
+        $responseTimes = [];
+        $resolutionTimes = [];
+        $slaBreachedCount = 0;
+        if ($ticketIds->isNotEmpty()) {
+            $msgs = DB::table('chat_messages')
+                ->whereIn('ticket_id', $ticketIds)
+                ->where('is_system', false)
+                ->orderBy('ticket_id')
+                ->orderBy('created_at')
+                ->get(['ticket_id', 'is_agent', 'created_at']);
+
+            $firstPartnerByTicket = [];
+            $firstStaffByTicket = [];
+            foreach ($msgs as $m) {
+                $tid = $m->ticket_id;
+                if ((bool) $m->is_agent) {
+                    if (! isset($firstStaffByTicket[$tid])) $firstStaffByTicket[$tid] = $m->created_at;
+                } else {
+                    if (! isset($firstPartnerByTicket[$tid])) $firstPartnerByTicket[$tid] = $m->created_at;
+                }
+            }
+
+            foreach ($firstPartnerByTicket as $tid => $partnerAt) {
+                if (! isset($firstStaffByTicket[$tid])) {
+                    // No reply yet — count as breach if waiting time > 30 min
+                    $mins = (strtotime(now()) - strtotime($partnerAt)) / 60;
+                    if ($mins > 30) $slaBreachedCount++;
+                    continue;
+                }
+                $mins = (strtotime($firstStaffByTicket[$tid]) - strtotime($partnerAt)) / 60;
+                if ($mins < 0) continue;
+                $responseTimes[] = $mins;
+                if ($mins > 30) $slaBreachedCount++;
+            }
+
+            // Resolution time: created_at → closed_at for closed tickets
+            $resolved = (clone $ticketsInPeriod)
+                ->whereNotNull('closed_at')
+                ->get(['created_at', 'closed_at']);
+            foreach ($resolved as $t) {
+                $mins = (strtotime($t->closed_at) - strtotime($t->created_at)) / 60;
+                if ($mins > 0) $resolutionTimes[] = $mins;
+            }
+        }
+
+        $avg = fn ($arr) => count($arr) > 0 ? round(array_sum($arr) / count($arr), 1) : 0;
+
+        // Breakdown by category (department)
+        $byCategory = (clone $ticketsInPeriod)
+            ->select('department', DB::raw('count(*) as cnt'))
+            ->groupBy('department')
+            ->orderByDesc('cnt')
+            ->get()
+            ->map(fn ($r) => ['category' => $r->department ?: 'general', 'count' => (int) $r->cnt]);
+
+        // Breakdown by priority
+        $byPriority = (clone $ticketsInPeriod)
+            ->select('priority', DB::raw('count(*) as cnt'))
+            ->groupBy('priority')
+            ->get()
+            ->map(fn ($r) => ['priority' => $r->priority ?: 'medium', 'count' => (int) $r->cnt]);
+
+        // Staff load: resolved tickets per assignee with avg response time
+        $staffLoad = DB::table('chat_tickets')
+            ->whereNotNull('assigned_to')
+            ->where('created_at', '>=', $from)
+            ->where('created_at', '<=', $to)
+            ->select('assigned_to', 'assigned_name',
+                DB::raw('count(*) as total'),
+                DB::raw("count(*) filter (where status = 'resolved' or status = 'closed') as resolved"))
+            ->groupBy('assigned_to', 'assigned_name')
+            ->orderByDesc('total')
+            ->get()
+            ->map(fn ($r) => [
+                'userId' => $r->assigned_to,
+                'name' => $r->assigned_name ?: 'Неизвестно',
+                'total' => (int) $r->total,
+                'resolved' => (int) $r->resolved,
+            ]);
+
+        // Daily trend: new vs resolved (or closed) per day
+        $dailyRaw = DB::table('chat_tickets')
+            ->where('created_at', '>=', $from)
+            ->where('created_at', '<=', $to)
+            ->selectRaw("to_char(created_at, 'YYYY-MM-DD') as day, count(*) as cnt")
+            ->groupBy('day')
+            ->orderBy('day')
+            ->pluck('cnt', 'day')
+            ->toArray();
+
+        $dailyResolvedRaw = DB::table('chat_tickets')
+            ->whereNotNull('closed_at')
+            ->where('closed_at', '>=', $from)
+            ->where('closed_at', '<=', $to)
+            ->selectRaw("to_char(closed_at, 'YYYY-MM-DD') as day, count(*) as cnt")
+            ->groupBy('day')
+            ->orderBy('day')
+            ->pluck('cnt', 'day')
+            ->toArray();
+
+        $days = [];
+        $cursor = strtotime($from);
+        $end = strtotime($to);
+        while ($cursor <= $end) {
+            $d = date('Y-m-d', $cursor);
+            $days[] = [
+                'day' => $d,
+                'new' => (int) ($dailyRaw[$d] ?? 0),
+                'resolved' => (int) ($dailyResolvedRaw[$d] ?? 0),
+            ];
+            $cursor += 86400;
+        }
+
+        return response()->json([
+            'period' => [
+                'type' => $period,
+                'from' => is_string($from) ? $from : $from->toIso8601String(),
+                'to' => is_string($to) ? $to : $to->toIso8601String(),
+            ],
+            'counters' => $counters,
+            'avgResponseMinutes' => $avg($responseTimes),
+            'avgResolutionMinutes' => $avg($resolutionTimes),
+            'responseTimeSamples' => count($responseTimes),
+            'slaBreachedCount' => $slaBreachedCount,
+            'byCategory' => $byCategory,
+            'byPriority' => $byPriority,
+            'staffLoad' => $staffLoad,
+            'dailyTrend' => $days,
+        ]);
+    }
+
+    /**
+     * Open tickets assigned to the current staff user — shift handover report.
+     */
+    public function myOpenTickets(Request $request): JsonResponse
+    {
+        if (! $this->isStaff($request)) {
+            return response()->json(['data' => []]);
+        }
+
+        $userId = $request->user()->id;
+        $tickets = DB::table('chat_tickets')
+            ->where('assigned_to', $userId)
+            ->whereIn('status', ['new', 'open', 'pending'])
+            ->orderByDesc('priority')
+            ->orderByDesc('last_message_at')
+            ->get()
+            ->map(fn ($t) => [
+                'id' => $t->id,
+                'subject' => $t->subject,
+                'customerName' => $t->customer_name,
+                'status' => $t->status,
+                'priority' => $t->priority,
+                'lastMessageAt' => $t->last_message_at,
+                'createdAt' => $t->created_at,
+                'department' => $t->department,
+                'tags' => $t->tags,
+            ]);
+
+        return response()->json(['data' => $tickets]);
+    }
+
+    private function resolvePeriod(Request $request, string $period): array
+    {
+        $now = now();
+        switch ($period) {
+            case 'day':
+                return [$now->copy()->startOfDay()->toDateTimeString(), $now->copy()->endOfDay()->toDateTimeString()];
+            case 'month':
+                return [$now->copy()->subDays(29)->startOfDay()->toDateTimeString(), $now->copy()->endOfDay()->toDateTimeString()];
+            case 'custom':
+                $from = $request->filled('from')
+                    ? \Carbon\Carbon::parse($request->input('from'))->startOfDay()->toDateTimeString()
+                    : $now->copy()->subDays(6)->startOfDay()->toDateTimeString();
+                $to = $request->filled('to')
+                    ? \Carbon\Carbon::parse($request->input('to'))->endOfDay()->toDateTimeString()
+                    : $now->copy()->endOfDay()->toDateTimeString();
+                return [$from, $to];
+            case 'week':
+            default:
+                return [$now->copy()->subDays(6)->startOfDay()->toDateTimeString(), $now->copy()->endOfDay()->toDateTimeString()];
+        }
+    }
+
     /** Unread messages count for current user */
     public function unreadCount(Request $request): JsonResponse
     {

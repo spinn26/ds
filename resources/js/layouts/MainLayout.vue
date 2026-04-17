@@ -442,10 +442,10 @@ const isStaff = computed(() =>
 
 // Cabinet sections per role — exact mapping from spec docs
 const cabinetSections = {
-  admin: ['calculator', 'structure', 'partners', 'statuses', 'clients', 'contracts', 'upload', 'acceptance', 'requisites', 'transfers', 'transactions', 'import', 'commissions', 'pool', 'qualifications', 'charges', 'payments', 'products', 'contests', 'communication', 'reports', 'currencies'],
-  backoffice: ['calculator', 'structure', 'partners', 'statuses', 'clients', 'contracts', 'upload', 'acceptance', 'requisites', 'transfers', 'products', 'contests', 'communication', 'reports'],
+  admin: ['calculator', 'structure', 'partners', 'statuses', 'clients', 'contracts', 'upload', 'acceptance', 'requisites', 'transfers', 'transactions', 'import', 'commissions', 'pool', 'qualifications', 'charges', 'payments', 'products', 'contests', 'communication', 'chat-analytics', 'reports', 'currencies'],
+  backoffice: ['calculator', 'structure', 'partners', 'statuses', 'clients', 'contracts', 'upload', 'acceptance', 'requisites', 'transfers', 'products', 'contests', 'communication', 'chat-analytics', 'reports'],
   support: ['partners', 'statuses', 'structure', 'clients', 'contracts', 'acceptance', 'products', 'communication', 'calculator'],
-  head: ['calculator', 'structure', 'partners', 'statuses', 'clients', 'contracts', 'acceptance', 'transfers', 'products', 'contests', 'communication', 'reports'],
+  head: ['calculator', 'structure', 'partners', 'statuses', 'clients', 'contracts', 'acceptance', 'transfers', 'products', 'contests', 'communication', 'chat-analytics', 'reports'],
   finance: ['calculator', 'requisites', 'charges', 'payments', 'reports', 'communication'],
   calculations: ['calculator', 'commissions', 'qualifications', 'pool', 'transactions', 'import', 'products', 'reports', 'currencies'],
   corrections: ['calculator', 'clients', 'contracts', 'partners'],
@@ -535,6 +535,7 @@ const menuItems = [
   { label: 'Продукты', icon: 'mdi-package-variant-closed', path: '/manage/products', adminSection: 'products' },
   { label: 'Конкурсы', icon: 'mdi-trophy', path: '/manage/contests', adminSection: 'contests' },
   { label: 'Чат / Тикеты', icon: 'mdi-chat-processing', path: '/manage/chat', adminSection: 'communication' },
+  { label: 'Аналитика чата', icon: 'mdi-chart-box-outline', path: '/manage/chat/analytics', adminSection: 'chat-analytics' },
   { label: 'Отчёты', icon: 'mdi-file-chart', path: '/manage/reports', adminSection: 'reports' },
   { label: 'Валюты и НДС', icon: 'mdi-currency-usd', path: '/manage/currencies', adminSection: 'currencies' },
 ];

@@ -49,6 +49,7 @@ const routes = [
             { path: 'manage/charges', component: () => import('../pages/Admin/Charges.vue'), meta: { staff: true } },
             { path: 'manage/payments', component: () => import('../pages/Admin/Payments.vue'), meta: { staff: true } },
             { path: 'manage/chat', component: () => import('../pages/Chat/StaffChat.vue'), meta: { staff: true } },
+            { path: 'manage/chat/analytics', component: () => import('../pages/Chat/Analytics.vue'), meta: { staff: true } },
             { path: 'manage/reports', component: () => import('../pages/Admin/Reports.vue'), meta: { staff: true } },
             { path: 'manage/currencies', component: () => import('../pages/Admin/Currencies.vue'), meta: { staff: true } },
             { path: 'manage/products', component: () => import('../pages/Admin/Products.vue'), meta: { staff: true } },

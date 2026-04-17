@@ -55,6 +55,8 @@ Route::prefix('v1')->group(function () {
         Route::get('/chat/knowledge', [\App\Http\Controllers\Api\ChatController::class, 'knowledgeArticles']);
         Route::get('/chat/tickets/{id}/knowledge-suggest', [\App\Http\Controllers\Api\ChatController::class, 'knowledgeSuggest']);
         Route::post('/chat/tickets/{id}/save-to-kb', [\App\Http\Controllers\Api\ChatController::class, 'saveTicketAsArticle']);
+        Route::get('/chat/analytics', [\App\Http\Controllers\Api\ChatController::class, 'analytics']);
+        Route::get('/chat/my-open', [\App\Http\Controllers\Api\ChatController::class, 'myOpenTickets']);
         Route::get('/dashboard', [DashboardController::class, 'index']);
         Route::get('/status-levels', [DashboardController::class, 'statusLevels']);
 
