@@ -24,7 +24,7 @@
             {{ item.group }}
           </v-list-subheader>
           <!-- Regular item -->
-          <v-list-item v-else :to="item.path" :prepend-icon="item.icon"
+          <v-list-item v-else :to="item.path || null" :prepend-icon="item.icon"
             :active="isActivePath(item.path)"
             :color="item.adminSection ? 'secondary' : 'primary'"
             rounded="lg" class="mb-1 menu-item" @click="onMenuClick(item)">
@@ -191,6 +191,31 @@
       </v-btn>
     </v-bottom-navigation>
 
+    <!-- Quick-message dialog: "Написать основателю" / "Оставить кейс" from the menu -->
+    <v-dialog v-model="quickMsg.open" max-width="560" :persistent="quickMsg.sending">
+      <v-card>
+        <v-card-title class="d-flex align-center ga-2">
+          <v-icon color="primary">{{ quickMsg.icon }}</v-icon>
+          {{ quickMsg.subject }}
+        </v-card-title>
+        <v-card-text>
+          <v-textarea v-model="quickMsg.message" label="Ваше сообщение"
+            rows="6" auto-grow counter maxlength="5000" autofocus
+            :disabled="quickMsg.sending" />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" :disabled="quickMsg.sending" @click="quickMsg.open = false">Отмена</v-btn>
+          <v-btn color="primary" variant="flat"
+            :loading="quickMsg.sending"
+            :disabled="!quickMsg.message.trim()"
+            @click="submitQuickMsg">
+            Отправить
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
   </v-layout>
 </template>
 
@@ -199,6 +224,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useDisplay, useTheme } from 'vuetify';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
+import { useSnackbar } from '../composables/useSnackbar';
 import api from '../api';
 function fmtShortDate(d) {
   if (!d) return '';
@@ -351,11 +377,44 @@ function copyReferral() {
 
 function onMenuClick(item) {
   if (mobile.value) drawer.value = false;
+  if (typeof item.action === 'function') {
+    item.action();
+    return;
+  }
   // For query-based routes (like /tickets?to=owner), force navigation even if already on /tickets
   if (item.path && item.path.includes('?')) {
     const [path, qs] = item.path.split('?');
     const params = Object.fromEntries(new URLSearchParams(qs));
     router.push({ path, query: params });
+  }
+}
+
+// Quick-message dialog (founder / case)
+const { showSuccess, showError } = useSnackbar();
+const quickMsg = ref({ open: false, subject: '', icon: 'mdi-email-edit', message: '', sending: false });
+
+function openQuickMsg(subject, icon = 'mdi-email-edit') {
+  quickMsg.value = { open: true, subject, icon, message: '', sending: false };
+}
+
+async function submitQuickMsg() {
+  const msg = quickMsg.value.message.trim();
+  if (!msg) return;
+  quickMsg.value.sending = true;
+  try {
+    await api.post('/chat/tickets', {
+      subject: quickMsg.value.subject,
+      department: 'general',
+      priority: 'medium',
+      message: msg,
+    });
+    quickMsg.value.open = false;
+    showSuccess('Сообщение отправлено');
+    loadChatUnread();
+  } catch (e) {
+    showError(e?.response?.data?.message || 'Не удалось отправить сообщение');
+  } finally {
+    quickMsg.value.sending = false;
   }
 }
 
@@ -426,6 +485,8 @@ const menuItems = [
   { label: 'Продукты', icon: 'mdi-package-variant', path: '/products', partner: true },
   { label: 'Список конкурсов и событий', icon: 'mdi-trophy', path: '/contests', partner: true },
   { label: 'Обратная связь', icon: 'mdi-chat', path: '/chat', partner: true },
+  { label: 'Написать основателю', icon: 'mdi-email-edit', path: '', partner: true, action: () => openQuickMsg('Сообщение основателю', 'mdi-email-edit') },
+  { label: 'Оставить кейс', icon: 'mdi-briefcase-plus', path: '', partner: true, action: () => openQuickMsg('Кейс', 'mdi-briefcase-plus') },
 
   // ---- Staff sections (grouped per spec) ----
   // Инструменты
