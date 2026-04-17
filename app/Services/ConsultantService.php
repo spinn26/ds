@@ -77,9 +77,22 @@ class ConsultantService
             ? DB::table('city')->whereIn('id', $cityIds)->pluck('cityNameRu', 'id')
             : collect();
 
-        return $consultants->map(function ($c) use ($statusLevels, $qLogs, $clientCounts, $contractCounts, $subCounts, $activityNames, $persons, $cities) {
+        // Index status_levels by level number for qualificationLog fallback
+        $statusLevelsByLevel = $statusLevels->keyBy('level');
+
+        return $consultants->map(function ($c) use ($statusLevels, $statusLevelsByLevel, $qLogs, $clientCounts, $contractCounts, $subCounts, $activityNames, $persons, $cities) {
             $statusLevel = $c->status_and_lvl ? ($statusLevels[$c->status_and_lvl] ?? null) : null;
             $qLog = $qLogs[$c->id] ?? null;
+
+            // Fallback: if consultant.status_and_lvl is empty but the latest
+            // qualificationLog carries a level, resolve it to status_levels by
+            // level number (status_levels has 10 tiers keyed by .level).
+            if (! $statusLevel && $qLog) {
+                $levelNum = $qLog->levelNew ?? $qLog->calculationLevel ?? $qLog->nominalLevel ?? null;
+                if ($levelNum) {
+                    $statusLevel = $statusLevelsByLevel[$levelNum] ?? null;
+                }
+            }
             $clientCount = $clientCounts[$c->id] ?? 0;
             $contractCount = $contractCounts[$c->id] ?? 0;
             $subCount = $subCounts[$c->id] ?? 0;
