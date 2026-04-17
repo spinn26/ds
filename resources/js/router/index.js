@@ -88,6 +88,7 @@ const routes = [
             { path: 'currencies', component: () => import('../pages/Admin/Currencies.vue') },
             { path: 'references', component: () => import('../pages/Admin/References.vue') },
             { path: 'mail', component: () => import('../pages/Admin/Mail.vue') },
+            { path: 'monitoring', component: () => import('../pages/Admin/Monitoring.vue') },
         ],
     },
 

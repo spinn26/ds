@@ -154,6 +154,13 @@ Route::prefix('v1')->group(function () {
         Route::post('/admin/transaction-import/{id}/calculate', [\App\Http\Controllers\Api\TransactionImportController::class, 'calculateCommissions']);
         Route::post('/admin/transactions/{id}/calculate', [\App\Http\Controllers\Api\TransactionImportController::class, 'calculateSingle']);
 
+        // Admin Monitoring (site status, error feed, queue control)
+        Route::get('/admin/monitoring/status', [\App\Http\Controllers\Api\AdminMonitoringController::class, 'status']);
+        Route::get('/admin/monitoring/errors', [\App\Http\Controllers\Api\AdminMonitoringController::class, 'errors']);
+        Route::post('/admin/monitoring/jobs/{id}/retry', [\App\Http\Controllers\Api\AdminMonitoringController::class, 'retryJob']);
+        Route::delete('/admin/monitoring/jobs/{id}', [\App\Http\Controllers\Api\AdminMonitoringController::class, 'forgetJob']);
+        Route::post('/admin/monitoring/jobs/flush', [\App\Http\Controllers\Api\AdminMonitoringController::class, 'flushJobs']);
+
         // Admin Mail (SMTP settings, broadcast, templates, send log)
         Route::get('/admin/mail/settings', [\App\Http\Controllers\Api\AdminMailController::class, 'settings']);
         Route::put('/admin/mail/settings', [\App\Http\Controllers\Api\AdminMailController::class, 'updateSettings']);

@@ -32,6 +32,7 @@
         <v-list-item to="/admin/contests" prepend-icon="mdi-trophy" title="Конкурсы и события" color="secondary" rounded="lg" class="mb-1" />
         <v-list-item to="/admin/references" prepend-icon="mdi-book-cog" title="Справочники" color="secondary" rounded="lg" class="mb-1" />
         <v-list-item to="/admin/mail" prepend-icon="mdi-email-fast" title="Почтовая рассылка" color="secondary" rounded="lg" class="mb-1" />
+        <v-list-item to="/admin/monitoring" prepend-icon="mdi-pulse" title="Мониторинг" color="secondary" rounded="lg" class="mb-1" />
       </v-list>
     </v-navigation-drawer>
 
