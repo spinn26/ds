@@ -56,7 +56,9 @@ class ChatController extends Controller
         }
 
         $total = $query->count();
-        $tickets = $query->orderByDesc('last_message_at')
+        $tickets = $query
+            ->orderByRaw('pinned_at DESC NULLS LAST') // pinned first, nulls at the end
+            ->orderByDesc('last_message_at')
             ->offset(max(0, ($request->input('page', 1) - 1) * 25))
             ->limit(25)
             ->get();
@@ -480,6 +482,41 @@ class ChatController extends Controller
         } catch (\Exception $e) {}
 
         return response()->json(['id' => $messageId, 'editedAt' => now()->toIso8601String()]);
+    }
+
+    /**
+     * Toggle pinned_at on a ticket. Pin is per-ticket (shared across users),
+     * not per-viewer — the assumption is pinning marks "важное" across the team.
+     */
+    public function togglePin(Request $request, int $id): JsonResponse
+    {
+        $ticket = DB::table('chat_tickets')->where('id', $id)->first();
+        if (! $ticket) return response()->json(['message' => 'Не найден'], 404);
+
+        $userId = $request->user()->id;
+        if (! $this->isStaff($request)
+            && (int) $ticket->created_by !== (int) $userId
+            && (int) ($ticket->recipient_id ?? 0) !== (int) $userId) {
+            return response()->json(['message' => 'Доступ запрещён'], 403);
+        }
+
+        $newValue = $ticket->pinned_at ? null : now();
+        DB::table('chat_tickets')->where('id', $id)->update([
+            'pinned_at' => $newValue,
+            'updated_at' => now(),
+        ]);
+
+        try {
+            app(\App\Services\SocketService::class)->emit('chat:ticket-updated', null, [
+                'ticketId' => $id,
+                'pinnedAt' => $newValue ? $newValue->toIso8601String() : null,
+            ]);
+        } catch (\Exception $e) {}
+
+        return response()->json([
+            'id' => $id,
+            'pinnedAt' => $newValue ? $newValue->toIso8601String() : null,
+        ]);
     }
 
     /**

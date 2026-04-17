@@ -28,13 +28,15 @@
           @click="categoryFilter = opt.value">{{ opt.label }}</button>
       </div>
       <div class="sidebar-list">
-        <div v-for="t in visibleChats" :key="t.id" class="chat-item" :class="{ active: activeChat?.id === t.id, 'has-unread': t.unread > 0 }" @click="openChat(t)">
+        <div v-for="t in visibleChats" :key="t.id" class="chat-item" :class="{ active: activeChat?.id === t.id, 'has-unread': t.unread > 0, pinned: t.pinned_at }" @click="openChat(t)">
           <div class="chat-item-avatar" :style="{ background: catColor(t.category) }">
             <v-icon size="18" color="white">{{ catIcon(t.category) }}</v-icon>
           </div>
           <div class="chat-item-body">
             <div class="chat-item-top">
-              <span class="chat-item-subject">{{ t.subject }}</span>
+              <span class="chat-item-subject">
+                <v-icon v-if="t.pinned_at" size="12" color="primary" class="mr-1">mdi-pin</v-icon>{{ t.subject }}
+              </span>
               <span class="chat-item-time">{{ ago(t.last_message_at) }}</span>
             </div>
             <div class="chat-item-bottom">
@@ -42,6 +44,9 @@
               <span class="chat-item-status-chip" :style="{ background: statusClr(t.status) + '22', color: statusClr(t.status) }">{{ statusTxt(t.status) }}</span>
             </div>
           </div>
+          <button class="chat-item-pin" :class="{ active: t.pinned_at }" :title="t.pinned_at ? 'Открепить' : 'Закрепить'" @click.stop="togglePin(t, $event)">
+            <v-icon size="14">{{ t.pinned_at ? 'mdi-pin' : 'mdi-pin-outline' }}</v-icon>
+          </button>
           <span v-if="t.unread > 0" class="unread-badge">{{ t.unread }}</span>
         </div>
         <div v-if="!visibleChats.length && !loading" class="sidebar-empty">
@@ -323,6 +328,65 @@ const showHotkeys = ref(false);
 
 // Reactions
 const REACTION_PALETTE = ['👍', '❤️', '😂', '🎉', '🙏', '✅'];
+
+// Notifications (desktop + sound)
+const notifyEnabled = ref(localStorage.getItem('chat-notify') !== '0');
+watch(notifyEnabled, v => localStorage.setItem('chat-notify', v ? '1' : '0'));
+
+function playPing() {
+  if (!notifyEnabled.value) return;
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(880, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(1320, ctx.currentTime + 0.1);
+    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.25);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.25);
+  } catch {}
+}
+
+function notifyDesktop(title, body) {
+  if (!notifyEnabled.value) return;
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  try {
+    const n = new Notification(title, { body, icon: '/favicon.ico', silent: false, tag: 'ds-chat' });
+    n.onclick = () => { window.focus(); n.close(); };
+  } catch {}
+}
+
+async function requestNotifPermission() {
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'default') {
+    try { await Notification.requestPermission(); } catch {}
+  }
+}
+
+// Pinning
+async function togglePin(ticket, e) {
+  e?.stopPropagation();
+  const prev = ticket.pinned_at;
+  ticket.pinned_at = prev ? null : new Date().toISOString();
+  try {
+    const { data } = await api.post(`/chat/tickets/${ticket.id}/pin`);
+    ticket.pinned_at = data.pinnedAt;
+    // Move pinned to top locally (server returns same ordering on next reload)
+    chats.value = [...chats.value].sort(sortChats);
+  } catch {
+    ticket.pinned_at = prev;
+  }
+}
+function sortChats(a, b) {
+  const pa = a.pinned_at ? 1 : 0;
+  const pb = b.pinned_at ? 1 : 0;
+  if (pa !== pb) return pb - pa;
+  return new Date(b.last_message_at || 0) - new Date(a.last_message_at || 0);
+}
 
 // Filters + search
 const searchQuery = ref('');
@@ -712,21 +776,33 @@ async function connectSocket() {
     socket = io(host, { auth: { token }, transports: ['websocket', 'polling'], reconnection: true });
 
     socket.on('chat:new-message', (m) => {
-      if (!activeChat.value || Number(m.ticketId) !== Number(activeChat.value.id)) return;
-      // Dedupe by id (message may arrive via socket + refresh)
-      if (messages.value.some(x => String(x.id) === String(m.id))) return;
-      const wasAtBottom = isAtBottom();
-      messages.value.push({
-        id: m.id,
-        senderId: m.senderId,
-        senderName: m.senderName,
-        content: m.content,
-        isSystem: false,
-        createdAt: m.createdAt,
-      });
-      if (wasAtBottom) scrollDown(true);
-      else pendingMessages.value++;
-      // Refresh list to update last message time
+      const isOwn = String(m.senderId) === String(currentUserId);
+      const isActive = activeChat.value && Number(m.ticketId) === Number(activeChat.value.id);
+
+      // Push live into open conversation
+      if (isActive) {
+        if (!messages.value.some(x => String(x.id) === String(m.id))) {
+          const wasAtBottom = isAtBottom();
+          messages.value.push({
+            id: m.id,
+            senderId: m.senderId,
+            senderName: m.senderName,
+            content: m.content,
+            isSystem: false,
+            createdAt: m.createdAt,
+          });
+          if (wasAtBottom) scrollDown(true);
+          else pendingMessages.value++;
+        }
+      }
+
+      // Notification: foreign message AND (tab hidden OR chat not open)
+      if (!isOwn && (document.hidden || !isActive)) {
+        playPing();
+        notifyDesktop(m.senderName || 'Новое сообщение',
+          (m.content || '').slice(0, 120) || 'Прислали сообщение');
+      }
+
       loadChats();
     });
 
@@ -766,18 +842,20 @@ async function connectSocket() {
       }
     });
 
-    // Staff changed status / priority / assignee on our ticket — reflect it live
+    // Staff changed status / priority / assignee / pin on our ticket — reflect it live
     socket.on('chat:ticket-updated', (e) => {
       const t = chats.value.find(x => Number(x.id) === Number(e.ticketId));
       if (t) {
         if (e.status !== undefined) t.status = e.status;
         if (e.priority !== undefined) t.priority = e.priority;
         if (e.assignedName !== undefined) t.assigned_name = e.assignedName;
+        if (e.pinnedAt !== undefined) { t.pinned_at = e.pinnedAt; chats.value = [...chats.value].sort(sortChats); }
       }
       if (activeChat.value && Number(activeChat.value.id) === Number(e.ticketId)) {
         if (e.status !== undefined) activeChat.value.status = e.status;
         if (e.priority !== undefined) activeChat.value.priority = e.priority;
         if (e.assignedName !== undefined) activeChat.value.assigned_name = e.assignedName;
+        if (e.pinnedAt !== undefined) activeChat.value.pinned_at = e.pinnedAt;
       }
     });
   } catch (e) {
@@ -818,6 +896,7 @@ onMounted(() => {
   checkQuery();
   connectSocket();
   window.addEventListener('keydown', onGlobalKey);
+  requestNotifPermission();
 });
 
 onUnmounted(() => {
@@ -870,6 +949,11 @@ onUnmounted(() => {
 .unread-badge { position: absolute; right: 12px; top: 12px; background: rgb(var(--v-theme-error)); color: #fff; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 10px; min-width: 18px; text-align: center; }
 .chat-item.has-unread { background: rgba(var(--v-theme-primary), 0.06); }
 .chat-item.has-unread .chat-item-subject { color: rgb(var(--v-theme-primary)); font-weight: 700; }
+.chat-item.pinned { background: rgba(var(--v-theme-primary), 0.04); }
+.chat-item-pin { position: absolute; right: 12px; bottom: 10px; background: none; border: none; padding: 2px; border-radius: 4px; cursor: pointer; color: rgba(var(--v-theme-on-surface), 0.3); opacity: 0; transition: opacity 0.15s, color 0.15s; }
+.chat-item:hover .chat-item-pin { opacity: 1; }
+.chat-item-pin.active { color: rgb(var(--v-theme-primary)); opacity: 1; }
+.chat-item-pin:hover { color: rgb(var(--v-theme-primary)); }
 
 /* Main chat area */
 .chat-main { flex: 1; display: flex; flex-direction: column; min-width: 0; position: relative; }

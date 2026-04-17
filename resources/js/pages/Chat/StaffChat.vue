@@ -22,14 +22,16 @@
         </div>
       </div>
       <div class="sidebar-list">
-        <div v-for="t in chats" :key="t.id" class="chat-item" :class="{ active: activeChat?.id === t.id, 'has-unread': t.unread > 0, stale: isStale(t) }" @click="openChat(t)">
+        <div v-for="t in chats" :key="t.id" class="chat-item" :class="{ active: activeChat?.id === t.id, 'has-unread': t.unread > 0, stale: isStale(t), pinned: t.pinned_at }" @click="openChat(t)">
           <div class="chat-item-avatar" :style="{ background: catColor(t.category || t.department) }">
             <v-icon size="18" color="white">{{ catIcon(t.category || t.department) }}</v-icon>
           </div>
           <div v-if="t.priority && t.priority !== 'medium'" class="priority-bar" :style="{ background: prioClr(t.priority) }"></div>
           <div class="chat-item-body">
             <div class="chat-item-top">
-              <span class="chat-item-subject">{{ t.subject }}</span>
+              <span class="chat-item-subject">
+                <v-icon v-if="t.pinned_at" size="12" color="primary" class="mr-1">mdi-pin</v-icon>{{ t.subject }}
+              </span>
               <span class="chat-item-time" :class="{ stale: isStale(t) }">{{ ago(t.last_message_at) }}</span>
             </div>
             <div class="chat-item-bottom">
@@ -38,6 +40,9 @@
               <span class="chat-item-status-chip" :style="{ background: statusClr(t.status) + '22', color: statusClr(t.status) }">{{ statusTxt(t.status) }}</span>
             </div>
           </div>
+          <button class="chat-item-pin" :class="{ active: t.pinned_at }" :title="t.pinned_at ? 'Открепить' : 'Закрепить'" @click.stop="togglePin(t, $event)">
+            <v-icon size="14">{{ t.pinned_at ? 'mdi-pin' : 'mdi-pin-outline' }}</v-icon>
+          </button>
           <span v-if="t.unread > 0" class="unread-badge">{{ t.unread }}</span>
         </div>
         <div v-if="!chats.length && !loading" class="sidebar-empty">
@@ -123,6 +128,7 @@
                     <div class="kanban-card-avatar" :style="{ background: catColor(t.category || t.department) }">
                       <v-icon size="12" color="white">{{ catIcon(t.category || t.department) }}</v-icon>
                     </div>
+                    <v-icon v-if="t.pinned_at" size="12" color="primary" :title="'Закреплён'">mdi-pin</v-icon>
                     <div class="kanban-card-subject">{{ t.subject }}</div>
                     <span v-if="t.unread > 0" class="kanban-card-unread">{{ t.unread }}</span>
                   </div>
@@ -143,6 +149,11 @@
                   </div>
                   <!-- Quick actions on hover -->
                   <div v-if="!bulkMode" class="kanban-quick-actions">
+                    <button class="kanban-qa-btn" :class="{ active: t.pinned_at }"
+                      :title="t.pinned_at ? 'Открепить' : 'Закрепить'"
+                      @click="togglePin(t, $event)">
+                      <v-icon size="12">{{ t.pinned_at ? 'mdi-pin' : 'mdi-pin-outline' }}</v-icon>
+                    </button>
                     <button v-if="String(t.assigned_to) !== String(currentUserId)"
                       class="kanban-qa-btn" title="Взять себе"
                       @click="quickAssignToMe(t, $event)">
@@ -288,6 +299,14 @@
             <!-- Notes -->
             <button class="action-btn" :class="{ active: showNotes }" title="Внутренние заметки" @click="toggleNotes">
               <v-icon size="16">mdi-note-text-outline</v-icon>
+            </button>
+            <!-- Pin toggle -->
+            <button class="action-btn" :class="{ active: activeChat.pinned_at }" :title="activeChat.pinned_at ? 'Открепить' : 'Закрепить'" @click="togglePin(activeChat, $event)">
+              <v-icon size="16">{{ activeChat.pinned_at ? 'mdi-pin' : 'mdi-pin-outline' }}</v-icon>
+            </button>
+            <!-- Notifications toggle -->
+            <button class="action-btn" :class="{ active: notifyEnabled }" :title="notifyEnabled ? 'Отключить уведомления' : 'Включить уведомления'" @click="notifyEnabled = !notifyEnabled">
+              <v-icon size="16">{{ notifyEnabled ? 'mdi-bell' : 'mdi-bell-off-outline' }}</v-icon>
             </button>
             <!-- Context panel toggle -->
             <button class="action-btn" :class="{ active: showContext }" title="Карточка партнёра" @click="showContext = !showContext">
@@ -688,6 +707,64 @@ watch(showContext, v => localStorage.setItem('staff-chat-context', v ? '1' : '0'
 
 // Reactions
 const REACTION_PALETTE = ['👍', '❤️', '😂', '🎉', '🙏', '✅'];
+
+// Notifications (desktop + sound)
+const notifyEnabled = ref(localStorage.getItem('staff-chat-notify') !== '0');
+watch(notifyEnabled, v => localStorage.setItem('staff-chat-notify', v ? '1' : '0'));
+
+function playPing() {
+  if (!notifyEnabled.value) return;
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(880, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(1320, ctx.currentTime + 0.1);
+    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.25);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.25);
+  } catch {}
+}
+
+function notifyDesktop(title, body) {
+  if (!notifyEnabled.value) return;
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  try {
+    const n = new Notification(title, { body, icon: '/favicon.ico', silent: false, tag: 'ds-chat' });
+    n.onclick = () => { window.focus(); n.close(); };
+  } catch {}
+}
+
+async function requestNotifPermission() {
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'default') {
+    try { await Notification.requestPermission(); } catch {}
+  }
+}
+
+// Pinning
+async function togglePin(ticket, e) {
+  e?.stopPropagation();
+  const prev = ticket.pinned_at;
+  ticket.pinned_at = prev ? null : new Date().toISOString();
+  try {
+    const { data } = await api.post(`/chat/tickets/${ticket.id}/pin`);
+    ticket.pinned_at = data.pinnedAt;
+    chats.value = [...chats.value].sort(sortChats);
+  } catch {
+    ticket.pinned_at = prev;
+  }
+}
+function sortChats(a, b) {
+  const pa = a.pinned_at ? 1 : 0;
+  const pb = b.pinned_at ? 1 : 0;
+  if (pa !== pb) return pb - pa;
+  return new Date(b.last_message_at || 0) - new Date(a.last_message_at || 0);
+}
 
 // View mode (list / kanban)
 const viewMode = ref(localStorage.getItem('staff-chat-view') || 'list');
@@ -1369,14 +1446,24 @@ async function connectSocket() {
     socket = io(host, { auth: { token }, transports: ['websocket', 'polling'], reconnection: true });
 
     socket.on('chat:new-message', (m) => {
-      if (!activeChat.value || Number(m.ticketId) !== Number(activeChat.value.id)) return;
-      if (messages.value.some(x => String(x.id) === String(m.id))) return;
-      const wasAtBottom = isAtBottom();
-      messages.value.push({
-        id: m.id, senderId: m.senderId, senderName: m.senderName,
-        content: m.content, isSystem: false, createdAt: m.createdAt,
-      });
-      if (wasAtBottom) scrollDown(true); else pendingMessages.value++;
+      const isOwn = String(m.senderId) === String(currentUserId);
+      const isActive = activeChat.value && Number(m.ticketId) === Number(activeChat.value.id);
+
+      if (isActive && !messages.value.some(x => String(x.id) === String(m.id))) {
+        const wasAtBottom = isAtBottom();
+        messages.value.push({
+          id: m.id, senderId: m.senderId, senderName: m.senderName,
+          content: m.content, isSystem: false, createdAt: m.createdAt,
+        });
+        if (wasAtBottom) scrollDown(true); else pendingMessages.value++;
+      }
+
+      if (!isOwn && (document.hidden || !isActive)) {
+        playPing();
+        notifyDesktop(m.senderName || 'Новое сообщение',
+          (m.content || '').slice(0, 120) || 'Прислали сообщение');
+      }
+
       loadChats();
     });
     socket.on('ticket:typing', (e) => {
@@ -1407,7 +1494,7 @@ async function connectSocket() {
       }
     });
 
-    // Ticket updates from other staff (status / priority / assignee changes)
+    // Ticket updates from other staff (status / priority / assignee / pin)
     socket.on('chat:ticket-updated', (e) => {
       const t = chats.value.find(x => Number(x.id) === Number(e.ticketId));
       if (!t) { loadChats(); return; }
@@ -1416,12 +1503,13 @@ async function connectSocket() {
       if (e.assignedTo !== undefined) t.assigned_to = e.assignedTo;
       if (e.assignedName !== undefined) t.assigned_name = e.assignedName;
       if (e.tags !== undefined) t.tags = e.tags;
-      // Update the active chat panel if it's the same ticket
+      if (e.pinnedAt !== undefined) { t.pinned_at = e.pinnedAt; chats.value = [...chats.value].sort(sortChats); }
       if (activeChat.value && Number(activeChat.value.id) === Number(e.ticketId)) {
         if (e.status !== undefined) activeChat.value.status = e.status;
         if (e.priority !== undefined) activeChat.value.priority = e.priority;
         if (e.assignedTo !== undefined) activeChat.value.assigned_to = e.assignedTo;
         if (e.assignedName !== undefined) activeChat.value.assigned_name = e.assignedName;
+        if (e.pinnedAt !== undefined) activeChat.value.pinned_at = e.pinnedAt;
       }
     });
   } catch (e) {
@@ -1448,6 +1536,7 @@ onMounted(async () => {
   loadChats();
   connectSocket();
   window.addEventListener('keydown', onGlobalKey);
+  requestNotifPermission();
   try { const { data } = await api.get('/chat/tickets/staff'); staffList.value = data || []; } catch {}
   try { const { data } = await api.get('/chat/quick-replies'); quickReplies.value = data.data || data || []; } catch {}
 });
@@ -1495,6 +1584,12 @@ onUnmounted(() => {
 .unread-badge { position: absolute; right: 12px; top: 10px; background: rgb(var(--v-theme-error)); color: #fff; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 10px; min-width: 18px; text-align: center; }
 .chat-item.has-unread { background: rgba(var(--v-theme-primary), 0.06); }
 .chat-item.has-unread .chat-item-subject { color: rgb(var(--v-theme-primary)); font-weight: 700; }
+.chat-item.pinned { background: rgba(var(--v-theme-primary), 0.04); }
+.chat-item-pin { position: absolute; right: 12px; bottom: 8px; background: none; border: none; padding: 2px; border-radius: 4px; cursor: pointer; color: rgba(var(--v-theme-on-surface), 0.3); opacity: 0; transition: opacity 0.15s, color 0.15s; }
+.chat-item:hover .chat-item-pin { opacity: 1; }
+.chat-item-pin.active { color: rgb(var(--v-theme-primary)); opacity: 1; }
+.chat-item-pin:hover { color: rgb(var(--v-theme-primary)); }
+.kanban-qa-btn.active { color: rgb(var(--v-theme-primary)); background: rgba(var(--v-theme-primary), 0.12); }
 
 .chat-main { flex: 1; display: flex; flex-direction: column; min-width: 0; position: relative; }
 .chat-placeholder { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 12px; color: rgba(var(--v-theme-on-surface), 0.3); }
