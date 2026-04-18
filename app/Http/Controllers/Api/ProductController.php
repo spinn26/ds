@@ -35,8 +35,33 @@ class ProductController extends Controller
             ->keyBy('id');
 
         $hasAccess = $this->checkAccess($consultant)['hasAccess'] ?? false;
+        $productRows = $query->orderBy('name')->get();
 
-        $products = $query->orderBy('name')->get()->map(function ($p) use ($consultant, $typeToCategory, $allCategories, $hasAccess) {
+        // Gate products by education-course completion:
+        // if a product has an active linked course, it's only "available" when
+        // the user has a completion record for EVERY such course.
+        // Products with no linked course fall back to the legacy gate ($hasAccess).
+        $coursesByProduct = collect();
+        $completedCourseIds = [];
+        if (Schema::hasTable('education_courses') && $productRows->isNotEmpty()) {
+            $coursesByProduct = DB::table('education_courses')
+                ->where('active', true)
+                ->whereNotNull('product_id')
+                ->whereIn('product_id', $productRows->pluck('id'))
+                ->get()
+                ->groupBy('product_id');
+
+            if (Schema::hasTable('education_course_completions') && $coursesByProduct->isNotEmpty()) {
+                $completedCourseIds = DB::table('education_course_completions')
+                    ->where('user_id', $user->id)
+                    ->whereIn('course_id', $coursesByProduct->flatten(1)->pluck('id'))
+                    ->pluck('course_id')
+                    ->all();
+            }
+        }
+        $completedSet = array_flip($completedCourseIds);
+
+        $products = $productRows->map(function ($p) use ($consultant, $typeToCategory, $allCategories, $hasAccess, $coursesByProduct, $completedSet) {
             $testPassed = $consultant
                 ? $this->isTestPassedForProduct($consultant, $p->id)
                 : false;
@@ -45,8 +70,13 @@ class ProductController extends Controller
             $categoryId = $p->productType ? ($typeToCategory[$p->productType] ?? null) : null;
             $cat = $categoryId ? ($allCategories[$categoryId] ?? null) : null;
 
-            // Любой активный ФК может открыть любой продукт
-            $available = $hasAccess;
+            $linkedCourses = $coursesByProduct[$p->id] ?? collect();
+            if ($linkedCourses->isNotEmpty()) {
+                $allPassed = $linkedCourses->every(fn ($c) => isset($completedSet[$c->id]));
+                $available = $allPassed;
+            } else {
+                $available = $hasAccess;
+            }
 
             return [
                 'id' => $p->id,
@@ -55,7 +85,6 @@ class ProductController extends Controller
                 'typeName' => $p->typeName ?? null,
                 'active' => (bool) $p->active,
                 'accessible' => $available,
-                // Frontend reads .available and .url; keep .accessible for back-compat
                 'available' => $available,
                 'url' => $p->openProductUrl ?? null,
                 'imageUrl' => $p->imageUrl ?? null,
@@ -66,6 +95,11 @@ class ProductController extends Controller
                     'id' => $cat->id,
                     'name' => $cat->productCategoryName,
                 ] : null,
+                'requiredCourses' => $linkedCourses->map(fn ($c) => [
+                    'id' => $c->id,
+                    'title' => $c->title,
+                    'completed' => isset($completedSet[$c->id]),
+                ])->values(),
             ];
         });
 

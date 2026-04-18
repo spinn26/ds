@@ -100,9 +100,10 @@ Route::prefix('v1')->group(function () {
 
         Route::get('/products', [ProductController::class, 'index']);
         Route::get('/contests', [ContestController::class, 'index']);
-        Route::get('/education', function () {
-            return response()->json(['videos' => [], 'documents' => []]);
-        });
+        Route::get('/education/courses', [\App\Http\Controllers\Api\EducationController::class, 'courses']);
+        Route::get('/education/courses/{id}', [\App\Http\Controllers\Api\EducationController::class, 'show'])->whereNumber('id');
+        Route::post('/education/courses/{id}/test', [\App\Http\Controllers\Api\EducationController::class, 'submitTest'])->whereNumber('id');
+        Route::post('/education/lessons/{id}/view', [\App\Http\Controllers\Api\EducationController::class, 'markLessonViewed'])->whereNumber('id');
 
         // Admin — all routes require staff role
         Route::middleware('role:admin')->group(function () {
