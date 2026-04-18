@@ -103,28 +103,39 @@ class AdminContestController extends Controller
             return response()->json(['message' => 'Not found'], 404);
         }
 
-        // Tables that hold per-contest data and would otherwise block delete via FK.
-        // Kept in sync with FK constraints `*_contest_fkey` referencing public."Contest"(id).
-        $childTables = [
-            'contestrating',
-            'calculationContestTrigger',
-            'calculationConsultantPoints',
-            'calculationConsultantRaiting',
-            'coefficientCriterion',
-            'criterion',
-        ];
+        // Discover every FK that references Contest(id) at runtime instead of
+        // maintaining a hand-written whitelist — new child tables stop being a
+        // hidden blocker the moment they show up in pg_constraint.
+        $refs = DB::select(<<<'SQL'
+            SELECT
+                child.relname AS table_name,
+                att.attname   AS column_name
+            FROM pg_constraint con
+            JOIN pg_class      parent ON parent.oid = con.confrelid
+            JOIN pg_class      child  ON child.oid  = con.conrelid
+            JOIN pg_attribute  att    ON att.attrelid = con.conrelid
+                                      AND att.attnum = ANY(con.conkey)
+            WHERE con.contype = 'f'
+              AND parent.relname = 'Contest'
+SQL);
 
         try {
-            DB::transaction(function () use ($id, $childTables) {
-                foreach ($childTables as $t) {
-                    DB::table($t)->where('contest', $id)->delete();
+            DB::transaction(function () use ($id, $refs) {
+                foreach ($refs as $r) {
+                    DB::table($r->table_name)->where($r->column_name, $id)->delete();
                 }
                 DB::table('Contest')->where('id', $id)->delete();
             });
         } catch (QueryException $e) {
+            \Log::warning('Contest delete blocked by FK', [
+                'contest_id' => $id,
+                'sqlstate' => $e->getCode(),
+                'message' => $e->getMessage(),
+            ]);
             if ($e->getCode() === '23503') {
                 return response()->json([
                     'message' => 'Невозможно удалить конкурс: на него ссылаются связанные данные.',
+                    'detail' => config('app.debug') ? $e->getMessage() : null,
                 ], 409);
             }
             throw $e;
