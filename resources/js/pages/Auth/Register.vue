@@ -33,10 +33,20 @@
               <v-stepper-item :value="2" title="Проверка" />
             </v-stepper-header>
 
-            <v-stepper-window>
+            <v-stepper-window class="mt-4">
               <!-- Step 1 -->
               <v-stepper-window-item :value="1">
                 <v-alert v-if="error" type="error" class="mb-3" density="compact">{{ error }}</v-alert>
+                <v-expansion-panels v-if="debug" class="mb-3">
+                  <v-expansion-panel>
+                    <v-expansion-panel-title class="text-error text-caption">
+                      DEBUG: {{ debug.stage }} → {{ debug.status || 'no response' }} {{ debug.statusText || '' }}
+                    </v-expansion-panel-title>
+                    <v-expansion-panel-text>
+                      <pre class="debug-dump">{{ JSON.stringify(debug, null, 2) }}</pre>
+                    </v-expansion-panel-text>
+                  </v-expansion-panel>
+                </v-expansion-panels>
                 <v-row dense>
                   <v-col cols="12" sm="4"><v-text-field v-model="form.lastName" label="Фамилия *" /></v-col>
                   <v-col cols="12" sm="4"><v-text-field v-model="form.firstName" label="Имя *" /></v-col>
@@ -79,6 +89,16 @@
                 </v-card>
 
                 <v-alert v-if="error" type="error" class="mb-3" density="compact">{{ error }}</v-alert>
+                <v-expansion-panels v-if="debug" class="mb-3">
+                  <v-expansion-panel>
+                    <v-expansion-panel-title class="text-error text-caption">
+                      DEBUG: {{ debug.stage }} → {{ debug.status || 'no response' }} {{ debug.statusText || '' }}
+                    </v-expansion-panel-title>
+                    <v-expansion-panel-text>
+                      <pre class="debug-dump">{{ JSON.stringify(debug, null, 2) }}</pre>
+                    </v-expansion-panel-text>
+                  </v-expansion-panel>
+                </v-expansion-panels>
 
                 <div class="d-flex gap-3">
                   <v-btn variant="outlined" size="large" @click="step = 1" class="flex-grow-1">Назад</v-btn>
@@ -114,6 +134,7 @@ const router = useRouter();
 const step = ref(1);
 const showPw = ref(false);
 const error = ref('');
+const debug = ref(null);
 const loading = ref(false);
 const form = ref({
   firstName: '', lastName: '', patronymic: '', email: '', phone: '',
@@ -156,24 +177,52 @@ async function nextStep() {
   if (!form.value.consentPersonalData || !form.value.consentTerms) {
     error.value = 'Необходимо дать согласие'; return;
   }
+  debug.value = null;
   loading.value = true;
   try {
     const { data } = await api.post('/auth/check-duplicates', { email: form.value.email, phone: form.value.phone });
     if (data.duplicate) { error.value = data.message; return; }
     step.value = 2;
-  } catch { error.value = 'Ошибка проверки'; }
+  } catch (e) {
+    error.value = e.response?.data?.message || 'Ошибка проверки';
+    debug.value = dumpError('check-duplicates', e);
+    console.error('[register] check-duplicates failed', e);
+  }
   finally { loading.value = false; }
 }
 
 async function handleRegister() {
   error.value = '';
+  debug.value = null;
   loading.value = true;
   try {
     await auth.register(form.value);
     router.push('/');
   } catch (e) {
     error.value = e.response?.data?.message || 'Ошибка регистрации';
+    debug.value = dumpError('register', e);
+    console.error('[register] register failed', e);
   } finally { loading.value = false; }
+}
+
+function dumpError(stage, e) {
+  const r = e?.response;
+  return {
+    stage,
+    time: new Date().toISOString(),
+    message: e?.message,
+    status: r?.status,
+    statusText: r?.statusText,
+    url: r?.config?.url,
+    method: r?.config?.method,
+    payload: safeParse(r?.config?.data),
+    response: r?.data,
+    errors: r?.data?.errors,
+  };
+}
+function safeParse(s) {
+  if (!s) return null;
+  try { return JSON.parse(s); } catch { return s; }
 }
 
 </script>
@@ -193,6 +242,7 @@ async function handleRegister() {
     radial-gradient(1200px 800px at 15% 20%, rgba(110, 232, 122, 0.18), transparent 60%),
     radial-gradient(900px 700px at 85% 85%, rgba(46, 125, 50, 0.22), transparent 65%),
     linear-gradient(135deg, #0B1F14 0%, #0E2C1B 50%, #081510 100%);
+  animation: bg-shift 24s ease-in-out infinite alternate;
 }
 .parallax {
   position: fixed;
@@ -231,9 +281,6 @@ async function handleRegister() {
   100% { filter: blur(64px) hue-rotate(-14deg); opacity: 0.65; transform: scale(0.96) translate(-10px, 12px); }
 }
 
-.bg-base {
-  animation: bg-shift 24s ease-in-out infinite alternate;
-}
 @keyframes bg-shift {
   0%   { filter: hue-rotate(0deg) brightness(1); }
   50%  { filter: hue-rotate(12deg) brightness(1.05); }
@@ -261,6 +308,18 @@ async function handleRegister() {
   background: rgba(var(--v-theme-surface), 0.95) !important;
   border: 1px solid rgba(var(--v-theme-brand), 0.3);
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+}
+.debug-dump {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  word-break: break-all;
+  background: rgba(0, 0, 0, 0.05);
+  padding: 8px;
+  border-radius: 4px;
+  max-height: 320px;
+  overflow: auto;
 }
 @media (prefers-reduced-motion: reduce) {
   .blob, .sphere { transition: none !important; transform: none !important; animation: none !important; }
