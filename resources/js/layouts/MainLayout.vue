@@ -56,11 +56,6 @@
     <v-app-bar flat border="b" class="topbar">
       <v-app-bar-nav-icon v-if="mobile" @click="drawer = !drawer" />
 
-      <!-- Brand fallback (visible when sidebar is collapsed or on mobile) -->
-      <router-link to="/" class="topbar-brand d-flex align-center ga-2 ml-2">
-        <span class="text-subtitle-2 font-weight-black text-primary">DS</span>
-      </router-link>
-
       <v-spacer />
 
       <template v-if="!mobile">
