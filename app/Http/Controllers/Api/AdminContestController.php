@@ -9,6 +9,7 @@ use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class AdminContestController extends Controller
 {
@@ -103,27 +104,13 @@ class AdminContestController extends Controller
             return response()->json(['message' => 'Not found'], 404);
         }
 
-        // Discover every FK that references Contest(id) at runtime instead of
-        // maintaining a hand-written whitelist — new child tables stop being a
-        // hidden blocker the moment they show up in pg_constraint.
-        $refs = DB::select(<<<'SQL'
-            SELECT
-                child.relname AS table_name,
-                att.attname   AS column_name
-            FROM pg_constraint con
-            JOIN pg_class      parent ON parent.oid = con.confrelid
-            JOIN pg_class      child  ON child.oid  = con.conrelid
-            JOIN pg_attribute  att    ON att.attrelid = con.conrelid
-                                      AND att.attnum = ANY(con.conkey)
-            WHERE con.contype = 'f'
-              AND parent.relname = 'Contest'
-SQL);
-
         try {
-            DB::transaction(function () use ($id, $refs) {
-                foreach ($refs as $r) {
-                    DB::table($r->table_name)->where($r->column_name, $id)->delete();
-                }
+            DB::transaction(function () use ($id) {
+                // Walk the whole FK graph rooted at Contest(id) and delete
+                // leaf-first. Direct children of Contest (criterion, contestrating,
+                // …) each have their own dependents (e.g. coefficientCriterion
+                // → criterion), so a one-level sweep isn't enough.
+                $this->cascadeDelete('Contest', 'id', [$id]);
                 DB::table('Contest')->where('id', $id)->delete();
             });
         } catch (QueryException $e) {
@@ -151,6 +138,58 @@ SQL);
         }
 
         return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Recursively purge rows that reference (table, column) via FK,
+     * leaf-first. Skips tables already visited to avoid infinite loops
+     * when the graph contains cycles. Assumes children have an 'id' PK
+     * for further recursion; non-'id' child is cleaned but not walked.
+     *
+     * @param array<int> $values  Parent-row ids whose dependants should die.
+     * @param array<string,bool> $visited  Internal recursion guard.
+     */
+    private function cascadeDelete(string $table, string $column, array $values, array &$visited = []): void
+    {
+        if (empty($values)) {
+            return;
+        }
+
+        $refs = DB::select(<<<'SQL'
+            SELECT
+                child.relname AS table_name,
+                att.attname   AS column_name
+            FROM pg_constraint con
+            JOIN pg_class      parent ON parent.oid = con.confrelid
+            JOIN pg_class      child  ON child.oid  = con.conrelid
+            JOIN pg_attribute  att    ON att.attrelid = con.conrelid
+                                      AND att.attnum = ANY(con.conkey)
+            JOIN pg_attribute  patt   ON patt.attrelid = con.confrelid
+                                      AND patt.attnum = ANY(con.confkey)
+            WHERE con.contype = 'f'
+              AND parent.relname = ?
+              AND patt.attname = ?
+SQL, [$table, $column]);
+
+        foreach ($refs as $r) {
+            $key = $r->table_name . '::' . $r->column_name;
+            if (isset($visited[$key])) {
+                continue;
+            }
+            $visited[$key] = true;
+
+            $rowIds = [];
+            if (Schema::hasColumn($r->table_name, 'id')) {
+                $rowIds = DB::table($r->table_name)
+                    ->whereIn($r->column_name, $values)
+                    ->pluck('id')
+                    ->all();
+            }
+            if (! empty($rowIds)) {
+                $this->cascadeDelete($r->table_name, 'id', $rowIds, $visited);
+            }
+            DB::table($r->table_name)->whereIn($r->column_name, $values)->delete();
+        }
     }
 
     /**
