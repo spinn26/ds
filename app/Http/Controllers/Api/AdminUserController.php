@@ -99,8 +99,12 @@ class AdminUserController extends Controller
                 'nullable', 'string', 'max:32',
                 function ($attribute, $value, $fail) use ($consultant) {
                     if ($value === null || $value === '') return;
+                    if (! $consultant) {
+                        $fail('У пользователя нет партнёрского профиля — реферальный код задать некуда.');
+                        return;
+                    }
                     $exists = Consultant::where('participantCode', $value)
-                        ->when($consultant, fn ($q) => $q->where('id', '!=', $consultant->id))
+                        ->where('id', '!=', $consultant->id)
                         ->exists();
                     if ($exists) $fail('Такой реферальный код уже используется.');
                 },

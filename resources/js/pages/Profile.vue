@@ -366,7 +366,7 @@ function fmtShortDate(d) {
 async function loadCities() {
   try {
     const { data } = await api.get('/profile/cities');
-    cityOptions.value = data;
+    cityOptions.value = Array.isArray(data) ? data : [];
   } catch {
     cityOptions.value = ['Москва', 'Санкт-Петербург', 'Краснодар', 'Казань', 'Новосибирск', 'Екатеринбург', 'Нижний Новгород', 'Ростов-на-Дону', 'Самара', 'Уфа', 'Красноярск', 'Воронеж', 'Пермь', 'Волгоград'];
   }
