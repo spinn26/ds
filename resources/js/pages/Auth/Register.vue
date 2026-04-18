@@ -37,16 +37,6 @@
               <!-- Step 1 -->
               <v-stepper-window-item :value="1">
                 <v-alert v-if="error" type="error" class="mb-3" density="compact">{{ error }}</v-alert>
-                <v-expansion-panels v-if="debug" class="mb-3">
-                  <v-expansion-panel>
-                    <v-expansion-panel-title class="text-error text-caption">
-                      DEBUG: {{ debug.stage }} → {{ debug.status || 'no response' }} {{ debug.statusText || '' }}
-                    </v-expansion-panel-title>
-                    <v-expansion-panel-text>
-                      <pre class="debug-dump">{{ JSON.stringify(debug, null, 2) }}</pre>
-                    </v-expansion-panel-text>
-                  </v-expansion-panel>
-                </v-expansion-panels>
                 <v-row dense>
                   <v-col cols="12" sm="4"><v-text-field v-model="form.lastName" label="Фамилия *" /></v-col>
                   <v-col cols="12" sm="4"><v-text-field v-model="form.firstName" label="Имя *" /></v-col>
@@ -89,16 +79,6 @@
                 </v-card>
 
                 <v-alert v-if="error" type="error" class="mb-3" density="compact">{{ error }}</v-alert>
-                <v-expansion-panels v-if="debug" class="mb-3">
-                  <v-expansion-panel>
-                    <v-expansion-panel-title class="text-error text-caption">
-                      DEBUG: {{ debug.stage }} → {{ debug.status || 'no response' }} {{ debug.statusText || '' }}
-                    </v-expansion-panel-title>
-                    <v-expansion-panel-text>
-                      <pre class="debug-dump">{{ JSON.stringify(debug, null, 2) }}</pre>
-                    </v-expansion-panel-text>
-                  </v-expansion-panel>
-                </v-expansion-panels>
 
                 <div class="d-flex gap-3">
                   <v-btn variant="outlined" size="large" @click="step = 1" class="flex-grow-1">Назад</v-btn>
@@ -134,7 +114,6 @@ const router = useRouter();
 const step = ref(1);
 const showPw = ref(false);
 const error = ref('');
-const debug = ref(null);
 const loading = ref(false);
 const form = ref({
   firstName: '', lastName: '', patronymic: '', email: '', phone: '',
@@ -177,7 +156,6 @@ async function nextStep() {
   if (!form.value.consentPersonalData || !form.value.consentTerms) {
     error.value = 'Необходимо дать согласие'; return;
   }
-  debug.value = null;
   loading.value = true;
   try {
     const { data } = await api.post('/auth/check-duplicates', { email: form.value.email, phone: form.value.phone });
@@ -185,46 +163,23 @@ async function nextStep() {
     step.value = 2;
   } catch (e) {
     error.value = e.response?.data?.message || 'Ошибка проверки';
-    debug.value = dumpError('check-duplicates', e);
-    console.error('[register] check-duplicates failed', e);
+  } finally {
+    loading.value = false;
   }
-  finally { loading.value = false; }
 }
 
 async function handleRegister() {
   error.value = '';
-  debug.value = null;
   loading.value = true;
   try {
     await auth.register(form.value);
     router.push('/');
   } catch (e) {
     error.value = e.response?.data?.message || 'Ошибка регистрации';
-    debug.value = dumpError('register', e);
-    console.error('[register] register failed', e);
-  } finally { loading.value = false; }
+  } finally {
+    loading.value = false;
+  }
 }
-
-function dumpError(stage, e) {
-  const r = e?.response;
-  return {
-    stage,
-    time: new Date().toISOString(),
-    message: e?.message,
-    status: r?.status,
-    statusText: r?.statusText,
-    url: r?.config?.url,
-    method: r?.config?.method,
-    payload: safeParse(r?.config?.data),
-    response: r?.data,
-    errors: r?.data?.errors,
-  };
-}
-function safeParse(s) {
-  if (!s) return null;
-  try { return JSON.parse(s); } catch { return s; }
-}
-
 </script>
 
 <style scoped>
@@ -308,18 +263,6 @@ function safeParse(s) {
   background: rgba(var(--v-theme-surface), 0.95) !important;
   border: 1px solid rgba(var(--v-theme-brand), 0.3);
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
-}
-.debug-dump {
-  font-family: ui-monospace, Menlo, Consolas, monospace;
-  font-size: 11px;
-  line-height: 1.35;
-  white-space: pre-wrap;
-  word-break: break-all;
-  background: rgba(0, 0, 0, 0.05);
-  padding: 8px;
-  border-radius: 4px;
-  max-height: 320px;
-  overflow: auto;
 }
 @media (prefers-reduced-motion: reduce) {
   .blob, .sphere { transition: none !important; transform: none !important; animation: none !important; }

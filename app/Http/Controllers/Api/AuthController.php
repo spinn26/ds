@@ -125,11 +125,7 @@ class AuthController extends Controller
      */
     public function register(RegisterRequest $request): JsonResponse
     {
-        $rid = substr(md5(uniqid('', true)), 0, 8);
-        \Log::info("[register:$rid] ENTER", ['email' => $request->input('email')]);
-
-        $user = DB::transaction(function () use ($request, $rid) {
-            \Log::info("[register:$rid] tx-start");
+        $user = DB::transaction(function () use ($request) {
             $user = User::create([
                 'firstName' => $request->input('firstName'),
                 'lastName' => $request->input('lastName'),
@@ -142,7 +138,6 @@ class AuthController extends Controller
                 'role' => 'registered',
                 'dateCreated' => now()->toIso8601String(),
             ]);
-            \Log::info("[register:$rid] user-created", ['id' => $user->id]);
 
             $inviter = null;
             if ($request->filled('refCode')) {
@@ -150,7 +145,6 @@ class AuthController extends Controller
                     ->where('active', true)
                     ->first();
             }
-            \Log::info("[register:$rid] inviter-checked", ['found' => (bool) $inviter]);
 
             $consultant = new Consultant();
             $consultant->person = $user->id;
@@ -165,25 +159,19 @@ class AuthController extends Controller
                 $consultant->inviterName = $inviter->personName;
             }
             $consultant->save();
-            \Log::info("[register:$rid] consultant-saved", ['id' => $consultant->id]);
 
             $user->consultant_id = $consultant->id;
             $user->saveQuietly();
-            \Log::info("[register:$rid] user-linked");
 
             return $user;
         });
-        \Log::info("[register:$rid] tx-done");
 
         $token = $user->createToken('spa')->plainTextToken;
-        \Log::info("[register:$rid] token-created");
 
-        $resp = response()->json([
+        return response()->json([
             'token' => $token,
             'user' => UserResource::make($user),
         ], 201);
-        \Log::info("[register:$rid] LEAVE");
-        return $resp;
     }
 
     /**
