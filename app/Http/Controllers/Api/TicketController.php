@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Controller;
 use App\Models\Consultant;
 use App\Services\SocketService;
@@ -214,15 +215,13 @@ class TicketController extends Controller
                 'created_at' => now(),
             ]);
 
-            // Notify owner via socket
-            try {
-                app(SocketService::class)->notifyUser($assignedTo, 'notification', [
-                    'type' => 'ticket',
-                    'title' => 'Новое сообщение от партнёра',
-                    'message' => $request->subject,
-                    'link' => "/manage/tickets?id={$ticketId}",
-                ]);
-            } catch (\Exception $e) {}
+            NotificationController::create(
+                $assignedTo,
+                'ticket',
+                'Новое сообщение от партнёра',
+                $request->subject,
+                "/manage/tickets?id={$ticketId}"
+            );
         }
 
         // Return full ticket data for frontend
@@ -376,16 +375,18 @@ class TicketController extends Controller
                 'createdAt' => now()->toIso8601String(),
             ]);
 
-            // Notify ticket creator if staff replies
-            if ($ticket && $user->id !== $ticket->created_by) {
-                $socketService->notifyUser($ticket->created_by, 'notification', [
-                    'type' => 'ticket',
-                    'title' => 'Новый ответ в тикете',
-                    'message' => mb_substr($request->message ?? '', 0, 80),
-                    'link' => '/tickets',
-                ]);
-            }
         } catch (\Exception $e) {}
+
+        // Notify ticket creator if staff replies
+        if ($ticket && $user->id !== $ticket->created_by) {
+            NotificationController::create(
+                $ticket->created_by,
+                'ticket',
+                'Новый ответ в тикете',
+                mb_substr($request->message ?? '', 0, 80),
+                '/tickets'
+            );
+        }
 
         return response()->json(['message' => 'Отправлено', 'id' => $msgId]);
     }

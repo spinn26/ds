@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -438,6 +439,20 @@ class ChatController extends Controller
                 'createdAt' => $now->toIso8601String(),
             ]);
         } catch (\Exception $e) {}
+
+        // Personal notification to the other side of the ticket
+        $recipientId = $isAgent
+            ? (int) $ticket->user_id
+            : ((int) ($ticket->assigned_to ?? 0));
+        if ($recipientId && $recipientId !== (int) $user->id) {
+            NotificationController::create(
+                $recipientId,
+                'chat',
+                $isAgent ? 'Ответ по обращению' : 'Новое сообщение в чате',
+                mb_substr($request->message ?? '', 0, 120) ?: 'Отправлено вложение',
+                $isAgent ? "/chat?ticket={$id}" : "/manage/chat?ticket={$id}"
+            );
+        }
 
         return response()->json(['id' => $msgId]);
     }

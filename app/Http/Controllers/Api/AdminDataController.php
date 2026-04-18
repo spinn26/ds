@@ -505,11 +505,24 @@ class AdminDataController extends Controller
             'comment' => 'nullable|string|max:1000',
         ]);
 
+        $consultantUserId = DB::table('consultant')->where('id', $requisite->consultant)->value('webUser');
+
         if ($request->action === 'verify') {
             $requisite->verified = true;
             $requisite->status = 3; // verified
             $requisite->dateChange = now();
             $requisite->save();
+
+            if ($consultantUserId) {
+                \App\Http\Controllers\Api\NotificationController::create(
+                    (int) $consultantUserId,
+                    'requisites',
+                    'Реквизиты подтверждены',
+                    'Банковские реквизиты прошли проверку.',
+                    '/profile'
+                );
+            }
+
             return response()->json(['message' => 'Реквизиты верифицированы']);
         }
 
@@ -531,6 +544,16 @@ class AdminDataController extends Controller
                 'direction' => 'ds2p',
                 'read' => false,
             ]);
+        }
+
+        if ($consultantUserId) {
+            \App\Http\Controllers\Api\NotificationController::create(
+                (int) $consultantUserId,
+                'requisites',
+                'Реквизиты отклонены',
+                $request->input('comment') ?: 'Проверьте и отправьте реквизиты повторно.',
+                '/profile'
+            );
         }
 
         return response()->json(['message' => 'Реквизиты отклонены']);

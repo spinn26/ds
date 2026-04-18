@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Enums\PartnerActivity;
+use App\Http\Controllers\Api\NotificationController;
 use App\Models\Consultant;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -306,5 +307,33 @@ class PartnerStatusService
             'to' => $to->label(),
             'comment' => $comment,
         ]);
+
+        if ($from !== null && $consultant->webUser) {
+            $this->notifyStatusChange($consultant->webUser, $to, $comment);
+        }
+    }
+
+    private function notifyStatusChange(int $userId, PartnerActivity $to, string $comment): void
+    {
+        [$title, $message] = match ($to) {
+            PartnerActivity::Active => [
+                'Статус: Активен',
+                'Партнёрский аккаунт активирован. Теперь вам доступны реферальные ссылки.',
+            ],
+            PartnerActivity::Terminated => [
+                'Статус: Терминация',
+                $comment ?: 'Начислена терминация. Подробности — в личном кабинете.',
+            ],
+            PartnerActivity::Excluded => [
+                'Статус: Исключён',
+                $comment ?: 'Аккаунт переведён в статус «Исключён».',
+            ],
+            PartnerActivity::Registered => [
+                'Статус: Зарегистрирован',
+                $comment ?: 'Статус возвращён к «Зарегистрирован».',
+            ],
+        };
+
+        NotificationController::create($userId, 'status', $title, $message, '/profile');
     }
 }

@@ -4,9 +4,11 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Consultant;
+use App\Services\SocketService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 
 class NotificationController extends Controller
@@ -68,8 +70,10 @@ class NotificationController extends Controller
     }
 
     /**
-     * Создать уведомление для пользователя.
-     * Вызывается из других сервисов/контроллеров.
+     * Persist a notification for a user AND push it over the socket channel,
+     * so offline users see it on next login and online users get it in real time.
+     *
+     * Call this from services/controllers on any user-facing event.
      */
     public static function create(int $userId, string $type, string $title, ?string $message = null, ?string $link = null): void
     {
@@ -79,6 +83,8 @@ class NotificationController extends Controller
             'requisites' => 'mdi-credit-card',
             'payment' => 'mdi-cash',
             'import' => 'mdi-upload',
+            'mail' => 'mdi-email-fast',
+            'chat' => 'mdi-message-text',
             'system' => 'mdi-bell',
         ];
         $colors = [
@@ -87,8 +93,13 @@ class NotificationController extends Controller
             'requisites' => 'success',
             'payment' => 'success',
             'import' => 'primary',
+            'mail' => 'info',
+            'chat' => 'info',
             'system' => 'grey',
         ];
+
+        $icon = $icons[$type] ?? 'mdi-bell';
+        $color = $colors[$type] ?? 'grey';
 
         try {
             DB::table('notifications')->insert([
@@ -96,17 +107,33 @@ class NotificationController extends Controller
                 'type' => $type,
                 'title' => $title,
                 'message' => $message,
-                'icon' => $icons[$type] ?? 'mdi-bell',
-                'color' => $colors[$type] ?? 'grey',
+                'icon' => $icon,
+                'color' => $color,
                 'link' => $link,
                 'read' => false,
                 'created_at' => now(),
             ]);
-        } catch (\Exception $e) {}
+        } catch (\Throwable $e) {
+            Log::warning('notification insert failed', ['error' => $e->getMessage(), 'user' => $userId]);
+        }
+
+        try {
+            app(SocketService::class)->notifyUser($userId, 'notification', [
+                'type' => $type,
+                'title' => $title,
+                'message' => $message,
+                'icon' => $icon,
+                'color' => $color,
+                'link' => $link,
+            ]);
+        } catch (\Throwable) {
+            // Socket is best-effort — the DB row is the source of truth.
+        }
     }
 
     private function ensureTable(): void
     {
+        // Kept for legacy bootstrap — the 2026_04_18_000001 migration is the source of truth.
         if (! Schema::hasTable('notifications')) {
             DB::statement('CREATE TABLE notifications (
                 id BIGSERIAL PRIMARY KEY,
