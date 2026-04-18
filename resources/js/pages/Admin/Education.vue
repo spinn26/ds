@@ -2,6 +2,9 @@
   <div>
     <PageHeader title="Обучение" icon="mdi-school">
       <template #actions>
+        <v-btn variant="text" prepend-icon="mdi-eye" href="/education" target="_blank">
+          Просмотр как партнёр
+        </v-btn>
         <v-btn color="primary" prepend-icon="mdi-plus" @click="openCreateCourse">Добавить курс</v-btn>
       </template>
     </PageHeader>
@@ -27,10 +30,11 @@
         :items-length="total"
         :loading="loading"
         :items-per-page="25"
-        :expanded="expanded"
+        v-model:expanded="expanded"
+        item-value="id"
         show-expand
         @update:page="page = $event; loadCourses()"
-        @click:row="(e, { item }) => toggleExpand(item)"
+        @update:expanded="onExpandedChange"
         no-data-text="Курсы не найдены"
       >
         <template #item.active="{ item }">
@@ -404,38 +408,33 @@ async function loadProductOptions() {
   } catch {}
 }
 
-function toggleExpand(item) {
-  const idx = expanded.value.findIndex(e => e === item);
-  if (idx >= 0) {
-    expanded.value.splice(idx, 1);
-  } else {
-    expanded.value.push(item);
-    activeTab[item.id] = 'lessons';
-    loadLessons(item.id);
-    loadTests(item.id);
+// Vuetify 3's v-data-table-server stores `expanded` as an array of
+// item-value keys (here: id). Fire off lazy loads whenever a new id appears.
+function onExpandedChange(newExpanded) {
+  for (const id of newExpanded) {
+    if (!(id in activeTab)) activeTab[id] = 'lessons';
+    if (!(id in lessonsByCourse)) loadLessons(id);
+    if (!(id in testsByCourse)) loadTests(id);
   }
 }
 
 function openCourseTab(item, tab) {
-  const existing = expanded.value.find(e => e === item);
-  if (!existing) {
-    expanded.value.push(item);
+  if (!expanded.value.includes(item.id)) {
+    expanded.value.push(item.id);
     loadLessons(item.id);
     loadTests(item.id);
   }
   activeTab[item.id] = tab;
 }
 
-// Expand the row matching the given id. Used after creating a course so
-// the user sees the Уроки/Тесты tabs right away without hunting the row.
+// Expand the row with the given id. Used after creating a course so
+// the admin immediately lands on the Уроки tab without hunting the row.
 function expandCourseById(id) {
-  const item = courses.value.find(c => c.id === id);
-  if (!item) return;
-  if (!expanded.value.find(e => e === item)) {
-    expanded.value.push(item);
-    activeTab[item.id] = 'lessons';
-    loadLessons(item.id);
-    loadTests(item.id);
+  if (!expanded.value.includes(id)) {
+    expanded.value.push(id);
+    activeTab[id] = 'lessons';
+    loadLessons(id);
+    loadTests(id);
   }
 }
 
