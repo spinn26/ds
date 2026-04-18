@@ -354,7 +354,9 @@ async function doDelete() {
     showSuccess('Конкурс удалён');
     loadData();
   } catch (e) {
-    showError(e.response?.data?.message || 'Не удалось удалить конкурс');
+    const d = e.response?.data || {};
+    const msg = [d.message || 'Не удалось удалить конкурс', d.hint].filter(Boolean).join('. ');
+    showError(msg);
   }
   saving.value = false;
 }

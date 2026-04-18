@@ -133,9 +133,18 @@ SQL);
                 'message' => $e->getMessage(),
             ]);
             if ($e->getCode() === '23503') {
+                // Pull "constraint X on table Y" out of the PG error for a
+                // human-readable hint. Example from PG:
+                //   update or delete on table "Contest" violates foreign key
+                //   constraint "abc_contest_fkey" on table "abc"
+                $hint = null;
+                if (preg_match('/on table "([^"]+)"/', $e->getMessage(), $m)) {
+                    $hint = "Блокирует таблица: {$m[1]}";
+                }
                 return response()->json([
                     'message' => 'Невозможно удалить конкурс: на него ссылаются связанные данные.',
-                    'detail' => config('app.debug') ? $e->getMessage() : null,
+                    'hint' => $hint,
+                    'detail' => $e->getMessage(),
                 ], 409);
             }
             throw $e;
