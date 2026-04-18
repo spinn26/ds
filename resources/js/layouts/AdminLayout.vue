@@ -4,12 +4,6 @@
       :rail="rail && !mobile" :width="280" :rail-width="72"
       color="grey-darken-4" theme="dark" class="admin-drawer">
       <div class="d-flex align-center pa-4 drawer-brand">
-        <div class="admin-brand-mark" :class="{ 'mr-2': !rail }">
-          <BrandWaves shape="sheet" :width="32" :height="32"
-            bg-color="#6EE87A" stroke-color="#000000"
-            :rows="10" :columns="14" :amplitude="3" :frequency="1.0"
-            :stroke-width="0.8" :stroke-opacity="0.8" />
-        </div>
         <div v-if="!rail">
           <div class="d-flex align-center ga-1">
             <span class="text-h6 font-weight-black text-white">DS</span>
@@ -76,7 +70,6 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useDisplay, useTheme } from 'vuetify';
 import { useAuthStore } from '../stores/auth';
-import BrandWaves from '../components/BrandWaves.vue';
 
 const auth = useAuthStore();
 const { mobile } = useDisplay();

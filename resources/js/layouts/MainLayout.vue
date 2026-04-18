@@ -5,12 +5,6 @@
       :rail="rail && !mobile" :width="260" :rail-width="72"
       class="sidebar-drawer">
       <div class="sidebar-header d-flex align-center pa-4" :class="{ 'justify-center': rail }">
-        <div class="brand-mark" :class="{ 'mr-2': !rail }">
-          <BrandWaves shape="sheet" :width="32" :height="32"
-            :bg-color="'#6EE87A'" stroke-color="#ffffff"
-            :rows="10" :columns="14" :amplitude="3" :frequency="1.0"
-            :stroke-width="0.8" :stroke-opacity="0.95" />
-        </div>
         <div v-if="!rail">
           <div class="d-flex align-center ga-1">
             <span class="text-h6 font-weight-black text-primary">DS</span>
@@ -63,12 +57,6 @@
 
       <!-- Brand fallback (visible when sidebar is collapsed or on mobile) -->
       <router-link to="/" class="topbar-brand d-flex align-center ga-2 ml-2">
-        <div class="brand-mark brand-mark-sm">
-          <BrandWaves shape="sheet" :width="24" :height="24"
-            bg-color="#6EE87A" stroke-color="#ffffff"
-            :rows="8" :columns="12" :amplitude="2.5" :frequency="1.0"
-            :stroke-width="0.7" :stroke-opacity="0.95" />
-        </div>
         <span class="text-subtitle-2 font-weight-black text-primary">DS</span>
       </router-link>
 
@@ -257,7 +245,6 @@ import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import { useSnackbar } from '../composables/useSnackbar';
 import OnboardingQuestionnaire from '../components/OnboardingQuestionnaire.vue';
-import BrandWaves from '../components/BrandWaves.vue';
 import api from '../api';
 function fmtShortDate(d) {
   if (!d) return '';

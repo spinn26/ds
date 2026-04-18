@@ -84,7 +84,7 @@ const vuetify = createVuetify({
         VDataTableServer: { density: 'comfortable', hover: true },
         VDialog: { rounded: 'xl' },
         VAlert: { rounded: 'lg', variant: 'tonal' },
-        VNavigationDrawer: { rounded: 'e-xl' },
+        VNavigationDrawer: { rounded: 0 },
     },
 });
 
