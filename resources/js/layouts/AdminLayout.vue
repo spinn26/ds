@@ -13,10 +13,12 @@
             ПАНЕЛЬ УПРАВЛЕНИЯ
           </div>
         </div>
-        <v-btn icon="mdi-chevron-left" size="x-small" variant="text" density="comfortable" color="grey-lighten-2"
-          v-if="!rail" @click="toggleRail" />
-        <v-btn icon="mdi-chevron-right" size="x-small" variant="text" density="comfortable" color="grey-lighten-2"
-          v-else @click="toggleRail" />
+        <v-btn v-if="mobile" icon="mdi-close" size="small" variant="text" density="comfortable" color="grey-lighten-2"
+          @click="drawer = false" />
+        <v-btn v-else-if="!rail" icon="mdi-chevron-left" size="x-small" variant="text" density="comfortable" color="grey-lighten-2"
+          @click="toggleRail" />
+        <v-btn v-else icon="mdi-chevron-right" size="x-small" variant="text" density="comfortable" color="grey-lighten-2"
+          @click="toggleRail" />
       </div>
       <v-divider />
 

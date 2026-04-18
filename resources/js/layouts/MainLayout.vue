@@ -14,10 +14,12 @@
             {{ cabinetName }}
           </div>
         </div>
-        <v-btn icon="mdi-chevron-left" size="x-small" variant="text" density="comfortable"
-          v-if="!rail" @click="toggleRail" />
-        <v-btn icon="mdi-chevron-right" size="x-small" variant="text" density="comfortable"
-          v-else @click="toggleRail" />
+        <v-btn v-if="mobile" icon="mdi-close" size="small" variant="text" density="comfortable"
+          @click="drawer = false" />
+        <v-btn v-else-if="!rail" icon="mdi-chevron-left" size="x-small" variant="text" density="comfortable"
+          @click="toggleRail" />
+        <v-btn v-else icon="mdi-chevron-right" size="x-small" variant="text" density="comfortable"
+          @click="toggleRail" />
       </div>
       <v-divider />
 
