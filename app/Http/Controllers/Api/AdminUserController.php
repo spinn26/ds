@@ -17,7 +17,11 @@ class AdminUserController extends Controller
 
     public function index(Request $request): JsonResponse
     {
+        // Hide soft-deleted users unless the caller explicitly asks for them.
         $query = User::query();
+        if (! $request->boolean('with_deleted')) {
+            $query->whereNull('dateDeleted');
+        }
 
         if ($request->filled('search')) {
             $s = $request->search;
@@ -139,10 +143,20 @@ class AdminUserController extends Controller
         return response()->json(['message' => 'Обновлён']);
     }
 
-    public function destroy(int $id): JsonResponse
+    public function destroy(Request $request, int $id): JsonResponse
     {
+        if ($id === (int) $request->user()->id) {
+            return response()->json(['message' => 'Нельзя удалить свой аккаунт'], 422);
+        }
+
         $user = User::findOrFail($id);
-        $user->delete();
+
+        // Soft-delete — hard DELETE on WebUser breaks a dozen legacy FKs.
+        // Schema already has isBlocked + dateDeleted columns for exactly this.
+        $user->isBlocked = true;
+        $user->dateDeleted = now();
+        $user->saveQuietly();
+        $user->tokens()->delete();
 
         return response()->json(['message' => 'Удалён']);
     }

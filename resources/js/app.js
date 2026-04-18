@@ -39,13 +39,14 @@ const vuetify = createVuetify({
                     // Brand mint — from DS identity 2023. Used for hero accents and wave-pattern fills.
                     brand: '#6EE87A',
                     'brand-ink': '#0A2B10',
-                    // Warm off-white palette — paper-like, easy on the eyes,
-                    // pairs with the green brand without the cold clinical-white glare.
-                    background: '#F3F1EC',
-                    surface: '#FBF9F4',
-                    'surface-variant': '#E8E3D7',
-                    'on-surface': '#2A2F36',
-                    'on-background': '#1A1D22',
+                    // Warm sand-stone palette — noticeable contrast between the
+                    // page background and card surface so cards don't disappear,
+                    // plus near-black text for readability.
+                    background: '#E6E3D8',
+                    surface: '#F1EEE5',
+                    'surface-variant': '#D0CBBC',
+                    'on-surface': '#141719',
+                    'on-background': '#0B0E12',
                     info: '#5C9CE6',
                     success: '#5CB85C',
                     warning: '#F0AD4E',
