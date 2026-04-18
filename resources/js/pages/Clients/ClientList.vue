@@ -1,10 +1,6 @@
 <template>
   <div>
-    <BrandHero
-      title="Мои клиенты"
-      :subtitle="`Всего: ${total}. Подключай новых клиентов, чтобы расти в квалификации.`"
-      icon="mdi-account-group"
-    />
+    <PageHeader title="Мои клиенты" icon="mdi-account-group" :count="total" />
 
     <v-card class="mb-3 pa-3">
       <div class="d-flex ga-2 flex-wrap align-center">
@@ -49,7 +45,6 @@ import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
 import PageHeader from '../../components/PageHeader.vue';
-import BrandHero from '../../components/BrandHero.vue';
 import EmptyState from '../../components/EmptyState.vue';
 import { fmtDate } from '../../composables/useDesign';
 

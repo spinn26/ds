@@ -1,10 +1,6 @@
 <template>
   <div>
-    <BrandHero
-      title="Профиль"
-      subtitle="Личные данные, реквизиты для выплат и реферальная ссылка"
-      icon="mdi-account"
-    />
+    <PageHeader title="Профиль" icon="mdi-account" />
 
     <v-tabs v-model="tab" color="primary" class="mb-4" grow>
       <v-tab value="info">Информация о партнере</v-tab>
@@ -277,7 +273,6 @@
 import { ref, computed, onMounted } from 'vue';
 import api from '../api';
 import PageHeader from '../components/PageHeader.vue';
-import BrandHero from '../components/BrandHero.vue';
 
 const loading = ref(true);
 const tab = ref('info');

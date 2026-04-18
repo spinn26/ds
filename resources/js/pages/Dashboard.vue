@@ -1,14 +1,10 @@
 <template>
   <div>
-    <BrandHero
-      title="Дашборд партнёра"
-      subtitle="Твоя квалификация, ЛП / ГП и прогресс по периоду"
-      icon="mdi-view-dashboard"
-    >
+    <PageHeader title="Дашборд партнёра" icon="mdi-view-dashboard">
       <template #actions>
         <MonthPicker v-model="period" @update:model-value="loadData" />
       </template>
-    </BrandHero>
+    </PageHeader>
 
     <!-- Status Info Alert (activation period countdown) -->
     <v-alert v-if="data.statusInfo && data.statusInfo.daysRemaining != null"
@@ -305,7 +301,6 @@ import { ref, computed, onMounted } from 'vue';
 import api from '../api';
 import MonthPicker from '../components/MonthPicker.vue';
 import PageHeader from '../components/PageHeader.vue';
-import BrandHero from '../components/BrandHero.vue';
 import { fmt } from '../composables/useDesign';
 
 const loading = ref(true);

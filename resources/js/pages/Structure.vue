@@ -1,10 +1,6 @@
 <template>
   <div>
-    <BrandHero
-      title="Структура моей команды"
-      subtitle="Прямые и групповые партнёры, фильтры по квалификациям и объёмам"
-      icon="mdi-sitemap"
-    />
+    <PageHeader title="Структура моей команды" icon="mdi-sitemap" />
 
     <v-card class="mb-3 pa-3">
       <div class="d-flex ga-2 flex-wrap align-center">
@@ -133,7 +129,6 @@ import { ref, computed, onMounted } from 'vue';
 import api from '../api';
 import { useDebounce } from '../composables/useDebounce';
 import PageHeader from '../components/PageHeader.vue';
-import BrandHero from '../components/BrandHero.vue';
 import EmptyState from '../components/EmptyState.vue';
 import { fmt } from '../composables/useDesign';
 

@@ -1,20 +1,16 @@
 <template>
   <div>
-    <BrandHero
-      title="Отчёт начислений и выплат"
-      subtitle="Личные и групповые продажи, комиссии по периоду"
-      icon="mdi-bank"
-    >
+    <PageHeader title="Отчёт начислений и выплат" icon="mdi-bank">
       <template #actions>
         <div class="d-flex align-center ga-2">
-          <v-btn variant="flat" color="brand-ink" size="small" prepend-icon="mdi-download"
+          <v-btn variant="flat" color="primary" size="small" prepend-icon="mdi-download"
             :loading="exporting" @click="downloadXlsx">
             Скачать XLSX
           </v-btn>
           <MonthPicker v-model="month" @update:model-value="loadData" />
         </div>
       </template>
-    </BrandHero>
+    </PageHeader>
 
     <!-- Row 1: Qualification + Commission + Volumes -->
     <v-row class="mb-4">
@@ -240,7 +236,6 @@ import api from '../../api';
 import MonthPicker from '../../components/MonthPicker.vue';
 import { exportFinanceReport } from '../../composables/useExport';
 import PageHeader from '../../components/PageHeader.vue';
-import BrandHero from '../../components/BrandHero.vue';
 import { fmt, fmt2 } from '../../composables/useDesign';
 
 const loading = ref(true);

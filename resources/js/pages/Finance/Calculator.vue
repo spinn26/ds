@@ -1,10 +1,6 @@
 <template>
   <div>
-    <BrandHero
-      title="Калькулятор объёмов"
-      subtitle="Оцени ЛП/ГП и комиссию по продукту и программе перед сделкой"
-      icon="mdi-calculator"
-    />
+    <PageHeader title="Калькулятор объёмов" icon="mdi-calculator" />
 
     <v-card class="mb-4 pa-4">
       <v-row dense>
@@ -111,7 +107,6 @@
 import { ref, reactive, computed, onMounted } from 'vue';
 import api from '../../api';
 import PageHeader from '../../components/PageHeader.vue';
-import BrandHero from '../../components/BrandHero.vue';
 import { fmt2 as fmt } from '../../composables/useDesign';
 
 const matrixLoading = ref(true);
