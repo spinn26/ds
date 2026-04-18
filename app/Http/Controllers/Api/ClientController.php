@@ -56,7 +56,8 @@ class ClientController extends Controller
                 $personQuery->where('birthDate', '<=', $request->input('birth_date_to'));
             }
             if ($request->filled('city')) {
-                $personQuery->join('city', 'city.id', '=', 'person.city')
+                // person.city is text (legacy Directual), city.id is integer — cast on FK side
+                $personQuery->join('city', DB::raw('"city"."id"::text'), '=', 'person.city')
                     ->where('city.cityNameRu', 'ilike', '%' . $request->input('city') . '%');
             }
             $query->whereIn('person', $personQuery->pluck('person.id'));
