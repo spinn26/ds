@@ -39,6 +39,18 @@
           </v-chip>
         </template>
         <template #item.actions="{ item }">
+          <v-tooltip text="Уроки" location="top">
+            <template #activator="{ props: p }">
+              <v-btn v-bind="p" icon="mdi-book-open-variant" size="x-small" variant="text" color="primary"
+                @click.stop="openCourseTab(item, 'lessons')" />
+            </template>
+          </v-tooltip>
+          <v-tooltip text="Тесты" location="top">
+            <template #activator="{ props: p }">
+              <v-btn v-bind="p" icon="mdi-help-circle-outline" size="x-small" variant="text" color="primary"
+                @click.stop="openCourseTab(item, 'tests')" />
+            </template>
+          </v-tooltip>
           <v-btn icon="mdi-pencil" size="x-small" variant="text" @click.stop="openEditCourse(item)" />
           <v-btn icon="mdi-delete" size="x-small" variant="text" color="error" @click.stop="confirmDeleteCourse(item)" />
         </template>
@@ -143,6 +155,11 @@
             </v-col>
           </v-row>
           <v-alert v-if="courseError" type="error" density="compact" class="mt-2">{{ courseError }}</v-alert>
+          <div class="text-caption text-medium-emphasis mt-2">
+            После сохранения курс появится в списке — уроки и тесты добавляются через кнопки
+            <v-icon size="small">mdi-book-open-variant</v-icon> /
+            <v-icon size="small">mdi-help-circle-outline</v-icon> в строке или раскрытием.
+          </div>
         </v-card-text>
         <v-card-actions>
           <v-spacer />
@@ -399,6 +416,29 @@ function toggleExpand(item) {
   }
 }
 
+function openCourseTab(item, tab) {
+  const existing = expanded.value.find(e => e === item);
+  if (!existing) {
+    expanded.value.push(item);
+    loadLessons(item.id);
+    loadTests(item.id);
+  }
+  activeTab[item.id] = tab;
+}
+
+// Expand the row matching the given id. Used after creating a course so
+// the user sees the Уроки/Тесты tabs right away without hunting the row.
+function expandCourseById(id) {
+  const item = courses.value.find(c => c.id === id);
+  if (!item) return;
+  if (!expanded.value.find(e => e === item)) {
+    expanded.value.push(item);
+    activeTab[item.id] = 'lessons';
+    loadLessons(item.id);
+    loadTests(item.id);
+  }
+}
+
 async function loadLessons(courseId) {
   lessonsLoading[courseId] = true;
   try {
@@ -437,14 +477,18 @@ async function saveCourse() {
   }
   saving.value = true;
   courseError.value = '';
+  const wasNew = !editCourse.value.id;
   try {
+    let createdId = null;
     if (editCourse.value.id) {
       await api.put(`/admin/education/courses/${editCourse.value.id}`, editCourse.value);
     } else {
-      await api.post('/admin/education/courses', editCourse.value);
+      const { data } = await api.post('/admin/education/courses', editCourse.value);
+      createdId = data.id;
     }
     courseDialog.value = false;
-    loadCourses();
+    await loadCourses();
+    if (wasNew && createdId) expandCourseById(createdId);
   } catch (e) {
     courseError.value = e.response?.data?.message || 'Ошибка сохранения';
   }
