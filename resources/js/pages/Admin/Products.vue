@@ -168,7 +168,8 @@
               <v-text-field v-model="editProgram.term" label="Срок" />
             </v-col>
             <v-col cols="6">
-              <v-select v-model="editProgram.currency" label="Валюта" :items="currencyOptions" />
+              <v-select v-model="editProgram.currency" label="Валюта"
+                :items="currencyOptions" item-title="label" item-value="id" />
             </v-col>
             <v-col cols="4">
               <v-checkbox v-model="editProgram.active" label="Активна" density="compact" />
@@ -263,12 +264,22 @@ const programHeaders = [
   { title: 'Название', key: 'name' },
   { title: 'Статус', key: 'active', width: 120 },
   { title: 'Срок', key: 'term', width: 100 },
-  { title: 'Валюта', key: 'currency', width: 100 },
+  { title: 'Валюта', key: 'currencyName', width: 100 },
   { title: 'Калькулятор', key: 'visibleToCalculator', width: 110 },
   { title: 'Действия', key: 'actions', sortable: false, width: 100 },
 ];
 
-const currencyOptions = ['RUB', 'USD', 'EUR', 'KZT', 'UZS'];
+// Loaded from /admin/references/currency — no more hardcoded list.
+const currencyOptions = ref([]);
+async function loadCurrencies() {
+  try {
+    const { data } = await api.get('/admin/references/currency');
+    currencyOptions.value = (data.items || []).map(c => ({
+      id: c.id,
+      label: c.symbol ? `${c.name} (${c.symbol})` : c.name,
+    }));
+  } catch {}
+}
 
 // Product dialog
 const productDialog = ref(false);
@@ -378,7 +389,7 @@ async function deleteProduct() {
 // Program CRUD
 function openCreateProgram(product) {
   editProgramProductId.value = product.id;
-  editProgram.value = { name: '', term: '', currency: 'RUB', active: true, visibleToResident: true, visibleToCalculator: true };
+  editProgram.value = { name: '', term: '', currency: null, active: true, visibleToResident: true, visibleToCalculator: true };
   programError.value = '';
   programDialog.value = true;
 }
@@ -431,5 +442,8 @@ async function deleteProgram() {
   saving.value = false;
 }
 
-onMounted(loadProducts);
+onMounted(() => {
+  loadProducts();
+  loadCurrencies();
+});
 </script>

@@ -104,6 +104,43 @@ class AdminReferenceController extends Controller
                 ['key' => 'title', 'label' => 'Название', 'type' => 'string', 'required' => true],
             ],
         ],
+        'currency' => [
+            'label' => 'Валюты',
+            'table' => 'currency',
+            'primaryLabel' => 'name',
+            'orderBy' => 'name',
+            'fields' => [
+                ['key' => 'name', 'label' => 'Название (RUB, USD, EUR…)', 'type' => 'string', 'required' => true],
+                ['key' => 'symbol', 'label' => 'Символ (₽, $, €…)', 'type' => 'string', 'required' => true],
+            ],
+        ],
+        'contractStatus' => [
+            'label' => 'Статусы контрактов',
+            'table' => 'contractStatus',
+            'primaryLabel' => 'name',
+            'orderBy' => 'name',
+            'fields' => [
+                ['key' => 'name', 'label' => 'Название', 'type' => 'string', 'required' => true],
+            ],
+        ],
+        'criterion' => [
+            'label' => 'Критерии конкурсов',
+            'table' => 'criterion',
+            'primaryLabel' => 'name',
+            'orderBy' => 'name',
+            'fields' => [
+                ['key' => 'name', 'label' => 'Название', 'type' => 'string', 'required' => true],
+            ],
+        ],
+        'status' => [
+            'label' => 'Статусы партнёров',
+            'table' => 'status',
+            'primaryLabel' => 'title',
+            'orderBy' => 'title',
+            'fields' => [
+                ['key' => 'title', 'label' => 'Название', 'type' => 'string', 'required' => true],
+            ],
+        ],
     ];
 
     /**
