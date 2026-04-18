@@ -66,9 +66,8 @@
         <v-chip v-if="value" size="x-small" :color="activityColor(value)">{{ value }}</v-chip>
         <span v-else>—</span>
       </template>
-      <template #item.statusName="{ value }">
-        <v-chip v-if="value && value !== 'Клиент'" size="x-small" color="secondary">{{ value }}</v-chip>
-        <v-chip v-else size="x-small" color="primary" variant="tonal">Партнёр</v-chip>
+      <template #item.statusName>
+        <v-chip size="x-small" color="primary" variant="tonal">Партнёр</v-chip>
       </template>
       <template #item.active="{ value }">
         <v-icon :color="value ? 'success' : 'grey'" size="small">
