@@ -1,17 +1,18 @@
 <template>
   <div>
-    <BrandHero
-      :title="`${greeting}, ${auth.user?.firstName || ''}!`"
-      subtitle="Рабочий стол DS Consulting"
-      icon="mdi-hand-wave"
-      :wave-height="220"
-    >
-      <template #actions>
-        <div class="text-body-2" style="color: rgba(10, 43, 16, 0.65)">
-          {{ new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) }}
-        </div>
-      </template>
-    </BrandHero>
+    <!-- Welcome header -->
+    <div class="d-flex justify-space-between align-center mb-4 flex-wrap ga-2">
+      <div>
+        <h4 :class="mobile ? 'text-h6' : 'text-h4'" class="font-weight-bold d-flex align-center ga-2">
+          <v-icon size="32" color="primary">mdi-hand-wave</v-icon>
+          {{ greeting }}, {{ auth.user?.firstName }}!
+        </h4>
+        <div class="text-body-1 text-medium-emphasis">Рабочий стол DS Consulting</div>
+      </div>
+      <div class="text-body-2 text-medium-emphasis">
+        {{ new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) }}
+      </div>
+    </div>
 
     <v-row>
       <!-- Left column -->
@@ -274,7 +275,6 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import { useDisplay } from 'vuetify';
-import BrandHero from '../components/BrandHero.vue';
 import { useAuthStore } from '../stores/auth';
 import api from '../api';
 
