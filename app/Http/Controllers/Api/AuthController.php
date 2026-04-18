@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\Auth\CheckDuplicatesRequest;
 use App\Http\Requests\Api\Auth\CheckReferralRequest;
+use App\Enums\PartnerActivity;
 use App\Http\Requests\Api\Auth\LoginRequest;
 use App\Http\Requests\Api\Auth\RegisterRequest;
 use App\Http\Resources\UserResource;
@@ -156,6 +157,7 @@ class AuthController extends Controller
             $consultant->personName = trim("{$request->input('lastName')} {$request->input('firstName')} {$request->input('patronymic')}");
             $consultant->active = false;
             $consultant->status = 1;
+            $consultant->activity = PartnerActivity::Registered;
             $consultant->dateCreated = now();
             $consultant->participantCode = null;
             if ($inviter) {

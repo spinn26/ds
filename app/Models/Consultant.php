@@ -119,7 +119,10 @@ class Consultant extends Model
 
     public function activityLabel(): string
     {
-        return $this->activity?->label() ?? 'Неизвестен';
+        // Null activity = just-registered row that never got the enum assigned.
+        // Treat it as Registered rather than 'Неизвестен' — matches the domain:
+        // every new consultant is in the registered stage until activation.
+        return $this->activity?->label() ?? PartnerActivity::Registered->label();
     }
 
     public function canInvite(): bool
