@@ -2,16 +2,7 @@
   <div>
     <PageHeader title="Перечень продуктов" icon="mdi-package-variant" />
 
-    <!-- Condition 1: Tests not passed -->
-    <v-alert v-if="accessChecked && !access.testsPassed" type="warning" variant="tonal" class="mb-4">
-      <div class="font-weight-bold mb-1">Пройдите обучение</div>
-      <div class="text-body-2">Для доступа к продуктам необходимо пройти обучение и сдать тесты.</div>
-      <v-btn color="warning" variant="flat" size="small" to="/education" class="mt-2" prepend-icon="mdi-school">
-        Перейти к обучению
-      </v-btn>
-    </v-alert>
-
-    <template v-if="access.testsPassed">
+    <template v-if="accessChecked">
       <!-- Filters -->
       <v-card class="mb-3 pa-3">
         <div class="d-flex ga-2 flex-wrap align-center">
@@ -45,15 +36,30 @@
             <div class="text-subtitle-1 font-weight-bold mb-1">{{ product.name }}</div>
             <div class="text-body-2 text-medium-emphasis flex-grow-1 mb-3">{{ product.description }}</div>
 
+            <!-- Locked: show which courses are still missing -->
+            <div v-if="!product.available && product.requiredCourses?.length" class="mb-3">
+              <div class="text-caption text-medium-emphasis mb-1">Для доступа пройдите:</div>
+              <div class="d-flex flex-wrap ga-1">
+                <v-chip v-for="c in product.requiredCourses" :key="c.id"
+                  size="x-small" :color="c.completed ? 'success' : 'warning'"
+                  :variant="c.completed ? 'tonal' : 'outlined'"
+                  :prepend-icon="c.completed ? 'mdi-check' : 'mdi-school'">
+                  {{ c.title }}
+                </v-chip>
+              </div>
+            </div>
+
             <div class="d-flex ga-2 flex-wrap">
-              <v-btn variant="outlined" size="small" color="primary" to="/education" prepend-icon="mdi-school">
-                Перейти к обучению
+              <v-btn v-if="!product.available && product.requiredCourses?.length"
+                variant="tonal" size="small" color="primary" to="/education" prepend-icon="mdi-school">
+                К обучению
               </v-btn>
               <v-btn v-if="product.available" variant="flat" size="small" color="primary"
                 prepend-icon="mdi-open-in-new" @click="openProduct(product)">
                 Открыть продукт
               </v-btn>
-              <v-btn v-else variant="flat" size="small" color="grey" disabled prepend-icon="mdi-lock">
+              <v-btn v-else-if="!product.requiredCourses?.length"
+                variant="flat" size="small" color="grey" disabled prepend-icon="mdi-lock">
                 Открыть продукт
               </v-btn>
             </div>
