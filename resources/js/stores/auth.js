@@ -48,6 +48,7 @@ export const useAuthStore = defineStore('auth', {
             const { data } = await api.post('/auth/login', { email, password });
             this.token = data.token;
             this.user = data.user;
+            this.initialized = true;
             // Legacy + socket compat
             localStorage.setItem('auth_token', data.token);
             localStorage.setItem('auth_user_id', data.user.id);
@@ -57,6 +58,10 @@ export const useAuthStore = defineStore('auth', {
             const { data } = await api.post('/auth/register', form);
             this.token = data.token;
             this.user = data.user;
+            this.initialized = true;
+            localStorage.setItem('auth_token', data.token);
+            localStorage.setItem('auth_user_id', data.user.id);
+            localStorage.setItem('auth_user_name', `${data.user.lastName || ''} ${data.user.firstName || ''}`.trim());
         },
         logout() {
             api.post('/auth/logout').catch(() => {});

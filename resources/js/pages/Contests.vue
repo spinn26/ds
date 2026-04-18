@@ -16,12 +16,9 @@
 
     <v-row>
       <v-col v-for="contest in contests" :key="contest.id" cols="12" sm="6" md="4">
-        <v-card class="pa-4 d-flex flex-column" height="100%"
-          :style="{ borderLeft: `4px solid ${contestBorderColor(contest.status)}` }">
+        <v-card class="pa-4 d-flex flex-column" height="100%" style="border-left: 4px solid #4CAF50">
           <div class="d-flex justify-space-between align-center mb-2">
-            <v-chip size="small" :color="contestStatusColor(contest.status)">
-              {{ contestStatusLabel(contest.status) }}
-            </v-chip>
+            <v-chip size="small" color="success">Активный</v-chip>
             <span v-if="contest.typeName" class="text-caption text-medium-emphasis">{{ contest.typeName }}</span>
           </div>
           <div class="text-subtitle-1 font-weight-bold mb-1">{{ contest.name }}</div>
@@ -55,7 +52,6 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import api from '../api';
-import PageHeader from '../components/PageHeader.vue';
 import BrandHero from '../components/BrandHero.vue';
 import { fmtDate } from '../composables/useDesign';
 
@@ -64,18 +60,6 @@ const contests = ref([]);
 const filters = ref({ type: null });
 
 const typeFilterOptions = ref([]);
-
-function contestStatusColor() {
-  return 'success';
-}
-
-function contestBorderColor() {
-  return '#4CAF50';
-}
-
-function contestStatusLabel() {
-  return 'Активный';
-}
 
 async function loadData() {
   loading.value = true;

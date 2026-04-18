@@ -4,6 +4,7 @@ import { useSnackbar } from './composables/useSnackbar';
 const api = axios.create({
     baseURL: '/api/v1',
     headers: { 'Accept': 'application/json' },
+    timeout: 30000,
 });
 
 /**

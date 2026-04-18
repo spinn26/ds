@@ -125,6 +125,7 @@ async function handleLogin() {
     radial-gradient(1200px 800px at 15% 20%, rgba(110, 232, 122, 0.18), transparent 60%),
     radial-gradient(900px 700px at 85% 85%, rgba(46, 125, 50, 0.22), transparent 65%),
     linear-gradient(135deg, #0B1F14 0%, #0E2C1B 50%, #081510 100%);
+  animation: bg-shift 14s ease-in-out infinite alternate;
 }
 
 .parallax {
@@ -165,9 +166,6 @@ async function handleLogin() {
   100% { filter: blur(60px) hue-rotate(-22deg); opacity: 0.7; transform: scale(0.92) translate(-26px, 28px); }
 }
 
-.bg-base {
-  animation: bg-shift 14s ease-in-out infinite alternate;
-}
 @keyframes bg-shift {
   0%   { filter: hue-rotate(-8deg) brightness(0.96) saturate(1.0); }
   50%  { filter: hue-rotate(22deg) brightness(1.1) saturate(1.2); }

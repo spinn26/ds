@@ -111,6 +111,8 @@ router.beforeEach(async (to) => {
 
     // Onboarding questionnaire: any non-staff user must fill it before the cabinet.
     // Allow /, /profile and /help so the dialog can be shown and identity edited.
+    // This check takes precedence over the "registered -> /education" rule below —
+    // otherwise a just-registered user ping-pongs between / and /education.
     if (
         auth.user
         && !auth.isStaff
@@ -120,8 +122,12 @@ router.beforeEach(async (to) => {
         return '/';
     }
 
-    // Registered users → only education
-    if (auth.user?.role === 'registered' && !['education', 'profile', 'help'].some(p => to.path.includes(p))) {
+    // Registered users (questionnaire done) → only education
+    if (
+        auth.user?.role === 'registered'
+        && auth.user?.questionnaireCompleted === true
+        && !['education', 'profile', 'help'].some(p => to.path.includes(p))
+    ) {
         return '/education';
     }
 
