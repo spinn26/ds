@@ -153,11 +153,21 @@ class ProfileController extends Controller
         $user->weeklyHours = $data['weeklyHours'];
         $user->incomeFactors = $data['incomeFactors'] ?? null;
         $user->questionnaireCompletedAt = now();
+
+        // Onboarding done → grant consultant role so the cabinet menu opens.
+        // Product visibility is still gated per-course downstream.
+        $roles = array_filter(array_map('trim', explode(',', (string) $user->role)));
+        if (! in_array('consultant', $roles, true)) {
+            $roles[] = 'consultant';
+            $user->role = implode(',', $roles);
+        }
+
         $user->saveQuietly();
 
         return response()->json([
             'message' => 'Анкета сохранена',
             'questionnaireCompleted' => true,
+            'role' => $user->role,
         ]);
     }
 

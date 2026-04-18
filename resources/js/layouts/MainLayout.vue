@@ -343,8 +343,11 @@ const initials = computed(() =>
 const showQuestionnaire = ref(false);
 const questionnaireIdentity = ref({ name: '', city: '' });
 
-function onQuestionnaireCompleted() {
+async function onQuestionnaireCompleted() {
   if (auth.user) auth.user.questionnaireCompleted = true;
+  // Refresh user so role upgrade (registered → registered,consultant) is picked up
+  // and the partner menu items become visible without a page reload.
+  await auth.fetchUser();
 }
 
 // Load status info for TopBar
