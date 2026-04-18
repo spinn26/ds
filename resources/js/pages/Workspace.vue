@@ -146,9 +146,14 @@
             Нет новостей
           </div>
           <div v-for="news in data.news" :key="news.id" class="mb-3">
-            <v-card variant="tonal" :color="news.type === 'warning' ? 'warning' : news.type === 'success' ? 'success' : 'primary'" class="pa-3">
+            <v-card variant="outlined" class="pa-3 news-item" :class="`news-${news.type || 'info'}`">
               <div class="d-flex justify-space-between align-center mb-1">
-                <div class="text-subtitle-2 font-weight-bold">{{ news.title }}</div>
+                <div class="d-flex align-center ga-2">
+                  <v-icon size="16" :color="news.type === 'warning' ? 'warning' : news.type === 'success' ? 'success' : 'primary'">
+                    {{ news.type === 'warning' ? 'mdi-alert-circle' : news.type === 'success' ? 'mdi-check-circle' : 'mdi-information' }}
+                  </v-icon>
+                  <div class="text-subtitle-2 font-weight-bold">{{ news.title }}</div>
+                </div>
                 <div class="text-caption text-medium-emphasis">{{ fmtDate(news.createdAt) }}</div>
               </div>
               <div class="text-body-2" style="white-space: pre-line">{{ news.content }}</div>
@@ -309,4 +314,15 @@ onMounted(async () => {
   loading.value = false;
 });
 </script>
+
+<style scoped>
+/* Colored left accent bar on news cards — keeps the type signal without
+   drowning the text in a low-contrast tonal fill. */
+.news-item {
+  border-left: 4px solid transparent;
+}
+.news-warning { border-left-color: rgb(var(--v-theme-warning)); }
+.news-success { border-left-color: rgb(var(--v-theme-success)); }
+.news-info { border-left-color: rgb(var(--v-theme-info)); }
+</style>
 
