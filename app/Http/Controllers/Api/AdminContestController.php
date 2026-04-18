@@ -125,7 +125,12 @@ class AdminContestController extends Controller
                 //   update or delete on table "Contest" violates foreign key
                 //   constraint "abc_contest_fkey" on table "abc"
                 $hint = null;
-                if (preg_match('/on table "([^"]+)"/', $e->getMessage(), $m)) {
+                // PG message format:
+                //   update or delete on table "Contest" violates foreign key
+                //   constraint "X_fkey" on table "child"
+                // Pin the match to the constraint half so we always get the
+                // referencing table, not the subject of the delete.
+                if (preg_match('/violates foreign key constraint "[^"]+" on table "([^"]+)"/', $e->getMessage(), $m)) {
                     $hint = "Блокирует таблица: {$m[1]}";
                 }
                 return response()->json([
@@ -142,16 +147,17 @@ class AdminContestController extends Controller
 
     /**
      * Recursively purge rows that reference (table, column) via FK,
-     * leaf-first. Skips tables already visited to avoid infinite loops
-     * when the graph contains cycles. Assumes children have an 'id' PK
-     * for further recursion; non-'id' child is cleaned but not walked.
+     * leaf-first. Handles self-referential FKs (e.g. Contest.parentContest
+     * → Contest.id) by NOT memoising on table::column — that previously
+     * blocked the second hop down a self-ref chain. Instead we cap the
+     * recursion depth; cycles in the graph are exceedingly rare here and
+     * depth-10 is more than enough for any real Contest tree.
      *
-     * @param array<int> $values  Parent-row ids whose dependants should die.
-     * @param array<string,bool> $visited  Internal recursion guard.
+     * @param array<int|string> $values
      */
-    private function cascadeDelete(string $table, string $column, array $values, array &$visited = []): void
+    private function cascadeDelete(string $table, string $column, array $values, int $depth = 0): void
     {
-        if (empty($values)) {
+        if (empty($values) || $depth > 10) {
             return;
         }
 
@@ -172,12 +178,6 @@ class AdminContestController extends Controller
 SQL, [$table, $column]);
 
         foreach ($refs as $r) {
-            $key = $r->table_name . '::' . $r->column_name;
-            if (isset($visited[$key])) {
-                continue;
-            }
-            $visited[$key] = true;
-
             $rowIds = [];
             if (Schema::hasColumn($r->table_name, 'id')) {
                 $rowIds = DB::table($r->table_name)
@@ -186,7 +186,7 @@ SQL, [$table, $column]);
                     ->all();
             }
             if (! empty($rowIds)) {
-                $this->cascadeDelete($r->table_name, 'id', $rowIds, $visited);
+                $this->cascadeDelete($r->table_name, 'id', $rowIds, $depth + 1);
             }
             DB::table($r->table_name)->whereIn($r->column_name, $values)->delete();
         }
