@@ -26,7 +26,7 @@
       <v-list density="compact" nav class="main-nav-list">
         <template v-for="(item, i) in visibleMenu" :key="i">
           <v-list-subheader v-if="item.group && !rail"
-            :class="[item.adminSection ? 'text-secondary font-weight-bold' : '', 'menu-group-header mt-2']">
+            :class="[item.adminSection ? 'text-medium-emphasis font-weight-bold' : '', 'menu-group-header mt-2']">
             {{ item.group }}
           </v-list-subheader>
           <v-divider v-else-if="item.group && rail" class="my-1" />

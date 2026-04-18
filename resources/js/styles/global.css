@@ -7,12 +7,24 @@
 
 /* Solid card style — clearly separated from the page background */
 .v-card {
-  border-color: rgba(0, 0, 0, 0.06) !important;
+  border-color: rgba(0, 0, 0, 0.1) !important;
   background: rgb(var(--v-theme-surface)) !important;
 }
 .v-theme--dark .v-card {
-  border-color: rgba(255, 255, 255, 0.06) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
   background: rgb(var(--v-theme-surface)) !important;
+}
+
+/* Subtle separators on data-table rows so they don't bleed together */
+.v-data-table :deep(tbody tr td),
+.v-data-table-server :deep(tbody tr td),
+.v-table tbody tr td {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06) !important;
+}
+.v-theme--dark .v-data-table :deep(tbody tr td),
+.v-theme--dark .v-data-table-server :deep(tbody tr td),
+.v-theme--dark .v-table tbody tr td {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
 }
 
 /* Card hover — gentle lift */

@@ -35,16 +35,17 @@ const vuetify = createVuetify({
             light: {
                 colors: {
                     primary: '#2E7D32',
-                    secondary: '#FB8C00',
+                    // Cool slate — deliberately picked to cut the warm-on-warm
+                    // clash with the sand background; orange lived here before.
+                    secondary: '#475569',
                     // Brand mint — from DS identity 2023. Used for hero accents and wave-pattern fills.
                     brand: '#6EE87A',
                     'brand-ink': '#0A2B10',
-                    // Warm sand-stone palette — noticeable contrast between the
-                    // page background and card surface so cards don't disappear,
-                    // plus near-black text for readability.
-                    background: '#E6E3D8',
-                    surface: '#F1EEE5',
-                    'surface-variant': '#D0CBBC',
+                    // Muted sand-stone — tuned down from the previous near-white
+                    // surface so cards stop glaring. Still distinct from bg.
+                    background: '#DCD8CB',
+                    surface: '#E8E4D6',
+                    'surface-variant': '#C7C1B0',
                     'on-surface': '#141719',
                     'on-background': '#0B0E12',
                     info: '#5C9CE6',

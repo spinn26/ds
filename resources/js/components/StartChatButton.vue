@@ -1,7 +1,10 @@
 <template>
-  <v-btn size="small" variant="tonal" color="primary" prepend-icon="mdi-chat-plus" @click="startChat" :loading="starting">
-    Написать
-  </v-btn>
+  <v-tooltip text="Написать партнёру" location="left">
+    <template #activator="{ props: ttProps }">
+      <v-btn v-bind="ttProps" size="small" variant="text" color="primary"
+        icon="mdi-chat-plus" :loading="starting" @click="startChat" />
+    </template>
+  </v-tooltip>
 </template>
 
 <script setup>
