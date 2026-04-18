@@ -55,9 +55,6 @@
     <!-- Top bar -->
     <v-app-bar flat border="b" class="topbar">
       <v-app-bar-nav-icon v-if="mobile" @click="drawer = !drawer" />
-      <v-btn v-else icon size="small" class="mr-1" @click="toggleRail">
-        <v-icon>{{ rail ? 'mdi-menu' : 'mdi-menu-open' }}</v-icon>
-      </v-btn>
 
       <!-- Brand fallback (visible when sidebar is collapsed or on mobile) -->
       <router-link to="/" class="topbar-brand d-flex align-center ga-2 ml-2">
@@ -634,7 +631,9 @@ const visibleMenu = computed(() => menuItems.filter((item) => {
 .sidebar-drawer {
   background: linear-gradient(180deg, rgba(var(--v-theme-surface), 1) 0%, rgba(var(--v-theme-surface), 0.97) 100%) !important;
   box-shadow: 2px 0 12px rgba(0, 0, 0, 0.06);
-  transition: all 0.3s ease;
+  /* Avoid transitioning `transform` — Vuetify owns the slide-in animation
+     for the temporary (mobile) drawer; a custom transition breaks it. */
+  transition: background-color 0.3s ease, box-shadow 0.3s ease;
 }
 
 .sidebar-header {

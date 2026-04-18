@@ -41,9 +41,6 @@
 
     <v-app-bar flat border="b" color="grey-darken-4" theme="dark">
       <v-app-bar-nav-icon v-if="mobile" @click="drawer = !drawer" />
-      <v-btn v-else icon size="small" class="mr-1" @click="toggleRail">
-        <v-icon>{{ rail ? 'mdi-menu' : 'mdi-menu-open' }}</v-icon>
-      </v-btn>
       <v-toolbar-title class="text-body-1">
         <v-icon icon="mdi-shield-crown" color="secondary" class="mr-1" /> DS Управление
       </v-toolbar-title>
