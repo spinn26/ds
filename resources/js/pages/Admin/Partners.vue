@@ -214,8 +214,6 @@ const activityOptions = [
 ];
 
 const headers = [
-  { title: 'ID', key: 'id', width: 60 },
-  { title: 'Person ID', key: 'personId', width: 90 },
   { title: 'ФИО', key: 'personName' },
   { title: 'Email', key: 'email' },
   { title: 'Телефон', key: 'phone', width: 140 },
