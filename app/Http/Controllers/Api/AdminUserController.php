@@ -4,9 +4,11 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Api\Concerns\PaginatesRequests;
 use App\Http\Controllers\Controller;
+use App\Models\Consultant;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 
 class AdminUserController extends Controller
@@ -34,23 +36,28 @@ class AdminUserController extends Controller
 
         $total = $query->count();
 
-        $users = $query->orderByDesc('id')
+        $rows = $query->orderByDesc('id')
             ->offset($this->paginationOffset($request))
             ->limit($this->paginationPerPage($request))
-            ->get()
-            ->map(fn ($u) => [
-                'id' => $u->id,
-                'email' => $u->email,
-                'firstName' => $u->firstName,
-                'lastName' => $u->lastName,
-                'patronymic' => $u->patronymic,
-                'phone' => $u->phone,
-                'role' => $u->role,
-                'gender' => $u->gender,
-                'birthDate' => $u->birthDate,
-                'isBlocked' => (bool) $u->isBlocked,
-                'agreement' => (bool) $u->agreement,
-            ]);
+            ->get();
+
+        $codes = Consultant::whereIn('webUser', $rows->pluck('id'))
+            ->pluck('participantCode', 'webUser');
+
+        $users = $rows->map(fn ($u) => [
+            'id' => $u->id,
+            'email' => $u->email,
+            'firstName' => $u->firstName,
+            'lastName' => $u->lastName,
+            'patronymic' => $u->patronymic,
+            'phone' => $u->phone,
+            'role' => $u->role,
+            'gender' => $u->gender,
+            'birthDate' => $u->birthDate,
+            'isBlocked' => (bool) $u->isBlocked,
+            'agreement' => (bool) $u->agreement,
+            'participantCode' => $codes[$u->id] ?? null,
+        ]);
 
         return response()->json(['data' => $users, 'total' => $total]);
     }
@@ -84,27 +91,46 @@ class AdminUserController extends Controller
     public function update(Request $request, int $id): JsonResponse
     {
         $user = User::findOrFail($id);
+        $consultant = Consultant::where('webUser', $id)->first();
 
         $request->validate([
             'email' => "required|email|unique:WebUser,email,{$id}",
+            'participantCode' => [
+                'nullable', 'string', 'max:32',
+                function ($attribute, $value, $fail) use ($consultant) {
+                    if ($value === null || $value === '') return;
+                    $exists = Consultant::where('participantCode', $value)
+                        ->when($consultant, fn ($q) => $q->where('id', '!=', $consultant->id))
+                        ->exists();
+                    if ($exists) $fail('Такой реферальный код уже используется.');
+                },
+            ],
         ]);
 
-        $user->email = $request->input('email', $user->email);
-        $user->firstName = $request->input('firstName', $user->firstName);
-        $user->lastName = $request->input('lastName', $user->lastName);
-        $user->patronymic = $request->input('patronymic', $user->patronymic);
-        $user->phone = $request->input('phone', $user->phone);
-        $user->role = $request->input('role', $user->role);
-        $user->gender = $request->input('gender', $user->gender);
-        $user->birthDate = $request->input('birthDate', $user->birthDate);
-        $user->isBlocked = $request->boolean('isBlocked');
-        $user->agreement = $request->boolean('agreement');
+        DB::transaction(function () use ($request, $user, $consultant) {
+            $user->email = $request->input('email', $user->email);
+            $user->firstName = $request->input('firstName', $user->firstName);
+            $user->lastName = $request->input('lastName', $user->lastName);
+            $user->patronymic = $request->input('patronymic', $user->patronymic);
+            $user->phone = $request->input('phone', $user->phone);
+            $user->role = $request->input('role', $user->role);
+            $user->gender = $request->input('gender', $user->gender);
+            $user->birthDate = $request->input('birthDate', $user->birthDate);
+            $user->isBlocked = $request->boolean('isBlocked');
+            $user->agreement = $request->boolean('agreement');
 
-        if ($request->filled('password')) {
-            $user->password = Hash::make($request->password);
-        }
+            if ($request->filled('password')) {
+                $user->password = Hash::make($request->password);
+            }
 
-        $user->saveQuietly();
+            $user->saveQuietly();
+
+            if ($request->has('participantCode') && $consultant) {
+                $code = $request->input('participantCode');
+                $consultant->participantCode = $code === '' ? null : $code;
+                $consultant->saveQuietly();
+            }
+        });
 
         return response()->json(['message' => 'Обновлён']);
     }

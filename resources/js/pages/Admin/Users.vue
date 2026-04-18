@@ -97,6 +97,11 @@
             <v-col cols="12" sm="6">
               <v-text-field v-model="editUser.birthDate" label="Дата рождения" type="date" />
             </v-col>
+            <v-col v-if="editUser.id" cols="12" sm="6">
+              <v-text-field v-model="editUser.participantCode" label="Реферальный код"
+                :hint="editUser.participantCode ? 'Изменение сломает существующие партнёрские ссылки' : 'Партнёр без кода — не сможет приглашать'"
+                persistent-hint prepend-inner-icon="mdi-tag-outline" />
+            </v-col>
             <v-col cols="12" sm="6">
               <v-checkbox v-model="editUser.isBlocked" label="Заблокирован" density="compact" />
             </v-col>
