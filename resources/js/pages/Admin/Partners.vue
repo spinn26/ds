@@ -67,16 +67,13 @@
         <span v-else>—</span>
       </template>
       <template #item.statusName="{ value }">
-        <v-chip v-if="value" size="x-small" color="secondary">{{ value }}</v-chip>
+        <v-chip v-if="value && value !== 'Клиент'" size="x-small" color="secondary">{{ value }}</v-chip>
+        <span v-else>—</span>
       </template>
       <template #item.active="{ value }">
         <v-icon :color="value ? 'success' : 'grey'" size="small">
           {{ value ? 'mdi-check-circle' : 'mdi-minus-circle' }}
         </v-icon>
-      </template>
-      <template #item.isClient="{ value }">
-        <v-icon v-if="value" color="success" size="small">mdi-check-circle</v-icon>
-        <v-icon v-else color="grey" size="small">mdi-minus-circle</v-icon>
       </template>
       <template #item.platformAccess="{ value }">
         <v-icon v-if="value" color="success" size="small">mdi-lock-open-variant</v-icon>
@@ -229,7 +226,6 @@ const headers = [
   { title: 'Код', key: 'participantCode', width: 100 },
   { title: 'Пригласивший', key: 'inviterName' },
   { title: 'Куратор', key: 'curatorName' },
-  { title: 'Клиент?', key: 'isClient', width: 80, sortable: false },
   { title: 'Доступ', key: 'platformAccess', width: 80, sortable: false },
   { title: 'Дата регистрации', key: 'createdAt', width: 140 },
   { title: '', key: 'actions', sortable: false, width: 60 },
