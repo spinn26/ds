@@ -4,7 +4,7 @@
       :rail="rail && !mobile" :width="280" :rail-width="72"
       color="grey-darken-4" theme="dark" class="admin-drawer">
       <div class="d-flex align-center pa-4 drawer-brand">
-        <div v-if="!rail">
+        <div v-if="!rail" class="flex-grow-1">
           <div class="d-flex align-center ga-1">
             <span class="text-h6 font-weight-black text-white">DS</span>
             <span class="text-caption text-grey-lighten-1">УПРАВЛЕНИЕ</span>
@@ -13,6 +13,10 @@
             ПАНЕЛЬ УПРАВЛЕНИЯ
           </div>
         </div>
+        <v-btn icon="mdi-chevron-left" size="x-small" variant="text" density="comfortable" color="grey-lighten-2"
+          v-if="!rail" @click="toggleRail" />
+        <v-btn icon="mdi-chevron-right" size="x-small" variant="text" density="comfortable" color="grey-lighten-2"
+          v-else @click="toggleRail" />
       </div>
       <v-divider />
 

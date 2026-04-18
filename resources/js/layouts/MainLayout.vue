@@ -5,7 +5,7 @@
       :rail="rail && !mobile" :width="260" :rail-width="72"
       class="sidebar-drawer">
       <div class="sidebar-header d-flex align-center pa-4" :class="{ 'justify-center': rail }">
-        <div v-if="!rail">
+        <div v-if="!rail" class="flex-grow-1">
           <div class="d-flex align-center ga-1">
             <span class="text-h6 font-weight-black text-primary">DS</span>
             <span class="text-caption text-medium-emphasis">ПЛАТФОРМА</span>
@@ -14,6 +14,10 @@
             {{ cabinetName }}
           </div>
         </div>
+        <v-btn icon="mdi-chevron-left" size="x-small" variant="text" density="comfortable"
+          v-if="!rail" @click="toggleRail" />
+        <v-btn icon="mdi-chevron-right" size="x-small" variant="text" density="comfortable"
+          v-else @click="toggleRail" />
       </div>
       <v-divider />
 
