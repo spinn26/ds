@@ -1,10 +1,6 @@
 <template>
   <div>
-    <BrandHero
-      title="Обучение"
-      subtitle="Курсы и тесты для доступа к продуктам"
-      icon="mdi-school"
-    />
+    <PageHeader title="Обучение" icon="mdi-school" />
 
     <v-alert v-if="loadError" type="error" class="mb-3" density="compact">{{ loadError }}</v-alert>
 
@@ -55,7 +51,7 @@
 <script setup>
 import { ref, watch } from 'vue';
 import api from '../api';
-import BrandHero from '../components/BrandHero.vue';
+import PageHeader from '../components/PageHeader.vue';
 import EmptyState from '../components/EmptyState.vue';
 import CourseRunner from '../components/education/CourseRunner.vue';
 
