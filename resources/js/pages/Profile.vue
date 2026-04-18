@@ -243,16 +243,16 @@
             </div>
             <v-row dense>
               <v-col cols="12" sm="6">
-                <v-text-field :model-value="profile.referral.code" label="Реферальный код" readonly>
+                <v-text-field :model-value="profile.referral.referralCode" label="Реферальный код" readonly>
                   <template #append-inner>
-                    <v-btn icon="mdi-content-copy" size="small" variant="text" @click="copyToClipboard(profile.referral.code)" />
+                    <v-btn icon="mdi-content-copy" size="small" variant="text" @click="copyToClipboard(profile.referral.referralCode)" />
                   </template>
                 </v-text-field>
               </v-col>
               <v-col cols="12">
-                <v-text-field :model-value="profile.referral.link" label="Ссылка для приглашения" readonly>
+                <v-text-field :model-value="profile.referral.referralLink" label="Ссылка для приглашения" readonly>
                   <template #append-inner>
-                    <v-btn icon="mdi-content-copy" size="small" variant="text" @click="copyToClipboard(profile.referral.link)" />
+                    <v-btn icon="mdi-content-copy" size="small" variant="text" @click="copyToClipboard(profile.referral.referralLink)" />
                   </template>
                 </v-text-field>
               </v-col>
