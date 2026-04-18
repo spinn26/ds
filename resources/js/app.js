@@ -58,7 +58,7 @@ const vuetify = createVuetify({
                 dark: true,
                 colors: {
                     primary: '#2E7D32',
-                    secondary: '#FFB74D',
+                    secondary: '#94A3B8',
                     brand: '#6EE87A',
                     'brand-ink': '#0A2B10',
                     background: '#0F1419',

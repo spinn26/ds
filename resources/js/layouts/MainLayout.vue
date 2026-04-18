@@ -68,11 +68,6 @@
           {{ copied ? 'Скопировано' : 'Реф. ссылка' }}
         </v-btn>
 
-        <!-- Admin panel — only for role 'admin' -->
-        <v-btn v-if="auth.isAdmin" to="/admin/dashboard" color="secondary" variant="flat" size="small"
-          prepend-icon="mdi-shield-crown" class="mr-2">
-          Управление
-        </v-btn>
       </template>
 
       <!-- Theme toggle -->
@@ -171,6 +166,8 @@
             <v-divider class="mb-2" />
             <v-list density="compact" nav class="pa-0">
               <v-list-item to="/profile" prepend-icon="mdi-account-outline" title="Профиль" class="mb-1" />
+              <v-list-item v-if="auth.isAdmin" to="/admin/dashboard"
+                prepend-icon="mdi-shield-crown" title="Панель управления" class="mb-1" />
               <v-list-item @click="auth.logout(); $router.push('/login')"
                 prepend-icon="mdi-logout" title="Выйти"
                 base-color="error" />
