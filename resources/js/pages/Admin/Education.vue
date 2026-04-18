@@ -62,7 +62,7 @@
         <!-- Expanded row: Lessons & Tests tabs -->
         <template #expanded-row="{ columns, item }">
           <tr>
-            <td :colspan="columns.length" class="pa-4 bg-grey-lighten-5">
+            <td :colspan="columns.length" class="pa-4 expanded-row-body">
               <v-tabs v-model="activeTab[item.id]" density="compact" class="mb-3">
                 <v-tab :value="'lessons'" prepend-icon="mdi-book-open-variant">Уроки</v-tab>
                 <v-tab :value="'tests'" prepend-icon="mdi-help-circle-outline">Тесты</v-tab>
@@ -72,7 +72,7 @@
               <div v-if="(activeTab[item.id] || 'lessons') === 'lessons'">
                 <div class="d-flex justify-space-between align-center mb-2">
                   <span class="text-subtitle-2 font-weight-bold">Уроки курса «{{ item.title }}»</span>
-                  <v-btn size="small" color="primary" prepend-icon="mdi-plus" variant="tonal"
+                  <v-btn size="small" color="primary" prepend-icon="mdi-plus" variant="flat"
                     @click="openCreateLesson(item)">Добавить урок</v-btn>
                 </div>
                 <v-data-table
@@ -105,7 +105,7 @@
               <div v-if="activeTab[item.id] === 'tests'">
                 <div class="d-flex justify-space-between align-center mb-2">
                   <span class="text-subtitle-2 font-weight-bold">Тесты курса «{{ item.title }}»</span>
-                  <v-btn size="small" color="primary" prepend-icon="mdi-plus" variant="tonal"
+                  <v-btn size="small" color="primary" prepend-icon="mdi-plus" variant="flat"
                     @click="openCreateTest(item)">Добавить вопрос</v-btn>
                 </div>
                 <v-data-table
@@ -644,6 +644,14 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* Expanded row body — theme-aware surface so it works in both light
+   admin and the forced-dark admin layout. Previously hardcoded to
+   bg-grey-lighten-5 which looked off in dark mode. */
+.expanded-row-body {
+  background: rgba(var(--v-theme-on-surface), 0.04) !important;
+  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+}
+
 .answer-row {
   transition: background-color 0.2s ease;
 }
