@@ -183,6 +183,9 @@ import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
 import { fmtDate } from '../../composables/useDesign';
+import { useSnackbar } from '../../composables/useSnackbar';
+
+const { showError, showSuccess } = useSnackbar();
 
 const items = ref([]);
 const total = ref(0);
@@ -348,8 +351,11 @@ async function doDelete() {
   try {
     await api.delete(`/admin/contests/${deleteTarget.value.id}`);
     deleteDialog.value = false;
+    showSuccess('Конкурс удалён');
     loadData();
-  } catch {}
+  } catch (e) {
+    showError(e.response?.data?.message || 'Не удалось удалить конкурс');
+  }
   saving.value = false;
 }
 

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Api\Concerns\PaginatesRequests;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\Admin\StoreContestRequest;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -98,9 +99,35 @@ class AdminContestController extends Controller
 
     public function destroy(int $id): JsonResponse
     {
-        $deleted = DB::table('Contest')->where('id', $id)->delete();
-        if (! $deleted) {
+        if (! DB::table('Contest')->where('id', $id)->exists()) {
             return response()->json(['message' => 'Not found'], 404);
+        }
+
+        // Tables that hold per-contest data and would otherwise block delete via FK.
+        // Kept in sync with FK constraints `*_contest_fkey` referencing public."Contest"(id).
+        $childTables = [
+            'contestrating',
+            'calculationContestTrigger',
+            'calculationConsultantPoints',
+            'calculationConsultantRaiting',
+            'coefficientCriterion',
+            'criterion',
+        ];
+
+        try {
+            DB::transaction(function () use ($id, $childTables) {
+                foreach ($childTables as $t) {
+                    DB::table($t)->where('contest', $id)->delete();
+                }
+                DB::table('Contest')->where('id', $id)->delete();
+            });
+        } catch (QueryException $e) {
+            if ($e->getCode() === '23503') {
+                return response()->json([
+                    'message' => 'Невозможно удалить конкурс: на него ссылаются связанные данные.',
+                ], 409);
+            }
+            throw $e;
         }
 
         return response()->json(['ok' => true]);

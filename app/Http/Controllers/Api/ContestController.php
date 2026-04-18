@@ -9,35 +9,31 @@ use Illuminate\Support\Facades\DB;
 
 class ContestController extends Controller
 {
+    // status_contest: 1=Черновик, 2=Опубликован, 3=Завершён.
+    // Публичная страница показывает только активные (Опубликован).
+    private const ACTIVE_STATUS = 2;
+
     /**
-     * Список конкурсов и событий.
+     * Список активных конкурсов и событий.
      */
     public function index(Request $request): JsonResponse
     {
         $query = DB::table('Contest')
+            ->where('status', self::ACTIVE_STATUS)
             ->orderByDesc('start');
-
-        // Фильтр по статусу
-        if ($request->filled('status')) {
-            $query->where('status', $request->status);
-        }
 
         // Фильтр по типу
         if ($request->filled('type')) {
             $query->where('type', $request->type);
         }
 
-        $contests = $query->get()->map(function ($c) {
-            $typeName = $c->type
-                ? DB::table('type_contest')->where('id', $c->type)->value('type')
-                : null;
+        $rows = $query->get();
+        $typeNames = DB::table('type_contest')
+            ->whereIn('id', $rows->pluck('type')->filter()->unique()->values())
+            ->pluck('type', 'id');
 
-            $statusLabel = match ((int) $c->status) {
-                1 => 'Активный',
-                2 => 'Завершён',
-                3 => 'Архив',
-                default => 'Неизвестно',
-            };
+        $contests = $rows->map(function ($c) use ($typeNames) {
+            $typeName = $c->type ? ($typeNames[$c->type] ?? null) : null;
 
             return [
                 'id' => $c->id,
@@ -45,7 +41,7 @@ class ContestController extends Controller
                 'description' => $c->description,
                 'typeName' => $typeName,
                 'status' => (int) $c->status,
-                'statusLabel' => $statusLabel,
+                'statusLabel' => 'Активный',
                 'start' => $c->start,
                 'end' => $c->end,
                 'numberOfWinners' => $c->numberOfWinners,

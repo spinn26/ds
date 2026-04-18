@@ -8,8 +8,6 @@
 
     <v-card class="mb-3 pa-3">
       <div class="d-flex ga-2 flex-wrap align-center">
-        <v-select v-model="filters.status" :items="statusFilterOptions" label="Статус"
-          clearable hide-details style="max-width:200px" @update:model-value="loadData" />
         <v-select v-model="filters.type" :items="typeFilterOptions" label="Тип"
           item-title="title" item-value="value"
           clearable hide-details style="max-width:240px" @update:model-value="loadData" />
@@ -63,39 +61,26 @@ import { fmtDate } from '../composables/useDesign';
 
 const loading = ref(true);
 const contests = ref([]);
-const filters = ref({ status: null, type: null });
-
-const statusFilterOptions = [
-  { title: 'Активный', value: 1 },
-  { title: 'Завершён', value: 2 },
-  { title: 'Архив', value: 3 },
-];
+const filters = ref({ type: null });
 
 const typeFilterOptions = ref([]);
 
-function contestStatusColor(status) {
-  if (status === 1) return 'success';
-  if (status === 2) return 'orange';
-  return 'grey';
+function contestStatusColor() {
+  return 'success';
 }
 
-function contestBorderColor(status) {
-  if (status === 1) return '#4CAF50';
-  if (status === 2) return '#FF9800';
-  return '#9E9E9E';
+function contestBorderColor() {
+  return '#4CAF50';
 }
 
-function contestStatusLabel(status) {
-  if (status === 1) return 'Активный';
-  if (status === 2) return 'Завершён';
-  return 'Архив';
+function contestStatusLabel() {
+  return 'Активный';
 }
 
 async function loadData() {
   loading.value = true;
   try {
     const params = {};
-    if (filters.value.status) params.status = filters.value.status;
     if (filters.value.type) params.type = filters.value.type;
     const { data } = await api.get('/contests', { params });
     if (Array.isArray(data)) {
