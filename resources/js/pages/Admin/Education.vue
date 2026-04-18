@@ -121,7 +121,9 @@
                     {{ (test.answers || []).length }}
                   </template>
                   <template #item.correct_answer="{ item: test }">
-                    <v-chip size="x-small" color="success">{{ test.correct_answer + 1 }}</v-chip>
+                    <v-chip size="x-small" color="success" prepend-icon="mdi-check">
+                      №{{ test.correct_answer + 1 }}
+                    </v-chip>
                   </template>
                   <template #item.actions="{ item: test }">
                     <v-btn icon="mdi-pencil" size="x-small" variant="text" @click="openEditTest(item, test)" />
@@ -223,24 +225,23 @@
                 :rules="[v => !!v || 'Обязательное поле']" />
             </v-col>
             <v-col cols="12">
-              <div class="text-subtitle-2 font-weight-bold mb-2">Варианты ответов</div>
-              <v-list density="compact">
-                <v-list-item v-for="(answer, idx) in editTest.answers" :key="idx" class="px-0">
-                  <template #prepend>
-                    <v-radio-group v-model="editTest.correct_answer" inline hide-details class="mt-0 pt-0">
-                      <v-radio :value="idx" />
-                    </v-radio-group>
-                  </template>
+              <div class="text-subtitle-2 font-weight-bold mb-1">Варианты ответов</div>
+              <div class="text-caption text-medium-emphasis mb-2">
+                Отметьте радио-кнопкой правильный вариант.
+              </div>
+              <v-radio-group v-model="editTest.correct_answer" hide-details class="mt-0 pt-0">
+                <div v-for="(answer, idx) in editTest.answers" :key="idx"
+                  class="d-flex align-center ga-2 mb-2 px-2 py-1 rounded answer-row"
+                  :class="{ 'answer-correct': editTest.correct_answer === idx }">
+                  <v-radio :value="idx" color="success" hide-details class="flex-grow-0" />
                   <v-text-field v-model="editTest.answers[idx]" :label="'Вариант ' + (idx + 1)"
-                    density="compact" hide-details />
-                  <template #append>
-                    <v-btn icon="mdi-close" size="x-small" variant="text" color="error"
-                      :disabled="editTest.answers.length <= 2"
-                      @click="removeAnswer(idx)" />
-                  </template>
-                </v-list-item>
-              </v-list>
-              <v-btn size="small" variant="tonal" prepend-icon="mdi-plus" class="mt-2"
+                    density="compact" hide-details class="flex-grow-1" />
+                  <v-btn icon="mdi-close" size="x-small" variant="text" color="error"
+                    :disabled="editTest.answers.length <= 2"
+                    @click="removeAnswer(idx)" />
+                </div>
+              </v-radio-group>
+              <v-btn size="small" variant="tonal" prepend-icon="mdi-plus" class="mt-1"
                 @click="addAnswer">Добавить вариант</v-btn>
             </v-col>
             <v-col cols="12" sm="4">
@@ -641,3 +642,22 @@ onMounted(() => {
   loadProductOptions();
 });
 </script>
+
+<style scoped>
+.answer-row {
+  transition: background-color 0.2s ease;
+}
+.answer-row:hover {
+  background: rgba(0, 0, 0, 0.03);
+}
+.answer-correct {
+  background: rgba(var(--v-theme-success), 0.12);
+  outline: 1px solid rgba(var(--v-theme-success), 0.35);
+}
+.v-theme--dark .answer-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+.v-theme--dark .answer-correct {
+  background: rgba(var(--v-theme-success), 0.18);
+}
+</style>
