@@ -28,3 +28,4 @@ frontend/
 /chat
 /Айдентика
 storage/ui-smoke/
+socket-server/node_modules
