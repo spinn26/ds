@@ -409,14 +409,30 @@ class CommissionSpecTest extends TestCase
     #[Test]
     public function invariant_manual_status_override_is_audit_logged(): void
     {
-        $this->markTestIncomplete(
-            'Per ./.claude/specs/✅Статусы партнеров.md Part 3: any manual ' .
-            'date/status change must write an audit row (operator id, ts, ' .
-            'old value, new value, comment). The project already has ' .
-            'Spatie\\Activitylog wired on User and Contract, but not on ' .
-            'activity / dateActivity / dateDeterministic columns of ' .
-            'consultant. Target: extend Consultant model ' .
-            '`getActivitylogOptions()` to log those columns too.'
-        );
+        // Per ./.claude/specs/✅Статусы партнеров.md Part 3: any manual
+        // date/status change must leave a Spatie Activitylog row. The list of
+        // tracked columns on Consultant should cover every field the edit
+        // modal can touch — any new field that ships in the UI needs a mirror
+        // entry here, or audit will go dark for it.
+        $tracked = (new \App\Models\Consultant())->getActivitylogOptions()->logAttributes;
+
+        $mustTrack = [
+            'activity',
+            'dateActivity',
+            'dateDeactivity',
+            'dateDeleted',
+            'activationDeadline',
+            'yearPeriodEnd',
+            'terminationCount',
+            'status_and_lvl',
+        ];
+
+        foreach ($mustTrack as $column) {
+            $this->assertContains(
+                $column,
+                $tracked,
+                "Consultant::getActivitylogOptions() must log `{$column}` — any override of it has to end up in activity_log."
+            );
+        }
     }
 }

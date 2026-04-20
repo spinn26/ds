@@ -21,11 +21,18 @@ class Consultant extends Model
 
     public function getActivitylogOptions(): LogOptions
     {
+        // Per ./.claude/specs/✅Статусы партнеров.md Part 3: manual overrides
+        // of activity / date* columns must leave an audit trail (who, when,
+        // old→new, comment). These are exactly the columns the edit modal
+        // can change — adding dateActivity / dateDeactivity / dateDeleted /
+        // status_and_lvl / qualificationLocked brings us in line with the spec.
         return LogOptions::defaults()
             ->logOnly([
                 'personName', 'activity', 'status', 'active', 'acceptance',
                 'participantCode', 'inviter', 'webUser', 'person',
                 'activationDeadline', 'yearPeriodEnd', 'terminationCount',
+                'dateActivity', 'dateDeactivity', 'dateDeleted',
+                'status_and_lvl', 'qualificationLocked',
             ])
             ->logOnlyDirty()
             ->setDescriptionForEvent(fn (string $eventName) => "Consultant {$eventName}");
