@@ -63,7 +63,7 @@
       @update:options="onOptions"
     >
       <template #item.activityName="{ value }">
-        <v-chip v-if="value" size="x-small" :color="activityColor(value)">{{ value }}</v-chip>
+        <v-chip v-if="value" size="x-small" :color="getActivityColorByName(value)">{{ value }}</v-chip>
         <span v-else>—</span>
       </template>
       <template #item.statusName>
@@ -173,7 +173,7 @@ import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
 import PageHeader from '../../components/PageHeader.vue';
 import DataTableWrapper from '../../components/DataTableWrapper.vue';
-import { fmtDate } from '../../composables/useDesign';
+import { fmtDate, getActivityColorByName } from '../../composables/useDesign';
 
 const items = ref([]);
 const total = ref(0);
@@ -227,15 +227,6 @@ const headers = [
   { title: 'Дата регистрации', key: 'createdAt', width: 140 },
   { title: '', key: 'actions', sortable: false, width: 60 },
 ];
-
-function activityColor(name) {
-  if (!name) return 'grey';
-  const l = name.toLowerCase();
-  if (l.includes('актив') && !l.includes('не')) return 'success';
-  if (l.includes('терминир') || l.includes('исключ')) return 'error';
-  if (l.includes('зарег')) return 'info';
-  return 'warning';
-}
 
 const { debounced: debouncedLoad } = useDebounce(loadData, 400);
 

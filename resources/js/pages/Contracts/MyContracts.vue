@@ -21,7 +21,7 @@
         {{ fmtDate(value) }}
       </template>
       <template #item.statusName="{ value }">
-        <v-chip size="x-small" :color="statusColor(value)">{{ value }}</v-chip>
+        <v-chip size="x-small" :color="getContractStatusColor(value)">{{ value }}</v-chip>
       </template>
       <template #no-data><EmptyState /></template>
     </v-data-table-server>
@@ -34,7 +34,7 @@ import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
 import PageHeader from '../../components/PageHeader.vue';
 import EmptyState from '../../components/EmptyState.vue';
-import { fmt, fmtDate } from '../../composables/useDesign';
+import { fmt, fmtDate, getContractStatusColor } from '../../composables/useDesign';
 
 const items = ref([]);
 const total = ref(0);
@@ -54,15 +54,6 @@ const headers = [
   { title: 'Сумма', key: 'ammount', width: 160, align: 'end', cellProps: nowrap },
   { title: 'Статус контракта', key: 'statusName', width: 170, cellProps: nowrap },
 ];
-
-function statusColor(s) {
-  if (!s) return 'grey';
-  const l = s.toLowerCase();
-  if (l.includes('актив') || l.includes('действ')) return 'success';
-  if (l.includes('закр') || l.includes('заверш') || l.includes('терминир') || l.includes('исключ')) return 'error';
-  if (l.includes('зарег')) return 'info';
-  return 'warning';
-}
 
 const { debounced: debouncedLoad } = useDebounce(loadData, 400);
 

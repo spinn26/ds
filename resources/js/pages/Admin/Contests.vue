@@ -28,7 +28,7 @@
         <v-chip size="x-small" variant="outlined">{{ item.typeName || '—' }}</v-chip>
       </template>
       <template #item.statusName="{ item }">
-        <v-chip size="x-small" :color="statusColor(item.status)">
+        <v-chip size="x-small" :color="getContestStatusColor(item.status)">
           {{ item.statusName || '—' }}
         </v-chip>
       </template>
@@ -182,7 +182,7 @@
 import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
-import { fmtDate } from '../../composables/useDesign';
+import { fmtDate, getContestStatusColor } from '../../composables/useDesign';
 import { useSnackbar } from '../../composables/useSnackbar';
 
 const { showError, showSuccess } = useSnackbar();
@@ -227,13 +227,6 @@ const programsForProduct = computed(() => {
   if (!form.value.product) return programOptions.value;
   return programOptions.value.filter(p => String(p.product) === String(form.value.product));
 });
-
-function statusColor(s) {
-  if (s === 1) return 'grey';         // Черновик
-  if (s === 2) return 'success';      // Опубликован
-  if (s === 3) return 'warning';      // Завершён
-  return 'grey';
-}
 
 function onOptions(opts) {
   page.value = opts.page;

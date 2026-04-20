@@ -20,7 +20,7 @@
       :headers="headers" :items-per-page="25" @update:options="onOptions">
       <template #item.amount="{ value }">{{ fmt(value) }}</template>
       <template #item.status="{ value }">
-        <v-chip size="x-small" :color="value == 2 ? 'success' : value == 1 ? 'warning' : 'grey'">
+        <v-chip size="x-small" :color="getPaymentStatusColor(value)">
           {{ value == 2 ? 'Выплачено' : value == 1 ? 'В обработке' : value ?? '—' }}
         </v-chip>
       </template>
@@ -38,7 +38,7 @@ import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
 import PageHeader from '../../components/PageHeader.vue';
 import EmptyState from '../../components/EmptyState.vue';
-import { fmt2 as fmt } from '../../composables/useDesign';
+import { fmt2 as fmt, getPaymentStatusColor } from '../../composables/useDesign';
 
 const items = ref([]);
 const total = ref(0);

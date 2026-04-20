@@ -5,7 +5,7 @@
     <!-- Summary cards -->
     <v-row class="mb-4">
       <v-col v-for="s in summary" :key="s.id" cols="12" sm="6" :md="12 / Math.max(summary.length, 1)">
-        <v-card class="pa-4 text-center" :color="statusColor(s.id)" variant="tonal"
+        <v-card class="pa-4 text-center" :color="getActivityColor(s.id)" variant="tonal"
           style="cursor:pointer" @click="filterByActivity(s.id)">
           <div class="text-body-2 text-medium-emphasis">{{ s.name }}</div>
           <div class="text-h3 font-weight-bold">{{ s.count }}</div>
@@ -32,7 +32,7 @@
     <v-data-table-server :items="items" :items-length="total" :loading="loading"
       :headers="headers" :items-per-page="25" @update:options="onOptions">
       <template #item.activityName="{ item }">
-        <v-chip size="x-small" :color="statusColor(item.activityId)">{{ item.activityName }}</v-chip>
+        <v-chip size="x-small" :color="getActivityColor(item.activityId)">{{ item.activityName }}</v-chip>
       </template>
       <template #item.dateActivity="{ value }">
         {{ fmtDate(value) }}
@@ -68,7 +68,7 @@ import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
 import PageHeader from '../../components/PageHeader.vue';
 import EmptyState from '../../components/EmptyState.vue';
-import { fmt, fmtDate } from '../../composables/useDesign';
+import { fmt, fmtDate, getActivityColor } from '../../composables/useDesign';
 
 const loading = ref(true);
 const summary = ref([]);
@@ -110,10 +110,6 @@ function isExpiringSoon(d) {
   if (!d) return false;
   const diff = (new Date(d) - new Date()) / (1000 * 60 * 60 * 24);
   return diff <= 60 && diff > 0;
-}
-
-function statusColor(id) {
-  return { 1: 'success', 2: 'warning', 3: 'error', 4: 'info', 5: 'error' }[id] || 'grey';
 }
 
 function filterByActivity(id) {

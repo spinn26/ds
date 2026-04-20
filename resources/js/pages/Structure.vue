@@ -93,7 +93,7 @@
                 <span v-else>—</span>
               </td>
               <td style="white-space:nowrap">
-                <v-chip v-if="row.activityName" size="x-small" :color="activityColor(row.activityName)">{{ row.activityName }}</v-chip>
+                <v-chip v-if="row.activityName" size="x-small" :color="getActivityColorByName(row.activityName)">{{ row.activityName }}</v-chip>
                 <span v-else>—</span>
               </td>
               <td style="white-space:nowrap">
@@ -130,7 +130,7 @@ import api from '../api';
 import { useDebounce } from '../composables/useDebounce';
 import PageHeader from '../components/PageHeader.vue';
 import EmptyState from '../components/EmptyState.vue';
-import { fmt } from '../composables/useDesign';
+import { fmt, getActivityColorByName } from '../composables/useDesign';
 
 const loading = ref(false);
 const showAdvanced = ref(false);
@@ -213,14 +213,6 @@ const flatRows = computed(() => {
   return result;
 });
 
-function activityColor(name) {
-  if (!name) return 'grey';
-  const l = name.toLowerCase();
-  if (l.includes('актив')) return 'success';
-  if (l.includes('терминир') || l.includes('исключ')) return 'error';
-  if (l.includes('зарег')) return 'info';
-  return 'warning';
-}
 
 // "Дата смены статуса" по правилам: Активен → до какого надо набрать 500 ЛП,
 // Зарегистрирован → до какого надо активироваться (90 дней с регистрации),

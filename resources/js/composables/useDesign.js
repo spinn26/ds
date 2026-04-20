@@ -136,8 +136,60 @@ export function getStatusColor(status) {
 }
 
 export function getActivityColor(activityId) {
-  const map = { 1: 'success', 3: 'error', 4: 'info', 5: 'error' };
+  const map = { 1: 'success', 2: 'warning', 3: 'error', 4: 'info', 5: 'error' };
   return map[activityId] || 'grey';
+}
+
+/**
+ * Substring match for russian activity names coming from legacy tables
+ * where only the label is at hand (no id). Mirrors the numeric scheme
+ * above so both helpers stay visually consistent.
+ */
+export function getActivityColorByName(name) {
+  if (!name) return 'grey';
+  const l = String(name).toLowerCase();
+  if (l.includes('актив') && !l.includes('не')) return 'success';
+  if (l.includes('терминир') || l.includes('исключ')) return 'error';
+  if (l.includes('зарег')) return 'info';
+  return 'warning';
+}
+
+/**
+ * Substring match for contract-side status labels ("Активирован",
+ * "Закрыто", "Сбор документов", ...). Broader matcher than the activity
+ * one — contracts have their own closed/terminated vocabulary.
+ */
+export function getContractStatusColor(name) {
+  if (!name) return 'grey';
+  const l = String(name).toLowerCase();
+  if (l.includes('актив') || l.includes('действ')) return 'success';
+  if (l.includes('закр') || l.includes('заверш') || l.includes('терминир') || l.includes('исключ')) return 'error';
+  if (l.includes('зарег')) return 'info';
+  return 'warning';
+}
+
+/** Contest status codes: 1 draft / 2 published / 3 finished. */
+export function getContestStatusColor(statusId) {
+  const map = { 1: 'grey', 2: 'success', 3: 'warning' };
+  return map[statusId] || 'grey';
+}
+
+/** Payment status codes: 1 processing / 2 paid. */
+export function getPaymentStatusColor(statusId) {
+  const map = { 1: 'warning', 2: 'success' };
+  return map[statusId] || 'grey';
+}
+
+/** Transaction-import run states. */
+export function getImportStatusColor(status) {
+  const map = {
+    success: 'success',
+    partial: 'warning',
+    error: 'error',
+    processing: 'info',
+    rolled_back: 'grey',
+  };
+  return map[status] || 'grey';
 }
 
 export function getCategoryColor(category) {

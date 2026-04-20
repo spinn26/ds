@@ -76,7 +76,7 @@
       <v-data-table-server :items="history" :items-length="historyTotal" :loading="historyLoading"
         :headers="historyHeaders" :items-per-page="25" @update:options="onHistoryOptions" density="compact" hover>
         <template #item.status="{ value }">
-          <v-chip size="x-small" :color="statusColor(value)">{{ statusLabel(value) }}</v-chip>
+          <v-chip size="x-small" :color="getImportStatusColor(value)">{{ statusLabel(value) }}</v-chip>
         </template>
         <template #item.counts="{ item }">
           <span class="text-success">{{ item.successCount }}</span>
@@ -145,6 +145,7 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import api from '../../api';
+import { getImportStatusColor } from '../../composables/useDesign';
 
 const counterparties = ref([]);
 const currencies = ref([]);
@@ -182,9 +183,6 @@ const historyHeaders = [
 
 function fmtDate(d) { if (!d) return '—'; try { return new Date(d).toLocaleDateString('ru-RU') + ' ' + new Date(d).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }); } catch { return d; } }
 
-function statusColor(s) {
-  return { success: 'success', partial: 'warning', error: 'error', processing: 'info', rolled_back: 'grey' }[s] || 'grey';
-}
 
 function statusLabel(s) {
   return { success: 'Успешно', partial: 'Частично', error: 'Ошибка', processing: 'В процессе', rolled_back: 'Откачено', pending: 'Ожидание' }[s] || s;
