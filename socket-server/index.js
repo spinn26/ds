@@ -26,10 +26,16 @@ const API_PORT = parseInt(PORT) + 1; // 3002
 const ALLOWED_ORIGINS = (process.env.SOCKET_ORIGINS || 'http://localhost:8000,https://dev.dsconsult.ru').split(',');
 const LARAVEL_API_URL = process.env.LARAVEL_API_URL || 'http://127.0.0.1:8000';
 const EMIT_SECRET = process.env.SOCKET_EMIT_SECRET || '';
+const NODE_ENV = process.env.NODE_ENV || 'development';
+const IS_PRODUCTION = NODE_ENV === 'production';
 const TOKEN_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 if (!EMIT_SECRET) {
-  console.warn('[!] SOCKET_EMIT_SECRET is not set — HTTP emit endpoints are OPEN. Set it in .env for production.');
+  if (IS_PRODUCTION) {
+    console.error('[FATAL] SOCKET_EMIT_SECRET is required in production. Generate one with: openssl rand -hex 32');
+    process.exit(1);
+  }
+  console.warn('[!] SOCKET_EMIT_SECRET is not set — HTTP emit endpoints will reject all requests. Set it in .env.');
 }
 
 const io = new Server(PORT, {
@@ -136,9 +142,10 @@ io.on('connection', (socket) => {
 
 // === HTTP API for Laravel to emit events ===
 function checkEmitAuth(req, res) {
-  if (!EMIT_SECRET) return true; // dev fallback with startup warning
+  // No fallback: if secret isn't configured the endpoint must reject
+  // (prevents an unconfigured dev instance from acting as an open relay).
   const auth = req.headers.authorization || '';
-  if (auth !== `Bearer ${EMIT_SECRET}`) {
+  if (!EMIT_SECRET || auth !== `Bearer ${EMIT_SECRET}`) {
     res.writeHead(401);
     res.end(JSON.stringify({ error: 'Unauthorized' }));
     return false;
