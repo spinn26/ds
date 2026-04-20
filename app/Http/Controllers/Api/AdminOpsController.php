@@ -252,11 +252,19 @@ class AdminOpsController extends Controller
                 'status' => 'down', 'details' => $e->getMessage()];
         }
 
-        // Google Sheets — check if API key present
-        $gsKey = env('GOOGLE_SHEETS_API_KEY');
+        // Google Sheets — check if API key present (DB settings → env fallback)
+        $gsKey = app(\App\Services\ApiSettingsService::class)->get('google.sheets.api_key');
         $services[] = ['key' => 'gsheets', 'label' => 'Google Sheets API',
             'status' => $gsKey ? 'up' : 'disabled',
-            'details' => $gsKey ? 'API-key present' : 'API-key not configured'];
+            'details' => $gsKey ? 'API-key задан в /admin/api-keys' : 'API-key не настроен'];
+
+        // Telegram bot
+        $tgNotifier = app(\App\Services\TelegramNotifier::class);
+        $services[] = ['key' => 'telegram', 'label' => 'Telegram Bot', 'host' => 'api.telegram.org',
+            'status' => $tgNotifier->isConfigured() ? 'up' : 'disabled',
+            'details' => $tgNotifier->isConfigured()
+                ? 'token + chat_id заданы'
+                : 'token или chat_id не заданы — /admin/api-keys'];
 
         return response()->json(['services' => $services]);
     }

@@ -143,6 +143,7 @@ const menuItems = [
   { to: '/admin/mail', icon: 'mdi-email-fast', title: 'Почтовая рассылка' },
   { to: '/admin/triggers', icon: 'mdi-robot', title: 'Триггеры уведомлений' },
   { to: '/admin/integrations', icon: 'mdi-cloud-sync', title: 'Интеграции' },
+  { to: '/admin/api-keys', icon: 'mdi-key-variant', title: 'API-ключи и токены' },
   { to: '/admin/settings', icon: 'mdi-cog', title: 'Настройки системы' },
   { to: '/admin/monitoring', icon: 'mdi-pulse', title: 'Мониторинг' },
 ];

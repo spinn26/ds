@@ -6,6 +6,10 @@ use Illuminate\Support\Facades\Http;
 
 class GoogleSheetsReader
 {
+    public function __construct(
+        private readonly ?ApiSettingsService $settings = null,
+    ) {}
+
     /**
      * Прочитать данные с листа Google Sheets.
      *
@@ -14,11 +18,13 @@ class GoogleSheetsReader
      *
      * @param string $spreadsheetId ID таблицы из URL
      * @param string $sheetName Имя листа (поставщик)
-     * @param string|null $apiKey Google API Key
+     * @param string|null $apiKey Google API Key — если null, берётся из ApiSettingsService.
      * @return array Массив строк [{column: value}, ...]
      */
     public function readSheet(string $spreadsheetId, string $sheetName, ?string $apiKey = null): array
     {
+        $apiKey ??= $this->settings?->get('google.sheets.api_key');
+
         if ($apiKey) {
             return $this->readViaApi($spreadsheetId, $sheetName, $apiKey);
         }
@@ -31,6 +37,7 @@ class GoogleSheetsReader
      */
     public function getSheetNames(string $spreadsheetId, ?string $apiKey = null): array
     {
+        $apiKey ??= $this->settings?->get('google.sheets.api_key');
         if (! $apiKey) return [];
 
         $url = "https://sheets.googleapis.com/v4/spreadsheets/{$spreadsheetId}?key={$apiKey}&fields=sheets.properties.title";

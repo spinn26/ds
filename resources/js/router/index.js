@@ -106,6 +106,7 @@ const routes = [
             { path: 'triggers', component: () => import('../pages/Admin/Triggers.vue') },
             { path: 'integrations', component: () => import('../pages/Admin/Integrations.vue') },
             { path: 'settings', component: () => import('../pages/Admin/Settings.vue') },
+            { path: 'api-keys', component: () => import('../pages/Admin/ApiKeys.vue') },
         ],
     },
 
