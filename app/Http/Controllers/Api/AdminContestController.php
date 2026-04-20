@@ -106,10 +106,15 @@ class AdminContestController extends Controller
 
         try {
             DB::transaction(function () use ($id) {
-                // Walk the whole FK graph rooted at Contest(id) and delete
-                // leaf-first. Direct children of Contest (criterion, contestrating,
-                // …) each have their own dependents (e.g. coefficientCriterion
-                // → criterion), so a one-level sweep isn't enough.
+                // Contest sits inside a cycle: Contest.criterion → criterion.id
+                // AND criterion.contest → Contest.id. A plain cascade-delete
+                // trips on shared criterions — the one we'd wipe belongs to
+                // another Contest too. So before the cascade, detach the
+                // criterion from THIS Contest by nulling the back-ref; the
+                // criterion itself keeps its other owners. Same treatment for
+                // any referring table whose FK column is nullable and which
+                // legitimately survives the delete (e.g. criterion).
+                $this->detachBeforeCascade('Contest', 'id', [$id]);
                 $this->cascadeDelete('Contest', 'id', [$id]);
                 DB::table('Contest')->where('id', $id)->delete();
             });
@@ -155,6 +160,85 @@ class AdminContestController extends Controller
      *
      * @param array<int|string> $values
      */
+    /**
+     * Null the back-ref FK on shared child rows before we try to cascade.
+     * For Contest → criterion cycle specifically: criterion can belong to
+     * several Contests (Contest.criterion), so we don't want to drop the
+     * row — we just say "this Contest no longer owns it".
+     *
+     * Only nulls FKs on tables listed below; the generic cascade handles
+     * the pure-log tables (contestrating, coefficientCriterion, calculation*).
+     */
+    private function detachBeforeCascade(string $parentTable, string $parentColumn, array $values): void
+    {
+        $sharedTables = ['criterion'];
+        foreach ($sharedTables as $t) {
+            // Only update rows that are actually referenced from ELSEWHERE —
+            // otherwise we want the cascade to delete them outright below.
+            $backrefCol = $this->findFkColumn($t, $parentTable, $parentColumn);
+            if (! $backrefCol) continue;
+
+            $forwardFks = $this->tablesReferencing($t);
+            if (empty($forwardFks)) {
+                // Nobody else points at this child table; cascadeDelete handles it.
+                continue;
+            }
+
+            // Shared criterions for this Contest = those referenced by another row.
+            $ids = DB::table($t)->whereIn($backrefCol, $values)->pluck('id')->all();
+            if (! $ids) continue;
+
+            $stillReferenced = [];
+            foreach ($forwardFks as [$otherTable, $otherCol]) {
+                $extra = DB::table($otherTable)
+                    ->whereIn($otherCol, $ids)
+                    // exclude the rows we're about to delete
+                    ->when(
+                        $otherTable === $parentTable && $otherCol === 'criterion',
+                        fn ($q) => $q->whereNotIn('id', $values)
+                    )
+                    ->pluck($otherCol)->all();
+                foreach ($extra as $e) $stillReferenced[$e] = true;
+            }
+            if ($stillReferenced) {
+                DB::table($t)
+                    ->whereIn('id', array_keys($stillReferenced))
+                    ->update([$backrefCol => null]);
+            }
+        }
+    }
+
+    /** Tables whose FK points at (table.id). Returns [[childTable, column], …]. */
+    private function tablesReferencing(string $table): array
+    {
+        $rows = DB::select(<<<'SQL'
+            SELECT child.relname AS t, att.attname AS c
+            FROM pg_constraint con
+            JOIN pg_class parent ON parent.oid = con.confrelid
+            JOIN pg_class child  ON child.oid  = con.conrelid
+            JOIN pg_attribute att ON att.attrelid = con.conrelid AND att.attnum = ANY(con.conkey)
+            WHERE con.contype='f' AND parent.relname = ?
+        SQL, [$table]);
+        return array_map(fn ($r) => [$r->t, $r->c], $rows);
+    }
+
+    /** First FK column in $table pointing at $parentTable.$parentColumn. */
+    private function findFkColumn(string $table, string $parentTable, string $parentColumn): ?string
+    {
+        $rows = DB::select(<<<'SQL'
+            SELECT att.attname AS c
+            FROM pg_constraint con
+            JOIN pg_class parent ON parent.oid = con.confrelid
+            JOIN pg_class child  ON child.oid  = con.conrelid
+            JOIN pg_attribute att ON att.attrelid = con.conrelid AND att.attnum = ANY(con.conkey)
+            JOIN pg_attribute patt ON patt.attrelid = con.confrelid AND patt.attnum = ANY(con.confkey)
+            WHERE con.contype='f'
+              AND child.relname = ? AND parent.relname = ? AND patt.attname = ?
+            LIMIT 1
+        SQL, [$table, $parentTable, $parentColumn]);
+        return $rows[0]->c ?? null;
+    }
+
     private function cascadeDelete(string $table, string $column, array $values, int $depth = 0): void
     {
         if (empty($values) || $depth > 10) {
