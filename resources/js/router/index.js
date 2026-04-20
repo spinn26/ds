@@ -54,6 +54,7 @@ const routes = [
             { path: 'manage/currencies', component: () => import('../pages/Admin/Currencies.vue'), meta: { staff: true } },
             { path: 'manage/products', component: () => import('../pages/Admin/Products.vue'), meta: { staff: true } },
             { path: 'manage/contests', component: () => import('../pages/Admin/Contests.vue'), meta: { staff: true } },
+            { path: 'forbidden', component: () => import('../pages/Forbidden.vue') },
         ],
     },
 
@@ -92,7 +93,8 @@ const routes = [
         ],
     },
 
-    { path: '/:pathMatch(.*)*', redirect: '/' },
+    { path: '/not-found', component: () => import('../pages/NotFound.vue'), meta: { auth: true } },
+    { path: '/:pathMatch(.*)*', redirect: '/not-found' },
 ];
 
 const router = createRouter({
@@ -106,8 +108,10 @@ router.beforeEach(async (to) => {
 
     if (to.meta.auth && !auth.user) return '/login';
     if (to.meta.guest && auth.user) return '/';
-    if (to.meta.admin && !auth.isAdmin) return '/';
-    if (to.meta.staff && !auth.isStaff) return '/';
+    // Send unauthorised users to an explicit 403 instead of bouncing them
+    // to '/', which produces a silent "nothing happened" UX.
+    if (to.meta.admin && !auth.isAdmin) return '/forbidden';
+    if (to.meta.staff && !auth.isStaff) return '/forbidden';
 
     // Onboarding questionnaire: any non-staff user must fill it before the cabinet.
     // Allow /, /profile and /help so the dialog can be shown and identity edited.
