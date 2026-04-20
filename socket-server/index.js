@@ -29,6 +29,7 @@ const EMIT_SECRET = process.env.SOCKET_EMIT_SECRET || '';
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const IS_PRODUCTION = NODE_ENV === 'production';
 const TOKEN_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const ACCESS_CACHE_TTL_MS = 60 * 1000; // 1 minute
 
 if (!EMIT_SECRET) {
   if (IS_PRODUCTION) {
@@ -50,6 +51,8 @@ const io = new Server(PORT, {
 
 // token → { user: { userId, userName }, expiresAt }
 const tokenCache = new Map();
+// `${token}:${ticketId}` → { allowed, expiresAt }
+const accessCache = new Map();
 // userId → { socketId, userName, rooms: Set }
 const onlineUsers = new Map();
 
@@ -79,6 +82,31 @@ async function validateToken(token) {
   }
 }
 
+/**
+ * Ask Laravel whether this token may view the ticket. Backed by
+ * ChatTicketPolicy on the server side; result cached for 1 minute per
+ * (token, ticketId) pair to keep the hot path cheap.
+ */
+async function canAccessTicket(token, ticketId) {
+  if (!token || !ticketId) return false;
+  const key = `${token}:${ticketId}`;
+  const cached = accessCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.allowed;
+  }
+  try {
+    const res = await fetch(`${LARAVEL_API_URL}/api/v1/chat/tickets/${ticketId}/can-access`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+    });
+    const allowed = res.ok;
+    accessCache.set(key, { allowed, expiresAt: Date.now() + ACCESS_CACHE_TTL_MS });
+    return allowed;
+  } catch (e) {
+    console.error('[!] Access check error:', e.message);
+    return false;
+  }
+}
+
 // === Handshake auth middleware ===
 io.use(async (socket, next) => {
   const token = socket.handshake.auth?.token;
@@ -88,6 +116,7 @@ io.use(async (socket, next) => {
   }
   socket.data.userId = user.userId;
   socket.data.userName = user.userName;
+  socket.data.token = token; // kept in memory only; needed for per-ticket access checks
   next();
 });
 
@@ -102,7 +131,13 @@ io.on('connection', (socket) => {
   console.log(`[+] User ${userName} (${userId}) connected. Online: ${onlineUsers.size}`);
 
   // === Join ticket room ===
-  socket.on('ticket:join', (ticketId) => {
+  socket.on('ticket:join', async (ticketId) => {
+    const allowed = await canAccessTicket(socket.data.token, ticketId);
+    if (!allowed) {
+      console.warn(`[!] ${userName} (${userId}) denied access to ticket:${ticketId}`);
+      socket.emit('ticket:access-denied', { ticketId });
+      return;
+    }
     const room = `ticket:${ticketId}`;
     socket.join(room);
     onlineUsers.get(userId)?.rooms.add(room);
@@ -119,8 +154,13 @@ io.on('connection', (socket) => {
   });
 
   // === Typing indicator ===
+  // Only honor typing for rooms this socket has actually joined (join
+  // gate runs the access check). Prevents a client from spraying typing
+  // events into arbitrary ticket rooms by guessing IDs.
   socket.on('ticket:typing', ({ ticketId, isTyping }) => {
-    socket.to(`ticket:${ticketId}`).emit('ticket:typing', {
+    const room = `ticket:${ticketId}`;
+    if (!socket.rooms.has(room)) return;
+    socket.to(room).emit('ticket:typing', {
       userId,
       userName,
       isTyping,

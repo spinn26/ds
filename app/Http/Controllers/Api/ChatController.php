@@ -1172,6 +1172,24 @@ class ChatController extends Controller
         return response()->json(['count' => $count]);
     }
 
+    /**
+     * Access probe used by the socket-server before it lets a client join
+     * `ticket:{id}`. Returns 200 if the current token may see the ticket,
+     * 403 otherwise. Logic is the same ChatTicketPolicy::view used by
+     * show/sendMessage — keeping both paths on a single gate.
+     */
+    public function canAccess(Request $request, int $id): JsonResponse
+    {
+        $ticket = ChatTicket::find($id);
+        if (! $ticket) return response()->json(['message' => 'Не найден'], 404);
+
+        if ($request->user()->cannot('view', $ticket)) {
+            return response()->json(['message' => 'Доступ запрещён'], 403);
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
     /** Staff list for assignment */
     public function staffList(): JsonResponse
     {
