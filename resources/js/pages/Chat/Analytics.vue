@@ -94,16 +94,16 @@
             <line :x1="0" :y1="trendViewH - 20" :x2="trendViewW" :y2="trendViewH - 20" stroke="rgba(127,127,127,0.3)" />
 
             <!-- Resolved polyline -->
-            <polyline :points="trendPoints('resolved')" fill="none" stroke="#34d399" stroke-width="2" />
+            <polyline :points="trendPoints('resolved')" fill="none" :stroke="chatTrendColors.resolvedSeries" stroke-width="2" />
             <!-- New polyline -->
-            <polyline :points="trendPoints('new')" fill="none" stroke="#60a5fa" stroke-width="2" />
+            <polyline :points="trendPoints('new')" fill="none" :stroke="chatTrendColors.newSeries" stroke-width="2" />
           </svg>
           <div class="trend-axis">
             <span v-for="d in thinnedLabels" :key="d.day">{{ shortDate(d.day) }}</span>
           </div>
           <div class="trend-legend">
-            <span class="legend-dot" style="background:#60a5fa"></span> Новые
-            <span class="legend-dot" style="background:#34d399"></span> Закрытые
+            <span class="legend-dot" :style="{ background: chatTrendColors.newSeries }"></span> Новые
+            <span class="legend-dot" :style="{ background: chatTrendColors.resolvedSeries }"></span> Закрытые
           </div>
         </div>
       </div>
@@ -195,6 +195,21 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
+import {
+  chatStatusColors,
+  chatStatusLabels,
+  chatPriorityColors,
+  chatPriorityLabels,
+  chatCategoryColors,
+  chatCategoryLabels,
+  chatTrendColors,
+  getChatStatusColor,
+  getChatStatusLabel,
+  getChatPriorityColor,
+  getChatPriorityLabel,
+  getChatCategoryColor,
+  getChatCategoryLabel,
+} from '../../composables/chatPalette';
 
 const data = ref(null);
 const loading = ref(false);
@@ -206,20 +221,20 @@ const periodOptions = [
   { value: 'month', label: '30 дней' },
 ];
 
-const statusCells = [
-  { key: 'new', label: 'Новые', color: '#60a5fa', icon: 'mdi-circle-outline' },
-  { key: 'open', label: 'В работе', color: '#fbbf24', icon: 'mdi-progress-clock' },
-  { key: 'pending', label: 'Ожидание', color: '#f97316', icon: 'mdi-pause-circle' },
-  { key: 'resolved', label: 'Решены', color: '#34d399', icon: 'mdi-check-circle' },
-  { key: 'closed', label: 'Закрыты', color: '#6b7280', icon: 'mdi-lock' },
-];
+const statusCellIcons = { new: 'mdi-circle-outline', open: 'mdi-progress-clock', pending: 'mdi-pause-circle', resolved: 'mdi-check-circle', closed: 'mdi-lock' };
+const statusCells = Object.keys(chatStatusColors).map(key => ({
+  key,
+  label: key === 'resolved' ? 'Решены' : key === 'closed' ? 'Закрыты' : key === 'new' ? 'Новые' : chatStatusLabels[key],
+  color: chatStatusColors[key],
+  icon: statusCellIcons[key],
+}));
 
-function catColor(c) { return { support: '#3b82f6', backoffice: '#f97316', billing: '#22c55e', legal: '#a855f7', general: '#6b7280', technical: '#3b82f6', sales: '#f97316' }[c] || '#6b7280'; }
-function catLabel(c) { return { support: 'Техподдержка', backoffice: 'Бэк-офис', billing: 'Начисления', legal: 'Юридический', general: 'Общий', technical: 'Технический', sales: 'Продажи' }[c] || c; }
-function prioColor(p) { return { critical: '#ef4444', high: '#f97316', medium: '#fbbf24', low: '#34d399' }[p] || '#888'; }
-function prioLabel(p) { return { critical: 'Критический', high: 'Высокий', medium: 'Средний', low: 'Низкий' }[p] || p; }
-function statusClr(s) { return { new: '#60a5fa', open: '#fbbf24', pending: '#f97316', resolved: '#34d399', closed: '#6b7280' }[s] || '#888'; }
-function statusTxt(s) { return { new: 'Новый', open: 'В работе', pending: 'Ожидание', resolved: 'Решён', closed: 'Закрыт' }[s] || s; }
+const catColor = getChatCategoryColor;
+const catLabel = getChatCategoryLabel;
+const prioColor = getChatPriorityColor;
+const prioLabel = getChatPriorityLabel;
+const statusClr = getChatStatusColor;
+const statusTxt = getChatStatusLabel;
 
 function fmtMinutes(m) {
   m = Number(m || 0);

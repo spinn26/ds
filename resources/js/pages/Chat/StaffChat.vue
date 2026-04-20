@@ -721,6 +721,14 @@ import { useDisplay } from 'vuetify';
 import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
 import { useAuthStore } from '../../stores/auth';
+import {
+  chatStatusColors,
+  chatPriorityColors,
+  getChatStatusColor,
+  getChatPriorityColor,
+  getChatCategoryColor,
+  getChatActivityAccent,
+} from '../../composables/chatPalette';
 
 const { mobile } = useDisplay();
 const auth = useAuthStore();
@@ -925,11 +933,11 @@ watch(viewMode, v => localStorage.setItem('staff-chat-view', v));
 const draggingId = ref(null);
 const dragOverCol = ref(null); // { col, lane } or col value for backward-compat
 const kanbanColumns = [
-  { value: 'new', label: 'Новые', color: '#60a5fa', icon: 'mdi-circle-outline' },
-  { value: 'open', label: 'В работе', color: '#fbbf24', icon: 'mdi-progress-clock' },
-  { value: 'pending', label: 'Ожидание', color: '#f97316', icon: 'mdi-pause-circle' },
-  { value: 'resolved', label: 'Решён', color: '#34d399', icon: 'mdi-check-circle' },
-  { value: 'closed', label: 'Закрыт', color: '#6b7280', icon: 'mdi-lock' },
+  { value: 'new', label: 'Новые', color: chatStatusColors.new, icon: 'mdi-circle-outline' },
+  { value: 'open', label: 'В работе', color: chatStatusColors.open, icon: 'mdi-progress-clock' },
+  { value: 'pending', label: 'Ожидание', color: chatStatusColors.pending, icon: 'mdi-pause-circle' },
+  { value: 'resolved', label: 'Решён', color: chatStatusColors.resolved, icon: 'mdi-check-circle' },
+  { value: 'closed', label: 'Закрыт', color: chatStatusColors.closed, icon: 'mdi-lock' },
 ];
 
 // Kanban extensions
@@ -985,10 +993,10 @@ const swimlanes = computed(() => {
 
   if (swimlaneMode.value === 'priority') {
     return [
-      { key: 'critical', label: 'Критический', color: '#ef4444' },
-      { key: 'high', label: 'Высокий', color: '#f97316' },
-      { key: 'medium', label: 'Средний', color: '#fbbf24' },
-      { key: 'low', label: 'Низкий', color: '#34d399' },
+      { key: 'critical', label: 'Критический', color: chatPriorityColors.critical },
+      { key: 'high', label: 'Высокий', color: chatPriorityColors.high },
+      { key: 'medium', label: 'Средний', color: chatPriorityColors.medium },
+      { key: 'low', label: 'Низкий', color: chatPriorityColors.low },
     ];
   }
 
@@ -1005,7 +1013,7 @@ const swimlanes = computed(() => {
   return sorted.map(n => ({
     key: n,
     label: n === '__unassigned' ? 'Не назначено' : n,
-    color: n === '__unassigned' ? '#6b7280' : null,
+    color: n === '__unassigned' ? chatStatusColors.closed : null,
   }));
 });
 
@@ -1168,27 +1176,27 @@ function openFromKanban(t, e) {
 function isMine(msg) { return String(msg.senderId) === String(currentUserId); }
 
 const priorities = [
-  { label: 'Критический', value: 'critical', color: '#ef4444' },
-  { label: 'Высокий', value: 'high', color: '#f97316' },
-  { label: 'Средний', value: 'medium', color: '#fbbf24' },
-  { label: 'Низкий', value: 'low', color: '#34d399' },
+  { label: 'Критический', value: 'critical', color: chatPriorityColors.critical },
+  { label: 'Высокий', value: 'high', color: chatPriorityColors.high },
+  { label: 'Средний', value: 'medium', color: chatPriorityColors.medium },
+  { label: 'Низкий', value: 'low', color: chatPriorityColors.low },
 ];
 const statuses = [
-  { label: 'Новый', value: 'new', color: '#60a5fa', icon: 'mdi-circle-outline' },
-  { label: 'В работе', value: 'open', color: '#fbbf24', icon: 'mdi-progress-clock' },
-  { label: 'Ожидание', value: 'pending', color: '#f97316', icon: 'mdi-pause-circle' },
-  { label: 'Решён', value: 'resolved', color: '#34d399', icon: 'mdi-check-circle' },
-  { label: 'Закрыт', value: 'closed', color: '#6b7280', icon: 'mdi-lock' },
+  { label: 'Новый', value: 'new', color: chatStatusColors.new, icon: 'mdi-circle-outline' },
+  { label: 'В работе', value: 'open', color: chatStatusColors.open, icon: 'mdi-progress-clock' },
+  { label: 'Ожидание', value: 'pending', color: chatStatusColors.pending, icon: 'mdi-pause-circle' },
+  { label: 'Решён', value: 'resolved', color: chatStatusColors.resolved, icon: 'mdi-check-circle' },
+  { label: 'Закрыт', value: 'closed', color: chatStatusColors.closed, icon: 'mdi-lock' },
 ];
 const statusFilterPills = [{ label: 'Все', value: '' }, ...statuses.map(s => ({ label: s.label, value: s.value }))];
 const priorityFilterPills = [{ label: 'Все', value: '', color: '#888' }, ...priorities];
 
-function catColor(c) { return { support: '#3b82f6', backoffice: '#f97316', billing: '#22c55e', legal: '#a855f7', general: '#6b7280', technical: '#3b82f6', sales: '#f97316' }[c] || '#6b7280'; }
+const catColor = getChatCategoryColor;
 function catIcon(c) { return { support: 'mdi-headset', backoffice: 'mdi-briefcase', billing: 'mdi-cash', legal: 'mdi-scale-balance', general: 'mdi-help-circle', technical: 'mdi-headset', sales: 'mdi-handshake' }[c] || 'mdi-chat'; }
-function statusClr(s) { return { new: '#60a5fa', open: '#fbbf24', pending: '#f97316', resolved: '#34d399', closed: '#6b7280' }[s] || '#888'; }
+const statusClr = getChatStatusColor;
 function statusTxt(s) { return { new: 'Новый', open: 'В работе', pending: 'Ожидание', resolved: 'Решён', closed: 'Закрыт' }[s] || s; }
 function statusIcon(s) { return { new: 'mdi-circle-outline', open: 'mdi-progress-clock', pending: 'mdi-pause-circle', resolved: 'mdi-check-circle', closed: 'mdi-lock' }[s] || 'mdi-circle'; }
-function prioClr(p) { return { critical: '#ef4444', high: '#f97316', medium: '#fbbf24', low: '#34d399' }[p] || '#888'; }
+const prioClr = getChatPriorityColor;
 function prioLabel(p) { return priorities.find(x => x.value === p)?.label || p; }
 function initials(name) {
   if (!name) return '?';
@@ -1214,12 +1222,7 @@ function activityChipBg(id) {
   return 'rgba(107, 114, 128, 0.15)';
 }
 function activityChipFg(id) {
-  const v = Number(id);
-  if (v === 1) return '#059669';
-  if (v === 4) return '#2563eb';
-  if (v === 3) return '#b45309';
-  if (v === 5) return '#b91c1c';
-  return '#4b5563';
+  return getChatActivityAccent(Number(id));
 }
 function dateLabel(date) {
   const d = new Date(date);

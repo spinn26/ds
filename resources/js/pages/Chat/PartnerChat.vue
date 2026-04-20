@@ -285,6 +285,7 @@ import { useDisplay } from 'vuetify';
 import { useRoute } from 'vue-router';
 import api from '../../api';
 import { useAuthStore } from '../../stores/auth';
+import { getChatStatusColor, getChatCategoryColor } from '../../composables/chatPalette';
 
 const { mobile } = useDisplay();
 const route = useRoute();
@@ -437,10 +438,10 @@ const categories = [
 ];
 
 function isMine(msg) { return String(msg.senderId) === String(currentUserId); }
-function catColor(c) { return { support: '#3b82f6', backoffice: '#f97316', billing: '#22c55e', legal: '#a855f7', general: '#6b7280' }[c] || '#6b7280'; }
+const catColor = getChatCategoryColor;
 function catIcon(c) { return { support: 'mdi-headset', backoffice: 'mdi-briefcase', billing: 'mdi-cash', legal: 'mdi-scale-balance', general: 'mdi-help-circle' }[c] || 'mdi-chat'; }
 function catLabel(c) { return { support: 'Техподдержка', backoffice: 'Бэк-офис', billing: 'Начисления', legal: 'Юридический', general: 'Общий' }[c] || c; }
-function statusClr(s) { return { new: '#60a5fa', open: '#fbbf24', pending: '#f97316', resolved: '#34d399', closed: '#6b7280' }[s] || '#888'; }
+const statusClr = getChatStatusColor;
 function statusTxt(s) { return { new: 'Новый', open: 'В работе', pending: 'Ожидание', resolved: 'Решён', closed: 'Закрыт' }[s] || s; }
 function statusIcon(s) { return { new: 'mdi-circle-outline', open: 'mdi-progress-clock', pending: 'mdi-pause-circle', resolved: 'mdi-check-circle', closed: 'mdi-lock' }[s] || 'mdi-circle'; }
 function initials(name) {
