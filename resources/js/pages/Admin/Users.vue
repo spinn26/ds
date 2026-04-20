@@ -5,170 +5,142 @@
       <v-btn color="primary" prepend-icon="mdi-plus" @click="openCreate">Добавить</v-btn>
     </div>
 
-    <!-- Filters -->
-    <v-card class="mb-4 pa-3">
-      <v-row dense>
-        <v-col cols="12" sm="4">
-          <v-text-field v-model="filters.search" label="Поиск по ФИО или email" prepend-inner-icon="mdi-magnify"
-            density="compact" variant="outlined" rounded clearable hide-details @update:model-value="debouncedLoad" />
-        </v-col>
-        <v-col cols="12" sm="3">
-          <v-select v-model="filters.role" label="Роль" :items="roleOptions" density="compact"
-            clearable hide-details @update:model-value="loadUsers" />
-        </v-col>
-        <v-col cols="12" sm="3">
-          <v-select v-model="filters.blocked" label="Заблокирован" :items="blockedOptions" density="compact"
-            clearable hide-details @update:model-value="loadUsers" />
-        </v-col>
-        <v-col cols="12" sm="2" class="d-flex align-center ga-1">
-          <v-chip v-if="activeFilterCount > 0" size="small" color="info" variant="tonal">
-            {{ activeFilterCount }} {{ activeFilterCount === 1 ? 'фильтр' : 'фильтра' }}
-          </v-chip>
-          <v-btn v-if="activeFilterCount > 0" size="small" variant="text" color="secondary"
-            prepend-icon="mdi-filter-remove" @click="resetFilters">Сбросить</v-btn>
-        </v-col>
-      </v-row>
-    </v-card>
+    <FilterBar
+      :search="filters.search"
+      search-placeholder="Поиск по ФИО или email"
+      :search-cols="4"
+      :show-reset="activeFilterCount > 0"
+      @update:search="v => { filters.search = v ?? ''; }"
+      @reset="resetFilters"
+    >
+      <v-col cols="12" md="3">
+        <v-select v-model="filters.role" label="Роль" :items="roleOptions"
+          variant="outlined" density="comfortable" clearable hide-details />
+      </v-col>
+      <v-col cols="12" md="3">
+        <v-select v-model="filters.blocked" label="Заблокирован" :items="blockedOptions"
+          variant="outlined" density="comfortable" clearable hide-details />
+      </v-col>
+      <v-col v-if="activeFilterCount > 0" cols="auto" class="d-flex align-center">
+        <v-chip size="small" color="info" variant="tonal">
+          {{ activeFilterCount }} {{ activeFilterCount === 1 ? 'фильтр' : 'фильтра' }}
+        </v-chip>
+      </v-col>
+    </FilterBar>
 
-    <!-- Table -->
     <DataTableWrapper
-      :items="users"
+      :items="items"
       :headers="headers"
       :loading="loading"
       server-side
       :page="page"
-      :items-per-page="25"
+      :items-per-page="perPage"
       :items-length="total"
       empty-icon="mdi-account-search-outline"
       empty-message="Пользователи не найдены"
-      @update:page="p => { page = p; loadUsers(); }"
+      @update:options="onOptions"
     >
       <template #item.role="{ item }">
-        <v-chip v-for="r in (item.role || '').split(',')" :key="r" size="x-small" class="mr-1"
-          :color="r.trim() === 'admin' ? 'red' : r.trim() === 'backoffice' ? 'orange' : r.trim() === 'consultant' ? 'green' : 'grey'">
-          {{ r.trim() }}
-        </v-chip>
+        <StatusChip v-for="r in (item.role || '').split(',')" :key="r" size="x-small" class="mr-1"
+          :color="roleColor(r.trim())" :text="r.trim()" />
       </template>
       <template #item.isBlocked="{ item }">
-        <v-icon :color="item.isBlocked ? 'error' : 'success'" size="small">
-          {{ item.isBlocked ? 'mdi-lock' : 'mdi-lock-open' }}
-        </v-icon>
+        <BooleanCell :value="!!item.isBlocked"
+          true-icon="mdi-lock" false-icon="mdi-lock-open"
+          true-color="error" false-color="success"
+          :tooltip="{ on: 'Заблокирован', off: 'Активен' }" />
       </template>
       <template #item.actions="{ item }">
-        <v-btn icon="mdi-pencil" size="x-small" variant="text" @click="openEdit(item)" />
-        <v-btn icon="mdi-login" size="x-small" variant="text" color="secondary" title="Войти как"
-          @click="impersonate(item)" />
-        <v-btn icon="mdi-delete" size="x-small" variant="text" color="error"
-          @click="confirmDelete(item)" />
+        <ActionsCell @edit="openEdit(item)" @delete="confirmDelete(item)">
+          <v-btn icon="mdi-login" size="x-small" variant="text" color="secondary"
+            title="Войти как" @click.stop="impersonate(item)" />
+        </ActionsCell>
       </template>
     </DataTableWrapper>
 
-    <!-- Edit/Create Dialog -->
-    <v-dialog v-model="dialog" max-width="600" persistent>
-      <v-card>
-        <v-card-title>{{ editUser?.id ? 'Редактировать' : 'Добавить' }} пользователя</v-card-title>
-        <v-card-text>
-          <v-row dense>
-            <v-col cols="12" sm="4">
-              <v-text-field v-model="editUser.lastName" label="Фамилия" />
-            </v-col>
-            <v-col cols="12" sm="4">
-              <v-text-field v-model="editUser.firstName" label="Имя" />
-            </v-col>
-            <v-col cols="12" sm="4">
-              <v-text-field v-model="editUser.patronymic" label="Отчество" />
-            </v-col>
-            <v-col cols="12" sm="6">
-              <v-text-field v-model="editUser.email" label="Электронная почта" type="email" />
-            </v-col>
-            <v-col cols="12" sm="6">
-              <v-text-field v-model="editUser.phone" label="Телефон" />
-            </v-col>
-            <v-col cols="12" sm="6">
-              <v-text-field v-model="editUser.role" label="Роли" hint="admin, backoffice, consultant, registered" persistent-hint />
-            </v-col>
-            <v-col cols="12" sm="6">
-              <v-text-field v-model="editUser.password" label="Новый пароль" type="password"
-                :placeholder="editUser.id ? 'оставьте пустым' : ''" />
-            </v-col>
-            <v-col cols="12" sm="6">
-              <v-select v-model="editUser.gender" label="Пол" :items="['Мужской', 'Женский']" clearable />
-            </v-col>
-            <v-col cols="12" sm="6">
-              <v-text-field v-model="editUser.birthDate" label="Дата рождения" type="date" />
-            </v-col>
-            <v-col v-if="editUser.id" cols="12" sm="6">
-              <v-text-field v-model="editUser.participantCode" label="Реферальный код"
-                :hint="editUser.participantCode ? 'Изменение сломает существующие партнёрские ссылки' : 'Партнёр без кода — не сможет приглашать'"
-                persistent-hint prepend-inner-icon="mdi-tag-outline" />
-            </v-col>
-            <v-col cols="12" sm="6">
-              <v-checkbox v-model="editUser.isBlocked" label="Заблокирован" density="compact" />
-            </v-col>
-            <v-col cols="12" sm="6">
-              <v-checkbox v-model="editUser.agreement" label="Согласие" density="compact" />
-            </v-col>
-          </v-row>
-          <v-alert v-if="editError" type="error" density="compact" class="mt-2">{{ editError }}</v-alert>
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn @click="dialog = false">Отмена</v-btn>
-          <v-btn color="primary" @click="saveUser" :loading="saving">Сохранить</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+    <DialogShell
+      v-model="editDialog"
+      :title="(editForm.id ? 'Редактировать' : 'Добавить') + ' пользователя'"
+      :max-width="600"
+      persistent
+      :loading="saving"
+      @confirm="save"
+    >
+      <FormErrors :errors="editErrors" :message="editMessage" />
+      <v-row dense>
+        <v-col cols="12" sm="4">
+          <v-text-field v-model="editForm.lastName" label="Фамилия" />
+        </v-col>
+        <v-col cols="12" sm="4">
+          <v-text-field v-model="editForm.firstName" label="Имя" />
+        </v-col>
+        <v-col cols="12" sm="4">
+          <v-text-field v-model="editForm.patronymic" label="Отчество" />
+        </v-col>
+        <v-col cols="12" sm="6">
+          <v-text-field v-model="editForm.email" label="Электронная почта" type="email" />
+        </v-col>
+        <v-col cols="12" sm="6">
+          <v-text-field v-model="editForm.phone" label="Телефон" />
+        </v-col>
+        <v-col cols="12" sm="6">
+          <v-text-field v-model="editForm.role" label="Роли" hint="admin, backoffice, consultant, registered" persistent-hint />
+        </v-col>
+        <v-col cols="12" sm="6">
+          <v-text-field v-model="editForm.password" label="Новый пароль" type="password"
+            :placeholder="editForm.id ? 'оставьте пустым' : ''" />
+        </v-col>
+        <v-col cols="12" sm="6">
+          <v-select v-model="editForm.gender" label="Пол" :items="['Мужской', 'Женский']" clearable />
+        </v-col>
+        <v-col cols="12" sm="6">
+          <v-text-field v-model="editForm.birthDate" label="Дата рождения" type="date" />
+        </v-col>
+        <v-col v-if="editForm.id" cols="12" sm="6">
+          <v-text-field v-model="editForm.participantCode" label="Реферальный код"
+            :hint="editForm.participantCode ? 'Изменение сломает существующие партнёрские ссылки' : 'Партнёр без кода — не сможет приглашать'"
+            persistent-hint prepend-inner-icon="mdi-tag-outline" />
+        </v-col>
+        <v-col cols="12" sm="6">
+          <v-checkbox v-model="editForm.isBlocked" label="Заблокирован" density="compact" />
+        </v-col>
+        <v-col cols="12" sm="6">
+          <v-checkbox v-model="editForm.agreement" label="Согласие" density="compact" />
+        </v-col>
+      </v-row>
+    </DialogShell>
 
-    <!-- Delete confirm -->
-    <v-dialog v-model="deleteDialog" max-width="400">
-      <v-card>
-        <v-card-title>Удалить пользователя?</v-card-title>
-        <v-card-text>{{ deleteTarget?.lastName }} {{ deleteTarget?.firstName }} ({{ deleteTarget?.email }})</v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn @click="deleteDialog = false">Отмена</v-btn>
-          <v-btn color="error" @click="deleteUser" :loading="saving">Удалить</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+    <DialogShell
+      v-model="deleteDialog"
+      title="Удалить пользователя?"
+      :max-width="400"
+      :loading="saving"
+      confirm-text="Удалить"
+      confirm-color="error"
+      @confirm="remove"
+    >
+      {{ deleteTarget?.lastName }} {{ deleteTarget?.firstName }} ({{ deleteTarget?.email }})
+    </DialogShell>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../../stores/auth';
 import api from '../../api';
-import { useDebounce } from '../../composables/useDebounce';
-import DataTableWrapper from '../../components/DataTableWrapper.vue';
+import {
+  FilterBar, DataTableWrapper, StatusChip, BooleanCell, ActionsCell,
+  DialogShell, FormErrors,
+} from '../../components';
+import { useCrud } from '../../composables/useCrud';
+
+function roleColor(r) {
+  return r === 'admin' ? 'red' : r === 'backoffice' ? 'orange' : r === 'consultant' ? 'green' : 'grey';
+}
 
 const auth = useAuthStore();
 const router = useRouter();
-const users = ref([]);
-const total = ref(0);
-const page = ref(1);
-const loading = ref(false);
-const dialog = ref(false);
-const deleteDialog = ref(false);
-const deleteTarget = ref(null);
-const saving = ref(false);
-const editError = ref('');
-const editUser = ref({});
-
-const filters = ref({ search: '', role: null, blocked: null });
-
-const activeFilterCount = computed(() => {
-  let c = 0;
-  if (filters.value.search) c++;
-  if (filters.value.role) c++;
-  if (filters.value.blocked) c++;
-  return c;
-});
-
-function resetFilters() {
-  filters.value = { search: '', role: null, blocked: null };
-  loadUsers();
-}
 
 const roleOptions = [
   { title: 'Администратор', value: 'admin' },
@@ -192,74 +164,40 @@ const headers = [
   { title: 'Действия', key: 'actions', sortable: false, width: 120 },
 ];
 
-const { debounced: debouncedLoad } = useDebounce(loadUsers, 400);
+const {
+  items, loading, page, perPage, total, filters, activeFilterCount,
+  editDialog, editForm, editErrors, editMessage, saving,
+  deleteDialog, deleteTarget,
+  load, onOptions, resetFilters,
+  openCreate: _openCreate, openEdit: _openEdit, save, confirmDelete, remove,
+} = useCrud('admin/users', {
+  filters: { search: '', role: null, blocked: null },
+  defaults: {
+    firstName: '', lastName: '', patronymic: '', email: '', phone: '',
+    role: 'registered', password: '', gender: '', birthDate: '',
+    isBlocked: false, agreement: false,
+  },
+  normalise: (d) => ({
+    items: d.data ?? d.items ?? [],
+    total: d.total ?? d.meta?.total ?? 0,
+  }),
+  labels: {
+    created: 'Пользователь создан',
+    updated: 'Пользователь обновлён',
+    deleted: 'Пользователь удалён',
+    error: 'Ошибка',
+  },
+});
 
-async function loadUsers() {
-  loading.value = true;
-  try {
-    const params = { page: page.value };
-    if (filters.value.search) params.search = filters.value.search;
-    if (filters.value.role) params.role = filters.value.role;
-    if (filters.value.blocked) params.blocked = filters.value.blocked;
-    const { data } = await api.get('/admin/users', { params });
-    users.value = data.data;
-    total.value = data.total;
-  } catch {}
-  loading.value = false;
-}
-
-function openCreate() {
-  editUser.value = { firstName: '', lastName: '', patronymic: '', email: '', phone: '', role: 'registered', password: '', gender: '', birthDate: '', isBlocked: false, agreement: false };
-  editError.value = '';
-  dialog.value = true;
-}
-
+// Override openCreate/openEdit to normalise birthDate to yyyy-MM-dd for <input type=date>.
+function openCreate() { _openCreate(); }
 function openEdit(user) {
-  editUser.value = { ...user, password: '', birthDate: user.birthDate ? user.birthDate.split('T')[0] : '' };
-  editError.value = '';
-  dialog.value = true;
-}
-
-async function saveUser() {
-  saving.value = true;
-  editError.value = '';
-  try {
-    if (editUser.value.id) {
-      await api.put(`/admin/users/${editUser.value.id}`, editUser.value);
-    } else {
-      await api.post('/admin/users', editUser.value);
-    }
-    dialog.value = false;
-    loadUsers();
-  } catch (e) {
-    editError.value = e.response?.data?.message || 'Ошибка сохранения';
-  }
-  saving.value = false;
-}
-
-function confirmDelete(user) {
-  deleteTarget.value = user;
-  deleteDialog.value = true;
-}
-
-async function deleteUser() {
-  saving.value = true;
-  try {
-    await api.delete(`/admin/users/${deleteTarget.value.id}`);
-    deleteDialog.value = false;
-    loadUsers();
-  } catch {}
-  saving.value = false;
+  _openEdit({ ...user, password: '', birthDate: user.birthDate ? user.birthDate.split('T')[0] : '' });
 }
 
 async function impersonate(user) {
   try {
-    // Stash the admin's own token in sessionStorage so /impersonate/leave
-    // can restore it; sessionStorage dies with the tab, which is the right
-    // lifetime for a supervised session.
-    if (auth.token) {
-      sessionStorage.setItem('impersonator_token', auth.token);
-    }
+    if (auth.token) sessionStorage.setItem('impersonator_token', auth.token);
     const { data } = await api.post(`/impersonate/${user.id}`);
     auth.token = data.token;
     auth.user = data.user;
@@ -267,5 +205,5 @@ async function impersonate(user) {
   } catch {}
 }
 
-onMounted(loadUsers);
+onMounted(load);
 </script>

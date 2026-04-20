@@ -76,7 +76,7 @@
       <v-data-table-server :items="history" :items-length="historyTotal" :loading="historyLoading"
         :headers="historyHeaders" :items-per-page="25" @update:options="onHistoryOptions" density="compact" hover>
         <template #item.status="{ value }">
-          <v-chip size="x-small" :color="getImportStatusColor(value)">{{ statusLabel(value) }}</v-chip>
+          <StatusChip :value="value" kind="import" size="x-small" :text="statusLabel(value)" />
         </template>
         <template #item.counts="{ item }">
           <span class="text-success">{{ item.successCount }}</span>
@@ -109,36 +109,29 @@
       </v-data-table-server>
     </v-card>
 
-    <!-- Rollback confirm -->
-    <v-dialog v-model="rollbackDialog" max-width="400">
-      <v-card>
-        <v-card-title>Откатить импорт #{{ rollbackTarget?.id }}?</v-card-title>
-        <v-card-text>
-          Все {{ rollbackTarget?.successCount }} транзакций, созданных этим импортом, будут удалены.
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn @click="rollbackDialog = false">Отмена</v-btn>
-          <v-btn color="error" @click="doRollback" :loading="rolling">Откатить</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+    <DialogShell
+      v-model="rollbackDialog"
+      :title="`Откатить импорт #${rollbackTarget?.id}?`"
+      :max-width="400"
+      :loading="rolling"
+      confirm-text="Откатить"
+      confirm-color="error"
+      @confirm="doRollback"
+    >
+      Все {{ rollbackTarget?.successCount }} транзакций, созданных этим импортом, будут удалены.
+    </DialogShell>
 
-    <!-- Errors dialog -->
-    <v-dialog v-model="errorsDialog" max-width="600">
-      <v-card>
-        <v-card-title>Ошибки импорта #{{ errorsTarget?.id }}</v-card-title>
-        <v-card-text>
-          <div v-for="(err, i) in errorsTarget?.errors || []" :key="i" class="text-body-2 mb-1">
-            <v-icon size="14" color="error" class="mr-1">mdi-alert</v-icon>{{ err }}
-          </div>
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn @click="errorsDialog = false">Закрыть</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+    <DialogShell
+      v-model="errorsDialog"
+      :title="`Ошибки импорта #${errorsTarget?.id}`"
+      :max-width="600"
+      :show-confirm="false"
+      cancel-text="Закрыть"
+    >
+      <div v-for="(err, i) in errorsTarget?.errors || []" :key="i" class="text-body-2 mb-1">
+        <v-icon size="14" color="error" class="mr-1">mdi-alert</v-icon>{{ err }}
+      </div>
+    </DialogShell>
   </div>
 </template>
 
@@ -146,6 +139,8 @@
 import { ref, onMounted } from 'vue';
 import api from '../../api';
 import { getImportStatusColor } from '../../composables/useDesign';
+import StatusChip from '../../components/StatusChip.vue';
+import DialogShell from '../../components/DialogShell.vue';
 
 const counterparties = ref([]);
 const currencies = ref([]);

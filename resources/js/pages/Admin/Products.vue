@@ -6,26 +6,25 @@
       </template>
     </PageHeader>
 
-    <!-- Filters -->
-    <v-card class="mb-4 pa-3">
-      <v-row dense>
-        <v-col cols="12" sm="4">
-          <v-text-field v-model="filters.search" label="Поиск по названию" prepend-inner-icon="mdi-magnify"
-            rounded clearable hide-details @update:model-value="debouncedLoad" />
-        </v-col>
-        <v-col cols="12" sm="3">
-          <v-select v-model="filters.active" label="Статус" :items="activeOptions"
-            clearable hide-details @update:model-value="loadProducts" />
-        </v-col>
-        <v-col cols="12" sm="2" class="d-flex align-center ga-1">
-          <v-chip v-if="activeFilterCount > 0" size="small" color="info" variant="tonal">
-            {{ activeFilterCount }} {{ activeFilterCount === 1 ? 'фильтр' : 'фильтра' }}
-          </v-chip>
-          <v-btn v-if="activeFilterCount > 0" size="small" variant="text" color="secondary"
-            prepend-icon="mdi-filter-remove" @click="resetProductFilters">Сбросить</v-btn>
-        </v-col>
-      </v-row>
-    </v-card>
+    <FilterBar
+      :search="filters.search"
+      search-placeholder="Поиск по названию"
+      :search-cols="4"
+      :show-reset="activeFilterCount > 0"
+      @update:search="v => { filters.search = v ?? ''; debouncedLoad(); }"
+      @reset="resetProductFilters"
+    >
+      <v-col cols="12" md="3">
+        <v-select v-model="filters.active" label="Статус" :items="activeOptions"
+          variant="outlined" density="comfortable"
+          clearable hide-details @update:model-value="loadProducts" />
+      </v-col>
+      <v-col v-if="activeFilterCount > 0" cols="auto" class="d-flex align-center">
+        <v-chip size="small" color="info" variant="tonal">
+          {{ activeFilterCount }} {{ activeFilterCount === 1 ? 'фильтр' : 'фильтра' }}
+        </v-chip>
+      </v-col>
+    </FilterBar>
 
     <!-- Products Table -->
     <v-card>
@@ -41,9 +40,11 @@
         @click:row="(e, { item }) => toggleExpand(item)"
       >
         <template #item.active="{ item }">
-          <v-chip :color="item.active ? 'success' : 'grey'" size="x-small">
-            {{ item.active ? 'Активен' : 'Неактивен' }}
-          </v-chip>
+          <StatusChip
+            :color="item.active ? 'success' : 'grey'"
+            :text="item.active ? 'Активен' : 'Неактивен'"
+            size="x-small"
+          />
         </template>
         <template #item.visibleToResident="{ item }">
           <v-icon :color="item.visibleToResident ? 'success' : 'grey'" size="small">
@@ -79,9 +80,11 @@
                 hide-default-footer
               >
                 <template #item.active="{ item: prog }">
-                  <v-chip :color="prog.active ? 'success' : 'grey'" size="x-small">
-                    {{ prog.active ? 'Активна' : 'Неактивна' }}
-                  </v-chip>
+                  <StatusChip
+                    :color="prog.active ? 'success' : 'grey'"
+                    :text="prog.active ? 'Активна' : 'Неактивна'"
+                    size="x-small"
+                  />
                 </template>
                 <template #item.visibleToCalculator="{ item: prog }">
                   <v-icon :color="prog.visibleToCalculator ? 'success' : 'grey'" size="small">
@@ -267,6 +270,8 @@ import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
 import PageHeader from '../../components/PageHeader.vue';
 import EmptyState from '../../components/EmptyState.vue';
+import StatusChip from '../../components/StatusChip.vue';
+import FilterBar from '../../components/FilterBar.vue';
 
 const loading = ref(false);
 const saving = ref(false);

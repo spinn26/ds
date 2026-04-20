@@ -93,7 +93,7 @@
                 <span v-else>—</span>
               </td>
               <td style="white-space:nowrap">
-                <v-chip v-if="row.activityName" size="x-small" :color="getActivityColorByName(row.activityName)">{{ row.activityName }}</v-chip>
+                <StatusChip v-if="row.activityName" :value="row.activityName" kind="activityName" size="x-small" :text="row.activityName" />
                 <span v-else>—</span>
               </td>
               <td style="white-space:nowrap">
@@ -130,6 +130,7 @@ import api from '../api';
 import { useDebounce } from '../composables/useDebounce';
 import PageHeader from '../components/PageHeader.vue';
 import EmptyState from '../components/EmptyState.vue';
+import StatusChip from '../components/StatusChip.vue';
 import { fmt, getActivityColorByName } from '../composables/useDesign';
 
 const loading = ref(false);

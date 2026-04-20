@@ -2,19 +2,25 @@
   <div>
     <PageHeader title="Менеджер контрактов" icon="mdi-file-document-edit" :count="total" />
 
-    <v-card class="mb-3 pa-3">
-      <div class="d-flex ga-2 flex-wrap align-center">
-        <v-text-field v-model="search" placeholder="Поиск по номеру, клиенту..."
-          rounded prepend-inner-icon="mdi-magnify" clearable hide-details style="max-width:300px" @update:model-value="debouncedLoad" />
+    <FilterBar
+      :search="search"
+      search-placeholder="Поиск по номеру, клиенту..."
+      :search-cols="3"
+      :show-reset="activeFilterCount > 0"
+      @update:search="v => { search = v ?? ''; debouncedLoad(); }"
+      @reset="resetFilters"
+    >
+      <v-col cols="12" md="3">
         <v-select v-model="statusFilter" :items="statusOptions" label="Статус"
-          clearable hide-details style="max-width:200px" @update:model-value="loadData" />
-        <v-chip v-if="activeFilterCount > 0" size="small" color="info" variant="tonal" class="ml-1">
+          variant="outlined" density="comfortable"
+          clearable hide-details @update:model-value="loadData" />
+      </v-col>
+      <v-col v-if="activeFilterCount > 0" cols="auto" class="d-flex align-center">
+        <v-chip size="small" color="info" variant="tonal">
           {{ activeFilterCount }} {{ activeFilterCount === 1 ? 'фильтр' : 'фильтра' }}
         </v-chip>
-        <v-btn v-if="activeFilterCount > 0" size="small" variant="text" color="secondary"
-          prepend-icon="mdi-filter-remove" @click="resetFilters">Сбросить</v-btn>
-      </div>
-    </v-card>
+      </v-col>
+    </FilterBar>
 
     <v-data-table-server :items="items" :items-length="total" :loading="loading"
       :headers="headers" :items-per-page="25" @update:options="onOptions">
@@ -25,7 +31,7 @@
         {{ fmtDate(value) }}
       </template>
       <template #item.statusName="{ value }">
-        <v-chip size="x-small" :color="getContractStatusColor(value)">{{ value }}</v-chip>
+        <StatusChip :value="value" kind="contract" size="x-small" :text="value" />
       </template>
       <template #item.chat="{ item }">
         <StartChatButton :partner-id="item.consultantId || item.consultant" :partner-name="item.consultantName"
@@ -43,6 +49,8 @@ import { useDebounce } from '../../composables/useDebounce';
 import PageHeader from '../../components/PageHeader.vue';
 import EmptyState from '../../components/EmptyState.vue';
 import StartChatButton from '../../components/StartChatButton.vue';
+import StatusChip from '../../components/StatusChip.vue';
+import FilterBar from '../../components/FilterBar.vue';
 import { fmt, fmtDate, getContractStatusColor } from '../../composables/useDesign';
 
 const items = ref([]);

@@ -21,7 +21,7 @@
         {{ fmtDate(value) }}
       </template>
       <template #item.statusName="{ value }">
-        <v-chip size="x-small" :color="getContractStatusColor(value)">{{ value }}</v-chip>
+        <StatusChip :value="value" kind="contract" size="x-small" :text="value" />
       </template>
       <template #no-data><EmptyState /></template>
     </v-data-table-server>
@@ -34,6 +34,7 @@ import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
 import PageHeader from '../../components/PageHeader.vue';
 import EmptyState from '../../components/EmptyState.vue';
+import StatusChip from '../../components/StatusChip.vue';
 import { fmt, fmtDate, getContractStatusColor } from '../../composables/useDesign';
 
 const items = ref([]);

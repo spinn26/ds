@@ -2,21 +2,30 @@
   <div>
     <PageHeader title="Партнёры" icon="mdi-account-search" :count="total" />
 
-    <v-card class="mb-3 pa-3">
-      <div class="d-flex ga-2 flex-wrap align-center">
-        <v-text-field v-model="search" placeholder="Поиск по ФИО..."
-          rounded prepend-inner-icon="mdi-magnify" clearable hide-details style="max-width:300px" @update:model-value="debouncedLoad" />
+    <FilterBar
+      :search="search"
+      search-placeholder="Поиск по ФИО..."
+      :search-cols="3"
+      :show-reset="activeFilterCount > 0"
+      @update:search="v => { search = v ?? ''; debouncedLoad(); }"
+      @reset="resetFilters"
+    >
+      <v-col cols="12" md="3">
         <v-select v-model="activityFilter" :items="activityOptions" label="Активность"
-          clearable hide-details style="max-width:200px" @update:model-value="loadData" />
+          variant="outlined" density="comfortable"
+          clearable hide-details @update:model-value="loadData" />
+      </v-col>
+      <v-col cols="12" md="3">
         <v-select v-model="statusFilter" :items="statusOptions" label="Статус"
-          clearable hide-details style="max-width:200px" @update:model-value="loadData" />
-        <v-chip v-if="activeFilterCount > 0" size="small" color="info" variant="tonal" class="ml-1">
+          variant="outlined" density="comfortable"
+          clearable hide-details @update:model-value="loadData" />
+      </v-col>
+      <v-col v-if="activeFilterCount > 0" cols="auto" class="d-flex align-center">
+        <v-chip size="small" color="info" variant="tonal">
           {{ activeFilterCount }} {{ activeFilterCount === 1 ? 'фильтр' : 'фильтра' }}
         </v-chip>
-        <v-btn v-if="activeFilterCount > 0" size="small" variant="text" color="secondary"
-          prepend-icon="mdi-filter-remove" @click="resetFilters">Сбросить</v-btn>
-        <v-spacer />
-        <!-- Column visibility menu -->
+      </v-col>
+      <template #actions>
         <v-menu :close-on-content-click="false">
           <template #activator="{ props: menuProps }">
             <v-btn size="small" variant="text" prepend-icon="mdi-view-column" v-bind="menuProps">Колонки</v-btn>
@@ -30,8 +39,8 @@
             </v-list-item>
           </v-list>
         </v-menu>
-      </div>
-    </v-card>
+      </template>
+    </FilterBar>
 
     <!-- Bulk action bar: two primary actions + destructive + overflow menu -->
     <v-slide-y-transition>
@@ -83,7 +92,7 @@
       @update:options="onOptions"
     >
       <template #item.activityName="{ value }">
-        <v-chip v-if="value" size="x-small" :color="getActivityColorByName(value)">{{ value }}</v-chip>
+        <StatusChip v-if="value" :value="value" kind="activityName" size="x-small" :text="value" />
         <span v-else>—</span>
       </template>
       <template #item.active="{ value }">
@@ -201,6 +210,8 @@ import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
 import PageHeader from '../../components/PageHeader.vue';
 import DataTableWrapper from '../../components/DataTableWrapper.vue';
+import StatusChip from '../../components/StatusChip.vue';
+import FilterBar from '../../components/FilterBar.vue';
 import { fmtDate, getActivityColorByName } from '../../composables/useDesign';
 
 const items = ref([]);

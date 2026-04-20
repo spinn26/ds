@@ -2,15 +2,13 @@
   <div>
     <PageHeader title="Контракты моих клиентов" icon="mdi-file-document" :count="total" />
 
-    <v-card class="mb-3 pa-3">
-      <div class="d-flex ga-2 align-center">
-        <v-text-field v-model="filters.search" placeholder="Поиск по ФИО, номеру, продукту..."
-          rounded prepend-inner-icon="mdi-magnify" clearable hide-details class="flex-grow-1" style="max-width:500px"
-          @update:model-value="debouncedLoad" />
-        <v-btn v-if="filters.search" size="small" variant="text" color="secondary"
-          prepend-icon="mdi-filter-remove" @click="filters.search = ''; loadData()">Сбросить</v-btn>
-      </div>
-    </v-card>
+    <FilterBar
+      :search="filters.search"
+      search-placeholder="Поиск по ФИО, номеру, продукту..."
+      :show-reset="!!filters.search"
+      @update:search="v => { filters.search = v ?? ''; debouncedLoad(); }"
+      @reset="filters.search = ''; loadData();"
+    />
 
     <v-data-table-server :items="items" :items-length="total" :loading="loading"
       :headers="headers" :items-per-page="25" @update:options="onOptions">
@@ -21,7 +19,7 @@
         {{ fmtDate(value) }}
       </template>
       <template #item.statusName="{ value }">
-        <v-chip size="x-small" :color="getContractStatusColor(value)">{{ value }}</v-chip>
+        <StatusChip :value="value" kind="contract" size="x-small" :text="value" />
       </template>
       <template #no-data><EmptyState /></template>
     </v-data-table-server>
@@ -34,6 +32,8 @@ import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
 import PageHeader from '../../components/PageHeader.vue';
 import EmptyState from '../../components/EmptyState.vue';
+import StatusChip from '../../components/StatusChip.vue';
+import FilterBar from '../../components/FilterBar.vue';
 import { fmt, fmtDate, getContractStatusColor } from '../../composables/useDesign';
 
 const items = ref([]);
