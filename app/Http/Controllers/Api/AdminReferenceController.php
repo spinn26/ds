@@ -107,10 +107,12 @@ class AdminReferenceController extends Controller
         'currency' => [
             'label' => 'Валюты',
             'table' => 'currency',
-            'primaryLabel' => 'name',
-            'orderBy' => 'name',
+            // Legacy schema: nameRu / nameEn / currencyName — no plain `name`.
+            'primaryLabel' => 'nameRu',
+            'orderBy' => 'nameRu',
             'fields' => [
-                ['key' => 'name', 'label' => 'Название (RUB, USD, EUR…)', 'type' => 'string', 'required' => true],
+                ['key' => 'nameRu', 'label' => 'Название (RUB, USD, EUR…)', 'type' => 'string', 'required' => true],
+                ['key' => 'nameEn', 'label' => 'Название (en)', 'type' => 'string'],
                 ['key' => 'symbol', 'label' => 'Символ (₽, $, €…)', 'type' => 'string', 'required' => true],
             ],
         ],
