@@ -7,6 +7,7 @@ use App\Models\Consultant;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class CalculatorController extends Controller
 {
@@ -258,7 +259,10 @@ class CalculatorController extends Controller
     {
         try {
             DB::table('volumeCalculator')->where('user', $request->user()->id)->delete();
-        } catch (\Exception $e) {}
+        } catch (\Exception $e) {
+            Log::error('calculator clearHistory failed', ['user_id' => $request->user()->id, 'exception' => $e->getMessage()]);
+            return response()->json(['message' => 'Не удалось очистить историю'], 500);
+        }
 
         return response()->json(['message' => 'История очищена']);
     }

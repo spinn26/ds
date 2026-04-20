@@ -9,6 +9,7 @@ use App\Services\SocketService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
 class TicketController extends Controller
@@ -375,7 +376,9 @@ class TicketController extends Controller
                 'createdAt' => now()->toIso8601String(),
             ]);
 
-        } catch (\Exception $e) {}
+        } catch (\Exception $e) {
+            Log::warning('ticket socket emit failed: new-message', ['ticket_id' => $id, 'message_id' => $msgId, 'exception' => $e->getMessage()]);
+        }
 
         // Notify ticket creator if staff replies
         if ($ticket && $user->id !== $ticket->created_by) {
