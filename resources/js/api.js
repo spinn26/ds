@@ -32,6 +32,12 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
     (r) => r,
     (error) => {
+        // Request was cancelled (component unmounted / navigation). Not an
+        // error the user needs to see — don't pop snackbars, just propagate.
+        if (axios.isCancel(error)) {
+            return Promise.reject(error);
+        }
+
         const status = error.response?.status;
         const url = error.config?.url || '';
         const { showError } = useSnackbar();
