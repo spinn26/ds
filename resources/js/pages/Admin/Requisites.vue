@@ -99,6 +99,46 @@
             </tbody>
           </v-table>
 
+          <!-- INN check -->
+          <div class="text-subtitle-2 font-weight-bold mb-2 d-flex align-center">
+            Проверка по ИНН
+            <v-spacer />
+            <v-btn size="small" variant="tonal" color="info" prepend-icon="mdi-magnify"
+              :loading="innChecking" :disabled="!selectedItem.inn" @click="checkInn">
+              Проверить ИНН
+            </v-btn>
+          </div>
+          <v-alert v-if="innResult" :type="innAlertType" variant="tonal" density="compact" class="mb-3">
+            <div v-if="!innResult.found" class="text-body-2">
+              <v-icon size="18" class="me-1">mdi-alert-circle</v-icon>
+              {{ innResult.error || 'Не удалось проверить ИНН' }}
+            </div>
+            <template v-else>
+              <div class="font-weight-medium">{{ innResult.name }}</div>
+              <div class="text-caption">
+                Статус: {{ innResult.status || '—' }}
+                <template v-if="innResult.registrationDate"> · Регистрация: {{ innResult.registrationDate }}</template>
+              </div>
+              <div v-if="innResult.address" class="text-caption">{{ innResult.address }}</div>
+              <div v-if="innResult.fioCheck" class="mt-2 pa-2"
+                :class="innResult.fioCheck.match ? 'bg-success-lighten-4' : 'bg-error-lighten-4'"
+                style="border-radius:4px">
+                <div class="font-weight-medium d-flex align-center">
+                  <v-icon :color="innResult.fioCheck.match ? 'success' : 'error'" size="18" class="me-1">
+                    {{ innResult.fioCheck.match ? 'mdi-check-circle' : 'mdi-alert-circle' }}
+                  </v-icon>
+                  {{ innResult.fioCheck.match ? 'ФИО совпадает' : 'ФИО НЕ совпадает' }}
+                </div>
+                <div class="text-caption mt-1">
+                  По ИНН: <b>{{ innResult.fioCheck.actual || '—' }}</b>
+                </div>
+                <div class="text-caption">
+                  В профиле: <b>{{ innResult.fioCheck.expected || '—' }}</b>
+                </div>
+              </div>
+            </template>
+          </v-alert>
+
           <!-- Documents -->
           <div class="text-subtitle-2 font-weight-bold mb-2">Документы</div>
           <v-list density="compact" class="mb-4">
@@ -109,7 +149,18 @@
                 </v-icon>
               </template>
               <v-list-item-title>{{ doc.label }}</v-list-item-title>
-              <v-list-item-subtitle>{{ doc.uploaded ? 'Загружен' : 'Не загружен' }}</v-list-item-subtitle>
+              <v-list-item-subtitle>
+                <template v-if="doc.uploaded">
+                  <a :href="doc.url" target="_blank" rel="noopener" class="text-primary">
+                    <v-icon size="14">mdi-eye-outline</v-icon> Открыть
+                  </a>
+                  <span class="text-medium-emphasis mx-1">·</span>
+                  <a :href="doc.url" :download="docFilename(doc)" class="text-primary">
+                    <v-icon size="14">mdi-download</v-icon> Скачать
+                  </a>
+                </template>
+                <span v-else class="text-medium-emphasis">Не загружен</span>
+              </v-list-item-subtitle>
             </v-list-item>
           </v-list>
 
@@ -184,6 +235,33 @@ const drawerVerifying = ref(false);
 const drawerRejecting = ref(false);
 const rejectDialogOpen = ref(false);
 const rejectComment = ref('');
+const innChecking = ref(false);
+const innResult = ref(null);
+
+const innAlertType = computed(() => {
+  if (!innResult.value) return 'info';
+  if (!innResult.value.found) return 'warning';
+  if (innResult.value.fioCheck && !innResult.value.fioCheck.match) return 'error';
+  return 'success';
+});
+
+function docFilename(doc) {
+  const base = (doc.path || doc.url || '').split('/').pop() || doc.type;
+  return base;
+}
+
+async function checkInn() {
+  if (!selectedItem.value?.id) return;
+  innChecking.value = true;
+  innResult.value = null;
+  try {
+    const { data } = await api.post(`/admin/requisites/${selectedItem.value.id}/check-inn`);
+    innResult.value = data;
+  } catch (e) {
+    innResult.value = { found: false, error: e.response?.data?.message || 'Не удалось проверить' };
+  }
+  innChecking.value = false;
+}
 
 const documentTypeLabels = {
   passportPage1: 'Паспорт (разворот с фото)',
@@ -194,15 +272,20 @@ const documentTypeLabels = {
 async function openDrawer(item) {
   selectedItem.value = item;
   drawerOpen.value = true;
+  innResult.value = null;
   try {
     const { data } = await api.get(`/admin/requisites/${item.id}/documents`);
-    const uploadedTypes = (data || []).map(d => d.type);
+    const byType = Object.fromEntries((data || []).map(d => [d.type, d]));
     drawerDocuments.value = Object.entries(documentTypeLabels).map(([type, label]) => ({
-      type, label, uploaded: uploadedTypes.includes(type),
+      type,
+      label,
+      uploaded: !!byType[type],
+      url: byType[type]?.url || null,
+      path: byType[type]?.path || null,
     }));
   } catch {
     drawerDocuments.value = Object.entries(documentTypeLabels).map(([type, label]) => ({
-      type, label, uploaded: false,
+      type, label, uploaded: false, url: null, path: null,
     }));
   }
 }

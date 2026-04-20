@@ -536,6 +536,44 @@ class AdminDataController extends Controller
         return response()->json($out);
     }
 
+    /**
+     * Проверка ИНН через DaData: находит ИП/юрлицо и сравнивает ФИО с ФИО
+     * партнёра из WebUser. Используется для быстрой сверки реквизитов.
+     */
+    public function checkRequisiteInn(int $id): JsonResponse
+    {
+        $req = DB::table('requisites')->where('id', $id)->first();
+        if (! $req) {
+            return response()->json(['message' => 'Реквизиты не найдены'], 404);
+        }
+        if (! $req->inn) {
+            return response()->json(['message' => 'ИНН не заполнен'], 422);
+        }
+
+        $dadata = app(\App\Services\DadataService::class);
+        $result = $dadata->findByInn((string) $req->inn);
+
+        // Если нашли — сравниваем ФИО с профилем партнёра.
+        if (! empty($result['found']) && $req->consultant) {
+            $webUserId = DB::table('consultant')->where('id', $req->consultant)->value('webUser');
+            if ($webUserId) {
+                $user = DB::table('WebUser')->where('id', $webUserId)->first([
+                    'firstName', 'lastName', 'patronymic',
+                ]);
+                if ($user) {
+                    $result['fioCheck'] = $dadata->compareFio(
+                        $result['fio'],
+                        $user->lastName,
+                        $user->firstName,
+                        $user->patronymic,
+                    );
+                }
+            }
+        }
+
+        return response()->json($result);
+    }
+
     /** Верификация/отклонение реквизитов */
     public function verifyRequisites(Request $request, int $id): JsonResponse
     {

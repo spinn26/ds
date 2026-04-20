@@ -29,6 +29,10 @@ class ApiSettingsService
         'telegram.status.chat_id'      => ['group' => 'telegram', 'label' => 'Chat ID для статуса платформы', 'hint' => 'ID чата/группы, куда слать health-алерты. Числовой, может быть отрицательным (группа)', 'secret' => false, 'envFallback' => 'TELEGRAM_STATUS_CHAT_ID'],
         'telegram.staff.chat_id'       => ['group' => 'telegram', 'label' => 'Chat ID для staff-уведомлений', 'hint' => 'Дублирование админ-нотификаций в Telegram (необязательно)', 'secret' => false, 'envFallback' => null],
 
+        // DaData — проверка ИНН физлиц/ИП
+        'dadata.api_key'               => ['group' => 'dadata', 'label' => 'DaData API Key', 'hint' => 'Для проверки ИНН (dadata.ru/api/find-party). Free tier: 10k запросов/сутки.', 'secret' => true, 'envFallback' => 'DADATA_API_KEY'],
+        'dadata.secret_key'            => ['group' => 'dadata', 'label' => 'DaData Secret (только для некоторых API)', 'hint' => 'Нужен для /clean/ эндпоинтов — для простого find-party не требуется', 'secret' => true, 'envFallback' => 'DADATA_SECRET_KEY'],
+
         // Другие интеграции — под резерв
         'bubble.api_token'             => ['group' => 'bubble', 'label' => 'Bubble API Token', 'hint' => 'Legacy интеграция, только для миграции', 'secret' => true, 'envFallback' => 'BUBBLE_API_TOKEN'],
         'getcourse.api_key'            => ['group' => 'getcourse', 'label' => 'GetCourse API Key', 'hint' => '', 'secret' => true, 'envFallback' => 'GETCOURSE_API_KEY'],
