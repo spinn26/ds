@@ -4,6 +4,7 @@ namespace App\Services;
 
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use App\Services\PeriodFreezeService;
 
 /**
  * Каскадный расчёт комиссий по MLM-структуре.
@@ -21,6 +22,7 @@ class CommissionCalculator
 {
     public function __construct(
         private readonly PartnerStatusService $statusService,
+        private readonly PeriodFreezeService $periodFreeze,
     ) {}
 
 
@@ -56,6 +58,12 @@ class CommissionCalculator
     {
         $tx = DB::table('transaction')->where('id', $transactionId)->first();
         if (! $tx) return ['error' => 'Транзакция не найдена'];
+
+        // Заморозка: нельзя пересчитывать комиссии в закрытом месяце.
+        // Per ./.claude/specs/✅Комиссии .md Part 2 §1.
+        if ($tx->dateYear && $tx->dateMonth && $this->periodFreeze->isFrozen((int) $tx->dateYear, (int) $tx->dateMonth)) {
+            return ['error' => "Период {$tx->dateMonth}.{$tx->dateYear} закрыт — комиссии не пересчитываются"];
+        }
 
         $contract = DB::table('contract')->where('id', $tx->contract)->first();
         if (! $contract) return ['error' => 'Контракт не найден'];

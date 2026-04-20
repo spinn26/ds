@@ -181,6 +181,12 @@ Route::prefix('v1')->group(function () {
         Route::put('/admin/mail/templates/{id}', [\App\Http\Controllers\Api\AdminMailController::class, 'updateTemplate']);
         Route::delete('/admin/mail/templates/{id}', [\App\Http\Controllers\Api\AdminMailController::class, 'destroyTemplate']);
 
+        // Admin — Period freeze (close/reopen reporting months)
+        Route::get('/admin/periods', [\App\Http\Controllers\Api\AdminPeriodController::class, 'index']);
+        Route::post('/admin/periods/close', [\App\Http\Controllers\Api\AdminPeriodController::class, 'close'])->middleware('throttle:10,1');
+        Route::post('/admin/periods/reopen', [\App\Http\Controllers\Api\AdminPeriodController::class, 'reopen'])->middleware('throttle:10,1');
+        Route::get('/admin/periods/{year}/{month}', [\App\Http\Controllers\Api\AdminPeriodController::class, 'check'])->whereNumber(['year', 'month']);
+
         // Admin References (generic CRUD for small reference tables)
         Route::get('/admin/references', [\App\Http\Controllers\Api\AdminReferenceController::class, 'catalogs']);
         Route::get('/admin/references/{catalog}', [\App\Http\Controllers\Api\AdminReferenceController::class, 'index']);

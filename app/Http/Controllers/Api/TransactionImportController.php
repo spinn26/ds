@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\PeriodFreezeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -10,6 +11,11 @@ use Illuminate\Support\Facades\Schema;
 
 class TransactionImportController extends Controller
 {
+    public function __construct(
+        private readonly PeriodFreezeService $periodFreeze,
+    ) {}
+
+
     /**
      * Справочники для формы импорта.
      */
@@ -258,6 +264,24 @@ class TransactionImportController extends Controller
      */
     public function rollback(int $importId): JsonResponse
     {
+        // Заморозка: если хоть одна транзакция импорта попадает в закрытый
+        // месяц — откатывать нельзя. Правки закрытых периодов идут только
+        // через «Прочие начисления» (spec ✅Комиссии Part 2 §1).
+        $frozenTxs = DB::table('transaction as t')
+            ->where('t.comment', 'Импорт #' . $importId)
+            ->join('period_closures as p', function ($j) {
+                $j->on('p.year', '=', 't.dateYear')
+                  ->on('p.month', '=', 't.dateMonth')
+                  ->whereNull('p.reopened_at');
+            })
+            ->count();
+
+        if ($frozenTxs > 0) {
+            return response()->json([
+                'message' => "Откат невозможен: {$frozenTxs} транзакций импорта находится в закрытых периодах. Для корректировки используйте «Прочие начисления».",
+            ], 422);
+        }
+
         $result = DB::transaction(function () use ($importId) {
             $txIds = DB::table('transaction')
                 ->where('comment', 'Импорт #' . $importId)
