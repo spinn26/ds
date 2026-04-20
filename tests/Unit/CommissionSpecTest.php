@@ -142,22 +142,17 @@ class CommissionSpecTest extends TestCase
     #[Test]
     public function spec_5_1_detachment_penalty_halves_branch_commission(): void
     {
-        $this->markTestIncomplete(
-            'Not implemented in Laravel CommissionCalculator. Detachment (>70%) ' .
-            'currently lives in legacy Directual. When the monthly commission ' .
-            'finaliser is ported to PHP, apply 0.5× to the single-branch '.
-            'commission whose share of group volume exceeds 70%. Points credit ' .
-            '100% (only the cash payout is cut).'
-        );
+        // Per spec §5.1: 3 ветки 7500/500/2000, первая ветка = 75% → ×0.5.
+        $finaliser = new \App\Services\MonthlyFinaliser();
+        $mults = $finaliser->detachmentMultipliers([
+            1 => 7500,
+            2 => 500,
+            3 => 2000,
+        ]);
 
-        // Per spec §5.1: partner has 3 branches — 7500 / 500 / 2000 balls (75 / 5 / 20%).
-        // Branch 1 is detached → commission from branch 1 ×0.5. Others stay 100%.
-        // Expected expressed as a pure check below once implemented:
-        //
-        //   $branchShare = 7500 / (7500 + 500 + 2000);
-        //   $this->assertGreaterThan(0.70, $branchShare);
-        //   $adjusted = $branch1Commission * 0.5;
-        //   $this->assertEquals($branch1Commission / 2, $adjusted);
+        $this->assertSame(0.5, $mults[1], 'Ветка 1 дала >70% — режется вдвое');
+        $this->assertSame(1.0, $mults[2]);
+        $this->assertSame(1.0, $mults[3]);
     }
 
     // ========================================================================
@@ -167,22 +162,20 @@ class CommissionSpecTest extends TestCase
     #[Test]
     public function spec_5_2_failed_op_cuts_group_commission_by_20_percent(): void
     {
-        $this->markTestIncomplete(
-            'Not implemented in Laravel CommissionCalculator. ОП threshold is ' .
-            'stored in status_levels (spec §2 column "ОП по ГП"), but no code ' .
-            'currently compares monthly ГП to the threshold and applies the 0.8× ' .
-            'multiplier. Personal (ЛП) commissions are never affected.'
-        );
+        // Per spec §5.2 (FC, ОП=3000): делают 2800. ГП ×0.8. ЛП нетронут.
+        $finaliser = new \App\Services\MonthlyFinaliser();
+        $mult = $finaliser->opMultiplier(actualGroupVolume: 2800, requiredOpVolume: 3000);
+        $this->assertSame(0.8, $mult, 'ОП недобор → ×0.8 к ГП');
 
-        // Per spec §5.2, example (FC): earned ЛП 10 000, ГП 35 000; ОП failed.
-        //   ЛП unchanged = 10 000.
-        //   ГП ×0.8 = 28 000.
-        //   Total 38 000.
+        $ok = $finaliser->opMultiplier(actualGroupVolume: 3500, requiredOpVolume: 3000);
+        $this->assertSame(1.0, $ok, 'ОП выполнен → без штрафа');
+
+        // ЛП не участвует: сервис просто не трогает ЛП, caller сам решает.
         $lp = 10_000;
         $gp = 35_000;
-        $gpAfter = $gp * 0.8;
-        $this->assertEqualsWithDelta(28_000.0, $gpAfter, 0.01);
-        $this->assertEqualsWithDelta(38_000.0, $lp + $gpAfter, 0.01);
+        $finalGp = $gp * $mult;
+        $this->assertEqualsWithDelta(28_000.0, $finalGp, 0.01);
+        $this->assertEqualsWithDelta(38_000.0, $lp + $finalGp, 0.01);
     }
 
     // ========================================================================
@@ -192,27 +185,26 @@ class CommissionSpecTest extends TestCase
     #[Test]
     public function spec_5_3_combo_penalty_order_is_detachment_then_op(): void
     {
-        $this->markTestIncomplete(
-            'Order matters: detachment (×0.5 per branch) must be applied FIRST, ' .
-            'then the OP penalty (×0.8) to the resulting group total. Reversing ' .
-            'the order yields a different number. Not in Laravel code yet.'
+        // Per spec §5.3 example (FC, ОП failed): ЛП 1000;
+        //   Ветка 1 (77%, detached) = 10 000, Ветка 2 = 1000, Ветка 3 = 1000.
+        // Expected: gp after combo = 5600, total with ЛП = 6600.
+        // Volumes mirror commissions 1:1 in this example so we pass both as the same shape.
+        $finaliser = new \App\Services\MonthlyFinaliser();
+        $result = $finaliser->applyCombo(
+            branchCommissionsRub: [1 => 10_000, 2 => 1_000, 3 => 1_000],
+            branchVolumes:        [1 => 10_000, 2 => 1_000, 3 => 1_000],
+            actualGroupVolume:    12_000,   // failed OP (assume threshold higher)
+            requiredOpVolume:     20_000,
         );
 
-        // Per spec §5.3, example (FC, ОП failed): ЛП 1000; Ветка 1 = 10 000 (77%, detached);
-        // Ветка 2 = 1000; Ветка 3 = 1000.
-        //   Step 1 (detachment on branch 1): 10 000 / 2 = 5 000.
-        //     GP total = 5000 + 1000 + 1000 = 7 000.
-        //   Step 2 (ОП penalty on the total): 7000 × 0.8 = 5 600.
-        //   Final payout = ЛП 1000 + ГП 5600 = 6 600.
-        $branch1 = 10_000 / 2;
-        $gpTotal = $branch1 + 1_000 + 1_000;
-        $gpAfterOp = $gpTotal * 0.8;
-        $total = 1_000 + $gpAfterOp;
+        $this->assertSame(0.5, $result['detachmentMultipliers'][1], 'Ветка 1 обрезана');
+        $this->assertSame(0.8, $result['opMultiplier'], 'ОП штраф 20%');
+        $this->assertEqualsWithDelta(5_000.0, $result['afterDetachment'][1], 0.01);
+        $this->assertEqualsWithDelta(7_000.0, $result['groupTotalRub'], 0.01, 'ГП до ОП = 7000');
+        $this->assertEqualsWithDelta(5_600.0, $result['afterOp'], 0.01, 'ГП после ОП = 5600');
 
-        $this->assertEqualsWithDelta(5_000.0, $branch1, 0.01);
-        $this->assertEqualsWithDelta(7_000.0, $gpTotal, 0.01);
-        $this->assertEqualsWithDelta(5_600.0, $gpAfterOp, 0.01);
-        $this->assertEqualsWithDelta(6_600.0, $total, 0.01);
+        $lp = 1_000;
+        $this->assertEqualsWithDelta(6_600.0, $lp + $result['afterOp'], 0.01);
     }
 
     // ========================================================================
@@ -223,37 +215,42 @@ class CommissionSpecTest extends TestCase
     public function spec_6_1_pool_fund_is_one_percent_of_revenue(): void
     {
         // Per spec §6.1: fund per leader level = 1% of VAT-exclusive revenue.
-        $revenueNoVat = 100_000_000;
-        $poolPercent = 1;
+        $pool = new \App\Services\PoolCalculator();
+        $shares = $pool->shareValues(100_000_000, [6 => 20]);
 
-        $fund = $revenueNoVat * $poolPercent / 100;
-        $this->assertSame(1_000_000, (int) $fund);
+        // 1% of 100M = 1M, divided by 20 heads at Top FC = 50k per share.
+        $this->assertSame(50_000.0, $shares[6]);
     }
 
     #[Test]
     public function spec_6_2_share_value_divides_fund_by_nominal_headcount(): void
     {
         // Per spec §6.2: share = fund / nominal headcount (qualifying + not).
-        $fund = 1_000_000;
+        $pool = new \App\Services\PoolCalculator();
+        $shares = $pool->shareValues(100_000_000, [
+            6 => 20,
+            7 => 10,
+            8 => 5,
+            9 => 4,
+        ]);
 
-        $this->assertSame(50_000, (int) ($fund / 20));   // TOP FC
-        $this->assertSame(100_000, (int) ($fund / 10));  // Silver
-        $this->assertSame(200_000, (int) ($fund / 5));   // Gold
-        $this->assertSame(250_000, (int) ($fund / 4));   // Platinum
+        $this->assertSame(50_000.0, $shares[6]);   // TOP FC
+        $this->assertSame(100_000.0, $shares[7]);  // Silver
+        $this->assertSame(200_000.0, $shares[8]);  // Gold
+        $this->assertSame(250_000.0, $shares[9]);  // Platinum
     }
 
     #[Test]
     public function spec_6_3_matryoshka_stacks_all_lower_leader_shares(): void
     {
-        // Per spec §6.3: Platinum partner who qualified gets his own share
-        // plus every lower leader share.
-        $topfc = 50_000;
-        $silver = 100_000;
-        $gold = 200_000;
-        $platinum = 250_000;
+        // Per spec §6.3: Platinum partner who qualified gets own share plus every lower leader share.
+        $pool = new \App\Services\PoolCalculator();
+        $shares = [6 => 50_000.0, 7 => 100_000.0, 8 => 200_000.0, 9 => 250_000.0];
 
-        $total = $topfc + $silver + $gold + $platinum;
-        $this->assertSame(600_000, $total);
+        $this->assertSame(50_000.0, $pool->matryoshkaForLevel(6, $shares));
+        $this->assertSame(150_000.0, $pool->matryoshkaForLevel(7, $shares));
+        $this->assertSame(350_000.0, $pool->matryoshkaForLevel(8, $shares));
+        $this->assertSame(600_000.0, $pool->matryoshkaForLevel(9, $shares));
     }
 
     #[Test]
@@ -280,22 +277,30 @@ class CommissionSpecTest extends TestCase
     #[Test]
     public function spec_6_5_forfeited_shares_are_not_redistributed(): void
     {
-        $this->markTestIncomplete(
-            'Spec §6.5: forfeited shares stay with the company, they are NOT ' .
-            'redistributed among qualifying peers. If a future pool calculator ' .
-            'divides (fund − forfeited) / qualifying_count instead of paying ' .
-            'each qualifier exactly one share — that is a bug.'
-        );
-
-        // Per spec example: 10 Silver, 2 failed ОП, fund 1 000 000 (share 100 000).
+        // Per spec §6.5: 10 Silver, 2 failed ОП, fund 1 000 000 (share 100 000).
         //   Correct outcome: 8 qualifiers each get 100 000, 200 000 stays with DS.
         //   Wrong outcome (redistribution): 8 qualifiers each get 125 000.
-        $share = 100_000;
-        $qualifyingCount = 8;
-        $correctPayout = $share;
-        $wrongPayout = 1_000_000 / $qualifyingCount;
+        $pool = new \App\Services\PoolCalculator();
 
-        $this->assertNotEquals($wrongPayout, $correctPayout);
+        // Ten Silver partners (level 7), two with participates=false.
+        $partners = [];
+        for ($i = 1; $i <= 8; $i++) {
+            $partners[] = ['id' => $i, 'level' => 7, 'participates' => true];
+        }
+        for ($i = 9; $i <= 10; $i++) {
+            $partners[] = ['id' => $i, 'level' => 7, 'participates' => false];
+        }
+
+        // No lower-level leaders here, so Silver matryoshka is just share(6)+share(7).
+        // Zero Top-FC head-count makes share(6)=0; Silver share alone drives the payout.
+        $distribution = $pool->distribute(100_000_000, [6 => 0, 7 => 10], $partners);
+
+        $payouts = array_column($distribution, 'payoutRub');
+        $sumPaidOut = array_sum($payouts);
+
+        $this->assertSame(100_000.0, $distribution[0]['payoutRub'], 'Qualifying partner gets one share');
+        $this->assertSame(0.0, $distribution[8]['payoutRub'], 'Non-participating partner gets zero');
+        $this->assertSame(800_000.0, $sumPaidOut, 'Only 8×100k paid; 200k stays with DS');
     }
 
     // ========================================================================
