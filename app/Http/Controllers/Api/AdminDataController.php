@@ -515,25 +515,98 @@ class AdminDataController extends Controller
             return response()->json([]);
         }
 
+        // В consultant.passportScanPage1/... хранится числовой FileUpload.uuid
+        // (legacy Directual). Нужно ждойнить FileUpload по uuid, чтобы получить
+        // реальный URL файла (urlLink = directual CDN).
         $map = [
             'passportPage1' => 'passportScanPage1',
             'passportPage2' => 'passportScanPage2',
             'applicationForPayment' => 'applicationForPayment',
         ];
 
+        $uuids = [];
+        foreach ($map as $column) {
+            $v = $consultant->{$column} ?? null;
+            if ($v !== null && $v !== '' && is_numeric($v)) $uuids[] = (int) $v;
+        }
+
+        $files = $uuids
+            ? DB::table('FileUpload')->whereIn('uuid', $uuids)
+                ->get(['uuid', 'urlLink', 'originalFileName', 'extension'])
+                ->keyBy('uuid')
+            : collect();
+
         $out = [];
         foreach ($map as $type => $column) {
-            $value = $consultant->{$column} ?? null;
-            if ($value) {
+            $raw = $consultant->{$column} ?? null;
+            if ($raw === null || $raw === '') continue;
+
+            // Если uuid есть в FileUpload — берём готовый URL оттуда
+            if (is_numeric($raw) && isset($files[(int) $raw])) {
+                $f = $files[(int) $raw];
                 $out[] = [
                     'type' => $type,
-                    'path' => $value,
-                    'url' => str_starts_with($value, 'http') ? $value : '/storage/' . $value,
+                    'uuid' => (int) $raw,
+                    'url' => $f->urlLink,
+                    'filename' => $f->originalFileName,
+                    'extension' => $f->extension,
                 ];
+            } elseif (str_starts_with((string) $raw, 'http')) {
+                $out[] = ['type' => $type, 'url' => (string) $raw];
+            } else {
+                // legacy: /storage/{relative-path}
+                $out[] = ['type' => $type, 'url' => '/storage/' . $raw, 'path' => (string) $raw];
             }
         }
 
         return response()->json($out);
+    }
+
+    /**
+     * Сводка по партнёру для drawer'а реквизитов:
+     * ФИО, контакты, уровень квалификации, дата регистрации, активность.
+     */
+    public function requisitePartner(int $id): JsonResponse
+    {
+        $req = DB::table('requisites')->where('id', $id)->first();
+        if (! $req || ! $req->consultant) {
+            return response()->json(null);
+        }
+
+        $c = DB::table('consultant')->where('id', $req->consultant)->first();
+        if (! $c) return response()->json(null);
+
+        $user = $c->webUser
+            ? DB::table('WebUser')->where('id', $c->webUser)->first([
+                'firstName', 'lastName', 'patronymic', 'email', 'phone', 'nicTG',
+            ])
+            : null;
+
+        $level = $c->status_and_lvl
+            ? DB::table('status_levels')->where('id', $c->status_and_lvl)->first(['level', 'title', 'percent'])
+            : null;
+
+        $activity = $c->activity
+            ? DB::table('directory_of_activities')->where('id', $c->activity)->value('name')
+            : null;
+
+        return response()->json([
+            'consultantId' => $c->id,
+            'personName' => $c->personName,
+            'firstName' => $user->firstName ?? null,
+            'lastName' => $user->lastName ?? null,
+            'patronymic' => $user->patronymic ?? null,
+            'email' => $user->email ?? null,
+            'phone' => $user->phone ?? null,
+            'telegram' => $user->nicTG ?? null,
+            'qualification' => $level ? "{$level->level} [{$level->title}]" : null,
+            'percent' => $level->percent ?? null,
+            'activity' => $activity,
+            'dateCreated' => $c->dateCreated,
+            'dateActivity' => $c->dateActivity,
+            'personalVolume' => (float) ($c->personalVolume ?? 0),
+            'groupVolume' => (float) ($c->groupVolume ?? 0),
+        ]);
     }
 
     /**

@@ -74,12 +74,45 @@
             {{ verifyLabel(selectedItem.verificationStatus) }}
           </v-chip>
 
-          <!-- IP Requisites -->
+          <!-- 1. Partner data -->
+          <div class="text-subtitle-2 font-weight-bold mb-2">Данные партнёра</div>
+          <v-table density="compact" class="mb-4">
+            <tbody>
+              <tr><td class="text-medium-emphasis" style="width:50%">ФИО</td>
+                <td>{{ partnerFullName || '—' }}</td></tr>
+              <tr><td class="text-medium-emphasis">Email</td>
+                <td>{{ partnerInfo?.email || '—' }}</td></tr>
+              <tr><td class="text-medium-emphasis">Телефон</td>
+                <td>{{ partnerInfo?.phone || '—' }}</td></tr>
+              <tr v-if="partnerInfo?.telegram"><td class="text-medium-emphasis">Telegram</td>
+                <td>{{ partnerInfo.telegram }}</td></tr>
+              <tr><td class="text-medium-emphasis">Квалификация</td>
+                <td>
+                  {{ partnerInfo?.qualification || '—' }}
+                  <span v-if="partnerInfo?.percent" class="text-medium-emphasis">· {{ partnerInfo.percent }}%</span>
+                </td></tr>
+              <tr><td class="text-medium-emphasis">Активность</td>
+                <td>{{ partnerInfo?.activity || '—' }}</td></tr>
+              <tr><td class="text-medium-emphasis">Дата регистрации</td>
+                <td>{{ fmtDate(partnerInfo?.dateCreated) }}</td></tr>
+            </tbody>
+          </v-table>
+
+          <!-- 2. IP Requisites -->
           <div class="text-subtitle-2 font-weight-bold mb-2">Реквизиты ИП</div>
           <v-table density="compact" class="mb-4">
             <tbody>
               <tr><td class="text-medium-emphasis">Наименование ИП</td><td>{{ selectedItem.individualEntrepreneur || '—' }}</td></tr>
-              <tr><td class="text-medium-emphasis">ИНН</td><td>{{ selectedItem.inn || '—' }}</td></tr>
+              <tr>
+                <td class="text-medium-emphasis">ИНН</td>
+                <td class="d-flex align-center ga-2">
+                  <span>{{ selectedItem.inn || '—' }}</span>
+                  <v-btn v-if="selectedItem.inn" size="x-small" variant="tonal" color="info"
+                    prepend-icon="mdi-magnify" :loading="innChecking" @click="checkInn">
+                    Проверить ИНН
+                  </v-btn>
+                </td>
+              </tr>
               <tr><td class="text-medium-emphasis">ОГРН</td><td>{{ selectedItem.ogrn || '—' }}</td></tr>
               <tr><td class="text-medium-emphasis">Адрес</td><td>{{ selectedItem.address || '—' }}</td></tr>
               <tr><td class="text-medium-emphasis">Email</td><td>{{ selectedItem.email || '—' }}</td></tr>
@@ -87,7 +120,7 @@
             </tbody>
           </v-table>
 
-          <!-- Bank Requisites -->
+          <!-- 3. Bank Requisites -->
           <div class="text-subtitle-2 font-weight-bold mb-2">Банковские реквизиты</div>
           <v-table density="compact" class="mb-4">
             <tbody>
@@ -99,50 +132,10 @@
             </tbody>
           </v-table>
 
-          <!-- INN check -->
-          <div class="text-subtitle-2 font-weight-bold mb-2 d-flex align-center">
-            Проверка по ИНН
-            <v-spacer />
-            <v-btn size="small" variant="tonal" color="info" prepend-icon="mdi-magnify"
-              :loading="innChecking" :disabled="!selectedItem.inn" @click="checkInn">
-              Проверить ИНН
-            </v-btn>
-          </div>
-          <v-alert v-if="innResult" :type="innAlertType" variant="tonal" density="compact" class="mb-3">
-            <div v-if="!innResult.found" class="text-body-2">
-              <v-icon size="18" class="me-1">mdi-alert-circle</v-icon>
-              {{ innResult.error || 'Не удалось проверить ИНН' }}
-            </div>
-            <template v-else>
-              <div class="font-weight-medium">{{ innResult.name }}</div>
-              <div class="text-caption">
-                Статус: {{ innResult.status || '—' }}
-                <template v-if="innResult.registrationDate"> · Регистрация: {{ innResult.registrationDate }}</template>
-              </div>
-              <div v-if="innResult.address" class="text-caption">{{ innResult.address }}</div>
-              <div v-if="innResult.fioCheck" class="mt-2 pa-2"
-                :class="innResult.fioCheck.match ? 'bg-success-lighten-4' : 'bg-error-lighten-4'"
-                style="border-radius:4px">
-                <div class="font-weight-medium d-flex align-center">
-                  <v-icon :color="innResult.fioCheck.match ? 'success' : 'error'" size="18" class="me-1">
-                    {{ innResult.fioCheck.match ? 'mdi-check-circle' : 'mdi-alert-circle' }}
-                  </v-icon>
-                  {{ innResult.fioCheck.match ? 'ФИО совпадает' : 'ФИО НЕ совпадает' }}
-                </div>
-                <div class="text-caption mt-1">
-                  По ИНН: <b>{{ innResult.fioCheck.actual || '—' }}</b>
-                </div>
-                <div class="text-caption">
-                  В профиле: <b>{{ innResult.fioCheck.expected || '—' }}</b>
-                </div>
-              </div>
-            </template>
-          </v-alert>
-
-          <!-- Documents -->
+          <!-- 4. Documents -->
           <div class="text-subtitle-2 font-weight-bold mb-2">Документы</div>
           <v-list density="compact" class="mb-4">
-            <v-list-item v-for="doc in drawerDocuments" :key="doc.type">
+            <v-list-item v-for="doc in drawerDocuments" :key="doc.type" :lines="doc.uploaded ? 'two' : 'one'">
               <template #prepend>
                 <v-icon :color="doc.uploaded ? 'success' : 'grey'" size="20">
                   {{ doc.uploaded ? 'mdi-check-circle' : 'mdi-circle-outline' }}
@@ -151,13 +144,14 @@
               <v-list-item-title>{{ doc.label }}</v-list-item-title>
               <v-list-item-subtitle>
                 <template v-if="doc.uploaded">
-                  <a :href="doc.url" target="_blank" rel="noopener" class="text-primary">
+                  <a :href="doc.url" target="_blank" rel="noopener" class="text-primary text-decoration-none">
                     <v-icon size="14">mdi-eye-outline</v-icon> Открыть
                   </a>
                   <span class="text-medium-emphasis mx-1">·</span>
-                  <a :href="doc.url" :download="docFilename(doc)" class="text-primary">
+                  <a :href="doc.url" :download="docFilename(doc)" class="text-primary text-decoration-none">
                     <v-icon size="14">mdi-download</v-icon> Скачать
                   </a>
+                  <span v-if="doc.filename" class="text-caption text-medium-emphasis ms-2">{{ doc.filename }}</span>
                 </template>
                 <span v-else class="text-medium-emphasis">Не загружен</span>
               </v-list-item-subtitle>
@@ -178,6 +172,79 @@
         </div>
       </template>
     </v-navigation-drawer>
+
+    <!-- INN check dialog -->
+    <v-dialog v-model="innDialog" max-width="560" scrollable>
+      <v-card :loading="innChecking">
+        <v-card-title class="d-flex align-center pa-4">
+          <v-icon class="me-2" :color="innIconColor">{{ innIcon }}</v-icon>
+          Проверка по ИНН {{ selectedItem?.inn || '' }}
+          <v-spacer />
+          <v-btn icon="mdi-close" size="small" variant="text" @click="innDialog = false" />
+        </v-card-title>
+        <v-divider />
+        <v-card-text class="pa-4">
+          <template v-if="innChecking">
+            <div class="d-flex align-center justify-center pa-4">
+              <v-progress-circular indeterminate color="info" />
+              <span class="ms-3">Запрос в DaData…</span>
+            </div>
+          </template>
+          <template v-else-if="innResult && !innResult.found">
+            <v-alert type="warning" variant="tonal" density="compact">
+              <v-icon size="18" class="me-1">mdi-alert-circle</v-icon>
+              {{ innResult.error || 'Не удалось проверить ИНН' }}
+            </v-alert>
+          </template>
+          <template v-else-if="innResult && innResult.found">
+            <!-- FIO check prominent at top -->
+            <v-alert v-if="innResult.fioCheck" :type="innResult.fioCheck.match ? 'success' : 'error'"
+              variant="tonal" density="comfortable" class="mb-3">
+              <div class="font-weight-bold text-body-1">
+                {{ innResult.fioCheck.match ? '✓ ФИО совпадает' : '✗ ФИО НЕ совпадает' }}
+              </div>
+              <div class="text-body-2 mt-2">
+                <div><span class="text-medium-emphasis">По ИНН:</span> <b>{{ innResult.fioCheck.actual || '—' }}</b></div>
+                <div><span class="text-medium-emphasis">В профиле:</span> <b>{{ innResult.fioCheck.expected || '—' }}</b></div>
+              </div>
+            </v-alert>
+
+            <!-- Full data -->
+            <v-table density="compact">
+              <tbody>
+                <tr><td class="text-medium-emphasis" style="width:40%">Наименование</td>
+                  <td class="font-weight-medium">{{ innResult.name }}</td></tr>
+                <tr><td class="text-medium-emphasis">Тип</td>
+                  <td>{{ typeLabel(innResult.type) }}</td></tr>
+                <tr><td class="text-medium-emphasis">Статус</td>
+                  <td>
+                    <v-chip size="x-small" :color="statusColor(innResult.status)">
+                      {{ statusLabel(innResult.status) }}
+                    </v-chip>
+                  </td></tr>
+                <tr v-if="innResult.registrationDate">
+                  <td class="text-medium-emphasis">Дата регистрации</td>
+                  <td>{{ innResult.registrationDate }}</td></tr>
+                <tr v-if="innResult.ogrn">
+                  <td class="text-medium-emphasis">ОГРН</td>
+                  <td>{{ innResult.ogrn }}</td></tr>
+                <tr v-if="innResult.okved">
+                  <td class="text-medium-emphasis">ОКВЭД</td>
+                  <td>{{ innResult.okved }}</td></tr>
+                <tr v-if="innResult.address">
+                  <td class="text-medium-emphasis">Адрес</td>
+                  <td>{{ innResult.address }}</td></tr>
+              </tbody>
+            </v-table>
+          </template>
+        </v-card-text>
+        <v-divider />
+        <v-card-actions class="pa-3">
+          <v-spacer />
+          <v-btn variant="text" @click="innDialog = false">Закрыть</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
     <!-- Reject Comment Dialog -->
     <v-dialog v-model="rejectDialogOpen" max-width="480">
@@ -237,13 +304,39 @@ const rejectDialogOpen = ref(false);
 const rejectComment = ref('');
 const innChecking = ref(false);
 const innResult = ref(null);
+const innDialog = ref(false);
+const partnerInfo = ref(null);
 
-const innAlertType = computed(() => {
-  if (!innResult.value) return 'info';
-  if (!innResult.value.found) return 'warning';
-  if (innResult.value.fioCheck && !innResult.value.fioCheck.match) return 'error';
-  return 'success';
+const partnerFullName = computed(() => {
+  const p = partnerInfo.value;
+  if (!p) return selectedItem.value?.partnerName || '';
+  return [p.lastName, p.firstName, p.patronymic].filter(Boolean).join(' ') || p.personName || '';
 });
+
+const innIcon = computed(() => {
+  if (!innResult.value || !innResult.value.found) return 'mdi-alert-circle-outline';
+  return innResult.value.fioCheck?.match ? 'mdi-check-decagram' : 'mdi-alert-decagram';
+});
+const innIconColor = computed(() => {
+  if (!innResult.value || !innResult.value.found) return 'warning';
+  return innResult.value.fioCheck?.match ? 'success' : 'error';
+});
+
+function typeLabel(t) {
+  return { INDIVIDUAL: 'Индивидуальный предприниматель', LEGAL: 'Юридическое лицо' }[t] || (t || '—');
+}
+function statusLabel(s) {
+  return { ACTIVE: 'Действующий', LIQUIDATING: 'Ликвидируется',
+    LIQUIDATED: 'Ликвидирован', BANKRUPT: 'Банкрот', REORGANIZING: 'Реорганизация' }[s] || (s || '—');
+}
+function statusColor(s) {
+  return { ACTIVE: 'success', LIQUIDATING: 'warning',
+    LIQUIDATED: 'error', BANKRUPT: 'error', REORGANIZING: 'warning' }[s] || 'grey';
+}
+function fmtDate(d) {
+  if (!d) return '—';
+  try { return new Date(d).toLocaleDateString('ru-RU'); } catch { return d; }
+}
 
 function docFilename(doc) {
   const base = (doc.path || doc.url || '').split('/').pop() || doc.type;
@@ -252,6 +345,7 @@ function docFilename(doc) {
 
 async function checkInn() {
   if (!selectedItem.value?.id) return;
+  innDialog.value = true;
   innChecking.value = true;
   innResult.value = null;
   try {
@@ -273,21 +367,31 @@ async function openDrawer(item) {
   selectedItem.value = item;
   drawerOpen.value = true;
   innResult.value = null;
-  try {
-    const { data } = await api.get(`/admin/requisites/${item.id}/documents`);
-    const byType = Object.fromEntries((data || []).map(d => [d.type, d]));
+  partnerInfo.value = null;
+
+  // Загружаем параллельно: документы + сводка партнёра
+  const [docsRes, partnerRes] = await Promise.allSettled([
+    api.get(`/admin/requisites/${item.id}/documents`),
+    api.get(`/admin/requisites/${item.id}/partner`),
+  ]);
+
+  if (docsRes.status === 'fulfilled') {
+    const byType = Object.fromEntries((docsRes.value.data || []).map(d => [d.type, d]));
     drawerDocuments.value = Object.entries(documentTypeLabels).map(([type, label]) => ({
       type,
       label,
       uploaded: !!byType[type],
       url: byType[type]?.url || null,
       path: byType[type]?.path || null,
+      filename: byType[type]?.filename || null,
     }));
-  } catch {
+  } else {
     drawerDocuments.value = Object.entries(documentTypeLabels).map(([type, label]) => ({
-      type, label, uploaded: false, url: null, path: null,
+      type, label, uploaded: false, url: null, path: null, filename: null,
     }));
   }
+
+  partnerInfo.value = partnerRes.status === 'fulfilled' ? partnerRes.value.data : null;
 }
 
 async function drawerVerify() {
