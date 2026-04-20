@@ -110,16 +110,7 @@ class AdminProductController extends Controller
         $programs = Program::where('product', $productId)
             ->orderBy('name')
             ->get()
-            ->map(fn ($p) => [
-                'id' => $p->id,
-                'name' => $p->name,
-                'active' => (bool) $p->active,
-                'visibleToResident' => (bool) $p->visibleToResident,
-                'visibleToCalculator' => (bool) $p->visibleToCalculator,
-                'term' => $p->term,
-                'currency' => $p->currency,
-                'currencyName' => $p->currency ? DB::table('currency')->where('id', $p->currency)->value('symbol') : null,
-            ]);
+            ->map(fn ($p) => $this->programResource($p));
 
         return response()->json($programs);
     }
@@ -127,17 +118,12 @@ class AdminProductController extends Controller
     /** CRUD программы */
     public function storeProgram(Request $request, int $productId): JsonResponse
     {
-        $request->validate(['name' => 'required|string|max:255']);
+        $request->validate($this->programRules());
 
-        $program = Program::create([
-            'name' => $request->name,
-            'product' => $productId,
-            'active' => $request->boolean('active', true),
-            'visibleToResident' => $request->boolean('visibleToResident', false),
-            'visibleToCalculator' => $request->boolean('visibleToCalculator', true),
-            'term' => $request->term,
-            'currency' => $request->currency,
-        ]);
+        $program = Program::create(array_merge(
+            ['product' => $productId],
+            $this->extractProgramPayload($request)
+        ));
 
         return response()->json(['message' => 'Программа создана', 'id' => $program->id], 201);
     }
@@ -146,12 +132,11 @@ class AdminProductController extends Controller
     {
         $program = Program::findOrFail($programId);
 
-        $program->name = $request->name ?? $program->name;
-        $program->active = $request->boolean('active');
-        $program->visibleToResident = $request->boolean('visibleToResident');
-        $program->visibleToCalculator = $request->boolean('visibleToCalculator');
-        $program->term = $request->term;
-        $program->currency = $request->currency;
+        $request->validate($this->programRules(patch: true));
+
+        foreach ($this->extractProgramPayload($request, patch: true) as $k => $v) {
+            $program->{$k} = $v;
+        }
         $program->save();
 
         return response()->json(['message' => 'Программа обновлена']);
@@ -164,5 +149,96 @@ class AdminProductController extends Controller
         $program->save();
 
         return response()->json(['message' => 'Программа деактивирована']);
+    }
+
+    /** Shared response shape for GET /admin/products/{id}/programs. */
+    private function programResource(Program $p): array
+    {
+        return [
+            'id' => $p->id,
+            'name' => $p->name,
+            'active' => (bool) $p->active,
+            'visibleToResident' => (bool) $p->visibleToResident,
+            'visibleToCalculator' => (bool) $p->visibleToCalculator,
+
+            // New calculator-driving fields
+            'fixedCost' => $p->fixedCost !== null ? (float) $p->fixedCost : null,
+            'dsPercent' => $p->dsPercent !== null ? (float) $p->dsPercent : null,
+            'pointsMethod' => $p->pointsMethod,
+            'pointsFormula' => $p->pointsFormula,
+            'pointsMin' => $p->pointsMin !== null ? (float) $p->pointsMin : null,
+            'pointsMax' => $p->pointsMax !== null ? (float) $p->pointsMax : null,
+            'kvPayoutYear' => $p->kvPayoutYear,
+
+            // Legacy-schema fields
+            'term' => $p->term,
+            'termContract' => $p->termContract,
+            'currency' => $p->currency,
+            'currencyName' => $p->currency
+                ? DB::table('currency')->where('id', $p->currency)->value('symbol')
+                : null,
+            'commissionCalcProperty' => $p->commissionCalcProperty,
+            'dsCommission' => $p->dsCommission,
+            'provider' => $p->provider,
+            'vendor' => $p->vendor,
+            'providerName' => $p->providerName,
+            'vendorName' => $p->vendorName,
+            'calcComment' => $p->calcComment,
+            'category' => $p->category,
+            'productType' => $p->productType,
+        ];
+    }
+
+    /** Validation rules — shared by store/update (patch drops `required` on name). */
+    private function programRules(bool $patch = false): array
+    {
+        $req = $patch ? 'sometimes' : 'required';
+        return [
+            'name' => "$req|string|max:255",
+            'active' => 'sometimes|boolean',
+            'visibleToResident' => 'sometimes|boolean',
+            'visibleToCalculator' => 'sometimes|boolean',
+            'fixedCost' => 'nullable|numeric|min:0',
+            'dsPercent' => 'nullable|numeric|min:0|max:100',
+            'pointsMethod' => 'nullable|string|in:cost_div_100,amount_div_100,amount_times_ds,fixed',
+            'pointsFormula' => 'nullable|string|max:500',
+            'pointsMin' => 'nullable|numeric|min:0',
+            'pointsMax' => 'nullable|numeric|min:0',
+            'kvPayoutYear' => 'nullable|integer|min:0|max:50',
+            'term' => 'nullable|integer',
+            'termContract' => 'nullable|integer|exists:termContract,id',
+            'currency' => 'nullable|integer|exists:currency,id',
+            'commissionCalcProperty' => 'nullable|integer|exists:commissionCalcProperty,id',
+            'calcComment' => 'nullable|string|max:1000',
+            'category' => 'nullable|integer',
+            'productType' => 'nullable|integer',
+            'provider' => 'nullable|integer',
+            'vendor' => 'nullable|integer',
+        ];
+    }
+
+    /** Select the writable keys off the request. */
+    private function extractProgramPayload(Request $request, bool $patch = false): array
+    {
+        $keys = [
+            'name', 'fixedCost', 'dsPercent', 'pointsMethod', 'pointsFormula',
+            'pointsMin', 'pointsMax', 'kvPayoutYear', 'term', 'termContract',
+            'currency', 'commissionCalcProperty', 'calcComment', 'category',
+            'productType', 'provider', 'vendor',
+        ];
+        $out = [];
+        foreach ($keys as $k) {
+            if ($request->has($k) || ! $patch) {
+                $out[$k] = $request->input($k);
+            }
+        }
+        foreach (['active', 'visibleToResident', 'visibleToCalculator'] as $bk) {
+            if ($request->has($bk)) {
+                $out[$bk] = $request->boolean($bk);
+            } elseif (! $patch) {
+                $out[$bk] = ['active' => true, 'visibleToResident' => false, 'visibleToCalculator' => true][$bk];
+            }
+        }
+        return $out;
     }
 }

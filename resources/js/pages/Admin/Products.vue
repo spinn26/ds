@@ -156,21 +156,63 @@
     </v-dialog>
 
     <!-- Program Dialog -->
-    <v-dialog v-model="programDialog" max-width="600" persistent>
+    <v-dialog v-model="programDialog" max-width="720" persistent scrollable>
       <v-card>
         <v-card-title>{{ editProgram.id ? 'Редактировать' : 'Добавить' }} программу</v-card-title>
-        <v-card-text>
+        <v-card-text style="max-height: 72vh">
           <v-row dense>
             <v-col cols="12">
               <v-text-field v-model="editProgram.name" label="Название *" :rules="[v => !!v || 'Обязательное поле']" />
             </v-col>
             <v-col cols="6">
-              <v-text-field v-model="editProgram.term" label="Срок" />
+              <v-text-field v-model="editProgram.term" label="Срок, лет" type="number" />
             </v-col>
             <v-col cols="6">
               <v-select v-model="editProgram.currency" label="Валюта"
                 :items="currencyOptions" item-title="label" item-value="id" />
             </v-col>
+          </v-row>
+
+          <v-divider class="my-3" />
+          <div class="text-subtitle-2 font-weight-bold mb-2">Параметры расчёта</div>
+          <v-row dense>
+            <v-col cols="6">
+              <v-text-field v-model.number="editProgram.dsPercent" label="% DS" type="number"
+                hint="Комиссия платформы от суммы сделки" persistent-hint />
+            </v-col>
+            <v-col cols="6">
+              <v-text-field v-model.number="editProgram.fixedCost" label="Фикс. стоимость"
+                type="number" hint="Для продуктов с фикс-ценой (образовательные)" persistent-hint />
+            </v-col>
+            <v-col cols="12">
+              <v-select v-model="editProgram.pointsMethod" label="Методика расчёта баллов"
+                :items="pointsMethodOptions" item-title="title" item-value="value" clearable
+                hint="Как считать ЛП от сделки по этой программе" persistent-hint />
+            </v-col>
+            <v-col cols="12">
+              <v-text-field v-model="editProgram.pointsFormula" label="Формула (текст)"
+                placeholder="Стоимость продукта / 100"
+                hint="Подсказка для сотрудника — что делает расчёт. На вычисления не влияет."
+                persistent-hint />
+            </v-col>
+            <v-col cols="4">
+              <v-text-field v-model.number="editProgram.pointsMin" label="Баллы от" type="number" />
+            </v-col>
+            <v-col cols="4">
+              <v-text-field v-model.number="editProgram.pointsMax" label="Баллы до" type="number" />
+            </v-col>
+            <v-col cols="4">
+              <v-text-field v-model.number="editProgram.kvPayoutYear" label="Год выплаты КВ"
+                type="number" hint="Для регулярных взносов" persistent-hint />
+            </v-col>
+            <v-col cols="12">
+              <v-textarea v-model="editProgram.calcComment" label="Комментарий к расчёту"
+                rows="2" auto-grow hint="Какие нюансы учитывать при ручном расчёте" persistent-hint />
+            </v-col>
+          </v-row>
+
+          <v-divider class="my-3" />
+          <v-row dense>
             <v-col cols="4">
               <v-checkbox v-model="editProgram.active" label="Активна" density="compact" />
             </v-col>
@@ -267,6 +309,15 @@ const programHeaders = [
   { title: 'Валюта', key: 'currencyName', width: 100 },
   { title: 'Калькулятор', key: 'visibleToCalculator', width: 110 },
   { title: 'Действия', key: 'actions', sortable: false, width: 100 },
+];
+
+// Методики расчёта баллов — синхронизировано с backend
+// CalculatorController::computePoints / CommissionCalculator::computePointsForProgram.
+const pointsMethodOptions = [
+  { value: 'amount_times_ds', title: 'Сумма × %ДС / 10000 (страховые/инвест)' },
+  { value: 'cost_div_100',    title: 'Стоимость продукта / 100 (образовательные)' },
+  { value: 'amount_div_100',  title: 'Сумма контракта / 100 (оборот)' },
+  { value: 'fixed',           title: 'Фиксировано (из "Баллы от")' },
 ];
 
 // Loaded from /admin/references/currency — no more hardcoded list.

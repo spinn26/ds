@@ -86,8 +86,19 @@ class CommissionCalculator
         $vatPercent = (float) ($vat->value ?? 0);
         $amountNoVat = $amountRub / (1 + $vatPercent / 100);
 
-        // dsCommission — тариф для программы контракта
+        // Program row — holds the BackOffice-editable fields:
+        // dsPercent (overrides legacy dsCommission), pointsMethod / fixedCost /
+        // pointsMin (drives the points formula).
+        $programRow = $contract->program
+            ? DB::table('program')->where('id', $contract->program)->first()
+            : null;
+
+        // dsCommission — legacy precedence: tx->dsCommissionPercentage →
+        // program.dsPercent → legacy dsCommission row → fallback 100%.
         $dsComPercent = (float) ($tx->dsCommissionPercentage ?? 0);
+        if ($dsComPercent <= 0 && $programRow && $programRow->dsPercent !== null) {
+            $dsComPercent = (float) $programRow->dsPercent;
+        }
         if ($dsComPercent <= 0 && $contract->program) {
             $dsCom = DB::table('dsCommission')
                 ->where('program', $contract->program)
@@ -103,8 +114,10 @@ class CommissionCalculator
             $dsComPercent = 100; // Fallback
         }
 
-        // ЛП (Personal Volume) = amountNoVat * dsCommission% / 10000
-        $personalVolume = $amountNoVat * $dsComPercent / 10000;
+        // ЛП per program.pointsMethod, same switch as CalculatorController::computePoints.
+        $personalVolume = $this->computePointsForProgram(
+            $programRow, $amountNoVat, $amountRub, $dsComPercent
+        );
 
         // Получить квалификацию прямого партнёра на момент транзакции.
         // Per spec §7: a new rate takes effect from the 1st of the month AFTER
@@ -230,6 +243,34 @@ class CommissionCalculator
         }
 
         return $results;
+    }
+
+    /**
+     * Применить `program.pointsMethod` для расчёта ЛП одной сделки.
+     * Дублирует логику CalculatorController::computePoints чтобы ручной
+     * калькулятор партнёра и фоновый пересчёт давали одинаковые цифры.
+     */
+    private function computePointsForProgram(
+        ?object $program,
+        float $amountNoVat,
+        float $amountRub,
+        float $dsComPercent,
+    ): float {
+        $method = $program->pointsMethod ?? null;
+        $fixedCost = $program && $program->fixedCost !== null ? (float) $program->fixedCost : null;
+        $pointsMin = $program && $program->pointsMin !== null ? (float) $program->pointsMin : null;
+
+        switch ($method) {
+            case 'cost_div_100':
+                return ($fixedCost ?? $amountRub) / 100;
+            case 'amount_div_100':
+                return $amountRub / 100;
+            case 'fixed':
+                return (float) ($pointsMin ?? 0);
+            case 'amount_times_ds':
+            default:
+                return $amountNoVat * $dsComPercent / 10000;
+        }
     }
 
     /**

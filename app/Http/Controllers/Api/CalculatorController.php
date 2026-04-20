@@ -126,7 +126,12 @@ class CalculatorController extends Controller
             return response()->json(['error' => 'Квалификация не найдена'], 422);
         }
 
-        // 2. dsCommission — тариф для этой программы + свойства
+        // 2. Программа — может содержать "ручные" поля, заданные бэк-офисом
+        //    в разделе «Продукты»: dsPercent, fixedCost, pointsMethod.
+        //    Если они есть — используем их; иначе фоллбек на legacy dsCommission.
+        $programRow = DB::table('program')->where('id', $programId)->first();
+
+        // 2b. Legacy — dsCommission лукап (тариф для этой программы + свойства)
         $dsComQuery = DB::table('dsCommission')
             ->where('program', $programId)
             ->where('commissionCalcProperty', $calcPropertyId)
@@ -152,7 +157,10 @@ class CalculatorController extends Controller
                 ->first();
         }
 
-        $dsCommissionPercent = (float) ($dsCom->comission ?? 0);
+        // Program-level dsPercent overrides legacy dsCommission if BackOffice set it.
+        $dsCommissionPercent = $programRow && $programRow->dsPercent !== null
+            ? (float) $programRow->dsPercent
+            : (float) ($dsCom->comission ?? 0);
         $commissionAbsolute = (float) ($dsCom->commissionAbsolute ?? 0);
 
         // 3. Курс валюты (если не RUB)
@@ -184,7 +192,19 @@ class CalculatorController extends Controller
             $dsIncome = $amountNoVat * $dsCommissionPercent / 100;
         }
 
-        $personalVolume = $amountNoVat * $dsIncomePercent / 10000;
+        // ЛП по методике программы (если задана):
+        //   cost_div_100   — фикс-стоимость / 100 (образовательные)
+        //   amount_div_100 — amount / 100 (прямой оборот)
+        //   amount_times_ds (default) — amount_no_vat × %ДС / 10000 (legacy)
+        //   fixed          — pointsMin как плоское значение
+        $personalVolume = $this->computePoints(
+            method: $programRow->pointsMethod ?? null,
+            amountNoVat: $amountNoVat,
+            amountRub: $amountRub,
+            dsIncomePercent: $dsIncomePercent,
+            fixedCost: $programRow && $programRow->fixedCost !== null ? (float) $programRow->fixedCost : null,
+            pointsMin: $programRow && $programRow->pointsMin !== null ? (float) $programRow->pointsMin : null,
+        );
         $groupBonus = $personalVolume * $qualification->percent / 100;
         $groupBonusRub = $groupBonus * 100;
 
@@ -291,6 +311,36 @@ class CalculatorController extends Controller
     /**
      * Очистить историю расчётов.
      */
+    /**
+     * Перевод «метода расчёта баллов» из program.pointsMethod в конкретное число.
+     * Если метод не задан — используется legacy-формула (amount_no_vat × %ДС ÷ 10000).
+     */
+    private function computePoints(
+        ?string $method,
+        float $amountNoVat,
+        float $amountRub,
+        float $dsIncomePercent,
+        ?float $fixedCost,
+        ?float $pointsMin,
+    ): float {
+        switch ($method) {
+            case 'cost_div_100':
+                // Образовательные: точки = фикс-стоимость / 100.
+                // Если fixedCost не задан — фоллбек на сумму транзакции.
+                return ($fixedCost ?? $amountRub) / 100;
+            case 'amount_div_100':
+                // Стоимость контракта / 100.
+                return $amountRub / 100;
+            case 'fixed':
+                // Плоское значение, без математики — например, «400 долларов ≈ pointsMin».
+                return (float) ($pointsMin ?? 0);
+            case 'amount_times_ds':
+            default:
+                // Legacy: amount_no_vat × %ДС / 10000.
+                return $amountNoVat * $dsIncomePercent / 10000;
+        }
+    }
+
     public function clearHistory(Request $request): JsonResponse
     {
         try {
