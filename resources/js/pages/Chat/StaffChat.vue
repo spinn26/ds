@@ -1672,7 +1672,7 @@ async function connectSocket() {
       }
     });
   } catch (e) {
-    console.warn('Chat socket unavailable, falling back to polling:', e?.message);
+    if (import.meta.env.DEV) console.warn('Chat socket unavailable, falling back to polling:', e?.message);
   }
 }
 
