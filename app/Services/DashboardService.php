@@ -86,6 +86,18 @@ class DashboardService
             if (!$nominalStatusLevel && $calcStatusLevel) $nominalStatusLevel = $calcStatusLevel;
             if (!$calcStatusLevel && $nominalStatusLevel) $calcStatusLevel = $nominalStatusLevel;
 
+            // Per .claude/specs/✅Квалификации.md Part 2 §2: «Единая квалификация».
+            // Directual's legacy split (nominalLevel vs calculationLevel) is
+            // retired — partners get one level per month. Prefer the higher
+            // of the two; it's what the partner actually earned by НГП.
+            // Keeping both fields in the response for backward compat, but
+            // they're now always equal.
+            if ($nominalStatusLevel && $calcStatusLevel
+                && ($nominalStatusLevel->level ?? 0) > ($calcStatusLevel->level ?? 0)
+            ) {
+                $calcStatusLevel = $nominalStatusLevel;
+            }
+
             if ($nominalStatusLevel) {
                 $nextLevelNum = ($nominalStatusLevel->level ?? 0) + 1;
                 $nextLevel = $allLevels->first(fn ($l) => $l->level === $nextLevelNum);

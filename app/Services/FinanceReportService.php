@@ -34,12 +34,20 @@ class FinanceReportService
             ->orderByDesc('date')
             ->first();
 
-        // Commission level
+        // Commission level — «Единая квалификация» (spec ✅Квалификации.md §2):
+        // one level per month. If Directual left divergent values, take the
+        // higher one — it's what the partner actually earned by НГП.
         $commissionLevel = null;
-        if ($qLogCurrent && ($qLogCurrent->calculationLevel ?? $qLogCurrent->nominalLevel)) {
-            $commissionLevel = DB::table('status_levels')
-                ->where('id', $qLogCurrent->calculationLevel ?? $qLogCurrent->nominalLevel)
-                ->first();
+        if ($qLogCurrent) {
+            $nomId = $qLogCurrent->nominalLevel ?? null;
+            $calcId = $qLogCurrent->calculationLevel ?? null;
+            $levels = DB::table('status_levels')
+                ->whereIn('id', array_filter([$nomId, $calcId]))
+                ->get()->keyBy('id');
+            $nomLvl = $nomId ? ($levels[$nomId]->level ?? 0) : 0;
+            $calcLvl = $calcId ? ($levels[$calcId]->level ?? 0) : 0;
+            $bestId = $nomLvl >= $calcLvl ? $nomId : $calcId;
+            $commissionLevel = $bestId ? $levels[$bestId] : null;
         }
 
         // All commissions for the period
