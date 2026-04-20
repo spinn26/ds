@@ -285,9 +285,16 @@ class AdminFinanceController extends Controller
         if ($request->filled('search')) {
             $query->where('consultant.personName', 'ilike', '%' . $request->search . '%');
         }
+        if ($request->filled('status')) {
+            $query->where('consultantPayment.status', (int) $request->status);
+        }
 
         $total = $query->count();
-        $data = $query->orderByDesc('consultantPayment.paymentDate')
+        // Postgres sorts NULLs first on DESC by default; half the legacy rows
+        // have no paymentDate, so the first 25 were a wall of prochеrк's.
+        // Push real dates to the top; fall back to id for deterministic order.
+        $data = $query->orderByRaw('"paymentDate" DESC NULLS LAST')
+            ->orderByDesc('consultantPayment.id')
             ->offset(($request->input('page', 1) - 1) * 25)
             ->limit(25)
             ->get()
