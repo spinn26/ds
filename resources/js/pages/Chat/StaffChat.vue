@@ -1592,7 +1592,7 @@ function stopPoll() { if (poll) { clearInterval(poll); poll = null; } }
 
 // Socket
 async function connectSocket() {
-  const token = localStorage.getItem('auth_token');
+  const token = auth.token;
   if (!token) return;
   try {
     const { io } = await import('socket.io-client');

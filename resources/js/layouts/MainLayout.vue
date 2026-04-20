@@ -368,7 +368,7 @@ onMounted(async () => {
       ? `ws://${location.hostname}:3001`
       : `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`;
     const host = window.__SOCKET_URL__ || defaultHost;
-    const token = localStorage.getItem('auth_token');
+    const token = auth.token;
     if (!token) return;
     const notifSocket = io(host, {
       auth: { token },

@@ -254,9 +254,13 @@ async function deleteUser() {
 
 async function impersonate(user) {
   try {
+    // Stash the admin's own token in sessionStorage so /impersonate/leave
+    // can restore it; sessionStorage dies with the tab, which is the right
+    // lifetime for a supervised session.
+    if (auth.token) {
+      sessionStorage.setItem('impersonator_token', auth.token);
+    }
     const { data } = await api.post(`/impersonate/${user.id}`);
-    localStorage.setItem('auth_token', data.token);
-    localStorage.setItem('impersonator_id', data.impersonator_id);
     auth.token = data.token;
     auth.user = data.user;
     router.push('/');

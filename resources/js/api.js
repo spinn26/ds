@@ -8,10 +8,13 @@ const api = axios.create({
 });
 
 /**
- * Read token from pinia-persist storage OR legacy localStorage.
+ * Read the token from pinia-persist storage (key `auth`, JSON-serialised).
+ * Single source of truth now — the legacy flat `auth_token` key is no
+ * longer written by the store (only cleared on logout), but we keep the
+ * one-line fallback so sessions that pre-date the migration still work
+ * until the user next logs in or out.
  */
 function getToken() {
-    // Pinia-persist stores under key 'auth' as JSON
     try {
         const stored = localStorage.getItem('auth');
         if (stored) {
@@ -19,8 +22,7 @@ function getToken() {
             if (parsed.token) return parsed.token;
         }
     } catch {}
-    // Legacy fallback
-    return localStorage.getItem('auth_token');
+    return localStorage.getItem('auth_token') || null;
 }
 
 api.interceptors.request.use((config) => {
@@ -46,6 +48,9 @@ api.interceptors.response.use(
             if (!url.includes('/auth/login') && !url.includes('/auth/register') && !url.includes('/auth/me')) {
                 localStorage.removeItem('auth');
                 localStorage.removeItem('auth_token');
+                localStorage.removeItem('auth_user_id');
+                localStorage.removeItem('auth_user_name');
+                sessionStorage.removeItem('impersonator_token');
                 window.location.href = '/login';
             }
         } else if (status === 403) {
