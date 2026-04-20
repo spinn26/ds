@@ -141,7 +141,16 @@ async function testTelegram() {
     const { data } = await api.post('/admin/api-settings/telegram-test', {});
     if (data.ok) showSuccess(data.message);
     else showError(data.message);
-  } catch (e) { showError(e.response?.data?.message || 'Не удалось отправить'); }
+  } catch (e) {
+    if (e.response?.status === 429) {
+      const retry = e.response?.headers?.['retry-after'];
+      showError(retry
+        ? `Слишком часто. Повторите через ${retry} сек.`
+        : 'Слишком много попыток за минуту. Подождите и попробуйте снова.');
+    } else {
+      showError(e.response?.data?.message || 'Не удалось отправить');
+    }
+  }
   testing.value = false;
 }
 

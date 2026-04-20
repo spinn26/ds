@@ -205,7 +205,7 @@ Route::prefix('v1')->group(function () {
         // Admin — API settings (Google Sheets key, Telegram bot, etc.)
         Route::get('/admin/api-settings', [\App\Http\Controllers\Api\AdminApiSettingsController::class, 'index']);
         Route::put('/admin/api-settings', [\App\Http\Controllers\Api\AdminApiSettingsController::class, 'update']);
-        Route::post('/admin/api-settings/telegram-test', [\App\Http\Controllers\Api\AdminApiSettingsController::class, 'testTelegram'])->middleware('throttle:5,1');
+        Route::post('/admin/api-settings/telegram-test', [\App\Http\Controllers\Api\AdminApiSettingsController::class, 'testTelegram'])->middleware('throttle:20,1');
 
         // Admin — Ops tools
         Route::get('/admin/ops/calendar', [\App\Http\Controllers\Api\AdminOpsController::class, 'calendar']);
