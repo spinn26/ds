@@ -30,9 +30,11 @@
     </v-card>
 
     <!-- Create/Edit dialog -->
-    <v-dialog v-model="dialog" max-width="820" persistent scrollable>
+    <v-dialog v-model="dialog" max-width="720" persistent scrollable>
       <v-card>
-        <v-card-title>{{ form.id ? 'Редактировать' : 'Новая' }} новость</v-card-title>
+        <v-card-title class="text-truncate">
+          {{ form.id ? `Редактировать новость${form.title ? ` «${form.title}»` : ''}` : 'Новая новость' }}
+        </v-card-title>
         <v-card-text style="max-height:70vh">
           <v-text-field v-model="form.title" label="Заголовок *" variant="outlined" density="compact" class="mb-3" />
           <div class="text-caption text-medium-emphasis mb-1">Содержание *</div>

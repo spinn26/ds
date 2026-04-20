@@ -10,9 +10,16 @@
       </div>
     </v-card>
 
-    <v-row>
+    <!-- Skeleton while loading -->
+    <v-row v-if="loading">
+      <v-col v-for="n in 6" :key="n" cols="12" sm="6" md="4">
+        <v-skeleton-loader type="article" />
+      </v-col>
+    </v-row>
+
+    <v-row v-else>
       <v-col v-for="contest in contests" :key="contest.id" cols="12" sm="6" md="4">
-        <v-card class="pa-4 d-flex flex-column" height="100%" style="border-left: 4px solid #4CAF50">
+        <v-card class="pa-4 d-flex flex-column contest-card" height="100%">
           <div class="d-flex justify-space-between align-center mb-2">
             <v-chip size="small" color="success">Активный</v-chip>
             <span v-if="contest.typeName" class="text-caption text-medium-emphasis">{{ contest.typeName }}</span>
@@ -33,15 +40,11 @@
       </v-col>
     </v-row>
 
-    <v-card v-if="!contests.length && !loading" class="pa-8 text-center">
+    <v-card v-if="!loading && !contests.length" class="pa-4 text-center">
       <v-icon size="64" color="grey-lighten-1" class="mb-3">mdi-trophy-outline</v-icon>
       <div class="text-h6 text-medium-emphasis mb-1">Конкурсов и событий пока нет</div>
       <div class="text-body-2 text-medium-emphasis">Следите за обновлениями — скоро здесь появятся новые конкурсы и события</div>
     </v-card>
-
-    <v-overlay v-model="loading" class="align-center justify-center" persistent>
-      <v-progress-circular indeterminate size="64" />
-    </v-overlay>
   </div>
 </template>
 
@@ -75,3 +78,9 @@ async function loadData() {
 
 onMounted(loadData);
 </script>
+
+<style scoped>
+.contest-card {
+  border-left: 4px solid rgb(var(--v-theme-primary));
+}
+</style>

@@ -43,7 +43,9 @@
     <!-- Create/Edit dialog -->
     <v-dialog v-model="dialog" max-width="900" persistent scrollable>
       <v-card>
-        <v-card-title>{{ form.id ? 'Редактировать' : 'Новый' }} конкурс / событие</v-card-title>
+        <v-card-title class="text-truncate">
+          {{ form.id ? `Редактировать${form.name ? ` «${form.name}»` : ' конкурс / событие'}` : 'Новый конкурс / событие' }}
+        </v-card-title>
         <v-card-text style="max-height:70vh">
           <v-row dense>
             <v-col cols="12">

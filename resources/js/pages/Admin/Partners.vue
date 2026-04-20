@@ -89,7 +89,9 @@
     <v-dialog v-model="editDialog" max-width="880" persistent scrollable>
       <v-card v-if="editForm">
         <v-card-title class="d-flex align-center ga-2">
-          Редактировать партнёра
+          <span class="text-truncate">
+            Редактировать{{ editForm.personName ? ` «${editForm.personName}»` : ' партнёра' }}
+          </span>
           <v-chip size="small" :color="editActivityColor">{{ editForm.activityName || '—' }}</v-chip>
           <v-spacer />
           <span class="text-caption text-medium-emphasis">ID {{ editForm.id }}</span>
