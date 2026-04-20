@@ -2,13 +2,20 @@
   <div>
     <PageHeader title="Статусы партнёров" icon="mdi-calendar-clock" />
 
-    <!-- Summary cards -->
-    <v-row class="mb-4">
-      <v-col v-for="s in summary" :key="s.id" cols="12" sm="6" :md="12 / Math.max(summary.length, 1)">
-        <v-card class="pa-4 text-center" :color="getActivityColor(s.id)" variant="tonal"
-          style="cursor:pointer" @click="filterByActivity(s.id)">
-          <div class="text-body-2 text-medium-emphasis">{{ s.name }}</div>
-          <div class="text-h3 font-weight-bold">{{ s.count }}</div>
+    <!-- Summary cards: compact horizontal strip. Tap a tile to filter. -->
+    <v-row class="mb-3" dense>
+      <v-col v-for="s in summary" :key="s.id" cols="6" sm="3">
+        <v-card
+          class="pa-3 d-flex align-center ga-3 summary-tile"
+          :class="{ 'summary-tile--active': activityFilter === s.id }"
+          :color="getActivityColor(s.id)" variant="tonal"
+          @click="filterByActivity(s.id)"
+        >
+          <v-icon size="28" class="summary-tile__icon">{{ summaryIcon(s.id) }}</v-icon>
+          <div class="flex-grow-1">
+            <div class="text-caption text-medium-emphasis">{{ s.name }}</div>
+            <div class="text-h5 font-weight-bold">{{ s.count }}</div>
+          </div>
         </v-card>
       </v-col>
     </v-row>
@@ -113,8 +120,18 @@ function isExpiringSoon(d) {
 }
 
 function filterByActivity(id) {
-  activityFilter.value = id;
+  // Toggle off if the same tile is clicked again
+  activityFilter.value = activityFilter.value === id ? null : id;
   loadData();
+}
+
+function summaryIcon(id) {
+  return {
+    1: 'mdi-account-check',
+    3: 'mdi-account-cancel',
+    4: 'mdi-account-clock',
+    5: 'mdi-account-remove',
+  }[id] || 'mdi-account';
 }
 
 const { debounced: debouncedLoad } = useDebounce(loadData, 400);
@@ -141,3 +158,19 @@ async function loadData() {
 
 onMounted(loadData);
 </script>
+
+<style scoped>
+.summary-tile {
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.summary-tile:hover {
+  transform: translateY(-1px);
+}
+.summary-tile--active {
+  box-shadow: 0 0 0 2px rgb(var(--v-theme-primary));
+}
+.summary-tile__icon {
+  opacity: 0.7;
+}
+</style>

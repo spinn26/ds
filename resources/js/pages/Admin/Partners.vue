@@ -15,10 +15,25 @@
         </v-chip>
         <v-btn v-if="activeFilterCount > 0" size="small" variant="text" color="secondary"
           prepend-icon="mdi-filter-remove" @click="resetFilters">Сбросить</v-btn>
+        <v-spacer />
+        <!-- Column visibility menu -->
+        <v-menu :close-on-content-click="false">
+          <template #activator="{ props: menuProps }">
+            <v-btn size="small" variant="text" prepend-icon="mdi-view-column" v-bind="menuProps">Колонки</v-btn>
+          </template>
+          <v-list density="compact" style="min-width: 220px">
+            <v-list-item v-for="col in toggleableColumns" :key="col.key">
+              <template #prepend>
+                <v-checkbox-btn :model-value="columnVisible[col.key]" @update:model-value="v => columnVisible[col.key] = v" />
+              </template>
+              <v-list-item-title>{{ col.title }}</v-list-item-title>
+            </v-list-item>
+          </v-list>
+        </v-menu>
       </div>
     </v-card>
 
-    <!-- Bulk action bar -->
+    <!-- Bulk action bar: two primary actions + destructive + overflow menu -->
     <v-slide-y-transition>
       <v-card v-if="selected.length" class="mb-3 pa-3" color="primary" variant="tonal">
         <div class="d-flex align-center flex-wrap ga-2">
@@ -32,14 +47,17 @@
             prepend-icon="mdi-account-cancel" @click="bulkRun('terminate')">Терминировать</v-btn>
           <v-btn size="small" variant="tonal" color="error"
             prepend-icon="mdi-account-remove" @click="bulkRun('exclude')">Исключить</v-btn>
-          <v-btn size="small" variant="tonal" color="info"
-            prepend-icon="mdi-account-reactivate" @click="bulkRun('re-register')">Перерегистрировать</v-btn>
-          <v-btn size="small" variant="tonal" color="grey"
-            prepend-icon="mdi-lock" @click="bulkRun('block')">Заблокировать</v-btn>
-          <v-btn size="small" variant="tonal" color="grey"
-            prepend-icon="mdi-lock-open" @click="bulkRun('unblock')">Разблокировать</v-btn>
-          <v-btn size="small" variant="tonal" color="secondary"
-            prepend-icon="mdi-account-supervisor" @click="bulkSetInviter">Сменить наставника</v-btn>
+          <v-menu>
+            <template #activator="{ props: menuProps }">
+              <v-btn size="small" variant="text" append-icon="mdi-chevron-down" v-bind="menuProps">Ещё</v-btn>
+            </template>
+            <v-list density="compact">
+              <v-list-item prepend-icon="mdi-account-reactivate" title="Перерегистрировать" @click="bulkRun('re-register')" />
+              <v-list-item prepend-icon="mdi-lock" title="Заблокировать" @click="bulkRun('block')" />
+              <v-list-item prepend-icon="mdi-lock-open" title="Разблокировать" @click="bulkRun('unblock')" />
+              <v-list-item prepend-icon="mdi-account-supervisor" title="Сменить наставника" @click="bulkSetInviter" />
+            </v-list>
+          </v-menu>
           <v-spacer />
           <v-btn size="small" variant="text" prepend-icon="mdi-close" @click="selected = []">Снять выбор</v-btn>
         </div>
@@ -55,19 +73,18 @@
       :items="items"
       :items-length="total"
       :loading="loading"
-      :headers="headers"
+      :headers="visibleHeaders"
       :items-per-page="25"
+      :row-props="rowProps"
       server-side
       empty-icon="mdi-account-search-outline"
       empty-message="Партнёры не найдены"
+      class="partners-table"
       @update:options="onOptions"
     >
       <template #item.activityName="{ value }">
         <v-chip v-if="value" size="x-small" :color="getActivityColorByName(value)">{{ value }}</v-chip>
         <span v-else>—</span>
-      </template>
-      <template #item.statusName>
-        <v-chip size="x-small" color="primary" variant="tonal">Партнёр</v-chip>
       </template>
       <template #item.active="{ value }">
         <v-icon :color="value ? 'success' : 'grey'" size="small">
@@ -75,13 +92,22 @@
         </v-icon>
       </template>
       <template #item.platformAccess="{ value }">
-        <v-icon v-if="value" color="success" size="small">mdi-lock-open-variant</v-icon>
-        <v-icon v-else color="grey" size="small">mdi-lock</v-icon>
+        <v-tooltip :text="value ? 'Доступ открыт' : 'Доступ заблокирован'" location="top">
+          <template #activator="{ props: tipProps }">
+            <v-icon v-bind="tipProps" :color="value ? 'success' : 'grey'" size="small">
+              {{ value ? 'mdi-lock-open-variant' : 'mdi-lock' }}
+            </v-icon>
+          </template>
+        </v-tooltip>
       </template>
       <template #item.birthDate="{ value }">{{ fmtDate(value) }}</template>
       <template #item.createdAt="{ value }">{{ fmtDate(value) }}</template>
       <template #item.actions="{ item }">
-        <v-btn icon="mdi-pencil" size="x-small" variant="text" @click="openEdit(item)" />
+        <v-tooltip text="Редактировать" location="top">
+          <template #activator="{ props: tipProps }">
+            <v-btn v-bind="tipProps" icon="mdi-pencil" size="x-small" variant="text" @click="openEdit(item)" />
+          </template>
+        </v-tooltip>
       </template>
     </DataTableWrapper>
 
@@ -170,7 +196,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
 import PageHeader from '../../components/PageHeader.vue';
@@ -214,21 +240,55 @@ const activityOptions = [
   { title: 'Исключён', value: '5' },
 ];
 
-const headers = [
-  { title: 'ФИО', key: 'personName' },
-  { title: 'Email', key: 'email' },
-  { title: 'Телефон', key: 'phone', width: 140 },
-  { title: 'Дата рождения', key: 'birthDate', width: 130 },
-  { title: 'Статус', key: 'statusName', width: 140 },
-  { title: 'Активность', key: 'activityName', width: 130 },
-  { title: 'Активен', key: 'active', width: 80 },
-  { title: 'Код', key: 'participantCode', width: 100 },
-  { title: 'Пригласивший', key: 'inviterName' },
-  { title: 'Куратор', key: 'curatorName' },
-  { title: 'Доступ', key: 'platformAccess', width: 80, sortable: false },
-  { title: 'Дата регистрации', key: 'createdAt', width: 140 },
-  { title: '', key: 'actions', sortable: false, width: 60 },
+// Column metadata: `always` = never hideable (ФИО / Активность / Действия);
+// `default` = shown out of the box; others are opt-in via the «Колонки» menu.
+const allColumns = [
+  { title: 'ФИО',              key: 'personName',     always: true },
+  { title: 'Активность',       key: 'activityName',   width: 130, always: true },
+  { title: 'Код',              key: 'participantCode', width: 100, default: true },
+  { title: 'Пригласивший',     key: 'inviterName',    default: true },
+  { title: 'Доступ',           key: 'platformAccess', width: 80, sortable: false, default: true },
+  { title: 'Email',            key: 'email' },
+  { title: 'Телефон',          key: 'phone',          width: 140 },
+  { title: 'Дата рождения',    key: 'birthDate',      width: 130 },
+  { title: 'Активен',          key: 'active',         width: 80 },
+  { title: 'Куратор',          key: 'curatorName' },
+  { title: 'Дата регистрации', key: 'createdAt',      width: 140 },
+  { title: '',                 key: 'actions',        sortable: false, width: 60, always: true },
 ];
+
+// Which columns show in the menu (everything except always-on).
+const toggleableColumns = computed(() => allColumns.filter(c => !c.always && c.title));
+
+// Reactive visibility state, persisted per-user in localStorage so their
+// column choice survives refreshes.
+const COL_STORAGE_KEY = 'admin.partners.visibleColumns';
+const columnVisible = ref((() => {
+  try {
+    const saved = JSON.parse(localStorage.getItem(COL_STORAGE_KEY) || 'null');
+    if (saved) return saved;
+  } catch {}
+  const initial = {};
+  for (const c of allColumns) if (!c.always) initial[c.key] = !!c.default;
+  return initial;
+})());
+
+// Persist on change.
+watch(columnVisible, v => localStorage.setItem(COL_STORAGE_KEY, JSON.stringify(v)), { deep: true });
+
+const visibleHeaders = computed(() =>
+  allColumns.filter(c => c.always || columnVisible.value[c.key])
+);
+
+/**
+ * Per-row accent: left border tinted by activity. Keeps the table
+ * scannable even in dense views and works with Vuetify hover.
+ */
+function rowProps({ item }) {
+  const activityId = item?.activityId;
+  const cls = activityId ? `row-activity-${activityId}` : '';
+  return { class: cls };
+}
 
 const { debounced: debouncedLoad } = useDebounce(loadData, 400);
 
@@ -426,3 +486,12 @@ async function changeStatus(action) {
 
 onMounted(loadData);
 </script>
+
+<style scoped>
+/* Row accent: a 3px left border tinted by activity. Keeps wide tables
+   scannable without adding a whole colored cell. */
+.partners-table :deep(tr.row-activity-1 > td:first-child) { box-shadow: inset 3px 0 0 rgb(var(--v-theme-success)); }
+.partners-table :deep(tr.row-activity-3 > td:first-child) { box-shadow: inset 3px 0 0 rgb(var(--v-theme-error)); }
+.partners-table :deep(tr.row-activity-4 > td:first-child) { box-shadow: inset 3px 0 0 rgb(var(--v-theme-info)); }
+.partners-table :deep(tr.row-activity-5 > td:first-child) { box-shadow: inset 3px 0 0 rgb(var(--v-theme-error)); }
+</style>
