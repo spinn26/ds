@@ -24,11 +24,23 @@ class AdminUserController extends Controller
         }
 
         if ($request->filled('search')) {
-            $s = $request->search;
-            $query->where(function ($q) use ($s) {
-                $q->where('email', 'ilike', "%{$s}%")
-                  ->orWhere('firstName', 'ilike', "%{$s}%")
-                  ->orWhere('lastName', 'ilike', "%{$s}%");
+            // Token-based search: split by whitespace, every token must match
+            // SOMEWHERE (email/firstName/lastName/patronymic/phone).
+            // So "Саляхутдинов Денис" finds rows where one token is in lastName
+            // and the other is in firstName — previously the query was looking
+            // for the whole literal "Саляхутдинов Денис" as a single substring.
+            $tokens = array_filter(preg_split('/\s+/', trim($request->search)));
+            $query->where(function ($outer) use ($tokens) {
+                foreach ($tokens as $t) {
+                    $pat = '%' . $t . '%';
+                    $outer->where(function ($sub) use ($pat) {
+                        $sub->where('email', 'ilike', $pat)
+                            ->orWhere('firstName', 'ilike', $pat)
+                            ->orWhere('lastName', 'ilike', $pat)
+                            ->orWhere('patronymic', 'ilike', $pat)
+                            ->orWhere('phone', 'ilike', $pat);
+                    });
+                }
             });
         }
         if ($request->filled('role')) {
