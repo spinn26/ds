@@ -181,6 +181,10 @@ Route::prefix('v1')->group(function () {
         Route::put('/admin/mail/templates/{id}', [\App\Http\Controllers\Api\AdminMailController::class, 'updateTemplate']);
         Route::delete('/admin/mail/templates/{id}', [\App\Http\Controllers\Api\AdminMailController::class, 'destroyTemplate']);
 
+        // Admin — Monthly finalisation (detachment / OP penalties on commissions)
+        Route::post('/admin/finalize/preview', [\App\Http\Controllers\Api\AdminFinalizeController::class, 'preview']);
+        Route::post('/admin/finalize/apply', [\App\Http\Controllers\Api\AdminFinalizeController::class, 'apply'])->middleware('throttle:5,1');
+
         // Admin — Pool (leader pool calc with manual «Участвует» moderation)
         Route::get('/admin/pool/participants', [\App\Http\Controllers\Api\AdminPoolController::class, 'participants']);
         Route::put('/admin/pool/participants', [\App\Http\Controllers\Api\AdminPoolController::class, 'toggleParticipant']);
