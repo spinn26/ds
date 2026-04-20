@@ -495,6 +495,47 @@ class AdminDataController extends Controller
         return response()->json(['data' => $requisites, 'total' => $total]);
     }
 
+    /**
+     * Документы, загруженные партнёром для этого requisite (паспорт +
+     * заявление на выплаты). Берём поля прямо с consultant — DocumentController
+     * пишет их именно туда. Возвращаем только те типы, где файл
+     * действительно есть.
+     */
+    public function requisiteDocuments(int $id): JsonResponse
+    {
+        $req = DB::table('requisites')->where('id', $id)->first();
+        if (! $req) {
+            return response()->json(['message' => 'Реквизиты не найдены'], 404);
+        }
+
+        $consultant = $req->consultant
+            ? DB::table('consultant')->where('id', $req->consultant)->first()
+            : null;
+        if (! $consultant) {
+            return response()->json([]);
+        }
+
+        $map = [
+            'passportPage1' => 'passportScanPage1',
+            'passportPage2' => 'passportScanPage2',
+            'applicationForPayment' => 'applicationForPayment',
+        ];
+
+        $out = [];
+        foreach ($map as $type => $column) {
+            $value = $consultant->{$column} ?? null;
+            if ($value) {
+                $out[] = [
+                    'type' => $type,
+                    'path' => $value,
+                    'url' => str_starts_with($value, 'http') ? $value : '/storage/' . $value,
+                ];
+            }
+        }
+
+        return response()->json($out);
+    }
+
     /** Верификация/отклонение реквизитов */
     public function verifyRequisites(Request $request, int $id): JsonResponse
     {

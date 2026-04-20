@@ -130,6 +130,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/admin/clients', [\App\Http\Controllers\Api\AdminDataController::class, 'clients']);
         Route::get('/admin/requisites', [\App\Http\Controllers\Api\AdminDataController::class, 'requisites']);
         Route::post('/admin/requisites/bulk', [\App\Http\Controllers\Api\AdminDataController::class, 'bulkRequisites'])->middleware('throttle:10,1');
+        Route::get('/admin/requisites/{id}/documents', [\App\Http\Controllers\Api\AdminDataController::class, 'requisiteDocuments'])->whereNumber('id');
         Route::post('/admin/requisites/{id}/verify', [\App\Http\Controllers\Api\AdminDataController::class, 'verifyRequisites']);
         Route::get('/admin/acceptance', [\App\Http\Controllers\Api\AdminDataController::class, 'acceptance']);
         Route::get('/admin/contracts', [\App\Http\Controllers\Api\AdminDataController::class, 'contracts']);
