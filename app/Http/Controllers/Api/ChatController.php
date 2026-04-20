@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Controller;
+use App\Models\ChatTicket;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -183,16 +184,14 @@ class ChatController extends Controller
     /** Get ticket with messages */
     public function show(Request $request, int $id): JsonResponse
     {
-        $ticket = DB::table('chat_tickets')->where('id', $id)->first();
+        $ticket = ChatTicket::find($id);
         if (!$ticket) return response()->json(['message' => 'Не найден'], 404);
 
-        // Auth check — creator, recipient, or staff
-        $userId = $request->user()->id;
-        if (!$this->isStaff($request)
-            && (int) $ticket->created_by !== $userId
-            && (int) ($ticket->recipient_id ?? 0) !== $userId) {
+        if ($request->user()->cannot('view', $ticket)) {
             return response()->json(['message' => 'Доступ запрещён'], 403);
         }
+
+        $userId = $request->user()->id;
 
         $rawMessages = DB::table('chat_messages')
             ->where('ticket_id', $id)
@@ -369,13 +368,10 @@ class ChatController extends Controller
     /** Send message to ticket */
     public function sendMessage(Request $request, int $id): JsonResponse
     {
-        $ticket = DB::table('chat_tickets')->where('id', $id)->first();
+        $ticket = ChatTicket::find($id);
         if (!$ticket) return response()->json(['message' => 'Не найден'], 404);
 
-        $userId = $request->user()->id;
-        if (!$this->isStaff($request)
-            && (int) $ticket->created_by !== $userId
-            && (int) ($ticket->recipient_id ?? 0) !== $userId) {
+        if ($request->user()->cannot('view', $ticket)) {
             return response()->json(['message' => 'Доступ запрещён'], 403);
         }
 
@@ -518,13 +514,10 @@ class ChatController extends Controller
      */
     public function togglePin(Request $request, int $id): JsonResponse
     {
-        $ticket = DB::table('chat_tickets')->where('id', $id)->first();
+        $ticket = ChatTicket::find($id);
         if (! $ticket) return response()->json(['message' => 'Не найден'], 404);
 
-        $userId = $request->user()->id;
-        if (! $this->isStaff($request)
-            && (int) $ticket->created_by !== (int) $userId
-            && (int) ($ticket->recipient_id ?? 0) !== (int) $userId) {
+        if ($request->user()->cannot('view', $ticket)) {
             return response()->json(['message' => 'Доступ запрещён'], 403);
         }
 
@@ -562,11 +555,9 @@ class ChatController extends Controller
 
         // Authorize: must have access to the ticket
         $userId = $request->user()->id;
-        $ticket = DB::table('chat_tickets')->where('id', $msg->ticket_id)->first();
+        $ticket = ChatTicket::find($msg->ticket_id);
         if (! $ticket) return response()->json(['message' => 'Не найден'], 404);
-        if (! $this->isStaff($request)
-            && (int) $ticket->created_by !== (int) $userId
-            && (int) ($ticket->recipient_id ?? 0) !== (int) $userId) {
+        if ($request->user()->cannot('view', $ticket)) {
             return response()->json(['message' => 'Доступ запрещён'], 403);
         }
 
