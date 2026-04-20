@@ -257,20 +257,24 @@ class CommissionSpecTest extends TestCase
     }
 
     #[Test]
-    public function spec_6_4_pool_forfeit_rule_90_percent_detachment_differs_from_70(): void
+    public function spec_6_4_pool_forfeit_is_a_manual_toggle_not_an_automatic_filter(): void
     {
         $this->markTestIncomplete(
-            'Leader-pool detachment threshold is 90% (§6.4), NOT 70% like ' .
-            'regular commission (§5.1). Easy to confuse — the two rules run on ' .
-            'different magic numbers. Laravel code currently has no pool writer ' .
-            'at all (AdminFinanceController only READS poolLog), so nothing to ' .
-            'assert beyond the threshold intent.'
+            'Per ./.claude/specs/✅Пул.md: the pool screen lists every partner ' .
+            'level ≥ 6 with a default-checked «Участвует» toggle. The operator ' .
+            'manually UN-checks anyone who failed ОП or breached the 90%-branch ' .
+            'detachment rule — the system does NOT auto-filter on 90%. So the ' .
+            'test target is not "does the code compute >90 detachment", but ' .
+            '"does the pool writer respect the manual toggle and zero out the ' .
+            'share for unchecked partners". Laravel has no pool writer at all ' .
+            'today (only read-only AdminFinanceController::pool), so this is ' .
+            'a port target, not a regression.'
         );
 
-        $ordinaryDetachThreshold = 0.70;
-        $poolForfeitThreshold    = 0.90;
-
-        $this->assertNotEquals($ordinaryDetachThreshold, $poolForfeitThreshold);
+        // Different thresholds must remain distinct in our heads:
+        $ordinaryCommissionDetachThreshold = 0.70; // §5.1, auto-applied
+        $poolManualForfeitHintThreshold    = 0.90; // §6.4, operator guidance
+        $this->assertNotEquals($ordinaryCommissionDetachThreshold, $poolManualForfeitHintThreshold);
     }
 
     #[Test]
@@ -334,5 +338,82 @@ class CommissionSpecTest extends TestCase
         $paid = 45_000;
         $remainder = $totalAccrued - $paid;
         $this->assertSame(2_000, $remainder, 'Остаток → сальдо следующего месяца');
+    }
+
+    // ========================================================================
+    // Invariants from the larger spec set (added 2026-04-20).
+    // ========================================================================
+
+    #[Test]
+    public function invariant_single_monthly_qualification(): void
+    {
+        $this->markTestIncomplete(
+            'Per ./.claude/specs/✅Квалификации.md Part 2 §2: partners have ' .
+            'ONE qualification per month — the old nominal-vs-calculated split ' .
+            'has been retired. `qualificationLog` in the legacy DB still has ' .
+            'both columns (nominalLevel, calculationLevel), so a read path ' .
+            'that surfaces both into the UI would be a regression against ' .
+            'the new rule. Target: the "Квалификации" screen should project ' .
+            'a single value per month (prefer calculationLevel if available, ' .
+            'else nominalLevel).'
+        );
+    }
+
+    #[Test]
+    public function invariant_closed_periods_are_frozen(): void
+    {
+        $this->markTestIncomplete(
+            'Per ./.claude/specs/✅Комиссии .md Part 2 §1: once a month is ' .
+            'closed (grey indicator in the transactions table), no commission / ' .
+            'transaction / qualificationLog / poolLog row for that month may ' .
+            'be edited or deleted. Corrections go through «Прочие начисления» ' .
+            'only. Target: a PHPUnit feature test that tries to PUT a closed ' .
+            'transaction and asserts 422/403.'
+        );
+    }
+
+    #[Test]
+    public function invariant_other_accruals_are_reversible(): void
+    {
+        $this->markTestIncomplete(
+            'Per ./.claude/specs/✅Прочие начисления.md Part 2 §4: deleting a ' .
+            'manual accrual must run the reverse transaction against the ' .
+            'partner balance (+100 ₽ credit → delete = −100 ₽). The current ' .
+            'other_accruals table stores the amount but no reversal trigger ' .
+            'is wired up in PHP (confirmed via grep). Target: wrap ' .
+            'AdminFinanceController::deleteCharge in a service that adjusts ' .
+            'the matching balance column (финансовый баланс for тип=Рубли, ' .
+            'personalVolume/НГП for тип=Баллы).'
+        );
+    }
+
+    #[Test]
+    public function invariant_vat_rate_is_historical_and_applied_per_transaction(): void
+    {
+        // Per ./.claude/specs/✅Валюты и НДС.md Part 2 §2.2: `vat` stores
+        // an active row plus a closed history. New transactions pick the
+        // row whose dateFrom ≤ txDate ≤ dateTo. CommissionCalculator:74-77
+        // already does exactly this lookup, so this test just pins the
+        // formula equivalence between spec wording "/105*100" and code's
+        // "/(1 + vat%/100)" for the canonical 5% rate.
+        $vatPercent = 5;
+        $divisorFromCode = 1 + $vatPercent / 100;
+        $divisorFromSpec = 105 / 100;
+
+        $this->assertEqualsWithDelta($divisorFromSpec, $divisorFromCode, 1e-9);
+    }
+
+    #[Test]
+    public function invariant_manual_status_override_is_audit_logged(): void
+    {
+        $this->markTestIncomplete(
+            'Per ./.claude/specs/✅Статусы партнеров.md Part 3: any manual ' .
+            'date/status change must write an audit row (operator id, ts, ' .
+            'old value, new value, comment). The project already has ' .
+            'Spatie\\Activitylog wired on User and Contract, but not on ' .
+            'activity / dateActivity / dateDeterministic columns of ' .
+            'consultant. Target: extend Consultant model ' .
+            '`getActivitylogOptions()` to log those columns too.'
+        );
     }
 }
