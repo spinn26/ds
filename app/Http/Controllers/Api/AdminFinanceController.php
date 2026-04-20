@@ -185,35 +185,85 @@ class AdminFinanceController extends Controller
         return response()->json(['data' => $data, 'total' => $total]);
     }
 
-    /** Создать начисление */
+    /**
+     * Создать начисление. Если в запросе есть баллы — они сразу
+     * прибавляются к consultant.personalVolume и
+     * consultant.groupVolumeCumulative (spec ✅Прочие начисления Part 2 §3).
+     * Рубли (`amount`) остаются только в other_accruals и влияют на
+     * финансовый баланс через агрегацию в реестре выплат.
+     *
+     * Баллы НЕ каскадятся по inviter-цепочке по прямому указанию спеки:
+     * "не должны генерировать финансовую комиссию для вышестоящих
+     * наставников, как это происходит при обычной продаже".
+     */
     public function storeCharge(Request $request): JsonResponse
     {
         $request->validate([
             'consultant' => 'required|integer|exists:consultant,id',
             'type' => 'required|in:bonus,penalty,compensation',
             'amount' => 'required|numeric',
+            'points' => 'nullable|numeric',
         ]);
 
-        $id = DB::table('other_accruals')->insertGetId([
-            'consultant' => $request->consultant,
-            'type' => $request->type,
-            'amount' => $request->amount,
-            'points' => $request->input('points', 0),
-            'comment' => $request->comment,
-            'accrual_date' => $request->input('accrual_date', now()),
-            'created_by' => $request->user()->id,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
+        $consultantId = (int) $request->consultant;
+        $points = (float) $request->input('points', 0);
+
+        $id = DB::transaction(function () use ($request, $consultantId, $points) {
+            $id = DB::table('other_accruals')->insertGetId([
+                'consultant' => $consultantId,
+                'type' => $request->type,
+                'amount' => $request->amount,
+                'points' => $points,
+                'comment' => $request->comment,
+                'accrual_date' => $request->input('accrual_date', now()),
+                'created_by' => $request->user()->id,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            if ($points != 0.0) {
+                DB::table('consultant')
+                    ->where('id', $consultantId)
+                    ->update([
+                        'personalVolume' => DB::raw("COALESCE(\"personalVolume\", 0) + {$points}"),
+                        'groupVolumeCumulative' => DB::raw("COALESCE(\"groupVolumeCumulative\", 0) + {$points}"),
+                    ]);
+            }
+
+            return $id;
+        });
 
         return response()->json(['message' => 'Начисление создано', 'id' => $id], 201);
     }
 
-    /** Удалить начисление */
+    /**
+     * Удалить начисление с реверсивной транзакцией.
+     * Per ✅Прочие начисления Part 2 §4: удаление должно откатить
+     * изменения баланса (+100 баллов → удалили → −100 баллов обратно).
+     */
     public function deleteCharge(int $id): JsonResponse
     {
-        DB::table('other_accruals')->where('id', $id)->delete();
-        return response()->json(['message' => 'Начисление удалено']);
+        $row = DB::table('other_accruals')->where('id', $id)->first();
+        if (! $row) {
+            return response()->json(['message' => 'Начисление не найдено'], 404);
+        }
+
+        DB::transaction(function () use ($row) {
+            $points = (float) ($row->points ?? 0);
+
+            if ($points != 0.0) {
+                DB::table('consultant')
+                    ->where('id', $row->consultant)
+                    ->update([
+                        'personalVolume' => DB::raw("COALESCE(\"personalVolume\", 0) - {$points}"),
+                        'groupVolumeCumulative' => DB::raw("COALESCE(\"groupVolumeCumulative\", 0) - {$points}"),
+                    ]);
+            }
+
+            DB::table('other_accruals')->where('id', $row->id)->delete();
+        });
+
+        return response()->json(['message' => 'Начисление удалено, баланс откатан']);
     }
 
     /** Реестр выплат */

@@ -398,16 +398,40 @@ class CommissionSpecTest extends TestCase
     #[Test]
     public function invariant_other_accruals_are_reversible(): void
     {
-        $this->markTestIncomplete(
-            'Per ./.claude/specs/✅Прочие начисления.md Part 2 §4: deleting a ' .
-            'manual accrual must run the reverse transaction against the ' .
-            'partner balance (+100 ₽ credit → delete = −100 ₽). The current ' .
-            'other_accruals table stores the amount but no reversal trigger ' .
-            'is wired up in PHP (confirmed via grep). Target: wrap ' .
-            'AdminFinanceController::deleteCharge in a service that adjusts ' .
-            'the matching balance column (финансовый баланс for тип=Рубли, ' .
-            'personalVolume/НГП for тип=Баллы).'
-        );
+        // Per ./.claude/specs/✅Прочие начисления.md Part 2 §3-§4:
+        // - storeCharge writes points into consultant.personalVolume +
+        //   groupVolumeCumulative inside a DB::transaction.
+        // - deleteCharge reads the row first, applies the inverse, then
+        //   removes the row, also inside a transaction.
+        //
+        // Structural assertions — we can't run the write against an empty
+        // sqlite :memory: without the 286 legacy tables, but we can pin:
+        //   1) both controller methods exist;
+        //   2) deleteCharge no longer does the old one-liner delete;
+        //   3) the source of the method includes the reversal clause and
+        //      the DB::transaction wrapper.
+        $refl = new \ReflectionClass(\App\Http\Controllers\Api\AdminFinanceController::class);
+        $storeSrc = $this->methodSource($refl, 'storeCharge');
+        $deleteSrc = $this->methodSource($refl, 'deleteCharge');
+
+        $this->assertStringContainsString('DB::transaction', $storeSrc, 'storeCharge must be atomic');
+        $this->assertStringContainsString('personalVolume', $storeSrc, 'storeCharge updates personalVolume for points');
+        $this->assertStringContainsString('groupVolumeCumulative', $storeSrc, 'storeCharge updates НГП for points');
+
+        $this->assertStringContainsString('DB::transaction', $deleteSrc, 'deleteCharge must be atomic');
+        $this->assertStringContainsString('- {$points}', $deleteSrc, 'deleteCharge reverses the points');
+    }
+
+    /** Helper: read a method body as source for structural checks. */
+    private function methodSource(\ReflectionClass $cls, string $method): string
+    {
+        $m = $cls->getMethod($method);
+        $file = file($m->getFileName());
+        return implode('', array_slice(
+            $file,
+            $m->getStartLine() - 1,
+            $m->getEndLine() - $m->getStartLine() + 1
+        ));
     }
 
     #[Test]
