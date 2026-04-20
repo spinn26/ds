@@ -81,7 +81,8 @@ class MonthlyPenaltyRunner
             ])
             ->get();
 
-        $dateMonth = str_pad((string) $month, 2, '0', STR_PAD_LEFT);
+        // Legacy format: dateMonth = "YYYY-MM" (not just "MM"), dateYear = "YYYY".
+        $dateMonth = sprintf('%04d-%02d', $year, $month);
         $dateYear = (string) $year;
         $monthEnd = Carbon::create($year, $month, 1)->endOfMonth();
 
@@ -143,15 +144,18 @@ class MonthlyPenaltyRunner
         }
 
         // Bucket commissions by first-line branch under this mentor.
+        // Seller id can live in `commissionFromOtherConsultant` (new) or
+        // `consultantsChain` (legacy) — try both; otherwise the row ends up
+        // as "unassigned" and only participates in the OP calc.
         $byBranch = [];
         $branchVolumes = [];
         $unassigned = [];
         foreach ($commissions as $c) {
-            $branchKey = $this->firstLineBranchUnder(
-                sellerId: $c->commissionFromOtherConsultant,
-                mentorId: (int) $consultant->id,
-                inviters: $inviters,
-            );
+            $sellerId = (int) ($c->commissionFromOtherConsultant ?? 0)
+                ?: (int) ($c->consultantsChain ?? 0);
+            $branchKey = $sellerId > 0
+                ? $this->firstLineBranchUnder($sellerId, (int) $consultant->id, $inviters)
+                : null;
             if ($branchKey === null) {
                 $unassigned[] = $c;
                 continue;
@@ -167,9 +171,12 @@ class MonthlyPenaltyRunner
             ? $this->finaliser->detachmentMultipliers($branchVolumes)
             : array_fill_keys(array_keys($branchVolumes), 1.0);
 
-        // OP: only when mandatoryGP > 0.
+        // OP: only when mandatoryGP > 0. Totals include unassigned rows —
+        // the OP cap is about total monthly group volume, regardless of
+        // whether branches are cleanly resolvable.
         $mandatoryGp = (float) ($consultant->mandatoryGP ?? 0);
         $totalGroupVolume = array_sum($branchVolumes);
+        foreach ($unassigned as $u) $totalGroupVolume += (float) $u->groupVolume;
         $opMult = $mandatoryGp > 0
             ? $this->finaliser->opMultiplier($totalGroupVolume, $mandatoryGp)
             : 1.0;
@@ -187,45 +194,48 @@ class MonthlyPenaltyRunner
         $withheldTotal = 0.0;
         $updates = [];
 
+        $applyToRow = function ($c, float $dm) use (&$affected, &$withheldTotal, &$updates, $opMult, $applyWrite) {
+            $totalMult = $dm * $opMult;
+            if ($totalMult >= 1.0) return;
+            if ((bool) ($c->reduction ?? false)) return; // idempotent
+
+            $originalRub = (float) $c->groupBonusRub;
+            $newRub = $originalRub * $totalMult;
+            $withheldTotal += $originalRub - $newRub;
+            $affected++;
+
+            $updates[] = [
+                'id' => (int) $c->id,
+                'originalRub' => $originalRub,
+                'newRub' => $newRub,
+                'detachMult' => $dm,
+                'opMult' => $opMult,
+            ];
+
+            if ($applyWrite) {
+                DB::table('commission')
+                    ->where('id', $c->id)
+                    ->update([
+                        'reduction' => true,
+                        'groupBonusRubBeforeGapReduction' => $originalRub,
+                        'withheldPercent' => (1.0 - $totalMult) * 100.0,
+                        'withheldForGap' => $dm < 1 ? ($originalRub * (1.0 - $dm)) : 0,
+                        'withheldForCommission' => $opMult < 1
+                            ? (($originalRub * $dm) * (1.0 - $opMult))
+                            : 0,
+                        'amountRUB' => $newRub,
+                        'groupBonusRub' => $newRub,
+                    ]);
+            }
+        };
+
+        // Branched rows — detachment multiplier applies per branch.
         foreach ($byBranch as $branchKey => $rows) {
             $dm = $detachMults[$branchKey] ?? 1.0;
-            $totalMult = $dm * $opMult;
-            if ($totalMult >= 1.0) continue;
-
-            foreach ($rows as $c) {
-                if ((bool) ($c->reduction ?? false)) continue; // idempotent
-
-                $originalRub = (float) $c->groupBonusRub;
-                $newRub = $originalRub * $totalMult;
-                $withheld = $originalRub - $newRub;
-                $withheldTotal += $withheld;
-                $affected++;
-
-                $updates[] = [
-                    'id' => (int) $c->id,
-                    'originalRub' => $originalRub,
-                    'newRub' => $newRub,
-                    'detachMult' => $dm,
-                    'opMult' => $opMult,
-                ];
-
-                if ($applyWrite) {
-                    DB::table('commission')
-                        ->where('id', $c->id)
-                        ->update([
-                            'reduction' => true,
-                            'groupBonusRubBeforeGapReduction' => $originalRub,
-                            'withheldPercent' => (1.0 - $totalMult) * 100.0,
-                            'withheldForGap' => $dm < 1 ? ($originalRub * (1.0 - $dm)) : 0,
-                            'withheldForCommission' => $opMult < 1
-                                ? (($originalRub * $dm) * (1.0 - $opMult))
-                                : 0,
-                            'amountRUB' => $newRub,
-                            'groupBonusRub' => $newRub,
-                        ]);
-                }
-            }
+            foreach ($rows as $c) $applyToRow($c, $dm);
         }
+        // Unassigned rows — no branch detach, just OP.
+        foreach ($unassigned as $c) $applyToRow($c, 1.0);
 
         $gapBranchKey = array_search(0.5, $detachMults, true);
         if ($applyWrite && ($gapBranchKey !== false || $opMult < 1.0)) {
