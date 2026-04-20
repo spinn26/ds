@@ -22,6 +22,8 @@ class ApiSettingsService
         // Google Sheets
         'google.sheets.api_key'        => ['group' => 'google', 'label' => 'Google Sheets API Key', 'hint' => 'API Key из GCP Console для чтения публичных таблиц', 'secret' => true, 'envFallback' => 'GOOGLE_SHEETS_API_KEY'],
         'google.sheets.products_id'    => ['group' => 'google', 'label' => 'ID таблицы «Продукты»', 'hint' => 'ID из URL таблицы: .../spreadsheets/d/{ID}/edit', 'secret' => false, 'envFallback' => null],
+        'google.sheets.contracts_id'   => ['group' => 'google', 'label' => 'ID таблицы «Импорт контрактов»', 'hint' => 'Используется как дефолт в /manage/contracts/upload', 'secret' => false, 'envFallback' => null],
+        'google.sheets.transactions_id' => ['group' => 'google', 'label' => 'ID таблицы «Импорт транзакций»', 'hint' => 'Используется как дефолт в /manage/transactions/import', 'secret' => false, 'envFallback' => null],
         'google.sheets.reference_id'   => ['group' => 'google', 'label' => 'ID таблицы «Справочники»', 'hint' => 'Необязательно — для общих справочников', 'secret' => false, 'envFallback' => null],
 
         // Telegram

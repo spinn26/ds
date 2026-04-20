@@ -44,8 +44,12 @@ class TransactionImportController extends Controller
      */
     public function sheetNames(): JsonResponse
     {
-        $spreadsheetId = config('services.google_sheets.spreadsheet_id', env('GOOGLE_SHEETS_SPREADSHEET_ID'));
-        $apiKey = config('services.google_sheets.api_key', env('GOOGLE_SHEETS_API_KEY'));
+        // Read from api_settings first (admin UI), fall back to legacy env.
+        $settings = app(\App\Services\ApiSettingsService::class);
+        $spreadsheetId = $settings->get('google.sheets.transactions_id',
+            config('services.google_sheets.spreadsheet_id', env('GOOGLE_SHEETS_SPREADSHEET_ID')));
+        $apiKey = $settings->get('google.sheets.api_key',
+            config('services.google_sheets.api_key', env('GOOGLE_SHEETS_API_KEY')));
 
         if (! $spreadsheetId || ! $apiKey) {
             return response()->json(['sheets' => [], 'message' => 'Google Sheets не настроен']);
@@ -68,11 +72,15 @@ class TransactionImportController extends Controller
             'currency' => 'nullable|integer',
         ]);
 
-        $spreadsheetId = config('services.google_sheets.spreadsheet_id', env('GOOGLE_SHEETS_SPREADSHEET_ID'));
-        $apiKey = config('services.google_sheets.api_key', env('GOOGLE_SHEETS_API_KEY'));
+        // Read from api_settings first (admin UI), fall back to legacy env.
+        $settings = app(\App\Services\ApiSettingsService::class);
+        $spreadsheetId = $settings->get('google.sheets.transactions_id',
+            config('services.google_sheets.spreadsheet_id', env('GOOGLE_SHEETS_SPREADSHEET_ID')));
+        $apiKey = $settings->get('google.sheets.api_key',
+            config('services.google_sheets.api_key', env('GOOGLE_SHEETS_API_KEY')));
 
         if (! $spreadsheetId || ! $apiKey) {
-            return response()->json(['message' => 'Google Sheets не настроен. Установите GOOGLE_SHEETS_SPREADSHEET_ID и GOOGLE_SHEETS_API_KEY в .env'], 422);
+            return response()->json(['message' => 'Google Sheets не настроен. Заполните «Google Sheets API Key» и «ID таблицы Импорт транзакций» в /admin/api-keys'], 422);
         }
 
         $reader = app(\App\Services\GoogleSheetsReader::class);
