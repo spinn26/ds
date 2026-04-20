@@ -1,0 +1,13 @@
+                           Table "public.vat"
+  Column  |            Type             | Collation | Nullable | Default 
+----------+-----------------------------+-----------+----------+---------
+ id       | integer                     |           | not null | 
+ value    | numeric                     |           |          | 
+ dateFrom | timestamp without time zone |           |          | 
+ dateTo   | timestamp without time zone |           |          | 
+Indexes:
+    "vat_pkey" PRIMARY KEY, btree (id)
+Referenced by:
+    TABLE "transaction" CONSTRAINT "transaction_vat_fkey" FOREIGN KEY (vat) REFERENCES vat(id) DEFERRABLE
+    TABLE ""volumeCalculator"" CONSTRAINT "volumeCalculator_vat_fkey" FOREIGN KEY (vat) REFERENCES vat(id) DEFERRABLE
+

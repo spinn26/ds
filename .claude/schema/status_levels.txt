@@ -1,0 +1,33 @@
+                          Table "public.status_levels"
+        Column         |       Type        | Collation | Nullable |   Default    
+-----------------------+-------------------+-----------+----------+--------------
+ id                    | integer           |           | not null | 
+ otrif                 | numeric           |           |          | 
+ status                | integer           |           |          | 
+ groupVolume           | numeric           |           |          | 
+ level                 | integer           |           |          | 
+ title                 | character varying |           |          | 
+ pool                  | numeric           |           |          | 
+ groupVolumeCumulative | numeric           |           |          | 
+ percent               | numeric           |           |          | 
+ comment               | character varying |           |          | 
+ personalVolume        | numeric(15,2)     |           | not null | '0'::numeric
+ dsShare               | numeric(5,2)      |           | not null | '0'::numeric
+ mandatoryGP           | numeric(15,2)     |           | not null | '0'::numeric
+Indexes:
+    "status_levels_pkey" PRIMARY KEY, btree (id)
+Foreign-key constraints:
+    "status_levels_status_fkey" FOREIGN KEY (status) REFERENCES statuses(id) DEFERRABLE
+Referenced by:
+    TABLE ""coefficientCriterion"" CONSTRAINT "coefficientCriterion_levelQualification_fkey" FOREIGN KEY ("levelQualification") REFERENCES status_levels(id) DEFERRABLE
+    TABLE "commission" CONSTRAINT "commission_calculationLevel_fkey" FOREIGN KEY ("calculationLevel") REFERENCES status_levels(id) DEFERRABLE
+    TABLE "consultant" CONSTRAINT "consultant_status_and_lvl_fkey" FOREIGN KEY (status_and_lvl) REFERENCES status_levels(id) DEFERRABLE
+    TABLE "criterion" CONSTRAINT "criterion_qualificationValue_fkey" FOREIGN KEY ("qualificationValue") REFERENCES status_levels(id) DEFERRABLE
+    TABLE ""qualificationLog"" CONSTRAINT "qualificationLog_calculationLevel_fkey" FOREIGN KEY ("calculationLevel") REFERENCES status_levels(id) DEFERRABLE
+    TABLE ""qualificationLog"" CONSTRAINT "qualificationLog_levelNew_fkey" FOREIGN KEY ("levelNew") REFERENCES status_levels(id) DEFERRABLE
+    TABLE ""qualificationLog"" CONSTRAINT "qualificationLog_levelPrevious_fkey" FOREIGN KEY ("levelPrevious") REFERENCES status_levels(id) DEFERRABLE
+    TABLE ""qualificationLog"" CONSTRAINT "qualificationLog_nominalLevel_fkey" FOREIGN KEY ("nominalLevel") REFERENCES status_levels(id) DEFERRABLE
+    TABLE "statuses" CONSTRAINT "statuses_levels_fkey" FOREIGN KEY (levels) REFERENCES status_levels(id) DEFERRABLE
+    TABLE "user_status_log" CONSTRAINT "user_status_log_status_lvl_fkey" FOREIGN KEY (status_lvl) REFERENCES status_levels(id) DEFERRABLE
+    TABLE ""volumeCalculator"" CONSTRAINT "volumeCalculator_qulaification_fkey" FOREIGN KEY (qulaification) REFERENCES status_levels(id) DEFERRABLE
+

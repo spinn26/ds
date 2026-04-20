@@ -1,0 +1,68 @@
+                              Table "public.qualificationLog"
+           Column           |            Type             | Collation | Nullable | Default 
+----------------------------+-----------------------------+-----------+----------+---------
+ id                         | integer                     |           | not null | 
+ consultant                 | integer                     |           |          | 
+ result                     | character varying           |           |          | 
+ commissionsToReduce        | integer                     |           |          | 
+ firstLineBranchesJSON      | json                        |           |          | 
+ levelsDontMatch            | boolean                     |           |          | 
+ branchWithGap              | integer                     |           |          | 
+ qualificationLogPrevious   | integer                     |           |          | 
+ commissionsToReduceCounter | integer                     |           |          | 
+ savingDate                 | timestamp without time zone |           |          | 
+ comment                    | character varying           |           |          | 
+ branchWithGapGroupVolume   | numeric                     |           |          | 
+ personalVolume             | numeric                     |           |          | 
+ dateDeleted                | timestamp without time zone |           |          | 
+ levelNew                   | integer                     |           |          | 
+ consultantPersonName       | character varying           |           |          | 
+ commissionsToReduceAmount  | integer                     |           |          | 
+ date                       | timestamp without time zone |           |          | 
+ groupVolumeCumulative      | numeric                     |           |          | 
+ gap                        | boolean                     |           |          | 
+ gapValuePercentage         | numeric                     |           |          | 
+ levelPrevious              | integer                     |           |          | 
+ groupVolume                | numeric                     |           |          | 
+ createdAt                  | timestamp without time zone |           |          | 
+ nominalLevel               | integer                     |           |          | 
+ firstLineBranches          | integer                     |           |          | 
+ calculationLevel           | integer                     |           |          | 
+ changedAt                  | timestamp without time zone |           |          | 
+ gapValue                   | numeric                     |           |          | 
+Indexes:
+    "qualificationLog_pkey" PRIMARY KEY, btree (id)
+    "qualificationlog_consultant_idx" btree (consultant)
+    "qualificationlog_date_idx" btree (date DESC)
+Foreign-key constraints:
+    "qualificationLog_branchWithGap_fkey" FOREIGN KEY ("branchWithGap") REFERENCES "qualificationLog"(id) DEFERRABLE
+    "qualificationLog_calculationLevel_fkey" FOREIGN KEY ("calculationLevel") REFERENCES status_levels(id) DEFERRABLE
+    "qualificationLog_commissionsToReduce_fkey" FOREIGN KEY ("commissionsToReduce") REFERENCES commission(id) DEFERRABLE
+    "qualificationLog_consultant_fkey" FOREIGN KEY (consultant) REFERENCES consultant(id) DEFERRABLE
+    "qualificationLog_firstLineBranches_fkey" FOREIGN KEY ("firstLineBranches") REFERENCES "qualificationLog"(id) DEFERRABLE
+    "qualificationLog_levelNew_fkey" FOREIGN KEY ("levelNew") REFERENCES status_levels(id) DEFERRABLE
+    "qualificationLog_levelPrevious_fkey" FOREIGN KEY ("levelPrevious") REFERENCES status_levels(id) DEFERRABLE
+    "qualificationLog_nominalLevel_fkey" FOREIGN KEY ("nominalLevel") REFERENCES status_levels(id) DEFERRABLE
+    "qualificationLog_qualificationLogPrevious_fkey" FOREIGN KEY ("qualificationLogPrevious") REFERENCES "qualificationLog"(id) DEFERRABLE
+Referenced by:
+    TABLE ""calculationConsultantPoints"" CONSTRAINT "calculationConsultantPoints_qualificationLog_fkey" FOREIGN KEY ("qualificationLog") REFERENCES "qualificationLog"(id) DEFERRABLE
+    TABLE ""calculationConsultantPoints"" CONSTRAINT "calculationConsultantPoints_qualification_fkey" FOREIGN KEY (qualification) REFERENCES "qualificationLog"(id) DEFERRABLE
+    TABLE ""calculationContestTrigger"" CONSTRAINT "calculationContestTrigger_qualificationLogActive_fkey" FOREIGN KEY ("qualificationLogActive") REFERENCES "qualificationLog"(id) DEFERRABLE
+    TABLE ""calculationContestTrigger"" CONSTRAINT "calculationContestTrigger_qualificationLog_fkey" FOREIGN KEY ("qualificationLog") REFERENCES "qualificationLog"(id) DEFERRABLE
+    TABLE ""calculationContestTrigger"" CONSTRAINT "calculationContestTrigger_qualifications_fkey" FOREIGN KEY (qualifications) REFERENCES "qualificationLog"(id) DEFERRABLE
+    TABLE "commission" CONSTRAINT "commission_qualificationLog_fkey" FOREIGN KEY ("qualificationLog") REFERENCES "qualificationLog"(id) DEFERRABLE
+    TABLE ""consultantBalance"" CONSTRAINT "consultantBalance_qualificationLog_fkey" FOREIGN KEY ("qualificationLog") REFERENCES "qualificationLog"(id) DEFERRABLE
+    TABLE "consultant" CONSTRAINT "consultant_qualificationLog_fkey" FOREIGN KEY ("qualificationLog") REFERENCES "qualificationLog"(id) DEFERRABLE
+    TABLE ""consultantsWithMissingLogs"" CONSTRAINT "consultantsWithMissingLogs_firstLogBeforeMissingOne_fkey" FOREIGN KEY ("firstLogBeforeMissingOne") REFERENCES "qualificationLog"(id) DEFERRABLE
+    TABLE "documentlogs" CONSTRAINT "documentlogs_qualificationLog_fkey" FOREIGN KEY ("qualificationLog") REFERENCES "qualificationLog"(id) DEFERRABLE
+    TABLE "documentlogs" CONSTRAINT "documentlogs_qualifications_fkey" FOREIGN KEY (qualifications) REFERENCES "qualificationLog"(id) DEFERRABLE
+    TABLE "documentlogs" CONSTRAINT "documentlogs_qualifications_old_fkey" FOREIGN KEY (qualifications_old) REFERENCES "qualificationLog"(id) DEFERRABLE
+    TABLE ""exportLogQualificationLog"" CONSTRAINT "exportLogQualificationLog_qLogs_fkey" FOREIGN KEY ("qLogs") REFERENCES "qualificationLog"(id) DEFERRABLE
+    TABLE ""firstBalances"" CONSTRAINT "firstBalances_qLog_fkey" FOREIGN KEY ("qLog") REFERENCES "qualificationLog"(id) DEFERRABLE
+    TABLE ""massTransactionRecalculationTrigger"" CONSTRAINT "massTransactionRecalculationTrigger_qualificationLogs_fkey" FOREIGN KEY ("qualificationLogs") REFERENCES "qualificationLog"(id) DEFERRABLE
+    TABLE ""qualificationLog"" CONSTRAINT "qualificationLog_branchWithGap_fkey" FOREIGN KEY ("branchWithGap") REFERENCES "qualificationLog"(id) DEFERRABLE
+    TABLE ""qualificationLog"" CONSTRAINT "qualificationLog_firstLineBranches_fkey" FOREIGN KEY ("firstLineBranches") REFERENCES "qualificationLog"(id) DEFERRABLE
+    TABLE ""qualificationLog"" CONSTRAINT "qualificationLog_qualificationLogPrevious_fkey" FOREIGN KEY ("qualificationLogPrevious") REFERENCES "qualificationLog"(id) DEFERRABLE
+    TABLE ""reportGenerator"" CONSTRAINT "reportGenerator_qualificationLogs_fkey" FOREIGN KEY ("qualificationLogs") REFERENCES "qualificationLog"(id) DEFERRABLE
+    TABLE ""unactualQlogs"" CONSTRAINT "unactualQlogs_qLog_fkey" FOREIGN KEY ("qLog") REFERENCES "qualificationLog"(id) DEFERRABLE
+

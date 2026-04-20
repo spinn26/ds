@@ -1,0 +1,72 @@
+                                   Table "public.commission"
+             Column              |            Type             | Collation | Nullable | Default 
+---------------------------------+-----------------------------+-----------+----------+---------
+ id                              | integer                     |           | not null | 
+ transaction                     | integer                     |           |          | 
+ consultant                      | integer                     |           |          | 
+ comment                         | character varying           |           |          | 
+ techComment                     | character varying           |           |          | 
+ amount                          | numeric                     |           |          | 
+ amountRUB                       | numeric                     |           |          | 
+ amountUSD                       | numeric                     |           |          | 
+ currency                        | integer                     |           |          | 
+ chainOrder                      | integer                     |           |          | 
+ type                            | character varying           |           |          | 
+ commissionFromOtherConsultant   | integer                     |           |          | 
+ user_field                      | integer                     |           |          | 
+ urlData                         | character varying           |           |          | 
+ detele                          | boolean                     |           |          | 
+ headers                         | character varying           |           |          | 
+ personalVolume                  | numeric                     |           |          | 
+ groupVolume                     | numeric                     |           |          | 
+ groupBonus                      | numeric                     |           |          | 
+ groupBonusRub                   | numeric                     |           |          | 
+ groupVolumeCumulative           | numeric                     |           |          | 
+ groupVolumeCumulativeUpdate     | numeric                     |           |          | 
+ createdAt                       | timestamp without time zone |           |          | 
+ deletedAt                       | timestamp without time zone |           |          | 
+ date                            | timestamp without time zone |           |          | 
+ dateDay                         | timestamp without time zone |           |          | 
+ dateMonth                       | character varying           |           |          | 
+ dateYear                        | character varying           |           |          | 
+ reduction                       | boolean                     |           |          | 
+ consultantsChain                | integer                     |           |          | 
+ groupBonusRubBeforeGapReduction | numeric                     |           |          | 
+ withheldPercent                 | numeric                     |           |          | 
+ withheldForCommission           | numeric                     |           |          | 
+ withheldForGap                  | numeric                     |           |          | 
+ qualificationLog                | integer                     |           |          | 
+ calculationLevel                | integer                     |           |          | 
+ percent                         | numeric                     |           |          | 
+ absolute                        | numeric                     |           |          | 
+Indexes:
+    "commission_pkey" PRIMARY KEY, btree (id)
+    "commission_consultant_idx" btree (consultant)
+    "commission_date_idx" btree (date)
+    "commission_dateyear_datemonth_idx" btree ("dateYear", "dateMonth")
+    "commission_transaction_idx" btree (transaction)
+Foreign-key constraints:
+    "commission_calculationLevel_fkey" FOREIGN KEY ("calculationLevel") REFERENCES status_levels(id) DEFERRABLE
+    "commission_commissionFromOtherConsultant_fkey" FOREIGN KEY ("commissionFromOtherConsultant") REFERENCES consultant(id) DEFERRABLE
+    "commission_consultant_fkey" FOREIGN KEY (consultant) REFERENCES consultant(id) DEFERRABLE
+    "commission_consultantsChain_fkey" FOREIGN KEY ("consultantsChain") REFERENCES consultant(id) DEFERRABLE
+    "commission_currency_fkey" FOREIGN KEY (currency) REFERENCES currency(id) DEFERRABLE
+    "commission_qualificationLog_fkey" FOREIGN KEY ("qualificationLog") REFERENCES "qualificationLog"(id) DEFERRABLE
+    "commission_transaction_fkey" FOREIGN KEY (transaction) REFERENCES transaction(id) DEFERRABLE
+    "commission_user_field_fkey" FOREIGN KEY (user_field) REFERENCES "WebUser"(id) DEFERRABLE
+Referenced by:
+    TABLE ""calculationConsultantPoints"" CONSTRAINT "calculationConsultantPoints_commissions_fkey" FOREIGN KEY (commissions) REFERENCES commission(id) DEFERRABLE
+    TABLE ""calculationContestTrigger"" CONSTRAINT "calculationContestTrigger_commissionsProduct_fkey" FOREIGN KEY ("commissionsProduct") REFERENCES commission(id) DEFERRABLE
+    TABLE "consultant" CONSTRAINT "consultant_commissionLast_fkey" FOREIGN KEY ("commissionLast") REFERENCES commission(id) DEFERRABLE
+    TABLE "documentlogs" CONSTRAINT "documentlogs_comissions2_fkey" FOREIGN KEY (comissions2) REFERENCES commission(id) DEFERRABLE
+    TABLE "documentlogs" CONSTRAINT "documentlogs_comissions3_fkey" FOREIGN KEY (comissions3) REFERENCES commission(id) DEFERRABLE
+    TABLE "documentlogs" CONSTRAINT "documentlogs_comissions_fkey" FOREIGN KEY (comissions) REFERENCES commission(id) DEFERRABLE
+    TABLE ""massTransactionRecalculationTrigger"" CONSTRAINT "massTransactionRecalculationTrigger_RemovalCommissions_fkey" FOREIGN KEY ("RemovalCommissions") REFERENCES commission(id) DEFERRABLE
+    TABLE ""partnerMonthlyPaymentsReportTrigger"" CONSTRAINT "partnerMonthlyPaymentsReportTr_nonTransactionalCommissions_fkey" FOREIGN KEY ("nonTransactionalCommissions") REFERENCES commission(id) DEFERRABLE
+    TABLE ""partnerMonthlyPaymentsReportTrigger"" CONSTRAINT "partnerMonthlyPaymentsReportTrigger_commissionsGroup_fkey" FOREIGN KEY ("commissionsGroup") REFERENCES commission(id) DEFERRABLE
+    TABLE ""partnerMonthlyPaymentsReportTrigger"" CONSTRAINT "partnerMonthlyPaymentsReportTrigger_commissionsPersonal_fkey" FOREIGN KEY ("commissionsPersonal") REFERENCES commission(id) DEFERRABLE
+    TABLE ""partnerMonthlyPaymentsReportTrigger"" CONSTRAINT "partnerMonthlyPaymentsReportTrigger_commissions_fkey" FOREIGN KEY (commissions) REFERENCES commission(id) DEFERRABLE
+    TABLE ""qualificationLog"" CONSTRAINT "qualificationLog_commissionsToReduce_fkey" FOREIGN KEY ("commissionsToReduce") REFERENCES commission(id) DEFERRABLE
+    TABLE ""reportGenerator"" CONSTRAINT "reportGenerator_commissions_fkey" FOREIGN KEY (commissions) REFERENCES commission(id) DEFERRABLE
+    TABLE "transaction" CONSTRAINT "transaction_commissions_fkey" FOREIGN KEY (commissions) REFERENCES commission(id) DEFERRABLE
+

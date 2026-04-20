@@ -1,0 +1,170 @@
+                                                  Table "public.consultant"
+           Column            |              Type              | Collation | Nullable |                Default                 
+-----------------------------+--------------------------------+-----------+----------+----------------------------------------
+ id                          | integer                        |           | not null | nextval('consultant_id_seq'::regclass)
+ applicationForPayment       | integer                        |           |          | 
+ urlData                     | character varying              |           |          | 
+ passportScanPage1           | integer                        |           |          | 
+ commissionLast              | integer                        |           |          | 
+ person                      | integer                        |           |          | 
+ structureLevel              | integer                        |           |          | 
+ title                       | integer                        |           |          | 
+ webUser                     | integer                        |           |          | 
+ statusRequisites            | integer                        |           |          | 
+ groupVolumeCumulative       | numeric                        |           |          | 
+ dateCreated                 | timestamp without time zone    |           |          | 
+ dateDeactivity              | timestamp without time zone    |           |          | 
+ soldProducts                | integer                        |           |          | 
+ status_and_lvl              | integer                        |           |          | 
+ dateDeterministicPlan       | timestamp without time zone    |           |          | 
+ qualificationLog            | integer                        |           |          | 
+ clients                     | integer                        |           |          | 
+ personName                  | character varying              |           |          | 
+ transactionProrostId        | integer                        |           |          | 
+ inviterName                 | character varying              |           |          | 
+ active                      | boolean                        |           |          | 
+ ambassadorProductNames      | character varying              |           |          | 
+ passportScanPage2           | integer                        |           |          | 
+ ambassadorForProducts       | integer                        |           |          | 
+ statusesName                | character varying              |           |          | 
+ fieldForReport              | boolean                        |           |          | 
+ acceptance                  | boolean                        |           |          | 
+ personalVolume              | numeric                        |           |          | 
+ changeConsultantInvitertLog | integer                        |           |          | 
+ dateDeterministic           | timestamp without time zone    |           |          | 
+ inviter                     | integer                        |           |          | 
+ groupVolume                 | numeric                        |           |          | 
+ soldPrograms                | integer                        |           |          | 
+ upperLevels                 | integer                        |           |          | 
+ contracts                   | integer                        |           |          | 
+ requisites                  | integer                        |           |          | 
+ bankRequisitesForPayments   | integer                        |           |          | 
+ dateActivity                | timestamp without time zone    |           |          | 
+ tempRequisites              | integer                        |           |          | 
+ transactionProrost          | json                           |           |          | 
+ structure                   | integer                        |           |          | 
+ participantCode             | character varying              |           |          | 
+ isStudent                   | boolean                        |           |          | 
+ headers                     | character varying              |           |          | 
+ dateChangeRequisites        | timestamp without time zone    |           |          | 
+ transactionSPFK             | json                           |           |          | 
+ dateDeleted                 | timestamp without time zone    |           |          | 
+ team                        | integer                        |           |          | 
+ country                     | integer                        |           |          | 
+ dateChanged                 | timestamp without time zone    |           |          | 
+ commissionAPI               | json                           |           |          | 
+ changedAt                   | timestamp without time zone    |           |          | 
+ invited                     | integer                        |           |          | 
+ activity                    | integer                        |           |          | 
+ qualificationLocked         | timestamp without time zone    |           |          | 
+ status                      | integer                        |           |          | 
+ comment                     | character varying              |           |          | 
+ transactionSpfkId           | integer                        |           |          | 
+ agreementlink               | integer                        |           |          | 
+ partnerIdGetCourse          | character varying              |           |          | 
+ terminationCount            | smallint                       |           | not null | '0'::smallint
+ activationDeadline          | timestamp(0) without time zone |           |          | 
+ yearPeriodEnd               | timestamp(0) without time zone |           |          | 
+Indexes:
+    "consultant_pkey" PRIMARY KEY, btree (id)
+    "consultant_inviter_idx" btree (inviter)
+    "consultant_webuser_idx" btree ("webUser")
+Foreign-key constraints:
+    "consultant_activity_fkey" FOREIGN KEY (activity) REFERENCES directory_of_activities(id) DEFERRABLE
+    "consultant_agreementlink_fkey" FOREIGN KEY (agreementlink) REFERENCES "partnerAcceptance"(id) DEFERRABLE
+    "consultant_ambassadorForProducts_fkey" FOREIGN KEY ("ambassadorForProducts") REFERENCES product(id) DEFERRABLE
+    "consultant_bankRequisitesForPayments_fkey" FOREIGN KEY ("bankRequisitesForPayments") REFERENCES bankrequisites(id) DEFERRABLE
+    "consultant_changeConsultantInvitertLog_fkey" FOREIGN KEY ("changeConsultantInvitertLog") REFERENCES "changeConsultantInviterLog"(id) DEFERRABLE
+    "consultant_clients_fkey" FOREIGN KEY (clients) REFERENCES client(id) DEFERRABLE
+    "consultant_commissionLast_fkey" FOREIGN KEY ("commissionLast") REFERENCES commission(id) DEFERRABLE
+    "consultant_contracts_fkey" FOREIGN KEY (contracts) REFERENCES contract(id) DEFERRABLE
+    "consultant_country_fkey" FOREIGN KEY (country) REFERENCES country(id) DEFERRABLE
+    "consultant_invited_fkey" FOREIGN KEY (invited) REFERENCES consultant(id) DEFERRABLE
+    "consultant_inviter_fkey" FOREIGN KEY (inviter) REFERENCES consultant(id) DEFERRABLE
+    "consultant_qualificationLog_fkey" FOREIGN KEY ("qualificationLog") REFERENCES "qualificationLog"(id) DEFERRABLE
+    "consultant_requisites_fkey" FOREIGN KEY (requisites) REFERENCES requisites(id) DEFERRABLE
+    "consultant_soldProducts_fkey" FOREIGN KEY ("soldProducts") REFERENCES product(id) DEFERRABLE
+    "consultant_soldPrograms_fkey" FOREIGN KEY ("soldPrograms") REFERENCES program(id) DEFERRABLE
+    "consultant_statusRequisites_fkey" FOREIGN KEY ("statusRequisites") REFERENCES status_requisites(id) DEFERRABLE
+    "consultant_status_and_lvl_fkey" FOREIGN KEY (status_and_lvl) REFERENCES status_levels(id) DEFERRABLE
+    "consultant_status_fkey" FOREIGN KEY (status) REFERENCES status(id) DEFERRABLE
+    "consultant_structure_fkey" FOREIGN KEY (structure) REFERENCES structure(id) DEFERRABLE
+    "consultant_team_fkey" FOREIGN KEY (team) REFERENCES team(id) DEFERRABLE
+    "consultant_tempRequisites_fkey" FOREIGN KEY ("tempRequisites") REFERENCES requisites(id) DEFERRABLE
+    "consultant_title_fkey" FOREIGN KEY (title) REFERENCES title(id) DEFERRABLE
+    "consultant_transactionProrostId_fkey" FOREIGN KEY ("transactionProrostId") REFERENCES transaction(id) DEFERRABLE
+    "consultant_transactionSpfkId_fkey" FOREIGN KEY ("transactionSpfkId") REFERENCES transaction(id) DEFERRABLE
+    "consultant_upperLevels_fkey" FOREIGN KEY ("upperLevels") REFERENCES consultant(id) DEFERRABLE
+    "consultant_webUser_fkey" FOREIGN KEY ("webUser") REFERENCES "WebUser"(id) DEFERRABLE
+Referenced by:
+    TABLE ""WebUser"" CONSTRAINT "WebUser_consultant_id_fkey" FOREIGN KEY (consultant_id) REFERENCES consultant(id) DEFERRABLE
+    TABLE ""calculationConsultantPoints"" CONSTRAINT "calculationConsultantPoints_consultant_fkey" FOREIGN KEY (consultant) REFERENCES consultant(id) DEFERRABLE
+    TABLE ""calculationContestTrigger"" CONSTRAINT "calculationContestTrigger_consultant_fkey" FOREIGN KEY (consultant) REFERENCES consultant(id) DEFERRABLE
+    TABLE ""chageConsultanStatusLog"" CONSTRAINT "chageConsultanStatusLog_consultant_fkey" FOREIGN KEY (consultant) REFERENCES consultant(id) DEFERRABLE
+    TABLE ""changeConsultantClientLog"" CONSTRAINT "changeConsultantClientLog_consultantNew_fkey" FOREIGN KEY ("consultantNew") REFERENCES consultant(id) DEFERRABLE
+    TABLE ""changeConsultantClientLog"" CONSTRAINT "changeConsultantClientLog_consultantOld_fkey" FOREIGN KEY ("consultantOld") REFERENCES consultant(id) DEFERRABLE
+    TABLE ""changeConsultantContractLog"" CONSTRAINT "changeConsultantContractLog_consultantNew_fkey" FOREIGN KEY ("consultantNew") REFERENCES consultant(id) DEFERRABLE
+    TABLE ""changeConsultantContractLog"" CONSTRAINT "changeConsultantContractLog_consultantOld_fkey" FOREIGN KEY ("consultantOld") REFERENCES consultant(id) DEFERRABLE
+    TABLE ""changeConsultantInviterLog"" CONSTRAINT "changeConsultantInviterLog_consultant_fkey" FOREIGN KEY (consultant) REFERENCES consultant(id) DEFERRABLE
+    TABLE ""changeConsultantInviterLog"" CONSTRAINT "changeConsultantInviterLog_inviterNew_fkey" FOREIGN KEY ("inviterNew") REFERENCES consultant(id) DEFERRABLE
+    TABLE ""changeConsultantInviterLog"" CONSTRAINT "changeConsultantInviterLog_inviterOld_fkey" FOREIGN KEY ("inviterOld") REFERENCES consultant(id) DEFERRABLE
+    TABLE ""changeConsultantStructureTrigger"" CONSTRAINT "changeConsultantStructureTrigger_allConsultants_fkey" FOREIGN KEY ("allConsultants") REFERENCES consultant(id) DEFERRABLE
+    TABLE ""changeConsultantStructureTrigger"" CONSTRAINT "changeConsultantStructureTrigger_level10_fkey" FOREIGN KEY (level10) REFERENCES consultant(id) DEFERRABLE
+    TABLE ""changeConsultantStructureTrigger"" CONSTRAINT "changeConsultantStructureTrigger_level1_fkey" FOREIGN KEY (level1) REFERENCES consultant(id) DEFERRABLE
+    TABLE ""changeConsultantStructureTrigger"" CONSTRAINT "changeConsultantStructureTrigger_level2_fkey" FOREIGN KEY (level2) REFERENCES consultant(id) DEFERRABLE
+    TABLE ""changeConsultantStructureTrigger"" CONSTRAINT "changeConsultantStructureTrigger_level3_fkey" FOREIGN KEY (level3) REFERENCES consultant(id) DEFERRABLE
+    TABLE ""changeConsultantStructureTrigger"" CONSTRAINT "changeConsultantStructureTrigger_level4_fkey" FOREIGN KEY (level4) REFERENCES consultant(id) DEFERRABLE
+    TABLE ""changeConsultantStructureTrigger"" CONSTRAINT "changeConsultantStructureTrigger_level5_fkey" FOREIGN KEY (level5) REFERENCES consultant(id) DEFERRABLE
+    TABLE ""changeConsultantStructureTrigger"" CONSTRAINT "changeConsultantStructureTrigger_level6_fkey" FOREIGN KEY (level6) REFERENCES consultant(id) DEFERRABLE
+    TABLE ""changeConsultantStructureTrigger"" CONSTRAINT "changeConsultantStructureTrigger_level7_fkey" FOREIGN KEY (level7) REFERENCES consultant(id) DEFERRABLE
+    TABLE ""changeConsultantStructureTrigger"" CONSTRAINT "changeConsultantStructureTrigger_level8_fkey" FOREIGN KEY (level8) REFERENCES consultant(id) DEFERRABLE
+    TABLE ""changeConsultantStructureTrigger"" CONSTRAINT "changeConsultantStructureTrigger_level9_fkey" FOREIGN KEY (level9) REFERENCES consultant(id) DEFERRABLE
+    TABLE "client" CONSTRAINT "client_consultant_fkey" FOREIGN KEY (consultant) REFERENCES consultant(id) DEFERRABLE
+    TABLE "commission" CONSTRAINT "commission_commissionFromOtherConsultant_fkey" FOREIGN KEY ("commissionFromOtherConsultant") REFERENCES consultant(id) DEFERRABLE
+    TABLE "commission" CONSTRAINT "commission_consultant_fkey" FOREIGN KEY (consultant) REFERENCES consultant(id) DEFERRABLE
+    TABLE "commission" CONSTRAINT "commission_consultantsChain_fkey" FOREIGN KEY ("consultantsChain") REFERENCES consultant(id) DEFERRABLE
+    TABLE ""consultantBalance"" CONSTRAINT "consultantBalance_consultant_fkey" FOREIGN KEY (consultant) REFERENCES consultant(id) DEFERRABLE
+    TABLE ""consultantMotivationGroupLevel"" CONSTRAINT "consultantMotivationGroupLevel_consultant_fkey" FOREIGN KEY (consultant) REFERENCES consultant(id) DEFERRABLE
+    TABLE ""consultantProgramsData"" CONSTRAINT "consultantProgramsData_consultant_fkey" FOREIGN KEY (consultant) REFERENCES consultant(id) DEFERRABLE
+    TABLE ""consultantStatusChangeMailing"" CONSTRAINT "consultantStatusChangeMailing_consultant_fkey" FOREIGN KEY (consultant) REFERENCES consultant(id) DEFERRABLE
+    TABLE ""consultantStructure"" CONSTRAINT "consultantStructure_child_fkey" FOREIGN KEY (child) REFERENCES consultant(id) DEFERRABLE
+    TABLE ""consultantStructure"" CONSTRAINT "consultantStructure_parent_fkey" FOREIGN KEY (parent) REFERENCES consultant(id) DEFERRABLE
+    TABLE "consultant" CONSTRAINT "consultant_invited_fkey" FOREIGN KEY (invited) REFERENCES consultant(id) DEFERRABLE
+    TABLE "consultant" CONSTRAINT "consultant_inviter_fkey" FOREIGN KEY (inviter) REFERENCES consultant(id) DEFERRABLE
+    TABLE "consultant" CONSTRAINT "consultant_upperLevels_fkey" FOREIGN KEY ("upperLevels") REFERENCES consultant(id) DEFERRABLE
+    TABLE ""consultantsWithMissingLogs"" CONSTRAINT "consultantsWithMissingLogs_consultant_fkey" FOREIGN KEY (consultant) REFERENCES consultant(id) DEFERRABLE
+    TABLE "contestrating" CONSTRAINT "contestrating_consultant_fkey" FOREIGN KEY (consultant) REFERENCES consultant(id) DEFERRABLE
+    TABLE "contract" CONSTRAINT "contract_consultant_fkey" FOREIGN KEY (consultant) REFERENCES consultant(id) DEFERRABLE
+    TABLE "contract" CONSTRAINT "contract_consultantsChain_fkey" FOREIGN KEY ("consultantsChain") REFERENCES consultant(id) DEFERRABLE
+    TABLE ""cronPartnerCompressionDaily"" CONSTRAINT "cronPartnerCompressionDaily_consultans_fkey" FOREIGN KEY (consultans) REFERENCES consultant(id) DEFERRABLE
+    TABLE ""dataPermutationTrigger"" CONSTRAINT "dataPermutationTrigger_consultant_fkey" FOREIGN KEY (consultant) REFERENCES consultant(id) DEFERRABLE
+    TABLE ""dataPermutationTrigger"" CONSTRAINT "dataPermutationTrigger_invited_fkey" FOREIGN KEY (invited) REFERENCES consultant(id) DEFERRABLE
+    TABLE "documentlogs" CONSTRAINT "documentlogs_consultant_fkey" FOREIGN KEY (consultant) REFERENCES consultant(id) DEFERRABLE
+    TABLE ""exportLogConsultant"" CONSTRAINT "exportLogConsultant_consultants_fkey" FOREIGN KEY (consultants) REFERENCES consultant(id) DEFERRABLE
+    TABLE ""firstBalances"" CONSTRAINT "firstBalances_consultant_fkey" FOREIGN KEY (consultant) REFERENCES consultant(id) DEFERRABLE
+    TABLE ""getCourseOrderWebHookData"" CONSTRAINT "getCourseOrderWebHookData_consultant_fkey" FOREIGN KEY (consultant) REFERENCES consultant(id) DEFERRABLE
+    TABLE ""getInsmartOrderWebHookData"" CONSTRAINT "getInsmartOrderWebHookData_consultant_fkey" FOREIGN KEY (consultant) REFERENCES consultant(id) DEFERRABLE
+    TABLE ""getcourseCreateResidentPromocodeDebit"" CONSTRAINT "getcourseCreateResidentPromocodeDebit_consultant_fkey" FOREIGN KEY (consultant) REFERENCES consultant(id) DEFERRABLE
+    TABLE ""logAcceptance"" CONSTRAINT "logAcceptance_consultant_fkey" FOREIGN KEY (consultant) REFERENCES consultant(id) DEFERRABLE
+    TABLE ""massTransactionRecalculationTrigger"" CONSTRAINT "massTransactionRecalculationTri_consultantsWithCommissions_fkey" FOREIGN KEY ("consultantsWithCommissions") REFERENCES consultant(id) DEFERRABLE
+    TABLE ""massTransactionRecalculationTrigger"" CONSTRAINT "massTransactionRecalculationTrigger_consultant_fkey" FOREIGN KEY (consultant) REFERENCES consultant(id) DEFERRABLE
+    TABLE "meeting" CONSTRAINT "meeting_consultant_fkey" FOREIGN KEY (consultant) REFERENCES consultant(id) DEFERRABLE
+    TABLE ""monthlyReports"" CONSTRAINT "monthlyReports_consultant_fkey" FOREIGN KEY (consultant) REFERENCES consultant(id) DEFERRABLE
+    TABLE ""networkGroupBonus"" CONSTRAINT "networkGroupBonus_consultants_fkey" FOREIGN KEY (consultants) REFERENCES consultant(id) DEFERRABLE
+    TABLE "nocomission" CONSTRAINT "nocomission_consultant_fkey" FOREIGN KEY (consultant) REFERENCES consultant(id) DEFERRABLE
+    TABLE "notification" CONSTRAINT "notification_consultant_fkey" FOREIGN KEY (consultant) REFERENCES consultant(id) DEFERRABLE
+    TABLE ""partnerAcceptance"" CONSTRAINT "partnerAcceptance_consultant_fkey" FOREIGN KEY (consultant) REFERENCES consultant(id) DEFERRABLE
+    TABLE ""partnerMonthlyPaymentsReportMailing"" CONSTRAINT "partnerMonthlyPaymentsReportMailing_consultants_fkey" FOREIGN KEY (consultants) REFERENCES consultant(id) DEFERRABLE
+    TABLE ""partnerMonthlyPaymentsReportTrigger"" CONSTRAINT "partnerMonthlyPaymentsReportTrigger_consultant_fkey" FOREIGN KEY (consultant) REFERENCES consultant(id) DEFERRABLE
+    TABLE ""platformCommunication"" CONSTRAINT "platformCommunication_consultant_fkey" FOREIGN KEY (consultant) REFERENCES consultant(id) DEFERRABLE
+    TABLE ""poolLog"" CONSTRAINT "poolLog_consultant_fkey" FOREIGN KEY (consultant) REFERENCES consultant(id) DEFERRABLE
+    TABLE ""poolTrigger"" CONSTRAINT "poolTrigger_consultants_fkey" FOREIGN KEY (consultants) REFERENCES consultant(id) DEFERRABLE
+    TABLE "product" CONSTRAINT "product_ambassador_fkey" FOREIGN KEY (ambassador) REFERENCES consultant(id) DEFERRABLE
+    TABLE ""qualificationCalculationsTrigger"" CONSTRAINT "qualificationCalculationsTrigger_consultant_fkey" FOREIGN KEY (consultant) REFERENCES consultant(id) DEFERRABLE
+    TABLE ""qualificationLog"" CONSTRAINT "qualificationLog_consultant_fkey" FOREIGN KEY (consultant) REFERENCES consultant(id) DEFERRABLE
+    TABLE ""reportGenerator"" CONSTRAINT "reportGenerator_consultant_fkey" FOREIGN KEY (consultant) REFERENCES consultant(id) DEFERRABLE
+    TABLE "requisites" CONSTRAINT "requisites_consultant_fkey" FOREIGN KEY (consultant) REFERENCES consultant(id) DEFERRABLE
+    TABLE "setup" CONSTRAINT "setup_consultant_fkey" FOREIGN KEY (consultant) REFERENCES consultant(id) DEFERRABLE
+    TABLE "structure" CONSTRAINT "structure_lead_fkey" FOREIGN KEY (lead) REFERENCES consultant(id) DEFERRABLE
+    TABLE "team" CONSTRAINT "team_lead_fkey" FOREIGN KEY (lead) REFERENCES consultant(id) DEFERRABLE
+

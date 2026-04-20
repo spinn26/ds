@@ -1,0 +1,107 @@
+                                      Table "public.transaction"
+                Column                 |            Type             | Collation | Nullable | Default 
+---------------------------------------+-----------------------------+-----------+----------+---------
+ id                                    | integer                     |           | not null | 
+ contract                              | integer                     |           |          | 
+ comment                               | character varying           |           |          | 
+ techComment                           | character varying           |           |          | 
+ amount                                | numeric                     |           |          | 
+ amountAfterFee                        | numeric                     |           |          | 
+ amountRUB                             | numeric                     |           |          | 
+ amountUSD                             | numeric                     |           |          | 
+ commissionsAmount                     | numeric                     |           |          | 
+ commissionsAmountRUB                  | numeric                     |           |          | 
+ commissionsAmountUSD                  | numeric                     |           |          | 
+ profit                                | numeric                     |           |          | 
+ profitRUB                             | numeric                     |           |          | 
+ profitUSD                             | numeric                     |           |          | 
+ score                                 | character varying           |           |          | 
+ customCommission                      | boolean                     |           |          | 
+ zeroDsIncome                          | boolean                     |           |          | 
+ personalVolume                        | numeric                     |           |          | 
+ groupVolume                           | numeric                     |           |          | 
+ commissionCalcProperty                | integer                     |           |          | 
+ commissions                           | integer                     |           |          | 
+ dsCommissionPercentage                | numeric                     |           |          | 
+ dsCommissionAbsolute                  | numeric                     |           |          | 
+ nocomission                           | integer                     |           |          | 
+ vat                                   | integer                     |           |          | 
+ userChanged                           | integer                     |           |          | 
+ getCourseOrderWebHookData             | integer                     |           |          | 
+ partnersInChain                       | text                        |           |          | 
+ urlData                               | character varying           |           |          | 
+ headers                               | character varying           |           |          | 
+ GetCourseexporttransactionsdata       | integer                     |           |          | 
+ date                                  | timestamp without time zone |           |          | 
+ dateCreated                           | timestamp without time zone |           |          | 
+ deletedAt                             | timestamp without time zone |           |          | 
+ dateDay                               | timestamp without time zone |           |          | 
+ dateMonth                             | character varying           |           |          | 
+ dateYear                              | character varying           |           |          | 
+ changedAt                             | timestamp without time zone |           |          | 
+ comission                             | numeric                     |           |          | 
+ comissionRUB                          | numeric                     |           |          | 
+ comissionUSD                          | numeric                     |           |          | 
+ netRevenue                            | numeric                     |           |          | 
+ netRevenueRUB                         | numeric                     |           |          | 
+ netRevenueUSD                         | numeric                     |           |          | 
+ currency                              | integer                     |           |          | 
+ currencyRate                          | numeric                     |           |          | 
+ customCurrencyRate                    | boolean                     |           |          | 
+ usdRate                               | numeric                     |           |          | 
+ bubbleId                              | character varying           |           |          | 
+ bubbleApiPatchResponse                | json                        |           |          | 
+ bubbleApiPostCommissionsResponse      | json                        |           |          | 
+ commissionAmountRubBeforeGapReduction | numeric                     |           |          | 
+ profitRubBeforeGapReduction           | numeric                     |           |          | 
+ withheldTotalAmount                   | numeric                     |           |          | 
+ withheldTotalAmountRUB                | numeric                     |           |          | 
+ withheldTotalAmountUSD                | numeric                     |           |          | 
+ withheldGapAmount                     | numeric                     |           |          | 
+ withheldCombinedAmount                | numeric                     |           |          | 
+ withheldCombinedAmountRUB             | numeric                     |           |          | 
+ withheldCombinedAmountUSD             | numeric                     |           |          | 
+ withheldTotalPercent                  | numeric                     |           |          | 
+Indexes:
+    "transaction_pkey" PRIMARY KEY, btree (id)
+    "transaction_contract_idx" btree (contract)
+    "transaction_date_idx" btree (date)
+    "transaction_dateyear_datemonth_idx" btree ("dateYear", "dateMonth")
+Foreign-key constraints:
+    "transaction_GetCourseexporttransactionsdata_fkey" FOREIGN KEY ("GetCourseexporttransactionsdata") REFERENCES "getcourseExportTransactionsData"(id) DEFERRABLE
+    "transaction_commissionCalcProperty_fkey" FOREIGN KEY ("commissionCalcProperty") REFERENCES "commissionCalcProperty"(id) DEFERRABLE
+    "transaction_commissions_fkey" FOREIGN KEY (commissions) REFERENCES commission(id) DEFERRABLE
+    "transaction_contract_fkey" FOREIGN KEY (contract) REFERENCES contract(id) DEFERRABLE
+    "transaction_currency_fkey" FOREIGN KEY (currency) REFERENCES currency(id) DEFERRABLE
+    "transaction_getCourseOrderWebHookData_fkey" FOREIGN KEY ("getCourseOrderWebHookData") REFERENCES "getCourseOrderWebHookData"(id) DEFERRABLE
+    "transaction_nocomission_fkey" FOREIGN KEY (nocomission) REFERENCES nocomission(id) DEFERRABLE
+    "transaction_userChanged_fkey" FOREIGN KEY ("userChanged") REFERENCES "WebUser"(id) DEFERRABLE
+    "transaction_vat_fkey" FOREIGN KEY (vat) REFERENCES vat(id) DEFERRABLE
+Referenced by:
+    TABLE ""calculationConsultantPoints"" CONSTRAINT "calculationConsultantPoints_transaction_fkey" FOREIGN KEY (transaction) REFERENCES transaction(id) DEFERRABLE
+    TABLE ""calculationContestTrigger"" CONSTRAINT "calculationContestTrigger_commissions_fkey" FOREIGN KEY (commissions) REFERENCES transaction(id) DEFERRABLE
+    TABLE ""calculationContestTrigger"" CONSTRAINT "calculationContestTrigger_transaction_fkey" FOREIGN KEY (transaction) REFERENCES transaction(id) DEFERRABLE
+    TABLE "commission" CONSTRAINT "commission_transaction_fkey" FOREIGN KEY (transaction) REFERENCES transaction(id) DEFERRABLE
+    TABLE ""consultantBalance"" CONSTRAINT "consultantBalance_groupSalesTransactions_fkey" FOREIGN KEY ("groupSalesTransactions") REFERENCES transaction(id) DEFERRABLE
+    TABLE "consultant" CONSTRAINT "consultant_transactionProrostId_fkey" FOREIGN KEY ("transactionProrostId") REFERENCES transaction(id) DEFERRABLE
+    TABLE "consultant" CONSTRAINT "consultant_transactionSpfkId_fkey" FOREIGN KEY ("transactionSpfkId") REFERENCES transaction(id) DEFERRABLE
+    TABLE "documentlogs" CONSTRAINT "documentlogs_commissions_fkey" FOREIGN KEY (commissions) REFERENCES transaction(id) DEFERRABLE
+    TABLE "documentlogs" CONSTRAINT "documentlogs_revenueExpenses_fkey" FOREIGN KEY ("revenueExpenses") REFERENCES transaction(id) DEFERRABLE
+    TABLE "documentlogs" CONSTRAINT "documentlogs_revenueRevenue_fkey" FOREIGN KEY ("revenueRevenue") REFERENCES transaction(id) DEFERRABLE
+    TABLE ""exportLogTransactions"" CONSTRAINT "exportLogTransactions_transactions_fkey" FOREIGN KEY (transactions) REFERENCES transaction(id) DEFERRABLE
+    TABLE ""getCourseOrderWebHookData"" CONSTRAINT "getCourseOrderWebHookData_transaction_fkey" FOREIGN KEY (transaction) REFERENCES transaction(id) DEFERRABLE
+    TABLE ""getInsmartOrderWebHookData"" CONSTRAINT "getInsmartOrderWebHookData_transaction_fkey" FOREIGN KEY (transaction) REFERENCES transaction(id) DEFERRABLE
+    TABLE ""getcourseExportTransactionsData"" CONSTRAINT "getcourseExportTransactionsData_transaction_fkey" FOREIGN KEY (transaction) REFERENCES transaction(id) DEFERRABLE
+    TABLE ""getcourseTransactionExportDataFromGoogleSpreadsheet"" CONSTRAINT "getcourseTransactionExportDataFromGoogleSpread_transaction_fkey" FOREIGN KEY (transaction) REFERENCES transaction(id) DEFERRABLE
+    TABLE ""importTransactionLog"" CONSTRAINT "importTransactionLog_transactions_fkey" FOREIGN KEY (transactions) REFERENCES transaction(id) DEFERRABLE
+    TABLE ""massTransactionRecalculationTrigger"" CONSTRAINT "massTransactionRecalculationT_customCommissionTransactions_fkey" FOREIGN KEY ("customCommissionTransactions") REFERENCES transaction(id) DEFERRABLE
+    TABLE ""massTransactionRecalculationTrigger"" CONSTRAINT "massTransactionRecalculationT_transactionsWithKnownPartner_fkey" FOREIGN KEY ("transactionsWithKnownPartner") REFERENCES transaction(id) DEFERRABLE
+    TABLE ""massTransactionRecalculationTrigger"" CONSTRAINT "massTransactionRecalculationT_transactionsWithUnknownPartn_fkey" FOREIGN KEY ("transactionsWithUnknownPartner") REFERENCES transaction(id) DEFERRABLE
+    TABLE ""massTransactionRecalculationTrigger"" CONSTRAINT "massTransactionRecalculationTrigge_transactionsWithoutFees_fkey" FOREIGN KEY ("transactionsWithoutFees") REFERENCES transaction(id) DEFERRABLE
+    TABLE ""massTransactionRecalculationTrigger"" CONSTRAINT "massTransactionRecalculationTrigger_transactionsWithFees_fkey" FOREIGN KEY ("transactionsWithFees") REFERENCES transaction(id) DEFERRABLE
+    TABLE ""massTransactionRecalculationTrigger"" CONSTRAINT "massTransactionRecalculationTrigger_transactions_fkey" FOREIGN KEY (transactions) REFERENCES transaction(id) DEFERRABLE
+    TABLE "nocomission" CONSTRAINT "nocomission_transaction_fkey" FOREIGN KEY (transaction) REFERENCES transaction(id) DEFERRABLE
+    TABLE ""reportGenerator"" CONSTRAINT "reportGenerator_transactions_fkey" FOREIGN KEY (transactions) REFERENCES transaction(id) DEFERRABLE
+    TABLE ""transactionDeleting"" CONSTRAINT "transactionDeleting_transactions_fkey" FOREIGN KEY (transactions) REFERENCES transaction(id) DEFERRABLE
+    TABLE ""transactionRecalculation"" CONSTRAINT "transactionRecalculation_transactions_fkey" FOREIGN KEY (transactions) REFERENCES transaction(id) DEFERRABLE
+

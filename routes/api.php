@@ -181,6 +181,12 @@ Route::prefix('v1')->group(function () {
         Route::put('/admin/mail/templates/{id}', [\App\Http\Controllers\Api\AdminMailController::class, 'updateTemplate']);
         Route::delete('/admin/mail/templates/{id}', [\App\Http\Controllers\Api\AdminMailController::class, 'destroyTemplate']);
 
+        // Admin — Pool (leader pool calc with manual «Участвует» moderation)
+        Route::get('/admin/pool/participants', [\App\Http\Controllers\Api\AdminPoolController::class, 'participants']);
+        Route::put('/admin/pool/participants', [\App\Http\Controllers\Api\AdminPoolController::class, 'toggleParticipant']);
+        Route::post('/admin/pool/preview', [\App\Http\Controllers\Api\AdminPoolController::class, 'preview']);
+        Route::post('/admin/pool/apply', [\App\Http\Controllers\Api\AdminPoolController::class, 'apply'])->middleware('throttle:10,1');
+
         // Admin — Period freeze (close/reopen reporting months)
         Route::get('/admin/periods', [\App\Http\Controllers\Api\AdminPeriodController::class, 'index']);
         Route::post('/admin/periods/close', [\App\Http\Controllers\Api\AdminPeriodController::class, 'close'])->middleware('throttle:10,1');
