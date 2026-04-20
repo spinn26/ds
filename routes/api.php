@@ -100,6 +100,7 @@ Route::prefix('v1')->group(function () {
         Route::delete('/calculator/history', [\App\Http\Controllers\Api\CalculatorController::class, 'clearHistory']);
 
         Route::get('/products', [ProductController::class, 'index']);
+        Route::post('/products/accept-documents', [ProductController::class, 'acceptDocuments']);
         Route::get('/contests', [ContestController::class, 'index']);
         Route::get('/education/courses', [\App\Http\Controllers\Api\EducationController::class, 'courses']);
         Route::get('/education/courses/{id}', [\App\Http\Controllers\Api\EducationController::class, 'show'])->whereNumber('id');

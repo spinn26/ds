@@ -116,6 +116,24 @@ class ProductController extends Controller
         ]);
     }
 
+    /**
+     * Партнёр принимает обязательные документы перед покупкой продукта.
+     * Проставляется consultant.acceptance = true; с этого момента
+     * checkAccess() возвращает documentsAccepted = true.
+     */
+    public function acceptDocuments(Request $request): JsonResponse
+    {
+        $consultant = Consultant::where('webUser', $request->user()->id)->first();
+        if (! $consultant) {
+            return response()->json(['message' => 'Консультант не найден'], 404);
+        }
+
+        $consultant->acceptance = true;
+        $consultant->save();
+
+        return response()->json(['message' => 'Документы приняты', 'documentsAccepted' => true]);
+    }
+
     private function checkAccess(?Consultant $consultant): array
     {
         if (! $consultant) {
