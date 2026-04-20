@@ -35,4 +35,13 @@ return [
         ],
     ],
 
+    // Google Sheets — источник данных для TransactionImportController.
+    // Получить API key: console.cloud.google.com → APIs & Services →
+    //   Credentials → Create credentials → API key. Включи "Google
+    //   Sheets API" и ограничь ключ по IP/referrer в проде.
+    'google_sheets' => [
+        'spreadsheet_id' => env('GOOGLE_SHEETS_SPREADSHEET_ID'),
+        'api_key' => env('GOOGLE_SHEETS_API_KEY'),
+    ],
+
 ];
