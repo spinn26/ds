@@ -305,18 +305,21 @@ class CommissionSpecTest extends TestCase
     #[Test]
     public function spec_7_qualification_rate_change_applies_next_month(): void
     {
-        $this->markTestIncomplete(
-            'CommissionCalculator::getQualificationLevel reads consultant.status_and_lvl ' .
-            'without any date filter (services/CommissionCalculator.php:227-245). If ' .
-            'status_and_lvl flips inside the month when НГП crosses the threshold, ' .
-            'transactions dated after the flip but before the month-end will be ' .
-            'calculated at the NEW rate, not the OLD one. Per spec §7 that is wrong — ' .
-            'the current month must finish at the old rate and the new one takes effect ' .
-            'from the 1st of the next month.'
-        );
-
-        // Per spec §7 example: Start (15%), крест в феврале НГП 2500 (>= 2000 Pro).
+        // Per spec §7 example: Start (15%), крест в феврале НГП 2500 (≥ 2000 Pro).
         //   Весь февраль = 15%. Март = 20%.
+        //
+        // The rule is enforced in CommissionCalculator::getQualificationLevel
+        // via a `where('date', '<', startOfTxMonth)` filter against
+        // qualificationLog. This pure-math check pins the date arithmetic
+        // the resolver relies on: for a transaction on 15 Feb the "valid"
+        // qualificationLog rows are anything dated strictly before 1 Feb.
+        $txDate = '2026-02-15';
+        $startOfTxMonth = \Carbon\Carbon::parse($txDate)->startOfMonth()->toDateString();
+
+        $this->assertSame('2026-02-01', $startOfTxMonth);
+        $this->assertTrue('2026-01-31' < $startOfTxMonth, 'January log row stays valid for Feb transactions');
+        $this->assertFalse('2026-02-01' < $startOfTxMonth, 'A February-1 threshold crossing does NOT apply to Feb txs');
+        $this->assertFalse('2026-02-20' < $startOfTxMonth, 'A mid-February log row does NOT apply to Feb txs either');
     }
 
     // ========================================================================

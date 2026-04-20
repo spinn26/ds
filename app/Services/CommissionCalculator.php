@@ -98,8 +98,11 @@ class CommissionCalculator
         // ЛП (Personal Volume) = amountNoVat * dsCommission% / 10000
         $personalVolume = $amountNoVat * $dsComPercent / 10000;
 
-        // Получить квалификацию прямого партнёра
-        $qualLevel = $this->getQualificationLevel($consultantId);
+        // Получить квалификацию прямого партнёра на момент транзакции.
+        // Per spec §7: a new rate takes effect from the 1st of the month AFTER
+        // the one in which the НГП threshold was crossed. Passing tx->date to
+        // the resolver below gives each historical transaction its own rate.
+        $qualLevel = $this->getQualificationLevel($consultantId, $tx->date);
         $qualPercent = $qualLevel ? (float) $qualLevel->percent : 15; // Start = 15%
 
         // Групповой бонус = ЛП * % квалификации / 100
@@ -145,7 +148,7 @@ class CommissionCalculator
             $inviter = DB::table('consultant')->where('id', $inviterId)->first();
             if (! $inviter) break;
 
-            $inviterLevel = $this->getQualificationLevel($inviterId);
+            $inviterLevel = $this->getQualificationLevel($inviterId, $tx->date);
             $inviterPercent = $inviterLevel ? (float) $inviterLevel->percent : 15;
 
             // Маржинальная разница — разница процентов между наставником и нижестоящим
@@ -222,15 +225,50 @@ class CommissionCalculator
     }
 
     /**
-     * Получить текущий уровень квалификации консультанта.
+     * Резолвит квалификацию консультанта на конкретную дату транзакции.
+     *
+     * Правило из спеки §7: новый процент применяется с 1-го числа
+     * месяца, СЛЕДУЮЩЕГО за тем, в котором НГП пересёк порог.
+     * То есть для транзакции даты `txDate` берём последнюю запись
+     * qualificationLog, чья `date` строго меньше начала месяца
+     * транзакции.
+     *
+     * Если такой записи нет (очень ранние транзакции) — используем
+     * Start (fallback возвращается из null в calculateInTransaction).
+     *
+     * Если `txDate` не передан — поведение legacy: берём актуальное
+     * значение `consultant.status_and_lvl` (нужно, когда требуется
+     * "текущая" квалификация, например в отчётах). Это единственный
+     * вызов без даты в коде.
      */
-    private function getQualificationLevel(int $consultantId): ?object
+    private function getQualificationLevel(int $consultantId, ?string $txDate = null): ?object
     {
+        if ($txDate) {
+            $startOfTxMonth = \Carbon\Carbon::parse($txDate)->startOfMonth()->toDateString();
+
+            $qLog = DB::table('qualificationLog')
+                ->where('consultant', $consultantId)
+                ->whereNull('dateDeleted')
+                ->where('date', '<', $startOfTxMonth)
+                ->orderByDesc('date')
+                ->first();
+
+            $levelId = $qLog->calculationLevel ?? $qLog->nominalLevel ?? null;
+
+            if ($levelId) {
+                return DB::table('status_levels')->where('id', $levelId)->first();
+            }
+            // Fallthrough: no qualificationLog entry before this tx — partner
+            // is fresh. Fall back to Start (15%) via the null return at the
+            // bottom; caller substitutes the default.
+            return null;
+        }
+
+        // Legacy "current qualification" path — no tx context supplied.
         $consultant = DB::table('consultant')->where('id', $consultantId)->first();
         $levelId = $consultant->status_and_lvl ?? null;
 
         if (! $levelId) {
-            // Попробовать из qualificationLog
             $qLog = DB::table('qualificationLog')
                 ->where('consultant', $consultantId)
                 ->whereNull('dateDeleted')
