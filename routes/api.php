@@ -114,7 +114,7 @@ Route::prefix('v1')->group(function () {
 
         Route::middleware(['role:admin,backoffice,support,finance,head,calculations,corrections', 'throttle:120,1'])->group(function () {
         Route::get('/admin/dashboard', [\App\Http\Controllers\Api\AdminDashboardController::class, 'index']);
-        Route::get('/admin/export/{type}', [\App\Http\Controllers\Api\ExportController::class, 'export']);
+        Route::get('/admin/export/{type}', [\App\Http\Controllers\Api\ExportController::class, 'export'])->middleware('throttle:10,1');
         Route::get('/admin/users', [AdminUserController::class, 'index']);
         Route::post('/admin/users', [AdminUserController::class, 'store']);
         Route::put('/admin/users/{id}', [AdminUserController::class, 'update']);
