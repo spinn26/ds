@@ -38,11 +38,11 @@ const vuetify = createVuetify({
                     secondary: '#475569',
                     brand: '#6EE87A',
                     'brand-ink': '#0A2B10',
-                    // Clean white background, off-white card surface so cards
-                    // are still visible on flat bg but don't clash with it.
-                    background: '#FFFFFF',
+                    // Material-3-ish elevated look: white cards on a softer
+                    // grey page bg so the card edges actually read as cards.
+                    background: '#EEF1F5',
                     surface: '#FFFFFF',
-                    'surface-variant': '#F4F6F8',
+                    'surface-variant': '#E4E7EC',
                     'on-surface': '#141719',
                     'on-background': '#0B0E12',
                     info: '#5C9CE6',
