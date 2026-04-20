@@ -153,10 +153,20 @@ class AdminUserController extends Controller
 
         // Soft-delete — hard DELETE on WebUser breaks a dozen legacy FKs.
         // Schema already has isBlocked + dateDeleted columns for exactly this.
-        $user->isBlocked = true;
-        $user->dateDeleted = now();
-        $user->saveQuietly();
-        $user->tokens()->delete();
+        // Consultant rows are soft-deleted in the same transaction: otherwise
+        // they stay visible on "Партнёры" and "Статусы партнёров" because both
+        // screens filter on consultant.dateDeleted, not WebUser.dateDeleted.
+        DB::transaction(function () use ($user) {
+            $user->isBlocked = true;
+            $user->dateDeleted = now();
+            $user->saveQuietly();
+            $user->tokens()->delete();
+
+            DB::table('consultant')
+                ->where('webUser', $user->id)
+                ->whereNull('dateDeleted')
+                ->update(['dateDeleted' => now()]);
+        });
 
         return response()->json(['message' => 'Удалён']);
     }
