@@ -111,7 +111,7 @@ Route::prefix('v1')->group(function () {
             Route::post('/impersonate/leave', [ImpersonateController::class, 'leave']);
         });
 
-        Route::middleware('role:admin,backoffice,support,finance,head,calculations,corrections')->group(function () {
+        Route::middleware(['role:admin,backoffice,support,finance,head,calculations,corrections', 'throttle:120,1'])->group(function () {
         Route::get('/admin/dashboard', [\App\Http\Controllers\Api\AdminDashboardController::class, 'index']);
         Route::get('/admin/export/{type}', [\App\Http\Controllers\Api\ExportController::class, 'export']);
         Route::get('/admin/users', [AdminUserController::class, 'index']);
@@ -120,14 +120,14 @@ Route::prefix('v1')->group(function () {
         Route::delete('/admin/users/{id}', [AdminUserController::class, 'destroy']);
 
         Route::get('/admin/partners', [\App\Http\Controllers\Api\AdminDataController::class, 'partners']);
-        Route::post('/admin/partners/bulk', [\App\Http\Controllers\Api\AdminDataController::class, 'bulkPartners']);
+        Route::post('/admin/partners/bulk', [\App\Http\Controllers\Api\AdminDataController::class, 'bulkPartners'])->middleware('throttle:10,1');
         Route::get('/admin/partners/{id}', [\App\Http\Controllers\Api\AdminDataController::class, 'showPartner']);
         Route::put('/admin/partners/{id}', [\App\Http\Controllers\Api\AdminDataController::class, 'updatePartner']);
         Route::post('/admin/partners/{id}/status', [\App\Http\Controllers\Api\AdminDataController::class, 'changePartnerStatus']);
         Route::get('/admin/partner-statuses', [\App\Http\Controllers\Api\AdminDataController::class, 'partnerStatuses']);
         Route::get('/admin/clients', [\App\Http\Controllers\Api\AdminDataController::class, 'clients']);
         Route::get('/admin/requisites', [\App\Http\Controllers\Api\AdminDataController::class, 'requisites']);
-        Route::post('/admin/requisites/bulk', [\App\Http\Controllers\Api\AdminDataController::class, 'bulkRequisites']);
+        Route::post('/admin/requisites/bulk', [\App\Http\Controllers\Api\AdminDataController::class, 'bulkRequisites'])->middleware('throttle:10,1');
         Route::post('/admin/requisites/{id}/verify', [\App\Http\Controllers\Api\AdminDataController::class, 'verifyRequisites']);
         Route::get('/admin/acceptance', [\App\Http\Controllers\Api\AdminDataController::class, 'acceptance']);
         Route::get('/admin/contracts', [\App\Http\Controllers\Api\AdminDataController::class, 'contracts']);
@@ -147,8 +147,8 @@ Route::prefix('v1')->group(function () {
         Route::get('/admin/currencies', [\App\Http\Controllers\Api\AdminFinanceController::class, 'currencies']);
         Route::get('/admin/transaction-import/form-data', [\App\Http\Controllers\Api\TransactionImportController::class, 'formData']);
         Route::get('/admin/transaction-import/sheet-names', [\App\Http\Controllers\Api\TransactionImportController::class, 'sheetNames']);
-        Route::post('/admin/transaction-import', [\App\Http\Controllers\Api\TransactionImportController::class, 'import']);
-        Route::post('/admin/transaction-import/from-sheets', [\App\Http\Controllers\Api\TransactionImportController::class, 'importFromSheets']);
+        Route::post('/admin/transaction-import', [\App\Http\Controllers\Api\TransactionImportController::class, 'import'])->middleware('throttle:10,1');
+        Route::post('/admin/transaction-import/from-sheets', [\App\Http\Controllers\Api\TransactionImportController::class, 'importFromSheets'])->middleware('throttle:10,1');
 
         // News CRUD (admin)
         Route::get('/admin/news', [\App\Http\Controllers\Api\WorkspaceController::class, 'newsList']);
@@ -171,7 +171,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/admin/mail/settings', [\App\Http\Controllers\Api\AdminMailController::class, 'settings']);
         Route::put('/admin/mail/settings', [\App\Http\Controllers\Api\AdminMailController::class, 'updateSettings']);
         Route::post('/admin/mail/test', [\App\Http\Controllers\Api\AdminMailController::class, 'test']);
-        Route::post('/admin/mail/broadcast', [\App\Http\Controllers\Api\AdminMailController::class, 'broadcast']);
+        Route::post('/admin/mail/broadcast', [\App\Http\Controllers\Api\AdminMailController::class, 'broadcast'])->middleware('throttle:10,1');
         Route::get('/admin/mail/broadcast/{id}/progress', [\App\Http\Controllers\Api\AdminMailController::class, 'broadcastProgress']);
         Route::post('/admin/mail/audience-preview', [\App\Http\Controllers\Api\AdminMailController::class, 'audiencePreview']);
         Route::get('/admin/mail/log', [\App\Http\Controllers\Api\AdminMailController::class, 'log']);
