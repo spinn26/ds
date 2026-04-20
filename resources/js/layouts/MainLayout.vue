@@ -554,6 +554,9 @@ const menuItems = [
   { label: 'Калькулятор объёмов', icon: 'mdi-calculator', path: '/finance/calculator', adminSection: 'calculator' },
   { label: 'Структура', icon: 'mdi-sitemap', path: '/structure', adminSection: 'structure' },
 
+  // Staff workspace (staff-only)
+  { label: 'Рабочий стол', icon: 'mdi-view-dashboard-variant', path: '/manage/workspace', adminSection: 'workspace', staffOnly: true },
+
   // Данные
   { group: 'Данные', adminSection: 'partners' },
   { label: 'Партнёры', icon: 'mdi-account-search', path: '/manage/partners', adminSection: 'partners' },

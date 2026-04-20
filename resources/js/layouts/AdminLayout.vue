@@ -22,12 +22,24 @@
       </div>
       <v-divider />
 
-      <v-list density="compact" nav class="admin-nav-list">
+      <v-list density="compact" nav class="admin-nav-list" open-strategy="multiple">
         <v-list-item to="/" prepend-icon="mdi-arrow-left" title="На сайт" color="grey-lighten-1" />
         <v-divider />
 
-        <v-list-item v-for="item in menuItems" :key="item.to"
-          :to="item.to" :prepend-icon="item.icon" :title="item.title" color="secondary" />
+        <template v-for="item in menuItems" :key="item.title">
+          <!-- Simple item -->
+          <v-list-item v-if="!item.children"
+            :to="item.to" :prepend-icon="item.icon" :title="item.title" color="secondary" />
+          <!-- Expandable group -->
+          <v-list-group v-else :value="item.title">
+            <template #activator="{ props }">
+              <v-list-item v-bind="props" :prepend-icon="item.icon" :title="item.title" color="secondary" />
+            </template>
+            <v-list-item v-for="child in item.children" :key="child.to"
+              :to="child.to" :title="child.title"
+              :prepend-icon="child.icon || 'mdi-circle-small'" color="secondary" class="ps-6" />
+          </v-list-group>
+        </template>
       </v-list>
 
       <template #append>
@@ -98,13 +110,40 @@ function toggleRail() {
 
 const menuItems = [
   { to: '/admin/dashboard', icon: 'mdi-chart-areaspline', title: 'Дашборд' },
+  { to: '/admin/owner-dashboard', icon: 'mdi-crown', title: 'Дашборд владельца' },
   { to: '/admin/users', icon: 'mdi-account-cog', title: 'Пользователи' },
   { to: '/admin/news', icon: 'mdi-newspaper', title: 'Новости' },
   { to: '/admin/products', icon: 'mdi-package-variant', title: 'Продукты' },
   { to: '/admin/education', icon: 'mdi-school', title: 'Обучение и тесты' },
   { to: '/admin/contests', icon: 'mdi-trophy', title: 'Конкурсы и события' },
-  { to: '/admin/references', icon: 'mdi-book-cog', title: 'Справочники' },
+  {
+    title: 'Справочники', icon: 'mdi-book-cog',
+    children: [
+      { to: '/admin/references/productCategory',     title: 'Категории продуктов',    icon: 'mdi-tag-multiple' },
+      { to: '/admin/references/productType',         title: 'Типы продуктов',         icon: 'mdi-shape-plus' },
+      { to: '/admin/references/currency',            title: 'Валюты',                 icon: 'mdi-currency-usd' },
+      { to: '/admin/references/contractStatus',      title: 'Статусы контрактов',     icon: 'mdi-file-check' },
+      { to: '/admin/references/status',              title: 'Статусы партнёров',      icon: 'mdi-account-check' },
+      { to: '/admin/references/directory_of_activities', title: 'Статусы активности', icon: 'mdi-lightning-bolt' },
+      { to: '/admin/references/type_contest',        title: 'Типы конкурсов',         icon: 'mdi-trophy-variant' },
+      { to: '/admin/references/status_contest',      title: 'Статусы конкурсов',      icon: 'mdi-trophy-outline' },
+      { to: '/admin/references/criterion',           title: 'Критерии конкурсов',     icon: 'mdi-target' },
+      { to: '/admin/references/communicationCategory', title: 'Категории обращений',  icon: 'mdi-message-text' },
+      { to: '/admin/references/title',               title: 'Титулы / звания',        icon: 'mdi-medal' },
+      { to: '/admin/references/occupation',          title: 'Род деятельности',       icon: 'mdi-briefcase' },
+      { to: '/admin/references/meetingType',         title: 'Типы встреч',            icon: 'mdi-calendar-account' },
+    ],
+  },
+  { to: '/admin/reconciliation', icon: 'mdi-scale-balance', title: 'Реконсиляция' },
+  { to: '/admin/anomalies', icon: 'mdi-alert-decagram', title: 'Аномалии' },
+  { to: '/admin/calendar', icon: 'mdi-calendar-check', title: 'Календарь операций' },
+  { to: '/admin/bulk-ops', icon: 'mdi-format-list-bulleted-square', title: 'Массовые операции' },
+  { to: '/admin/funnel', icon: 'mdi-filter-variant', title: 'Воронка партнёров' },
+  { to: '/admin/cohorts', icon: 'mdi-chart-line', title: 'Когорты' },
   { to: '/admin/mail', icon: 'mdi-email-fast', title: 'Почтовая рассылка' },
+  { to: '/admin/triggers', icon: 'mdi-robot', title: 'Триггеры уведомлений' },
+  { to: '/admin/integrations', icon: 'mdi-cloud-sync', title: 'Интеграции' },
+  { to: '/admin/settings', icon: 'mdi-cog', title: 'Настройки системы' },
   { to: '/admin/monitoring', icon: 'mdi-pulse', title: 'Мониторинг' },
 ];
 

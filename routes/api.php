@@ -193,6 +193,25 @@ Route::prefix('v1')->group(function () {
         Route::post('/admin/pool/preview', [\App\Http\Controllers\Api\AdminPoolController::class, 'preview']);
         Route::post('/admin/pool/apply', [\App\Http\Controllers\Api\AdminPoolController::class, 'apply'])->middleware('throttle:10,1');
 
+        // Admin — Analytics (reconciliation, anomalies, funnel, cohorts, owner)
+        Route::get('/admin/analytics/reconciliation', [\App\Http\Controllers\Api\AdminAnalyticsController::class, 'reconciliation']);
+        Route::get('/admin/analytics/anomalies', [\App\Http\Controllers\Api\AdminAnalyticsController::class, 'anomalies']);
+        Route::get('/admin/analytics/funnel', [\App\Http\Controllers\Api\AdminAnalyticsController::class, 'funnel']);
+        Route::get('/admin/analytics/cohorts', [\App\Http\Controllers\Api\AdminAnalyticsController::class, 'cohorts']);
+        Route::get('/admin/analytics/owner-dashboard', [\App\Http\Controllers\Api\AdminAnalyticsController::class, 'ownerDashboard']);
+
+        // Admin — Ops tools
+        Route::get('/admin/ops/calendar', [\App\Http\Controllers\Api\AdminOpsController::class, 'calendar']);
+        Route::get('/admin/ops/bulk', [\App\Http\Controllers\Api\AdminOpsController::class, 'bulkList']);
+        Route::post('/admin/ops/bulk/{action}', [\App\Http\Controllers\Api\AdminOpsController::class, 'bulkRun'])->middleware('throttle:10,1');
+        Route::get('/admin/ops/triggers', [\App\Http\Controllers\Api\AdminOpsController::class, 'triggers']);
+        Route::get('/admin/ops/integrations', [\App\Http\Controllers\Api\AdminOpsController::class, 'integrations']);
+        Route::get('/admin/ops/settings', [\App\Http\Controllers\Api\AdminOpsController::class, 'settingsShow']);
+
+        // Admin — Payment registry (spec ✅Реестр выплат.md)
+        Route::get('/admin/payment-registry', [\App\Http\Controllers\Api\AdminPaymentRegistryController::class, 'index']);
+        Route::post('/admin/payment-registry/{id}/payments', [\App\Http\Controllers\Api\AdminPaymentRegistryController::class, 'addPayment'])->whereNumber('id');
+
         // Admin — Period freeze (close/reopen reporting months)
         Route::get('/admin/periods', [\App\Http\Controllers\Api\AdminPeriodController::class, 'index']);
         Route::post('/admin/periods/close', [\App\Http\Controllers\Api\AdminPeriodController::class, 'close'])->middleware('throttle:10,1');

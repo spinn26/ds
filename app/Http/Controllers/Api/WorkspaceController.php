@@ -281,30 +281,227 @@ class WorkspaceController extends Controller
         ];
     }
 
-    /** Задачи для сотрудников */
+    /**
+     * Задачи для сотрудников — «рабочий стол» бэк-офиса: что требует внимания сегодня.
+     *
+     * Каждая секция → { count, items: [...preview] } либо голый count для простых
+     * числовых плиток. Фронт группирует это в ленту задач на /manage/workspace.
+     */
     private function getStaffTasks(): array
     {
-        $unverifiedRequisites = DB::table('requisites')
-            ->whereNull('deletedAt')
-            ->where(function ($q) {
-                $q->where('verified', false)->orWhereNull('verified');
-            })
-            ->count();
+        return [
+            'unverifiedRequisites' => $this->countUnverifiedRequisites(),
+            'unreadMessages'       => $this->countUnreadMessages(),
+            'pendingPayments'      => $this->countPendingPayments(),
 
-        $unreadMessages = DB::table('platformCommunication')
+            // Расширенные блоки — ленты задач
+            'pendingAcceptance'    => $this->listPendingAcceptance(),
+            'newContractsNoTx'     => $this->listContractsWithoutTransactions(),
+            'failedImports'        => $this->listFailedImports(),
+            'pendingAccruals'      => $this->listPendingAccruals(),
+            'activationExpiring'   => $this->listActivationExpiring(),
+            'unclosedPeriods'      => $this->listUnclosedPeriods(),
+        ];
+    }
+
+    private function countUnverifiedRequisites(): int
+    {
+        return DB::table('requisites')
+            ->whereNull('deletedAt')
+            ->where(function ($q) { $q->where('verified', false)->orWhereNull('verified'); })
+            ->count();
+    }
+
+    private function countUnreadMessages(): int
+    {
+        return DB::table('platformCommunication')
             ->where('direction', 'p2ds')
             ->where('read', false)
             ->count();
+    }
 
-        $pendingPayments = DB::table('consultantPayment')
-            ->where('status', 1)
+    private function countPendingPayments(): int
+    {
+        return DB::table('consultantPayment')->where('status', 1)->count();
+    }
+
+    /** Записи partnerAcceptance, ещё не акцептованные. */
+    private function listPendingAcceptance(): array
+    {
+        $rows = DB::table('partnerAcceptance as pa')
+            ->leftJoin('consultant as c', 'c.id', '=', 'pa.consultant')
+            ->leftJoin('WebUser as u', 'u.id', '=', 'c.webUser')
+            ->where(function ($q) { $q->where('pa.accepted', false)->orWhereNull('pa.accepted'); })
+            ->orderByDesc('pa.id')
+            ->select('pa.id', 'pa.documentType', 'pa.dateAccepted', 'c.personName', 'u.email')
+            ->limit(5)
+            ->get();
+
+        $count = DB::table('partnerAcceptance')
+            ->where(function ($q) { $q->where('accepted', false)->orWhereNull('accepted'); })
             ->count();
 
-        return [
-            'unverifiedRequisites' => $unverifiedRequisites,
-            'unreadMessages' => $unreadMessages,
-            'pendingPayments' => $pendingPayments,
-        ];
+        return ['count' => $count, 'items' => $rows];
+    }
+
+    /** Контракты «Активирован», у которых нет ни одной транзакции за 30 дней. */
+    private function listContractsWithoutTransactions(): array
+    {
+        $cutoff = now()->subDays(30);
+
+        $rows = DB::select(
+            'SELECT c.id, c.number, c."openDate", c.consultant,
+                    cons."personName" AS "consultantName",
+                    s.name AS "statusName"
+               FROM contract c
+               LEFT JOIN consultant cons ON cons.id = c.consultant
+               LEFT JOIN "contractStatus" s ON s.id = c.status
+              WHERE c."openDate" <= ?
+                AND c."deletedAt" IS NULL
+                AND s.name ILIKE \'%Активирован%\'
+                AND NOT EXISTS (
+                    SELECT 1 FROM transaction t
+                     WHERE t.contract = c.id AND t."deletedAt" IS NULL
+                )
+              ORDER BY c."openDate" DESC
+              LIMIT 5',
+            [$cutoff]
+        );
+
+        $count = (int) DB::scalar(
+            'SELECT COUNT(*) FROM contract c
+              LEFT JOIN "contractStatus" s ON s.id = c.status
+              WHERE c."openDate" <= ?
+                AND c."deletedAt" IS NULL
+                AND s.name ILIKE \'%Активирован%\'
+                AND NOT EXISTS (
+                    SELECT 1 FROM transaction t
+                     WHERE t.contract = c.id AND t."deletedAt" IS NULL
+                )',
+            [$cutoff]
+        );
+
+        return ['count' => $count, 'items' => $rows];
+    }
+
+    /** Последние неудачные импорты транзакций. */
+    private function listFailedImports(): array
+    {
+        if (! Schema::hasTable('transaction_import_log')) {
+            return ['count' => 0, 'items' => []];
+        }
+
+        $rows = DB::table('transaction_import_log')
+            ->whereIn('status', ['error', 'partial'])
+            ->orderByDesc('created_at')
+            ->limit(5)
+            ->get(['id', 'status', 'success_count', 'error_count', 'created_at']);
+
+        $count = DB::table('transaction_import_log')
+            ->whereIn('status', ['error', 'partial'])
+            ->count();
+
+        return ['count' => $count, 'items' => $rows];
+    }
+
+    /**
+     * «Прочие начисления» за текущий месяц — свежие начисления, которые staff,
+     * возможно, ещё должен проверить. В нашей схеме нет явного approved_at,
+     * поэтому показываем последние записи этого месяца как «свежие».
+     */
+    private function listPendingAccruals(): array
+    {
+        if (! Schema::hasTable('other_accruals')) {
+            return ['count' => 0, 'items' => []];
+        }
+
+        $from = now()->startOfMonth();
+
+        $rows = DB::table('other_accruals as oa')
+            ->leftJoin('consultant as c', 'c.id', '=', 'oa.consultant')
+            ->where('oa.created_at', '>=', $from)
+            ->orderByDesc('oa.created_at')
+            ->limit(5)
+            ->get([
+                'oa.id', 'oa.amount', 'oa.points', 'oa.type', 'oa.comment as reason',
+                'oa.created_at', 'c.personName as consultantName',
+            ]);
+
+        $count = DB::table('other_accruals')->where('created_at', '>=', $from)->count();
+
+        return ['count' => $count, 'items' => $rows];
+    }
+
+    /**
+     * Партнёры в статусе «Зарегистрирован» (consultant.activity=4), чей
+     * 90-дневный срок активации истекает в ближайшие 7 дней.
+     * Предпочитаем поле `activationDeadline`, если оно заполнено.
+     */
+    private function listActivationExpiring(): array
+    {
+        $now = now();
+        $in7 = now()->addDays(7);
+
+        $rows = DB::table('consultant as c')
+            ->leftJoin('WebUser as u', 'u.id', '=', 'c.webUser')
+            ->whereNull('c.dateDeleted')
+            ->where('c.activity', 4)
+            ->where(function ($q) use ($now, $in7) {
+                $q->whereBetween('c.activationDeadline', [$now, $in7])
+                  ->orWhere(function ($qq) use ($now, $in7) {
+                      $qq->whereNull('c.activationDeadline')
+                         ->whereRaw('c."dateCreated" + interval \'90 days\' BETWEEN ? AND ?', [$now, $in7]);
+                  });
+            })
+            ->select('c.id', 'c.personName', 'u.email', 'c.dateCreated', 'c.activationDeadline', 'c.personalVolume')
+            ->orderBy('c.dateCreated')
+            ->limit(5)
+            ->get();
+
+        $count = DB::table('consultant as c')
+            ->whereNull('c.dateDeleted')
+            ->where('c.activity', 4)
+            ->where(function ($q) use ($now, $in7) {
+                $q->whereBetween('c.activationDeadline', [$now, $in7])
+                  ->orWhere(function ($qq) use ($now, $in7) {
+                      $qq->whereNull('c.activationDeadline')
+                         ->whereRaw('c."dateCreated" + interval \'90 days\' BETWEEN ? AND ?', [$now, $in7]);
+                  });
+            })
+            ->count();
+
+        return ['count' => $count, 'items' => $rows];
+    }
+
+    /** Последние месяцы, ещё не закрытые. */
+    private function listUnclosedPeriods(): array
+    {
+        if (! Schema::hasTable('period_closures')) {
+            return ['count' => 0, 'items' => []];
+        }
+
+        // Прошлый и позапрошлый месяц, проверяем closure
+        $prev = now()->subMonth();
+        $prev2 = now()->subMonths(2);
+        $unclosed = [];
+        foreach ([$prev2, $prev] as $d) {
+            // «Закрыт и заморожен» = есть закрытие без переоткрытия.
+            $frozen = DB::table('period_closures')
+                ->where('year', $d->year)
+                ->where('month', $d->month)
+                ->whereNotNull('closed_at')
+                ->whereNull('reopened_at')
+                ->exists();
+            if (! $frozen) {
+                $unclosed[] = [
+                    'year' => $d->year,
+                    'month' => $d->month,
+                    'label' => sprintf('%02d.%d', $d->month, $d->year),
+                ];
+            }
+        }
+
+        return ['count' => count($unclosed), 'items' => $unclosed];
     }
 
     // === CRUD Новости ===

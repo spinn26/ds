@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Services\MonthlyPenaltyRunner;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use App\Http\Controllers\Api\NotificationController;
 
 /**
  * Финализация месяца — штрафы по спеке §5 (detachment, OP, combo).
@@ -32,6 +33,14 @@ class AdminFinalizeController extends Controller
         if ($result['frozen'] ?? false) {
             return response()->json($result, 422);
         }
+
+        NotificationController::notifyStaff(
+            'system',
+            sprintf('Штрафы применены: %02d.%d', $data['month'], $data['year']),
+            sprintf('Затронуто %d комиссий у %d партнёров', $result['affected'] ?? 0, $result['processed'] ?? 0),
+            sprintf('/manage/periods/%d-%02d', $data['year'], $data['month']),
+        );
+
         return response()->json([
             'message' => "Финализация выполнена: затронуто {$result['affected']} комиссий у {$result['processed']} партнёров",
             'result' => $result,

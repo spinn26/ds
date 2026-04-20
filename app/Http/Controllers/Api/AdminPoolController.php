@@ -84,6 +84,15 @@ class AdminPoolController extends Controller
 
         $result = $this->runner->run((int) $data['year'], (int) $data['month'], applyWrite: true);
 
+        NotificationController::notifyStaff(
+            'payment',
+            sprintf('Пул рассчитан: %02d.%d', $data['month'], $data['year']),
+            sprintf('Записано %d строк, выплачено %s ₽',
+                $result['written'] ?? 0,
+                number_format($result['totalPaid'] ?? 0, 0, '.', ' ')),
+            sprintf('/manage/periods/%d-%02d', $data['year'], $data['month']),
+        );
+
         return response()->json([
             'message' => "Пул записан: {$result['written']} строк",
             'result' => $result,

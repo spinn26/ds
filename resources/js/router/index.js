@@ -33,6 +33,8 @@ const routes = [
             { path: 'profile', component: () => import('../pages/Profile.vue') },
 
             // Staff management pages (inside main layout, staff-only)
+            { path: 'manage/workspace', component: () => import('../pages/Admin/Workspace.vue'), meta: { staff: true } },
+            { path: 'manage/periods/:ym', component: () => import('../pages/Admin/PeriodCard.vue'), meta: { staff: true } },
             { path: 'manage/contracts', component: () => import('../pages/Admin/ContractManager.vue'), meta: { staff: true } },
             { path: 'manage/contracts/upload', component: () => import('../pages/Admin/ContractUpload.vue'), meta: { staff: true } },
             { path: 'manage/partners', component: () => import('../pages/Admin/Partners.vue'), meta: { staff: true } },
@@ -47,7 +49,8 @@ const routes = [
             { path: 'manage/pool', component: () => import('../pages/Admin/Pool.vue'), meta: { staff: true } },
             { path: 'manage/qualifications', component: () => import('../pages/Admin/Qualifications.vue'), meta: { staff: true } },
             { path: 'manage/charges', component: () => import('../pages/Admin/Charges.vue'), meta: { staff: true } },
-            { path: 'manage/payments', component: () => import('../pages/Admin/Payments.vue'), meta: { staff: true } },
+            { path: 'manage/payments', component: () => import('../pages/Admin/PaymentRegistry.vue'), meta: { staff: true } },
+            { path: 'manage/payments-legacy', component: () => import('../pages/Admin/Payments.vue'), meta: { staff: true } },
             { path: 'manage/chat', component: () => import('../pages/Chat/StaffChat.vue'), meta: { staff: true } },
             { path: 'manage/chat/analytics', component: () => import('../pages/Chat/Analytics.vue'), meta: { staff: true } },
             { path: 'manage/reports', component: () => import('../pages/Admin/Reports.vue'), meta: { staff: true } },
@@ -88,8 +91,21 @@ const routes = [
             { path: 'reports', component: () => import('../pages/Admin/Reports.vue') },
             { path: 'currencies', component: () => import('../pages/Admin/Currencies.vue') },
             { path: 'references', component: () => import('../pages/Admin/References.vue') },
+            { path: 'references/:catalog', component: () => import('../pages/Admin/ReferenceDetail.vue') },
             { path: 'mail', component: () => import('../pages/Admin/Mail.vue') },
             { path: 'monitoring', component: () => import('../pages/Admin/Monitoring.vue') },
+
+            // New admin sections — owner dashboard + analytics + ops tools
+            { path: 'owner-dashboard', component: () => import('../pages/Admin/OwnerDashboard.vue') },
+            { path: 'reconciliation', component: () => import('../pages/Admin/Reconciliation.vue') },
+            { path: 'anomalies', component: () => import('../pages/Admin/Anomalies.vue') },
+            { path: 'calendar', component: () => import('../pages/Admin/OpsCalendar.vue') },
+            { path: 'bulk-ops', component: () => import('../pages/Admin/BulkOps.vue') },
+            { path: 'funnel', component: () => import('../pages/Admin/Funnel.vue') },
+            { path: 'cohorts', component: () => import('../pages/Admin/Cohorts.vue') },
+            { path: 'triggers', component: () => import('../pages/Admin/Triggers.vue') },
+            { path: 'integrations', component: () => import('../pages/Admin/Integrations.vue') },
+            { path: 'settings', component: () => import('../pages/Admin/Settings.vue') },
         ],
     },
 

@@ -61,6 +61,13 @@ class AdminPeriodController extends Controller
             $data['note'] ?? null,
         );
 
+        NotificationController::notifyStaff(
+            'system',
+            sprintf('Период %02d.%d закрыт', $data['month'], $data['year']),
+            $data['note'] ?: 'Правка комиссий и пула в этом месяце заблокирована',
+            sprintf('/manage/periods/%d-%02d', $data['year'], $data['month']),
+        );
+
         return response()->json([
             'message' => "Период {$data['month']}.{$data['year']} закрыт",
         ]);
@@ -78,6 +85,13 @@ class AdminPeriodController extends Controller
             (int) $data['year'],
             (int) $data['month'],
             (int) $request->user()->id,
+        );
+
+        NotificationController::notifyStaff(
+            'system',
+            sprintf('Период %02d.%d переоткрыт', $data['month'], $data['year']),
+            'Закрытие месяца отменено — будьте внимательны к последующим правкам',
+            sprintf('/manage/periods/%d-%02d', $data['year'], $data['month']),
         );
 
         return response()->json([
