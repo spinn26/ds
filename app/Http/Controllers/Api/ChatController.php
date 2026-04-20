@@ -12,13 +12,9 @@ use Illuminate\Support\Facades\Log;
 
 class ChatController extends Controller
 {
+    // Kept here (not in User) because staffList() builds a SQL LIKE over
+    // the comma-separated role column; the flat list is the shape it needs.
     private static array $staffRoles = ['admin', 'backoffice', 'support', 'finance', 'head', 'calculations', 'corrections'];
-
-    private function isStaff(Request $request): bool
-    {
-        $roles = array_map('trim', explode(',', $request->user()->role ?? ''));
-        return (bool) array_intersect($roles, self::$staffRoles);
-    }
 
     private function userName(Request $request): string
     {
@@ -32,7 +28,7 @@ class ChatController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
-        $isStaff = $this->isStaff($request);
+        $isStaff = $request->user()->isStaff();
 
         $query = DB::table('chat_tickets');
 
@@ -156,7 +152,7 @@ class ChatController extends Controller
                 'sender_id' => $user->id,
                 'sender_name' => $name,
                 'content' => $request->message,
-                'is_agent' => $this->isStaff($request),
+                'is_agent' => $request->user()->isStaff(),
                 'created_at' => $now,
                 'updated_at' => $now,
             ]);
@@ -266,7 +262,7 @@ class ChatController extends Controller
 
         // Partner context — staff-only, lets the agent see who they're talking to
         $partnerContext = null;
-        if ($this->isStaff($request)) {
+        if ($request->user()->isStaff()) {
             $partnerContext = $this->buildPartnerContext($ticket);
         }
 
@@ -383,7 +379,7 @@ class ChatController extends Controller
 
         $user = $request->user();
         $name = $this->userName($request);
-        $isAgent = $this->isStaff($request);
+        $isAgent = $request->user()->isStaff();
         $now = now();
 
         $attachmentPath = null;
@@ -600,7 +596,7 @@ class ChatController extends Controller
     /** Change ticket status */
     public function updateStatus(Request $request, int $id): JsonResponse
     {
-        if (!$this->isStaff($request)) {
+        if (!$request->user()->isStaff()) {
             return response()->json(['message' => 'Только для сотрудников'], 403);
         }
 
@@ -675,7 +671,7 @@ class ChatController extends Controller
     /** Assign ticket to staff */
     public function assign(Request $request, int $id): JsonResponse
     {
-        if (!$this->isStaff($request)) {
+        if (!$request->user()->isStaff()) {
             return response()->json(['message' => 'Только для сотрудников'], 403);
         }
 
@@ -720,7 +716,7 @@ class ChatController extends Controller
 
     public function notes(Request $request, int $id): JsonResponse
     {
-        if (! $this->isStaff($request)) {
+        if (! $request->user()->isStaff()) {
             return response()->json(['message' => 'Только для сотрудников'], 403);
         }
 
@@ -741,7 +737,7 @@ class ChatController extends Controller
 
     public function addNote(Request $request, int $id): JsonResponse
     {
-        if (!$this->isStaff($request)) {
+        if (!$request->user()->isStaff()) {
             return response()->json(['message' => 'Только для сотрудников'], 403);
         }
 
@@ -794,7 +790,7 @@ class ChatController extends Controller
      */
     public function knowledgeSuggest(Request $request, int $ticketId): JsonResponse
     {
-        if (! $this->isStaff($request)) {
+        if (! $request->user()->isStaff()) {
             return response()->json(['data' => []]);
         }
 
@@ -855,7 +851,7 @@ class ChatController extends Controller
      */
     public function saveTicketAsArticle(Request $request, int $ticketId): JsonResponse
     {
-        if (! $this->isStaff($request)) {
+        if (! $request->user()->isStaff()) {
             return response()->json(['message' => 'Только для сотрудников'], 403);
         }
 
@@ -926,7 +922,7 @@ class ChatController extends Controller
      */
     public function analytics(Request $request): JsonResponse
     {
-        if (! $this->isStaff($request)) {
+        if (! $request->user()->isStaff()) {
             return response()->json(['message' => 'Только для сотрудников'], 403);
         }
 
@@ -1085,7 +1081,7 @@ class ChatController extends Controller
      */
     public function myOpenTickets(Request $request): JsonResponse
     {
-        if (! $this->isStaff($request)) {
+        if (! $request->user()->isStaff()) {
             return response()->json(['data' => []]);
         }
 
@@ -1137,7 +1133,7 @@ class ChatController extends Controller
     public function unreadCount(Request $request): JsonResponse
     {
         $userId = $request->user()->id;
-        $isStaff = $this->isStaff($request);
+        $isStaff = $request->user()->isStaff();
 
         $query = DB::table('chat_tickets');
         if (!$isStaff) {
