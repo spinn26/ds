@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class ChatController extends Controller
 {
@@ -126,35 +127,41 @@ class ChatController extends Controller
             }
         }
 
-        $ticketId = DB::table('chat_tickets')->insertGetId([
-            'subject' => $request->subject,
-            'description' => $request->description,
-            'status' => 'new',
-            'priority' => $request->input('priority', 'medium'),
-            'department' => $request->department,
-            'created_by' => $user->id,
-            'customer_name' => $name,
-            'customer_email' => $user->email,
-            'recipient_id' => $recipientId,
-            'recipient_name' => $recipientName,
-            'context_type' => $request->input('context_type'),
-            'context_id' => $request->input('context_id'),
-            'tags' => $request->tags ? json_encode($request->tags) : null,
-            'messages_count' => 1,
-            'last_message_at' => $now,
-            'created_at' => $now,
-            'updated_at' => $now,
-        ]);
+        // Transaction: the ticket row is meaningless without its first message,
+        // so either both land or neither does.
+        $ticketId = DB::transaction(function () use ($request, $user, $name, $recipientId, $recipientName, $now) {
+            $id = DB::table('chat_tickets')->insertGetId([
+                'subject' => $request->subject,
+                'description' => $request->description,
+                'status' => 'new',
+                'priority' => $request->input('priority', 'medium'),
+                'department' => $request->department,
+                'created_by' => $user->id,
+                'customer_name' => $name,
+                'customer_email' => $user->email,
+                'recipient_id' => $recipientId,
+                'recipient_name' => $recipientName,
+                'context_type' => $request->input('context_type'),
+                'context_id' => $request->input('context_id'),
+                'tags' => $request->tags ? json_encode($request->tags) : null,
+                'messages_count' => 1,
+                'last_message_at' => $now,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
 
-        DB::table('chat_messages')->insert([
-            'ticket_id' => $ticketId,
-            'sender_id' => $user->id,
-            'sender_name' => $name,
-            'content' => $request->message,
-            'is_agent' => $this->isStaff($request),
-            'created_at' => $now,
-            'updated_at' => $now,
-        ]);
+            DB::table('chat_messages')->insert([
+                'ticket_id' => $id,
+                'sender_id' => $user->id,
+                'sender_name' => $name,
+                'content' => $request->message,
+                'is_agent' => $this->isStaff($request),
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+
+            return $id;
+        });
 
         // Notify via socket
         try {
@@ -164,7 +171,9 @@ class ChatController extends Controller
                 'department' => $request->department,
                 'customerName' => $name,
             ]);
-        } catch (\Exception $e) {}
+        } catch (\Exception $e) {
+            Log::warning('chat socket emit failed: new-ticket', ['ticket_id' => $ticketId, 'exception' => $e->getMessage()]);
+        }
 
         $ticket = DB::table('chat_tickets')->where('id', $ticketId)->first();
 
@@ -438,7 +447,9 @@ class ChatController extends Controller
                 'isAgent' => $isAgent,
                 'createdAt' => $now->toIso8601String(),
             ]);
-        } catch (\Exception $e) {}
+        } catch (\Exception $e) {
+            Log::warning('chat socket emit failed: new-message', ['ticket_id' => $id, 'message_id' => $msgId, 'exception' => $e->getMessage()]);
+        }
 
         // Personal notification to the other side of the ticket
         $recipientId = $isAgent
@@ -494,7 +505,9 @@ class ChatController extends Controller
                 'content' => $request->content,
                 'editedAt' => now()->toIso8601String(),
             ]);
-        } catch (\Exception $e) {}
+        } catch (\Exception $e) {
+            Log::warning('chat socket emit failed: message-edited', ['message_id' => $messageId, 'exception' => $e->getMessage()]);
+        }
 
         return response()->json(['id' => $messageId, 'editedAt' => now()->toIso8601String()]);
     }
@@ -526,7 +539,9 @@ class ChatController extends Controller
                 'ticketId' => $id,
                 'pinnedAt' => $newValue ? $newValue->toIso8601String() : null,
             ]);
-        } catch (\Exception $e) {}
+        } catch (\Exception $e) {
+            Log::warning('chat socket emit failed: ticket-updated (pin)', ['ticket_id' => $id, 'exception' => $e->getMessage()]);
+        }
 
         return response()->json([
             'id' => $id,
@@ -584,7 +599,9 @@ class ChatController extends Controller
                 'userId' => $userId,
                 'action' => $action,
             ]);
-        } catch (\Exception $e) {}
+        } catch (\Exception $e) {
+            Log::warning('chat socket emit failed: reaction-toggled', ['message_id' => $messageId, 'exception' => $e->getMessage()]);
+        }
 
         return response()->json(['action' => $action]);
     }
@@ -651,7 +668,9 @@ class ChatController extends Controller
                 if ($priorityChanged) $payload['priority'] = $request->priority;
                 if ($tagsChanged) $payload['tags'] = $update['tags'];
                 app(\App\Services\SocketService::class)->emit('chat:ticket-updated', null, $payload);
-            } catch (\Exception $e) {}
+            } catch (\Exception $e) {
+                Log::warning('chat socket emit failed: ticket-updated (status)', ['ticket_id' => $id, 'exception' => $e->getMessage()]);
+            }
         }
 
         return response()->json([
@@ -699,7 +718,9 @@ class ChatController extends Controller
                 'assignedName' => $assigneeName,
                 'status' => 'open',
             ]);
-        } catch (\Exception $e) {}
+        } catch (\Exception $e) {
+            Log::warning('chat socket emit failed: ticket-updated (assign)', ['ticket_id' => $id, 'exception' => $e->getMessage()]);
+        }
 
         return response()->json(['message' => 'Назначен']);
     }
