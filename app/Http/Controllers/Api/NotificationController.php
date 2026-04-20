@@ -131,6 +131,37 @@ class NotificationController extends Controller
         }
     }
 
+    /**
+     * Разослать уведомление всем пользователям с указанными ролями.
+     * Роли в WebUser хранятся как CSV в колонке `role`, поэтому матчим через LIKE.
+     */
+    public static function notifyRoles(array $roles, string $type, string $title, ?string $message = null, ?string $link = null): int
+    {
+        if (! $roles) return 0;
+
+        $query = DB::table('WebUser')->whereNull('dateDeleted');
+        $query->where(function ($q) use ($roles) {
+            foreach ($roles as $r) {
+                $q->orWhere('role', 'ilike', '%' . $r . '%');
+            }
+        });
+        $userIds = $query->pluck('id')->all();
+
+        foreach ($userIds as $uid) {
+            self::create((int) $uid, $type, $title, $message, $link);
+        }
+        return count($userIds);
+    }
+
+    /** Shortcut: разослать всем staff-ролям. */
+    public static function notifyStaff(string $type, string $title, ?string $message = null, ?string $link = null): int
+    {
+        return self::notifyRoles(
+            ['admin', 'backoffice', 'finance', 'support', 'head', 'calculations', 'corrections'],
+            $type, $title, $message, $link
+        );
+    }
+
     private function ensureTable(): void
     {
         // Kept for legacy bootstrap — the 2026_04_18_000001 migration is the source of truth.

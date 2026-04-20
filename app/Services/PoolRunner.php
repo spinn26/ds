@@ -130,26 +130,23 @@ class PoolRunner
     }
 
     /**
-     * Ежемесячная выручка ДС без НДС. Берётся как агрегат по transaction
-     * за месяц, каждая сумма делится на (1 + vat%/100), где vat% — ставка
-     * актуальная на дату транзакции.
+     * Ежемесячная выручка ДС без НДС.
+     *
+     * В transaction поле netRevenueRUB уже содержит чистую выручку ДС
+     * (после вычета НДС и комиссии партнёрам). Raw amountRUB — это оборот
+     * клиентов, он НЕ является базой для пула (Богданова подтвердила:
+     * 1% берётся от netRevenue, не от gross).
      */
     private function monthlyVatExclusiveRevenue(int $year, int $month): float
     {
         $from = Carbon::create($year, $month, 1)->startOfMonth();
         $to = $from->copy()->endOfMonth();
 
-        // Raw SQL: outer-join vat by date range, fall back to divisor=1.05 if nothing matches.
         $sum = DB::selectOne(
-            'SELECT COALESCE(SUM(
-                CASE WHEN v.value IS NULL THEN t."amountRUB" / 1.05
-                     ELSE t."amountRUB" / (1 + v.value / 100)
-                END
-             ), 0) AS revenue
-             FROM transaction t
-             LEFT JOIN vat v ON t.date >= v."dateFrom" AND t.date <= v."dateTo"
-             WHERE t.date >= ? AND t.date <= ?
-               AND t."deletedAt" IS NULL',
+            'SELECT COALESCE(SUM("netRevenueRUB"), 0) AS revenue
+               FROM transaction
+              WHERE date >= ? AND date <= ?
+                AND "deletedAt" IS NULL',
             [$from, $to]
         );
 

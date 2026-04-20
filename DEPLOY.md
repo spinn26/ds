@@ -1,0 +1,116 @@
+# Prod deployment runbook — 2026-04-20
+
+Все изменения этой сессии, упакованные в пошаговый план для наката.
+
+## Миграции к накату (10 штук)
+
+Прогоняются одной командой. Все идемпотентны — можно повторно запускать
+если процесс прервался.
+
+```bash
+ssh root@dev.dsconsult.ru
+cd /var/www/newds
+php artisan migrate --force
+```
+
+Ожидаемый порядок применения:
+
+| # | Файл | Что делает | Риск |
+|---|---|---|---|
+| 1 | `2026_04_20_000001_add_fk_indexes_for_tickets_and_accruals.php` | Индексы на FK-колонки tickets/accruals | low |
+| 2 | `2026_04_20_000002_backfill_deleted_consultants_from_webuser.php` | Чистка orphan-FK (5 шт из аудита) | medium — меняет данные, down() пустой |
+| 3 | `2026_04_20_000010_create_period_closures_table.php` | Новая таблица `period_closures` | low |
+| 4 | `2026_04_20_000020_create_pool_moderation_table.php` | Новая таблица `pool_moderation` | low |
+| 5 | `2026_04_20_000030_add_soft_delete_partial_indexes.php` | Partial indexes на soft-delete | low — только скорость |
+| 6 | `2026_04_20_000040_add_calc_fields_to_program.php` | `program.dsPercent / pointsMethod / fixedCost / kvPayoutYear` | low — nullable add |
+| 7 | `2026_04_20_000050_add_identity_to_legacy_pk.php` | IDENTITY на `volumeCalculator.id`, `Contest.id` | medium — меняет PK-семантику |
+| 8 | `2026_04_20_000060_add_identity_to_commission.php` | IDENTITY на `commission.id` | medium — без этого CommissionCalculator::createCommission падает |
+
+## Что накат НЕ делает автоматически
+
+- **Не пересчитывает комиссии за февраль-март 2026.** В БД сейчас
+  `commission.amountRUB = NULL` для всех строк 2025-2026. Запуск пересчёта —
+  отдельной командой **ПОСЛЕ** миграций:
+
+  ```bash
+  # dry-run (ничего не пишет, откатывает транзакцию)
+  php scripts/commissions-recalc.php 2026-02
+  php scripts/commissions-recalc.php 2026-03
+
+  # реальный пересчёт — после подтверждения цифр
+  php scripts/commissions-recalc.php 2026-02 --apply
+  php scripts/commissions-recalc.php 2026-03 --apply
+  ```
+
+- **Не заполняет `program.dsPercent` / `pointsMethod`.** После миграции
+  поля пустые. BackOffice заполняет вручную через диалог Programs в
+  админке (Admin → Продукты → программа → Редактировать).
+
+- **Не ротирует `GOOGLE_SHEETS_API_KEY`.** Ключ был в сессии, надо
+  отключить старый и выдать новый через GCP Console.
+
+## Поверка после наката
+
+```bash
+# Все миграции применены
+php artisan migrate:status | tail -10
+
+# Identity действительно встала
+psql $DATABASE_URL -c "
+  SELECT attname, attidentity FROM pg_attribute
+  WHERE attrelid IN ('commission'::regclass,
+                     'volumeCalculator'::regclass,
+                     '\"Contest\"'::regclass)
+    AND attname = 'id'"
+# Ожидается attidentity = 'd' для всех трёх
+
+# Новые таблицы существуют
+psql $DATABASE_URL -c "\dt period_closures pool_moderation"
+
+# PoolCalculator читает правильное поле
+php artisan tinker --execute='
+  $r = app(\App\Services\PoolRunner::class)->run(2026, 2);
+  echo "Revenue: ", number_format($r["revenue"]), "\nFund/level: ",
+       number_format($r["fund"]), "\n";
+'
+# Ожидается: revenue ~10.8 млн, fund/level ~108 тыс (у Богдановой было 216K —
+# см. пояснение ниже).
+```
+
+## Что сломается, если накатить частично
+
+- Без миграции 8 (`commission` identity) ни один `CommissionCalculator::calc`
+  не отработает на проде — insert упадёт на NOT NULL id.
+- Без миграции 2 (backfill orphan FK) не восстанавливаются 5 constraints,
+  `\d+ WebUser` продолжит ругаться на сломанные FK.
+
+## Откаты
+
+Все миграции имеют `down()`. Откат по одной:
+```bash
+php artisan migrate:rollback --step=1
+```
+
+**Но:** `000050`/`000060` в `down()` делают `DROP IDENTITY` — после этого
+все новые inserts снова падают на NULL id. Откатывать identity нет смысла
+кроме тестового цикла, лучше вперёд доделать.
+
+## Pool: следующий разговор с Богдановой
+
+Мой PoolCalculator читает `transaction.netRevenueRUB` (не `amountRUB`).
+Сумма чистой выручки ДС за февраль = 10.87M ₽, 1% = 108.7K ₽ на уровень.
+
+Богданова называла 216K ₽. Гипотеза: она считала суммарный фонд на
+несколько уровней сразу (2 × 108K ≈ 216K) либо брала чуть другой
+источник. **Подтвердить вручную на трёх месяцах до запуска `PoolRunner`
+в автоматическом режиме.**
+
+## Контрольный чеклист перед тем как сказать "релизим"
+
+- [ ] Прогнал `php scripts/commissions-recalc.php 2026-02` (dry-run)
+      и убедился, что суммы не нулевые и разложены адекватно по цепочкам
+- [ ] Богданова подтвердила формулу пула на минимум трёх месяцах
+- [ ] Сделан бэкап БД (`pg_dump -Fc newds > newds-pre-release.dump`)
+- [ ] Tests: `php artisan test` даёт 0 failed (12 skipped норма — нужны
+      фабрики, не критично)
+- [ ] Smoke: `node scripts/ui-smoke.cjs` проходит по всем 61 странице
