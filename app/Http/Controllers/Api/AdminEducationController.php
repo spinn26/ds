@@ -25,25 +25,46 @@ class AdminEducationController extends Controller
         }
 
         $total = $query->count();
-        $courses = $query->orderBy('sort_order')
+        $rows = $query->orderBy('sort_order')
             ->offset(($request->input('page', 1) - 1) * 25)
             ->limit(25)
-            ->get()
-            ->map(function ($c) {
-                $lessonCount = DB::table('education_lessons')->where('course_id', $c->id)->count();
-                $testCount = DB::table('education_tests')->where('course_id', $c->id)->count();
-                return [
-                    'id' => $c->id,
-                    'title' => $c->title,
-                    'description' => $c->description,
-                    'product_id' => $c->product_id,
-                    'productName' => $c->product_id ? DB::table('product')->where('id', $c->product_id)->value('name') : null,
-                    'active' => (bool) $c->active,
-                    'sort_order' => $c->sort_order,
-                    'lessonCount' => $lessonCount,
-                    'testCount' => $testCount,
-                ];
-            });
+            ->get();
+
+        if ($rows->isEmpty()) {
+            return response()->json(['data' => [], 'total' => $total]);
+        }
+
+        // Batch-load counts and product names (was N+1: three lookups per row).
+        $courseIds = $rows->pluck('id');
+
+        $lessonCounts = DB::table('education_lessons')
+            ->whereIn('course_id', $courseIds)
+            ->select('course_id', DB::raw('count(*) as cnt'))
+            ->groupBy('course_id')
+            ->pluck('cnt', 'course_id');
+
+        $testCounts = DB::table('education_tests')
+            ->whereIn('course_id', $courseIds)
+            ->select('course_id', DB::raw('count(*) as cnt'))
+            ->groupBy('course_id')
+            ->pluck('cnt', 'course_id');
+
+        $productIds = $rows->pluck('product_id')->filter()->unique();
+        $productNames = $productIds->isNotEmpty()
+            ? DB::table('product')->whereIn('id', $productIds)->pluck('name', 'id')
+            : collect();
+
+        $courses = $rows->map(fn ($c) => [
+            'id' => $c->id,
+            'title' => $c->title,
+            'description' => $c->description,
+            'product_id' => $c->product_id,
+            'productName' => $c->product_id ? ($productNames[$c->product_id] ?? null) : null,
+            'active' => (bool) $c->active,
+            'sort_order' => $c->sort_order,
+            'lessonCount' => (int) ($lessonCounts[$c->id] ?? 0),
+            'testCount' => (int) ($testCounts[$c->id] ?? 0),
+        ]);
 
         return response()->json(['data' => $courses, 'total' => $total]);
     }
@@ -150,7 +171,17 @@ class AdminEducationController extends Controller
 
     public function destroyLesson(int $courseId, int $lessonId): JsonResponse
     {
-        DB::table('education_lessons')->where('id', $lessonId)->delete();
+        // Scope by course_id so the URL {courseId} actually matters —
+        // otherwise a lesson under course A could be deleted via course B's URL.
+        $deleted = DB::table('education_lessons')
+            ->where('id', $lessonId)
+            ->where('course_id', $courseId)
+            ->delete();
+
+        if ($deleted === 0) {
+            return response()->json(['message' => 'Урок не найден'], 404);
+        }
+
         return response()->json(['message' => 'Урок удалён']);
     }
 
@@ -208,7 +239,15 @@ class AdminEducationController extends Controller
 
     public function destroyTest(int $courseId, int $testId): JsonResponse
     {
-        DB::table('education_tests')->where('id', $testId)->delete();
+        $deleted = DB::table('education_tests')
+            ->where('id', $testId)
+            ->where('course_id', $courseId)
+            ->delete();
+
+        if ($deleted === 0) {
+            return response()->json(['message' => 'Вопрос не найден'], 404);
+        }
+
         return response()->json(['message' => 'Вопрос удалён']);
     }
 
