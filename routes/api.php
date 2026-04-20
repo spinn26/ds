@@ -122,9 +122,9 @@ Route::prefix('v1')->group(function () {
 
         Route::get('/admin/partners', [\App\Http\Controllers\Api\AdminDataController::class, 'partners']);
         Route::post('/admin/partners/bulk', [\App\Http\Controllers\Api\AdminDataController::class, 'bulkPartners'])->middleware('throttle:10,1');
-        Route::get('/admin/partners/{id}', [\App\Http\Controllers\Api\AdminDataController::class, 'showPartner']);
-        Route::put('/admin/partners/{id}', [\App\Http\Controllers\Api\AdminDataController::class, 'updatePartner']);
-        Route::post('/admin/partners/{id}/status', [\App\Http\Controllers\Api\AdminDataController::class, 'changePartnerStatus']);
+        Route::get('/admin/partners/{id}', [\App\Http\Controllers\Api\AdminDataController::class, 'showPartner'])->whereNumber('id');
+        Route::put('/admin/partners/{id}', [\App\Http\Controllers\Api\AdminDataController::class, 'updatePartner'])->whereNumber('id');
+        Route::post('/admin/partners/{id}/status', [\App\Http\Controllers\Api\AdminDataController::class, 'changePartnerStatus'])->whereNumber('id');
         Route::get('/admin/partner-statuses', [\App\Http\Controllers\Api\AdminDataController::class, 'partnerStatuses']);
         Route::get('/admin/clients', [\App\Http\Controllers\Api\AdminDataController::class, 'clients']);
         Route::get('/admin/requisites', [\App\Http\Controllers\Api\AdminDataController::class, 'requisites']);

@@ -192,7 +192,7 @@ class CalculatorController extends Controller
         $historyId = null;
         try {
             $historyId = DB::table('volumeCalculator')->insertGetId([
-                'user' => $request->user()?->id,
+                'user_field' => $request->user()?->id,
                 'qulaification' => $qualificationId, // typo in original DB
                 'program' => $programId,
                 'calcProperty' => $calcPropertyId,
@@ -233,7 +233,7 @@ class CalculatorController extends Controller
 
         try {
             $rows = DB::table('volumeCalculator')
-                ->where('user', $userId)
+                ->where('user_field', $userId)
                 ->orderByDesc('createdAt')
                 ->limit(50)
                 ->get();
@@ -294,7 +294,7 @@ class CalculatorController extends Controller
     public function clearHistory(Request $request): JsonResponse
     {
         try {
-            DB::table('volumeCalculator')->where('user', $request->user()->id)->delete();
+            DB::table('volumeCalculator')->where('user_field', $request->user()->id)->delete();
         } catch (\Exception $e) {
             Log::error('calculator clearHistory failed', ['user_id' => $request->user()->id, 'exception' => $e->getMessage()]);
             return response()->json(['message' => 'Не удалось очистить историю'], 500);

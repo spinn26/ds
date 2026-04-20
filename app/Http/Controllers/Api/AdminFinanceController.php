@@ -321,7 +321,8 @@ class AdminFinanceController extends Controller
         $currencies = DB::table('currency')->orderBy('id')->get()
             ->map(fn ($c) => [
                 'id' => $c->id,
-                'name' => $c->name,
+                // Legacy schema has nameRu / nameEn / currencyName — no plain `name`.
+                'name' => $c->nameRu ?? $c->nameEn ?? $c->currencyName ?? '',
                 'symbol' => $c->symbol,
             ]);
 
