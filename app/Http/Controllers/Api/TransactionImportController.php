@@ -453,10 +453,13 @@ class TransactionImportController extends Controller
         // Заморозка: если хоть одна транзакция импорта попадает в закрытый
         // месяц — откатывать нельзя. Правки закрытых периодов идут только
         // через «Прочие начисления» (spec ✅Комиссии Part 2 §1).
+        //
+        // period_closures.year/month — smallint, transaction.dateYear —
+        // varchar (legacy). Нужен явный каст в PG, иначе 500.
         $frozenQuery = DB::table('transaction as t')
             ->join('period_closures as p', function ($j) {
-                $j->on('p.year', '=', 't.dateYear')
-                  ->on('p.month', '=', 't.dateMonth')
+                $j->on(DB::raw('p.year::text'), '=', 't.dateYear')
+                  ->on(DB::raw('LPAD(p.month::text, 2, \'0\')'), '=', DB::raw("RIGHT(t.\"dateMonth\", 2)"))
                   ->whereNull('p.reopened_at');
             });
         $frozenTxs = ($txIdsFromLog
