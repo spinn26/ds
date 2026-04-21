@@ -373,6 +373,98 @@ class AdminDataController extends Controller
         ]);
     }
 
+    /**
+     * Soft-delete партнёра (consultant). Ставит dateDeleted = now(),
+     * не трогая FK на contract/commission/transaction — они продолжают
+     * ссылаться, исторические данные сохраняются. Обратимо через
+     * прямой UPDATE consultant SET dateDeleted=NULL (нет UI reverse).
+     *
+     * Блокируется если партнёр активен (activity=1) и имеет детей в
+     * структуре — staff должен сначала перестроить ветку.
+     */
+    public function deletePartner(Request $request, int $id): JsonResponse
+    {
+        $consultant = DB::table('consultant')->where('id', $id)->first();
+        if (! $consultant) {
+            return response()->json(['message' => 'Партнёр не найден'], 404);
+        }
+        if ($consultant->dateDeleted) {
+            return response()->json(['message' => 'Партнёр уже удалён'], 422);
+        }
+
+        // Нельзя удалить активного с детьми — осиротит ветку.
+        if ($consultant->activity == 1) {
+            $children = DB::table('consultant')
+                ->where('inviter', $id)
+                ->whereNull('dateDeleted')
+                ->count();
+            if ($children > 0) {
+                return response()->json([
+                    'message' => "Нельзя удалить активного партнёра с {$children} детьми в структуре. Сначала переназначьте их на другого наставника.",
+                ], 422);
+            }
+        }
+
+        DB::transaction(function () use ($id, $request) {
+            DB::table('consultant')->where('id', $id)->update([
+                'dateDeleted' => now(),
+            ]);
+
+            // Audit через Spatie
+            if (function_exists('activity')) {
+                try {
+                    activity('partner_delete')
+                        ->performedOn(new Consultant(['id' => $id]))
+                        ->causedBy($request->user())
+                        ->withProperties(['reason' => $request->input('reason')])
+                        ->log('partner soft-deleted');
+                } catch (\Throwable) {}
+            }
+        });
+
+        return response()->json(['message' => 'Партнёр удалён']);
+    }
+
+    /**
+     * Soft-delete клиента. Если у клиента есть активные контракты —
+     * блокируем. FK из contract/commission остаются.
+     */
+    public function deleteClient(Request $request, int $id): JsonResponse
+    {
+        $client = DB::table('client')->where('id', $id)->first();
+        if (! $client) {
+            return response()->json(['message' => 'Клиент не найден'], 404);
+        }
+        if ($client->dateDeleted ?? null) {
+            return response()->json(['message' => 'Клиент уже удалён'], 422);
+        }
+
+        $activeContracts = DB::table('contract')
+            ->where('client', $id)
+            ->whereNull('deletedAt')
+            ->count();
+        if ($activeContracts > 0) {
+            return response()->json([
+                'message' => "Нельзя удалить: у клиента {$activeContracts} активных контрактов. Сначала закройте или удалите их.",
+            ], 422);
+        }
+
+        DB::table('client')->where('id', $id)->update([
+            'dateDeleted' => now(),
+        ]);
+
+        if (function_exists('activity')) {
+            try {
+                activity('client_delete')
+                    ->causedBy($request->user())
+                    ->withProperties(['clientId' => $id, 'reason' => $request->input('reason')])
+                    ->log('client soft-deleted');
+            } catch (\Throwable) {}
+        }
+
+        return response()->json(['message' => 'Клиент удалён']);
+    }
+
     /** Клиенты — админ-список всех клиентов */
     public function clients(Request $request): JsonResponse
     {

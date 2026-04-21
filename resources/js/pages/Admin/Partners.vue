@@ -117,8 +117,37 @@
             <v-btn v-bind="tipProps" icon="mdi-pencil" size="x-small" variant="text" @click="openEdit(item)" />
           </template>
         </v-tooltip>
+        <v-tooltip text="Удалить" location="top">
+          <template #activator="{ props: tipProps }">
+            <v-btn v-bind="tipProps" icon="mdi-delete" size="x-small" variant="text" color="error"
+              @click.stop="confirmDeletePartner(item)" />
+          </template>
+        </v-tooltip>
       </template>
     </DataTableWrapper>
+
+    <!-- Delete dialog -->
+    <DialogShell
+      v-model="deleteDialogOpen"
+      title="Удалить партнёра?"
+      :max-width="500"
+      :loading="deleting"
+      confirm-text="Удалить"
+      confirm-color="error"
+      @confirm="performDeletePartner"
+    >
+      <p class="mb-2">
+        <strong>{{ deleteTarget?.personName }}</strong>
+        (ID {{ deleteTarget?.id }})
+      </p>
+      <p class="text-body-2 text-medium-emphasis mb-3">
+        Удаление — soft-delete (выставит <code>dateDeleted</code>). FK из
+        контрактов/комиссий/транзакций сохраняются. Если у партнёра есть
+        активные дети в структуре — сервер отклонит запрос.
+      </p>
+      <v-textarea v-model="deleteReason" label="Причина (для аудита)"
+        variant="outlined" density="comfortable" rows="2" />
+    </DialogShell>
 
     <!-- Edit dialog -->
     <v-dialog v-model="editDialog" max-width="880" persistent scrollable>
@@ -212,7 +241,37 @@ import PageHeader from '../../components/PageHeader.vue';
 import DataTableWrapper from '../../components/DataTableWrapper.vue';
 import StatusChip from '../../components/StatusChip.vue';
 import FilterBar from '../../components/FilterBar.vue';
+import DialogShell from '../../components/DialogShell.vue';
+import { useSnackbar } from '../../composables/useSnackbar';
 import { fmtDate, getActivityColorByName } from '../../composables/useDesign';
+
+const { showSuccess, showError } = useSnackbar();
+const deleteDialogOpen = ref(false);
+const deleteTarget = ref(null);
+const deleteReason = ref('');
+const deleting = ref(false);
+
+function confirmDeletePartner(item) {
+  deleteTarget.value = item;
+  deleteReason.value = '';
+  deleteDialogOpen.value = true;
+}
+
+async function performDeletePartner() {
+  if (!deleteTarget.value?.id) return;
+  deleting.value = true;
+  try {
+    await api.delete(`/admin/partners/${deleteTarget.value.id}`, {
+      data: { reason: deleteReason.value },
+    });
+    showSuccess('Партнёр удалён');
+    deleteDialogOpen.value = false;
+    loadData();
+  } catch (e) {
+    showError(e.response?.data?.message || 'Не удалось удалить');
+  }
+  deleting.value = false;
+}
 
 const items = ref([]);
 const total = ref(0);

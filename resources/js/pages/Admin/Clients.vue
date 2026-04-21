@@ -27,8 +27,32 @@
       <template #item.birthDate="{ value }">
         {{ fmtDate(value) }}
       </template>
+      <template #item.actions="{ item }">
+        <v-btn icon="mdi-delete" size="x-small" variant="text" color="error"
+          title="Удалить" @click.stop="confirmDeleteClient(item)" />
+      </template>
       <template #no-data><EmptyState /></template>
     </v-data-table-server>
+
+    <DialogShell
+      v-model="deleteDialogOpen"
+      title="Удалить клиента?"
+      :max-width="500"
+      :loading="deleting"
+      confirm-text="Удалить"
+      confirm-color="error"
+      @confirm="performDeleteClient"
+    >
+      <p class="mb-2">
+        <strong>{{ deleteTarget?.personName }}</strong> (ID {{ deleteTarget?.id }})
+      </p>
+      <p class="text-body-2 text-medium-emphasis mb-3">
+        Soft-delete (<code>dateDeleted</code>). Блокируется если у клиента
+        есть активные контракты — сначала закрой их.
+      </p>
+      <v-textarea v-model="deleteReason" label="Причина (для аудита)"
+        variant="outlined" density="comfortable" rows="2" />
+    </DialogShell>
   </div>
 </template>
 
@@ -39,7 +63,37 @@ import { useDebounce } from '../../composables/useDebounce';
 import PageHeader from '../../components/PageHeader.vue';
 import EmptyState from '../../components/EmptyState.vue';
 import StartChatButton from '../../components/StartChatButton.vue';
+import DialogShell from '../../components/DialogShell.vue';
+import { useSnackbar } from '../../composables/useSnackbar';
 import { fmtDate } from '../../composables/useDesign';
+
+const { showSuccess, showError } = useSnackbar();
+const deleteDialogOpen = ref(false);
+const deleteTarget = ref(null);
+const deleteReason = ref('');
+const deleting = ref(false);
+
+function confirmDeleteClient(item) {
+  deleteTarget.value = item;
+  deleteReason.value = '';
+  deleteDialogOpen.value = true;
+}
+
+async function performDeleteClient() {
+  if (!deleteTarget.value?.id) return;
+  deleting.value = true;
+  try {
+    await api.delete(`/admin/clients/${deleteTarget.value.id}`, {
+      data: { reason: deleteReason.value },
+    });
+    showSuccess('Клиент удалён');
+    deleteDialogOpen.value = false;
+    loadData();
+  } catch (e) {
+    showError(e.response?.data?.message || 'Не удалось удалить');
+  }
+  deleting.value = false;
+}
 
 const items = ref([]);
 const total = ref(0);
@@ -61,6 +115,7 @@ const headers = [
   { title: 'Комментарий', key: 'comment' },
   { title: 'Продукты', key: 'products', sortable: false },
   { title: '', key: 'chat', sortable: false, width: 50 },
+  { title: '', key: 'actions', sortable: false, width: 50 },
 ];
 
 const { debounced: debouncedLoad } = useDebounce(loadData, 400);
