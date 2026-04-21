@@ -113,7 +113,7 @@ Route::prefix('v1')->group(function () {
             Route::post('/impersonate/leave', [ImpersonateController::class, 'leave']);
         });
 
-        Route::middleware(['role:admin,backoffice,support,finance,head,calculations,corrections', 'throttle:120,1'])->group(function () {
+        Route::middleware(['role:admin,backoffice,support,finance,head,calculations,corrections', 'throttle:600,1'])->group(function () {
         Route::get('/admin/dashboard', [\App\Http\Controllers\Api\AdminDashboardController::class, 'index']);
         Route::get('/admin/export/{type}', [\App\Http\Controllers\Api\ExportController::class, 'export'])->middleware('throttle:10,1');
         Route::get('/admin/users', [AdminUserController::class, 'index']);
@@ -171,8 +171,8 @@ Route::prefix('v1')->group(function () {
         Route::get('/admin/currencies', [\App\Http\Controllers\Api\AdminFinanceController::class, 'currencies']);
         Route::get('/admin/transaction-import/form-data', [\App\Http\Controllers\Api\TransactionImportController::class, 'formData']);
         Route::get('/admin/transaction-import/sheet-names', [\App\Http\Controllers\Api\TransactionImportController::class, 'sheetNames']);
-        Route::post('/admin/transaction-import', [\App\Http\Controllers\Api\TransactionImportController::class, 'import'])->middleware('throttle:10,1');
-        Route::post('/admin/transaction-import/from-sheets', [\App\Http\Controllers\Api\TransactionImportController::class, 'importFromSheets'])->middleware('throttle:10,1');
+        Route::post('/admin/transaction-import', [\App\Http\Controllers\Api\TransactionImportController::class, 'import'])->middleware('throttle:30,1');
+        Route::post('/admin/transaction-import/from-sheets', [\App\Http\Controllers\Api\TransactionImportController::class, 'importFromSheets'])->middleware('throttle:30,1');
 
         // News CRUD (admin)
         Route::get('/admin/news', [\App\Http\Controllers\Api\WorkspaceController::class, 'newsList']);

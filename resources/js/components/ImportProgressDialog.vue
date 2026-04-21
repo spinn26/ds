@@ -117,13 +117,16 @@ const iconColor = computed(() => {
 function startPolling() {
   if (!props.tracker) return;
   stopPolling();
+  // 1 sec: достаточно плавно для пользователя, 60 req/min на polling —
+  // не даст 429 на group-throttle (600/min).
   pollTimer = setInterval(async () => {
+    if (document.visibilityState !== 'visible') return;
     try {
       const { data } = await api.get('/admin/import-progress', { params: { tracker: props.tracker } });
       progress.value = { ...progress.value, ...data };
       if (data.status === 'done') stopPolling();
     } catch {}
-  }, 500);
+  }, 1000);
 }
 function stopPolling() {
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
