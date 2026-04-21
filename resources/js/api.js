@@ -33,7 +33,7 @@ api.interceptors.request.use((config) => {
 
 api.interceptors.response.use(
     (r) => r,
-    (error) => {
+    async (error) => {
         // Request was cancelled (component unmounted / navigation). Not an
         // error the user needs to see — don't pop snackbars, just propagate.
         if (axios.isCancel(error)) {
@@ -43,6 +43,19 @@ api.interceptors.response.use(
         const status = error.response?.status;
         const url = error.config?.url || '';
         const { showError } = useSnackbar();
+
+        // Сетевые ошибки / таймауты после idle: PHP-FPM или PG могли
+        // временно не ответить. Пробуем один молчаливый ретрай для
+        // идемпотентных GET-запросов (это фиксит «ничего не происходит»
+        // после 5 минут бездействия — первый запрос вешается).
+        const config = error.config || {};
+        const isIdempotent = (config.method || 'get').toLowerCase() === 'get';
+        const isNetworkFail = !error.response || error.code === 'ECONNABORTED';
+        if (isNetworkFail && isIdempotent && !config.__retried) {
+            config.__retried = true;
+            await new Promise(r => setTimeout(r, 400));
+            return api.request(config);
+        }
 
         if (status === 401) {
             if (!url.includes('/auth/login') && !url.includes('/auth/register') && !url.includes('/auth/me')) {

@@ -357,7 +357,41 @@ onMounted(async () => {
   } catch {}
   loadNotifications();
   loadChatUnread();
-  unreadInterval = setInterval(() => { loadNotifications(); loadChatUnread(); }, 30000);
+
+  // Polling с учётом visibility — если вкладка скрыта/свёрнута, таймер
+  // не работает. При возврате в видимое состояние — сразу дёргаем
+  // свежие данные и перезапускаем интервал. Это фиксит зависание UI
+  // после 5+ минут idle (DB pool / PHP-FPM / Socket засыпают, первый
+  // запрос уходит в таймаут).
+  const POLL_MS = 30000;
+  const startPolling = () => {
+    if (unreadInterval) clearInterval(unreadInterval);
+    unreadInterval = setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
+      loadNotifications();
+      loadChatUnread();
+    }, POLL_MS);
+  };
+  startPolling();
+
+  let lastHiddenAt = null;
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      // Если пауза > 60 сек — принудительно перезапрашиваем всё сразу
+      // и реконнектим сокет (если он отвалился при спящей вкладке).
+      const paused = lastHiddenAt ? (Date.now() - lastHiddenAt) : 0;
+      lastHiddenAt = null;
+      if (paused > 60000) {
+        loadNotifications();
+        loadChatUnread();
+        if (window.__notifSocket && !window.__notifSocket.connected) {
+          try { window.__notifSocket.connect(); } catch {}
+        }
+      }
+    } else {
+      lastHiddenAt = Date.now();
+    }
+  });
 
   // Real-time notifications via Socket.IO
   try {
@@ -374,7 +408,10 @@ onMounted(async () => {
       auth: { token },
       transports: ['websocket', 'polling'],
       reconnection: true,
+      reconnectionDelay: 2000,
+      reconnectionAttempts: Infinity,
     });
+    window.__notifSocket = notifSocket;
     notifSocket.on('notification', (data) => {
       // Add to list in real-time
       notifications.value.unshift({
