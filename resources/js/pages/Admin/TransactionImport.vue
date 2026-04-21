@@ -157,6 +157,14 @@
         <v-icon size="14" color="error" class="mr-1">mdi-alert</v-icon>{{ err }}
       </div>
     </DialogShell>
+
+    <ImportProgressDialog
+      v-model="progressOpen"
+      :tracker="progressTracker"
+      :result="progressResult"
+      :finished="progressFinished"
+      title="Импорт транзакций"
+    />
   </div>
 </template>
 
@@ -166,11 +174,16 @@ import api from '../../api';
 import { getImportStatusColor } from '../../composables/useDesign';
 import StatusChip from '../../components/StatusChip.vue';
 import DialogShell from '../../components/DialogShell.vue';
+import ImportProgressDialog from '../../components/ImportProgressDialog.vue';
 
 const counterparties = ref([]);
 const currencies = ref([]);
 const sheetNames = ref([]);
 const sheetsError = ref('');
+const progressOpen = ref(false);
+const progressTracker = ref(null);
+const progressResult = ref(null);
+const progressFinished = ref(false);
 const selectedSheet = computed(() => {
   if (!form.value.sheet) return null;
   return sheetNames.value.find(s => (s.name || s) === form.value.sheet) || null;
@@ -214,20 +227,32 @@ function statusLabel(s) {
 }
 
 async function runSheetsImport() {
-  if (!form.value.sheet || !form.value.counterparty) return;
+  if (!form.value.sheet) return;
+  if (!selectedSheet.value?.profiled && !form.value.counterparty) return;
+
   importing.value = true;
   result.value = null;
+  progressResult.value = null;
+  progressFinished.value = false;
+  progressTracker.value = 'tx-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+  progressOpen.value = true;
+
   try {
     const { data } = await api.post('/admin/transaction-import/from-sheets', {
       sheet: form.value.sheet,
       counterparty: form.value.counterparty,
       currency: form.value.currency,
+      tracker: progressTracker.value,
     });
     result.value = data;
+    progressResult.value = data;
     loadHistory();
   } catch (e) {
-    result.value = { message: e.response?.data?.message || 'Ошибка импорта из Google Sheets', errors: 1, success: 0 };
+    const msg = e.response?.data?.message || 'Ошибка импорта из Google Sheets';
+    result.value = { message: msg, errors: 1, success: 0 };
+    progressResult.value = { message: msg, errors: 1, success: 0 };
   }
+  progressFinished.value = true;
   importing.value = false;
 }
 

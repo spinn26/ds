@@ -120,6 +120,14 @@
         </v-card>
       </v-col>
     </v-row>
+
+    <ImportProgressDialog
+      v-model="progressOpen"
+      :tracker="progressTracker"
+      :result="progressResult"
+      :finished="progressFinished"
+      title="Импорт контрактов"
+    />
   </div>
 </template>
 
@@ -127,8 +135,13 @@
 import { ref, onMounted } from 'vue';
 import api from '../../api';
 import PageHeader from '../../components/PageHeader.vue';
+import ImportProgressDialog from '../../components/ImportProgressDialog.vue';
 
 const mode = ref('sheets');
+const progressOpen = ref(false);
+const progressTracker = ref(null);
+const progressResult = ref(null);
+const progressFinished = ref(false);
 const file = ref(null);
 const format = ref('auto');
 const skipFirst = ref(true);
@@ -173,21 +186,35 @@ async function runSheetsImport() {
   if (!form.value.sheet) return;
   importing.value = true;
   result.value = null;
+  progressResult.value = null;
+  progressFinished.value = false;
+  progressTracker.value = 'contracts-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+  progressOpen.value = true;
+
   try {
     const { data } = await api.post('/admin/contract-import/from-sheets', {
       sheet: form.value.sheet,
       currency: form.value.currency,
+      tracker: progressTracker.value,
     });
     const t = data.errors === 0 ? 'success' : data.success > 0 ? 'warning' : 'error';
-    result.value = {
+    const payload = {
       type: t,
       message: `Импортировано: ${data.success} / ${data.total}. Ошибок: ${data.errors}`,
+      success: data.success,
+      errors: data.errors,
+      total: data.total,
       errorsList: data.errorsList || [],
     };
+    result.value = payload;
+    progressResult.value = payload;
     loadHistory();
   } catch (e) {
-    result.value = { type: 'error', message: e.response?.data?.message || 'Ошибка импорта' };
+    const msg = e.response?.data?.message || 'Ошибка импорта';
+    result.value = { type: 'error', message: msg };
+    progressResult.value = { errors: 1, success: 0, message: msg };
   }
+  progressFinished.value = true;
   importing.value = false;
 }
 

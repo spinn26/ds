@@ -196,6 +196,16 @@ class TransactionImportController extends Controller
         $skippedDupes = 0;
         $errors = [];
         $createdIds = [];
+        $tracker = $request->input('tracker');
+        $totalRows = count($rows);
+
+        if ($tracker) {
+            \Illuminate\Support\Facades\Cache::put(
+                "import:tracker:{$tracker}",
+                ['total' => $totalRows, 'processed' => 0, 'success' => 0, 'errors' => 0, 'status' => 'running'],
+                600,
+            );
+        }
 
         foreach ($rows as $i => $row) {
             $contractNumber = trim($row['contract_number'] ?? $row['number'] ?? $row['номер_контракта'] ?? $row['contract'] ?? '');
@@ -284,6 +294,20 @@ class TransactionImportController extends Controller
                 $errors[] = "Строка " . ($i + 2) . ": ошибка создания";
                 $errorCount++;
             }
+
+            if ($tracker) {
+                \Illuminate\Support\Facades\Cache::put(
+                    "import:tracker:{$tracker}",
+                    [
+                        'total' => $totalRows,
+                        'processed' => $i + 1,
+                        'success' => $successCount,
+                        'errors' => $errorCount + $skippedDupes,
+                        'status' => 'running',
+                    ],
+                    600,
+                );
+            }
         }
 
         if ($skippedDupes > 0) {
@@ -299,6 +323,21 @@ class TransactionImportController extends Controller
             'created_ids' => json_encode($createdIds),
             'updated_at' => now(),
         ]);
+
+        if ($tracker) {
+            \Illuminate\Support\Facades\Cache::put(
+                "import:tracker:{$tracker}",
+                [
+                    'total' => $totalRows,
+                    'processed' => $totalRows,
+                    'success' => $successCount,
+                    'errors' => $errorCount + $skippedDupes,
+                    'status' => 'done',
+                    'importId' => $importLogId,
+                ],
+                600,
+            );
+        }
 
         return response()->json([
             'message' => "Импорт завершён: {$successCount} успешно, {$errorCount} ошибок, {$skippedDupes} дублей пропущено",

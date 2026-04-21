@@ -140,6 +140,17 @@ Route::prefix('v1')->group(function () {
         Route::get('/admin/contracts', [\App\Http\Controllers\Api\AdminDataController::class, 'contracts']);
         Route::get('/admin/contracts/upload-history', fn () => response()->json([]));
 
+        // Shared import progress polling — frontend генерирует tracker id,
+        // бэк пишет в cache перед каждой пачкой строк, фронт читает каждые
+        // 500ms пока идёт POST-импорт. Не требует очереди Laravel.
+        Route::get('/admin/import-progress', function (\Illuminate\Http\Request $r) {
+            $tracker = $r->query('tracker');
+            if (! $tracker) return response()->json(['total' => 0, 'processed' => 0]);
+            $state = \Illuminate\Support\Facades\Cache::get("import:tracker:{$tracker}")
+                ?? ['total' => 0, 'processed' => 0, 'success' => 0, 'errors' => 0, 'status' => 'starting'];
+            return response()->json($state);
+        });
+
         // Admin — Contracts import from Google Sheets
         Route::get('/admin/contract-import/sheet-names', [\App\Http\Controllers\Api\ContractImportController::class, 'sheetNames']);
         Route::get('/admin/contract-import/history', [\App\Http\Controllers\Api\ContractImportController::class, 'history']);

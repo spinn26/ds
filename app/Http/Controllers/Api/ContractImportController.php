@@ -61,6 +61,7 @@ class ContractImportController extends Controller
             'sheet' => 'required|string',
             'currency' => 'nullable|integer',
             'statusId' => 'nullable|integer',
+            'tracker' => 'nullable|string|max:80',
         ]);
 
         $settings = app(ApiSettingsService::class);
@@ -70,16 +71,36 @@ class ContractImportController extends Controller
             return response()->json(['message' => 'Google Sheets не настроен — заполни ключи в /admin/api-keys'], 422);
         }
 
+        // Читаем API напрямую — GoogleSheetsReader::normalizeRow портит колонки
+        // типа createDate/openDate/closeDate в общий ключ `date`, затирая
+        // друг друга. Для контрактов нужны оригинальные заголовки.
         try {
-            $rows = app(GoogleSheetsReader::class)
-                ->readSheet($spreadsheetId, $request->sheet, $apiKey);
+            $range = urlencode($request->sheet);
+            $url = "https://sheets.googleapis.com/v4/spreadsheets/{$spreadsheetId}/values/{$range}?key={$apiKey}&majorDimension=ROWS";
+            $response = \Illuminate\Support\Facades\Http::timeout(30)->get($url);
+            if (! $response->ok()) {
+                return response()->json(['message' => "Google API вернул HTTP {$response->status()}"], 422);
+            }
+            $values = $response->json('values') ?? [];
         } catch (\Throwable $e) {
             Log::error('contracts sheet read failed', ['error' => $e->getMessage()]);
             return response()->json(['message' => 'Ошибка чтения листа: ' . $e->getMessage()], 422);
         }
 
-        if (empty($rows)) {
+        if (count($values) < 2) {
             return response()->json(['message' => 'Лист пустой'], 422);
+        }
+
+        $headers = $values[0];
+        $rows = [];
+        for ($i = 1; $i < count($values); $i++) {
+            $row = [];
+            foreach ($headers as $j => $h) {
+                $row[trim((string) $h)] = $values[$i][$j] ?? null;
+            }
+            if (array_filter($row, fn ($v) => $v !== null && $v !== '')) {
+                $rows[] = $row;
+            }
         }
 
         return response()->json($this->processRows($rows, $request, 'sheets:' . $request->sheet));
@@ -98,8 +119,20 @@ class ContractImportController extends Controller
         $success = 0;
         $errors = [];
         $createdIds = [];
+        $tracker = $request->input('tracker');
+        $total = count($rows);
 
-        DB::transaction(function () use ($rows, $defaultCurrency, $defaultStatus, $source, &$success, &$errors, &$createdIds) {
+        // Инициализируем прогресс-ключ сразу, чтобы фронт при поллинге
+        // не получал null.
+        if ($tracker) {
+            \Illuminate\Support\Facades\Cache::put(
+                "import:tracker:{$tracker}",
+                ['total' => $total, 'processed' => 0, 'success' => 0, 'errors' => 0, 'status' => 'running'],
+                600,
+            );
+        }
+
+        DB::transaction(function () use ($rows, $defaultCurrency, $defaultStatus, $source, $tracker, $total, &$success, &$errors, &$createdIds) {
             foreach ($rows as $idx => $row) {
                 try {
                     $norm = $this->normaliseRow($row);
@@ -159,6 +192,21 @@ class ContractImportController extends Controller
                 } catch (\Throwable $e) {
                     $errors[] = "Строка " . ($idx + 2) . ": " . $e->getMessage();
                 }
+
+                // Обновляем прогресс каждую строку (дешёвый cache put).
+                if ($tracker) {
+                    \Illuminate\Support\Facades\Cache::put(
+                        "import:tracker:{$tracker}",
+                        [
+                            'total' => $total,
+                            'processed' => $idx + 1,
+                            'success' => $success,
+                            'errors' => count($errors),
+                            'status' => 'running',
+                        ],
+                        600,
+                    );
+                }
             }
 
             // Пишем в отдельную таблицу contract_import_log (миграция 2026_04_21_000010).
@@ -178,6 +226,22 @@ class ContractImportController extends Controller
                 $this->lastLogId = $logId;
             }
         });
+
+        // Финализируем прогресс (done).
+        if ($tracker) {
+            \Illuminate\Support\Facades\Cache::put(
+                "import:tracker:{$tracker}",
+                [
+                    'total' => $total,
+                    'processed' => $total,
+                    'success' => $success,
+                    'errors' => count($errors),
+                    'status' => 'done',
+                    'importId' => $this->lastLogId,
+                ],
+                600,
+            );
+        }
 
         return [
             'source' => $source,

@@ -31,6 +31,7 @@ export { default as MoneyCell } from './MoneyCell.vue';
 export { default as DialogShell } from './DialogShell.vue';
 export { default as ConfirmDialog } from './ConfirmDialog.vue';
 export { default as BulkActionBar } from './BulkActionBar.vue';
+export { default as ImportProgressDialog } from './ImportProgressDialog.vue';
 
 // Forms
 export { default as FormErrors } from './FormErrors.vue';
