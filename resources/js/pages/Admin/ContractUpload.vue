@@ -62,20 +62,32 @@
 
       <v-col cols="12" md="6">
         <v-card class="pa-4">
-          <div class="text-subtitle-1 font-weight-bold mb-3">
-            <v-icon class="mr-1">mdi-history</v-icon> История загрузок
+          <div class="d-flex align-center mb-3">
+            <v-icon class="mr-1">mdi-history</v-icon>
+            <span class="text-subtitle-1 font-weight-bold">История импорта</span>
+            <v-spacer />
+            <v-btn size="x-small" variant="text" prepend-icon="mdi-refresh" @click="loadHistory">Обновить</v-btn>
           </div>
           <v-list v-if="history.length" density="compact">
             <v-list-item v-for="h in history" :key="h.id">
               <template #prepend>
-                <v-icon :color="h.status === 'success' ? 'success' : h.status === 'error' ? 'error' : 'warning'">
-                  {{ h.status === 'success' ? 'mdi-check-circle' : h.status === 'error' ? 'mdi-alert-circle' : 'mdi-clock' }}
+                <v-icon :color="h.status === 'success' ? 'success' : h.status === 'rolled_back' ? 'grey' : h.status === 'error' ? 'error' : 'warning'">
+                  {{ h.status === 'success' ? 'mdi-check-circle' :
+                     h.status === 'rolled_back' ? 'mdi-undo-variant' :
+                     h.status === 'error' ? 'mdi-alert-circle' : 'mdi-clock' }}
                 </v-icon>
               </template>
-              <v-list-item-title>{{ h.filename }}</v-list-item-title>
+              <v-list-item-title>Импорт #{{ h.id }} · {{ h.source || '—' }}</v-list-item-title>
               <v-list-item-subtitle>
-                {{ h.created }} · {{ h.success_count || 0 }} успешно / {{ h.error_count || 0 }} ошибок
+                {{ fmtDate(h.createdAt) }} · {{ h.successCount || 0 }} создано · {{ h.errorCount || 0 }} ошибок
               </v-list-item-subtitle>
+              <template #append>
+                <v-btn v-if="h.status !== 'rolled_back' && h.successCount > 0"
+                  size="x-small" variant="text" color="error" icon="mdi-undo-variant"
+                  :title="`Откатить импорт #${h.id}`"
+                  :loading="rollingBackId === h.id"
+                  @click="rollbackImport(h)" />
+              </template>
             </v-list-item>
           </v-list>
           <div v-else class="text-center text-medium-emphasis pa-6">Нет загрузок</div>
@@ -200,9 +212,29 @@ async function upload() {
 
 async function loadHistory() {
   try {
-    const { data } = await api.get('/admin/contracts/upload-history');
-    history.value = data || [];
-  } catch {}
+    const { data } = await api.get('/admin/contract-import/history');
+    history.value = data.data || [];
+  } catch { history.value = []; }
+}
+
+const rollingBackId = ref(null);
+
+async function rollbackImport(h) {
+  if (!confirm(`Откатить импорт #${h.id}?\n\nБудут удалены все контракты, созданные этим прогоном (${h.successCount}). Действие обратимо только через SQL.`)) return;
+  rollingBackId.value = h.id;
+  try {
+    const { data } = await api.post(`/admin/contract-import/${h.id}/rollback`);
+    result.value = { type: 'success', message: data.message };
+    await loadHistory();
+  } catch (e) {
+    result.value = { type: 'error', message: e.response?.data?.message || 'Не удалось откатить' };
+  }
+  rollingBackId.value = null;
+}
+
+function fmtDate(d) {
+  if (!d) return '—';
+  try { return new Date(d).toLocaleString('ru-RU'); } catch { return d; }
 }
 
 

@@ -161,26 +161,27 @@ class ContractImportController extends Controller
                 }
             }
 
-            // Пишем в лог импорта (таблица transaction_import_log используется для
-            // любых импортов — используем её и для контрактов через разные counterparty)
-            if (\Schema::hasTable('transaction_import_log')) {
-                DB::table('transaction_import_log')->insert([
-                    'counterparty' => 0,
-                    'currency' => $defaultCurrency ?? 0,
-                    'status' => count($errors) === 0 ? 'success' : ($success > 0 ? 'partial' : 'error'),
+            // Пишем в отдельную таблицу contract_import_log (миграция 2026_04_21_000010).
+            if (\Schema::hasTable('contract_import_log')) {
+                $logId = DB::table('contract_import_log')->insertGetId([
+                    'source' => $source,
+                    'status' => count($errors) === 0 && $success > 0 ? 'success' : ($success > 0 ? 'partial' : 'error'),
                     'total_rows' => count($rows),
                     'success_count' => $success,
                     'error_count' => count($errors),
                     'errors' => json_encode(array_slice($errors, 0, 50), JSON_UNESCAPED_UNICODE),
+                    'created_ids' => json_encode($createdIds),
                     'created_by' => auth()->id(),
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]);
+                $this->lastLogId = $logId;
             }
         });
 
         return [
             'source' => $source,
+            'importId' => $this->lastLogId,
             'total' => count($rows),
             'success' => $success,
             'errors' => count($errors),
@@ -188,6 +189,80 @@ class ContractImportController extends Controller
             'createdIds' => $createdIds,
         ];
     }
+
+    /** GET /admin/contract-import/history */
+    public function history(Request $request): JsonResponse
+    {
+        if (! \Schema::hasTable('contract_import_log')) {
+            return response()->json(['data' => [], 'total' => 0]);
+        }
+
+        $rows = DB::table('contract_import_log')
+            ->orderByDesc('created_at')
+            ->limit(50)
+            ->get()
+            ->map(fn ($r) => [
+                'id' => $r->id,
+                'source' => $r->source,
+                'status' => $r->status,
+                'totalRows' => $r->total_rows,
+                'successCount' => $r->success_count,
+                'errorCount' => $r->error_count,
+                'createdAt' => $r->created_at,
+                'errors' => $r->errors ? json_decode($r->errors, true) : [],
+            ]);
+
+        return response()->json(['data' => $rows, 'total' => $rows->count()]);
+    }
+
+    /**
+     * POST /admin/contract-import/{id}/rollback — удалить контракты прогона.
+     * Блокируется если у любого из них есть не-удалённые транзакции
+     * (нельзя осиротить транзакцию).
+     */
+    public function rollback(int $importId): JsonResponse
+    {
+        $log = DB::table('contract_import_log')->where('id', $importId)->first();
+        if (! $log) {
+            return response()->json(['message' => 'Импорт не найден'], 404);
+        }
+
+        $contractIds = $log->created_ids
+            ? array_filter((array) json_decode($log->created_ids, true))
+            : [];
+        if (empty($contractIds)) {
+            return response()->json(['message' => 'Нет ID для отката (старый импорт без created_ids?)'], 422);
+        }
+
+        // Guard: если по контракту есть активные транзакции — блокируем.
+        $withTx = DB::table('transaction')
+            ->whereIn('contract', $contractIds)
+            ->whereNull('deletedAt')
+            ->distinct()
+            ->count('contract');
+        if ($withTx > 0) {
+            return response()->json([
+                'message' => "Откат невозможен: у {$withTx} контрактов этого импорта уже есть транзакции. Сначала удалите транзакции или откатите их импорт.",
+            ], 422);
+        }
+
+        $deleted = DB::transaction(function () use ($contractIds, $importId) {
+            $d = DB::table('contract')->whereIn('id', $contractIds)->update([
+                'deletedAt' => now(),
+            ]);
+
+            DB::table('contract_import_log')->where('id', $importId)->update([
+                'status' => 'rolled_back',
+                'updated_at' => now(),
+            ]);
+
+            return $d;
+        });
+
+        return response()->json(['message' => "Откат выполнен: удалено {$deleted} контрактов"]);
+    }
+
+    private ?int $lastLogId = null;
 
     /** Привести ключи к унифицированным (accept ru+en headers). */
     private function normaliseRow(array $row): array

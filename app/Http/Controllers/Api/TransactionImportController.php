@@ -155,7 +155,9 @@ class TransactionImportController extends Controller
 
         $successCount = 0;
         $errorCount = 0;
+        $skippedDupes = 0;
         $errors = [];
+        $createdIds = [];
 
         foreach ($rows as $i => $row) {
             $contractNumber = trim($row['contract_number'] ?? $row['number'] ?? $row['номер_контракта'] ?? $row['contract'] ?? '');
@@ -188,6 +190,23 @@ class TransactionImportController extends Controller
                 continue;
             }
 
+            // Дедупликация: если транзакция по этому контракту с такой же
+            // датой и суммой уже существует — пропускаем (spec: основной
+            // параметр сверки = номер контракта + дата/сумма).
+            $txDate = $date ? date('Y-m-d', strtotime($date)) : null;
+            if ($txDate) {
+                $dup = DB::table('transaction')
+                    ->where('contract', $contract->id)
+                    ->whereRaw('DATE(date) = ?', [$txDate])
+                    ->whereBetween('amount', [$amount - 0.01, $amount + 0.01])
+                    ->whereNull('deletedAt')
+                    ->exists();
+                if ($dup) {
+                    $skippedDupes++;
+                    continue;
+                }
+            }
+
             // Получаем курс валюты
             $currencyRate = 1.0;
             if ($currencyId !== 67) {
@@ -206,7 +225,7 @@ class TransactionImportController extends Controller
 
             // Создаём транзакцию
             try {
-                DB::table('transaction')->insert([
+                $txId = DB::table('transaction')->insertGetId([
                     'contract' => $contract->id,
                     'amount' => $amount,
                     'amountRUB' => round($amountRub, 2),
@@ -220,6 +239,7 @@ class TransactionImportController extends Controller
                     'dsCommissionPercentage' => $row['ds_percent'] ?? $row['процент_дс'] ?? null,
                     'commissionCalcProperty' => $row['property'] ?? $row['свойство'] ?? null,
                 ]);
+                $createdIds[] = (int) $txId;
                 $successCount++;
             } catch (\Exception $e) {
                 \Log::warning("Import row " . ($i + 2) . " failed: " . $e->getMessage());
@@ -228,20 +248,26 @@ class TransactionImportController extends Controller
             }
         }
 
+        if ($skippedDupes > 0) {
+            $errors[] = "Пропущено дублей (contract+date+amount уже существуют): {$skippedDupes}";
+        }
+
         // Обновляем лог
         DB::table('transaction_import_log')->where('id', $importLogId)->update([
-            'status' => $errorCount === 0 ? 'success' : ($successCount > 0 ? 'partial' : 'error'),
+            'status' => $errorCount === 0 && $skippedDupes === 0 ? 'success' : ($successCount > 0 ? 'partial' : 'error'),
             'success_count' => $successCount,
-            'error_count' => $errorCount,
+            'error_count' => $errorCount + $skippedDupes,
             'errors' => json_encode($errors, JSON_UNESCAPED_UNICODE),
+            'created_ids' => json_encode($createdIds),
             'updated_at' => now(),
         ]);
 
         return response()->json([
-            'message' => "Импорт завершён: {$successCount} успешно, {$errorCount} ошибок",
+            'message' => "Импорт завершён: {$successCount} успешно, {$errorCount} ошибок, {$skippedDupes} дублей пропущено",
             'importId' => $importLogId,
             'success' => $successCount,
             'errors' => $errorCount,
+            'skipped' => $skippedDupes,
             'errorDetails' => array_slice($errors, 0, 20),
         ]);
     }
@@ -286,17 +312,31 @@ class TransactionImportController extends Controller
      */
     public function rollback(int $importId): JsonResponse
     {
+        // Предпочитаем точечный список created_ids (новые импорты). Для
+        // старых импортов, где created_ids ещё не заполнялся, fallback
+        // на comment='Импорт #N'.
+        $log = DB::table('transaction_import_log')->where('id', $importId)->first();
+        if (! $log) {
+            return response()->json(['message' => 'Импорт не найден'], 404);
+        }
+
+        $txIdsFromLog = $log->created_ids
+            ? array_filter((array) json_decode($log->created_ids, true))
+            : [];
+
         // Заморозка: если хоть одна транзакция импорта попадает в закрытый
         // месяц — откатывать нельзя. Правки закрытых периодов идут только
         // через «Прочие начисления» (spec ✅Комиссии Part 2 §1).
-        $frozenTxs = DB::table('transaction as t')
-            ->where('t.comment', 'Импорт #' . $importId)
+        $frozenQuery = DB::table('transaction as t')
             ->join('period_closures as p', function ($j) {
                 $j->on('p.year', '=', 't.dateYear')
                   ->on('p.month', '=', 't.dateMonth')
                   ->whereNull('p.reopened_at');
-            })
-            ->count();
+            });
+        $frozenTxs = ($txIdsFromLog
+            ? $frozenQuery->whereIn('t.id', $txIdsFromLog)
+            : $frozenQuery->where('t.comment', 'Импорт #' . $importId)
+        )->count();
 
         if ($frozenTxs > 0) {
             return response()->json([
@@ -304,10 +344,12 @@ class TransactionImportController extends Controller
             ], 422);
         }
 
-        $result = DB::transaction(function () use ($importId) {
-            $txIds = DB::table('transaction')
-                ->where('comment', 'Импорт #' . $importId)
-                ->pluck('id');
+        $result = DB::transaction(function () use ($importId, $txIdsFromLog) {
+            $txIds = $txIdsFromLog
+                ? collect($txIdsFromLog)
+                : DB::table('transaction')
+                    ->where('comment', 'Импорт #' . $importId)
+                    ->pluck('id');
 
             $deletedCommissions = 0;
             if ($txIds->isNotEmpty()) {
