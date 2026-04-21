@@ -5,28 +5,58 @@
     <v-row>
       <v-col cols="12" md="6">
         <v-card class="pa-4">
-          <div class="text-subtitle-1 font-weight-bold mb-3">
-            <v-icon class="mr-1">mdi-file-upload</v-icon> Загрузить файл контрактов
-          </div>
-          <v-alert type="info" variant="tonal" density="compact" class="mb-4">
-            Поддерживаемые форматы: CSV, XLSX. Файл должен содержать колонки: номер контракта, клиент, продукт, программа, сумма, дата открытия.
-          </v-alert>
+          <v-tabs v-model="mode" class="mb-3">
+            <v-tab value="sheets" prepend-icon="mdi-google-spreadsheet">Google Sheets</v-tab>
+            <v-tab value="file" prepend-icon="mdi-file-upload">Загрузить файл</v-tab>
+          </v-tabs>
 
-          <v-file-input v-model="file" label="Выберите файл" accept=".csv,.xlsx,.xls"
-            prepend-icon="" prepend-inner-icon="mdi-file-document" class="mb-3"
-            :rules="[v => !!v || 'Файл обязателен']" />
+          <!-- Google Sheets -->
+          <template v-if="mode === 'sheets'">
+            <v-alert v-if="sheetsError" type="warning" variant="tonal" density="compact" class="mb-3" closable>
+              <div class="font-weight-medium">{{ sheetsError }}</div>
+              <div class="text-caption mt-1">
+                Заполни <strong>Google Sheets API Key</strong> и
+                <strong>ID таблицы «Импорт контрактов»</strong> в
+                <a href="/admin/api-keys" class="text-primary">/admin/api-keys</a>.
+              </div>
+            </v-alert>
 
-          <v-select v-model="format" :items="formats" label="Формат файла" class="mb-3" />
+            <v-select v-model="form.sheet" :items="sheetNames" label="Лист *"
+              density="compact" variant="outlined" class="mb-3" :loading="loadingSheets"
+              :disabled="!!sheetsError"
+              :no-data-text="sheetsError || 'Листы не найдены'" />
 
-          <v-checkbox v-model="skipFirst" label="Пропустить первую строку (заголовки)" density="compact" hide-details class="mb-3" />
+            <v-select v-model="form.currency" :items="currencies" item-title="symbol" item-value="id"
+              label="Валюта по умолчанию" density="compact" variant="outlined" class="mb-3" clearable />
 
-          <v-btn color="primary" :loading="uploading" :disabled="!file" prepend-icon="mdi-upload" @click="upload" block>
-            Загрузить
-          </v-btn>
+            <v-btn color="primary" :loading="importing" :disabled="!form.sheet || !!sheetsError"
+              prepend-icon="mdi-import" @click="runSheetsImport" block>
+              Импортировать из Sheets
+            </v-btn>
+          </template>
+
+          <!-- File upload -->
+          <template v-else>
+            <v-alert type="info" variant="tonal" density="compact" class="mb-4">
+              Поддерживаемые форматы: CSV, XLSX. Файл должен содержать колонки: номер контракта, клиент, продукт, программа, сумма, дата открытия.
+            </v-alert>
+            <v-file-input v-model="file" label="Выберите файл" accept=".csv,.xlsx,.xls"
+              prepend-icon="" prepend-inner-icon="mdi-file-document" class="mb-3"
+              :rules="[v => !!v || 'Файл обязателен']" />
+            <v-select v-model="format" :items="formats" label="Формат файла" class="mb-3" />
+            <v-checkbox v-model="skipFirst" label="Пропустить первую строку (заголовки)" density="compact" hide-details class="mb-3" />
+            <v-btn color="primary" :loading="uploading" :disabled="!file"
+              prepend-icon="mdi-upload" @click="upload" block>
+              Загрузить файл
+            </v-btn>
+          </template>
 
           <v-alert v-if="result" :type="result.type" density="compact" class="mt-4">
             {{ result.message }}
           </v-alert>
+          <v-expansion-panels v-if="result?.errorsList?.length" class="mt-2">
+            <v-expansion-panel title="Ошибки" :text="result.errorsList.join('\n')" />
+          </v-expansion-panels>
         </v-card>
       </v-col>
 
@@ -86,18 +116,68 @@ import { ref, onMounted } from 'vue';
 import api from '../../api';
 import PageHeader from '../../components/PageHeader.vue';
 
+const mode = ref('sheets');
 const file = ref(null);
 const format = ref('auto');
 const skipFirst = ref(true);
 const uploading = ref(false);
+const importing = ref(false);
 const result = ref(null);
 const history = ref([]);
+
+const sheetNames = ref([]);
+const sheetsError = ref('');
+const loadingSheets = ref(false);
+const currencies = ref([]);
+const form = ref({ sheet: null, currency: null });
 
 const formats = [
   { title: 'Автоопределение', value: 'auto' },
   { title: 'CSV (;)', value: 'csv' },
   { title: 'XLSX', value: 'xlsx' },
 ];
+
+async function loadSheets() {
+  loadingSheets.value = true;
+  sheetsError.value = '';
+  try {
+    const { data } = await api.get('/admin/contract-import/sheet-names');
+    sheetNames.value = data.sheets || [];
+    if (!sheetNames.value.length && data.message) sheetsError.value = data.message;
+  } catch (e) {
+    sheetsError.value = e.response?.data?.message || 'Не удалось загрузить листы';
+  }
+  loadingSheets.value = false;
+}
+
+async function loadCurrencies() {
+  try {
+    const { data } = await api.get('/admin/references/currency');
+    currencies.value = (data.items || []).map(c => ({ id: c.id, symbol: c.symbol || c.nameRu }));
+  } catch {}
+}
+
+async function runSheetsImport() {
+  if (!form.value.sheet) return;
+  importing.value = true;
+  result.value = null;
+  try {
+    const { data } = await api.post('/admin/contract-import/from-sheets', {
+      sheet: form.value.sheet,
+      currency: form.value.currency,
+    });
+    const t = data.errors === 0 ? 'success' : data.success > 0 ? 'warning' : 'error';
+    result.value = {
+      type: t,
+      message: `Импортировано: ${data.success} / ${data.total}. Ошибок: ${data.errors}`,
+      errorsList: data.errorsList || [],
+    };
+    loadHistory();
+  } catch (e) {
+    result.value = { type: 'error', message: e.response?.data?.message || 'Ошибка импорта' };
+  }
+  importing.value = false;
+}
 
 async function upload() {
   if (!file.value) return;
@@ -125,5 +205,6 @@ async function loadHistory() {
   } catch {}
 }
 
-onMounted(loadHistory);
+
+onMounted(() => { loadSheets(); loadCurrencies(); loadHistory(); });
 </script>
