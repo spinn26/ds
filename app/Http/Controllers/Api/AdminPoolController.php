@@ -84,6 +84,11 @@ class AdminPoolController extends Controller
 
         $result = $this->runner->run((int) $data['year'], (int) $data['month'], applyWrite: true);
 
+        // Заморожен → 422, как и штрафы §5 в AdminFinalizeController::apply
+        if ($result['frozen'] ?? false) {
+            return response()->json($result, 422);
+        }
+
         NotificationController::notifyStaff(
             'payment',
             sprintf('Пул рассчитан: %02d.%d', $data['month'], $data['year']),

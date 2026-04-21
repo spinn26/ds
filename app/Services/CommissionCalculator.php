@@ -302,7 +302,15 @@ class CommissionCalculator
                 ->orderByDesc('date')
                 ->first();
 
-            $levelId = $qLog->calculationLevel ?? $qLog->nominalLevel ?? null;
+            // «Единая квалификация» (spec ✅Квалификации.md §2): у партнёра в месяц
+            // один уровень. Legacy-схема записывала nominalLevel и calculationLevel
+            // по отдельности (calc мог быть ниже при штрафе отрыва). По новой спеке
+            // выбираем максимум — штрафы применяются отдельным шагом через
+            // MonthlyFinaliser, а не подменой процента в calculateForTransaction.
+            $levelId = $this->resolveMaxLevel(
+                $qLog->nominalLevel ?? null,
+                $qLog->calculationLevel ?? null,
+            );
 
             if ($levelId) {
                 return DB::table('status_levels')->where('id', $levelId)->first();
@@ -323,12 +331,33 @@ class CommissionCalculator
                 ->whereNull('dateDeleted')
                 ->orderByDesc('date')
                 ->first();
-            $levelId = $qLog->calculationLevel ?? $qLog->nominalLevel ?? null;
+            $levelId = $this->resolveMaxLevel(
+                $qLog->nominalLevel ?? null,
+                $qLog->calculationLevel ?? null,
+            );
         }
 
         if (! $levelId) return null;
 
         return DB::table('status_levels')->where('id', $levelId)->first();
+    }
+
+    /**
+     * Возвращает id уровня, у которого status_levels.level выше. Nullable-
+     * безопасно: если один из аргументов null — возвращает второй. Используется
+     * для реализации «единой квалификации» (см. spec Квалификации §2).
+     */
+    private function resolveMaxLevel(?int $aId, ?int $bId): ?int
+    {
+        if (! $aId) return $bId;
+        if (! $bId) return $aId;
+        if ($aId === $bId) return $aId;
+
+        $levels = DB::table('status_levels')
+            ->whereIn('id', [$aId, $bId])
+            ->pluck('level', 'id');
+
+        return ($levels[$aId] ?? 0) >= ($levels[$bId] ?? 0) ? $aId : $bId;
     }
 
     /**

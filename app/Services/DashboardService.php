@@ -232,29 +232,46 @@ class DashboardService
             ],
             'statusInfo' => $statusInfo,
             'qualification' => [
-                // Закрытая квалификация (по НГП)
-                'nominalLevel' => $nominalStatusLevel ? [
-                    'id' => $nominalStatusLevel->id,
-                    'level' => $nominalStatusLevel->level,
-                    'title' => $nominalStatusLevel->title,
-                    'percent' => $nominalStatusLevel->percent,
-                    'groupVolume' => $nominalStatusLevel->groupVolume ?? 0,
-                    'mandatoryGP' => $nominalStatusLevel->mandatoryGP ?? 0,
-                    'groupVolumeCumulative' => $nominalStatusLevel->groupVolumeCumulative ?? 0,
-                    'personalVolume' => $nominalStatusLevel->personalVolume ?? 0,
-                    'otrif' => $nominalStatusLevel->otrif ?? 0,
-                    'pool' => $nominalStatusLevel->pool ?? 0,
-                    'dsShare' => $nominalStatusLevel->dsShare ?? 0,
+                // «Единая квалификация» (spec ✅Квалификации.md §2). После
+                // унификации выше nominalStatusLevel === calcStatusLevel,
+                // поэтому primary поле — просто `level`. Старые nominalLevel /
+                // calculationLevel оставлены для обратной совместимости с
+                // фронтом, но всегда указывают на тот же уровень.
+                'level' => $calcStatusLevel ? [
+                    'id' => $calcStatusLevel->id,
+                    'level' => $calcStatusLevel->level,
+                    'title' => $calcStatusLevel->title,
+                    'percent' => $calcStatusLevel->percent,
+                    'groupVolume' => $calcStatusLevel->groupVolume ?? 0,
+                    'mandatoryGP' => $calcStatusLevel->mandatoryGP ?? 0,
+                    'groupVolumeCumulative' => $calcStatusLevel->groupVolumeCumulative ?? 0,
+                    'personalVolume' => $calcStatusLevel->personalVolume ?? 0,
+                    'otrif' => $calcStatusLevel->otrif ?? 0,
+                    'pool' => $calcStatusLevel->pool ?? 0,
+                    'dsShare' => $calcStatusLevel->dsShare ?? 0,
                 ] : null,
-                // Уровень расчёта комиссии (может отличаться из-за отрыва)
+                // BC aliases — точно то же, что и `level`.
+                'nominalLevel' => $calcStatusLevel ? [
+                    'id' => $calcStatusLevel->id,
+                    'level' => $calcStatusLevel->level,
+                    'title' => $calcStatusLevel->title,
+                    'percent' => $calcStatusLevel->percent,
+                    'groupVolume' => $calcStatusLevel->groupVolume ?? 0,
+                    'mandatoryGP' => $calcStatusLevel->mandatoryGP ?? 0,
+                    'groupVolumeCumulative' => $calcStatusLevel->groupVolumeCumulative ?? 0,
+                    'personalVolume' => $calcStatusLevel->personalVolume ?? 0,
+                    'otrif' => $calcStatusLevel->otrif ?? 0,
+                    'pool' => $calcStatusLevel->pool ?? 0,
+                    'dsShare' => $calcStatusLevel->dsShare ?? 0,
+                ] : null,
                 'calculationLevel' => $calcStatusLevel ? [
                     'id' => $calcStatusLevel->id,
                     'level' => $calcStatusLevel->level,
                     'title' => $calcStatusLevel->title,
                     'percent' => $calcStatusLevel->percent,
                 ] : null,
-                // Уровни не совпадают (отрыв/снижение)
-                'levelsDontMatch' => $currentQLog->levelsDontMatch ?? false,
+                // Всегда false — spec «Единая квалификация» убрала этот split.
+                'levelsDontMatch' => false,
                 'nextLevel' => $nextLevel ? [
                     'id' => $nextLevel->id,
                     'level' => $nextLevel->level,

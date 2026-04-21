@@ -290,22 +290,65 @@ class PartnerStatusService
         return $info;
     }
 
+    /**
+     * Логируем смену статуса в трёх местах:
+     *   1. Spatie activity_log — единый системный аудит (искать по subject).
+     *   2. Legacy `chageConsultanStatusLog` — для старых отчётов. После
+     *      миграции 000080 у нас есть from/to/comment/source/changed_by.
+     *   3. Laravel logs — для инцидент-разборок.
+     */
     private function logStatusChange(
         Consultant $consultant,
         ?PartnerActivity $from,
         PartnerActivity $to,
-        string $comment = ''
+        string $comment = '',
+        string $source = 'system',
     ): void {
-        DB::table('chageConsultanStatusLog')->insert([
+        $changedBy = auth()->id();
+
+        // 1. Spatie activity_log — это «нормальный» аудит.
+        if (function_exists('activity')) {
+            try {
+                activity('partner_status')
+                    ->performedOn($consultant)
+                    ->causedBy($changedBy ? \App\Models\User::find($changedBy) : null)
+                    ->withProperties([
+                        'from' => $from?->value,
+                        'from_label' => $from?->label(),
+                        'to' => $to->value,
+                        'to_label' => $to->label(),
+                        'comment' => $comment,
+                        'source' => $source,
+                    ])
+                    ->log(sprintf('%s → %s', $from?->label() ?? '—', $to->label()));
+            } catch (\Throwable $e) {
+                Log::warning('activity() failed', ['error' => $e->getMessage()]);
+            }
+        }
+
+        // 2. Legacy таблица — пишем новые поля если миграция 000080 применилась.
+        $row = [
             'consultant' => $consultant->id,
             'dateCreated' => Carbon::now(),
-        ]);
+            'webUser' => $consultant->webUser,
+        ];
+        if (\Illuminate\Support\Facades\Schema::hasColumn('chageConsultanStatusLog', 'from_status')) {
+            $row['from_status'] = $from?->label();
+            $row['to_status'] = $to->label();
+            $row['comment'] = $comment ?: null;
+            $row['source'] = $source;
+            $row['changed_by'] = $changedBy;
+        }
+        DB::table('chageConsultanStatusLog')->insert($row);
 
+        // 3. Laravel log для разборок.
         Log::info('Partner status change', [
             'consultant_id' => $consultant->id,
             'from' => $from?->label(),
             'to' => $to->label(),
             'comment' => $comment,
+            'source' => $source,
+            'changed_by' => $changedBy,
         ]);
 
         if ($from !== null && $consultant->webUser) {

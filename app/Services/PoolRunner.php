@@ -4,6 +4,7 @@ namespace App\Services;
 
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use App\Services\PeriodFreezeService;
 
 /**
  * Integration glue between PoolCalculator (pure math) and the DB.
@@ -22,6 +23,7 @@ class PoolRunner
 {
     public function __construct(
         private readonly PoolCalculator $calculator,
+        private readonly PeriodFreezeService $periodFreeze,
     ) {}
 
     /**
@@ -32,11 +34,26 @@ class PoolRunner
      *   shareValues:array<int,float>,
      *   participants:list<array{id:int,level:int,participates:bool,payoutRub:float,levelName:string,personName:string}>,
      *   totalPaid:float, totalForfeited:float,
-     *   written:int
+     *   written:int, frozen?:bool
      * }
      */
     public function run(int $year, int $month, bool $applyWrite = false): array
     {
+        // Заморозка: если период закрыт, запись в poolLog запрещена (spec ✅Пул.md
+        // + «Закрытые периоды заморожены» в commission-spec). Preview-прогон
+        // (applyWrite=false) разрешён — оператор может посмотреть на числа,
+        // но не переписать уже утверждённое.
+        if ($applyWrite && $this->periodFreeze->isFrozen($year, $month)) {
+            return [
+                'year' => $year, 'month' => $month,
+                'revenue' => 0.0, 'fund' => 0.0,
+                'shareValues' => [], 'participants' => [],
+                'totalPaid' => 0.0, 'totalForfeited' => 0.0,
+                'written' => 0, 'frozen' => true,
+                'message' => sprintf('Период %02d.%d закрыт — пул не переписывается', $month, $year),
+            ];
+        }
+
         $revenue = $this->monthlyVatExclusiveRevenue($year, $month);
 
         // Leader levels 6..10 only.
