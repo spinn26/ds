@@ -84,7 +84,15 @@
           <v-text-field v-model="editForm.phone" label="Телефон" />
         </v-col>
         <v-col cols="12" sm="6">
-          <v-text-field v-model="editForm.role" label="Роли" hint="admin, backoffice, consultant, registered" persistent-hint />
+          <v-select
+            v-model="editFormRoles"
+            :items="allRoleOptions"
+            item-title="title" item-value="value"
+            label="Роли"
+            multiple chips closable-chips
+            hint="Можно выбрать несколько"
+            persistent-hint
+          />
         </v-col>
         <v-col cols="12" sm="6">
           <v-text-field v-model="editForm.password" label="Новый пароль" type="password"
@@ -134,20 +142,45 @@ import {
   DialogShell, FormErrors,
 } from '../../components';
 import { useCrud } from '../../composables/useCrud';
+import { computed } from 'vue';
 
 function roleColor(r) {
-  return r === 'admin' ? 'red' : r === 'backoffice' ? 'orange' : r === 'consultant' ? 'green' : 'grey';
+  return ({
+    admin: 'red',
+    backoffice: 'orange',
+    support: 'blue',
+    head: 'purple',
+    finance: 'teal',
+    calculations: 'brown',
+    corrections: 'amber',
+    consultant: 'green',
+  }[r]) || 'grey';
 }
 
 const auth = useAuthStore();
 const router = useRouter();
 
+// Short list — для фильтра справа (оставляем основные)
 const roleOptions = [
   { title: 'Администратор', value: 'admin' },
   { title: 'Бэкофис', value: 'backoffice' },
   { title: 'Консультант', value: 'consultant' },
   { title: 'Зарегистрирован', value: 'registered' },
 ];
+
+// Full list — все 8 ролей для формы редактирования
+const allRoleOptions = [
+  { title: 'Администратор', value: 'admin' },
+  { title: 'Бэкофис (БЭК)', value: 'backoffice' },
+  { title: 'Техподдержка', value: 'support' },
+  { title: 'Руководитель', value: 'head' },
+  { title: 'Фин. менеджер', value: 'finance' },
+  { title: 'Расчёты (Богданова)', value: 'calculations' },
+  { title: 'Правки', value: 'corrections' },
+  { title: 'Консультант', value: 'consultant' },
+  { title: 'Зарегистрирован', value: 'registered' },
+];
+
 const blockedOptions = [
   { title: 'Да', value: 'true' },
   { title: 'Нет', value: 'false' },
@@ -186,6 +219,18 @@ const {
     updated: 'Пользователь обновлён',
     deleted: 'Пользователь удалён',
     error: 'Ошибка',
+  },
+});
+
+// Роли в БД — CSV-строка; в UI — массив. Прокси через computed.
+const editFormRoles = computed({
+  get: () => {
+    const raw = editForm.value?.role;
+    if (!raw) return [];
+    return String(raw).split(',').map(s => s.trim()).filter(Boolean);
+  },
+  set: (arr) => {
+    editForm.value.role = (arr || []).join(',');
   },
 });
 
