@@ -24,14 +24,27 @@
       </v-alert>
       <v-row v-if="importMode === 'sheets'" dense>
         <v-col cols="12" sm="4">
-          <v-select v-model="form.sheet" :items="sheetNames" label="Лист (поставщик) *"
+          <v-select v-model="form.sheet" :items="sheetNames" label="Лист *"
+            item-title="name" item-value="name"
             density="compact" variant="outlined" :loading="loadingSheets"
             :disabled="!!sheetsError"
             :no-data-text="sheetsError || 'Листы не найдены'" />
+          <div v-if="selectedSheet?.profiled" class="text-caption text-success mt-1">
+            <v-icon size="14">mdi-check-circle</v-icon>
+            Поставщик: <b>{{ selectedSheet.counterpartyName }}</b>
+            <template v-if="selectedSheet.productHint"> · {{ selectedSheet.productHint }}</template>
+          </div>
+          <div v-else-if="form.sheet" class="text-caption text-warning mt-1">
+            <v-icon size="14">mdi-alert</v-icon>
+            Лист не распознан, выбери поставщика вручную
+          </div>
         </v-col>
         <v-col cols="12" sm="3">
           <v-select v-model="form.counterparty" :items="counterparties" item-title="name" item-value="id"
-            label="Поставщик в БД *" density="compact" variant="outlined" />
+            label="Поставщик в БД" density="compact" variant="outlined"
+            :disabled="selectedSheet?.profiled"
+            :hint="selectedSheet?.profiled ? 'Автоопределён по профилю' : ''"
+            persistent-hint />
         </v-col>
         <v-col cols="12" sm="3">
           <v-select v-model="form.currency" :items="currencies" item-title="symbol" item-value="id"
@@ -39,7 +52,8 @@
         </v-col>
         <v-col cols="12" sm="2" class="d-flex align-end">
           <v-btn color="primary" block prepend-icon="mdi-import" :loading="importing"
-            :disabled="!form.sheet || !form.counterparty" @click="runSheetsImport">
+            :disabled="!form.sheet || (!selectedSheet?.profiled && !form.counterparty)"
+            @click="runSheetsImport">
             Импортировать
           </v-btn>
         </v-col>
@@ -147,7 +161,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
 import { getImportStatusColor } from '../../composables/useDesign';
 import StatusChip from '../../components/StatusChip.vue';
@@ -157,6 +171,10 @@ const counterparties = ref([]);
 const currencies = ref([]);
 const sheetNames = ref([]);
 const sheetsError = ref('');
+const selectedSheet = computed(() => {
+  if (!form.value.sheet) return null;
+  return sheetNames.value.find(s => (s.name || s) === form.value.sheet) || null;
+});
 const loadingSheets = ref(false);
 const importing = ref(false);
 const importMode = ref('sheets');

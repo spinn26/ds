@@ -275,8 +275,11 @@ class ContractImportController extends Controller
             'program_name'    => ['program_name', 'program', 'программа'],
             'amount'          => ['amount', 'сумма'],
             'currency'        => ['currency', 'валюта'],
-            'open_date'       => ['open_date', 'date', 'дата', 'дата открытия', 'openDate'],
+            'open_date'       => ['open_date', 'opendate', 'date', 'дата', 'дата открытия'],
             'term'            => ['term', 'срок'],
+            'status'          => ['status', 'статус'],
+            'create_date'     => ['createdate', 'created_at', 'дата создания'],
+            'close_date'      => ['closedate', 'close_date', 'дата закрытия'],
         ];
 
         // Ключи — в lowercase, trim
@@ -347,10 +350,13 @@ class ContractImportController extends Controller
     private function parseDate(mixed $raw): ?string
     {
         if (! $raw) return null;
-        foreach (['d.m.Y', 'd/m/Y', 'Y-m-d', 'd-m-Y'] as $fmt) {
+        $raw = trim((string) $raw);
+        // Форматы в таблицах: "17.4.2026" (без leading zero), "01.03.2026",
+        // "01/03/2026", "2026-03-01". j.n.Y = день/месяц без нулей.
+        foreach (['j.n.Y', 'd.m.Y', 'j/n/Y', 'd/m/Y', 'Y-m-d', 'd-m-Y'] as $fmt) {
             try {
-                $d = Carbon::createFromFormat($fmt, trim((string) $raw));
-                if ($d) return $d->format('Y-m-d');
+                $d = Carbon::createFromFormat($fmt, $raw);
+                if ($d && $d->format($fmt) === $raw) return $d->format('Y-m-d');
             } catch (\Throwable) {}
         }
         try { return Carbon::parse($raw)->format('Y-m-d'); } catch (\Throwable) { return null; }

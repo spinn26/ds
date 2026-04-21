@@ -74,17 +74,34 @@ class TransactionImportController extends Controller
             ]);
         }
 
-        return response()->json(['sheets' => $sheets]);
+        // Обогащаем каждый лист инфой о профиле (авто-распознанный counterparty).
+        $withMeta = array_map(function ($name) {
+            $profile = \App\Services\SheetProfiles::profile($name);
+            return [
+                'name' => $name,
+                'profiled' => $profile !== null,
+                'counterpartyName' => $profile['counterpartyName'] ?? null,
+                'currency' => $profile['currency'] ?? null,
+                'productHint' => $profile['productHint'] ?? null,
+            ];
+        }, $sheets);
+
+        return response()->json(['sheets' => $withMeta]);
     }
 
     /**
      * Импорт из Google Sheets — выбрать лист (поставщика) → загрузить данные.
+     *
+     * Если лист есть в SheetProfiles::PROFILES — counterparty и маппинг
+     * колонок берутся автоматически из профиля (пользовательский выбор
+     * counterparty/currency игнорируется в пользу профиля). Иначе
+     * используется generic-парсер.
      */
     public function importFromSheets(Request $request): JsonResponse
     {
         $request->validate([
             'sheet' => 'required|string',
-            'counterparty' => 'required|integer',
+            'counterparty' => 'nullable|integer',
             'currency' => 'nullable|integer',
         ]);
 
@@ -99,20 +116,39 @@ class TransactionImportController extends Controller
             return response()->json(['message' => 'Google Sheets не настроен. Заполните «Google Sheets API Key» и «ID таблицы Импорт транзакций» в /admin/api-keys'], 422);
         }
 
-        $reader = app(\App\Services\GoogleSheetsReader::class);
-
-        try {
-            $rows = $reader->readSheet($spreadsheetId, $request->sheet, $apiKey);
-        } catch (\Exception $e) {
-            \Log::error('Sheet read failed: ' . $e->getMessage());
-            return response()->json(['message' => 'Ошибка чтения листа. Проверьте ID и название листа.'], 422);
+        // Прямой запрос в Sheets API — нам нужна и шапка, и строки, generic-
+        // reader приводит к ассоциативным уже с header-стрипом.
+        $range = urlencode($request->sheet);
+        $url = "https://sheets.googleapis.com/v4/spreadsheets/{$spreadsheetId}/values/{$range}?key={$apiKey}&majorDimension=ROWS";
+        $response = \Illuminate\Support\Facades\Http::timeout(20)->get($url);
+        if (! $response->ok()) {
+            \Log::error('Sheet read failed', ['status' => $response->status(), 'body' => mb_substr((string) $response->body(), 0, 200)]);
+            return response()->json(['message' => "Ошибка чтения листа: HTTP {$response->status()}. Проверьте ID и название листа."], 422);
         }
 
-        if (empty($rows)) {
-            return response()->json(['message' => 'Лист пустой или не содержит данных'], 422);
+        $values = $response->json('values') ?? [];
+        if (count($values) < 2) {
+            return response()->json(['message' => 'Лист пустой или нет строк данных'], 422);
         }
 
-        return $this->processRows($rows, (int) $request->counterparty, $request->currency ? (int) $request->currency : 67, $request);
+        $headers = $values[0];
+        $rows = array_slice($values, 1);
+
+        $profile = \App\Services\SheetProfiles::profile($request->sheet);
+        if ($profile) {
+            return $this->processProfiledRows($headers, $rows, $profile, $request);
+        }
+
+        // Fallback: старый generic-парсер требует counterparty явно.
+        if (! $request->counterparty) {
+            return response()->json(['message' => 'Лист не распознан в профилях. Выберите поставщика вручную.'], 422);
+        }
+        $assoc = array_map(function ($row) use ($headers) {
+            $out = [];
+            foreach ($headers as $i => $h) $out[mb_strtolower(trim($h))] = $row[$i] ?? null;
+            return $out;
+        }, $rows);
+        return $this->processRows($assoc, (int) $request->counterparty, $request->currency ? (int) $request->currency : 67, $request);
     }
 
     /**
@@ -272,6 +308,49 @@ class TransactionImportController extends Controller
             'skipped' => $skippedDupes,
             'errorDetails' => array_slice($errors, 0, 20),
         ]);
+    }
+
+    /**
+     * Парсер строк по SheetProfile. Резолвит counterparty из профиля,
+     * парсит колонки по canonical-ключам, сводит к формату processRows.
+     */
+    private function processProfiledRows(array $headers, array $rows, array $profile, Request $request): JsonResponse
+    {
+        $counterpartyId = \App\Services\SheetProfiles::resolveCounterpartyId($profile['counterpartyName'] ?? '')
+            ?? (int) $request->counterparty;
+        if (! $counterpartyId) {
+            return response()->json([
+                'message' => 'Counterparty «' . ($profile['counterpartyName'] ?? '—') . '» не найден в БД. Создайте его или выберите вручную.',
+            ], 422);
+        }
+
+        $currencyId = isset($profile['currency'])
+            ? (\App\Services\SheetProfiles::resolveCurrencyId($profile['currency'], 67))
+            : ($request->currency ? (int) $request->currency : 67);
+
+        // Приводим строки к generic-формату: contract_number, amount, date + extras.
+        $assoc = [];
+        foreach ($rows as $row) {
+            $a = \App\Services\SheetProfiles::alignRow($row, $headers, $profile);
+
+            // Если в профиле per-row валюта (InvestorsTrust, Woodville) — решаем на месте
+            $rowCurrency = $currencyId;
+            if (! empty($a['currency'])) {
+                $resolved = \App\Services\SheetProfiles::resolveCurrencyId((string) $a['currency'], $currencyId);
+                if ($resolved) $rowCurrency = $resolved;
+            }
+
+            $assoc[] = [
+                'contract_number' => (string) ($a['contract_number'] ?? ''),
+                'amount' => $a['amount'] ?? ($a['commission'] ?? 0),
+                'date' => $a['date'] ?? null,
+                'ds_percent' => $a['commission_pct'] ?? null,
+                '_rowCurrency' => $rowCurrency,
+                '_profileSheet' => $profile['productHint'] ?? null,
+            ];
+        }
+
+        return $this->processRows($assoc, $counterpartyId, $currencyId, $request);
     }
 
     /**
