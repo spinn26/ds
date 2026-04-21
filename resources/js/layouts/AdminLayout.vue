@@ -112,6 +112,8 @@ const menuItems = [
   { to: '/admin/dashboard', icon: 'mdi-chart-areaspline', title: 'Дашборд' },
   { to: '/admin/owner-dashboard', icon: 'mdi-crown', title: 'Дашборд владельца' },
   { to: '/admin/users', icon: 'mdi-account-cog', title: 'Пользователи' },
+  { to: '/admin/partners', icon: 'mdi-account-group', title: 'Партнёры' },
+  { to: '/admin/clients', icon: 'mdi-account-multiple', title: 'Клиенты' },
   { to: '/admin/news', icon: 'mdi-newspaper', title: 'Новости' },
   { to: '/admin/products', icon: 'mdi-package-variant', title: 'Продукты' },
   { to: '/admin/education', icon: 'mdi-school', title: 'Обучение и тесты' },
