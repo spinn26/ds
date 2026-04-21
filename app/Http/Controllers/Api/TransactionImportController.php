@@ -52,11 +52,25 @@ class TransactionImportController extends Controller
             config('services.google_sheets.api_key', env('GOOGLE_SHEETS_API_KEY')));
 
         if (! $spreadsheetId || ! $apiKey) {
-            return response()->json(['sheets' => [], 'message' => 'Google Sheets не настроен']);
+            $missing = array_filter([
+                ! $apiKey        ? '«Google Sheets API Key»' : null,
+                ! $spreadsheetId ? '«ID таблицы Импорт транзакций»' : null,
+            ]);
+            return response()->json([
+                'sheets' => [],
+                'message' => 'Не заполнено: ' . implode(' и ', $missing) . '. См. /admin/api-keys',
+            ]);
         }
 
         $reader = app(\App\Services\GoogleSheetsReader::class);
         $sheets = $reader->getSheetNames($spreadsheetId, $apiKey);
+
+        if (empty($sheets)) {
+            return response()->json([
+                'sheets' => [],
+                'message' => 'Не удалось получить список листов. Проверь валидность API-ключа и что таблица расшарена «Anyone with link».',
+            ]);
+        }
 
         return response()->json(['sheets' => $sheets]);
     }

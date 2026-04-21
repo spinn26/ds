@@ -13,10 +13,21 @@
       </v-tabs>
 
       <!-- Google Sheets mode -->
+      <v-alert v-if="importMode === 'sheets' && sheetsError" type="warning" variant="tonal"
+        density="compact" class="mb-3" closable>
+        <div class="font-weight-medium">{{ sheetsError }}</div>
+        <div class="text-caption mt-1">
+          Заполни <strong>Google Sheets API Key</strong> и
+          <strong>ID таблицы «Импорт транзакций»</strong> в
+          <a href="/admin/api-keys" class="text-primary">/admin/api-keys</a>.
+        </div>
+      </v-alert>
       <v-row v-if="importMode === 'sheets'" dense>
         <v-col cols="12" sm="4">
           <v-select v-model="form.sheet" :items="sheetNames" label="Лист (поставщик) *"
-            density="compact" variant="outlined" :loading="loadingSheets" />
+            density="compact" variant="outlined" :loading="loadingSheets"
+            :disabled="!!sheetsError"
+            :no-data-text="sheetsError || 'Листы не найдены'" />
         </v-col>
         <v-col cols="12" sm="3">
           <v-select v-model="form.counterparty" :items="counterparties" item-title="name" item-value="id"
@@ -145,6 +156,7 @@ import DialogShell from '../../components/DialogShell.vue';
 const counterparties = ref([]);
 const currencies = ref([]);
 const sheetNames = ref([]);
+const sheetsError = ref('');
 const loadingSheets = ref(false);
 const importing = ref(false);
 const importMode = ref('sheets');
@@ -265,10 +277,17 @@ onMounted(async () => {
   } catch {}
   // Load Google Sheets names
   loadingSheets.value = true;
+  sheetsError.value = '';
   try {
     const { data } = await api.get('/admin/transaction-import/sheet-names');
     sheetNames.value = data.sheets || [];
-  } catch {}
+    // Backend может вернуть 200 с пустым массивом и message (ключи не настроены)
+    if (!sheetNames.value.length && data.message) {
+      sheetsError.value = data.message;
+    }
+  } catch (e) {
+    sheetsError.value = e.response?.data?.message || 'Не удалось загрузить список листов';
+  }
   loadingSheets.value = false;
   loadHistory();
 });
