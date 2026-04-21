@@ -118,7 +118,7 @@ class SheetProfiles
             'currency' => 'RUB',
         ],
         'Medlife' => [
-            'counterpartyName' => 'DS',
+            'counterpartyName' => 'Medlife',
             'productHint' => 'Medlife',
             'fields' => [
                 'holder_name'     => 'Страхователь',
@@ -141,7 +141,7 @@ class SheetProfiles
             ],
         ],
         'Брокер+' => [
-            'counterpartyName' => 'DS',
+            'counterpartyName' => 'Брокер+',
             'productHint' => 'Брокер+',
             'fields' => [
                 'client_name'     => 'ФИО',
@@ -167,7 +167,7 @@ class SheetProfiles
             ],
         ],
         'Private Equity' => [
-            'counterpartyName' => 'DS',
+            'counterpartyName' => 'Private Equity',
             'productHint' => 'Private Equity',
             'fields' => [
                 'contract_number' => 'Номер контракта',
