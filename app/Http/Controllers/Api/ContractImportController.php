@@ -116,9 +116,12 @@ class ContractImportController extends Controller
         $defaultCurrency = (int) ($request->currency ?? 0) ?: null;
         $defaultStatus = (int) ($request->statusId ?? 0) ?: $this->defaultStatusId();
 
-        $success = 0;
+        $success = 0;   // новые записи
+        $updated = 0;   // обновлённые
+        $skipped = 0;   // без изменений
         $errors = [];
         $createdIds = [];
+        $updatedIds = [];
         $tracker = $request->input('tracker');
         $total = count($rows);
 
@@ -132,7 +135,7 @@ class ContractImportController extends Controller
             );
         }
 
-        DB::transaction(function () use ($rows, $defaultCurrency, $defaultStatus, $source, $tracker, $total, &$success, &$errors, &$createdIds) {
+        DB::transaction(function () use ($rows, $defaultCurrency, $defaultStatus, $source, $tracker, $total, &$success, &$updated, &$skipped, &$errors, &$createdIds, &$updatedIds) {
             foreach ($rows as $idx => $row) {
                 try {
                     $norm = $this->normaliseRow($row);
@@ -163,19 +166,19 @@ class ContractImportController extends Controller
                         continue;
                     }
 
-                    // Дедупликация по номеру
-                    if (! empty($norm['number'])) {
-                        $exists = DB::table('contract')
-                            ->where('number', $norm['number'])
-                            ->whereNull('deletedAt')
-                            ->exists();
-                        if ($exists) {
-                            $errors[] = "Строка " . ($idx + 2) . ": контракт №{$norm['number']} уже существует";
-                            continue;
-                        }
+                    // Статус контракта: маппим текст "АКТИВИРОВАН" / "СБОР
+                    // ДОКУМЕНТОВ" из листа в contractStatus.id через ilike.
+                    $statusId = $defaultStatus;
+                    if (! empty($norm['status'])) {
+                        $resolved = DB::table('contractStatus')
+                            ->where('name', 'ilike', trim($norm['status']))
+                            ->value('id');
+                        if ($resolved) $statusId = $resolved;
                     }
 
-                    $id = DB::table('contract')->insertGetId([
+                    $closeDate = $this->parseDate($norm['close_date'] ?? null);
+
+                    $payload = [
                         'number' => $norm['number'] ?? null,
                         'client' => $ref['client'],
                         'consultant' => $ref['consultant'],
@@ -184,9 +187,34 @@ class ContractImportController extends Controller
                         'ammount' => $amount,  // legacy spelling
                         'currency' => $ref['currency'],
                         'openDate' => $openDate,
-                        'status' => $defaultStatus,
+                        'closeDate' => $closeDate,
+                        'status' => $statusId,
                         'term' => $norm['term'] ?? null,
-                    ]);
+                    ];
+
+                    // Upsert по number: если контракт есть — обновляем только
+                    // те поля, значения которых реально отличаются (diff).
+                    // Если diff пустой — skipped. Новый — INSERT.
+                    if (! empty($norm['number'])) {
+                        $existing = DB::table('contract')
+                            ->where('number', $norm['number'])
+                            ->whereNull('deletedAt')
+                            ->first();
+
+                        if ($existing) {
+                            $diff = $this->buildDiff((array) $existing, $payload);
+                            if (empty($diff)) {
+                                $skipped++;
+                            } else {
+                                DB::table('contract')->where('id', $existing->id)->update($diff);
+                                $updated++;
+                                $updatedIds[] = (int) $existing->id;
+                            }
+                            continue;
+                        }
+                    }
+
+                    $id = DB::table('contract')->insertGetId($payload);
                     $createdIds[] = $id;
                     $success++;
                 } catch (\Throwable $e) {
@@ -201,6 +229,8 @@ class ContractImportController extends Controller
                             'total' => $total,
                             'processed' => $idx + 1,
                             'success' => $success,
+                            'updated' => $updated,
+                            'skipped' => $skipped,
                             'errors' => count($errors),
                             'status' => 'running',
                         ],
@@ -211,14 +241,23 @@ class ContractImportController extends Controller
 
             // Пишем в отдельную таблицу contract_import_log (миграция 2026_04_21_000010).
             if (\Schema::hasTable('contract_import_log')) {
+                $hasAnything = $success > 0 || $updated > 0;
+                $status = count($errors) === 0 && $hasAnything ? 'success'
+                        : ($hasAnything ? 'partial' : 'error');
                 $logId = DB::table('contract_import_log')->insertGetId([
                     'source' => $source,
-                    'status' => count($errors) === 0 && $success > 0 ? 'success' : ($success > 0 ? 'partial' : 'error'),
+                    'status' => $status,
                     'total_rows' => count($rows),
                     'success_count' => $success,
                     'error_count' => count($errors),
                     'errors' => json_encode(array_slice($errors, 0, 50), JSON_UNESCAPED_UNICODE),
-                    'created_ids' => json_encode($createdIds),
+                    // Храним и созданные, и обновлённые id — rollback откатывает
+                    // только созданные (обновлённые сохраняем как reference).
+                    'created_ids' => json_encode([
+                        'created' => $createdIds,
+                        'updated' => $updatedIds,
+                        'skipped' => $skipped,
+                    ]),
                     'created_by' => auth()->id(),
                     'created_at' => now(),
                     'updated_at' => now(),
@@ -235,6 +274,8 @@ class ContractImportController extends Controller
                     'total' => $total,
                     'processed' => $total,
                     'success' => $success,
+                    'updated' => $updated,
+                    'skipped' => $skipped,
                     'errors' => count($errors),
                     'status' => 'done',
                     'importId' => $this->lastLogId,
@@ -248,9 +289,12 @@ class ContractImportController extends Controller
             'importId' => $this->lastLogId,
             'total' => count($rows),
             'success' => $success,
+            'updated' => $updated,
+            'skipped' => $skipped,
             'errors' => count($errors),
             'errorsList' => array_slice($errors, 0, 50),
             'createdIds' => $createdIds,
+            'updatedIds' => $updatedIds,
         ];
     }
 
@@ -291,11 +335,22 @@ class ContractImportController extends Controller
             return response()->json(['message' => 'Импорт не найден'], 404);
         }
 
-        $contractIds = $log->created_ids
-            ? array_filter((array) json_decode($log->created_ids, true))
-            : [];
+        // created_ids может быть в двух форматах:
+        //   legacy:  [1, 2, 3]               — только созданные
+        //   new:     {"created": [...], "updated": [...], "skipped": N}
+        // Откатываем только созданные контракты (обновлённые — не трогаем,
+        // они были до импорта и должны остаться).
+        $raw = $log->created_ids ? json_decode($log->created_ids, true) : [];
+        $contractIds = [];
+        if (is_array($raw)) {
+            if (isset($raw['created']) && is_array($raw['created'])) {
+                $contractIds = array_filter($raw['created']);
+            } elseif (array_is_list($raw)) {
+                $contractIds = array_filter($raw);
+            }
+        }
         if (empty($contractIds)) {
-            return response()->json(['message' => 'Нет ID для отката (старый импорт без created_ids?)'], 422);
+            return response()->json(['message' => 'Нет ID для отката (в этом прогоне созданных контрактов не было — только обновления)'], 422);
         }
 
         // Guard: если по контракту есть активные транзакции — блокируем.
@@ -400,6 +455,35 @@ class ContractImportController extends Controller
         if (\Schema::hasColumn($table, 'deletedAt')) $q->whereNull('deletedAt');
         if (\Schema::hasColumn($table, 'dateDeleted')) $q->whereNull('dateDeleted');
         return $q->value('id');
+    }
+
+    /**
+     * Возвращает только те поля из $new, значения которых реально отличаются
+     * от $existing. Используется при upsert'е контракта — чтобы не писать
+     * no-op UPDATE и не триггерить лишние изменения в aуди́те.
+     */
+    private function buildDiff(array $existing, array $new): array
+    {
+        $diff = [];
+        foreach ($new as $k => $v) {
+            if (! array_key_exists($k, $existing)) { $diff[$k] = $v; continue; }
+            $old = $existing[$k];
+            // Нормализация для сравнения: числа → floatcast, даты → date
+            $normOld = is_numeric($old) && is_numeric($v) ? (float) $old : $old;
+            $normNew = is_numeric($v) && is_numeric($old) ? (float) $v : $v;
+            // Даты могут храниться как "2026-04-17 00:00:00", а приходить
+            // как "2026-04-17" — приводим к Y-m-d.
+            if (is_string($old) && preg_match('/^\d{4}-\d{2}-\d{2}/', $old)) {
+                $normOld = substr($old, 0, 10);
+            }
+            if (is_string($v) && preg_match('/^\d{4}-\d{2}-\d{2}/', $v)) {
+                $normNew = substr($v, 0, 10);
+            }
+            if ($normOld != $normNew) {
+                $diff[$k] = $v;
+            }
+        }
+        return $diff;
     }
 
     private function parseAmount(mixed $raw): ?float

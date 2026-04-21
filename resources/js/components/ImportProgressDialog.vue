@@ -27,11 +27,19 @@
             rounded
           />
           <v-row dense class="mt-3">
-            <v-col cols="6">
-              <div class="text-caption text-medium-emphasis">Успешно</div>
+            <v-col :cols="hasUpdateSkipped ? 3 : 6">
+              <div class="text-caption text-medium-emphasis">Создано</div>
               <div class="text-h6 text-success">{{ progress.success || 0 }}</div>
             </v-col>
-            <v-col cols="6">
+            <v-col v-if="hasUpdateSkipped" cols="3">
+              <div class="text-caption text-medium-emphasis">Обновлено</div>
+              <div class="text-h6 text-info">{{ progress.updated || 0 }}</div>
+            </v-col>
+            <v-col v-if="hasUpdateSkipped" cols="3">
+              <div class="text-caption text-medium-emphasis">Без изменений</div>
+              <div class="text-h6 text-medium-emphasis">{{ progress.skipped || 0 }}</div>
+            </v-col>
+            <v-col :cols="hasUpdateSkipped ? 3 : 6">
               <div class="text-caption text-medium-emphasis">Ошибок</div>
               <div class="text-h6" :class="(progress.errors || 0) > 0 ? 'text-error' : ''">
                 {{ progress.errors || 0 }}
@@ -43,15 +51,16 @@
         <!-- Done -->
         <template v-else>
           <v-alert
-            :type="result?.errors === 0 ? 'success' : result?.success > 0 ? 'warning' : 'error'"
+            :type="result?.errors === 0 ? 'success' : result?.success > 0 || result?.updated > 0 ? 'warning' : 'error'"
             variant="tonal"
             density="comfortable"
           >
             <div class="font-weight-medium">{{ result?.message }}</div>
             <div class="text-body-2 mt-1">
-              Создано: <b>{{ result?.success ?? 0 }}</b> ·
-              Ошибок: <b>{{ result?.errors ?? 0 }}</b>
-              <template v-if="result?.skipped"> · Пропущено дублей: <b>{{ result.skipped }}</b></template>
+              Создано: <b>{{ result?.success ?? 0 }}</b>
+              <template v-if="result?.updated != null"> · Обновлено: <b>{{ result.updated }}</b></template>
+              <template v-if="result?.skipped != null"> · Без изменений: <b>{{ result.skipped }}</b></template>
+              · Ошибок: <b>{{ result?.errors ?? 0 }}</b>
             </div>
           </v-alert>
 
@@ -103,6 +112,12 @@ const percent = computed(() => {
   if (!progress.value.total) return 0;
   return Math.min(100, Math.round((progress.value.processed / progress.value.total) * 100));
 });
+
+// Показывать колонки «Обновлено / Без изменений» только если они реально
+// используются (контракты — upsert, транзакции — чистый insert).
+const hasUpdateSkipped = computed(() =>
+  (progress.value.updated != null) || (progress.value.skipped != null)
+);
 
 const iconName = computed(() => {
   if (!props.finished) return 'mdi-progress-upload';
