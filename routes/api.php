@@ -208,6 +208,23 @@ Route::prefix('v1')->group(function () {
         Route::get('/admin/analytics/cohorts', [\App\Http\Controllers\Api\AdminAnalyticsController::class, 'cohorts']);
         Route::get('/admin/analytics/owner-dashboard', [\App\Http\Controllers\Api\AdminAnalyticsController::class, 'ownerDashboard']);
 
+        // Подбор валют для селекторов (4 рабочие: RUB/USD/EUR/GBP).
+        Route::get('/currencies/selectable', function () {
+            return response()->json([
+                'items' => \Illuminate\Support\Facades\DB::table('currency')
+                    ->where('selectable', true)
+                    ->orderBy('id')
+                    ->get(['id', 'nameRu', 'nameEn', 'symbol'])
+                    ->map(fn ($c) => [
+                        'id' => $c->id,
+                        'name' => $c->nameRu,
+                        'nameEn' => $c->nameEn,
+                        'symbol' => $c->symbol,
+                        'label' => $c->symbol ? "{$c->nameRu} ({$c->symbol})" : $c->nameRu,
+                    ]),
+            ]);
+        });
+
         // Admin — API settings (Google Sheets key, Telegram bot, etc.)
         Route::get('/admin/api-settings', [\App\Http\Controllers\Api\AdminApiSettingsController::class, 'index']);
         Route::put('/admin/api-settings', [\App\Http\Controllers\Api\AdminApiSettingsController::class, 'update']);

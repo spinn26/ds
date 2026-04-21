@@ -26,10 +26,12 @@ class TransactionImportController extends Controller
             ->get()
             ->map(fn ($c) => ['id' => $c->id, 'name' => $c->counterpartyName]);
 
+        // Оставили только RUB/USD/EUR/GBP — остальные валюты в селекторах
+        // почти никогда не нужны. Управляется через currency.selectable
+        // (миграция 2026_04_21_000020).
         $currencies = DB::table('currency')
-            ->whereIn('id', [5, 17, 67, 38]) // USD, EUR, RUB, KZT
-            ->orWhere('priority', '>', 0)
-            ->orderByDesc('priority')
+            ->where('selectable', true)
+            ->orderBy('id')
             ->get()
             ->map(fn ($c) => ['id' => $c->id, 'symbol' => $c->symbol, 'name' => $c->nameRu ?? $c->currencyName]);
 

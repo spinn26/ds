@@ -164,8 +164,8 @@ async function loadSheets() {
 
 async function loadCurrencies() {
   try {
-    const { data } = await api.get('/admin/references/currency');
-    currencies.value = (data.items || []).map(c => ({ id: c.id, symbol: c.symbol || c.nameRu }));
+    const { data } = await api.get('/currencies/selectable');
+    currencies.value = (data.items || []).map(c => ({ id: c.id, symbol: c.label || c.symbol }));
   } catch {}
 }
 

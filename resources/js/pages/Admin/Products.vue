@@ -325,14 +325,15 @@ const pointsMethodOptions = [
   { value: 'fixed',           title: 'Фиксировано (из "Баллы от")' },
 ];
 
-// Loaded from /admin/references/currency — no more hardcoded list.
+// Селектор валют — только рабочие 4 (RUB/USD/EUR/GBP). Управляется
+// через currency.selectable в БД, эндпоинт /currencies/selectable.
 const currencyOptions = ref([]);
 async function loadCurrencies() {
   try {
-    const { data } = await api.get('/admin/references/currency');
+    const { data } = await api.get('/currencies/selectable');
     currencyOptions.value = (data.items || []).map(c => ({
       id: c.id,
-      label: c.symbol ? `${c.name} (${c.symbol})` : c.name,
+      label: c.label || (c.symbol ? `${c.name} (${c.symbol})` : c.name),
     }));
   } catch {}
 }
