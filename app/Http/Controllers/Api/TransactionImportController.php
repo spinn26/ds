@@ -291,7 +291,13 @@ class TransactionImportController extends Controller
                 $successCount++;
             } catch (\Exception $e) {
                 \Log::warning("Import row " . ($i + 2) . " failed: " . $e->getMessage());
-                $errors[] = "Строка " . ($i + 2) . ": ошибка создания";
+                // Берём первую значимую часть ошибки (до "CONTEXT" / "SQL" — PG
+                // часто возвращает трёхуровневый текст с дампом запроса).
+                $msg = $e->getMessage();
+                if (preg_match('/([^:\n]+(?:violation|violates|exists|not-null|duplicate)[^\n]*)/i', $msg, $m)) {
+                    $msg = trim($m[1]);
+                }
+                $errors[] = "Строка " . ($i + 2) . ": " . mb_substr($msg, 0, 200);
                 $errorCount++;
             }
 

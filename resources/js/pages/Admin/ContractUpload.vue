@@ -210,7 +210,13 @@ async function runSheetsImport() {
     progressResult.value = payload;
     loadHistory();
   } catch (e) {
-    const msg = e.response?.data?.message || 'Ошибка импорта';
+    let msg = e.response?.data?.message || 'Ошибка импорта';
+    if (e.response?.status === 429) {
+      const retry = e.response?.headers?.['retry-after'];
+      msg = retry
+        ? `Слишком часто. Повторите через ${retry} сек.`
+        : 'Слишком много запросов. Подождите минуту.';
+    }
     result.value = { type: 'error', message: msg };
     progressResult.value = { errors: 1, success: 0, message: msg };
   }
