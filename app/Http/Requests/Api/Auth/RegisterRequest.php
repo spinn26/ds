@@ -24,7 +24,21 @@ class RegisterRequest extends FormRequest
             'birthDate' => ['nullable', 'date'],
             'city' => ['nullable', 'string', 'max:255'],
             'password' => ['required', 'confirmed', Password::min(8)->letters()->numbers()],
-            'refCode' => ['nullable', 'string'],
+            // Закрытая регистрация: можно попасть только по реф-ссылке от
+            // активного партнёра. refCode обязателен и должен матчить
+            // существующий consultant.participantCode.
+            'refCode' => [
+                'required', 'string',
+                function ($attribute, $value, $fail) {
+                    $exists = \App\Models\Consultant::where('participantCode', $value)
+                        ->where('active', true)
+                        ->whereNull('dateDeleted')
+                        ->exists();
+                    if (! $exists) {
+                        $fail('Реферальный код не найден или партнёр неактивен. Регистрация возможна только по ссылке от активного партнёра.');
+                    }
+                },
+            ],
             'consentPersonalData' => ['accepted'],
             'consentTerms' => ['accepted'],
         ];

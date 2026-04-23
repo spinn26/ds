@@ -66,6 +66,24 @@ class PartnerStatusService
     }
 
     /**
+     * Сгенерировать уникальный participantCode. 6 символов A-Z0-9,
+     * исключая легко путающиеся (0, O, 1, I, L). Проверяется уникальность.
+     */
+    private function generateUniqueCode(): string
+    {
+        $alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+        for ($attempt = 0; $attempt < 20; $attempt++) {
+            $code = '';
+            for ($i = 0; $i < 6; $i++) {
+                $code .= $alphabet[random_int(0, strlen($alphabet) - 1)];
+            }
+            $exists = DB::table('consultant')->where('participantCode', $code)->exists();
+            if (! $exists) return $code;
+        }
+        throw new \RuntimeException('Не удалось сгенерировать уникальный participantCode за 20 попыток');
+    }
+
+    /**
      * Активация партнёра: проверяет ЛП >= 500 и переводит в «Активен».
      * Вызывается при достижении порога ЛП или по событию.
      */
@@ -87,6 +105,16 @@ class PartnerStatusService
             $consultant->active = true;
             $consultant->dateActivity = Carbon::now();
             $consultant->yearPeriodEnd = Carbon::now()->addYear();
+
+            // Генерируем participantCode если ещё нет. Код нужен активному
+            // партнёру для выдачи реф-ссылки; без него /register?ref=... не
+            // сработает. 6 символов A-Z0-9 даёт 2.1 млрд комбинаций —
+            // collision-проверка защищает даже при экстремально больших
+            // выборках.
+            if (empty($consultant->participantCode)) {
+                $consultant->participantCode = $this->generateUniqueCode();
+            }
+
             $consultant->save();
         });
 

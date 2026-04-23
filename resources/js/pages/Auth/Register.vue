@@ -26,7 +26,22 @@
 
           <div class="text-h5 text-center mb-4">Регистрация</div>
 
-          <v-stepper v-model="step" flat>
+          <!-- Реф-код: баннер пригласившего или ошибка -->
+          <v-alert v-if="refChecking" type="info" variant="tonal" density="compact" class="mb-3">
+            <template #prepend><v-progress-circular indeterminate size="18" width="2" /></template>
+            Проверяем реферальную ссылку…
+          </v-alert>
+          <v-alert v-else-if="mentor" type="success" variant="tonal" density="compact" class="mb-3" prepend-icon="mdi-account-check">
+            <div class="text-caption text-medium-emphasis">Вас пригласил партнёр</div>
+            <div class="font-weight-medium">{{ mentor.name }}</div>
+            <div class="text-caption text-medium-emphasis">Код: {{ mentor.code }}</div>
+          </v-alert>
+          <v-alert v-else-if="refError" type="error" variant="tonal" density="compact" class="mb-3" prepend-icon="mdi-lock-alert">
+            <div class="font-weight-medium mb-1">Регистрация закрыта</div>
+            <div class="text-caption">{{ refError }}</div>
+          </v-alert>
+
+          <v-stepper v-if="mentor" v-model="step" flat>
             <v-stepper-header>
               <v-stepper-item :value="1" title="Ввод данных" />
               <v-divider />
@@ -103,14 +118,15 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
-import { useRouter } from 'vue-router';
+import { ref, computed, onMounted } from 'vue';
+import { useRouter, useRoute } from 'vue-router';
 import { useAuthStore } from '../../stores/auth';
 import api from '../../api';
 import BrandWaves from '../../components/BrandWaves.vue';
 
 const auth = useAuthStore();
 const router = useRouter();
+const route = useRoute();
 const step = ref(1);
 const showPw = ref(false);
 const error = ref('');
@@ -118,7 +134,34 @@ const loading = ref(false);
 const form = ref({
   firstName: '', lastName: '', patronymic: '', email: '', phone: '',
   telegram: '', birthDate: '', city: '', password: '', password_confirmation: '',
-  consentPersonalData: false, consentTerms: false,
+  consentPersonalData: false, consentTerms: false, refCode: '',
+});
+
+// Реф-код и пригласивший партнёр
+const refChecking = ref(false);
+const mentor = ref(null);
+const refError = ref('');
+
+onMounted(async () => {
+  const code = (route.query.ref || '').toString().trim().toUpperCase();
+  if (!code) {
+    refError.value = 'Регистрация возможна только по реферальной ссылке от активного партнёра. Обратитесь к своему наставнику за персональной ссылкой приглашения.';
+    return;
+  }
+  form.value.refCode = code;
+  refChecking.value = true;
+  try {
+    const { data } = await api.post('/auth/check-referral', { code });
+    if (data.valid) {
+      mentor.value = data.mentor;
+    } else {
+      refError.value = data.message || 'Реферальный код не найден или партнёр неактивен.';
+    }
+  } catch (e) {
+    refError.value = e.response?.data?.message || 'Не удалось проверить реферальный код. Попробуйте позже.';
+  } finally {
+    refChecking.value = false;
+  }
 });
 
 // Parallax mouse tracking
