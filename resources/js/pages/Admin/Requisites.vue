@@ -13,6 +13,8 @@
         </v-chip>
         <v-btn v-if="activeFilterCount > 0" size="small" variant="text" color="secondary"
           prepend-icon="mdi-filter-remove" @click="resetFilters">Сбросить</v-btn>
+        <v-spacer />
+        <ColumnVisibilityMenu :headers="headers" v-model:visible="columnVisible" storage-key="requisites-cols" />
       </div>
     </v-card>
 
@@ -39,7 +41,7 @@
 
     <v-data-table-server v-model="selected" show-select return-object item-value="id"
       :items="items" :items-length="total" :loading="loading"
-      :headers="headers" :items-per-page="25" @update:options="onOptions">
+      :headers="visibleHeaders" :items-per-page="25" @update:options="onOptions">
       <template #item.hasBankRequisites="{ item }">
         <v-icon v-if="item.hasBankRequisites" color="success" size="18">mdi-check-circle</v-icon>
         <v-icon v-else color="grey" size="18">mdi-minus-circle-outline</v-icon>
@@ -271,6 +273,7 @@ import { useDebounce } from '../../composables/useDebounce';
 import PageHeader from '../../components/PageHeader.vue';
 import EmptyState from '../../components/EmptyState.vue';
 import StartChatButton from '../../components/StartChatButton.vue';
+import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 
 const items = ref([]);
 const total = ref(0);
@@ -456,6 +459,9 @@ const headers = [
   { title: 'Статус', key: 'verificationStatus', width: 130 },
   { title: 'Действия', key: 'actions', sortable: false, width: 100 },
 ];
+
+const columnVisible = ref({});
+const visibleHeaders = computed(() => headers.filter(h => columnVisible.value[h.key] !== false));
 
 function verifyColor(s) {
   if (s === 'verified') return 'success';

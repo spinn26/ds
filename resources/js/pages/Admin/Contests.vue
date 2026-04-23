@@ -23,10 +23,13 @@
         <v-select v-model="filters.type" :items="typeOptions" item-title="name" item-value="id"
           label="Тип" clearable hide-details density="comfortable" variant="outlined" />
       </v-col>
+      <v-col cols="auto" class="d-flex align-center ms-auto">
+        <ColumnVisibilityMenu :headers="headers" v-model:visible="columnVisible" storage-key="contests-cols" />
+      </v-col>
     </FilterBar>
 
     <v-data-table-server :items="items" :items-length="total" :loading="loading"
-      :headers="headers" :items-per-page="perPage" @update:options="onOptions" density="compact" hover>
+      :headers="visibleHeaders" :items-per-page="perPage" @update:options="onOptions" density="compact" hover>
       <template #item.typeName="{ item }">
         <v-chip size="x-small" variant="outlined">{{ item.typeName || '—' }}</v-chip>
       </template>
@@ -171,7 +174,7 @@ import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
 import { fmtDate } from '../../composables/useDesign';
 import {
-  StatusChip, FilterBar, DialogShell, ActionsCell,
+  StatusChip, FilterBar, DialogShell, ActionsCell, ColumnVisibilityMenu,
 } from '../../components';
 import { useCrud } from '../../composables/useCrud';
 
@@ -195,6 +198,9 @@ const headers = [
   { title: 'Победителей', key: 'numberOfWinners', width: 120, align: 'end' },
   { title: '', key: 'actions', sortable: false, width: 90 },
 ];
+
+const columnVisible = ref({});
+const visibleHeaders = computed(() => headers.filter(h => columnVisible.value[h.key] !== false));
 
 const defaults = {
   name: '', description: '',

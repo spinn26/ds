@@ -20,10 +20,13 @@
           {{ activeFilterCount }} {{ activeFilterCount === 1 ? 'фильтр' : 'фильтра' }}
         </v-chip>
       </v-col>
+      <v-col cols="auto" class="d-flex align-center ms-auto">
+        <ColumnVisibilityMenu :headers="headers" v-model:visible="columnVisible" storage-key="contract-manager-cols" />
+      </v-col>
     </FilterBar>
 
     <v-data-table-server :items="items" :items-length="total" :loading="loading"
-      :headers="headers" :items-per-page="25" @update:options="onOptions">
+      :headers="visibleHeaders" :items-per-page="25" @update:options="onOptions">
       <template #item.ammount="{ item }">
         {{ fmt(item.ammount) }} {{ item.currencySymbol }}
       </template>
@@ -51,6 +54,7 @@ import EmptyState from '../../components/EmptyState.vue';
 import StartChatButton from '../../components/StartChatButton.vue';
 import StatusChip from '../../components/StatusChip.vue';
 import FilterBar from '../../components/FilterBar.vue';
+import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 import { fmt, fmtDate, getContractStatusColor } from '../../composables/useDesign';
 
 const items = ref([]);
@@ -73,6 +77,9 @@ const headers = [
   { title: 'Статус', key: 'statusName', width: 130 },
   { title: '', key: 'chat', sortable: false, width: 50 },
 ];
+
+const columnVisible = ref({});
+const visibleHeaders = computed(() => headers.filter(h => columnVisible.value[h.key] !== false));
 
 const activeFilterCount = computed(() => {
   let c = 0;

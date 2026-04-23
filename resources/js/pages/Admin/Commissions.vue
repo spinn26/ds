@@ -13,11 +13,13 @@
         </v-chip>
         <v-btn v-if="activeFilterCount > 0" size="small" variant="text" color="secondary"
           prepend-icon="mdi-filter-remove" @click="resetFilters">Сбросить</v-btn>
+        <v-spacer />
+        <ColumnVisibilityMenu :headers="headers" v-model:visible="columnVisible" storage-key="commissions-cols" />
       </div>
     </v-card>
 
     <v-data-table-server :items="items" :items-length="total" :loading="loading"
-      :headers="headers" :items-per-page="25" @update:options="onOptions">
+      :headers="visibleHeaders" :items-per-page="25" @update:options="onOptions">
       <template #item.amountRUB="{ value }">
         {{ fmt(value) }}
       </template>
@@ -52,6 +54,7 @@ import { useDebounce } from '../../composables/useDebounce';
 import PageHeader from '../../components/PageHeader.vue';
 import EmptyState from '../../components/EmptyState.vue';
 import StartChatButton from '../../components/StartChatButton.vue';
+import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 import { fmt2 as fmt, fmtDate } from '../../composables/useDesign';
 
 const items = ref([]);
@@ -75,6 +78,9 @@ const headers = [
   { title: 'Дата', key: 'date', width: 120 },
   { title: '', key: 'chat', sortable: false, width: 50 },
 ];
+
+const columnVisible = ref({});
+const visibleHeaders = computed(() => headers.filter(h => columnVisible.value[h.key] !== false));
 
 const activeFilterCount = computed(() => {
   let c = 0;

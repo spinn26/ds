@@ -20,10 +20,13 @@
           {{ activeFilterCount }} {{ activeFilterCount === 1 ? 'фильтр' : 'фильтра' }}
         </v-chip>
       </v-col>
+      <v-col cols="auto" class="d-flex align-center ms-auto">
+        <ColumnVisibilityMenu :headers="headers" v-model:visible="columnVisible" storage-key="payments-legacy-cols" />
+      </v-col>
     </FilterBar>
 
     <v-data-table-server :items="items" :items-length="total" :loading="loading"
-      :headers="headers" :items-per-page="25" @update:options="onOptions">
+      :headers="visibleHeaders" :items-per-page="25" @update:options="onOptions">
       <template #item.amount="{ value }">{{ fmt(value) }}</template>
       <template #item.status="{ value }">
         <StatusChip
@@ -49,6 +52,7 @@ import PageHeader from '../../components/PageHeader.vue';
 import EmptyState from '../../components/EmptyState.vue';
 import StatusChip from '../../components/StatusChip.vue';
 import FilterBar from '../../components/FilterBar.vue';
+import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 import { fmt2 as fmt, getPaymentStatusColor } from '../../composables/useDesign';
 
 const items = ref([]);
@@ -85,6 +89,9 @@ const headers = [
   { title: 'Дата выплаты', key: 'paymentDate', width: 140 },
   { title: 'Комментарий', key: 'comment' },
 ];
+
+const columnVisible = ref({});
+const visibleHeaders = computed(() => headers.filter(h => columnVisible.value[h.key] !== false));
 
 const { debounced: debouncedLoad } = useDebounce(loadData, 400);
 function onOptions(opts) {

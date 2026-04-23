@@ -7,7 +7,10 @@
         Партнёры сгруппированы по месяцу регистрации. Показывается, сколько из
         каждой когорты сейчас активно / терминировано.
       </v-card-text>
-      <v-data-table :items="rows" :headers="headers" density="comfortable" hover no-data-text="Нет данных за последние 12 месяцев">
+      <div class="d-flex justify-end px-3 pb-2">
+        <ColumnVisibilityMenu :headers="headers" v-model:visible="columnVisible" storage-key="cohorts-cols" />
+      </div>
+      <v-data-table :items="rows" :headers="visibleHeaders" density="comfortable" hover no-data-text="Нет данных за последние 12 месяцев">
         <template #item.cohort_month="{ value }">{{ formatMonth(value) }}</template>
         <template #item.retention_pct="{ item }">
           <span :class="retentionClass(item)">{{ retention(item) }}%</span>
@@ -21,9 +24,9 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
-import { PageHeader } from '../../components';
+import { PageHeader, ColumnVisibilityMenu } from '../../components';
 
 const rows = ref([]);
 
@@ -35,6 +38,9 @@ const headers = [
   { title: 'Retention', key: 'retention_pct', align: 'end', width: 120 },
   { title: 'Отвалилось', key: 'termination_pct', align: 'end', width: 120 },
 ];
+
+const columnVisible = ref({});
+const visibleHeaders = computed(() => headers.filter(h => columnVisible.value[h.key] !== false));
 
 function formatMonth(v) {
   if (!v) return '';

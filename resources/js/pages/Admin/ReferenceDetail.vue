@@ -8,7 +8,10 @@
     </PageHeader>
 
     <v-card>
-      <v-data-table :items="items" :loading="loading" :headers="headers" density="comfortable" hover>
+      <div class="d-flex justify-end px-3 pt-2">
+        <ColumnVisibilityMenu :headers="headers" v-model:visible="columnVisible" storage-key="reference-cols" />
+      </div>
+      <v-data-table :items="items" :loading="loading" :headers="visibleHeaders" density="comfortable" hover>
         <template v-for="f in boolFields" :key="f.key" #[`item.${f.key}`]="{ value }">
           <BooleanCell :value="!!value" />
         </template>
@@ -69,7 +72,7 @@
 import { ref, computed, watch, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import api from '../../api';
-import { PageHeader, DialogShell, ActionsCell, BooleanCell, FormErrors } from '../../components';
+import { PageHeader, DialogShell, ActionsCell, BooleanCell, FormErrors, ColumnVisibilityMenu } from '../../components';
 import { useSnackbar } from '../../composables/useSnackbar';
 
 const route = useRoute();
@@ -105,6 +108,9 @@ const headers = computed(() => {
     { title: '', key: 'actions', sortable: false, width: 100 },
   ];
 });
+
+const columnVisible = ref({});
+const visibleHeaders = computed(() => headers.value.filter(h => columnVisible.value[h.key] !== false));
 
 const formValid = computed(() => {
   if (!cfg.value) return false;

@@ -9,11 +9,13 @@
           @update:model-value="debouncedLoad" />
         <v-btn v-if="filters.search" size="small" variant="text" color="secondary"
           prepend-icon="mdi-filter-remove" @click="filters.search = ''; loadData()">Сбросить</v-btn>
+        <v-spacer />
+        <ColumnVisibilityMenu :headers="headers" v-model:visible="columnVisible" storage-key="team-contracts-cols" />
       </div>
     </v-card>
 
     <v-data-table-server :items="items" :items-length="total" :loading="loading"
-      :headers="headers" :items-per-page="25" @update:options="onOptions">
+      :headers="visibleHeaders" :items-per-page="25" @update:options="onOptions">
       <template #item.ammount="{ item }">
         {{ fmt(item.ammount) }} {{ item.currencySymbol }}
       </template>
@@ -35,6 +37,7 @@ import { useDebounce } from '../../composables/useDebounce';
 import PageHeader from '../../components/PageHeader.vue';
 import EmptyState from '../../components/EmptyState.vue';
 import StatusChip from '../../components/StatusChip.vue';
+import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 import { fmt, fmtDate, getContractStatusColor } from '../../composables/useDesign';
 
 const items = ref([]);
@@ -57,6 +60,9 @@ const headers = [
   { title: 'Сумма', key: 'ammount', width: 160, align: 'end', cellProps: nowrap },
   { title: 'Статус контракта', key: 'statusName', width: 170, cellProps: nowrap },
 ];
+
+const columnVisible = ref({});
+const visibleHeaders = computed(() => headers.filter(h => columnVisible.value[h.key] !== false));
 
 const { debounced: debouncedLoad } = useDebounce(loadData, 400);
 

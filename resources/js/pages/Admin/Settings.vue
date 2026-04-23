@@ -9,7 +9,10 @@
     </v-alert>
 
     <v-card>
-      <v-data-table :items="settings" :headers="headers" density="comfortable" hover>
+      <div class="d-flex justify-end px-3 pt-2">
+        <ColumnVisibilityMenu :headers="headers" v-model:visible="columnVisible" storage-key="settings-cols" />
+      </div>
+      <v-data-table :items="settings" :headers="visibleHeaders" density="comfortable" hover>
         <template #item.editable="{ value }">
           <BooleanCell :value="!!value" :tooltip="{ on: 'Можно менять', off: 'Только код' }" />
         </template>
@@ -20,9 +23,9 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
-import { PageHeader, BooleanCell } from '../../components';
+import { PageHeader, BooleanCell, ColumnVisibilityMenu } from '../../components';
 
 const settings = ref([]);
 
@@ -32,6 +35,9 @@ const headers = [
   { title: 'Источник', key: 'source' },
   { title: 'Меняется', key: 'editable', width: 100 },
 ];
+
+const columnVisible = ref({});
+const visibleHeaders = computed(() => headers.filter(h => columnVisible.value[h.key] !== false));
 
 async function load() {
   try { const { data } = await api.get('/admin/ops/settings'); settings.value = data.settings || []; } catch {}

@@ -26,11 +26,14 @@
           {{ activeFilterCount }} {{ activeFilterCount === 1 ? 'фильтр' : 'фильтра' }}
         </v-chip>
       </v-col>
+      <v-col cols="auto" class="d-flex align-center ms-auto">
+        <ColumnVisibilityMenu :headers="headers" v-model:visible="columnVisible" storage-key="users-cols" />
+      </v-col>
     </FilterBar>
 
     <DataTableWrapper
       :items="items"
-      :headers="headers"
+      :headers="visibleHeaders"
       :loading="loading"
       server-side
       :page="page"
@@ -139,10 +142,10 @@ import { useAuthStore } from '../../stores/auth';
 import api from '../../api';
 import {
   FilterBar, DataTableWrapper, StatusChip, BooleanCell, ActionsCell,
-  DialogShell, FormErrors,
+  DialogShell, FormErrors, ColumnVisibilityMenu,
 } from '../../components';
 import { useCrud } from '../../composables/useCrud';
-import { computed } from 'vue';
+import { ref, computed } from 'vue';
 
 function roleColor(r) {
   return ({
@@ -196,6 +199,9 @@ const headers = [
   { title: 'Блок', key: 'isBlocked', width: 60 },
   { title: 'Действия', key: 'actions', sortable: false, width: 120 },
 ];
+
+const columnVisible = ref({});
+const visibleHeaders = computed(() => headers.filter(h => columnVisible.value[h.key] !== false));
 
 const {
   items, loading, page, perPage, total, filters, activeFilterCount,

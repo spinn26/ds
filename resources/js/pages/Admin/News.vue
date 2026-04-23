@@ -7,7 +7,10 @@
     </PageHeader>
 
     <v-card :loading="loading">
-      <v-data-table :items="items" :headers="headers" density="compact" hover no-data-text="Нет новостей">
+      <div class="d-flex justify-end px-3 pt-2">
+        <ColumnVisibilityMenu :headers="headers" v-model:visible="columnVisible" storage-key="news-cols" />
+      </div>
+      <v-data-table :items="items" :headers="visibleHeaders" density="compact" hover no-data-text="Нет новостей">
         <template #item.type="{ value }">
           <StatusChip
             :color="value === 'warning' ? 'warning' : value === 'success' ? 'success' : 'primary'"
@@ -61,9 +64,9 @@
 </template>
 
 <script setup>
-import { onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import {
-  PageHeader, DialogShell, StatusChip, BooleanCell, ActionsCell, FormErrors, RichTextEditor,
+  PageHeader, DialogShell, StatusChip, BooleanCell, ActionsCell, FormErrors, RichTextEditor, ColumnVisibilityMenu,
 } from '../../components';
 import { useCrud } from '../../composables/useCrud';
 import { fmtDate } from '../../composables/useDesign';
@@ -101,6 +104,9 @@ const headers = [
   { title: 'Дата', key: 'created_at', width: 120 },
   { title: '', key: 'actions', sortable: false, width: 80 },
 ];
+
+const columnVisible = ref({});
+const visibleHeaders = computed(() => headers.filter(h => columnVisible.value[h.key] !== false));
 
 onMounted(load);
 </script>

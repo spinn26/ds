@@ -13,6 +13,8 @@
         </v-chip>
         <v-btn v-if="activeFilterCount > 0" size="small" variant="text" color="secondary"
           prepend-icon="mdi-filter-remove" @click="resetFilters">Сбросить</v-btn>
+        <v-spacer />
+        <ColumnVisibilityMenu :headers="headers" v-model:visible="columnVisible" storage-key="transactions-cols" />
       </div>
     </v-card>
 
@@ -20,7 +22,7 @@
       :items="items"
       :items-length="total"
       :loading="loading"
-      :headers="headers"
+      :headers="visibleHeaders"
       :items-per-page="25"
       server-side
       empty-icon="mdi-swap-horizontal-variant"
@@ -46,6 +48,7 @@ import { useDebounce } from '../../composables/useDebounce';
 import PageHeader from '../../components/PageHeader.vue';
 import DataTableWrapper from '../../components/DataTableWrapper.vue';
 import StartChatButton from '../../components/StartChatButton.vue';
+import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 import { fmt2 as fmt, fmtDate } from '../../composables/useDesign';
 
 const items = ref([]);
@@ -66,6 +69,9 @@ const headers = [
   { title: 'Дата', key: 'date', width: 120 },
   { title: '', key: 'chat', sortable: false, width: 50 },
 ];
+
+const columnVisible = ref({});
+const visibleHeaders = computed(() => headers.filter(h => columnVisible.value[h.key] !== false));
 
 const activeFilterCount = computed(() => {
   let c = 0;

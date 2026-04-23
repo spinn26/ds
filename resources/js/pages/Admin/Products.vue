@@ -24,12 +24,15 @@
           {{ activeFilterCount }} {{ activeFilterCount === 1 ? 'фильтр' : 'фильтра' }}
         </v-chip>
       </v-col>
+      <v-col cols="auto" class="d-flex align-center ms-auto">
+        <ColumnVisibilityMenu :headers="headers" v-model:visible="columnVisible" storage-key="products-cols" />
+      </v-col>
     </FilterBar>
 
     <!-- Products Table -->
     <v-card>
       <v-data-table-server
-        :headers="headers"
+        :headers="visibleHeaders"
         :items="products"
         :items-length="total"
         :loading="loading"
@@ -298,6 +301,7 @@ import PageHeader from '../../components/PageHeader.vue';
 import EmptyState from '../../components/EmptyState.vue';
 import StatusChip from '../../components/StatusChip.vue';
 import FilterBar from '../../components/FilterBar.vue';
+import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 
 const loading = ref(false);
 const saving = ref(false);
@@ -333,6 +337,9 @@ const headers = [
   { title: 'Программ', key: 'programCount', width: 90 },
   { title: 'Действия', key: 'actions', sortable: false, width: 140 },
 ];
+
+const columnVisible = ref({});
+const visibleHeaders = computed(() => headers.filter(h => columnVisible.value[h.key] !== false));
 
 const programHeaders = [
   { title: 'Название', key: 'name' },

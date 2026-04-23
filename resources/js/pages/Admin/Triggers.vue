@@ -9,7 +9,10 @@
     </v-alert>
 
     <v-card>
-      <v-data-table :items="catalog" :headers="headers" density="comfortable" hover>
+      <div class="d-flex justify-end px-3 pt-2">
+        <ColumnVisibilityMenu :headers="headers" v-model:visible="columnVisible" storage-key="triggers-cols" />
+      </div>
+      <v-data-table :items="catalog" :headers="visibleHeaders" density="comfortable" hover>
         <template #item.channels="{ value }">
           <v-chip v-for="c in value || []" :key="c" size="x-small" class="mr-1"
             :color="chipColor(c)">
@@ -25,9 +28,9 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
-import { PageHeader, BooleanCell } from '../../components';
+import { PageHeader, BooleanCell, ColumnVisibilityMenu } from '../../components';
 
 const catalog = ref([]);
 
@@ -37,6 +40,9 @@ const headers = [
   { title: 'Каналы', key: 'channels', width: 200 },
   { title: 'Активен', key: 'enabled', width: 100 },
 ];
+
+const columnVisible = ref({});
+const visibleHeaders = computed(() => headers.filter(h => columnVisible.value[h.key] !== false));
 
 function chipColor(c) {
   return { email: 'info', tg: 'primary', inApp: 'warning' }[c] || 'grey';

@@ -9,11 +9,13 @@
         <v-chip v-if="search" size="small" color="info" variant="tonal" class="ml-1">1 фильтр</v-chip>
         <v-btn v-if="search" size="small" variant="text" color="secondary"
           prepend-icon="mdi-filter-remove" @click="search = ''; loadData()">Сбросить</v-btn>
+        <v-spacer />
+        <ColumnVisibilityMenu :headers="headers" v-model:visible="columnVisible" storage-key="transfers-cols" />
       </div>
     </v-card>
 
     <v-data-table-server :items="items" :items-length="total" :loading="loading"
-      :headers="headers" :items-per-page="25" @update:options="onOptions">
+      :headers="visibleHeaders" :items-per-page="25" @update:options="onOptions">
       <template #item.dateCreated="{ value }">
         {{ fmtDate(value) }}
       </template>
@@ -28,6 +30,7 @@ import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
 import PageHeader from '../../components/PageHeader.vue';
 import EmptyState from '../../components/EmptyState.vue';
+import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 import { fmtDate } from '../../composables/useDesign';
 
 const items = ref([]);
@@ -43,6 +46,9 @@ const headers = [
   { title: 'Прежний наставник', key: 'inviterOldName' },
   { title: 'Новый наставник', key: 'inviterNewName' },
 ];
+
+const columnVisible = ref({});
+const visibleHeaders = computed(() => headers.filter(h => columnVisible.value[h.key] !== false));
 
 const { debounced: debouncedLoad } = useDebounce(loadData, 400);
 

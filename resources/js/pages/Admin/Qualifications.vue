@@ -13,11 +13,13 @@
         </v-chip>
         <v-btn v-if="activeFilterCount > 0" size="small" variant="text" color="secondary"
           prepend-icon="mdi-filter-remove" @click="resetFilters">Сбросить</v-btn>
+        <v-spacer />
+        <ColumnVisibilityMenu :headers="headers" v-model:visible="columnVisible" storage-key="qualifications-cols" />
       </div>
     </v-card>
 
     <v-data-table-server :items="items" :items-length="total" :loading="loading"
-      :headers="headers" :items-per-page="25" @update:options="onOptions">
+      :headers="visibleHeaders" :items-per-page="25" @update:options="onOptions">
       <template #item.personalVolume="{ value }">{{ fmt(value) }}</template>
       <template #item.groupVolume="{ value }">{{ fmt(value) }}</template>
       <template #item.groupVolumeCumulative="{ value }">{{ fmt(value) }}</template>
@@ -38,6 +40,7 @@ import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
 import PageHeader from '../../components/PageHeader.vue';
 import EmptyState from '../../components/EmptyState.vue';
+import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 import { fmt, fmtDate } from '../../composables/useDesign';
 
 const items = ref([]);
@@ -73,6 +76,9 @@ const headers = [
   { title: 'НГП', key: 'groupVolumeCumulative', align: 'end', width: 130 },
   { title: 'Дата', key: 'date', width: 120 },
 ];
+
+const columnVisible = ref({});
+const visibleHeaders = computed(() => headers.filter(h => columnVisible.value[h.key] !== false));
 
 function resultLabel(r) {
   const map = { levelIncreased: 'Повышение', levelDecreased: 'Понижение', idle: 'Без изменений' };
