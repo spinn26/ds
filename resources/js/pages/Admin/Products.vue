@@ -56,7 +56,21 @@
             {{ item.visibleToCalculator ? 'mdi-calculator' : 'mdi-calculator-variant' }}
           </v-icon>
         </template>
+        <template #item.publishStatus="{ item }">
+          <v-chip size="x-small"
+            :color="item.publishStatus === 'published' ? 'success' : 'warning'"
+            :variant="item.publishStatus === 'published' ? 'flat' : 'outlined'">
+            {{ item.publishStatus === 'published' ? 'Опубликован' : 'Черновик' }}
+          </v-chip>
+        </template>
         <template #item.actions="{ item }">
+          <v-btn
+            :icon="item.publishStatus === 'published' ? 'mdi-arrow-down-bold-circle' : 'mdi-rocket-launch'"
+            size="x-small" variant="text"
+            :color="item.publishStatus === 'published' ? 'grey' : 'success'"
+            :title="item.publishStatus === 'published' ? 'Снять с публикации' : 'Опубликовать'"
+            :loading="publishingId === item.id"
+            @click.stop="togglePublish(item)" />
           <v-btn icon="mdi-pencil" size="x-small" variant="text" @click.stop="openEditProduct(item)" />
           <v-btn icon="mdi-delete" size="x-small" variant="text" color="error" @click.stop="confirmDeleteProduct(item)" />
         </template>
@@ -117,11 +131,18 @@
                 hint="Отображается в карточке продукта" persistent-hint />
             </v-col>
             <v-col cols="12">
-              <v-text-field v-model="editProduct.imageUrl" label="URL картинки"
-                prepend-inner-icon="mdi-image" hint="Ссылка на изображение продукта" persistent-hint />
+              <v-text-field v-model="editProduct.imageUrl" label="URL логотипа / иконки"
+                prepend-inner-icon="mdi-image" hint="Маленькое изображение (логотип поставщика)" persistent-hint />
             </v-col>
             <v-col cols="12" v-if="editProduct.imageUrl">
-              <v-img :src="editProduct.imageUrl" height="120" class="rounded border" contain />
+              <v-img :src="editProduct.imageUrl" height="80" class="rounded border" contain />
+            </v-col>
+            <v-col cols="12">
+              <v-text-field v-model="editProduct.heroImage" label="URL баннера карточки (hero-image)"
+                prepend-inner-icon="mdi-image-area" hint="Большое изображение сверху карточки на витрине" persistent-hint />
+            </v-col>
+            <v-col cols="12" v-if="editProduct.heroImage">
+              <v-img :src="editProduct.heroImage" height="140" class="rounded border" />
             </v-col>
             <v-col cols="12">
               <v-text-field v-model="editProduct.educationUrl" label="Ссылка на обучение"
@@ -134,6 +155,11 @@
             <v-col cols="12">
               <v-text-field v-model="editProduct.openProductUrl" label="Ссылка 'Открыть продукт'"
                 prepend-inner-icon="mdi-open-in-new" hint="Куда ведёт кнопка 'Открыть продукт' (форма БЭКа)" persistent-hint />
+            </v-col>
+            <v-col cols="12">
+              <v-select v-model="editProduct.publishStatus"
+                :items="[{title: 'Черновик', value: 'draft'}, {title: 'Опубликован', value: 'published'}]"
+                label="Статус публикации" hint="Партнёры видят только опубликованные" persistent-hint />
             </v-col>
             <v-col cols="6">
               <v-checkbox v-model="editProduct.active" label="Активен" density="compact" />
@@ -300,11 +326,12 @@ const activeOptions = [
 
 const headers = [
   { title: 'Название', key: 'name' },
-  { title: 'Статус', key: 'active', width: 120 },
-  { title: 'Партнёр', key: 'visibleToResident', width: 100 },
-  { title: 'Калькулятор', key: 'visibleToCalculator', width: 110 },
-  { title: 'Программ', key: 'programCount', width: 100 },
-  { title: 'Действия', key: 'actions', sortable: false, width: 100 },
+  { title: 'Публикация', key: 'publishStatus', width: 130 },
+  { title: 'Статус', key: 'active', width: 110 },
+  { title: 'Партнёр', key: 'visibleToResident', width: 90 },
+  { title: 'Калькулятор', key: 'visibleToCalculator', width: 100 },
+  { title: 'Программ', key: 'programCount', width: 90 },
+  { title: 'Действия', key: 'actions', sortable: false, width: 140 },
 ];
 
 const programHeaders = [
@@ -395,8 +422,24 @@ async function loadPrograms(productId) {
 }
 
 // Product CRUD
+const publishingId = ref(null);
+
+async function togglePublish(product) {
+  publishingId.value = product.id;
+  try {
+    const { data } = await api.post(`/admin/products/${product.id}/toggle-publish`);
+    product.publishStatus = data.publishStatus;
+  } catch {}
+  publishingId.value = null;
+}
+
 function openCreateProduct() {
-  editProduct.value = { name: '', description: '', imageUrl: '', educationUrl: '', instructionUrl: '', openProductUrl: '', active: true, noComission: false, visibleToResident: true, visibleToCalculator: true };
+  editProduct.value = {
+    name: '', description: '', imageUrl: '', heroImage: '',
+    educationUrl: '', instructionUrl: '', openProductUrl: '',
+    active: true, noComission: false, visibleToResident: true, visibleToCalculator: true,
+    publishStatus: 'draft',
+  };
   productError.value = '';
   productDialog.value = true;
 }

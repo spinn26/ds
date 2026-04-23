@@ -21,6 +21,14 @@ class ProductController extends Controller
 
         $query = DB::table('product')->where('active', true);
 
+        // Партнёр видит только published; staff-preview проходит через
+        // этот же endpoint но с ?includeDrafts=1 (роут защищён ролью).
+        if (! $request->boolean('includeDrafts') || ! $user->hasAnyRole(['admin', 'backoffice', 'head'])) {
+            if (Schema::hasColumn('product', 'publish_status')) {
+                $query->where('publish_status', 'published');
+            }
+        }
+
         if ($request->filled('search')) {
             $query->where('name', 'ilike', '%' . $request->search . '%');
         }
@@ -115,6 +123,8 @@ class ProductController extends Controller
                 'available' => $available,
                 'url' => $p->openProductUrl ?? null,
                 'imageUrl' => $p->imageUrl ?? null,
+                'heroImage' => $p->hero_image ?? null,
+                'publishStatus' => $p->publish_status ?? 'published',
                 'educationUrl' => $p->educationUrl ?? null,
                 'instructionUrl' => $p->instructionUrl ?? null,
                 'testPassed' => $testPassed,

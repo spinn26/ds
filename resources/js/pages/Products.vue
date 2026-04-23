@@ -19,12 +19,18 @@
       <!-- Product cards -->
       <v-row>
         <v-col v-for="product in filteredProducts" :key="product.id" cols="12" sm="6" md="4" lg="3">
-          <v-card class="pa-4 d-flex flex-column" height="100%">
-            <!-- Image placeholder (same style as video placeholders in Education) -->
-            <div class="rounded d-flex align-center justify-center mb-3" style="height:140px; background: linear-gradient(135deg, #1a1f2e 0%, #2d3748 100%)">
+          <v-card class="pa-4 d-flex flex-column" height="100%" :class="!product.available ? 'locked-card' : ''">
+            <!-- Hero image если есть, иначе placeholder -->
+            <div v-if="product.heroImage" class="rounded mb-3"
+              :style="`height:140px; background: url(${product.heroImage}) center/cover`" />
+            <div v-else class="rounded d-flex align-center justify-center mb-3"
+              style="height:140px; background: linear-gradient(135deg, #1a1f2e 0%, #2d3748 100%)">
               <div class="text-center">
-                <v-icon size="48" color="primary" class="mb-2">mdi-package-variant</v-icon>
-                <div class="text-caption text-white">DS Consulting</div>
+                <v-img v-if="product.imageUrl" :src="product.imageUrl" height="80" contain />
+                <template v-else>
+                  <v-icon size="48" color="primary" class="mb-2">mdi-package-variant</v-icon>
+                  <div class="text-caption text-white">DS Consulting</div>
+                </template>
               </div>
             </div>
 
@@ -37,7 +43,15 @@
             </div>
 
             <div class="text-subtitle-1 font-weight-bold mb-1">{{ product.name }}</div>
-            <div class="text-body-2 text-medium-emphasis flex-grow-1 mb-3">{{ product.description }}</div>
+            <div class="text-body-2 text-medium-emphasis flex-grow-1 mb-2">{{ product.description }}</div>
+
+            <!-- Currencies this product supports -->
+            <div v-if="product.currencies?.length" class="mb-2">
+              <v-chip v-for="c in product.currencies" :key="c.id"
+                size="x-small" class="me-1" color="primary" variant="outlined">
+                {{ c.symbol || c.nameRu }}
+              </v-chip>
+            </div>
 
             <!-- Locked: show which courses are still missing -->
             <div v-if="!product.available && product.requiredCourses?.length" class="mb-3">
@@ -52,7 +66,19 @@
               </div>
             </div>
 
-            <div class="d-flex ga-2 flex-wrap">
+            <!-- Secondary actions: always visible (обучение + инструкция) -->
+            <div v-if="product.educationUrl || product.instructionUrl" class="d-flex ga-1 mb-2 flex-wrap">
+              <v-btn v-if="product.educationUrl" size="x-small" variant="text" color="info"
+                :href="product.educationUrl" target="_blank" prepend-icon="mdi-school">
+                Обучение
+              </v-btn>
+              <v-btn v-if="product.instructionUrl" size="x-small" variant="text" color="secondary"
+                :href="product.instructionUrl" target="_blank" prepend-icon="mdi-file-document">
+                Инструкция
+              </v-btn>
+            </div>
+
+            <div class="d-flex ga-2 flex-wrap mt-auto">
               <v-btn v-if="!product.available && product.requiredCourses?.length"
                 variant="tonal" size="small" color="primary" to="/education" prepend-icon="mdi-school">
                 К обучению
@@ -317,3 +343,14 @@ async function loadProducts() {
 
 onMounted(loadProducts);
 </script>
+
+<style scoped>
+.locked-card {
+  filter: grayscale(0.6);
+  opacity: 0.75;
+}
+.locked-card:hover {
+  filter: grayscale(0);
+  opacity: 1;
+}
+</style>

@@ -36,6 +36,7 @@ class AdminProductController extends Controller
                 'name' => $p->name,
                 'description' => $p->description,
                 'imageUrl' => $p->imageUrl,
+                'heroImage' => $p->hero_image ?? null,
                 'educationUrl' => $p->educationUrl,
                 'instructionUrl' => $p->instructionUrl,
                 'openProductUrl' => $p->openProductUrl,
@@ -43,6 +44,8 @@ class AdminProductController extends Controller
                 'noComission' => (bool) $p->noComission,
                 'visibleToResident' => (bool) $p->visibleToResident,
                 'visibleToCalculator' => (bool) $p->visibleToCalculator,
+                'publishStatus' => $p->publish_status ?? 'published',
+                'publishedAt' => $p->published_at,
                 'programCount' => Program::where('product', $p->id)->count(),
             ]);
 
@@ -56,10 +59,12 @@ class AdminProductController extends Controller
             'name' => 'required|string|max:255',
         ]);
 
+        $status = $request->input('publishStatus', 'draft');
         $product = Product::create([
             'name' => $request->name,
             'description' => $request->description,
             'imageUrl' => $request->imageUrl,
+            'hero_image' => $request->input('heroImage'),
             'educationUrl' => $request->educationUrl,
             'instructionUrl' => $request->instructionUrl,
             'openProductUrl' => $request->openProductUrl,
@@ -67,6 +72,9 @@ class AdminProductController extends Controller
             'noComission' => $request->boolean('noComission', false),
             'visibleToResident' => $request->boolean('visibleToResident', false),
             'visibleToCalculator' => $request->boolean('visibleToCalculator', true),
+            'publish_status' => $status,
+            'published_at' => $status === 'published' ? now() : null,
+            'published_by' => $status === 'published' ? $request->user()?->id : null,
         ]);
 
         return response()->json(['message' => 'Продукт создан', 'id' => $product->id], 201);
@@ -82,6 +90,7 @@ class AdminProductController extends Controller
         $product->name = $request->name;
         $product->description = $request->description;
         $product->imageUrl = $request->imageUrl;
+        $product->hero_image = $request->input('heroImage');
         $product->educationUrl = $request->educationUrl;
         $product->instructionUrl = $request->instructionUrl;
         $product->openProductUrl = $request->openProductUrl;
@@ -89,9 +98,37 @@ class AdminProductController extends Controller
         $product->noComission = $request->boolean('noComission');
         $product->visibleToResident = $request->boolean('visibleToResident');
         $product->visibleToCalculator = $request->boolean('visibleToCalculator');
+
+        if ($request->has('publishStatus')) {
+            $newStatus = $request->input('publishStatus');
+            $wasPublished = $product->publish_status === 'published';
+            $product->publish_status = $newStatus;
+            if ($newStatus === 'published' && ! $wasPublished) {
+                $product->published_at = now();
+                $product->published_by = $request->user()?->id;
+            }
+        }
         $product->save();
 
         return response()->json(['message' => 'Продукт обновлён']);
+    }
+
+    /** Быстрая публикация/снятие с публикации без открытия формы. */
+    public function togglePublish(Request $request, int $id): JsonResponse
+    {
+        $product = Product::findOrFail($id);
+        $toPublished = $product->publish_status !== 'published';
+        $product->publish_status = $toPublished ? 'published' : 'draft';
+        if ($toPublished) {
+            $product->published_at = now();
+            $product->published_by = $request->user()?->id;
+        }
+        $product->save();
+
+        return response()->json([
+            'message' => $toPublished ? 'Продукт опубликован' : 'Продукт снят с публикации',
+            'publishStatus' => $product->publish_status,
+        ]);
     }
 
     /** Удалить продукт */
