@@ -56,6 +56,7 @@ const routes = [
             { path: 'manage/reports', component: () => import('../pages/Admin/Reports.vue'), meta: { staff: true } },
             { path: 'manage/currencies', component: () => import('../pages/Admin/Currencies.vue'), meta: { staff: true } },
             { path: 'manage/products', component: () => import('../pages/Admin/Products.vue'), meta: { staff: true } },
+            { path: 'manage/products-preview', component: () => import('../pages/Admin/ProductsPreview.vue'), meta: { staff: true } },
             { path: 'manage/contests', component: () => import('../pages/Admin/Contests.vue'), meta: { staff: true } },
             { path: 'forbidden', component: () => import('../pages/Forbidden.vue') },
         ],

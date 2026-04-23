@@ -101,6 +101,8 @@ Route::prefix('v1')->group(function () {
 
         Route::get('/products', [ProductController::class, 'index']);
         Route::post('/products/accept-documents', [ProductController::class, 'acceptDocuments']);
+        Route::post('/requisites/check-inn', [ProductController::class, 'checkInn']);
+        Route::post('/requisites', [ProductController::class, 'setupRequisites']);
         Route::get('/contests', [ContestController::class, 'index']);
         Route::get('/education/courses', [\App\Http\Controllers\Api\EducationController::class, 'courses']);
         Route::get('/education/courses/{id}', [\App\Http\Controllers\Api\EducationController::class, 'show'])->whereNumber('id');

@@ -10,6 +10,9 @@
             prepend-inner-icon="mdi-magnify" hide-details style="max-width:300px" clearable />
           <v-select v-model="category" :items="categoryOptions" label="Категория"
             clearable hide-details style="max-width:240px" />
+          <v-select v-model="currency" :items="currencyOptions"
+            item-title="label" item-value="id"
+            label="Валюта" clearable hide-details style="max-width:180px" />
         </div>
       </v-card>
 
@@ -72,38 +75,86 @@
       </div>
     </template>
 
-    <!-- Condition 2: Requisites not verified -->
-    <v-dialog v-model="reqDialog" max-width="420" persistent>
+    <!-- Blocking dialog #1: Requisites — показывается сразу при входе,
+         если реквизиты не верифицированы. Пока не заполнены — не даёт
+         листать витрину. -->
+    <v-dialog v-model="reqDialog" max-width="560" persistent>
       <v-card>
         <v-card-title class="d-flex align-center ga-2">
-          <v-icon color="warning">mdi-alert-circle</v-icon>
-          Реквизиты не подтверждены
+          <v-icon color="warning">mdi-shield-account</v-icon>
+          Шаг 1: Юридические реквизиты
         </v-card-title>
         <v-card-text>
-          Для доступа к данному продукту необходимо заполнить и подтвердить реквизиты в профиле.
+          <p class="text-body-2 mb-3">
+            Чтобы открыть раздел «Продукты», необходимо заполнить данные
+            вашего ИП и банковские реквизиты. Заполните ИНН — остальные данные
+            подтянутся из реестров автоматически.
+          </p>
+          <v-text-field
+            v-model="inn"
+            label="ИНН ИП"
+            placeholder="10 или 12 цифр"
+            variant="outlined" density="comfortable"
+            :loading="innLookup"
+            @blur="lookupInn"
+            @keyup.enter="lookupInn"
+          />
+          <v-alert v-if="innResult" :type="innMatch ? 'success' : 'warning'"
+            variant="tonal" density="compact" class="mb-3">
+            <div class="font-weight-medium">{{ innResult.name || 'Не найдено' }}</div>
+            <div v-if="innResult.fioCheck" class="text-caption">
+              <template v-if="innMatch">
+                ✓ ФИО совпадает с профилем — будет авто-верификация
+              </template>
+              <template v-else>
+                ⚠ ФИО в ИП: {{ innResult.fioCheck.actual }} · В профиле: {{ innResult.fioCheck.expected }}.
+                Будет создан тикет финменеджеру на ручную проверку.
+              </template>
+            </div>
+          </v-alert>
+          <v-text-field v-model="bankName" label="Банк" variant="outlined" density="comfortable" class="mb-2" />
+          <v-text-field v-model="bankBik" label="БИК" variant="outlined" density="comfortable" class="mb-2" />
+          <v-text-field v-model="accountNumber" label="Расчётный счёт" variant="outlined" density="comfortable" />
         </v-card-text>
-        <v-card-actions>
+        <v-card-actions class="pa-3">
           <v-spacer />
-          <v-btn @click="reqDialog = false">Закрыть</v-btn>
-          <v-btn color="primary" to="/profile" prepend-icon="mdi-account-cog">Перейти в профиль</v-btn>
+          <v-btn color="primary" :loading="savingReq"
+            :disabled="!canSaveReq" @click="saveRequisites"
+            prepend-icon="mdi-content-save">
+            Сохранить и продолжить
+          </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
 
-    <!-- Condition 3: Documents not accepted -->
-    <v-dialog v-model="acceptDialog" max-width="420" persistent>
+    <!-- Blocking dialog #2: Documents — показывается после реквизитов,
+         если документы не акцептованы. Все галки обязательны. -->
+    <v-dialog v-model="acceptDialog" max-width="560" persistent>
       <v-card>
         <v-card-title class="d-flex align-center ga-2">
-          <v-icon color="warning">mdi-file-alert</v-icon>
-          Документы не акцептованы
+          <v-icon color="warning">mdi-file-check</v-icon>
+          Шаг 2: Акцепт документов
         </v-card-title>
         <v-card-text>
-          Для доступа к данному продукту необходимо принять условия и акцептовать документы.
+          <p class="text-body-2 mb-3">
+            Перед началом работы с продуктами необходимо ознакомиться с
+            документами и принять условия.
+          </p>
+          <v-checkbox v-for="d in requiredDocs" :key="d.key"
+            v-model="acceptedDocs[d.key]" density="compact" hide-details>
+            <template #label>
+              <span>{{ d.title }}</span>
+              <a v-if="d.url" :href="d.url" target="_blank" class="text-primary ms-2">
+                <v-icon size="14">mdi-open-in-new</v-icon> открыть
+              </a>
+            </template>
+          </v-checkbox>
         </v-card-text>
-        <v-card-actions>
+        <v-card-actions class="pa-3">
           <v-spacer />
-          <v-btn @click="acceptDialog = false">Закрыть</v-btn>
-          <v-btn color="primary" @click="acceptDocuments" :loading="accepting" prepend-icon="mdi-check">
+          <v-btn color="primary" :loading="accepting"
+            :disabled="!allDocsAccepted"
+            @click="acceptDocuments" prepend-icon="mdi-check">
             Принять документы
           </v-btn>
         </v-card-actions>
@@ -125,13 +176,37 @@ const loading = ref(true);
 const products = ref([]);
 const search = ref('');
 const category = ref(null);
+const currency = ref(null);
 const categoryOptions = ref([]);
+const currencyOptions = ref([]);
 const access = ref({ testsPassed: false, requisitesVerified: false, documentsAccepted: false });
 const accessChecked = ref(false);
 const reqDialog = ref(false);
 const acceptDialog = ref(false);
 const accepting = ref(false);
-const pendingProduct = ref(null);
+
+// Requisites form state
+const inn = ref('');
+const innLookup = ref(false);
+const innResult = ref(null);
+const innMatch = computed(() => innResult.value?.fioCheck?.match ?? null);
+const bankName = ref('');
+const bankBik = ref('');
+const accountNumber = ref('');
+const savingReq = ref(false);
+const canSaveReq = computed(() =>
+  inn.value.replace(/\D/g, '').length >= 10 &&
+  bankName.value.trim() && bankBik.value.trim() && accountNumber.value.trim()
+);
+
+// Document acceptance
+const requiredDocs = [
+  { key: 'agency', title: 'Агентский договор', url: null },
+  { key: 'privacy', title: 'Согласие на обработку персональных данных', url: null },
+  { key: 'offer',   title: 'Публичная оферта', url: null },
+];
+const acceptedDocs = ref(Object.fromEntries(requiredDocs.map(d => [d.key, false])));
+const allDocsAccepted = computed(() => requiredDocs.every(d => acceptedDocs.value[d.key]));
 
 const filteredProducts = computed(() => {
   let list = products.value;
@@ -142,35 +217,74 @@ const filteredProducts = computed(() => {
   if (category.value) {
     list = list.filter(p => String(p.category?.id) === String(category.value));
   }
+  if (currency.value) {
+    list = list.filter(p => (p.currencies || []).some(c => c.id === currency.value));
+  }
   return list;
 });
 
-
 function openProduct(product) {
+  // Реквизиты/акцепт проверены ещё на входе (блокирующие окна), но
+  // оставляем защиту на случай если пользователь дошёл до карточки с
+  // частично-выполненными шагами.
+  if (!access.value.requisitesVerified) { reqDialog.value = true; return; }
+  if (!access.value.documentsAccepted)  { acceptDialog.value = true; return; }
+  if (product.url) window.open(product.url, '_blank');
+}
+
+/** Blocking gate: открыть соответствующее окно сразу после загрузки. */
+function gateIfNeeded() {
   if (!access.value.requisitesVerified) {
-    pendingProduct.value = product;
     reqDialog.value = true;
-    return;
-  }
-  if (!access.value.documentsAccepted) {
-    pendingProduct.value = product;
+  } else if (!access.value.documentsAccepted) {
     acceptDialog.value = true;
-    return;
   }
-  if (product.url) {
-    window.open(product.url, '_blank');
+}
+
+async function lookupInn() {
+  const clean = inn.value.replace(/\D/g, '');
+  if (clean.length !== 10 && clean.length !== 12) return;
+  innLookup.value = true;
+  try {
+    const { data } = await api.post('/requisites/check-inn', { inn: clean });
+    innResult.value = data;
+    if (data.found) {
+      // Если в ответе пришли юрданные (адрес, наименование) — показываем
+      // в alert, реальное сохранение произойдёт в saveRequisites.
+    }
+  } catch (e) {
+    innResult.value = { found: false, error: e.response?.data?.message || 'Не удалось проверить ИНН' };
   }
+  innLookup.value = false;
+}
+
+async function saveRequisites() {
+  savingReq.value = true;
+  try {
+    await api.post('/requisites', {
+      inn: inn.value.replace(/\D/g, ''),
+      bankName: bankName.value, bankBik: bankBik.value, accountNumber: accountNumber.value,
+      // сервер сам решает auto-verify если ФИО совпали
+      fioMatched: innMatch.value === true,
+    });
+    access.value.requisitesVerified = true;
+    reqDialog.value = false;
+    // Сразу переходим к следующему шагу
+    if (!access.value.documentsAccepted) acceptDialog.value = true;
+  } catch (e) {
+    alert(e.response?.data?.message || 'Не удалось сохранить реквизиты');
+  }
+  savingReq.value = false;
 }
 
 async function acceptDocuments() {
   accepting.value = true;
   try {
-    await api.post('/products/accept-documents');
+    await api.post('/products/accept-documents', {
+      documents: Object.keys(acceptedDocs.value).filter(k => acceptedDocs.value[k]),
+    });
     access.value.documentsAccepted = true;
     acceptDialog.value = false;
-    if (pendingProduct.value?.url) {
-      window.open(pendingProduct.value.url, '_blank');
-    }
   } catch {}
   accepting.value = false;
 }
@@ -187,7 +301,16 @@ async function loadProducts() {
       else if (data.access) access.value = data.access;
       if (data.categories) categoryOptions.value = data.categories.map(c => ({ title: c.name, value: c.id }));
     }
+    // Валюты — пересечение из всех продуктов (dedupe by id)
+    const seen = new Set();
+    currencyOptions.value = products.value
+      .flatMap(p => p.currencies || [])
+      .filter(c => { if (seen.has(c.id)) return false; seen.add(c.id); return true; })
+      .map(c => ({ id: c.id, label: c.symbol ? `${c.nameRu} (${c.symbol})` : c.nameRu }));
+
     accessChecked.value = true;
+    // После загрузки и определения access — запускаем gate
+    gateIfNeeded();
   } catch {}
   loading.value = false;
 }
