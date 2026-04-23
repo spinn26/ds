@@ -2,6 +2,7 @@
   <div>
     <PageHeader title="Реестр выплат" icon="mdi-cash-multiple">
       <template #actions>
+        <ColumnVisibilityMenu :headers="headers" v-model:visible="columnVisible" storage-key="payment-registry-cols" />
         <v-btn variant="text" prepend-icon="mdi-refresh" :loading="loading" @click="load">Пересчитать</v-btn>
       </template>
     </PageHeader>
@@ -70,7 +71,7 @@
       <v-data-table
         v-model="selectedIds"
         :items="items"
-        :headers="headers"
+        :headers="visibleHeaders"
         :loading="loading"
         density="compact"
         item-value="id"
@@ -140,7 +141,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue';
 import api from '../../api';
-import { PageHeader, FilterBar, DialogShell, MoneyCell } from '../../components';
+import { PageHeader, FilterBar, DialogShell, MoneyCell, ColumnVisibilityMenu } from '../../components';
 import { useDebounce } from '../../composables/useDebounce';
 import { useSnackbar } from '../../composables/useSnackbar';
 
@@ -189,6 +190,9 @@ const headers = [
   { title: 'Статус', key: 'status', width: 170 },
   { title: '', key: 'actions', sortable: false, width: 60 },
 ];
+
+const columnVisible = ref({});
+const visibleHeaders = computed(() => headers.filter(h => columnVisible.value[h.key] !== false));
 
 const dashboardTiles = computed(() => [
   { key: 'balance', label: 'Сальдо прошлых', value: totals.value.balance ?? 0, cls: '' },

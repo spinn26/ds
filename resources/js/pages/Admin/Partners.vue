@@ -306,7 +306,7 @@ function resetFilters() {
 const activityOptions = [
   { title: 'Активен', value: '1' },
   { title: 'Терминирован', value: '3' },
-  { title: 'Зарегистрирован', value: '4' },
+  { title: 'Зарегистрирован-Партнёр', value: '4' },
   { title: 'Исключён', value: '5' },
 ];
 

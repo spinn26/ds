@@ -77,7 +77,7 @@ export const categoryLabels = {
 export const activityLabels = {
   1: 'Активен',
   3: 'Терминирован',
-  4: 'Зарегистрирован',
+  4: 'Зарегистрирован-Партнёр',
   5: 'Исключён',
 };
 

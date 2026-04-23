@@ -9,11 +9,13 @@
         <v-chip v-if="search" size="small" color="info" variant="tonal" class="ml-1">1 фильтр</v-chip>
         <v-btn v-if="search" size="small" variant="text" color="secondary"
           prepend-icon="mdi-filter-remove" @click="search = ''; loadData()">Сбросить</v-btn>
+        <v-spacer />
+        <ColumnVisibilityMenu :headers="headers" v-model:visible="columnVisible" storage-key="clients-cols" />
       </div>
     </v-card>
 
     <v-data-table-server :items="items" :items-length="total" :loading="loading"
-      :headers="headers" :items-per-page="25" @update:options="onOptions">
+      :headers="visibleHeaders" :items-per-page="25" @update:options="onOptions">
       <template #item.isPartner="{ value }">
         <v-icon v-if="value" color="success" size="small">mdi-check-circle</v-icon>
       </template>
@@ -64,6 +66,10 @@ import PageHeader from '../../components/PageHeader.vue';
 import EmptyState from '../../components/EmptyState.vue';
 import StartChatButton from '../../components/StartChatButton.vue';
 import DialogShell from '../../components/DialogShell.vue';
+import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
+
+const columnVisible = ref({});
+const visibleHeaders = computed(() => headers.filter(h => columnVisible.value[h.key] !== false));
 import { useSnackbar } from '../../composables/useSnackbar';
 import { fmtDate } from '../../composables/useDesign';
 

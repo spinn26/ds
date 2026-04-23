@@ -530,7 +530,7 @@ const cabinetSections = {
   admin: ['calculator', 'structure', 'partners', 'statuses', 'clients', 'contracts', 'upload', 'acceptance', 'requisites', 'transfers', 'transactions', 'import', 'commissions', 'pool', 'qualifications', 'charges', 'payments', 'products', 'contests', 'communication', 'chat-analytics', 'reports', 'currencies'],
   backoffice: ['calculator', 'structure', 'partners', 'statuses', 'clients', 'contracts', 'upload', 'acceptance', 'requisites', 'transfers', 'products', 'contests', 'communication', 'chat-analytics', 'reports'],
   support: ['partners', 'statuses', 'structure', 'clients', 'contracts', 'acceptance', 'products', 'communication', 'calculator'],
-  head: ['calculator', 'structure', 'partners', 'statuses', 'clients', 'contracts', 'acceptance', 'transfers', 'products', 'contests', 'communication', 'chat-analytics', 'reports'],
+  head: ['calculator', 'structure', 'partners', 'statuses', 'clients', 'contracts', 'acceptance', 'transfers', 'products', 'contests', 'communication', 'chat-analytics', 'reports', 'owner-dashboard', 'reconciliation', 'anomalies', 'funnel', 'cohorts'],
   finance: ['calculator', 'requisites', 'charges', 'payments', 'reports', 'communication'],
   calculations: ['calculator', 'commissions', 'qualifications', 'pool', 'transactions', 'import', 'products', 'reports', 'currencies'],
   corrections: ['calculator', 'clients', 'contracts', 'partners'],
@@ -626,6 +626,14 @@ const menuItems = [
   { label: 'Аналитика чата', icon: 'mdi-chart-box-outline', path: '/manage/chat/analytics', adminSection: 'chat-analytics' },
   { label: 'Отчёты', icon: 'mdi-file-chart', path: '/manage/reports', adminSection: 'reports' },
   { label: 'Валюты и НДС', icon: 'mdi-currency-usd', path: '/manage/currencies', adminSection: 'currencies' },
+
+  // Аналитика — для руководителя / админа
+  { group: 'Аналитика', adminSection: 'owner-dashboard' },
+  { label: 'Дашборд руководителя', icon: 'mdi-crown', path: '/manage/owner-dashboard', adminSection: 'owner-dashboard' },
+  { label: 'Реконсиляция', icon: 'mdi-scale-balance', path: '/manage/reconciliation', adminSection: 'reconciliation' },
+  { label: 'Аномалии', icon: 'mdi-alert-decagram', path: '/manage/anomalies', adminSection: 'anomalies' },
+  { label: 'Воронка партнёров', icon: 'mdi-filter-variant', path: '/manage/funnel', adminSection: 'funnel' },
+  { label: 'Когорты', icon: 'mdi-chart-line', path: '/manage/cohorts', adminSection: 'cohorts' },
 ];
 
 const isConsultant = computed(() => userRoles.value.includes('consultant'));

@@ -57,6 +57,14 @@ const routes = [
             { path: 'manage/currencies', component: () => import('../pages/Admin/Currencies.vue'), meta: { staff: true } },
             { path: 'manage/products', component: () => import('../pages/Admin/Products.vue'), meta: { staff: true } },
             { path: 'manage/products-preview', component: () => import('../pages/Admin/ProductsPreview.vue'), meta: { staff: true } },
+
+            // Head (руководитель) — аналитика/дашборды клонируются в /manage/*
+            // чтобы не открывать доступ в /admin/. Переиспользуют те же компоненты.
+            { path: 'manage/owner-dashboard', component: () => import('../pages/Admin/OwnerDashboard.vue'), meta: { staff: true } },
+            { path: 'manage/reconciliation', component: () => import('../pages/Admin/Reconciliation.vue'), meta: { staff: true } },
+            { path: 'manage/anomalies', component: () => import('../pages/Admin/Anomalies.vue'), meta: { staff: true } },
+            { path: 'manage/funnel', component: () => import('../pages/Admin/Funnel.vue'), meta: { staff: true } },
+            { path: 'manage/cohorts', component: () => import('../pages/Admin/Cohorts.vue'), meta: { staff: true } },
             { path: 'manage/contests', component: () => import('../pages/Admin/Contests.vue'), meta: { staff: true } },
             { path: 'forbidden', component: () => import('../pages/Forbidden.vue') },
         ],

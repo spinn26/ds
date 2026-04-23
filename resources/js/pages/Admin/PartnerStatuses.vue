@@ -38,11 +38,14 @@
           {{ activeFilterCount }} {{ activeFilterCount === 1 ? 'фильтр' : 'фильтра' }}
         </v-chip>
       </v-col>
+      <template #actions>
+        <ColumnVisibilityMenu :headers="headers" v-model:visible="columnVisible" storage-key="partner-statuses-cols" />
+      </template>
     </FilterBar>
 
     <!-- Detail table -->
     <v-data-table-server :items="items" :items-length="total" :loading="loading"
-      :headers="headers" :items-per-page="25" @update:options="onOptions">
+      :headers="visibleHeaders" :items-per-page="25" @update:options="onOptions">
       <template #item.activityName="{ item }">
         <StatusChip :value="item.activityId" kind="activity" size="x-small" :text="item.activityName" />
       </template>
@@ -82,6 +85,7 @@ import PageHeader from '../../components/PageHeader.vue';
 import EmptyState from '../../components/EmptyState.vue';
 import StatusChip from '../../components/StatusChip.vue';
 import FilterBar from '../../components/FilterBar.vue';
+import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 import { fmt, fmtDate, getActivityColor } from '../../composables/useDesign';
 
 const loading = ref(true);
@@ -119,6 +123,9 @@ const headers = [
   { title: 'ЛП', key: 'personalVolume', align: 'end', width: 100 },
   { title: 'Терминаций', key: 'terminationCount', width: 110 },
 ];
+
+const columnVisible = ref({});
+const visibleHeaders = computed(() => headers.filter(h => columnVisible.value[h.key] !== false));
 
 function isExpiringSoon(d) {
   if (!d) return false;

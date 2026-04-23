@@ -14,6 +14,7 @@ export { default as Breadcrumbs } from './Breadcrumbs.vue';
 export { default as DataTableWrapper } from './DataTableWrapper.vue';
 export { default as EmptyState } from './EmptyState.vue';
 export { default as BrandWaves } from './BrandWaves.vue';
+export { default as ColumnVisibilityMenu } from './ColumnVisibilityMenu.vue';
 
 // Filters / search
 export { default as FilterBar } from './FilterBar.vue';

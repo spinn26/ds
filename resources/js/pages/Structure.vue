@@ -176,7 +176,7 @@ const total = ref(0);
 const page = ref(1);
 const qualificationOptions = ref([]);
 const statusOptions = [
-  { title: 'Зарегистрирован', value: 'registered' },
+  { title: 'Зарегистрирован-Партнёр', value: 'registered' },
   { title: 'Активен', value: 'active' },
   { title: 'Терминирован', value: 'terminated' },
   { title: 'Исключён', value: 'excluded' },

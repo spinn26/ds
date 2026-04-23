@@ -20,7 +20,7 @@ enum PartnerActivity: int
         return match ($this) {
             self::Active => 'Активен',
             self::Terminated => 'Терминирован',
-            self::Registered => 'Зарегистрирован',
+            self::Registered => 'Зарегистрирован-Партнёр',
             self::Excluded => 'Исключён',
         };
     }

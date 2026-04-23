@@ -165,7 +165,7 @@ const roleOptions = [
   { title: 'Администратор', value: 'admin' },
   { title: 'Бэкофис', value: 'backoffice' },
   { title: 'Консультант', value: 'consultant' },
-  { title: 'Зарегистрирован', value: 'registered' },
+  { title: 'Зарегистрирован-Партнёр', value: 'registered' },
 ];
 
 // Full list — все 8 ролей для формы редактирования
@@ -178,7 +178,7 @@ const allRoleOptions = [
   { title: 'Расчёты (Богданова)', value: 'calculations' },
   { title: 'Правки', value: 'corrections' },
   { title: 'Консультант', value: 'consultant' },
-  { title: 'Зарегистрирован', value: 'registered' },
+  { title: 'Зарегистрирован-Партнёр', value: 'registered' },
 ];
 
 const blockedOptions = [

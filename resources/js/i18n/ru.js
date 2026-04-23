@@ -35,7 +35,7 @@ export default {
   },
   status: {
     active: 'Активен',
-    registered: 'Зарегистрирован',
+    registered: 'Зарегистрирован-Партнёр',
     terminated: 'Терминирован',
     excluded: 'Исключён',
   },
