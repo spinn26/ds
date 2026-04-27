@@ -17,6 +17,11 @@
             <v-icon size="20">mdi-file-document-multiple</v-icon>
             Контракты
             <v-chip v-if="contractTotal" size="x-small" color="primary" variant="tonal">{{ contractTotal }}</v-chip>
+            <v-spacer />
+            <ColumnVisibilityMenu :headers="contractHeaders"
+              v-model:visible="contractColsVisible"
+              storage-key="manual-tx-contracts-cols"
+              :always-visible="['add']" />
           </v-card-title>
 
           <v-card-text class="pt-0">
@@ -66,7 +71,7 @@
 
           <v-data-table-server
             :items="contracts" :items-length="contractTotal" :loading="loadingContracts"
-            :headers="contractHeaders" :items-per-page="15" item-value="id"
+            :headers="visibleContractHeaders" :items-per-page="15" item-value="id"
             density="compact"
             @update:options="onContractOpts">
             <template #item.add="{ item }">
@@ -89,8 +94,11 @@
               <v-chip size="x-small" color="warning" variant="tonal" class="ml-1">{{ drafts.length }}</v-chip>
             </span>
             <v-spacer />
-            <v-switch v-model="showProduct" label="Показать продукт" hide-details density="compact" color="primary" />
             <v-switch v-model="showExtra" label="Показать доп. настройки" hide-details density="compact" color="primary" />
+            <ColumnVisibilityMenu :headers="draftHeaders"
+              v-model:visible="draftColsVisible"
+              storage-key="manual-tx-drafts-cols"
+              :always-visible="['icon', 'actions']" />
           </v-card-title>
 
           <v-card-text v-if="!drafts.length" class="text-center text-medium-emphasis py-4">
@@ -100,129 +108,130 @@
           <v-table v-else density="compact" class="manual-tx-table">
             <thead>
               <tr>
-                <th style="width:32px"></th>
-                <th>№</th>
-                <th>Клиент</th>
-                <th v-if="showProduct">Продукт</th>
-                <th v-if="showProduct">Программа</th>
-                <th v-if="showProduct">Поставщик</th>
-                <th style="min-width:140px">Дата</th>
-                <th style="min-width:160px">Комментарий</th>
-                <th style="min-width:130px">Параметр</th>
-                <th v-if="showExtra" style="min-width:110px">Год КВ</th>
-                <th class="text-end" style="min-width:140px">Транзакция</th>
-                <th style="min-width:90px">Валюта</th>
-                <th class="text-end" style="min-width:80px">% ДС</th>
-                <th style="width:50px">Изменить</th>
-                <th class="text-end">Доход ДС</th>
-                <th class="text-end">Без НДС, RUB</th>
-                <th class="text-end">Без НДС, USD</th>
-                <th>Партнёр</th>
-                <th class="text-end">Прибыль ДС</th>
-                <th style="width:48px"></th>
+                <th v-for="h in visibleDraftHeaders" :key="h.key" :class="h.thClass" :style="h.style">
+                  {{ h.title }}
+                </th>
               </tr>
             </thead>
             <tbody>
               <!-- Строка-итог -->
               <tr class="tx-totals-row">
-                <td></td>
-                <td colspan="5" v-if="showProduct"></td>
-                <td colspan="2" v-if="!showProduct"></td>
-                <td class="text-success">{{ totals.maxDate || '—' }}</td>
-                <td></td>
-                <td></td>
-                <td v-if="showExtra"></td>
-                <td class="text-end text-success font-weight-bold">{{ fmt2(totals.amount) }}</td>
-                <td class="text-success">{{ totals.currencySymbol || 'RUB' }}</td>
-                <td></td>
-                <td></td>
-                <td class="text-end text-success font-weight-bold">{{ fmt2(totals.incomeDS) }} RUB</td>
-                <td class="text-end text-success font-weight-bold">{{ fmt2(totals.noVatRub) }} RUB</td>
-                <td class="text-end text-success font-weight-bold">{{ fmt2(totals.noVatUsd) }} USD</td>
-                <td></td>
-                <td class="text-end text-success font-weight-bold">{{ fmt2(totals.profit) }} RUB</td>
-                <td></td>
+                <td v-for="h in visibleDraftHeaders" :key="'tot-' + h.key" :class="h.tdClass">
+                  <template v-if="h.key === 'date'">
+                    <span class="text-success">{{ totals.maxDate || '—' }}</span>
+                  </template>
+                  <template v-else-if="h.key === 'amount'">
+                    <span class="text-end text-success font-weight-bold d-block">{{ fmt2(totals.amount) }}</span>
+                  </template>
+                  <template v-else-if="h.key === 'currency'">
+                    <span class="text-success">{{ totals.currencySymbol || 'RUB' }}</span>
+                  </template>
+                  <template v-else-if="h.key === 'incomeDS'">
+                    <span class="text-end text-success font-weight-bold d-block">{{ fmt2(totals.incomeDS) }} RUB</span>
+                  </template>
+                  <template v-else-if="h.key === 'noVatRub'">
+                    <span class="text-end text-success font-weight-bold d-block">{{ fmt2(totals.noVatRub) }} RUB</span>
+                  </template>
+                  <template v-else-if="h.key === 'noVatUsd'">
+                    <span class="text-end text-success font-weight-bold d-block">{{ fmt2(totals.noVatUsd) }} USD</span>
+                  </template>
+                  <template v-else-if="h.key === 'profit'">
+                    <span class="text-end text-success font-weight-bold d-block">{{ fmt2(totals.profit) }} RUB</span>
+                  </template>
+                </td>
               </tr>
 
               <template v-for="d in drafts" :key="d.id">
                 <tr :class="{ 'tx-row-ready': d.preview?.ready }">
-                  <td>
-                    <v-icon size="20" color="primary">mdi-calculator</v-icon>
-                  </td>
-                  <td class="text-no-wrap">{{ d.contractNumber || '—' }}</td>
-                  <td class="text-no-wrap">{{ d.clientName || '—' }}</td>
-                  <td v-if="showProduct" class="text-no-wrap">{{ d.productName || '—' }}</td>
-                  <td v-if="showProduct" class="text-no-wrap">{{ d.programName || '—' }}</td>
-                  <td v-if="showProduct" class="text-no-wrap">{{ d.supplierName || '—' }}</td>
-                  <td>
-                    <v-text-field :model-value="d.date" type="date" density="compact" hide-details variant="plain"
-                      @update:model-value="v => patchField(d, 'date', v)" />
-                  </td>
-                  <td>
-                    <v-text-field :model-value="d.comment" placeholder="Введите" density="compact" hide-details variant="plain"
-                      @update:model-value="v => patchField(d, 'comment', v)" />
-                  </td>
-                  <td>
-                    <v-select :model-value="d.parameter" :items="parameterOptions" density="compact" hide-details variant="plain"
-                      @update:model-value="v => patchField(d, 'parameter', v)" />
-                  </td>
-                  <td v-if="showExtra">
-                    <v-select :model-value="d.yearKV" :items="yearKVOptions" density="compact" hide-details variant="plain" clearable
-                      @update:model-value="v => patchField(d, 'yearKV', v)" />
-                  </td>
-                  <td class="text-end">
-                    <v-text-field :model-value="d.amount" type="number" density="compact" hide-details variant="plain"
-                      reverse @update:model-value="v => patchField(d, 'amount', v)" />
-                  </td>
-                  <td>
-                    <v-select :model-value="d.currencyId" :items="currencyOptions" item-title="symbol" item-value="id"
-                      density="compact" hide-details variant="plain"
-                      @update:model-value="v => patchField(d, 'currency', v)" />
-                  </td>
-                  <td class="text-end">
-                    <span v-if="d.preview?.ready">{{ fmt2(d.preview.dsCommissionPercentage) }}%</span>
-                    <span v-else class="text-medium-emphasis">—</span>
-                  </td>
-                  <td class="text-center">
-                    <v-btn icon="mdi-pencil-outline" size="x-small" variant="text"
-                      :disabled="!d.productId" :title="d.productId ? 'Изменить % ДС' : 'Нет продукта'"
-                      @click="openRateModal(d)" />
-                  </td>
-                  <td class="text-end text-no-wrap">
-                    <template v-if="showExtra && d.customCommission">
-                      <v-text-field :model-value="d.dsCommissionAbsolute" type="number" density="compact" hide-details variant="plain"
-                        style="max-width:120px; display:inline-block"
-                        reverse @update:model-value="v => patchField(d, 'dsCommissionAbsolute', v)" />
-                      RUB
+                  <td v-for="h in visibleDraftHeaders" :key="h.key + '-' + d.id" :class="h.tdClass">
+                    <template v-if="h.key === 'icon'">
+                      <v-icon size="20" color="primary">mdi-calculator</v-icon>
                     </template>
-                    <template v-else>
-                      <span v-if="d.preview?.ready">{{ fmt2(d.preview.incomeDS) }} RUB</span>
+                    <template v-else-if="h.key === 'number'">
+                      <span class="text-no-wrap">{{ d.contractNumber || '—' }}</span>
+                    </template>
+                    <template v-else-if="h.key === 'client'">
+                      <span class="text-no-wrap">{{ d.clientName || '—' }}</span>
+                    </template>
+                    <template v-else-if="h.key === 'product'">
+                      <span class="text-no-wrap">{{ d.productName || '—' }}</span>
+                    </template>
+                    <template v-else-if="h.key === 'program'">
+                      <span class="text-no-wrap">{{ d.programName || '—' }}</span>
+                    </template>
+                    <template v-else-if="h.key === 'supplier'">
+                      <span class="text-no-wrap">{{ d.supplierName || '—' }}</span>
+                    </template>
+                    <template v-else-if="h.key === 'date'">
+                      <v-text-field :model-value="d.date" type="date" density="compact" hide-details variant="plain"
+                        @update:model-value="v => patchField(d, 'date', v)" />
+                    </template>
+                    <template v-else-if="h.key === 'comment'">
+                      <v-text-field :model-value="d.comment" placeholder="Введите" density="compact" hide-details variant="plain"
+                        @update:model-value="v => patchField(d, 'comment', v)" />
+                    </template>
+                    <template v-else-if="h.key === 'parameter'">
+                      <v-select :model-value="d.parameter" :items="parameterOptions" density="compact" hide-details variant="plain"
+                        @update:model-value="v => patchField(d, 'parameter', v)" />
+                    </template>
+                    <template v-else-if="h.key === 'yearKV'">
+                      <v-select :model-value="d.yearKV" :items="yearKVOptions" density="compact" hide-details variant="plain" clearable
+                        @update:model-value="v => patchField(d, 'yearKV', v)" />
+                    </template>
+                    <template v-else-if="h.key === 'amount'">
+                      <v-text-field :model-value="d.amount" type="number" density="compact" hide-details variant="plain"
+                        reverse @update:model-value="v => patchField(d, 'amount', v)" />
+                    </template>
+                    <template v-else-if="h.key === 'currency'">
+                      <v-select :model-value="d.currencyId" :items="currencyOptions" item-title="symbol" item-value="id"
+                        density="compact" hide-details variant="plain"
+                        @update:model-value="v => patchField(d, 'currency', v)" />
+                    </template>
+                    <template v-else-if="h.key === 'dsPercent'">
+                      <span v-if="d.preview?.ready">{{ fmt2(d.preview.dsCommissionPercentage) }}%</span>
                       <span v-else class="text-medium-emphasis">—</span>
                     </template>
-                  </td>
-                  <td class="text-end text-no-wrap">
-                    <span v-if="d.preview?.ready">{{ fmt2(d.preview.amountNoVat) }} RUB</span>
-                    <span v-else class="text-medium-emphasis">—</span>
-                  </td>
-                  <td class="text-end text-no-wrap">
-                    <span v-if="d.preview?.ready">{{ fmt2(d.preview.amountNoVatUSD) }} USD</span>
-                    <span v-else class="text-medium-emphasis">—</span>
-                  </td>
-                  <td>
-                    <a v-if="d.preview?.chain?.length" href="#" class="text-decoration-none text-primary"
-                      @click.prevent="toggleChain(d.id)">
-                      Цепочка партнёров
-                      <v-icon size="14">{{ chainExpanded[d.id] ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon>
-                    </a>
-                    <span v-else class="text-no-wrap text-medium-emphasis">{{ d.consultantName || '—' }}</span>
-                  </td>
-                  <td class="text-end text-no-wrap">
-                    <span v-if="d.preview?.ready" class="font-weight-bold">{{ fmt2(d.preview.profitDS) }} RUB</span>
-                    <span v-else class="text-medium-emphasis">—</span>
-                  </td>
-                  <td>
-                    <v-btn icon="mdi-trash-can-outline" size="x-small" variant="text" color="error"
-                      @click="removeDraft(d)" />
+                    <template v-else-if="h.key === 'change'">
+                      <v-btn icon="mdi-pencil-outline" size="x-small" variant="text"
+                        :disabled="!d.productId" :title="d.productId ? 'Изменить % ДС' : 'Нет продукта'"
+                        @click="openRateModal(d)" />
+                    </template>
+                    <template v-else-if="h.key === 'incomeDS'">
+                      <template v-if="showExtra && d.customCommission">
+                        <v-text-field :model-value="d.dsCommissionAbsolute" type="number" density="compact" hide-details variant="plain"
+                          style="max-width:120px; display:inline-block"
+                          reverse @update:model-value="v => patchField(d, 'dsCommissionAbsolute', v)" />
+                        RUB
+                      </template>
+                      <template v-else>
+                        <span v-if="d.preview?.ready">{{ fmt2(d.preview.incomeDS) }} RUB</span>
+                        <span v-else class="text-medium-emphasis">—</span>
+                      </template>
+                    </template>
+                    <template v-else-if="h.key === 'noVatRub'">
+                      <span v-if="d.preview?.ready">{{ fmt2(d.preview.amountNoVat) }} RUB</span>
+                      <span v-else class="text-medium-emphasis">—</span>
+                    </template>
+                    <template v-else-if="h.key === 'noVatUsd'">
+                      <span v-if="d.preview?.ready">{{ fmt2(d.preview.amountNoVatUSD) }} USD</span>
+                      <span v-else class="text-medium-emphasis">—</span>
+                    </template>
+                    <template v-else-if="h.key === 'partner'">
+                      <a v-if="d.preview?.chain?.length" href="#" class="text-decoration-none text-primary"
+                        @click.prevent="toggleChain(d.id)">
+                        Цепочка партнёров
+                        <v-icon size="14">{{ chainExpanded[d.id] ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon>
+                      </a>
+                      <span v-else class="text-no-wrap text-medium-emphasis">{{ d.consultantName || '—' }}</span>
+                    </template>
+                    <template v-else-if="h.key === 'profit'">
+                      <span v-if="d.preview?.ready" class="font-weight-bold">{{ fmt2(d.preview.profitDS) }} RUB</span>
+                      <span v-else class="text-medium-emphasis">—</span>
+                    </template>
+                    <template v-else-if="h.key === 'actions'">
+                      <v-btn icon="mdi-trash-can-outline" size="x-small" variant="text" color="error"
+                        @click="removeDraft(d)" />
+                    </template>
                   </td>
                 </tr>
 
@@ -230,22 +239,22 @@
                 <template v-if="chainExpanded[d.id] && d.preview?.chain?.length">
                   <tr v-for="(row, idx) in d.preview.chain" :key="'chain-' + d.id + '-' + idx"
                     class="tx-chain-row" :class="{ 'font-weight-bold': row.isDirect }">
-                    <td colspan="13"></td>
-                    <td colspan="3" class="text-end pe-3">
-                      <span class="text-medium-emphasis me-3">ЛП</span>
-                      <span class="me-3">{{ fmt2(row.lp) }}</span>
-                      <span class="text-medium-emphasis me-3">Баллы</span>
-                      <span>{{ fmt2(row.points) }}</span>
+                    <td :colspan="visibleDraftHeaders.length" class="pa-2">
+                      <div class="d-flex align-center ga-3 ps-12">
+                        <span class="text-medium-emphasis">ЛП</span>
+                        <span style="min-width: 60px">{{ fmt2(row.lp) }}</span>
+                        <span class="text-medium-emphasis">Баллы</span>
+                        <span style="min-width: 60px">{{ fmt2(row.points) }}</span>
+                        <span class="text-medium-emphasis ms-auto">{{ row.name }}</span>
+                        <span class="text-end text-no-wrap" style="min-width: 100px">{{ fmt2(row.sum) }} RUB</span>
+                      </div>
                     </td>
-                    <td>{{ row.name }}</td>
-                    <td class="text-end text-no-wrap">{{ fmt2(row.sum) }} RUB</td>
-                    <td></td>
                   </tr>
                 </template>
 
                 <!-- Своя комиссия в доп. настройках -->
                 <tr v-if="showExtra" class="tx-extra-row">
-                  <td colspan="20" class="pa-2">
+                  <td :colspan="visibleDraftHeaders.length" class="pa-2">
                     <v-checkbox :model-value="d.customCommission"
                       :label="'Своя комиссия для ' + (d.contractNumber || '—') + ' (Брокер+ и подобные)'"
                       hide-details density="compact" color="warning"
@@ -406,7 +415,7 @@ function resetContractFilters() {
   loadContracts();
 }
 
-const contractHeaders = computed(() => ([
+const contractHeaders = [
   { title: '', key: 'add', sortable: false, width: 50 },
   { title: 'Номер', key: 'number', width: 130 },
   { title: 'Клиент', key: 'clientName' },
@@ -418,7 +427,43 @@ const contractHeaders = computed(() => ([
   { title: 'Продукт', key: 'productName' },
   { title: 'Программа', key: 'programName' },
   { title: 'Сумма', key: 'amount', align: 'end', width: 140 },
-]));
+];
+const contractColsVisible = ref({});
+const visibleContractHeaders = computed(() =>
+  contractHeaders.filter(h => contractColsVisible.value[h.key] !== false)
+);
+
+// Колонки таблицы черновиков. По умолчанию product/program/supplier/yearKV
+// скрыты (legacy «Показать продукт» / «доп. настройки»). Пользователь
+// открывает их через ColumnVisibilityMenu.
+const draftHeaders = [
+  { title: '', key: 'icon', style: 'width:32px' },
+  { title: '№', key: 'number' },
+  { title: 'Клиент', key: 'client' },
+  { title: 'Продукт', key: 'product' },
+  { title: 'Программа', key: 'program' },
+  { title: 'Поставщик', key: 'supplier' },
+  { title: 'Дата', key: 'date', style: 'min-width:140px' },
+  { title: 'Комментарий', key: 'comment', style: 'min-width:160px' },
+  { title: 'Параметр', key: 'parameter', style: 'min-width:130px' },
+  { title: 'Год КВ', key: 'yearKV', style: 'min-width:110px' },
+  { title: 'Транзакция', key: 'amount', thClass: 'text-end', tdClass: 'text-end', style: 'min-width:140px' },
+  { title: 'Валюта', key: 'currency', style: 'min-width:90px' },
+  { title: '% ДС', key: 'dsPercent', thClass: 'text-end', tdClass: 'text-end', style: 'min-width:80px' },
+  { title: 'Изменить', key: 'change', thClass: 'text-center', tdClass: 'text-center', style: 'width:50px' },
+  { title: 'Доход ДС', key: 'incomeDS', thClass: 'text-end', tdClass: 'text-end text-no-wrap' },
+  { title: 'Без НДС, RUB', key: 'noVatRub', thClass: 'text-end', tdClass: 'text-end text-no-wrap' },
+  { title: 'Без НДС, USD', key: 'noVatUsd', thClass: 'text-end', tdClass: 'text-end text-no-wrap' },
+  { title: 'Партнёр', key: 'partner' },
+  { title: 'Прибыль ДС', key: 'profit', thClass: 'text-end', tdClass: 'text-end text-no-wrap' },
+  { title: '', key: 'actions', style: 'width:48px' },
+];
+const draftColsVisible = ref({
+  product: false, program: false, supplier: false, yearKV: false,
+});
+const visibleDraftHeaders = computed(() =>
+  draftHeaders.filter(h => draftColsVisible.value[h.key] !== false)
+);
 
 const { debounced: debouncedSearch } = useDebounce(loadContracts, 400);
 
@@ -452,7 +497,6 @@ async function loadContracts() {
 const drafts = ref([]);
 const adding = ref(false);
 const fixing = ref(false);
-const showProduct = ref(false);
 const showExtra = ref(false);
 const chainExpanded = ref({});
 
