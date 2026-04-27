@@ -161,7 +161,11 @@ class ManualTransactionController extends Controller
         return response()->json(['data' => $data]);
     }
 
-    /** Обновить поле черновика. После записи возвращаем превью-расчёт. */
+    /**
+     * Обновить поле черновика. Превью НЕ пересчитывается — пользователь
+     * сам жмёт «Рассчитать транзакции», чтобы увидеть новые цифры.
+     * Любая правка инвалидирует существующее превью (стираем previewCalc).
+     */
     public function updateDraft(Request $request, int $id): JsonResponse
     {
         $request->validate([
@@ -188,25 +192,47 @@ class ManualTransactionController extends Controller
             'customCommission', 'dsCommissionAbsolute',
         ]);
 
-        // Когда переключают валюту — перезатираем currencyRate актуальным курсом.
         if ($request->filled('currency')) {
             $update['currency'] = (int) $request->currency;
             $update['currencyRate'] = $this->fetchCurrencyRate((int) $request->currency);
         }
 
+        // Любое изменение полей инвалидирует ранее рассчитанное превью.
+        $update['previewCalc'] = null;
         $update['updatedAt'] = now();
         DB::table('transaction_draft')->where('id', $id)->update($update);
 
-        $fresh = $this->loadDraftWithRefs($id);
-        $preview = $this->computePreview($fresh);
+        return response()->json($this->serializeDraft($this->loadDraftWithRefs($id)));
+    }
 
-        DB::table('transaction_draft')->where('id', $id)->update([
-            'previewCalc' => json_encode($preview, JSON_UNESCAPED_UNICODE),
-        ]);
+    /**
+     * Рассчитать (или пересчитать) превью для всех черновиков либо для
+     * указанного списка ids. Запускается явно по клику «Рассчитать».
+     * Зафиксированные строки не появляются здесь — они уже в transaction.
+     */
+    public function calculateDrafts(Request $request): JsonResponse
+    {
+        $ids = $request->input('ids');
+        $query = DB::table('transaction_draft');
+        if (is_array($ids) && count($ids)) $query->whereIn('id', $ids);
+        $allIds = $query->pluck('id');
 
-        $fresh->previewCalc = json_encode($preview, JSON_UNESCAPED_UNICODE);
+        $results = ['calculated' => 0, 'skipped' => 0];
+        foreach ($allIds as $id) {
+            $draft = $this->loadDraftWithRefs((int) $id);
+            if (! $draft || ! $draft->amount || ! $draft->date) {
+                $results['skipped']++;
+                continue;
+            }
+            $preview = $this->computePreview($draft);
+            DB::table('transaction_draft')->where('id', $id)->update([
+                'previewCalc' => json_encode($preview, JSON_UNESCAPED_UNICODE),
+                'updatedAt' => now(),
+            ]);
+            $results['calculated']++;
+        }
 
-        return response()->json($this->serializeDraft($fresh));
+        return response()->json($results);
     }
 
     public function deleteDraft(int $id): JsonResponse

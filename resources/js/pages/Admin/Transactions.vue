@@ -257,10 +257,17 @@
           </v-table>
 
           <v-card-actions class="d-flex flex-wrap ga-2">
+            <v-btn color="primary" :disabled="!calculableIds.length || calculating" prepend-icon="mdi-calculator"
+              :loading="calculating" @click="calcAll" size="large">
+              Рассчитать транзакции
+              <v-chip v-if="dirtyCount" size="x-small" color="white" variant="elevated" class="ms-2">
+                {{ dirtyCount }}
+              </v-chip>
+            </v-btn>
             <v-btn color="success" :disabled="!fixableIds.length || fixing" prepend-icon="mdi-content-save"
-              :loading="fixing" @click="fixAll" size="large">
+              :loading="fixing" @click="fixAll" size="large" variant="outlined">
               Зафиксировать транзакции
-              <v-chip v-if="fixableIds.length" size="x-small" color="white" variant="elevated" class="ms-2">
+              <v-chip v-if="fixableIds.length" size="x-small" color="success" variant="elevated" class="ms-2">
                 {{ fixableIds.length }}
               </v-chip>
             </v-btn>
@@ -522,11 +529,32 @@ async function clearAll() {
   drafts.value = [];
 }
 
-const fixableIds = computed(() =>
-  drafts.value
-    .filter(d => d.amount && d.date && d.preview?.ready)
-    .map(d => d.id)
+// Готовые к расчёту: есть сумма и дата.
+const calculableIds = computed(() =>
+  drafts.value.filter(d => d.amount && d.date).map(d => d.id)
 );
+// Готовые к фиксации: уже посчитано превью.
+const fixableIds = computed(() =>
+  drafts.value.filter(d => d.amount && d.date && d.preview?.ready).map(d => d.id)
+);
+// Сколько строк ждут расчёта (есть данные, но превью пустое).
+const dirtyCount = computed(() =>
+  drafts.value.filter(d => d.amount && d.date && !d.preview?.ready).length
+);
+
+const calculating = ref(false);
+async function calcAll() {
+  calculating.value = true;
+  try {
+    const { data } = await api.post('/admin/manual-tx/calc', {});
+    if (data.calculated) notify(`Рассчитано: ${data.calculated}`);
+    if (data.skipped) notify(`Пропущено (нет суммы/даты): ${data.skipped}`, 'warning');
+    await loadDrafts();
+  } catch (e) {
+    notify(e.response?.data?.message || 'Ошибка расчёта', 'error');
+  }
+  calculating.value = false;
+}
 
 async function fixAll() {
   if (!fixableIds.value.length) return;
