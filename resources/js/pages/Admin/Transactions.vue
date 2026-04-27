@@ -23,46 +23,61 @@
             <v-row dense>
               <v-col cols="12" md="3">
                 <v-text-field v-model="filters.consultantName" placeholder="ФИО консультанта"
-                  prepend-inner-icon="mdi-account-tie" density="compact" hide-details rounded clearable
+                  density="compact" hide-details rounded clearable variant="outlined"
                   @update:model-value="debouncedSearch" />
               </v-col>
               <v-col cols="12" md="3">
                 <v-text-field v-model="filters.clientName" placeholder="ФИО клиента"
-                  prepend-inner-icon="mdi-account" density="compact" hide-details rounded clearable
+                  density="compact" hide-details rounded clearable variant="outlined"
                   @update:model-value="debouncedSearch" />
               </v-col>
               <v-col cols="12" md="2">
                 <v-text-field v-model="filters.number" placeholder="№ контракта"
-                  prepend-inner-icon="mdi-pound" density="compact" hide-details rounded clearable
+                  density="compact" hide-details rounded clearable variant="outlined"
                   @update:model-value="debouncedSearch" />
               </v-col>
-              <v-col cols="12" md="4">
-                <v-autocomplete v-model="filters.product" :items="productList" item-title="name" item-value="id"
-                  placeholder="Продукт" density="compact" hide-details rounded clearable
+              <v-col cols="12" md="2">
+                <v-autocomplete v-model="filters.supplier" :items="lookupSuppliers"
+                  placeholder="Поставщик" density="compact" hide-details rounded clearable variant="outlined"
                   @update:model-value="loadContracts" />
+              </v-col>
+              <v-col cols="12" md="2">
+                <v-autocomplete v-model="filters.provider" :items="lookupProviders"
+                  placeholder="Провайдер" density="compact" hide-details rounded clearable variant="outlined"
+                  @update:model-value="loadContracts" />
+              </v-col>
+              <v-col cols="12" md="3">
+                <v-autocomplete v-model="filters.product" :items="productList" item-title="name" item-value="id"
+                  placeholder="Продукт" density="compact" hide-details rounded clearable variant="outlined"
+                  @update:model-value="loadContracts" />
+              </v-col>
+              <v-col cols="12" md="3">
+                <v-autocomplete v-model="filters.program" :items="programList" item-title="name" item-value="id"
+                  placeholder="Программа" density="compact" hide-details rounded clearable variant="outlined"
+                  @update:model-value="loadContracts" />
+              </v-col>
+              <v-col cols="12" md="auto" class="d-flex align-center">
+                <v-btn variant="text" size="small" prepend-icon="mdi-filter-remove" @click="resetContractFilters">
+                  Очистить фильтры
+                </v-btn>
               </v-col>
             </v-row>
           </v-card-text>
 
           <v-data-table-server
-            v-model="selectedContractIds"
-            show-select
             :items="contracts" :items-length="contractTotal" :loading="loadingContracts"
             :headers="contractHeaders" :items-per-page="15" item-value="id"
             density="compact"
             @update:options="onContractOpts">
+            <template #item.add="{ item }">
+              <v-btn icon="mdi-plus-circle" size="small" variant="text" color="primary"
+                title="Добавить в черновики"
+                @click="addContractToDrafts(item.id)" />
+            </template>
             <template #item.amount="{ item }">{{ fmt2(item.amount) }} {{ item.currencySymbol || '' }}</template>
             <template #item.openDate="{ value }">{{ fmtDate(value) }}</template>
             <template #no-data><EmptyState message="Контракты не найдены" /></template>
           </v-data-table-server>
-
-          <v-card-actions>
-            <v-btn color="primary" :disabled="!selectedContractIds.length" prepend-icon="mdi-plus"
-              @click="addToDrafts" :loading="adding">
-              Добавить в черновики ({{ selectedContractIds.length }})
-            </v-btn>
-            <v-spacer />
-          </v-card-actions>
         </v-card>
 
         <!-- Рабочая зона черновиков -->
@@ -85,7 +100,7 @@
           <v-table v-else density="compact" class="manual-tx-table">
             <thead>
               <tr>
-                <th style="width:36px"><v-checkbox v-model="allSelected" hide-details density="compact" :indeterminate="someSelected" /></th>
+                <th style="width:32px"></th>
                 <th>№</th>
                 <th>Клиент</th>
                 <th v-if="showProduct">Продукт</th>
@@ -95,122 +110,141 @@
                 <th style="min-width:160px">Комментарий</th>
                 <th style="min-width:130px">Параметр</th>
                 <th v-if="showExtra" style="min-width:110px">Год КВ</th>
-                <th style="min-width:140px">Транзакция</th>
+                <th class="text-end" style="min-width:140px">Транзакция</th>
                 <th style="min-width:90px">Валюта</th>
                 <th class="text-end" style="min-width:80px">% ДС</th>
-                <th style="width:50px"></th>
+                <th style="width:50px">Изменить</th>
                 <th class="text-end">Доход ДС</th>
-                <th class="text-end">Без НДС</th>
-                <th class="text-end">НДС</th>
+                <th class="text-end">Без НДС, RUB</th>
+                <th class="text-end">Без НДС, USD</th>
                 <th>Партнёр</th>
                 <th class="text-end">Прибыль ДС</th>
                 <th style="width:48px"></th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="d in drafts" :key="d.id" :class="{ 'tx-row-ready': d.preview?.ready }">
-                <td><v-checkbox v-model="selectedDraftIds" :value="d.id" hide-details density="compact" /></td>
-                <td class="text-no-wrap">{{ d.contractNumber || '—' }}</td>
-                <td class="text-no-wrap">{{ d.clientName || '—' }}</td>
-                <td v-if="showProduct" class="text-no-wrap">{{ d.productName || '—' }}</td>
-                <td v-if="showProduct" class="text-no-wrap">{{ d.programName || '—' }}</td>
-                <td v-if="showProduct" class="text-no-wrap">{{ d.supplierName || '—' }}</td>
-                <td>
-                  <v-text-field :model-value="d.date" type="date" density="compact" hide-details variant="plain"
-                    @update:model-value="v => patchField(d, 'date', v)" />
-                </td>
-                <td>
-                  <v-text-field :model-value="d.comment" placeholder="Введите" density="compact" hide-details variant="plain"
-                    @update:model-value="v => patchField(d, 'comment', v)" />
-                </td>
-                <td>
-                  <v-select :model-value="d.parameter" :items="parameterOptions" density="compact" hide-details variant="plain"
-                    @update:model-value="v => patchField(d, 'parameter', v)" />
-                </td>
-                <td v-if="showExtra">
-                  <v-select :model-value="d.yearKV" :items="yearKVOptions" density="compact" hide-details variant="plain" clearable
-                    @update:model-value="v => patchField(d, 'yearKV', v)" />
-                </td>
-                <td>
-                  <v-text-field :model-value="d.amount" type="number" density="compact" hide-details variant="plain"
-                    @update:model-value="v => patchField(d, 'amount', v)" />
-                </td>
-                <td>
-                  <v-select :model-value="d.currencyId" :items="currencyOptions" item-title="symbol" item-value="id"
-                    density="compact" hide-details variant="plain"
-                    @update:model-value="v => patchField(d, 'currency', v)" />
-                </td>
-                <td class="text-end">
-                  <span v-if="d.preview?.ready">{{ fmt2(d.preview.dsCommissionPercentage) }}%</span>
-                  <span v-else class="text-medium-emphasis">—</span>
-                </td>
-                <td>
-                  <v-btn icon="mdi-pencil-outline" size="x-small" variant="text"
-                    :disabled="!d.productId" :title="d.productId ? 'Изменить % ДС' : 'Нет продукта'"
-                    @click="openRateModal(d)" />
-                </td>
-                <td class="text-end text-no-wrap">
-                  <template v-if="showExtra && d.customCommission">
-                    <v-text-field :model-value="d.dsCommissionAbsolute" type="number" density="compact" hide-details variant="plain"
-                      style="max-width:120px; display:inline-block"
-                      @update:model-value="v => patchField(d, 'dsCommissionAbsolute', v)" />
-                    RUB
-                  </template>
-                  <template v-else>
-                    <span v-if="d.preview?.ready">{{ fmt2(d.preview.incomeDS) }} RUB</span>
-                    <span v-else class="text-medium-emphasis">—</span>
-                  </template>
-                </td>
-                <td class="text-end text-no-wrap">
-                  <span v-if="d.preview?.ready">{{ fmt2(d.preview.amountNoVat) }} RUB</span>
-                  <span v-else class="text-medium-emphasis">—</span>
-                </td>
-                <td class="text-end text-no-wrap">
-                  <span v-if="d.preview?.ready">{{ fmt2(d.preview.vat) }} RUB</span>
-                  <span v-else class="text-medium-emphasis">—</span>
-                </td>
-                <td>
-                  <v-menu open-on-hover open-delay="200" location="bottom start" :close-on-content-click="false">
-                    <template #activator="{ props }">
-                      <span v-bind="props" class="text-no-wrap" :class="{ 'text-primary': d.preview?.chain }">
-                        <v-icon size="14" class="mr-1">mdi-account-tree</v-icon>
-                        {{ d.consultantName || '—' }}
-                      </span>
-                    </template>
-                    <v-card v-if="d.preview?.chain?.length" min-width="380" class="pa-2">
-                      <div class="text-caption font-weight-bold mb-1">Цепочка партнёров</div>
-                      <v-table density="compact">
-                        <thead>
-                          <tr>
-                            <th class="text-left">Партнёр</th>
-                            <th class="text-end">ЛП</th>
-                            <th class="text-end">Баллы</th>
-                            <th class="text-end">Σ, RUB</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          <tr v-for="row in d.preview.chain" :key="row.consultantId" :class="{ 'font-weight-bold': row.isDirect }">
-                            <td>{{ row.name }}</td>
-                            <td class="text-end">{{ fmt2(row.lp) }}</td>
-                            <td class="text-end">{{ fmt2(row.points) }}</td>
-                            <td class="text-end">{{ fmt2(row.sum) }} RUB</td>
-                          </tr>
-                        </tbody>
-                      </v-table>
-                    </v-card>
-                  </v-menu>
-                </td>
-                <td class="text-end text-no-wrap">
-                  <span v-if="d.preview?.ready">{{ fmt2(d.preview.profitDS) }} RUB</span>
-                  <span v-else class="text-medium-emphasis">—</span>
-                </td>
-                <td>
-                  <v-btn icon="mdi-trash-can-outline" size="x-small" variant="text" color="error"
-                    @click="removeDraft(d)" />
-                </td>
+              <!-- Строка-итог -->
+              <tr class="tx-totals-row">
+                <td></td>
+                <td colspan="5" v-if="showProduct"></td>
+                <td colspan="2" v-if="!showProduct"></td>
+                <td class="text-success">{{ totals.maxDate || '—' }}</td>
+                <td></td>
+                <td></td>
+                <td v-if="showExtra"></td>
+                <td class="text-end text-success font-weight-bold">{{ fmt2(totals.amount) }}</td>
+                <td class="text-success">{{ totals.currencySymbol || 'RUB' }}</td>
+                <td></td>
+                <td></td>
+                <td class="text-end text-success font-weight-bold">{{ fmt2(totals.incomeDS) }} RUB</td>
+                <td class="text-end text-success font-weight-bold">{{ fmt2(totals.noVatRub) }} RUB</td>
+                <td class="text-end text-success font-weight-bold">{{ fmt2(totals.noVatUsd) }} USD</td>
+                <td></td>
+                <td class="text-end text-success font-weight-bold">{{ fmt2(totals.profit) }} RUB</td>
+                <td></td>
               </tr>
-              <template v-if="showExtra">
-                <tr v-for="d in drafts" :key="'opts-' + d.id" class="tx-extra-row">
+
+              <template v-for="d in drafts" :key="d.id">
+                <tr :class="{ 'tx-row-ready': d.preview?.ready }">
+                  <td>
+                    <v-icon size="20" color="primary">mdi-calculator</v-icon>
+                  </td>
+                  <td class="text-no-wrap">{{ d.contractNumber || '—' }}</td>
+                  <td class="text-no-wrap">{{ d.clientName || '—' }}</td>
+                  <td v-if="showProduct" class="text-no-wrap">{{ d.productName || '—' }}</td>
+                  <td v-if="showProduct" class="text-no-wrap">{{ d.programName || '—' }}</td>
+                  <td v-if="showProduct" class="text-no-wrap">{{ d.supplierName || '—' }}</td>
+                  <td>
+                    <v-text-field :model-value="d.date" type="date" density="compact" hide-details variant="plain"
+                      @update:model-value="v => patchField(d, 'date', v)" />
+                  </td>
+                  <td>
+                    <v-text-field :model-value="d.comment" placeholder="Введите" density="compact" hide-details variant="plain"
+                      @update:model-value="v => patchField(d, 'comment', v)" />
+                  </td>
+                  <td>
+                    <v-select :model-value="d.parameter" :items="parameterOptions" density="compact" hide-details variant="plain"
+                      @update:model-value="v => patchField(d, 'parameter', v)" />
+                  </td>
+                  <td v-if="showExtra">
+                    <v-select :model-value="d.yearKV" :items="yearKVOptions" density="compact" hide-details variant="plain" clearable
+                      @update:model-value="v => patchField(d, 'yearKV', v)" />
+                  </td>
+                  <td class="text-end">
+                    <v-text-field :model-value="d.amount" type="number" density="compact" hide-details variant="plain"
+                      reverse @update:model-value="v => patchField(d, 'amount', v)" />
+                  </td>
+                  <td>
+                    <v-select :model-value="d.currencyId" :items="currencyOptions" item-title="symbol" item-value="id"
+                      density="compact" hide-details variant="plain"
+                      @update:model-value="v => patchField(d, 'currency', v)" />
+                  </td>
+                  <td class="text-end">
+                    <span v-if="d.preview?.ready">{{ fmt2(d.preview.dsCommissionPercentage) }}%</span>
+                    <span v-else class="text-medium-emphasis">—</span>
+                  </td>
+                  <td class="text-center">
+                    <v-btn icon="mdi-pencil-outline" size="x-small" variant="text"
+                      :disabled="!d.productId" :title="d.productId ? 'Изменить % ДС' : 'Нет продукта'"
+                      @click="openRateModal(d)" />
+                  </td>
+                  <td class="text-end text-no-wrap">
+                    <template v-if="showExtra && d.customCommission">
+                      <v-text-field :model-value="d.dsCommissionAbsolute" type="number" density="compact" hide-details variant="plain"
+                        style="max-width:120px; display:inline-block"
+                        reverse @update:model-value="v => patchField(d, 'dsCommissionAbsolute', v)" />
+                      RUB
+                    </template>
+                    <template v-else>
+                      <span v-if="d.preview?.ready">{{ fmt2(d.preview.incomeDS) }} RUB</span>
+                      <span v-else class="text-medium-emphasis">—</span>
+                    </template>
+                  </td>
+                  <td class="text-end text-no-wrap">
+                    <span v-if="d.preview?.ready">{{ fmt2(d.preview.amountNoVat) }} RUB</span>
+                    <span v-else class="text-medium-emphasis">—</span>
+                  </td>
+                  <td class="text-end text-no-wrap">
+                    <span v-if="d.preview?.ready">{{ fmt2(d.preview.amountNoVatUSD) }} USD</span>
+                    <span v-else class="text-medium-emphasis">—</span>
+                  </td>
+                  <td>
+                    <a v-if="d.preview?.chain?.length" href="#" class="text-decoration-none text-primary"
+                      @click.prevent="toggleChain(d.id)">
+                      Цепочка партнёров
+                      <v-icon size="14">{{ chainExpanded[d.id] ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon>
+                    </a>
+                    <span v-else class="text-no-wrap text-medium-emphasis">{{ d.consultantName || '—' }}</span>
+                  </td>
+                  <td class="text-end text-no-wrap">
+                    <span v-if="d.preview?.ready" class="font-weight-bold">{{ fmt2(d.preview.profitDS) }} RUB</span>
+                    <span v-else class="text-medium-emphasis">—</span>
+                  </td>
+                  <td>
+                    <v-btn icon="mdi-trash-can-outline" size="x-small" variant="text" color="error"
+                      @click="removeDraft(d)" />
+                  </td>
+                </tr>
+
+                <!-- Развёрнутая цепочка партнёров -->
+                <template v-if="chainExpanded[d.id] && d.preview?.chain?.length">
+                  <tr v-for="(row, idx) in d.preview.chain" :key="'chain-' + d.id + '-' + idx"
+                    class="tx-chain-row" :class="{ 'font-weight-bold': row.isDirect }">
+                    <td colspan="13"></td>
+                    <td colspan="3" class="text-end pe-3">
+                      <span class="text-medium-emphasis me-3">ЛП</span>
+                      <span class="me-3">{{ fmt2(row.lp) }}</span>
+                      <span class="text-medium-emphasis me-3">Баллы</span>
+                      <span>{{ fmt2(row.points) }}</span>
+                    </td>
+                    <td>{{ row.name }}</td>
+                    <td class="text-end text-no-wrap">{{ fmt2(row.sum) }} RUB</td>
+                    <td></td>
+                  </tr>
+                </template>
+
+                <!-- Своя комиссия в доп. настройках -->
+                <tr v-if="showExtra" class="tx-extra-row">
                   <td colspan="20" class="pa-2">
                     <v-checkbox :model-value="d.customCommission"
                       :label="'Своя комиссия для ' + (d.contractNumber || '—') + ' (Брокер+ и подобные)'"
@@ -224,8 +258,11 @@
 
           <v-card-actions class="d-flex flex-wrap ga-2">
             <v-btn color="success" :disabled="!fixableIds.length || fixing" prepend-icon="mdi-content-save"
-              :loading="fixing" @click="fixSelected">
-              Зафиксировать транзакции ({{ fixableIds.length }})
+              :loading="fixing" @click="fixAll" size="large">
+              Зафиксировать транзакции
+              <v-chip v-if="fixableIds.length" size="x-small" color="white" variant="elevated" class="ms-2">
+                {{ fixableIds.length }}
+              </v-chip>
             </v-btn>
             <v-spacer />
             <v-btn v-if="drafts.length" color="error" variant="text" prepend-icon="mdi-trash-can-outline" @click="clearAll">
@@ -344,15 +381,26 @@ function notify(text, color = 'success') { snack.value = { open: true, color, te
 const contracts = ref([]);
 const contractTotal = ref(0);
 const loadingContracts = ref(false);
-const selectedContractIds = ref([]);
 const contractPage = ref(1);
 const contractPerPage = ref(15);
-const filters = ref({ consultantName: '', clientName: '', number: '', product: null });
+const filters = ref({
+  consultantName: '', clientName: '', number: '',
+  supplier: null, provider: null, product: null, program: null,
+});
 const productList = ref([]);
+const programList = ref([]);
+const lookupSuppliers = ref([]);
+const lookupProviders = ref([]);
 const currencyOptions = ref([]);
 const productRates = ref([]);
 
+function resetContractFilters() {
+  filters.value = { consultantName: '', clientName: '', number: '', supplier: null, provider: null, product: null, program: null };
+  loadContracts();
+}
+
 const contractHeaders = computed(() => ([
+  { title: '', key: 'add', sortable: false, width: 50 },
   { title: 'Номер', key: 'number', width: 130 },
   { title: 'Клиент', key: 'clientName' },
   { title: 'Партнёр', key: 'consultantName' },
@@ -381,6 +429,9 @@ async function loadContracts() {
     if (filters.value.clientName) params.clientName = filters.value.clientName;
     if (filters.value.number) params.number = filters.value.number;
     if (filters.value.product) params.product = filters.value.product;
+    if (filters.value.program) params.program = filters.value.program;
+    if (filters.value.supplier) params.supplier = filters.value.supplier;
+    if (filters.value.provider) params.provider = filters.value.provider;
     const { data } = await api.get('/admin/manual-tx/contracts', { params });
     contracts.value = data.data;
     contractTotal.value = data.total;
@@ -392,11 +443,30 @@ async function loadContracts() {
 
 // === Manual entry: drafts ===
 const drafts = ref([]);
-const selectedDraftIds = ref([]);
 const adding = ref(false);
 const fixing = ref(false);
 const showProduct = ref(false);
 const showExtra = ref(false);
+const chainExpanded = ref({});
+
+function toggleChain(id) {
+  chainExpanded.value[id] = !chainExpanded.value[id];
+}
+
+const totals = computed(() => {
+  const ready = drafts.value.filter(d => d.preview?.ready);
+  const maxDate = drafts.value.map(d => d.date).filter(Boolean).sort().pop();
+  const sym = drafts.value[0]?.currencySymbol || 'RUB';
+  return {
+    maxDate: maxDate ? fmtDate(maxDate) : null,
+    currencySymbol: sym,
+    amount: drafts.value.reduce((s, d) => s + Number(d.amount || 0), 0),
+    incomeDS: ready.reduce((s, d) => s + Number(d.preview.incomeDS || 0), 0),
+    noVatRub: ready.reduce((s, d) => s + Number(d.preview.amountNoVat || 0), 0),
+    noVatUsd: ready.reduce((s, d) => s + Number(d.preview.amountNoVatUSD || 0), 0),
+    profit: ready.reduce((s, d) => s + Number(d.preview.profitDS || 0), 0),
+  };
+});
 
 const parameterOptions = [
   { title: 'Стандарт', value: 'standard' },
@@ -413,14 +483,12 @@ async function loadDrafts() {
   } catch {}
 }
 
-async function addToDrafts() {
-  if (!selectedContractIds.value.length) return;
+async function addContractToDrafts(contractId) {
   adding.value = true;
   try {
-    await api.post('/admin/manual-tx/drafts', { contractIds: selectedContractIds.value });
-    selectedContractIds.value = [];
+    await api.post('/admin/manual-tx/drafts', { contractIds: [contractId] });
     await loadDrafts();
-    notify('Контракты добавлены в черновики');
+    notify('Добавлено в черновики');
   } catch (e) {
     notify(e.response?.data?.message || 'Ошибка', 'error');
   }
@@ -452,25 +520,23 @@ async function clearAll() {
   if (!confirm('Удалить все черновики?')) return;
   await api.delete('/admin/manual-tx/drafts');
   drafts.value = [];
-  selectedDraftIds.value = [];
 }
 
 const fixableIds = computed(() =>
   drafts.value
-    .filter(d => selectedDraftIds.value.includes(d.id) && d.amount && d.date && d.preview?.ready)
+    .filter(d => d.amount && d.date && d.preview?.ready)
     .map(d => d.id)
 );
 
-async function fixSelected() {
+async function fixAll() {
   if (!fixableIds.value.length) return;
   fixing.value = true;
   try {
     const { data } = await api.post('/admin/manual-tx/fix', { ids: fixableIds.value });
     if (data.fixed?.length) notify(`Зафиксировано: ${data.fixed.length}`);
     if (data.errors?.length) notify(`Ошибки: ${data.errors.length}`, 'warning');
-    selectedDraftIds.value = [];
     await loadDrafts();
-    if (data.fixed?.length) loadLog(); // обновить журнал
+    if (data.fixed?.length) loadLog();
   } catch (e) {
     notify(e.response?.data?.message || 'Ошибка фиксации', 'error');
   }
@@ -482,14 +548,6 @@ const cl = computed(() => ({
   dates: drafts.value.length > 0 && drafts.value.every(d => !!d.date),
   calculated: drafts.value.length > 0 && drafts.value.every(d => d.preview?.ready),
 }));
-
-const allSelected = computed({
-  get: () => drafts.value.length > 0 && selectedDraftIds.value.length === drafts.value.length,
-  set: (v) => { selectedDraftIds.value = v ? drafts.value.map(d => d.id) : []; },
-});
-const someSelected = computed(() =>
-  selectedDraftIds.value.length > 0 && selectedDraftIds.value.length < drafts.value.length
-);
 
 const rateModal = ref(false);
 const rateContext = ref(null);
@@ -575,14 +633,17 @@ async function loadLog() {
 onMounted(async () => {
   await Promise.all([loadContracts(), loadDrafts(), loadLog()]);
   try {
-    const [products, formData] = await Promise.all([
+    const [products, formData, lookups] = await Promise.all([
       api.get('/admin/products', { params: { per_page: 1000, active: true } }).catch(() => ({ data: { data: [] } })),
       api.get('/admin/transaction-import/form-data').catch(() => ({ data: { currencies: [] } })),
+      api.get('/admin/manual-tx/lookups').catch(() => ({ data: { suppliers: [], providers: [] } })),
     ]);
     productList.value = (products.data?.data || []).map(p => ({ id: p.id, name: p.name }));
     currencyOptions.value = (formData.data?.currencies || []).map(c => ({
       id: c.id, symbol: c.symbol || c.name, name: c.name,
     }));
+    lookupSuppliers.value = lookups.data?.suppliers || [];
+    lookupProviders.value = lookups.data?.providers || [];
   } catch {}
 });
 </script>

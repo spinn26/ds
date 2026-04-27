@@ -27,72 +27,75 @@ class ManualTransactionController extends Controller
     /** Поиск контрактов для верхней таблицы. */
     public function searchContracts(Request $request): JsonResponse
     {
-        $q = DB::table('contract')->whereNull('deletedAt');
+        $q = DB::table('contract as c')
+            ->leftJoin('program as pr', 'pr.id', '=', 'c.program')
+            ->whereNull('c.deletedAt');
 
         if ($request->filled('consultantName')) {
-            $q->where('consultantName', 'ilike', '%' . $request->consultantName . '%');
+            $q->where('c.consultantName', 'ilike', '%' . $request->consultantName . '%');
         }
         if ($request->filled('clientName')) {
-            $q->where('clientName', 'ilike', '%' . $request->clientName . '%');
+            $q->where('c.clientName', 'ilike', '%' . $request->clientName . '%');
         }
         if ($request->filled('number')) {
-            $q->where('number', 'ilike', '%' . $request->number . '%');
+            $q->where('c.number', 'ilike', '%' . $request->number . '%');
         }
         if ($request->filled('product')) {
-            $q->where('product', $request->product);
+            $q->where('c.product', $request->product);
         }
         if ($request->filled('program')) {
-            $q->where('program', $request->program);
+            $q->where('c.program', $request->program);
+        }
+        if ($request->filled('supplier')) {
+            $q->where('pr.providerName', 'ilike', '%' . $request->supplier . '%');
+        }
+        if ($request->filled('provider')) {
+            $q->where('pr.vendorName', 'ilike', '%' . $request->provider . '%');
         }
         if ($request->filled('search')) {
             $term = '%' . $request->search . '%';
             $q->where(function ($w) use ($term) {
-                $w->where('number', 'ilike', $term)
-                  ->orWhere('clientName', 'ilike', $term)
-                  ->orWhere('consultantName', 'ilike', $term)
-                  ->orWhere('productName', 'ilike', $term)
-                  ->orWhere('programName', 'ilike', $term);
+                $w->where('c.number', 'ilike', $term)
+                  ->orWhere('c.clientName', 'ilike', $term)
+                  ->orWhere('c.consultantName', 'ilike', $term)
+                  ->orWhere('c.productName', 'ilike', $term)
+                  ->orWhere('c.programName', 'ilike', $term);
             });
         }
 
         $total = $q->count();
-        $rows = $q->orderByDesc('openDate')
+        $rows = $q->orderByDesc('c.openDate')
             ->offset($this->paginationOffset($request))
             ->limit($this->paginationPerPage($request))
-            ->get();
+            ->get([
+                'c.*',
+                'pr.providerName as joinedSupplier',
+                'pr.vendorName as joinedProvider',
+            ]);
 
         $currencyIds = $rows->pluck('currency')->filter()->unique();
         $currencies = $currencyIds->isNotEmpty()
             ? DB::table('currency')->whereIn('id', $currencyIds)->pluck('symbol', 'id')
             : collect();
 
-        // For "Поставщик/Провайдер" we use program.providerName / vendorName.
-        $programIds = $rows->pluck('program')->filter()->unique();
-        $programs = $programIds->isNotEmpty()
-            ? DB::table('program')->whereIn('id', $programIds)->get()->keyBy('id')
-            : collect();
-
-        $data = $rows->map(function ($c) use ($currencies, $programs) {
-            $prog = $c->program ? ($programs[$c->program] ?? null) : null;
-            return [
-                'id' => $c->id,
-                'number' => $c->number,
-                'clientName' => $c->clientName,
-                'consultantName' => $c->consultantName,
-                'consultantId' => $c->consultant,
-                'openDate' => $c->openDate,
-                'term' => $c->term,
-                'productId' => $c->product,
-                'productName' => $c->productName,
-                'programId' => $c->program,
-                'programName' => $c->programName,
-                'providerName' => $prog?->vendorName,
-                'supplierName' => $prog?->providerName,
-                'amount' => round((float) ($c->ammount ?? 0), 2),
-                'currencyId' => $c->currency,
-                'currencySymbol' => $c->currency ? ($currencies[$c->currency] ?? null) : null,
-            ];
-        });
+        $data = $rows->map(fn ($c) => [
+            'id' => $c->id,
+            'number' => $c->number,
+            'clientName' => $c->clientName,
+            'consultantName' => $c->consultantName,
+            'consultantId' => $c->consultant,
+            'openDate' => $c->openDate,
+            'term' => $c->term,
+            'productId' => $c->product,
+            'productName' => $c->productName,
+            'programId' => $c->program,
+            'programName' => $c->programName,
+            'supplierName' => $c->joinedSupplier ?? null,
+            'providerName' => $c->joinedProvider ?? null,
+            'amount' => round((float) ($c->ammount ?? 0), 2),
+            'currencyId' => $c->currency,
+            'currencySymbol' => $c->currency ? ($currencies[$c->currency] ?? null) : null,
+        ]);
 
         return response()->json(['data' => $data, 'total' => $total]);
     }
@@ -216,6 +219,27 @@ class ManualTransactionController extends Controller
     {
         DB::table('transaction_draft')->delete();
         return response()->json(['ok' => true]);
+    }
+
+    /** Список уникальных поставщиков/провайдеров для фильтров. */
+    public function suppliersAndProviders(): JsonResponse
+    {
+        $suppliers = DB::table('program')
+            ->whereNotNull('providerName')
+            ->whereNull('dateDeleted')
+            ->distinct()
+            ->orderBy('providerName')
+            ->pluck('providerName');
+        $providers = DB::table('program')
+            ->whereNotNull('vendorName')
+            ->whereNull('dateDeleted')
+            ->distinct()
+            ->orderBy('vendorName')
+            ->pluck('vendorName');
+        return response()->json([
+            'suppliers' => $suppliers,
+            'providers' => $providers,
+        ]);
     }
 
     /** Доступные ставки %ДС для продукта (модалка «Изменить»). */
@@ -404,14 +428,21 @@ class ManualTransactionController extends Controller
         $partnersTotal = array_sum(array_column($chain, 'sum'));
         $profitDS = round($incomeDS - $partnersTotal, 2);
 
+        $usdRow = DB::table('currencyRate')->where('currency', 5)->orderByDesc('date')->first();
+        $usdRate = (float) ($usdRow->rate ?? 0);
+        $incomeDsUsd = $usdRate > 0 ? round($incomeDS / $usdRate, 2) : 0;
+        $amountNoVatUsd = $usdRate > 0 ? round($amountNoVat / $usdRate, 2) : 0;
+
         return [
             'ready' => true,
             'amountRUB' => round($amountRub, 2),
             'amountNoVat' => round($amountNoVat, 2),
+            'amountNoVatUSD' => $amountNoVatUsd,
             'vat' => round($amountRub - $amountNoVat, 2),
             'vatPercent' => $vatPercent,
             'dsCommissionPercentage' => round($dsPercent, 4),
             'incomeDS' => round($incomeDS, 2),
+            'incomeDSUSD' => $incomeDsUsd,
             'personalVolume' => round($points, 4),
             'partnersTotal' => round($partnersTotal, 2),
             'profitDS' => $profitDS,

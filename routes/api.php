@@ -188,6 +188,7 @@ Route::prefix('v1')->group(function () {
 
         // Admin — Manual transaction entry (✅Транзакции.md)
         Route::get('/admin/manual-tx/contracts', [\App\Http\Controllers\Api\ManualTransactionController::class, 'searchContracts']);
+        Route::get('/admin/manual-tx/lookups', [\App\Http\Controllers\Api\ManualTransactionController::class, 'suppliersAndProviders']);
         Route::post('/admin/manual-tx/drafts', [\App\Http\Controllers\Api\ManualTransactionController::class, 'createDrafts']);
         Route::get('/admin/manual-tx/drafts', [\App\Http\Controllers\Api\ManualTransactionController::class, 'listDrafts']);
         Route::patch('/admin/manual-tx/drafts/{id}', [\App\Http\Controllers\Api\ManualTransactionController::class, 'updateDraft'])->whereNumber('id');
