@@ -608,7 +608,6 @@ const menuItems = [
   // Финансы
   { group: 'Финансы', adminSection: 'import' },
   { label: 'Импорт транзакций', icon: 'mdi-upload', path: '/manage/transactions/import', adminSection: 'import' },
-  { label: 'Ручной ввод транзакций', icon: 'mdi-cash-plus', path: '/manage/transactions/manual', adminSection: 'import' },
   { label: 'Транзакции', icon: 'mdi-swap-horizontal', path: '/manage/transactions', adminSection: 'transactions' },
   { label: 'Комиссии', icon: 'mdi-receipt', path: '/manage/commissions', adminSection: 'commissions' },
   { label: 'Пул', icon: 'mdi-cash-multiple', path: '/manage/pool', adminSection: 'pool' },

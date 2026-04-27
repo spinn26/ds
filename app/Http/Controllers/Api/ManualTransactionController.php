@@ -150,7 +150,7 @@ class ManualTransactionController extends Controller
                 'pr.providerName as supplierName',
                 'pr.vendorName as providerName',
                 'cur.symbol as currencySymbol',
-                'cur.name as currencyName',
+                'cur.nameRu as currencyName',
             ]);
 
         $data = $rows->map(fn ($r) => $this->serializeDraft($r));
@@ -481,7 +481,7 @@ class ManualTransactionController extends Controller
                 'pr.providerName as supplierName',
                 'pr.vendorName as providerName',
                 'cur.symbol as currencySymbol',
-                'cur.name as currencyName',
+                'cur.nameRu as currencyName',
             ]);
     }
 
