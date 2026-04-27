@@ -186,6 +186,16 @@ Route::prefix('v1')->group(function () {
         Route::post('/admin/transaction-import/{id}/calculate', [\App\Http\Controllers\Api\TransactionImportController::class, 'calculateCommissions']);
         Route::post('/admin/transactions/{id}/calculate', [\App\Http\Controllers\Api\TransactionImportController::class, 'calculateSingle']);
 
+        // Admin — Manual transaction entry (✅Транзакции.md)
+        Route::get('/admin/manual-tx/contracts', [\App\Http\Controllers\Api\ManualTransactionController::class, 'searchContracts']);
+        Route::post('/admin/manual-tx/drafts', [\App\Http\Controllers\Api\ManualTransactionController::class, 'createDrafts']);
+        Route::get('/admin/manual-tx/drafts', [\App\Http\Controllers\Api\ManualTransactionController::class, 'listDrafts']);
+        Route::patch('/admin/manual-tx/drafts/{id}', [\App\Http\Controllers\Api\ManualTransactionController::class, 'updateDraft'])->whereNumber('id');
+        Route::delete('/admin/manual-tx/drafts/{id}', [\App\Http\Controllers\Api\ManualTransactionController::class, 'deleteDraft'])->whereNumber('id');
+        Route::delete('/admin/manual-tx/drafts', [\App\Http\Controllers\Api\ManualTransactionController::class, 'clearDrafts']);
+        Route::post('/admin/manual-tx/fix', [\App\Http\Controllers\Api\ManualTransactionController::class, 'fixDrafts']);
+        Route::get('/admin/manual-tx/products/{id}/rates', [\App\Http\Controllers\Api\ManualTransactionController::class, 'productRates'])->whereNumber('id');
+
         // Admin Monitoring (site status, error feed, queue control)
         Route::get('/admin/monitoring/status', [\App\Http\Controllers\Api\AdminMonitoringController::class, 'status']);
         Route::get('/admin/monitoring/errors', [\App\Http\Controllers\Api\AdminMonitoringController::class, 'errors']);
