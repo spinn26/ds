@@ -94,7 +94,6 @@
               <v-chip size="x-small" color="warning" variant="tonal" class="ml-1">{{ drafts.length }}</v-chip>
             </span>
             <v-spacer />
-            <v-switch v-model="showExtra" label="Показать доп. настройки" hide-details density="compact" color="primary" />
             <ColumnVisibilityMenu :headers="draftHeaders"
               v-model:visible="draftColsVisible"
               storage-key="manual-tx-drafts-cols"
@@ -193,20 +192,13 @@
                     </template>
                     <template v-else-if="h.key === 'change'">
                       <v-btn icon="mdi-pencil-outline" size="x-small" variant="text"
-                        :disabled="!d.productId" :title="d.productId ? 'Изменить % ДС' : 'Нет продукта'"
+                        :disabled="!isRateChangeable(d)"
+                        :title="isRateChangeable(d) ? 'Изменить % ДС' : 'Доступно только для Investors Trust и Medlife'"
                         @click="openRateModal(d)" />
                     </template>
                     <template v-else-if="h.key === 'incomeDS'">
-                      <template v-if="showExtra && d.customCommission">
-                        <v-text-field :model-value="d.dsCommissionAbsolute" type="number" density="compact" hide-details variant="plain"
-                          style="max-width:120px; display:inline-block"
-                          reverse @update:model-value="v => patchField(d, 'dsCommissionAbsolute', v)" />
-                        RUB
-                      </template>
-                      <template v-else>
-                        <span v-if="d.preview?.ready">{{ fmt2(d.preview.incomeDS) }} RUB</span>
-                        <span v-else class="text-medium-emphasis">—</span>
-                      </template>
+                      <span v-if="d.preview?.ready">{{ fmt2(d.preview.incomeDS) }} RUB</span>
+                      <span v-else class="text-medium-emphasis">—</span>
                     </template>
                     <template v-else-if="h.key === 'noVatRub'">
                       <span v-if="d.preview?.ready">{{ fmt2(d.preview.amountNoVat) }} RUB</span>
@@ -252,15 +244,6 @@
                   </tr>
                 </template>
 
-                <!-- Своя комиссия в доп. настройках -->
-                <tr v-if="showExtra" class="tx-extra-row">
-                  <td :colspan="visibleDraftHeaders.length" class="pa-2">
-                    <v-checkbox :model-value="d.customCommission"
-                      :label="'Своя комиссия для ' + (d.contractNumber || '—') + ' (Брокер+ и подобные)'"
-                      hide-details density="compact" color="warning"
-                      @update:model-value="v => patchField(d, 'customCommission', v)" />
-                  </td>
-                </tr>
               </template>
             </tbody>
           </v-table>
@@ -497,8 +480,17 @@ async function loadContracts() {
 const drafts = ref([]);
 const adding = ref(false);
 const fixing = ref(false);
-const showExtra = ref(false);
 const chainExpanded = ref({});
+
+/**
+ * «Изменить % ДС» доступна только для Investors Trust и Medlife
+ * (по спеке ✅Транзакции.md, для остальных продуктов ставка фиксирована).
+ */
+function isRateChangeable(d) {
+  if (!d.productId || !d.productName) return false;
+  const n = d.productName.toLowerCase();
+  return n.includes('investor') || n.includes('trust') || n.includes('medlife') || n.includes('медлайф') || n.includes('инвестор');
+}
 
 function toggleChain(id) {
   chainExpanded.value[id] = !chainExpanded.value[id];
@@ -657,7 +649,9 @@ const defaultMonth = new Date().toISOString().slice(0, 7);
 
 const logHeaders = [
   { title: 'ID', key: 'id', width: 60 },
-  { title: 'Контракт', key: 'contract', width: 130 },
+  { title: '№ контракта', key: 'contractNumber', width: 150 },
+  { title: 'Клиент', key: 'clientName' },
+  { title: 'Партнёр', key: 'consultantName' },
   { title: 'Сумма', key: 'amount', width: 140 },
   { title: 'Сумма (руб)', key: 'amountRUB', align: 'end', width: 140 },
   { title: 'Сумма (USD)', key: 'amountUSD', align: 'end', width: 140 },

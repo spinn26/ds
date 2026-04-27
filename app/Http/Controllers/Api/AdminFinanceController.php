@@ -15,22 +15,33 @@ class AdminFinanceController extends Controller
     /** Транзакции */
     public function transactions(Request $request): JsonResponse
     {
-        $query = DB::table('transaction')->whereNull('deletedAt');
+        $query = DB::table('transaction as t')
+            ->leftJoin('contract as c', 'c.id', '=', 't.contract')
+            ->whereNull('t.deletedAt');
 
         if ($request->filled('search')) {
-            $query->where('id', 'ilike', '%' . $request->search . '%');
+            $term = '%' . $request->search . '%';
+            $query->where(function ($w) use ($term) {
+                $w->where('t.id', 'ilike', $term)
+                  ->orWhere('c.number', 'ilike', $term)
+                  ->orWhere('c.clientName', 'ilike', $term);
+            });
         }
         if ($request->filled('month')) {
-            $query->where('dateMonth', $request->month);
+            $query->where('t.dateMonth', $request->month);
         }
 
         $total = $query->count();
-        $rows = $query->orderByDesc('date')
+        $rows = $query->orderByDesc('t.date')
             ->offset($this->paginationOffset($request))
             ->limit($this->paginationPerPage($request))
-            ->get();
+            ->get([
+                't.*',
+                'c.number as contractNumber',
+                'c.clientName as clientName',
+                'c.consultantName as consultantName',
+            ]);
 
-        // Batch load currencies
         $currencyIds = $rows->pluck('currency')->filter()->unique();
         $currencies = $currencyIds->isNotEmpty()
             ? DB::table('currency')->whereIn('id', $currencyIds)->pluck('symbol', 'id')
@@ -39,6 +50,9 @@ class AdminFinanceController extends Controller
         $data = $rows->map(fn ($t) => [
                 'id' => $t->id,
                 'contract' => $t->contract,
+                'contractNumber' => $t->contractNumber,
+                'clientName' => $t->clientName,
+                'consultantName' => $t->consultantName,
                 'amount' => round((float) ($t->amount ?? 0), 2),
                 'amountRUB' => round((float) ($t->amountRUB ?? 0), 2),
                 'amountUSD' => round((float) ($t->amountUSD ?? 0), 2),
