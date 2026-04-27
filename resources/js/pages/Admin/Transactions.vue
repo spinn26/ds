@@ -79,6 +79,9 @@
                 title="Добавить в черновики"
                 @click="addContractToDrafts(item.id)" />
             </template>
+            <template #item.number="{ item }">
+              {{ item.number || ('Контракт #' + item.id) }}
+            </template>
             <template #item.amount="{ item }">{{ fmt2(item.amount) }} {{ item.currencySymbol || '' }}</template>
             <template #item.openDate="{ value }">{{ fmtDate(value) }}</template>
             <template #no-data><EmptyState message="Контракты не найдены" /></template>
@@ -113,33 +116,6 @@
               </tr>
             </thead>
             <tbody>
-              <!-- Строка-итог -->
-              <tr class="tx-totals-row">
-                <td v-for="h in visibleDraftHeaders" :key="'tot-' + h.key" :class="h.tdClass">
-                  <template v-if="h.key === 'date'">
-                    <span class="text-success">{{ totals.maxDate || '—' }}</span>
-                  </template>
-                  <template v-else-if="h.key === 'amount'">
-                    <span class="text-end text-success font-weight-bold d-block">{{ fmt2(totals.amount) }}</span>
-                  </template>
-                  <template v-else-if="h.key === 'currency'">
-                    <span class="text-success">{{ totals.currencySymbol || 'RUB' }}</span>
-                  </template>
-                  <template v-else-if="h.key === 'incomeDS'">
-                    <span class="text-end text-success font-weight-bold d-block">{{ fmt2(totals.incomeDS) }} RUB</span>
-                  </template>
-                  <template v-else-if="h.key === 'noVatRub'">
-                    <span class="text-end text-success font-weight-bold d-block">{{ fmt2(totals.noVatRub) }} RUB</span>
-                  </template>
-                  <template v-else-if="h.key === 'noVatUsd'">
-                    <span class="text-end text-success font-weight-bold d-block">{{ fmt2(totals.noVatUsd) }} USD</span>
-                  </template>
-                  <template v-else-if="h.key === 'profit'">
-                    <span class="text-end text-success font-weight-bold d-block">{{ fmt2(totals.profit) }} RUB</span>
-                  </template>
-                </td>
-              </tr>
-
               <template v-for="d in drafts" :key="d.id">
                 <tr :class="{ 'tx-row-ready': d.preview?.ready }">
                   <td v-for="h in visibleDraftHeaders" :key="h.key + '-' + d.id" :class="h.tdClass">
@@ -147,7 +123,7 @@
                       <v-icon size="20" color="primary">mdi-calculator</v-icon>
                     </template>
                     <template v-else-if="h.key === 'number'">
-                      <span class="text-no-wrap">{{ d.contractNumber || '—' }}</span>
+                      <span class="text-no-wrap">{{ contractNum(d) }}</span>
                     </template>
                     <template v-else-if="h.key === 'client'">
                       <span class="text-no-wrap">{{ d.clientName || '—' }}</span>
@@ -162,8 +138,15 @@
                       <span class="text-no-wrap">{{ d.supplierName || '—' }}</span>
                     </template>
                     <template v-else-if="h.key === 'date'">
-                      <v-text-field :model-value="d.date" type="date" density="compact" hide-details variant="plain"
-                        @update:model-value="v => patchField(d, 'date', v)" />
+                      <v-menu :close-on-content-click="false" location="bottom start">
+                        <template #activator="{ props: dprops }">
+                          <v-text-field v-bind="dprops" :model-value="fmtDate(d.date) || ''"
+                            placeholder="дд.мм.гггг" readonly density="compact" hide-details variant="plain"
+                            append-inner-icon="mdi-calendar" />
+                        </template>
+                        <v-date-picker :model-value="parseDate(d.date)" hide-header
+                          @update:model-value="v => patchField(d, 'date', formatYmd(v))" />
+                      </v-menu>
                     </template>
                     <template v-else-if="h.key === 'comment'">
                       <v-text-field :model-value="d.comment" placeholder="Введите" density="compact" hide-details variant="plain"
@@ -209,12 +192,42 @@
                       <span v-else class="text-medium-emphasis">—</span>
                     </template>
                     <template v-else-if="h.key === 'partner'">
-                      <a v-if="d.preview?.chain?.length" href="#" class="text-decoration-none text-primary"
-                        @click.prevent="toggleChain(d.id)">
-                        Цепочка партнёров
-                        <v-icon size="14">{{ chainExpanded[d.id] ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon>
-                      </a>
-                      <span v-else class="text-no-wrap text-medium-emphasis">{{ d.consultantName || '—' }}</span>
+                      <v-menu open-on-hover open-delay="150" close-delay="100" location="bottom start">
+                        <template #activator="{ props: pprops }">
+                          <span v-bind="pprops" class="text-no-wrap"
+                            :class="d.preview?.chain?.length ? 'text-primary tx-partner-hover' : 'text-medium-emphasis'">
+                            {{ partnerSurname(d.consultantName) || '—' }}
+                            <v-icon v-if="d.preview?.chain?.length" size="14" class="ms-1">mdi-account-tree</v-icon>
+                          </span>
+                        </template>
+                        <v-card v-if="d.preview?.chain?.length" min-width="440" class="pa-3">
+                          <div class="text-caption text-medium-emphasis mb-2">
+                            Цепочка партнёров (от верхнего наставника вниз):
+                          </div>
+                          <v-table density="compact">
+                            <thead>
+                              <tr>
+                                <th class="text-left">Партнёр</th>
+                                <th class="text-end">ЛП</th>
+                                <th class="text-end">Баллы</th>
+                                <th class="text-end">Σ, RUB</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr v-for="row in chainTopDown(d.preview.chain)" :key="row.consultantId"
+                                :class="{ 'font-weight-bold tx-direct-row': row.isDirect }">
+                                <td>{{ row.name }}</td>
+                                <td class="text-end">{{ fmt2(row.lp) }}</td>
+                                <td class="text-end">{{ fmt2(row.points) }}</td>
+                                <td class="text-end">{{ fmt2(row.sum) }} RUB</td>
+                              </tr>
+                            </tbody>
+                          </v-table>
+                          <div class="text-caption text-medium-emphasis mt-2">
+                            Полужирным — текущий партнёр (получатель транзакции).
+                          </div>
+                        </v-card>
+                      </v-menu>
                     </template>
                     <template v-else-if="h.key === 'profit'">
                       <span v-if="d.preview?.ready" class="font-weight-bold">{{ fmt2(d.preview.profitDS) }} RUB</span>
@@ -227,24 +240,40 @@
                   </td>
                 </tr>
 
-                <!-- Развёрнутая цепочка партнёров -->
-                <template v-if="chainExpanded[d.id] && d.preview?.chain?.length">
-                  <tr v-for="(row, idx) in d.preview.chain" :key="'chain-' + d.id + '-' + idx"
-                    class="tx-chain-row" :class="{ 'font-weight-bold': row.isDirect }">
-                    <td :colspan="visibleDraftHeaders.length" class="pa-2">
-                      <div class="d-flex align-center ga-3 ps-12">
-                        <span class="text-medium-emphasis">ЛП</span>
-                        <span style="min-width: 60px">{{ fmt2(row.lp) }}</span>
-                        <span class="text-medium-emphasis">Баллы</span>
-                        <span style="min-width: 60px">{{ fmt2(row.points) }}</span>
-                        <span class="text-medium-emphasis ms-auto">{{ row.name }}</span>
-                        <span class="text-end text-no-wrap" style="min-width: 100px">{{ fmt2(row.sum) }} RUB</span>
-                      </div>
-                    </td>
-                  </tr>
-                </template>
-
               </template>
+
+              <!-- Строка-итог снизу таблицы -->
+              <tr class="tx-totals-row">
+                <td v-for="h in visibleDraftHeaders" :key="'tot-' + h.key" :class="h.tdClass">
+                  <template v-if="h.key === 'icon'">
+                    <v-icon size="20" color="success">mdi-sigma</v-icon>
+                  </template>
+                  <template v-else-if="h.key === 'number'">
+                    <span class="text-success font-weight-bold">ИТОГО</span>
+                  </template>
+                  <template v-else-if="h.key === 'date'">
+                    <span class="text-success">{{ totals.maxDate || '—' }}</span>
+                  </template>
+                  <template v-else-if="h.key === 'amount'">
+                    <span class="text-end text-success font-weight-bold d-block">{{ fmt2(totals.amount) }}</span>
+                  </template>
+                  <template v-else-if="h.key === 'currency'">
+                    <span class="text-success">{{ totals.currencySymbol || 'RUB' }}</span>
+                  </template>
+                  <template v-else-if="h.key === 'incomeDS'">
+                    <span class="text-end text-success font-weight-bold d-block">{{ fmt2(totals.incomeDS) }} RUB</span>
+                  </template>
+                  <template v-else-if="h.key === 'noVatRub'">
+                    <span class="text-end text-success font-weight-bold d-block">{{ fmt2(totals.noVatRub) }} RUB</span>
+                  </template>
+                  <template v-else-if="h.key === 'noVatUsd'">
+                    <span class="text-end text-success font-weight-bold d-block">{{ fmt2(totals.noVatUsd) }} USD</span>
+                  </template>
+                  <template v-else-if="h.key === 'profit'">
+                    <span class="text-end text-success font-weight-bold d-block">{{ fmt2(totals.profit) }} RUB</span>
+                  </template>
+                </td>
+              </tr>
             </tbody>
           </v-table>
 
@@ -344,6 +373,9 @@
           empty-icon="mdi-swap-horizontal-variant"
           empty-message="Транзакции не найдены"
           @update:options="onLogOptions">
+          <template #item.contractNumber="{ item }">
+            {{ item.contractNumber || ('Контракт #' + item.contract) }}
+          </template>
           <template #item.amount="{ item }">{{ fmt2(item.amount) }} {{ item.currencySymbol || '' }}</template>
           <template #item.amountRUB="{ value }">{{ fmt2(value) }}</template>
           <template #item.amountUSD="{ value }">{{ fmt2(value) }}</template>
@@ -480,20 +512,41 @@ async function loadContracts() {
 const drafts = ref([]);
 const adding = ref(false);
 const fixing = ref(false);
-const chainExpanded = ref({});
 
-/**
- * «Изменить % ДС» доступна только для Investors Trust и Medlife
- * (по спеке ✅Транзакции.md, для остальных продуктов ставка фиксирована).
- */
 function isRateChangeable(d) {
   if (!d.productId || !d.productName) return false;
   const n = d.productName.toLowerCase();
   return n.includes('investor') || n.includes('trust') || n.includes('medlife') || n.includes('медлайф') || n.includes('инвестор');
 }
 
-function toggleChain(id) {
-  chainExpanded.value[id] = !chainExpanded.value[id];
+function contractNum(d) {
+  return d.contractNumber || (d.contractId ? `Контракт #${d.contractId}` : '—');
+}
+
+function partnerSurname(name) {
+  if (!name) return '';
+  return name.trim().split(/\s+/)[0];
+}
+
+/** В hover-попап выводим цепочку сверху-вниз: верхний наставник → текущий партнёр (bold). */
+function chainTopDown(chain) {
+  return [...chain].reverse();
+}
+
+function parseDate(v) {
+  if (!v) return null;
+  const d = new Date(v);
+  return isNaN(d) ? null : d;
+}
+
+function formatYmd(d) {
+  if (!d) return null;
+  const date = d instanceof Date ? d : new Date(d);
+  if (isNaN(date)) return null;
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${dd}`;
 }
 
 const totals = computed(() => {
@@ -715,8 +768,30 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.manual-tx-table :deep(table) { border-collapse: separate; border-spacing: 0; }
 .manual-tx-table :deep(td) { vertical-align: middle; }
-.manual-tx-table :deep(th) { white-space: nowrap; font-weight: 600; }
-.tx-row-ready { background: rgba(76, 175, 80, 0.04); }
-.tx-extra-row td { background: rgba(0, 0, 0, 0.02); border-top: 0; padding: 4px 8px !important; }
+.manual-tx-table :deep(th) {
+  white-space: nowrap;
+  font-weight: 600;
+  background: rgba(var(--v-theme-surface-variant), 0.5);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: rgba(var(--v-theme-on-surface), 0.7);
+}
+.manual-tx-table :deep(tbody tr:hover td) {
+  background: rgba(var(--v-theme-primary), 0.04);
+}
+.tx-row-ready :deep(td),
+.tx-row-ready td { background: rgba(76, 175, 80, 0.06); }
+.tx-totals-row td {
+  background: rgba(76, 175, 80, 0.12) !important;
+  font-size: 14px;
+  border-top: 2px solid rgba(76, 175, 80, 0.4) !important;
+  padding-top: 12px !important;
+  padding-bottom: 12px !important;
+}
+.tx-partner-hover { cursor: pointer; }
+.tx-partner-hover:hover { text-decoration: underline; }
+.tx-direct-row td { background: rgba(var(--v-theme-primary), 0.06); }
 </style>
