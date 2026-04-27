@@ -121,7 +121,7 @@ class ManualTransactionController extends Controller
                 'consultant' => $c->consultant,
                 'currency' => $c->currency,
                 'currencyRate' => $c->currency ? $this->fetchCurrencyRate((int) $c->currency) : 1,
-                'parameter' => 'standard',
+                'parameter' => null,
                 'createdBy' => $userId,
                 'createdAt' => now(),
                 'updatedAt' => now(),
@@ -156,7 +156,10 @@ class ManualTransactionController extends Controller
                 'cur.nameRu as currencyName',
             ]);
 
-        $data = $rows->map(fn ($r) => $this->serializeDraft($r));
+        $productIds = $rows->pluck('productId')->filter()->unique()->all();
+        $paramsByProduct = $this->loadParametersForProducts($productIds);
+
+        $data = $rows->map(fn ($r) => $this->serializeDraft($r, $paramsByProduct));
 
         return response()->json(['data' => $data]);
     }
@@ -508,6 +511,33 @@ class ManualTransactionController extends Controller
         return ['percent' => (float) ($level->percent ?? 15), 'levelId' => $level?->id];
     }
 
+    /**
+     * Какие параметры (commissionCalcProperty) есть у продукта.
+     * Список параметров = distinct commissionCalcProperty всех активных
+     * dsCommission-строк, которые относятся к программам этого продукта.
+     * Если у продукта <=1 параметра — UI скроет дропдаун (выбор не нужен).
+     */
+    private function loadParametersForProducts(array $productIds): array
+    {
+        if (! count($productIds)) return [];
+
+        $rows = DB::table('dsCommission as dc')
+            ->join('commissionCalcProperty as cp', 'cp.id', '=', 'dc.commissionCalcProperty')
+            ->where('dc.active', true)
+            ->whereNull('dc.dateDeleted')
+            ->whereIn('dc.product', $productIds)
+            ->select(['dc.product as productId', 'cp.id', 'cp.title'])
+            ->distinct()
+            ->orderBy('cp.title')
+            ->get();
+
+        $byProduct = [];
+        foreach ($rows as $r) {
+            $byProduct[$r->productId][] = ['id' => $r->id, 'title' => $r->title];
+        }
+        return $byProduct;
+    }
+
     private function fetchCurrencyRate(int $currencyId): float
     {
         if ($currencyId === 67) return 1.0; // RUB
@@ -542,8 +572,13 @@ class ManualTransactionController extends Controller
             ]);
     }
 
-    private function serializeDraft(object $r): array
+    private function serializeDraft(object $r, ?array $paramsByProduct = null): array
     {
+        if ($paramsByProduct === null && $r->productId ?? null) {
+            $paramsByProduct = $this->loadParametersForProducts([(int) $r->productId]);
+        }
+        $params = $r->productId ? ($paramsByProduct[$r->productId] ?? []) : [];
+
         return [
             'id' => $r->id,
             'contractId' => $r->contract,
@@ -563,7 +598,8 @@ class ManualTransactionController extends Controller
             'currencyRate' => $r->currencyRate !== null ? (float) $r->currencyRate : null,
             'date' => $r->date,
             'comment' => $r->comment,
-            'parameter' => $r->parameter ?? 'standard',
+            'parameter' => $r->parameter,
+            'availableParameters' => $params,
             'yearKV' => $r->yearKV,
             'dsCommissionPercentage' => $r->dsCommissionPercentage !== null ? (float) $r->dsCommissionPercentage : null,
             'commissionOverride' => (bool) $r->commissionOverride,

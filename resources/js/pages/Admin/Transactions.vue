@@ -153,8 +153,18 @@
                         @update:model-value="v => patchField(d, 'comment', v)" />
                     </template>
                     <template v-else-if="h.key === 'parameter'">
-                      <v-select :model-value="d.parameter" :items="parameterOptions" density="compact" hide-details variant="plain"
-                        @update:model-value="v => patchField(d, 'parameter', v)" />
+                      <template v-if="(d.availableParameters?.length || 0) > 1">
+                        <v-select :model-value="d.parameter" :items="d.availableParameters"
+                          item-title="title" item-value="title"
+                          density="compact" hide-details variant="plain" placeholder="Выберите"
+                          @update:model-value="v => patchField(d, 'parameter', v)" />
+                      </template>
+                      <template v-else-if="d.availableParameters?.length === 1">
+                        <span class="text-medium-emphasis">{{ d.availableParameters[0].title }}</span>
+                      </template>
+                      <template v-else>
+                        <span class="text-medium-emphasis">—</span>
+                      </template>
                     </template>
                     <template v-else-if="h.key === 'yearKV'">
                       <v-select :model-value="d.yearKV" :items="yearKVOptions" density="compact" hide-details variant="plain" clearable
@@ -564,12 +574,6 @@ const totals = computed(() => {
   };
 });
 
-const parameterOptions = [
-  { title: 'Стандарт', value: 'standard' },
-  { title: 'Апфронт', value: 'upfront' },
-  { title: 'Левел', value: 'level' },
-  { title: 'MF', value: 'mf' },
-];
 const yearKVOptions = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
 async function loadDrafts() {
