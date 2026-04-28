@@ -40,8 +40,56 @@
         <StartChatButton :partner-id="item.consultantId || item.consultant" :partner-name="item.consultantName"
           context-type="Контракт" :context-id="item.id" :context-label="'#' + (item.number || item.id)" />
       </template>
+      <template #item.actions="{ item }">
+        <v-btn icon="mdi-history" size="x-small" variant="text" title="История изменений"
+          @click="openHistory(item)" />
+      </template>
       <template #no-data><EmptyState /></template>
     </v-data-table-server>
+
+    <!-- Модалка «История контракта» (per spec ✅Менеджер контрактов §4) -->
+    <v-dialog v-model="historyOpen" max-width="900">
+      <v-card v-if="historyContext">
+        <v-card-title>
+          История изменений контракта {{ historyContext.number || ('#' + historyContext.id) }}
+        </v-card-title>
+        <v-card-text>
+          <v-alert v-if="!historyRows.length && !historyLoading" type="info" variant="tonal" density="compact">
+            Изменений не найдено (или контракт не редактировался после установки логирования).
+          </v-alert>
+          <v-table v-else density="compact">
+            <thead>
+              <tr>
+                <th style="width:170px">Дата и время</th>
+                <th>Что изменено</th>
+                <th style="width:200px">Автор</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in historyRows" :key="row.id">
+                <td class="text-no-wrap">{{ fmtDateTime(row.createdAt) }}</td>
+                <td>
+                  <div v-if="!row.changes.length" class="text-medium-emphasis">
+                    {{ row.description || row.event }}
+                  </div>
+                  <div v-for="ch in row.changes" :key="ch.field" class="mb-1">
+                    <span class="font-weight-medium">{{ ch.fieldLabel }}:</span>
+                    <span class="text-medium-emphasis">{{ formatVal(ch.old) }}</span>
+                    <v-icon size="14" class="mx-1">mdi-arrow-right</v-icon>
+                    <span class="text-success">{{ formatVal(ch.new) }}</span>
+                  </div>
+                </td>
+                <td class="text-no-wrap">{{ row.author }}</td>
+              </tr>
+            </tbody>
+          </v-table>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="historyOpen = false">Закрыть</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
@@ -76,7 +124,36 @@ const headers = [
   { title: 'Сумма', key: 'ammount', width: 140 },
   { title: 'Статус', key: 'statusName', width: 130 },
   { title: '', key: 'chat', sortable: false, width: 50 },
+  { title: '', key: 'actions', sortable: false, width: 50 },
 ];
+
+const historyOpen = ref(false);
+const historyContext = ref(null);
+const historyRows = ref([]);
+const historyLoading = ref(false);
+
+async function openHistory(item) {
+  historyContext.value = item;
+  historyRows.value = [];
+  historyLoading.value = true;
+  historyOpen.value = true;
+  try {
+    const { data } = await api.get(`/admin/contracts/${item.id}/history`);
+    historyRows.value = data.data || [];
+  } catch {}
+  historyLoading.value = false;
+}
+
+function fmtDateTime(d) {
+  if (!d) return '—';
+  return new Date(d).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' });
+}
+
+function formatVal(v) {
+  if (v === null || v === undefined) return '—';
+  if (typeof v === 'object') return JSON.stringify(v);
+  return String(v);
+}
 
 const columnVisible = ref({});
 const visibleHeaders = computed(() => headers.filter(h => columnVisible.value[h.key] !== false));

@@ -368,6 +368,74 @@ class AdminDataController extends Controller
         return response()->json(['message' => 'Статус обновлён вручную, изменение зафиксировано в аудит-логе']);
     }
 
+    /**
+     * История изменений контракта (per spec ✅Менеджер контрактов §4).
+     *
+     * Берётся из Spatie\Activitylog `activity_log`. Возвращает все
+     * правки контракта (Contract model уже логирует client/consultant/
+     * product/program/status/currency/amount/number/openDate/closeDate).
+     *
+     * Спека требует:
+     *   - Дата и время изменения
+     *   - Что изменено (название поля: было → стало)
+     *   - Автор изменений (ФИО сотрудника или Система)
+     */
+    public function contractHistory(int $id): JsonResponse
+    {
+        $rows = DB::table('activity_log')
+            ->where('subject_type', \App\Models\Contract::class)
+            ->where('subject_id', $id)
+            ->orderByDesc('created_at')
+            ->limit(200)
+            ->get();
+
+        $causerIds = $rows->pluck('causer_id')->filter()->unique();
+        $causers = $causerIds->isNotEmpty()
+            ? DB::table('WebUser')->whereIn('id', $causerIds)->select(['id', 'firstName', 'lastName', 'patronymic'])->get()->keyBy('id')
+            : collect();
+
+        $fieldLabels = [
+            'client' => 'Клиент', 'consultant' => 'Консультант',
+            'product' => 'Продукт', 'program' => 'Программа',
+            'status' => 'Статус', 'currency' => 'Валюта',
+            'amount' => 'Сумма', 'number' => 'Номер',
+            'openDate' => 'Дата открытия', 'closeDate' => 'Дата закрытия',
+        ];
+
+        $data = $rows->map(function ($r) use ($causers, $fieldLabels) {
+            $props = json_decode($r->properties ?: '{}', true);
+            $changes = [];
+            $oldValues = $props['old'] ?? [];
+            $newValues = $props['attributes'] ?? [];
+            foreach ($newValues as $field => $newVal) {
+                $oldVal = $oldValues[$field] ?? null;
+                if ($oldVal === $newVal) continue;
+                $changes[] = [
+                    'field' => $field,
+                    'fieldLabel' => $fieldLabels[$field] ?? $field,
+                    'old' => $oldVal,
+                    'new' => $newVal,
+                ];
+            }
+
+            $causer = $r->causer_id ? ($causers[$r->causer_id] ?? null) : null;
+            $author = $causer
+                ? trim("{$causer->lastName} {$causer->firstName} {$causer->patronymic}")
+                : 'Система';
+
+            return [
+                'id' => $r->id,
+                'createdAt' => $r->created_at,
+                'description' => $r->description,
+                'event' => $r->event,
+                'author' => $author,
+                'changes' => $changes,
+            ];
+        });
+
+        return response()->json(['data' => $data]);
+    }
+
     /** Статусы партнёров — сводка + детальный список */
     public function partnerStatuses(Request $request): JsonResponse
     {

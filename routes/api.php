@@ -142,6 +142,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/admin/acceptance', [\App\Http\Controllers\Api\AdminDataController::class, 'acceptance']);
         Route::get('/admin/contracts', [\App\Http\Controllers\Api\AdminDataController::class, 'contracts']);
         Route::get('/admin/contracts/upload-history', fn () => response()->json([]));
+        Route::get('/admin/contracts/{id}/history', [\App\Http\Controllers\Api\AdminDataController::class, 'contractHistory'])->whereNumber('id');
 
         // Shared import progress polling — frontend генерирует tracker id,
         // бэк пишет в cache перед каждой пачкой строк, фронт читает каждые
