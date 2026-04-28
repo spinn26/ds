@@ -30,6 +30,7 @@ class FinrezTransactionsReport extends AbstractReportType
             ->get([
                 'c.number', 'pr.providerName', 'c.productName', 'c.programName',
                 'c.clientName', 't.date', 't.amountRUB', 't.netRevenueRUB',
+                't.dsCommissionPercentage',
                 'cn.personName as partner', 't.commissionsAmountRUB', 't.profitRUB',
                 't.amount', 'cur.symbol as curSymbol', 't.score', 'c.paymentCount',
                 'c.term', 'c.openDate',
@@ -37,10 +38,24 @@ class FinrezTransactionsReport extends AbstractReportType
 
         return $rows->map(fn ($r) => [
             $r->number, $r->providerName, $r->productName, $r->programName,
-            $r->clientName, $r->date, $this->n($r->amountRUB), '', $this->n($r->netRevenueRUB),
+            $r->clientName, $r->date, $this->n($r->amountRUB),
+            $this->n($this->dsRevenueGross($r)), $this->n($r->netRevenueRUB),
             $r->partner, $this->n($r->commissionsAmountRUB), $this->n($r->profitRUB),
             $this->n($r->amount), $r->curSymbol, $r->score,
             $r->paymentCount, $r->term, $r->openDate,
         ])->all();
+    }
+
+    /** Доход DS до вычета НДС: net × 1.05, либо amountRUB × dsCommission% / 100 как fallback. */
+    private function dsRevenueGross(object $r): float
+    {
+        if (! empty($r->netRevenueRUB)) {
+            return ((float) $r->netRevenueRUB) * 1.05;
+        }
+        $pct = (float) ($r->dsCommissionPercentage ?? 0);
+        if ($pct > 0 && ! empty($r->amountRUB)) {
+            return ((float) $r->amountRUB) * $pct / 100.0;
+        }
+        return 0.0;
     }
 }
