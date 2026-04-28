@@ -41,6 +41,36 @@ class AdminFinanceController extends Controller
         if ($request->filled('month')) {
             $query->where('t.dateMonth', $request->month);
         }
+        // Фильтр «Партнёр в цепочке» per spec ✅Транзакции —
+        // ищем все транзакции, у которых указанный консультант есть
+        // в апплайне (вверх по inviter) консультанта контракта.
+        if ($request->filled('chain_partner')) {
+            $needle = '%' . $request->chain_partner . '%';
+
+            // 1) находим всех консультантов, чьё имя матчит запросу
+            $matchedIds = DB::table('consultant')
+                ->where('personName', 'ilike', $needle)
+                ->pluck('id');
+
+            if ($matchedIds->isNotEmpty()) {
+                // 2) для каждого спускаемся вниз по структуре (inviter дерево)
+                //    и собираем все нижестоящие consultant.id — их транзакции
+                //    нужно показать.
+                $allDescendants = collect($matchedIds);
+                $current = collect($matchedIds);
+                for ($depth = 0; $depth < 20 && $current->isNotEmpty(); $depth++) {
+                    $next = DB::table('consultant')
+                        ->whereIn('inviter', $current)
+                        ->whereNull('dateDeleted')
+                        ->pluck('id');
+                    $allDescendants = $allDescendants->merge($next)->unique();
+                    $current = $next;
+                }
+                $query->whereIn('c.consultant', $allDescendants->all());
+            } else {
+                $query->whereRaw('1=0'); // no match → empty result
+            }
+        }
 
         $total = $query->count();
         $rows = $query->orderByDesc('t.date')

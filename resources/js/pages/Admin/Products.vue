@@ -197,7 +197,17 @@
               <v-text-field v-model="editProgram.name" label="Название *" :rules="[v => !!v || 'Обязательное поле']" />
             </v-col>
             <v-col cols="6">
-              <v-text-field v-model="editProgram.term" label="Срок, лет" type="number" />
+              <!-- Per spec ✅Продукты §2 — поле «Поставщик». -->
+              <v-text-field v-model="editProgram.providerName" label="Поставщик"
+                hint="DS / Axevil / БКС / Insmart …" persistent-hint />
+            </v-col>
+            <v-col cols="6">
+              <!-- Per spec ✅Продукты §2 — поле «Свойство продукта». -->
+              <v-text-field v-model="editProgram.vendorName" label="Свойство продукта"
+                hint="Например: «МФ», «Standard», «Apfront»" persistent-hint />
+            </v-col>
+            <v-col cols="6">
+              <v-text-field v-model="editProgram.term" label="Срок контракта, лет" type="number" />
             </v-col>
             <v-col cols="6">
               <v-select v-model="editProgram.currency" label="Валюта"

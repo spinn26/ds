@@ -251,6 +251,11 @@ class AdminProductController extends Controller
             'productType' => 'nullable|integer',
             'provider' => 'nullable|integer',
             'vendor' => 'nullable|integer',
+            // Per spec ✅Продукты §2: «Поставщик» (free-text counterparty)
+            // и «Свойство продукта» — опциональные строки, если в legacy
+            // справочниках нужного варианта нет.
+            'providerName' => 'nullable|string|max:255',
+            'vendorName' => 'nullable|string|max:255',
         ];
     }
 
@@ -262,6 +267,7 @@ class AdminProductController extends Controller
             'pointsMin', 'pointsMax', 'kvPayoutYear', 'term', 'termContract',
             'currency', 'commissionCalcProperty', 'calcComment', 'category',
             'productType', 'provider', 'vendor',
+            'providerName', 'vendorName',
         ];
         $out = [];
         foreach ($keys as $k) {

@@ -5,10 +5,46 @@
     <FilterBar
       :search="filters.search"
       search-placeholder="Поиск по ФИО, номеру, продукту..."
-      :show-reset="!!filters.search"
+      :search-cols="3"
+      :show-reset="activeFilterCount > 0"
       @update:search="v => { filters.search = v ?? ''; debouncedLoad(); }"
-      @reset="filters.search = ''; loadData();"
+      @reset="resetFilters"
     >
+      <v-col cols="12" md="2">
+        <v-text-field v-model="filters.openedFrom" type="date" label="Открыт с"
+          density="comfortable" variant="outlined" hide-details
+          @update:model-value="loadData" />
+      </v-col>
+      <v-col cols="12" md="2">
+        <v-text-field v-model="filters.openedTo" type="date" label="Открыт по"
+          density="comfortable" variant="outlined" hide-details
+          @update:model-value="loadData" />
+      </v-col>
+      <v-col cols="12" md="2">
+        <v-text-field v-model.number="filters.amountMin" type="number" label="Сумма от"
+          density="comfortable" variant="outlined" hide-details clearable
+          @update:model-value="debouncedLoad" />
+      </v-col>
+      <v-col cols="12" md="2">
+        <v-text-field v-model.number="filters.amountMax" type="number" label="Сумма до"
+          density="comfortable" variant="outlined" hide-details clearable
+          @update:model-value="debouncedLoad" />
+      </v-col>
+      <v-col cols="12" md="2">
+        <v-text-field v-model.number="filters.termMin" type="number" label="Срок ≥, лет"
+          density="comfortable" variant="outlined" hide-details clearable
+          @update:model-value="debouncedLoad" />
+      </v-col>
+      <v-col cols="12" md="2">
+        <v-text-field v-model.number="filters.termMax" type="number" label="Срок ≤, лет"
+          density="comfortable" variant="outlined" hide-details clearable
+          @update:model-value="debouncedLoad" />
+      </v-col>
+      <v-col v-if="activeFilterCount > 0" cols="auto" class="d-flex align-center">
+        <v-chip size="small" color="info" variant="tonal">
+          {{ activeFilterCount }} {{ activeFilterCount === 1 ? 'фильтр' : 'фильтра' }}
+        </v-chip>
+      </v-col>
       <v-col cols="auto" class="d-flex align-center ms-auto">
         <ColumnVisibilityMenu :headers="headers" v-model:visible="columnVisible" storage-key="my-contracts-cols" />
       </v-col>
@@ -46,7 +82,29 @@ const total = ref(0);
 const loading = ref(false);
 const page = ref(1);
 const perPage = ref(25);
-const filters = ref({ search: '' });
+const filters = ref({
+  search: '',
+  openedFrom: '', openedTo: '',
+  amountMin: null, amountMax: null,
+  termMin: null, termMax: null,
+});
+
+const activeFilterCount = computed(() => {
+  let c = 0;
+  Object.values(filters.value).forEach(v => {
+    if (v !== '' && v !== null && v !== undefined) c++;
+  });
+  return c;
+});
+
+function resetFilters() {
+  filters.value = {
+    search: '', openedFrom: '', openedTo: '',
+    amountMin: null, amountMax: null,
+    termMin: null, termMax: null,
+  };
+  loadData();
+}
 
 const nowrap = { style: 'white-space:nowrap' };
 const headers = [
@@ -90,6 +148,12 @@ async function loadData() {
   try {
     const params = { page: page.value, per_page: perPage.value };
     if (filters.value.search) params.search = filters.value.search;
+    if (filters.value.openedFrom) params.opened_from = filters.value.openedFrom;
+    if (filters.value.openedTo) params.opened_to = filters.value.openedTo;
+    if (filters.value.amountMin != null && filters.value.amountMin !== '') params.amount_min = filters.value.amountMin;
+    if (filters.value.amountMax != null && filters.value.amountMax !== '') params.amount_max = filters.value.amountMax;
+    if (filters.value.termMin != null && filters.value.termMin !== '') params.term_min = filters.value.termMin;
+    if (filters.value.termMax != null && filters.value.termMax !== '') params.term_max = filters.value.termMax;
     const { data } = await api.get('/contracts/my', { params });
     items.value = data.data;
     total.value = data.total;

@@ -13,11 +13,12 @@ class ContractService
      */
     public function applyContractFilters($query, Request $request): void
     {
-        // ФИО клиента
+        // ФИО клиента / номер контракта / название продукта
         if ($request->filled('search')) {
             $query->where(function ($q) use ($request) {
                 $q->where('clientName', 'ilike', '%' . $request->search . '%')
-                  ->orWhere('number', 'ilike', '%' . $request->search . '%');
+                  ->orWhere('number', 'ilike', '%' . $request->search . '%')
+                  ->orWhere('productName', 'ilike', '%' . $request->search . '%');
             });
         }
 
@@ -26,17 +27,44 @@ class ContractService
             $query->where('status', $request->status);
         }
 
-        // Продукт
+        // Продукт / Программа
         if ($request->filled('product')) {
             $query->where('product', $request->product);
         }
+        if ($request->filled('program')) {
+            $query->where('program', $request->program);
+        }
 
-        // Дата открытия — диапазон
+        // Дата открытия — диапазон (поддерживаются оба варианта именования
+        // параметров: legacy date_from/to и новый opened_from/to per spec
+        // ✅Контракты моей команды §1).
         if ($request->filled('date_from')) {
             $query->where('openDate', '>=', $request->date_from);
         }
         if ($request->filled('date_to')) {
             $query->where('openDate', '<=', $request->date_to);
+        }
+        if ($request->filled('opened_from')) {
+            $query->where('openDate', '>=', $request->opened_from);
+        }
+        if ($request->filled('opened_to')) {
+            $query->where('openDate', '<=', $request->opened_to . ' 23:59:59');
+        }
+
+        // Сумма — диапазон. Колонка в БД называется "ammount" (typo в legacy).
+        if ($request->filled('amount_min')) {
+            $query->where('ammount', '>=', $request->amount_min);
+        }
+        if ($request->filled('amount_max')) {
+            $query->where('ammount', '<=', $request->amount_max);
+        }
+
+        // Срок контракта (term) — диапазон.
+        if ($request->filled('term_min')) {
+            $query->where('term', '>=', $request->term_min);
+        }
+        if ($request->filled('term_max')) {
+            $query->where('term', '<=', $request->term_max);
         }
     }
 

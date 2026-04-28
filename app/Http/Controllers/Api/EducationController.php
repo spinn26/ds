@@ -63,6 +63,8 @@ class EducationController extends Controller
                 'title' => $c->title,
                 'description' => $c->description,
                 'product_id' => $c->product_id,
+                // Per spec ✅Обучение §3 — 9 блоков + 0 «База знаний».
+                'block' => $c->block ?? 0,
                 'lessonCount' => $total,
                 'lessonViewed' => $viewed,
                 'testPassed' => $testPassed,

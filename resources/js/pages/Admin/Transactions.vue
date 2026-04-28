@@ -390,7 +390,11 @@
         <v-card class="mb-3 pa-3">
           <div class="d-flex ga-2 flex-wrap align-center">
             <v-text-field v-model="logSearch" placeholder="Поиск по ID..."
-              rounded prepend-inner-icon="mdi-magnify" clearable hide-details style="max-width:300px"
+              rounded prepend-inner-icon="mdi-magnify" clearable hide-details style="max-width:240px"
+              @update:model-value="debouncedLogLoad" />
+            <v-text-field v-model="logChainPartner" placeholder="Партнёр в цепочке"
+              rounded prepend-inner-icon="mdi-account-tree" clearable hide-details
+              style="max-width:240px"
               @update:model-value="debouncedLogLoad" />
             <v-text-field v-model="logMonth" type="month" label="Месяц"
               hide-details style="max-width:200px" @update:model-value="loadLog" />
@@ -777,6 +781,7 @@ const logItems = ref([]);
 const logTotal = ref(0);
 const logLoading = ref(false);
 const logSearch = ref('');
+const logChainPartner = ref('');
 const logMonth = ref(new Date().toISOString().slice(0, 7));
 const logPage = ref(1);
 const logPerPage = ref(25);
@@ -810,12 +815,14 @@ const logVisibleHeaders = computed(() => logHeaders.filter(h => logColumnVisible
 const logActiveFilters = computed(() => {
   let c = 0;
   if (logSearch.value) c++;
+  if (logChainPartner.value) c++;
   if (logMonth.value && logMonth.value !== defaultMonth) c++;
   return c;
 });
 
 function resetLogFilters() {
   logSearch.value = '';
+  logChainPartner.value = '';
   logMonth.value = defaultMonth;
   loadLog();
 }
@@ -833,6 +840,7 @@ async function loadLog() {
   try {
     const params = { page: logPage.value, per_page: logPerPage.value };
     if (logSearch.value) params.search = logSearch.value;
+    if (logChainPartner.value) params.chain_partner = logChainPartner.value;
     if (logMonth.value) params.month = logMonth.value;
     const { data } = await api.get('/admin/transactions', { params });
     logItems.value = data.data;
