@@ -1250,27 +1250,83 @@ class AdminDataController extends Controller
         return response()->json(['message' => 'Контракт удалён']);
     }
 
-    /** История перестановок */
+    /**
+     * История перестановок (per spec ✅История перестановок.md).
+     * 3 вкладки: partner / contract / client. Колонка «Автор изменений»
+     * резолвится через webUser → WebUser.firstName/lastName/patronymic
+     * или «Система» если webUser=null.
+     */
     public function transfers(Request $request): JsonResponse
     {
-        $query = DB::table('changeConsultantInviterLog');
+        $tab = $request->input('tab', 'partner');
+        $tableConfig = match ($tab) {
+            'contract' => [
+                'table' => 'changeConsultantContractLog',
+                'subjectColumn' => 'contractNumber',
+                'subjectKey' => 'subjectName',
+                'subjectIdKey' => 'subjectId',
+                'subjectFkColumn' => 'contract',
+            ],
+            'client' => [
+                'table' => 'changeConsultantClientLog',
+                'subjectColumn' => 'clientName',
+                'subjectKey' => 'subjectName',
+                'subjectIdKey' => 'subjectId',
+                'subjectFkColumn' => 'client',
+            ],
+            'partner' => [
+                'table' => 'changeConsultantInviterLog',
+                'subjectColumn' => 'consultantName',
+                'subjectKey' => 'subjectName',
+                'subjectIdKey' => 'subjectId',
+                'subjectFkColumn' => 'consultant',
+            ],
+            default => throw new \InvalidArgumentException('Bad tab'),
+        };
+
+        $query = DB::table($tableConfig['table']);
 
         if ($request->filled('search')) {
-            $query->where('consultantName', 'ilike', '%' . $request->search . '%');
+            $query->where($tableConfig['subjectColumn'], 'ilike', '%' . $request->search . '%');
+        }
+        if ($request->filled('date_from')) {
+            $query->where('dateCreated', '>=', $request->date_from);
+        }
+        if ($request->filled('date_to')) {
+            $query->where('dateCreated', '<=', $request->date_to . ' 23:59:59');
         }
 
         $total = $query->count();
-        $data = $query->orderByDesc('dateCreated')
-            ->offset(($request->input('page', 1) - 1) * 25)
-            ->limit(25)
-            ->get()
-            ->map(fn ($r) => [
+        $rows = $query->orderByDesc('dateCreated')
+            ->offset($this->paginationOffset($request))
+            ->limit($this->paginationPerPage($request))
+            ->get();
+
+        $userIds = $rows->pluck('webUser')->filter()->unique();
+        $users = $userIds->isNotEmpty()
+            ? DB::table('WebUser')->whereIn('id', $userIds)
+                ->get(['id', 'firstName', 'lastName', 'patronymic'])
+                ->keyBy('id')
+            : collect();
+
+        $oldKey = $tab === 'partner' ? 'inviterOldName' : 'consultantOldName';
+        $newKey = $tab === 'partner' ? 'inviterNewName' : 'consultantNewName';
+
+        $data = $rows->map(function ($r) use ($users, $tableConfig, $oldKey, $newKey) {
+            $author = $r->webUser
+                ? trim(($users[$r->webUser]?->lastName ?? '') . ' ' . ($users[$r->webUser]?->firstName ?? ''))
+                : 'Система';
+            return [
                 'id' => $r->id,
                 'dateCreated' => $r->dateCreated,
-                'consultantName' => $r->consultantName,
-                'inviterOldName' => $r->inviterOldName,
-                'inviterNewName' => $r->inviterNewName,
-            ]);
+                'subjectName' => $r->{$tableConfig['subjectColumn']} ?? null,
+                'subjectId' => $r->{$tableConfig['subjectFkColumn']} ?? null,
+                'oldName' => $r->{$oldKey} ?? null,
+                'newName' => $r->{$newKey} ?? null,
+                'author' => $author ?: 'Система',
+                'triggeredBy' => $r->triggeredBy ?? null,
+            ];
+        });
 
         return response()->json(['data' => $data, 'total' => $total]);
     }
