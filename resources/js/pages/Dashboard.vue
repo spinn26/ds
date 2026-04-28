@@ -28,10 +28,12 @@
     <v-card class="mb-4 pa-4">
       <div class="d-flex justify-space-between align-center mb-4 flex-wrap ga-2">
         <div>
-          <div class="text-caption text-medium-emphasis text-uppercase" style="letter-spacing: 1px">Закрытая квалификация</div>
+          <div class="text-caption text-medium-emphasis text-uppercase" style="letter-spacing: 1px">
+            Текущая квалификация
+          </div>
           <div class="d-flex align-center ga-3 mt-1 flex-wrap">
             <v-chip color="secondary" size="default" variant="flat" class="font-weight-bold">
-              {{ data.qualification.nominalLevel?.level ?? '—' }} [{{ data.qualification.nominalLevel?.title ?? 'Start' }}]
+              {{ currentLevel?.level ?? '—' }} [{{ currentLevel?.title ?? 'Start' }}]
             </v-chip>
             <v-chip v-if="data.consultant.activityName" size="small"
               :color="data.consultant.active ? 'success' : 'grey'" variant="tonal">
@@ -56,19 +58,11 @@
         <v-progress-linear :model-value="nqpProgress" height="10" rounded color="primary" />
       </div>
 
-      <!-- Calculation level (if differs from nominal = breakaway) -->
-      <div v-if="data.qualification.levelsDontMatch && data.qualification.calculationLevel" class="mb-3">
-        <div class="d-flex align-center ga-2 flex-wrap">
-          <span class="text-body-2 text-medium-emphasis">Уровень расчёта комиссионных</span>
-          <v-chip color="warning" size="small" variant="flat">
-            {{ data.qualification.calculationLevel.level }} [{{ data.qualification.calculationLevel.title }}]
-          </v-chip>
-          <span class="text-body-2">Комиссия <strong>{{ data.qualification.calculationLevel.percent }}%</strong></span>
-        </div>
-      </div>
-      <div v-else class="mb-3">
+      <!-- Per spec ✅Дашборд.md §2: «Логика разделения на закрытую/расчётную упразднена. -->
+      <!--                          Отображается только Текущая квалификация». -->
+      <div class="mb-3">
         <span class="text-body-2 text-medium-emphasis">Комиссия</span>
-        <span class="text-body-2 font-weight-bold ml-2">{{ data.qualification.nominalLevel?.percent ?? 15 }}%</span>
+        <span class="text-body-2 font-weight-bold ml-2">{{ currentLevel?.percent ?? 15 }}%</span>
       </div>
 
       <!-- GP progress bar -->
@@ -265,11 +259,11 @@
               </thead>
               <tbody>
                 <tr v-for="lv in levels" :key="lv.id"
-                  :class="lv.level === data.qualification.nominalLevel?.level ? 'bg-green-lighten-5' : ''">
-                  <td>{{ lv.level }}</td>
+                  :class="lv.level === currentLevel?.level ? 'bg-green-lighten-5' : ''">
+<td>{{ lv.level }}</td>
                   <td class="font-weight-medium">
                     {{ lv.title }}
-                    <v-chip v-if="lv.level === data.qualification.nominalLevel?.level" size="x-small" color="success" class="ml-1">Текущий</v-chip>
+                    <v-chip v-if="lv.level === currentLevel?.level" size="x-small" color="success" class="ml-1">Текущий</v-chip>
                     <v-chip v-if="lv.level === data.qualification.nextLevel?.level" size="x-small" color="info" class="ml-1">Следующий</v-chip>
                   </td>
                   <td class="text-right">{{ lv.percent }}%</td>
@@ -334,6 +328,22 @@ const statusProgress = computed(() => {
   const si = data.value.statusInfo;
   if (!si || !si.requiredPoints) return 0;
   return Math.min((si.currentPoints / si.requiredPoints) * 100, 100);
+});
+
+/**
+ * Per spec ✅Дашборд.md §2 + ✅Квалификации.md §2:
+ * «Единая квалификация — у партнёра ОДИН уровень в месяц».
+ * Раньше показывались nominal и calculation отдельно;
+ * теперь берём максимум из двух (выше всегда уровень с большим level).
+ */
+const currentLevel = computed(() => {
+  const q = data.value.qualification || {};
+  const n = q.nominalLevel;
+  const c = q.calculationLevel;
+  if (!n && !c) return null;
+  if (!n) return c;
+  if (!c) return n;
+  return (n.level || 0) >= (c.level || 0) ? n : c;
 });
 
 const volumeCards = computed(() => {
