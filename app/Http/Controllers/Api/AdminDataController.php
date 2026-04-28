@@ -35,6 +35,34 @@ class AdminDataController extends Controller
         if ($request->filled('active')) {
             $query->where('active', $request->active === 'true');
         }
+        // Доп. фильтры per spec ✅Партнёры §1.1
+        if ($request->filled('partner_id')) {
+            $query->where('id', (int) $request->partner_id);
+        }
+        if ($request->filled('inviter_name')) {
+            $query->where('inviterName', 'ilike', '%' . $request->inviter_name . '%');
+        }
+        if ($request->filled('email')) {
+            // Email/Phone лежат на WebUser/person — фильтруем через подзапрос.
+            $emailLike = '%' . $request->email . '%';
+            $query->where(function ($q) use ($emailLike) {
+                $q->whereIn('webUser', function ($sub) use ($emailLike) {
+                    $sub->select('id')->from('WebUser')->where('email', 'ilike', $emailLike);
+                })->orWhereIn('person', function ($sub) use ($emailLike) {
+                    $sub->select('id')->from('person')->where('email', 'ilike', $emailLike);
+                });
+            });
+        }
+        if ($request->filled('phone')) {
+            $phoneLike = '%' . preg_replace('/\D/', '', $request->phone) . '%';
+            $query->where(function ($q) use ($phoneLike) {
+                $q->whereIn('webUser', function ($sub) use ($phoneLike) {
+                    $sub->select('id')->from('WebUser')->where('phone', 'ilike', $phoneLike);
+                })->orWhereIn('person', function ($sub) use ($phoneLike) {
+                    $sub->select('id')->from('person')->where('phone', 'ilike', $phoneLike);
+                });
+            });
+        }
 
         $total = $query->count();
         $rows = $query->orderByDesc('id')
@@ -145,6 +173,62 @@ class AdminDataController extends Controller
                 'isBlocked' => (bool) ($webUser->isBlocked ?? false),
             ] : null,
         ]);
+    }
+
+    /**
+     * POST /admin/partners — создать нового партнёра per spec ✅Партнёры §2.
+     * Двухшаг (антидубль) делается на фронте; этот эндпоинт принимает
+     * уже подтверждённый «новая персона».
+     */
+    public function storePartner(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'firstName' => ['required', 'string', 'max:255'],
+            'lastName' => ['required', 'string', 'max:255'],
+            'patronymic' => ['nullable', 'string', 'max:255'],
+            'email' => ['nullable', 'email', 'max:255', 'unique:WebUser,email'],
+            'phone' => ['nullable', 'string', 'max:64'],
+            'birthDate' => ['nullable', 'date'],
+            'activity' => ['required', 'integer', 'in:1,3,4,5'],
+            'inviter' => ['nullable', 'integer', 'exists:consultant,id'],
+            'participantCode' => ['nullable', 'string', 'max:64', 'unique:consultant,participantCode'],
+        ]);
+
+        $personName = trim("{$data['lastName']} {$data['firstName']}" . ($data['patronymic'] ?? '' ? ' ' . $data['patronymic'] : ''));
+
+        $consultantId = DB::transaction(function () use ($data, $personName) {
+            // 1. Создаём WebUser (источник истины для identity per CLAUDE.md).
+            $webUserId = DB::table('WebUser')->insertGetId([
+                'firstName' => $data['firstName'],
+                'lastName' => $data['lastName'],
+                'patronymic' => $data['patronymic'] ?? null,
+                'email' => $data['email'] ?? null,
+                'phone' => $data['phone'] ?? null,
+                'birthDate' => $data['birthDate'] ?? null,
+                'role' => 'consultant',
+                'dateCreated' => now(),
+            ]);
+
+            // 2. Создаём Consultant.
+            $inviterName = null;
+            if (! empty($data['inviter'])) {
+                $inviterName = DB::table('consultant')->where('id', $data['inviter'])->value('personName');
+            }
+
+            return DB::table('consultant')->insertGetId([
+                'webUser' => $webUserId,
+                'personName' => $personName,
+                'activity' => $data['activity'],
+                'active' => $data['activity'] == 1,
+                'inviter' => $data['inviter'] ?? null,
+                'inviterName' => $inviterName,
+                'participantCode' => $data['participantCode'] ?? null,
+                'dateCreated' => now(),
+                'dateActivity' => $data['activity'] == 1 ? now() : null,
+            ]);
+        });
+
+        return response()->json(['message' => 'Партнёр создан', 'id' => $consultantId], 201);
     }
 
     /**
@@ -637,6 +721,53 @@ class AdminDataController extends Controller
      * Soft-delete клиента. Если у клиента есть активные контракты —
      * блокируем. FK из contract/commission остаются.
      */
+    /**
+     * POST /admin/clients — создать клиента per spec ✅Клиенты §3.
+     * Двухшаг (антидубль) делается на фронте, эндпоинт принимает уже
+     * подтверждённую новую персону.
+     */
+    public function storeClient(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'firstName' => ['required', 'string', 'max:255'],
+            'lastName' => ['required', 'string', 'max:255'],
+            'patronymic' => ['nullable', 'string', 'max:255'],
+            'email' => ['nullable', 'email', 'max:255'],
+            'phone' => ['nullable', 'string', 'max:64'],
+            'birthDate' => ['nullable', 'date'],
+            'city' => ['nullable', 'string', 'max:128'],
+            'consultant' => ['required', 'integer', 'exists:consultant,id'],
+            'comment' => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        $personName = trim("{$data['lastName']} {$data['firstName']}" . (! empty($data['patronymic']) ? ' ' . $data['patronymic'] : ''));
+
+        $clientId = DB::transaction(function () use ($data, $personName) {
+            // 1. WebUser — единственный источник истины (per CLAUDE.md).
+            $webUserId = DB::table('WebUser')->insertGetId([
+                'firstName' => $data['firstName'],
+                'lastName' => $data['lastName'],
+                'patronymic' => $data['patronymic'] ?? null,
+                'email' => $data['email'] ?? null,
+                'phone' => $data['phone'] ?? null,
+                'birthDate' => $data['birthDate'] ?? null,
+                'role' => 'client',
+                'dateCreated' => now(),
+            ]);
+
+            return DB::table('client')->insertGetId([
+                'person' => $webUserId,
+                'personName' => $personName,
+                'consultant' => $data['consultant'],
+                'city' => $data['city'] ?? null,
+                'comment' => $data['comment'] ?? null,
+                'dateCreated' => now(),
+            ]);
+        });
+
+        return response()->json(['message' => 'Клиент создан', 'id' => $clientId], 201);
+    }
+
     public function deleteClient(Request $request, int $id): JsonResponse
     {
         $client = DB::table('client')->where('id', $id)->first();
@@ -683,6 +814,25 @@ class AdminDataController extends Controller
         }
         if ($request->filled('consultant')) {
             $query->where('consultant', $request->consultant);
+        }
+        // Доп. фильтры per spec ✅Клиенты §1
+        if ($request->filled('id')) {
+            $query->where('id', (int) $request->id);
+        }
+        if ($request->filled('consultant_name')) {
+            $consName = '%' . $request->consultant_name . '%';
+            $query->whereIn('consultant', function ($sub) use ($consName) {
+                $sub->select('id')->from('consultant')->where('personName', 'ilike', $consName);
+            });
+        }
+        if ($request->filled('comment')) {
+            $query->where('comment', 'ilike', '%' . $request->comment . '%');
+        }
+        if ($request->filled('created_from')) {
+            $query->where('dateCreated', '>=', $request->created_from);
+        }
+        if ($request->filled('created_to')) {
+            $query->where('dateCreated', '<=', $request->created_to . ' 23:59:59');
         }
 
         $total = $query->count();

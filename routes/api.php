@@ -132,6 +132,7 @@ Route::prefix('v1')->group(function () {
         Route::delete('/admin/users/{id}', [AdminUserController::class, 'destroy']);
 
         Route::get('/admin/partners', [\App\Http\Controllers\Api\AdminDataController::class, 'partners']);
+        Route::post('/admin/partners', [\App\Http\Controllers\Api\AdminDataController::class, 'storePartner']);
         Route::post('/admin/partners/bulk', [\App\Http\Controllers\Api\AdminDataController::class, 'bulkPartners'])->middleware('throttle:10,1');
         Route::get('/admin/partners/{id}', [\App\Http\Controllers\Api\AdminDataController::class, 'showPartner'])->whereNumber('id');
         Route::put('/admin/partners/{id}', [\App\Http\Controllers\Api\AdminDataController::class, 'updatePartner'])->whereNumber('id');
@@ -140,6 +141,7 @@ Route::prefix('v1')->group(function () {
         Route::delete('/admin/partners/{id}', [\App\Http\Controllers\Api\AdminDataController::class, 'deletePartner'])->whereNumber('id');
         Route::get('/admin/partner-statuses', [\App\Http\Controllers\Api\AdminDataController::class, 'partnerStatuses']);
         Route::get('/admin/clients', [\App\Http\Controllers\Api\AdminDataController::class, 'clients']);
+        Route::post('/admin/clients', [\App\Http\Controllers\Api\AdminDataController::class, 'storeClient']);
         Route::delete('/admin/clients/{id}', [\App\Http\Controllers\Api\AdminDataController::class, 'deleteClient'])->whereNumber('id');
         Route::get('/admin/requisites', [\App\Http\Controllers\Api\AdminDataController::class, 'requisites']);
         Route::post('/admin/requisites/bulk', [\App\Http\Controllers\Api\AdminDataController::class, 'bulkRequisites'])->middleware('throttle:10,1');

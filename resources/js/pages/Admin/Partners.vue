@@ -1,21 +1,47 @@
 <template>
   <div>
-    <PageHeader title="Партнёры" icon="mdi-account-search" :count="total" />
+    <PageHeader title="Партнёры" icon="mdi-account-search" :count="total">
+      <template #actions>
+        <v-btn color="success" prepend-icon="mdi-plus" @click="openAddPartner">
+          Добавить партнёра
+        </v-btn>
+      </template>
+    </PageHeader>
 
     <FilterBar
       :search="search"
-      search-placeholder="Поиск по ФИО..."
-      :search-cols="3"
+      search-placeholder="ФИО партнёра"
+      :search-cols="2"
       :show-reset="activeFilterCount > 0"
       @update:search="v => { search = v ?? ''; debouncedLoad(); }"
       @reset="resetFilters"
     >
-      <v-col cols="12" md="3">
+      <v-col cols="12" md="2">
+        <v-text-field v-model="filters.partnerId" placeholder="ИД партнёра"
+          density="comfortable" variant="outlined" hide-details clearable
+          @update:model-value="debouncedLoad" />
+      </v-col>
+      <v-col cols="12" md="2">
+        <v-text-field v-model="filters.inviterName" placeholder="ФИО пригласителя"
+          density="comfortable" variant="outlined" hide-details clearable
+          @update:model-value="debouncedLoad" />
+      </v-col>
+      <v-col cols="12" md="2">
+        <v-text-field v-model="filters.email" placeholder="Эл. почта"
+          density="comfortable" variant="outlined" hide-details clearable
+          @update:model-value="debouncedLoad" />
+      </v-col>
+      <v-col cols="12" md="2">
+        <v-text-field v-model="filters.phone" placeholder="Телефон"
+          density="comfortable" variant="outlined" hide-details clearable
+          @update:model-value="debouncedLoad" />
+      </v-col>
+      <v-col cols="12" md="2">
         <v-select v-model="activityFilter" :items="activityOptions" label="Активность"
           variant="outlined" density="comfortable"
           clearable hide-details @update:model-value="loadData" />
       </v-col>
-      <v-col cols="12" md="3">
+      <v-col cols="12" md="2">
         <v-select v-model="statusFilter" :items="statusOptions" label="Статус"
           variant="outlined" density="comfortable"
           clearable hide-details @update:model-value="loadData" />
@@ -250,6 +276,87 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <!-- Двухшаг «Добавить партнёра» per spec ✅Партнёры §2 -->
+    <v-dialog v-model="addOpen" max-width="640" persistent>
+      <v-card>
+        <v-card-title class="d-flex align-center">
+          <v-icon class="me-2">mdi-account-plus</v-icon>
+          {{ addStep === 1 ? 'Шаг 1: проверка на дубли' : 'Шаг 2: новая персона' }}
+          <v-spacer />
+          <v-btn icon="mdi-close" size="small" variant="text" @click="addOpen = false" />
+        </v-card-title>
+
+        <v-card-text v-if="addStep === 1">
+          <div class="text-body-2 mb-3">
+            Выберите существующую персону или добавьте новую, если не удаётся найти её в списке.
+          </div>
+          <v-text-field v-model="addSearch" label="Начните вводить фамилию"
+            variant="outlined" density="comfortable"
+            prepend-inner-icon="mdi-magnify" autofocus
+            @update:model-value="searchAddCandidates" />
+          <v-progress-linear v-if="addSearching" indeterminate class="mt-2" />
+          <v-list v-if="addCandidates.length" density="compact" class="mt-2">
+            <v-list-item v-for="p in addCandidates" :key="p.id"
+              :title="p.personName" :subtitle="`${p.email || '—'} · ID ${p.id}`"
+              @click="pickExisting(p)">
+              <template #prepend><v-icon>mdi-account</v-icon></template>
+            </v-list-item>
+          </v-list>
+          <v-alert v-else-if="addSearch.length >= 2 && !addSearching"
+            type="info" variant="tonal" density="compact" class="mt-2">
+            Совпадений не найдено.
+          </v-alert>
+        </v-card-text>
+
+        <v-card-text v-else>
+          <v-row dense>
+            <v-col cols="12" sm="4"><v-text-field v-model="addForm.lastName"
+              label="Фамилия *" variant="outlined" density="comfortable" /></v-col>
+            <v-col cols="12" sm="4"><v-text-field v-model="addForm.firstName"
+              label="Имя *" variant="outlined" density="comfortable" /></v-col>
+            <v-col cols="12" sm="4"><v-text-field v-model="addForm.patronymic"
+              label="Отчество" variant="outlined" density="comfortable" /></v-col>
+            <v-col cols="12" sm="6"><v-text-field v-model="addForm.email"
+              label="Email" type="email" variant="outlined" density="comfortable" /></v-col>
+            <v-col cols="12" sm="6"><v-text-field v-model="addForm.phone"
+              label="Телефон" variant="outlined" density="comfortable" /></v-col>
+            <v-col cols="12" sm="6"><v-text-field v-model="addForm.birthDate"
+              label="Дата рождения" type="date" variant="outlined" density="comfortable" /></v-col>
+            <v-col cols="12" sm="6"><v-text-field v-model="addForm.participantCode"
+              label="Партнёрский код" variant="outlined" density="comfortable"
+              hint="Сгенерируется автоматически при активации" persistent-hint /></v-col>
+            <v-col cols="12" sm="6">
+              <v-select v-model="addForm.activity"
+                :items="[{title:'Зарегистрирован',value:4},{title:'Активный',value:1},
+                         {title:'Терминирован',value:3},{title:'Исключён',value:5}]"
+                label="Статус активности *" variant="outlined" density="comfortable" />
+            </v-col>
+            <v-col cols="12" sm="6"><v-text-field v-model="addForm.inviter"
+              label="Пригласитель (ID)" type="number" variant="outlined" density="comfortable"
+              hint="ID существующего партнёра-наставника" persistent-hint /></v-col>
+          </v-row>
+          <v-alert v-if="addError" type="error" density="compact" class="mt-2">{{ addError }}</v-alert>
+        </v-card-text>
+
+        <v-card-actions>
+          <v-btn v-if="addStep === 2" variant="text" prepend-icon="mdi-arrow-left"
+            @click="addStep = 1">Назад</v-btn>
+          <v-spacer />
+          <v-btn v-if="addStep === 1" variant="text" @click="addOpen = false">Отмена</v-btn>
+          <v-btn v-if="addStep === 1" color="success" prepend-icon="mdi-plus"
+            :disabled="!addSearch || addSearch.length < 2" @click="gotoNewPersonStep">
+            + Добавить новую персону
+          </v-btn>
+          <v-btn v-else color="success" prepend-icon="mdi-content-save"
+            :loading="addSaving"
+            :disabled="!addForm.firstName || !addForm.lastName"
+            @click="saveNewPartner">
+            Создать партнёра
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
@@ -305,6 +412,9 @@ const statusFilter = ref(null);
 const statusOptions = ref([]);
 const page = ref(1);
 const perPage = ref(25);
+const filters = ref({
+  partnerId: '', inviterName: '', email: '', phone: '',
+});
 
 // Bulk selection
 const selected = ref([]);
@@ -316,6 +426,7 @@ const activeFilterCount = computed(() => {
   if (search.value) c++;
   if (activityFilter.value) c++;
   if (statusFilter.value) c++;
+  Object.values(filters.value).forEach(v => { if (v) c++; });
   return c;
 });
 
@@ -323,6 +434,7 @@ function resetFilters() {
   search.value = '';
   activityFilter.value = null;
   statusFilter.value = null;
+  filters.value = { partnerId: '', inviterName: '', email: '', phone: '' };
   loadData();
 }
 
@@ -414,11 +526,88 @@ async function loadData() {
     if (search.value) params.search = search.value;
     if (activityFilter.value) params.activity = activityFilter.value;
     if (statusFilter.value) params.status = statusFilter.value;
+    if (filters.value.partnerId) params.partner_id = filters.value.partnerId;
+    if (filters.value.inviterName) params.inviter_name = filters.value.inviterName;
+    if (filters.value.email) params.email = filters.value.email;
+    if (filters.value.phone) params.phone = filters.value.phone;
     const { data } = await api.get('/admin/partners', { params });
     items.value = data.data;
     total.value = data.total;
   } catch {}
   loading.value = false;
+}
+
+// Двухшаг «Добавить партнёра» per spec ✅Партнёры §2:
+// шаг 1 — поиск по существующим (антидубль), шаг 2 — заполнение профиля
+// если совпадений нет.
+const addOpen = ref(false);
+const addStep = ref(1);
+const addSearch = ref('');
+const addCandidates = ref([]);
+const addSearching = ref(false);
+const addSaving = ref(false);
+const addError = ref('');
+const addForm = ref({
+  email: '', phone: '', firstName: '', lastName: '', patronymic: '',
+  birthDate: '', activity: 1, inviter: null, participantCode: '',
+});
+let addSearchTimer;
+
+function openAddPartner() {
+  addOpen.value = true;
+  addStep.value = 1;
+  addSearch.value = '';
+  addCandidates.value = [];
+  addError.value = '';
+  addForm.value = {
+    email: '', phone: '', firstName: '', lastName: '', patronymic: '',
+    birthDate: '', activity: 1, inviter: null, participantCode: '',
+  };
+}
+
+function searchAddCandidates(q) {
+  clearTimeout(addSearchTimer);
+  if (!q || q.length < 2) {
+    addCandidates.value = [];
+    return;
+  }
+  addSearchTimer = setTimeout(async () => {
+    addSearching.value = true;
+    try {
+      const { data } = await api.get('/admin/partners', { params: { search: q, per_page: 10 } });
+      addCandidates.value = data.data || [];
+    } catch {}
+    addSearching.value = false;
+  }, 300);
+}
+
+function pickExisting(person) {
+  addOpen.value = false;
+  // Открываем существующий профиль для редактирования.
+  openEdit?.(person);
+}
+
+function gotoNewPersonStep() {
+  // Заполняем фамилию из последнего поиска, чтобы не вводить дважды.
+  const parts = addSearch.value.trim().split(/\s+/);
+  if (parts[0]) addForm.value.lastName = parts[0];
+  if (parts[1]) addForm.value.firstName = parts[1];
+  if (parts[2]) addForm.value.patronymic = parts[2];
+  addStep.value = 2;
+  addError.value = '';
+}
+
+async function saveNewPartner() {
+  addSaving.value = true;
+  addError.value = '';
+  try {
+    await api.post('/admin/partners', addForm.value);
+    addOpen.value = false;
+    await loadData();
+  } catch (e) {
+    addError.value = e.response?.data?.message || 'Ошибка сохранения';
+  }
+  addSaving.value = false;
 }
 
 const editDialog = ref(false);
