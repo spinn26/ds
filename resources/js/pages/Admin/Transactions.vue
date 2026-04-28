@@ -408,13 +408,32 @@
           empty-icon="mdi-swap-horizontal-variant"
           empty-message="Транзакции не найдены"
           @update:options="onLogOptions">
+          <template #item.period="{ item }">
+            <v-icon :color="item.periodFrozen ? 'grey' : 'info'" size="14"
+              :title="item.periodFrozen ? 'Период закрыт' : 'Период открыт'">
+              mdi-square
+            </v-icon>
+          </template>
           <template #item.contractNumber="{ item }">
             {{ item.contractNumber || ('Контракт #' + item.contract) }}
           </template>
+          <template #item.contractOpenDate="{ value }">{{ value ? fmtDate(value) : '—' }}</template>
           <template #item.amount="{ item }">{{ fmt2(item.amount) }} {{ item.currencySymbol || '' }}</template>
-          <template #item.amountRUB="{ value }">{{ fmt2(value) }}</template>
-          <template #item.amountUSD="{ value }">{{ fmt2(value) }}</template>
+          <template #item.amountRUB="{ value }">{{ fmt2(value) }} ₽</template>
+          <template #item.amountUSD="{ value }">{{ fmt2(value) }} $</template>
           <template #item.date="{ value }">{{ fmtDate(value) }}</template>
+          <template #item.dsCommissionPercentage="{ value }">
+            <span v-if="value != null">{{ value }}%</span>
+            <span v-else class="text-medium-emphasis">—</span>
+          </template>
+          <template #item.commissionsAmountRUB="{ value }">{{ fmt2(value) }} ₽</template>
+          <template #item.commissionsAmountUSD="{ value }">{{ fmt2(value) }} $</template>
+          <template #item.netRevenueRUB="{ value }">{{ fmt2(value) }} ₽</template>
+          <template #item.netRevenueUSD="{ value }">{{ fmt2(value) }} $</template>
+          <template #item.contractTerm="{ value }">{{ value || '—' }}</template>
+          <template #item.yearKV="{ value }">{{ value || '—' }}</template>
+          <template #item.propertyTitle="{ value }">{{ value || '—' }}</template>
+          <template #item.comment="{ value }">{{ value || '—' }}</template>
           <template #item.chat="{ item }">
             <StartChatButton :partner-id="item.consultantId || item.consultant" :partner-name="item.consultantName"
               context-type="Транзакция" :context-id="item.id" :context-label="'#' + item.id" />
@@ -750,14 +769,24 @@ const logPerPage = ref(25);
 const defaultMonth = new Date().toISOString().slice(0, 7);
 
 const logHeaders = [
-  { title: 'ID', key: 'id', width: 60 },
-  { title: '№ контракта', key: 'contractNumber', width: 150 },
+  { title: '', key: 'period', sortable: false, width: 30 },
+  { title: 'ID', key: 'id', width: 70 },
+  { title: '№ контракта', key: 'contractNumber', width: 140 },
+  { title: 'Открыт', key: 'contractOpenDate', width: 110 },
   { title: 'Клиент', key: 'clientName' },
   { title: 'Партнёр', key: 'consultantName' },
-  { title: 'Сумма', key: 'amount', width: 140 },
-  { title: 'Сумма (руб)', key: 'amountRUB', align: 'end', width: 140 },
-  { title: 'Сумма (USD)', key: 'amountUSD', align: 'end', width: 140 },
-  { title: 'Дата', key: 'date', width: 120 },
+  { title: 'Дата тр.', key: 'date', width: 110 },
+  { title: 'Комментарий', key: 'comment' },
+  { title: 'Свойство', key: 'propertyTitle', width: 130 },
+  { title: 'Срок контр.', key: 'contractTerm', width: 100, align: 'end' },
+  { title: 'Год КВ', key: 'yearKV', width: 90, align: 'end' },
+  { title: 'Транзакция', key: 'amount', align: 'end', width: 130 },
+  { title: 'В РУБ', key: 'amountRUB', align: 'end', width: 130 },
+  { title: '%ДС', key: 'dsCommissionPercentage', align: 'end', width: 80 },
+  { title: 'Доход DS RUB', key: 'commissionsAmountRUB', align: 'end', width: 140 },
+  { title: 'Доход DS USD', key: 'commissionsAmountUSD', align: 'end', width: 140 },
+  { title: 'Без НДС RUB', key: 'netRevenueRUB', align: 'end', width: 130 },
+  { title: 'Без НДС USD', key: 'netRevenueUSD', align: 'end', width: 130 },
   { title: '', key: 'chat', sortable: false, width: 50 },
 ];
 

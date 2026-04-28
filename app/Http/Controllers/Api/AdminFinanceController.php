@@ -12,8 +12,19 @@ class AdminFinanceController extends Controller
 {
     use PaginatesRequests;
 
-    /** Транзакции */
-    public function transactions(Request $request): JsonResponse
+    /**
+     * Транзакции (per spec ✅Комиссии §1.2). Расширенный набор колонок:
+     *  - Индикатор периода (frozen синий/серый)
+     *  - № контракта, Открыт (контракта), Клиент, Партнёр
+     *  - Дата транзакции, Комментарий
+     *  - Свойство (commissionCalcProperty.title)
+     *  - Год контракта (contract.term)
+     *  - Год выплаты КВ (transaction.score)
+     *  - Транзакция (исх валюта) + Транзакция в RUB
+     *  - %DS, Доход DS, Доход DS RUB/USD
+     *  - Без НДС RUB / USD
+     */
+    public function transactions(Request $request, \App\Services\PeriodFreezeService $freeze): JsonResponse
     {
         $query = DB::table('transaction as t')
             ->leftJoin('contract as c', 'c.id', '=', 't.contract')
@@ -40,6 +51,8 @@ class AdminFinanceController extends Controller
                 'c.number as contractNumber',
                 'c.clientName as clientName',
                 'c.consultantName as consultantName',
+                'c.openDate as contractOpenDate',
+                'c.term as contractTerm',
             ]);
 
         $currencyIds = $rows->pluck('currency')->filter()->unique();
@@ -47,18 +60,51 @@ class AdminFinanceController extends Controller
             ? DB::table('currency')->whereIn('id', $currencyIds)->pluck('symbol', 'id')
             : collect();
 
-        $data = $rows->map(fn ($t) => [
+        $propIds = $rows->pluck('commissionCalcProperty')->filter()->unique();
+        $properties = $propIds->isNotEmpty()
+            ? DB::table('commissionCalcProperty')->whereIn('id', $propIds)->pluck('title', 'id')
+            : collect();
+
+        // Заморозка периодов — для индикатора цвета
+        $periods = $rows->map(fn ($t) => [(int) $t->dateYear, (int) substr((string) $t->dateMonth, -2)])
+            ->unique(fn ($p) => $p[0] . '-' . $p[1]);
+        $frozenSet = collect();
+        foreach ($periods as [$y, $m]) {
+            if ($y && $m && $freeze->isFrozen($y, $m)) {
+                $frozenSet->put("$y-$m", true);
+            }
+        }
+
+        $data = $rows->map(function ($t) use ($currencies, $properties, $frozenSet) {
+            $month = (int) substr((string) $t->dateMonth, -2);
+            $year = (int) $t->dateYear;
+            $isFrozen = $frozenSet->get("$year-$month", false);
+            return [
                 'id' => $t->id,
+                'periodFrozen' => $isFrozen,
                 'contract' => $t->contract,
                 'contractNumber' => $t->contractNumber,
+                'contractOpenDate' => $t->contractOpenDate,
+                'contractTerm' => $t->contractTerm,
                 'clientName' => $t->clientName,
                 'consultantName' => $t->consultantName,
                 'amount' => round((float) ($t->amount ?? 0), 2),
                 'amountRUB' => round((float) ($t->amountRUB ?? 0), 2),
                 'amountUSD' => round((float) ($t->amountUSD ?? 0), 2),
                 'date' => $t->date,
+                'comment' => $t->comment,
+                'propertyTitle' => $t->commissionCalcProperty
+                    ? ($properties[$t->commissionCalcProperty] ?? null) : null,
+                'yearKV' => $t->score,
+                'dsCommissionPercentage' => $t->dsCommissionPercentage !== null
+                    ? round((float) $t->dsCommissionPercentage, 2) : null,
+                'commissionsAmountRUB' => round((float) ($t->commissionsAmountRUB ?? 0), 2),
+                'commissionsAmountUSD' => round((float) ($t->commissionsAmountUSD ?? 0), 2),
+                'netRevenueRUB' => round((float) ($t->netRevenueRUB ?? 0), 2),
+                'netRevenueUSD' => round((float) ($t->netRevenueUSD ?? 0), 2),
                 'currencySymbol' => $t->currency ? ($currencies[$t->currency] ?? null) : null,
-            ]);
+            ];
+        });
 
         return response()->json(['data' => $data, 'total' => $total]);
     }
