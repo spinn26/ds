@@ -86,7 +86,25 @@ class ClientController extends Controller
             ? DB::table('city')->whereIn('id', $cityIds)->pluck('cityNameRu', 'id')
             : collect();
 
-        $items = $clientRows->map(function ($c) use ($persons, $cities) {
+        // Per spec ✅Мои клиенты.md: «Открытые продукты» — список названий
+        // активных продуктов всех контрактов клиента.
+        $clientIds = $clientRows->pluck('id')->all();
+        $productsByClient = [];
+        if (! empty($clientIds)) {
+            $contractRows = DB::table('contract')
+                ->whereIn('client', $clientIds)
+                ->whereNull('deletedAt')
+                ->get(['client', 'productName']);
+            foreach ($contractRows as $r) {
+                if (! $r->productName) continue;
+                $productsByClient[$r->client] = $productsByClient[$r->client] ?? [];
+                if (! in_array($r->productName, $productsByClient[$r->client], true)) {
+                    $productsByClient[$r->client][] = $r->productName;
+                }
+            }
+        }
+
+        $items = $clientRows->map(function ($c) use ($persons, $cities, $productsByClient) {
             $personData = $c->person ? ($persons[$c->person] ?? null) : null;
             $cityName = ($personData && ($personData->city ?? null))
                 ? ($cities[$personData->city] ?? null)
@@ -100,6 +118,7 @@ class ClientController extends Controller
                 'phone' => $personData?->phone ?? null,
                 'email' => $personData?->email ?? null,
                 'active' => (bool) $c->active,
+                'products' => $productsByClient[$c->id] ?? [],
             ];
         });
 

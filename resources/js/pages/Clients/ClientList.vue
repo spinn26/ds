@@ -37,6 +37,12 @@
           {{ value ? 'Активен' : 'Неактивен' }}
         </v-chip>
       </template>
+      <template #item.products="{ value }">
+        <v-chip v-for="(p, i) in value" :key="i" size="x-small" variant="tonal" color="primary" class="mr-1 mb-1">
+          {{ p }}
+        </v-chip>
+        <span v-if="!value || !value.length" class="text-medium-emphasis">—</span>
+      </template>
       <template #no-data><EmptyState /></template>
     </v-data-table-server>
   </div>
@@ -87,6 +93,7 @@ const headers = [
   { title: 'Место жительства', key: 'city', sortable: true },
   { title: 'Телефон', key: 'phone', width: 160, sortable: false },
   { title: 'Email', key: 'email', width: 220, sortable: false },
+  { title: 'Открытые продукты', key: 'products', sortable: false },
 ];
 
 const columnVisible = ref({});

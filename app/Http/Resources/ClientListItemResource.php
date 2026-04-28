@@ -24,6 +24,7 @@ class ClientListItemResource extends JsonResource
             'phone' => $src['phone'] ?? null,
             'email' => $src['email'] ?? null,
             'active' => (bool) ($src['active'] ?? false),
+            'products' => $src['products'] ?? [],
         ];
     }
 }
