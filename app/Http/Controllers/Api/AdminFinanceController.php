@@ -573,15 +573,25 @@ class AdminFinanceController extends Controller
         ]);
     }
 
-    /** PATCH /admin/currencies/rates/{id} — обновить курс за период. */
-    public function updateCurrencyRate(Request $request, int $id): JsonResponse
+    /**
+     * PATCH /admin/currencies/rates/{id} — обновить курс за период
+     * + автоматический пересчёт всех валютных транзакций этого месяца
+     * (per spec ✅Валюты и НДС §2.1 шаг 3 «Глобальный пересчёт»).
+     */
+    public function updateCurrencyRate(Request $request, int $id, \App\Services\CurrencyRecalculator $recalc): JsonResponse
     {
         $request->validate(['rate' => 'required|numeric|min:0']);
         $row = DB::table('currencyRate')->where('id', $id)->first();
         if (! $row) return response()->json(['message' => 'Курс не найден'], 404);
 
         DB::table('currencyRate')->where('id', $id)->update(['rate' => $request->rate]);
-        return response()->json(['message' => 'Курс обновлён']);
+
+        $stats = $recalc->recalcForRate($id);
+
+        return response()->json([
+            'message' => 'Курс обновлён',
+            'recalculation' => $stats,
+        ]);
     }
 
     /**
@@ -642,8 +652,9 @@ class AdminFinanceController extends Controller
     }
 
     /**
-     * Запуск генерации отчёта (per spec §1.1 + §3).
-     * V1 — синхронная генерация. Async-очередь добавится в дальнейшем.
+     * Запуск генерации отчёта (per spec ✅Отчеты §2.1 — async).
+     * Создаём запись «generating» и диспатчим GenerateReportJob.
+     * Воркер (queue:work) обработает её в фоне.
      */
     public function generateReport(\Illuminate\Http\Request $request, \App\Services\ReportGenerator $gen): JsonResponse
     {
@@ -655,7 +666,7 @@ class AdminFinanceController extends Controller
         ]);
 
         $filters = array_filter(['activity' => $data['activity'] ?? null]);
-        $id = $gen->generate(
+        $id = $gen->reserveArchive(
             (string) $data['type'],
             (string) $data['date_from'],
             (string) $data['date_to'],
@@ -663,7 +674,9 @@ class AdminFinanceController extends Controller
             $request->user()?->id,
         );
 
-        return response()->json(['message' => 'Отчёт сгенерирован', 'id' => $id]);
+        \App\Jobs\GenerateReportJob::dispatch($id);
+
+        return response()->json(['message' => 'Отчёт поставлен в очередь', 'id' => $id]);
     }
 
     /** Скачать готовый отчёт. */

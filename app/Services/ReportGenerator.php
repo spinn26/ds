@@ -20,12 +20,17 @@ use Illuminate\Support\Facades\Storage;
 class ReportGenerator
 {
     /**
-     * Сгенерировать отчёт и записать в архив.
-     * @return int ID записи в report_archive.
+     * Создать запись в архиве со статусом «generating» и вернуть ID.
+     * Дальше контроллер диспатчит GenerateReportJob который вызовет
+     * generateAsArchived($id) в воркере очереди.
+     *
+     * Per spec ✅Отчеты.md §2.1: «Администратор не должен ждать
+     * загрузки страницы — он нажимает кнопку, отчет появляется в
+     * нижней таблице со статусом Генерируем».
      */
-    public function generate(string $type, string $dateFrom, string $dateTo, array $filters = [], ?int $userId = null): int
+    public function reserveArchive(string $type, string $dateFrom, string $dateTo, array $filters = [], ?int $userId = null): int
     {
-        $id = DB::table('report_archive')->insertGetId([
+        return DB::table('report_archive')->insertGetId([
             'type' => $type,
             'date_from' => $dateFrom,
             'date_to' => $dateTo,
@@ -35,19 +40,40 @@ class ReportGenerator
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+    }
 
+    /**
+     * Выполнить генерацию для уже зарезервированной записи в архиве.
+     * Вызывается из GenerateReportJob.
+     */
+    public function generateAsArchived(int $id): void
+    {
+        $row = DB::table('report_archive')->where('id', $id)->first();
+        if (! $row) throw new \RuntimeException("Архив #{$id} не найден");
+
+        $filters = json_decode($row->filters ?: '{}', true);
+        $rows = $this->fetchRows($row->type, $row->date_from, $row->date_to, $filters);
+        $headers = $this->headersFor($row->type);
+        $path = "reports/{$id}.csv";
+        $csv = $this->toCsv($headers, $rows);
+        Storage::disk('local')->put($path, $csv);
+
+        DB::table('report_archive')->where('id', $id)->update([
+            'status' => 'ready',
+            'file_path' => $path,
+            'updated_at' => now(),
+        ]);
+    }
+
+    /**
+     * Синхронная генерация (для тестов / небольших отчётов).
+     * Боевой путь — через reserveArchive() + GenerateReportJob.
+     */
+    public function generate(string $type, string $dateFrom, string $dateTo, array $filters = [], ?int $userId = null): int
+    {
+        $id = $this->reserveArchive($type, $dateFrom, $dateTo, $filters, $userId);
         try {
-            $rows = $this->fetchRows($type, $dateFrom, $dateTo, $filters);
-            $headers = $this->headersFor($type);
-            $path = "reports/{$id}.csv";
-            $csv = $this->toCsv($headers, $rows);
-            Storage::disk('local')->put($path, $csv);
-
-            DB::table('report_archive')->where('id', $id)->update([
-                'status' => 'ready',
-                'file_path' => $path,
-                'updated_at' => now(),
-            ]);
+            $this->generateAsArchived($id);
         } catch (\Throwable $e) {
             Log::warning('Report generation failed', ['id' => $id, 'type' => $type, 'error' => $e->getMessage()]);
             DB::table('report_archive')->where('id', $id)->update([
@@ -56,7 +82,6 @@ class ReportGenerator
                 'updated_at' => now(),
             ]);
         }
-
         return $id;
     }
 
@@ -160,20 +185,69 @@ class ReportGenerator
         ])->all();
     }
 
+    /**
+     * Per spec ✅Отчеты §3.4: «База: Партнёр, Активность.
+     * Прошлый период: Кв., ЛП, ГП, НГП. Выбранный период: Кв., ЛП, ГП, НГП».
+     * Берём date_from..date_to как «выбранный период», дату сразу перед
+     * date_from считаем «прошлым» (1 месяц назад).
+     */
     private function qualificationsReport(string $from, string $to): array
     {
-        // Простая выборка из qualificationLog за выбранный период.
-        $rows = DB::table('qualificationLog')
+        $prevFrom = (new \DateTime($from))->modify('-1 month')->format('Y-m-01');
+        $prevTo = (new \DateTime($prevFrom))->modify('last day of this month')->format('Y-m-d');
+
+        $logs = DB::table('qualificationLog')
             ->whereNull('dateDeleted')
-            ->whereBetween('date', [$from, $to])
-            ->orderByDesc('date')
-            ->limit(20000)
+            ->where(function ($w) use ($from, $to, $prevFrom, $prevTo) {
+                $w->whereBetween('date', [$from, $to])
+                  ->orWhereBetween('date', [$prevFrom, $prevTo]);
+            })
+            ->limit(60000)
             ->get();
-        return $rows->map(fn ($r) => [
-            $r->consultantPersonName, '',
-            '', '', '', '',
-            $r->nominalLevel, $r->personalVolume, $r->groupVolume, $r->groupVolumeCumulative,
-        ])->all();
+
+        $consultantIds = $logs->pluck('consultant')->filter()->unique()->all();
+        $consultants = DB::table('consultant')->whereIn('id', $consultantIds)
+            ->get(['id', 'personName', 'activity'])->keyBy('id');
+        $activityNames = DB::table('directory_of_activities')->pluck('name', 'id');
+        $levels = DB::table('status_levels')->get()->keyBy('id');
+
+        $resolveLevel = function ($nominalId, $calcId) use ($levels) {
+            $a = $nominalId ? ($levels[$nominalId] ?? null) : null;
+            $b = $calcId ? ($levels[$calcId] ?? null) : null;
+            if (! $a && ! $b) return null;
+            if (! $a) return $b;
+            if (! $b) return $a;
+            return $a->level >= $b->level ? $a : $b;
+        };
+
+        $byConsultant = [];
+        foreach ($logs as $l) {
+            $isCurrent = $l->date >= $from && $l->date <= $to;
+            $bucket = $isCurrent ? 'current' : 'previous';
+            $level = $resolveLevel($l->nominalLevel, $l->calculationLevel);
+            $byConsultant[$l->consultant][$bucket] = [
+                'levelTitle' => $level?->title,
+                'lp' => round((float) $l->personalVolume, 2),
+                'gp' => round((float) $l->groupVolume, 2),
+                'ngp' => round((float) $l->groupVolumeCumulative, 2),
+            ];
+        }
+
+        $rows = [];
+        foreach ($byConsultant as $cid => $data) {
+            $cons = $consultants[$cid] ?? null;
+            if (! $cons) continue;
+            $prev = $data['previous'] ?? ['levelTitle' => '', 'lp' => 0, 'gp' => 0, 'ngp' => 0];
+            $cur = $data['current'] ?? ['levelTitle' => '', 'lp' => 0, 'gp' => 0, 'ngp' => 0];
+            $rows[] = [
+                $cons->personName,
+                $cons->activity ? ($activityNames[$cons->activity] ?? '') : '',
+                $prev['levelTitle'], $prev['lp'], $prev['gp'], $prev['ngp'],
+                $cur['levelTitle'], $cur['lp'], $cur['gp'], $cur['ngp'],
+            ];
+        }
+        usort($rows, fn ($a, $b) => strcmp($a[0] ?? '', $b[0] ?? ''));
+        return $rows;
     }
 
     private function finrezTransactions(string $from, string $to): array
@@ -235,10 +309,101 @@ class ReportGenerator
         ])->all();
     }
 
+    /**
+     * Per spec ✅Отчеты §3.3 — финансовый срез для бухгалтерии:
+     * ФИО / Активность / Сальдо / Начислено / Прочее / Пул / Итого
+     * начислено / Итого к оплате / Оплачено / Реквизиты / Банк.
+     *
+     * Аггрегируем по партнёрам за период.
+     */
     private function paymentRegistry(string $from, string $to): array
     {
-        // Минимальная заглушка: список консультантов с балансами за месяц.
-        return [];
+        $consultants = DB::table('consultant')
+            ->whereNull('dateDeleted')
+            ->get(['id', 'personName', 'activity']);
+        $activityNames = DB::table('directory_of_activities')->pluck('name', 'id');
+
+        // Агрегаты по commission за период
+        $accruedByCons = DB::table('commission')
+            ->whereNull('deletedAt')
+            ->whereBetween('date', [$from, $to])
+            ->select('consultant', DB::raw('SUM(COALESCE("amountRUB", 0)) as accrued'))
+            ->groupBy('consultant')
+            ->pluck('accrued', 'consultant');
+
+        // other_accruals
+        $otherByCons = DB::table('other_accruals')
+            ->whereBetween('accrual_date', [$from, $to])
+            ->select('consultant', DB::raw('SUM(COALESCE(amount, 0)) as other'))
+            ->groupBy('consultant')
+            ->pluck('other', 'consultant');
+
+        // poolLog
+        $poolByCons = DB::table('poolLog')
+            ->whereBetween('date', [$from, $to])
+            ->select('consultant', DB::raw('SUM(COALESCE("poolBonus", 0)) as pool'))
+            ->groupBy('consultant')
+            ->pluck('pool', 'consultant');
+
+        // payments via consultantBalance/consultantPayment
+        $paidByCons = DB::table('consultantPayment as cp')
+            ->join('consultantBalance as cb', 'cb.id', '=', 'cp.consultantBalance')
+            ->whereBetween('cp.paymentDate', [$from, $to])
+            ->where('cp.status', 1) // 1=Оплачено в legacy enum
+            ->select('cb.consultant', DB::raw('SUM(COALESCE(cp.amount, 0)) as paid'))
+            ->groupBy('cb.consultant')
+            ->pluck('paid', 'consultant');
+
+        // Реквизиты: partnerLegalRequisites / partnerBankRequisites (упрощённо)
+        $requisitesByCons = DB::table('partnerLegalRequisites')
+            ->select(['consultant', 'individualEntrepreneur', 'ogrnip', 'inn', 'addressIp', 'verificationStatus'])
+            ->get()
+            ->keyBy('consultant');
+
+        $bankByCons = DB::table('partnerBankRequisites')
+            ->select(['consultant', 'rs', 'ks', 'bik', 'bankName'])
+            ->get()
+            ->keyBy('consultant');
+
+        $rows = [];
+        foreach ($consultants as $c) {
+            $accrued = (float) ($accruedByCons[$c->id] ?? 0);
+            $other = (float) ($otherByCons[$c->id] ?? 0);
+            $pool = (float) ($poolByCons[$c->id] ?? 0);
+            $paid = (float) ($paidByCons[$c->id] ?? 0);
+            $totalAccrued = $accrued + $other + $pool;
+            // Сальдо = 0 в этом V1 (нужна логика consultantBalance)
+            $totalToPay = $totalAccrued;
+
+            $req = $requisitesByCons[$c->id] ?? null;
+            $bank = $bankByCons[$c->id] ?? null;
+
+            // Пропускаем партнёров без активности по всем колонкам
+            if (! $accrued && ! $other && ! $pool && ! $paid) continue;
+
+            $rows[] = [
+                $c->personName,
+                $c->activity ? ($activityNames[$c->activity] ?? '') : '',
+                0, // Сальдо
+                round($accrued, 2),
+                round($other, 2),
+                round($pool, 2),
+                round($totalAccrued, 2),
+                round($totalToPay, 2),
+                round($paid, 2),
+                $req?->individualEntrepreneur ?? '',
+                $req?->ogrnip ?? '',
+                $req?->inn ?? '',
+                $req?->addressIp ?? '',
+                $req?->verificationStatus === 'verified' ? 'true' : 'false',
+                $bank?->rs ?? '',
+                $bank?->ks ?? '',
+                $bank?->bik ?? '',
+                $bank?->bankName ?? '',
+            ];
+        }
+        usort($rows, fn ($a, $b) => strcmp($a[0] ?? '', $b[0] ?? ''));
+        return $rows;
     }
 
     private function toCsv(array $headers, array $rows): string
