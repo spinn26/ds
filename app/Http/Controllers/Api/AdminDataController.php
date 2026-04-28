@@ -1036,9 +1036,16 @@ class AdminDataController extends Controller
                   ->orWhere('number', 'ilike', "%{$s}%");
             });
         }
-        if ($request->filled('status')) {
-            $query->where('status', $request->status);
-        }
+        if ($request->filled('status')) $query->where('status', $request->status);
+        if ($request->filled('number')) $query->where('number', 'ilike', '%' . $request->number . '%');
+        if ($request->filled('comment')) $query->where('comment', 'ilike', '%' . $request->comment . '%');
+        if ($request->filled('product')) $query->where('product', $request->product);
+        if ($request->filled('created_from')) $query->where('createDate', '>=', $request->created_from);
+        if ($request->filled('created_to')) $query->where('createDate', '<=', $request->created_to . ' 23:59:59');
+        if ($request->filled('opened_from')) $query->where('openDate', '>=', $request->opened_from);
+        if ($request->filled('opened_to')) $query->where('openDate', '<=', $request->opened_to . ' 23:59:59');
+        if ($request->filled('closed_from')) $query->where('closeDate', '>=', $request->closed_from);
+        if ($request->filled('closed_to')) $query->where('closeDate', '<=', $request->closed_to . ' 23:59:59');
 
         $total = $query->count();
         $rows = $query->orderByDesc('id')

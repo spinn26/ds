@@ -10,20 +10,53 @@
 
     <FilterBar
       :search="search"
-      search-placeholder="Поиск по номеру, клиенту..."
+      search-placeholder="ФИО клиента / консультанта"
       :search-cols="3"
       :show-reset="activeFilterCount > 0"
       @update:search="v => { search = v ?? ''; debouncedLoad(); }"
       @reset="resetFilters"
     >
-      <v-col cols="12" md="3">
-        <v-select v-model="statusFilter" :items="statusOptions" label="Статус"
-          variant="outlined" density="comfortable"
-          clearable hide-details @update:model-value="loadData" />
+      <v-col cols="12" md="2">
+        <v-text-field v-model="filters.number" placeholder="№ контракта"
+          density="comfortable" variant="outlined" hide-details clearable
+          @update:model-value="debouncedLoad" />
       </v-col>
+      <v-col cols="12" md="2">
+        <v-text-field v-model="filters.comment" placeholder="Комментарий"
+          density="comfortable" variant="outlined" hide-details clearable
+          @update:model-value="debouncedLoad" />
+      </v-col>
+      <v-col cols="12" md="2">
+        <v-select v-model="statusFilter" :items="statusOptions" label="Статус"
+          variant="outlined" density="comfortable" clearable hide-details
+          @update:model-value="loadData" />
+      </v-col>
+      <v-col cols="12" md="3">
+        <v-autocomplete v-model="filters.product" :items="productOptions" item-title="name" item-value="id"
+          label="Продукт" density="comfortable" variant="outlined" hide-details clearable
+          @update:model-value="loadData" />
+      </v-col>
+      <v-col cols="12" md="2">
+        <v-btn variant="text" size="small" :prepend-icon="showAdvanced ? 'mdi-chevron-up' : 'mdi-chevron-down'"
+          @click="showAdvanced = !showAdvanced">Доп. фильтры</v-btn>
+      </v-col>
+      <template v-if="showAdvanced">
+        <v-col cols="12" md="2"><v-text-field v-model="filters.created_from" label="Создан с" type="date"
+          density="comfortable" variant="outlined" hide-details @update:model-value="loadData" /></v-col>
+        <v-col cols="12" md="2"><v-text-field v-model="filters.created_to" label="Создан по" type="date"
+          density="comfortable" variant="outlined" hide-details @update:model-value="loadData" /></v-col>
+        <v-col cols="12" md="2"><v-text-field v-model="filters.opened_from" label="Открыт с" type="date"
+          density="comfortable" variant="outlined" hide-details @update:model-value="loadData" /></v-col>
+        <v-col cols="12" md="2"><v-text-field v-model="filters.opened_to" label="Открыт по" type="date"
+          density="comfortable" variant="outlined" hide-details @update:model-value="loadData" /></v-col>
+        <v-col cols="12" md="2"><v-text-field v-model="filters.closed_from" label="Закрыт с" type="date"
+          density="comfortable" variant="outlined" hide-details @update:model-value="loadData" /></v-col>
+        <v-col cols="12" md="2"><v-text-field v-model="filters.closed_to" label="Закрыт по" type="date"
+          density="comfortable" variant="outlined" hide-details @update:model-value="loadData" /></v-col>
+      </template>
       <v-col v-if="activeFilterCount > 0" cols="auto" class="d-flex align-center">
         <v-chip size="small" color="info" variant="tonal">
-          {{ activeFilterCount }} {{ activeFilterCount === 1 ? 'фильтр' : 'фильтра' }}
+          {{ activeFilterCount }} {{ activeFilterCount === 1 ? 'фильтр' : activeFilterCount < 5 ? 'фильтра' : 'фильтров' }}
         </v-chip>
       </v-col>
       <v-col cols="auto" class="d-flex align-center ms-auto">
@@ -229,6 +262,13 @@ const loading = ref(false);
 const search = ref('');
 const statusFilter = ref(null);
 const statusOptions = ref([]);
+const showAdvanced = ref(false);
+const filters = ref({
+  number: '', comment: '', product: null,
+  created_from: '', created_to: '',
+  opened_from: '', opened_to: '',
+  closed_from: '', closed_to: '',
+});
 const page = ref(1);
 const perPage = ref(25);
 
@@ -447,12 +487,19 @@ const activeFilterCount = computed(() => {
   let c = 0;
   if (search.value) c++;
   if (statusFilter.value) c++;
+  Object.values(filters.value).forEach(v => { if (v) c++; });
   return c;
 });
 
 function resetFilters() {
   search.value = '';
   statusFilter.value = null;
+  filters.value = {
+    number: '', comment: '', product: null,
+    created_from: '', created_to: '',
+    opened_from: '', opened_to: '',
+    closed_from: '', closed_to: '',
+  };
   loadData();
 }
 
@@ -470,6 +517,9 @@ async function loadData() {
     const params = { page: page.value, per_page: perPage.value };
     if (search.value) params.search = search.value;
     if (statusFilter.value) params.status = statusFilter.value;
+    Object.entries(filters.value).forEach(([k, v]) => {
+      if (v !== '' && v !== null && v !== undefined) params[k] = v;
+    });
     const { data } = await api.get('/admin/contracts', { params });
     items.value = data.data;
     total.value = data.total;
