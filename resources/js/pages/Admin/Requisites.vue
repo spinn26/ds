@@ -230,6 +230,14 @@
               <div class="font-weight-bold">Реквизиты автоматически верифицированы</div>
               <div class="text-body-2">ФИО совпадает с DaData, ИП действующий — статус переведён в «Подтверждено».</div>
             </v-alert>
+            <v-alert v-else-if="innResult.autoRejected" type="error" variant="flat"
+              density="comfortable" class="mb-3" icon="mdi-close-octagon">
+              <div class="font-weight-bold">Реквизиты автоматически отклонены</div>
+              <div class="text-body-2">
+                ФИО в ИП не совпадает с профилем партнёра. Уведомление отправлено
+                консультанту, статус возвращён в «На проверке у консультанта».
+              </div>
+            </v-alert>
 
             <!-- FIO check prominent at top -->
             <v-alert v-if="innResult.fioCheck" :type="innResult.fioCheck.match ? 'success' : 'error'"
@@ -419,6 +427,9 @@ async function checkInn() {
     innResult.value = data;
     if (data.autoVerified) {
       selectedItem.value.verificationStatus = 'verified';
+      loadData();
+    } else if (data.autoRejected) {
+      selectedItem.value.verificationStatus = 'rejected';
       loadData();
     }
   } catch (e) {
