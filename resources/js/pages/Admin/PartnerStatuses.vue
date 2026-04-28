@@ -52,6 +52,9 @@
       <template #item.dateActivity="{ value }">
         {{ fmtDate(value) }}
       </template>
+      <template #item.dateCreated="{ value }">
+        {{ value ? fmtDate(value) : '—' }}
+      </template>
       <template #item.willTerminate="{ value }">
         <span v-if="value" :class="isExpiringSoon(value) ? 'text-error font-weight-bold' : ''">
           {{ fmtDate(value) }}
@@ -68,8 +71,46 @@
         <v-chip v-if="value > 0" size="x-small" :color="value >= 3 ? 'error' : 'warning'">{{ value }}/3</v-chip>
         <span v-else>—</span>
       </template>
+      <template #item.actions="{ item }">
+        <v-btn icon="mdi-pencil" size="x-small" variant="text" title="Управление статусом"
+          @click="openOverride(item)" />
+      </template>
       <template #no-data><EmptyState /></template>
     </v-data-table-server>
+
+    <!-- Модалка «Управление статусом» (ручной override) -->
+    <v-dialog v-model="overrideOpen" max-width="540" persistent>
+      <v-card v-if="overrideTarget">
+        <v-card-title>Управление статусом — {{ overrideTarget.personName }}</v-card-title>
+        <v-card-text>
+          <v-alert type="warning" variant="tonal" density="compact" class="mb-3" icon="mdi-shield-alert">
+            Ручной override обходит бизнес-правила и пишется в аудит-лог.
+            Используется для корректировок задним числом или индивидуальных решений руководства.
+          </v-alert>
+
+          <v-select v-model="overrideForm.activity" :items="activityChoices" label="Новый статус *"
+            variant="outlined" density="comfortable" class="mb-3" />
+          <v-text-field v-model="overrideForm.date" type="date" label="Фактическая дата *"
+            variant="outlined" density="comfortable" class="mb-3"
+            hint="Можно задним числом или будущим" persistent-hint />
+          <v-textarea v-model="overrideForm.comment" label="Комментарий *"
+            variant="outlined" density="comfortable" rows="3"
+            placeholder="Например: «Перенос даты терминации на 1-е по согласованию с фин. директором»"
+            :error-messages="overrideError" />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="overrideOpen = false">Отмена</v-btn>
+          <v-btn color="warning" :loading="overrideSaving"
+            :disabled="!overrideForm.activity || !overrideForm.date || (overrideForm.comment?.length || 0) < 3"
+            @click="saveOverride">
+            Сохранить изменения
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <v-snackbar v-model="snack.open" :color="snack.color" timeout="4000">{{ snack.text }}</v-snackbar>
 
     <v-overlay v-model="loading" class="align-center justify-center" persistent>
       <v-progress-circular indeterminate size="64" />
@@ -117,11 +158,13 @@ const activityOptions = computed(() =>
 const headers = [
   { title: 'Партнёр', key: 'personName' },
   { title: 'Статус', key: 'activityName', width: 150 },
+  { title: 'Зарегистрирован', key: 'dateCreated', width: 140 },
   { title: 'Активен с', key: 'dateActivity', width: 130 },
   { title: 'Будет терминирован', key: 'willTerminate', width: 170 },
   { title: 'Терминирован', key: 'dateDeterministic', width: 140 },
-  { title: 'ЛП', key: 'personalVolume', align: 'end', width: 100 },
+  { title: 'ЛП от активации', key: 'personalVolume', align: 'end', width: 130 },
   { title: 'Терминаций', key: 'terminationCount', width: 110 },
+  { title: '', key: 'actions', sortable: false, width: 50 },
 ];
 
 const columnVisible = ref({});
@@ -146,6 +189,50 @@ function summaryIcon(id) {
     4: 'mdi-account-clock',
     5: 'mdi-account-remove',
   }[id] || 'mdi-account';
+}
+
+// === Manual override modal ===
+const overrideOpen = ref(false);
+const overrideTarget = ref(null);
+const overrideSaving = ref(false);
+const overrideError = ref('');
+const overrideForm = ref({ activity: null, date: '', comment: '' });
+
+const activityChoices = [
+  { title: 'Зарегистрирован', value: 4 },
+  { title: 'Активен', value: 1 },
+  { title: 'Терминирован', value: 3 },
+  { title: 'Исключён', value: 5 },
+];
+
+const snack = ref({ open: false, color: 'success', text: '' });
+function notify(text, color = 'success') { snack.value = { open: true, color, text }; }
+
+function openOverride(item) {
+  overrideTarget.value = item;
+  overrideForm.value = {
+    activity: item.activityId,
+    date: (item.dateActivity || item.dateCreated || new Date().toISOString()).slice(0, 10),
+    comment: '',
+  };
+  overrideError.value = '';
+  overrideOpen.value = true;
+}
+
+async function saveOverride() {
+  if (!overrideTarget.value) return;
+  overrideSaving.value = true;
+  overrideError.value = '';
+  try {
+    await api.post(`/admin/partners/${overrideTarget.value.id}/status-override`, overrideForm.value);
+    overrideOpen.value = false;
+    await loadData();
+    notify('Статус обновлён, изменение в аудит-логе');
+  } catch (e) {
+    overrideError.value = e.response?.data?.message || 'Ошибка сохранения';
+    notify(overrideError.value, 'error');
+  }
+  overrideSaving.value = false;
 }
 
 const { debounced: debouncedLoad } = useDebounce(loadData, 400);

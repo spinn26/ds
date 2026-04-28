@@ -302,6 +302,72 @@ class AdminDataController extends Controller
         return response()->json(['message' => $result]);
     }
 
+    /**
+     * Ручной override статуса партнёра (per spec ✅Статусы партнеров.md §3).
+     *
+     * Сотрудник может задать ЛЮБОЙ статус + ЛЮБУЮ дату (включая
+     * ретроспективную) + обязательный комментарий. Бизнес-правила
+     * обходятся: если сотрудник вручную ставит статус «Активен», система
+     * не проверяет ЛП-порог. Audit-лог обеспечивается активити-логом
+     * на Consultant (см. CommissionSpecTest::invariant_manual_status_override_is_audit_logged).
+     *
+     * Какую дату обновлять выбирается по статусу:
+     *   activity=1 (Активен) → dateActivity
+     *   activity=3 (Терминирован) → dateDeterministic
+     *   activity=4 (Зарегистрирован) → dateCreated
+     *   activity=5 (Исключён) → dateDeleted (мягкое удаление)
+     */
+    public function overridePartnerStatus(Request $request, int $id): JsonResponse
+    {
+        $consultant = Consultant::findOrFail($id);
+
+        $request->validate([
+            'activity' => 'required|integer|in:1,3,4,5',
+            'date' => 'required|date',
+            'comment' => 'required|string|min:3|max:500',
+        ]);
+
+        $activity = (int) $request->activity;
+        $date = $request->input('date');
+        $comment = $request->input('comment');
+
+        DB::transaction(function () use ($consultant, $activity, $date, $comment, $request) {
+            // Логируем намерение в activity_log через свойство.
+            // (Activitylog подхватит изменения трекаемых полей автоматически)
+            activity()
+                ->performedOn($consultant)
+                ->causedBy($request->user())
+                ->withProperties(['comment' => $comment, 'override' => true])
+                ->log('manual-status-override');
+
+            $consultant->activity = $activity;
+
+            switch ($activity) {
+                case 1: // Активен
+                    $consultant->dateActivity = $date;
+                    $consultant->dateDeterministic = (new \DateTime($date))->modify('+12 months')->format('Y-m-d');
+                    $consultant->active = true;
+                    break;
+                case 3: // Терминирован
+                    $consultant->dateDeterministic = $date;
+                    $consultant->dateDeactivity = $date;
+                    $consultant->active = false;
+                    break;
+                case 4: // Зарегистрирован
+                    $consultant->dateCreated = $date;
+                    $consultant->active = false;
+                    break;
+                case 5: // Исключён
+                    $consultant->dateDeleted = $date;
+                    $consultant->active = false;
+                    break;
+            }
+            $consultant->save();
+        });
+
+        return response()->json(['message' => 'Статус обновлён вручную, изменение зафиксировано в аудит-логе']);
+    }
+
     /** Статусы партнёров — сводка + детальный список */
     public function partnerStatuses(Request $request): JsonResponse
     {
@@ -356,6 +422,7 @@ class AdminDataController extends Controller
                     'personName' => $c->personName,
                     'activityId' => $c->activity,
                     'activityName' => $activityName,
+                    'dateCreated' => $c->dateCreated,
                     'dateActivity' => $c->dateActivity,
                     'dateDeactivity' => $c->dateDeactivity,
                     'dateDeterministic' => $c->dateDeterministic,
