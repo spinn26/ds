@@ -1,6 +1,6 @@
 <template>
   <div>
-    <PageHeader title="Валюты и НДС" icon="mdi-currency-usd" />
+    <PageHeader title="Справочники для расчёта транзакций" icon="mdi-currency-usd" />
 
     <v-row>
       <!-- Курсы валют -->
