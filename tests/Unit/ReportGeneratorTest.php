@@ -23,9 +23,6 @@ class ReportGeneratorTest extends TestCase
     public function each_report_type_has_correct_headers(): void
     {
         $gen = $this->app->make(ReportGenerator::class);
-        $reflection = new \ReflectionClass($gen);
-        $method = $reflection->getMethod('headersFor');
-        $method->setAccessible(true);
 
         $expected = [
             'revenue_expenses' => 3,             // Продукт, Доход, Расход
@@ -38,7 +35,7 @@ class ReportGeneratorTest extends TestCase
         ];
 
         foreach ($expected as $type => $count) {
-            $headers = $method->invoke($gen, $type);
+            $headers = $gen->headersFor($type);
             $this->assertCount($count, $headers, "Type {$type} should have {$count} headers");
         }
     }
@@ -47,11 +44,7 @@ class ReportGeneratorTest extends TestCase
     public function unknown_type_returns_empty_headers(): void
     {
         $gen = $this->app->make(ReportGenerator::class);
-        $reflection = new \ReflectionClass($gen);
-        $method = $reflection->getMethod('headersFor');
-        $method->setAccessible(true);
-
-        $this->assertSame([], $method->invoke($gen, 'unknown_type'));
+        $this->assertSame([], $gen->headersFor('unknown_type'));
     }
 
     #[Test]
