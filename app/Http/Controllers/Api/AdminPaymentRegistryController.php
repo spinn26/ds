@@ -83,11 +83,31 @@ class AdminPaymentRegistryController extends Controller
                    ->orWhere('b.balance', '!=', 0);
             });
         }
+        // Фильтр «ФК с отрывом»: ищем партнёров, у которых в commission
+        // за выбранный месяц есть строки с reduction > 0 (правило отрыва
+        // 70% сработало). Раньше фильтр опирался на consultantBalance
+        // .withheldForGap, но это поле в legacy-данных почти всегда NULL
+        // (только 22 строки из 36810). reduction живёт прямо в commission
+        // и заполнен корректно (7687 строк).
         if (! empty($params['withDetachment'])) {
-            $q->where('b.withheldForGap', '>', 0);
+            $q->whereIn('b.consultant', function ($sub) use ($year, $month) {
+                $sub->select('consultant')->from('commission')
+                    ->where('reduction', '>', 0)
+                    ->whereNull('deletedAt')
+                    ->whereYear('date', $year)
+                    ->whereMonth('date', $month);
+            });
         }
+        // Аналогично для ОП — опираемся на withheldForCommission в commission
+        // (это per-row penalty за невыполнение плана продаж).
         if (! empty($params['withOp'])) {
-            $q->where('b.withheldForCommissions', '>', 0);
+            $q->whereIn('b.consultant', function ($sub) use ($year, $month) {
+                $sub->select('consultant')->from('commission')
+                    ->where('withheldForCommission', '>', 0)
+                    ->whereNull('deletedAt')
+                    ->whereYear('date', $year)
+                    ->whereMonth('date', $month);
+            });
         }
 
         $rows = $q->orderByDesc('b.totalPayable')->limit(2000)->get();

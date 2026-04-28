@@ -65,12 +65,16 @@ class PoolRunner
             return $this->emptyResult($year, $month, $revenue);
         }
 
-        // Nominal head-counts per level: every consultant currently pinned
-        // to this level, regardless of qualifying status.
+        // Nominal head-counts per level: только Активные (activity=1).
+        // Терминированные/Исключённые/Зарегистрированные исключаются —
+        // пул только для активных лидеров (per user feedback + spec
+        // ✅Расчет пула «выплачиваем только партнерам выполнившим условие
+        // квалификации»; неактивные по определению не выполняют).
         $nominalCounts = [];
         foreach ($leaderLevelIds as $level => $levelId) {
             $nominalCounts[$level] = DB::table('consultant')
                 ->where('status_and_lvl', $levelId)
+                ->where('activity', 1)
                 ->whereNull('dateDeleted')
                 ->count();
         }
@@ -87,6 +91,7 @@ class PoolRunner
                   ->where('pm.month', $month);
             })
             ->whereIn('sl.level', array_keys($leaderLevelIds))
+            ->where('c.activity', 1)
             ->whereNull('c.dateDeleted')
             ->select([
                 'c.id',
