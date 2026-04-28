@@ -168,7 +168,8 @@ Route::prefix('v1')->group(function () {
         Route::get('/admin/qualifications/history/{id}', [\App\Http\Controllers\Api\AdminFinanceController::class, 'qualificationHistory'])->whereNumber('id');
         Route::get('/admin/charges', [\App\Http\Controllers\Api\AdminFinanceController::class, 'charges']);
         Route::post('/admin/charges', [\App\Http\Controllers\Api\AdminFinanceController::class, 'storeCharge']);
-        Route::delete('/admin/charges/{id}', [\App\Http\Controllers\Api\AdminFinanceController::class, 'deleteCharge']);
+        Route::put('/admin/charges/{id}', [\App\Http\Controllers\Api\AdminFinanceController::class, 'updateCharge'])->whereNumber('id');
+        Route::delete('/admin/charges/{id}', [\App\Http\Controllers\Api\AdminFinanceController::class, 'deleteCharge'])->whereNumber('id');
         Route::get('/admin/payments', [\App\Http\Controllers\Api\AdminFinanceController::class, 'payments']);
         Route::get('/admin/reports', [\App\Http\Controllers\Api\AdminFinanceController::class, 'reports']);
         Route::get('/admin/report-availability', [\App\Http\Controllers\Api\AdminFinanceController::class, 'reportAvailability']);

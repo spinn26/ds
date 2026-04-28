@@ -284,8 +284,17 @@ class AdminFinanceController extends Controller
         if ($request->filled('search')) {
             $query->where('consultant.personName', 'ilike', '%' . $request->search . '%');
         }
+        if ($request->filled('comment')) {
+            $query->where('other_accruals.comment', 'ilike', '%' . $request->comment . '%');
+        }
         if ($request->filled('type')) {
             $query->where('other_accruals.type', $request->type);
+        }
+        if ($request->filled('date_from')) {
+            $query->where('other_accruals.accrual_date', '>=', $request->date_from);
+        }
+        if ($request->filled('date_to')) {
+            $query->where('other_accruals.accrual_date', '<=', $request->date_to);
         }
 
         $total = $query->count();
@@ -357,6 +366,68 @@ class AdminFinanceController extends Controller
         });
 
         return response()->json(['message' => 'Начисление создано', 'id' => $id], 201);
+    }
+
+    /**
+     * Обновить начисление. Если баллы изменились — корректируем
+     * personalVolume/groupVolumeCumulative на разницу (delta).
+     */
+    public function updateCharge(Request $request, int $id): JsonResponse
+    {
+        $row = DB::table('other_accruals')->where('id', $id)->first();
+        if (! $row) {
+            return response()->json(['message' => 'Начисление не найдено'], 404);
+        }
+
+        $request->validate([
+            'consultant' => 'required|integer|exists:consultant,id',
+            'type' => 'required|in:bonus,penalty,compensation',
+            'amount' => 'required|numeric',
+            'points' => 'nullable|numeric',
+        ]);
+
+        $newPoints = (float) $request->input('points', 0);
+        $oldPoints = (float) ($row->points ?? 0);
+        $delta = $newPoints - $oldPoints;
+
+        DB::transaction(function () use ($request, $id, $row, $delta) {
+            DB::table('other_accruals')->where('id', $id)->update([
+                'consultant' => $request->consultant,
+                'type' => $request->type,
+                'amount' => $request->amount,
+                'points' => $request->input('points', 0),
+                'comment' => $request->comment,
+                'accrual_date' => $request->input('accrual_date', $row->accrual_date),
+                'updated_at' => now(),
+            ]);
+
+            // Если консультант не менялся — просто прибавляем дельту.
+            // Если поменялся — у старого вычитаем oldPoints, у нового добавляем newPoints.
+            if ($request->consultant == $row->consultant) {
+                if ($delta != 0.0) {
+                    DB::table('consultant')->where('id', $row->consultant)->update([
+                        'personalVolume' => DB::raw("COALESCE(\"personalVolume\", 0) + {$delta}"),
+                        'groupVolumeCumulative' => DB::raw("COALESCE(\"groupVolumeCumulative\", 0) + {$delta}"),
+                    ]);
+                }
+            } else {
+                if ($row->points != 0.0) {
+                    DB::table('consultant')->where('id', $row->consultant)->update([
+                        'personalVolume' => DB::raw("COALESCE(\"personalVolume\", 0) - {$row->points}"),
+                        'groupVolumeCumulative' => DB::raw("COALESCE(\"groupVolumeCumulative\", 0) - {$row->points}"),
+                    ]);
+                }
+                if ($request->input('points', 0) != 0.0) {
+                    $newP = (float) $request->input('points', 0);
+                    DB::table('consultant')->where('id', $request->consultant)->update([
+                        'personalVolume' => DB::raw("COALESCE(\"personalVolume\", 0) + {$newP}"),
+                        'groupVolumeCumulative' => DB::raw("COALESCE(\"groupVolumeCumulative\", 0) + {$newP}"),
+                    ]);
+                }
+            }
+        });
+
+        return response()->json(['message' => 'Начисление обновлено']);
     }
 
     /**

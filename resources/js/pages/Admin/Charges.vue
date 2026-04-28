@@ -8,16 +8,31 @@
 
     <v-card class="mb-3 pa-3">
       <div class="d-flex ga-2 flex-wrap align-center">
-        <v-text-field v-model="search" placeholder="Поиск по партнёру..."
-          rounded prepend-inner-icon="mdi-magnify" clearable hide-details style="max-width:300px" @update:model-value="debouncedLoad" />
+        <v-text-field v-model="search" placeholder="ФИО консультанта"
+          density="compact" variant="outlined" hide-details rounded clearable
+          prepend-inner-icon="mdi-magnify" style="max-width:240px"
+          @update:model-value="debouncedLoad" />
+        <v-text-field v-model="commentFilter" placeholder="Поиск по комментарию"
+          density="compact" variant="outlined" hide-details rounded clearable
+          style="max-width:240px" @update:model-value="debouncedLoad" />
         <v-select v-model="typeFilter" :items="typeOptions" label="Тип"
-          clearable hide-details style="max-width:200px" @update:model-value="loadData" />
+          density="compact" variant="outlined" clearable hide-details
+          style="max-width:160px" @update:model-value="loadData" />
+        <v-text-field v-model="dateFrom" label="Дата с" type="date"
+          density="compact" variant="outlined" hide-details
+          style="max-width:160px" @update:model-value="loadData" />
+        <v-text-field v-model="dateTo" label="Дата по" type="date"
+          density="compact" variant="outlined" hide-details
+          style="max-width:160px" @update:model-value="loadData" />
         <v-chip v-if="activeFilterCount > 0" size="small" color="info" variant="tonal" class="ml-1">
           {{ activeFilterCount }} {{ activeFilterCount === 1 ? 'фильтр' : 'фильтра' }}
         </v-chip>
         <v-btn v-if="activeFilterCount > 0" size="small" variant="text" color="secondary"
           prepend-icon="mdi-filter-remove" @click="resetFilters">Сбросить</v-btn>
         <v-spacer />
+        <v-btn variant="text" size="small" prepend-icon="mdi-download" @click="exportCsv">
+          Экспорт CSV
+        </v-btn>
         <ColumnVisibilityMenu :headers="headers" v-model:visible="columnVisible" storage-key="charges-cols" />
       </div>
     </v-card>
@@ -42,6 +57,7 @@
       <template #item.points="{ value }">{{ value ? fmt(value) : '—' }}</template>
       <template #item.accrualDate="{ value }">{{ fmtDate(value) }}</template>
       <template #item.actions="{ item }">
+        <v-btn icon="mdi-pencil" size="x-small" variant="text" @click="openEdit(item)" />
         <v-btn icon="mdi-delete" size="x-small" variant="text" color="error" @click="confirmDelete(item)" />
       </template>
     </DataTableWrapper>
@@ -49,7 +65,7 @@
     <!-- Create dialog -->
     <v-dialog v-model="createDialog" max-width="500" persistent>
       <v-card>
-        <v-card-title>Новое начисление</v-card-title>
+        <v-card-title>{{ editingId ? 'Редактировать начисление' : 'Новое начисление' }}</v-card-title>
         <v-card-text>
           <v-autocomplete v-model="form.consultant" :items="consultantOptions" item-title="personName" item-value="id"
             label="Партнёр *" :loading="searchingConsultants"
@@ -102,7 +118,11 @@ const total = ref(0);
 const loading = ref(false);
 const saving = ref(false);
 const search = ref('');
+const commentFilter = ref('');
 const typeFilter = ref(null);
+const dateFrom = ref('');
+const dateTo = ref('');
+const editingId = ref(null);
 const page = ref(1);
 const perPage = ref(25);
 
@@ -140,11 +160,54 @@ function typeColor(t) { return { bonus: 'success', penalty: 'error', compensatio
 const activeFilterCount = computed(() => {
   let c = 0;
   if (search.value) c++;
+  if (commentFilter.value) c++;
   if (typeFilter.value) c++;
+  if (dateFrom.value) c++;
+  if (dateTo.value) c++;
   return c;
 });
 
-function resetFilters() { search.value = ''; typeFilter.value = null; loadData(); }
+function resetFilters() {
+  search.value = ''; commentFilter.value = ''; typeFilter.value = null;
+  dateFrom.value = ''; dateTo.value = '';
+  loadData();
+}
+
+function openEdit(item) {
+  editingId.value = item.id;
+  form.value = {
+    consultant: item.consultant,
+    type: item.type,
+    amount: item.amount,
+    points: item.points,
+    accrual_date: item.accrualDate,
+    comment: item.comment,
+  };
+  // pre-populate consultant options so v-autocomplete shows current selection
+  consultantOptions.value = [{ id: item.consultant, personName: item.consultantName }];
+  formError.value = '';
+  createDialog.value = true;
+}
+
+function exportCsv() {
+  const rows = [
+    ['Дата', 'Партнёр', 'Тип', 'Сумма (₽)', 'Баллы', 'Комментарий'],
+    ...items.value.map(i => [
+      i.accrualDate || '',
+      i.consultantName || '',
+      typeLabel(i.type),
+      i.amount,
+      i.points || 0,
+      (i.comment || '').replace(/"/g, '""'),
+    ]),
+  ];
+  const csv = rows.map(r => r.map(c => `"${c}"`).join(',')).join('\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `charges-${new Date().toISOString().slice(0, 10)}.csv`;
+  link.click();
+}
 
 const { debounced: debouncedLoad } = useDebounce(loadData, 400);
 function onOptions(opts) {
@@ -158,7 +221,10 @@ async function loadData() {
   try {
     const params = { page: page.value, per_page: perPage.value };
     if (search.value) params.search = search.value;
+    if (commentFilter.value) params.comment = commentFilter.value;
     if (typeFilter.value) params.type = typeFilter.value;
+    if (dateFrom.value) params.date_from = dateFrom.value;
+    if (dateTo.value) params.date_to = dateTo.value;
     const { data } = await api.get('/admin/charges', { params });
     items.value = data.data;
     total.value = data.total;
@@ -181,6 +247,7 @@ async function searchConsultants(q) {
 }
 
 function openCreate() {
+  editingId.value = null;
   form.value = { consultant: null, type: 'bonus', amount: 0, points: 0, comment: '', accrual_date: new Date().toISOString().slice(0, 10) };
   formError.value = '';
   createDialog.value = true;
@@ -190,7 +257,11 @@ async function saveCharge() {
   saving.value = true;
   formError.value = '';
   try {
-    await api.post('/admin/charges', form.value);
+    if (editingId.value) {
+      await api.put('/admin/charges/' + editingId.value, form.value);
+    } else {
+      await api.post('/admin/charges', form.value);
+    }
     createDialog.value = false;
     loadData();
   } catch (e) {
