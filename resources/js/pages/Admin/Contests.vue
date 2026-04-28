@@ -1,13 +1,10 @@
 <template>
   <div>
-    <div class="d-flex justify-space-between align-center mb-4 flex-wrap ga-2">
-      <div class="d-flex align-center ga-2">
-        <v-icon size="32" color="primary">mdi-trophy</v-icon>
-        <h5 class="text-h5 font-weight-bold">Конкурсы и события</h5>
-        <v-chip size="small" color="primary">{{ total }}</v-chip>
-      </div>
-      <v-btn color="primary" prepend-icon="mdi-plus" @click="openCreate">Добавить</v-btn>
-    </div>
+    <PageHeader title="Конкурсы и события" icon="mdi-trophy" :count="total">
+      <template #actions>
+        <v-btn color="primary" prepend-icon="mdi-plus" @click="openCreate">Добавить</v-btn>
+      </template>
+    </PageHeader>
 
     <FilterBar
       :search="filters.search"
@@ -174,7 +171,7 @@ import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
 import { fmtDate } from '../../composables/useDesign';
 import {
-  StatusChip, FilterBar, DialogShell, ActionsCell, ColumnVisibilityMenu,
+  PageHeader, StatusChip, FilterBar, DialogShell, ActionsCell, ColumnVisibilityMenu,
 } from '../../components';
 import { useCrud } from '../../composables/useCrud';
 

@@ -1,20 +1,21 @@
 <template>
   <div>
-    <div class="d-flex align-center ga-2 mb-4 flex-wrap">
-      <v-icon size="32" color="primary">mdi-pulse</v-icon>
-      <h5 class="text-h5 font-weight-bold">Мониторинг системы</h5>
-      <v-spacer />
-      <div class="text-caption text-medium-emphasis">
-        <v-icon size="14" class="mr-1">mdi-clock-outline</v-icon>
-        Обновлено: {{ lastUpdatedLabel }}
-      </div>
-      <v-btn-toggle v-model="autoRefresh" mandatory density="comfortable" color="primary" variant="outlined">
-        <v-btn :value="false" size="small">Вручную</v-btn>
-        <v-btn :value="true" size="small">Авто 30с</v-btn>
-      </v-btn-toggle>
-      <v-btn color="primary" prepend-icon="mdi-refresh" size="small" :loading="loadingStatus"
-        variant="tonal" @click="refreshAll">Обновить</v-btn>
-    </div>
+    <PageHeader title="Мониторинг системы" icon="mdi-pulse">
+      <template #actions>
+        <div class="d-flex align-center ga-2 flex-wrap">
+          <span class="text-caption text-medium-emphasis">
+            <v-icon size="14" class="mr-1">mdi-clock-outline</v-icon>
+            Обновлено: {{ lastUpdatedLabel }}
+          </span>
+          <v-btn-toggle v-model="autoRefresh" mandatory density="comfortable" color="primary" variant="outlined">
+            <v-btn :value="false" size="small">Вручную</v-btn>
+            <v-btn :value="true" size="small">Авто 30с</v-btn>
+          </v-btn-toggle>
+          <v-btn color="primary" prepend-icon="mdi-refresh" size="small" :loading="loadingStatus"
+            variant="tonal" @click="refreshAll">Обновить</v-btn>
+        </div>
+      </template>
+    </PageHeader>
 
     <!-- SERVICE TILES -->
     <v-row dense>
@@ -160,6 +161,7 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import api from '../../api';
 import { fmtDateTime } from '../../composables/useDesign';
+import PageHeader from '../../components/PageHeader.vue';
 
 const status = ref({});
 const errors = ref([]);

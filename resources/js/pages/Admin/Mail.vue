@@ -1,9 +1,6 @@
 <template>
   <div>
-    <div class="d-flex align-center ga-2 mb-4">
-      <v-icon size="32" color="primary">mdi-email-fast</v-icon>
-      <h5 class="text-h5 font-weight-bold">Почтовая рассылка</h5>
-    </div>
+    <PageHeader title="Почтовая рассылка" icon="mdi-email-fast" />
 
     <v-card>
       <v-tabs v-model="tab" color="primary" show-arrows>
@@ -258,6 +255,7 @@ import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
 import { useConfirm } from '../../composables/useConfirm';
 import { fmtDateTime } from '../../composables/useDesign';
+import PageHeader from '../../components/PageHeader.vue';
 
 const confirm = useConfirm();
 import RichTextEditor from '../../components/RichTextEditor.vue';

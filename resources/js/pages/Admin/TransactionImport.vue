@@ -1,9 +1,6 @@
 <template>
   <div>
-    <div class="d-flex align-center ga-2 mb-4">
-      <v-icon size="32" color="primary">mdi-upload</v-icon>
-      <h5 class="text-h5 font-weight-bold">Импорт транзакций</h5>
-    </div>
+    <PageHeader title="Импорт транзакций" icon="mdi-upload" />
 
     <!-- Import form -->
     <v-card class="mb-4 pa-4">
@@ -173,6 +170,7 @@ import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
 import { getImportStatusColor } from '../../composables/useDesign';
 import StatusChip from '../../components/StatusChip.vue';
+import PageHeader from '../../components/PageHeader.vue';
 import DialogShell from '../../components/DialogShell.vue';
 import ImportProgressDialog from '../../components/ImportProgressDialog.vue';
 

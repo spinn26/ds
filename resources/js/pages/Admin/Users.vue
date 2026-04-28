@@ -1,9 +1,10 @@
 <template>
   <div>
-    <div class="d-flex justify-space-between align-center mb-4 flex-wrap ga-2">
-      <h5 class="text-h5 font-weight-bold">Пользователи</h5>
-      <v-btn color="primary" prepend-icon="mdi-plus" @click="openCreate">Добавить</v-btn>
-    </div>
+    <PageHeader title="Пользователи" icon="mdi-account-multiple">
+      <template #actions>
+        <v-btn color="primary" prepend-icon="mdi-plus" @click="openCreate">Добавить</v-btn>
+      </template>
+    </PageHeader>
 
     <FilterBar
       :search="filters.search"
@@ -141,7 +142,7 @@ import { useRouter } from 'vue-router';
 import { useAuthStore } from '../../stores/auth';
 import api from '../../api';
 import {
-  FilterBar, DataTableWrapper, StatusChip, BooleanCell, ActionsCell,
+  PageHeader, FilterBar, DataTableWrapper, StatusChip, BooleanCell, ActionsCell,
   DialogShell, FormErrors, ColumnVisibilityMenu,
 } from '../../components';
 import { useCrud } from '../../composables/useCrud';
