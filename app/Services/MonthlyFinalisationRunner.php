@@ -38,7 +38,9 @@ class MonthlyFinalisationRunner
             ];
         }
 
-        $monthStr = sprintf('%02d', $month);
+        // commission.dateMonth хранится в формате 'Y-m' (см. TransactionImportController:284),
+        // dateYear — отдельно как 'Y'.
+        $monthStr = sprintf('%04d-%02d', $year, $month);
         $yearStr = (string) $year;
 
         $consultantIds = DB::table('commission')
@@ -73,7 +75,9 @@ class MonthlyFinalisationRunner
 
     private function applyForConsultant(int $consultantId, int $year, int $month): array
     {
-        $monthStr = sprintf('%02d', $month);
+        // commission.dateMonth хранится в формате 'Y-m' (см. TransactionImportController:284),
+        // dateYear — отдельно как 'Y'.
+        $monthStr = sprintf('%04d-%02d', $year, $month);
         $yearStr = (string) $year;
 
         $level = $this->getLevelAtMonth($consultantId, $year, $month);

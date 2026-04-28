@@ -47,13 +47,16 @@ class PaymentRegistryReport extends AbstractReportType
             ->select('cb.consultant', DB::raw('SUM(COALESCE(cp.amount, 0)) as paid'))
             ->groupBy('cb.consultant')->pluck('paid', 'consultant');
 
-        $reqs = DB::table('partnerLegalRequisites')
-            ->select(['consultant', 'individualEntrepreneur', 'ogrnip', 'inn', 'addressIp', 'verificationStatus'])
+        // Реальные имена таблиц в legacy-схеме: `requisites` (юр) + `bankrequisites` (банк).
+        // bankrequisites привязаны к requisites через requisites.id (FK), не к consultant напрямую.
+        $reqs = DB::table('requisites')
+            ->whereNull('deletedAt')
+            ->select(['id', 'consultant', 'individualEntrepreneur', 'ogrn', 'inn', 'address', 'verified'])
             ->get()->keyBy('consultant');
 
-        $bank = DB::table('partnerBankRequisites')
-            ->select(['consultant', 'rs', 'ks', 'bik', 'bankName'])
-            ->get()->keyBy('consultant');
+        $bankByReq = DB::table('bankrequisites')
+            ->select(['requisites', 'accountNumber', 'correspondentAccount', 'bankBik', 'bankName'])
+            ->get()->keyBy('requisites');
 
         $rows = [];
         foreach ($consultants as $c) {
@@ -65,16 +68,17 @@ class PaymentRegistryReport extends AbstractReportType
 
             $totalAccrued = $accrued + $other + $pool;
             $r = $reqs[$c->id] ?? null;
-            $b = $bank[$c->id] ?? null;
+            $b = $r ? ($bankByReq[$r->id] ?? null) : null;
             $rows[] = [
                 $c->personName,
                 $c->activity ? ($names[$c->activity] ?? '') : '',
                 0, $this->n($accrued), $this->n($other), $this->n($pool),
                 $this->n($totalAccrued), $this->n($totalAccrued), $this->n($paid),
-                $r?->individualEntrepreneur ?? '', $r?->ogrnip ?? '',
-                $r?->inn ?? '', $r?->addressIp ?? '',
-                $r?->verificationStatus === 'verified' ? 'true' : 'false',
-                $b?->rs ?? '', $b?->ks ?? '', $b?->bik ?? '', $b?->bankName ?? '',
+                $r?->individualEntrepreneur ?? '', $r?->ogrn ?? '',
+                $r?->inn ?? '', $r?->address ?? '',
+                $r?->verified ? 'true' : 'false',
+                $b?->accountNumber ?? '', $b?->correspondentAccount ?? '',
+                $b?->bankBik ?? '', $b?->bankName ?? '',
             ];
         }
         usort($rows, fn ($a, $b) => strcmp($a[0] ?? '', $b[0] ?? ''));

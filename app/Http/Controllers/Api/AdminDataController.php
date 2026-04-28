@@ -1123,9 +1123,13 @@ class AdminDataController extends Controller
             'statuses' => DB::table('contractStatus')->orderBy('id')->get(['id', 'name']),
             'currencies' => DB::table('currency')->where('selectable', true)->orderBy('id')
                 ->get()->map(fn ($c) => ['id' => $c->id, 'symbol' => $c->symbol, 'name' => $c->nameRu]),
-            'countries' => DB::table('country')->orderBy('countryName')->get(['id', 'countryName as name']),
-            'riskProfiles' => DB::table('riskProfile')->orderBy('id')->get(['id', 'title as name']),
-            'setups' => DB::table('setup')->orderBy('id')->get(['id', 'title as name']),
+            // Реальные имена колонок в legacy: country.countryNameRu, riskProfile.name, setup.setup
+            'countries' => DB::table('country')->orderBy('countryNameRu')
+                ->get()->map(fn ($c) => ['id' => $c->id, 'name' => $c->countryNameRu]),
+            'riskProfiles' => DB::table('riskProfile')->orderBy('id')
+                ->get()->map(fn ($r) => ['id' => $r->id, 'name' => $r->name]),
+            'setups' => DB::table('setup')->orderBy('id')
+                ->get()->map(fn ($s) => ['id' => $s->id, 'name' => $s->setup]),
         ]);
     }
 

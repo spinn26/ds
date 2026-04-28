@@ -149,10 +149,12 @@ class PoolRunner
     /**
      * Ежемесячная выручка ДС без НДС.
      *
-     * В transaction поле netRevenueRUB уже содержит чистую выручку ДС
-     * (после вычета НДС и комиссии партнёрам). Raw amountRUB — это оборот
-     * клиентов, он НЕ является базой для пула (Богданова подтвердила:
-     * 1% берётся от netRevenue, не от gross).
+     * В transaction поле netRevenueRUB уже содержит чистую выручку ДС.
+     * Однако legacy-импортированные строки часто хранят netRevenueRUB=NULL,
+     * поэтому используем COALESCE: либо записанное значение, либо
+     * расчёт «на лету» = amountRUB × dsCommissionPercentage / 105.
+     * Для совсем grace-fallback (нет ни netRevenue, ни %DS) считаем
+     * amountRUB / 1.05 (предполагая дефолтный VAT 5%).
      */
     private function monthlyVatExclusiveRevenue(int $year, int $month): float
     {
@@ -160,7 +162,13 @@ class PoolRunner
         $to = $from->copy()->endOfMonth();
 
         $sum = DB::selectOne(
-            'SELECT COALESCE(SUM("netRevenueRUB"), 0) AS revenue
+            'SELECT COALESCE(
+               SUM(COALESCE("netRevenueRUB",
+                           CASE WHEN "dsCommissionPercentage" > 0
+                                THEN "amountRUB" * "dsCommissionPercentage" / 105
+                                ELSE "amountRUB" / 1.05
+                           END)),
+               0) AS revenue
                FROM transaction
               WHERE date >= ? AND date <= ?
                 AND "deletedAt" IS NULL',
