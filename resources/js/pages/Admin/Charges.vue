@@ -77,11 +77,15 @@
       </template>
       <template #item.accrualDate="{ value }">{{ fmtDate(value) }}</template>
       <template #item.actions="{ item }">
-        <template v-if="item.editable">
-          <v-btn icon="mdi-pencil" size="x-small" variant="text" title="Редактировать" @click="openEdit(item)" />
-          <v-btn icon="mdi-delete" size="x-small" variant="text" color="error" title="Удалить" @click="confirmDelete(item)" />
-        </template>
-        <v-chip v-else size="x-small" color="grey" variant="tonal" title="Запись из legacy-истории, редактирование недоступно">
+        <!-- Edit — только для manual (legacy commission имеет другую структуру).
+             Delete — для всех (legacy soft-deletes commission row). -->
+        <v-btn v-if="item.editable" icon="mdi-pencil" size="x-small" variant="text"
+          title="Редактировать" @click="openEdit(item)" />
+        <v-btn icon="mdi-delete" size="x-small" variant="text" color="error"
+          :title="item.editable ? 'Удалить' : 'Удалить (legacy — soft-delete)'"
+          @click="confirmDelete(item)" />
+        <v-chip v-if="!item.editable" size="x-small" color="grey" variant="tonal"
+          class="ms-1" title="Запись из legacy-истории">
           legacy
         </v-chip>
       </template>
@@ -332,7 +336,10 @@ function confirmDelete(item) { deleteTarget.value = item; deleteDialog.value = t
 async function deleteCharge() {
   saving.value = true;
   try {
-    await api.delete(`/admin/charges/${deleteTarget.value.id}`);
+    // source=legacy для строк из commission.type='nonTransactional' —
+    // backend делает soft-delete (deletedAt = now()).
+    const params = { source: deleteTarget.value.source || 'manual' };
+    await api.delete(`/admin/charges/${deleteTarget.value.id}`, { params });
     deleteDialog.value = false;
     loadData();
   } catch {}

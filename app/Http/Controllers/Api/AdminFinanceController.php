@@ -580,8 +580,25 @@ class AdminFinanceController extends Controller
      * Per ✅Прочие начисления Part 2 §4: удаление должно откатить
      * изменения баланса (+100 баллов → удалили → −100 баллов обратно).
      */
-    public function deleteCharge(int $id): JsonResponse
+    public function deleteCharge(int $id, Request $request): JsonResponse
     {
+        // source=legacy → soft-delete commission row (Directual-история).
+        // source=manual (default) → удалить из other_accruals + откатить баллы.
+        $source = $request->query('source', 'manual');
+
+        if ($source === 'legacy') {
+            $row = DB::table('commission')->where('id', $id)->where('type', 'nonTransactional')->first();
+            if (! $row) {
+                return response()->json(['message' => 'Legacy-начисление не найдено'], 404);
+            }
+            DB::table('commission')->where('id', $id)->update([
+                'deletedAt' => now(),
+            ]);
+            return response()->json([
+                'message' => 'Legacy-начисление помечено удалённым (soft-delete)',
+            ]);
+        }
+
         $row = DB::table('other_accruals')->where('id', $id)->first();
         if (! $row) {
             return response()->json(['message' => 'Начисление не найдено'], 404);

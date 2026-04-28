@@ -65,14 +65,26 @@
       </v-card-actions>
     </v-card>
 
-    <!-- 1.4 Таблица начислений -->
-    <v-card v-if="result">
+    <!-- 1.4 Таблица начислений (всегда видна — auto-preview после загрузки) -->
+    <v-card>
       <v-card-title class="text-subtitle-1">
         <v-icon size="20" class="mr-1">mdi-calculator</v-icon>
         Начисления пула
+        <v-chip v-if="result" size="x-small" color="info" variant="tonal" class="ml-2">
+          preview
+        </v-chip>
       </v-card-title>
 
-      <v-table density="compact" class="pool-results">
+      <div v-if="!result && !calcing" class="pa-6 text-center text-medium-emphasis">
+        <v-icon size="48" color="grey">mdi-calculator-variant-outline</v-icon>
+        <div class="mt-2">Нажмите «Рассчитать пул», чтобы увидеть детализацию.</div>
+      </div>
+
+      <div v-else-if="!result" class="pa-6 text-center">
+        <v-progress-circular indeterminate color="primary" />
+      </div>
+
+      <v-table v-if="result" density="compact" class="pool-results">
         <thead>
           <tr>
             <th>Период</th>
@@ -217,6 +229,23 @@ async function loadParticipants() {
     notify(e.response?.data?.message || 'Ошибка загрузки участников', 'error');
   }
   loadingParticipants.value = false;
+
+  // Автоматически считаем preview, чтобы таблица расчёта была видна сразу
+  // без нажатия кнопки. Запись в poolLog не делается — нужно явное «Применить».
+  if (participants.value.length) {
+    autoPreview();
+  }
+}
+
+async function autoPreview() {
+  if (!month.value) return;
+  try {
+    const [y, m] = month.value.split('-');
+    const { data } = await api.post('/admin/pool/preview', {
+      year: Number(y), month: Number(m),
+    });
+    result.value = data;
+  } catch {} // молча — кнопка «Рассчитать пул» доступна для ручного перезапуска
 }
 
 async function toggleParticipates(item, value) {
