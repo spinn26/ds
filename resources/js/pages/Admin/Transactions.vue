@@ -451,7 +451,10 @@
 import { ref, computed, onMounted, watch } from 'vue';
 import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
+import { useConfirm } from '../../composables/useConfirm';
 import PageHeader from '../../components/PageHeader.vue';
+
+const confirmDialog = useConfirm();
 import EmptyState from '../../components/EmptyState.vue';
 import DataTableWrapper from '../../components/DataTableWrapper.vue';
 import StartChatButton from '../../components/StartChatButton.vue';
@@ -677,7 +680,11 @@ async function removeDraft(draft) {
 }
 
 async function clearAll() {
-  if (!confirm('Удалить все черновики?')) return;
+  if (!await confirmDialog.ask({
+    title: 'Очистить все черновики?',
+    message: `Будет удалено ${drafts.value.length} черновиков. Действие необратимо.`,
+    confirmText: 'Очистить', confirmColor: 'error', icon: 'mdi-trash-can',
+  })) return;
   await api.delete('/admin/manual-tx/drafts');
   drafts.value = [];
 }

@@ -78,6 +78,12 @@
         <router-view />
       </v-container>
     </v-main>
+
+    <!-- Глобальный confirm-диалог -->
+    <ConfirmDialog ref="confirmRef" />
+
+    <!-- Глобальный snackbar -->
+    <GlobalSnackbar />
   </v-layout>
 </template>
 
@@ -85,6 +91,12 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useDisplay, useTheme } from 'vuetify';
 import { useAuthStore } from '../stores/auth';
+import ConfirmDialog from '../components/ConfirmDialog.vue';
+import GlobalSnackbar from '../components/GlobalSnackbar.vue';
+import { provideConfirm } from '../composables/useConfirm';
+
+const confirmRef = ref(null);
+provideConfirm(confirmRef);
 
 const auth = useAuthStore();
 const { mobile } = useDisplay();

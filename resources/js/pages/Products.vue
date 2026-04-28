@@ -197,6 +197,9 @@
 import { ref, computed, onMounted } from 'vue';
 import api from '../api';
 import PageHeader from '../components/PageHeader.vue';
+import { useSnackbar } from '../composables/useSnackbar';
+
+const { showError } = useSnackbar();
 
 const loading = ref(true);
 const products = ref([]);
@@ -298,7 +301,7 @@ async function saveRequisites() {
     // Сразу переходим к следующему шагу
     if (!access.value.documentsAccepted) acceptDialog.value = true;
   } catch (e) {
-    alert(e.response?.data?.message || 'Не удалось сохранить реквизиты');
+    showError(e.response?.data?.message || 'Не удалось сохранить реквизиты');
   }
   savingReq.value = false;
 }

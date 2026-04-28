@@ -296,6 +296,9 @@
 import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
+import { useConfirm } from '../../composables/useConfirm';
+
+const confirm = useConfirm();
 import PageHeader from '../../components/PageHeader.vue';
 import EmptyState from '../../components/EmptyState.vue';
 import StartChatButton from '../../components/StartChatButton.vue';
@@ -466,7 +469,11 @@ async function bulkRun(action) {
   const ids = selected.value.map(x => (typeof x === 'object' ? x.id : x));
   if (!ids.length) return;
   const label = action === 'verify' ? 'верифицировать' : 'отклонить';
-  if (!confirm(`${ids.length} записей — ${label}. Продолжить?`)) return;
+  if (!await confirm.ask({
+    title: `Массовая ${label.toLowerCase()}?`,
+    message: `${ids.length} записей будет переведено в статус "${label}".`,
+    confirmText: label, confirmColor: action === 'verify' ? 'success' : 'error',
+  })) return;
 
   let comment = '';
   if (action === 'reject') {

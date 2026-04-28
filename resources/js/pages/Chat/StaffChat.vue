@@ -720,7 +720,12 @@ import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue';
 import { useDisplay } from 'vuetify';
 import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
+import { useConfirm } from '../../composables/useConfirm';
+import { useSnackbar } from '../../composables/useSnackbar';
 import { useAuthStore } from '../../stores/auth';
+
+const confirmDialog = useConfirm();
+const { showError, showSuccess } = useSnackbar();
 import {
   chatStatusColors,
   chatPriorityColors,
@@ -840,9 +845,9 @@ async function submitSaveFaq() {
       content: saveFaqDialog.value.content,
     });
     saveFaqDialog.value.open = false;
-    alert('Статья добавлена в базу знаний');
+    showSuccess('Статья добавлена в базу знаний');
   } catch (e) {
-    alert(e?.response?.data?.message || 'Не удалось сохранить');
+    showError(e?.response?.data?.message || 'Не удалось сохранить');
   }
   saveFaqDialog.value.saving = false;
 }
@@ -1044,7 +1049,11 @@ const anySelected = computed(() => selectedIds.value.size > 0);
 async function bulkSetStatus(status) {
   const ids = [...selectedIds.value];
   if (!ids.length) return;
-  if (!confirm(`Сменить статус на «${kanbanColumns.find(c => c.value === status)?.label}» для ${ids.length} тикетов?`)) return;
+  if (!await confirmDialog.ask({
+    title: 'Сменить статус тикетов?',
+    message: `${ids.length} тикетов будут переведены в статус «${kanbanColumns.find(c => c.value === status)?.label}».`,
+    confirmText: 'Сменить', confirmColor: 'primary',
+  })) return;
   for (const id of ids) {
     const t = chats.value.find(x => x.id === id);
     if (!t || t.status === status) continue;
@@ -1164,7 +1173,7 @@ async function onKanbanDrop(targetStatus, laneKey) {
     }
   } catch {
     Object.assign(ticket, prev);
-    alert('Не удалось обновить тикет');
+    showError('Не удалось обновить тикет');
   }
 }
 function openFromKanban(t, e) {
@@ -1451,7 +1460,7 @@ async function saveEdit() {
     if (m) { m.content = newText; m.editedAt = new Date().toISOString(); }
     editing.value = null;
   } catch (e) {
-    alert(e?.response?.data?.message || 'Не удалось изменить');
+    showError(e?.response?.data?.message || 'Не удалось изменить');
   }
 }
 
@@ -1551,7 +1560,7 @@ async function syncTags() {
     });
     activeChat.value.tags = JSON.stringify(currentTags.value);
   } catch (e) {
-    alert('Не удалось сохранить теги');
+    showError('Не удалось сохранить теги');
   }
 }
 watch(addingTag, (v) => { if (v) nextTick(() => tagInput.value?.focus()); });
@@ -1576,7 +1585,7 @@ async function addNote() {
     noteText.value = '';
     await loadNotes();
   } catch (e) {
-    alert('Не удалось добавить заметку');
+    showError('Не удалось добавить заметку');
   }
 }
 

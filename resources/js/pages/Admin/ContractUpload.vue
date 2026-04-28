@@ -187,6 +187,9 @@
 import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
 import PageHeader from '../../components/PageHeader.vue';
+import { useConfirm } from '../../composables/useConfirm';
+
+const confirm = useConfirm();
 
 const form = ref({ sheet: null, currency: null });
 const sheetNames = ref([]);
@@ -289,7 +292,7 @@ async function saveEdit() {
 }
 
 async function deleteRow(row) {
-  if (!confirm('Удалить строку из буфера?')) return;
+  if (!await confirm.ask({ title: 'Удалить строку?', message: 'Строка будет удалена из буфера импорта.', confirmText: 'Удалить', confirmColor: 'error', icon: 'mdi-trash-can' })) return;
   try {
     await api.delete(`/admin/contract-import/preview/row/${row.id}`);
     await loadList();
@@ -299,7 +302,7 @@ async function deleteRow(row) {
 }
 
 async function clearAll() {
-  if (!confirm('Удалить все строки буфера? Импорт можно будет начать заново.')) return;
+  if (!await confirm.ask({ title: 'Очистить буфер?', message: 'Все строки буфера будут удалены. Импорт можно будет запустить заново.', confirmText: 'Очистить', confirmColor: 'error', icon: 'mdi-trash-can' })) return;
   try {
     await api.delete(`/admin/contract-import/preview/${sessionId.value}`);
     sessionId.value = null;
@@ -312,7 +315,11 @@ async function clearAll() {
 
 async function finalizeImport() {
   if (!canFinalize.value) return;
-  if (!confirm(`Сохранить ${stats.value.validCount} контрактов в БД? Действие необратимо.`)) return;
+  if (!await confirm.ask({
+    title: 'Сохранить контракты в БД?',
+    message: `${stats.value.validCount} валидных строк будет добавлено в основную таблицу контрактов. Действие необратимо.`,
+    confirmText: 'Сохранить', confirmColor: 'success', icon: 'mdi-content-save',
+  })) return;
   finalizing.value = true;
   try {
     const { data } = await api.post(`/admin/contract-import/preview/${sessionId.value}/finalize`, {});
@@ -326,9 +333,13 @@ async function finalizeImport() {
   finalizing.value = false;
 }
 
-function exitPreview() {
-  if (!confirm('Отменить весь импорт? Все строки буфера будут потеряны.')) return;
-  clearAll();
+async function exitPreview() {
+  if (!await confirm.ask({
+    title: 'Отменить импорт?',
+    message: 'Все строки буфера будут потеряны. Это действие нельзя отменить.',
+    confirmText: 'Отменить импорт', confirmColor: 'warning', icon: 'mdi-close-circle',
+  })) return;
+  await clearAll();
 }
 
 onMounted(() => {

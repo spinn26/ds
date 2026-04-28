@@ -90,6 +90,9 @@
 import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
 import PageHeader from '../../components/PageHeader.vue';
+import { useConfirm } from '../../composables/useConfirm';
+
+const confirm = useConfirm();
 
 const items = ref([]);
 const search = ref('');
@@ -172,7 +175,11 @@ async function save() {
 }
 
 async function confirmDelete(item) {
-  if (!confirm(`Удалить инструкцию "${item.title}"?`)) return;
+  if (!await confirm.ask({
+    title: 'Удалить инструкцию?',
+    message: `«${item.title}» будет удалена без возможности восстановления.`,
+    confirmText: 'Удалить', confirmColor: 'error', icon: 'mdi-trash-can',
+  })) return;
   try {
     await api.delete('/admin/instructions/' + item.id);
     notify('Удалено');

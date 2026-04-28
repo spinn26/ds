@@ -256,7 +256,10 @@
 import { ref, computed, onMounted, watch } from 'vue';
 import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
+import { useConfirm } from '../../composables/useConfirm';
 import { fmtDateTime } from '../../composables/useDesign';
+
+const confirm = useConfirm();
 import RichTextEditor from '../../components/RichTextEditor.vue';
 
 const tab = ref('compose');
@@ -485,7 +488,11 @@ async function saveTemplate() {
 }
 
 async function deleteTemplate(item) {
-  if (!confirm(`Удалить шаблон «${item.name}»?`)) return;
+  if (!await confirm.ask({
+    title: 'Удалить шаблон?',
+    message: `«${item.name}» будет удалён без возможности восстановления.`,
+    confirmText: 'Удалить', confirmColor: 'error', icon: 'mdi-trash-can',
+  })) return;
   try {
     await api.delete(`/admin/mail/templates/${item.id}`);
     await loadTemplates();

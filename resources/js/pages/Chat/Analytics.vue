@@ -195,6 +195,9 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
+import { useSnackbar } from '../../composables/useSnackbar';
+
+const { showSuccess } = useSnackbar();
 import {
   chatStatusColors,
   chatStatusLabels,
@@ -348,7 +351,7 @@ function copyHandover() {
     ),
   ].join('\n');
   navigator.clipboard.writeText(lines).catch(() => {});
-  alert('Скопировано в буфер обмена');
+  showSuccess('Скопировано в буфер обмена');
 }
 
 onMounted(load);

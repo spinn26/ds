@@ -285,7 +285,10 @@ import { useDisplay } from 'vuetify';
 import { useRoute } from 'vue-router';
 import api from '../../api';
 import { useAuthStore } from '../../stores/auth';
+import { useSnackbar } from '../../composables/useSnackbar';
 import { getChatStatusColor, getChatCategoryColor } from '../../composables/chatPalette';
+
+const { showError } = useSnackbar();
 
 const { mobile } = useDisplay();
 const route = useRoute();
@@ -670,7 +673,7 @@ async function saveEdit() {
     if (msg) { msg.content = newText; msg.editedAt = new Date().toISOString(); }
     editing.value = null;
   } catch (e) {
-    alert(e?.response?.data?.message || 'Не удалось изменить');
+    showError(e?.response?.data?.message || 'Не удалось изменить');
   }
 }
 

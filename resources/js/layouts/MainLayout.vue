@@ -184,6 +184,13 @@
       </v-container>
     </v-main>
 
+    <!-- Глобальный confirm-диалог (per useConfirm()). Mount-once-per-app. -->
+    <ConfirmDialog ref="confirmRef" />
+
+    <!-- Глобальный snackbar (per useSnackbar()). Все .showError/.showSuccess
+         из любого компонента отрисуются здесь. -->
+    <GlobalSnackbar />
+
     <!-- Mobile bottom navigation -->
     <v-bottom-navigation v-if="mobile" :model-value="activeBottomNav" grow class="mobile-bottom-nav">
       <v-btn v-for="item in bottomNavItems" :key="item.key || item.path"
@@ -240,7 +247,13 @@ import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import { useSnackbar } from '../composables/useSnackbar';
 import OnboardingQuestionnaire from '../components/OnboardingQuestionnaire.vue';
+import ConfirmDialog from '../components/ConfirmDialog.vue';
+import GlobalSnackbar from '../components/GlobalSnackbar.vue';
+import { provideConfirm } from '../composables/useConfirm';
 import api from '../api';
+
+const confirmRef = ref(null);
+provideConfirm(confirmRef);
 function fmtShortDate(d) {
   if (!d) return '';
   return new Date(d).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });

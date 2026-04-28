@@ -263,7 +263,10 @@ import StatusChip from '../../components/StatusChip.vue';
 import FilterBar from '../../components/FilterBar.vue';
 import DialogShell from '../../components/DialogShell.vue';
 import { useSnackbar } from '../../composables/useSnackbar';
+import { useConfirm } from '../../composables/useConfirm';
 import { fmtDate, getActivityColorByName } from '../../composables/useDesign';
+
+const confirm = useConfirm();
 
 const { showSuccess, showError } = useSnackbar();
 const deleteDialogOpen = ref(false);
@@ -524,7 +527,13 @@ async function bulkRun(action) {
     activate: 'активировать', terminate: 'терминировать', exclude: 'исключить',
     're-register': 'перерегистрировать', block: 'заблокировать', unblock: 'разблокировать',
   };
-  if (!confirm(`${ids.length} партнёр(ов) — ${labels[action]}. Продолжить?`)) return;
+  const colors = { activate: 'success', terminate: 'warning', exclude: 'error',
+    're-register': 'primary', block: 'error', unblock: 'success' };
+  if (!await confirm.ask({
+    title: `Массовое действие: ${labels[action]}`,
+    message: `${ids.length} партнёр(ов) будут переведены в статус "${labels[action]}". Действие применится сразу.`,
+    confirmText: labels[action], confirmColor: colors[action] || 'primary',
+  })) return;
 
   let reason = '';
   if (action === 'terminate' || action === 'exclude') {
@@ -554,7 +563,11 @@ async function bulkSetInviter() {
     bulkMsgType.value = 'error';
     return;
   }
-  if (!confirm(`${ids.length} партнёр(ов) → новый наставник ID ${n}. Продолжить?`)) return;
+  if (!await confirm.ask({
+    title: 'Сменить наставника?',
+    message: `${ids.length} партнёр(ов) будут перепривязаны к наставнику с ID ${n}.`,
+    confirmText: 'Сменить', confirmColor: 'warning',
+  })) return;
   try {
     const { data } = await api.post('/admin/partners/bulk', {
       ids, action: 'set-inviter', inviter: n,

@@ -130,6 +130,9 @@ import api from '../../api';
 import PageHeader from '../../components/PageHeader.vue';
 import EmptyState from '../../components/EmptyState.vue';
 import { fmt2 } from '../../composables/useDesign';
+import { useConfirm } from '../../composables/useConfirm';
+
+const confirm = useConfirm();
 
 const month = ref(new Date().toISOString().slice(0, 7));
 const defaultMonth = month.value;
@@ -249,7 +252,11 @@ async function calcPool() {
 
 async function applyPool() {
   if (!month.value || !result.value) return;
-  if (!confirm('Записать рассчитанный пул в poolLog? Прошлая запись за этот месяц будет переписана.')) return;
+  if (!await confirm.ask({
+    title: 'Применить пул?',
+    message: 'Рассчитанный пул будет записан в poolLog. Прошлая запись за этот месяц будет переписана.',
+    confirmText: 'Применить', confirmColor: 'primary', icon: 'mdi-content-save',
+  })) return;
   applying.value = true;
   try {
     const [y, m] = month.value.split('-');
