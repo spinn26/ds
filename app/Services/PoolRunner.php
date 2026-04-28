@@ -65,42 +65,92 @@ class PoolRunner
             return $this->emptyResult($year, $month, $revenue);
         }
 
-        // Nominal head-counts per level: только Активные (activity=1).
-        // Терминированные/Исключённые/Зарегистрированные исключаются —
-        // пул только для активных лидеров (per user feedback + spec
-        // ✅Расчет пула «выплачиваем только партнерам выполнившим условие
-        // квалификации»; неактивные по определению не выполняют).
-        $nominalCounts = [];
-        foreach ($leaderLevelIds as $level => $levelId) {
-            $nominalCounts[$level] = DB::table('consultant')
-                ->where('status_and_lvl', $levelId)
-                ->where('activity', 1)
-                ->whereNull('dateDeleted')
-                ->count();
+        // Если pool для этого месяца уже был зафиксирован (poolLog имеет
+        // записи) — отдаём ИХ как источник правды, а не пересчитываем.
+        // Это критично для исторических периодов: пересчёт по текущему
+        // qualificationLog даёт другую картину, чем то, что было реально
+        // выплачено в момент закрытия периода.
+        if (! $applyWrite) {
+            $logged = $this->participantsFromPoolLog($year, $month, $leaderLevelIds, $revenue);
+            if ($logged !== null) {
+                return $logged;
+            }
+        }
+
+        // ИСТОЧНИК ПРАВДЫ ДЛЯ УРОВНЯ — qualificationLog за расчётный месяц.
+        // Раньше брали current consultant.status_and_lvl, что давало неверные
+        // данные для прошлых периодов (партнёр сейчас L3, а в феврале был L8 —
+        // его пропускали из расчёта). Теперь резолвим level на каждого
+        // консультанта через его последний qualificationLog в окне (start..end).
+        $start = sprintf('%04d-%02d-01', $year, $month);
+        $end = date('Y-m-t', strtotime($start));
+
+        $perPartnerLevel = DB::table('qualificationLog as ql')
+            ->join('status_levels as sl', function ($j) {
+                // Берём наибольший из nominalLevel/calculationLevel —
+                // как делает CalculatorController при resolveQual().
+                $j->on('sl.id', '=', DB::raw('GREATEST(ql."nominalLevel", ql."calculationLevel")'));
+            })
+            ->whereBetween('ql.date', [$start, $end])
+            ->whereNull('ql.dateDeleted')
+            ->select([
+                'ql.consultant',
+                'sl.level',
+                'sl.title',
+                'sl.id as level_id',
+            ])
+            ->orderByDesc('ql.date')
+            ->get()
+            ->groupBy('consultant')
+            // У одного консультанта может быть несколько qualificationLog
+            // в месяц — берём максимальный уровень.
+            ->map(fn ($g) => $g->sortByDesc('level')->first());
+
+        // Активный? — глобальный флаг (терминированные исключаются всегда,
+        // даже если у них есть qualificationLog за период).
+        $consIds = $perPartnerLevel->keys()->all();
+        $activeIds = $consIds ? DB::table('consultant')
+            ->whereIn('id', $consIds)
+            ->where('activity', 1)
+            ->whereNull('dateDeleted')
+            ->pluck('id')->flip() : collect();
+
+        // Для UI участников используем фильтрованный набор. Также готовим
+        // имена.
+        $consultantMeta = $consIds ? DB::table('consultant')
+            ->whereIn('id', $consIds)
+            ->pluck('personName', 'id') : collect();
+
+        // Pool moderation overrides ([year, month, consultant, participates]).
+        $modByConsId = DB::table('pool_moderation')
+            ->where('year', $year)->where('month', $month)
+            ->whereIn('consultant', $consIds ?: [-1])
+            ->pluck('participates', 'consultant');
+
+        // Considered = active + level ≥ 6 + has qualificationLog за период
+        $considered = [];
+        $nominalCounts = array_fill_keys(array_keys($leaderLevelIds), 0);
+        $rowsForUi = [];
+        foreach ($perPartnerLevel as $consultantId => $row) {
+            $level = (int) $row->level;
+            if ($level < PoolCalculator::LEADER_LEVEL_MIN) continue;
+            if (! $activeIds->has($consultantId)) continue;
+
+            $nominalCounts[$level] = ($nominalCounts[$level] ?? 0) + 1;
+
+            $considered[] = (int) $consultantId;
+            $rowsForUi[] = (object) [
+                'id' => (int) $consultantId,
+                'level' => $level,
+                'title' => $row->title,
+                'personName' => $consultantMeta[$consultantId] ?? '—',
+                'participates' => $modByConsId[$consultantId] ?? null,
+            ];
         }
 
         $shares = $this->calculator->shareValues($revenue, $nominalCounts);
 
-        // Each candidate partner and their «Участвует» flag (default true
-        // unless the operator un-checked them in pool_moderation for this month).
-        $rows = DB::table('consultant as c')
-            ->leftJoin('status_levels as sl', 'sl.id', '=', 'c.status_and_lvl')
-            ->leftJoin('pool_moderation as pm', function ($j) use ($year, $month) {
-                $j->on('pm.consultant', '=', 'c.id')
-                  ->where('pm.year', $year)
-                  ->where('pm.month', $month);
-            })
-            ->whereIn('sl.level', array_keys($leaderLevelIds))
-            ->where('c.activity', 1)
-            ->whereNull('c.dateDeleted')
-            ->select([
-                'c.id',
-                'sl.level',
-                'sl.title',
-                'c.personName',
-                'pm.participates',
-            ])
-            ->get();
+        $rows = collect($rowsForUi);
 
         $partnerInputs = [];
         foreach ($rows as $r) {
@@ -181,6 +231,80 @@ class PoolRunner
         );
 
         return (float) ($sum->revenue ?? 0);
+    }
+
+    /**
+     * Снимок «как было» из poolLog. Возвращает null, если за период
+     * нет ни одной записи — тогда вызывающий код пересчитывает заново.
+     *
+     * Для исторических периодов это единственный достоверный источник:
+     * текущий qualificationLog мог быть пересчитан, current
+     * consultant.status_and_lvl мог измениться. Реальный выплаченный
+     * пул лежит только в poolLog.
+     */
+    private function participantsFromPoolLog(int $year, int $month, array $leaderLevelIds, float $revenue): ?array
+    {
+        $start = sprintf('%04d-%02d-01', $year, $month);
+        $end = date('Y-m-t', strtotime($start));
+
+        $rows = DB::table('poolLog as p')
+            ->leftJoin('consultant as c', 'c.id', '=', 'p.consultant')
+            ->leftJoin('status_levels as sl', 'sl.id', '=', 'c.status_and_lvl')
+            ->whereBetween('p.date', [$start, $end])
+            ->select([
+                'p.consultant',
+                'c.personName',
+                'sl.level',
+                'sl.title',
+                'p.poolBonus',
+                'p.networkGroupBonus',
+            ])
+            ->orderBy('sl.level')
+            ->orderBy('c.personName')
+            ->get();
+
+        if ($rows->isEmpty()) {
+            return null;
+        }
+
+        $participants = $rows->map(fn ($r) => [
+            'id' => (int) $r->consultant,
+            'level' => (int) ($r->level ?? 0),
+            'levelName' => $r->title ?? '',
+            'personName' => $r->personName ?? '—',
+            'participates' => true,
+            'payoutRub' => round((float) ($r->poolBonus ?? 0), 2),
+            'groupBonusRub' => round((float) ($r->networkGroupBonus ?? 0), 2),
+        ])->all();
+
+        $totalPaid = array_sum(array_column($participants, 'payoutRub'));
+
+        // shareValues: средняя выплата на уровень (для отображения «Итого фонд × #голов»).
+        $byLevel = [];
+        foreach ($participants as $p) {
+            $byLevel[$p['level']][] = $p['payoutRub'];
+        }
+        $shareValues = [];
+        foreach ($leaderLevelIds as $lvl => $_id) {
+            $shareValues[$lvl] = !empty($byLevel[$lvl])
+                ? round(max($byLevel[$lvl]), 2)
+                : 0;
+        }
+
+        $fund = $revenue * PoolCalculator::POOL_PERCENT;
+
+        return [
+            'year' => $year,
+            'month' => $month,
+            'revenue' => $revenue,
+            'fund' => $fund,
+            'shareValues' => $shareValues,
+            'participants' => $participants,
+            'totalPaid' => $totalPaid,
+            'totalForfeited' => 0.0,
+            'written' => 0,
+            'fromPoolLog' => true,  // флаг для UI: данные из реального лога
+        ];
     }
 
     private function emptyResult(int $year, int $month, float $revenue): array

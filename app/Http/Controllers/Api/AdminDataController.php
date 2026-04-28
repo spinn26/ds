@@ -901,12 +901,37 @@ class AdminDataController extends Controller
         if ($request->filled('verified')) {
             $query->where('verified', $request->verified === 'true');
         }
+        // Per spec ✅Реквизиты партнёров: status фильтр от UI присылается
+        // как 'verified' / 'pending' / 'rejected'. Маппим на колонки
+        // `verified` (boolean) + `status` (1=backoffice, 2=consultant-возврат, 3=verified).
+        if ($request->filled('status')) {
+            switch ($request->status) {
+                case 'verified':
+                    $query->where('verified', true);
+                    break;
+                case 'rejected':
+                    // Отклонено = возврат на консультанта (status=2) и не верифицировано
+                    $query->where('verified', false)->where('status', 2);
+                    break;
+                case 'pending':
+                    // На проверке = не верифицировано и не возвращено
+                    $query->where('verified', false)->where(function ($q) {
+                        $q->whereNull('status')->orWhere('status', '!=', 2);
+                    });
+                    break;
+            }
+        }
         if ($request->filled('search')) {
             $s = $request->search;
             $query->where(function ($q) use ($s) {
                 $q->where('individualEntrepreneur', 'ilike', "%{$s}%")
                   ->orWhere('inn', 'ilike', "%{$s}%");
             });
+            // Поиск также по ФИО консультанта (legacy join).
+            $consultantIds = DB::table('consultant')->where('personName', 'ilike', "%{$s}%")->pluck('id');
+            if ($consultantIds->isNotEmpty()) {
+                $query->orWhereIn('consultant', $consultantIds);
+            }
         }
 
         $total = $query->count();
@@ -930,13 +955,24 @@ class AdminDataController extends Controller
         $requisites = $rows->map(function ($r) use ($consultantNames, $bankReqs) {
                 $bankReq = $bankReqs[$r->id] ?? null;
 
+                // Резолвим verificationStatus для UI: verified / pending / rejected.
+                $verificationStatus = 'pending';
+                if ($r->verified) {
+                    $verificationStatus = 'verified';
+                } elseif ((int) ($r->status ?? 0) === 2) {
+                    $verificationStatus = 'rejected';
+                }
+
                 return [
                     'id' => $r->id,
+                    'consultant' => $r->consultant,
                     'consultantId' => $r->consultant,
                     'consultantName' => $r->consultant ? ($consultantNames[$r->consultant] ?? null) : null,
+                    'partnerName' => $r->consultant ? ($consultantNames[$r->consultant] ?? null) : null,
                     'individualEntrepreneur' => $r->individualEntrepreneur,
                     'inn' => $r->inn,
-                    'verified' => $r->verified,
+                    'verified' => (bool) $r->verified,
+                    'verificationStatus' => $verificationStatus,
                     'hasBankRequisites' => $bankReq !== null,
                     'bankVerified' => $bankReq?->verified ?? false,
                 ];
