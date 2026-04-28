@@ -10,20 +10,34 @@
       <div class="d-flex ga-2 flex-wrap align-center">
         <v-text-field v-model="search" placeholder="ФИО консультанта"
           density="compact" variant="outlined" hide-details rounded clearable
-          prepend-inner-icon="mdi-magnify" style="max-width:240px"
+          prepend-inner-icon="mdi-magnify" style="max-width:220px"
           @update:model-value="debouncedLoad" />
         <v-text-field v-model="commentFilter" placeholder="Поиск по комментарию"
           density="compact" variant="outlined" hide-details rounded clearable
-          style="max-width:240px" @update:model-value="debouncedLoad" />
+          style="max-width:220px" @update:model-value="debouncedLoad" />
         <v-select v-model="typeFilter" :items="typeOptions" label="Тип"
           density="compact" variant="outlined" clearable hide-details
+          style="max-width:140px" @update:model-value="loadData" />
+        <!-- Год + Месяц (как в Реестре выплат) -->
+        <v-text-field v-model.number="yearFilter" label="Год" type="number"
+          density="compact" variant="outlined" hide-details clearable
+          style="max-width:110px" @update:model-value="loadData" />
+        <v-select v-model="monthFilter" :items="monthOptions" label="Месяц"
+          density="compact" variant="outlined" clearable hide-details
           style="max-width:160px" @update:model-value="loadData" />
-        <v-text-field v-model="dateFrom" label="Дата с" type="date"
-          density="compact" variant="outlined" hide-details
-          style="max-width:160px" @update:model-value="loadData" />
-        <v-text-field v-model="dateTo" label="Дата по" type="date"
-          density="compact" variant="outlined" hide-details
-          style="max-width:160px" @update:model-value="loadData" />
+        <v-btn variant="text" size="small"
+          :prepend-icon="showAdvancedDates ? 'mdi-chevron-up' : 'mdi-chevron-down'"
+          @click="showAdvancedDates = !showAdvancedDates">
+          Дата с/по
+        </v-btn>
+        <template v-if="showAdvancedDates">
+          <v-text-field v-model="dateFrom" label="Дата с" type="date"
+            density="compact" variant="outlined" hide-details
+            style="max-width:160px" @update:model-value="loadData" />
+          <v-text-field v-model="dateTo" label="Дата по" type="date"
+            density="compact" variant="outlined" hide-details
+            style="max-width:160px" @update:model-value="loadData" />
+        </template>
         <v-chip v-if="activeFilterCount > 0" size="small" color="info" variant="tonal" class="ml-1">
           {{ activeFilterCount }} {{ activeFilterCount === 1 ? 'фильтр' : 'фильтра' }}
         </v-chip>
@@ -136,9 +150,17 @@ const commentFilter = ref('');
 const typeFilter = ref(null);
 const dateFrom = ref('');
 const dateTo = ref('');
+const yearFilter = ref(null);
+const monthFilter = ref(null);
+const showAdvancedDates = ref(false);
 const editingId = ref(null);
 const page = ref(1);
 const perPage = ref(25);
+
+const monthOptions = Array.from({ length: 12 }, (_, i) => ({
+  title: new Date(2000, i, 1).toLocaleDateString('ru-RU', { month: 'long' }),
+  value: i + 1,
+}));
 
 const createDialog = ref(false);
 const deleteDialog = ref(false);
@@ -181,6 +203,8 @@ const activeFilterCount = computed(() => {
   if (search.value) c++;
   if (commentFilter.value) c++;
   if (typeFilter.value) c++;
+  if (yearFilter.value) c++;
+  if (monthFilter.value) c++;
   if (dateFrom.value) c++;
   if (dateTo.value) c++;
   return c;
@@ -188,6 +212,7 @@ const activeFilterCount = computed(() => {
 
 function resetFilters() {
   search.value = ''; commentFilter.value = ''; typeFilter.value = null;
+  yearFilter.value = null; monthFilter.value = null;
   dateFrom.value = ''; dateTo.value = '';
   loadData();
 }
@@ -242,6 +267,8 @@ async function loadData() {
     if (search.value) params.search = search.value;
     if (commentFilter.value) params.comment = commentFilter.value;
     if (typeFilter.value) params.type = typeFilter.value;
+    if (yearFilter.value) params.year = yearFilter.value;
+    if (monthFilter.value) params.month = monthFilter.value;
     if (dateFrom.value) params.date_from = dateFrom.value;
     if (dateTo.value) params.date_to = dateTo.value;
     const { data } = await api.get('/admin/charges', { params });

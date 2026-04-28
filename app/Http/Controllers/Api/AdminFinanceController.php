@@ -388,6 +388,14 @@ class AdminFinanceController extends Controller
         if ($request->filled('date_to')) {
             $query->where('other_accruals.accrual_date', '<=', $request->date_to);
         }
+        // Year + Month фильтры (как в Реестре выплат — для быстрого
+        // переключения по периодам без ручной задачи диапазона дат).
+        if ($request->filled('year')) {
+            $query->whereRaw('EXTRACT(YEAR FROM other_accruals.accrual_date) = ?', [(int) $request->year]);
+        }
+        if ($request->filled('month')) {
+            $query->whereRaw('EXTRACT(MONTH FROM other_accruals.accrual_date) = ?', [(int) $request->month]);
+        }
 
         $total = $query->count();
         $data = $query->orderByDesc('other_accruals.created_at')
