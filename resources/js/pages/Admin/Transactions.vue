@@ -402,6 +402,10 @@
               @update:model-value="debouncedLogLoad" />
             <v-text-field v-model="logMonth" type="month" label="Месяц"
               hide-details style="max-width:200px" @update:model-value="loadLog" />
+            <v-checkbox v-model="logHideZero" label="Скрыть нулевые"
+              density="compact" hide-details color="primary"
+              title="Скрыть строки уплайн-наставников с margin=0 (та же квалификация, что у нижестоящего)"
+              @update:model-value="loadLog" />
             <v-chip v-if="logActiveFilters > 0" size="small" color="info" variant="tonal" class="ml-1">
               {{ logActiveFilters }} {{ logActiveFilters === 1 ? 'фильтр' : 'фильтра' }}
             </v-chip>
@@ -776,6 +780,9 @@ const logLoading = ref(false);
 const logSearch = ref('');
 const logChainPartner = ref('');
 const logMonth = ref(new Date().toISOString().slice(0, 7));
+// Скрывать строки уплайн-наставников с amountRUB=0 (margin=0) — по умолчанию
+// включено, чтобы не было «шума» из тысяч нулевых строк.
+const logHideZero = ref(true);
 const logPage = ref(1);
 const logPerPage = ref(25);
 const defaultMonth = new Date().toISOString().slice(0, 7);
@@ -810,6 +817,7 @@ const logActiveFilters = computed(() => {
   if (logSearch.value) c++;
   if (logChainPartner.value) c++;
   if (logMonth.value && logMonth.value !== defaultMonth) c++;
+  if (!logHideZero.value) c++; // если ВЫКЛЮЧИЛ дефолтный фильтр — это активный фильтр
   return c;
 });
 
@@ -817,6 +825,7 @@ function resetLogFilters() {
   logSearch.value = '';
   logChainPartner.value = '';
   logMonth.value = defaultMonth;
+  logHideZero.value = true;
   loadLog();
 }
 
@@ -835,6 +844,7 @@ async function loadLog() {
     if (logSearch.value) params.search = logSearch.value;
     if (logChainPartner.value) params.chain_partner = logChainPartner.value;
     if (logMonth.value) params.month = logMonth.value;
+    if (logHideZero.value) params.hide_zero = 1;
     const { data } = await api.get('/admin/transactions', { params });
     logItems.value = data.data;
     logTotal.value = data.total;

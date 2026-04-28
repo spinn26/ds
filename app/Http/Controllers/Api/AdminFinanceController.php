@@ -41,6 +41,10 @@ class AdminFinanceController extends Controller
         if ($request->filled('month')) {
             $query->where('t.dateMonth', $request->month);
         }
+        // hide_zero=1 — скрываем уплайн-строки с amountRUB=0 (margin=0).
+        if ($request->boolean('hide_zero')) {
+            $query->where('t.amountRUB', '>', 0);
+        }
         // Фильтр «Партнёр в цепочке» per spec ✅Транзакции —
         // ищем все транзакции, у которых указанный консультант есть
         // в апплайне (вверх по inviter) консультанта контракта.
@@ -149,6 +153,15 @@ class AdminFinanceController extends Controller
         }
         if ($request->filled('month')) {
             $query->where('dateMonth', $request->month);
+        }
+        if ($request->filled('search')) {
+            $query->where('consultantPersonName', 'ilike', '%' . $request->search . '%');
+        }
+        // hide_zero=1 — скрываем строки уплайн-наставников с margin=0
+        // (та же квалификация, что у нижестоящего → 0 ₽). Per user feedback —
+        // включено по умолчанию из UI, чтобы убрать «шум» из тысяч 0,00-строк.
+        if ($request->boolean('hide_zero')) {
+            $query->where('amountRUB', '>', 0);
         }
 
         $total = $query->count();

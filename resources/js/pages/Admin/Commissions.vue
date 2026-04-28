@@ -8,6 +8,10 @@
           rounded prepend-inner-icon="mdi-magnify" clearable hide-details style="max-width:300px" @update:model-value="debouncedLoad" />
         <v-text-field v-model="month" type="month" label="Месяц"
           hide-details style="max-width:200px" @update:model-value="loadData" />
+        <v-checkbox v-model="hideZero" label="Скрыть нулевые"
+          density="compact" hide-details color="primary"
+          title="Скрыть строки наставников с margin=0 (та же квалификация, что у нижестоящего → 0 ₽ комиссии)"
+          @update:model-value="loadData" />
         <v-chip v-if="activeFilterCount > 0" size="small" color="info" variant="tonal" class="ml-1">
           {{ activeFilterCount }} {{ activeFilterCount === 1 ? 'фильтр' : 'фильтра' }}
         </v-chip>
@@ -65,6 +69,9 @@ const month = ref(new Date().toISOString().slice(0, 7));
 const page = ref(1);
 const perPage = ref(25);
 const defaultMonth = new Date().toISOString().slice(0, 7);
+// По умолчанию скрываем уплайн-наставников с margin=0 (нулевая комиссия)
+// — иначе таблица зашумлена тысячами строк типа «25% / 0,00 ₽».
+const hideZero = ref(true);
 
 const headers = [
   { title: 'ID', key: 'id', width: 60 },
@@ -86,12 +93,14 @@ const activeFilterCount = computed(() => {
   let c = 0;
   if (search.value) c++;
   if (month.value && month.value !== defaultMonth) c++;
+  if (!hideZero.value) c++;  // выключенный дефолтный — это активное действие
   return c;
 });
 
 function resetFilters() {
   search.value = '';
   month.value = defaultMonth;
+  hideZero.value = true;
   loadData();
 }
 
@@ -109,6 +118,7 @@ async function loadData() {
     const params = { page: page.value, per_page: perPage.value };
     if (search.value) params.search = search.value;
     if (month.value) params.month = month.value;
+    if (hideZero.value) params.hide_zero = 1;
     const { data } = await api.get('/admin/commissions', { params });
     items.value = data.data;
     total.value = data.total;
