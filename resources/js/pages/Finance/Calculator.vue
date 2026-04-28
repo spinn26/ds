@@ -65,8 +65,8 @@
     <v-card v-if="result && !result.error" class="mb-4 pa-4">
       <v-row>
         <v-col cols="12" md="6">
-          <div class="text-body-2 text-medium-emphasis">Бонус (руб)</div>
-          <div class="text-h4 font-weight-bold text-primary">{{ fmt(result.commission) }} руб.</div>
+          <div class="text-body-2 text-medium-emphasis">Комиссионные</div>
+          <div class="text-h4 font-weight-bold text-primary">{{ fmt(result.groupBonusRub ?? result.commission) }} руб.</div>
         </v-col>
         <v-col cols="12" md="6">
           <div class="text-body-2 text-medium-emphasis">Личные продажи (ЛП)</div>

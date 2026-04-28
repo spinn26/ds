@@ -29,6 +29,12 @@
           variant="outlined" density="comfortable" hide-details clearable
           @update:model-value="load" />
       </v-col>
+      <v-col cols="12" sm="4" md="3">
+        <v-select v-model="filters.activity" :items="activityOptions" label="Активность"
+          item-title="title" item-value="value"
+          variant="outlined" density="comfortable" hide-details clearable
+          @update:model-value="load" />
+      </v-col>
       <v-col cols="12">
         <div class="d-flex ga-3 flex-wrap">
           <v-checkbox v-model="filters.nonZero" density="compact" hide-details
@@ -54,10 +60,11 @@
           </v-col>
           <v-col cols="12" md="8">
             <v-row dense>
-              <v-col v-for="t in dashboardTiles" :key="t.key" cols="6" sm="4">
+              <v-col v-for="t in dashboardTiles" :key="t.key" cols="6" sm="4" md="3">
                 <div class="text-caption text-medium-emphasis">{{ t.label }}</div>
                 <div :class="['text-body-1', 'font-weight-medium', t.cls]">
-                  <MoneyCell :value="t.value" currency="₽" />
+                  <span v-if="t.isCount">{{ t.value }}</span>
+                  <MoneyCell v-else :value="t.value" currency="₽" />
                 </div>
               </v-col>
             </v-row>
@@ -80,15 +87,18 @@
       >
         <template #item.personName="{ item }">
           <div class="d-flex align-center ga-2">
-            <v-tooltip :text="item.verifiedRequisites ? 'Реквизиты верифицированы' : 'Реквизиты не верифицированы'">
-              <template #activator="{ props: tipProps }">
-                <v-icon v-bind="tipProps" size="x-small"
-                  :color="item.verifiedRequisites ? 'success' : 'error'">
-                  {{ item.verifiedRequisites ? 'mdi-check-circle' : 'mdi-close-circle' }}
-                </v-icon>
-              </template>
-            </v-tooltip>
+            <v-btn :icon="item.verifiedRequisites ? 'mdi-checkbox-marked' : 'mdi-close-octagon'"
+              size="x-small" variant="text"
+              :color="item.verifiedRequisites ? 'success' : 'error'"
+              :title="item.verifiedRequisites ? 'Реквизиты верифицированы — открыть' : 'Реквизиты не верифицированы — выплата невозможна'"
+              @click="openRequisitesPopup(item)" />
+            <v-btn icon="mdi-file-document-outline" size="x-small" variant="text" color="primary"
+              title="Открыть отчёт начислений и выплат"
+              :href="`/finance/report?consultant=${item.consultantId}&year=${filters.year}&month=${filters.month}`"
+              target="_blank" />
             <span>{{ item.personName }}</span>
+            <v-chip v-if="item.activityName" size="x-small" variant="tonal"
+              :color="activityColor(item.activityId)">{{ item.activityName }}</v-chip>
           </div>
         </template>
 
@@ -111,11 +121,42 @@
 
         <template #item.actions="{ item }">
           <v-btn icon="mdi-plus" size="x-small" variant="text" color="primary"
-            :disabled="!item.verifiedRequisites" title="Добавить платёж"
+            :disabled="!canAddPayment(item)" :title="paymentBlockedReason(item) || 'Добавить платёж'"
             @click="openPayment(item)" />
         </template>
       </v-data-table>
     </v-card>
+
+    <!-- Реквизиты для выплат (per spec ✅Реестр выплат §1.4) -->
+    <v-dialog v-model="reqDialog" max-width="560">
+      <v-card v-if="reqData">
+        <v-card-title class="d-flex align-center">
+          Реквизиты для выплат
+          <v-chip size="x-small" :color="reqData.verified ? 'success' : 'error'" class="ms-2">
+            {{ reqData.verified ? 'Верифицировано' : 'Не верифицировано' }}
+          </v-chip>
+          <v-spacer />
+          <v-btn icon="mdi-close" variant="text" size="small" @click="reqDialog = false" />
+        </v-card-title>
+        <v-card-text>
+          <v-table density="compact">
+            <tbody>
+              <tr v-for="row in reqRows" :key="row.label">
+                <td class="text-medium-emphasis" style="width:42%">{{ row.label }}</td>
+                <td>
+                  <span v-if="row.value">{{ row.value }}</span>
+                  <span v-else class="text-medium-emphasis">—</span>
+                </td>
+                <td style="width:48px" class="text-end">
+                  <v-btn v-if="row.value" icon="mdi-content-copy" size="x-small" variant="text"
+                    title="Скопировать" @click="copyToClipboard(row.value, row.label)" />
+                </td>
+              </tr>
+            </tbody>
+          </v-table>
+        </v-card-text>
+      </v-card>
+    </v-dialog>
 
     <!-- Add payment dialog -->
     <DialogShell
@@ -144,8 +185,18 @@ import api from '../../api';
 import { PageHeader, FilterBar, DialogShell, MoneyCell, ColumnVisibilityMenu } from '../../components';
 import { useDebounce } from '../../composables/useDebounce';
 import { useSnackbar } from '../../composables/useSnackbar';
+import { useAuthStore } from '../../stores/auth';
 
 const { showSuccess, showError } = useSnackbar();
+const authStore = useAuthStore();
+
+// Override-роль (Богданова) — может вносить выплаты в обход блокировок
+// (per spec ✅Реестр выплат §2 «Шаг 4»). Роль 'calculations' маркируется
+// в Users.vue как «Расчёты (Богданова)».
+const canOverridePaymentBlock = computed(() => {
+  const roles = (authStore.user?.role || '').split(',').map(r => r.trim());
+  return roles.includes('calculations') || roles.includes('admin');
+});
 
 const now = new Date();
 const filters = reactive({
@@ -153,10 +204,76 @@ const filters = reactive({
   month: now.getMonth() + 1,
   search: '',
   status: null,
+  activity: null,
   nonZero: true,
   withDetachment: false,
   withOp: false,
 });
+
+const activityOptions = ref([]);
+
+// activityId: 1 Активный, 2 Зарегистрирован, 3 Терминирован, 4 ?, 5 Исключён.
+// Спец §2 шаг 4: блокируем выплату для Зарегистрирован/Терминирован/Исключён.
+const ACTIVE_ACTIVITY_IDS = new Set([1]);
+
+function activityColor(id) {
+  if (id === 1) return 'success';
+  if (id === 3) return 'error';
+  if (id === 5) return 'error';
+  return 'warning';
+}
+
+function canAddPayment(item) {
+  if (canOverridePaymentBlock.value) return true;
+  if (!item.verifiedRequisites) return false;
+  if (!ACTIVE_ACTIVITY_IDS.has(item.activityId)) return false;
+  return true;
+}
+
+function paymentBlockedReason(item) {
+  if (canOverridePaymentBlock.value) return null;
+  if (!item.verifiedRequisites) return 'Реквизиты не верифицированы';
+  if (!ACTIVE_ACTIVITY_IDS.has(item.activityId)) {
+    return `Статус «${item.activityName || '—'}» — выплата невозможна`;
+  }
+  return null;
+}
+
+const reqDialog = ref(false);
+const reqData = ref(null);
+const reqRows = computed(() => {
+  if (!reqData.value) return [];
+  return [
+    { label: 'Расчётный счёт', value: reqData.value.accountNumber },
+    { label: 'Корр. счёт', value: reqData.value.correspondentAccount },
+    { label: 'БИК', value: reqData.value.bankBik },
+    { label: 'Название банка', value: reqData.value.bankName },
+    { label: 'Наименование ИП', value: reqData.value.individualEntrepreneur },
+    { label: 'ИНН', value: reqData.value.inn },
+    { label: 'ОГРНИП', value: reqData.value.ogrn },
+    { label: 'Юр. адрес', value: reqData.value.address },
+  ];
+});
+
+async function openRequisitesPopup(item) {
+  reqData.value = null;
+  reqDialog.value = true;
+  try {
+    const { data } = await api.get(`/admin/payment-registry/${item.id}/requisites`);
+    reqData.value = data;
+  } catch (e) {
+    showError(e.response?.data?.message || 'Реквизиты не найдены');
+    reqDialog.value = false;
+  }
+}
+
+function copyToClipboard(text, label) {
+  if (!navigator?.clipboard) return;
+  navigator.clipboard.writeText(String(text)).then(
+    () => showSuccess(`${label} скопировано`),
+    () => showError('Не удалось скопировать'),
+  );
+}
 
 const loading = ref(false);
 const items = ref([]);
@@ -195,10 +312,13 @@ const columnVisible = ref({});
 const visibleHeaders = computed(() => headers.filter(h => columnVisible.value[h.key] !== false));
 
 const dashboardTiles = computed(() => [
+  { key: 'rows', label: 'Кол-во реестров', value: totals.value.rows ?? 0, cls: '', isCount: true },
   { key: 'balance', label: 'Сальдо прошлых', value: totals.value.balance ?? 0, cls: '' },
-  { key: 'accrued', label: 'Начислено', value: totals.value.accruedTransactional ?? 0, cls: '' },
+  { key: 'beforeGap', label: 'Начислено до отрыва', value: totals.value.accruedBeforeGap ?? 0, cls: '' },
+  { key: 'accrued', label: 'Начислено за транзакции', value: totals.value.accruedTransactional ?? 0, cls: '' },
   { key: 'other', label: 'Прочее', value: totals.value.accruedNonTransactional ?? 0, cls: '' },
   { key: 'pool', label: 'Пул', value: totals.value.accruedPool ?? 0, cls: '' },
+  { key: 'accruedTotal', label: 'Итого начислено', value: totals.value.accruedTotal ?? 0, cls: '' },
   { key: 'payable', label: 'Итого к оплате', value: totals.value.totalPayable ?? 0, cls: 'text-primary' },
   { key: 'paid', label: 'Оплачено', value: totals.value.payed ?? 0, cls: 'text-success' },
 ]);
@@ -209,12 +329,13 @@ const selectedTotal = computed(() => {
 });
 
 const hasActiveFilters = computed(() =>
-  !!filters.search || !!filters.status || filters.withDetachment || filters.withOp
+  !!filters.search || !!filters.status || !!filters.activity || filters.withDetachment || filters.withOp
 );
 
 function resetFilters() {
   filters.search = '';
   filters.status = null;
+  filters.activity = null;
   filters.nonZero = true;
   filters.withDetachment = false;
   filters.withOp = false;
@@ -236,6 +357,7 @@ async function load() {
     const { data } = await api.get('/admin/payment-registry', { params: { ...filters } });
     items.value = data.items || [];
     totals.value = data.totals || {};
+    if (data.activityOptions?.length) activityOptions.value = data.activityOptions;
     selectedIds.value = [];
   } catch (e) { showError(e.response?.data?.message || 'Не удалось загрузить реестр'); }
   loading.value = false;

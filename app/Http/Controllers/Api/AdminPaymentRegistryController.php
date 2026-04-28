@@ -104,10 +104,16 @@ class AdminPaymentRegistryController extends Controller
                 ->toArray();
         }
 
+        // Activity name lookup for partner-status filter UI.
+        $activityNames = DB::table('directory_of_activities')->pluck('name', 'id');
+
         // Dashboard totals (same filters minus pagination limit).
         $totals = [
             'rows' => $rows->count(),
             'balance' => (float) $rows->sum('balance'),
+            // Spec ✅Реестр выплат §1.2: «Начислено за транзакции до уменьшения по отрыву»
+            'accruedBeforeGap' => (float) $rows->sum('accruedTransactional')
+                + (float) $rows->sum('withheldForGap'),
             'accruedTransactional' => (float) $rows->sum('accruedTransactional'),
             'accruedNonTransactional' => (float) $rows->sum('accruedNonTransactional'),
             'accruedPool' => (float) $rows->sum('accruedPool'),
@@ -124,6 +130,7 @@ class AdminPaymentRegistryController extends Controller
             'consultantId' => $r->consultant,
             'personName' => $r->consultantPersonName ?? $r->personName ?? '—',
             'activityId' => $r->activityId,
+            'activityName' => $r->activityId ? ($activityNames[$r->activityId] ?? null) : null,
             'status' => $r->status,
             'balance' => (float) ($r->balance ?? 0),
             'accrued' => (float) ($r->accruedTransactional ?? 0),
@@ -143,6 +150,38 @@ class AdminPaymentRegistryController extends Controller
             'month' => $month,
             'items' => $items,
             'totals' => $totals,
+            'activityOptions' => $activityNames->map(fn ($name, $id) => ['title' => $name, 'value' => $id])->values(),
+        ]);
+    }
+
+    /** GET /admin/payment-registry/{id}/requisites — для попапа реквизитов в строке. */
+    public function requisites(int $id): JsonResponse
+    {
+        $balance = DB::table('consultantBalance')->where('id', $id)->first();
+        if (! $balance) {
+            return response()->json(['message' => 'Запись не найдена'], 404);
+        }
+
+        $req = DB::table('requisites')
+            ->where('consultant', $balance->consultant)
+            ->whereNull('deletedAt')
+            ->orderByDesc('verified')
+            ->first();
+        if (! $req) {
+            return response()->json(['message' => 'Реквизиты не найдены', 'verified' => false], 404);
+        }
+        $bank = DB::table('bankrequisites')->where('requisites', $req->id)->first();
+
+        return response()->json([
+            'verified' => (bool) $req->verified,
+            'individualEntrepreneur' => $req->individualEntrepreneur,
+            'inn' => $req->inn,
+            'ogrn' => $req->ogrn,
+            'address' => $req->address,
+            'accountNumber' => $bank->accountNumber ?? null,
+            'correspondentAccount' => $bank->correspondentAccount ?? null,
+            'bankBik' => $bank->bankBik ?? null,
+            'bankName' => $bank->bankName ?? null,
         ]);
     }
 
