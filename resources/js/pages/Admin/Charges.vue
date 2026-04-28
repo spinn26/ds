@@ -77,8 +77,13 @@
       </template>
       <template #item.accrualDate="{ value }">{{ fmtDate(value) }}</template>
       <template #item.actions="{ item }">
-        <v-btn icon="mdi-pencil" size="x-small" variant="text" title="Редактировать" @click="openEdit(item)" />
-        <v-btn icon="mdi-delete" size="x-small" variant="text" color="error" title="Удалить" @click="confirmDelete(item)" />
+        <template v-if="item.editable">
+          <v-btn icon="mdi-pencil" size="x-small" variant="text" title="Редактировать" @click="openEdit(item)" />
+          <v-btn icon="mdi-delete" size="x-small" variant="text" color="error" title="Удалить" @click="confirmDelete(item)" />
+        </template>
+        <v-chip v-else size="x-small" color="grey" variant="tonal" title="Запись из legacy-истории, редактирование недоступно">
+          legacy
+        </v-chip>
       </template>
     </DataTableWrapper>
 

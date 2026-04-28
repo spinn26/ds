@@ -360,59 +360,91 @@ class AdminFinanceController extends Controller
         return response()->json(['data' => $data]);
     }
 
-    /** Прочие начисления — CRUD */
+    /**
+     * Прочие начисления — CRUD.
+     *
+     * Источников данных два:
+     * 1. `other_accruals` — новая таблица для ручных операций (источник
+     *    «manual», полный CRUD).
+     * 2. `commission` WHERE type='nonTransactional' — legacy-история
+     *    «Прочих начислений» из Directual (источник «legacy», read-only).
+     *
+     * Для UI оба источника объединяются. Legacy-строки помечаются
+     * `editable=false`, чтобы фронт скрывал кнопки edit/delete.
+     */
     public function charges(Request $request): JsonResponse
     {
-        // LEFT JOIN — чтобы строки с битыми FK на consultant не выпадали
-        // (legacy-данные могут ссылаться на consultant.id, который удалён
-        // или отсутствует). Имя резолвим через COALESCE с fallback.
-        $query = DB::table('other_accruals')
-            ->leftJoin('consultant', 'other_accruals.consultant', '=', 'consultant.id')
-            ->select(
-                'other_accruals.*',
-                'consultant.personName as consultantName'
-            );
+        // 1. Новая таблица — manual entries.
+        // Postgres folds unquoted identifiers to lowercase, поэтому в
+        // UNION-алиасах используем snake_case (consultant_name, accrual_date,
+        // created_at) — иначе ORDER BY/SELECT в обёрточном fromSub() ломается.
+        $newQuery = DB::table('other_accruals as oa')
+            ->leftJoin('consultant as c', 'oa.consultant', '=', 'c.id')
+            ->select([
+                'oa.id', 'oa.consultant', DB::raw("'manual' as source"),
+                DB::raw('c."personName" as consultant_name'),
+                'oa.type', 'oa.amount', 'oa.points', 'oa.comment',
+                DB::raw('oa.accrual_date as accrual_date'),
+                DB::raw('oa.created_at as created_at'),
+            ]);
 
-        if ($request->filled('search')) {
-            $query->where('consultant.personName', 'ilike', '%' . $request->search . '%');
-        }
-        if ($request->filled('comment')) {
-            $query->where('other_accruals.comment', 'ilike', '%' . $request->comment . '%');
-        }
-        if ($request->filled('type')) {
-            $query->where('other_accruals.type', $request->type);
-        }
-        if ($request->filled('date_from')) {
-            $query->where('other_accruals.accrual_date', '>=', $request->date_from);
-        }
-        if ($request->filled('date_to')) {
-            $query->where('other_accruals.accrual_date', '<=', $request->date_to);
-        }
-        // Year + Month фильтры (как в Реестре выплат — для быстрого
-        // переключения по периодам без ручной задачи диапазона дат).
-        if ($request->filled('year')) {
-            $query->whereRaw('EXTRACT(YEAR FROM other_accruals.accrual_date) = ?', [(int) $request->year]);
-        }
-        if ($request->filled('month')) {
-            $query->whereRaw('EXTRACT(MONTH FROM other_accruals.accrual_date) = ?', [(int) $request->month]);
-        }
+        if ($request->filled('search')) $newQuery->where('c.personName', 'ilike', '%' . $request->search . '%');
+        if ($request->filled('comment')) $newQuery->where('oa.comment', 'ilike', '%' . $request->comment . '%');
+        if ($request->filled('type')) $newQuery->where('oa.type', $request->type);
+        if ($request->filled('date_from')) $newQuery->where('oa.accrual_date', '>=', $request->date_from);
+        if ($request->filled('date_to')) $newQuery->where('oa.accrual_date', '<=', $request->date_to);
+        if ($request->filled('year')) $newQuery->whereRaw('EXTRACT(YEAR FROM oa.accrual_date) = ?', [(int) $request->year]);
+        if ($request->filled('month')) $newQuery->whereRaw('EXTRACT(MONTH FROM oa.accrual_date) = ?', [(int) $request->month]);
 
-        $total = $query->count();
-        $data = $query->orderByDesc('other_accruals.created_at')
+        // 2. Legacy commission.type='nonTransactional' — history (read-only).
+        $legacyQuery = DB::table('commission as cm')
+            ->leftJoin('consultant as c', 'cm.consultant', '=', 'c.id')
+            ->where('cm.type', 'nonTransactional')
+            ->whereNull('cm.deletedAt')
+            ->select([
+                'cm.id', 'cm.consultant', DB::raw("'legacy' as source"),
+                DB::raw('c."personName" as consultant_name'),
+                DB::raw("'rub' as type"),
+                DB::raw('COALESCE(cm."amountRUB", cm.amount, 0) as amount'),
+                DB::raw('COALESCE(cm."personalVolume", 0) as points'),
+                'cm.comment',
+                DB::raw('cm.date as accrual_date'),
+                DB::raw('cm."createdAt" as created_at'),
+            ]);
+
+        if ($request->filled('search')) $legacyQuery->where('c.personName', 'ilike', '%' . $request->search . '%');
+        if ($request->filled('comment')) $legacyQuery->where('cm.comment', 'ilike', '%' . $request->comment . '%');
+        if ($request->filled('type') && $request->type === 'points') {
+            $legacyQuery->whereRaw('1=0');
+        }
+        if ($request->filled('date_from')) $legacyQuery->where('cm.date', '>=', $request->date_from);
+        if ($request->filled('date_to')) $legacyQuery->where('cm.date', '<=', $request->date_to);
+        if ($request->filled('year')) $legacyQuery->whereRaw('EXTRACT(YEAR FROM cm.date) = ?', [(int) $request->year]);
+        if ($request->filled('month')) $legacyQuery->whereRaw('EXTRACT(MONTH FROM cm.date) = ?', [(int) $request->month]);
+
+        $union = $newQuery->unionAll($legacyQuery);
+        $sub = DB::query()->fromSub($union, 'u');
+        $total = (clone $sub)->count();
+
+        $rows = $sub->orderByDesc('accrual_date')
+            ->orderByDesc('created_at')
             ->offset(($request->input('page', 1) - 1) * 25)
             ->limit(25)
-            ->get()
-            ->map(fn ($r) => [
-                'id' => $r->id,
-                'consultantName' => $r->consultantName ?: ('Консультант #' . $r->consultant),
-                'consultant' => $r->consultant,
-                'type' => $r->type,
-                'amount' => round((float) $r->amount, 2),
-                'points' => round((float) $r->points, 2),
-                'comment' => $r->comment,
-                'accrualDate' => $r->accrual_date,
-                'createdAt' => $r->created_at,
-            ]);
+            ->get();
+
+        $data = $rows->map(fn ($r) => [
+            'id' => $r->id,
+            'source' => $r->source,
+            'editable' => $r->source === 'manual',
+            'consultantName' => $r->consultant_name ?: ('Консультант #' . $r->consultant),
+            'consultant' => $r->consultant,
+            'type' => $r->type,
+            'amount' => round((float) $r->amount, 2),
+            'points' => round((float) $r->points, 2),
+            'comment' => $r->comment,
+            'accrualDate' => $r->accrual_date,
+            'createdAt' => $r->created_at,
+        ]);
 
         return response()->json(['data' => $data, 'total' => $total]);
     }
