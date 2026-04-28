@@ -2,274 +2,346 @@
   <div>
     <PageHeader title="Загрузка контрактов" icon="mdi-upload" />
 
-    <v-row>
-      <v-col cols="12" md="6">
-        <v-card class="pa-4">
-          <v-tabs v-model="mode" class="mb-3">
-            <v-tab value="sheets" prepend-icon="mdi-google-spreadsheet">Google Sheets</v-tab>
-            <v-tab value="file" prepend-icon="mdi-file-upload">Загрузить файл</v-tab>
-          </v-tabs>
+    <!-- Этап 1. Триггер импорта (per spec ✅Загрузка контрактов §1) -->
+    <v-card v-if="!sessionId" class="mb-4 pa-4">
+      <v-row dense>
+        <v-col cols="12" sm="6">
+          <v-select v-model="form.sheet" :items="sheetNames" label="Лист *"
+            density="compact" variant="outlined" :loading="loadingSheets"
+            :no-data-text="sheetsError || 'Листы не найдены'"
+            :hint="sheetsError || ''" persistent-hint />
+        </v-col>
+        <v-col cols="12" sm="3">
+          <v-select v-model="form.currency" :items="currencies" item-title="symbol" item-value="id"
+            label="Валюта по умолчанию" density="compact" variant="outlined" clearable />
+        </v-col>
+        <v-col cols="12" sm="3" class="d-flex align-center">
+          <v-btn color="primary" size="large" prepend-icon="mdi-upload"
+            :loading="loadingPreview" :disabled="!form.sheet"
+            @click="loadPreview" block>
+            Загрузить контракты
+          </v-btn>
+        </v-col>
+      </v-row>
 
-          <!-- Google Sheets -->
-          <template v-if="mode === 'sheets'">
-            <v-alert v-if="sheetsError" type="warning" variant="tonal" density="compact" class="mb-3" closable>
-              <div class="font-weight-medium">{{ sheetsError }}</div>
-              <div class="text-caption mt-1">
-                Заполни <strong>Google Sheets API Key</strong> и
-                <strong>ID таблицы «Импорт контрактов»</strong> в
-                <a href="/admin/api-keys" class="text-primary">/admin/api-keys</a>.
-              </div>
-            </v-alert>
+      <v-alert type="info" variant="tonal" density="compact" class="mt-3" icon="mdi-information">
+        Контракты сначала попадают в буферную зону. Сохранятся в БД только
+        после ручной проверки и подтверждения. Строки с ошибками подсвечены
+        красным треугольником и блокируют сохранение.
+      </v-alert>
+    </v-card>
 
-            <v-select v-model="form.sheet" :items="sheetNames" label="Лист *"
-              density="compact" variant="outlined" class="mb-3" :loading="loadingSheets"
-              :disabled="!!sheetsError"
-              :no-data-text="sheetsError || 'Листы не найдены'" />
+    <!-- Этап 2. Буферная таблица с индикацией ошибок -->
+    <v-card v-if="sessionId">
+      <v-card-title class="d-flex align-center ga-3 flex-wrap">
+        <v-icon color="info">mdi-database-eye</v-icon>
+        Предварительный реестр
+        <v-chip v-if="stats.total" size="small" variant="tonal">{{ stats.total }} строк</v-chip>
+        <v-chip v-if="stats.validCount" size="small" color="success" variant="tonal">
+          ✓ {{ stats.validCount }} валидных
+        </v-chip>
+        <v-chip v-if="stats.invalidCount" size="small" color="error" variant="tonal">
+          ✗ {{ stats.invalidCount }} с ошибками
+        </v-chip>
+        <v-spacer />
+        <v-btn variant="text" color="error" prepend-icon="mdi-trash-can-outline"
+          @click="clearAll">
+          Удалить все контракты
+        </v-btn>
+        <v-btn variant="text" prepend-icon="mdi-refresh" @click="loadList">
+          Обновить
+        </v-btn>
+      </v-card-title>
 
-            <v-select v-model="form.currency" :items="currencies" item-title="symbol" item-value="id"
-              label="Валюта по умолчанию" density="compact" variant="outlined" class="mb-3" clearable />
+      <v-table density="compact" class="preview-table">
+        <thead>
+          <tr>
+            <th style="width:40px"></th>
+            <th>№ контракта</th>
+            <th>Клиент (ID)</th>
+            <th>Продукт (ID)</th>
+            <th>Программа (ID)</th>
+            <th class="text-end">Сумма</th>
+            <th>Дата создания</th>
+            <th style="width:100px">Действия</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="row in items" :key="row.id" :class="{ 'preview-row-invalid': row.status === 'invalid' }">
+            <td>
+              <v-tooltip v-if="row.status === 'invalid'" location="right">
+                <template #activator="{ props }">
+                  <v-icon v-bind="props" color="error" size="22">mdi-alert</v-icon>
+                </template>
+                <div class="text-caption">
+                  <div v-for="e in row.errors" :key="e.field">
+                    <strong>{{ e.field }}:</strong> {{ e.message }}
+                  </div>
+                </div>
+              </v-tooltip>
+              <v-icon v-else color="success" size="22">mdi-check-circle</v-icon>
+            </td>
+            <td>
+              <span :class="hasFieldError(row, 'number') ? 'text-error' : ''">
+                {{ row.rowData?.number || '—' }}
+              </span>
+            </td>
+            <td>{{ row.rowData?.client || '—' }}</td>
+            <td>{{ row.rowData?.product || '—' }}</td>
+            <td>{{ row.rowData?.program || '—' }}</td>
+            <td class="text-end">{{ row.rowData?.ammount || row.rowData?.amount || '—' }}</td>
+            <td>{{ row.rowData?.createDate || '—' }}</td>
+            <td>
+              <v-btn icon="mdi-pencil" size="x-small" variant="text" color="success"
+                title="Редактировать" @click="openEdit(row)" />
+              <v-btn icon="mdi-trash-can-outline" size="x-small" variant="text" color="error"
+                title="Удалить строку" @click="deleteRow(row)" />
+            </td>
+          </tr>
+          <tr v-if="!items.length">
+            <td colspan="8" class="text-center text-medium-emphasis pa-4">Буфер пуст</td>
+          </tr>
+        </tbody>
+      </v-table>
 
-            <v-btn color="primary" :loading="importing" :disabled="!form.sheet || !!sheetsError"
-              prepend-icon="mdi-import" @click="runSheetsImport" block>
-              Импортировать из Sheets
-            </v-btn>
-          </template>
+      <v-card-actions class="d-flex flex-wrap ga-2 pa-3">
+        <v-spacer />
+        <v-btn variant="text" @click="exitPreview">Отменить весь импорт</v-btn>
+        <!-- Per spec §3.2: большая зелёная кнопка появляется ТОЛЬКО когда нет ошибок -->
+        <v-btn v-if="canFinalize" color="success" size="large" prepend-icon="mdi-content-save"
+          :loading="finalizing" @click="finalizeImport">
+          Сохранить заполненные контракты ({{ stats.validCount }})
+        </v-btn>
+        <v-alert v-else type="warning" variant="tonal" density="compact" class="ma-0">
+          Кнопка сохранения появится когда все строки будут без ошибок.
+          Текущие проблемы: {{ stats.invalidCount }}.
+        </v-alert>
+      </v-card-actions>
+    </v-card>
 
-          <!-- File upload -->
-          <template v-else>
-            <v-alert type="info" variant="tonal" density="compact" class="mb-4">
-              Поддерживаемые форматы: CSV, XLSX. Файл должен содержать колонки: номер контракта, клиент, продукт, программа, сумма, дата открытия.
-            </v-alert>
-            <v-file-input v-model="file" label="Выберите файл" accept=".csv,.xlsx,.xls"
-              prepend-icon="" prepend-inner-icon="mdi-file-document" class="mb-3"
-              :rules="[v => !!v || 'Файл обязателен']" />
-            <v-select v-model="format" :items="formats" label="Формат файла" class="mb-3" />
-            <v-checkbox v-model="skipFirst" label="Пропустить первую строку (заголовки)" density="compact" hide-details class="mb-3" />
-            <v-btn color="primary" :loading="uploading" :disabled="!file"
-              prepend-icon="mdi-upload" @click="upload" block>
-              Загрузить файл
-            </v-btn>
-          </template>
-
-          <v-alert v-if="result" :type="result.type" density="compact" class="mt-4">
-            {{ result.message }}
+    <!-- Inline-edit modal -->
+    <v-dialog v-model="editOpen" max-width="640">
+      <v-card v-if="editingRow">
+        <v-card-title>Редактирование строки буфера</v-card-title>
+        <v-card-text>
+          <v-alert v-if="editingRow.errors?.length" type="error" variant="tonal" density="compact" class="mb-3">
+            <div v-for="e in editingRow.errors" :key="e.field" class="text-body-2">
+              <strong>{{ e.field }}:</strong> {{ e.message }}
+            </div>
           </v-alert>
-          <v-expansion-panels v-if="result?.errorsList?.length" class="mt-2">
-            <v-expansion-panel title="Ошибки" :text="result.errorsList.join('\n')" />
-          </v-expansion-panels>
-        </v-card>
-      </v-col>
 
-      <v-col cols="12" md="6">
-        <v-card class="pa-4">
-          <div class="d-flex align-center mb-3">
-            <v-icon class="mr-1">mdi-history</v-icon>
-            <span class="text-subtitle-1 font-weight-bold">История импорта</span>
-            <v-spacer />
-            <v-btn size="x-small" variant="text" prepend-icon="mdi-refresh" @click="loadHistory">Обновить</v-btn>
-          </div>
-          <v-list v-if="history.length" density="compact">
-            <v-list-item v-for="h in history" :key="h.id">
-              <template #prepend>
-                <v-icon :color="h.status === 'success' ? 'success' : h.status === 'rolled_back' ? 'grey' : h.status === 'error' ? 'error' : 'warning'">
-                  {{ h.status === 'success' ? 'mdi-check-circle' :
-                     h.status === 'rolled_back' ? 'mdi-undo-variant' :
-                     h.status === 'error' ? 'mdi-alert-circle' : 'mdi-clock' }}
-                </v-icon>
-              </template>
-              <v-list-item-title>Импорт #{{ h.id }} · {{ h.source || '—' }}</v-list-item-title>
-              <v-list-item-subtitle>
-                {{ fmtDate(h.createdAt) }} · {{ h.successCount || 0 }} создано · {{ h.errorCount || 0 }} ошибок
-              </v-list-item-subtitle>
-              <template #append>
-                <v-btn v-if="h.status !== 'rolled_back' && h.successCount > 0"
-                  size="x-small" variant="text" color="error" icon="mdi-undo-variant"
-                  :title="`Откатить импорт #${h.id}`"
-                  :loading="rollingBackId === h.id"
-                  @click="rollbackImport(h)" />
-              </template>
-            </v-list-item>
-          </v-list>
-          <div v-else class="text-center text-medium-emphasis pa-6">Нет загрузок</div>
-        </v-card>
+          <v-row dense>
+            <v-col cols="12" sm="6">
+              <v-text-field v-model="editForm.number" label="№ контракта *"
+                density="compact" variant="outlined" />
+            </v-col>
+            <v-col cols="12" sm="6">
+              <v-text-field v-model.number="editForm.client" label="Client ID *" type="number"
+                density="compact" variant="outlined" />
+            </v-col>
+            <v-col cols="12" sm="6">
+              <v-text-field v-model.number="editForm.product" label="Product ID *" type="number"
+                density="compact" variant="outlined" />
+            </v-col>
+            <v-col cols="12" sm="6">
+              <v-text-field v-model.number="editForm.program" label="Program ID" type="number"
+                density="compact" variant="outlined" />
+            </v-col>
+            <v-col cols="12" sm="6">
+              <v-text-field v-model.number="editForm.ammount" label="Сумма *" type="number"
+                density="compact" variant="outlined" />
+            </v-col>
+            <v-col cols="12" sm="6">
+              <v-text-field v-model.number="editForm.currency" label="Currency ID" type="number"
+                density="compact" variant="outlined" />
+            </v-col>
+            <v-col cols="12" sm="6">
+              <v-text-field v-model="editForm.createDate" label="Дата создания" type="date"
+                density="compact" variant="outlined" />
+            </v-col>
+            <v-col cols="12" sm="6">
+              <v-text-field v-model="editForm.openDate" label="Дата открытия" type="date"
+                density="compact" variant="outlined" />
+            </v-col>
+            <v-col cols="12">
+              <v-textarea v-model="editForm.comment" label="Комментарий"
+                density="compact" variant="outlined" rows="2" />
+            </v-col>
+          </v-row>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="editOpen = false">Отмена</v-btn>
+          <v-btn color="primary" :loading="editSaving" @click="saveEdit">
+            Сохранить и перепроверить
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
-        <v-card class="pa-4 mt-4">
-          <div class="text-subtitle-1 font-weight-bold mb-3">
-            <v-icon class="mr-1">mdi-information</v-icon> Шаблон файла
-          </div>
-          <v-table density="compact">
-            <thead>
-              <tr>
-                <th>Колонка</th>
-                <th>Описание</th>
-                <th>Обязательна</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr><td>number</td><td>Номер контракта</td><td>Да</td></tr>
-              <tr><td>client_name</td><td>ФИО клиента</td><td>Да</td></tr>
-              <tr><td>consultant_name</td><td>ФИО консультанта</td><td>Нет</td></tr>
-              <tr><td>product_name</td><td>Название продукта</td><td>Да</td></tr>
-              <tr><td>program_name</td><td>Название программы</td><td>Нет</td></tr>
-              <tr><td>amount</td><td>Сумма контракта</td><td>Да</td></tr>
-              <tr><td>currency</td><td>Валюта (RUB, USD, EUR)</td><td>Нет</td></tr>
-              <tr><td>open_date</td><td>Дата открытия (DD.MM.YYYY)</td><td>Да</td></tr>
-              <tr><td>term</td><td>Срок контракта</td><td>Нет</td></tr>
-            </tbody>
-          </v-table>
-        </v-card>
-      </v-col>
-    </v-row>
-
-    <ImportProgressDialog
-      v-model="progressOpen"
-      :tracker="progressTracker"
-      :result="progressResult"
-      :finished="progressFinished"
-      title="Импорт контрактов"
-    />
+    <v-snackbar v-model="snack.open" :color="snack.color" timeout="4000">{{ snack.text }}</v-snackbar>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
 import PageHeader from '../../components/PageHeader.vue';
-import ImportProgressDialog from '../../components/ImportProgressDialog.vue';
 
-const mode = ref('sheets');
-const progressOpen = ref(false);
-const progressTracker = ref(null);
-const progressResult = ref(null);
-const progressFinished = ref(false);
-const file = ref(null);
-const format = ref('auto');
-const skipFirst = ref(true);
-const uploading = ref(false);
-const importing = ref(false);
-const result = ref(null);
-const history = ref([]);
-
+const form = ref({ sheet: null, currency: null });
 const sheetNames = ref([]);
 const sheetsError = ref('');
-const loadingSheets = ref(false);
 const currencies = ref([]);
-const form = ref({ sheet: null, currency: null });
+const loadingSheets = ref(false);
+const loadingPreview = ref(false);
+const finalizing = ref(false);
+const sessionId = ref(null);
+const items = ref([]);
+const stats = ref({ total: 0, validCount: 0, invalidCount: 0 });
 
-const formats = [
-  { title: 'Автоопределение', value: 'auto' },
-  { title: 'CSV (;)', value: 'csv' },
-  { title: 'XLSX', value: 'xlsx' },
-];
+const editOpen = ref(false);
+const editingRow = ref(null);
+const editForm = ref({});
+const editSaving = ref(false);
 
-async function loadSheets() {
+const snack = ref({ open: false, color: 'success', text: '' });
+function notify(text, color = 'success') { snack.value = { open: true, color, text }; }
+
+const canFinalize = computed(() =>
+  stats.value.total > 0 && stats.value.invalidCount === 0
+);
+
+function hasFieldError(row, field) {
+  return (row.errors || []).some(e => e.field === field);
+}
+
+async function loadSheetNames() {
   loadingSheets.value = true;
-  sheetsError.value = '';
   try {
     const { data } = await api.get('/admin/contract-import/sheet-names');
-    sheetNames.value = data.sheets || [];
-    if (!sheetNames.value.length && data.message) sheetsError.value = data.message;
+    sheetNames.value = (data.sheets || []).map(s => s.name || s);
+    if (data.message) sheetsError.value = data.message;
   } catch (e) {
-    sheetsError.value = e.response?.data?.message || 'Не удалось загрузить листы';
+    sheetsError.value = e.response?.data?.message || 'Ошибка загрузки списка листов';
   }
   loadingSheets.value = false;
 }
 
 async function loadCurrencies() {
   try {
-    const { data } = await api.get('/currencies/selectable');
-    currencies.value = (data.items || []).map(c => ({ id: c.id, symbol: c.label || c.symbol }));
+    const { data } = await api.get('/admin/transaction-import/form-data');
+    currencies.value = (data.currencies || []).map(c => ({
+      id: c.id, symbol: c.symbol || c.name, name: c.name,
+    }));
   } catch {}
 }
 
-async function runSheetsImport() {
+async function loadPreview() {
   if (!form.value.sheet) return;
-  importing.value = true;
-  result.value = null;
-  progressResult.value = null;
-  progressFinished.value = false;
-  progressTracker.value = 'contracts-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
-  progressOpen.value = true;
-
+  loadingPreview.value = true;
   try {
-    const { data } = await api.post('/admin/contract-import/from-sheets', {
-      sheet: form.value.sheet,
-      currency: form.value.currency,
-      tracker: progressTracker.value,
-    });
-    const t = data.errors === 0 ? 'success' : data.success > 0 ? 'warning' : 'error';
-    const payload = {
-      type: t,
-      message: `Импортировано: ${data.success} / ${data.total}. Ошибок: ${data.errors}`,
-      success: data.success,
-      errors: data.errors,
+    const { data } = await api.post('/admin/contract-import/preview/from-sheets', form.value);
+    sessionId.value = data.sessionId;
+    stats.value = { total: data.total, validCount: data.valid, invalidCount: data.invalid };
+    notify(`Загружено: ${data.total} строк (валидных ${data.valid}, с ошибками ${data.invalid})`);
+    await loadList();
+  } catch (e) {
+    notify(e.response?.data?.message || 'Ошибка загрузки', 'error');
+  }
+  loadingPreview.value = false;
+}
+
+async function loadList() {
+  if (!sessionId.value) return;
+  try {
+    const { data } = await api.get(`/admin/contract-import/preview/${sessionId.value}`);
+    items.value = data.data;
+    stats.value = {
       total: data.total,
-      errorsList: data.errorsList || [],
+      validCount: data.validCount,
+      invalidCount: data.invalidCount,
     };
-    result.value = payload;
-    progressResult.value = payload;
-    loadHistory();
-  } catch (e) {
-    let msg = e.response?.data?.message || 'Ошибка импорта';
-    if (e.response?.status === 429) {
-      const retry = e.response?.headers?.['retry-after'];
-      msg = retry
-        ? `Слишком часто. Повторите через ${retry} сек.`
-        : 'Слишком много запросов. Подождите минуту.';
+  } catch {}
+}
+
+function openEdit(row) {
+  editingRow.value = row;
+  editForm.value = { ...(row.rowData || {}) };
+  editOpen.value = true;
+}
+
+async function saveEdit() {
+  if (!editingRow.value) return;
+  editSaving.value = true;
+  try {
+    const { data } = await api.patch(`/admin/contract-import/preview/row/${editingRow.value.id}`, editForm.value);
+    editOpen.value = false;
+    if (data.status === 'valid') {
+      notify('Строка прошла валидацию');
+    } else {
+      notify(`Остались ошибки: ${data.errors.length}`, 'warning');
     }
-    result.value = { type: 'error', message: msg };
-    progressResult.value = { errors: 1, success: 0, message: msg };
-  }
-  progressFinished.value = true;
-  importing.value = false;
-}
-
-async function upload() {
-  if (!file.value) return;
-  uploading.value = true;
-  result.value = null;
-  try {
-    const fd = new FormData();
-    fd.append('file', file.value);
-    fd.append('format', format.value);
-    fd.append('skip_first', skipFirst.value ? '1' : '0');
-    const { data } = await api.post('/admin/contracts/upload', fd);
-    result.value = { type: 'success', message: `Загружено: ${data.success || 0} контрактов. Ошибок: ${data.errors || 0}` };
-    file.value = null;
-    loadHistory();
+    await loadList();
   } catch (e) {
-    result.value = { type: 'error', message: e.response?.data?.message || 'Ошибка загрузки' };
+    notify(e.response?.data?.message || 'Ошибка', 'error');
   }
-  uploading.value = false;
+  editSaving.value = false;
 }
 
-async function loadHistory() {
+async function deleteRow(row) {
+  if (!confirm('Удалить строку из буфера?')) return;
   try {
-    const { data } = await api.get('/admin/contract-import/history');
-    history.value = data.data || [];
-  } catch { history.value = []; }
-}
-
-const rollingBackId = ref(null);
-
-async function rollbackImport(h) {
-  if (!confirm(`Откатить импорт #${h.id}?\n\nБудут удалены все контракты, созданные этим прогоном (${h.successCount}). Действие обратимо только через SQL.`)) return;
-  rollingBackId.value = h.id;
-  try {
-    const { data } = await api.post(`/admin/contract-import/${h.id}/rollback`);
-    result.value = { type: 'success', message: data.message };
-    await loadHistory();
+    await api.delete(`/admin/contract-import/preview/row/${row.id}`);
+    await loadList();
   } catch (e) {
-    result.value = { type: 'error', message: e.response?.data?.message || 'Не удалось откатить' };
+    notify(e.response?.data?.message || 'Ошибка', 'error');
   }
-  rollingBackId.value = null;
 }
 
-function fmtDate(d) {
-  if (!d) return '—';
-  try { return new Date(d).toLocaleString('ru-RU'); } catch { return d; }
+async function clearAll() {
+  if (!confirm('Удалить все строки буфера? Импорт можно будет начать заново.')) return;
+  try {
+    await api.delete(`/admin/contract-import/preview/${sessionId.value}`);
+    sessionId.value = null;
+    items.value = [];
+    notify('Буфер очищен');
+  } catch (e) {
+    notify(e.response?.data?.message || 'Ошибка', 'error');
+  }
 }
 
+async function finalizeImport() {
+  if (!canFinalize.value) return;
+  if (!confirm(`Сохранить ${stats.value.validCount} контрактов в БД? Действие необратимо.`)) return;
+  finalizing.value = true;
+  try {
+    const { data } = await api.post(`/admin/contract-import/preview/${sessionId.value}/finalize`, {});
+    notify(data.message || `Сохранено: ${data.written}`);
+    sessionId.value = null;
+    items.value = [];
+    stats.value = { total: 0, validCount: 0, invalidCount: 0 };
+  } catch (e) {
+    notify(e.response?.data?.message || 'Ошибка фиксации', 'error');
+  }
+  finalizing.value = false;
+}
 
-onMounted(() => { loadSheets(); loadCurrencies(); loadHistory(); });
+function exitPreview() {
+  if (!confirm('Отменить весь импорт? Все строки буфера будут потеряны.')) return;
+  clearAll();
+}
+
+onMounted(() => {
+  loadSheetNames();
+  loadCurrencies();
+});
 </script>
+
+<style scoped>
+.preview-table :deep(td) { vertical-align: middle; }
+.preview-table :deep(th) {
+  background: rgba(var(--v-theme-surface-variant), 0.4);
+  font-size: 12px; text-transform: uppercase; letter-spacing: 0.4px;
+}
+.preview-row-invalid td { background: rgba(244, 67, 54, 0.06); }
+</style>

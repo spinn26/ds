@@ -164,6 +164,12 @@ Route::prefix('v1')->group(function () {
         Route::get('/admin/contract-import/sheet-names', [\App\Http\Controllers\Api\ContractImportController::class, 'sheetNames']);
         Route::get('/admin/contract-import/history', [\App\Http\Controllers\Api\ContractImportController::class, 'history']);
         Route::post('/admin/contract-import/from-sheets', [\App\Http\Controllers\Api\ContractImportController::class, 'importFromSheets'])->middleware('throttle:30,1');
+        Route::post('/admin/contract-import/preview/from-sheets', [\App\Http\Controllers\Api\ContractImportController::class, 'previewFromSheets'])->middleware('throttle:30,1');
+        Route::get('/admin/contract-import/preview/{sessionId}', [\App\Http\Controllers\Api\ContractImportController::class, 'previewList']);
+        Route::patch('/admin/contract-import/preview/row/{id}', [\App\Http\Controllers\Api\ContractImportController::class, 'previewUpdate'])->whereNumber('id');
+        Route::delete('/admin/contract-import/preview/row/{id}', [\App\Http\Controllers\Api\ContractImportController::class, 'previewDelete'])->whereNumber('id');
+        Route::delete('/admin/contract-import/preview/{sessionId}', [\App\Http\Controllers\Api\ContractImportController::class, 'previewClear']);
+        Route::post('/admin/contract-import/preview/{sessionId}/finalize', [\App\Http\Controllers\Api\ContractImportController::class, 'previewFinalize'])->middleware('throttle:30,1');
         Route::post('/admin/contract-import/{id}/rollback', [\App\Http\Controllers\Api\ContractImportController::class, 'rollback'])->whereNumber('id')->middleware('throttle:30,1');
         Route::get('/admin/transfers', [\App\Http\Controllers\Api\AdminDataController::class, 'transfers']);
 

@@ -55,6 +55,138 @@ class ContractImportController extends Controller
     }
 
     /** Импорт контрактов из выбранного листа. */
+    /**
+     * Preview-режим (per spec ✅Загрузка контрактов §1.2-§3):
+     * читаем строки из Sheets, прогоняем через валидаторы, складываем
+     * в буферную таблицу contract_import_preview и возвращаем session_id.
+     * Записи в `contract` НЕ создаются — только после finalize().
+     */
+    public function previewFromSheets(Request $request, \App\Services\ContractImportPreviewService $preview): JsonResponse
+    {
+        $request->validate([
+            'sheet' => 'required|string',
+            'currency' => 'nullable|integer',
+            'statusId' => 'nullable|integer',
+        ]);
+
+        $rows = $this->readRowsFromSheet($request);
+        if (isset($rows['error'])) {
+            return response()->json(['message' => $rows['error']], 422);
+        }
+
+        $stats = $preview->bufferRows($rows, $request->user()?->id);
+        return response()->json($stats);
+    }
+
+    /** Список строк буфера за конкретную сессию. */
+    public function previewList(string $sessionId): JsonResponse
+    {
+        $rows = DB::table('contract_import_preview')
+            ->where('session_id', $sessionId)
+            ->orderBy('id')
+            ->get();
+
+        $data = $rows->map(fn ($r) => [
+            'id' => $r->id,
+            'sessionId' => $r->session_id,
+            'rowData' => json_decode($r->row_data, true),
+            'errors' => json_decode($r->errors ?: '[]', true),
+            'status' => $r->status,
+        ]);
+
+        return response()->json([
+            'data' => $data,
+            'total' => $rows->count(),
+            'validCount' => $rows->where('status', 'valid')->count(),
+            'invalidCount' => $rows->where('status', 'invalid')->count(),
+        ]);
+    }
+
+    /** Inline-edit одной строки + перезапуск валидации. */
+    public function previewUpdate(Request $request, int $id, \App\Services\ContractImportPreviewService $preview): JsonResponse
+    {
+        $patch = $request->validate([
+            'number' => 'nullable|string',
+            'client' => 'nullable|integer',
+            'product' => 'nullable|integer',
+            'program' => 'nullable|integer',
+            'currency' => 'nullable|integer',
+            'status' => 'nullable|integer',
+            'ammount' => 'nullable|numeric',
+            'createDate' => 'nullable|date',
+            'openDate' => 'nullable|date',
+            'closeDate' => 'nullable|date',
+            'comment' => 'nullable|string|max:2000',
+            'counterpartyContractId' => 'nullable|string|max:255',
+        ]);
+
+        try {
+            $r = $preview->updateRow($id, $patch);
+            return response()->json($r);
+        } catch (\Throwable $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+    }
+
+    /** Удалить строку из буфера. */
+    public function previewDelete(int $id): JsonResponse
+    {
+        DB::table('contract_import_preview')->where('id', $id)->delete();
+        return response()->json(['ok' => true]);
+    }
+
+    /** Очистить всю сессию (per spec §1.3 «Удалить все контракты»). */
+    public function previewClear(string $sessionId): JsonResponse
+    {
+        $deleted = DB::table('contract_import_preview')
+            ->where('session_id', $sessionId)
+            ->delete();
+        return response()->json(['deleted' => $deleted]);
+    }
+
+    /** Зафиксировать valid-строки в `contract` (per spec §3.3). */
+    public function previewFinalize(string $sessionId, \App\Services\ContractImportPreviewService $preview, Request $request): JsonResponse
+    {
+        $r = $preview->finalize($sessionId, $request->user()?->id);
+        return response()->json($r);
+    }
+
+    /** Вспомогательный — читает строки листа. Возвращает list<assoc> или {error}. */
+    private function readRowsFromSheet(Request $request): array
+    {
+        $settings = app(ApiSettingsService::class);
+        $apiKey = $settings->get('google.sheets.api_key');
+        $spreadsheetId = $settings->get('google.sheets.contracts_id');
+        if (! $spreadsheetId || ! $apiKey) {
+            return ['error' => 'Google Sheets не настроен — заполни ключи в /admin/api-keys'];
+        }
+
+        try {
+            $range = urlencode($request->sheet);
+            $url = "https://sheets.googleapis.com/v4/spreadsheets/{$spreadsheetId}/values/{$range}?key={$apiKey}&majorDimension=ROWS";
+            $response = \Illuminate\Support\Facades\Http::timeout(30)->get($url);
+            if (! $response->ok()) return ['error' => "Google API HTTP {$response->status()}"];
+            $values = $response->json('values') ?? [];
+        } catch (\Throwable $e) {
+            return ['error' => 'Ошибка чтения листа: ' . $e->getMessage()];
+        }
+
+        if (count($values) < 2) return ['error' => 'Лист пустой'];
+
+        $headers = $values[0];
+        $rows = [];
+        for ($i = 1; $i < count($values); $i++) {
+            $row = [];
+            foreach ($headers as $j => $h) {
+                $row[trim((string) $h)] = $values[$i][$j] ?? null;
+            }
+            if (array_filter($row, fn ($v) => $v !== null && $v !== '')) {
+                $rows[] = $row;
+            }
+        }
+        return $rows;
+    }
+
     public function importFromSheets(Request $request): JsonResponse
     {
         $request->validate([
