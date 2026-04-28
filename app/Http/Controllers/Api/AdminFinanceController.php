@@ -620,6 +620,66 @@ class AdminFinanceController extends Controller
     }
 
     /**
+     * Архив отчётов (per spec ✅Отчеты.md §1.2).
+     */
+    public function reportArchive(): JsonResponse
+    {
+        $rows = DB::table('report_archive')
+            ->orderByDesc('created_at')
+            ->limit(200)
+            ->get();
+        $data = $rows->map(fn ($r) => [
+            'id' => $r->id,
+            'type' => $r->type,
+            'status' => $r->status,
+            'dateFrom' => $r->date_from,
+            'dateTo' => $r->date_to,
+            'createdAt' => $r->created_at,
+            'fileUrl' => $r->status === 'ready' ? url('/api/v1/admin/reports/' . $r->id . '/download') : null,
+            'errorMessage' => $r->error_message,
+        ]);
+        return response()->json(['data' => $data]);
+    }
+
+    /**
+     * Запуск генерации отчёта (per spec §1.1 + §3).
+     * V1 — синхронная генерация. Async-очередь добавится в дальнейшем.
+     */
+    public function generateReport(\Illuminate\Http\Request $request, \App\Services\ReportGenerator $gen): JsonResponse
+    {
+        $data = $request->validate([
+            'type' => 'required|string|max:60',
+            'date_from' => 'required|date',
+            'date_to' => 'required|date|after_or_equal:date_from',
+            'activity' => 'nullable|integer',
+        ]);
+
+        $filters = array_filter(['activity' => $data['activity'] ?? null]);
+        $id = $gen->generate(
+            (string) $data['type'],
+            (string) $data['date_from'],
+            (string) $data['date_to'],
+            $filters,
+            $request->user()?->id,
+        );
+
+        return response()->json(['message' => 'Отчёт сгенерирован', 'id' => $id]);
+    }
+
+    /** Скачать готовый отчёт. */
+    public function downloadReport(int $id)
+    {
+        $row = DB::table('report_archive')->where('id', $id)->first();
+        if (! $row || $row->status !== 'ready' || ! $row->file_path) {
+            abort(404, 'Файл не найден или не готов');
+        }
+        if (! \Storage::disk('local')->exists($row->file_path)) {
+            abort(404, 'Файл отсутствует на диске');
+        }
+        return \Storage::disk('local')->download($row->file_path, "report-{$row->type}-{$row->date_from}-{$row->date_to}.csv");
+    }
+
+    /**
      * Месячная финализация: применить штрафы Отрыв/ОП к комиссиям месяца.
      * Идемпотентно. Защищено от запуска по закрытому периоду.
      */
