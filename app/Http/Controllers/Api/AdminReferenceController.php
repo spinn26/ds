@@ -27,19 +27,9 @@ class AdminReferenceController extends Controller
                 ['key' => 'visibleToResident', 'label' => 'Видна резидентам', 'type' => 'bool'],
             ],
         ],
-        'productType' => [
-            'label' => 'Типы продуктов',
-            'table' => 'productType',
-            'primaryLabel' => 'productTypeName',
-            'orderBy' => 'productTypeName',
-            'fields' => [
-                ['key' => 'productTypeName', 'label' => 'Название', 'type' => 'string', 'required' => true],
-                ['key' => 'categoryName', 'label' => 'Категория (текст)', 'type' => 'string'],
-                ['key' => 'productTypeCategory', 'label' => 'Категория (ID)', 'type' => 'fkey', 'refTable' => 'productCategory', 'refLabel' => 'productCategoryName'],
-                ['key' => 'active', 'label' => 'Активен', 'type' => 'bool'],
-                ['key' => 'visibleToResident', 'label' => 'Виден резидентам', 'type' => 'bool'],
-            ],
-        ],
+        // Тип продукта убран из UI (per user request) — справочник
+        // productType остаётся в legacy-БД, но больше не редактируется
+        // через admin references.
         'communicationCategory' => [
             'label' => 'Категории обращений',
             'table' => 'communicationCategory',

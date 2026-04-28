@@ -10,15 +10,9 @@
             label="Квалификация" :loading="matrixLoading" />
         </v-col>
 
-        <!-- 2. Тип продукта — после выбора квалификации -->
+        <!-- 2. Продукт — сразу после квалификации (тип продукта убран) -->
         <v-col cols="12" sm="6" md="4" v-if="form.qualification">
-          <v-select v-model="form.productType" :items="filteredTypes" item-title="name" item-value="id"
-            label="Тип продукта" clearable @update:model-value="resetFrom('productType')" />
-        </v-col>
-
-        <!-- 3. Продукт — после выбора типа -->
-        <v-col cols="12" sm="6" md="4" v-if="form.productType">
-          <v-select v-model="form.product" :items="filteredProducts" item-title="name" item-value="id"
+          <v-autocomplete v-model="form.product" :items="filteredProducts" item-title="name" item-value="id"
             label="Продукт" clearable @update:model-value="resetFrom('product')" />
         </v-col>
 
@@ -120,7 +114,7 @@ const matrix = reactive({
 });
 
 const form = reactive({
-  qualification: null, productType: null, product: null, program: null,
+  qualification: null, product: null, program: null,
   calcProperty: null, termContract: null, amount: null, currency: null,
 });
 
@@ -134,13 +128,9 @@ const allowedCurrencies = computed(() =>
   matrix.currencies.filter(c => allowedSymbols.some(s => (c.symbol || '').includes(s) || (c.code || '').includes(s)))
 );
 
-// Cascading filters
-const filteredTypes = computed(() => matrix.types);
-
-const filteredProducts = computed(() => {
-  if (!form.productType) return [];
-  return matrix.products.filter(p => p.typeId == form.productType);
-});
+// Тип продукта убран из UI (per user request) — сразу показываем все
+// активные продукты из matrix.products.
+const filteredProducts = computed(() => matrix.products);
 
 const filteredPrograms = computed(() => {
   if (!form.product) return [];
@@ -187,7 +177,7 @@ const canCalculate = computed(() => {
 
 // Reset downstream fields
 function resetFrom(field) {
-  const order = ['productType', 'product', 'program', 'calcProperty', 'termContract', 'amount'];
+  const order = ['product', 'program', 'calcProperty', 'termContract', 'amount'];
   const idx = order.indexOf(field);
   for (let i = idx + 1; i < order.length; i++) {
     form[order[i]] = null;
@@ -212,7 +202,6 @@ function resetFrom(field) {
 
 function resetForm() {
   form.qualification = null;
-  form.productType = null;
   form.product = null;
   form.program = null;
   form.calcProperty = null;

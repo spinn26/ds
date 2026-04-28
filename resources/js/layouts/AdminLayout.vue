@@ -122,7 +122,6 @@ const menuItems = [
     title: 'Справочники', icon: 'mdi-book-cog',
     children: [
       { to: '/admin/references/productCategory',     title: 'Категории продуктов',    icon: 'mdi-tag-multiple' },
-      { to: '/admin/references/productType',         title: 'Типы продуктов',         icon: 'mdi-shape-plus' },
       { to: '/admin/references/currency',            title: 'Валюты',                 icon: 'mdi-currency-usd' },
       { to: '/admin/references/contractStatus',      title: 'Статусы контрактов',     icon: 'mdi-file-check' },
       { to: '/admin/references/status',              title: 'Статусы партнёров',      icon: 'mdi-account-check' },
