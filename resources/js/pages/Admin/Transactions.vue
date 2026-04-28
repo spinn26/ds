@@ -214,6 +214,12 @@
                       <span v-if="d.preview?.ready">{{ fmt2(d.preview.amountNoVatUSD) }} USD</span>
                       <span v-else class="text-medium-emphasis">—</span>
                     </template>
+                    <template v-else-if="h.key === 'vat'">
+                      <span v-if="d.preview?.ready" :title="`Ставка НДС: ${d.preview.vatPercent}%`">
+                        {{ fmt2(d.preview.vat) }} RUB
+                      </span>
+                      <span v-else class="text-medium-emphasis">—</span>
+                    </template>
                     <template v-else-if="h.key === 'partner'">
                       <v-menu open-on-hover open-delay="150" close-delay="100" location="bottom start">
                         <template #activator="{ props: pprops }">
@@ -527,6 +533,7 @@ const draftHeaders = [
   { title: 'Доход ДС', key: 'incomeDS', thClass: 'text-end', tdClass: 'text-end text-no-wrap' },
   { title: 'Без НДС, RUB', key: 'noVatRub', thClass: 'text-end', tdClass: 'text-end text-no-wrap' },
   { title: 'Без НДС, USD', key: 'noVatUsd', thClass: 'text-end', tdClass: 'text-end text-no-wrap' },
+  { title: 'НДС', key: 'vat', thClass: 'text-end', tdClass: 'text-end text-no-wrap' },
   { title: 'Партнёр', key: 'partner' },
   { title: 'Прибыль ДС', key: 'profit', thClass: 'text-end', tdClass: 'text-end text-no-wrap' },
   { title: '', key: 'actions', style: 'width:48px' },

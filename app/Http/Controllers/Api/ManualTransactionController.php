@@ -384,8 +384,30 @@ class ManualTransactionController extends Controller
             ? DB::table('program')->where('id', $contract->program)->first()
             : null;
 
-        // %ДС: override → программа → справочник dsCommission → 100%
+        $productRow = $contract->product
+            ? DB::table('product')->where('id', $contract->product)->first()
+            : null;
+        $isMedlife = $productRow && stripos((string) $productRow->name, 'medlife') !== false
+            || $productRow && stripos((string) $productRow->name, 'медлайф') !== false;
+
+        // %ДС: override → Medlife: первая транзакция → программа → справочник → 100%
         $dsPercent = (float) ($draft->dsCommissionPercentage ?? 0);
+
+        // Medlife: если override не задан явно — наследуем от первой
+        // зафиксированной транзакции на этом контракте (per spec §2.2 «Изменить»).
+        if ($dsPercent <= 0 && $isMedlife && $contract->id) {
+            $firstTx = DB::table('transaction')
+                ->where('contract', $contract->id)
+                ->whereNull('deletedAt')
+                ->whereNotNull('dsCommissionPercentage')
+                ->orderBy('date')
+                ->orderBy('id')
+                ->first(['dsCommissionPercentage']);
+            if ($firstTx && $firstTx->dsCommissionPercentage > 0) {
+                $dsPercent = (float) $firstTx->dsCommissionPercentage;
+            }
+        }
+
         if ($dsPercent <= 0 && $programRow && $programRow->dsPercent !== null) {
             $dsPercent = (float) $programRow->dsPercent;
         }
