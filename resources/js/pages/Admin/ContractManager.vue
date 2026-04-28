@@ -110,10 +110,17 @@
 
           <!-- Блок «Привязки» -->
           <div class="text-subtitle-2 font-weight-bold mb-2">Привязки</div>
-          <v-autocomplete v-model="form.client" :items="clientOptions" item-title="personName" item-value="id"
-            :loading="clientSearching" @update:search="searchClients"
-            label="Клиент *" variant="outlined" density="comfortable" class="mb-2"
-            no-data-text="Начните вводить ФИО клиента" />
+          <div class="d-flex ga-2 mb-2">
+            <v-autocomplete v-model="form.client" :items="clientOptions" item-title="personName" item-value="id"
+              :loading="clientSearching" @update:search="searchClients"
+              label="Клиент *" variant="outlined" density="comfortable" class="flex-grow-1"
+              no-data-text="Начните вводить ФИО клиента" />
+            <v-btn v-if="form.client" variant="outlined" color="secondary" :height="44"
+              prepend-icon="mdi-pencil" :href="'/admin/clients?id=' + form.client" target="_blank"
+              title="Открыть карточку клиента в новой вкладке">
+              Изменить
+            </v-btn>
+          </div>
           <v-text-field :model-value="autoConsultant" label="Партнёр (авто из клиента)"
             variant="outlined" density="comfortable" disabled class="mb-2"
             hint="Подтягивается автоматически при выборе клиента" persistent-hint />

@@ -146,7 +146,8 @@
               <v-list-item-title>{{ doc.label }}</v-list-item-title>
               <v-list-item-subtitle>
                 <template v-if="doc.uploaded">
-                  <a :href="doc.url" target="_blank" rel="noopener" class="text-primary text-decoration-none">
+                  <a href="#" class="text-primary text-decoration-none"
+                    @click.prevent="openLightbox(doc)">
                     <v-icon size="14">mdi-eye-outline</v-icon> Открыть
                   </a>
                   <span class="text-medium-emphasis mx-1">·</span>
@@ -174,6 +175,31 @@
         </div>
       </template>
     </v-navigation-drawer>
+
+    <!-- Lightbox для документов (per spec ✅Реквизиты партнеров §1.4) -->
+    <v-dialog v-model="lightboxOpen" fullscreen transition="dialog-bottom-transition">
+      <v-card v-if="lightboxDoc" class="lightbox-card">
+        <v-toolbar density="compact" color="rgba(0,0,0,0.85)" theme="dark">
+          <v-toolbar-title>{{ lightboxDoc.label }}</v-toolbar-title>
+          <v-spacer />
+          <v-btn icon="mdi-rotate-left" variant="text" title="Повернуть влево" @click="rotateLeft" />
+          <v-btn icon="mdi-rotate-right" variant="text" title="Повернуть вправо" @click="rotateRight" />
+          <v-divider vertical class="mx-2" />
+          <v-btn icon="mdi-magnify-minus" variant="text" title="Уменьшить" @click="zoomOut" />
+          <span class="text-caption mx-2">{{ Math.round(lightboxZoom * 100) }}%</span>
+          <v-btn icon="mdi-magnify-plus" variant="text" title="Увеличить" @click="zoomIn" />
+          <v-btn icon="mdi-restore" variant="text" title="Сброс" @click="resetTransform" />
+          <v-divider vertical class="mx-2" />
+          <v-btn icon="mdi-download" variant="text" :href="lightboxDoc.url" :download="docFilename(lightboxDoc)" title="Скачать" />
+          <v-btn icon="mdi-close" variant="text" @click="lightboxOpen = false" />
+        </v-toolbar>
+        <v-card-text class="lightbox-stage d-flex align-center justify-center pa-0">
+          <img v-if="isImage(lightboxDoc.url)" :src="lightboxDoc.url" :style="lightboxStyle" alt="" />
+          <iframe v-else :src="lightboxDoc.url" class="lightbox-pdf"
+            :style="{ transform: `scale(${lightboxZoom})` }" />
+        </v-card-text>
+      </v-card>
+    </v-dialog>
 
     <!-- INN check dialog -->
     <v-dialog v-model="innDialog" max-width="560" scrollable>
@@ -309,6 +335,34 @@ const innChecking = ref(false);
 const innResult = ref(null);
 const innDialog = ref(false);
 const partnerInfo = ref(null);
+
+// Lightbox для документов (per spec ✅Реквизиты партнеров §1.4)
+const lightboxOpen = ref(false);
+const lightboxDoc = ref(null);
+const lightboxRotation = ref(0);
+const lightboxZoom = ref(1);
+
+function openLightbox(doc) {
+  lightboxDoc.value = doc;
+  lightboxRotation.value = 0;
+  lightboxZoom.value = 1;
+  lightboxOpen.value = true;
+}
+function rotateLeft() { lightboxRotation.value = (lightboxRotation.value - 90) % 360; }
+function rotateRight() { lightboxRotation.value = (lightboxRotation.value + 90) % 360; }
+function zoomIn() { lightboxZoom.value = Math.min(lightboxZoom.value + 0.25, 4); }
+function zoomOut() { lightboxZoom.value = Math.max(lightboxZoom.value - 0.25, 0.25); }
+function resetTransform() { lightboxRotation.value = 0; lightboxZoom.value = 1; }
+const lightboxStyle = computed(() => ({
+  transform: `rotate(${lightboxRotation.value}deg) scale(${lightboxZoom.value})`,
+  transition: 'transform 0.18s ease',
+  maxWidth: '100%',
+  maxHeight: '85vh',
+}));
+function isImage(url) {
+  if (!url) return false;
+  return /\.(jpe?g|png|gif|bmp|webp|tiff)(\?|$)/i.test(url);
+}
 
 const partnerFullName = computed(() => {
   const p = partnerInfo.value;
@@ -516,3 +570,20 @@ async function reject(item) {
 
 onMounted(loadData);
 </script>
+
+<style scoped>
+.lightbox-card {
+  background: rgba(20, 20, 20, 0.96) !important;
+}
+.lightbox-stage {
+  height: calc(100vh - 64px);
+  overflow: auto;
+  background: #1a1a1a;
+}
+.lightbox-pdf {
+  width: 90vw;
+  height: 88vh;
+  border: none;
+  background: white;
+}
+</style>

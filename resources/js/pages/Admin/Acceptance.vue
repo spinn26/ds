@@ -32,9 +32,15 @@
       :items-per-page="perPage" density="compact" hover
       v-model:expanded="expanded" item-value="id" show-expand>
       <template #item.signedCount="{ item }">
-        <v-chip size="x-small" :color="item.fullyAccepted ? 'success' : 'warning'" variant="tonal">
-          {{ item.signedCount }} из {{ item.totalCount }}
-        </v-chip>
+        <div class="d-flex align-center ga-2" style="min-width:180px">
+          <v-progress-linear
+            :model-value="(item.signedCount / item.totalCount) * 100"
+            :color="item.fullyAccepted ? 'success' : 'warning'"
+            height="14" rounded class="flex-grow-1" />
+          <v-chip size="x-small" :color="item.fullyAccepted ? 'success' : 'warning'" variant="flat">
+            {{ item.signedCount }} / {{ item.totalCount }}
+          </v-chip>
+        </div>
       </template>
       <template #expanded-row="{ columns, item }">
         <tr>
