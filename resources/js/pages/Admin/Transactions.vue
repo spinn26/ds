@@ -875,15 +875,15 @@ onMounted(async () => {
   background: rgba(var(--v-theme-primary), 0.04);
 }
 .tx-row-ready :deep(td),
-.tx-row-ready td { background: rgba(76, 175, 80, 0.06); }
+.tx-row-ready td { background: rgba(var(--v-theme-success), 0.08); }
 .tx-totals-row td {
-  background: rgba(76, 175, 80, 0.12) !important;
+  background: rgba(var(--v-theme-success), 0.14) !important;
   font-size: 14px;
-  border-top: 2px solid rgba(76, 175, 80, 0.4) !important;
+  border-top: 2px solid rgba(var(--v-theme-success), 0.45) !important;
   padding-top: 12px !important;
   padding-bottom: 12px !important;
 }
 .tx-partner-hover { cursor: pointer; }
 .tx-partner-hover:hover { text-decoration: underline; }
-.tx-direct-row td { background: rgba(var(--v-theme-primary), 0.06); }
+.tx-direct-row td { background: rgba(var(--v-theme-primary), 0.08); }
 </style>

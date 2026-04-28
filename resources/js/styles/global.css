@@ -7,11 +7,11 @@
 
 /* Solid card style — clearly separated from the page background */
 .v-card {
-  border-color: rgba(0, 0, 0, 0.1) !important;
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
   background: rgb(var(--v-theme-surface)) !important;
 }
 .v-theme--dark .v-card {
-  border-color: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
   background: rgb(var(--v-theme-surface)) !important;
 }
 
@@ -47,10 +47,10 @@
   text-transform: uppercase;
   font-size: 0.7rem !important;
   letter-spacing: 0.5px;
-  color: rgba(0, 0, 0, 0.5) !important;
+  color: rgba(0, 0, 0, 0.72) !important;
 }
 .v-theme--dark .v-data-table thead th {
-  color: rgba(255, 255, 255, 0.5) !important;
+  color: rgba(255, 255, 255, 0.78) !important;
 }
 
 /* Scrollbar — thin and rounded */
@@ -110,9 +110,82 @@
   font-weight: 500 !important;
 }
 
+/* === ВСПЛЫВАШКИ: единый стиль для dialog / menu / tooltip / autocomplete ===
+   Решает: тусклые границы, прозрачный фон в дропдаунах, плохой контраст
+   тултипов, неработающие theme-цвета во вложенных v-list/v-card. */
+
 /* Dialog — floating feel */
 .v-dialog > .v-overlay__content > .v-card {
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.12) !important;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(0, 0, 0, 0.06) !important;
+  border-radius: 16px !important;
+}
+.v-theme--dark .v-dialog > .v-overlay__content > .v-card {
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Menu / autocomplete dropdown / select listbox — solid surface, видимая граница.
+   На v-card НЕ применяем (у него уже своя border + бэкграунд глобально). */
+.v-menu > .v-overlay__content > .v-list,
+.v-menu > .v-overlay__content > .v-sheet,
+.v-overlay__content > .v-list {
+  background: rgb(var(--v-theme-surface)) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.14), 0 0 0 1px rgba(0, 0, 0, 0.06) !important;
+  overflow: hidden;
+}
+.v-theme--dark .v-menu > .v-overlay__content > .v-list,
+.v-theme--dark .v-menu > .v-overlay__content > .v-sheet,
+.v-theme--dark .v-overlay__content > .v-list {
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Card внутри menu (hover-попапы как в Transactions) — мягкая тень
+   поверх собственной границы карточки */
+.v-menu > .v-overlay__content > .v-card,
+.v-overlay__content > .v-card:not(.v-dialog .v-card) {
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.14) !important;
+  border-radius: 12px !important;
+}
+.v-theme--dark .v-menu > .v-overlay__content > .v-card,
+.v-theme--dark .v-overlay__content > .v-card:not(.v-dialog .v-card) {
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5) !important;
+}
+
+/* List items hover в дропдаунах */
+.v-overlay__content .v-list-item:hover {
+  background: rgba(var(--v-theme-primary), 0.08) !important;
+}
+.v-overlay__content .v-list-item--active,
+.v-overlay__content .v-list-item[aria-selected="true"] {
+  background: rgba(var(--v-theme-primary), 0.14) !important;
+  color: rgb(var(--v-theme-primary)) !important;
+}
+
+/* Tooltip — читаемый контраст в обеих темах вместо дефолтного тёмно-серого */
+.v-tooltip > .v-overlay__content {
+  background: rgba(33, 33, 33, 0.96) !important;
+  color: #fff !important;
+  border-radius: 8px !important;
+  font-size: 12px !important;
+  padding: 6px 10px !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
+  max-width: 320px;
+}
+.v-theme--dark .v-tooltip > .v-overlay__content {
+  background: rgba(240, 240, 240, 0.96) !important;
+  color: #1a1a1a !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6) !important;
+}
+
+/* Date picker внутри menu — нужна заливка под surface */
+.v-overlay__content .v-date-picker,
+.v-overlay__content .v-picker {
+  background: rgb(var(--v-theme-surface)) !important;
+}
+
+/* Snackbar — читаемая тень в обеих темах */
+.v-snackbar__wrapper {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18) !important;
 }
 
 /* Input fields — softer border */
