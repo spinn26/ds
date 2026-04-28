@@ -125,41 +125,150 @@ class AdminFinanceController extends Controller
     }
 
     /** Квалификации */
+    /**
+     * Per spec ✅Квалификации.md §2: «Единая квалификация — у партнёра в
+     * месяц только ОДИН показатель статуса». Возвращаем выбранный месяц +
+     * сравнение с предыдущим месяцем (Блок 2 + Блок 3 в спеке).
+     */
     public function qualifications(Request $request): JsonResponse
     {
-        $query = DB::table('qualificationLog')
-            ->whereNull('dateDeleted');
+        $month = $request->input('month', now()->format('Y-m'));
+        $start = $month . '-01';
+        $end = date('Y-m-t', strtotime($start));
+        $prevStart = date('Y-m-01', strtotime($start . ' -1 month'));
+        $prevEnd = date('Y-m-t', strtotime($prevStart));
+
+        // Все consultant_id с записью за выбранный или предыдущий месяц
+        $consultantQuery = DB::table('qualificationLog')
+            ->whereNull('dateDeleted')
+            ->where(function ($w) use ($start, $end, $prevStart, $prevEnd) {
+                $w->whereBetween('date', [$start, $end])
+                  ->orWhereBetween('date', [$prevStart, $prevEnd]);
+            });
 
         if ($request->filled('search')) {
-            $query->where('consultantPersonName', 'ilike', '%' . $request->search . '%');
-        }
-        if ($request->filled('month')) {
-            $start = $request->month . '-01';
-            $end = date('Y-m-t', strtotime($start));
-            $query->whereBetween('date', [$start, $end]);
+            $consultantQuery->where('consultantPersonName', 'ilike', '%' . $request->search . '%');
         }
 
-        $total = $query->count();
-        $data = $query->orderByDesc('date')
-            ->offset(($request->input('page', 1) - 1) * 25)
-            ->limit(25)
-            ->get()
-            ->map(fn ($q) => [
-                'id' => $q->id,
-                'consultant' => $q->consultant,
-                'consultantName' => $q->consultantPersonName,
-                'personalVolume' => round((float) ($q->personalVolume ?? 0), 2),
-                'groupVolume' => round((float) ($q->groupVolume ?? 0), 2),
-                'groupVolumeCumulative' => round((float) ($q->groupVolumeCumulative ?? 0), 2),
-                'nominalLevel' => $q->nominalLevel,
-                'calculationLevel' => $q->calculationLevel,
-                'levelNew' => $q->levelNew,
-                'levelPrevious' => $q->levelPrevious,
-                'result' => $q->result,
-                'date' => $q->date,
-            ]);
+        $consultantIds = $consultantQuery->distinct()->pluck('consultant')->all();
 
-        return response()->json(['data' => $data, 'total' => $total]);
+        // Фильтр «только ненулевые логи»
+        if ($request->boolean('non_zero_only')) {
+            $nonZeroIds = DB::table('qualificationLog')
+                ->whereNull('dateDeleted')
+                ->whereIn('consultant', $consultantIds)
+                ->where(function ($w) {
+                    $w->where('personalVolume', '>', 0)
+                      ->orWhere('groupVolume', '>', 0);
+                })
+                ->pluck('consultant')
+                ->unique()
+                ->all();
+            $consultantIds = array_values(array_intersect($consultantIds, $nonZeroIds));
+        }
+
+        $total = count($consultantIds);
+        $offset = ($request->input('page', 1) - 1) * 25;
+        $pageIds = array_slice($consultantIds, $offset, 25);
+
+        if (empty($pageIds)) {
+            return response()->json(['data' => [], 'total' => 0, 'monthLabel' => $month, 'prevMonthLabel' => substr($prevStart, 0, 7)]);
+        }
+
+        // Вытаскиваем все нужные строки одним запросом
+        $logs = DB::table('qualificationLog')
+            ->whereNull('dateDeleted')
+            ->whereIn('consultant', $pageIds)
+            ->where(function ($w) use ($start, $end, $prevStart, $prevEnd) {
+                $w->whereBetween('date', [$start, $end])
+                  ->orWhereBetween('date', [$prevStart, $prevEnd]);
+            })
+            ->get();
+
+        $consultants = DB::table('consultant')
+            ->whereIn('id', $pageIds)
+            ->get(['id', 'personName', 'activity'])
+            ->keyBy('id');
+
+        // status_levels lookup
+        $levels = DB::table('status_levels')->get()->keyBy('id');
+
+        $resolveLevel = function ($nominal, $calculation) use ($levels) {
+            $a = $nominal ? ($levels[$nominal] ?? null) : null;
+            $b = $calculation ? ($levels[$calculation] ?? null) : null;
+            if (! $a && ! $b) return null;
+            if (! $a) return $b;
+            if (! $b) return $a;
+            return ($a->level >= $b->level) ? $a : $b;
+        };
+
+        $byConsultant = [];
+        foreach ($logs as $l) {
+            $isCurrent = $l->date >= $start && $l->date <= $end;
+            $bucket = $isCurrent ? 'current' : 'previous';
+            $level = $resolveLevel($l->nominalLevel, $l->calculationLevel);
+            $byConsultant[$l->consultant][$bucket] = [
+                'id' => $l->id,
+                'personalVolume' => round((float) ($l->personalVolume ?? 0), 2),
+                'groupVolume' => round((float) ($l->groupVolume ?? 0), 2),
+                'groupVolumeCumulative' => round((float) ($l->groupVolumeCumulative ?? 0), 2),
+                'levelId' => $level?->id,
+                'levelTitle' => $level?->title,
+                'levelNum' => $level?->level,
+                'mandatoryGP' => (float) ($level?->mandatoryGP ?? 0),
+                'date' => $l->date,
+            ];
+        }
+
+        $activityMap = [1 => 'active', 3 => 'terminated', 4 => 'registered', 5 => 'excluded'];
+
+        $data = [];
+        foreach ($pageIds as $cid) {
+            $cons = $consultants[$cid] ?? null;
+            if (! $cons) continue;
+            $data[] = [
+                'consultant' => (int) $cid,
+                'consultantName' => $cons->personName,
+                'activity' => $activityMap[$cons->activity ?? 0] ?? 'unknown',
+                'current' => $byConsultant[$cid]['current'] ?? null,
+                'previous' => $byConsultant[$cid]['previous'] ?? null,
+            ];
+        }
+
+        return response()->json([
+            'data' => $data,
+            'total' => $total,
+            'monthLabel' => $month,
+            'prevMonthLabel' => substr($prevStart, 0, 7),
+        ]);
+    }
+
+    /** История квалификаций партнёра — все месяцы по убыванию даты. */
+    public function qualificationHistory(int $consultantId): JsonResponse
+    {
+        $rows = DB::table('qualificationLog')
+            ->where('consultant', $consultantId)
+            ->whereNull('dateDeleted')
+            ->orderByDesc('date')
+            ->get();
+
+        $levels = DB::table('status_levels')->get()->keyBy('id');
+
+        $data = $rows->map(function ($r) use ($levels) {
+            $a = $r->nominalLevel ? ($levels[$r->nominalLevel] ?? null) : null;
+            $b = $r->calculationLevel ? ($levels[$r->calculationLevel] ?? null) : null;
+            $level = (! $a) ? $b : ((! $b) ? $a : (($a->level >= $b->level) ? $a : $b));
+            return [
+                'date' => substr((string) $r->date, 0, 7),
+                'personalVolume' => round((float) ($r->personalVolume ?? 0), 2),
+                'groupVolume' => round((float) ($r->groupVolume ?? 0), 2),
+                'groupVolumeCumulative' => round((float) ($r->groupVolumeCumulative ?? 0), 2),
+                'levelNum' => $level?->level,
+                'levelTitle' => $level?->title,
+            ];
+        });
+
+        return response()->json(['data' => $data]);
     }
 
     /** Прочие начисления — CRUD */
