@@ -21,8 +21,11 @@ class Contract extends Model
     {
         return LogOptions::defaults()
             ->logOnly([
+                'number', 'counterpartyContractId',
                 'client', 'consultant', 'product', 'program', 'status',
-                'currency', 'amount', 'number', 'openDate', 'closeDate',
+                'country', 'currency', 'ammount',
+                'createDate', 'openDate', 'closeDate',
+                'riskProfile', 'setup', 'type', 'comment',
             ])
             ->logOnlyDirty()
             ->setDescriptionForEvent(fn (string $eventName) => "Contract {$eventName}");

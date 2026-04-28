@@ -408,14 +408,65 @@ class AdminDataController extends Controller
             : collect();
 
         $fieldLabels = [
-            'client' => 'Клиент', 'consultant' => 'Консультант',
+            'number' => '№ контракта',
+            'counterpartyContractId' => 'ИД контрагента',
+            'client' => 'Клиент', 'consultant' => 'Партнёр',
             'product' => 'Продукт', 'program' => 'Программа',
             'status' => 'Статус', 'currency' => 'Валюта',
-            'amount' => 'Сумма', 'number' => 'Номер',
-            'openDate' => 'Дата открытия', 'closeDate' => 'Дата закрытия',
+            'ammount' => 'Сумма', 'amount' => 'Сумма',
+            'country' => 'Страна оформления',
+            'createDate' => 'Дата создания',
+            'openDate' => 'Дата открытия',
+            'closeDate' => 'Дата закрытия',
+            'riskProfile' => 'Риск-профиль',
+            'setup' => 'Сетап',
+            'type' => 'Тип (страх.)',
+            'comment' => 'Комментарий',
         ];
 
-        $data = $rows->map(function ($r) use ($causers, $fieldLabels) {
+        // Собираем все ID, чтобы резолвить human-friendly значения FK одним батчем.
+        $idsByField = [
+            'client' => [], 'consultant' => [], 'product' => [], 'program' => [],
+            'status' => [], 'currency' => [], 'country' => [], 'riskProfile' => [], 'setup' => [],
+        ];
+        foreach ($rows as $r) {
+            $props = json_decode($r->properties ?: '{}', true);
+            foreach (['old', 'attributes'] as $bucket) {
+                foreach ($props[$bucket] ?? [] as $field => $val) {
+                    if (isset($idsByField[$field]) && $val !== null && $val !== '') {
+                        $idsByField[$field][] = (int) $val;
+                    }
+                }
+            }
+        }
+        $resolveFn = function (string $table, string $col, array $ids): array {
+            $ids = array_values(array_unique(array_filter($ids)));
+            if (! $ids) return [];
+            return DB::table($table)->whereIn('id', $ids)->pluck($col, 'id')->toArray();
+        };
+        $maps = [
+            'client'      => $resolveFn('client', 'personName', $idsByField['client']),
+            'consultant'  => $resolveFn('consultant', 'personName', $idsByField['consultant']),
+            'product'     => $resolveFn('product', 'name', $idsByField['product']),
+            'program'     => $resolveFn('program', 'name', $idsByField['program']),
+            'status'      => $resolveFn('contractStatus', 'name', $idsByField['status']),
+            'currency'    => $resolveFn('currency', 'symbol', $idsByField['currency']),
+            'country'     => $resolveFn('country', 'countryNameRu', $idsByField['country']),
+            'riskProfile' => $resolveFn('riskProfile', 'name', $idsByField['riskProfile']),
+            'setup'       => $resolveFn('setup', 'setup', $idsByField['setup']),
+        ];
+
+        $humanize = function ($field, $val) use ($maps) {
+            if ($val === null || $val === '') return null;
+            if (isset($maps[$field][$val])) return $maps[$field][$val];
+            // Даты приводим к Y-m-d
+            if (in_array($field, ['createDate', 'openDate', 'closeDate'], true)) {
+                try { return (new \DateTimeImmutable((string) $val))->format('Y-m-d'); } catch (\Throwable) { return $val; }
+            }
+            return $val;
+        };
+
+        $data = $rows->map(function ($r) use ($causers, $fieldLabels, $humanize) {
             $props = json_decode($r->properties ?: '{}', true);
             $changes = [];
             $oldValues = $props['old'] ?? [];
@@ -426,8 +477,8 @@ class AdminDataController extends Controller
                 $changes[] = [
                     'field' => $field,
                     'fieldLabel' => $fieldLabels[$field] ?? $field,
-                    'old' => $oldVal,
-                    'new' => $newVal,
+                    'old' => $humanize($field, $oldVal),
+                    'new' => $humanize($field, $newVal),
                 ];
             }
 
@@ -863,8 +914,16 @@ class AdminDataController extends Controller
             return response()->json(['message' => 'ИНН не заполнен'], 422);
         }
 
-        $dadata = app(\App\Services\DadataService::class);
-        $result = $dadata->findByInn((string) $req->inn);
+        $cleanInn = preg_replace('/\D/', '', (string) $req->inn);
+
+        // Кэшируем DaData-ответ на 1 час, чтобы повторные клики не упирались в throttle.
+        $result = \Illuminate\Support\Facades\Cache::remember(
+            "dadata:inn:{$cleanInn}",
+            3600,
+            fn () => app(\App\Services\DadataService::class)->findByInn($cleanInn),
+        );
+
+        $autoVerified = false;
 
         // Если нашли — сравниваем ФИО с профилем партнёра.
         if (! empty($result['found']) && $req->consultant) {
@@ -874,16 +933,32 @@ class AdminDataController extends Controller
                     'firstName', 'lastName', 'patronymic',
                 ]);
                 if ($user) {
+                    $dadata = app(\App\Services\DadataService::class);
                     $result['fioCheck'] = $dadata->compareFio(
                         $result['fio'],
                         $user->lastName,
                         $user->firstName,
                         $user->patronymic,
                     );
+
+                    // Автоверификация: ФИО совпадает + ИП действующий + ещё не верифицирован.
+                    if (
+                        ($result['fioCheck']['match'] ?? false)
+                        && ($result['status'] ?? null) === 'ACTIVE'
+                        && empty($req->verified)
+                    ) {
+                        DB::table('requisites')->where('id', $id)->update([
+                            'verified' => true,
+                            'status' => 3,
+                            'dateChange' => now(),
+                        ]);
+                        $autoVerified = true;
+                    }
                 }
             }
         }
 
+        $result['autoVerified'] = $autoVerified;
         return response()->json($result);
     }
 
@@ -1039,31 +1114,51 @@ class AdminDataController extends Controller
     /** Менеджер контрактов */
     public function contracts(Request $request): JsonResponse
     {
-        $query = DB::table('contract')->whereNull('deletedAt');
+        $query = DB::table('contract as c')
+            ->leftJoin('program as pr', 'c.program', '=', 'pr.id')
+            ->whereNull('c.deletedAt');
 
         if ($request->filled('search')) {
             $s = $request->search;
             $query->where(function ($q) use ($s) {
-                $q->where('clientName', 'ilike', "%{$s}%")
-                  ->orWhere('consultantName', 'ilike', "%{$s}%")
-                  ->orWhere('number', 'ilike', "%{$s}%");
+                $q->where('c.clientName', 'ilike', "%{$s}%")
+                  ->orWhere('c.consultantName', 'ilike', "%{$s}%")
+                  ->orWhere('c.number', 'ilike', "%{$s}%");
             });
         }
-        if ($request->filled('status')) $query->where('status', $request->status);
-        if ($request->filled('number')) $query->where('number', 'ilike', '%' . $request->number . '%');
-        if ($request->filled('comment')) $query->where('comment', 'ilike', '%' . $request->comment . '%');
-        if ($request->filled('product')) $query->where('product', $request->product);
-        if ($request->filled('created_from')) $query->where('createDate', '>=', $request->created_from);
-        if ($request->filled('created_to')) $query->where('createDate', '<=', $request->created_to . ' 23:59:59');
-        if ($request->filled('opened_from')) $query->where('openDate', '>=', $request->opened_from);
-        if ($request->filled('opened_to')) $query->where('openDate', '<=', $request->opened_to . ' 23:59:59');
-        if ($request->filled('closed_from')) $query->where('closeDate', '>=', $request->closed_from);
-        if ($request->filled('closed_to')) $query->where('closeDate', '<=', $request->closed_to . ' 23:59:59');
+        if ($request->filled('client_name')) {
+            $query->where('c.clientName', 'ilike', '%' . $request->client_name . '%');
+        }
+        if ($request->filled('consultant_name')) {
+            $query->where('c.consultantName', 'ilike', '%' . $request->consultant_name . '%');
+        }
+        if ($request->filled('status')) $query->where('c.status', $request->status);
+        if ($request->filled('number')) $query->where('c.number', 'ilike', '%' . $request->number . '%');
+        if ($request->filled('comment')) $query->where('c.comment', 'ilike', '%' . $request->comment . '%');
+        if ($request->filled('product')) $query->where('c.product', $request->product);
+        if ($request->filled('program')) $query->where('c.program', $request->program);
+        if ($request->filled('setup')) $query->where('c.setup', $request->setup);
+        if ($request->filled('supplier')) {
+            $query->where('pr.providerName', 'ilike', '%' . $request->supplier . '%');
+        }
+        if ($request->filled('created_from')) $query->where('c.createDate', '>=', $request->created_from);
+        if ($request->filled('created_to')) $query->where('c.createDate', '<=', $request->created_to . ' 23:59:59');
+        if ($request->filled('opened_from')) $query->where('c.openDate', '>=', $request->opened_from);
+        if ($request->filled('opened_to')) $query->where('c.openDate', '<=', $request->opened_to . ' 23:59:59');
+        if ($request->filled('closed_from')) $query->where('c.closeDate', '>=', $request->closed_from);
+        if ($request->filled('closed_to')) $query->where('c.closeDate', '<=', $request->closed_to . ' 23:59:59');
 
         $total = $query->count();
-        $rows = $query->orderByDesc('id')
+        $rows = $query->orderByDesc('c.id')
             ->offset($this->paginationOffset($request))
             ->limit($this->paginationPerPage($request))
+            ->select([
+                'c.id', 'c.number', 'c.clientName', 'c.consultant', 'c.consultantName',
+                'c.productName', 'c.programName', 'c.status', 'c.ammount', 'c.currency',
+                'c.openDate', 'c.createDate', 'c.createdAt', 'c.comment',
+                'c.counterpartyContractId',
+                'pr.providerName as supplierName',
+            ])
             ->get();
 
         // Batch load contract statuses
@@ -1081,11 +1176,14 @@ class AdminDataController extends Controller
         $contracts = $rows->map(fn ($c) => [
                 'id' => $c->id,
                 'number' => $c->number,
+                'counterpartyContractId' => $c->counterpartyContractId,
                 'clientName' => $c->clientName,
                 'consultant' => $c->consultant ?? null,
                 'consultantName' => $c->consultantName,
                 'productName' => $c->productName,
                 'programName' => $c->programName,
+                'supplierName' => $c->supplierName,
+                'comment' => $c->comment,
                 'statusName' => $c->status ? ($contractStatuses[$c->status] ?? null) : null,
                 'ammount' => $c->ammount,
                 'currencySymbol' => $c->currency ? ($currencies[$c->currency] ?? null) : null,
@@ -1132,6 +1230,18 @@ class AdminDataController extends Controller
      */
     public function contractFormData(): JsonResponse
     {
+        $suppliers = DB::table('program')
+            ->whereNotNull('providerName')
+            ->whereNull('dateDeleted')
+            ->distinct()
+            ->orderBy('providerName')
+            ->pluck('providerName');
+
+        $programs = DB::table('program')
+            ->whereNull('dateDeleted')
+            ->orderBy('name')
+            ->get(['id', 'name', 'product as productId', 'providerName']);
+
         return response()->json([
             'statuses' => DB::table('contractStatus')->orderBy('id')->get(['id', 'name']),
             'currencies' => DB::table('currency')->where('selectable', true)->orderBy('id')
@@ -1143,6 +1253,8 @@ class AdminDataController extends Controller
                 ->get()->map(fn ($r) => ['id' => $r->id, 'name' => $r->name]),
             'setups' => DB::table('setup')->orderBy('id')
                 ->get()->map(fn ($s) => ['id' => $s->id, 'name' => $s->setup]),
+            'suppliers' => $suppliers,
+            'programs'  => $programs,
         ]);
     }
 
@@ -1217,7 +1329,7 @@ class AdminDataController extends Controller
      */
     public function updateContract(Request $request, int $id): JsonResponse
     {
-        $contract = DB::table('contract')->where('id', $id)->first();
+        $contract = \App\Models\Contract::find($id);
         if (! $contract) return response()->json(['message' => 'Контракт не найден'], 404);
 
         $data = $request->validate([
@@ -1239,8 +1351,8 @@ class AdminDataController extends Controller
             'comment' => 'nullable|string|max:2000',
         ]);
 
-        DB::transaction(function () use ($data, $id) {
-            // Денормализация имён при изменении FK
+        DB::transaction(function () use ($data, $contract) {
+            // Денормализация имён при изменении FK (для совместимости с прежними запросами)
             if (isset($data['client'])) {
                 $client = DB::table('client')->where('id', $data['client'])->first();
                 $data['clientName'] = $client?->personName;
@@ -1256,7 +1368,9 @@ class AdminDataController extends Controller
                 $data['programName'] = DB::table('program')->where('id', $data['program'])->value('name');
             }
             $data['changedAt'] = now();
-            DB::table('contract')->where('id', $id)->update($data);
+            // Eloquent + LogsActivity — каждое изменение полей попадает в activity_log,
+            // что и подтягивает «История изменений контракта» (per spec §4).
+            $contract->fill($data)->save();
         });
 
         return response()->json(['message' => 'Контракт обновлён']);

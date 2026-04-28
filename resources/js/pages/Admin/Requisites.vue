@@ -225,6 +225,12 @@
             </v-alert>
           </template>
           <template v-else-if="innResult && innResult.found">
+            <v-alert v-if="innResult.autoVerified" type="success" variant="flat"
+              density="comfortable" class="mb-3" icon="mdi-check-decagram">
+              <div class="font-weight-bold">Реквизиты автоматически верифицированы</div>
+              <div class="text-body-2">ФИО совпадает с DaData, ИП действующий — статус переведён в «Подтверждено».</div>
+            </v-alert>
+
             <!-- FIO check prominent at top -->
             <v-alert v-if="innResult.fioCheck" :type="innResult.fioCheck.match ? 'success' : 'error'"
               variant="tonal" density="comfortable" class="mb-3">
@@ -411,6 +417,10 @@ async function checkInn() {
   try {
     const { data } = await api.post(`/admin/requisites/${selectedItem.value.id}/check-inn`);
     innResult.value = data;
+    if (data.autoVerified) {
+      selectedItem.value.verificationStatus = 'verified';
+      loadData();
+    }
   } catch (e) {
     innResult.value = { found: false, error: e.response?.data?.message || 'Не удалось проверить' };
   }
@@ -420,7 +430,6 @@ async function checkInn() {
 const documentTypeLabels = {
   passportPage1: 'Паспорт (разворот с фото)',
   passportPage2: 'Паспорт (регистрация)',
-  applicationForPayment: 'Заявление на получение выплат',
 };
 
 async function openDrawer(item) {

@@ -10,12 +10,22 @@
 
     <FilterBar
       :search="search"
-      search-placeholder="ФИО клиента / консультанта"
+      search-placeholder="ФИО клиента / консультанта / №"
       :search-cols="3"
       :show-reset="activeFilterCount > 0"
       @update:search="v => { search = v ?? ''; debouncedLoad(); }"
       @reset="resetFilters"
     >
+      <v-col cols="12" md="2">
+        <v-text-field v-model="filters.client_name" placeholder="ФИО клиента"
+          density="comfortable" variant="outlined" hide-details clearable
+          @update:model-value="debouncedLoad" />
+      </v-col>
+      <v-col cols="12" md="2">
+        <v-text-field v-model="filters.consultant_name" placeholder="ФИО консультанта"
+          density="comfortable" variant="outlined" hide-details clearable
+          @update:model-value="debouncedLoad" />
+      </v-col>
       <v-col cols="12" md="2">
         <v-text-field v-model="filters.number" placeholder="№ контракта"
           density="comfortable" variant="outlined" hide-details clearable
@@ -31,9 +41,24 @@
           variant="outlined" density="comfortable" clearable hide-details
           @update:model-value="loadData" />
       </v-col>
+      <v-col cols="12" md="2">
+        <v-autocomplete v-model="filters.supplier" :items="supplierOptions"
+          label="Поставщик" density="comfortable" variant="outlined" hide-details clearable
+          @update:model-value="loadData" />
+      </v-col>
       <v-col cols="12" md="3">
         <v-autocomplete v-model="filters.product" :items="productOptions" item-title="name" item-value="id"
           label="Продукт" density="comfortable" variant="outlined" hide-details clearable
+          @update:model-value="onFilterProductChange" />
+      </v-col>
+      <v-col cols="12" md="3">
+        <v-autocomplete v-model="filters.program" :items="filterPrograms" item-title="name" item-value="id"
+          label="Программа" density="comfortable" variant="outlined" hide-details clearable
+          @update:model-value="loadData" />
+      </v-col>
+      <v-col cols="12" md="3">
+        <v-autocomplete v-model="filters.setup" :items="formData.setups" item-title="name" item-value="id"
+          label="Сетап" density="comfortable" variant="outlined" hide-details clearable
           @update:model-value="loadData" />
       </v-col>
       <v-col cols="12" md="2">
@@ -74,6 +99,20 @@
       </template>
       <template #item.statusName="{ value }">
         <StatusChip :value="value" kind="contract" size="x-small" :text="value" />
+      </template>
+      <template #item.comment="{ value }">
+        <span v-if="value" :title="value" class="d-inline-block text-truncate" style="max-width:240px">
+          {{ value }}
+        </span>
+        <span v-else class="text-medium-emphasis">—</span>
+      </template>
+      <template #item.counterpartyContractId="{ value }">
+        <span v-if="value">{{ value }}</span>
+        <span v-else class="text-medium-emphasis">—</span>
+      </template>
+      <template #item.supplierName="{ value }">
+        <span v-if="value">{{ value }}</span>
+        <span v-else class="text-medium-emphasis">—</span>
       </template>
       <template #item.chat="{ item }">
         <StartChatButton :partner-id="item.consultantId || item.consultant" :partner-name="item.consultantName"
@@ -271,7 +310,9 @@ const statusFilter = ref(null);
 const statusOptions = ref([]);
 const showAdvanced = ref(false);
 const filters = ref({
-  number: '', comment: '', product: null,
+  client_name: '', consultant_name: '',
+  number: '', comment: '', product: null, program: null,
+  setup: null, supplier: null,
   created_from: '', created_to: '',
   opened_from: '', opened_to: '',
   closed_from: '', closed_to: '',
@@ -282,15 +323,31 @@ const perPage = ref(25);
 const headers = [
   { title: 'ID', key: 'id', width: 60 },
   { title: 'Номер', key: 'number', width: 120 },
+  { title: 'ИД контрагента', key: 'counterpartyContractId', width: 130 },
   { title: 'Клиент', key: 'clientName' },
-  { title: 'Консультант', key: 'consultantName' },
-  { title: 'Продукт', key: 'productName' },
-  { title: 'Дата открытия', key: 'openDate', width: 120 },
-  { title: 'Сумма', key: 'ammount', width: 140 },
+  { title: 'Партнёр', key: 'consultantName' },
+  { title: 'Открыт', key: 'openDate', width: 120 },
   { title: 'Статус', key: 'statusName', width: 130 },
+  { title: 'Сумма', key: 'ammount', width: 140 },
+  { title: 'Продукт', key: 'productName' },
+  { title: 'Программа', key: 'programName' },
+  { title: 'Поставщик', key: 'supplierName', width: 130 },
+  { title: 'Комментарий', key: 'comment' },
   { title: '', key: 'chat', sortable: false, width: 50 },
-  { title: '', key: 'actions', sortable: false, width: 50 },
+  { title: '', key: 'actions', sortable: false, width: 70 },
 ];
+
+const supplierOptions = ref([]);
+const filterPrograms = computed(() => {
+  const all = formData.value.programs || [];
+  if (!filters.value.product) return all;
+  return all.filter(p => p.productId == filters.value.product);
+});
+
+function onFilterProductChange() {
+  filters.value.program = null;
+  loadData();
+}
 
 // === Edit modal ===
 const editOpen = ref(false);
@@ -299,7 +356,7 @@ const saving = ref(false);
 const deleteDialog = ref(false);
 const chain = ref([]);
 
-const formData = ref({ statuses: [], currencies: [], countries: [], riskProfiles: [], setups: [] });
+const formData = ref({ statuses: [], currencies: [], countries: [], riskProfiles: [], setups: [], suppliers: [], programs: [] });
 const productOptions = ref([]);
 const programsByProduct = ref({}); // productId → programs[]
 const clientOptions = ref([]);
@@ -394,6 +451,7 @@ async function ensureFormData() {
     ]);
     formData.value = fd.data;
     productOptions.value = (products.data?.data || []).map(p => ({ id: p.id, name: p.name }));
+    supplierOptions.value = fd.data.suppliers || [];
   } catch {}
 }
 
@@ -502,7 +560,9 @@ function resetFilters() {
   search.value = '';
   statusFilter.value = null;
   filters.value = {
-    number: '', comment: '', product: null,
+    client_name: '', consultant_name: '',
+    number: '', comment: '', product: null, program: null,
+    setup: null, supplier: null,
     created_from: '', created_to: '',
     opened_from: '', opened_to: '',
     closed_from: '', closed_to: '',
@@ -544,5 +604,6 @@ async function loadStatuses() {
 onMounted(() => {
   loadData();
   loadStatuses();
+  ensureFormData();
 });
 </script>
