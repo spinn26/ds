@@ -165,11 +165,12 @@ const visibleHeaders = computed(() => headers.value.filter(h => columnVisible.va
 
 const filteredItems = computed(() => {
   let arr = items.value;
+  // qualFilter оставляем client-side: квалификация хранится в logs, не на
+  // consultant-таблице — фильтрация на server-side слишком дорого.
+  // activityFilter теперь идёт на server (см. loadData) — пагинация и
+  // total остаются консистентными.
   if (qualFilter.value) {
     arr = arr.filter(i => i.current?.levelNum === qualFilter.value || i.previous?.levelNum === qualFilter.value);
-  }
-  if (activityFilter.value) {
-    arr = arr.filter(i => i.activity === activityFilter.value);
   }
   return arr;
 });
@@ -196,6 +197,7 @@ async function loadData() {
   try {
     const params = { page: page.value, per_page: perPage.value, month: month.value };
     if (search.value) params.search = search.value;
+    if (activityFilter.value) params.activity = activityFilter.value;
     if (nonZeroOnly.value) params.non_zero_only = 1;
     const { data } = await api.get('/admin/qualifications', { params });
     items.value = data.data || [];

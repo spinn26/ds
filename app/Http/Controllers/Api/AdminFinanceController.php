@@ -226,6 +226,19 @@ class AdminFinanceController extends Controller
             $consultantQuery->where('consultantPersonName', 'ilike', '%' . $request->search . '%');
         }
 
+        // Фильтр по статусу активности — переносим на server-side, чтобы
+        // pagination и total были консистентны (раньше фильтровалось
+        // в массиве на фронте поверх 25-row страницы — total врал).
+        if ($request->filled('activity')) {
+            $activityMap = ['active' => 1, 'terminated' => 3, 'registered' => 4, 'excluded' => 5];
+            $activityId = $activityMap[$request->activity] ?? null;
+            if ($activityId !== null) {
+                $consultantQuery->whereIn('consultant', function ($sub) use ($activityId) {
+                    $sub->select('id')->from('consultant')->where('activity', $activityId);
+                });
+            }
+        }
+
         $consultantIds = $consultantQuery->distinct()->pluck('consultant')->all();
 
         // Фильтр «только ненулевые логи»
