@@ -156,4 +156,9 @@ const selectedProxy = computed({
 .dtw-skeleton :deep(.v-skeleton-loader__table-tbody) { padding: 0 16px; }
 .dtw-table :deep(.v-data-table__td) { font-variant-numeric: tabular-nums; }
 .dtw-table :deep(.v-data-table__tr:hover .v-data-table__td) { background: rgba(var(--v-theme-primary), 0.03); }
+.dtw-table :deep(.v-table__wrapper) { overflow-x: auto; }
+@media (max-width: 600px) {
+  .dtw-toolbar { padding: 8px !important; }
+  .dtw-search { max-width: 100%; min-width: 0; flex: 1 1 100%; }
+}
 </style>

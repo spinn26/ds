@@ -111,10 +111,6 @@
     </v-dialog>
 
     <v-snackbar v-model="snack.open" :color="snack.color" timeout="4000">{{ snack.text }}</v-snackbar>
-
-    <v-overlay v-model="loading" class="align-center justify-center" persistent>
-      <v-progress-circular indeterminate size="64" />
-    </v-overlay>
   </div>
 </template>
 

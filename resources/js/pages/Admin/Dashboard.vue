@@ -158,9 +158,9 @@
       </v-col>
     </v-row>
 
-    <v-overlay v-model="loading" class="align-center justify-center" persistent>
-      <v-progress-circular indeterminate size="64" />
-    </v-overlay>
+    <!-- Линейный индикатор загрузки сверху страницы — не блокирует UI -->
+    <v-progress-linear v-if="loading" indeterminate color="primary"
+      style="position:fixed;top:0;left:0;right:0;z-index:2000" />
   </div>
 </template>
 

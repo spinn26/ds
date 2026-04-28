@@ -91,9 +91,8 @@
       </v-data-table>
     </v-card>
 
-    <v-overlay v-model="matrixLoading" class="align-center justify-center" persistent>
-      <v-progress-circular indeterminate size="64" />
-    </v-overlay>
+    <v-progress-linear v-if="matrixLoading" indeterminate color="primary"
+      style="position:fixed;top:0;left:0;right:0;z-index:2000" />
   </div>
 </template>
 

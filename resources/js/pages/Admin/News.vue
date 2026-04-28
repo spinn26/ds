@@ -10,7 +10,7 @@
       <div class="d-flex justify-end px-3 pt-2">
         <ColumnVisibilityMenu :headers="headers" v-model:visible="columnVisible" storage-key="news-cols" />
       </div>
-      <v-data-table :items="items" :headers="visibleHeaders" density="compact" hover no-data-text="Нет новостей">
+      <v-data-table :items="items" :headers="visibleHeaders" density="compact" hover>
         <template #item.type="{ value }">
           <StatusChip
             :color="value === 'warning' ? 'warning' : value === 'success' ? 'success' : 'primary'"
@@ -27,6 +27,9 @@
         </template>
         <template #item.actions="{ item }">
           <ActionsCell @edit="openEdit(item)" @delete="confirmDelete(item)" />
+        </template>
+        <template #no-data>
+          <EmptyState message="Нет новостей" icon="mdi-newspaper-variant-outline" />
         </template>
       </v-data-table>
     </v-card>
@@ -66,7 +69,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import {
-  PageHeader, DialogShell, StatusChip, BooleanCell, ActionsCell, FormErrors, RichTextEditor, ColumnVisibilityMenu,
+  PageHeader, DialogShell, StatusChip, BooleanCell, ActionsCell, FormErrors, RichTextEditor, ColumnVisibilityMenu, EmptyState,
 } from '../../components';
 import { useCrud } from '../../composables/useCrud';
 import { fmtDate } from '../../composables/useDesign';

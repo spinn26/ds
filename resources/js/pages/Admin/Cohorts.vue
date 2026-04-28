@@ -10,13 +10,16 @@
       <div class="d-flex justify-end px-3 pb-2">
         <ColumnVisibilityMenu :headers="headers" v-model:visible="columnVisible" storage-key="cohorts-cols" />
       </div>
-      <v-data-table :items="rows" :headers="visibleHeaders" density="comfortable" hover no-data-text="Нет данных за последние 12 месяцев">
+      <v-data-table :items="rows" :headers="visibleHeaders" density="comfortable" hover>
         <template #item.cohort_month="{ value }">{{ formatMonth(value) }}</template>
         <template #item.retention_pct="{ item }">
           <span :class="retentionClass(item)">{{ retention(item) }}%</span>
         </template>
         <template #item.termination_pct="{ item }">
           <span :class="terminationClass(item)">{{ termination(item) }}%</span>
+        </template>
+        <template #no-data>
+          <EmptyState message="Нет данных за последние 12 месяцев" icon="mdi-chart-bell-curve" />
         </template>
       </v-data-table>
     </v-card>
@@ -26,7 +29,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
-import { PageHeader, ColumnVisibilityMenu } from '../../components';
+import { PageHeader, ColumnVisibilityMenu, EmptyState } from '../../components';
 
 const rows = ref([]);
 
