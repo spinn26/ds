@@ -357,4 +357,19 @@ class AdminFinanceController extends Controller
     {
         return response()->json(['data' => [], 'message' => 'В разработке']);
     }
+
+    /**
+     * Месячная финализация: применить штрафы Отрыв/ОП к комиссиям месяца.
+     * Идемпотентно. Защищено от запуска по закрытому периоду.
+     */
+    public function finalizeMonth(Request $request, \App\Services\MonthlyFinalisationRunner $runner): JsonResponse
+    {
+        $request->validate([
+            'year' => ['required', 'integer', 'min:2020', 'max:2100'],
+            'month' => ['required', 'integer', 'min:1', 'max:12'],
+        ]);
+
+        $stats = $runner->applyForMonth((int) $request->year, (int) $request->month);
+        return response()->json($stats);
+    }
 }

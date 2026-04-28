@@ -161,6 +161,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/admin/transfers', [\App\Http\Controllers\Api\AdminDataController::class, 'transfers']);
 
         Route::get('/admin/transactions', [\App\Http\Controllers\Api\AdminFinanceController::class, 'transactions']);
+        Route::post('/admin/finalize-month', [\App\Http\Controllers\Api\AdminFinanceController::class, 'finalizeMonth']);
         Route::get('/admin/commissions', [\App\Http\Controllers\Api\AdminFinanceController::class, 'commissions']);
         Route::get('/admin/pool', [\App\Http\Controllers\Api\AdminFinanceController::class, 'pool']);
         Route::get('/admin/qualifications', [\App\Http\Controllers\Api\AdminFinanceController::class, 'qualifications']);
