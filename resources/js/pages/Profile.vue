@@ -36,13 +36,16 @@
 
           <v-row dense>
             <v-col cols="12" sm="4">
-              <v-text-field v-model="form.lastName" label="Фамилия" disabled prepend-inner-icon="mdi-lock" />
+              <v-text-field v-model="form.lastName" label="Фамилия" disabled prepend-inner-icon="mdi-lock"
+                hint="Изменение возможно только через техподдержку" persistent-hint />
             </v-col>
             <v-col cols="12" sm="4">
-              <v-text-field v-model="form.firstName" label="Имя" disabled prepend-inner-icon="mdi-lock" />
+              <v-text-field v-model="form.firstName" label="Имя" disabled prepend-inner-icon="mdi-lock"
+                hint="Изменение возможно только через техподдержку" persistent-hint />
             </v-col>
             <v-col cols="12" sm="4">
-              <v-text-field v-model="form.patronymic" label="Отчество" disabled prepend-inner-icon="mdi-lock" />
+              <v-text-field v-model="form.patronymic" label="Отчество" disabled prepend-inner-icon="mdi-lock"
+                hint="Изменение возможно только через техподдержку" persistent-hint />
             </v-col>
             <v-col cols="12" sm="4">
               <v-text-field v-model="form.birthDate" label="Дата рождения" type="date" />
