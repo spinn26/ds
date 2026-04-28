@@ -354,7 +354,19 @@ function statusColor(s) {
 async function load() {
   loading.value = true;
   try {
-    const { data } = await api.get('/admin/payment-registry', { params: { ...filters } });
+    // Laravel boolean-валидатор не принимает строки 'true'/'false' из
+    // query string — приводим к 1/0 явно.
+    const params = {
+      year: filters.year,
+      month: filters.month,
+      search: filters.search || undefined,
+      status: filters.status || undefined,
+      activity: filters.activity || undefined,
+      nonZero: filters.nonZero ? 1 : 0,
+      withDetachment: filters.withDetachment ? 1 : 0,
+      withOp: filters.withOp ? 1 : 0,
+    };
+    const { data } = await api.get('/admin/payment-registry', { params });
     items.value = data.items || [];
     totals.value = data.totals || {};
     if (data.activityOptions?.length) activityOptions.value = data.activityOptions;

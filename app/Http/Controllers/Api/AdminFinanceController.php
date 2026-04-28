@@ -320,8 +320,11 @@ class AdminFinanceController extends Controller
     /** Прочие начисления — CRUD */
     public function charges(Request $request): JsonResponse
     {
+        // LEFT JOIN — чтобы строки с битыми FK на consultant не выпадали
+        // (legacy-данные могут ссылаться на consultant.id, который удалён
+        // или отсутствует). Имя резолвим через COALESCE с fallback.
         $query = DB::table('other_accruals')
-            ->join('consultant', 'other_accruals.consultant', '=', 'consultant.id')
+            ->leftJoin('consultant', 'other_accruals.consultant', '=', 'consultant.id')
             ->select(
                 'other_accruals.*',
                 'consultant.personName as consultantName'
@@ -350,7 +353,7 @@ class AdminFinanceController extends Controller
             ->get()
             ->map(fn ($r) => [
                 'id' => $r->id,
-                'consultantName' => $r->consultantName,
+                'consultantName' => $r->consultantName ?: ('Консультант #' . $r->consultant),
                 'consultant' => $r->consultant,
                 'type' => $r->type,
                 'amount' => round((float) $r->amount, 2),
