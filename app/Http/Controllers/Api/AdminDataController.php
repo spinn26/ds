@@ -71,6 +71,17 @@ class AdminDataController extends Controller
                 $isClient = $c->person ? isset($personClients[$c->person]) : false;
                 $platformAccess = $webUser && ! ($webUser->isBlocked ?? false);
 
+                // «Дата смены статуса» (per spec ✅Партнеры §1.2):
+                // - Активен → +12 мес от dateActivity
+                // - Зарегистрирован → +90 дней от dateCreated
+                $statusChangeDate = null;
+                $activityValue = $c->activity?->value;
+                if ($activityValue == 1 && $c->dateActivity) { // Active
+                    $statusChangeDate = \Carbon\Carbon::parse($c->dateActivity)->addYear()->format('Y-m-d');
+                } elseif ($activityValue == 4 && $c->dateCreated) { // Registered
+                    $statusChangeDate = \Carbon\Carbon::parse($c->dateCreated)->addDays(90)->format('Y-m-d');
+                }
+
                 return [
                     'id' => $c->id,
                     'personId' => $c->person,
@@ -83,6 +94,8 @@ class AdminDataController extends Controller
                     'groupVolumeCumulative' => round((float) ($c->groupVolumeCumulative ?? 0), 2),
                     'participantCode' => $c->participantCode,
                     'dateCreated' => $c->dateCreated?->format('d.m.Y'),
+                    'createdAt' => $c->dateCreated?->format('d.m.Y'),
+                    'statusChangeDate' => $statusChangeDate,
                     'terminationCount' => $c->terminationCount ?? 0,
                     'email' => $personData?->email ?? null,
                     'phone' => $personData?->phone ?? null,

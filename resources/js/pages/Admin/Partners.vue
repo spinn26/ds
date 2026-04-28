@@ -91,9 +91,29 @@
       class="partners-table"
       @update:options="onOptions"
     >
+      <template #item.id="{ item }">
+        <div class="d-flex align-center ga-1">
+          <span>{{ item.id }}</span>
+          <v-btn icon="mdi-content-copy" size="x-small" variant="text"
+            title="Скопировать ID"
+            @click.stop="copyToClipboard(item.id)" />
+        </div>
+      </template>
       <template #item.activityName="{ value }">
         <StatusChip v-if="value" :value="value" kind="activityName" size="x-small" :text="value" />
         <span v-else>—</span>
+      </template>
+      <template #item.isClient="{ item }">
+        <v-icon :color="item.isClient ? 'success' : 'grey-lighten-1'" size="20"
+          :title="item.isClient ? 'Партнёр является клиентом' : 'Не клиент'">
+          {{ item.isClient ? 'mdi-check-circle' : 'mdi-minus-circle-outline' }}
+        </v-icon>
+      </template>
+      <template #item.statusChangeDate="{ item }">
+        <span v-if="item.statusChangeDate" :class="isStatusChangeSoon(item) ? 'text-error font-weight-bold' : ''">
+          {{ fmtDate(item.statusChangeDate) }}
+        </span>
+        <span v-else class="text-medium-emphasis">—</span>
       </template>
       <template #item.active="{ value }">
         <v-icon :color="value ? 'success' : 'grey'" size="small">
@@ -313,17 +333,21 @@ const activityOptions = [
 // Column metadata: `always` = never hideable (ФИО / Активность / Действия);
 // `default` = shown out of the box; others are opt-in via the «Колонки» menu.
 const allColumns = [
+  { title: 'ID',               key: 'id',             width: 80, default: true },
   { title: 'ФИО',              key: 'personName',     always: true },
   { title: 'Активность',       key: 'activityName',   width: 130, always: true },
   { title: 'Код',              key: 'participantCode', width: 100, default: true },
   { title: 'Пригласивший',     key: 'inviterName',    default: true },
-  { title: 'Доступ',           key: 'platformAccess', width: 80, sortable: false, default: true },
+  { title: 'Клиент',           key: 'isClient',       width: 80, default: true,
+    title2: 'Партнёр является клиентом (есть запись в client с тем же email)' },
+  { title: 'Доступ',           key: 'platformAccess', width: 80, sortable: false },
   { title: 'Email',            key: 'email' },
   { title: 'Телефон',          key: 'phone',          width: 140 },
   { title: 'Дата рождения',    key: 'birthDate',      width: 130 },
   { title: 'Активен',          key: 'active',         width: 80 },
   { title: 'Куратор',          key: 'curatorName' },
   { title: 'Дата регистрации', key: 'createdAt',      width: 140 },
+  { title: 'Смена статуса',    key: 'statusChangeDate', width: 140, default: true },
   { title: '',                 key: 'actions',        sortable: false, width: 60, always: true },
 ];
 
@@ -366,6 +390,18 @@ function onOptions(opts) {
   page.value = opts.page;
   if (opts.itemsPerPage) perPage.value = opts.itemsPerPage;
   loadData();
+}
+
+// === per spec ✅Партнеры.md §1.2 helpers ===
+function copyToClipboard(text) {
+  if (!text) return;
+  navigator.clipboard?.writeText(String(text));
+}
+
+function isStatusChangeSoon(item) {
+  if (!item.statusChangeDate) return false;
+  const days = (new Date(item.statusChangeDate) - new Date()) / 86400000;
+  return days >= 0 && days <= 30;
 }
 
 async function loadData() {

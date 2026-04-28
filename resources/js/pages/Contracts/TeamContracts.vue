@@ -67,6 +67,7 @@ const headers = [
   { title: 'Номер контракта', key: 'number', width: 140, cellProps: nowrap },
   { title: 'ФИО клиента', key: 'clientName', cellProps: nowrap },
   { title: 'ФИО ФК', key: 'consultantName', cellProps: nowrap },
+  { title: 'Дата добавления', key: 'createDate', width: 130, cellProps: nowrap },
   { title: 'Дата открытия', key: 'openDate', width: 130, cellProps: nowrap },
   { title: 'Продукт', key: 'productName', cellProps: nowrap },
   { title: 'Программа', key: 'programName', cellProps: nowrap },
