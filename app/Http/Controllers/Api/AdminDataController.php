@@ -940,64 +940,87 @@ class AdminDataController extends Controller
 
     /** Акцепт документов — список */
     /** Акцепт документов — реестр всех партнёров с фактом акцепта */
+    /**
+     * Per spec ✅Акцепт документов.md:
+     * Главная строка — партнёр + индикатор «X из 5». При раскрытии —
+     * строка на каждый из 5 системных документов с галочкой и timestamp.
+     * Колонка «Источник» убрана (по спеке источник по умолчанию — Платформа).
+     */
     public function acceptance(Request $request): JsonResponse
     {
-        $query = DB::table('consultant')
-            ->whereNull('dateDeleted')
-            ->select('id', 'personName', 'acceptance');
+        $query = DB::table('consultant')->whereNull('dateDeleted');
 
         if ($request->filled('search')) {
             $query->where('personName', 'ilike', '%' . $request->search . '%');
-        }
-
-        // Фильтр: акцепт да/нет
-        if ($request->filled('accepted')) {
-            if ($request->accepted === 'true') {
-                $query->where('acceptance', true);
-            } else {
-                $query->where(function ($q) {
-                    $q->where('acceptance', false)->orWhereNull('acceptance');
-                });
-            }
         }
 
         $total = $query->count();
         $rows = $query->orderBy('personName')
             ->offset($this->paginationOffset($request))
             ->limit($this->paginationPerPage($request))
-            ->get();
+            ->get(['id', 'personName', 'acceptance']);
 
-        // Batch load latest acceptance logs per consultant
-        $consultantIds = $rows->pluck('id')->filter()->unique();
-        $acceptanceLogs = collect();
-        if ($consultantIds->isNotEmpty()) {
-            // Get latest log per consultant using a subquery
-            $latestLogIds = DB::table('logAcceptance')
-                ->whereIn('consultant', $consultantIds)
-                ->selectRaw('MAX(id) as id')
-                ->groupBy('consultant')
-                ->pluck('id');
-            if ($latestLogIds->isNotEmpty()) {
-                $acceptanceLogs = DB::table('logAcceptance')
-                    ->whereIn('id', $latestLogIds)
-                    ->get()
-                    ->keyBy('consultant');
-            }
+        $consultantIds = $rows->pluck('id')->all();
+
+        // Все документы (5 системных)
+        $allDocs = DB::table('agreementPartnersDocuments')
+            ->orderBy('number')
+            ->get(['id', 'name', 'link', 'number']);
+        $totalDocs = $allDocs->count() ?: 5;
+
+        // Все акцепты этих консультантов (latest per (consultant, document))
+        $latestPerPair = DB::table('partnerAcceptance')
+            ->whereIn('consultant', $consultantIds)
+            ->where('accepted', true)
+            ->selectRaw('consultant, "documentType", MAX("dateAccepted") as last_date')
+            ->groupBy(['consultant', 'documentType'])
+            ->get()
+            ->groupBy('consultant');
+
+        $data = $rows->map(function ($c) use ($allDocs, $latestPerPair, $totalDocs) {
+            $accs = $latestPerPair[$c->id] ?? collect();
+            $byDoc = $accs->keyBy('documentType');
+            $documents = $allDocs->map(fn ($d) => [
+                'id' => $d->id,
+                'name' => $d->name,
+                'link' => $d->link,
+                'number' => $d->number,
+                'accepted' => isset($byDoc[$d->id]),
+                'dateAccepted' => $byDoc[$d->id]->last_date ?? null,
+            ]);
+            $signed = $documents->where('accepted', true)->count();
+            return [
+                'id' => $c->id,
+                'personName' => $c->personName,
+                'signedCount' => $signed,
+                'totalCount' => $totalDocs,
+                'fullyAccepted' => $signed >= $totalDocs,
+                'documents' => $documents,
+            ];
+        });
+
+        // Filter «Акцептовано/не акцептовано» (выполняем после агрегации, чтобы
+        // не переписывать оптимизированный запрос — данных уже в памяти).
+        if ($request->filled('accepted')) {
+            $expect = $request->accepted === 'true';
+            $data = $data->filter(fn ($r) => $r['fullyAccepted'] === $expect)->values();
         }
 
-        $data = $rows->map(function ($c) use ($acceptanceLogs) {
-                $log = $acceptanceLogs[$c->id] ?? null;
+        // Filter по типу документа: оставляем только партнёров, у кого выбранный
+        // документ имеет нужный статус (по умолчанию — не акцептован).
+        if ($request->filled('document_type')) {
+            $docId = (int) $request->document_type;
+            $data = $data->filter(function ($r) use ($docId) {
+                $d = collect($r['documents'])->firstWhere('id', $docId);
+                return $d && ! $d['accepted'];
+            })->values();
+        }
 
-                return [
-                    'id' => $c->id,
-                    'personName' => $c->personName,
-                    'accepted' => (bool) $c->acceptance,
-                    'dateAccepted' => $log->dateAccepted ?? null,
-                    'source' => $log->source ?? null,
-                ];
-            });
-
-        return response()->json(['data' => $data, 'total' => $total]);
+        return response()->json([
+            'data' => $data,
+            'total' => $total,
+            'documents' => $allDocs,
+        ]);
     }
 
     /** Менеджер контрактов */
