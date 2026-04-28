@@ -20,6 +20,13 @@ use App\Services\PeriodFreezeService;
  */
 class CommissionCalculator
 {
+    /**
+     * ID плейсхолдер-консультанта «Неизвестный консультант».
+     * Per spec ✅Бизнес-логика «Неизвестного консультанта».md:
+     *   ставка 0%, 100% удерживается компанией, цепочка не строится.
+     */
+    public const UNKNOWN_CONSULTANT_ID = 536;
+
     public function __construct(
         private readonly PartnerStatusService $statusService,
         private readonly PeriodFreezeService $periodFreeze,
@@ -118,6 +125,13 @@ class CommissionCalculator
         $personalVolume = $this->computePointsForProgram(
             $programRow, $amountNoVat, $amountRub, $dsComPercent
         );
+
+        // Per spec ✅Бизнес-логика «Неизвестного консультанта».md:
+        // если контракт привязан к плейсхолдер-аккаунту, ставка = 0%
+        // и каскад не строится — 100% дохода остаётся компании.
+        if ((int) $consultantId === self::UNKNOWN_CONSULTANT_ID) {
+            return $this->writeZeroForUnknownConsultant($transactionId, $consultantId, $personalVolume, $tx);
+        }
 
         // Получить квалификацию прямого партнёра на момент транзакции.
         // Per spec §7: a new rate takes effect from the 1st of the month AFTER
@@ -368,5 +382,47 @@ class CommissionCalculator
         return DB::table('commission')->insertGetId(array_merge($data, [
             'createdAt' => now(),
         ]));
+    }
+
+    /**
+     * Транзакция привязана к «Неизвестному консультанту»:
+     * ставка 0%, цепочки нет, в commission пишется 1 запись с нулём
+     * (для аудит-следа), 100% Дохода ДС остаётся компании.
+     */
+    private function writeZeroForUnknownConsultant(int $transactionId, int $consultantId, float $personalVolume, object $tx): array
+    {
+        $this->createCommission([
+            'transaction' => $transactionId,
+            'consultant' => $consultantId,
+            'chainOrder' => 1,
+            'type' => 'transaction',
+            'personalVolume' => round($personalVolume, 6),
+            'groupVolume' => round($personalVolume, 6),
+            'groupBonus' => 0,
+            'groupBonusRub' => 0,
+            'percent' => 0,
+            'amount' => 0,
+            'amountRUB' => 0,
+            'amountUSD' => 0,
+            'currency' => $tx->currency ?? 67,
+            'date' => $tx->date,
+            'dateMonth' => $tx->dateMonth,
+            'dateYear' => $tx->dateYear,
+            'comment' => 'Неизвестный консультант: 0% (спека ✅Бизнес-логика «Неизвестного консультанта».md)',
+        ]);
+
+        DB::table('transaction')->where('id', $transactionId)->update([
+            'personalVolume' => round($personalVolume, 6),
+            'groupVolume' => round($personalVolume, 6),
+        ]);
+
+        return [
+            'success' => true,
+            'transactionId' => $transactionId,
+            'consultantId' => (int) $consultantId,
+            'personalVolume' => round($personalVolume, 6),
+            'commissionsCount' => 1,
+            'unknownConsultant' => true,
+        ];
     }
 }

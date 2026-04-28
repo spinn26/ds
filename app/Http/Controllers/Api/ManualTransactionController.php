@@ -411,6 +411,34 @@ class ManualTransactionController extends Controller
 
         // Цепочка наставников: вверх по inviter, маржинальная разница процентов.
         $consultantId = (int) $contract->consultant;
+
+        // Spec ✅Бизнес-логика «Неизвестного консультанта»: 0% и без каскада.
+        if ($consultantId === \App\Services\CommissionCalculator::UNKNOWN_CONSULTANT_ID) {
+            return [
+                'ready' => true,
+                'amountRUB' => round($amountRub, 2),
+                'amountNoVat' => round($amountNoVat, 2),
+                'vat' => round($amountRub - $amountNoVat, 2),
+                'vatPercent' => $vatPercent,
+                'dsCommissionPercentage' => round($dsPercent, 4),
+                'incomeDS' => round($incomeDS, 2),
+                'personalVolume' => round($points, 4),
+                'partnersTotal' => 0,
+                'profitDS' => round($incomeDS, 2),
+                'chain' => [[
+                    'consultantId' => $consultantId,
+                    'name' => 'Неизвестный консультант',
+                    'percent' => 0,
+                    'lp' => round($points, 2),
+                    'points' => 0,
+                    'sum' => 0,
+                    'isDirect' => true,
+                    'isUnknown' => true,
+                ]],
+                'unknownConsultant' => true,
+            ];
+        }
+
         $directQual = $this->resolveQual($consultantId, $draft->date);
         $directPercent = $directQual['percent'];
 
