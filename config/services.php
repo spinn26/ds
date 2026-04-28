@@ -44,4 +44,12 @@ return [
         'api_key' => env('GOOGLE_SHEETS_API_KEY'),
     ],
 
+    // Insmart integration (per spec ✅Инсмарт.md).
+    // webhook_secret — shared secret для проверки X-Insmart-Secret.
+    'insmart' => [
+        'webhook_secret' => env('INSMART_WEBHOOK_SECRET'),
+        'api_base_url' => env('INSMART_API_BASE_URL', 'https://api.insmart.ru/v1'),
+        'api_key' => env('INSMART_API_KEY'),
+    ],
+
 ];

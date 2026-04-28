@@ -577,6 +577,7 @@ const menuItems = [
 
   { group: 'Развитие', partner: true },
   { label: 'Обучение', icon: 'mdi-school-outline', path: '/education', partner: true },
+  { label: 'Инструкции', icon: 'mdi-book-open-variant', path: '/instructions', partner: true },
   { label: 'Продукты', icon: 'mdi-package-variant-closed', path: '/products', partner: true },
   { label: 'Конкурсы и события', icon: 'mdi-trophy-outline', path: '/contests', partner: true },
 
@@ -626,6 +627,7 @@ const menuItems = [
   { label: 'Аналитика чата', icon: 'mdi-chart-box-outline', path: '/manage/chat/analytics', adminSection: 'chat-analytics' },
   { label: 'Отчёты', icon: 'mdi-file-chart', path: '/manage/reports', adminSection: 'reports' },
   { label: 'Валюты и НДС', icon: 'mdi-currency-usd', path: '/manage/currencies', adminSection: 'currencies' },
+  { label: 'Инструкции', icon: 'mdi-book-edit-outline', path: '/manage/instructions', adminSection: 'products' },
 
   // Аналитика — для руководителя / админа
   { group: 'Аналитика', adminSection: 'owner-dashboard' },

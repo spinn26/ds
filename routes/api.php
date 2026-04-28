@@ -25,6 +25,12 @@ Route::prefix('v1')->group(function () {
         Route::post('/auth/check-referral', [AuthController::class, 'checkReferral']);
     });
 
+    // Insmart webhook — без auth:sanctum (внешний источник),
+    // защищён shared-secret в заголовке X-Insmart-Secret + throttle.
+    Route::middleware('throttle:60,1')->group(function () {
+        Route::post('/webhooks/insmart/paid', [\App\Http\Controllers\Api\InsmartWebhookController::class, 'paid']);
+    });
+
     Route::middleware('auth:sanctum')->group(function () {
         Route::get('/auth/me', [AuthController::class, 'me']);
         Route::post('/auth/logout', [AuthController::class, 'logout']);
@@ -104,6 +110,8 @@ Route::prefix('v1')->group(function () {
         Route::post('/requisites/check-inn', [ProductController::class, 'checkInn']);
         Route::post('/requisites', [ProductController::class, 'setupRequisites']);
         Route::get('/contests', [ContestController::class, 'index']);
+        Route::get('/instructions', [\App\Http\Controllers\Api\InstructionController::class, 'partnerList']);
+        Route::get('/instructions/{slug}', [\App\Http\Controllers\Api\InstructionController::class, 'show']);
         Route::get('/education/courses', [\App\Http\Controllers\Api\EducationController::class, 'courses']);
         Route::get('/education/courses/{id}', [\App\Http\Controllers\Api\EducationController::class, 'show'])->whereNumber('id');
         Route::post('/education/courses/{id}/test', [\App\Http\Controllers\Api\EducationController::class, 'submitTest'])->whereNumber('id');
@@ -322,6 +330,11 @@ Route::prefix('v1')->group(function () {
         Route::delete('/admin/products/{id}/programs/{programId}', [\App\Http\Controllers\Api\AdminProductController::class, 'destroyProgram']);
 
         // Admin Education CRUD
+        Route::get('/admin/instructions', [\App\Http\Controllers\Api\InstructionController::class, 'adminList']);
+        Route::post('/admin/instructions', [\App\Http\Controllers\Api\InstructionController::class, 'adminStore']);
+        Route::put('/admin/instructions/{id}', [\App\Http\Controllers\Api\InstructionController::class, 'adminUpdate'])->whereNumber('id');
+        Route::delete('/admin/instructions/{id}', [\App\Http\Controllers\Api\InstructionController::class, 'adminDestroy'])->whereNumber('id');
+
         Route::get('/admin/education/courses', [\App\Http\Controllers\Api\AdminEducationController::class, 'courses']);
         Route::post('/admin/education/courses', [\App\Http\Controllers\Api\AdminEducationController::class, 'storeCourse']);
         Route::put('/admin/education/courses/{id}', [\App\Http\Controllers\Api\AdminEducationController::class, 'updateCourse']);

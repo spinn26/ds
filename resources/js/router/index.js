@@ -30,6 +30,7 @@ const routes = [
             { path: 'chat', component: () => import('../pages/Chat/PartnerChat.vue') },
             { path: 'communication', redirect: '/chat' },
             { path: 'help', component: () => import('../pages/Help.vue') },
+            { path: 'instructions', component: () => import('../pages/Instructions.vue') },
             { path: 'profile', component: () => import('../pages/Profile.vue') },
 
             // Staff management pages (inside main layout, staff-only)
@@ -43,6 +44,7 @@ const routes = [
             { path: 'manage/acceptance', component: () => import('../pages/Admin/Acceptance.vue'), meta: { staff: true } },
             { path: 'manage/requisites', component: () => import('../pages/Admin/Requisites.vue'), meta: { staff: true } },
             { path: 'manage/transfers', component: () => import('../pages/Admin/Transfers.vue'), meta: { staff: true } },
+            { path: 'manage/instructions', component: () => import('../pages/Admin/Instructions.vue'), meta: { staff: true } },
             { path: 'manage/transactions/import', component: () => import('../pages/Admin/TransactionImport.vue'), meta: { staff: true } },
             { path: 'manage/transactions', component: () => import('../pages/Admin/Transactions.vue'), meta: { staff: true } },
             { path: 'manage/commissions', component: () => import('../pages/Admin/Commissions.vue'), meta: { staff: true } },
