@@ -97,10 +97,12 @@
               <v-chip size="x-small" color="warning" variant="tonal" class="ml-1">{{ drafts.length }}</v-chip>
             </span>
             <v-spacer />
+            <v-switch v-model="showProduct" label="Показать продукт" hide-details density="compact" color="primary" />
+            <v-switch v-model="showExtra" label="Показать доп. настройки" hide-details density="compact" color="primary" />
             <ColumnVisibilityMenu :headers="draftHeaders"
               v-model:visible="draftColsVisible"
               storage-key="manual-tx-drafts-cols"
-              :always-visible="['icon', 'actions']" />
+              :always-visible="['select', 'icon', 'actions']" />
           </v-card-title>
 
           <v-card-text v-if="!drafts.length" class="text-center text-medium-emphasis py-4">
@@ -119,7 +121,10 @@
               <template v-for="d in drafts" :key="d.id">
                 <tr :class="{ 'tx-row-ready': d.preview?.ready }">
                   <td v-for="h in visibleDraftHeaders" :key="h.key + '-' + d.id" :class="h.tdClass">
-                    <template v-if="h.key === 'icon'">
+                    <template v-if="h.key === 'select'">
+                      <v-checkbox v-model="selectedDraftIds" :value="d.id" hide-details density="compact" />
+                    </template>
+                    <template v-else-if="h.key === 'icon'">
                       <v-icon size="20" color="primary">mdi-calculator</v-icon>
                     </template>
                     <template v-else-if="h.key === 'number'">
@@ -190,8 +195,16 @@
                         @click="openRateModal(d)" />
                     </template>
                     <template v-else-if="h.key === 'incomeDS'">
-                      <span v-if="d.preview?.ready">{{ fmt2(d.preview.incomeDS) }} RUB</span>
-                      <span v-else class="text-medium-emphasis">—</span>
+                      <template v-if="showExtra && d.customCommission">
+                        <v-text-field :model-value="d.dsCommissionAbsolute" type="number" density="compact" hide-details variant="plain"
+                          style="max-width:120px; display:inline-block"
+                          reverse @update:model-value="v => patchField(d, 'dsCommissionAbsolute', v)" />
+                        RUB
+                      </template>
+                      <template v-else>
+                        <span v-if="d.preview?.ready">{{ fmt2(d.preview.incomeDS) }} RUB</span>
+                        <span v-else class="text-medium-emphasis">—</span>
+                      </template>
                     </template>
                     <template v-else-if="h.key === 'noVatRub'">
                       <span v-if="d.preview?.ready">{{ fmt2(d.preview.amountNoVat) }} RUB</span>
@@ -250,6 +263,14 @@
                   </td>
                 </tr>
 
+                <tr v-if="showExtra" class="tx-extra-row">
+                  <td :colspan="visibleDraftHeaders.length" class="pa-2">
+                    <v-checkbox :model-value="d.customCommission"
+                      :label="'Своя комиссия для ' + contractNum(d) + ' — введите Доход ДС вручную, %ДС посчитается обратно (для Брокер+ и подобных)'"
+                      hide-details density="compact" color="warning"
+                      @update:model-value="v => patchField(d, 'customCommission', v)" />
+                  </td>
+                </tr>
               </template>
 
               <!-- Строка-итог снизу таблицы -->
@@ -313,15 +334,19 @@
             <div class="d-flex flex-wrap ga-2">
               <v-chip size="small" :color="cl.amounts ? 'success' : 'default'"
                 :prepend-icon="cl.amounts ? 'mdi-check-circle' : 'mdi-checkbox-blank-circle-outline'">
-                Введены суммы
+                Введены суммы транзакций
               </v-chip>
               <v-chip size="small" :color="cl.dates ? 'success' : 'default'"
                 :prepend-icon="cl.dates ? 'mdi-check-circle' : 'mdi-checkbox-blank-circle-outline'">
-                Введены даты
+                Введены даты транзакций
+              </v-chip>
+              <v-chip size="small" :color="!calculating ? 'success' : 'default'"
+                :prepend-icon="!calculating ? 'mdi-check-circle' : 'mdi-loading'">
+                Расчёты не ведутся
               </v-chip>
               <v-chip size="small" :color="cl.calculated ? 'success' : 'warning'"
                 :prepend-icon="cl.calculated ? 'mdi-check-circle' : 'mdi-checkbox-blank-circle-outline'">
-                Рассчитаны комиссии
+                Рассчитаны комиссии по всем транзакциям
               </v-chip>
             </div>
           </v-card-text>
@@ -404,7 +429,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
 import PageHeader from '../../components/PageHeader.vue';
@@ -458,10 +483,11 @@ const visibleContractHeaders = computed(() =>
   contractHeaders.filter(h => contractColsVisible.value[h.key] !== false)
 );
 
-// Колонки таблицы черновиков. По умолчанию product/program/supplier/yearKV
-// скрыты (legacy «Показать продукт» / «доп. настройки»). Пользователь
-// открывает их через ColumnVisibilityMenu.
+// Колонки таблицы черновиков. select/icon/actions — always-visible.
+// Тогглы «Показать продукт» / «Показать доп. настройки» — quick-presets,
+// которые пакетно меняют видимость связанных колонок в draftColsVisible.
 const draftHeaders = [
+  { title: '', key: 'select', style: 'width:36px' },
   { title: '', key: 'icon', style: 'width:32px' },
   { title: '№', key: 'number' },
   { title: 'Клиент', key: 'client' },
@@ -522,6 +548,21 @@ async function loadContracts() {
 const drafts = ref([]);
 const adding = ref(false);
 const fixing = ref(false);
+const selectedDraftIds = ref([]);
+
+// Тогглы-пресеты, синхронизированы с draftColsVisible (две тройки колонок).
+const showProduct = ref(false);
+const showExtra = ref(false);
+
+watch(showProduct, (v) => {
+  draftColsVisible.value = {
+    ...draftColsVisible.value,
+    product: v, program: v, supplier: v,
+  };
+});
+watch(showExtra, (v) => {
+  draftColsVisible.value = { ...draftColsVisible.value, yearKV: v };
+});
 
 function isRateChangeable(d) {
   if (!d.productId || !d.productName) return false;
@@ -622,17 +663,21 @@ async function clearAll() {
   drafts.value = [];
 }
 
-// Готовые к расчёту: есть сумма и дата.
+// Если есть выбранные чекбоксами — работаем по выбору, иначе по всем строкам.
+function targetDrafts() {
+  if (selectedDraftIds.value.length) {
+    return drafts.value.filter(d => selectedDraftIds.value.includes(d.id));
+  }
+  return drafts.value;
+}
 const calculableIds = computed(() =>
-  drafts.value.filter(d => d.amount && d.date).map(d => d.id)
+  targetDrafts().filter(d => d.amount && d.date).map(d => d.id)
 );
-// Готовые к фиксации: уже посчитано превью.
 const fixableIds = computed(() =>
-  drafts.value.filter(d => d.amount && d.date && d.preview?.ready).map(d => d.id)
+  targetDrafts().filter(d => d.amount && d.date && d.preview?.ready).map(d => d.id)
 );
-// Сколько строк ждут расчёта (есть данные, но превью пустое).
 const dirtyCount = computed(() =>
-  drafts.value.filter(d => d.amount && d.date && !d.preview?.ready).length
+  targetDrafts().filter(d => d.amount && d.date && !d.preview?.ready).length
 );
 
 const calculating = ref(false);
