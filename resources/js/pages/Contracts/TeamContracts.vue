@@ -25,6 +25,20 @@
       <template #item.statusName="{ value }">
         <StatusChip :value="value" kind="contract" size="x-small" :text="value" />
       </template>
+      <template #item.gpPoints="{ item }">
+        <span v-if="item.gpPoints != null" :class="item.isActual ? '' : 'text-medium-emphasis font-italic'">
+          {{ fmt(item.gpPoints) }}
+          <v-icon v-if="!item.isActual" size="12" class="ms-1" title="Прогноз">mdi-tilde</v-icon>
+        </span>
+        <span v-else class="text-medium-emphasis">—</span>
+      </template>
+      <template #item.myCommission="{ item }">
+        <span v-if="item.myCommission != null" :class="item.isActual ? '' : 'text-medium-emphasis font-italic'">
+          {{ fmt(item.myCommission) }} ₽
+          <v-icon v-if="!item.isActual" size="12" class="ms-1" title="Прогноз">mdi-tilde</v-icon>
+        </span>
+        <span v-else class="text-medium-emphasis">—</span>
+      </template>
       <template #no-data><EmptyState /></template>
     </v-data-table-server>
   </div>
@@ -59,6 +73,8 @@ const headers = [
   { title: 'Срок контракта', key: 'term', width: 120, cellProps: nowrap },
   { title: 'Сумма', key: 'ammount', width: 160, align: 'end', cellProps: nowrap },
   { title: 'Статус контракта', key: 'statusName', width: 170, cellProps: nowrap },
+  { title: 'ГП (баллы)', key: 'gpPoints', width: 130, align: 'end', cellProps: nowrap },
+  { title: 'Моё вознаграждение', key: 'myCommission', width: 180, align: 'end', cellProps: nowrap },
 ];
 
 const columnVisible = ref({});

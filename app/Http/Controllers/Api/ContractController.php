@@ -19,6 +19,7 @@ class ContractController extends Controller
     public function __construct(
         private readonly ContractService $contractService,
         private readonly ConsultantService $consultantService,
+        private readonly \App\Services\ContractForecastService $forecast,
     ) {}
 
     /**
@@ -87,6 +88,17 @@ class ContractController extends Controller
             ->get();
 
         $contracts = $this->contractService->formatContracts($contractRows, true);
+
+        // Per spec ✅Контракты моей команды §3 — прогноз/факт «ГП баллы» и
+        // «Моё вознаграждение» относительно текущего viewer'а.
+        $forecasts = $this->forecast->forecastForContracts($contractRows, $consultant->id);
+        $contracts = $contracts->map(function ($c) use ($forecasts) {
+            $f = $forecasts[$c['id']] ?? null;
+            $c['gpPoints'] = $f['gp'] ?? null;
+            $c['myCommission'] = $f['commission'] ?? null;
+            $c['isActual'] = $f['isActual'] ?? false;
+            return $c;
+        });
 
         return response()->json(['data' => $contracts, 'total' => $total]);
     }
