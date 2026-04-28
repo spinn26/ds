@@ -38,7 +38,9 @@ class ContractForecastService
             ->select(
                 't.contract as contractId',
                 DB::raw('SUM(COALESCE(cm."groupVolume", 0)) as gp'),
-                DB::raw('SUM(COALESCE(cm."amountRUB", 0)) as commission')
+                // legacy commission rows often have amountRUB=NULL but amount filled
+                // (assumed to be RUB since контракт.валюта default RUB).
+                DB::raw('SUM(COALESCE(cm."amountRUB", cm.amount, 0)) as commission')
             )
             ->groupBy('t.contract')
             ->get()

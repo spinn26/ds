@@ -40,6 +40,10 @@ class ManualTransactionController extends Controller
         if ($request->filled('number')) {
             $q->where('c.number', 'ilike', '%' . $request->number . '%');
         }
+        // Per user: транзакция не может быть без номера контракта.
+        // 397 legacy-контрактов без c.number отфильтровываем — на них
+        // нельзя завести транзакцию (некуда привязать).
+        $q->whereNotNull('c.number')->where('c.number', '!=', '');
         if ($request->filled('product')) {
             $q->where('c.product', $request->product);
         }
@@ -80,6 +84,7 @@ class ManualTransactionController extends Controller
 
         $data = $rows->map(fn ($c) => [
             'id' => $c->id,
+            // Гарантировано не-null: WHERE c.number IS NOT NULL добавлен выше.
             'number' => $c->number,
             'clientName' => $c->clientName,
             'consultantName' => $c->consultantName,
@@ -452,6 +457,7 @@ class ManualTransactionController extends Controller
                     'name' => 'Неизвестный консультант',
                     'percent' => 0,
                     'lp' => round($points, 2),
+                    'gp' => 0,
                     'points' => 0,
                     'sum' => 0,
                     'isDirect' => true,
@@ -469,7 +475,8 @@ class ManualTransactionController extends Controller
             'consultantId' => $consultantId,
             'name' => DB::table('consultant')->where('id', $consultantId)->value('personName'),
             'percent' => $directPercent,
-            'lp' => round($points, 2),
+            'lp' => round($points, 2),       // ЛП у прямого партнёра
+            'gp' => 0,                       // ГП у прямого = 0 (его собственная продажа не ГП)
             'points' => round($points * $directPercent / 100, 2),
             'sum' => round($points * $directPercent, 2),
             'isDirect' => true,
@@ -494,7 +501,8 @@ class ManualTransactionController extends Controller
                 'consultantId' => $inviterId,
                 'name' => $inviter->personName,
                 'percent' => $invQual['percent'],
-                'lp' => 0,
+                'lp' => 0,                       // ЛП у наставника = 0 (продажа не его)
+                'gp' => round($points, 2),       // ГП у наставника = объём, поднявшийся снизу
                 'points' => $margin > 0 ? round($points * $margin / 100, 2) : 0,
                 'sum' => $margin > 0 ? round($points * $margin, 2) : 0,
                 'isDirect' => false,

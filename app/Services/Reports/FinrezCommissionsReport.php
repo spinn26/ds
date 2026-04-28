@@ -37,7 +37,9 @@ class FinrezCommissionsReport extends AbstractReportType
                 'c.number', 'c.id as contractId', 't.date',
                 't.amount', 'cur.symbol as curSymbol', 't.amountRUB',
                 't.netRevenueRUB', 't.dsCommissionPercentage',
-                'cm.personalVolume', 'cm.amountRUB as commissionRub', 't.profitRUB',
+                'cm.personalVolume',
+                DB::raw('COALESCE(cm."amountRUB", cm.amount, 0) as commissionRub'),
+                't.profitRUB',
             ]);
 
         return $rows->map(function ($r) {

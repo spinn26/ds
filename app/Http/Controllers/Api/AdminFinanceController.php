@@ -828,13 +828,45 @@ class AdminFinanceController extends Controller
     public function downloadReport(int $id)
     {
         $row = DB::table('report_archive')->where('id', $id)->first();
-        if (! $row || $row->status !== 'ready' || ! $row->file_path) {
-            abort(404, 'Файл не найден или не готов');
+        if (! $row) {
+            abort(404, 'Архив не найден');
         }
-        if (! \Storage::disk('local')->exists($row->file_path)) {
+        if ($row->status !== 'ready') {
+            abort(409, "Файл ещё не готов (статус: {$row->status})");
+        }
+        if (! $row->file_path) {
+            abort(404, 'У записи отсутствует file_path');
+        }
+
+        // Резолвим путь напрямую через storage_path — так избегаем
+        // расхождений между local/private диском Laravel 11 и тем, что
+        // у нас в БД сохранён legacy-путь без префикса private/.
+        $candidates = [
+            \Storage::disk('local')->path($row->file_path),
+            storage_path('app/' . $row->file_path),
+            storage_path('app/private/' . $row->file_path),
+        ];
+        $absPath = null;
+        foreach ($candidates as $p) {
+            if (file_exists($p)) { $absPath = $p; break; }
+        }
+        if (! $absPath) {
+            \Log::warning('downloadReport: файл не найден ни по одному пути', [
+                'id' => $id, 'file_path' => $row->file_path, 'tried' => $candidates,
+            ]);
             abort(404, 'Файл отсутствует на диске');
         }
-        return \Storage::disk('local')->download($row->file_path, "report-{$row->type}-{$row->date_from}-{$row->date_to}.csv");
+
+        $filename = sprintf(
+            'report-%s-%s-%s.csv',
+            preg_replace('/[^A-Za-z0-9_.-]/', '_', (string) $row->type),
+            substr((string) $row->date_from, 0, 10),
+            substr((string) $row->date_to, 0, 10),
+        );
+
+        return response()->download($absPath, $filename, [
+            'Content-Type' => 'text/csv; charset=utf-8',
+        ]);
     }
 
     /**

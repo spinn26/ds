@@ -97,8 +97,6 @@
               <v-chip size="x-small" color="warning" variant="tonal" class="ml-1">{{ drafts.length }}</v-chip>
             </span>
             <v-spacer />
-            <v-switch v-model="showProduct" label="Показать продукт" hide-details density="compact" color="primary" />
-            <v-switch v-model="showExtra" label="Показать доп. настройки" hide-details density="compact" color="primary" />
             <ColumnVisibilityMenu :headers="draftHeaders"
               v-model:visible="draftColsVisible"
               storage-key="manual-tx-drafts-cols"
@@ -195,7 +193,7 @@
                         @click="openRateModal(d)" />
                     </template>
                     <template v-else-if="h.key === 'incomeDS'">
-                      <template v-if="showExtra && d.customCommission">
+                      <template v-if="d.customCommission">
                         <v-text-field :model-value="d.dsCommissionAbsolute" type="number" density="compact" hide-details variant="plain"
                           style="max-width:120px; display:inline-block"
                           reverse @update:model-value="v => patchField(d, 'dsCommissionAbsolute', v)" />
@@ -229,7 +227,7 @@
                             <v-icon v-if="d.preview?.chain?.length" size="14" class="ms-1">mdi-account-tree</v-icon>
                           </span>
                         </template>
-                        <v-card v-if="d.preview?.chain?.length" min-width="440" class="pa-3">
+                        <v-card v-if="d.preview?.chain?.length" min-width="640" class="pa-3">
                           <div class="text-caption text-medium-emphasis mb-2">
                             Цепочка партнёров (от верхнего наставника вниз):
                           </div>
@@ -237,16 +235,20 @@
                             <thead>
                               <tr>
                                 <th class="text-left">Партнёр</th>
+                                <th class="text-end" style="white-space:nowrap">% кв.</th>
                                 <th class="text-end">ЛП</th>
+                                <th class="text-end">ГП</th>
                                 <th class="text-end">Баллы</th>
-                                <th class="text-end">Σ, RUB</th>
+                                <th class="text-end" style="white-space:nowrap">Σ, RUB</th>
                               </tr>
                             </thead>
                             <tbody>
                               <tr v-for="row in chainTopDown(d.preview.chain)" :key="row.consultantId"
                                 :class="{ 'font-weight-bold tx-direct-row': row.isDirect }">
                                 <td>{{ row.name }}</td>
+                                <td class="text-end">{{ row.percent }}%</td>
                                 <td class="text-end">{{ fmt2(row.lp) }}</td>
+                                <td class="text-end">{{ fmt2(row.gp || 0) }}</td>
                                 <td class="text-end">{{ fmt2(row.points) }}</td>
                                 <td class="text-end">{{ fmt2(row.sum) }} RUB</td>
                               </tr>
@@ -254,6 +256,7 @@
                           </v-table>
                           <div class="text-caption text-medium-emphasis mt-2">
                             Полужирным — текущий партнёр (получатель транзакции).
+                            ЛП — личные продажи, ГП — групповой объём, поднявшийся снизу.
                           </div>
                         </v-card>
                       </v-menu>
@@ -269,7 +272,8 @@
                   </td>
                 </tr>
 
-                <tr v-if="showExtra" class="tx-extra-row">
+                <!-- Строка «Своя комиссия» — теперь всегда видна (тогглы убраны) -->
+                <tr class="tx-extra-row">
                   <td :colspan="visibleDraftHeaders.length" class="pa-2">
                     <v-checkbox :model-value="d.customCommission"
                       :label="'Своя комиссия для ' + contractNum(d) + ' — введите Доход ДС вручную, %ДС посчитается обратно (для Брокер+ и подобных)'"
@@ -542,9 +546,10 @@ const draftHeaders = [
   { title: 'Прибыль ДС', key: 'profit', thClass: 'text-end', tdClass: 'text-end text-no-wrap' },
   { title: '', key: 'actions', style: 'width:48px' },
 ];
-const draftColsVisible = ref({
-  product: false, program: false, supplier: false, yearKV: false,
-});
+// По умолчанию все колонки видимы — тогглы «Показать продукт» / «Показать
+// доп. настройки» убраны per user request. Управление через
+// ColumnVisibilityMenu остаётся.
+const draftColsVisible = ref({});
 const visibleDraftHeaders = computed(() =>
   draftHeaders.filter(h => draftColsVisible.value[h.key] !== false)
 );
@@ -583,19 +588,7 @@ const adding = ref(false);
 const fixing = ref(false);
 const selectedDraftIds = ref([]);
 
-// Тогглы-пресеты, синхронизированы с draftColsVisible (две тройки колонок).
-const showProduct = ref(false);
-const showExtra = ref(false);
-
-watch(showProduct, (v) => {
-  draftColsVisible.value = {
-    ...draftColsVisible.value,
-    product: v, program: v, supplier: v,
-  };
-});
-watch(showExtra, (v) => {
-  draftColsVisible.value = { ...draftColsVisible.value, yearKV: v };
-});
+// Тогглы убраны (per user request) — все колонки видимы по умолчанию.
 
 function isRateChangeable(d) {
   if (!d.productId || !d.productName) return false;
