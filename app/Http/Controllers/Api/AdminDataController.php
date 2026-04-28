@@ -1195,10 +1195,55 @@ class AdminDataController extends Controller
      */
     public function acceptance(Request $request): JsonResponse
     {
+        // Все документы (5 системных) — нужны и для фильтра, и для отрисовки.
+        $allDocs = DB::table('agreementPartnersDocuments')
+            ->orderBy('number')
+            ->get(['id', 'name', 'link', 'number']);
+        $totalDocs = $allDocs->count() ?: 5;
+
         $query = DB::table('consultant')->whereNull('dateDeleted');
 
         if ($request->filled('search')) {
             $query->where('personName', 'ilike', '%' . $request->search . '%');
+        }
+
+        // Фильтр по виду документа per spec ✅Акцепт документов §1:
+        // показываем только консультантов, которые акцептовали (или НЕ
+        // акцептовали — в зависимости от accepted) этот конкретный документ.
+        $acceptedFilter = $request->input('accepted'); // 'true' | 'false' | null
+        if ($request->filled('document_type')) {
+            $docId = (int) $request->input('document_type');
+            $signedIds = DB::table('partnerAcceptance')
+                ->where('documentType', $docId)
+                ->where('accepted', true)
+                ->pluck('consultant')
+                ->unique()
+                ->values()
+                ->all();
+
+            if ($acceptedFilter === 'false') {
+                // Не акцептовавшие именно этот документ.
+                if ($signedIds) {
+                    $query->whereNotIn('id', $signedIds);
+                }
+            } else {
+                // По умолчанию или accepted=true — показываем именно подписавших.
+                $query->whereIn('id', $signedIds ?: [-1]);
+            }
+        } elseif ($acceptedFilter === 'true' || $acceptedFilter === 'false') {
+            // Без выбранного документа фильтр работает по «все 5 подписаны»
+            // (true) или «есть хотя бы 1 не подписанный» (false).
+            $signedCounts = DB::table('partnerAcceptance')
+                ->where('accepted', true)
+                ->select('consultant', DB::raw('COUNT(DISTINCT "documentType") as cnt'))
+                ->groupBy('consultant')
+                ->pluck('cnt', 'consultant');
+            $fullyAccepted = $signedCounts->filter(fn ($c) => $c >= $totalDocs)->keys()->all();
+            if ($acceptedFilter === 'true') {
+                $query->whereIn('id', $fullyAccepted ?: [-1]);
+            } else {
+                $query->whereNotIn('id', $fullyAccepted);
+            }
         }
 
         $total = $query->count();
@@ -1208,12 +1253,6 @@ class AdminDataController extends Controller
             ->get(['id', 'personName', 'acceptance']);
 
         $consultantIds = $rows->pluck('id')->all();
-
-        // Все документы (5 системных)
-        $allDocs = DB::table('agreementPartnersDocuments')
-            ->orderBy('number')
-            ->get(['id', 'name', 'link', 'number']);
-        $totalDocs = $allDocs->count() ?: 5;
 
         // Все акцепты этих консультантов (latest per (consultant, document))
         $latestPerPair = DB::table('partnerAcceptance')
@@ -1246,22 +1285,9 @@ class AdminDataController extends Controller
             ];
         });
 
-        // Filter «Акцептовано/не акцептовано» (выполняем после агрегации, чтобы
-        // не переписывать оптимизированный запрос — данных уже в памяти).
-        if ($request->filled('accepted')) {
-            $expect = $request->accepted === 'true';
-            $data = $data->filter(fn ($r) => $r['fullyAccepted'] === $expect)->values();
-        }
-
-        // Filter по типу документа: оставляем только партнёров, у кого выбранный
-        // документ имеет нужный статус (по умолчанию — не акцептован).
-        if ($request->filled('document_type')) {
-            $docId = (int) $request->document_type;
-            $data = $data->filter(function ($r) use ($docId) {
-                $d = collect($r['documents'])->firstWhere('id', $docId);
-                return $d && ! $d['accepted'];
-            })->values();
-        }
+        // Filters «Акцептовано/документ» теперь применяются на SQL-уровне выше
+        // (через whereIn/whereNotIn по consultantIds) — пост-агрегатная
+        // фильтрация удалена, чтобы пагинация и total работали корректно.
 
         return response()->json([
             'data' => $data,

@@ -123,7 +123,14 @@ const { debounced: debouncedLoad } = useDebounce(loadData, 400);
 
 function fmtDateTime(d) {
   if (!d) return '—';
-  return new Date(d).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' });
+  // Per spec ✅Акцепт документов §3.2: «19.06.2025 14:30» — полная дата + время.
+  const dt = new Date(d);
+  if (Number.isNaN(dt.getTime())) return '—';
+  const dd = String(dt.getDate()).padStart(2, '0');
+  const mm = String(dt.getMonth() + 1).padStart(2, '0');
+  const hh = String(dt.getHours()).padStart(2, '0');
+  const mi = String(dt.getMinutes()).padStart(2, '0');
+  return `${dd}.${mm}.${dt.getFullYear()} ${hh}:${mi}`;
 }
 
 async function loadData() {
