@@ -141,7 +141,12 @@ Route::prefix('v1')->group(function () {
         Route::post('/admin/requisites/{id}/verify', [\App\Http\Controllers\Api\AdminDataController::class, 'verifyRequisites']);
         Route::get('/admin/acceptance', [\App\Http\Controllers\Api\AdminDataController::class, 'acceptance']);
         Route::get('/admin/contracts', [\App\Http\Controllers\Api\AdminDataController::class, 'contracts']);
+        Route::get('/admin/contracts/form-data', [\App\Http\Controllers\Api\AdminDataController::class, 'contractFormData']);
         Route::get('/admin/contracts/upload-history', fn () => response()->json([]));
+        Route::post('/admin/contracts', [\App\Http\Controllers\Api\AdminDataController::class, 'storeContract']);
+        Route::get('/admin/contracts/{id}', [\App\Http\Controllers\Api\AdminDataController::class, 'contractDetails'])->whereNumber('id');
+        Route::put('/admin/contracts/{id}', [\App\Http\Controllers\Api\AdminDataController::class, 'updateContract'])->whereNumber('id');
+        Route::delete('/admin/contracts/{id}', [\App\Http\Controllers\Api\AdminDataController::class, 'deleteContract'])->whereNumber('id');
         Route::get('/admin/contracts/{id}/history', [\App\Http\Controllers\Api\AdminDataController::class, 'contractHistory'])->whereNumber('id');
 
         // Shared import progress polling — frontend генерирует tracker id,

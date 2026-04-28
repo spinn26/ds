@@ -1075,6 +1075,181 @@ class AdminDataController extends Controller
         return response()->json(['data' => $contracts, 'total' => $total]);
     }
 
+    /**
+     * Single contract for edit modal (per spec ✅Менеджер контрактов §3).
+     * Возвращает все поля контракта + цепочка партнёров (read-only) для
+     * блока «Цепочка Партнеров» в модалке редактирования.
+     */
+    public function contractDetails(int $id): JsonResponse
+    {
+        $row = DB::table('contract')->where('id', $id)->first();
+        if (! $row) return response()->json(['message' => 'Контракт не найден'], 404);
+
+        // Цепочка наставников: вверх по consultant.inviter
+        $chain = [];
+        if ($row->consultant) {
+            $current = $row->consultant;
+            $visited = [];
+            for ($i = 0; $i < 20; $i++) {
+                if (in_array($current, $visited)) break;
+                $visited[] = $current;
+                $cons = DB::table('consultant')->where('id', $current)->first(['id', 'personName', 'inviter']);
+                if (! $cons) break;
+                $chain[] = ['id' => $cons->id, 'personName' => $cons->personName];
+                if (! $cons->inviter) break;
+                $current = $cons->inviter;
+            }
+        }
+
+        return response()->json([
+            'contract' => $row,
+            'chain' => $chain,
+        ]);
+    }
+
+    /**
+     * Form-data для модалки контракта: справочники.
+     */
+    public function contractFormData(): JsonResponse
+    {
+        return response()->json([
+            'statuses' => DB::table('contractStatus')->orderBy('id')->get(['id', 'name']),
+            'currencies' => DB::table('currency')->where('selectable', true)->orderBy('id')
+                ->get()->map(fn ($c) => ['id' => $c->id, 'symbol' => $c->symbol, 'name' => $c->nameRu]),
+            'countries' => DB::table('country')->orderBy('countryName')->get(['id', 'countryName as name']),
+            'riskProfiles' => DB::table('riskProfile')->orderBy('id')->get(['id', 'title as name']),
+            'setups' => DB::table('setup')->orderBy('id')->get(['id', 'title as name']),
+        ]);
+    }
+
+    /**
+     * Создать контракт (per spec ✅Менеджер контрактов §3 «Сохранить контракт»).
+     * Партнёр подтягивается автоматически из выбранного клиента.
+     */
+    public function storeContract(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'number' => 'required|string|max:255',
+            'counterpartyContractId' => 'nullable|string|max:255',
+            'status' => 'required|integer|exists:contractStatus,id',
+            'client' => 'required|integer|exists:client,id',
+            'product' => 'required|integer|exists:product,id',
+            'program' => 'required|integer|exists:program,id',
+            'country' => 'nullable|integer|exists:country,id',
+            'createDate' => 'required|date',
+            'openDate' => 'nullable|date',
+            'closeDate' => 'nullable|date',
+            'ammount' => 'required|numeric|min:0',
+            'currency' => 'required|integer|exists:currency,id',
+            'riskProfile' => 'nullable|integer|exists:riskProfile,id',
+            'setup' => 'nullable|integer|exists:setup,id',
+            'type' => 'nullable|string|max:50',
+            'comment' => 'nullable|string|max:2000',
+        ]);
+
+        // Партнёр и его данные подтягиваются из клиента
+        $client = DB::table('client')->where('id', $data['client'])->first();
+        $consultantId = $client?->consultant;
+        $consultantName = $consultantId
+            ? DB::table('consultant')->where('id', $consultantId)->value('personName')
+            : null;
+
+        $product = DB::table('product')->where('id', $data['product'])->first();
+        $program = DB::table('program')->where('id', $data['program'])->first();
+
+        $id = DB::transaction(function () use ($data, $client, $consultantId, $consultantName, $product, $program, $request) {
+            return DB::table('contract')->insertGetId([
+                'number' => $data['number'],
+                'counterpartyContractId' => $data['counterpartyContractId'] ?? null,
+                'status' => $data['status'],
+                'client' => $data['client'],
+                'clientName' => $client?->personName,
+                'consultant' => $consultantId,
+                'consultantName' => $consultantName,
+                'product' => $data['product'],
+                'productName' => $product?->name,
+                'program' => $data['program'],
+                'programName' => $program?->name,
+                'country' => $data['country'] ?? null,
+                'createDate' => $data['createDate'],
+                'openDate' => $data['openDate'] ?? null,
+                'closeDate' => $data['closeDate'] ?? null,
+                'ammount' => $data['ammount'],
+                'currency' => $data['currency'],
+                'riskProfile' => $data['riskProfile'] ?? null,
+                'setup' => $data['setup'] ?? null,
+                'type' => $data['type'] ?? null,
+                'comment' => $data['comment'] ?? null,
+                'createdAt' => now(),
+                'changedAt' => now(),
+            ]);
+        });
+
+        return response()->json(['message' => 'Контракт создан', 'id' => $id], 201);
+    }
+
+    /**
+     * Обновить контракт. Закрытые периоды защищены через freeze.
+     */
+    public function updateContract(Request $request, int $id): JsonResponse
+    {
+        $contract = DB::table('contract')->where('id', $id)->first();
+        if (! $contract) return response()->json(['message' => 'Контракт не найден'], 404);
+
+        $data = $request->validate([
+            'number' => 'sometimes|string|max:255',
+            'counterpartyContractId' => 'nullable|string|max:255',
+            'status' => 'sometimes|integer|exists:contractStatus,id',
+            'client' => 'sometimes|integer|exists:client,id',
+            'product' => 'sometimes|integer|exists:product,id',
+            'program' => 'sometimes|integer|exists:program,id',
+            'country' => 'nullable|integer|exists:country,id',
+            'createDate' => 'sometimes|date',
+            'openDate' => 'nullable|date',
+            'closeDate' => 'nullable|date',
+            'ammount' => 'sometimes|numeric|min:0',
+            'currency' => 'sometimes|integer|exists:currency,id',
+            'riskProfile' => 'nullable|integer|exists:riskProfile,id',
+            'setup' => 'nullable|integer|exists:setup,id',
+            'type' => 'nullable|string|max:50',
+            'comment' => 'nullable|string|max:2000',
+        ]);
+
+        DB::transaction(function () use ($data, $id) {
+            // Денормализация имён при изменении FK
+            if (isset($data['client'])) {
+                $client = DB::table('client')->where('id', $data['client'])->first();
+                $data['clientName'] = $client?->personName;
+                if ($client?->consultant) {
+                    $data['consultant'] = $client->consultant;
+                    $data['consultantName'] = DB::table('consultant')->where('id', $client->consultant)->value('personName');
+                }
+            }
+            if (isset($data['product'])) {
+                $data['productName'] = DB::table('product')->where('id', $data['product'])->value('name');
+            }
+            if (isset($data['program'])) {
+                $data['programName'] = DB::table('program')->where('id', $data['program'])->value('name');
+            }
+            $data['changedAt'] = now();
+            DB::table('contract')->where('id', $id)->update($data);
+        });
+
+        return response()->json(['message' => 'Контракт обновлён']);
+    }
+
+    /**
+     * Soft-delete контракта (per spec §3 «Удалить контракт» с предупреждением).
+     */
+    public function deleteContract(int $id): JsonResponse
+    {
+        $row = DB::table('contract')->where('id', $id)->first();
+        if (! $row) return response()->json(['message' => 'Контракт не найден'], 404);
+
+        DB::table('contract')->where('id', $id)->update(['deletedAt' => now()]);
+        return response()->json(['message' => 'Контракт удалён']);
+    }
+
     /** История перестановок */
     public function transfers(Request $request): JsonResponse
     {
