@@ -12,23 +12,27 @@
       </template>
     </PageHeader>
 
-    <!-- Row 1: Qualification + Commission + Volumes -->
+    <!-- Row 1: Qualification + Volumes per spec ✅Отчет начислений и выплат §1
+         Удалены: «Плашка курсов валют» и «Уровень расчета комиссионных».
+         «ГП» переименован в «ОП по ГП». -->
     <v-row class="mb-4">
-      <v-col cols="12" sm="6" md="3">
+      <v-col cols="12" sm="6" md="4">
         <v-card class="pa-4 h-100">
-          <div class="text-body-2 text-medium-emphasis">Квалификация</div>
+          <div class="text-body-2 text-medium-emphasis">Текущая квалификация</div>
           <div class="d-flex align-center ga-2 mt-1 flex-wrap">
-            <v-chip size="small" color="grey" class="text-truncate">{{ summary.qualificationPrev?.title || '—' }}</v-chip>
-            <v-icon size="16">mdi-arrow-right</v-icon>
-            <v-chip size="small" color="primary" class="text-truncate">{{ summary.qualificationCurrent?.title || '—' }}</v-chip>
+            <v-chip size="small" color="primary" class="text-truncate">
+              {{ summary.qualificationCurrent?.title || '—' }}
+            </v-chip>
+            <v-chip v-if="summary.qualificationCurrent?.percent != null" size="x-small" variant="tonal">
+              {{ summary.qualificationCurrent.percent }}%
+            </v-chip>
+            <v-icon v-if="qualTrend === 'up'" size="18" color="success" title="Рост">mdi-trending-up</v-icon>
+            <v-icon v-else-if="qualTrend === 'down'" size="18" color="error" title="Снижение">mdi-trending-down</v-icon>
+            <v-icon v-else size="18" color="grey" title="Без изменений">mdi-trending-neutral</v-icon>
           </div>
-        </v-card>
-      </v-col>
-      <v-col cols="12" sm="6" md="3">
-        <v-card class="pa-4 h-100">
-          <div class="text-body-2 text-medium-emphasis">Уровень комиссии</div>
-          <div class="text-h4 font-weight-bold text-primary mt-1" style="white-space:nowrap">{{ summary.commissionLevel?.percent ?? 0 }}%</div>
-          <div class="text-caption text-medium-emphasis">{{ summary.commissionLevel?.title || '' }}</div>
+          <div v-if="summary.qualificationPrev?.title" class="text-caption text-medium-emphasis mt-1">
+            Прошлый месяц: {{ summary.qualificationPrev.title }}
+          </div>
         </v-card>
       </v-col>
       <v-col cols="12" sm="6" md="2">
@@ -37,13 +41,13 @@
           <div class="text-h6 font-weight-bold text-success mt-1" style="white-space:nowrap">{{ fmt(summary.volumes?.lp) }}</div>
         </v-card>
       </v-col>
-      <v-col cols="12" sm="6" md="2">
+      <v-col cols="12" sm="6" md="3">
         <v-card class="pa-4 h-100">
-          <div class="text-body-2 text-medium-emphasis">ГП</div>
+          <div class="text-body-2 text-medium-emphasis">ОП по ГП</div>
           <div class="text-h6 font-weight-bold text-info mt-1" style="white-space:nowrap">{{ fmt(summary.volumes?.gp) }}</div>
         </v-card>
       </v-col>
-      <v-col cols="12" sm="6" md="2">
+      <v-col cols="12" sm="6" md="3">
         <v-card class="pa-4 h-100">
           <div class="text-body-2 text-medium-emphasis">НГП</div>
           <div class="text-h6 font-weight-bold text-warning mt-1" style="white-space:nowrap">{{ fmt(summary.volumes?.ngp) }}</div>
@@ -60,9 +64,8 @@
             <span class="text-body-2 text-medium-emphasis">Личные продажи</span>
           </div>
           <div class="text-body-2"><span class="font-weight-medium">Баллы:</span> {{ fmt(summary.personalSales?.points) }}</div>
-          <div class="text-body-2"><span class="font-weight-medium">Бонус:</span> {{ fmt(summary.personalSales?.bonus) }}</div>
-          <div class="text-body-2"><span class="font-weight-medium">Бонус (руб):</span> {{ fmt2(summary.personalSales?.bonusRub) }}</div>
-          <div class="text-body-2"><span class="font-weight-medium">Клиентские платежи:</span> {{ fmt2(summary.personalSales?.clientPaymentsRub) }}</div>
+          <div class="text-body-2"><span class="font-weight-medium">Бонус в баллах ЛП:</span> {{ fmt(summary.personalSales?.bonus) }}</div>
+          <div class="text-body-2"><span class="font-weight-medium">Бонус, ₽:</span> {{ fmt2(summary.personalSales?.bonusRub) }}</div>
         </v-card>
       </v-col>
       <v-col cols="12" sm="6" md="3">
@@ -71,10 +74,9 @@
             <v-icon size="18" color="blue">mdi-account-group</v-icon>
             <span class="text-body-2 text-medium-emphasis">Групповые продажи</span>
           </div>
-          <div class="text-body-2"><span class="font-weight-medium">Баллы:</span> {{ fmt(summary.groupSales?.points) }}</div>
-          <div class="text-body-2"><span class="font-weight-medium">Бонус:</span> {{ fmt(summary.groupSales?.bonus) }}</div>
-          <div class="text-body-2"><span class="font-weight-medium">Бонус (руб):</span> {{ fmt2(summary.groupSales?.bonusRub) }}</div>
-          <div class="text-body-2"><span class="font-weight-medium">Клиентские платежи:</span> {{ fmt2(summary.groupSales?.clientPaymentsRub) }}</div>
+          <div class="text-body-2"><span class="font-weight-medium">Баллы (ОП по ГП):</span> {{ fmt(summary.groupSales?.points) }}</div>
+          <div class="text-body-2"><span class="font-weight-medium">Бонус баллы по разнице %:</span> {{ fmt(summary.groupSales?.bonus) }}</div>
+          <div class="text-body-2"><span class="font-weight-medium">Бонус, ₽:</span> {{ fmt2(summary.groupSales?.bonusRub) }}</div>
         </v-card>
       </v-col>
       <v-col cols="12" sm="6" md="3">
@@ -253,6 +255,13 @@ const data = ref({});
 const fmtRate = (n) => Number(n || 0).toLocaleString('ru-RU', { minimumFractionDigits: 4 });
 
 const summary = computed(() => data.value.summary || {});
+const qualTrend = computed(() => {
+  const cur = summary.value.qualificationCurrent?.percent ?? 0;
+  const prev = summary.value.qualificationPrev?.percent ?? 0;
+  if (cur > prev) return 'up';
+  if (cur < prev) return 'down';
+  return 'flat';
+});
 const tables = computed(() => data.value.tables || {});
 
 const personalSalesHeaders = [

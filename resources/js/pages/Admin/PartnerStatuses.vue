@@ -33,6 +33,40 @@
           variant="outlined" density="comfortable"
           clearable hide-details @update:model-value="loadData" />
       </v-col>
+      <v-col cols="12" md="3">
+        <v-btn variant="text" size="small"
+          :prepend-icon="showAdvancedDates ? 'mdi-chevron-up' : 'mdi-chevron-down'"
+          @click="showAdvancedDates = !showAdvancedDates">
+          Диапазоны дат
+        </v-btn>
+      </v-col>
+      <template v-if="showAdvancedDates">
+        <!-- 4 диапазона дат per spec ✅Статусы партнеров §1 -->
+        <v-col cols="12" md="3"><v-text-field v-model="dateFilters.created_from"
+          label="Регистрация с" type="date" variant="outlined" density="comfortable"
+          hide-details @update:model-value="loadData" /></v-col>
+        <v-col cols="12" md="3"><v-text-field v-model="dateFilters.created_to"
+          label="Регистрация по" type="date" variant="outlined" density="comfortable"
+          hide-details @update:model-value="loadData" /></v-col>
+        <v-col cols="12" md="3"><v-text-field v-model="dateFilters.activity_from"
+          label="Активность с" type="date" variant="outlined" density="comfortable"
+          hide-details @update:model-value="loadData" /></v-col>
+        <v-col cols="12" md="3"><v-text-field v-model="dateFilters.activity_to"
+          label="Активность по" type="date" variant="outlined" density="comfortable"
+          hide-details @update:model-value="loadData" /></v-col>
+        <v-col cols="12" md="3"><v-text-field v-model="dateFilters.plan_from"
+          label="План. терминация с" type="date" variant="outlined" density="comfortable"
+          hide-details @update:model-value="loadData" /></v-col>
+        <v-col cols="12" md="3"><v-text-field v-model="dateFilters.plan_to"
+          label="План. терминация по" type="date" variant="outlined" density="comfortable"
+          hide-details @update:model-value="loadData" /></v-col>
+        <v-col cols="12" md="3"><v-text-field v-model="dateFilters.term_from"
+          label="Факт. терминация с" type="date" variant="outlined" density="comfortable"
+          hide-details @update:model-value="loadData" /></v-col>
+        <v-col cols="12" md="3"><v-text-field v-model="dateFilters.term_to"
+          label="Факт. терминация по" type="date" variant="outlined" density="comfortable"
+          hide-details @update:model-value="loadData" /></v-col>
+      </template>
       <v-col v-if="activeFilterCount > 0" cols="auto" class="d-flex align-center">
         <v-chip size="small" color="info" variant="tonal">
           {{ activeFilterCount }} {{ activeFilterCount === 1 ? 'фильтр' : 'фильтра' }}
@@ -133,17 +167,31 @@ const page = ref(1);
 const perPage = ref(25);
 const search = ref('');
 const activityFilter = ref(null);
+const showAdvancedDates = ref(false);
+const dateFilters = ref({
+  created_from: '', created_to: '',
+  activity_from: '', activity_to: '',
+  plan_from: '', plan_to: '',
+  term_from: '', term_to: '',
+});
 
 const activeFilterCount = computed(() => {
   let c = 0;
   if (search.value) c++;
   if (activityFilter.value) c++;
+  Object.values(dateFilters.value).forEach(v => { if (v) c++; });
   return c;
 });
 
 function resetFilters() {
   search.value = '';
   activityFilter.value = null;
+  dateFilters.value = {
+    created_from: '', created_to: '',
+    activity_from: '', activity_to: '',
+    plan_from: '', plan_to: '',
+    term_from: '', term_to: '',
+  };
   loadData();
 }
 
@@ -245,6 +293,9 @@ async function loadData() {
     const params = { page: page.value, per_page: perPage.value };
     if (search.value) params.search = search.value;
     if (activityFilter.value) params.activity = activityFilter.value;
+    Object.entries(dateFilters.value).forEach(([k, v]) => {
+      if (v) params[k] = v;
+    });
     const { data } = await api.get('/admin/partner-statuses', { params });
     summary.value = data.summary || [];
     items.value = data.data || [];

@@ -346,14 +346,14 @@ const currentLevel = computed(() => {
   return (n.level || 0) >= (c.level || 0) ? n : c;
 });
 
+// Per spec ✅Дашборд §3: остаются ТОЛЬКО ЛП и НГП (ГП — обязательный плановый
+// показатель внутри расчёта, на дашборде партнёра не выводится).
 const volumeCards = computed(() => {
   const v = data.value.volumes;
   const lp = pct(v.personalVolume, v.prevPersonalVolume);
-  const gp = pct(v.groupVolume, v.prevGroupVolume);
   const ngp = pct(v.groupVolumeCumulative, v.prevGroupVolumeCumulative);
   return [
     { title: 'Личные продажи (ЛП)', value: v.personalVolume, change: lp.value, changeType: lp.type, icon: 'mdi-bank', color: 'green' },
-    { title: 'Групповые продажи (ГП)', value: v.groupVolume, change: gp.value, changeType: gp.type, icon: 'mdi-account-group', color: 'blue' },
     { title: 'Накопленные ГП (НГП)', value: v.groupVolumeCumulative, change: ngp.value, changeType: ngp.type, icon: 'mdi-trending-up', color: 'orange' },
   ];
 });

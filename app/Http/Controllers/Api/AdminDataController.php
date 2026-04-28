@@ -527,6 +527,15 @@ class AdminDataController extends Controller
         if ($request->filled('activity')) {
             $detailQuery->where('activity', $request->activity);
         }
+        // 4 диапазона дат per spec ✅Статусы партнеров §1
+        if ($request->filled('created_from')) $detailQuery->where('dateCreated', '>=', $request->created_from);
+        if ($request->filled('created_to')) $detailQuery->where('dateCreated', '<=', $request->created_to . ' 23:59:59');
+        if ($request->filled('activity_from')) $detailQuery->where('dateActivity', '>=', $request->activity_from);
+        if ($request->filled('activity_to')) $detailQuery->where('dateActivity', '<=', $request->activity_to . ' 23:59:59');
+        if ($request->filled('plan_from')) $detailQuery->where('dateDeterministicPlan', '>=', $request->plan_from);
+        if ($request->filled('plan_to')) $detailQuery->where('dateDeterministicPlan', '<=', $request->plan_to . ' 23:59:59');
+        if ($request->filled('term_from')) $detailQuery->where('dateDeterministic', '>=', $request->term_from);
+        if ($request->filled('term_to')) $detailQuery->where('dateDeterministic', '<=', $request->term_to . ' 23:59:59');
 
         $detailTotal = $detailQuery->count();
         $detailRows = $detailQuery->orderBy('personName')

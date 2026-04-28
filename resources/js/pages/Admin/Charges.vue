@@ -51,10 +51,16 @@
       <template #item.type="{ value }">
         <v-chip size="x-small" :color="typeColor(value)">{{ typeLabel(value) }}</v-chip>
       </template>
-      <template #item.amount="{ value }">
-        <span :class="value < 0 ? 'text-error' : 'text-success'">{{ fmt(value) }} ₽</span>
+      <template #item.amount="{ item }">
+        <!-- Per spec ✅Прочие начисления §2: единая колонка «Сумма» —
+             знак ± + единица (руб/баллы), цвет по знаку. -->
+        <span v-if="isPointsRow(item)" :class="item.points < 0 ? 'text-error' : 'text-success'">
+          {{ fmt(item.points) }} баллов
+        </span>
+        <span v-else :class="item.amount < 0 ? 'text-error' : 'text-success'">
+          {{ fmt(item.amount) }} ₽
+        </span>
       </template>
-      <template #item.points="{ value }">{{ value ? fmt(value) : '—' }}</template>
       <template #item.accrualDate="{ value }">{{ fmtDate(value) }}</template>
       <template #item.actions="{ item }">
         <v-btn icon="mdi-pencil" size="x-small" variant="text" title="Редактировать" @click="openEdit(item)" />
@@ -62,26 +68,34 @@
       </template>
     </DataTableWrapper>
 
-    <!-- Create dialog -->
+    <!-- Create dialog (per spec ✅Прочие начисления §3) -->
     <v-dialog v-model="createDialog" max-width="500" persistent>
       <v-card>
         <v-card-title>{{ editingId ? 'Редактировать начисление' : 'Новое начисление' }}</v-card-title>
         <v-card-text>
+          <div class="text-caption text-medium-emphasis mb-1">Тип операции *</div>
+          <v-radio-group v-model="form.type" inline density="compact" hide-details class="mb-3">
+            <v-radio label="Рубли" value="rub" />
+            <v-radio label="Баллы" value="points" />
+          </v-radio-group>
           <v-autocomplete v-model="form.consultant" :items="consultantOptions" item-title="personName" item-value="id"
             label="Партнёр *" :loading="searchingConsultants"
             @update:search="searchConsultants" no-data-text="Начните вводить ФИО" class="mb-3" />
-          <v-select v-model="form.type" :items="typeOptions" label="Тип *" class="mb-3" />
-          <v-text-field v-model.number="form.amount" label="Сумма (₽) *" type="number" class="mb-3" />
-          <v-text-field v-model.number="form.points" label="Баллы" type="number" class="mb-3" />
-          <v-text-field v-model="form.accrual_date" label="Дата начисления" type="date" class="mb-3" />
-          <v-textarea v-model="form.comment" label="Комментарий" rows="2" />
+          <v-text-field v-model.number="form.amount"
+            :label="form.type === 'points' ? 'Сумма (баллы) — для списания используйте −' : 'Сумма (₽) — для списания используйте −'"
+            type="number" :hint="form.type === 'points' ? 'Баллы влияют на ЛП и НГП. В деньги не конвертируются.' : 'Влияет только на финансовый баланс к выплате. ЛП/НГП не трогает.'"
+            persistent-hint class="mb-3" />
+          <v-text-field v-model="form.accrual_date" label="Дата начисления *" type="date" class="mb-3"
+            hint="Влияет на расчётный период (можно задним числом)" persistent-hint />
+          <v-textarea v-model="form.comment" label="Комментарий *" rows="2"
+            hint="Обязательно для аудита (например, «За билет на съезд»)" persistent-hint />
           <v-alert v-if="formError" type="error" density="compact" class="mt-2">{{ formError }}</v-alert>
         </v-card-text>
         <v-card-actions>
           <v-spacer />
           <v-btn @click="createDialog = false">Отмена</v-btn>
           <v-btn color="primary" @click="saveCharge" :loading="saving"
-            :disabled="!form.consultant || !form.type || !form.amount">Сохранить</v-btn>
+            :disabled="!form.consultant || !form.type || !form.amount || !form.comment">Сохранить</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -135,27 +149,32 @@ const consultantOptions = ref([]);
 const searchingConsultants = ref(false);
 
 const typeOptions = [
-  { title: 'Бонус', value: 'bonus' },
-  { title: 'Штраф', value: 'penalty' },
-  { title: 'Компенсация', value: 'compensation' },
+  { title: 'Рубли', value: 'rub' },
+  { title: 'Баллы', value: 'points' },
 ];
 
 const headers = [
-  { title: 'ID', key: 'id', width: 60 },
-  { title: 'Партнёр', key: 'consultantName' },
-  { title: 'Тип', key: 'type', width: 130 },
-  { title: 'Сумма', key: 'amount', align: 'end', width: 130 },
-  { title: 'Баллы', key: 'points', align: 'end', width: 100 },
   { title: 'Дата', key: 'accrualDate', width: 120 },
+  { title: 'Партнёр', key: 'consultantName' },
+  { title: 'Сумма', key: 'amount', align: 'end', width: 160 },
   { title: 'Комментарий', key: 'comment' },
-  { title: '', key: 'actions', sortable: false, width: 50 },
+  { title: '', key: 'actions', sortable: false, width: 90 },
 ];
 
 const columnVisible = ref({});
 const visibleHeaders = computed(() => headers.filter(h => columnVisible.value[h.key] !== false));
 
-function typeLabel(t) { return { bonus: 'Бонус', penalty: 'Штраф', compensation: 'Компенсация' }[t] || t; }
-function typeColor(t) { return { bonus: 'success', penalty: 'error', compensation: 'info' }[t] || 'grey'; }
+function typeLabel(t) {
+  return { rub: 'Рубли', points: 'Баллы',
+    bonus: 'Рубли', penalty: 'Рубли', compensation: 'Рубли' }[t] || t;
+}
+function typeColor(t) { return t === 'points' ? 'info' : 'success'; }
+function isPointsRow(item) {
+  // Новые записи: type='points'. Старые (bonus/penalty/compensation) —
+  // всегда рубли. Дополнительная защита: если points != 0, считаем баллами.
+  if (item.type === 'points') return true;
+  return Number(item.points) !== 0 && Number(item.amount) === 0;
+}
 
 const activeFilterCount = computed(() => {
   let c = 0;
@@ -175,15 +194,15 @@ function resetFilters() {
 
 function openEdit(item) {
   editingId.value = item.id;
+  // Маппинг старых типов в новую семантику (rub/points).
+  const isPoints = isPointsRow(item);
   form.value = {
     consultant: item.consultant,
-    type: item.type,
-    amount: item.amount,
-    points: item.points,
+    type: isPoints ? 'points' : 'rub',
+    amount: isPoints ? Number(item.points || 0) : Number(item.amount || 0),
     accrual_date: item.accrualDate,
     comment: item.comment,
   };
-  // pre-populate consultant options so v-autocomplete shows current selection
   consultantOptions.value = [{ id: item.consultant, personName: item.consultantName }];
   formError.value = '';
   createDialog.value = true;
@@ -248,7 +267,13 @@ async function searchConsultants(q) {
 
 function openCreate() {
   editingId.value = null;
-  form.value = { consultant: null, type: 'bonus', amount: 0, points: 0, comment: '', accrual_date: new Date().toISOString().slice(0, 10) };
+  form.value = {
+    consultant: null,
+    type: 'rub',
+    amount: 0,
+    comment: '',
+    accrual_date: new Date().toISOString().slice(0, 10),
+  };
   formError.value = '';
   createDialog.value = true;
 }

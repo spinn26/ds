@@ -381,19 +381,28 @@ class AdminFinanceController extends Controller
     {
         $request->validate([
             'consultant' => 'required|integer|exists:consultant,id',
-            'type' => 'required|in:bonus,penalty,compensation',
+            // Per spec ✅Прочие начисления §3: тип = Рубли | Баллы.
+            // Старые типы (bonus/penalty/compensation) тоже принимаются для
+            // обратной совместимости — они мапятся в 'rub' семантику.
+            'type' => 'required|in:rub,points,bonus,penalty,compensation',
             'amount' => 'required|numeric',
-            'points' => 'nullable|numeric',
+            'comment' => 'required|string|max:2000',
         ]);
 
         $consultantId = (int) $request->consultant;
-        $points = (float) $request->input('points', 0);
+        $type = $request->type;
+        $value = (float) $request->amount;
 
-        $id = DB::transaction(function () use ($request, $consultantId, $points) {
+        // Маршрутизация per spec §3: Рубли → amount, Баллы → points.
+        $isPoints = $type === 'points';
+        $amountRub = $isPoints ? 0.0 : $value;
+        $points = $isPoints ? $value : 0.0;
+
+        $id = DB::transaction(function () use ($request, $consultantId, $type, $amountRub, $points) {
             $id = DB::table('other_accruals')->insertGetId([
                 'consultant' => $consultantId,
-                'type' => $request->type,
-                'amount' => $request->amount,
+                'type' => $type,
+                'amount' => $amountRub,
                 'points' => $points,
                 'comment' => $request->comment,
                 'accrual_date' => $request->input('accrual_date', now()),
@@ -430,27 +439,32 @@ class AdminFinanceController extends Controller
 
         $request->validate([
             'consultant' => 'required|integer|exists:consultant,id',
-            'type' => 'required|in:bonus,penalty,compensation',
+            'type' => 'required|in:rub,points,bonus,penalty,compensation',
             'amount' => 'required|numeric',
-            'points' => 'nullable|numeric',
+            'comment' => 'required|string|max:2000',
         ]);
 
-        $newPoints = (float) $request->input('points', 0);
+        $type = $request->type;
+        $value = (float) $request->amount;
+        $isPoints = $type === 'points';
+        $newAmountRub = $isPoints ? 0.0 : $value;
+        $newPoints = $isPoints ? $value : 0.0;
+
         $oldPoints = (float) ($row->points ?? 0);
         $delta = $newPoints - $oldPoints;
 
-        DB::transaction(function () use ($request, $id, $row, $delta) {
+        DB::transaction(function () use ($request, $id, $row, $type, $newAmountRub, $newPoints, $delta) {
             DB::table('other_accruals')->where('id', $id)->update([
                 'consultant' => $request->consultant,
-                'type' => $request->type,
-                'amount' => $request->amount,
-                'points' => $request->input('points', 0),
+                'type' => $type,
+                'amount' => $newAmountRub,
+                'points' => $newPoints,
                 'comment' => $request->comment,
                 'accrual_date' => $request->input('accrual_date', $row->accrual_date),
                 'updated_at' => now(),
             ]);
 
-            // Если консультант не менялся — просто прибавляем дельту.
+            // Если консультант не менялся — просто прибавляем дельту по баллам.
             // Если поменялся — у старого вычитаем oldPoints, у нового добавляем newPoints.
             if ($request->consultant == $row->consultant) {
                 if ($delta != 0.0) {
@@ -466,11 +480,10 @@ class AdminFinanceController extends Controller
                         'groupVolumeCumulative' => DB::raw("COALESCE(\"groupVolumeCumulative\", 0) - {$row->points}"),
                     ]);
                 }
-                if ($request->input('points', 0) != 0.0) {
-                    $newP = (float) $request->input('points', 0);
+                if ($newPoints != 0.0) {
                     DB::table('consultant')->where('id', $request->consultant)->update([
-                        'personalVolume' => DB::raw("COALESCE(\"personalVolume\", 0) + {$newP}"),
-                        'groupVolumeCumulative' => DB::raw("COALESCE(\"groupVolumeCumulative\", 0) + {$newP}"),
+                        'personalVolume' => DB::raw("COALESCE(\"personalVolume\", 0) + {$newPoints}"),
+                        'groupVolumeCumulative' => DB::raw("COALESCE(\"groupVolumeCumulative\", 0) + {$newPoints}"),
                     ]);
                 }
             }
