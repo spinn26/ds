@@ -516,20 +516,101 @@ class AdminFinanceController extends Controller
         return response()->json(['data' => [], 'message' => 'В разработке']);
     }
 
-    /** Валюты и НДС */
+    /**
+     * Валюты и НДС (per spec ✅Валюты и НДС.md):
+     * - currencyRates: помесячные курсы (последние 24 месяца), с периодом
+     *   и кодом валюты для редактирования.
+     * - vat: история ставок, текущая (dateTo > now или max value) маркируется
+     *   isCurrent для отображения «настоящее время».
+     */
     public function currencies(): JsonResponse
     {
-        $currencies = DB::table('currency')->orderBy('id')->get()
+        $currencyMeta = DB::table('currency')->orderBy('id')->get()
             ->map(fn ($c) => [
                 'id' => $c->id,
-                // Legacy schema has nameRu / nameEn / currencyName — no plain `name`.
                 'name' => $c->nameRu ?? $c->nameEn ?? $c->currencyName ?? '',
                 'symbol' => $c->symbol,
+            ])->keyBy('id');
+
+        // Курсы за последние 24 месяца, отсортированы по убыванию даты
+        $minDate = now()->subMonths(24)->startOfMonth();
+        $rates = DB::table('currencyRate')
+            ->where('date', '>=', $minDate)
+            ->orderByDesc('date')
+            ->orderBy('currency')
+            ->get()
+            ->map(function ($r) use ($currencyMeta) {
+                $meta = $currencyMeta[$r->currency] ?? null;
+                return [
+                    'id' => $r->id,
+                    'currencyId' => $r->currency,
+                    'symbol' => $meta['symbol'] ?? '',
+                    'currencyName' => $meta['name'] ?? '',
+                    'rate' => round((float) $r->rate, 8),
+                    'date' => $r->date,
+                    'period' => $r->date ? substr((string) $r->date, 0, 7) : null,
+                ];
+            });
+
+        // VAT история
+        $vatRows = DB::table('vat')->orderBy('dateFrom')->get();
+        $now = now();
+        $vat = $vatRows->map(function ($v) use ($now) {
+            $isCurrent = $v->dateFrom <= $now && (! $v->dateTo || $v->dateTo >= $now->copy()->addYears(10));
+            return [
+                'id' => $v->id,
+                'value' => (float) $v->value,
+                'dateFrom' => $v->dateFrom,
+                'dateTo' => $v->dateTo,
+                'isCurrent' => $isCurrent,
+            ];
+        });
+
+        return response()->json([
+            'currencies' => $currencyMeta->values(),
+            'currencyRates' => $rates,
+            'vat' => $vat,
+        ]);
+    }
+
+    /** PATCH /admin/currencies/rates/{id} — обновить курс за период. */
+    public function updateCurrencyRate(Request $request, int $id): JsonResponse
+    {
+        $request->validate(['rate' => 'required|numeric|min:0']);
+        $row = DB::table('currencyRate')->where('id', $id)->first();
+        if (! $row) return response()->json(['message' => 'Курс не найден'], 404);
+
+        DB::table('currencyRate')->where('id', $id)->update(['rate' => $request->rate]);
+        return response()->json(['message' => 'Курс обновлён']);
+    }
+
+    /**
+     * POST /admin/currencies/vat — добавить новую ставку НДС с указанной даты.
+     * Закрывает предыдущую ставку (выставляет dateTo в день перед новой dateFrom).
+     */
+    public function addVatRate(Request $request): JsonResponse
+    {
+        $request->validate([
+            'value' => 'required|numeric|min:0',
+            'dateFrom' => 'required|date',
+        ]);
+
+        DB::transaction(function () use ($request) {
+            // Закрываем самую свежую активную ставку
+            $current = DB::table('vat')->orderByDesc('dateFrom')->first();
+            $newFrom = $request->dateFrom;
+            $closeDate = (new \DateTime($newFrom))->modify('-1 day')->format('Y-m-d 23:59:59');
+            if ($current) {
+                DB::table('vat')->where('id', $current->id)->update(['dateTo' => $closeDate]);
+            }
+            DB::table('vat')->insert([
+                'value' => $request->value,
+                'dateFrom' => $newFrom,
+                'dateTo' => '2050-01-01 00:00:00', // дальняя дата = «настоящее время»
             ]);
+        });
 
-        $vat = DB::table('vat')->orderBy('id')->get();
-
-        return response()->json(['currencies' => $currencies, 'vat' => $vat]);
+        return response()->json(['message' => 'Ставка НДС добавлена']);
     }
 
     /** Импорт транзакций — placeholder */
