@@ -41,8 +41,10 @@ class ManualTransactionController extends Controller
             $q->where('c.number', 'ilike', '%' . $request->number . '%');
         }
         // Per user: транзакция не может быть без номера контракта.
-        // 397 legacy-контрактов без c.number отфильтровываем — на них
-        // нельзя завести транзакцию (некуда привязать).
+        // ~398 legacy-контрактов без c.number отфильтровываем — на них
+        // нельзя завести транзакцию (некуда привязать). Индекс
+        // contract_number_idx (partial WHERE number IS NOT NULL) ускоряет
+        // запрос на ~17k активных контрактов.
         $q->whereNotNull('c.number')->where('c.number', '!=', '');
         if ($request->filled('product')) {
             $q->where('c.product', $request->product);

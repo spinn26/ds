@@ -89,24 +89,26 @@ class AdminPaymentRegistryController extends Controller
         // .withheldForGap, но это поле в legacy-данных почти всегда NULL
         // (только 22 строки из 36810). reduction живёт прямо в commission
         // и заполнен корректно (7687 строк).
+        // Используем денормализованные dateYear/dateMonth (есть индекс
+        // commission_dateyear_datemonth_idx), а не whereYear/whereMonth —
+        // последние делают seq-scan по всему commission (533k строк).
+        $dm = sprintf('%04d-%02d', $year, $month);
         if (! empty($params['withDetachment'])) {
-            $q->whereIn('b.consultant', function ($sub) use ($year, $month) {
+            $q->whereIn('b.consultant', function ($sub) use ($dm) {
                 $sub->select('consultant')->from('commission')
                     ->where('reduction', '>', 0)
                     ->whereNull('deletedAt')
-                    ->whereYear('date', $year)
-                    ->whereMonth('date', $month);
+                    ->where('dateMonth', $dm);
             });
         }
         // Аналогично для ОП — опираемся на withheldForCommission в commission
         // (это per-row penalty за невыполнение плана продаж).
         if (! empty($params['withOp'])) {
-            $q->whereIn('b.consultant', function ($sub) use ($year, $month) {
+            $q->whereIn('b.consultant', function ($sub) use ($dm) {
                 $sub->select('consultant')->from('commission')
                     ->where('withheldForCommission', '>', 0)
                     ->whereNull('deletedAt')
-                    ->whereYear('date', $year)
-                    ->whereMonth('date', $month);
+                    ->where('dateMonth', $dm);
             });
         }
 

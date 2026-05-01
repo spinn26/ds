@@ -54,11 +54,14 @@ class CurrencyRecalculator
         $monthEnd = $period->copy()->endOfMonth();
         $newRate = (float) $rate->rate;
 
-        // USD-курс на этот же месяц нужен для пересчёта amountUSD
+        // USD-курс на этот же месяц нужен для пересчёта amountUSD.
+        // Используем диапазон дат вместо whereYear/whereMonth — это
+        // позволяет Postgres применить btree-индекс на currencyRate(date)
+        // вместо seq-scan'а по всей таблице.
         $usdRow = DB::table('currencyRate')
             ->where('currency', self::USD_CURRENCY_ID)
-            ->whereYear('date', $year)
-            ->whereMonth('date', $month)
+            ->where('date', '>=', $period)
+            ->where('date', '<=', $monthEnd)
             ->first();
         $usdRate = (float) ($usdRow->rate ?? 0);
 
