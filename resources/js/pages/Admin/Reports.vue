@@ -62,7 +62,7 @@
         </template>
         <template #item.file="{ item }">
           <v-btn v-if="item.status === 'ready'" size="x-small" variant="tonal" color="info"
-            prepend-icon="mdi-cloud-download" :href="item.fileUrl" target="_blank">
+            prepend-icon="mdi-cloud-download" @click="downloadReport(item)">
             Скачать
           </v-btn>
           <span v-else class="text-medium-emphasis">—</span>
@@ -174,6 +174,31 @@ async function loadArchive() {
     const { data } = await api.get('/admin/reports/archive');
     archive.value = data.data || [];
   } catch {}
+}
+
+/**
+ * Скачивание через XHR с Bearer-токеном — прямая ссылка на endpoint
+ * требует Authorization header (через `auth:sanctum`), который браузер
+ * не пошлёт при `<a target=_blank>`. Поэтому грузим как Blob и
+ * триггерим скачивание программно.
+ */
+async function downloadReport(item) {
+  try {
+    const resp = await api.get(`/admin/reports/${item.id}/download`, {
+      responseType: 'blob',
+    });
+    const filename = `report-${item.type}-${item.dateFrom}-${item.dateTo}.csv`;
+    const url = URL.createObjectURL(resp.data);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    notify(e.response?.data?.message || 'Не удалось скачать отчёт', 'error');
+  }
 }
 
 onMounted(loadArchive);
