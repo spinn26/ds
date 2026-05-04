@@ -227,14 +227,31 @@ const canSaveReq = computed(() =>
   bankName.value.trim() && bankBik.value.trim() && accountNumber.value.trim()
 );
 
-// Document acceptance
-const requiredDocs = [
+// Document acceptance — список тянем из таблицы agreementDocument
+// (per spec ✅Продукты §1.3 «Список документов»). Если backend не вернёт —
+// fallback на минимальный набор, чтобы блокирующее окно не оставалось пустым.
+const FALLBACK_DOCS = [
   { key: 'agency', title: 'Агентский договор', url: null },
   { key: 'privacy', title: 'Согласие на обработку персональных данных', url: null },
   { key: 'offer',   title: 'Публичная оферта', url: null },
 ];
-const acceptedDocs = ref(Object.fromEntries(requiredDocs.map(d => [d.key, false])));
-const allDocsAccepted = computed(() => requiredDocs.every(d => acceptedDocs.value[d.key]));
+const requiredDocs = ref(FALLBACK_DOCS);
+const acceptedDocs = ref(Object.fromEntries(FALLBACK_DOCS.map(d => [d.key, false])));
+const allDocsAccepted = computed(() => requiredDocs.value.every(d => acceptedDocs.value[d.key]));
+
+async function loadAgreementDocs() {
+  try {
+    const { data } = await api.get('/profile/agreement-documents');
+    if (Array.isArray(data) && data.length) {
+      requiredDocs.value = data.map(d => ({
+        key: 'doc_' + d.id,
+        title: d.name,
+        url: d.link || d.url || null,
+      }));
+      acceptedDocs.value = Object.fromEntries(requiredDocs.value.map(d => [d.key, false]));
+    }
+  } catch {}
+}
 
 const filteredProducts = computed(() => {
   let list = products.value;
@@ -343,7 +360,7 @@ async function loadProducts() {
   loading.value = false;
 }
 
-onMounted(loadProducts);
+onMounted(() => { loadProducts(); loadAgreementDocs(); });
 </script>
 
 <style scoped>
