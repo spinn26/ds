@@ -376,9 +376,16 @@ class PoolRunner
                 $nominalCounts[$level] = ($nominalCounts[$level] ?? 0) + (int) $cnt;
             }
         }
+        // shareValues[L] = fund / count(L+) — каждая доля делится на ВСЕХ
+        // её получателей (партнёры уровня L и выше получают долю L через
+        // матрёшку), а не только на ровно-L. См. PoolCalculator::shareValues.
         $shareValues = [];
-        foreach ($nominalCounts as $level => $count) {
-            $shareValues[$level] = $count > 0 ? round($fund / $count, 2) : 0;
+        for ($level = PoolCalculator::LEADER_LEVEL_MIN; $level <= PoolCalculator::LEADER_LEVEL_MAX; $level++) {
+            $cum = 0;
+            for ($l = $level; $l <= PoolCalculator::LEADER_LEVEL_MAX; $l++) {
+                $cum += (int) ($nominalCounts[$l] ?? 0);
+            }
+            $shareValues[$level] = $cum > 0 ? round($fund / $cum, 2) : 0;
         }
 
         return [

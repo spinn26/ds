@@ -18,7 +18,21 @@ class PoolCalculator
     public const LEADER_LEVEL_MAX = 10;         // Co-founder DS
 
     /**
-     * Share value per level: fund(1%) / nominal head-count.
+     * Share value per level: fund(1%) / count of leaders at or above the level.
+     *
+     * Уточнение по спеке (см. бизнес-кейс декабря 2025 / января 2026):
+     * долю уровня L получают ВСЕ партнёры уровня L и выше (через матрёшку),
+     * поэтому фонд этого уровня делится на **общее** число его получателей,
+     * а не только на партнёров ровно уровня L.
+     *
+     *   share(6)  = fund / count(6+) = fund / (n6 + n7 + n8 + n9 + n10)
+     *   share(7)  = fund / count(7+) = fund / (n7 + n8 + n9 + n10)
+     *   share(8)  = fund / count(8+) = fund / (n8 + n9 + n10)
+     *   share(9)  = fund / count(9+) = fund / (n9 + n10)
+     *   share(10) = fund / count(10+) = fund / n10
+     *
+     * Партнёр уровня L получает sum(share(6)..share(L)) — это уже шире, чем
+     * у него «свой» уровень.
      *
      * @param array<int,int> $nominalCounts  level => count of partners at that level (qualifying + not)
      * @return array<int,float> level => share in rubles
@@ -27,9 +41,12 @@ class PoolCalculator
     {
         $fund = $vatExclusiveRevenue * self::POOL_PERCENT;
         $shares = [];
-        foreach ($nominalCounts as $level => $count) {
-            if ($level < self::LEADER_LEVEL_MIN || $level > self::LEADER_LEVEL_MAX) continue;
-            $shares[$level] = $count > 0 ? $fund / $count : 0.0;
+        for ($level = self::LEADER_LEVEL_MIN; $level <= self::LEADER_LEVEL_MAX; $level++) {
+            $cumulative = 0;
+            for ($l = $level; $l <= self::LEADER_LEVEL_MAX; $l++) {
+                $cumulative += (int) ($nominalCounts[$l] ?? 0);
+            }
+            $shares[$level] = $cumulative > 0 ? $fund / $cumulative : 0.0;
         }
         return $shares;
     }

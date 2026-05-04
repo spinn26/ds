@@ -223,21 +223,30 @@ class CommissionSpecTest extends TestCase
     }
 
     #[Test]
-    public function spec_6_2_share_value_divides_fund_by_nominal_headcount(): void
+    public function spec_6_2_share_value_divides_fund_by_cumulative_recipients(): void
     {
-        // Per spec §6.2: share = fund / nominal headcount (qualifying + not).
+        // Per real-world business case (2025-12 / 2026-01 на дашборде):
+        //   shareValues[L] = fund / count(L+)
+        // То есть фонд делится на ВСЕХ получателей доли (партнёры уровня L
+        // и выше получают долю L через матрёшку), а не только на партнёров
+        // ровно уровня L. Спека §6.2 фразой «фонд / общее номинальное
+        // количество в этой квалификации» допускает обе интерпретации;
+        // владельцем продукта зафиксирована вторая.
         $pool = new \App\Services\PoolCalculator();
         $shares = $pool->shareValues(100_000_000, [
-            6 => 20,
-            7 => 10,
-            8 => 5,
-            9 => 4,
+            6 => 20,  // Top FC
+            7 => 10,  // Silver
+            8 => 5,   // Gold
+            9 => 4,   // Platinum
+            10 => 0,  // Co-founder
         ]);
 
-        $this->assertSame(50_000.0, $shares[6]);   // TOP FC
-        $this->assertSame(100_000.0, $shares[7]);  // Silver
-        $this->assertSame(200_000.0, $shares[8]);  // Gold
-        $this->assertSame(250_000.0, $shares[9]);  // Platinum
+        // 1% от 100M = 1M на уровень.
+        $this->assertEqualsWithDelta(1_000_000 / 39, $shares[6], 0.01);  // 20+10+5+4 = 39
+        $this->assertEqualsWithDelta(1_000_000 / 19, $shares[7], 0.01);  // 10+5+4 = 19
+        $this->assertEqualsWithDelta(1_000_000 / 9,  $shares[8], 0.01);  // 5+4 = 9
+        $this->assertEqualsWithDelta(1_000_000 / 4,  $shares[9], 0.01);  // 4
+        $this->assertSame(0.0, $shares[10]);                              // нет Co-founder'ов
     }
 
     #[Test]
@@ -277,12 +286,17 @@ class CommissionSpecTest extends TestCase
     #[Test]
     public function spec_6_5_forfeited_shares_are_not_redistributed(): void
     {
-        // Per spec §6.5: 10 Silver, 2 failed ОП, fund 1 000 000 (share 100 000).
-        //   Correct outcome: 8 qualifiers each get 100 000, 200 000 stays with DS.
-        //   Wrong outcome (redistribution): 8 qualifiers each get 125 000.
+        // Per spec §6.5 + new shareValue formula:
+        // 10 Silver-партнёров (level 7), 2 fail'ят. Если бы доли передавали
+        // оставшимся, qualifying получили бы больше — это запрещено.
+        //
+        // По новой формуле shareValues[L] = fund / count(L+):
+        //   share(6) = 1M / 10 = 100 000  (Top FC count = 0, recipients = 10 silvers)
+        //   share(7) = 1M / 10 = 100 000
+        //   matryoshka(7) = 100k + 100k = 200k каждому квалифицирующемуся.
+        //   8 × 200k = 1 600 000 выплачено, 400k остаётся в DS.
         $pool = new \App\Services\PoolCalculator();
 
-        // Ten Silver partners (level 7), two with participates=false.
         $partners = [];
         for ($i = 1; $i <= 8; $i++) {
             $partners[] = ['id' => $i, 'level' => 7, 'participates' => true];
@@ -291,16 +305,14 @@ class CommissionSpecTest extends TestCase
             $partners[] = ['id' => $i, 'level' => 7, 'participates' => false];
         }
 
-        // No lower-level leaders here, so Silver matryoshka is just share(6)+share(7).
-        // Zero Top-FC head-count makes share(6)=0; Silver share alone drives the payout.
-        $distribution = $pool->distribute(100_000_000, [6 => 0, 7 => 10], $partners);
+        $distribution = $pool->distribute(100_000_000, [6 => 0, 7 => 10, 8 => 0, 9 => 0, 10 => 0], $partners);
 
         $payouts = array_column($distribution, 'payoutRub');
         $sumPaidOut = array_sum($payouts);
 
-        $this->assertSame(100_000.0, $distribution[0]['payoutRub'], 'Qualifying partner gets one share');
+        $this->assertSame(200_000.0, $distribution[0]['payoutRub'], 'Qualifying partner gets share(6)+share(7)');
         $this->assertSame(0.0, $distribution[8]['payoutRub'], 'Non-participating partner gets zero');
-        $this->assertSame(800_000.0, $sumPaidOut, 'Only 8×100k paid; 200k stays with DS');
+        $this->assertSame(1_600_000.0, $sumPaidOut, '8×200k paid; 400k stays with DS');
     }
 
     // ========================================================================
