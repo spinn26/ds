@@ -4,7 +4,7 @@
       <template #actions>
         <div class="d-flex align-center ga-2">
           <v-btn variant="flat" color="primary" size="small" prepend-icon="mdi-download"
-            :loading="exporting" @click="downloadXlsx">
+            :loading="exporting" :disabled="locked" @click="downloadXlsx">
             Скачать XLSX
           </v-btn>
           <MonthPicker v-model="month" @update:model-value="loadData" />
@@ -12,6 +12,14 @@
       </template>
     </PageHeader>
 
+    <!-- Per spec ✅Доступность отчётов: пока админ не открыл период,
+         партнёр видит заглушку вместо детализации. -->
+    <v-alert v-if="locked" type="info" variant="tonal" class="mb-4" icon="mdi-lock-clock">
+      <div class="text-subtitle-1 font-weight-bold mb-1">Отчёт ещё не опубликован</div>
+      <div>{{ lockedMessage }}. Дождитесь окончания сверки за этот месяц — администратор откроет данные после внесения всех транзакций.</div>
+    </v-alert>
+
+    <template v-if="!locked">
     <!-- Row 1: Qualification + Volumes per spec ✅Отчет начислений и выплат §1
          Удалены: «Плашка курсов валют» и «Уровень расчета комиссионных».
          «ГП» переименован в «ОП по ГП». -->
@@ -225,6 +233,7 @@
         </v-expansion-panel-text>
       </v-expansion-panel>
     </v-expansion-panels>
+    </template>
 
     <v-progress-linear v-if="loading" indeterminate color="primary"
       style="position:fixed;top:0;left:0;right:0;z-index:2000" />
@@ -300,13 +309,24 @@ const paymentsHeaders = [
   { title: 'Статус', key: 'status', width: 120 },
 ];
 
+const locked = ref(false);
+const lockedMessage = ref('');
+
 async function loadData() {
   loading.value = true;
+  locked.value = false;
+  lockedMessage.value = '';
   try {
     const { data: d } = await api.get('/finance/report', { params: { month: month.value } });
     data.value = d;
-  } catch {
-    data.value = {};
+  } catch (e) {
+    if (e?.response?.status === 423) {
+      locked.value = true;
+      lockedMessage.value = e.response.data?.message || 'Отчёт за этот период ещё не опубликован';
+      data.value = {};
+    } else {
+      data.value = {};
+    }
   }
   loading.value = false;
 }

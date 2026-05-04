@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Services\PeriodFreezeService;
+use App\Services\PeriodVisibilityService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -20,29 +21,72 @@ class AdminPeriodController extends Controller
 {
     public function __construct(
         private readonly PeriodFreezeService $periodFreeze,
+        private readonly PeriodVisibilityService $visibility,
     ) {}
 
-    /** Список закрытий с пагинацией. */
+    /**
+     * Линейный реестр последних 24 месяцев со статусами заморозки и
+     * видимости (per spec ✅Доступность отчётов §1).
+     */
     public function index(Request $request): JsonResponse
     {
         $closures = DB::table('period_closures')
             ->orderByDesc('year')
             ->orderByDesc('month')
-            ->limit(120)
+            ->limit(240)
             ->get()
-            ->map(fn ($c) => [
-                'id' => $c->id,
-                'year' => (int) $c->year,
-                'month' => (int) $c->month,
-                'closedAt' => $c->closed_at,
-                'closedBy' => $c->closed_by,
-                'reopenedAt' => $c->reopened_at,
-                'reopenedBy' => $c->reopened_by,
-                'note' => $c->note,
-                'isFrozen' => $c->reopened_at === null,
-            ]);
+            ->keyBy(fn ($c) => sprintf('%04d-%02d', $c->year, $c->month));
 
-        return response()->json(['data' => $closures]);
+        $now = now();
+        $rows = [];
+        for ($i = 0; $i < 24; $i++) {
+            $d = $now->copy()->subMonths($i);
+            $year = (int) $d->format('Y');
+            $month = (int) $d->format('n');
+            $key = sprintf('%04d-%02d', $year, $month);
+            $c = $closures[$key] ?? null;
+
+            $rows[] = [
+                'id' => $c->id ?? null,
+                'year' => $year,
+                'month' => $month,
+                'closedAt' => $c->closed_at ?? null,
+                'closedBy' => $c->closed_by ?? null,
+                'reopenedAt' => $c->reopened_at ?? null,
+                'reopenedBy' => $c->reopened_by ?? null,
+                'note' => $c->note ?? null,
+                'isFrozen' => $c ? $c->reopened_at === null : false,
+                'isVisibleToPartners' => $this->visibility->isVisible($year, $month),
+            ];
+        }
+
+        return response()->json(['data' => $rows]);
+    }
+
+    /**
+     * Toggle видимости отчёта за месяц для партнёров
+     * (per spec ✅Доступность отчётов §1, кнопка «Сделать доступным/недоступным»).
+     */
+    public function setVisibility(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'year' => 'required|integer|min:2020|max:2099',
+            'month' => 'required|integer|min:1|max:12',
+            'visible' => 'required|boolean',
+        ]);
+
+        $this->visibility->setVisibility(
+            (int) $data['year'],
+            (int) $data['month'],
+            (bool) $data['visible'],
+            (int) $request->user()->id,
+        );
+
+        return response()->json([
+            'message' => $data['visible']
+                ? "Отчёты за {$data['month']}.{$data['year']} стали видны партнёрам"
+                : "Отчёты за {$data['month']}.{$data['year']} скрыты от партнёров",
+        ]);
     }
 
     /** Закрыть месяц. */

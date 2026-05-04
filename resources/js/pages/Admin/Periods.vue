@@ -1,10 +1,12 @@
 <template>
   <div>
-    <PageHeader title="Реестр отчётных периодов" icon="mdi-calendar-month" :count="rows.length" />
+    <PageHeader title="Закрытие отчётного месяца" icon="mdi-calendar-month" :count="rows.length">
+      <template #subtitle>Доступность отчётов на платформе для Партнёров</template>
+    </PageHeader>
 
     <v-alert type="info" variant="tonal" density="compact" class="mb-3" icon="mdi-information">
-      Закрытие периода блокирует транзакции / пересчёты этого месяца. Доступность —
-      управляет видимостью отчёта партнёрам (per spec ✅Доступность отчётов).
+      Доступность управляет видимостью отчёта партнёрам. Закрытие периода — финальная
+      заморозка: транзакции/пересчёты блокируются навсегда (per spec ✅Доступность отчётов).
     </v-alert>
 
     <DataTableWrapper
@@ -18,25 +20,39 @@
       <template #item.period="{ item }">
         <span class="font-weight-medium">{{ formatPeriod(item.year, item.month) }}</span>
       </template>
+      <template #item.visible="{ item }">
+        <v-icon v-if="item.isVisibleToPartners" color="success" title="Отчёты видны партнёрам">mdi-check-circle</v-icon>
+        <v-icon v-else color="error" title="Отчёты скрыты от партнёров">mdi-minus-circle</v-icon>
+      </template>
+      <template #item.visibilityToggle="{ item }">
+        <v-btn v-if="!item.isFrozen && !item.isVisibleToPartners"
+          size="x-small" color="success" variant="tonal" prepend-icon="mdi-eye"
+          @click="toggleVisibility(item, true)">
+          Сделать доступным
+        </v-btn>
+        <v-btn v-else-if="!item.isFrozen && item.isVisibleToPartners"
+          size="x-small" color="error" variant="tonal" prepend-icon="mdi-eye-off"
+          @click="toggleVisibility(item, false)">
+          Сделать недоступным
+        </v-btn>
+        <span v-else class="text-caption text-medium-emphasis">—</span>
+      </template>
       <template #item.frozen="{ item }">
-        <v-chip size="x-small" :color="item.isFrozen ? 'error' : 'success'" variant="tonal">
-          {{ item.isFrozen ? 'Закрыт' : 'Открыт' }}
+        <v-chip v-if="item.isFrozen" size="x-small" color="error" variant="flat" prepend-icon="mdi-lock">
+          Период закрыт
         </v-chip>
-      </template>
-      <template #item.closedAt="{ value }">
-        {{ value ? fmtDateTime(value) : '—' }}
-      </template>
-      <template #item.reopenedAt="{ value }">
-        {{ value ? fmtDateTime(value) : '—' }}
+        <v-btn v-else size="x-small" color="success" variant="tonal" prepend-icon="mdi-lock"
+          @click="confirmClose(item)">
+          Закрыть период
+        </v-btn>
       </template>
       <template #item.actions="{ item }">
         <v-btn icon="mdi-card-account-details-outline" size="x-small" variant="text"
           color="primary" title="Карточка периода"
           :to="`/manage/periods/${item.year}-${String(item.month).padStart(2, '0')}`" />
-        <v-btn v-if="!item.isFrozen" icon="mdi-lock" size="x-small" variant="text"
-          color="warning" title="Закрыть период" @click="confirmClose(item)" />
-        <v-btn v-else icon="mdi-lock-open" size="x-small" variant="text"
-          color="success" title="Переоткрыть период" @click="confirmReopen(item)" />
+        <v-btn v-if="item.isFrozen" icon="mdi-lock-open" size="x-small" variant="text"
+          color="warning" title="Переоткрыть период (только в исключительных случаях)"
+          @click="confirmReopen(item)" />
       </template>
     </DataTableWrapper>
 
@@ -97,11 +113,11 @@ function fmtDateTime(v) {
 
 const headers = [
   { title: 'Период', key: 'period', width: 180 },
-  { title: 'Состояние', key: 'frozen', width: 120 },
-  { title: 'Закрыт', key: 'closedAt', width: 170 },
-  { title: 'Переоткрыт', key: 'reopenedAt', width: 170 },
+  { title: 'Доступность', key: 'visible', width: 120, align: 'center' },
+  { title: 'Изменить доступность', key: 'visibilityToggle', sortable: false, width: 200 },
+  { title: 'Закрыть период', key: 'frozen', sortable: false, width: 200 },
   { title: 'Комментарий', key: 'note' },
-  { title: '', key: 'actions', sortable: false, width: 130 },
+  { title: '', key: 'actions', sortable: false, width: 90 },
 ];
 
 async function load() {
@@ -131,6 +147,22 @@ async function doClose() {
     });
     closeDialog.value = false;
     notify('Период закрыт');
+    await load();
+  } catch (e) {
+    notify(e.response?.data?.message || 'Ошибка', 'error');
+  }
+  saving.value = false;
+}
+
+async function toggleVisibility(item, visible) {
+  saving.value = true;
+  try {
+    await api.post('/admin/periods/visibility', {
+      year: item.year, month: item.month, visible,
+    });
+    notify(visible
+      ? `Отчёты за ${formatPeriod(item.year, item.month)} стали доступны партнёрам`
+      : `Отчёты за ${formatPeriod(item.year, item.month)} скрыты от партнёров`);
     await load();
   } catch (e) {
     notify(e.response?.data?.message || 'Ошибка', 'error');

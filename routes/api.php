@@ -310,6 +310,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/admin/periods', [\App\Http\Controllers\Api\AdminPeriodController::class, 'index']);
         Route::post('/admin/periods/close', [\App\Http\Controllers\Api\AdminPeriodController::class, 'close'])->middleware('throttle:10,1');
         Route::post('/admin/periods/reopen', [\App\Http\Controllers\Api\AdminPeriodController::class, 'reopen'])->middleware('throttle:10,1');
+        Route::post('/admin/periods/visibility', [\App\Http\Controllers\Api\AdminPeriodController::class, 'setVisibility'])->middleware('throttle:30,1');
         Route::get('/admin/periods/{year}/{month}', [\App\Http\Controllers\Api\AdminPeriodController::class, 'check'])->whereNumber(['year', 'month']);
 
         // Admin References (generic CRUD for small reference tables)
