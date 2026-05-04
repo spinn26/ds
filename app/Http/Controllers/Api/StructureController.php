@@ -47,11 +47,16 @@ class StructureController extends Controller
             // Терминированных-сирот в корне НЕ показываем: после терминации
             // их структура улетает наставнику, поэтому видеть их «висящими»
             // в верхушке нет смысла — они только засоряют дерево.
+            //
+            // Также скрываем системные аккаунты (role=supreme — глобальный
+            // супер-юзер; «Неизвестный консультант» — служебная сущность
+            // per spec ✅Бизнес-логика «Неизвестного консультанта»).
             $topLevelRows = Consultant::whereNull('dateDeleted')
                 ->where(function ($q) {
                     $q->whereNull('inviter')->orWhere('inviter', 0);
                 })
                 ->where('activity', '!=', PartnerActivity::Terminated->value)
+                ->whereNotIn('id', $this->systemConsultantIds())
                 ->orderBy('personName')
                 ->get();
             $topLevel = $this->consultantService->formatMembers($topLevelRows);
@@ -88,6 +93,35 @@ class StructureController extends Controller
         $members = $this->consultantService->formatMembers($rows);
 
         return response()->json(['data' => $members->values()]);
+    }
+
+    /**
+     * ID системных consultant'ов, которых не показываем в верхушке
+     * структуры команды.
+     *
+     * Включает:
+     *   - всех с ролью supreme (глобальный супер-юзер платформы);
+     *   - «Неизвестного консультанта» — служебная сущность для сделок
+     *     «с улицы» per spec ✅Бизнес-логика «Неизвестного консультанта».
+     *
+     * Кэшировать не стоит — список крайне маленький (1-2 строки).
+     *
+     * @return array<int>
+     */
+    private function systemConsultantIds(): array
+    {
+        $supremeIds = DB::table('consultant as c')
+            ->join('WebUser as w', 'w.id', '=', 'c.webUser')
+            ->where('w.role', 'ilike', '%supreme%')
+            ->pluck('c.id')
+            ->all();
+
+        $unknownIds = DB::table('consultant')
+            ->where('personName', 'ilike', 'Неизвестный консультант%')
+            ->pluck('id')
+            ->all();
+
+        return array_values(array_unique(array_map('intval', array_merge($supremeIds, $unknownIds))));
     }
 
     /**
