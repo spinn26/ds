@@ -295,21 +295,36 @@ class PoolRunner
         $start = sprintf('%04d-%02d-01', $year, $month);
         $end = date('Y-m-t', strtotime($start));
 
-        $rows = DB::table('poolLog as p')
-            ->leftJoin('consultant as c', 'c.id', '=', 'p.consultant')
-            ->leftJoin('status_levels as sl', 'sl.id', '=', 'c.status_and_lvl')
-            ->whereBetween('p.date', [$start, $end])
-            ->select([
-                'p.consultant',
-                'c.personName',
-                'sl.level',
-                'sl.title',
-                'p.poolBonus',
-                'p.networkGroupBonus',
-            ])
-            ->orderBy('sl.level')
-            ->orderBy('c.personName')
-            ->get();
+        // ВАЖНО: уровень должен быть за РАСЧЁТНЫЙ месяц, а не текущий
+        // c.status_and_lvl. Иначе у партнёра, который в феврале был Топ ФК
+        // и сегодня уже Эксперт, в исторической карточке пула 2026-02
+        // отображается «Эксперт» — выглядит как сломанные данные.
+        // Берём GREATEST(nominalLevel, calculationLevel) из qualificationLog
+        // за тот месяц, как и в основной ветке расчёта.
+        $rows = DB::select(
+            'SELECT
+                p.consultant,
+                c."personName",
+                sl.level,
+                sl.title,
+                p."poolBonus",
+                p."networkGroupBonus"
+             FROM "poolLog" p
+             LEFT JOIN consultant c ON c.id = p.consultant
+             LEFT JOIN LATERAL (
+                 SELECT GREATEST(ql."nominalLevel", ql."calculationLevel") AS lvl_id
+                 FROM "qualificationLog" ql
+                 WHERE ql.consultant = p.consultant
+                   AND ql.date BETWEEN ? AND ?
+                   AND ql."dateDeleted" IS NULL
+                 ORDER BY ql.date DESC LIMIT 1
+             ) ql_period ON TRUE
+             LEFT JOIN status_levels sl ON sl.id = ql_period.lvl_id
+             WHERE p.date BETWEEN ? AND ?
+             ORDER BY sl.level NULLS LAST, c."personName"',
+            [$start, $end, $start, $end]
+        );
+        $rows = collect($rows);
 
         if ($rows->isEmpty()) {
             return null;
