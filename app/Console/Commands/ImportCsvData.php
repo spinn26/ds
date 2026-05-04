@@ -222,13 +222,17 @@ class ImportCsvData extends Command
         $batch = [];
         $batchSize = 100;
 
-        while (($line = fgets($handle)) !== false) {
-            $line = trim($line);
-            if (empty($line)) continue;
+        // КРИТИЧНО: fgetcsv корректно обрабатывает многострочные поля
+        // в кавычках (например, JSON-сессии Directual со встроенными \n).
+        // Старая связка fgets() + str_getcsv() читала только одну физическую
+        // строку и теряла строки CSV, разбитые на несколько физических
+        // (на transaction.csv это приводило к потере 46 ID, в том числе 24
+        // «живых» — без deletedAt — записей).
+        while (($values = fgetcsv($handle, 0, ';')) !== false) {
+            // fgetcsv может вернуть [null] для пустой строки.
+            if ($values === [null]) continue;
 
-            $values = str_getcsv($line, ';');
             $row = [];
-
             foreach ($dataColumns as $i => $col) {
                 $val = $values[$i] ?? null;
                 $row[$col] = $this->coerce($val, $columnTypes[$col] ?? null);
