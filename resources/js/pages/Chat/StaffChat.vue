@@ -488,7 +488,11 @@
               <span>{{ item.label }}</span>
             </div>
             <div v-else-if="item.msg.isSystem" class="msg-row system">
-              <div class="msg-system">{{ item.msg.content }}</div>
+              <div class="msg-system">
+                <v-icon size="12" class="me-1">mdi-information-outline</v-icon>
+                <span>{{ item.msg.content }}</span>
+                <span v-if="item.msg.createdAt" class="msg-system-time">· {{ ago(item.msg.createdAt) }}</span>
+              </div>
             </div>
             <div v-else class="msg-row" :class="{ mine: isMine(item.msg), 'search-hit': messageSearch.open && messageSearchMatches.has(item.msg.id) }">
               <div class="msg-avatar" v-if="!isMine(item.msg)">
@@ -777,10 +781,20 @@
           Горячие клавиши
         </v-card-title>
         <v-card-text>
+          <div class="text-overline mt-1 mb-1">Навигация</div>
+          <div class="hotkey-row"><kbd>J</kbd> / <kbd>↓</kbd><span>Следующий тикет</span></div>
+          <div class="hotkey-row"><kbd>K</kbd> / <kbd>↑</kbd><span>Предыдущий тикет</span></div>
+          <div class="hotkey-row"><kbd>/</kbd><span>Поиск тикетов</span></div>
+          <div class="hotkey-row"><kbd>Esc</kbd><span>Закрыть чат / поиск / отмена</span></div>
+          <v-divider class="my-2" />
+          <div class="text-overline mt-1 mb-1">Действия в открытом тикете</div>
+          <div class="hotkey-row"><kbd>R</kbd><span>Фокус на ответ</span></div>
+          <div class="hotkey-row"><kbd>E</kbd><span>Закрыть тикет (resolved)</span></div>
           <div class="hotkey-row"><kbd>Enter</kbd><span>Отправить ответ</span></div>
           <div class="hotkey-row"><kbd>Shift</kbd> + <kbd>Enter</kbd><span>Новая строка</span></div>
-          <div class="hotkey-row"><kbd>Esc</kbd><span>Отмена ответа / правки / закрыть чат</span></div>
           <div class="hotkey-row"><kbd>Ctrl</kbd> + <kbd>K</kbd><span>Поиск по сообщениям в чате</span></div>
+          <v-divider class="my-2" />
+          <div class="text-overline mt-1 mb-1">Прочее</div>
           <div class="hotkey-row"><kbd>Ctrl</kbd> + <kbd>/</kbd><span>Показать / скрыть эту панель</span></div>
           <div class="hotkey-row"><kbd>?</kbd><span>То же (вне поля ввода)</span></div>
           <v-divider class="my-2" />
@@ -1799,17 +1813,40 @@ async function connectSocket() {
   }
 }
 
-// Global keyboard shortcuts
+// Global keyboard shortcuts (Intercom Inbox / Linear-style — оператор
+// работает 80% действий с клавиатуры).
+//   J / ↓     следующий тикет
+//   K / ↑     предыдущий тикет
+//   R         фокус на ответ
+//   A         меню «Назначить»
+//   E         закрыть тикет (resolve)
+//   #         меню «Статус»
+//   /         фокус поиска
+//   Ctrl+K    поиск по сообщениям
+//   ?         показать справку
+//   Esc       закрыть тикет / поиск
+function jumpToTicket(delta) {
+  const list = filteredBySmartView.value;
+  if (!list.length) return;
+  const idx = activeChat.value ? list.findIndex(t => t.id === activeChat.value.id) : -1;
+  const next = idx === -1 ? 0 : Math.max(0, Math.min(list.length - 1, idx + delta));
+  if (list[next] && (idx === -1 || list[next].id !== activeChat.value?.id)) {
+    openChat(list[next]);
+  }
+}
+
 function onGlobalKey(e) {
   const tag = e.target?.tagName;
   const inField = tag === 'INPUT' || tag === 'TEXTAREA' || e.target?.isContentEditable;
+
+  // Ctrl/Cmd combos работают всегда
   if ((e.ctrlKey || e.metaKey) && e.key === '/') { e.preventDefault(); showHotkeys.value = !showHotkeys.value; return; }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k' && activeChat.value) {
     e.preventDefault();
     openMessageSearch();
     return;
   }
-  if (!inField && e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); showHotkeys.value = !showHotkeys.value; return; }
+
   if (e.key === 'Escape') {
     if (messageSearch.value.open) { closeMessageSearch(); return; }
     if (showHotkeys.value) { showHotkeys.value = false; return; }
@@ -1817,6 +1854,38 @@ function onGlobalKey(e) {
     if (replyTo.value) { cancelReply(); return; }
     if (addingTag.value) { cancelAddTag(); return; }
     if (activeChat.value && !inField) { closeActiveChat(); return; }
+  }
+
+  // Single-key shortcuts работают только когда курсор НЕ в input/textarea.
+  if (inField || e.ctrlKey || e.metaKey || e.altKey) return;
+
+  switch (e.key) {
+    case '?':
+      e.preventDefault(); showHotkeys.value = !showHotkeys.value; return;
+    case 'j':
+    case 'ArrowDown':
+      e.preventDefault(); jumpToTicket(+1); return;
+    case 'k':
+    case 'ArrowUp':
+      e.preventDefault(); jumpToTicket(-1); return;
+    case 'r':
+      if (activeChat.value && taRef.value) {
+        e.preventDefault();
+        taRef.value.focus();
+      }
+      return;
+    case 'e':
+      if (activeChat.value && activeChat.value.status !== 'closed') {
+        e.preventDefault();
+        setStatus('resolved');
+      }
+      return;
+    case '/':
+      // Фокус глобального поиска по тикетам
+      e.preventDefault();
+      const searchInput = document.querySelector('.sidebar-search-row input');
+      if (searchInput) searchInput.focus();
+      return;
   }
 }
 
@@ -1956,7 +2025,8 @@ onUnmounted(() => {
 .msg-row { display: flex; align-items: flex-end; gap: 8px; }
 .msg-row.mine { flex-direction: row-reverse; }
 .msg-row.system { justify-content: center; }
-.msg-system { font-size: 12px; color: rgba(var(--v-theme-on-surface), 0.4); font-style: italic; padding: 4px 12px; background: rgba(var(--v-theme-surface-variant), 0.5); border-radius: 12px; }
+.msg-system { font-size: 12px; color: rgba(var(--v-theme-on-surface), 0.55); padding: 4px 12px; background: rgba(var(--v-theme-surface-variant), 0.5); border-radius: 12px; display: inline-flex; align-items: center; gap: 2px; }
+.msg-system-time { color: rgba(var(--v-theme-on-surface), 0.35); margin-left: 4px; font-size: 11px; }
 .msg-avatar { flex-shrink: 0; }
 .avatar-circle { width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #fff; letter-spacing: -0.5px; }
 .avatar-circle.partner { background: #f97316; }
