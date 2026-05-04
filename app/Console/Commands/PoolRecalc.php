@@ -15,10 +15,15 @@ use Illuminate\Support\Facades\DB;
  * Удаляет существующие записи poolLog за указанный период и записывает
  * новые. Безопасно повторно запускать (idempotent).
  *
- *   php artisan pool:recalc 2026-02              # один месяц
+ * ВАЖНО: исторические периоды (есть запись в poolLog от Directual)
+ * по умолчанию НЕ перезаписываются — там источник правды CSV / Directual.
+ * Чтобы всё-таки пересчитать историю, нужен явный --force-history.
+ *
+ *   php artisan pool:recalc 2026-04              # текущий открытый месяц
  *   php artisan pool:recalc 2024-06 --to=2026-03 # диапазон
  *   php artisan pool:recalc all                  # все месяцы где есть poolLog
  *   php artisan pool:recalc 2026-02 --dry-run    # без записи
+ *   php artisan pool:recalc 2024-12 --force-history  # реально перезаписать legacy
  *   php artisan pool:recalc 2026-02 --force-frozen # обойти заморозку периода
  */
 class PoolRecalc extends Command
@@ -27,7 +32,8 @@ class PoolRecalc extends Command
                             {month : YYYY-MM или ключевое слово all}
                             {--to= : Конец диапазона YYYY-MM (включительно)}
                             {--dry-run : Не записывать в poolLog}
-                            {--force-frozen : Игнорировать заморозку периода}';
+                            {--force-frozen : Игнорировать заморозку периода}
+                            {--force-history : Перезаписать legacy-данные poolLog (по умолчанию пропускаются)}';
 
     protected $description = 'Пересчитать leader-пул за месяц/диапазон по новой формуле спеки.';
 
@@ -40,6 +46,7 @@ class PoolRecalc extends Command
         }
         $dryRun = (bool) $this->option('dry-run');
         $forceFrozen = (bool) $this->option('force-frozen');
+        $forceHistory = (bool) $this->option('force-history');
 
         $this->info(sprintf(
             'Будет обработано месяцев: %d%s',
@@ -65,6 +72,17 @@ class PoolRecalc extends Command
             $oldCount = DB::table('poolLog')
                 ->whereBetween('date', [$start, $end])
                 ->count();
+
+            // Защита: исторические периоды (с уже записанным poolLog от
+            // Directual или предыдущим расчётом) пропускаем по умолчанию.
+            // Это предотвращает случайное перезатирание эталонных данных.
+            if ($oldCount > 0 && ! $forceHistory && ! $dryRun) {
+                $this->warn(sprintf(
+                    '  %04d-%02d: ПРОПУЩЕН (уже есть %d записей в poolLog, %d ₽). --force-history чтобы перезаписать.',
+                    $year, $month, $oldCount, round($oldSum)
+                ));
+                continue;
+            }
 
             if ($dryRun) {
                 // Без записи: запускаем в транзакции и откатываем.
