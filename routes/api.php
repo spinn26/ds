@@ -76,6 +76,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/contracts/team', [ContractController::class, 'teamContracts']);
         Route::get('/contracts/statuses', [ContractController::class, 'statuses']);
         Route::get('/contracts/products', [ContractController::class, 'products']);
+        Route::get('/contracts/programs', [ContractController::class, 'programs']);
 
         Route::get('/profile', [ProfileController::class, 'show']);
         Route::put('/profile', [ProfileController::class, 'update']);

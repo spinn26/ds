@@ -13,13 +13,22 @@ class ContractService
      */
     public function applyContractFilters($query, Request $request): void
     {
-        // ФИО клиента / номер контракта / название продукта
+        // ФИО клиента / номер контракта / название продукта (общая строка поиска).
         if ($request->filled('search')) {
             $query->where(function ($q) use ($request) {
                 $q->where('clientName', 'ilike', '%' . $request->search . '%')
                   ->orWhere('number', 'ilike', '%' . $request->search . '%')
                   ->orWhere('productName', 'ilike', '%' . $request->search . '%');
             });
+        }
+
+        // Раздельные фильтры — Номер, ФИО клиента
+        // (per spec ✅Контакты моих клиентов §1).
+        if ($request->filled('number')) {
+            $query->where('number', 'ilike', '%' . $request->number . '%');
+        }
+        if ($request->filled('client_name')) {
+            $query->where('clientName', 'ilike', '%' . $request->client_name . '%');
         }
 
         // Статус контракта
@@ -33,6 +42,14 @@ class ContractService
         }
         if ($request->filled('program')) {
             $query->where('program', $request->program);
+        }
+
+        // Дата добавления контракта в систему (createDate).
+        if ($request->filled('created_from')) {
+            $query->where('createDate', '>=', $request->created_from);
+        }
+        if ($request->filled('created_to')) {
+            $query->where('createDate', '<=', $request->created_to . ' 23:59:59');
         }
 
         // Дата открытия — диапазон (поддерживаются оба варианта именования

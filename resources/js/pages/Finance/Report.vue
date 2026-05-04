@@ -145,10 +145,12 @@
           <div style="overflow-x: auto">
           <v-data-table :items="tables.personalSales || []" :headers="personalSalesHeaders" density="compact"
             hover no-data-text="Нет данных">
-            <template #item.points="{ value }">{{ fmt(value) }}</template>
+            <template #item.date="{ value }">{{ fmtShortDate(value) }}</template>
+            <template #item.paymentAmount="{ value }">{{ fmt2(value) }}</template>
+            <template #item.amountNoVat="{ value }">{{ fmt2(value) }}</template>
+            <template #item.personalVolume="{ value }">{{ fmt(value) }}</template>
             <template #item.bonus="{ value }">{{ fmt(value) }}</template>
             <template #item.bonusRub="{ value }">{{ fmt2(value) }}</template>
-            <template #item.clientPaymentsRub="{ value }">{{ fmt2(value) }}</template>
           </v-data-table>
           </div>
         </v-expansion-panel-text>
@@ -165,10 +167,12 @@
           <div style="overflow-x: auto">
           <v-data-table :items="tables.groupSales || []" :headers="groupSalesHeaders" density="compact"
             hover no-data-text="Нет данных">
-            <template #item.points="{ value }">{{ fmt(value) }}</template>
+            <template #item.date="{ value }">{{ fmtShortDate(value) }}</template>
+            <template #item.paymentAmount="{ value }">{{ fmt2(value) }}</template>
+            <template #item.amountNoVat="{ value }">{{ fmt2(value) }}</template>
+            <template #item.personalVolume="{ value }">{{ fmt(value) }}</template>
             <template #item.bonus="{ value }">{{ fmt(value) }}</template>
             <template #item.bonusRub="{ value }">{{ fmt2(value) }}</template>
-            <template #item.clientPaymentsRub="{ value }">{{ fmt2(value) }}</template>
           </v-data-table>
           </div>
         </v-expansion-panel-text>
@@ -185,8 +189,9 @@
           <div style="overflow-x: auto">
           <v-data-table :items="tables.otherAccruals || []" :headers="otherAccrualsHeaders" density="compact"
             hover no-data-text="Нет данных">
-            <template #item.points="{ value }">{{ fmt(value) }}</template>
-            <template #item.amountRub="{ value }">{{ fmt2(value) }}</template>
+            <template #item.date="{ value }">{{ fmtShortDate(value) }}</template>
+            <template #item.amount="{ value }">{{ fmt(value) }}</template>
+            <template #item.amountRUB="{ value }">{{ fmt2(value) }}</template>
           </v-data-table>
           </div>
         </v-expansion-panel-text>
@@ -222,12 +227,8 @@
           <div style="overflow-x: auto">
           <v-data-table :items="tables.payments || []" :headers="paymentsHeaders" density="compact"
             hover no-data-text="Нет данных">
+            <template #item.date="{ value }">{{ fmtShortDate(value) }}</template>
             <template #item.amount="{ value }">{{ fmt2(value) }}</template>
-            <template #item.status="{ value }">
-              <v-chip size="x-small" :color="value === 'paid' ? 'success' : 'warning'">
-                {{ value === 'paid' ? 'Выплачено' : value }}
-              </v-chip>
-            </template>
           </v-data-table>
           </div>
         </v-expansion-panel-text>
@@ -246,7 +247,7 @@ import api from '../../api';
 import MonthPicker from '../../components/MonthPicker.vue';
 import { exportFinanceReport } from '../../composables/useExport';
 import PageHeader from '../../components/PageHeader.vue';
-import { fmt, fmt2 } from '../../composables/useDesign';
+import { fmt, fmt2, fmtDate as fmtShortDate } from '../../composables/useDesign';
 
 const loading = ref(true);
 const exporting = ref(false);
@@ -273,40 +274,55 @@ const qualTrend = computed(() => {
 });
 const tables = computed(() => data.value.tables || {});
 
+// Per spec ✅Отчет начислений и выплат партнера §4.1:
+// Дата, Контракт, Клиент, Продукт, Программа, Сумма оплаты,
+// Параметр (Свойство продукта), Сумма без НДС, ЛП, Бонус, Бонус ₽, Комментарий.
 const personalSalesHeaders = [
-  { title: 'Контракт', key: 'contractNumber' },
+  { title: 'Дата', key: 'date', width: 110 },
+  { title: 'Контракт', key: 'contractNumber', width: 130 },
   { title: 'Клиент', key: 'clientName' },
   { title: 'Продукт', key: 'productName' },
-  { title: 'Баллы', key: 'points', align: 'end', width: 100 },
-  { title: 'Бонус', key: 'bonus', align: 'end', width: 100 },
-  { title: 'Бонус (руб)', key: 'bonusRub', align: 'end', width: 120 },
-  { title: 'Клиентские платежи (руб)', key: 'clientPaymentsRub', align: 'end', width: 180 },
+  { title: 'Программа', key: 'programName' },
+  { title: 'Сумма оплаты', key: 'paymentAmount', align: 'end', width: 130 },
+  { title: 'Параметр', key: 'parameter', width: 110 },
+  { title: 'Сумма без НДС', key: 'amountNoVat', align: 'end', width: 130 },
+  { title: 'ЛП', key: 'personalVolume', align: 'end', width: 90 },
+  { title: 'Бонус', key: 'bonus', align: 'end', width: 90 },
+  { title: 'Бонус, ₽', key: 'bonusRub', align: 'end', width: 110 },
+  { title: 'Комментарий', key: 'comment' },
 ];
 
+// Per spec §4.2: Дата, Контракт, Партнёр сделки, Клиент, Продукт, Программа,
+// Сумма оплаты, Параметр, Сумма без НДС, ГП, Бонус, Бонус ₽, Комментарий.
 const groupSalesHeaders = [
-  { title: 'Партнёр', key: 'partnerName' },
-  { title: 'Контракт', key: 'contractNumber' },
+  { title: 'Дата', key: 'date', width: 110 },
+  { title: 'Контракт', key: 'contractNumber', width: 130 },
+  { title: 'Партнёр сделки', key: 'partnerName' },
   { title: 'Клиент', key: 'clientName' },
   { title: 'Продукт', key: 'productName' },
-  { title: 'Баллы', key: 'points', align: 'end', width: 100 },
-  { title: 'Бонус', key: 'bonus', align: 'end', width: 100 },
-  { title: 'Бонус (руб)', key: 'bonusRub', align: 'end', width: 120 },
-  { title: 'Клиентские платежи (руб)', key: 'clientPaymentsRub', align: 'end', width: 180 },
+  { title: 'Программа', key: 'programName' },
+  { title: 'Сумма оплаты', key: 'paymentAmount', align: 'end', width: 130 },
+  { title: 'Параметр', key: 'parameter', width: 110 },
+  { title: 'Сумма без НДС', key: 'amountNoVat', align: 'end', width: 130 },
+  { title: 'ГП', key: 'personalVolume', align: 'end', width: 90 },
+  { title: 'Бонус', key: 'bonus', align: 'end', width: 90 },
+  { title: 'Бонус, ₽', key: 'bonusRub', align: 'end', width: 110 },
+  { title: 'Комментарий', key: 'comment' },
 ];
 
+// Per spec §4.3: Дата, Сумма (₽), Комментарий.
 const otherAccrualsHeaders = [
-  { title: 'Описание', key: 'description' },
-  { title: 'Тип', key: 'type' },
-  { title: 'Баллы', key: 'points', align: 'end', width: 100 },
-  { title: 'Сумма (руб)', key: 'amountRub', align: 'end', width: 140 },
+  { title: 'Дата', key: 'date', width: 130 },
+  { title: 'Сумма, ₽', key: 'amountRUB', align: 'end', width: 140 },
+  { title: 'Баллы', key: 'amount', align: 'end', width: 110 },
+  { title: 'Комментарий', key: 'comment' },
 ];
 
+// Per spec §4.5: Дата, Сумма, Комментарий.
 const paymentsHeaders = [
-  { title: 'Дата', key: 'date', width: 120 },
-  { title: 'Описание', key: 'description' },
-  { title: 'Сумма', key: 'amount', align: 'end', width: 140 },
-  { title: 'Валюта', key: 'currency', width: 80 },
-  { title: 'Статус', key: 'status', width: 120 },
+  { title: 'Дата', key: 'date', width: 130 },
+  { title: 'Сумма, ₽', key: 'amount', align: 'end', width: 160 },
+  { title: 'Комментарий', key: 'comment' },
 ];
 
 const locked = ref(false);

@@ -198,11 +198,11 @@ class DashboardService
         if ($statusLevel && ($statusLevel->pool ?? 0) > 0) {
             $opFulfilled = $mandatoryPlan ? (bool) $mandatoryPlan['fulfilled'] : true;
             $gapPct = (float) ($currentQLog->gapValuePercentage ?? 0);
-            $gapDisqualifies = $gapPct >= 90.0;
+            $gapDisqualifies = $gapPct > 90.0;
             $poolEligible = $opFulfilled && ! $gapDisqualifies;
             $reason = null;
             if (! $opFulfilled)         $reason = 'ОП по ГП не выполнен на 100%';
-            elseif ($gapDisqualifies)   $reason = sprintf('Отрыв %.0f%% ≥ 90%%', $gapPct);
+            elseif ($gapDisqualifies)   $reason = sprintf('Отрыв %.0f%% > 90%%', $gapPct);
             $poolInfo = [
                 'poolPercent' => (float) $statusLevel->pool,
                 'eligible' => $poolEligible,

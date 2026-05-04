@@ -127,10 +127,32 @@ class ContractController extends Controller
             $query->where('name', 'ilike', '%' . $request->q . '%');
         }
 
-        $products = $query->orderBy('name')->limit(20)
+        $products = $query->orderBy('name')->limit(200)
             ->get()
             ->map(fn ($p) => ['id' => $p->id, 'name' => $p->name]);
 
         return response()->json($products);
+    }
+
+    /**
+     * Список программ (для фильтра-автокомплита).
+     * Возвращает productId, чтобы фронт мог отфильтровать по выбранному продукту.
+     */
+    public function programs(Request $request): JsonResponse
+    {
+        $query = DB::table('program');
+        if (\Illuminate\Support\Facades\Schema::hasColumn('program', 'active')) {
+            $query->where('active', true);
+        }
+        if ($request->filled('q')) {
+            $query->where('name', 'ilike', '%' . $request->q . '%');
+        }
+        if ($request->filled('product')) {
+            $query->where('product', $request->product);
+        }
+        $programs = $query->orderBy('name')->limit(500)
+            ->get(['id', 'name', 'product'])
+            ->map(fn ($p) => ['id' => $p->id, 'name' => $p->name, 'productId' => $p->product]);
+        return response()->json($programs);
     }
 }

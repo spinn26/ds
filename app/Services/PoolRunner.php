@@ -152,7 +152,9 @@ class PoolRunner
             $gapPct = (float) ($row->gapValuePercentage ?? 0);
 
             $opOk = $mandatoryGp <= 0 || $groupVolume >= $mandatoryGp;
-            $gapOk = $gapPct < 90.0;
+            // Per spec ✅Расчет пула §6.4: дисквалификация при отрыве > 90%
+            // (строго больше; если ровно 90% — пул выплачивается).
+            $gapOk = $gapPct <= 90.0;
             $modParticipates = $modByConsId[$consultantId] ?? null;
             $modOk = $modParticipates === null ? true : (bool) $modParticipates;
 
@@ -160,7 +162,7 @@ class PoolRunner
             if (! $opOk) {
                 $disqualifyReason = 'ОП не выполнен';
             } elseif (! $gapOk) {
-                $disqualifyReason = sprintf('Отрыв %.0f%% ≥ 90%%', $gapPct);
+                $disqualifyReason = sprintf('Отрыв %.0f%% > 90%%', $gapPct);
             } elseif (! $modOk) {
                 $disqualifyReason = 'Снята галочка «Участвует»';
             }

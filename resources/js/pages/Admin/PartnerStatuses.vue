@@ -101,6 +101,9 @@
       <template #item.personalVolume="{ value }">
         {{ fmt(value) }}
       </template>
+      <template #item.lpFromActivation="{ value }">
+        {{ fmt(value) }}
+      </template>
       <template #item.terminationCount="{ value }">
         <v-chip v-if="value > 0" size="x-small" :color="value >= 3 ? 'error' : 'warning'">{{ value }}/3</v-chip>
         <span v-else>—</span>
@@ -206,7 +209,7 @@ const headers = [
   { title: 'Активен с', key: 'dateActivity', width: 130 },
   { title: 'Будет терминирован', key: 'willTerminate', width: 170 },
   { title: 'Терминирован', key: 'dateDeterministic', width: 140 },
-  { title: 'ЛП от активации', key: 'personalVolume', align: 'end', width: 130 },
+  { title: 'ЛП от активации', key: 'lpFromActivation', align: 'end', width: 150 },
   { title: 'Терминаций', key: 'terminationCount', width: 110 },
   { title: '', key: 'actions', sortable: false, width: 50 },
 ];
