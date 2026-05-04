@@ -104,10 +104,12 @@ class CurrencyRecalculator
 
         // Считаем commission-строки за период (для пользователя — подсказка
         // что нужно их перерасчитать через CommissionCalculator).
-        $monthStr = sprintf('%02d', $month);
+        // commission.dateMonth хранит формат 'YYYY-MM' (например, '2026-02'),
+        // а не просто 'MM' — раньше тут было sprintf('%02d', $month) и счётчик
+        // всегда возвращал 0.
+        $dateMonthStr = sprintf('%04d-%02d', $year, $month);
         $commissionsAffected = DB::table('commission')
-            ->where('dateMonth', $monthStr)
-            ->where('dateYear', (string) $year)
+            ->where('dateMonth', $dateMonthStr)
             ->whereIn('transaction', $txs->pluck('id'))
             ->whereNull('deletedAt')
             ->count();

@@ -65,15 +65,21 @@ class FinanceReportService
         // Other accruals: no transaction linked (manual bonuses/penalties)
         $otherAccruals = $allCommissions->whereNull('transaction');
 
-        // Batch load transaction details for all commissions with transactions
+        // Batch load transaction details for all commissions with transactions.
+        // Soft-deleted транзакции/контракты исключаем — иначе в отчёте партнёра
+        // могут всплыть удалённые сделки с их (возможно стертыми) суммами.
         $allWithTx = $allCommissions->whereNotNull('transaction');
         $txIds = $allWithTx->pluck('transaction')->filter()->unique();
         $transactions = $txIds->isNotEmpty()
-            ? DB::table('transaction')->whereIn('id', $txIds)->get()->keyBy('id')
+            ? DB::table('transaction')->whereIn('id', $txIds)
+                ->whereNull('deletedAt')
+                ->get()->keyBy('id')
             : collect();
         $contractIds = $transactions->pluck('contract')->filter()->unique();
         $contracts = $contractIds->isNotEmpty()
-            ? DB::table('contract')->whereIn('id', $contractIds)->get()->keyBy('id')
+            ? DB::table('contract')->whereIn('id', $contractIds)
+                ->whereNull('deletedAt')
+                ->get()->keyBy('id')
             : collect();
 
         // Helper to get tx details from pre-loaded data
