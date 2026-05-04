@@ -342,19 +342,44 @@ class PoolRunner
 
         $totalPaid = array_sum(array_column($participants, 'payoutRub'));
 
-        // shareValues: средняя выплата на уровень (для отображения «Итого фонд × #голов»).
-        $byLevel = [];
-        foreach ($participants as $p) {
-            $byLevel[$p['level']][] = $p['payoutRub'];
+        $fund = $revenue * PoolCalculator::POOL_PERCENT;
+
+        // shareValues[L] = «доля одного партнёра уровня L» = fund / nominalCount(L).
+        // ВНИМАНИЕ: брать max(payoutRub) на уровне НЕЛЬЗЯ — это уже накопленная
+        // матрёшка (share(6)+...+share(L)). Frontend ожидает именно share(L)
+        // как отдельное значение и сам строит матрёшку через цикл, поэтому
+        // мы вернули бы дублированные суммы.
+        //
+        // Считаем nominalCount(L) из qualificationLog за период (как в
+        // основной ветке). Партнёры из poolLog входят в nominalCount, плюс
+        // дисквалифицированные тоже считаются (они в фонде но без выплаты).
+        $start = sprintf('%04d-%02d-01', $year, $month);
+        $end = date('Y-m-t', strtotime($start));
+        $nominalCounts = array_fill_keys(array_keys($leaderLevelIds), 0);
+        $qlogCounts = DB::select('
+            SELECT GREATEST(ql."nominalLevel", ql."calculationLevel") AS lvl_id, COUNT(DISTINCT ql.consultant) AS cnt
+            FROM "qualificationLog" ql
+            JOIN consultant c ON c.id = ql.consultant
+            WHERE ql.date BETWEEN ? AND ?
+              AND ql."dateDeleted" IS NULL
+              AND c."dateDeleted" IS NULL
+              AND c.activity = 1
+            GROUP BY GREATEST(ql."nominalLevel", ql."calculationLevel")
+        ', [$start, $end]);
+        $countByLevelId = collect($qlogCounts)->pluck('cnt', 'lvl_id')->toArray();
+        $levelByLevelId = DB::table('status_levels')
+            ->whereIn('id', array_keys($countByLevelId))
+            ->pluck('level', 'id')->toArray();
+        foreach ($countByLevelId as $lvlId => $cnt) {
+            $level = (int) ($levelByLevelId[$lvlId] ?? 0);
+            if ($level >= PoolCalculator::LEADER_LEVEL_MIN && $level <= PoolCalculator::LEADER_LEVEL_MAX) {
+                $nominalCounts[$level] = ($nominalCounts[$level] ?? 0) + (int) $cnt;
+            }
         }
         $shareValues = [];
-        foreach ($leaderLevelIds as $lvl => $_id) {
-            $shareValues[$lvl] = !empty($byLevel[$lvl])
-                ? round(max($byLevel[$lvl]), 2)
-                : 0;
+        foreach ($nominalCounts as $level => $count) {
+            $shareValues[$level] = $count > 0 ? round($fund / $count, 2) : 0;
         }
-
-        $fund = $revenue * PoolCalculator::POOL_PERCENT;
 
         return [
             'year' => $year,

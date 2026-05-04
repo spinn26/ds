@@ -246,11 +246,21 @@ class FinanceReportService
                     'title' => $commissionLevel->title,
                     'percent' => $commissionLevel->percent,
                 ] : null,
-                'volumes' => [
-                    'lp' => round((float) ($qLogCurrent->personalVolume ?? $consultant->personalVolume ?? 0), 2),
-                    'gp' => round((float) ($qLogCurrent->groupVolume ?? $consultant->groupVolume ?? 0), 2),
-                    'ngp' => round((float) ($qLogCurrent->groupVolumeCumulative ?? $consultant->groupVolumeCumulative ?? 0), 2),
-                ],
+                // Для исторических периодов fallback на consultant.* (текущие
+                // агрегаты) даёт неверную картину: нет qualificationLog за
+                // март — покажется ЛП за СЕГОДНЯ. Допускаем такой fallback
+                // только когда отчёт строится за текущий месяц.
+                'volumes' => (function () use ($qLogCurrent, $consultant, $month) {
+                    $isCurrentMonth = $month === now()->format('Y-m');
+                    return [
+                        'lp' => round((float) ($qLogCurrent->personalVolume
+                            ?? ($isCurrentMonth ? $consultant->personalVolume : 0)), 2),
+                        'gp' => round((float) ($qLogCurrent->groupVolume
+                            ?? ($isCurrentMonth ? $consultant->groupVolume : 0)), 2),
+                        'ngp' => round((float) ($qLogCurrent->groupVolumeCumulative
+                            ?? ($isCurrentMonth ? $consultant->groupVolumeCumulative : 0)), 2),
+                    ];
+                })(),
                 'personalSales' => [
                     'points' => round($personalSalesPoints, 2),
                     'bonus' => round($personalSalesBonus, 2),
