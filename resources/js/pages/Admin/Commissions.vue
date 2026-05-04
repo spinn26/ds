@@ -73,6 +73,8 @@
     <v-data-table-server :items="items" :items-length="total" :loading="loading"
       :headers="visibleHeaders" :items-per-page="25"
       v-model:expanded="expanded" item-value="id" show-expand
+      hover class="commissions-table"
+      @click:row="onRowClick"
       @update:options="onOptions">
 
       <!-- Индикатор периода -->
@@ -266,6 +268,15 @@ function onOptions(opts) {
   loadData();
 }
 
+// Per spec ✅Комиссии §1.3: «при клике на строку транзакции она разворачивается».
+function onRowClick(_event, { item }) {
+  const id = item?.id;
+  if (!id) return;
+  const idx = expanded.value.indexOf(id);
+  if (idx === -1) expanded.value = [...expanded.value, id];
+  else expanded.value = expanded.value.filter(x => x !== id);
+}
+
 async function loadData() {
   loading.value = true;
   try {
@@ -314,5 +325,9 @@ onMounted(() => { loadData(); loadSuppliers(); });
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.4px;
+}
+/* Курсор pointer на строках основной таблицы — намёк что строка кликабельна. */
+.commissions-table :deep(tbody tr:not(.v-data-table__tr--expanded-content)) {
+  cursor: pointer;
 }
 </style>
