@@ -1,5 +1,11 @@
 <template>
   <div class="chat-wrap" :class="{ 'kanban-mode': viewMode === 'kanban' }">
+    <!-- Connection-status banner: показываем только если socket упал, чтобы
+         оператор не думал что чат «завис». Polling-fallback всё равно работает. -->
+    <div v-if="!socketConnected" class="conn-banner">
+      <v-icon size="14">mdi-wifi-off</v-icon>
+      Real-time соединение потеряно. Сообщения придут с задержкой ~15 сек.
+    </div>
     <!-- Left: ticket list (hidden in Kanban mode on mobile / collapsed on desktop) -->
     <aside class="chat-sidebar" :class="{ 'mobile-hidden': mobile && (activeChat || viewMode === 'kanban'), 'compact': viewMode === 'kanban' && !mobile }">
       <div class="sidebar-head">
@@ -8,6 +14,18 @@
           <v-icon size="16">mdi-magnify</v-icon>
           <input v-model="filter.search" placeholder="Поиск по теме / клиенту…" @input="debouncedLoad" />
           <button v-if="filter.search" class="clear-btn" @click="filter.search = ''; loadChats()"><v-icon size="14">mdi-close</v-icon></button>
+        </div>
+        <!-- Smart views (как в Intercom Inbox / Zendesk Views): быстрые
+             фильтры по «кому принадлежит» — самая частая операция оператора. -->
+        <div class="filter-row smart-views">
+          <button class="filter-chip" :class="{ active: smartView === 'all' }"
+            @click="smartView = 'all'">Все<span class="vw-count">{{ chats.length }}</span></button>
+          <button class="filter-chip" :class="{ active: smartView === 'mine' }"
+            @click="smartView = 'mine'">Мои<span class="vw-count">{{ countMine }}</span></button>
+          <button class="filter-chip" :class="{ active: smartView === 'unassigned' }"
+            @click="smartView = 'unassigned'">Без ответственного<span class="vw-count">{{ countUnassigned }}</span></button>
+          <button class="filter-chip" :class="{ active: smartView === 'stale' }"
+            @click="smartView = 'stale'">Просрочено<span class="vw-count">{{ countStale }}</span></button>
         </div>
         <div class="filter-row">
           <button v-for="s in statusFilterPills" :key="s.value"
@@ -22,7 +40,7 @@
         </div>
       </div>
       <div class="sidebar-list">
-        <div v-for="t in chats" :key="t.id" class="chat-item" :class="{ active: activeChat?.id === t.id, 'has-unread': t.unread > 0, stale: isStale(t), pinned: t.pinned_at }" @click="openChat(t)">
+        <div v-for="t in filteredBySmartView" :key="t.id" class="chat-item" :class="{ active: activeChat?.id === t.id, 'has-unread': t.unread > 0, stale: isStale(t), pinned: t.pinned_at }" @click="openChat(t)">
           <div class="chat-item-avatar" :style="{ background: catColor(t.category || t.department) }">
             <v-icon size="18" color="white">{{ catIcon(t.category || t.department) }}</v-icon>
           </div>
@@ -33,6 +51,12 @@
                 <v-icon v-if="t.pinned_at" size="12" color="primary" class="mr-1">mdi-pin</v-icon>{{ t.subject }}
               </span>
               <span class="chat-item-time" :class="{ stale: isStale(t) }">{{ ago(t.last_message_at) }}</span>
+            </div>
+            <!-- Last message preview — оператор видит без открытия что в последнем
+                 сообщении: вопрос клиента или собственный ответ. -->
+            <div v-if="t.lastMessage" class="chat-item-preview">
+              <span v-if="t.lastMessageFromMe" class="chat-item-preview-prefix">Вы:</span>
+              <span class="chat-item-preview-text">{{ t.lastMessage }}</span>
             </div>
             <div class="chat-item-bottom">
               <span class="customer">{{ t.customer_name }}</span>
@@ -756,8 +780,30 @@ const quickReplies = ref([]);
 const filter = ref({ status: '', priority: '', search: '' });
 let poll = null;
 
+// Smart-views: быстрые фильтры по принадлежности тикета (как Intercom Inbox).
+// Применяются на client-side после fetch — backend и так присылает <=25 строк.
+const smartView = ref('all');
+const countMine = computed(() =>
+  chats.value.filter(t => String(t.assigned_to) === String(currentUserId)).length
+);
+const countUnassigned = computed(() =>
+  chats.value.filter(t => !t.assigned_to).length
+);
+const countStale = computed(() =>
+  chats.value.filter(t => isStale(t)).length
+);
+const filteredBySmartView = computed(() => {
+  switch (smartView.value) {
+    case 'mine': return chats.value.filter(t => String(t.assigned_to) === String(currentUserId));
+    case 'unassigned': return chats.value.filter(t => !t.assigned_to);
+    case 'stale': return chats.value.filter(t => isStale(t));
+    default: return chats.value;
+  }
+});
+
 // Socket
 let socket = null;
+const socketConnected = ref(true); // оптимистично; станет false на disconnect
 const typingName = ref('');
 let typingClearTimer = null;
 let typingSendTimer = null;
@@ -1616,6 +1662,12 @@ async function connectSocket() {
     const host = window.__SOCKET_URL__ || defaultHost;
     socket = io(host, { auth: { token }, transports: ['websocket', 'polling'], reconnection: true });
 
+    // Connection status — раньше падение socket'а было невидимым, оператор
+    // не понимал что real-time ушёл и приходится ждать polling.
+    socket.on('connect', () => { socketConnected.value = true; });
+    socket.on('disconnect', () => { socketConnected.value = false; });
+    socket.on('connect_error', () => { socketConnected.value = false; });
+
     socket.on('chat:new-message', (m) => {
       const isOwn = String(m.senderId) === String(currentUserId);
       const isActive = activeChat.value && Number(m.ticketId) === Number(activeChat.value.id);
@@ -1755,6 +1807,14 @@ onUnmounted(() => {
 .chat-item-time { font-size: 10px; color: rgba(var(--v-theme-on-surface), 0.4); flex-shrink: 0; }
 .chat-item-time.stale { color: #ef4444; font-weight: 700; }
 .chat-item-bottom { font-size: 11px; color: rgba(var(--v-theme-on-surface), 0.5); margin-top: 2px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.chat-item-preview { display: flex; gap: 4px; margin-top: 2px; font-size: 12px; color: rgba(var(--v-theme-on-surface), 0.62); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.chat-item-preview-prefix { color: rgba(var(--v-theme-on-surface), 0.45); flex-shrink: 0; }
+.chat-item-preview-text { overflow: hidden; text-overflow: ellipsis; }
+.chat-item.has-unread .chat-item-preview { color: rgba(var(--v-theme-on-surface), 0.92); font-weight: 500; }
+.smart-views .filter-chip { display: inline-flex; align-items: center; gap: 4px; }
+.smart-views .vw-count { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 16px; padding: 0 5px; border-radius: 8px; background: rgba(var(--v-theme-on-surface), 0.08); color: rgba(var(--v-theme-on-surface), 0.6); font-size: 10px; font-weight: 600; }
+.smart-views .filter-chip.active .vw-count { background: rgba(var(--v-theme-primary), 0.15); color: rgb(var(--v-theme-primary)); }
+.conn-banner { position: absolute; top: 0; left: 0; right: 0; z-index: 100; padding: 6px 12px; background: rgba(var(--v-theme-warning), 0.18); color: rgb(var(--v-theme-warning)); font-size: 12px; display: flex; align-items: center; gap: 6px; border-bottom: 1px solid rgba(var(--v-theme-warning), 0.3); }
 .customer { font-weight: 600; }
 .recipient { color: #f97316; }
 .chat-item-status-chip { padding: 1px 7px; border-radius: 10px; font-size: 10px; font-weight: 600; margin-left: auto; }

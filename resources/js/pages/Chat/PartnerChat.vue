@@ -1,5 +1,10 @@
 <template>
   <div class="chat-wrap">
+    <!-- Connection-status banner: визуальный сигнал что real-time потерян. -->
+    <div v-if="!socketConnected" class="conn-banner">
+      <v-icon size="14">mdi-wifi-off</v-icon>
+      Соединение потеряно. Сообщения придут с задержкой ~15 сек.
+    </div>
     <!-- Left sidebar: dialog list -->
     <aside class="chat-sidebar" :class="{ 'mobile-hidden': mobile && activeChat }">
       <div class="sidebar-head">
@@ -38,6 +43,13 @@
                 <v-icon v-if="t.pinned_at" size="12" color="primary" class="mr-1">mdi-pin</v-icon>{{ t.subject }}
               </span>
               <span class="chat-item-time">{{ ago(t.last_message_at) }}</span>
+            </div>
+            <!-- Last message preview — Telegram/Slack стиль. «Вы:» если автор я,
+                 ⚙️ для системных, 📎 для вложений уже в preview. -->
+            <div v-if="t.last_message_preview" class="chat-item-preview">
+              <span v-if="t.last_message_is_system" class="chat-item-preview-prefix">⚙</span>
+              <span v-else-if="t.last_message_from_me" class="chat-item-preview-prefix">Вы:</span>
+              <span class="chat-item-preview-text">{{ t.last_message_preview }}</span>
             </div>
             <div class="chat-item-bottom">
               <span class="chat-item-cat">{{ catLabel(t.category) }}</span>
@@ -309,6 +321,7 @@ let poll = null;
 
 // Socket
 let socket = null;
+const socketConnected = ref(true);
 const typingName = ref('');
 let typingClearTimer = null;
 let typingSendTimer = null;
@@ -784,6 +797,10 @@ async function connectSocket() {
     const host = window.__SOCKET_URL__ || defaultHost;
     socket = io(host, { auth: { token }, transports: ['websocket', 'polling'], reconnection: true });
 
+    socket.on('connect', () => { socketConnected.value = true; });
+    socket.on('disconnect', () => { socketConnected.value = false; });
+    socket.on('connect_error', () => { socketConnected.value = false; });
+
     socket.on('chat:new-message', (m) => {
       const isOwn = String(m.senderId) === String(currentUserId);
       const isActive = activeChat.value && Number(m.ticketId) === Number(activeChat.value.id);
@@ -954,6 +971,11 @@ onUnmounted(() => {
 .chat-item-time { font-size: 11px; color: rgba(var(--v-theme-on-surface), 0.4); flex-shrink: 0; }
 .chat-item-bottom { display: flex; gap: 6px; margin-top: 4px; font-size: 11px; align-items: center; }
 .chat-item-cat { color: rgba(var(--v-theme-on-surface), 0.5); }
+.chat-item-preview { display: flex; gap: 4px; margin-top: 2px; font-size: 12px; color: rgba(var(--v-theme-on-surface), 0.62); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.chat-item-preview-prefix { color: rgba(var(--v-theme-on-surface), 0.45); flex-shrink: 0; }
+.chat-item-preview-text { overflow: hidden; text-overflow: ellipsis; }
+.chat-item.has-unread .chat-item-preview { color: rgba(var(--v-theme-on-surface), 0.92); font-weight: 500; }
+.conn-banner { position: absolute; top: 0; left: 0; right: 0; z-index: 100; padding: 6px 12px; background: rgba(var(--v-theme-warning), 0.18); color: rgb(var(--v-theme-warning)); font-size: 12px; display: flex; align-items: center; gap: 6px; border-bottom: 1px solid rgba(var(--v-theme-warning), 0.3); }
 .chat-item-status-chip { padding: 2px 8px; border-radius: 10px; font-weight: 600; font-size: 10px; }
 .unread-badge { position: absolute; right: 12px; top: 12px; background: rgb(var(--v-theme-error)); color: #fff; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 10px; min-width: 18px; text-align: center; }
 .chat-item.has-unread { background: rgba(var(--v-theme-primary), 0.06); }

@@ -66,6 +66,7 @@ class ChatController extends Controller
         // (was N+1: one COUNT per ticket).
         $ticketIds = $tickets->pluck('id')->filter();
         $unreadMap = collect();
+        $lastMsgMap = collect();
 
         if ($ticketIds->isNotEmpty()) {
             $unreadMap = DB::table('chat_messages as cm')
@@ -83,10 +84,41 @@ class ChatController extends Controller
                 ->groupBy('cm.ticket_id')
                 ->select('cm.ticket_id', DB::raw('count(*) as unread'))
                 ->pluck('unread', 'cm.ticket_id');
+
+            // Last message preview per ticket — для отображения карточки в
+            // sidebar в стиле Telegram/Slack: subject + первые 80 символов
+            // последнего сообщения + кто его автор.
+            $latestIds = DB::table('chat_messages')
+                ->whereIn('ticket_id', $ticketIds)
+                ->selectRaw('MAX(id) as id')
+                ->groupBy('ticket_id')
+                ->pluck('id');
+            if ($latestIds->isNotEmpty()) {
+                $lastMsgMap = DB::table('chat_messages')
+                    ->whereIn('id', $latestIds)
+                    ->select('ticket_id', 'sender_id', 'sender_name', 'content', 'is_agent', 'attachment_name', 'is_system', 'created_at')
+                    ->get()
+                    ->keyBy('ticket_id');
+            }
         }
 
-        $data = $tickets->map(function ($t) use ($unreadMap) {
+        $data = $tickets->map(function ($t) use ($unreadMap, $lastMsgMap, $user) {
             $t->unread = $unreadMap[$t->id] ?? 0;
+            $lm = $lastMsgMap[$t->id] ?? null;
+            if ($lm) {
+                $preview = $lm->content
+                    ? mb_substr($lm->content, 0, 80)
+                    : ($lm->attachment_name ? '📎 ' . $lm->attachment_name : '');
+                $t->last_message_preview = $preview;
+                $t->last_message_from_me = (int) $lm->sender_id === (int) $user->id;
+                $t->last_message_is_system = (bool) $lm->is_system;
+                $t->last_message_sender = $lm->sender_name;
+            } else {
+                $t->last_message_preview = null;
+                $t->last_message_from_me = false;
+                $t->last_message_is_system = false;
+                $t->last_message_sender = null;
+            }
             return $t;
         });
 

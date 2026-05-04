@@ -131,7 +131,7 @@ class TicketController extends Controller
                 ->pluck('cnt', 'ticket_id');
         }
 
-        $tickets = $rows->map(function ($t) use ($webUsers, $lastMessages, $unreadCounts) {
+        $tickets = $rows->map(function ($t) use ($webUsers, $lastMessages, $unreadCounts, $currentUserId) {
                 $creator = $webUsers[$t->created_by] ?? null;
                 $assignee = $t->assigned_to ? ($webUsers[$t->assigned_to] ?? null) : null;
                 $lastMsg = $lastMessages[$t->id] ?? null;
@@ -144,11 +144,16 @@ class TicketController extends Controller
                     'status' => $t->status,
                     'priority' => $t->priority,
                     'createdBy' => $creator ? trim(($creator->lastName ?? '') . ' ' . ($creator->firstName ?? '')) : '—',
+                    'created_by' => $t->created_by,
+                    'assigned_to' => $t->assigned_to,
                     'assignedTo' => $assignee ? trim(($assignee->lastName ?? '') . ' ' . ($assignee->firstName ?? '')) : null,
                     'contextType' => $t->context_type,
                     'lastMessage' => $lastMsg ? mb_substr($lastMsg->message ?? '', 0, 80) : null,
                     'lastMessageAt' => $lastMsg?->created_at ?? null,
+                    'lastMessageFromMe' => $lastMsg ? ((int) $lastMsg->user_id === (int) $currentUserId) : false,
+                    'last_message_at' => $lastMsg?->created_at ?? null,
                     'unreadCount' => $unreadCounts[$t->id] ?? 0,
+                    'unread' => $unreadCounts[$t->id] ?? 0,
                     'createdAt' => $t->created_at,
                     'updatedAt' => $t->updated_at,
                 ];
