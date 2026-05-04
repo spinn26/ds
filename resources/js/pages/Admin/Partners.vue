@@ -630,10 +630,10 @@ const editBirthDate = computed({
 
 const editActivityColor = computed(() => {
   const id = editForm.value?.activityId;
-  if (id === 1) return 'success';
-  if (id === 4) return 'info';
-  if (id === 3) return 'warning';
-  if (id === 5) return 'error';
+  if (id === 1) return 'success';   // Активен
+  if (id === 4) return 'info';      // Зарегистрирован
+  if (id === 3) return 'error';     // Терминирован — per spec ✅Статусы партнеров §2 col.2
+  if (id === 5) return 'error';     // Исключен
   return 'grey';
 });
 

@@ -217,10 +217,11 @@ const activityOptions = ref([]);
 const ACTIVE_ACTIVITY_IDS = new Set([1]);
 
 function activityColor(id) {
-  if (id === 1) return 'success';
-  if (id === 3) return 'error';
-  if (id === 5) return 'error';
-  return 'warning';
+  if (id === 1) return 'success';   // Активен
+  if (id === 4) return 'info';      // Зарегистрирован
+  if (id === 3) return 'error';     // Терминирован
+  if (id === 5) return 'error';     // Исключен
+  return 'grey';
 }
 
 function canAddPayment(item) {

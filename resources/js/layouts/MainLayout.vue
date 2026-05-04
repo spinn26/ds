@@ -455,7 +455,7 @@ const statusColor = computed(() => {
   const id = statusInfo.value?.activityId;
   if (id === 1) return 'success';   // Активен
   if (id === 4) return 'info';      // Зарегистрирован
-  if (id === 3) return 'warning';   // Терминирован
+  if (id === 3) return 'error';     // Терминирован — per spec ✅Статусы партнеров §2 col.2 (красная)
   if (id === 5) return 'error';     // Исключен
   return 'default';
 });
