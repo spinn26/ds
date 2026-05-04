@@ -1022,7 +1022,7 @@ class AdminDataController extends Controller
      */
     public function requisiteDocuments(int $id): JsonResponse
     {
-        $req = DB::table('requisites')->where('id', $id)->first();
+        $req = DB::table('requisites')->where('id', $id)->whereNull('deletedAt')->first();
         if (! $req) {
             return response()->json(['message' => 'Реквизиты не найдены'], 404);
         }
@@ -1087,7 +1087,7 @@ class AdminDataController extends Controller
      */
     public function requisitePartner(int $id): JsonResponse
     {
-        $req = DB::table('requisites')->where('id', $id)->first();
+        $req = DB::table('requisites')->where('id', $id)->whereNull('deletedAt')->first();
         if (! $req || ! $req->consultant) {
             return response()->json(null);
         }
@@ -1134,7 +1134,7 @@ class AdminDataController extends Controller
      */
     public function checkRequisiteInn(int $id): JsonResponse
     {
-        $req = DB::table('requisites')->where('id', $id)->first();
+        $req = DB::table('requisites')->where('id', $id)->whereNull('deletedAt')->first();
         if (! $req) {
             return response()->json(['message' => 'Реквизиты не найдены'], 404);
         }

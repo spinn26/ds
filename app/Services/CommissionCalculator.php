@@ -63,8 +63,8 @@ class CommissionCalculator
 
     private function calculateInTransaction(int $transactionId): array
     {
-        $tx = DB::table('transaction')->where('id', $transactionId)->first();
-        if (! $tx) return ['error' => 'Транзакция не найдена'];
+        $tx = DB::table('transaction')->where('id', $transactionId)->whereNull('deletedAt')->first();
+        if (! $tx) return ['error' => 'Транзакция не найдена или удалена'];
 
         // Заморозка: нельзя пересчитывать комиссии в закрытом месяце.
         // Per ./.claude/specs/✅Комиссии .md Part 2 §1.
@@ -72,14 +72,14 @@ class CommissionCalculator
             return ['error' => "Период {$tx->dateMonth}.{$tx->dateYear} закрыт — комиссии не пересчитываются"];
         }
 
-        $contract = DB::table('contract')->where('id', $tx->contract)->first();
-        if (! $contract) return ['error' => 'Контракт не найден'];
+        $contract = DB::table('contract')->where('id', $tx->contract)->whereNull('deletedAt')->first();
+        if (! $contract) return ['error' => 'Контракт не найден или удалён'];
 
         $consultantId = $contract->consultant;
         if (! $consultantId) return ['error' => 'Консультант не привязан'];
 
-        $consultant = DB::table('consultant')->where('id', $consultantId)->first();
-        if (! $consultant) return ['error' => 'Консультант не найден'];
+        $consultant = DB::table('consultant')->where('id', $consultantId)->whereNull('dateDeleted')->first();
+        if (! $consultant) return ['error' => 'Консультант не найден или удалён'];
 
         // Курс валюты
         $currencyRate = (float) ($tx->currencyRate ?? 1);
