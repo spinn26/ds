@@ -239,24 +239,35 @@ function resetFilters() {
   loadParticipants();
 }
 
+// Guard от race condition: при быстрой смене месяца ответы могут вернуться
+// в обратном порядке и затереть актуальные данные более старыми.
+// Вместо AbortController — простой счётчик: применяем результат только если
+// мы всё ещё ждём именно его (tag не сбит другим вызовом).
+let loadTag = 0;
+
 async function loadParticipants() {
   if (!month.value) return;
+  const myTag = ++loadTag;
+  const requestedMonth = month.value;
   loadingParticipants.value = true;
   try {
-    const [y, m] = month.value.split('-');
+    const [y, m] = requestedMonth.split('-');
     const { data } = await api.get('/admin/pool/participants', {
       params: { year: Number(y), month: Number(m) },
     });
+    if (myTag !== loadTag || month.value !== requestedMonth) return; // устаревший ответ
     participants.value = data.participants || [];
     result.value = null;
   } catch (e) {
+    if (myTag !== loadTag) return;
     notify(e.response?.data?.message || 'Ошибка загрузки участников', 'error');
+  } finally {
+    if (myTag === loadTag) loadingParticipants.value = false;
   }
-  loadingParticipants.value = false;
 
   // Автоматически считаем preview, чтобы таблица расчёта была видна сразу
   // без нажатия кнопки. Запись в poolLog не делается — нужно явное «Применить».
-  if (participants.value.length) {
+  if (myTag === loadTag && participants.value.length) {
     autoPreview();
   }
 }

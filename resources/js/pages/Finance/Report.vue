@@ -328,14 +328,24 @@ const paymentsHeaders = [
 const locked = ref(false);
 const lockedMessage = ref('');
 
+// Guard от race-condition при быстрой смене месяца в MonthPicker:
+// если пользователь переключается «март→апрель→март», ответы могут
+// прийти в обратном порядке и затереть актуальные данные. Применяем
+// результат только если tag не сбит более новым запросом.
+let loadDataTag = 0;
+
 async function loadData() {
+  const myTag = ++loadDataTag;
+  const requestedMonth = month.value;
   loading.value = true;
   locked.value = false;
   lockedMessage.value = '';
   try {
-    const { data: d } = await api.get('/finance/report', { params: { month: month.value } });
+    const { data: d } = await api.get('/finance/report', { params: { month: requestedMonth } });
+    if (myTag !== loadDataTag || month.value !== requestedMonth) return;
     data.value = d;
   } catch (e) {
+    if (myTag !== loadDataTag) return;
     if (e?.response?.status === 423) {
       locked.value = true;
       lockedMessage.value = e.response.data?.message || 'Отчёт за этот период ещё не опубликован';
@@ -343,8 +353,9 @@ async function loadData() {
     } else {
       data.value = {};
     }
+  } finally {
+    if (myTag === loadDataTag) loading.value = false;
   }
-  loading.value = false;
 }
 
 onMounted(loadData);
