@@ -443,10 +443,22 @@ class ChatController extends Controller
             Log::warning('chat socket emit failed: new-message', ['ticket_id' => $id, 'message_id' => $msgId, 'exception' => $e->getMessage()]);
         }
 
-        // Personal notification to the other side of the ticket
-        $recipientId = $isAgent
-            ? (int) $ticket->user_id
-            : ((int) ($ticket->assigned_to ?? 0));
+        // Personal notification to the other side of the ticket.
+        // Раньше тут было $ticket->user_id — этого поля не существует в
+        // chat_tickets, поэтому уведомления партнёру никогда не уходили.
+        // Реальные поля схемы: created_by (автор), recipient_id (другая
+        // сторона приватного staff↔partner), assigned_to (назначенный staff).
+        if ($isAgent) {
+            // Staff отвечает → шлём партнёру: автор тикета, либо вторая сторона
+            // приватного диалога если автор это сам staff.
+            $recipientId = (int) ($ticket->created_by ?? 0);
+            if ($recipientId === (int) $user->id) {
+                $recipientId = (int) ($ticket->recipient_id ?? 0);
+            }
+        } else {
+            // Партнёр пишет → шлём назначенному staff, либо в личный диалог.
+            $recipientId = (int) ($ticket->assigned_to ?? $ticket->recipient_id ?? 0);
+        }
         if ($recipientId && $recipientId !== (int) $user->id) {
             NotificationController::create(
                 $recipientId,
@@ -1129,7 +1141,15 @@ class ChatController extends Controller
         }
     }
 
-    /** Unread messages count for current user */
+    /**
+     * Unread messages count + tickets-with-unread count for current user.
+     *
+     * Раньше возвращалось количество ТИКЕТОВ с непрочитанными — поэтому в
+     * шапке висело «N» вместо реального числа новых сообщений и ощущение
+     * было «счётчик не обновляется». Теперь считаем именно сообщения.
+     *
+     * Один SQL вместо N+1 (раньше .exists() в цикле по каждому тикету).
+     */
     public function unreadCount(Request $request): JsonResponse
     {
         $userId = $request->user()->id;
@@ -1144,28 +1164,30 @@ class ChatController extends Controller
 
         $ticketIds = $query->whereIn('status', ['new', 'open', 'pending'])->pluck('id');
         if ($ticketIds->isEmpty()) {
-            return response()->json(['count' => 0]);
+            return response()->json(['count' => 0, 'tickets' => 0]);
         }
 
-        $readMap = DB::table('chat_read_status')
-            ->where('user_id', $userId)
-            ->whereIn('ticket_id', $ticketIds)
-            ->pluck('last_read_at', 'ticket_id');
+        // Один JOIN-запрос: непрочитанные = сообщения от других и системные
+        // отброшены, плюс created_at > last_read_at (либо нет read-маркера).
+        $row = DB::table('chat_messages as cm')
+            ->leftJoin('chat_read_status as rs', function ($j) use ($userId) {
+                $j->on('rs.ticket_id', '=', 'cm.ticket_id')
+                  ->where('rs.user_id', '=', $userId);
+            })
+            ->whereIn('cm.ticket_id', $ticketIds)
+            ->where('cm.sender_id', '!=', $userId)
+            ->where('cm.is_system', false)
+            ->where(function ($q) {
+                $q->whereNull('rs.last_read_at')
+                  ->orWhereColumn('cm.created_at', '>', 'rs.last_read_at');
+            })
+            ->selectRaw('COUNT(*) AS msgs, COUNT(DISTINCT cm.ticket_id) AS tickets')
+            ->first();
 
-        $count = 0;
-        foreach ($ticketIds as $tid) {
-            $lastRead = $readMap[$tid] ?? null;
-            $q = DB::table('chat_messages')
-                ->where('ticket_id', $tid)
-                ->where('sender_id', '!=', $userId)
-                ->where('is_system', false);
-            if ($lastRead) {
-                $q->where('created_at', '>', $lastRead);
-            }
-            if ($q->exists()) $count++;
-        }
-
-        return response()->json(['count' => $count]);
+        return response()->json([
+            'count'   => (int) ($row->msgs ?? 0),
+            'tickets' => (int) ($row->tickets ?? 0),
+        ]);
     }
 
     /**
