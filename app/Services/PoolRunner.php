@@ -110,8 +110,11 @@ class PoolRunner
             ->map(fn ($g) => $g->sortByDesc('level')->first());
 
         // Активный? — глобальный флаг (терминированные исключаются всегда,
-        // даже если у них есть qualificationLog за период).
-        $consIds = $perPartnerLevel->keys()->all();
+        // даже если у них есть qualificationLog за период). Фильтруем
+        // null/пустые id (legacy-данные могут содержать orphan-строки).
+        $consIds = array_values(array_filter(
+            array_map('intval', $perPartnerLevel->keys()->all())
+        ));
         $activeIds = $consIds ? DB::table('consultant')
             ->whereIn('id', $consIds)
             ->where('activity', 1)
