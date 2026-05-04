@@ -33,10 +33,37 @@ class AdminFinanceController extends Controller
         if ($request->filled('search')) {
             $term = '%' . $request->search . '%';
             $query->where(function ($w) use ($term) {
-                $w->where('t.id', 'ilike', $term)
+                $w->where('c.consultantName', 'ilike', $term)
                   ->orWhere('c.number', 'ilike', $term)
-                  ->orWhere('c.clientName', 'ilike', $term);
+                  ->orWhere('c.clientName', 'ilike', $term)
+                  ->orWhere('t.id::text', 'ilike', $term);
             });
+        }
+        // Дополнительные раздельные фильтры per spec ✅Комиссии §1.1
+        if ($request->filled('client')) {
+            $query->where('c.clientName', 'ilike', '%' . $request->client . '%');
+        }
+        if ($request->filled('contract_number')) {
+            $query->where('c.number', 'ilike', '%' . $request->contract_number . '%');
+        }
+        if ($request->filled('comment')) {
+            $query->where('t.comment', 'ilike', '%' . $request->comment . '%');
+        }
+        if ($request->filled('supplier')) {
+            // supplier — это program.providerName / vendorName на legacy. Делаем
+            // join один раз, без N+1.
+            $query->join('program as pr', 'pr.id', '=', 'c.program')
+                  ->where(function ($w) use ($request) {
+                      $sup = '%' . $request->supplier . '%';
+                      $w->where('pr.providerName', 'ilike', $sup)
+                        ->orWhere('pr.vendorName', 'ilike', $sup);
+                  });
+        }
+        if ($request->filled('date_from')) {
+            $query->where('t.date', '>=', $request->date_from);
+        }
+        if ($request->filled('date_to')) {
+            $query->where('t.date', '<=', $request->date_to . ' 23:59:59');
         }
         if ($request->filled('month')) {
             $query->where('t.dateMonth', $request->month);
@@ -371,6 +398,52 @@ class AdminFinanceController extends Controller
         });
 
         return response()->json(['data' => $data]);
+    }
+
+    /**
+     * GET /admin/commissions/chain/{transactionId}
+     * Цепочка commission rows для одной транзакции (для аккордеона на
+     * странице Комиссии per spec ✅Комиссии §1.3).
+     */
+    public function commissionChain(int $transactionId): JsonResponse
+    {
+        $rows = DB::table('commission as cm')
+            ->leftJoin('consultant as c', 'c.id', '=', 'cm.consultant')
+            ->leftJoin('status_levels as sl', 'sl.id', '=', 'cm.calculationLevel')
+            ->where('cm.transaction', $transactionId)
+            ->whereNull('cm.deletedAt')
+            ->orderBy('cm.chainOrder')
+            ->select([
+                'cm.id', 'cm.consultant', 'c.personName as consultantName',
+                'cm.chainOrder', 'cm.percent',
+                'cm.personalVolume', 'cm.groupVolume',
+                'cm.groupBonus', 'cm.amountRUB',
+                'sl.title as levelTitle', 'sl.level as levelNum',
+            ])
+            ->get();
+
+        $tx = DB::table('transaction')->where('id', $transactionId)
+            ->first(['netRevenueRUB', 'amountRUB', 'profitRUB']);
+        $totalCommission = $rows->sum(fn ($r) => (float) ($r->amountRUB ?? 0));
+        $profitDS = (float) ($tx?->profitRUB ?? (($tx?->netRevenueRUB ?? 0) - $totalCommission));
+
+        return response()->json([
+            'data' => $rows->map(fn ($r) => [
+                'id' => $r->id,
+                'consultantId' => $r->consultant,
+                'consultantName' => $r->consultantName,
+                'chainOrder' => (int) ($r->chainOrder ?? 0),
+                'percent' => (float) ($r->percent ?? 0),
+                'levelTitle' => $r->levelTitle,
+                'levelNum' => $r->levelNum,
+                'personalVolume' => round((float) ($r->personalVolume ?? 0), 2),
+                'groupVolume' => round((float) ($r->groupVolume ?? 0), 2),
+                'groupBonus' => round((float) ($r->groupBonus ?? 0), 2),
+                'amountRUB' => round((float) ($r->amountRUB ?? 0), 2),
+            ])->all(),
+            'profitDS' => round($profitDS, 2),
+            'totalCommission' => round($totalCommission, 2),
+        ]);
     }
 
     /**
