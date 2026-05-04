@@ -9,7 +9,14 @@
     <!-- Left: ticket list (hidden in Kanban mode on mobile / collapsed on desktop) -->
     <aside class="chat-sidebar" :class="{ 'mobile-hidden': mobile && (activeChat || viewMode === 'kanban'), 'compact': viewMode === 'kanban' && !mobile }">
       <div class="sidebar-head">
-        <h3>Обращения</h3>
+        <div class="d-flex align-center justify-space-between">
+          <h3>Обращения</h3>
+          <button class="filter-chip bulk-toggle" :class="{ active: bulkMode }"
+            @click="toggleBulk" title="Массовые операции">
+            <v-icon size="14">{{ bulkMode ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline' }}</v-icon>
+            Выбор
+          </button>
+        </div>
         <div class="sidebar-search-row">
           <v-icon size="16">mdi-magnify</v-icon>
           <input v-model="filter.search" placeholder="Поиск по теме / клиенту…" @input="debouncedLoad" />
@@ -40,7 +47,13 @@
         </div>
       </div>
       <div class="sidebar-list">
-        <div v-for="t in filteredBySmartView" :key="t.id" class="chat-item" :class="{ active: activeChat?.id === t.id, 'has-unread': t.unread > 0, stale: isStale(t), pinned: t.pinned_at }" @click="openChat(t)">
+        <div v-for="t in filteredBySmartView" :key="t.id"
+          class="chat-item"
+          :class="{ active: activeChat?.id === t.id, 'has-unread': t.unread > 0, stale: isStale(t), pinned: t.pinned_at, 'bulk-mode': bulkMode, selected: selectedIds.has(t.id) }"
+          @click="bulkMode ? toggleCardSelect(t, $event) : openChat(t)">
+          <input v-if="bulkMode" type="checkbox" class="chat-item-cb"
+            :checked="selectedIds.has(t.id)"
+            @click.stop="toggleCardSelect(t, $event)" />
           <div class="chat-item-avatar" :style="{ background: catColor(t.category || t.department) }">
             <v-icon size="18" color="white">{{ catIcon(t.category || t.department) }}</v-icon>
           </div>
@@ -74,6 +87,52 @@
           <p>Ничего не найдено</p>
         </div>
       </div>
+
+      <!-- Bulk action bar (list-mode). В Канбане свой — это для list-view. -->
+      <transition name="bulk-slide">
+        <div v-if="bulkMode && anySelected && viewMode === 'list'" class="bulk-bar list-bulk-bar">
+          <div class="bulk-count">Выбрано: <strong>{{ selectedIds.size }}</strong></div>
+          <v-menu>
+            <template #activator="{ props }">
+              <button v-bind="props" class="bulk-btn"><v-icon size="14">mdi-arrow-right-bold</v-icon> Статус</button>
+            </template>
+            <v-list density="compact">
+              <v-list-item v-for="s in statuses" :key="s.value" @click="bulkSetStatus(s.value)">
+                <template #prepend><v-icon size="14" :color="s.color">{{ s.icon }}</v-icon></template>
+                <v-list-item-title class="text-body-2">{{ s.label }}</v-list-item-title>
+              </v-list-item>
+            </v-list>
+          </v-menu>
+          <v-menu>
+            <template #activator="{ props }">
+              <button v-bind="props" class="bulk-btn"><v-icon size="14">mdi-flag</v-icon> Приоритет</button>
+            </template>
+            <v-list density="compact">
+              <v-list-item v-for="p in priorities" :key="p.value" @click="bulkSetPriority(p.value)">
+                <template #prepend><v-icon size="14" :color="p.color">mdi-circle</v-icon></template>
+                <v-list-item-title class="text-body-2">{{ p.label }}</v-list-item-title>
+              </v-list-item>
+            </v-list>
+          </v-menu>
+          <v-menu>
+            <template #activator="{ props }">
+              <button v-bind="props" class="bulk-btn"><v-icon size="14">mdi-account-plus</v-icon> Назначить</button>
+            </template>
+            <v-list density="compact" style="max-height: 320px; overflow-y: auto">
+              <v-list-item @click="bulkAssign(currentUserId, currentUserName)">
+                <template #prepend><v-icon size="14">mdi-account-check</v-icon></template>
+                <v-list-item-title class="text-body-2 font-weight-bold">На себя</v-list-item-title>
+              </v-list-item>
+              <v-divider />
+              <v-list-item v-for="s in staffList" :key="s.id" @click="bulkAssign(s.id, s.name)">
+                <v-list-item-title class="text-body-2">{{ s.name }}</v-list-item-title>
+              </v-list-item>
+            </v-list>
+          </v-menu>
+          <button class="bulk-btn cancel" @click="selectedIds = new Set()">Сбросить</button>
+          <button class="bulk-btn cancel" @click="bulkMode = false">Выйти</button>
+        </div>
+      </transition>
     </aside>
 
     <!-- View toggle: floating vertical rail on the right edge -->
@@ -2103,6 +2162,14 @@ onUnmounted(() => {
 
 /* Bulk action bar */
 .bulk-bar { position: sticky; bottom: 0; display: flex; align-items: center; gap: 8px; padding: 10px 16px; background: rgb(var(--v-theme-surface)); border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); box-shadow: 0 -4px 16px rgba(0,0,0,0.08); flex-wrap: wrap; }
+.list-bulk-bar { padding: 8px 12px; gap: 6px; }
+.list-bulk-bar .bulk-btn { padding: 4px 8px; font-size: 11px; }
+.chat-item.bulk-mode { padding-left: 36px; }
+.chat-item-cb { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; cursor: pointer; }
+.chat-item.selected { background: rgba(var(--v-theme-primary), 0.08); border-left: 3px solid rgb(var(--v-theme-primary)); }
+.bulk-toggle { font-size: 11px; padding: 3px 8px; }
+.bulk-slide-enter-active, .bulk-slide-leave-active { transition: transform 0.2s, opacity 0.2s; }
+.bulk-slide-enter-from, .bulk-slide-leave-to { transform: translateY(20px); opacity: 0; }
 .bulk-count { font-size: 13px; color: rgba(var(--v-theme-on-surface), 0.7); margin-right: auto; }
 .bulk-btn { display: inline-flex; align-items: center; gap: 4px; padding: 6px 12px; border-radius: 8px; border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); background: rgb(var(--v-theme-surface)); color: inherit; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
 .bulk-btn:hover { background: rgba(var(--v-theme-primary), 0.08); border-color: rgb(var(--v-theme-primary)); }
