@@ -98,6 +98,9 @@ class PoolRunner
                 'sl.level',
                 'sl.title',
                 'sl.id as level_id',
+                'sl.mandatoryGP',
+                'ql.groupVolume',
+                'ql.gapValuePercentage',
             ])
             ->orderByDesc('ql.date')
             ->get()
@@ -127,7 +130,13 @@ class PoolRunner
             ->whereIn('consultant', $consIds ?: [-1])
             ->pluck('participates', 'consultant');
 
-        // Considered = active + level ≥ 6 + has qualificationLog за период
+        // Considered = active + level ≥ 6 + has qualificationLog за период.
+        // Per spec ✅Расчет пула §6.4: пул делится на ВСЕХ участников
+        // (nominalCounts), но выплачивается только тем, кто:
+        //   1) выполнил план по ГП (groupVolume ≥ mandatoryGP);
+        //   2) не имеет отрыва ≥ 90% по одной ветке.
+        //   3) не снят галочкой «Участвует» вручную (модерация).
+        // Не выплаченные доли «остаются в компании» — НЕ перераспределяются.
         $considered = [];
         $nominalCounts = array_fill_keys(array_keys($leaderLevelIds), 0);
         $rowsForUi = [];
@@ -138,13 +147,38 @@ class PoolRunner
 
             $nominalCounts[$level] = ($nominalCounts[$level] ?? 0) + 1;
 
+            $mandatoryGp = (float) ($row->mandatoryGP ?? 0);
+            $groupVolume = (float) ($row->groupVolume ?? 0);
+            $gapPct = (float) ($row->gapValuePercentage ?? 0);
+
+            $opOk = $mandatoryGp <= 0 || $groupVolume >= $mandatoryGp;
+            $gapOk = $gapPct < 90.0;
+            $modParticipates = $modByConsId[$consultantId] ?? null;
+            $modOk = $modParticipates === null ? true : (bool) $modParticipates;
+
+            $disqualifyReason = null;
+            if (! $opOk) {
+                $disqualifyReason = 'ОП не выполнен';
+            } elseif (! $gapOk) {
+                $disqualifyReason = sprintf('Отрыв %.0f%% ≥ 90%%', $gapPct);
+            } elseif (! $modOk) {
+                $disqualifyReason = 'Снята галочка «Участвует»';
+            }
+
             $considered[] = (int) $consultantId;
             $rowsForUi[] = (object) [
                 'id' => (int) $consultantId,
                 'level' => $level,
                 'title' => $row->title,
                 'personName' => $consultantMeta[$consultantId] ?? '—',
-                'participates' => $modByConsId[$consultantId] ?? null,
+                'participates' => $modParticipates,
+                'eligible' => $opOk && $gapOk && $modOk,
+                'opOk' => $opOk,
+                'gapOk' => $gapOk,
+                'mandatoryGP' => $mandatoryGp,
+                'groupVolume' => $groupVolume,
+                'gapValuePercentage' => $gapPct,
+                'disqualifyReason' => $disqualifyReason,
             ];
         }
 
@@ -157,13 +191,15 @@ class PoolRunner
             $partnerInputs[] = [
                 'id' => (int) $r->id,
                 'level' => (int) $r->level,
-                'participates' => $r->participates === null ? true : (bool) $r->participates,
+                // PoolCalculator::distribute смотрит только на participates →
+                // прокидываем итоговую eligibility (модерация × ОП × отрыв).
+                'participates' => (bool) $r->eligible,
             ];
         }
 
         $distribution = $this->calculator->distribute($revenue, $nominalCounts, $partnerInputs);
 
-        // Merge meta (name, level title) back in for the response.
+        // Merge meta (name, level title, причина исключения) для ответа UI.
         $metaById = $rows->keyBy('id');
         $participants = array_map(function ($p) use ($metaById) {
             $meta = $metaById[$p['id']] ?? null;
@@ -172,9 +208,16 @@ class PoolRunner
                 'level' => $p['level'],
                 'levelName' => $meta?->title ?? '',
                 'personName' => $meta?->personName ?? '',
-                'participates' => $metaById[$p['id']]?->participates === null
+                'participates' => $meta?->participates === null
                     ? true
-                    : (bool) $metaById[$p['id']]?->participates,
+                    : (bool) $meta->participates,
+                'eligible' => (bool) ($meta?->eligible ?? false),
+                'opOk' => (bool) ($meta?->opOk ?? false),
+                'gapOk' => (bool) ($meta?->gapOk ?? false),
+                'mandatoryGP' => $meta?->mandatoryGP ?? 0,
+                'groupVolume' => $meta?->groupVolume ?? 0,
+                'gapValuePercentage' => $meta?->gapValuePercentage ?? 0,
+                'disqualifyReason' => $meta?->disqualifyReason,
                 'payoutRub' => $p['payoutRub'],
             ];
         }, $distribution);

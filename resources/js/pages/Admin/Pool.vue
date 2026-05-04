@@ -40,6 +40,18 @@
             {{ item.level }} {{ item.levelName }}
           </v-chip>
         </template>
+        <template #item.eligibility="{ item }">
+          <v-chip v-if="item.eligible !== false" size="x-small" color="success" variant="tonal" prepend-icon="mdi-check">
+            ОК
+          </v-chip>
+          <v-tooltip v-else location="top" :text="item.disqualifyReason || 'Исключён'">
+            <template #activator="{ props }">
+              <v-chip v-bind="props" size="x-small" color="error" variant="tonal" prepend-icon="mdi-alert">
+                {{ item.disqualifyReason || 'Исключён' }}
+              </v-chip>
+            </template>
+          </v-tooltip>
+        </template>
         <template #no-data>
           <EmptyState message="Нет партнёров уровня 6+ за этот месяц" />
         </template>
@@ -166,9 +178,10 @@ const monthLabel = computed(() => {
 });
 
 const participantHeaders = [
-  { title: 'Участвует', key: 'participates', width: 120, sortable: false },
+  { title: 'Участвует', key: 'participates', width: 110, sortable: false },
   { title: 'Партнёр', key: 'personName' },
   { title: 'Квалификация', key: 'level', width: 200 },
+  { title: 'Условие выплаты', key: 'eligibility', width: 220, sortable: false },
 ];
 
 function levelColor(lvl) {

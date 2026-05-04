@@ -190,18 +190,23 @@ class DashboardService
             ];
         }
 
-        // Pool eligibility (from TOP FC = level 6 onwards)
+        // Pool eligibility (from TOP FC = level 6 onwards).
+        // Per spec ✅Расчет пула §6.4: пул не выплачивается если
+        //   (а) ОП по ГП не выполнен на 100% — или
+        //   (б) у партнёра отрыв ≥ 90% (одна ветка занимает >90% от ГП).
         $poolInfo = null;
         if ($statusLevel && ($statusLevel->pool ?? 0) > 0) {
-            $poolEligible = true;
-            // Must meet 80% of GP plan to qualify for pool
-            if ($mandatoryPlan) {
-                $poolEligible = $mandatoryPlan['fulfillment'] >= 80;
-            }
+            $opFulfilled = $mandatoryPlan ? (bool) $mandatoryPlan['fulfilled'] : true;
+            $gapPct = (float) ($currentQLog->gapValuePercentage ?? 0);
+            $gapDisqualifies = $gapPct >= 90.0;
+            $poolEligible = $opFulfilled && ! $gapDisqualifies;
+            $reason = null;
+            if (! $opFulfilled)         $reason = 'ОП по ГП не выполнен на 100%';
+            elseif ($gapDisqualifies)   $reason = sprintf('Отрыв %.0f%% ≥ 90%%', $gapPct);
             $poolInfo = [
                 'poolPercent' => (float) $statusLevel->pool,
                 'eligible' => $poolEligible,
-                'reason' => $poolEligible ? null : 'План ГП выполнен менее чем на 80%',
+                'reason' => $reason,
             ];
         }
 
