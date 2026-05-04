@@ -87,9 +87,14 @@ class PoolRunner
 
         $perPartnerLevel = DB::table('qualificationLog as ql')
             ->join('status_levels as sl', function ($j) {
-                // Берём наибольший из nominalLevel/calculationLevel —
-                // как делает CalculatorController при resolveQual().
-                $j->on('sl.id', '=', DB::raw('GREATEST(ql."nominalLevel", ql."calculationLevel")'));
+                // Используем calculationLevel — это «реальный» уровень для
+                // расчёта пула. nominalLevel может быть выше (заслуженный по
+                // НГП), но если ОП не выполнен или отрыв — система понижает
+                // его в calculationLevel. Pool должен распределяться по
+                // фактическому уровню, как это делает Directual эталон.
+                // COALESCE на nominalLevel — на случай если calc=NULL у
+                // совсем старых записей.
+                $j->on('sl.id', '=', DB::raw('COALESCE(ql."calculationLevel", ql."nominalLevel")'));
             })
             ->whereBetween('ql.date', [$start, $end])
             ->whereNull('ql.dateDeleted')
@@ -312,7 +317,7 @@ class PoolRunner
              FROM "poolLog" p
              LEFT JOIN consultant c ON c.id = p.consultant
              LEFT JOIN LATERAL (
-                 SELECT GREATEST(ql."nominalLevel", ql."calculationLevel") AS lvl_id
+                 SELECT COALESCE(ql."calculationLevel", ql."nominalLevel") AS lvl_id
                  FROM "qualificationLog" ql
                  WHERE ql.consultant = p.consultant
                    AND ql.date BETWEEN ? AND ?
@@ -357,14 +362,14 @@ class PoolRunner
         $end = date('Y-m-t', strtotime($start));
         $nominalCounts = array_fill_keys(array_keys($leaderLevelIds), 0);
         $qlogCounts = DB::select('
-            SELECT GREATEST(ql."nominalLevel", ql."calculationLevel") AS lvl_id, COUNT(DISTINCT ql.consultant) AS cnt
+            SELECT COALESCE(ql."calculationLevel", ql."nominalLevel") AS lvl_id, COUNT(DISTINCT ql.consultant) AS cnt
             FROM "qualificationLog" ql
             JOIN consultant c ON c.id = ql.consultant
             WHERE ql.date BETWEEN ? AND ?
               AND ql."dateDeleted" IS NULL
               AND c."dateDeleted" IS NULL
               AND c.activity = 1
-            GROUP BY GREATEST(ql."nominalLevel", ql."calculationLevel")
+            GROUP BY COALESCE(ql."calculationLevel", ql."nominalLevel")
         ', [$start, $end]);
         $countByLevelId = collect($qlogCounts)->pluck('cnt', 'lvl_id')->toArray();
         $levelByLevelId = DB::table('status_levels')
