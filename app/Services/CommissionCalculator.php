@@ -68,8 +68,13 @@ class CommissionCalculator
 
         // Заморозка: нельзя пересчитывать комиссии в закрытом месяце.
         // Per ./.claude/specs/✅Комиссии .md Part 2 §1.
-        if ($tx->dateYear && $tx->dateMonth && $this->periodFreeze->isFrozen((int) $tx->dateYear, (int) $tx->dateMonth)) {
-            return ['error' => "Период {$tx->dateMonth}.{$tx->dateYear} закрыт — комиссии не пересчитываются"];
+        // ВАЖНО: dateMonth хранится как 'YYYY-MM' (например, '2026-02'),
+        // intval() даёт 2026, не 2 → проверка заморозки никогда не срабатывала.
+        // Берём последние 2 символа (число месяца).
+        $txMonth = $tx->dateMonth ? (int) substr((string) $tx->dateMonth, -2) : null;
+        $txYear  = $tx->dateYear ? (int) $tx->dateYear : null;
+        if ($txYear && $txMonth && $this->periodFreeze->isFrozen($txYear, $txMonth)) {
+            return ['error' => "Период {$tx->dateMonth} закрыт — комиссии не пересчитываются"];
         }
 
         $contract = DB::table('contract')->where('id', $tx->contract)->whereNull('deletedAt')->first();

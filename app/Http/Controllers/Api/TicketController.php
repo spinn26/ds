@@ -176,36 +176,38 @@ class TicketController extends Controller
             $assignedTo = $owner?->id;
         }
 
-        $ticketId = DB::table('tickets')->insertGetId([
-            'subject' => $request->subject,
-            'category' => $request->category,
-            'created_by' => $user->id,
-            'consultant_id' => $consultant?->id,
-            'status' => 'open',
-            'priority' => $request->input('priority', 'normal'),
-            'assigned_to' => $assignedTo,
-            'context_type' => $request->context_type,
-            'context_id' => $request->context_id,
-            'context_info' => $request->context_info ? json_encode($request->context_info) : null,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
-
-        // Первое сообщение
-        DB::table('ticket_messages')->insert([
-            'ticket_id' => $ticketId,
-            'user_id' => $user->id,
-            'message' => $request->message,
-            'created_at' => now(),
-        ]);
-
-        // Участник-создатель
-        DB::table('ticket_participants')->insert([
-            'ticket_id' => $ticketId,
-            'user_id' => $user->id,
-            'role' => 'creator',
-            'created_at' => now(),
-        ]);
+        // Транзакция: insert tickets + первое сообщение + участники должны
+        // либо все пройти, либо все откатиться. Иначе при сбое на одном из
+        // INSERT'ов остаётся «полусозданный» тикет без первого сообщения.
+        $ticketId = DB::transaction(function () use ($request, $user, $consultant, $assignedTo) {
+            $tid = DB::table('tickets')->insertGetId([
+                'subject' => $request->subject,
+                'category' => $request->category,
+                'created_by' => $user->id,
+                'consultant_id' => $consultant?->id,
+                'status' => 'open',
+                'priority' => $request->input('priority', 'normal'),
+                'assigned_to' => $assignedTo,
+                'context_type' => $request->context_type,
+                'context_id' => $request->context_id,
+                'context_info' => $request->context_info ? json_encode($request->context_info) : null,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+            DB::table('ticket_messages')->insert([
+                'ticket_id' => $tid,
+                'user_id' => $user->id,
+                'message' => $request->message,
+                'created_at' => now(),
+            ]);
+            DB::table('ticket_participants')->insert([
+                'ticket_id' => $tid,
+                'user_id' => $user->id,
+                'role' => 'creator',
+                'created_at' => now(),
+            ]);
+            return $tid;
+        });
 
         // Участник-owner (если назначен)
         if ($assignedTo) {
@@ -340,26 +342,29 @@ class TicketController extends Controller
             return response()->json(['message' => 'Сообщение или файл обязательны'], 422);
         }
 
-        $msgId = DB::table('ticket_messages')->insertGetId([
-            'ticket_id' => $id,
-            'user_id' => $user->id,
-            'message' => $request->message,
-            'attachment_path' => $attachmentPath,
-            'attachment_name' => $attachmentName,
-            'created_at' => now(),
-        ]);
-
-        // Обновить статус если сотрудник отвечает
-        $ticket = DB::table('tickets')->where('id', $id)->first();
-        if ($ticket && $ticket->status === 'open' && $user->id !== $ticket->created_by) {
-            DB::table('tickets')->where('id', $id)->update([
-                'status' => 'in_progress',
-                'assigned_to' => $ticket->assigned_to ?? $user->id,
-                'updated_at' => now(),
+        // Транзакция: insert + update tickets вместе.
+        $ticket = null;
+        $msgId = DB::transaction(function () use ($id, $user, $request, $attachmentPath, $attachmentName, &$ticket) {
+            $tid = DB::table('ticket_messages')->insertGetId([
+                'ticket_id' => $id,
+                'user_id' => $user->id,
+                'message' => $request->message,
+                'attachment_path' => $attachmentPath,
+                'attachment_name' => $attachmentName,
+                'created_at' => now(),
             ]);
-        } else {
-            DB::table('tickets')->where('id', $id)->update(['updated_at' => now()]);
-        }
+            $ticket = DB::table('tickets')->where('id', $id)->first();
+            if ($ticket && $ticket->status === 'open' && $user->id !== $ticket->created_by) {
+                DB::table('tickets')->where('id', $id)->update([
+                    'status' => 'in_progress',
+                    'assigned_to' => $ticket->assigned_to ?? $user->id,
+                    'updated_at' => now(),
+                ]);
+            } else {
+                DB::table('tickets')->where('id', $id)->update(['updated_at' => now()]);
+            }
+            return $tid;
+        });
 
         // Emit to Socket.IO for real-time delivery
         try {
@@ -401,7 +406,9 @@ class TicketController extends Controller
             return response()->json(['message' => 'Только для сотрудников'], 403);
         }
 
-        $request->validate(['user_id' => 'required|integer']);
+        // exists защищает от подделанного user_id — иначе тикет назначался
+        // на несуществующего юзера и потом валился весь UI «assigned_name».
+        $request->validate(['user_id' => 'required|integer|exists:WebUser,id']);
 
         $assignee = DB::table('WebUser')->where('id', $request->user_id)->first();
 

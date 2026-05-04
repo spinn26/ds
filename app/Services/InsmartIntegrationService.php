@@ -99,7 +99,10 @@ class InsmartIntegrationService
                 'currency' => $this->resolveCurrencyId($payload['currency'] ?? 'RUB'),
                 'currencyRate' => 1,
                 'date' => now(),
-                'dateMonth' => now()->format('m'),
+                // dateMonth хранится в формате 'YYYY-MM' (как остальные
+                // транзакции и фильтры в коде); раньше тут было 'm', из-за
+                // чего Insmart-транзакции не попадали в pool/finance/report.
+                'dateMonth' => now()->format('Y-m'),
                 'dateYear' => now()->format('Y'),
                 'comment' => 'Insmart agent commission',
                 'dateCreated' => now(),

@@ -112,7 +112,9 @@ class ManualTransactionController extends Controller
     {
         $request->validate([
             'contractIds' => ['required', 'array', 'min:1'],
-            'contractIds.*' => ['integer'],
+            // exists защищает от создания draft'ов на несуществующих контрактах,
+            // которые потом упадут на расчёте.
+            'contractIds.*' => ['integer', 'exists:contract,id'],
         ]);
 
         $userId = $request->user()->id;

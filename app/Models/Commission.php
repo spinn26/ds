@@ -26,7 +26,9 @@ class Commission extends Model
     {
         return [
             'date' => 'datetime',
-            'dateMonth' => 'integer',
+            // dateMonth хранится как строка 'YYYY-MM' ('2026-02'), а не int —
+            // cast 'integer' давал 2026 вместо 2 (intval до дефиса).
+            'dateMonth' => 'string',
             'dateYear' => 'integer',
             'chainOrder' => 'integer',
             'percent' => 'float',

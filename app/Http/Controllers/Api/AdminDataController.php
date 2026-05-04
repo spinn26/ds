@@ -803,6 +803,10 @@ class AdminDataController extends Controller
 
     public function deleteClient(Request $request, int $id): JsonResponse
     {
+        $request->validate([
+            'reason' => ['nullable', 'string', 'max:500'],
+        ]);
+
         $client = DB::table('client')->where('id', $id)->first();
         if (! $client) {
             return response()->json(['message' => 'Клиент не найден'], 404);
