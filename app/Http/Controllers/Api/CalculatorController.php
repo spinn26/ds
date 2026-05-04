@@ -51,6 +51,29 @@ class CalculatorController extends Controller
                 ->where(function ($q) {
                     $q->where('visibleToCalculator', true)->orWhereNull('visibleToCalculator');
                 })
+                // Скрываем legacy/мёртвые программы у которых вообще нет ни
+                // активного тарифа, ни заполненных dsPercent/pointsMethod —
+                // их расчёт всё равно даст 0. Это убирает 200+ дубликатов
+                // (EVO05/EVO10/..., Medlife COI/EIP/... с числовыми сроками,
+                // legacy Зетта/Совкомбанк/Ренессанс).
+                ->where(function ($q) {
+                    $q->whereNotNull('dsPercent')
+                      ->orWhereNotNull('pointsMethod')
+                      ->orWhereExists(function ($sub) {
+                          $sub->select(DB::raw(1))->from('dsCommission')
+                              ->whereColumn('dsCommission.program', 'program.id')
+                              ->where('dsCommission.active', true)
+                              ->whereNull('dsCommission.dateDeleted')
+                              ->where(function ($d) {
+                                  $d->whereNull('dsCommission.date')
+                                    ->orWhere('dsCommission.date', '<=', now());
+                              })
+                              ->where(function ($d) {
+                                  $d->whereNull('dsCommission.dateFinish')
+                                    ->orWhere('dsCommission.dateFinish', '>=', now());
+                              });
+                      });
+                })
                 ->orderBy('name')->get();
 
             // Per spec ✅Калькулятор объёмов §2: «Свойство / Срок / Год выплаты
