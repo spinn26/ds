@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 class CalculatorController extends Controller
 {
@@ -45,13 +46,41 @@ class CalculatorController extends Controller
                     'typeId' => $p->productType ?? null,
                 ]);
 
-            $programs = DB::table('program')
+            $programRows = DB::table('program')
                 ->where('active', true)
                 ->where(function ($q) {
                     $q->where('visibleToCalculator', true)->orWhereNull('visibleToCalculator');
                 })
-                ->orderBy('name')->get()
-                ->map(fn ($p) => [
+                ->orderBy('name')->get();
+
+            // Per spec ✅Калькулятор объёмов §2: «Свойство / Срок / Год выплаты
+            // КВ» показываются ТОЛЬКО если применимы к программе. Берём
+            // discrete-варианты из активных тарифов (dsCommission) — если
+            // вариантов нет, поле в UI скрывается.
+            $programIds = $programRows->pluck('id')->all();
+            $hasKvYear = Schema::hasColumn('dsCommission', 'kvPayoutYear');
+            $cols = ['program', 'commissionCalcProperty', 'termContract'];
+            if ($hasKvYear) $cols[] = 'kvPayoutYear';
+            $tariffs = $programIds ? DB::table('dsCommission')
+                ->whereIn('program', $programIds)
+                ->where('active', true)
+                ->whereNull('dateDeleted')
+                ->where(function ($q) {
+                    $q->whereNull('date')->orWhere('date', '<=', now());
+                })
+                ->where(function ($q) {
+                    $q->whereNull('dateFinish')->orWhere('dateFinish', '>=', now());
+                })
+                ->get($cols) : collect();
+
+            $byProgram = $tariffs->groupBy('program');
+
+            $programs = $programRows->map(function ($p) use ($byProgram, $hasKvYear) {
+                $rows = $byProgram[$p->id] ?? collect();
+                $availableProperties = $rows->pluck('commissionCalcProperty')->filter()->unique()->values()->all();
+                $availableTerms = $rows->pluck('termContract')->filter()->unique()->values()->all();
+                $maxKvYear = $hasKvYear ? (int) $rows->pluck('kvPayoutYear')->filter()->max() : 0;
+                return [
                     'id' => $p->id,
                     'name' => $p->name,
                     'productId' => $p->product,
@@ -59,7 +88,11 @@ class CalculatorController extends Controller
                     'currency' => $p->currency,
                     'calcPropertyId' => $p->commissionCalcProperty ?? null,
                     'termContractId' => $p->termContract ?? null,
-                ]);
+                    'availableProperties' => array_map('intval', $availableProperties),
+                    'availableTerms' => array_map('intval', $availableTerms),
+                    'kvPayoutYear' => $maxKvYear ?: ($p->kvPayoutYear ?? null),
+                ];
+            });
 
             $properties = DB::table('commissionCalcProperty')->orderBy('title')->get()
                 ->map(fn ($p) => ['id' => $p->id, 'title' => $p->title]);
@@ -108,7 +141,10 @@ class CalculatorController extends Controller
         $request->validate([
             'qualification' => 'required|integer',
             'program' => 'required|integer',
-            'calcProperty' => 'required|integer',
+            // calcProperty/termContract — опциональны: для некоторых
+            // программ (IPO, образовательные) свойство и срок не применимы.
+            'calcProperty' => 'nullable|integer',
+            'termContract' => 'nullable|integer',
             'amount' => 'required|numeric|min:0.01',
             'currency' => 'required|integer',
         ]);
@@ -131,30 +167,37 @@ class CalculatorController extends Controller
         //    Если они есть — используем их; иначе фоллбек на legacy dsCommission.
         $programRow = DB::table('program')->where('id', $programId)->first();
 
-        // 2b. Legacy — dsCommission лукап (тариф для этой программы + свойства)
+        // 2b. Legacy — dsCommission лукап (тариф для этой программы + свойства).
+        // calcProperty/termContract могут быть null — для программ без свойства
+        // или без срока. Используем whereNull в этом случае.
         $dsComQuery = DB::table('dsCommission')
             ->where('program', $programId)
-            ->where('commissionCalcProperty', $calcPropertyId)
             ->where('active', true)
             ->where('date', '<=', now())
             ->where('dateFinish', '>=', now())
             ->whereNull('dateDeleted');
 
+        if ($calcPropertyId) {
+            $dsComQuery->where('commissionCalcProperty', $calcPropertyId);
+        } else {
+            $dsComQuery->whereNull('commissionCalcProperty');
+        }
         if ($termContractId) {
             $dsComQuery->where('termContract', $termContractId);
         }
 
         $dsCom = $dsComQuery->first();
-        if (! $dsCom) {
-            // Попробуем без termContract
-            $dsCom = DB::table('dsCommission')
+        if (! $dsCom && $termContractId) {
+            // Попробуем без termContract (для программ где срок optional).
+            $fallback = DB::table('dsCommission')
                 ->where('program', $programId)
-                ->where('commissionCalcProperty', $calcPropertyId)
                 ->where('active', true)
                 ->where('date', '<=', now())
                 ->where('dateFinish', '>=', now())
-                ->whereNull('dateDeleted')
-                ->first();
+                ->whereNull('dateDeleted');
+            if ($calcPropertyId) $fallback->where('commissionCalcProperty', $calcPropertyId);
+            else $fallback->whereNull('commissionCalcProperty');
+            $dsCom = $fallback->first();
         }
 
         // Program-level dsPercent overrides legacy dsCommission if BackOffice set it.

@@ -144,27 +144,39 @@ const filteredPrograms = computed(() => {
   return matrix.programs.filter(p => p.productId == form.product);
 });
 
-// Filter properties by selected program's commissionCalcProperty
+// Per spec ✅Калькулятор объёмов §2: «Свойство / Срок / Год выплаты КВ» —
+// опциональные поля, выводятся ТОЛЬКО если применимы к выбранной программе.
+// Список «применимых» приходит с бэкенда как program.availableProperties[]
+// и program.availableTerms[] (distinct из таблицы dsCommission).
+// Если массив пуст — поле в UI скрывается полностью.
+
+const selectedProgram = computed(() =>
+  form.program ? matrix.programs.find(p => p.id == form.program) : null
+);
+
 const filteredProperties = computed(() => {
-  if (!form.program) return [];
-  const prog = matrix.programs.find(p => p.id == form.program);
-  if (prog?.calcPropertyId) {
-    // Program has specific property — show only that one
+  const prog = selectedProgram.value;
+  if (!prog) return [];
+  // Если у программы есть фиксированное свойство — показываем только его.
+  if (prog.calcPropertyId) {
     return matrix.properties.filter(p => p.id == prog.calcPropertyId);
   }
-  // No specific property — show all
-  return matrix.properties;
+  // Иначе — варианты из dsCommission. Если пусто — поле скрыто.
+  const ids = prog.availableProperties || [];
+  if (!ids.length) return [];
+  return matrix.properties.filter(p => ids.includes(Number(p.id)));
 });
 
-// Filter terms by selected program
 const filteredTerms = computed(() => {
-  if (!form.program) return [];
-  const prog = matrix.programs.find(p => p.id == form.program);
-  if (prog?.termContractId) {
-    return matrix.terms.filter(t => t.id == prog.termContractId).map(t => ({ ...t, label: t.term + (t.term > 4 ? ' лет' : t.term > 1 ? ' года' : ' год') }));
+  const prog = selectedProgram.value;
+  if (!prog) return [];
+  const labelize = (t) => ({ ...t, label: t.term + (t.term > 4 ? ' лет' : t.term > 1 ? ' года' : ' год') });
+  if (prog.termContractId) {
+    return matrix.terms.filter(t => t.id == prog.termContractId).map(labelize);
   }
-  // Show all terms
-  return matrix.terms.map(t => ({ ...t, label: t.term + (t.term > 4 ? ' лет' : t.term > 1 ? ' года' : ' год') }));
+  const ids = prog.availableTerms || [];
+  if (!ids.length) return [];
+  return matrix.terms.filter(t => ids.includes(Number(t.id))).map(labelize);
 });
 
 // Show remaining fields if program selected OR no programs exist for product
