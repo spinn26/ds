@@ -91,10 +91,7 @@ class ManualTransactionController extends Controller
             'clientName' => $c->clientName,
             'consultantName' => $c->consultantName,
             'consultantId' => $c->consultant,
-            // openDate в legacy-данных пуст у ~12% контрактов (особенно у
-            // образовательных и IB-портфелей). Fallback на createDate чтобы
-            // не было «—» во всей колонке у таких записей.
-            'openDate' => $c->openDate ?? $c->createDate,
+            'openDate' => $c->openDate,
             'term' => $c->term,
             'productId' => $c->product,
             'productName' => $c->productName,

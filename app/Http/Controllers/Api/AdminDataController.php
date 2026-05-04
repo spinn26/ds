@@ -1445,7 +1445,7 @@ class AdminDataController extends Controller
                 'statusName' => $c->status ? ($contractStatuses[$c->status] ?? null) : null,
                 'ammount' => $c->ammount,
                 'currencySymbol' => $c->currency ? ($currencies[$c->currency] ?? null) : null,
-                'openDate' => $c->openDate ?? $c->createDate ?? $c->createdAt,
+                'openDate' => $c->openDate,
             ]);
 
         return response()->json(['data' => $contracts, 'total' => $total]);
