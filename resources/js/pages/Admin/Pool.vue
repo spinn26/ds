@@ -26,9 +26,14 @@
         <v-chip v-if="filteredParticipants.length" size="x-small" color="primary" variant="tonal">
           {{ filteredParticipants.length }}
         </v-chip>
+        <v-spacer />
+        <ColumnVisibilityMenu
+          :headers="participantHeaders"
+          v-model:visible="participantColumnVisible"
+          storage-key="pool-participants-cols" />
       </v-card-title>
 
-      <v-data-table :items="filteredParticipants" :headers="participantHeaders"
+      <v-data-table :items="filteredParticipants" :headers="visibleParticipantHeaders"
         :items-per-page="50" density="compact" hover :loading="loadingParticipants">
         <template #item.participates="{ item }">
           <v-checkbox :model-value="item.participates" hide-details density="compact" color="success"
@@ -153,6 +158,7 @@ import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
 import PageHeader from '../../components/PageHeader.vue';
 import EmptyState from '../../components/EmptyState.vue';
+import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 import { fmt2 } from '../../composables/useDesign';
 import { useConfirm } from '../../composables/useConfirm';
 
@@ -183,6 +189,11 @@ const participantHeaders = [
   { title: 'Квалификация', key: 'level', width: 200 },
   { title: 'Условие выплаты', key: 'eligibility', width: 220, sortable: false },
 ];
+
+const participantColumnVisible = ref({});
+const visibleParticipantHeaders = computed(() =>
+  participantHeaders.filter(h => participantColumnVisible.value[h.key] !== false)
+);
 
 function levelColor(lvl) {
   const map = { 6: 'amber-darken-1', 7: 'grey', 8: 'orange', 9: 'blue', 10: 'purple' };

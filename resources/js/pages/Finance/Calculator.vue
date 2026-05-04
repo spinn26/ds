@@ -87,10 +87,16 @@
     <v-card class="pa-4">
       <div class="d-flex justify-space-between align-center mb-3">
         <div class="text-subtitle-1 font-weight-bold">Предыдущие расчёты</div>
-        <v-btn size="small" variant="text" prepend-icon="mdi-broom" @click="clearHistory"
-          :disabled="!history.length">Очистить</v-btn>
+        <div class="d-flex align-center ga-2">
+          <ColumnVisibilityMenu
+            :headers="historyHeaders"
+            v-model:visible="historyColumnVisible"
+            storage-key="calculator-history-cols" />
+          <v-btn size="small" variant="text" prepend-icon="mdi-broom" @click="clearHistory"
+            :disabled="!history.length">Очистить</v-btn>
+        </div>
       </div>
-      <v-data-table :items="history" :headers="historyHeaders" density="compact" hover
+      <v-data-table :items="history" :headers="visibleHistoryHeaders" density="compact" hover
         no-data-text="Нет сохранённых расчётов" :items-per-page="10">
         <template #item.personalVolume="{ value }">{{ fmt(value) }}</template>
         <template #item.groupBonusRub="{ value }">{{ fmt(value) }}</template>
@@ -107,6 +113,7 @@
 import { ref, reactive, computed, onMounted } from 'vue';
 import api from '../../api';
 import PageHeader from '../../components/PageHeader.vue';
+import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 import { fmt2 as fmt } from '../../composables/useDesign';
 
 const matrixLoading = ref(true);
@@ -276,6 +283,11 @@ const historyHeaders = [
   { title: 'ЛП', key: 'personalVolume', align: 'end', width: 100 },
   { title: 'Бонус (руб)', key: 'groupBonusRub', align: 'end', width: 120 },
 ];
+
+const historyColumnVisible = ref({});
+const visibleHistoryHeaders = computed(() =>
+  historyHeaders.filter(h => historyColumnVisible.value[h.key] !== false)
+);
 
 // Per spec ✅Калькулятор объемов §2 — Год выплаты КВ:
 // если у выбранной программы заполнено поле kvPayoutYear, выводим

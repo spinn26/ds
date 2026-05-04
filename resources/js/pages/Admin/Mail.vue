@@ -96,11 +96,15 @@
           <div class="d-flex align-center mb-3">
             <div class="text-subtitle-1 font-weight-bold">Шаблоны писем</div>
             <v-spacer />
+            <ColumnVisibilityMenu
+              :headers="templateHeaders"
+              v-model:visible="templateColumnVisible"
+              storage-key="mail-templates-cols" />
             <v-btn color="primary" prepend-icon="mdi-plus" @click="openTemplate(null)">
               Новый шаблон
             </v-btn>
           </div>
-          <v-data-table :items="templates" :headers="templateHeaders" :loading="loadingTemplates"
+          <v-data-table :items="templates" :headers="visibleTemplateHeaders" :loading="loadingTemplates"
             density="compact" hover no-data-text="Шаблонов пока нет" :items-per-page="25">
             <template #item.is_html="{ value }">
               <v-chip size="x-small" :color="value ? 'info' : 'grey'" variant="tonal">
@@ -176,9 +180,13 @@
               clearable hide-details density="compact" variant="outlined"
               style="max-width:200px" @update:model-value="loadLog" />
             <v-spacer />
+            <ColumnVisibilityMenu
+              :headers="logHeaders"
+              v-model:visible="logColumnVisible"
+              storage-key="mail-log-cols" />
             <v-btn variant="text" size="small" prepend-icon="mdi-refresh" @click="loadLog">Обновить</v-btn>
           </div>
-          <v-data-table :items="log" :headers="logHeaders" :loading="loadingLog"
+          <v-data-table :items="log" :headers="visibleLogHeaders" :loading="loadingLog"
             density="compact" hover no-data-text="Журнал пуст" :items-per-page="50">
             <template #item.status="{ value }">
               <v-chip size="x-small" :color="value === 'sent' ? 'success' : 'error'">
@@ -256,6 +264,7 @@ import { useDebounce } from '../../composables/useDebounce';
 import { useConfirm } from '../../composables/useConfirm';
 import { fmtDateTime } from '../../composables/useDesign';
 import PageHeader from '../../components/PageHeader.vue';
+import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 
 const confirm = useConfirm();
 import RichTextEditor from '../../components/RichTextEditor.vue';
@@ -416,6 +425,11 @@ const logHeaders = [
   { title: 'Ошибка', key: 'error' },
 ];
 
+const logColumnVisible = ref({});
+const visibleLogHeaders = computed(() =>
+  logHeaders.filter(h => logColumnVisible.value[h.key] !== false)
+);
+
 async function loadLog() {
   loadingLog.value = true;
   try {
@@ -445,6 +459,11 @@ const templateHeaders = [
   { title: 'Формат', key: 'is_html', width: 100 },
   { title: '', key: 'actions', sortable: false, width: 120 },
 ];
+
+const templateColumnVisible = ref({});
+const visibleTemplateHeaders = computed(() =>
+  templateHeaders.filter(h => templateColumnVisible.value[h.key] !== false)
+);
 
 const templateOptions = computed(() => templates.value.map(t => ({ id: t.id, name: t.name })));
 

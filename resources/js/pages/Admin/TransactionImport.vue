@@ -92,11 +92,17 @@
     <v-card class="pa-4">
       <div class="d-flex justify-space-between align-center mb-3">
         <div class="text-subtitle-1 font-weight-bold">История импорта</div>
-        <v-btn size="small" variant="text" prepend-icon="mdi-refresh" @click="loadHistory">Обновить</v-btn>
+        <div class="d-flex align-center ga-2">
+          <ColumnVisibilityMenu
+            :headers="historyHeaders"
+            v-model:visible="historyColumnVisible"
+            storage-key="transaction-import-history-cols" />
+          <v-btn size="small" variant="text" prepend-icon="mdi-refresh" @click="loadHistory">Обновить</v-btn>
+        </div>
       </div>
 
       <v-data-table-server :items="history" :items-length="historyTotal" :loading="historyLoading"
-        :headers="historyHeaders" :items-per-page="25" @update:options="onHistoryOptions" density="compact" hover>
+        :headers="visibleHistoryHeaders" :items-per-page="25" @update:options="onHistoryOptions" density="compact" hover>
         <template #item.status="{ value }">
           <StatusChip :value="value" kind="import" size="x-small" :text="statusLabel(value)" />
         </template>
@@ -173,6 +179,7 @@ import StatusChip from '../../components/StatusChip.vue';
 import PageHeader from '../../components/PageHeader.vue';
 import DialogShell from '../../components/DialogShell.vue';
 import ImportProgressDialog from '../../components/ImportProgressDialog.vue';
+import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 
 const counterparties = ref([]);
 const currencies = ref([]);
@@ -216,6 +223,11 @@ const historyHeaders = [
   { title: 'Дата', key: 'createdAt', width: 150 },
   { title: '', key: 'actions', sortable: false, width: 90 },
 ];
+
+const historyColumnVisible = ref({});
+const visibleHistoryHeaders = computed(() =>
+  historyHeaders.filter(h => historyColumnVisible.value[h.key] !== false)
+);
 
 function fmtDate(d) { if (!d) return '—'; try { return new Date(d).toLocaleDateString('ru-RU') + ' ' + new Date(d).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }); } catch { return d; } }
 

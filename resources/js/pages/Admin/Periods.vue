@@ -2,6 +2,12 @@
   <div>
     <PageHeader title="Закрытие отчётного месяца" icon="mdi-calendar-month" :count="rows.length">
       <template #subtitle>Доступность отчётов на платформе для Партнёров</template>
+      <template #actions>
+        <ColumnVisibilityMenu
+          :headers="headers"
+          v-model:visible="columnVisible"
+          storage-key="periods-cols" />
+      </template>
     </PageHeader>
 
     <v-alert type="info" variant="tonal" density="compact" class="mb-3" icon="mdi-information">
@@ -11,7 +17,7 @@
 
     <DataTableWrapper
       :items="rows"
-      :headers="headers"
+      :headers="visibleHeaders"
       :loading="loading"
       :items-per-page="50"
       empty-icon="mdi-calendar-blank"
@@ -81,10 +87,11 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
 import PageHeader from '../../components/PageHeader.vue';
 import DataTableWrapper from '../../components/DataTableWrapper.vue';
+import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 import { useConfirm } from '../../composables/useConfirm';
 
 const confirm = useConfirm();
@@ -119,6 +126,11 @@ const headers = [
   { title: 'Комментарий', key: 'note' },
   { title: '', key: 'actions', sortable: false, width: 90 },
 ];
+
+const columnVisible = ref({});
+const visibleHeaders = computed(() =>
+  headers.filter(h => columnVisible.value[h.key] !== false)
+);
 
 async function load() {
   loading.value = true;

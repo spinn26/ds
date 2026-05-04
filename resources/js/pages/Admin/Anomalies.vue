@@ -16,13 +16,27 @@
     </v-row>
 
     <v-card class="mb-3">
-      <v-card-title class="pa-3">Клиенты с контрактами у разных партнёров (возможный «отжим»)</v-card-title>
-      <v-data-table :items="data.multiContractClients || []" :headers="multiHeaders" density="compact" :items-per-page="10" />
+      <v-card-title class="pa-3 d-flex align-center">
+        Клиенты с контрактами у разных партнёров (возможный «отжим»)
+        <v-spacer />
+        <ColumnVisibilityMenu
+          :headers="multiHeaders"
+          v-model:visible="multiColumnVisible"
+          storage-key="anomalies-multi-cols" />
+      </v-card-title>
+      <v-data-table :items="data.multiContractClients || []" :headers="visibleMultiHeaders" density="compact" :items-per-page="10" />
     </v-card>
 
     <v-card class="mb-3">
-      <v-card-title class="pa-3">Транзакции &gt;3σ от среднего продукта (за 90 дней)</v-card-title>
-      <v-data-table :items="data.outlierTx || []" :headers="outlierHeaders" density="compact" :items-per-page="10">
+      <v-card-title class="pa-3 d-flex align-center">
+        Транзакции &gt;3σ от среднего продукта (за 90 дней)
+        <v-spacer />
+        <ColumnVisibilityMenu
+          :headers="outlierHeaders"
+          v-model:visible="outlierColumnVisible"
+          storage-key="anomalies-outlier-cols" />
+      </v-card-title>
+      <v-data-table :items="data.outlierTx || []" :headers="visibleOutlierHeaders" density="compact" :items-per-page="10">
         <template #item.amountRUB="{ value }"><MoneyCell :value="value" currency="₽" /></template>
         <template #item.avg_amt="{ value }"><MoneyCell :value="value" currency="₽" /></template>
         <template #item.date="{ value }">{{ fmtDate(value) }}</template>
@@ -30,13 +44,27 @@
     </v-card>
 
     <v-card class="mb-3">
-      <v-card-title class="pa-3">Партнёры с 0 ЛП и 10+ детьми (фиктивные ветки?)</v-card-title>
-      <v-data-table :items="data.fakeBranches || []" :headers="fakeHeaders" density="compact" :items-per-page="10" />
+      <v-card-title class="pa-3 d-flex align-center">
+        Партнёры с 0 ЛП и 10+ детьми (фиктивные ветки?)
+        <v-spacer />
+        <ColumnVisibilityMenu
+          :headers="fakeHeaders"
+          v-model:visible="fakeColumnVisible"
+          storage-key="anomalies-fake-cols" />
+      </v-card-title>
+      <v-data-table :items="data.fakeBranches || []" :headers="visibleFakeHeaders" density="compact" :items-per-page="10" />
     </v-card>
 
     <v-card>
-      <v-card-title class="pa-3">Недавние перестановки (30 дней)</v-card-title>
-      <v-data-table :items="data.recentTransfers || []" :headers="transferHeaders" density="compact" :items-per-page="10">
+      <v-card-title class="pa-3 d-flex align-center">
+        Недавние перестановки (30 дней)
+        <v-spacer />
+        <ColumnVisibilityMenu
+          :headers="transferHeaders"
+          v-model:visible="transferColumnVisible"
+          storage-key="anomalies-transfers-cols" />
+      </v-card-title>
+      <v-data-table :items="data.recentTransfers || []" :headers="visibleTransferHeaders" density="compact" :items-per-page="10">
         <template #item.transferDate="{ value }">{{ fmtDate(value) }}</template>
       </v-data-table>
     </v-card>
@@ -46,7 +74,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
-import { PageHeader, MoneyCell } from '../../components';
+import { PageHeader, MoneyCell, ColumnVisibilityMenu } from '../../components';
 import { fmtDate } from '../../composables/useDesign';
 import { useSnackbar } from '../../composables/useSnackbar';
 
@@ -89,6 +117,23 @@ const transferHeaders = [
   { title: 'Новый наставник', key: 'newInviter', width: 160 },
   { title: 'Дата', key: 'transferDate', width: 140 },
 ];
+
+const multiColumnVisible = ref({});
+const visibleMultiHeaders = computed(() =>
+  multiHeaders.filter(h => multiColumnVisible.value[h.key] !== false)
+);
+const outlierColumnVisible = ref({});
+const visibleOutlierHeaders = computed(() =>
+  outlierHeaders.filter(h => outlierColumnVisible.value[h.key] !== false)
+);
+const fakeColumnVisible = ref({});
+const visibleFakeHeaders = computed(() =>
+  fakeHeaders.filter(h => fakeColumnVisible.value[h.key] !== false)
+);
+const transferColumnVisible = ref({});
+const visibleTransferHeaders = computed(() =>
+  transferHeaders.filter(h => transferColumnVisible.value[h.key] !== false)
+);
 
 async function load() {
   loading.value = true;

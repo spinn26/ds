@@ -2,6 +2,10 @@
   <div>
     <PageHeader title="Обучение" icon="mdi-school">
       <template #actions>
+        <ColumnVisibilityMenu
+          :headers="courseHeaders"
+          v-model:visible="courseColumnVisible"
+          storage-key="education-courses-cols" />
         <v-btn variant="text" prepend-icon="mdi-eye" href="/education" target="_blank">
           Просмотр как партнёр
         </v-btn>
@@ -25,7 +29,7 @@
     <!-- Courses Table -->
     <v-card>
       <v-data-table-server
-        :headers="courseHeaders"
+        :headers="visibleCourseHeaders"
         :items="courses"
         :items-length="total"
         :loading="loading"
@@ -72,11 +76,17 @@
               <div v-if="(activeTab[item.id] || 'lessons') === 'lessons'">
                 <div class="d-flex justify-space-between align-center mb-2">
                   <span class="text-subtitle-2 font-weight-bold">Уроки курса «{{ item.title }}»</span>
-                  <v-btn size="small" color="primary" prepend-icon="mdi-plus" variant="flat"
-                    @click="openCreateLesson(item)">Добавить урок</v-btn>
+                  <div class="d-flex align-center ga-2">
+                    <ColumnVisibilityMenu
+                      :headers="lessonHeaders"
+                      v-model:visible="lessonColumnVisible"
+                      storage-key="education-lessons-cols" />
+                    <v-btn size="small" color="primary" prepend-icon="mdi-plus" variant="flat"
+                      @click="openCreateLesson(item)">Добавить урок</v-btn>
+                  </div>
                 </div>
                 <v-data-table
-                  :headers="lessonHeaders"
+                  :headers="visibleLessonHeaders"
                   :items="lessonsByCourse[item.id] || []"
                   :loading="lessonsLoading[item.id]"
                   density="compact"
@@ -105,11 +115,17 @@
               <div v-if="activeTab[item.id] === 'tests'">
                 <div class="d-flex justify-space-between align-center mb-2">
                   <span class="text-subtitle-2 font-weight-bold">Тесты курса «{{ item.title }}»</span>
-                  <v-btn size="small" color="primary" prepend-icon="mdi-plus" variant="flat"
-                    @click="openCreateTest(item)">Добавить вопрос</v-btn>
+                  <div class="d-flex align-center ga-2">
+                    <ColumnVisibilityMenu
+                      :headers="testHeaders"
+                      v-model:visible="testColumnVisible"
+                      storage-key="education-tests-cols" />
+                    <v-btn size="small" color="primary" prepend-icon="mdi-plus" variant="flat"
+                      @click="openCreateTest(item)">Добавить вопрос</v-btn>
+                  </div>
                 </div>
                 <v-data-table
-                  :headers="testHeaders"
+                  :headers="visibleTestHeaders"
                   :items="testsByCourse[item.id] || []"
                   :loading="testsLoading[item.id]"
                   density="compact"
@@ -300,10 +316,11 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue';
+import { ref, reactive, computed, onMounted } from 'vue';
 import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
 import PageHeader from '../../components/PageHeader.vue';
+import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 
 const loading = ref(false);
 const saving = ref(false);
@@ -340,6 +357,19 @@ const testHeaders = [
   { title: 'Правильный', key: 'correct_answer', width: 110 },
   { title: 'Действия', key: 'actions', sortable: false, width: 100 },
 ];
+
+const courseColumnVisible = ref({});
+const visibleCourseHeaders = computed(() =>
+  courseHeaders.filter(h => courseColumnVisible.value[h.key] !== false)
+);
+const lessonColumnVisible = ref({});
+const visibleLessonHeaders = computed(() =>
+  lessonHeaders.filter(h => lessonColumnVisible.value[h.key] !== false)
+);
+const testColumnVisible = ref({});
+const visibleTestHeaders = computed(() =>
+  testHeaders.filter(h => testColumnVisible.value[h.key] !== false)
+);
 
 const contentTypeOptions = [
   { title: 'Текст', value: 'text' },

@@ -10,8 +10,13 @@
             <v-icon size="20">mdi-currency-rub</v-icon>
             Курсы валют
             <v-chip size="x-small" color="primary" variant="tonal">{{ rates.length }}</v-chip>
+            <v-spacer />
+            <ColumnVisibilityMenu
+              :headers="rateHeaders"
+              v-model:visible="rateColumnVisible"
+              storage-key="currencies-rates-cols" />
           </v-card-title>
-          <v-data-table :items="rates" :headers="rateHeaders" density="compact"
+          <v-data-table :items="rates" :headers="visibleRateHeaders" density="compact"
             :items-per-page="20" :loading="loading">
             <template #item.period="{ item }">{{ formatPeriod(item.period) }}</template>
             <template #item.symbol="{ item }">
@@ -34,10 +39,14 @@
             <v-icon size="20">mdi-percent</v-icon>
             Ставки НДС
             <v-spacer />
+            <ColumnVisibilityMenu
+              :headers="vatHeaders"
+              v-model:visible="vatColumnVisible"
+              storage-key="currencies-vat-cols" />
             <v-btn color="primary" size="small" prepend-icon="mdi-plus"
               @click="openAddVat">Добавить ставку</v-btn>
           </v-card-title>
-          <v-data-table :items="vat" :headers="vatHeaders" density="compact" hover>
+          <v-data-table :items="vat" :headers="visibleVatHeaders" density="compact" hover>
             <template #item.dateFrom="{ value }">{{ fmtPeriodDate(value) }}</template>
             <template #item.dateTo="{ item }">
               <span v-if="item.isCurrent" class="text-success font-weight-bold">настоящее время</span>
@@ -94,10 +103,11 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
 import PageHeader from '../../components/PageHeader.vue';
 import EmptyState from '../../components/EmptyState.vue';
+import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 
 const loading = ref(true);
 const saving = ref(false);
@@ -116,6 +126,15 @@ const vatHeaders = [
   { title: 'Период по', key: 'dateTo' },
   { title: 'Ставка', key: 'value', width: 100 },
 ];
+
+const rateColumnVisible = ref({});
+const visibleRateHeaders = computed(() =>
+  rateHeaders.filter(h => rateColumnVisible.value[h.key] !== false)
+);
+const vatColumnVisible = ref({});
+const visibleVatHeaders = computed(() =>
+  vatHeaders.filter(h => vatColumnVisible.value[h.key] !== false)
+);
 
 const fmtRate = (n) => Number(n || 0).toLocaleString('ru-RU', { minimumFractionDigits: 4 });
 const monthNames = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];

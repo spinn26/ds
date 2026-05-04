@@ -16,12 +16,18 @@
           <div class="text-body-2 text-medium-emphasis">
             Записей: <strong>{{ total }}</strong>
           </div>
-          <v-btn color="primary" prepend-icon="mdi-plus" :disabled="!currentCatalog" @click="openCreate">
-            Добавить
-          </v-btn>
+          <div class="d-flex align-center ga-2">
+            <ColumnVisibilityMenu
+              :headers="tableHeaders"
+              v-model:visible="columnVisible"
+              :storage-key="`references-${activeTab}-cols`" />
+            <v-btn color="primary" prepend-icon="mdi-plus" :disabled="!currentCatalog" @click="openCreate">
+              Добавить
+            </v-btn>
+          </div>
         </div>
 
-        <v-data-table :items="items" :headers="tableHeaders" :loading="loading"
+        <v-data-table :items="items" :headers="visibleTableHeaders" :loading="loading"
           density="compact" hover no-data-text="Нет записей" :items-per-page="50">
           <template v-for="f in boolFields" #[`item.${f.key}`]="{ value }" :key="f.key">
             <v-icon size="small" :color="value ? 'success' : 'grey'">
@@ -97,6 +103,7 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue';
 import api from '../../api';
+import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 
 const catalogs = ref([]);
 const activeTab = ref(null);
@@ -129,6 +136,13 @@ const tableHeaders = computed(() => {
   headers.push({ title: '', key: 'actions', sortable: false, width: 100 });
   return headers;
 });
+
+// Per-tab visibility state — reset on tab change so that each catalog's
+// localStorage key (set via :storage-key) re-loads its own saved layout.
+const columnVisible = ref({});
+const visibleTableHeaders = computed(() =>
+  tableHeaders.value.filter(h => columnVisible.value[h.key] !== false)
+);
 
 const canSave = computed(() => {
   if (!currentCatalog.value) return false;
@@ -243,9 +257,14 @@ async function doDelete() {
   saving.value = false;
 }
 
-watch(activeTab, () => {
+watch(activeTab, (key) => {
   items.value = [];
   total.value = 0;
+  // Re-hydrate column visibility from this tab's localStorage slot.
+  try {
+    const raw = localStorage.getItem(`cols:references-${key}-cols`);
+    columnVisible.value = raw ? JSON.parse(raw) : {};
+  } catch { columnVisible.value = {}; }
   loadData();
 });
 

@@ -83,9 +83,13 @@
           variant="tonal" prepend-icon="mdi-broom" @click="confirmFlush">
           Очистить failed_jobs
         </v-btn>
+        <ColumnVisibilityMenu
+          :headers="errorHeaders"
+          v-model:visible="errorColumnVisible"
+          storage-key="monitoring-errors-cols" />
       </div>
       <v-divider />
-      <v-data-table :items="errors" :headers="errorHeaders" :loading="loadingErrors"
+      <v-data-table :items="errors" :headers="visibleErrorHeaders" :loading="loadingErrors"
         density="compact" hover no-data-text="Ошибок не зафиксировано" :items-per-page="50">
         <template #item.source="{ value }">
           <v-chip size="x-small" :color="sourceColor(value)">{{ sourceLabel(value) }}</v-chip>
@@ -162,6 +166,7 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import api from '../../api';
 import { fmtDateTime } from '../../composables/useDesign';
 import PageHeader from '../../components/PageHeader.vue';
+import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 
 const status = ref({});
 const errors = ref([]);
@@ -186,6 +191,11 @@ const errorHeaders = [
   { title: 'Сообщение', key: 'message' },
   { title: '', key: 'actions', sortable: false, width: 130 },
 ];
+
+const errorColumnVisible = ref({});
+const visibleErrorHeaders = computed(() =>
+  errorHeaders.filter(h => errorColumnVisible.value[h.key] !== false)
+);
 
 const serviceTiles = computed(() => {
   const s = status.value?.services || {};

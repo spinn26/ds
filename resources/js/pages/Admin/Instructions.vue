@@ -2,6 +2,10 @@
   <div>
     <PageHeader title="Управление инструкциями" icon="mdi-book-edit-outline">
       <template #actions>
+        <ColumnVisibilityMenu
+          :headers="headers"
+          v-model:visible="columnVisible"
+          storage-key="instructions-cols" />
         <v-btn color="primary" prepend-icon="mdi-plus" @click="openCreate">Новая инструкция</v-btn>
       </template>
     </PageHeader>
@@ -21,7 +25,7 @@
       </div>
     </v-card>
 
-    <v-data-table :items="items" :headers="headers" density="compact" hover :items-per-page="50">
+    <v-data-table :items="items" :headers="visibleHeaders" density="compact" hover :items-per-page="50">
       <template #item.audience="{ value }">
         <v-chip size="x-small" variant="tonal">{{ audienceLabel(value) }}</v-chip>
       </template>
@@ -90,6 +94,7 @@
 import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
 import PageHeader from '../../components/PageHeader.vue';
+import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 import { useConfirm } from '../../composables/useConfirm';
 
 const confirm = useConfirm();
@@ -120,6 +125,11 @@ const headers = [
   { title: 'Порядок', key: 'order_index', width: 90, align: 'end' },
   { title: '', key: 'actions', sortable: false, width: 90 },
 ];
+
+const columnVisible = ref({});
+const visibleHeaders = computed(() =>
+  headers.filter(h => columnVisible.value[h.key] !== false)
+);
 
 const blank = () => ({ title: '', category: '', audience: 'both', publish_status: 'draft', body_md: '', video_url: '', order_index: 0 });
 const form = ref(blank());

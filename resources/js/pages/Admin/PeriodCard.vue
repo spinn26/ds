@@ -110,9 +110,15 @@
                 </v-col>
               </v-row>
               <v-divider class="my-2" />
+              <div class="d-flex justify-end mb-1">
+                <ColumnVisibilityMenu
+                  :headers="poolHeaders"
+                  v-model:visible="poolColumnVisible"
+                  storage-key="period-card-pool-cols" />
+              </div>
               <v-data-table
                 :items="pool.participants"
-                :headers="poolHeaders"
+                :headers="visiblePoolHeaders"
                 density="compact"
                 no-data-text="Нет участников"
                 :items-per-page="10"
@@ -161,7 +167,7 @@
 import { ref, computed, watch, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import api from '../../api';
-import { PageHeader, DialogShell, MoneyCell } from '../../components';
+import { PageHeader, DialogShell, MoneyCell, ColumnVisibilityMenu } from '../../components';
 import { fmtDate } from '../../composables/useDesign';
 import { useSnackbar } from '../../composables/useSnackbar';
 
@@ -193,6 +199,11 @@ const poolHeaders = [
   { title: 'Уровень', key: 'levelName', width: 180 },
   { title: 'Выплата', key: 'payoutRub', align: 'end', width: 140 },
 ];
+
+const poolColumnVisible = ref({});
+const visiblePoolHeaders = computed(() =>
+  poolHeaders.filter(h => poolColumnVisible.value[h.key] !== false)
+);
 
 async function loadClosure() {
   try {

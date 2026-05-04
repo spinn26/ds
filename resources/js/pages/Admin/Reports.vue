@@ -50,9 +50,13 @@
           style="max-width:280px" />
         <v-btn v-if="archiveFilter" size="small" variant="text" color="secondary"
           prepend-icon="mdi-filter-remove" @click="archiveFilter = null">Очистить</v-btn>
+        <ColumnVisibilityMenu
+          :headers="archiveHeaders"
+          v-model:visible="archiveColumnVisible"
+          storage-key="reports-archive-cols" />
       </v-card-title>
 
-      <v-data-table :items="filteredArchive" :headers="archiveHeaders"
+      <v-data-table :items="filteredArchive" :headers="visibleArchiveHeaders"
         density="compact" :items-per-page="25">
         <template #item.type="{ item }">
           <v-chip size="x-small" variant="tonal">{{ reportLabel(item.type) }}</v-chip>
@@ -83,6 +87,7 @@ import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
 import PageHeader from '../../components/PageHeader.vue';
 import EmptyState from '../../components/EmptyState.vue';
+import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 import { fmtDate } from '../../composables/useDesign';
 
 const generating = ref(false);
@@ -142,6 +147,11 @@ const archiveHeaders = [
   { title: 'Период по', key: 'dateTo', width: 130 },
   { title: 'Дата формирования', key: 'createdAt', width: 170 },
 ];
+
+const archiveColumnVisible = ref({});
+const visibleArchiveHeaders = computed(() =>
+  archiveHeaders.filter(h => archiveColumnVisible.value[h.key] !== false)
+);
 
 const filteredArchive = computed(() => {
   if (!archiveFilter.value) return archive.value;

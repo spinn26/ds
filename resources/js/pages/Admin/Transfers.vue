@@ -1,6 +1,13 @@
 <template>
   <div>
-    <PageHeader title="История перестановок" icon="mdi-history" :count="total" />
+    <PageHeader title="История перестановок" icon="mdi-history" :count="total">
+      <template #actions>
+        <ColumnVisibilityMenu
+          :headers="headers"
+          v-model:visible="columnVisible"
+          storage-key="transfers-cols" />
+      </template>
+    </PageHeader>
 
     <v-tabs v-model="tab" color="primary" class="mb-3" density="compact" @update:model-value="onTabChange">
       <v-tab value="partner" prepend-icon="mdi-account-supervisor">Партнёр</v-tab>
@@ -33,7 +40,7 @@
     </v-card>
 
     <v-data-table-server :items="items" :items-length="total" :loading="loading"
-      :headers="headers" :items-per-page="25" density="compact"
+      :headers="visibleHeaders" :items-per-page="25" density="compact"
       @update:options="onOptions">
       <template #item.dateCreated="{ value }">{{ fmtDateTime(value) }}</template>
       <template #item.subjectName="{ item }">
@@ -58,6 +65,7 @@ import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
 import PageHeader from '../../components/PageHeader.vue';
 import EmptyState from '../../components/EmptyState.vue';
+import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 
 const tab = ref('partner');
 const items = ref([]);
@@ -91,6 +99,11 @@ const headers = computed(() => {
     { title: 'Автор изменений', key: 'author', width: 200, sortable: false },
   ];
 });
+
+const columnVisible = ref({});
+const visibleHeaders = computed(() =>
+  headers.value.filter(h => columnVisible.value[h.key] !== false)
+);
 
 const activeFilterCount = computed(() => {
   let c = 0;

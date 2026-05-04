@@ -1,6 +1,13 @@
 <template>
   <div>
-    <PageHeader title="Акцепт документов" icon="mdi-check-circle" :count="total" />
+    <PageHeader title="Акцепт документов" icon="mdi-check-circle" :count="total">
+      <template #actions>
+        <ColumnVisibilityMenu
+          :headers="headers"
+          v-model:visible="columnVisible"
+          storage-key="acceptance-cols" />
+      </template>
+    </PageHeader>
 
     <v-card class="mb-3 pa-3">
       <div class="d-flex ga-2 flex-wrap align-center">
@@ -28,7 +35,7 @@
       </div>
     </v-card>
 
-    <v-data-table :items="items" :loading="loading" :headers="headers"
+    <v-data-table :items="items" :loading="loading" :headers="visibleHeaders"
       :items-per-page="perPage" density="compact" hover
       v-model:expanded="expanded" item-value="id" show-expand>
       <template #item.signedCount="{ item }">
@@ -81,6 +88,7 @@ import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
 import PageHeader from '../../components/PageHeader.vue';
 import EmptyState from '../../components/EmptyState.vue';
+import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 
 const items = ref([]);
 const total = ref(0);
@@ -118,6 +126,11 @@ const headers = [
   { title: 'Статус акцепта', key: 'signedCount', width: 200, align: 'center' },
   { title: '', key: 'data-table-expand', sortable: false, width: 50 },
 ];
+
+const columnVisible = ref({});
+const visibleHeaders = computed(() =>
+  headers.filter(h => columnVisible.value[h.key] !== false)
+);
 
 const { debounced: debouncedLoad } = useDebounce(loadData, 400);
 

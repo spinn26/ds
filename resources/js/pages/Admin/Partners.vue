@@ -52,19 +52,10 @@
         </v-chip>
       </v-col>
       <template #actions>
-        <v-menu :close-on-content-click="false">
-          <template #activator="{ props: menuProps }">
-            <v-btn size="small" variant="text" prepend-icon="mdi-view-column" v-bind="menuProps">Колонки</v-btn>
-          </template>
-          <v-list density="compact" style="min-width: 220px">
-            <v-list-item v-for="col in toggleableColumns" :key="col.key">
-              <template #prepend>
-                <v-checkbox-btn :model-value="columnVisible[col.key]" @update:model-value="v => columnVisible[col.key] = v" />
-              </template>
-              <v-list-item-title>{{ col.title }}</v-list-item-title>
-            </v-list-item>
-          </v-list>
-        </v-menu>
+        <ColumnVisibilityMenu
+          :headers="toggleableColumns"
+          v-model:visible="columnVisible"
+          storage-key="partners-cols" />
       </template>
     </FilterBar>
 
@@ -369,6 +360,7 @@ import DataTableWrapper from '../../components/DataTableWrapper.vue';
 import StatusChip from '../../components/StatusChip.vue';
 import FilterBar from '../../components/FilterBar.vue';
 import DialogShell from '../../components/DialogShell.vue';
+import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 import { useSnackbar } from '../../composables/useSnackbar';
 import { useConfirm } from '../../composables/useConfirm';
 import { fmtDate, getActivityColorByName } from '../../composables/useDesign';
