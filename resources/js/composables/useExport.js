@@ -34,53 +34,103 @@ export async function exportToXlsx(data, columns, filename = 'export') {
 }
 
 /**
- * Export finance report to XLSX with multiple sheets.
+ * Export finance report to XLSX (per spec ✅Описание EXCEL-файла отчета.md).
+ * Структура: 5 листов — Сводная, Личные продажи, Групповые продажи,
+ * Прочие начисления и выплаты, Выплаты.
  */
 export async function exportFinanceReport(reportData, month) {
   const XLSX = await import('xlsx');
   const wb = XLSX.utils.book_new();
 
-  // Summary sheet
+  const s = reportData.summary || {};
+  const t = reportData.tables || {};
+
+  // Sheet 1: Сводная
   const summaryRows = [
-    ['Отчёт начислений и выплат', month],
+    ['Период отчёта', month],
+    ['Квалификация (тек.)', s.qualificationCurrent?.title || '—'],
+    ['Квалификация (пред.)', s.qualificationPrev?.title || '—'],
     [],
-    ['Квалификация', reportData.summary?.qualificationCurrent?.title || '—'],
-    ['Уровень комиссии', `${reportData.summary?.commissionLevel?.percent || 0}%`],
-    ['ЛП', reportData.summary?.volumes?.lp || 0],
-    ['ГП', reportData.summary?.volumes?.gp || 0],
-    ['НГП', reportData.summary?.volumes?.ngp || 0],
+    ['Объёмы в баллах'],
+    ['ЛП', s.volumes?.lp ?? 0],
+    ['ГП', s.volumes?.gp ?? 0],
+    ['НГП', s.volumes?.ngp ?? 0],
+    ['Отрыв', s.breakaway?.gapValue ?? 0],
     [],
-    ['Личные продажи'],
-    ['Баллы', reportData.summary?.personalSales?.points || 0],
-    ['Бонус', reportData.summary?.personalSales?.bonus || 0],
-    ['Бонус (руб)', reportData.summary?.personalSales?.bonusRub || 0],
+    ['Показатель / Личные продажи'],
+    ['Баллы', s.personalSales?.points ?? 0],
+    ['Бонус', s.personalSales?.bonus ?? 0],
+    ['Бонус, ₽', s.personalSales?.bonusRub ?? 0],
+    ['Сумма оплат, ₽', s.personalSales?.clientPaymentsRub ?? 0],
     [],
     ['Групповые продажи'],
-    ['Баллы', reportData.summary?.groupSales?.points || 0],
-    ['Бонус', reportData.summary?.groupSales?.bonus || 0],
-    ['Бонус (руб)', reportData.summary?.groupSales?.bonusRub || 0],
+    ['Баллы', s.groupSales?.points ?? 0],
+    ['Бонус', s.groupSales?.bonus ?? 0],
+    ['Бонус, ₽', s.groupSales?.bonusRub ?? 0],
+    ['Сумма оплат, ₽', s.groupSales?.clientPaymentsRub ?? 0],
+    [],
+    ['Итог по продажам'],
+    ['Бонус', s.totalSales?.bonus ?? 0],
+    ['Бонус, ₽', s.totalSales?.bonusRub ?? 0],
+    ['Пул, ₽', s.totalSales?.poolRub ?? 0],
+    ['Итого, ₽', s.totalSales?.totalRub ?? 0],
+    [],
+    ['Итоги к выплате за месяц'],
+    ['Прочие начисления, баллы', s.monthEnd?.otherAccrualsPoints ?? 0],
+    ['Прочие начисления, ₽', s.monthEnd?.otherAccruals ?? 0],
+    ['Итого начислено, ₽', s.monthEnd?.totalAccrued ?? 0],
+    ['Остаток на начало месяца, ₽', s.monthEnd?.balanceStart ?? 0],
+    ['Итого к выплате, ₽', s.monthEnd?.totalPayable ?? 0],
   ];
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summaryRows), 'Итого');
+  const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows);
+  wsSummary['!cols'] = [{ wch: 36 }, { wch: 22 }];
+  XLSX.utils.book_append_sheet(wb, wsSummary, 'Сводная');
 
-  // Personal sales
-  if (reportData.tables?.personalSales?.length) {
-    const headers = ['Дата', 'Контракт', 'Клиент', 'Продукт', 'Программа', 'Баллы', 'Бонус', 'Бонус (руб)'];
-    const rows = reportData.tables.personalSales.map(r => [
-      r.date, r.contractNumber, r.clientName, r.productName, r.programName,
-      r.personalVolume, r.bonus, r.bonusRub,
-    ]);
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([headers, ...rows]), 'Личные продажи');
-  }
+  // Sheet 2: Личные продажи
+  const personalHeaders = [
+    'Дата', 'Контракт', 'Клиент', 'Продукт', 'Программа',
+    'Сумма оплаты', 'Сумма без НДС', 'Параметр', 'ЛП', 'Бонус', 'Бонус, ₽', 'Комментарий',
+  ];
+  const personalRows = (t.personalSales || []).map(r => [
+    r.date, r.contractNumber, r.clientName, r.productName, r.programName,
+    r.paymentAmount ?? 0, r.amountNoVat ?? 0, r.parameter ?? '',
+    r.personalVolume ?? 0, r.bonus ?? 0, r.bonusRub ?? 0, r.comment ?? '',
+  ]);
+  const wsPersonal = XLSX.utils.aoa_to_sheet([personalHeaders, ...personalRows]);
+  wsPersonal['!cols'] = personalHeaders.map((h, i) => ({ wch: Math.min(40, Math.max(h.length + 2, ...personalRows.map(r => String(r[i] ?? '').length + 2), 12)) }));
+  XLSX.utils.book_append_sheet(wb, wsPersonal, 'Личные продажи');
 
-  // Group sales
-  if (reportData.tables?.groupSales?.length) {
-    const headers = ['Дата', 'Контракт', 'Клиент', 'Партнёр', 'Продукт', 'Баллы', 'Бонус', 'Бонус (руб)'];
-    const rows = reportData.tables.groupSales.map(r => [
-      r.date, r.contractNumber, r.clientName, r.partnerName, r.productName,
-      r.personalVolume, r.bonus, r.bonusRub,
-    ]);
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([headers, ...rows]), 'Групповые продажи');
-  }
+  // Sheet 3: Групповые продажи
+  const groupHeaders = [
+    'Дата', 'Контракт', 'Клиент', 'Партнёр сделки', 'Продукт', 'Программа',
+    'Сумма оплаты', 'Сумма без НДС', 'Параметр', 'ГП', 'Бонус', 'Бонус, ₽', 'Комментарий',
+  ];
+  const groupRows = (t.groupSales || []).map(r => [
+    r.date, r.contractNumber, r.clientName, r.partnerName, r.productName, r.programName,
+    r.paymentAmount ?? 0, r.amountNoVat ?? 0, r.parameter ?? '',
+    r.personalVolume ?? 0, r.bonus ?? 0, r.bonusRub ?? 0, r.comment ?? '',
+  ]);
+  const wsGroup = XLSX.utils.aoa_to_sheet([groupHeaders, ...groupRows]);
+  wsGroup['!cols'] = groupHeaders.map((h, i) => ({ wch: Math.min(40, Math.max(h.length + 2, ...groupRows.map(r => String(r[i] ?? '').length + 2), 12)) }));
+  XLSX.utils.book_append_sheet(wb, wsGroup, 'Групповые продажи');
+
+  // Sheet 4: Прочие начисления и выплаты
+  const otherHeaders = ['Дата', 'Сумма оплаты', 'Баллы', 'Комментарий'];
+  const otherRows = (t.otherAccruals || []).map(r => [
+    r.date, r.amountRUB ?? 0, r.amount ?? 0, r.comment ?? '',
+  ]);
+  const wsOther = XLSX.utils.aoa_to_sheet([otherHeaders, ...otherRows]);
+  wsOther['!cols'] = [{ wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 60 }];
+  XLSX.utils.book_append_sheet(wb, wsOther, 'Прочие начисления');
+
+  // Sheet 5: Выплаты
+  const paymentHeaders = ['Дата', 'Сумма оплаты', 'Комментарий'];
+  const paymentRows = (t.payments || []).map(r => [
+    r.date, r.amount ?? 0, r.comment ?? '',
+  ]);
+  const wsPay = XLSX.utils.aoa_to_sheet([paymentHeaders, ...paymentRows]);
+  wsPay['!cols'] = [{ wch: 14 }, { wch: 16 }, { wch: 60 }];
+  XLSX.utils.book_append_sheet(wb, wsPay, 'Выплаты');
 
   XLSX.writeFile(wb, `report_${month}.xlsx`);
 }

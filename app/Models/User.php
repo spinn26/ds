@@ -46,6 +46,10 @@ class User extends Authenticatable
         'weeklyHours',
         'incomeFactors',
         'questionnaireCompletedAt',
+        'position',
+        'nicTG',
+        'taxResidency',
+        'city',
     ];
 
     protected $hidden = [

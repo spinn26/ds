@@ -67,8 +67,12 @@ class ProfileController extends Controller
                 'avatarUrl' => $user->avatar ? '/storage/' . $user->avatar : null,
                 'phone' => $user->phone,
                 'nicTG' => $user->nicTG,
+                'telegram' => $user->nicTG,
                 'gender' => $user->gender,
                 'birthDate' => $user->birthDate,
+                'country' => $country,
+                'city' => $city,
+                'position' => $user->position ?? null,
                 'role' => $user->role,
             ],
             'location' => [
@@ -93,16 +97,52 @@ class ProfileController extends Controller
 
     /**
      * Обновление персональных данных.
-     * ФИО заблокировано — изменение только через ТП.
+     *
+     * Per spec ✅Профиль §1:
+     *  - Партнёру: ФИО заблокировано (ТП), редактируемы только контактные поля.
+     *  - Сотруднику: ФИО редактируемо + появляется поле «Должность».
      */
     public function update(UpdateProfileRequest $request): JsonResponse
     {
         $user = $request->user();
 
         $user->phone = $request->input('phone', $user->phone);
-        $user->nicTG = $request->input('nicTG', $user->nicTG);
+        $user->nicTG = $request->input('telegram', $request->input('nicTG', $user->nicTG));
         $user->gender = $request->input('gender', $user->gender);
         $user->birthDate = $request->input('birthDate', $user->birthDate);
+
+        if ($request->filled('email')) {
+            $user->email = $request->input('email');
+        }
+
+        if ($request->has('country')) {
+            $countryName = $request->input('country');
+            $user->taxResidency = $countryName
+                ? DB::table('country')->where('countryNameRu', $countryName)->value('id')
+                : null;
+        }
+
+        if ($request->has('city')) {
+            $cityName = $request->input('city');
+            if ($cityName) {
+                $cityId = DB::table('city')->where('cityNameRu', $cityName)->value('id');
+                if (! $cityId) {
+                    $cityId = DB::table('city')->insertGetId(['cityNameRu' => $cityName]);
+                }
+                $user->city = $cityId;
+            } else {
+                $user->city = null;
+            }
+        }
+
+        // Сотрудник может редактировать ФИО + Должность.
+        if ($user->isStaff()) {
+            if ($request->filled('firstName'))  $user->firstName  = $request->input('firstName');
+            if ($request->filled('lastName'))   $user->lastName   = $request->input('lastName');
+            if ($request->has('patronymic'))    $user->patronymic = $request->input('patronymic');
+            if ($request->has('position'))      $user->position   = $request->input('position');
+        }
+
         $user->saveQuietly();
 
         return response()->json(['message' => 'Профиль обновлён']);

@@ -34,6 +34,13 @@
             label="Срок контракта" clearable />
         </v-col>
 
+        <!-- 6.5. Год выплаты КВ — per spec ✅Калькулятор объемов §2 -->
+        <v-col cols="12" sm="6" md="4" v-if="showRemainingFields && kvYearOptions.length">
+          <v-select v-model="form.kvPayoutYear" :items="kvYearOptions"
+            label="Год выплаты КВ" clearable
+            hint="Год выплаты комиссионного вознаграждения от провайдера" persistent-hint />
+        </v-col>
+
         <!-- 7. Сумма -->
         <v-col cols="12" sm="6" md="4" v-if="showRemainingFields">
           <v-text-field v-model.number="form.amount" label="Сумма взноса" type="number" />
@@ -114,7 +121,8 @@ const matrix = reactive({
 
 const form = reactive({
   qualification: null, product: null, program: null,
-  calcProperty: null, termContract: null, amount: null, currency: null,
+  calcProperty: null, termContract: null, kvPayoutYear: null,
+  amount: null, currency: null,
 });
 
 const lvlItems = computed(() =>
@@ -222,6 +230,7 @@ async function calculate() {
       amount: form.amount,
       currency: form.currency,
       termContract: form.termContract,
+      kvPayoutYear: form.kvPayoutYear,
     });
     result.value = data;
     loadHistory();
@@ -250,10 +259,21 @@ const historyHeaders = [
   { title: 'Продукт', key: 'productName' },
   { title: 'Программа', key: 'programName' },
   { title: 'Свойство', key: 'property', width: 120 },
+  { title: 'Год КВ', key: 'kvPayoutYear', align: 'end', width: 90 },
   { title: 'Сумма', key: 'amount', align: 'end', width: 120 },
   { title: 'ЛП', key: 'personalVolume', align: 'end', width: 100 },
   { title: 'Бонус (руб)', key: 'groupBonusRub', align: 'end', width: 120 },
 ];
+
+// Per spec ✅Калькулятор объемов §2 — Год выплаты КВ:
+// если у выбранной программы заполнено поле kvPayoutYear, выводим
+// варианты от 1 до этого года.
+const kvYearOptions = computed(() => {
+  const program = matrix.programs?.find(p => p.id === form.program);
+  const max = Number(program?.kvPayoutYear ?? 0);
+  if (!max || max < 1) return [];
+  return Array.from({ length: max }, (_, i) => i + 1);
+});
 
 onMounted(async () => {
   try {

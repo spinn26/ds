@@ -204,7 +204,8 @@
       </v-btn>
     </v-bottom-navigation>
 
-    <!-- Quick-message dialog: "Написать основателю" / "Оставить кейс" from the menu -->
+    <!-- Per spec ✅Написать собственику: форма с чекбоксом «анонимно»,
+         сообщение уходит в Telegram-группу через POST /api/v1/founder-message. -->
     <v-dialog v-model="quickMsg.open" max-width="560" :persistent="quickMsg.sending">
       <v-card>
         <v-card-title class="d-flex align-center ga-2">
@@ -212,6 +213,10 @@
           {{ quickMsg.subject }}
         </v-card-title>
         <v-card-text>
+          <v-checkbox v-model="quickMsg.anonymous" label="Отправить анонимно"
+            density="compact" hide-details color="primary" class="mb-2"
+            hint="Если включено — Ваши ФИО и email не передаются основателю"
+            persistent-hint />
           <v-textarea v-model="quickMsg.message" label="Ваше сообщение"
             rows="6" auto-grow counter maxlength="5000" autofocus
             :disabled="quickMsg.sending" />
@@ -490,12 +495,13 @@ function onMenuClick(item) {
   }
 }
 
-// Quick-message dialog (founder / case)
+// Quick-message dialog «Написать собственику» per spec ✅Написать собственику.
+// Отправляется в Telegram-группу через POST /founder-message с флагом anonymous.
 const { showSuccess, showError } = useSnackbar();
-const quickMsg = ref({ open: false, subject: '', icon: 'mdi-email-edit', message: '', sending: false });
+const quickMsg = ref({ open: false, subject: '', icon: 'mdi-email-edit', message: '', anonymous: false, sending: false });
 
 function openQuickMsg(subject, icon = 'mdi-email-edit') {
-  quickMsg.value = { open: true, subject, icon, message: '', sending: false };
+  quickMsg.value = { open: true, subject, icon, message: '', anonymous: false, sending: false };
 }
 
 async function submitQuickMsg() {
@@ -503,15 +509,12 @@ async function submitQuickMsg() {
   if (!msg) return;
   quickMsg.value.sending = true;
   try {
-    await api.post('/chat/tickets', {
-      subject: quickMsg.value.subject,
-      department: 'general',
-      priority: 'medium',
+    await api.post('/founder-message', {
       message: msg,
+      anonymous: quickMsg.value.anonymous,
     });
     quickMsg.value.open = false;
-    showSuccess('Сообщение отправлено');
-    loadChatUnread();
+    showSuccess('Сообщение отправлено основателю');
   } catch (e) {
     showError(e?.response?.data?.message || 'Не удалось отправить сообщение');
   } finally {
@@ -596,8 +599,9 @@ const menuItems = [
 
   { group: 'Связь', partner: true },
   { label: 'Обратная связь', icon: 'mdi-chat-outline', path: '/chat', partner: true },
-  { label: 'Написать основателю', icon: 'mdi-email-edit-outline', path: '', partner: true, action: () => openQuickMsg('Сообщение основателю', 'mdi-email-edit-outline') },
-  { label: 'Оставить кейс', icon: 'mdi-briefcase-plus-outline', path: '', partner: true, action: () => openQuickMsg('Кейс', 'mdi-briefcase-plus-outline') },
+  { label: 'Написать собственику', icon: 'mdi-email-edit-outline', path: '', partner: true, action: () => openQuickMsg('Сообщение собственику', 'mdi-email-edit-outline') },
+  // Per spec ✅Оставить кейс — внешняя ссылка, без диалога.
+  { label: 'Оставить кейс', icon: 'mdi-briefcase-plus-outline', path: '', partner: true, action: () => window.open('https://dsconsalting.academy/bankcases', '_blank', 'noopener') },
 
   // ---- Staff sections (grouped per spec) ----
   // Инструменты

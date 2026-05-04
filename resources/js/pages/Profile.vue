@@ -2,10 +2,12 @@
   <div>
     <PageHeader title="Профиль" icon="mdi-account" />
 
+    <!-- Per spec ✅Профиль: для сотрудника финансовые блоки скрыты,
+         ФИО редактируемо, есть поле «Должность». -->
     <v-tabs v-model="tab" color="primary" class="mb-4" grow>
-      <v-tab value="info">Информация о партнере</v-tab>
-      <v-tab value="requisites">Реквизиты и документы для выплат</v-tab>
-      <v-tab value="referral">Реферальные ссылки</v-tab>
+      <v-tab value="info">{{ isEmployee ? 'Информация о сотруднике' : 'Информация о партнере' }}</v-tab>
+      <v-tab v-if="!isEmployee" value="requisites">Реквизиты и документы для выплат</v-tab>
+      <v-tab v-if="!isEmployee && canInvite" value="referral">Реферальные ссылки</v-tab>
     </v-tabs>
 
     <v-tabs-window v-model="tab">
@@ -36,16 +38,29 @@
 
           <v-row dense>
             <v-col cols="12" sm="4">
-              <v-text-field v-model="form.lastName" label="Фамилия" disabled prepend-inner-icon="mdi-lock"
-                hint="Изменение возможно только через техподдержку" persistent-hint />
+              <v-text-field v-model="form.lastName" label="Фамилия"
+                :disabled="!isEmployee"
+                :prepend-inner-icon="!isEmployee ? 'mdi-lock' : undefined"
+                :hint="!isEmployee ? 'Изменение возможно только через техподдержку' : undefined"
+                persistent-hint />
             </v-col>
             <v-col cols="12" sm="4">
-              <v-text-field v-model="form.firstName" label="Имя" disabled prepend-inner-icon="mdi-lock"
-                hint="Изменение возможно только через техподдержку" persistent-hint />
+              <v-text-field v-model="form.firstName" label="Имя"
+                :disabled="!isEmployee"
+                :prepend-inner-icon="!isEmployee ? 'mdi-lock' : undefined"
+                :hint="!isEmployee ? 'Изменение возможно только через техподдержку' : undefined"
+                persistent-hint />
             </v-col>
             <v-col cols="12" sm="4">
-              <v-text-field v-model="form.patronymic" label="Отчество" disabled prepend-inner-icon="mdi-lock"
-                hint="Изменение возможно только через техподдержку" persistent-hint />
+              <v-text-field v-model="form.patronymic" label="Отчество"
+                :disabled="!isEmployee"
+                :prepend-inner-icon="!isEmployee ? 'mdi-lock' : undefined"
+                :hint="!isEmployee ? 'Изменение возможно только через техподдержку' : undefined"
+                persistent-hint />
+            </v-col>
+            <v-col v-if="isEmployee" cols="12" sm="4">
+              <v-text-field v-model="form.position" label="Должность"
+                prepend-inner-icon="mdi-briefcase" />
             </v-col>
             <v-col cols="12" sm="4">
               <v-text-field v-model="form.birthDate" label="Дата рождения" type="date" />
@@ -73,8 +88,8 @@
           <v-alert v-if="saveMsg" :type="saveMsgType" density="compact" class="mt-3" closable @click:close="saveMsg = ''">{{ saveMsg }}</v-alert>
         </v-card>
 
-        <!-- Signed Documents -->
-        <v-card v-if="profile.signedDocuments?.length" class="pa-4 mb-4">
+        <!-- Signed Documents — только для партнёров per spec ✅Профиль §1 Блок 2 -->
+        <v-card v-if="!isEmployee && profile.signedDocuments?.length" class="pa-4 mb-4">
           <div class="text-subtitle-1 font-weight-bold mb-2">Подписанные документы</div>
           <v-list density="compact">
             <v-list-item v-for="doc in profile.signedDocuments" :key="doc.id"
@@ -275,6 +290,11 @@
 import { ref, computed, onMounted } from 'vue';
 import api from '../api';
 import PageHeader from '../components/PageHeader.vue';
+import { useAuthStore } from '../stores/auth';
+
+const auth = useAuthStore();
+const isEmployee = computed(() => auth.isStaff && !auth.isConsultant);
+const canInvite = computed(() => profile.value?.referral?.canInvite ?? false);
 
 const loading = ref(true);
 const tab = ref('info');
@@ -369,7 +389,7 @@ async function loadCities() {
   }
 }
 
-const form = ref({ phone: '', telegram: '', gender: '', birthDate: '', email: '', country: '', city: '' });
+const form = ref({ firstName: '', lastName: '', patronymic: '', position: '', phone: '', telegram: '', gender: '', birthDate: '', email: '', country: '', city: '' });
 const pwd = ref({ current_password: '', password: '', password_confirmation: '' });
 const reqForm = ref({ individualEntrepreneur: '', inn: '', ogrn: '', address: '', email: '', phone: '' });
 const bankForm = ref({ bankName: '', bankBik: '', accountNumber: '', correspondentAccount: '', beneficiaryName: '' });
@@ -398,7 +418,8 @@ async function loadProfile() {
     profile.value = data;
     const u = data.user || {};
     form.value = {
-      firstName: u.firstName, lastName: u.lastName, patronymic: u.patronymic,
+      firstName: u.firstName || '', lastName: u.lastName || '', patronymic: u.patronymic || '',
+      position: u.position || '',
       phone: u.phone || '', telegram: u.telegram || '', gender: u.gender || '',
       birthDate: u.birthDate ? u.birthDate.split('T')[0] : '',
       email: u.email || '', country: u.country || '', city: u.city || '',
@@ -424,11 +445,18 @@ async function saveProfile() {
   saving.value = true;
   saveMsg.value = '';
   try {
-    await api.put('/profile', {
+    const payload = {
       phone: form.value.phone, telegram: form.value.telegram,
       gender: form.value.gender, birthDate: form.value.birthDate,
       email: form.value.email, country: form.value.country, city: form.value.city,
-    });
+    };
+    if (isEmployee.value) {
+      payload.firstName = form.value.firstName;
+      payload.lastName = form.value.lastName;
+      payload.patronymic = form.value.patronymic;
+      payload.position = form.value.position;
+    }
+    await api.put('/profile', payload);
     saveMsg.value = 'Данные сохранены';
     saveMsgType.value = 'success';
   } catch (e) {

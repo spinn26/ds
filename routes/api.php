@@ -37,6 +37,10 @@ Route::prefix('v1')->group(function () {
         Route::post('/auth/activate', [AuthController::class, 'activate']);
 
         Route::get('/workspace', [\App\Http\Controllers\Api\WorkspaceController::class, 'index']);
+
+        // Per spec ✅Написать собственику — отправка в Telegram-группу
+        Route::post('/founder-message', [\App\Http\Controllers\Api\FounderMessageController::class, 'send'])
+            ->middleware('throttle:5,1'); // антиспам: 5 сообщений в минуту с пользователя
         Route::get('/notifications', [\App\Http\Controllers\Api\NotificationController::class, 'index']);
         Route::get('/notifications/unread-count', [\App\Http\Controllers\Api\NotificationController::class, 'unreadCount']);
         Route::post('/notifications/{id}/read', [\App\Http\Controllers\Api\NotificationController::class, 'markRead']);

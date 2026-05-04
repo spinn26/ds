@@ -273,6 +273,7 @@ class FinanceReportService
                 'monthEnd' => $balance ? [
                     'balanceStart' => round((float) ($balance->balance ?? 0), 2),
                     'otherAccruals' => round((float) ($balance->accruedNonTransactional ?? 0), 2),
+                    'otherAccrualsPoints' => round($otherAccruals->sum(fn ($c) => (float) ($c->amount ?? 0)), 2),
                     'totalAccrued' => round((float) ($balance->accruedTotal ?? 0), 2),
                     'totalPayable' => round((float) ($balance->totalPayable ?? 0), 2),
                     'payed' => round((float) ($balance->payed ?? 0), 2),

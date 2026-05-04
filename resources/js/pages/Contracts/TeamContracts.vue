@@ -3,15 +3,60 @@
     <PageHeader title="Контракты моей команды" icon="mdi-folder-account" :count="total" />
 
     <v-card class="mb-3 pa-3">
-      <div class="d-flex ga-2 align-center">
-        <v-text-field v-model="filters.search" placeholder="Поиск по ФИО, номеру, продукту, консультанту..."
-          rounded prepend-inner-icon="mdi-magnify" clearable hide-details class="flex-grow-1" style="max-width:500px"
-          @update:model-value="debouncedLoad" />
-        <v-btn v-if="filters.search" size="small" variant="text" color="secondary"
-          prepend-icon="mdi-filter-remove" @click="filters.search = ''; loadData()">Сбросить</v-btn>
-        <v-spacer />
-        <ColumnVisibilityMenu :headers="headers" v-model:visible="columnVisible" storage-key="team-contracts-cols" />
-      </div>
+      <v-row dense>
+        <v-col cols="12" md="3">
+          <v-text-field v-model="filters.consultantSearch" placeholder="ФИО консультанта"
+            density="comfortable" variant="outlined" hide-details clearable
+            prepend-inner-icon="mdi-account-tie"
+            @update:model-value="debouncedLoad" />
+        </v-col>
+        <v-col cols="12" md="3">
+          <v-text-field v-model="filters.search" placeholder="ФИО клиента / № контракта / продукт"
+            density="comfortable" variant="outlined" hide-details clearable
+            prepend-inner-icon="mdi-magnify"
+            @update:model-value="debouncedLoad" />
+        </v-col>
+        <v-col cols="12" md="2">
+          <v-text-field v-model="filters.openedFrom" type="date" label="Открыт с"
+            density="comfortable" variant="outlined" hide-details
+            @update:model-value="loadData" />
+        </v-col>
+        <v-col cols="12" md="2">
+          <v-text-field v-model="filters.openedTo" type="date" label="Открыт по"
+            density="comfortable" variant="outlined" hide-details
+            @update:model-value="loadData" />
+        </v-col>
+        <v-col cols="6" md="2">
+          <v-text-field v-model.number="filters.amountMin" type="number" label="Сумма от"
+            density="comfortable" variant="outlined" hide-details clearable
+            @update:model-value="debouncedLoad" />
+        </v-col>
+        <v-col cols="6" md="2">
+          <v-text-field v-model.number="filters.amountMax" type="number" label="Сумма до"
+            density="comfortable" variant="outlined" hide-details clearable
+            @update:model-value="debouncedLoad" />
+        </v-col>
+        <v-col cols="6" md="2">
+          <v-text-field v-model.number="filters.termMin" type="number" label="Срок ≥, лет"
+            density="comfortable" variant="outlined" hide-details clearable
+            @update:model-value="debouncedLoad" />
+        </v-col>
+        <v-col cols="6" md="2">
+          <v-text-field v-model.number="filters.termMax" type="number" label="Срок ≤, лет"
+            density="comfortable" variant="outlined" hide-details clearable
+            @update:model-value="debouncedLoad" />
+        </v-col>
+        <v-col cols="auto" class="d-flex align-center">
+          <v-chip v-if="activeFilterCount > 0" size="small" color="info" variant="tonal" class="ms-1">
+            {{ activeFilterCount }} {{ activeFilterCount === 1 ? 'фильтр' : 'фильтра' }}
+          </v-chip>
+          <v-btn v-if="activeFilterCount > 0" size="small" variant="text" color="secondary"
+            prepend-icon="mdi-filter-remove" @click="resetFilters">Сбросить</v-btn>
+        </v-col>
+        <v-col cols="auto" class="d-flex align-center ms-auto">
+          <ColumnVisibilityMenu :headers="headers" v-model:visible="columnVisible" storage-key="team-contracts-cols" />
+        </v-col>
+      </v-row>
     </v-card>
 
     <v-data-table-server :items="items" :items-length="total" :loading="loading"
@@ -59,7 +104,31 @@ const total = ref(0);
 const loading = ref(false);
 const page = ref(1);
 const perPage = ref(25);
-const filters = ref({ search: '' });
+const filters = ref({
+  search: '',
+  consultantSearch: '',
+  openedFrom: '', openedTo: '',
+  amountMin: null, amountMax: null,
+  termMin: null, termMax: null,
+});
+
+const activeFilterCount = computed(() => {
+  let c = 0;
+  Object.values(filters.value).forEach(v => {
+    if (v !== '' && v !== null && v !== undefined) c++;
+  });
+  return c;
+});
+
+function resetFilters() {
+  filters.value = {
+    search: '', consultantSearch: '',
+    openedFrom: '', openedTo: '',
+    amountMin: null, amountMax: null,
+    termMin: null, termMax: null,
+  };
+  loadData();
+}
 
 
 const nowrap = { style: 'white-space:nowrap' };
@@ -107,6 +176,13 @@ async function loadData() {
   try {
     const params = { page: page.value, per_page: perPage.value };
     if (filters.value.search) params.search = filters.value.search;
+    if (filters.value.consultantSearch) params.consultant_search = filters.value.consultantSearch;
+    if (filters.value.openedFrom) params.opened_from = filters.value.openedFrom;
+    if (filters.value.openedTo) params.opened_to = filters.value.openedTo;
+    if (filters.value.amountMin != null && filters.value.amountMin !== '') params.amount_min = filters.value.amountMin;
+    if (filters.value.amountMax != null && filters.value.amountMax !== '') params.amount_max = filters.value.amountMax;
+    if (filters.value.termMin != null && filters.value.termMin !== '') params.term_min = filters.value.termMin;
+    if (filters.value.termMax != null && filters.value.termMax !== '') params.term_max = filters.value.termMax;
     const { data } = await api.get('/contracts/team', { params });
     items.value = data.data;
     total.value = data.total;
