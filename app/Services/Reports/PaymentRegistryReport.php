@@ -47,6 +47,17 @@ class PaymentRegistryReport extends AbstractReportType
             ->select('cb.consultant', DB::raw('SUM(COALESCE(cp.amount, 0)) as paid'))
             ->groupBy('cb.consultant')->pluck('paid', 'consultant');
 
+        // Сальдо = входящий остаток с прошлых периодов (per spec ✅Отчет Реестр Выплат):
+        // последний consultantBalance.balance до начала отчётного периода.
+        $balanceFromMonth = \Carbon\Carbon::parse($from)->format('Y-m');
+        $balanceByCons = DB::table('consultantBalance as cb1')
+            ->whereRaw('cb1.id = (SELECT cb2.id FROM "consultantBalance" cb2
+                WHERE cb2.consultant = cb1.consultant
+                  AND cb2."dateMonth" < ?
+                ORDER BY cb2."dateMonth" DESC LIMIT 1)', [$balanceFromMonth])
+            ->select('cb1.consultant', 'cb1.remaining')
+            ->pluck('remaining', 'consultant');
+
         // Реальные имена таблиц в legacy-схеме: `requisites` (юр) + `bankrequisites` (банк).
         // bankrequisites привязаны к requisites через requisites.id (FK), не к consultant напрямую.
         $reqs = DB::table('requisites')
@@ -64,16 +75,18 @@ class PaymentRegistryReport extends AbstractReportType
             $other = (float) ($otherByCons[$c->id] ?? 0);
             $pool = (float) ($poolByCons[$c->id] ?? 0);
             $paid = (float) ($paidByCons[$c->id] ?? 0);
-            if (! $accrued && ! $other && ! $pool && ! $paid) continue;
+            $balance = (float) ($balanceByCons[$c->id] ?? 0);
+            if (! $accrued && ! $other && ! $pool && ! $paid && ! $balance) continue;
 
             $totalAccrued = $accrued + $other + $pool;
+            $totalPayable = $balance + $totalAccrued;
             $r = $reqs[$c->id] ?? null;
             $b = $r ? ($bankByReq[$r->id] ?? null) : null;
             $rows[] = [
                 $c->personName,
                 $c->activity ? ($names[$c->activity] ?? '') : '',
-                0, $this->n($accrued), $this->n($other), $this->n($pool),
-                $this->n($totalAccrued), $this->n($totalAccrued), $this->n($paid),
+                $this->n($balance), $this->n($accrued), $this->n($other), $this->n($pool),
+                $this->n($totalAccrued), $this->n($totalPayable), $this->n($paid),
                 $r?->individualEntrepreneur ?? '', $r?->ogrn ?? '',
                 $r?->inn ?? '', $r?->address ?? '',
                 $r?->verified ? 'true' : 'false',

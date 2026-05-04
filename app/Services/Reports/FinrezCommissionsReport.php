@@ -14,7 +14,7 @@ class FinrezCommissionsReport extends AbstractReportType
             'Поставщик', 'Продукт', 'Программа',
             'Номер', 'ID контракта', 'Дата',
             'Сумма', 'Валюта', 'Сумма RUB',
-            'Доход DS', 'Доход DS RUB', 'Без НДС RUB',
+            'Доход DS RUB', 'Без НДС RUB',
             'ЛП', 'Комиссия', 'Прибыль'];
     }
 
@@ -49,7 +49,7 @@ class FinrezCommissionsReport extends AbstractReportType
                 $r->providerName, $r->productName, $r->programName,
                 $r->number, $r->contractId, $r->date,
                 $this->n($r->amount), $r->curSymbol, $this->n($r->amountRUB),
-                $this->n($dsRub), $this->n($dsRub),
+                $this->n($dsRub),
                 $this->n($r->netRevenueRUB),
                 $this->n($r->personalVolume),
                 $this->n($r->commissionRub), $this->n($r->profitRUB),
