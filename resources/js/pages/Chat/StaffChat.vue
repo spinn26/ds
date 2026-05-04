@@ -81,6 +81,9 @@
             <v-icon size="14">{{ t.pinned_at ? 'mdi-pin' : 'mdi-pin-outline' }}</v-icon>
           </button>
           <span v-if="t.unread > 0" class="unread-badge">{{ t.unread }}</span>
+          <span v-else-if="t.csat_rating" class="csat-badge" :title="`CSAT: ${t.csat_rating} из 5`">
+            ★ {{ t.csat_rating }}
+          </span>
         </div>
         <div v-if="!chats.length && !loading" class="sidebar-empty">
           <v-icon size="40" color="grey">mdi-inbox-outline</v-icon>
@@ -1368,12 +1371,21 @@ function isImageAttachment(path) { return !!path && IMAGE_EXT.test(path); }
 function fmtFileSize(bytes) { if (!bytes) return ''; if (bytes < 1024) return bytes + ' B'; if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'; return (bytes / 1024 / 1024).toFixed(1) + ' MB'; }
 function parseTags(t) { if (!t) return []; if (Array.isArray(t)) return t; try { return JSON.parse(t); } catch { return []; } }
 
-// SLA: stale if open/new and last message > 30 min old from partner
-const SLA_THRESHOLD_MIN = 30;
+// SLA: per-priority пороги, как в Zendesk/Freshdesk SLA-policies.
+// Раньше был единый 30 мин для всех — критичный «горел» так же как
+// низкоприоритетный, и оператор не мог быстро понять что важно.
+//   critical → 30 мин
+//   high     → 2 ч
+//   medium   → 8 ч
+//   low      → 24 ч
+const SLA_THRESHOLDS_MIN = { critical: 30, high: 120, medium: 480, low: 1440 };
+function slaThresholdFor(t) {
+  return SLA_THRESHOLDS_MIN[t?.priority || 'medium'] ?? SLA_THRESHOLDS_MIN.medium;
+}
 function isStale(t) {
   if (!t.last_message_at || ['resolved', 'closed'].includes(t.status)) return false;
   const mins = (Date.now() - new Date(t.last_message_at).getTime()) / 60000;
-  return mins > SLA_THRESHOLD_MIN;
+  return mins > slaThresholdFor(t);
 }
 const slaLabel = computed(() => {
   if (!activeChat.value?.last_message_at || ['resolved', 'closed'].includes(activeChat.value.status)) return '';
@@ -1386,8 +1398,9 @@ const slaLabel = computed(() => {
 const slaClass = computed(() => {
   if (!activeChat.value?.last_message_at) return '';
   const mins = (Date.now() - new Date(activeChat.value.last_message_at).getTime()) / 60000;
-  if (mins > SLA_THRESHOLD_MIN) return 'sla-danger';
-  if (mins > SLA_THRESHOLD_MIN / 2) return 'sla-warn';
+  const thr = slaThresholdFor(activeChat.value);
+  if (mins > thr) return 'sla-danger';
+  if (mins > thr / 2) return 'sla-warn';
   return '';
 });
 
@@ -1947,6 +1960,7 @@ onUnmounted(() => {
 .recipient { color: #f97316; }
 .chat-item-status-chip { padding: 1px 7px; border-radius: 10px; font-size: 10px; font-weight: 600; margin-left: auto; }
 .unread-badge { position: absolute; right: 12px; top: 10px; background: rgb(var(--v-theme-error)); color: #fff; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 10px; min-width: 18px; text-align: center; }
+.csat-badge { position: absolute; right: 12px; top: 10px; background: #f5a52415; color: #f5a524; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 10px; }
 .chat-item.has-unread { background: rgba(var(--v-theme-primary), 0.06); }
 .chat-item.has-unread .chat-item-subject { color: rgb(var(--v-theme-primary)); font-weight: 700; }
 .chat-item.pinned { background: rgba(var(--v-theme-primary), 0.04); }

@@ -712,6 +712,69 @@ class ChatController extends Controller
         ]);
     }
 
+    /**
+     * CSAT (Customer Satisfaction) — оценка тикета партнёром после resolve.
+     * 1-5 звёзд + опциональный комментарий. Доступно только создателю
+     * тикета (или recipient_id для приватных staff↔partner) и только когда
+     * статус resolved/closed. Ставить можно один раз.
+     */
+    public function submitCsat(Request $request, int $id): JsonResponse
+    {
+        $data = $request->validate([
+            'rating' => 'required|integer|min:1|max:5',
+            'comment' => 'nullable|string|max:1000',
+        ]);
+
+        $ticket = DB::table('chat_tickets')->where('id', $id)->first();
+        if (! $ticket) return response()->json(['message' => 'Не найден'], 404);
+
+        $userId = (int) $request->user()->id;
+        $isOwner = (int) $ticket->created_by === $userId
+            || (int) ($ticket->recipient_id ?? 0) === $userId;
+        if (! $isOwner) {
+            return response()->json(['message' => 'Оценить может только участник тикета'], 403);
+        }
+        if (! in_array($ticket->status, ['resolved', 'closed'], true)) {
+            return response()->json(['message' => 'Оценить можно только закрытый тикет'], 422);
+        }
+        if ($ticket->csat_rating !== null) {
+            return response()->json(['message' => 'Оценка уже поставлена'], 422);
+        }
+
+        DB::table('chat_tickets')->where('id', $id)->update([
+            'csat_rating' => $data['rating'],
+            'csat_comment' => $data['comment'] ?? null,
+            'csat_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        // Системное сообщение в ленту, чтобы staff видел оценку без перезагрузки.
+        DB::table('chat_messages')->insert([
+            'ticket_id' => $id,
+            'sender_id' => $userId,
+            'sender_name' => $this->userName($request),
+            'content' => 'Оценка: ' . str_repeat('★', $data['rating']) . str_repeat('☆', 5 - $data['rating'])
+                . ($data['comment'] ? ' · ' . $data['comment'] : ''),
+            'is_system' => true,
+            'is_agent' => false,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        // Уведомить assigned-staff
+        if ($ticket->assigned_to) {
+            NotificationController::create(
+                (int) $ticket->assigned_to,
+                'chat',
+                "Оценка тикета: {$data['rating']} ★",
+                $data['comment'] ?: 'Партнёр оценил ваш ответ',
+                "/manage/chat?ticket={$id}",
+            );
+        }
+
+        return response()->json(['message' => 'Спасибо за оценку!', 'rating' => $data['rating']]);
+    }
+
     /** Assign ticket to staff */
     public function assign(Request $request, int $id): JsonResponse
     {
@@ -719,7 +782,7 @@ class ChatController extends Controller
             return response()->json(['message' => 'Только для сотрудников'], 403);
         }
 
-        $request->validate(['user_id' => 'required|integer']);
+        $request->validate(['user_id' => 'required|integer|exists:WebUser,id']);
 
         $assignee = DB::table('WebUser')->where('id', $request->user_id)->first();
         $assigneeName = $assignee ? trim(($assignee->lastName ?? '') . ' ' . ($assignee->firstName ?? '')) : '—';

@@ -60,6 +60,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/chat/tickets/{id}/pin', [\App\Http\Controllers\Api\ChatController::class, 'togglePin']);
         Route::post('/chat/tickets/{id}/status', [\App\Http\Controllers\Api\ChatController::class, 'updateStatus']);
         Route::post('/chat/tickets/{id}/assign', [\App\Http\Controllers\Api\ChatController::class, 'assign']);
+        Route::post('/chat/tickets/{id}/csat', [\App\Http\Controllers\Api\ChatController::class, 'submitCsat'])->middleware('throttle:5,1');
         Route::get('/chat/tickets/{id}/notes', [\App\Http\Controllers\Api\ChatController::class, 'notes']);
         Route::post('/chat/tickets/{id}/notes', [\App\Http\Controllers\Api\ChatController::class, 'addNote']);
         Route::get('/chat/quick-replies', [\App\Http\Controllers\Api\ChatController::class, 'quickReplies']);

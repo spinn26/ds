@@ -237,6 +237,37 @@
         <div v-else class="chat-closed">
           <v-icon size="16">mdi-lock</v-icon> Чат закрыт
         </div>
+
+        <!-- CSAT — оценка ответа после resolve/closed. Показывается только если
+             ещё не оценено партнёром. После submit заменяется на сообщение
+             благодарности. -->
+        <div v-if="canRateChat" class="csat-prompt">
+          <div class="csat-title">
+            <v-icon size="16" color="primary">mdi-star-circle</v-icon>
+            Оцените, как мы помогли
+          </div>
+          <div class="csat-stars">
+            <button v-for="n in 5" :key="n"
+              class="csat-star" :class="{ filled: csatHover >= n || csatRating >= n }"
+              @click="csatRating = n"
+              @mouseenter="csatHover = n"
+              @mouseleave="csatHover = 0">
+              <v-icon size="22">{{ (csatHover >= n || csatRating >= n) ? 'mdi-star' : 'mdi-star-outline' }}</v-icon>
+            </button>
+          </div>
+          <textarea v-if="csatRating > 0" v-model="csatComment"
+            class="csat-comment" rows="2" maxlength="1000"
+            placeholder="Комментарий (необязательно)"></textarea>
+          <button v-if="csatRating > 0" class="csat-submit" :disabled="csatSubmitting" @click="submitCsat">
+            <v-icon size="14">mdi-send</v-icon>
+            {{ csatSubmitting ? 'Отправка…' : 'Оценить' }}
+          </button>
+        </div>
+        <div v-else-if="activeChat && activeChat.csat_rating" class="csat-shown">
+          <v-icon size="14" color="success">mdi-check</v-icon>
+          Вы поставили оценку
+          <span class="csat-rate">{{ '★'.repeat(activeChat.csat_rating) }}{{ '☆'.repeat(5 - activeChat.csat_rating) }}</span>
+        </div>
       </template>
 
       <!-- No chat selected -->
@@ -342,6 +373,38 @@ const otherLastReadAt = ref(null);
 const replyTo = ref(null); // { id, senderName, content }
 const editing = ref(null); // { id, content }
 const showHotkeys = ref(false);
+
+// CSAT (Customer Satisfaction) — 5-звёздочная оценка после resolve/closed.
+// Показывается inline в области ввода когда тикет закрыт и оценка ещё
+// не поставлена. После submit ChatTicket.csat_rating заполняется.
+const csatRating = ref(0);
+const csatHover = ref(0);
+const csatComment = ref('');
+const csatSubmitting = ref(false);
+const canRateChat = computed(() =>
+  activeChat.value
+  && ['resolved', 'closed'].includes(activeChat.value.status)
+  && !activeChat.value.csat_rating
+);
+
+async function submitCsat() {
+  if (!activeChat.value || !csatRating.value) return;
+  csatSubmitting.value = true;
+  try {
+    await api.post(`/chat/tickets/${activeChat.value.id}/csat`, {
+      rating: csatRating.value,
+      comment: csatComment.value || null,
+    });
+    activeChat.value.csat_rating = csatRating.value;
+    activeChat.value.csat_comment = csatComment.value || null;
+    csatRating.value = 0; csatHover.value = 0; csatComment.value = '';
+    showSuccess('Спасибо за оценку!');
+  } catch (e) {
+    showError(e.response?.data?.message || 'Не удалось отправить оценку');
+  } finally {
+    csatSubmitting.value = false;
+  }
+}
 
 // Reactions
 const REACTION_PALETTE = ['👍', '❤️', '😂', '🎉', '🙏', '✅'];
@@ -607,10 +670,19 @@ async function openChat(t) {
   typingName.value = '';
   replyTo.value = null;
   editing.value = null;
+  csatRating.value = 0;
+  csatHover.value = 0;
+  csatComment.value = '';
   try {
     const { data } = await api.get(`/chat/tickets/${t.id}`);
     messages.value = data.messages || [];
     otherLastReadAt.value = data.otherLastReadAt || null;
+    // Подтягиваем CSAT-поля из server-side ticket в активный объект,
+    // чтобы canRateChat / отображение оценки работали без перезагрузки.
+    if (data.ticket) {
+      activeChat.value.csat_rating = data.ticket.csat_rating ?? null;
+      activeChat.value.csat_comment = data.ticket.csat_comment ?? null;
+    }
     if (t.unread > 0) { t.unread = 0; }
     scrollDown(true);
   } catch {}
@@ -976,6 +1048,17 @@ onUnmounted(() => {
 .chat-item-preview-text { overflow: hidden; text-overflow: ellipsis; }
 .chat-item.has-unread .chat-item-preview { color: rgba(var(--v-theme-on-surface), 0.92); font-weight: 500; }
 .conn-banner { position: absolute; top: 0; left: 0; right: 0; z-index: 100; padding: 6px 12px; background: rgba(var(--v-theme-warning), 0.18); color: rgb(var(--v-theme-warning)); font-size: 12px; display: flex; align-items: center; gap: 6px; border-bottom: 1px solid rgba(var(--v-theme-warning), 0.3); }
+.csat-prompt { padding: 14px 16px; background: rgba(var(--v-theme-primary), 0.06); border-top: 1px solid rgba(var(--v-theme-primary), 0.18); display: flex; flex-direction: column; gap: 8px; }
+.csat-title { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.csat-stars { display: flex; gap: 4px; }
+.csat-star { background: transparent; border: none; padding: 2px; cursor: pointer; color: rgba(var(--v-theme-on-surface), 0.35); transition: color 0.15s, transform 0.1s; }
+.csat-star:hover { transform: scale(1.15); }
+.csat-star.filled { color: #f5a524; }
+.csat-comment { width: 100%; resize: vertical; min-height: 50px; padding: 6px 10px; border-radius: 8px; border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); background: rgb(var(--v-theme-surface)); color: inherit; font-size: 13px; }
+.csat-submit { align-self: flex-start; display: inline-flex; align-items: center; gap: 4px; padding: 6px 14px; border-radius: 8px; border: none; background: rgb(var(--v-theme-primary)); color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; }
+.csat-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+.csat-shown { padding: 12px 16px; font-size: 12px; color: rgba(var(--v-theme-on-surface), 0.6); display: flex; align-items: center; gap: 6px; border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); }
+.csat-rate { color: #f5a524; letter-spacing: 1px; font-weight: 600; }
 .chat-item-status-chip { padding: 2px 8px; border-radius: 10px; font-weight: 600; font-size: 10px; }
 .unread-badge { position: absolute; right: 12px; top: 12px; background: rgb(var(--v-theme-error)); color: #fff; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 10px; min-width: 18px; text-align: center; }
 .chat-item.has-unread { background: rgba(var(--v-theme-primary), 0.06); }
