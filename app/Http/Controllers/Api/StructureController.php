@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Enums\PartnerActivity;
 use App\Http\Controllers\Controller;
 use App\Models\Consultant;
 use App\Services\ConsultantService;
@@ -42,11 +43,15 @@ class StructureController extends Controller
                 return response()->json(['data' => $members->values()]);
             }
 
-            // No search → show top-level structure (consultants without inviter)
+            // No search → show top-level structure (consultants without inviter).
+            // Терминированных-сирот в корне НЕ показываем: после терминации
+            // их структура улетает наставнику, поэтому видеть их «висящими»
+            // в верхушке нет смысла — они только засоряют дерево.
             $topLevelRows = Consultant::whereNull('dateDeleted')
                 ->where(function ($q) {
                     $q->whereNull('inviter')->orWhere('inviter', 0);
                 })
+                ->where('activity', '!=', PartnerActivity::Terminated->value)
                 ->orderBy('personName')
                 ->get();
             $topLevel = $this->consultantService->formatMembers($topLevelRows);
