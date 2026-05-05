@@ -63,8 +63,13 @@
       </v-data-table>
 
       <v-card-actions>
+        <!-- Disable только если период заморожен или уже идёт расчёт.
+             Раньше кнопка дизаблилась когда `filteredParticipants` пуст —
+             но это не понятно пользователю; теперь оператор всегда может
+             нажать «Рассчитать», даже на месяце без партнёров (получит
+             корректный 0). -->
         <v-btn color="success" prepend-icon="mdi-account-multiple-plus" size="large"
-          :disabled="!filteredParticipants.length || isFrozen" :loading="calcing"
+          :disabled="isFrozen" :loading="calcing"
           @click="calcPool">
           Рассчитать пул
         </v-btn>
