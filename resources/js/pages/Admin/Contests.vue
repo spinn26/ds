@@ -2,7 +2,7 @@
   <div>
     <PageHeader title="Конкурсы и события" icon="mdi-trophy" :count="total">
       <template #actions>
-        <v-btn color="primary" prepend-icon="mdi-plus" @click="openCreate">Добавить</v-btn>
+        <v-btn v-if="!auth.isEducationOnly" color="primary" prepend-icon="mdi-plus" @click="openCreate">Добавить</v-btn>
       </template>
     </PageHeader>
 
@@ -174,6 +174,9 @@ import {
   PageHeader, StatusChip, FilterBar, DialogShell, ActionsCell, ColumnVisibilityMenu,
 } from '../../components';
 import { useCrud } from '../../composables/useCrud';
+import { useAuthStore } from '../../stores/auth';
+
+const auth = useAuthStore();
 
 const typeOptions = ref([]);
 const statusOptions = ref([]);

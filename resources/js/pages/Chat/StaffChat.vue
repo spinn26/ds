@@ -343,7 +343,7 @@
             <!-- Priority -->
             <v-menu>
               <template #activator="{ props }">
-                <button v-bind="props" class="action-btn" :title="'Приоритет: ' + prioLabel(activeChat.priority || 'medium')">
+                <button v-bind="props" class="action-btn" :aria-label="'Приоритет: ' + prioLabel(activeChat.priority || 'medium')" :title="'Приоритет: ' + prioLabel(activeChat.priority || 'medium')">
                   <v-icon size="16" :color="prioClr(activeChat.priority)">mdi-flag</v-icon>
                 </button>
               </template>
@@ -357,7 +357,7 @@
             <!-- Assign -->
             <v-menu>
               <template #activator="{ props }">
-                <button v-bind="props" class="action-btn" title="Назначить"><v-icon size="16">mdi-account-plus</v-icon></button>
+                <button v-bind="props" class="action-btn" aria-label="Назначить" title="Назначить"><v-icon size="16">mdi-account-plus</v-icon></button>
               </template>
               <v-list density="compact" style="min-width: 220px">
                 <v-list-item @click="assignTo(currentUserId, currentUserName)">
@@ -373,7 +373,7 @@
             <!-- Status -->
             <v-menu>
               <template #activator="{ props }">
-                <button v-bind="props" class="action-btn" title="Статус"><v-icon size="16">mdi-check-circle-outline</v-icon></button>
+                <button v-bind="props" class="action-btn" aria-label="Изменить статус" title="Статус"><v-icon size="16">mdi-check-circle-outline</v-icon></button>
               </template>
               <v-list density="compact" style="min-width: 160px">
                 <v-list-item v-for="s in statuses" :key="s.value" @click="setStatus(s.value)">
@@ -383,35 +383,35 @@
               </v-list>
             </v-menu>
             <!-- Search in chat -->
-            <button class="action-btn" title="Поиск в чате (Ctrl+K)" @click="openMessageSearch">
+            <button class="action-btn" aria-label="Поиск в чате" title="Поиск в чате (Ctrl+K)" @click="openMessageSearch">
               <v-icon size="16">mdi-magnify</v-icon>
             </button>
             <!-- Knowledge base -->
-            <button class="action-btn" :class="{ active: showKb }" title="База знаний" @click="toggleKb">
+            <button class="action-btn" :class="{ active: showKb }" aria-label="База знаний" title="База знаний" @click="toggleKb">
               <v-icon size="16">mdi-book-open-variant</v-icon>
             </button>
             <!-- Notes -->
-            <button class="action-btn" :class="{ active: showNotes }" title="Внутренние заметки" @click="toggleNotes">
+            <button class="action-btn" :class="{ active: showNotes }" aria-label="Внутренние заметки" title="Внутренние заметки" @click="toggleNotes">
               <v-icon size="16">mdi-note-text-outline</v-icon>
             </button>
             <!-- Save to FAQ (only when resolved) -->
-            <button v-if="activeChat.status === 'resolved'" class="action-btn" title="Сохранить решение в базу знаний" @click="openSaveFaq">
+            <button v-if="activeChat.status === 'resolved'" class="action-btn" aria-label="Сохранить решение в базу знаний" title="Сохранить решение в базу знаний" @click="openSaveFaq">
               <v-icon size="16">mdi-content-save-outline</v-icon>
             </button>
             <!-- Pin toggle -->
-            <button class="action-btn" :class="{ active: activeChat.pinned_at }" :title="activeChat.pinned_at ? 'Открепить' : 'Закрепить'" @click="togglePin(activeChat, $event)">
+            <button class="action-btn" :class="{ active: activeChat.pinned_at }" :aria-label="activeChat.pinned_at ? 'Открепить тикет' : 'Закрепить тикет'" :title="activeChat.pinned_at ? 'Открепить' : 'Закрепить'" @click="togglePin(activeChat, $event)">
               <v-icon size="16">{{ activeChat.pinned_at ? 'mdi-pin' : 'mdi-pin-outline' }}</v-icon>
             </button>
             <!-- Notifications toggle -->
-            <button class="action-btn" :class="{ active: notifyEnabled }" :title="notifyEnabled ? 'Отключить уведомления' : 'Включить уведомления'" @click="notifyEnabled = !notifyEnabled">
+            <button class="action-btn" :class="{ active: notifyEnabled }" :aria-label="notifyEnabled ? 'Отключить уведомления' : 'Включить уведомления'" :title="notifyEnabled ? 'Отключить уведомления' : 'Включить уведомления'" @click="notifyEnabled = !notifyEnabled">
               <v-icon size="16">{{ notifyEnabled ? 'mdi-bell' : 'mdi-bell-off-outline' }}</v-icon>
             </button>
             <!-- Context panel toggle -->
-            <button class="action-btn" :class="{ active: showContext }" title="Карточка партнёра" @click="showContext = !showContext">
+            <button class="action-btn" :class="{ active: showContext }" aria-label="Карточка партнёра" title="Карточка партнёра" @click="showContext = !showContext">
               <v-icon size="16">mdi-card-account-details-outline</v-icon>
             </button>
             <!-- Hotkeys -->
-            <button class="action-btn" title="Горячие клавиши (?)" @click="showHotkeys = true">
+            <button class="action-btn" aria-label="Горячие клавиши" title="Горячие клавиши (?)" @click="showHotkeys = true">
               <v-icon size="16">mdi-keyboard-outline</v-icon>
             </button>
           </div>
@@ -440,7 +440,7 @@
           <div class="kb-head">
             <v-icon size="14" color="primary">mdi-book-open-variant</v-icon>
             <span>База знаний · предложения по теме</span>
-            <button class="action-btn small" @click="loadKbSuggestions" title="Обновить"><v-icon size="12">mdi-refresh</v-icon></button>
+            <button class="action-btn small" aria-label="Обновить базу знаний" @click="loadKbSuggestions" title="Обновить"><v-icon size="12">mdi-refresh</v-icon></button>
           </div>
           <div v-if="kbLoading" class="kb-empty">Ищу…</div>
           <div v-else-if="!kbArticles.length" class="kb-empty">
@@ -523,11 +523,11 @@
                   <div v-if="item.msg.content" class="msg-text">{{ item.msg.content }}</div>
                 </template>
                 <template v-if="item.msg.attachmentPath">
-                  <a v-if="isImageAttachment(item.msg.attachmentPath)"
-                    :href="item.msg.attachmentPath" target="_blank" class="msg-image-link">
+                  <a v-if="isImageAttachment(item.msg.attachmentName || item.msg.attachmentPath)"
+                    :href="item.msg.attachmentPath" target="_blank" rel="noopener noreferrer" class="msg-image-link">
                     <img :src="item.msg.attachmentPath" :alt="item.msg.attachmentName || 'Изображение'" class="msg-image" loading="lazy" />
                   </a>
-                  <a v-else :href="item.msg.attachmentPath" target="_blank" class="msg-attach">
+                  <a v-else :href="item.msg.attachmentPath" target="_blank" rel="noopener noreferrer" class="msg-attach">
                     <v-icon size="14">mdi-paperclip</v-icon> {{ item.msg.attachmentName || 'Файл' }}
                   </a>
                 </template>
@@ -639,12 +639,27 @@
     </main>
 
     <!-- Right: Partner context panel -->
+    <aside v-if="viewMode === 'list' && activeChat && showContext && !mobile && !partnerContext"
+      class="context-panel">
+      <div class="context-head">
+        <v-icon size="14" color="primary">mdi-card-account-details-outline</v-icon>
+        <span>Карточка партнёра</span>
+        <button class="action-btn small" aria-label="Скрыть карточку партнёра" title="Скрыть" @click="showContext = false">
+          <v-icon size="14">mdi-close</v-icon>
+        </button>
+      </div>
+      <div class="context-body" style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 16px;text-align:center;color:rgba(var(--v-theme-on-surface),0.5);">
+        <v-icon size="40" color="grey-lighten-1" class="mb-2">mdi-account-question-outline</v-icon>
+        <div class="text-body-2 mb-1">Нет партнёрских данных</div>
+        <div class="text-caption">Автор тикета не связан с активным консультантом или пока загружается.</div>
+      </div>
+    </aside>
     <aside v-if="viewMode === 'list' && activeChat && showContext && partnerContext && !mobile"
       class="context-panel">
       <div class="context-head">
         <v-icon size="14" color="primary">mdi-card-account-details-outline</v-icon>
         <span>Карточка партнёра</span>
-        <button class="action-btn small" title="Скрыть" @click="showContext = false">
+        <button class="action-btn small" aria-label="Скрыть карточку партнёра" title="Скрыть" @click="showContext = false">
           <v-icon size="14">mdi-close</v-icon>
         </button>
       </div>
@@ -1532,7 +1547,9 @@ async function openChat(t) {
     partnerContext.value = data.partnerContext || null;
     currentTags.value = parseTags(t.tags);
     scrollDown(true);
-  } catch {}
+  } catch (e) {
+    showError(e?.response?.data?.message || 'Не удалось загрузить чат');
+  }
 
   msgText.value = localStorage.getItem(draftKey(t.id)) || '';
   nextTick(() => { taRef.value?.focus(); autoGrow(); });
@@ -1618,9 +1635,13 @@ async function toggleReaction(msg, emoji) {
 async function send() {
   if (!msgText.value?.trim() && !file.value) return;
   sending.value = true;
+  // Идемпотентный токен — backend дедуплицирует, фронт игнорирует
+  // socket-emit с этим же id (см. recvNewMessage).
+  const clientMessageId = (crypto?.randomUUID?.() ?? `cmid-${Date.now()}-${Math.random().toString(36).slice(2)}`);
   try {
     const fd = new FormData();
     fd.append('message', msgText.value || '');
+    fd.append('client_message_id', clientMessageId);
     if (file.value) fd.append('attachment', file.value);
     if (replyTo.value) fd.append('reply_to_id', String(replyTo.value.id));
     await api.post(`/chat/tickets/${activeChat.value.id}/messages`, fd);
@@ -1634,7 +1655,9 @@ async function send() {
     activeChat.value.unread = 0;
     loadChats();
     taRef.value?.focus();
-  } catch {}
+  } catch (e) {
+    showError(e?.response?.data?.message || 'Не удалось отправить сообщение');
+  }
   sending.value = false;
 }
 
@@ -1644,7 +1667,9 @@ async function setStatus(status) {
     activeChat.value.status = status;
     await refreshMessages();
     loadChats();
-  } catch {}
+  } catch (e) {
+    showError(e?.response?.data?.message || 'Не удалось изменить статус');
+  }
 }
 
 async function setPriority(priority) {
@@ -1652,7 +1677,9 @@ async function setPriority(priority) {
     await api.post(`/chat/tickets/${activeChat.value.id}/status`, { status: activeChat.value.status, priority });
     activeChat.value.priority = priority;
     loadChats();
-  } catch {}
+  } catch (e) {
+    showError(e?.response?.data?.message || 'Не удалось изменить приоритет');
+  }
 }
 
 async function assignTo(userId, name) {
@@ -1661,7 +1688,9 @@ async function assignTo(userId, name) {
     activeChat.value.assigned_to = userId;
     activeChat.value.assigned_name = name;
     await refreshMessages();
-  } catch {}
+  } catch (e) {
+    showError(e?.response?.data?.message || 'Не удалось назначить ответственного');
+  }
 }
 
 // Tags
@@ -1731,8 +1760,24 @@ function insertQuickReply(q) {
   nextTick(() => { taRef.value?.focus(); autoGrow(); });
 }
 
-function startPoll() { stopPoll(); poll = setInterval(() => { refreshMessages(); loadChats(); }, 15000); }
+// Polling работает только пока вкладка активна. Скрытая вкладка
+// получит обновления через socket-events, отдельный setInterval
+// просто жжёт батарею и нагружает API.
+function startPoll() {
+  stopPoll();
+  if (document.hidden) return;
+  poll = setInterval(() => { refreshMessages(); loadChats(); }, 15000);
+}
 function stopPoll() { if (poll) { clearInterval(poll); poll = null; } }
+function onVisibilityChange() {
+  if (document.hidden) {
+    stopPoll();
+  } else if (activeChat.value) {
+    refreshMessages();
+    loadChats();
+    startPoll();
+  }
+}
 
 // Socket
 async function connectSocket() {
@@ -1906,6 +1951,7 @@ onMounted(async () => {
   loadChats();
   connectSocket();
   window.addEventListener('keydown', onGlobalKey);
+  document.addEventListener('visibilitychange', onVisibilityChange);
   requestNotifPermission();
   try { const { data } = await api.get('/chat/tickets/staff'); staffList.value = data || []; } catch {}
   try { const { data } = await api.get('/chat/quick-replies'); quickReplies.value = data.data || data || []; } catch {}
@@ -1916,6 +1962,7 @@ onUnmounted(() => {
   socket?.disconnect();
   document.title = BASE_TITLE;
   window.removeEventListener('keydown', onGlobalKey);
+  document.removeEventListener('visibilitychange', onVisibilityChange);
 });
 </script>
 

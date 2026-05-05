@@ -2,7 +2,7 @@
   <div>
     <PageHeader title="Продукты и программы" icon="mdi-package-variant-closed">
       <template #actions>
-        <v-btn color="primary" prepend-icon="mdi-plus" @click="openCreateProduct">Добавить продукт</v-btn>
+        <v-btn v-if="!auth.isEducationOnly" color="primary" prepend-icon="mdi-plus" @click="openCreateProduct">Добавить продукт</v-btn>
       </template>
     </PageHeader>
 
@@ -84,7 +84,7 @@
             <td :colspan="columns.length" class="pa-4 bg-grey-lighten-5">
               <div class="d-flex justify-space-between align-center mb-2">
                 <span class="text-subtitle-2 font-weight-bold">Программы продукта «{{ item.name }}»</span>
-                <v-btn size="small" color="primary" prepend-icon="mdi-plus" variant="tonal"
+                <v-btn v-if="!auth.isEducationOnly" size="small" color="primary" prepend-icon="mdi-plus" variant="tonal"
                   @click="openCreateProgram(item)">Добавить программу</v-btn>
               </div>
               <v-data-table
@@ -312,6 +312,9 @@ import EmptyState from '../../components/EmptyState.vue';
 import StatusChip from '../../components/StatusChip.vue';
 import FilterBar from '../../components/FilterBar.vue';
 import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
+import { useAuthStore } from '../../stores/auth';
+
+const auth = useAuthStore();
 
 const loading = ref(false);
 const saving = ref(false);

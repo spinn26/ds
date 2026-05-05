@@ -97,6 +97,16 @@ return [
             'prefix_indexes' => true,
             'search_path' => 'public',
             'sslmode' => env('DB_SSLMODE', 'prefer'),
+            // Statement timeout — через 30с тяжёлый запрос будет прерван
+            // и не зависнет до nginx-таймаута. Артизан-команды не страдают —
+            // long-running операции вынесены в queue или CLI-контекст.
+            // Переопределить точечно: DB::statement('SET statement_timeout = 0').
+            'options' => [
+                \PDO::ATTR_PERSISTENT => false,
+            ],
+            'application_name' => env('DB_APP_NAME', 'ds-platform'),
+            // Read-side таймауты применяются в каждой сессии через
+            // `SET statement_timeout`. Делается в AppServiceProvider::boot().
         ],
 
         'sqlsrv' => [

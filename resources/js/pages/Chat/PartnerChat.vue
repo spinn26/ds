@@ -132,11 +132,11 @@
                   <div v-if="item.msg.content" class="msg-text">{{ item.msg.content }}</div>
                 </template>
                 <template v-if="item.msg.attachmentPath">
-                  <a v-if="isImageAttachment(item.msg.attachmentPath)"
-                    :href="item.msg.attachmentPath" target="_blank" class="msg-image-link">
+                  <a v-if="isImageAttachment(item.msg.attachmentName || item.msg.attachmentPath)"
+                    :href="item.msg.attachmentPath" target="_blank" rel="noopener noreferrer" class="msg-image-link">
                     <img :src="item.msg.attachmentPath" :alt="item.msg.attachmentName || 'Изображение'" class="msg-image" loading="lazy" />
                   </a>
-                  <a v-else :href="item.msg.attachmentPath" target="_blank" class="msg-attach">
+                  <a v-else :href="item.msg.attachmentPath" target="_blank" rel="noopener noreferrer" class="msg-attach">
                     <v-icon size="14">mdi-paperclip</v-icon> {{ item.msg.attachmentName || 'Файл' }}
                   </a>
                 </template>
@@ -791,9 +791,13 @@ async function toggleReaction(msg, emoji) {
 async function send() {
   if (!msgText.value?.trim() && !file.value) return;
   sending.value = true;
+  // Идемпотентный токен — backend дедуплицирует, фронт игнорирует
+  // socket-emit с этим же id.
+  const clientMessageId = (crypto?.randomUUID?.() ?? `cmid-${Date.now()}-${Math.random().toString(36).slice(2)}`);
   try {
     const fd = new FormData();
     fd.append('message', msgText.value || '');
+    fd.append('client_message_id', clientMessageId);
     if (file.value) fd.append('attachment', file.value);
     if (replyTo.value) fd.append('reply_to_id', String(replyTo.value.id));
     await api.post(`/chat/tickets/${activeChat.value.id}/messages`, fd);
@@ -808,7 +812,9 @@ async function send() {
     activeChat.value.unread = 0;
     loadChats();
     taRef.value?.focus();
-  } catch {}
+  } catch (e) {
+    showError(e?.response?.data?.message || 'Не удалось отправить сообщение');
+  }
   sending.value = false;
 }
 
@@ -831,9 +837,19 @@ async function createChat() {
 
 function startPoll() {
   stopPoll();
+  if (document.hidden) return;
   poll = setInterval(() => { refreshMessages(); loadChats(); }, 15000); // slower since socket handles real-time
 }
 function stopPoll() { if (poll) { clearInterval(poll); poll = null; } }
+function onVisibilityChange() {
+  if (document.hidden) {
+    stopPoll();
+  } else if (activeChat.value) {
+    refreshMessages();
+    loadChats();
+    startPoll();
+  }
+}
 
 function openFounder() {
   newForm.value = { category: 'general', subject: 'Сообщение основателю', message: '' };
@@ -994,6 +1010,7 @@ onMounted(() => {
   checkQuery();
   connectSocket();
   window.addEventListener('keydown', onGlobalKey);
+  document.addEventListener('visibilitychange', onVisibilityChange);
   requestNotifPermission();
 });
 
@@ -1003,6 +1020,7 @@ onUnmounted(() => {
   socket?.disconnect();
   document.title = BASE_TITLE;
   window.removeEventListener('keydown', onGlobalKey);
+  document.removeEventListener('visibilitychange', onVisibilityChange);
 });
 </script>
 

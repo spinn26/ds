@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\PeriodFreezeService;
 use App\Services\PoolRunner;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -22,6 +23,7 @@ class AdminPoolController extends Controller
 {
     public function __construct(
         private readonly PoolRunner $runner,
+        private readonly PeriodFreezeService $freeze,
     ) {}
 
     /** GET /admin/pool/participants */
@@ -32,7 +34,29 @@ class AdminPoolController extends Controller
             'month' => 'required|integer|min:1|max:12',
         ]);
 
-        $result = $this->runner->run((int) $data['year'], (int) $data['month'], applyWrite: false);
+        $year = (int) $data['year'];
+        $month = (int) $data['month'];
+        $result = $this->runner->run($year, $month, applyWrite: false);
+
+        // Метаданные о заморозке — для UI: показываем плашку «Зафиксировано»
+        // и прячем кнопку фиксации, если период уже закрыт.
+        $closure = DB::table('period_closures')
+            ->where('year', $year)->where('month', $month)
+            ->whereNull('reopened_at')
+            ->select('closed_at', 'closed_by', 'note')
+            ->first();
+        $result['frozen'] = (bool) $closure;
+        if ($closure) {
+            $closedByName = $closure->closed_by
+                ? DB::table('WebUser')->where('id', $closure->closed_by)->value('lastName')
+                : null;
+            $result['closure'] = [
+                'closed_at' => $closure->closed_at,
+                'closed_by' => $closure->closed_by,
+                'closed_by_name' => $closedByName,
+                'note' => $closure->note,
+            ];
+        }
         return response()->json($result);
     }
 
@@ -74,7 +98,19 @@ class AdminPoolController extends Controller
         return $this->participants($request);
     }
 
-    /** POST /admin/pool/apply */
+    /**
+     * POST /admin/pool/apply — одноразовая фиксация пула за месяц.
+     *
+     * Поведение:
+     *   - Если период УЖЕ закрыт (period_closures) → 422.
+     *     Перезапись зафиксированного периода невозможна; для редких
+     *     корректировок есть отдельный flow «Разморозка периода» (reopen).
+     *   - Иначе: пересчитываем пул на лету по текущему qualificationLog,
+     *     пишем в poolLog (DELETE-then-INSERT в транзакции) и СРАЗУ
+     *     закрываем период через PeriodFreezeService::close.
+     *     После этого poolLog/transaction/commission/qualificationLog за
+     *     период становятся read-only через PeriodFreezeService::guard.
+     */
     public function apply(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -82,25 +118,54 @@ class AdminPoolController extends Controller
             'month' => 'required|integer|min:1|max:12',
         ]);
 
-        $result = $this->runner->run((int) $data['year'], (int) $data['month'], applyWrite: true);
+        $year = (int) $data['year'];
+        $month = (int) $data['month'];
 
-        // Заморожен → 422, как и штрафы §5 в AdminFinalizeController::apply
-        if ($result['frozen'] ?? false) {
-            return response()->json($result, 422);
+        if ($this->freeze->isFrozen($year, $month)) {
+            return response()->json([
+                'frozen' => true,
+                'message' => sprintf(
+                    'Период %02d.%d уже зафиксирован. Перезапись запрещена. '.
+                    'Для пересчёта обратитесь к админу — нужна разморозка периода.',
+                    $month, $year
+                ),
+            ], 422);
         }
 
-        NotificationController::notifyStaff(
-            'payment',
-            sprintf('Пул рассчитан: %02d.%d', $data['month'], $data['year']),
-            sprintf('Записано %d строк, выплачено %s ₽',
-                $result['written'] ?? 0,
-                number_format($result['totalPaid'] ?? 0, 0, '.', ' ')),
-            sprintf('/manage/periods/%d-%02d', $data['year'], $data['month']),
-        );
+        // Async через queue: фронт получает batch_id и поллит /admin/pool/progress.
+        // Раньше синхронный run() мог занять минуты на 500K commission-строк
+        // и упирался в php-fpm/nginx таймауты.
+        $batchId = (string) \Illuminate\Support\Str::uuid();
+        \Illuminate\Support\Facades\Cache::put("pool-apply:{$batchId}", [
+            'status' => 'queued', 'percent' => 0,
+            'message' => 'Задача поставлена в очередь',
+            'updated_at' => now()->toIso8601String(),
+        ], now()->addMinutes(30));
+
+        \App\Jobs\ApplyPoolJob::dispatch($batchId, $year, $month, $request->user()?->id);
 
         return response()->json([
-            'message' => "Пул записан: {$result['written']} строк",
-            'result' => $result,
-        ]);
+            'message' => 'Расчёт пула запущен в фоне',
+            'batch_id' => $batchId,
+            'progress_url' => "/api/v1/admin/pool/progress?batch_id={$batchId}",
+        ], 202);
+    }
+
+    /**
+     * GET /admin/pool/progress?batch_id=… — статус async-расчёта.
+     */
+    public function progress(Request $request): JsonResponse
+    {
+        $batchId = (string) $request->input('batch_id');
+        if ($batchId === '') return response()->json(['message' => 'batch_id required'], 422);
+
+        $progress = \Illuminate\Support\Facades\Cache::get("pool-apply:{$batchId}");
+        if (! $progress) {
+            return response()->json([
+                'status' => 'unknown',
+                'message' => 'Задача не найдена или истекла (TTL 30 мин)',
+            ], 404);
+        }
+        return response()->json($progress);
     }
 }

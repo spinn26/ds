@@ -207,6 +207,21 @@ class EducationController extends Controller
 
         $passed = $correct === $total;
 
+        // Сохраняем КАЖДУЮ попытку (включая неудачные) для куратора —
+        // он анализирует на каких вопросах партнёры спотыкаются и
+        // сколько раз пробуют до успеха. Completion-таблица остаётся
+        // источником «прошёл/не прошёл», attempts — историческим логом.
+        DB::table('education_test_attempts')->insert([
+            'user_id' => $userId,
+            'course_id' => $id,
+            'score' => $correct,
+            'total' => $total,
+            'passed' => $passed,
+            'attempted_at' => now(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
         if ($passed) {
             DB::table('education_course_completions')->upsert(
                 [[

@@ -1,6 +1,6 @@
 <template>
-  <v-btn variant="tonal" size="small" prepend-icon="mdi-download" :loading="exporting" @click="doExport">
-    Экспорт CSV
+  <v-btn variant="tonal" size="small" prepend-icon="mdi-microsoft-excel" :loading="exporting" @click="doExport">
+    Экспорт Excel
   </v-btn>
 </template>
 
@@ -22,10 +22,12 @@ async function doExport() {
     const url = `/admin/export/${props.type}${queryString ? '?' + queryString : ''}`;
     const response = await api.get(url, { responseType: 'blob' });
 
-    const blob = new Blob([response.data], { type: 'text/csv;charset=utf-8' });
+    const blob = new Blob([response.data], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = `ds_${props.type}_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.download = `ds_${props.type}_${new Date().toISOString().slice(0, 10)}.xlsx`;
     link.click();
     URL.revokeObjectURL(link.href);
   } catch {}

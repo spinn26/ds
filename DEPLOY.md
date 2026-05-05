@@ -114,3 +114,110 @@ php artisan migrate:rollback --step=1
 - [ ] Tests: `php artisan test` даёт 0 failed (12 skipped норма — нужны
       фабрики, не критично)
 - [ ] Smoke: `node scripts/ui-smoke.cjs` проходит по всем 61 странице
+
+---
+
+## Production checklist (релиз-блокеры — обновлено 2026-05-05)
+
+### .env — обязательно проверить
+```
+APP_DEBUG=false
+APP_ENV=production
+LOG_LEVEL=warning            # не debug! debug сжирает диск
+LOG_STACK=daily              # rotation 14 дней
+QUEUE_CONNECTION=redis       # либо database — но миграция queue tables нужна
+CACHE_STORE=redis
+SESSION_DRIVER=redis
+SANCTUM_TOKEN_EXPIRATION=43200   # 30 дней; null = вечно (опасно)
+SOCKET_EMIT_SECRET=<openssl rand -hex 32>
+INSMART_WEBHOOK_SECRET=<openssl rand -hex 32>
+# DB_STATEMENT_TIMEOUT_MS=30000  — опционально, дефолт ОК
+```
+
+### Шаги наката (в строгом порядке)
+
+```bash
+ssh root@dev.dsconsult.ru
+cd /var/www/newds
+
+# 1) Бэкап ДО любых изменений (не пропускать!).
+pg_dump -Fc newds > /var/backups/newds-$(date +%Y-%m-%d-%H%M).dump
+
+# 2) Проверить что .env в актуальном состоянии (см. чеклист выше).
+grep -E '^(APP_DEBUG|LOG_LEVEL|QUEUE_CONNECTION|CACHE_STORE|SANCTUM_TOKEN_EXPIRATION)' .env
+
+# 3) Получить код.
+git pull origin main
+composer install --no-dev --optimize-autoloader
+npm ci && npm run build
+
+# 4) Storage symlink (нужен для public/storage и публичных файлов).
+php artisan storage:link
+
+# 5) Миграции. Перед накатом проверить status —
+#    если есть конфликты по timestamp (старая версия уже применена),
+#    разрезолвить вручную (см. секцию ниже).
+php artisan migrate:status | tail -20
+php artisan migrate --force
+
+# 6) Кэши.
+php artisan config:cache
+php artisan route:cache
+php artisan view:cache
+php artisan event:cache
+
+# 7) Перезапуск сервисов.
+systemctl restart php8.2-fpm
+systemctl restart ds-queue-worker     # supervisor: queue:work --queue=default
+systemctl restart ds-socket-server    # systemd unit для socket-server/
+
+# 8) Smoke-тесты.
+curl -f https://dev.dsconsult.ru/up
+curl -f https://dev.dsconsult.ru/api/v1/auth/me -H "Authorization: Bearer $TEST_TOKEN"
+```
+
+### Конфликты таймстемпов миграций (resolved 2026-05-05)
+
+Старые миграции имели одинаковые префиксы (`2026_04_28_000010` × 2 и т.п.).
+В коммите 2026-05-05 переименованы → `_000011`, `_000021`, `_000031`.
+
+**Если на проде уже применилась хотя бы одна из пары** до переименования —
+после `git pull` Laravel увидит миграции как новые и попробует применить
+заново. Проверить:
+```sql
+SELECT migration FROM migrations WHERE migration LIKE '2026_04_28_%';
+```
+Если в результате есть строки с **старыми** именами (без `_000011`/etc):
+вручную обновить:
+```sql
+UPDATE migrations SET migration = '2026_04_28_000011_create_report_archive_table'
+  WHERE migration = '2026_04_28_000010_create_report_archive_table';
+-- аналогично для двух остальных пар
+```
+
+### Backup стратегия
+
+Бэкапы делаются **ежедневно** через cron на хост-машине (не из Laravel
+scheduler — пусть приложение и БД упадут раздельно):
+```cron
+0 3 * * * postgres pg_dump -Fc newds > /var/backups/newds/daily-$(date +\%F).dump
+0 4 * * 0 find /var/backups/newds -name 'daily-*.dump' -mtime +30 -delete
+```
+Ретеншн: 30 дней daily, никогда не удаляем еженедельные. Проверять
+ежемесячно что бэкапы реально восстанавливаются (drill).
+
+### Откат при проблемах
+
+```bash
+# Откатить миграции (последние N).
+php artisan migrate:rollback --step=N --force
+
+# Восстановить из бэкапа.
+dropdb newds && createdb newds
+pg_restore -Fc -d newds /var/backups/newds-XXXX.dump
+
+# Откатить код.
+git reset --hard <previous-commit>
+composer install --no-dev && npm ci && npm run build
+systemctl restart php8.2-fpm ds-queue-worker ds-socket-server
+```

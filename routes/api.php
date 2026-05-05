@@ -29,6 +29,7 @@ Route::prefix('v1')->group(function () {
     // защищён shared-secret в заголовке X-Insmart-Secret + throttle.
     Route::middleware('throttle:60,1')->group(function () {
         Route::post('/webhooks/insmart/paid', [\App\Http\Controllers\Api\InsmartWebhookController::class, 'paid']);
+        Route::post('/webhooks/zammad', [\App\Http\Controllers\Api\ZammadWebhookController::class, 'handle']);
     });
 
     Route::middleware('auth:sanctum')->group(function () {
@@ -48,15 +49,18 @@ Route::prefix('v1')->group(function () {
 
         // Chat system v2
         Route::get('/chat/tickets', [\App\Http\Controllers\Api\ChatController::class, 'index']);
-        Route::post('/chat/tickets', [\App\Http\Controllers\Api\ChatController::class, 'store']);
+        Route::post('/chat/tickets', [\App\Http\Controllers\Api\ChatController::class, 'store'])->middleware('throttle:10,1');
         Route::get('/chat/tickets/stats', [\App\Http\Controllers\Api\ChatController::class, 'stats']);
         Route::get('/chat/unread-count', [\App\Http\Controllers\Api\ChatController::class, 'unreadCount']);
         Route::get('/chat/tickets/staff', [\App\Http\Controllers\Api\ChatController::class, 'staffList']);
         Route::get('/chat/tickets/{id}', [\App\Http\Controllers\Api\ChatController::class, 'show']);
         Route::get('/chat/tickets/{id}/can-access', [\App\Http\Controllers\Api\ChatController::class, 'canAccess']);
-        Route::post('/chat/tickets/{id}/messages', [\App\Http\Controllers\Api\ChatController::class, 'sendMessage']);
-        Route::put('/chat/messages/{messageId}', [\App\Http\Controllers\Api\ChatController::class, 'editMessage']);
-        Route::post('/chat/messages/{messageId}/reactions', [\App\Http\Controllers\Api\ChatController::class, 'toggleReaction']);
+        Route::get('/chat/tickets/{id}/changes', [\App\Http\Controllers\Api\ChatController::class, 'changes']);
+        Route::get('/chat/tickets/{id}/partner-context', [\App\Http\Controllers\Api\ChatController::class, 'partnerContext']);
+        Route::post('/chat/tickets/{id}/messages', [\App\Http\Controllers\Api\ChatController::class, 'sendMessage'])->middleware('throttle:60,1');
+        Route::put('/chat/messages/{messageId}', [\App\Http\Controllers\Api\ChatController::class, 'editMessage'])->middleware('throttle:30,1');
+        Route::post('/chat/messages/{messageId}/reactions', [\App\Http\Controllers\Api\ChatController::class, 'toggleReaction'])->middleware('throttle:60,1');
+        Route::get('/chat/messages/{messageId}/attachment', [\App\Http\Controllers\Api\ChatController::class, 'downloadAttachment'])->whereNumber('messageId');
         Route::post('/chat/tickets/{id}/pin', [\App\Http\Controllers\Api\ChatController::class, 'togglePin']);
         Route::post('/chat/tickets/{id}/status', [\App\Http\Controllers\Api\ChatController::class, 'updateStatus']);
         Route::post('/chat/tickets/{id}/assign', [\App\Http\Controllers\Api\ChatController::class, 'assign']);
@@ -129,7 +133,7 @@ Route::prefix('v1')->group(function () {
             Route::post('/impersonate/leave', [ImpersonateController::class, 'leave']);
         });
 
-        Route::middleware(['role:admin,backoffice,support,finance,head,calculations,corrections', 'throttle:600,1'])->group(function () {
+        Route::middleware(['role:admin,backoffice,support,finance,head,calculations,corrections,education', 'restrict.education', 'throttle:600,1'])->group(function () {
         Route::get('/admin/dashboard', [\App\Http\Controllers\Api\AdminDashboardController::class, 'index']);
         Route::get('/admin/export/{type}', [\App\Http\Controllers\Api\ExportController::class, 'export'])->middleware('throttle:10,1');
         Route::get('/admin/users', [AdminUserController::class, 'index']);
@@ -265,6 +269,7 @@ Route::prefix('v1')->group(function () {
         Route::put('/admin/pool/participants', [\App\Http\Controllers\Api\AdminPoolController::class, 'toggleParticipant']);
         Route::post('/admin/pool/preview', [\App\Http\Controllers\Api\AdminPoolController::class, 'preview']);
         Route::post('/admin/pool/apply', [\App\Http\Controllers\Api\AdminPoolController::class, 'apply'])->middleware('throttle:10,1');
+        Route::get('/admin/pool/progress', [\App\Http\Controllers\Api\AdminPoolController::class, 'progress']);
 
         // Admin — Analytics (reconciliation, anomalies, funnel, cohorts, owner)
         Route::get('/admin/analytics/reconciliation', [\App\Http\Controllers\Api\AdminAnalyticsController::class, 'reconciliation']);
@@ -301,6 +306,15 @@ Route::prefix('v1')->group(function () {
         Route::post('/admin/ops/bulk/{action}', [\App\Http\Controllers\Api\AdminOpsController::class, 'bulkRun'])->middleware('throttle:10,1');
         Route::get('/admin/ops/triggers', [\App\Http\Controllers\Api\AdminOpsController::class, 'triggers']);
         Route::get('/admin/ops/integrations', [\App\Http\Controllers\Api\AdminOpsController::class, 'integrations']);
+
+        // Полноценная панель «Интеграции»: метрики 24h, журнал, тесты, replay.
+        Route::get('/admin/integrations', [\App\Http\Controllers\Api\AdminIntegrationsController::class, 'index']);
+        Route::get('/admin/integrations/events', [\App\Http\Controllers\Api\AdminIntegrationsController::class, 'events']);
+        Route::get('/admin/integrations/events/{id}', [\App\Http\Controllers\Api\AdminIntegrationsController::class, 'eventShow'])->whereNumber('id');
+        Route::post('/admin/integrations/events/{id}/replay', [\App\Http\Controllers\Api\AdminIntegrationsController::class, 'replay'])->whereNumber('id')->middleware('throttle:30,1');
+        Route::post('/admin/integrations/{service}/test', [\App\Http\Controllers\Api\AdminIntegrationsController::class, 'test'])->middleware('throttle:30,1')->where('service', '[a-z_]+');
+        Route::get('/admin/integrations/{service}/config', [\App\Http\Controllers\Api\AdminIntegrationsController::class, 'config']);
+        Route::put('/admin/integrations/{service}/config', [\App\Http\Controllers\Api\AdminIntegrationsController::class, 'saveConfig']);
         Route::get('/admin/ops/settings', [\App\Http\Controllers\Api\AdminOpsController::class, 'settingsShow']);
 
         // Admin — Payment registry (spec ✅Реестр выплат.md)
@@ -346,6 +360,13 @@ Route::prefix('v1')->group(function () {
         Route::put('/admin/instructions/{id}', [\App\Http\Controllers\Api\InstructionController::class, 'adminUpdate'])->whereNumber('id');
         Route::delete('/admin/instructions/{id}', [\App\Http\Controllers\Api\InstructionController::class, 'adminDestroy'])->whereNumber('id');
 
+        // Анкеты партнёров (для куратора обучения и общего ознакомления)
+        Route::get('/admin/partners/questionnaires', [\App\Http\Controllers\Api\AdminQuestionnaireController::class, 'index']);
+        Route::get('/admin/partners/questionnaires/export', [\App\Http\Controllers\Api\AdminQuestionnaireController::class, 'export']);
+        Route::get('/admin/partners/{id}/questionnaire', [\App\Http\Controllers\Api\AdminQuestionnaireController::class, 'show'])->whereNumber('id');
+
+        Route::get('/admin/education/analytics', [\App\Http\Controllers\Api\AdminEducationController::class, 'analytics']);
+        Route::get('/admin/education/analytics/export', [\App\Http\Controllers\Api\AdminEducationController::class, 'analyticsExport']);
         Route::get('/admin/education/courses', [\App\Http\Controllers\Api\AdminEducationController::class, 'courses']);
         Route::post('/admin/education/courses', [\App\Http\Controllers\Api\AdminEducationController::class, 'storeCourse']);
         Route::put('/admin/education/courses/{id}', [\App\Http\Controllers\Api\AdminEducationController::class, 'updateCourse']);

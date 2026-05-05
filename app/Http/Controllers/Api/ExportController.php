@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\XlsxExportService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -10,10 +11,11 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 class ExportController extends Controller
 {
     /**
-     * Универсальный экспорт в CSV (Excel совместимый).
+     * Универсальный экспорт в стилизованный XLSX (бренд-зелёная шапка,
+     * frozen panes, autofilter, авто-ширины, форматы чисел и дат).
      * Поддерживает: partners, clients, contracts, transactions, commissions, qualifications, payments.
      */
-    public function export(Request $request, string $type): StreamedResponse
+    public function export(Request $request, string $type, XlsxExportService $xlsx): StreamedResponse
     {
         $config = $this->getExportConfig($type);
         if (! $config) {
@@ -22,7 +24,6 @@ class ExportController extends Controller
 
         $query = DB::table($config['table']);
 
-        // Apply basic filters
         if ($config['whereNull'] ?? null) {
             $query->whereNull($config['whereNull']);
         }
@@ -34,37 +35,37 @@ class ExportController extends Controller
         }
 
         $query->orderByDesc($config['orderBy'] ?? 'id')->limit(5000);
+        $rows = $query->get();
 
-        $filename = "ds_export_{$type}_" . now()->format('Y-m-d_His') . '.csv';
+        $fields = array_keys($config['columns']);
+        $data = $rows->map(function ($row) use ($fields) {
+            $line = [];
+            foreach ($fields as $field) {
+                $value = $row->$field ?? '';
+                if (is_bool($value)) $value = $value ? 'Да' : 'Нет';
+                $line[] = $value;
+            }
+            return $line;
+        })->all();
 
-        return new StreamedResponse(function () use ($query, $config) {
-            $handle = fopen('php://output', 'w');
+        // Готовим карту индексов 1-based для форматов (числа / проценты / даты).
+        $opts = [];
+        foreach (['numeric' => 'numericColumns', 'percent' => 'percentColumns', 'date' => 'dateColumns'] as $cfgKey => $optKey) {
+            if (! empty($config[$cfgKey])) {
+                $opts[$optKey] = array_values(array_filter(array_map(
+                    fn ($f) => ($pos = array_search($f, $fields, true)) === false ? null : $pos + 1,
+                    $config[$cfgKey],
+                )));
+            }
+        }
 
-            // BOM for Excel UTF-8
-            fwrite($handle, "\xEF\xBB\xBF");
-
-            // Headers
-            fputcsv($handle, array_values($config['columns']), ';');
-
-            // Data
-            $query->chunk(500, function ($rows) use ($handle, $config) {
-                foreach ($rows as $row) {
-                    $line = [];
-                    foreach (array_keys($config['columns']) as $field) {
-                        $value = $row->$field ?? '';
-                        if (is_bool($value)) $value = $value ? 'Да' : 'Нет';
-                        $line[] = $value;
-                    }
-                    fputcsv($handle, $line, ';');
-                }
-            });
-
-            fclose($handle);
-        }, 200, [
-            'Content-Type' => 'text/csv; charset=UTF-8',
-            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
-            'Cache-Control' => 'no-cache',
-        ]);
+        return $xlsx->stream(
+            "ds_export_{$type}_" . now()->format('Y-m-d_His'),
+            $config['title'] ?? ucfirst($type),
+            array_values($config['columns']),
+            $data,
+            $opts,
+        );
     }
 
     private function getExportConfig(string $type): ?array
@@ -72,6 +73,7 @@ class ExportController extends Controller
         $configs = [
             'partners' => [
                 'table' => 'consultant',
+                'title' => 'Партнёры',
                 'whereNull' => 'dateDeleted',
                 'searchField' => 'personName',
                 'orderBy' => 'id',
@@ -87,9 +89,12 @@ class ExportController extends Controller
                     'dateCreated' => 'Дата регистрации',
                     'dateActivity' => 'Дата активации',
                 ],
+                'numeric' => ['personalVolume', 'groupVolume', 'groupVolumeCumulative'],
+                'date' => ['dateCreated', 'dateActivity'],
             ],
             'clients' => [
                 'table' => 'client',
+                'title' => 'Клиенты',
                 'searchField' => 'personName',
                 'orderBy' => 'id',
                 'columns' => [
@@ -101,9 +106,11 @@ class ExportController extends Controller
                     'workSince' => 'Работаем с',
                     'comment' => 'Комментарий',
                 ],
+                'date' => ['dateCreated', 'workSince'],
             ],
             'contracts' => [
                 'table' => 'contract',
+                'title' => 'Контракты',
                 'whereNull' => 'deletedAt',
                 'searchField' => 'clientName',
                 'orderBy' => 'id',
@@ -117,9 +124,12 @@ class ExportController extends Controller
                     'ammount' => 'Сумма',
                     'openDate' => 'Дата открытия',
                 ],
+                'numeric' => ['ammount'],
+                'date' => ['openDate'],
             ],
             'transactions' => [
                 'table' => 'transaction',
+                'title' => 'Транзакции',
                 'whereNull' => 'deletedAt',
                 'monthField' => 'dateMonth',
                 'orderBy' => 'id',
@@ -132,9 +142,12 @@ class ExportController extends Controller
                     'date' => 'Дата',
                     'dateMonth' => 'Месяц',
                 ],
+                'numeric' => ['amount', 'amountRUB', 'amountUSD'],
+                'date' => ['date'],
             ],
             'commissions' => [
                 'table' => 'commission',
+                'title' => 'Комиссии',
                 'whereNull' => 'deletedAt',
                 'monthField' => 'dateMonth',
                 'orderBy' => 'id',
@@ -149,9 +162,13 @@ class ExportController extends Controller
                     'percent' => '%',
                     'date' => 'Дата',
                 ],
+                'numeric' => ['amountRUB', 'personalVolume', 'groupVolume', 'groupBonusRub'],
+                'percent' => ['percent'],
+                'date' => ['date'],
             ],
             'qualifications' => [
                 'table' => 'qualificationLog',
+                'title' => 'Квалификации',
                 'whereNull' => 'dateDeleted',
                 'searchField' => 'consultantPersonName',
                 'orderBy' => 'id',
@@ -166,6 +183,8 @@ class ExportController extends Controller
                     'result' => 'Результат',
                     'date' => 'Дата',
                 ],
+                'numeric' => ['personalVolume', 'groupVolume', 'groupVolumeCumulative'],
+                'date' => ['date'],
             ],
         ];
 

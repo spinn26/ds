@@ -28,8 +28,13 @@ const LARAVEL_API_URL = process.env.LARAVEL_API_URL || 'http://127.0.0.1:8000';
 const EMIT_SECRET = process.env.SOCKET_EMIT_SECRET || '';
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const IS_PRODUCTION = NODE_ENV === 'production';
-const TOKEN_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+// Сокращено с 5 мин до 60 сек: при logout / отозванном токене предыдущая
+// задержка позволяла читать чат до 5 мин. 60 сек — компромисс между
+// защитой и нагрузкой на /api/v1/auth/me. Lazy-cleanup при каждом
+// validateToken отбрасывает истёкшие записи, чтобы Map не рос бесконечно.
+const TOKEN_CACHE_TTL_MS = 60 * 1000; // 1 minute
 const ACCESS_CACHE_TTL_MS = 60 * 1000; // 1 minute
+const CACHE_CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // periodic sweep
 
 if (!EMIT_SECRET) {
   if (IS_PRODUCTION) {
@@ -63,12 +68,19 @@ async function validateToken(token) {
   if (cached && cached.expiresAt > Date.now()) {
     return cached.user;
   }
+  // Истёкший — выкидываем сразу, не ждём sweep.
+  if (cached) tokenCache.delete(token);
 
   try {
     const res = await fetch(`${LARAVEL_API_URL}/api/v1/auth/me`, {
       headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      // Если сервер сказал «не валиден» (401/403) — снимаем все
+      // зависимые access-кэши, чтобы клиент не висел в комнате.
+      invalidateToken(token);
+      return null;
+    }
     const u = await res.json();
     const user = {
       userId: String(u.id),
@@ -81,6 +93,29 @@ async function validateToken(token) {
     return null;
   }
 }
+
+/** Снять все кэши, связанные с токеном — вызывается при logout/инвалидации. */
+function invalidateToken(token) {
+  if (!token) return;
+  tokenCache.delete(token);
+  // Снимаем access-cache по префиксу `${token}:`.
+  const prefix = `${token}:`;
+  for (const key of accessCache.keys()) {
+    if (key.startsWith(prefix)) accessCache.delete(key);
+  }
+}
+
+/** Периодическая чистка истёкших записей — защита от роста памяти. */
+function sweepCaches() {
+  const now = Date.now();
+  for (const [k, v] of tokenCache) {
+    if (v.expiresAt <= now) tokenCache.delete(k);
+  }
+  for (const [k, v] of accessCache) {
+    if (v.expiresAt <= now) accessCache.delete(k);
+  }
+}
+setInterval(sweepCaches, CACHE_CLEANUP_INTERVAL_MS).unref?.();
 
 /**
  * Ask Laravel whether this token may view the ticket. Backed by
@@ -248,6 +283,40 @@ const apiServer = http.createServer((req, res) => {
     return;
   }
 
+  // Laravel шлёт сюда при logout / token revoke, чтобы немедленно
+  // снять кэшированные права для этого токена и отключить активные
+  // socket-соединения с этим токеном.
+  if (req.method === 'POST' && req.url === '/invalidate-token') {
+    if (!checkEmitAuth(req, res)) return;
+    let body = '';
+    req.on('data', (chunk) => body += chunk);
+    req.on('end', () => {
+      try {
+        const { token } = JSON.parse(body);
+        if (!token) {
+          res.writeHead(400);
+          res.end(JSON.stringify({ error: 'token required' }));
+          return;
+        }
+        invalidateToken(token);
+        // Принудительно дисконнектим все сокеты с этим токеном.
+        let kicked = 0;
+        for (const [, sock] of io.sockets.sockets) {
+          if (sock.data?.token === token) {
+            sock.disconnect(true);
+            kicked++;
+          }
+        }
+        res.writeHead(200);
+        res.end(JSON.stringify({ ok: true, kicked }));
+      } catch (e) {
+        res.writeHead(400);
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+
   if (req.method === 'GET' && req.url === '/health') {
     res.writeHead(200);
     res.end(JSON.stringify({
@@ -271,3 +340,32 @@ apiServer.listen(API_PORT, () => {
   console.log(`   Emit secret:  ${EMIT_SECRET ? 'configured' : 'NOT SET (open)'}`);
   console.log('');
 });
+
+// Graceful shutdown: при SIGTERM/SIGINT (docker stop, kill -15, Ctrl+C)
+// уведомляем клиентов и закрываем серверы, чтобы in-flight запросы
+// долетели. После 10 сек — force exit.
+let shuttingDown = false;
+function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`\n[${signal}] Graceful shutdown started…`);
+
+  // Уведомляем всех клиентов — они увидят свою кнопку «переподключиться».
+  io.emit('server:shutdown', { reason: signal });
+
+  const forceTimer = setTimeout(() => {
+    console.error('[!] Forced exit after 10s timeout');
+    process.exit(1);
+  }, 10_000);
+  forceTimer.unref?.();
+
+  Promise.allSettled([
+    new Promise((resolve) => io.close(resolve)),
+    new Promise((resolve) => apiServer.close(resolve)),
+  ]).then(() => {
+    console.log('[✓] Shutdown complete');
+    process.exit(0);
+  });
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));

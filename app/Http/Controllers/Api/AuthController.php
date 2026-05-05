@@ -212,13 +212,35 @@ class AuthController extends Controller
 
     public function logout(Request $request): JsonResponse
     {
-        $request->user()->currentAccessToken()->delete();
+        $token = $request->user()->currentAccessToken();
+        // Plain text токен из заголовка (для инвалидации в socket-server,
+        // который кэширует validateToken по plain Bearer'у).
+        $bearer = (string) $request->bearerToken();
+        $token->delete();
 
         if ($request->hasSession()) {
             $request->session()->invalidate();
             $request->session()->regenerateToken();
         }
         auth('web')->logout();
+
+        // Сообщаем socket-серверу, что токен невалиден — он снимет кэши и
+        // принудительно дисконнектит активные сокеты с этим токеном.
+        // Best-effort: ошибка не должна ронять logout.
+        if ($bearer !== '') {
+            try {
+                $host = env('SOCKET_HOST', '127.0.0.1');
+                $port = env('SOCKET_API_PORT', 3002);
+                $secret = (string) env('SOCKET_EMIT_SECRET', '');
+                if ($secret !== '') {
+                    \Illuminate\Support\Facades\Http::timeout(2)
+                        ->withToken($secret)
+                        ->post("http://{$host}:{$port}/invalidate-token", ['token' => $bearer]);
+                }
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::debug('socket invalidate-token failed: ' . $e->getMessage());
+            }
+        }
 
         return response()->json(['message' => 'OK']);
     }

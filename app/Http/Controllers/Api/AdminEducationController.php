@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\XlsxExportService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -13,6 +14,146 @@ class AdminEducationController extends Controller
     public function __construct()
     {
         $this->ensureTablesExist();
+    }
+
+    /**
+     * GET /admin/education/analytics
+     *
+     * Сводка по обучению: на каждого партнёра — сколько уроков просмотрено,
+     * сколько курсов пройдено (тест 100 %), последняя активность. Поддержка
+     * фильтров по партнёру и курсу для куратора обучения.
+     *
+     * Query: search (по ФИО), course_id, page (по умолчанию 1), per (25).
+     */
+    public function analytics(Request $request): JsonResponse
+    {
+        $search = trim((string) $request->input('search', ''));
+        $courseId = (int) $request->input('course_id', 0);
+        $page = max(1, (int) $request->input('page', 1));
+        $per = min(100, max(10, (int) $request->input('per', 25)));
+
+        // База — все WebUser с ролью consultant (потенциальные обучающиеся).
+        $usersQuery = DB::table('WebUser')
+            ->where('role', 'like', '%consultant%')
+            ->whereNull('deletedAt');
+        if ($search !== '') {
+            $usersQuery->where(function ($q) use ($search) {
+                $q->where('lastName', 'ilike', "%{$search}%")
+                  ->orWhere('firstName', 'ilike', "%{$search}%")
+                  ->orWhere('email', 'ilike', "%{$search}%");
+            });
+        }
+        $total = (clone $usersQuery)->count();
+        $users = $usersQuery
+            ->orderBy('lastName')->orderBy('firstName')
+            ->forPage($page, $per)
+            ->get(['id', 'lastName', 'firstName', 'email']);
+        if ($users->isEmpty()) {
+            return response()->json(['data' => [], 'total' => $total]);
+        }
+
+        $userIds = $users->pluck('id');
+        $totalCourses = $courseId > 0 ? 1
+            : (int) DB::table('education_courses')->where('active', true)->count();
+
+        // Просмотренные уроки.
+        $viewQ = DB::table('education_lesson_views as v')
+            ->join('education_lessons as l', 'l.id', '=', 'v.lesson_id')
+            ->whereIn('v.user_id', $userIds);
+        if ($courseId > 0) $viewQ->where('l.course_id', $courseId);
+        $views = $viewQ
+            ->select('v.user_id', DB::raw('COUNT(*) as cnt'), DB::raw('MAX(v.viewed_at) as last_viewed'))
+            ->groupBy('v.user_id')
+            ->get()->keyBy('user_id');
+
+        // Пройденные курсы.
+        $compQ = DB::table('education_course_completions')
+            ->whereIn('user_id', $userIds);
+        if ($courseId > 0) $compQ->where('course_id', $courseId);
+        $completions = $compQ
+            ->select('user_id',
+                DB::raw('COUNT(*) as cnt'),
+                DB::raw('AVG(score::float / NULLIF(total,0)) as avg_pct'),
+                DB::raw('MAX(completed_at) as last_completed'))
+            ->groupBy('user_id')
+            ->get()->keyBy('user_id');
+
+        // История попыток (все, включая неудачные).
+        $attempts = collect();
+        if (Schema::hasTable('education_test_attempts')) {
+            $attemptQ = DB::table('education_test_attempts')
+                ->whereIn('user_id', $userIds);
+            if ($courseId > 0) $attemptQ->where('course_id', $courseId);
+            $attempts = $attemptQ
+                ->select('user_id',
+                    DB::raw('COUNT(*) as total_attempts'),
+                    DB::raw('SUM(CASE WHEN passed THEN 1 ELSE 0 END) as passed_attempts'))
+                ->groupBy('user_id')
+                ->get()->keyBy('user_id');
+        }
+
+        $data = $users->map(function ($u) use ($views, $completions, $attempts, $totalCourses) {
+            $v = $views[$u->id] ?? null;
+            $c = $completions[$u->id] ?? null;
+            $a = $attempts[$u->id] ?? null;
+            $lastActivity = max(
+                $v?->last_viewed ?? '0',
+                $c?->last_completed ?? '0',
+            );
+            return [
+                'user_id' => $u->id,
+                'name' => trim(($u->lastName ?? '') . ' ' . ($u->firstName ?? '')) ?: ($u->email ?? '—'),
+                'email' => $u->email,
+                'lessons_viewed' => (int) ($v->cnt ?? 0),
+                'courses_completed' => (int) ($c->cnt ?? 0),
+                'courses_total' => $totalCourses,
+                'avg_score_pct' => $c && $c->avg_pct !== null ? round($c->avg_pct * 100, 1) : null,
+                'test_attempts' => (int) ($a->total_attempts ?? 0),
+                'test_passed' => (int) ($a->passed_attempts ?? 0),
+                'last_activity' => $lastActivity !== '0' ? $lastActivity : null,
+            ];
+        })->values();
+
+        return response()->json(['data' => $data, 'total' => $total]);
+    }
+
+    /**
+     * GET /admin/education/analytics/export
+     *
+     * Стилизованный XLSX (зелёная шапка, freeze panes, autofilter,
+     * форматы чисел и процентов). Без пагинации.
+     */
+    public function analyticsExport(Request $request, XlsxExportService $xlsx): \Symfony\Component\HttpFoundation\StreamedResponse
+    {
+        $request->merge(['per' => 100000, 'page' => 1]);
+        $data = $this->analytics($request)->getData(true)['data'] ?? [];
+
+        $headers = [
+            'Партнёр', 'E-mail',
+            'Просмотрено уроков', 'Пройдено курсов', 'Всего курсов',
+            'Средний балл, %',
+            'Попыток тестов', 'Сдач из попыток',
+            'Последняя активность',
+        ];
+        $rows = array_map(fn ($r) => [
+            $r['name'], $r['email'] ?? '',
+            $r['lessons_viewed'], $r['courses_completed'], $r['courses_total'],
+            $r['avg_score_pct'],
+            $r['test_attempts'] ?? 0, $r['test_passed'] ?? 0,
+            $r['last_activity'] ?? '',
+        ], $data);
+
+        return $xlsx->stream(
+            'education-analytics-' . now()->format('Y-m-d'),
+            'Статистика обучения',
+            $headers,
+            $rows,
+            [
+                'numericColumns' => [3, 4, 5, 7, 8],
+                'percentColumns' => [6],
+                'dateColumns' => [9],
+            ]
+        );
     }
 
     /** Список курсов */
@@ -141,7 +282,7 @@ class AdminEducationController extends Controller
         $id = DB::table('education_lessons')->insertGetId([
             'course_id' => $courseId,
             'title' => $request->title,
-            'content' => $request->content,
+            'content' => $request->input('content'),
             'content_type' => $request->input('content_type', 'text'),
             'video_url' => $request->video_url,
             'document_url' => $request->document_url,
@@ -157,7 +298,7 @@ class AdminEducationController extends Controller
     {
         DB::table('education_lessons')->where('id', $lessonId)->update([
             'title' => $request->title,
-            'content' => $request->content,
+            'content' => $request->input('content'),
             'content_type' => $request->input('content_type', 'text'),
             'video_url' => $request->video_url,
             'document_url' => $request->document_url,

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Services\IntegrationLogger;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -52,13 +53,22 @@ class SocketService
 
     private function post(string $path, array $payload): void
     {
+        // Журналируем только ошибки — успешных эмитов в чате тысячи в день,
+        // не имеет смысла раздувать integration_events.
         try {
-            Http::timeout(2)
+            $res = Http::timeout(2)
                 ->withHeaders($this->authHeaders())
                 ->post($this->apiUrl . $path, $payload);
+            if (! $res->successful()) {
+                app(IntegrationLogger::class)->record('socket_io', 'outbound',
+                    ltrim($path, '/'), 'error',
+                    "HTTP {$res->status()}", $payload, ['body' => mb_substr((string) $res->body(), 0, 200)]);
+            }
         } catch (\Exception $e) {
             // Socket server may be offline — just log, don't break the app
             Log::debug("Socket {$path} failed: " . $e->getMessage());
+            app(IntegrationLogger::class)->record('socket_io', 'outbound',
+                ltrim($path, '/'), 'error', $e->getMessage(), $payload);
         }
     }
 

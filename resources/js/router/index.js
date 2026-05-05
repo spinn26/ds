@@ -60,6 +60,9 @@ const routes = [
             { path: 'manage/currencies', component: () => import('../pages/Admin/Currencies.vue'), meta: { staff: true } },
             { path: 'manage/products', component: () => import('../pages/Admin/Products.vue'), meta: { staff: true } },
             { path: 'manage/products-preview', component: () => import('../pages/Admin/ProductsPreview.vue'), meta: { staff: true } },
+            { path: 'manage/education', component: () => import('../pages/Admin/Education.vue'), meta: { staff: true } },
+            { path: 'manage/education/analytics', component: () => import('../pages/Admin/EducationAnalytics.vue'), meta: { staff: true } },
+            { path: 'manage/partner-questionnaires', component: () => import('../pages/Admin/PartnerQuestionnaires.vue'), meta: { staff: true } },
 
             // Head (руководитель) — аналитика/дашборды клонируются в /manage/*
             // чтобы не открывать доступ в /admin/. Переиспользуют те же компоненты.

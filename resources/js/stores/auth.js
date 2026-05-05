@@ -17,7 +17,14 @@ export const useAuthStore = defineStore('auth', {
         },
         isStaff: (state) => {
             const roles = (state.user?.role || '').split(',').map(r => r.trim());
-            return roles.some(r => ['admin', 'backoffice', 'support', 'finance', 'head', 'calculations', 'corrections'].includes(r));
+            return roles.some(r => ['admin', 'backoffice', 'support', 'finance', 'head', 'calculations', 'corrections', 'education'].includes(r));
+        },
+        // Чистый education-куратор: спрятать write-кнопки на чужих доменах.
+        // Если у пользователя есть admin или другая staff-write-роль — гард не активен.
+        isEducationOnly: (state) => {
+            const roles = (state.user?.role || '').split(',').map(r => r.trim());
+            const overrides = ['admin', 'backoffice', 'finance', 'head', 'calculations', 'corrections'];
+            return roles.includes('education') && !roles.some(r => overrides.includes(r));
         },
         isConsultant: (state) => state.user?.role?.includes('consultant'),
         isRegistered: (state) => state.user?.role === 'registered',
@@ -65,6 +72,26 @@ export const useAuthStore = defineStore('auth', {
             localStorage.removeItem('auth_user_id');
             localStorage.removeItem('auth_user_name');
             sessionStorage.removeItem('impersonator_token');
+
+            // Чистим feature-specific state, которое могло утечь между
+            // юзерами на одном браузере (drafts, kanban-фильтры, открытые
+            // тикеты, скрытые секции). Префиксы должны совпадать с теми,
+            // что используют Vue-страницы при записи.
+            const PREFIXES = [
+                'staff-chat-',     // StaffChat: drafts, view-mode, context toggle
+                'partner-chat-',   // PartnerChat: drafts
+                'kanban-',         // Kanban-state на чате
+                'pool-',           // Pool: column visibility
+                'admin-',          // Admin pages: column visibility, last filter
+            ];
+            try {
+                const toRemove = [];
+                for (let i = 0; i < localStorage.length; i++) {
+                    const k = localStorage.key(i);
+                    if (k && PREFIXES.some(p => k.startsWith(p))) toRemove.push(k);
+                }
+                toRemove.forEach(k => localStorage.removeItem(k));
+            } catch {}
         },
     },
 });

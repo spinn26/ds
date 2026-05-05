@@ -538,18 +538,19 @@ const userRoles = computed(() => {
 });
 
 const isStaff = computed(() =>
-  userRoles.value.some(r => ['admin', 'backoffice', 'support', 'finance', 'head', 'calculations', 'corrections'].includes(r))
+  userRoles.value.some(r => ['admin', 'backoffice', 'support', 'finance', 'head', 'calculations', 'corrections', 'education'].includes(r))
 );
 
 // Cabinet sections per role — exact mapping from spec docs
 const cabinetSections = {
-  admin: ['calculator', 'structure', 'partners', 'statuses', 'clients', 'contracts', 'upload', 'acceptance', 'requisites', 'transfers', 'transactions', 'import', 'commissions', 'pool', 'qualifications', 'charges', 'payments', 'products', 'contests', 'communication', 'chat-analytics', 'reports', 'currencies'],
-  backoffice: ['calculator', 'structure', 'partners', 'statuses', 'clients', 'contracts', 'upload', 'acceptance', 'requisites', 'transfers', 'products', 'contests', 'communication', 'chat-analytics', 'reports'],
-  support: ['partners', 'statuses', 'structure', 'clients', 'contracts', 'acceptance', 'products', 'communication', 'calculator'],
-  head: ['calculator', 'structure', 'partners', 'statuses', 'clients', 'contracts', 'acceptance', 'transfers', 'products', 'contests', 'communication', 'chat-analytics', 'reports', 'owner-dashboard', 'reconciliation', 'anomalies', 'funnel', 'cohorts'],
-  finance: ['calculator', 'requisites', 'charges', 'payments', 'reports', 'communication'],
+  admin: ['calculator', 'structure', 'partners', 'statuses', 'clients', 'contracts', 'upload', 'acceptance', 'requisites', 'transfers', 'transactions', 'import', 'commissions', 'pool', 'qualifications', 'charges', 'payments', 'products', 'contests', 'communication', 'chat-analytics', 'reports', 'currencies', 'education', 'education-analytics', 'partner-questionnaires'],
+  backoffice: ['calculator', 'structure', 'partners', 'statuses', 'clients', 'contracts', 'upload', 'acceptance', 'requisites', 'transfers', 'products', 'contests', 'communication', 'chat-analytics', 'reports', 'pool', 'partner-questionnaires'],
+  support: ['partners', 'statuses', 'structure', 'clients', 'contracts', 'acceptance', 'products', 'communication', 'calculator', 'partner-questionnaires'],
+  head: ['calculator', 'structure', 'partners', 'statuses', 'clients', 'contracts', 'acceptance', 'transfers', 'products', 'contests', 'communication', 'chat-analytics', 'reports', 'owner-dashboard', 'reconciliation', 'anomalies', 'funnel', 'cohorts', 'pool', 'partner-questionnaires'],
+  finance: ['calculator', 'requisites', 'charges', 'payments', 'reports', 'communication', 'pool'],
   calculations: ['calculator', 'commissions', 'qualifications', 'pool', 'transactions', 'import', 'products', 'reports', 'currencies'],
   corrections: ['calculator', 'clients', 'contracts', 'partners'],
+  education: ['education', 'education-analytics', 'partner-questionnaires', 'partners', 'products', 'instructions', 'contests', 'communication'],
 };
 
 const availableSections = computed(() => {
@@ -569,6 +570,7 @@ const cabinetName = computed(() => {
   if (userRoles.value.includes('finance')) return 'Фин. менеджер';
   if (userRoles.value.includes('calculations')) return 'Расчёты';
   if (userRoles.value.includes('corrections')) return 'Правки';
+  if (userRoles.value.includes('education')) return 'Куратор обучения';
   return null;
 });
 
@@ -635,6 +637,12 @@ const menuItems = [
   { group: 'Выплаты', adminSection: 'charges' },
   { label: 'Начисления', icon: 'mdi-bank', path: '/manage/charges', adminSection: 'charges' },
   { label: 'Выплаты', icon: 'mdi-cash', path: '/manage/payments', adminSection: 'payments' },
+
+  // Обучение (LMS) — конструктор курсов и куратор обучения партнёров
+  { group: 'Обучение', adminSection: 'education' },
+  { label: 'Конструктор курсов', icon: 'mdi-school', path: '/manage/education', adminSection: 'education' },
+  { label: 'Статистика обучения', icon: 'mdi-chart-line', path: '/manage/education/analytics', adminSection: 'education-analytics' },
+  { label: 'Анкеты партнёров', icon: 'mdi-clipboard-account', path: '/manage/partner-questionnaires', adminSection: 'partner-questionnaires' },
 
   // Прочее
   { group: 'Прочее', adminSection: 'products' },

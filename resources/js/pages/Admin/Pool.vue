@@ -37,7 +37,7 @@
         :items-per-page="50" density="compact" hover :loading="loadingParticipants">
         <template #item.participates="{ item }">
           <v-checkbox :model-value="item.participates" hide-details density="compact" color="success"
-            :loading="toggling[item.id]"
+            :loading="toggling[item.id]" :disabled="isFrozen"
             @update:model-value="v => toggleParticipates(item, v)" />
         </template>
         <template #item.level="{ item }">
@@ -64,14 +64,18 @@
 
       <v-card-actions>
         <v-btn color="success" prepend-icon="mdi-account-multiple-plus" size="large"
-          :disabled="!filteredParticipants.length" :loading="calcing"
+          :disabled="!filteredParticipants.length || isFrozen" :loading="calcing"
           @click="calcPool">
           Рассчитать пул
         </v-btn>
-        <v-btn v-if="result" color="primary" prepend-icon="mdi-content-save" size="large" variant="outlined"
-          :loading="applying" @click="applyPool">
-          Применить (записать в poolLog)
+        <v-btn v-if="result && !isFrozen" color="primary" prepend-icon="mdi-lock-check"
+          size="large" variant="flat" :loading="applying" @click="applyPool">
+          Зафиксировать пул
         </v-btn>
+        <v-chip v-else-if="isFrozen" size="small" color="warning" variant="tonal"
+          prepend-icon="mdi-lock">
+          Зафиксировано{{ closureLabel }}
+        </v-chip>
         <v-spacer />
         <span v-if="result" class="text-caption text-medium-emphasis">
           Выручка ДС без НДС: <strong>{{ fmt2(result.revenue) }} ₽</strong>
@@ -80,6 +84,19 @@
           · Остаётся ДС: <strong class="text-warning">{{ fmt2(result.totalForfeited) }} ₽</strong>
         </span>
       </v-card-actions>
+
+      <!-- Прогресс async-расчёта (см. ApplyPoolJob). -->
+      <div v-if="applyProgress" class="pa-3" style="border-top:1px solid rgba(var(--v-theme-on-surface),0.1);">
+        <div class="d-flex align-center ga-2 mb-1">
+          <v-icon size="16" :color="applyProgress.status === 'error' ? 'error' : 'primary'">
+            {{ applyProgress.status === 'error' ? 'mdi-alert' : 'mdi-progress-clock' }}
+          </v-icon>
+          <span class="text-caption">{{ applyProgress.message || 'Расчёт пула…' }}</span>
+        </div>
+        <v-progress-linear :model-value="applyProgress.percent || 0"
+          :color="applyProgress.status === 'error' ? 'error' : 'primary'"
+          height="6" rounded />
+      </div>
     </v-card>
 
     <!-- 1.4 Таблица начислений (всегда видна — auto-preview после загрузки) -->
@@ -123,26 +140,35 @@
             <td class="text-end font-weight-bold text-success">{{ fmt2(result.totalPaid) }}</td>
           </tr>
 
-          <tr v-for="p in payoutRows" :key="'pay-' + p.id">
+          <tr v-for="p in payoutRows" :key="'pay-' + p.id" :class="{ 'pool-row-excluded': !p.payoutRub }">
             <td>{{ monthLabel }}</td>
-            <td>{{ p.personName }}</td>
+            <td>
+              {{ p.personName }}
+              <v-tooltip v-if="!p.payoutRub && p.disqualifyReason" location="top" :text="p.disqualifyReason">
+                <template #activator="{ props }">
+                  <v-icon v-bind="props" size="14" color="warning" class="ml-1">mdi-information-outline</v-icon>
+                </template>
+              </v-tooltip>
+            </td>
             <td>
               <v-chip size="x-small" :color="levelColor(p.level)" variant="tonal">
                 {{ p.level }} {{ p.levelName }}
               </v-chip>
             </td>
-            <td class="text-end text-medium-emphasis">{{ fmt2(p.groupBonusRub || 0) }}</td>
+            <td class="text-end">{{ fmt2(p.groupBonusRub || 0) }} ₽</td>
             <td v-for="lvl in [6,7,8,9,10]" :key="'r-' + p.id + '-' + lvl" class="text-end">
               <span :class="p.byLevel[lvl] > 0 ? 'text-success' : 'text-medium-emphasis'">
                 {{ fmt2(p.byLevel[lvl] || 0) }}
               </span>
             </td>
-            <td class="text-end font-weight-bold">{{ fmt2(p.payoutRub) }}</td>
+            <td class="text-end font-weight-bold" :class="p.payoutRub > 0 ? '' : 'text-medium-emphasis'">
+              {{ fmt2(p.payoutRub) }} ₽
+            </td>
           </tr>
 
           <tr v-if="!payoutRows.length">
             <td :colspan="9" class="text-center text-medium-emphasis pa-4">
-              Никому не начислено (никто не подтвердил квалификацию или все исключены оператором)
+              Нет партнёров уровня 6+ за этот месяц.
             </td>
           </tr>
         </tbody>
@@ -183,6 +209,15 @@ const monthLabel = computed(() => {
   return `${m}.${y}`;
 });
 
+const isFrozen = computed(() => !!result.value?.frozen);
+const closureLabel = computed(() => {
+  const c = result.value?.closure;
+  if (!c) return '';
+  const who = c.closed_by_name ? ` ${c.closed_by_name}` : '';
+  const when = c.closed_at ? new Date(c.closed_at).toLocaleDateString('ru-RU') : '';
+  return when ? `${who} ${when}` : who;
+});
+
 const participantHeaders = [
   { title: 'Участвует', key: 'participates', width: 110, sortable: false },
   { title: 'Партнёр', key: 'personName' },
@@ -209,28 +244,30 @@ const filteredParticipants = computed(() => {
 });
 
 // Per-partner матрёшка breakdown by level: для уровня L он получает share(6)+share(7)+...+share(L).
+// Выводим ВСЕХ кандидатов уровня 6+ (даже неучаствующих и тех у кого 0):
+// колонки матрёшки заполняются только если payoutRub > 0; иначе строка
+// dim-ится в UI и показывается причина исключения через tooltip.
 const payoutRows = computed(() => {
   if (!result.value) return [];
   const shares = result.value.shareValues || {};
-  return result.value.participants
-    .filter(p => p.participates && p.payoutRub > 0)
-    .map(p => {
-      const byLevel = { 6: 0, 7: 0, 8: 0, 9: 0, 10: 0 };
-      if (p.participates) {
-        for (let lvl = 6; lvl <= p.level; lvl++) {
-          byLevel[lvl] = shares[lvl] || 0;
-        }
+  return (result.value.participants || []).map(p => {
+    const byLevel = { 6: 0, 7: 0, 8: 0, 9: 0, 10: 0 };
+    if (p.payoutRub > 0) {
+      for (let lvl = 6; lvl <= p.level; lvl++) {
+        byLevel[lvl] = shares[lvl] || 0;
       }
-      return {
-        id: p.id,
-        personName: p.personName,
-        level: p.level,
-        levelName: p.levelName,
-        byLevel,
-        payoutRub: p.payoutRub,
-        groupBonusRub: p.groupBonusRub,
-      };
-    });
+    }
+    return {
+      id: p.id,
+      personName: p.personName,
+      level: p.level,
+      levelName: p.levelName,
+      byLevel,
+      payoutRub: p.payoutRub,
+      groupBonusRub: p.groupBonusRub || 0,
+      disqualifyReason: p.disqualifyReason,
+    };
+  });
 });
 
 function resetFilters() {
@@ -257,30 +294,16 @@ async function loadParticipants() {
     });
     if (myTag !== loadTag || month.value !== requestedMonth) return; // устаревший ответ
     participants.value = data.participants || [];
-    result.value = null;
+    // Тот же ответ — уже полноценный preview (live для открытого периода,
+    // snapshot для заморожённого), сразу кладём в result чтобы UI не ждал
+    // повторного запроса.
+    result.value = data;
   } catch (e) {
     if (myTag !== loadTag) return;
     notify(e.response?.data?.message || 'Ошибка загрузки участников', 'error');
   } finally {
     if (myTag === loadTag) loadingParticipants.value = false;
   }
-
-  // Автоматически считаем preview, чтобы таблица расчёта была видна сразу
-  // без нажатия кнопки. Запись в poolLog не делается — нужно явное «Применить».
-  if (myTag === loadTag && participants.value.length) {
-    autoPreview();
-  }
-}
-
-async function autoPreview() {
-  if (!month.value) return;
-  try {
-    const [y, m] = month.value.split('-');
-    const { data } = await api.post('/admin/pool/preview', {
-      year: Number(y), month: Number(m),
-    });
-    result.value = data;
-  } catch {} // молча — кнопка «Рассчитать пул» доступна для ручного перезапуска
 }
 
 async function toggleParticipates(item, value) {
@@ -314,25 +337,75 @@ async function calcPool() {
   calcing.value = false;
 }
 
+// Прогресс async-расчёта (см. ApplyPoolJob).
+const applyProgress = ref(null);
+let applyPollTimer = null;
+
 async function applyPool() {
-  if (!month.value || !result.value) return;
+  if (!month.value || !result.value || isFrozen.value) return;
   if (!await confirm.ask({
-    title: 'Применить пул?',
-    message: 'Рассчитанный пул будет записан в poolLog. Прошлая запись за этот месяц будет переписана.',
-    confirmText: 'Применить', confirmColor: 'primary', icon: 'mdi-content-save',
+    title: 'Зафиксировать пул?',
+    message: 'Рассчитанные суммы будут записаны в poolLog, а период '
+           + 'закрыт от изменений. Удалить или пересчитать его потом '
+           + 'будет нельзя — только через ручную разморозку админом.',
+    confirmText: 'Зафиксировать', confirmColor: 'primary', icon: 'mdi-lock-check',
   })) return;
   applying.value = true;
+  applyProgress.value = { status: 'queued', percent: 0, message: 'Постановка в очередь…' };
   try {
     const [y, m] = month.value.split('-');
     const { data } = await api.post('/admin/pool/apply', {
       year: Number(y), month: Number(m),
     });
-    result.value = data;
-    notify(`Пул применён: ${data.written} записей в poolLog`);
+    if (data.batch_id) {
+      pollApplyProgress(data.batch_id);
+    } else {
+      // Старый sync-ответ (бэк ещё не обновлён) — обработаем как раньше.
+      notify(`Пул зафиксирован: ${(data.result || data).written} записей.`);
+      applying.value = false;
+      applyProgress.value = null;
+      await loadParticipants();
+    }
   } catch (e) {
-    notify(e.response?.data?.message || 'Ошибка применения', 'error');
+    notify(e.response?.data?.message || 'Ошибка фиксации', 'error');
+    applying.value = false;
+    applyProgress.value = null;
   }
-  applying.value = false;
+}
+
+function pollApplyProgress(batchId) {
+  clearInterval(applyPollTimer);
+  applyPollTimer = setInterval(async () => {
+    try {
+      const { data } = await api.get('/admin/pool/progress', {
+        params: { batch_id: batchId },
+      });
+      applyProgress.value = data;
+      if (data.status === 'done') {
+        clearInterval(applyPollTimer);
+        applyPollTimer = null;
+        notify(data.message || 'Пул зафиксирован', 'success');
+        applying.value = false;
+        await loadParticipants();
+        applyProgress.value = null;
+      } else if (data.status === 'error') {
+        clearInterval(applyPollTimer);
+        applyPollTimer = null;
+        notify(data.message || 'Ошибка фиксации', 'error');
+        applying.value = false;
+        applyProgress.value = null;
+      }
+    } catch (e) {
+      // 404 на progress = задача истекла или ещё не дошла до cache. Тихо ждём.
+      if (e.response?.status !== 404) {
+        clearInterval(applyPollTimer);
+        applyPollTimer = null;
+        applying.value = false;
+        notify('Не удалось получить прогресс', 'error');
+        applyProgress.value = null;
+      }
+    }
+  }, 1500);
 }
 
 onMounted(loadParticipants);
@@ -344,5 +417,12 @@ onMounted(loadParticipants);
   background: rgba(76, 175, 80, 0.12) !important;
   border-top: 2px solid rgba(76, 175, 80, 0.4) !important;
   border-bottom: 2px solid rgba(76, 175, 80, 0.4) !important;
+}
+/* Партнёр уровня 6+, но без выплаты: участвует=false, ОП не выполнен,
+   отрыв >90% или галка снята оператором. Строку оставляем видимой,
+   чтобы куратор видел общий состав, но визуально приглушаем. */
+.pool-row-excluded :deep(td) {
+  background: rgba(var(--v-theme-on-surface), 0.02);
+  color: rgba(var(--v-theme-on-surface), 0.55);
 }
 </style>

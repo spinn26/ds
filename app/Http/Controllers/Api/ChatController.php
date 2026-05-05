@@ -134,26 +134,37 @@ class ChatController extends Controller
     {
         $request->validate([
             'subject' => 'required|string|max:255',
-            'description' => 'nullable|string',
+            'description' => 'nullable|string|max:10000',
             'department' => 'required|in:technical,billing,sales,general',
             'priority' => 'nullable|in:critical,high,medium,low',
-            'message' => 'required|string',
+            'message' => 'required|string|max:10000',
+            'recipient_id' => 'nullable|integer|exists:WebUser,id',
+            'context_type' => 'nullable|string|max:50',
+            'context_id' => 'nullable|string|max:50',
+            'tags' => 'nullable|array|max:20',
+            'tags.*' => 'string|max:50',
+        ]);
+
+        // Защита от XSS на write-side. Сейчас фронт рендерит content через
+        // обычный {{ }} (text-биндинг), но если в будущем кто-то добавит
+        // v-html или экспорт в HTML-PDF — дыра уже закрыта на уровне БД.
+        $request->merge([
+            'subject' => strip_tags((string) $request->input('subject')),
+            'description' => $request->input('description') !== null
+                ? strip_tags((string) $request->input('description')) : null,
+            'message' => strip_tags((string) $request->input('message')),
         ]);
 
         $user = $request->user();
         $name = $this->userName($request);
         $now = now();
 
-        // Resolve recipient name
+        // Resolve recipient name. recipient_id уже валиден exists:WebUser,id.
         $recipientId = $request->input('recipient_id');
         $recipientName = null;
         if ($recipientId) {
             $recipient = DB::table('WebUser')->where('id', $recipientId)->first();
             $recipientName = $recipient ? trim(($recipient->lastName ?? '') . ' ' . ($recipient->firstName ?? '')) : null;
-            // If no recipient found, check consultant table
-            if (!$recipientName) {
-                $recipientName = DB::table('consultant')->where('id', $recipientId)->value('personName');
-            }
         }
 
         // Transaction: the ticket row is meaningless without its first message,
@@ -271,7 +282,9 @@ class ChatController extends Controller
                 'senderName' => $m->sender_name,
                 'isAgent' => (bool) $m->is_agent,
                 'isSystem' => (bool) $m->is_system,
-                'attachmentPath' => $m->attachment_path ? '/storage/' . $m->attachment_path : null,
+                // Защищённый endpoint: путь скрыт, фронт скачивает по id.
+                // Партнёр без доступа к тикету получит 403 на /api/v1/chat/messages/{id}/attachment.
+                'attachmentPath' => $m->attachment_path ? "/api/v1/chat/messages/{$m->id}/attachment" : null,
                 'attachmentName' => $m->attachment_name,
                 'createdAt' => $m->created_at,
                 'editedAt' => $m->edited_at ?? null,
@@ -295,7 +308,7 @@ class ChatController extends Controller
         // Partner context — staff-only, lets the agent see who they're talking to
         $partnerContext = null;
         if ($request->user()->isStaff()) {
-            $partnerContext = $this->buildPartnerContext($ticket);
+            $partnerContext = $this->buildPartnerContext((int) $ticket->created_by);
         }
 
         return response()->json([
@@ -304,93 +317,6 @@ class ChatController extends Controller
             'otherLastReadAt' => $otherLastReadAt,
             'partnerContext' => $partnerContext,
         ]);
-    }
-
-    /**
-     * Build a compact partner snapshot for the staff sidebar:
-     * WebUser identity, Consultant activity/qualification, recent contracts.
-     */
-    private function buildPartnerContext($ticket): ?array
-    {
-        $webUserId = $ticket->created_by ?? null;
-        if (! $webUserId) return null;
-
-        $webUser = DB::table('WebUser')->where('id', $webUserId)->first();
-        if (! $webUser) return null;
-
-        $consultant = DB::table('consultant')->where('webUser', $webUserId)->first();
-
-        $activityName = null;
-        if ($consultant && $consultant->activity) {
-            $activityName = DB::table('directory_of_activities')
-                ->where('id', (int) (is_object($consultant->activity) ? $consultant->activity->value : $consultant->activity))
-                ->value('name');
-        }
-
-        $qualificationName = null;
-        if ($consultant && ! empty($consultant->status_and_lvl)) {
-            $qualificationName = DB::table('status_levels')
-                ->where('id', $consultant->status_and_lvl)
-                ->value('title');
-        }
-
-        $recentContracts = [];
-        if ($consultant) {
-            $recentContracts = DB::table('contract')
-                ->where('consultant', $consultant->id)
-                ->whereNull('deletedAt')
-                ->orderByDesc('id')
-                ->limit(5)
-                ->get()
-                ->map(fn ($c) => [
-                    'id' => $c->id,
-                    'number' => $c->number ?? "#{$c->id}",
-                    'clientName' => $c->clientName ?? '—',
-                    'productName' => $c->productName ?? '—',
-                    'amount' => $c->amount ?? null,
-                    'openDate' => $c->openDate ?? null,
-                ])
-                ->toArray();
-
-            $clientsCount = DB::table('client')
-                ->where('consultant', $consultant->id)
-                ->where('active', true)
-                ->count();
-            $contractsCount = DB::table('contract')
-                ->where('consultant', $consultant->id)
-                ->whereNull('deletedAt')
-                ->count();
-        }
-
-        return [
-            'user' => [
-                'id' => $webUser->id,
-                'email' => $webUser->email,
-                'firstName' => $webUser->firstName,
-                'lastName' => $webUser->lastName,
-                'patronymic' => $webUser->patronymic,
-                'phone' => $webUser->phone,
-                'avatarUrl' => $webUser->avatar ? '/storage/' . $webUser->avatar : null,
-                'role' => $webUser->role,
-            ],
-            'consultant' => $consultant ? [
-                'id' => $consultant->id,
-                'participantCode' => $consultant->participantCode,
-                'activityId' => is_object($consultant->activity) ? $consultant->activity->value : $consultant->activity,
-                'activityName' => $activityName,
-                'qualificationName' => $qualificationName,
-                'personalVolume' => round((float) ($consultant->personalVolume ?? 0), 2),
-                'groupVolumeCumulative' => round((float) ($consultant->groupVolumeCumulative ?? 0), 2),
-                'dateActivity' => $consultant->dateActivity ?? null,
-                'yearPeriodEnd' => $consultant->yearPeriodEnd ?? null,
-                'activationDeadline' => $consultant->activationDeadline ?? null,
-                'terminationCount' => $consultant->terminationCount ?? 0,
-                'clientsCount' => $clientsCount ?? 0,
-                'contractsCount' => $contractsCount ?? 0,
-                'inviterName' => $consultant->inviterName ?? null,
-            ] : null,
-            'recentContracts' => $recentContracts,
-        ];
     }
 
     /** Send message to ticket */
@@ -404,21 +330,45 @@ class ChatController extends Controller
         }
 
         $request->validate([
-            'message' => 'nullable|string',
-            'attachment' => 'nullable|file|mimes:pdf,doc,docx,xls,xlsx,jpg,jpeg,png,webp,gif,zip|max:10240',
+            'message' => 'nullable|string|max:10000',
+            'attachment' => 'nullable|file|mimes:pdf,doc,docx,xls,xlsx,jpg,jpeg,png,webp,gif|max:10240',
             'reply_to_id' => 'nullable|integer',
+            // Идемпотентный клиент-id для дедупа в фронте (опционально).
+            'client_message_id' => 'nullable|string|max:64',
         ]);
+
+        // Снимаем теги из контента — backend хранит plain text.
+        if ($request->filled('message')) {
+            $request->merge(['message' => strip_tags((string) $request->input('message'))]);
+        }
 
         $user = $request->user();
         $name = $this->userName($request);
         $isAgent = $request->user()->isStaff();
         $now = now();
+        $clientMessageId = (string) ($request->input('client_message_id') ?? '');
 
+        // Дедуп: если та же пара (ticket, client_message_id) уже сохранена —
+        // возвращаем существующий id, ничего не пишем повторно. Защищает от
+        // дублей при retry / двойном click / гонке HTTP+socket.
+        if ($clientMessageId !== '') {
+            $existingId = DB::table('chat_messages')
+                ->where('ticket_id', $id)
+                ->where('client_message_id', $clientMessageId)
+                ->value('id');
+            if ($existingId) {
+                return response()->json(['id' => (int) $existingId, 'deduplicated' => true]);
+            }
+        }
+
+        // Аттач кладём в ПРИВАТНОЕ хранилище. Скачивание — только через
+        // защищённый endpoint downloadAttachment с auth-проверкой доступа
+        // к тикету (см. блокер «IDOR на attachments»).
         $attachmentPath = null;
         $attachmentName = null;
         if ($request->hasFile('attachment')) {
             $file = $request->file('attachment');
-            $attachmentPath = $file->store("chat/{$id}", 'public');
+            $attachmentPath = $file->store("chat/{$id}", 'local');
             $attachmentName = $file->getClientOriginalName();
         }
 
@@ -438,32 +388,42 @@ class ChatController extends Controller
             }
         }
 
-        $msgId = DB::table('chat_messages')->insertGetId([
-            'ticket_id' => $id,
-            'sender_id' => $user->id,
-            'sender_name' => $name,
-            'content' => $request->message ?? '',
-            'is_agent' => $isAgent,
-            'attachment_path' => $attachmentPath,
-            'attachment_name' => $attachmentName,
-            'reply_to_id' => $replyToId,
-            'created_at' => $now,
-            'updated_at' => $now,
-        ]);
+        // Атомарно: insert сообщения + update счётчиков и статуса тикета.
+        // Socket-emit ВЫНЕСЕН за пределы транзакции — иначе при rollback
+        // клиенты получили бы сообщение, которого нет в БД.
+        $msgId = DB::transaction(function () use ($id, $user, $name, $isAgent, $request,
+            $attachmentPath, $attachmentName, $replyToId, $clientMessageId, $now, $ticket) {
+            $msgId = DB::table('chat_messages')->insertGetId([
+                'ticket_id' => $id,
+                'sender_id' => $user->id,
+                'sender_name' => $name,
+                'content' => $request->message ?? '',
+                'is_agent' => $isAgent,
+                'attachment_path' => $attachmentPath,
+                'attachment_name' => $attachmentName,
+                'reply_to_id' => $replyToId,
+                'client_message_id' => $clientMessageId !== '' ? $clientMessageId : null,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
 
-        // Update ticket
-        $update = ['messages_count' => DB::raw('messages_count + 1'), 'last_message_at' => $now, 'updated_at' => $now];
-        if ($ticket->status === 'new' && $isAgent) {
-            $update['status'] = 'open';
-            $update['assigned_to'] = $ticket->assigned_to ?? $user->id;
-            $update['assigned_name'] = $ticket->assigned_name ?? $name;
-        }
-        DB::table('chat_tickets')->where('id', $id)->update($update);
+            $update = ['messages_count' => DB::raw('messages_count + 1'),
+                'last_message_at' => $now, 'updated_at' => $now];
+            if ($ticket->status === 'new' && $isAgent) {
+                $update['status'] = 'open';
+                $update['assigned_to'] = $ticket->assigned_to ?? $user->id;
+                $update['assigned_name'] = $ticket->assigned_name ?? $name;
+            }
+            DB::table('chat_tickets')->where('id', $id)->update($update);
 
-        // Socket emit
+            return $msgId;
+        });
+
+        // Socket emit ПОСЛЕ commit. Фронт дедуплицирует через clientMessageId.
         try {
             app(\App\Services\SocketService::class)->emit('chat:new-message', "ticket:{$id}", [
                 'id' => $msgId,
+                'clientMessageId' => $clientMessageId !== '' ? $clientMessageId : null,
                 'ticketId' => $id,
                 'senderId' => $user->id,
                 'senderName' => $name,
@@ -676,6 +636,17 @@ class ChatController extends Controller
 
         DB::table('chat_tickets')->where('id', $id)->update($update);
 
+        // Audit log: одна строка на каждое реально изменённое поле.
+        if ($statusChanged) {
+            $this->logTicketChange($id, 'status', $existing->status, $request->status, $request->user());
+        }
+        if ($priorityChanged) {
+            $this->logTicketChange($id, 'priority', $existing->priority, $request->priority, $request->user());
+        }
+        if ($tagsChanged) {
+            $this->logTicketChange($id, 'tags', $existing->tags, $update['tags'], $request->user());
+        }
+
         // System message only for status changes (other changes are silent)
         if ($statusChanged) {
             $statusLabels = ['new' => 'Новый', 'open' => 'Открыт', 'pending' => 'Ожидание', 'resolved' => 'Решён', 'closed' => 'Закрыт'];
@@ -784,6 +755,10 @@ class ChatController extends Controller
 
         $request->validate(['user_id' => 'required|integer|exists:WebUser,id']);
 
+        $existing = DB::table('chat_tickets')->where('id', $id)
+            ->select('assigned_to', 'assigned_name', 'status')->first();
+        if (! $existing) return response()->json(['message' => 'Не найден'], 404);
+
         $assignee = DB::table('WebUser')->where('id', $request->user_id)->first();
         $assigneeName = $assignee ? trim(($assignee->lastName ?? '') . ' ' . ($assignee->firstName ?? '')) : '—';
 
@@ -793,6 +768,16 @@ class ChatController extends Controller
             'status' => 'open',
             'updated_at' => now(),
         ]);
+
+        // Audit log: assignment + (если был) переход статуса в open.
+        if ((int) ($existing->assigned_to ?? 0) !== (int) $request->user_id) {
+            $this->logTicketChange($id, 'assigned_to',
+                $existing->assigned_name ?? (string) ($existing->assigned_to ?? ''),
+                $assigneeName, $request->user());
+        }
+        if ($existing->status !== 'open') {
+            $this->logTicketChange($id, 'status', $existing->status, 'open', $request->user());
+        }
 
         DB::table('chat_messages')->insert([
             'ticket_id' => $id,
@@ -895,6 +880,228 @@ class ChatController extends Controller
      * content overlaps with the ticket subject / category / tags. Returns
      * up to 5 items ranked by a simple substring count.
      */
+    /**
+     * GET /chat/tickets/{id}/partner-context
+     *
+     * Карточка автора тикета для правой контекстной панели в StaffChat.
+     * Возвращает: профиль WebUser (ФИО / e-mail / телефон), партнёрский
+     * блок (статус активности, квалификация, ЛП/ГП/НГП, кол-во клиентов
+     * и контрактов, реф-код, пригласитель, дедлайн активации, кол-во
+     * терминаций, год до …) и до 5 последних контрактов.
+     *
+     * Доступ: только staff.
+     */
+    public function partnerContext(Request $request, int $id): JsonResponse
+    {
+        if (! $request->user() || ! $request->user()->isStaff()) {
+            return response()->json(['message' => 'Доступ запрещён'], 403);
+        }
+
+        $ticket = DB::table('chat_tickets')->where('id', $id)
+            ->select('id', 'created_by')->first();
+        if (! $ticket) {
+            return response()->json(['message' => 'Тикет не найден'], 404);
+        }
+
+        $context = $this->buildPartnerContext((int) $ticket->created_by);
+        return response()->json($context);
+    }
+
+    /**
+     * Сборка контекста партнёра по WebUser.id.
+     * Используется и в show() (чтобы вернуть всё одним запросом для UI),
+     * и в отдельном endpoint partnerContext() (для refresh без перезагрузки
+     * сообщений).
+     *
+     * @return array{user:?array,consultant:?array,recentContracts:\Illuminate\Support\Collection}
+     */
+    private function buildPartnerContext(int $webUserId): array
+    {
+        $user = DB::table('WebUser')->where('id', $webUserId)
+            ->select('id', 'lastName', 'firstName', 'patronymic', 'email', 'phone', 'avatarUrl')
+            ->first();
+        if (! $user) {
+            return ['user' => null, 'consultant' => null, 'recentContracts' => collect()];
+        }
+
+        // Один SQL: партнёрская строка + связанные справочники.
+        // Учёт двух-id-спейса (см. CLAUDE.md): ищем по consultant.webUser,
+        // а не по совпадению id.
+        $consultantRow = DB::table('consultant as c')
+            ->leftJoin('directory_of_activities as pa', 'pa.id', '=', 'c.activity')
+            ->leftJoin('status_levels as sl', 'sl.id', '=', 'c.status_and_lvl')
+            ->leftJoin('consultant as inv', 'inv.id', '=', 'c.inviter')
+            ->where('c.webUser', $user->id)
+            ->whereNull('c.dateDeleted')
+            ->select([
+                'c.id',
+                'c.activity as activityId',
+                'pa.name as activityName',
+                'sl.title as qualificationName',
+                'sl.level as qualificationLevel',
+                'c.participantCode',
+                'c.personalVolume',
+                'c.groupVolume',
+                'c.groupVolumeCumulative',
+                'c.dateActivity',
+                'c.yearPeriodEnd',
+                'c.activationDeadline',
+                'c.terminationCount',
+                'inv.personName as inviterName',
+            ])
+            ->first();
+
+        $consultant = null;
+        $recentContracts = collect();
+        if ($consultantRow) {
+            $clientsCount = (int) DB::table('client')
+                ->where('consultant', $consultantRow->id)
+                ->whereNull('dateDeleted')
+                ->count();
+            $contractsCount = (int) DB::table('contract')
+                ->where('consultant', $consultantRow->id)
+                ->whereNull('deletedAt')
+                ->count();
+
+            $consultant = [
+                'id' => $consultantRow->id,
+                'activityId' => $consultantRow->activityId,
+                'activityName' => $consultantRow->activityName,
+                'qualificationName' => $consultantRow->qualificationName,
+                'qualificationLevel' => $consultantRow->qualificationLevel,
+                'participantCode' => $consultantRow->participantCode,
+                'personalVolume' => (float) ($consultantRow->personalVolume ?? 0),
+                'groupVolume' => (float) ($consultantRow->groupVolume ?? 0),
+                'groupVolumeCumulative' => (float) ($consultantRow->groupVolumeCumulative ?? 0),
+                'dateActivity' => $consultantRow->dateActivity,
+                'yearPeriodEnd' => $consultantRow->yearPeriodEnd,
+                'activationDeadline' => $consultantRow->activationDeadline,
+                'terminationCount' => (int) ($consultantRow->terminationCount ?? 0),
+                'inviterName' => $consultantRow->inviterName,
+                'clientsCount' => $clientsCount,
+                'contractsCount' => $contractsCount,
+            ];
+
+            $recentContracts = DB::table('contract as ct')
+                ->leftJoin('client as cl', 'cl.id', '=', 'ct.client')
+                ->leftJoin('product as p', 'p.id', '=', 'ct.product')
+                ->where('ct.consultant', $consultantRow->id)
+                ->whereNull('ct.deletedAt')
+                ->orderByDesc('ct.openDate')
+                ->limit(5)
+                ->select([
+                    'ct.id',
+                    'ct.number',
+                    'ct.ammount as amount',
+                    'cl.personName as clientName',
+                    'p.name as productName',
+                    'ct.openDate',
+                ])
+                ->get();
+        }
+
+        return [
+            'user' => [
+                'id' => $user->id,
+                'lastName' => $user->lastName,
+                'firstName' => $user->firstName,
+                'patronymic' => $user->patronymic,
+                'email' => $user->email,
+                'phone' => $user->phone,
+                'avatarUrl' => $user->avatarUrl,
+            ],
+            'consultant' => $consultant,
+            'recentContracts' => $recentContracts,
+        ];
+    }
+
+    /**
+     * Записать изменение тикета в audit-log. Best-effort: если таблица
+     * ещё не существует (старая БД без миграции), молчим.
+     */
+    private function logTicketChange(int $ticketId, string $field, $oldValue, $newValue, $user): void
+    {
+        try {
+            DB::table('chat_ticket_changes')->insert([
+                'ticket_id' => $ticketId,
+                'field' => $field,
+                'old_value' => $oldValue !== null ? (string) $oldValue : null,
+                'new_value' => $newValue !== null ? (string) $newValue : null,
+                'changed_by' => $user?->id,
+                'changed_by_name' => $user
+                    ? trim(($user->lastName ?? '') . ' ' . ($user->firstName ?? ''))
+                    : null,
+                'changed_at' => now(),
+            ]);
+        } catch (\Throwable $e) {
+            Log::debug('chat_ticket_changes insert skipped: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * GET /chat/tickets/{id}/changes — история всех изменений тикета.
+     * Доступно только staff (для compliance / debug).
+     */
+    public function changes(Request $request, int $id): JsonResponse
+    {
+        if (! $request->user()->isStaff()) {
+            return response()->json(['message' => 'Только для сотрудников'], 403);
+        }
+        $rows = DB::table('chat_ticket_changes')
+            ->where('ticket_id', $id)
+            ->orderByDesc('changed_at')
+            ->limit(200)
+            ->get();
+        return response()->json(['data' => $rows]);
+    }
+
+    /**
+     * GET /chat/messages/{messageId}/attachment
+     *
+     * Защищённое скачивание вложения. Файл лежит в private storage
+     * (`storage/app/chat/...`), доступ — только если пользователь имеет
+     * право видеть тикет. Отвечает inline для image/pdf, attachment
+     * для всех остальных типов.
+     */
+    public function downloadAttachment(Request $request, int $messageId): \Symfony\Component\HttpFoundation\Response
+    {
+        $msg = DB::table('chat_messages')->where('id', $messageId)
+            ->select('id', 'ticket_id', 'attachment_path', 'attachment_name')
+            ->first();
+        if (! $msg || ! $msg->attachment_path) {
+            abort(404, 'Вложение не найдено');
+        }
+
+        $ticket = ChatTicket::find($msg->ticket_id);
+        if (! $ticket) abort(404);
+        if ($request->user()->cannot('view', $ticket)) {
+            abort(403, 'Доступ запрещён');
+        }
+
+        $disk = \Illuminate\Support\Facades\Storage::disk('local');
+        if (! $disk->exists($msg->attachment_path)) {
+            abort(404, 'Файл не найден на диске');
+        }
+
+        $mime = $disk->mimeType($msg->attachment_path) ?: 'application/octet-stream';
+        $name = $msg->attachment_name ?: basename($msg->attachment_path);
+        // image/pdf — inline (открываются прямо в браузере), остальные — download.
+        $disposition = (str_starts_with($mime, 'image/') || $mime === 'application/pdf')
+            ? 'inline' : 'attachment';
+
+        return response()->stream(function () use ($disk, $msg) {
+            $stream = $disk->readStream($msg->attachment_path);
+            if ($stream) {
+                fpassthru($stream);
+                fclose($stream);
+            }
+        }, 200, [
+            'Content-Type' => $mime,
+            'Content-Disposition' => $disposition . '; filename="' . addslashes($name) . '"',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
+    }
+
     public function knowledgeSuggest(Request $request, int $ticketId): JsonResponse
     {
         if (! $request->user()->isStaff()) {

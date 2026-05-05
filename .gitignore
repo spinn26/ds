@@ -29,3 +29,24 @@ frontend/
 /Айдентика
 storage/ui-smoke/
 socket-server/node_modules
+
+# Database dumps — никогда не коммитим (могут содержать прод-данные).
+*.dump
+*.sql
+*.sql.gz
+*.sql.bz2
+*.tar.gz
+*.bak
+
+# Локальные backup-файлы
+backup/
+backups/
+
+# Editor temp / OS
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Lock-файлы для скриптов
+.claude/scheduled_tasks.lock

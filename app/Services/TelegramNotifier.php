@@ -24,6 +24,7 @@ class TelegramNotifier
      */
     public function send(string $text, ?string $chatId = null, string $parseMode = 'HTML'): bool
     {
+        $logger = app(IntegrationLogger::class);
         $token = $this->settings->get('telegram.bot.token');
         if (! $token) {
             Log::debug('telegram: bot token not configured, skipping', ['text' => mb_substr($text, 0, 60)]);
@@ -35,6 +36,9 @@ class TelegramNotifier
             Log::debug('telegram: chat_id not configured, skipping');
             return false;
         }
+
+        $event = $logger->begin('telegram', 'outbound', 'send_message',
+            null, null, (string) $chatId, ['text' => mb_substr($text, 0, 200)]);
 
         try {
             $response = Http::timeout(8)->post(
@@ -52,11 +56,15 @@ class TelegramNotifier
                     'status' => $response->status(),
                     'body' => mb_substr((string) $response->body(), 0, 200),
                 ]);
+                $logger->finish($event, 'error',
+                    "HTTP {$response->status()}: " . mb_substr((string) $response->body(), 0, 200));
                 return false;
             }
+            $logger->finish($event, 'success', 'Сообщение доставлено');
             return true;
         } catch (\Throwable $e) {
             Log::warning('telegram: network error', ['error' => $e->getMessage()]);
+            $logger->finish($event, 'error', $e->getMessage());
             return false;
         }
     }

@@ -70,6 +70,7 @@ class PlatformHealthCheck extends Command
             $this->checkPostgres(),
             $this->checkCache(),
             $this->checkSocketIo(),
+            $this->checkIntegrationSuccessRate(),
         ];
     }
 
@@ -99,14 +100,69 @@ class PlatformHealthCheck extends Command
     private function checkSocketIo(): array
     {
         try {
-            $resp = Http::timeout(3)->get('http://127.0.0.1:3002/health');
+            $host = env('SOCKET_HOST', '127.0.0.1');
+            $port = env('SOCKET_API_PORT', 3002);
+            $resp = Http::timeout(3)->get("http://{$host}:{$port}/health");
+            $data = $resp->json() ?? [];
+            $connections = (int) ($data['connections'] ?? 0);
+            $online = (int) ($data['onlineUsers'] ?? 0);
             return [
                 'name' => 'socket.io',
                 'ok' => $resp->ok(),
-                'details' => $resp->ok() ? 'HTTP 200' : "HTTP {$resp->status()}",
+                'details' => $resp->ok()
+                    ? "online={$online} conn={$connections}"
+                    : "HTTP {$resp->status()}",
             ];
         } catch (\Throwable $e) {
             return ['name' => 'socket.io', 'ok' => false, 'details' => 'unreachable'];
+        }
+    }
+
+    /**
+     * Просадка success-rate в integration_events за последний час.
+     * Алерт если у любого внешнего сервиса (insmart/google_sheets/telegram/
+     * smtp/zammad) success-rate < 80% при минимум 5 событиях.
+     */
+    private function checkIntegrationSuccessRate(): array
+    {
+        try {
+            // Если таблицы нет (миграция не накачена) — не падаем, просто skip.
+            if (! \Illuminate\Support\Facades\Schema::hasTable('integration_events')) {
+                return ['name' => 'integrations', 'ok' => true, 'details' => 'skip (no table)'];
+            }
+
+            $rows = DB::table('integration_events')
+                ->where('created_at', '>=', now()->subHour())
+                ->whereIn('service', ['insmart', 'google_sheets', 'telegram', 'smtp', 'zammad'])
+                ->selectRaw("
+                    service,
+                    COUNT(*) AS total,
+                    COUNT(*) FILTER (WHERE status = 'success') AS ok_cnt
+                ")
+                ->groupBy('service')
+                ->get();
+
+            $degraded = [];
+            foreach ($rows as $r) {
+                if ((int) $r->total < 5) continue; // мало данных — не алертим
+                $rate = $r->ok_cnt / max(1, $r->total) * 100;
+                if ($rate < 80.0) {
+                    $degraded[] = sprintf('%s %d/%d (%.0f%%)',
+                        $r->service, $r->ok_cnt, $r->total, $rate);
+                }
+            }
+
+            if (! empty($degraded)) {
+                return [
+                    'name' => 'integrations',
+                    'ok' => false,
+                    'details' => 'degraded: ' . implode(', ', $degraded),
+                ];
+            }
+            return ['name' => 'integrations', 'ok' => true,
+                'details' => $rows->count() . ' service(s) ok'];
+        } catch (\Throwable $e) {
+            return ['name' => 'integrations', 'ok' => false, 'details' => $e->getMessage()];
         }
     }
 

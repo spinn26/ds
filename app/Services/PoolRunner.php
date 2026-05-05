@@ -65,12 +65,12 @@ class PoolRunner
             return $this->emptyResult($year, $month, $revenue);
         }
 
-        // Если pool для этого месяца уже был зафиксирован (poolLog имеет
-        // записи) — отдаём ИХ как источник правды, а не пересчитываем.
-        // Это критично для исторических периодов: пересчёт по текущему
-        // qualificationLog даёт другую картину, чем то, что было реально
-        // выплачено в момент закрытия периода.
-        if (! $applyWrite) {
+        // Snapshot из poolLog возвращается ТОЛЬКО для заморожённых периодов.
+        // Открытый месяц всегда считается на лету, чтобы оператор (Богданова)
+        // видел актуальные числа по последним qualificationLog/transaction
+        // и мог нажать «Зафиксировать», когда готов. После фиксации период
+        // закрывается через period_closures и UI начинает читать снимок.
+        if (! $applyWrite && $this->periodFreeze->isFrozen($year, $month)) {
             $logged = $this->participantsFromPoolLog($year, $month, $leaderLevelIds, $revenue);
             if ($logged !== null) {
                 return $logged;
@@ -148,6 +148,29 @@ class PoolRunner
         $considered = [];
         $nominalCounts = array_fill_keys(array_keys($leaderLevelIds), 0);
         $rowsForUi = [];
+
+        // Сумма групповых бонусов в РУБЛЯХ за период по каждому консультанту.
+        //
+        // ВАЖНО: считаем через `groupBonus × 100`, не через `groupBonusRub`.
+        // В legacy Directual-данных колонка `groupBonusRub` для части
+        // записей содержит фактически БАЛЛЫ (не рубли — несмотря на имя):
+        // импорт из CSV не сделал умножение на 100. Это видно в проде:
+        // у партнёров уровня TOP FC за февраль выходило ~23 в этой колонке,
+        // что было бы 23 рубля — нереально мало.
+        //
+        // `groupBonus` (баллы) консистентен между legacy и Laravel-генерируемыми
+        // commission, поэтому `× 100` даёт корректные рубли всегда.
+        $monthKey = sprintf('%04d-%02d', $year, $month);
+        $groupBonusByCons = $consIds
+            ? DB::table('commission')
+                ->whereIn('consultant', $consIds)
+                ->where('dateMonth', $monthKey)
+                ->whereNull('deletedAt')
+                ->select('consultant', DB::raw('SUM("groupBonus") * 100 as total'))
+                ->groupBy('consultant')
+                ->pluck('total', 'consultant')
+            : collect();
+
         foreach ($perPartnerLevel as $consultantId => $row) {
             $level = (int) $row->level;
             if ($level < PoolCalculator::LEADER_LEVEL_MIN) continue;
@@ -189,6 +212,7 @@ class PoolRunner
                 'groupVolume' => $groupVolume,
                 'gapValuePercentage' => $gapPct,
                 'disqualifyReason' => $disqualifyReason,
+                'groupBonusRub' => round((float) ($groupBonusByCons[$consultantId] ?? 0), 2),
             ];
         }
 
@@ -229,6 +253,7 @@ class PoolRunner
                 'gapValuePercentage' => $meta?->gapValuePercentage ?? 0,
                 'disqualifyReason' => $meta?->disqualifyReason,
                 'payoutRub' => $p['payoutRub'],
+                'groupBonusRub' => $meta?->groupBonusRub ?? 0,
             ];
         }, $distribution);
 

@@ -2,7 +2,7 @@
   <div>
     <PageHeader title="Партнёры" icon="mdi-account-search" :count="total">
       <template #actions>
-        <v-btn color="success" prepend-icon="mdi-plus" @click="openAddPartner">
+        <v-btn v-if="!auth.isEducationOnly" color="success" prepend-icon="mdi-plus" @click="openAddPartner">
           Добавить партнёра
         </v-btn>
       </template>
@@ -362,6 +362,9 @@ import FilterBar from '../../components/FilterBar.vue';
 import DialogShell from '../../components/DialogShell.vue';
 import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 import { useSnackbar } from '../../composables/useSnackbar';
+import { useAuthStore } from '../../stores/auth';
+
+const auth = useAuthStore();
 import { useConfirm } from '../../composables/useConfirm';
 import { fmtDate, getActivityColorByName } from '../../composables/useDesign';
 
