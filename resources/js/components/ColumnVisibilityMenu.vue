@@ -61,7 +61,12 @@ const props = defineProps({
 const emit = defineEmits(['update:visible']);
 
 const toggleableColumns = computed(() =>
-  props.headers.filter(h => h.key && !props.alwaysVisible.includes(h.key))
+  // Игнорируем колонки без `title` — это служебные (actions, chat,
+  // expand-toggle и т.п.), пользователь их прятать не должен.
+  // Также alwaysVisible — явный whitelist.
+  props.headers.filter(h => h.key
+    && h.title && String(h.title).trim() !== ''
+    && !props.alwaysVisible.includes(h.key))
 );
 
 const hiddenCount = computed(() =>

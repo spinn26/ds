@@ -248,6 +248,7 @@ const headers = [
   { title: 'Контракты', key: 'contractCount', width: 110, align: 'end' },
   { title: 'Партнёр?', key: 'isPartner', width: 90, sortable: false },
   { title: 'Консультант', key: 'consultantName' },
+  { title: 'Статус партнёра', key: 'consultantStatus', width: 160 },
   { title: 'Комментарий', key: 'comment' },
   { title: 'Продукты', key: 'products', sortable: false },
   { title: '', key: 'chat', sortable: false, width: 50 },

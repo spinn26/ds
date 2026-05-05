@@ -899,14 +899,20 @@ class AdminDataController extends Controller
                 ->pluck('person')->unique()->flip()
             : collect();
 
-        // Batch load consultant names
+        // Batch load consultant names + статус (квалификация) — оператору
+        // нужно видеть текущий уровень партнёра рядом с клиентом.
         $consultantIds = $rows->pluck('consultant')->filter()->unique();
-        $consultantNames = $consultantIds->isNotEmpty()
-            ? DB::table('consultant')->whereIn('id', $consultantIds)->pluck('personName', 'id')
+        $consultantInfo = $consultantIds->isNotEmpty()
+            ? DB::table('consultant as c')
+                ->leftJoin('status_levels as sl', 'sl.id', '=', 'c.status_and_lvl')
+                ->whereIn('c.id', $consultantIds)
+                ->select('c.id', 'c.personName', 'sl.title as statusName', 'sl.level as statusLevel')
+                ->get()->keyBy('id')
             : collect();
 
-        $clients = $rows->map(function ($c) use ($persons, $contractCounts, $personPartners, $consultantNames) {
+        $clients = $rows->map(function ($c) use ($persons, $contractCounts, $personPartners, $consultantInfo) {
                 $person = $c->person ? ($persons[$c->person] ?? null) : null;
+                $cInfo = $c->consultant ? ($consultantInfo[$c->consultant] ?? null) : null;
 
                 return [
                     'id' => $c->id,
@@ -915,7 +921,10 @@ class AdminDataController extends Controller
                     'personName' => $c->personName,
                     'active' => (bool) $c->active,
                     'consultantId' => $c->consultant,
-                    'consultantName' => $c->consultant ? ($consultantNames[$c->consultant] ?? null) : null,
+                    'consultantName' => $cInfo?->personName,
+                    'consultantStatus' => $cInfo?->statusName
+                        ? ($cInfo->statusLevel . ' [' . $cInfo->statusName . ']')
+                        : null,
                     'dateCreated' => $c->dateCreated,
                     'workSince' => $c->workSince,
                     'contractCount' => $contractCounts[$c->id] ?? 0,
@@ -959,15 +968,27 @@ class AdminDataController extends Controller
             }
         }
         if ($request->filled('search')) {
-            $s = $request->search;
-            $query->where(function ($q) use ($s) {
-                $q->where('individualEntrepreneur', 'ilike', "%{$s}%")
-                  ->orWhere('inn', 'ilike', "%{$s}%");
-            });
-            // Поиск также по ФИО консультанта (legacy join).
-            $consultantIds = DB::table('consultant')->where('personName', 'ilike', "%{$s}%")->pluck('id');
-            if ($consultantIds->isNotEmpty()) {
-                $query->orWhereIn('consultant', $consultantIds);
+            $s = trim((string) $request->search);
+            $isNumericLike = preg_match('/^\d{4,}$/', $s) === 1;
+            if ($isNumericLike) {
+                // Похоже на ИНН → ищем строго по нему.
+                $query->where('inn', 'ilike', "%{$s}%");
+            } else {
+                // Текст → ищем ТОЛЬКО по ФИО консультанта-владельца.
+                // Раньше OR'или с individualEntrepreneur, что давало дубли:
+                // если ИП Зарипова используют 5 партнёров, поиск «Зарипов»
+                // возвращал все 5 строк, а нужно только Зарипова. По правкам
+                // 2026-05-05 — только ФИО владельца ИП.
+                $consultantIds = DB::table('consultant')
+                    ->where('personName', 'ilike', "%{$s}%")
+                    ->pluck('id');
+                if ($consultantIds->isNotEmpty()) {
+                    $query->whereIn('consultant', $consultantIds);
+                } else {
+                    // Не нашли консультанта — пустой результат, чтобы фильтр
+                    // не «съезжал» на другие совпадения.
+                    $query->whereRaw('1 = 0');
+                }
             }
         }
 

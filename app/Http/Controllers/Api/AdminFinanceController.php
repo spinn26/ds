@@ -104,6 +104,20 @@ class AdminFinanceController extends Controller
         }
 
         $total = $query->count();
+
+        // Агрегаты по всем строкам фильтра (не только видимая страница) —
+        // для итоговой панели сверху таблицы. Запрос отдельный, чтобы
+        // не тянуть JOIN'ы на справочники без надобности.
+        $aggregates = (clone $query)
+            ->selectRaw('
+                SUM("amountRUB") AS amount_rub,
+                SUM("commissionsAmountRUB") AS commissions_rub,
+                SUM("commissionsAmountUSD") AS commissions_usd,
+                SUM("netRevenueRUB") AS net_rub,
+                SUM("netRevenueUSD") AS net_usd
+            ')
+            ->first();
+
         $rows = $query->orderByDesc('t.date')
             ->offset($this->paginationOffset($request))
             ->limit($this->paginationPerPage($request))
@@ -167,7 +181,17 @@ class AdminFinanceController extends Controller
             ];
         });
 
-        return response()->json(['data' => $data, 'total' => $total]);
+        return response()->json([
+            'data' => $data,
+            'total' => $total,
+            'aggregates' => [
+                'amountRUB' => round((float) ($aggregates->amount_rub ?? 0), 2),
+                'commissionsAmountRUB' => round((float) ($aggregates->commissions_rub ?? 0), 2),
+                'commissionsAmountUSD' => round((float) ($aggregates->commissions_usd ?? 0), 2),
+                'netRevenueRUB' => round((float) ($aggregates->net_rub ?? 0), 2),
+                'netRevenueUSD' => round((float) ($aggregates->net_usd ?? 0), 2),
+            ],
+        ]);
     }
 
     /** Комиссии */

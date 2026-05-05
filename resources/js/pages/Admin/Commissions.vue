@@ -70,6 +70,26 @@
       </v-row>
     </v-card>
 
+    <!-- Сводка сверху таблицы — суммы по основным денежным колонкам
+         за все строки текущего фильтра (не только видимая страница). -->
+    <v-card v-if="aggregates && total > 0" variant="tonal" color="primary" class="mb-2 pa-3">
+      <div class="d-flex flex-wrap ga-4 text-body-2">
+        <span><strong>Записей:</strong> {{ total }}</span>
+        <span v-if="aggregates.amountRUB != null">
+          <strong>Сумма ₽:</strong> {{ fmt(aggregates.amountRUB) }}
+        </span>
+        <span v-if="aggregates.commissionsAmountRUB != null">
+          <strong>Комиссия ₽:</strong> {{ fmt(aggregates.commissionsAmountRUB) }}
+        </span>
+        <span v-if="aggregates.netRevenueRUB != null">
+          <strong>Выручка ДС ₽:</strong> {{ fmt(aggregates.netRevenueRUB) }}
+        </span>
+        <span v-if="aggregates.commissionsAmountUSD != null">
+          <strong>Комиссия $:</strong> {{ fmt(aggregates.commissionsAmountUSD) }}
+        </span>
+      </div>
+    </v-card>
+
     <v-data-table-server :items="items" :items-length="total" :loading="loading"
       :headers="visibleHeaders" :items-per-page="25"
       v-model:expanded="expanded" item-value="id" show-expand
@@ -187,6 +207,7 @@ import { fmt2 as fmt, fmtDate } from '../../composables/useDesign';
 
 const items = ref([]);
 const total = ref(0);
+const aggregates = ref(null);
 const loading = ref(false);
 const page = ref(1);
 const perPage = ref(25);
@@ -293,6 +314,7 @@ async function loadData() {
     const { data } = await api.get('/admin/transactions', { params });
     items.value = data.data || [];
     total.value = data.total || 0;
+    aggregates.value = data.aggregates || null;
   } catch {}
   loading.value = false;
 }
