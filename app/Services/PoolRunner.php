@@ -127,25 +127,24 @@ class PoolRunner
         $start = sprintf('%04d-%02d-01', $year, $month);
         $end = date('Y-m-t', strtotime($start));
 
+        // Берём calc и nom отдельно: основная ветка распределения работает
+        // по calculationLevel (фактический уровень после ОП-проверки),
+        // но если calc < 6 при nom >= 6 — партнёр всё равно показывается
+        // в верхней таблице как «потенциальный получатель, ОП не выполнен».
         $perPartnerLevel = DB::table('qualificationLog as ql')
-            ->join('status_levels as sl', function ($j) {
-                // Используем calculationLevel — это «реальный» уровень для
-                // расчёта пула. nominalLevel может быть выше (заслуженный по
-                // НГП), но если ОП не выполнен или отрыв — система понижает
-                // его в calculationLevel. Pool должен распределяться по
-                // фактическому уровню, как это делает Directual эталон.
-                // COALESCE на nominalLevel — на случай если calc=NULL у
-                // совсем старых записей.
-                $j->on('sl.id', '=', DB::raw('COALESCE(ql."calculationLevel", ql."nominalLevel")'));
-            })
+            ->leftJoin('status_levels as sl_calc', 'sl_calc.id', '=', 'ql.calculationLevel')
+            ->leftJoin('status_levels as sl_nom', 'sl_nom.id', '=', 'ql.nominalLevel')
             ->whereBetween('ql.date', [$start, $end])
             ->whereNull('ql.dateDeleted')
             ->select([
                 'ql.consultant',
-                'sl.level',
-                'sl.title',
-                'sl.id as level_id',
-                'sl.mandatoryGP',
+                DB::raw('COALESCE(sl_calc.level, sl_nom.level) AS level'),
+                DB::raw('COALESCE(sl_calc.title, sl_nom.title) AS title'),
+                DB::raw('COALESCE(sl_calc.id, sl_nom.id) AS level_id'),
+                DB::raw('COALESCE(sl_calc."mandatoryGP", sl_nom."mandatoryGP") AS "mandatoryGP"'),
+                DB::raw('sl_nom.level AS nominal_level'),
+                DB::raw('sl_nom.title AS nominal_title'),
+                DB::raw('sl_nom.id AS nominal_level_id'),
                 'ql.groupVolume',
                 'ql.gapValuePercentage',
             ])
@@ -288,15 +287,34 @@ class PoolRunner
 
         foreach ($perPartnerLevel as $consultantId => $row) {
             $level = (int) $row->level;
-            if ($level < PoolCalculator::LEADER_LEVEL_MIN) continue;
+            $nominalLevel = (int) ($row->nominal_level ?? 0);
+
+            // Партнёр считается участником пула если ИЛИ
+            // - calc-level >= 6 (заработал по ОП), либо
+            // - nom-level >= 6 (был на лидерском уровне, но ОП не выполнен).
+            // Во втором случае он помечается как ОП-не-выполнен и не идёт
+            // в счётчик долей, но виден в верхней таблице UI.
+            $isLeaderByCalc = $level >= PoolCalculator::LEADER_LEVEL_MIN;
+            $isLeaderByNom = $nominalLevel >= PoolCalculator::LEADER_LEVEL_MIN;
+            if (! $isLeaderByCalc && ! $isLeaderByNom) continue;
             if (! $activeIds->has($consultantId)) continue;
 
-            // Extras (нет qualificationLog за период) НЕ участвуют в счётчике
+            // Если по calc партнёр выпал из лидерского пула — показываем
+            // его на nominal-уровне с пометкой «ОП не выполнен», как extra.
+            $isOpFailExtra = ! $isLeaderByCalc && $isLeaderByNom;
+            if ($isOpFailExtra) {
+                $level = $nominalLevel;
+                $row->title = $row->nominal_title;
+                $row->level_id = $row->nominal_level_id;
+            }
+
+            // Extras (нет qualificationLog за период ИЛИ есть но ОП не
+            // выполнен с понижением calc < 6) НЕ участвуют в счётчике
             // фонда — эталон старой платформы делит только на тех, у кого
-            // есть подтверждённая квалификация в этом месяце. Сняли галочку
-            // вручную — остаются в счётчике (доля не выплачивается, но
-            // делитель не уменьшается).
-            $isExtra = (bool) ($row->isExtra ?? false);
+            // фактически calc >= 6 в этом месяце. Сняли галочку вручную —
+            // остаются в счётчике (доля не выплачивается, но делитель
+            // не уменьшается).
+            $isExtra = (bool) ($row->isExtra ?? false) || $isOpFailExtra;
             if (! $isExtra) {
                 $nominalCounts[$level] = ($nominalCounts[$level] ?? 0) + 1;
             }
@@ -313,9 +331,12 @@ class PoolRunner
             $modOk = $modParticipates === null ? true : (bool) $modParticipates;
 
             $disqualifyReason = null;
-            if ($isExtra) {
+            if ($isOpFailExtra ?? false) {
+                // ОП не выполнен → calc понижен ниже 6, виден на nominal-уровне.
+                $disqualifyReason = 'ОП не выполнен';
+                $opOk = false;
+            } elseif ((bool) ($row->isExtra ?? false)) {
                 $disqualifyReason = 'Не подтвердил квалификацию';
-                // Для extras eligibility всегда false (не получают выплату).
                 $opOk = false;
             } elseif (! $opOk) {
                 $disqualifyReason = 'ОП не выполнен';
