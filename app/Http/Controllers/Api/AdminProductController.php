@@ -125,6 +125,41 @@ class AdminProductController extends Controller
         return response()->json(['message' => 'Продукт обновлён']);
     }
 
+    /**
+     * Загрузка логотипа / hero-баннера.
+     *
+     * Принимает multipart/form-data (поле "file"), параметр "kind"="image"
+     * для маленького логотипа или "kind"="hero" для широкого баннера.
+     * Файл сохраняется в storage/app/public/products/ и возвращается URL
+     * через `/storage/products/...` (требует `php artisan storage:link`).
+     *
+     * Возвращает обновлённый URL, который потом можно записать в product
+     * через PUT /admin/products/{id} (фронт делает это автоматически).
+     */
+    public function uploadImage(Request $request, int $id): JsonResponse
+    {
+        $request->validate([
+            'file' => 'required|file|image|max:4096', // 4MB
+            'kind' => 'required|in:image,hero',
+        ]);
+
+        $product = Product::findOrFail($id);
+        $file = $request->file('file');
+        $ext = strtolower($file->getClientOriginalExtension() ?: $file->extension());
+        $name = sprintf('%d-%s-%s.%s', $product->id, $request->kind, substr(md5(uniqid('', true)), 0, 8), $ext);
+        $path = $file->storeAs('products', $name, 'public');
+        $url = '/storage/' . $path;
+
+        if ($request->kind === 'image') {
+            $product->imageUrl = $url;
+        } else {
+            $product->hero_image = $url;
+        }
+        $product->save();
+
+        return response()->json(['url' => $url]);
+    }
+
     /** Быстрая публикация/снятие с публикации без открытия формы. */
     public function togglePublish(Request $request, int $id): JsonResponse
     {

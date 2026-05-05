@@ -135,14 +135,26 @@
             </v-col>
             <v-col cols="12">
               <v-text-field v-model="editProduct.imageUrl" label="URL логотипа / иконки"
-                prepend-inner-icon="mdi-image" hint="Маленькое изображение (логотип поставщика)" persistent-hint />
+                prepend-inner-icon="mdi-image" hint="Маленькое изображение (логотип поставщика). Можно вставить URL или загрузить файл ниже."
+                persistent-hint />
+            </v-col>
+            <v-col cols="12" v-if="editProduct.id">
+              <v-file-input v-model="logoFile" label="Загрузить логотип" density="compact"
+                accept="image/*" prepend-icon="" prepend-inner-icon="mdi-upload" show-size hide-details
+                @update:model-value="uploadImage('image')" :loading="uploadingLogo" />
             </v-col>
             <v-col cols="12" v-if="editProduct.imageUrl">
               <v-img :src="editProduct.imageUrl" height="80" class="rounded border" contain />
             </v-col>
             <v-col cols="12">
               <v-text-field v-model="editProduct.heroImage" label="URL баннера карточки (hero-image)"
-                prepend-inner-icon="mdi-image-area" hint="Большое изображение сверху карточки на витрине" persistent-hint />
+                prepend-inner-icon="mdi-image-area" hint="Большое изображение сверху карточки на витрине"
+                persistent-hint />
+            </v-col>
+            <v-col cols="12" v-if="editProduct.id">
+              <v-file-input v-model="heroFile" label="Загрузить hero-баннер" density="compact"
+                accept="image/*" prepend-icon="" prepend-inner-icon="mdi-upload" show-size hide-details
+                @update:model-value="uploadImage('hero')" :loading="uploadingHero" />
             </v-col>
             <v-col cols="12" v-if="editProduct.heroImage">
               <v-img :src="editProduct.heroImage" height="140" class="rounded border" />
@@ -412,6 +424,36 @@ async function loadCurrencies() {
 const productDialog = ref(false);
 const productError = ref('');
 const editProduct = ref({});
+
+// Загрузка логотипа / hero-баннера. Работает только для уже сохранённого
+// продукта (нужен id) — для нового сначала жмём «Сохранить», потом
+// переоткрываем форму на редактирование и грузим картинки.
+const logoFile = ref(null);
+const heroFile = ref(null);
+const uploadingLogo = ref(false);
+const uploadingHero = ref(false);
+
+async function uploadImage(kind) {
+  const fileRef = kind === 'image' ? logoFile : heroFile;
+  const loadingRef = kind === 'image' ? uploadingLogo : uploadingHero;
+  const file = Array.isArray(fileRef.value) ? fileRef.value[0] : fileRef.value;
+  if (!file || !editProduct.value.id) return;
+  loadingRef.value = true;
+  try {
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('kind', kind);
+    const { data } = await api.post(`/admin/products/${editProduct.value.id}/image`, fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    if (kind === 'image') editProduct.value.imageUrl = data.url;
+    else editProduct.value.heroImage = data.url;
+    fileRef.value = null;
+  } catch (e) {
+    productError.value = e.response?.data?.message || 'Ошибка загрузки файла';
+  }
+  loadingRef.value = false;
+}
 
 // Program dialog
 const programDialog = ref(false);

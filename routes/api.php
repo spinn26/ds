@@ -351,6 +351,7 @@ Route::prefix('v1')->group(function () {
         Route::put('/admin/products/{id}', [\App\Http\Controllers\Api\AdminProductController::class, 'update']);
         Route::delete('/admin/products/{id}', [\App\Http\Controllers\Api\AdminProductController::class, 'destroy']);
         Route::post('/admin/products/{id}/toggle-publish', [\App\Http\Controllers\Api\AdminProductController::class, 'togglePublish'])->whereNumber('id');
+        Route::post('/admin/products/{id}/image', [\App\Http\Controllers\Api\AdminProductController::class, 'uploadImage'])->whereNumber('id');
         Route::get('/admin/products/{id}/programs', [\App\Http\Controllers\Api\AdminProductController::class, 'programs']);
         Route::post('/admin/products/{id}/programs', [\App\Http\Controllers\Api\AdminProductController::class, 'storeProgram']);
         Route::put('/admin/products/{id}/programs/{programId}', [\App\Http\Controllers\Api\AdminProductController::class, 'updateProgram']);
