@@ -161,7 +161,14 @@ const selectedProgram = computed(() =>
   form.program ? matrix.programs.find(p => p.id == form.program) : null
 );
 
+const selectedProduct = computed(() =>
+  form.product ? matrix.products.find(p => p.id == form.product) : null
+);
+
 const filteredProperties = computed(() => {
+  // Гейт по config-флагу продукта: если has_property=false — поле скрыто,
+  // даже если в dsCommission остались legacy-варианты.
+  if (selectedProduct.value && selectedProduct.value.hasProperty === false) return [];
   const prog = selectedProgram.value;
   if (!prog) return [];
   // Если у программы есть фиксированное свойство — показываем только его.
@@ -175,6 +182,7 @@ const filteredProperties = computed(() => {
 });
 
 const filteredTerms = computed(() => {
+  if (selectedProduct.value && selectedProduct.value.hasTerm === false) return [];
   const prog = selectedProgram.value;
   if (!prog) return [];
   const labelize = (t) => ({ ...t, label: t.term + (t.term > 4 ? ' лет' : t.term > 1 ? ' года' : ' год') });
@@ -293,6 +301,10 @@ const visibleHistoryHeaders = computed(() =>
 // если у выбранной программы заполнено поле kvPayoutYear, выводим
 // варианты от 1 до этого года.
 const kvYearOptions = computed(() => {
+  // Гейт по config-флагу: продукты без kvPayoutYear-схемы (страхование без
+  // year-of-payout, разовые услуги) скрывают поле даже если в legacy
+  // program.kvPayoutYear осталось ненулевое значение.
+  if (selectedProduct.value && selectedProduct.value.hasYearKv === false) return [];
   const program = matrix.programs?.find(p => p.id === form.program);
   const max = Number(program?.kvPayoutYear ?? 0);
   if (!max || max < 1) return [];

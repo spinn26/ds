@@ -48,6 +48,12 @@ class CalculatorController extends Controller
                     'id' => $p->id,
                     'name' => $p->name,
                     'typeId' => $p->productType ?? null,
+                    // Config-флаги релевантности параметров — UI скрывает
+                    // «Свойство»/«Срок»/«Год КВ» когда продукт не использует
+                    // их даже если в dsCommission остались legacy-варианты.
+                    'hasProperty' => (bool) ($p->has_property ?? false),
+                    'hasTerm' => (bool) ($p->has_term ?? false),
+                    'hasYearKv' => (bool) ($p->has_year_kv ?? false),
                 ]);
 
             $programRows = DB::table('program')

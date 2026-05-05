@@ -176,6 +176,29 @@
             <v-col cols="6">
               <v-checkbox v-model="editProduct.visibleToCalculator" label="Виден в калькуляторе" density="compact" />
             </v-col>
+            <v-col cols="12">
+              <div class="text-caption text-medium-emphasis mb-1">
+                Релевантные параметры (показываются в формах транзакций)
+              </div>
+            </v-col>
+            <v-col cols="6" md="4">
+              <v-checkbox v-model="editProduct.hasProperty"
+                label="«Свойство»" density="compact"
+                hint="commissionCalcProperty (стандарт / 1 год / 2 год …)"
+                persistent-hint />
+            </v-col>
+            <v-col cols="6" md="4">
+              <v-checkbox v-model="editProduct.hasTerm"
+                label="«Срок контракта»" density="compact"
+                hint="число лет действия программы"
+                persistent-hint />
+            </v-col>
+            <v-col cols="6" md="4">
+              <v-checkbox v-model="editProduct.hasYearKv"
+                label="«Год КВ»" density="compact"
+                hint="указывается за какой год контракта выплата"
+                persistent-hint />
+            </v-col>
           </v-row>
           <v-alert v-if="productError" type="error" density="compact" class="mt-2">{{ productError }}</v-alert>
         </v-card-text>
@@ -458,6 +481,7 @@ function openCreateProduct() {
     name: '', description: '', imageUrl: '', heroImage: '',
     educationUrl: '', instructionUrl: '', openProductUrl: '',
     active: true, noComission: false, visibleToResident: true, visibleToCalculator: true,
+    hasProperty: false, hasTerm: false, hasYearKv: false,
     publishStatus: 'draft',
   };
   productError.value = '';
