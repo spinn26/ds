@@ -6,8 +6,6 @@
       <div class="d-flex ga-2 flex-wrap align-center">
         <v-text-field v-model="filters.search" placeholder="Поиск по ФИО..."
           rounded prepend-inner-icon="mdi-magnify" clearable hide-details style="max-width:240px" @update:model-value="debouncedLoad" />
-        <v-select v-model="filters.status" :items="statusOptions" label="Статус"
-          clearable hide-details style="max-width:180px" @update:model-value="loadData" />
         <v-text-field v-model="filters.city" placeholder="Город"
           prepend-inner-icon="mdi-city" clearable hide-details style="max-width:200px" @update:model-value="debouncedLoad" />
         <v-text-field v-model="filters.email" placeholder="Email..."
@@ -86,9 +84,10 @@ function resetFilters() {
   loadData();
 }
 
+// «Статус клиента» (active/inactive) убран — у клиента нет понятия
+// статуса в бизнес-логике (это были partner-статусы по ошибке).
 const headers = [
   { title: 'ФИО клиента', key: 'personName', sortable: true },
-  { title: 'Статус', key: 'active', width: 120, sortable: false },
   { title: 'Дата рождения', key: 'birthDate', width: 140, sortable: true },
   { title: 'Место жительства', key: 'city', sortable: true },
   { title: 'Телефон', key: 'phone', width: 160, sortable: false },

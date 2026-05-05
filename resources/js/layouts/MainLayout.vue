@@ -601,7 +601,8 @@ const menuItems = [
   { label: 'Обучение', icon: 'mdi-school-outline', path: '/education', partner: true },
   { label: 'Инструкции', icon: 'mdi-book-open-variant', path: '/instructions', partner: true },
   { label: 'Продукты', icon: 'mdi-package-variant-closed', path: '/products', partner: true },
-  { label: 'Конкурсы и события', icon: 'mdi-trophy-outline', path: '/contests', partner: true },
+  // Конкурсы скрыты у всех кабинетов по запросу 2026-05-05.
+  // { label: 'Конкурсы и события', icon: 'mdi-trophy-outline', path: '/contests', partner: true },
 
   { group: 'Связь', partner: true },
   { label: 'Обратная связь', icon: 'mdi-chat-outline', path: '/chat', partner: true },
@@ -651,7 +652,8 @@ const menuItems = [
   // Прочее
   { group: 'Прочее', adminSection: 'products' },
   { label: 'Продукты', icon: 'mdi-package-variant-closed', path: '/manage/products', adminSection: 'products' },
-  { label: 'Конкурсы', icon: 'mdi-trophy', path: '/manage/contests', adminSection: 'contests' },
+  // Конкурсы скрыты у staff-кабинетов по запросу 2026-05-05.
+  // { label: 'Конкурсы', icon: 'mdi-trophy', path: '/manage/contests', adminSection: 'contests' },
   { label: 'Чат / Тикеты', icon: 'mdi-chat-processing', path: '/manage/chat', adminSection: 'communication' },
   { label: 'Аналитика чата', icon: 'mdi-chart-box-outline', path: '/manage/chat/analytics', adminSection: 'chat-analytics' },
   { label: 'Отчёты', icon: 'mdi-file-chart', path: '/manage/reports', adminSection: 'reports' },
