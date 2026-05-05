@@ -160,13 +160,19 @@ class FinanceReportService
             'comment' => $c->comment,
         ])->values();
 
-        // Breakaway info from qualificationLog
+        // Breakaway info from qualificationLog. Раньше блок появлялся только
+        // при $qLogCurrent->gap=true → партнёры без отрыва не видели окно
+        // вовсе и думали, что данные не подгрузились. Теперь возвращаем
+        // breakaway всегда (если есть qualificationLog), с фактическими
+        // значениями. Если отрыва нет — gapPercentage=0, frontend сам
+        // решает рендерить «Не зафиксирован» или скрыть.
         $breakaway = null;
-        if ($qLogCurrent && $qLogCurrent->gap) {
+        if ($qLogCurrent) {
             $branchName = $qLogCurrent->branchWithGap
                 ? DB::table('consultant')->where('id', $qLogCurrent->branchWithGap)->value('personName')
                 : null;
             $breakaway = [
+                'hasGap' => (bool) $qLogCurrent->gap,
                 'partnerName' => $branchName,
                 'groupVolume' => round((float) ($qLogCurrent->branchWithGapGroupVolume ?? 0), 2),
                 'gapPercentage' => round((float) ($qLogCurrent->gapValuePercentage ?? 0), 2),
@@ -289,7 +295,12 @@ class FinanceReportService
                 'monthEnd' => $balance ? [
                     'balanceStart' => round((float) ($balance->balance ?? 0), 2),
                     'otherAccruals' => round((float) ($balance->accruedNonTransactional ?? 0), 2),
-                    'otherAccrualsPoints' => round($otherAccruals->sum(fn ($c) => (float) ($c->amount ?? 0)), 2),
+                    // «Прочие начисления» в commission (transaction IS NULL)
+                    // выражены в РУБЛЯХ, не в баллах. Раньше отдавалось как
+                    // otherAccrualsPoints — UI показывал «Прочие (баллы)»,
+                    // что вводило в заблуждение.
+                    'otherAccrualsRub' => round($otherAccruals->sum(fn ($c) => (float) ($c->amount ?? 0)), 2),
+                    'otherAccrualsPoints' => round($otherAccruals->sum(fn ($c) => (float) ($c->groupBonus ?? 0)), 2),
                     'totalAccrued' => round((float) ($balance->accruedTotal ?? 0), 2),
                     'totalPayable' => round((float) ($balance->totalPayable ?? 0), 2),
                     'payed' => round((float) ($balance->payed ?? 0), 2),

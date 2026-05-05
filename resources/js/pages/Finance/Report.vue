@@ -106,30 +106,46 @@
             <span class="text-body-2 text-medium-emphasis">Итог за месяц</span>
           </div>
           <div class="text-body-2"><span class="font-weight-medium">Баланс на начало:</span> {{ fmt2(summary.monthEnd?.balanceStart) }}</div>
-          <div class="text-body-2"><span class="font-weight-medium">Прочие (баллы):</span> {{ fmt(summary.monthEnd?.otherAccrualsPoints) }}</div>
-          <div class="text-body-2"><span class="font-weight-medium">Прочие (руб):</span> {{ fmt2(summary.monthEnd?.otherAccrualsRub) }}</div>
+          <div class="text-body-2"><span class="font-weight-medium">Прочие начисления:</span> {{ fmt2(summary.monthEnd?.otherAccrualsRub) }} ₽</div>
+          <div v-if="summary.monthEnd?.otherAccrualsPoints" class="text-body-2 text-medium-emphasis text-caption">
+            <span>в т.ч. в баллах:</span> {{ fmt(summary.monthEnd?.otherAccrualsPoints) }}
+          </div>
           <div class="text-body-2"><span class="font-weight-medium">Итого начислено:</span> {{ fmt2(summary.monthEnd?.totalAccrued) }}</div>
           <div class="text-body-2 font-weight-bold"><span class="font-weight-medium">К выплате:</span> {{ fmt2(summary.monthEnd?.totalPayable) }}</div>
         </v-card>
       </v-col>
     </v-row>
 
-    <!-- Breakaway card -->
-    <v-card v-if="summary.breakaway" class="mb-4 pa-4" color="amber-lighten-5" variant="tonal">
+    <!-- Breakaway card. Раньше показывалось только при наличии отрыва;
+         теперь — всегда (когда есть qualificationLog), чтобы партнёр
+         видел текущее состояние. Цвет зависит от hasGap. -->
+    <v-card v-if="summary.breakaway" class="mb-4 pa-4"
+      :color="summary.breakaway.hasGap ? 'amber-lighten-5' : 'green-lighten-5'" variant="tonal">
       <div class="d-flex align-center ga-2 mb-2">
-        <v-icon color="amber-darken-2">mdi-alert-decagram</v-icon>
-        <span class="font-weight-bold text-amber-darken-3">Отрыв</span>
+        <v-icon :color="summary.breakaway.hasGap ? 'amber-darken-2' : 'success'">
+          {{ summary.breakaway.hasGap ? 'mdi-alert-decagram' : 'mdi-check-decagram' }}
+        </v-icon>
+        <span class="font-weight-bold" :class="summary.breakaway.hasGap ? 'text-amber-darken-3' : 'text-success'">
+          {{ summary.breakaway.hasGap ? 'Отрыв зафиксирован' : 'Отрыв не зафиксирован' }}
+        </span>
       </div>
-      <v-row>
+      <v-row v-if="summary.breakaway.hasGap">
         <v-col cols="6" md="3">
           <div class="text-body-2 text-medium-emphasis">Разница</div>
-          <div class="font-weight-medium">{{ fmt(summary.breakaway.gapValue) }} ({{ summary.breakaway.gapValuePercentage ?? 0 }}%)</div>
+          <div class="font-weight-medium">{{ fmt(summary.breakaway.gapValue) }} ({{ summary.breakaway.gapPercentage ?? 0 }}%)</div>
         </v-col>
         <v-col cols="6" md="3">
-          <div class="text-body-2 text-medium-emphasis">Ветка</div>
-          <div class="font-weight-medium">{{ summary.breakaway.branchWithGapName || '—' }}</div>
+          <div class="text-body-2 text-medium-emphasis">Ветка с наибольшим ГП</div>
+          <div class="font-weight-medium">{{ summary.breakaway.partnerName || '—' }}</div>
+        </v-col>
+        <v-col cols="6" md="3">
+          <div class="text-body-2 text-medium-emphasis">ГП ветки</div>
+          <div class="font-weight-medium">{{ fmt(summary.breakaway.groupVolume) }}</div>
         </v-col>
       </v-row>
+      <div v-else class="text-body-2 text-medium-emphasis">
+        Ни одна ветка не превышает 90% от вашего ГП — пул выплачивается.
+      </div>
     </v-card>
 
     <!-- Expandable Tables -->
