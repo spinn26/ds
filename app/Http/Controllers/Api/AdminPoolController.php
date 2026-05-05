@@ -168,4 +168,60 @@ class AdminPoolController extends Controller
         }
         return response()->json($progress);
     }
+
+    /**
+     * POST /admin/pool/reopen — разморозка зафиксированного периода.
+     *
+     * Только для роли `admin`. PeriodFreezeService::reopen ставит
+     * reopened_at, после чего isFrozen возвращает false и UI снова
+     * показывает кнопку «Зафиксировать пул». История закрытия
+     * сохраняется в той же строке (не удаляется).
+     *
+     * После разморозки оператор может пересчитать пул и зафиксировать
+     * заново — DELETE-then-INSERT в poolLog идемпотентен. Старые
+     * выплаты партнёрам остаются в poolLog до момента повторной
+     * фиксации (с DELETE WHERE date BETWEEN...).
+     */
+    public function reopen(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'year' => 'required|integer|min:2020|max:2099',
+            'month' => 'required|integer|min:1|max:12',
+        ]);
+
+        $user = $request->user();
+        $roles = array_map('trim', explode(',', $user->role ?? ''));
+        if (! in_array('admin', $roles, true)) {
+            return response()->json([
+                'message' => 'Разморозка периода доступна только администратору',
+            ], 403);
+        }
+
+        $year = (int) $data['year'];
+        $month = (int) $data['month'];
+
+        if (! $this->freeze->isFrozen($year, $month)) {
+            return response()->json([
+                'message' => sprintf('Период %02d.%d не заморожен', $month, $year),
+            ], 422);
+        }
+
+        $this->freeze->reopen($year, $month, $user->id);
+
+        \Illuminate\Support\Facades\Log::warning('pool period reopened', [
+            'year' => $year, 'month' => $month, 'admin_id' => $user->id,
+        ]);
+
+        NotificationController::notifyStaff(
+            'payment',
+            sprintf('Период %02d.%d разморожен', $month, $year),
+            sprintf('Админ %s разморозил период. Пул можно пересчитать.',
+                trim(($user->lastName ?? '') . ' ' . ($user->firstName ?? ''))),
+            sprintf('/admin/pool?month=%d-%02d', $year, $month),
+        );
+
+        return response()->json([
+            'message' => sprintf('Период %02d.%d разморожен', $month, $year),
+        ]);
+    }
 }

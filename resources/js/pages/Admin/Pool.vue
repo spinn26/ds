@@ -77,10 +77,16 @@
           size="large" variant="flat" :loading="applying" @click="applyPool">
           Зафиксировать пул
         </v-btn>
-        <v-chip v-else-if="isFrozen" size="small" color="warning" variant="tonal"
-          prepend-icon="mdi-lock">
-          Зафиксировано{{ closureLabel }}
-        </v-chip>
+        <template v-else-if="isFrozen">
+          <v-chip size="small" color="warning" variant="tonal" prepend-icon="mdi-lock">
+            Зафиксировано{{ closureLabel }}
+          </v-chip>
+          <v-btn v-if="auth.isAdmin" size="small" variant="text" color="error"
+            prepend-icon="mdi-lock-open-variant" :loading="reopening" class="ml-2"
+            @click="reopenPool">
+            Разморозить
+          </v-btn>
+        </template>
         <v-spacer />
         <span v-if="result" class="text-caption text-medium-emphasis">
           Выручка ДС без НДС: <strong>{{ fmt2(result.revenue) }} ₽</strong>
@@ -185,8 +191,10 @@ import EmptyState from '../../components/EmptyState.vue';
 import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 import { fmt2 } from '../../composables/useDesign';
 import { useConfirm } from '../../composables/useConfirm';
+import { useAuthStore } from '../../stores/auth';
 
 const confirm = useConfirm();
+const auth = useAuthStore();
 
 const month = ref(new Date().toISOString().slice(0, 7));
 const defaultMonth = month.value;
@@ -196,6 +204,7 @@ const result = ref(null);
 const loadingParticipants = ref(false);
 const calcing = ref(false);
 const applying = ref(false);
+const reopening = ref(false);
 const toggling = ref({});
 
 const snack = ref({ open: false, color: 'success', text: '' });
@@ -392,6 +401,30 @@ async function applyPool() {
     applying.value = false;
     applyProgress.value = null;
   }
+}
+
+async function reopenPool() {
+  if (!month.value || !isFrozen.value || !auth.isAdmin) return;
+  if (!await confirm.ask({
+    title: 'Разморозить период?',
+    message: 'Период будет открыт для повторного расчёта пула. '
+           + 'Текущие записи в poolLog останутся до повторной фиксации, '
+           + 'после которой они будут перезаписаны.\n\nДействие записывается '
+           + 'в audit-log.',
+    confirmText: 'Разморозить', confirmColor: 'error', icon: 'mdi-lock-open-variant',
+  })) return;
+  reopening.value = true;
+  try {
+    const [y, m] = month.value.split('-');
+    await api.post('/admin/pool/reopen', {
+      year: Number(y), month: Number(m),
+    });
+    notify('Период разморожен. Можно пересчитать и зафиксировать заново.');
+    await loadParticipants();
+  } catch (e) {
+    notify(e.response?.data?.message || 'Ошибка разморозки', 'error');
+  }
+  reopening.value = false;
 }
 
 function pollApplyProgress(batchId) {

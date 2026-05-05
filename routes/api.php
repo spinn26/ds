@@ -270,6 +270,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/admin/pool/preview', [\App\Http\Controllers\Api\AdminPoolController::class, 'preview']);
         Route::post('/admin/pool/apply', [\App\Http\Controllers\Api\AdminPoolController::class, 'apply'])->middleware('throttle:10,1');
         Route::get('/admin/pool/progress', [\App\Http\Controllers\Api\AdminPoolController::class, 'progress']);
+        Route::post('/admin/pool/reopen', [\App\Http\Controllers\Api\AdminPoolController::class, 'reopen'])->middleware('throttle:5,1');
 
         // Admin — Analytics (reconciliation, anomalies, funnel, cohorts, owner)
         Route::get('/admin/analytics/reconciliation', [\App\Http\Controllers\Api\AdminAnalyticsController::class, 'reconciliation']);
