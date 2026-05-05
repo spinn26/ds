@@ -844,7 +844,9 @@ class AdminDataController extends Controller
     /** Клиенты — админ-список всех клиентов */
     public function clients(Request $request): JsonResponse
     {
-        $query = DB::table('client');
+        // Soft-deleted клиентов в админке тоже скрываем по умолчанию.
+        // Если потребуется аудит-лог удалений — отдельный endpoint.
+        $query = DB::table('client')->whereNull('dateDeleted');
 
         if ($request->filled('search')) {
             $query->where('personName', 'ilike', '%' . $request->search . '%');

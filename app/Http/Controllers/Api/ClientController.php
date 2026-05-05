@@ -24,7 +24,12 @@ class ClientController extends Controller
             return response()->json(['data' => [], 'total' => 0]);
         }
 
-        $query = Client::where('consultant', $consultant->id);
+        // Soft-deleted клиентов в «Мои клиенты» НЕ показываем. Раньше
+        // не было фильтра — поэтому в UI вылезали 15 пустых строк
+        // (12 заброшенных draft'ов удалены 10.02.2025, 3 — настоящих
+        // удаления). Badge у Саляхутдинова показывал 165 вместо 150.
+        $query = Client::where('consultant', $consultant->id)
+            ->whereNull('dateDeleted');
 
         if ($request->filled('search')) {
             $query->where('personName', 'ilike', '%' . $request->input('search') . '%');
