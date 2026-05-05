@@ -130,6 +130,7 @@ class AdminFinanceController extends Controller
                 'c.consultantName as consultantName',
                 'c.openDate as contractOpenDate',
                 'c.term as contractTerm',
+                'c.product as productId',
             ]);
 
         $currencyIds = $rows->pluck('currency')->filter()->unique();
@@ -142,6 +143,15 @@ class AdminFinanceController extends Controller
             ? DB::table('commissionCalcProperty')->whereIn('id', $propIds)->pluck('title', 'id')
             : collect();
 
+        // Config-флаги продукта — UI скрывает «Свойство»/«Срок»/«Год КВ»
+        // у тех продуктов, где они не релевантны.
+        $productIds = $rows->pluck('productId')->filter()->unique();
+        $productFlags = $productIds->isNotEmpty()
+            ? DB::table('product')->whereIn('id', $productIds)
+                ->get(['id', 'has_property', 'has_term', 'has_year_kv'])
+                ->keyBy('id')
+            : collect();
+
         // Заморозка периодов — для индикатора цвета
         $periods = $rows->map(fn ($t) => [(int) $t->dateYear, (int) substr((string) $t->dateMonth, -2)])
             ->unique(fn ($p) => $p[0] . '-' . $p[1]);
@@ -152,17 +162,18 @@ class AdminFinanceController extends Controller
             }
         }
 
-        $data = $rows->map(function ($t) use ($currencies, $properties, $frozenSet) {
+        $data = $rows->map(function ($t) use ($currencies, $properties, $frozenSet, $productFlags) {
             $month = (int) substr((string) $t->dateMonth, -2);
             $year = (int) $t->dateYear;
             $isFrozen = $frozenSet->get("$year-$month", false);
+            $flags = $t->productId ? ($productFlags[$t->productId] ?? null) : null;
             return [
                 'id' => $t->id,
                 'periodFrozen' => $isFrozen,
                 'contract' => $t->contract,
                 'contractNumber' => $t->contractNumber,
                 'contractOpenDate' => $t->contractOpenDate,
-                'contractTerm' => $t->contractTerm,
+                'contractTerm' => $flags && ! $flags->has_term ? null : $t->contractTerm,
                 'clientName' => $t->clientName,
                 'consultantName' => $t->consultantName,
                 'amount' => round((float) ($t->amount ?? 0), 2),
@@ -170,9 +181,16 @@ class AdminFinanceController extends Controller
                 'amountUSD' => round((float) ($t->amountUSD ?? 0), 2),
                 'date' => $t->date,
                 'comment' => $t->comment,
-                'propertyTitle' => $t->commissionCalcProperty
-                    ? ($properties[$t->commissionCalcProperty] ?? null) : null,
-                'yearKV' => $t->score,
+                // Если у продукта has_property=false — показываем '—'
+                // вместо реального значения (даже если оно есть в БД).
+                // Это сделано чтобы UI чётко передавал «у этого продукта
+                // понятия "свойство" не существует».
+                'propertyTitle' => $flags && ! $flags->has_property ? null
+                    : ($t->commissionCalcProperty ? ($properties[$t->commissionCalcProperty] ?? null) : null),
+                'yearKV' => $flags && ! $flags->has_year_kv ? null : $t->score,
+                'productHasProperty' => $flags ? (bool) $flags->has_property : true,
+                'productHasTerm' => $flags ? (bool) $flags->has_term : true,
+                'productHasYearKv' => $flags ? (bool) $flags->has_year_kv : true,
                 'dsCommissionPercentage' => $t->dsCommissionPercentage !== null
                     ? round((float) $t->dsCommissionPercentage, 2) : null,
                 'commissionsAmountRUB' => round((float) ($t->commissionsAmountRUB ?? 0), 2),

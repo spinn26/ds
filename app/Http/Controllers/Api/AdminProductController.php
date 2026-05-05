@@ -44,6 +44,12 @@ class AdminProductController extends Controller
                 'noComission' => (bool) $p->noComission,
                 'visibleToResident' => (bool) $p->visibleToResident,
                 'visibleToCalculator' => (bool) $p->visibleToCalculator,
+                // Config-флаги: какие параметры релевантны при создании
+                // транзакции / в калькуляторе. Раньше показывались все
+                // поля у каждого продукта, что путало оператора.
+                'hasProperty' => (bool) ($p->has_property ?? false),
+                'hasTerm' => (bool) ($p->has_term ?? false),
+                'hasYearKv' => (bool) ($p->has_year_kv ?? false),
                 'publishStatus' => $p->publish_status ?? 'published',
                 'publishedAt' => $p->published_at,
                 'programCount' => Program::where('product', $p->id)->count(),
@@ -72,6 +78,9 @@ class AdminProductController extends Controller
             'noComission' => $request->boolean('noComission', false),
             'visibleToResident' => $request->boolean('visibleToResident', false),
             'visibleToCalculator' => $request->boolean('visibleToCalculator', true),
+            'has_property' => $request->boolean('hasProperty', false),
+            'has_term' => $request->boolean('hasTerm', false),
+            'has_year_kv' => $request->boolean('hasYearKv', false),
             'publish_status' => $status,
             'published_at' => $status === 'published' ? now() : null,
             'published_by' => $status === 'published' ? $request->user()?->id : null,
@@ -98,6 +107,9 @@ class AdminProductController extends Controller
         $product->noComission = $request->boolean('noComission');
         $product->visibleToResident = $request->boolean('visibleToResident');
         $product->visibleToCalculator = $request->boolean('visibleToCalculator');
+        if ($request->has('hasProperty')) $product->has_property = $request->boolean('hasProperty');
+        if ($request->has('hasTerm')) $product->has_term = $request->boolean('hasTerm');
+        if ($request->has('hasYearKv')) $product->has_year_kv = $request->boolean('hasYearKv');
 
         if ($request->has('publishStatus')) {
             $newStatus = $request->input('publishStatus');

@@ -1593,6 +1593,16 @@ class AdminDataController extends Controller
                 ]),
             'suppliers' => $suppliers,
             'programs'  => $programs,
+            // Конфиг-флаги продукта для условного показа полей в формах
+            // транзакций / калькулятора: «Свойство», «Срок контракта», «Год КВ».
+            'products' => DB::table('product')
+                ->where('active', true)
+                ->select('id', 'name',
+                    DB::raw('COALESCE(has_property, false) AS "hasProperty"'),
+                    DB::raw('COALESCE(has_term, false) AS "hasTerm"'),
+                    DB::raw('COALESCE(has_year_kv, false) AS "hasYearKv"'),
+                )
+                ->orderBy('name')->get(),
         ]);
     }
 

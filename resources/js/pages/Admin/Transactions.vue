@@ -846,7 +846,28 @@ const logHeaders = [
 ];
 
 const logColumnVisible = ref({});
-const logVisibleHeaders = computed(() => logHeaders.filter(h => logColumnVisible.value[h.key] !== false));
+
+// Авто-скрытие колонок «Свойство»/«Срок контр.»/«Год КВ» если ни у одной
+// строки текущей страницы продукт не объявил соответствующий флаг.
+// Раньше эти колонки показывали '—' для всех строк продуктов где они не
+// релевантны — занимало место без информации.
+const logAutoHide = computed(() => {
+  const items = logItems.value || [];
+  if (! items.length) return new Set();
+  const hide = new Set(['propertyTitle', 'contractTerm', 'yearKV']);
+  for (const it of items) {
+    if (it.productHasProperty) hide.delete('propertyTitle');
+    if (it.productHasTerm) hide.delete('contractTerm');
+    if (it.productHasYearKv) hide.delete('yearKV');
+    if (hide.size === 0) break;
+  }
+  return hide;
+});
+
+const logVisibleHeaders = computed(() => logHeaders.filter(h =>
+  logColumnVisible.value[h.key] !== false
+  && ! logAutoHide.value.has(h.key)
+));
 
 // Редактирование одной транзакции через PUT /admin/transactions/{id}.
 const editDialog = ref(false);
