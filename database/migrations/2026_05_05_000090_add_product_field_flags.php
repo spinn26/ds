@@ -44,12 +44,15 @@ return new class extends Migration
             )
         ');
 
+        // «Срок контракта» хранится в program.term (число лет) —
+        // termContract это FK на справочник, не на каждой программе.
         DB::statement('
             UPDATE product p
             SET has_term = EXISTS (
                 SELECT 1 FROM program pr
                 WHERE pr.product = p.id
-                  AND pr."termContract" IS NOT NULL
+                  AND pr.term IS NOT NULL
+                  AND pr.term > 0
                   AND pr.active = true
             )
         ');
