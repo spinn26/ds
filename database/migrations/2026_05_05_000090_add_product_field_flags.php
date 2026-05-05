@@ -54,15 +54,18 @@ return new class extends Migration
             )
         ');
 
+        // «Год КВ» хранится в transaction.score (varchar). Backfill:
+        // продукт имеет хотя бы одну транзакцию по своему контракту с
+        // непустым score.
         DB::statement('
             UPDATE product p
             SET has_year_kv = EXISTS (
-                SELECT 1 FROM program pr
-                JOIN "dsCommission" dc ON dc.program = pr.id
-                WHERE pr.product = p.id
-                  AND dc.score IS NOT NULL
-                  AND dc.active = true
-                  AND dc."dateDeleted" IS NULL
+                SELECT 1 FROM "transaction" t
+                JOIN contract c ON c.id = t.contract
+                WHERE c.product = p.id
+                  AND t.score IS NOT NULL
+                  AND t.score <> \'\'
+                  AND t."deletedAt" IS NULL
             )
         ');
 
