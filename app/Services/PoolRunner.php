@@ -114,28 +114,59 @@ class PoolRunner
             // в месяц — берём максимальный уровень.
             ->map(fn ($g) => $g->sortByDesc('level')->first());
 
-        // ДОБОР: партнёры с текущим status_and_lvl >= 6, у которых нет
-        // qualificationLog за период (например, не подтверждали квалификацию
-        // в этом месяце). В эталоне старой платформы они видны в верхней
-        // таблице как «партнёр уровня 6+, не участвует» — без галочки и без
-        // выплаты. Это важно чтобы оператор видел весь потенциальный состав
-        // лидерского пула, а не только тех, у кого был qualificationLog.
+        // ДОБОР: партнёры, у которых нет qualificationLog за этот месяц,
+        // но был раньше с уровнем 6+. В эталоне старой платформы такие
+        // видны в верхней таблице как «партнёр уровня 6+, не участвует»
+        // — без галочки и без выплаты.
+        //
+        // Источник уровня: ПОСЛЕДНИЙ qualificationLog партнёра (даже за
+        // прошлые месяцы) — даёт точную картину «когда последний раз
+        // партнёр квалифицировался на 6+». Раньше пытались брать из
+        // consultant.status_and_lvl, но это поле обновляется только при
+        // finalisation и в новых открытых месяцах (где finalisation ещё
+        // не запускалась) даёт ноль партнёров.
+        //
+        // Дополнительный backup: текущий consultant.status_and_lvl >= 6.
+        // Берётся UNION-ом с qualificationLog-источником.
         $alreadyHaveQl = $perPartnerLevel->keys()->map(fn ($k) => (int) $k)->all();
-        $extraConsultants = DB::table('consultant as c')
-            ->join('status_levels as sl', 'sl.id', '=', 'c.status_and_lvl')
-            ->where('c.activity', 1)
-            ->whereNull('c.dateDeleted')
-            ->where('sl.level', '>=', PoolCalculator::LEADER_LEVEL_MIN)
-            ->where('sl.level', '<=', PoolCalculator::LEADER_LEVEL_MAX)
-            ->when($alreadyHaveQl, fn ($q) => $q->whereNotIn('c.id', $alreadyHaveQl))
-            ->select([
-                'c.id as consultant',
-                'sl.level',
-                'sl.title',
-                'sl.id as level_id',
-                'sl.mandatoryGP',
-            ])
-            ->get();
+
+        $extraConsultants = DB::select(
+            "
+            WITH last_ql AS (
+                SELECT DISTINCT ON (ql.consultant)
+                    ql.consultant,
+                    COALESCE(ql.\"calculationLevel\", ql.\"nominalLevel\") AS lvl_id
+                FROM \"qualificationLog\" ql
+                WHERE ql.date <= ?
+                  AND ql.\"dateDeleted\" IS NULL
+                ORDER BY ql.consultant, ql.date DESC
+            )
+            SELECT
+                c.id          AS consultant,
+                sl.level      AS level,
+                sl.title      AS title,
+                sl.id         AS level_id,
+                sl.\"mandatoryGP\" AS \"mandatoryGP\"
+            FROM consultant c
+            JOIN status_levels sl ON sl.id = COALESCE(
+                (SELECT lvl_id FROM last_ql WHERE consultant = c.id),
+                c.status_and_lvl
+            )
+            WHERE c.activity = 1
+              AND c.\"dateDeleted\" IS NULL
+              AND sl.level >= ?
+              AND sl.level <= ?
+              " . (! empty($alreadyHaveQl)
+                    ? 'AND c.id NOT IN (' . implode(',', array_map('intval', $alreadyHaveQl)) . ')'
+                    : '') . "
+            ",
+            [
+                $end,
+                PoolCalculator::LEADER_LEVEL_MIN,
+                PoolCalculator::LEADER_LEVEL_MAX,
+            ],
+        );
+        $extraConsultants = collect($extraConsultants);
 
         // Конвертируем в формат perPartnerLevel и доливаем. У этих
         // консультантов нет ОП-данных за период, поэтому groupVolume=0,
@@ -143,7 +174,6 @@ class PoolRunner
         // Помечаем флагом isExtra=true: в эталоне старой платформы такие
         // партнёры видны в верхней таблице, но НЕ участвуют в счётчике
         // долей (фонд делится только на тех, у кого есть qualificationLog).
-        $extraIds = [];
         foreach ($extraConsultants as $row) {
             $perPartnerLevel[$row->consultant] = (object) [
                 'consultant' => $row->consultant,
@@ -155,7 +185,6 @@ class PoolRunner
                 'gapValuePercentage' => 0,
                 'isExtra' => true,
             ];
-            $extraIds[(int) $row->consultant] = true;
         }
 
         // Активный? — глобальный флаг (терминированные исключаются всегда,
