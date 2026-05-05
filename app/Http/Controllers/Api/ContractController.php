@@ -69,8 +69,23 @@ class ContractController extends Controller
 
         $teamIds = $this->consultantService->getTeamIds($consultant->id);
 
+        // Только активированные контракты — баллы и комиссия начисляются
+        // именно за «Активирован». Запрошено правками 2026-05-05: «должно
+        // быть только по активированным контрактам».
+        // Статус «Активирован» в legacy-схеме = contractStatus.id с
+        // соответствующим title; ищем dynamically чтобы не зависеть от ID.
+        $activeStatusId = DB::table('contractStatus')
+            ->where(function ($q) {
+                $q->where('name', 'ilike', '%активирован%')
+                  ->orWhere('name', 'ilike', '%active%');
+            })
+            ->value('id');
+
         $query = Contract::whereIn('consultant', $teamIds)
             ->whereNull('deletedAt');
+        if ($activeStatusId) {
+            $query->where('status', $activeStatusId);
+        }
 
         $this->contractService->applyContractFilters($query, $request);
 
