@@ -156,7 +156,17 @@ class StructureController extends Controller
     public function cities(Request $request): JsonResponse
     {
         $q = trim((string) $request->input('q', ''));
-        $query = DB::table('city')->select('id', 'cityNameRu')->orderBy('cityNameRu');
+        // Очистка мусора: legacy-импорт CSV положил в city.cityNameRu
+        // тире, пустые строки и e-mail адреса (видимо колонка съехала
+        // при импорте). Фильтруем явно: исключаем '@' (email), цифры в
+        // начале, тире/прочерки, слишком короткие (≤2 символа).
+        $query = DB::table('city')
+            ->select('id', 'cityNameRu')
+            ->whereNotNull('cityNameRu')
+            ->where('cityNameRu', '!~', '@')             // нет email
+            ->where('cityNameRu', '!~', '^[-—–\s]+$')   // не одни тире/пробелы
+            ->whereRaw('LENGTH(TRIM("cityNameRu")) >= 3') // минимум 3 символа
+            ->orderBy('cityNameRu');
         if ($q !== '') {
             $query->where('cityNameRu', 'ilike', '%' . $q . '%');
         }
