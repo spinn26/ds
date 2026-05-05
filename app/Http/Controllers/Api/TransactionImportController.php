@@ -536,6 +536,69 @@ class TransactionImportController extends Controller
         return response()->json($result);
     }
 
+    /**
+     * PUT /admin/transactions/{id}
+     *
+     * Редактирование транзакции (amount, comment, date, dsCommissionPercentage).
+     * Заморозка периода — 422. После успешного UPDATE автоматически
+     * пересчитываются комиссии для этой транзакции (DELETE + INSERT в commission).
+     */
+    public function update(
+        Request $request,
+        int $id,
+        \App\Services\PeriodFreezeService $freeze
+    ): JsonResponse {
+        $tx = DB::table('transaction')->where('id', $id)->whereNull('deletedAt')->first();
+        if (! $tx) {
+            return response()->json(['message' => 'Транзакция не найдена'], 404);
+        }
+
+        // Заморозка периода — нельзя править.
+        $period = $freeze->resolvePeriod(date: $tx->date);
+        if ($period && $freeze->isFrozen($period[0], $period[1])) {
+            return response()->json([
+                'message' => sprintf('Период %02d.%d закрыт — транзакцию нельзя редактировать.',
+                    $period[1], $period[0]),
+            ], 422);
+        }
+
+        $data = $request->validate([
+            'amount' => 'nullable|numeric',
+            'comment' => 'nullable|string|max:1000',
+            'date' => 'nullable|date',
+            'dsCommissionPercentage' => 'nullable|numeric|min:0|max:100',
+        ]);
+
+        $update = ['dateChanged' => now()];
+        if (array_key_exists('amount', $data)) $update['amount'] = $data['amount'];
+        if (array_key_exists('comment', $data)) $update['comment'] = $data['comment'];
+        if (array_key_exists('date', $data)) {
+            $update['date'] = $data['date'];
+            $d = \Carbon\Carbon::parse($data['date']);
+            $update['dateMonth'] = $d->format('Y-m');
+            $update['dateYear'] = (string) $d->year;
+        }
+        if (array_key_exists('dsCommissionPercentage', $data)) {
+            $update['dsCommissionPercentage'] = $data['dsCommissionPercentage'];
+        }
+
+        DB::table('transaction')->where('id', $id)->update($update);
+
+        // Пересчёт комиссий после правки: удаляем старые и вызываем calculator.
+        try {
+            DB::table('commission')->where('transaction', $id)->update([
+                'deletedAt' => now(),
+            ]);
+            app(\App\Services\CommissionCalculator::class)->calculateForTransaction($id);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('transaction recalc after edit failed', [
+                'id' => $id, 'error' => $e->getMessage(),
+            ]);
+        }
+
+        return response()->json(['message' => 'Транзакция обновлена', 'id' => $id]);
+    }
+
     private function parseCsv(string $path): array
     {
         $rows = [];

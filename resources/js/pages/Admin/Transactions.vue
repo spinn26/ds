@@ -458,10 +458,44 @@
             <StartChatButton :partner-id="item.consultantId || item.consultant" :partner-name="item.consultantName"
               context-type="Транзакция" :context-id="item.id" :context-label="'#' + item.id" />
           </template>
+          <template #item.edit="{ item }">
+            <v-btn icon="mdi-pencil" size="x-small" variant="text" color="primary"
+              :title="item.periodFrozen ? 'Период закрыт — нельзя править' : 'Редактировать транзакцию'"
+              :disabled="item.periodFrozen" @click="openEditTx(item)" />
+          </template>
         </DataTableWrapper>
       </v-window-item>
 
     </v-window>
+
+    <!-- Редактирование транзакции -->
+    <v-dialog v-model="editDialog" max-width="560">
+      <v-card v-if="editTx">
+        <v-card-title class="d-flex align-center ga-2">
+          <v-icon>mdi-pencil</v-icon>
+          Редактировать транзакцию #{{ editTx.id }}
+          <v-spacer />
+          <v-btn icon="mdi-close" variant="text" size="small" @click="editDialog = false" />
+        </v-card-title>
+        <v-card-text>
+          <v-text-field v-model="editTx.amount" type="number" step="0.01" label="Сумма"
+            density="comfortable" variant="outlined" class="mb-2" />
+          <v-text-field v-model="editTx.dsCommissionPercentage" type="number" step="0.01"
+            label="% ДС" density="comfortable" variant="outlined" class="mb-2"
+            hint="Если задан — пересчитает комиссию" persistent-hint />
+          <v-text-field v-model="editTx.date" type="date" label="Дата транзакции"
+            density="comfortable" variant="outlined" class="mb-2" />
+          <v-textarea v-model="editTx.comment" label="Комментарий" rows="2" auto-grow
+            density="comfortable" variant="outlined" />
+        </v-card-text>
+        <v-card-actions>
+          <v-btn variant="text" @click="editDialog = false">Отмена</v-btn>
+          <v-spacer />
+          <v-btn color="primary" variant="flat" prepend-icon="mdi-content-save"
+            :loading="savingTx" @click="saveTx">Сохранить</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
     <v-snackbar v-model="snack.open" :color="snack.color" timeout="4000">{{ snack.text }}</v-snackbar>
   </div>
@@ -808,10 +842,49 @@ const logHeaders = [
   { title: 'Без НДС RUB', key: 'netRevenueRUB', align: 'end', width: 130 },
   { title: 'Без НДС USD', key: 'netRevenueUSD', align: 'end', width: 130 },
   { title: '', key: 'chat', sortable: false, width: 50 },
+  { title: '', key: 'edit', sortable: false, width: 50 },
 ];
 
 const logColumnVisible = ref({});
 const logVisibleHeaders = computed(() => logHeaders.filter(h => logColumnVisible.value[h.key] !== false));
+
+// Редактирование одной транзакции через PUT /admin/transactions/{id}.
+const editDialog = ref(false);
+const editTx = ref(null);
+const savingTx = ref(false);
+
+function openEditTx(item) {
+  if (item.periodFrozen) return;
+  editTx.value = {
+    id: item.id,
+    amount: item.amount ?? 0,
+    dsCommissionPercentage: item.dsCommissionPercentage ?? null,
+    date: item.date ? String(item.date).slice(0, 10) : '',
+    comment: item.comment ?? '',
+  };
+  editDialog.value = true;
+}
+
+async function saveTx() {
+  if (!editTx.value) return;
+  savingTx.value = true;
+  try {
+    const payload = {
+      amount: editTx.value.amount === '' ? null : Number(editTx.value.amount),
+      dsCommissionPercentage: editTx.value.dsCommissionPercentage === '' || editTx.value.dsCommissionPercentage == null
+        ? null : Number(editTx.value.dsCommissionPercentage),
+      date: editTx.value.date || null,
+      comment: editTx.value.comment ?? null,
+    };
+    await api.put(`/admin/transactions/${editTx.value.id}`, payload);
+    notify('Транзакция обновлена. Комиссии пересчитаны.', 'success');
+    editDialog.value = false;
+    await loadLog();
+  } catch (e) {
+    notify(e.response?.data?.message || 'Ошибка сохранения', 'error');
+  }
+  savingTx.value = false;
+}
 
 const logActiveFilters = computed(() => {
   let c = 0;
