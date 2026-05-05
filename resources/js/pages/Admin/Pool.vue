@@ -148,7 +148,7 @@
           </tr>
 
           <tr v-for="p in payoutRows" :key="'pay-' + p.id">
-            <td>{{ monthLabel }}</td>
+            <td>{{ monthShort }}</td>
             <td>{{ p.personName }}</td>
             <td>
               <v-chip size="x-small" :color="levelColor(p.level)" variant="tonal">
@@ -201,7 +201,16 @@ const toggling = ref({});
 const snack = ref({ open: false, color: 'success', text: '' });
 function notify(text, color = 'success') { snack.value = { open: true, color, text }; }
 
+// Развёрнутый формат "Февраль 2026" для заголовка карточки и для
+// поля «Период» в нижней таблице. Соответствует эталону старой платформы.
+const RU_MONTHS = ['Январь','Февраль','Март','Апрель','Май','Июнь',
+  'Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
 const monthLabel = computed(() => {
+  if (!month.value) return '';
+  const [y, m] = month.value.split('-');
+  return `${RU_MONTHS[parseInt(m, 10) - 1]} ${y}`;
+});
+const monthShort = computed(() => {
   if (!month.value) return '';
   const [y, m] = month.value.split('-');
   return `${m}.${y}`;
@@ -323,6 +332,10 @@ async function toggleParticipates(item, value) {
       consultant: item.id, participates: !!value,
     });
     item.participates = !!value;
+    // Авто-пересчёт превью: оператор сразу видит как изменение галочки
+    // влияет на распределение (не нужно нажимать «Рассчитать пул» вручную).
+    // calcPool сам выставит loading-индикатор и дернёт /admin/pool/preview.
+    await calcPool();
   } catch (e) {
     notify(e.response?.data?.message || 'Ошибка', 'error');
   }
@@ -425,12 +438,5 @@ onMounted(loadParticipants);
   background: rgba(76, 175, 80, 0.12) !important;
   border-top: 2px solid rgba(76, 175, 80, 0.4) !important;
   border-bottom: 2px solid rgba(76, 175, 80, 0.4) !important;
-}
-/* Партнёр уровня 6+, но без выплаты: участвует=false, ОП не выполнен,
-   отрыв >90% или галка снята оператором. Строку оставляем видимой,
-   чтобы куратор видел общий состав, но визуально приглушаем. */
-.pool-row-excluded :deep(td) {
-  background: rgba(var(--v-theme-on-surface), 0.02);
-  color: rgba(var(--v-theme-on-surface), 0.55);
 }
 </style>
