@@ -35,7 +35,7 @@ class AdminEducationController extends Controller
         // База — все WebUser с ролью consultant (потенциальные обучающиеся).
         $usersQuery = DB::table('WebUser')
             ->where('role', 'like', '%consultant%')
-            ->whereNull('deletedAt');
+            ->whereNull('dateDeleted');
         if ($search !== '') {
             $usersQuery->where(function ($q) use ($search) {
                 $q->where('lastName', 'ilike', "%{$search}%")

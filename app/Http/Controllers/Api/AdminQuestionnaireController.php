@@ -68,7 +68,7 @@ class AdminQuestionnaireController extends Controller
     {
         $row = DB::table('WebUser')
             ->where('id', $id)
-            ->whereNull('deletedAt')
+            ->whereNull('dateDeleted')
             ->first();
 
         if (! $row) {
@@ -124,7 +124,7 @@ class AdminQuestionnaireController extends Controller
     {
         $q = DB::table('WebUser')
             ->where('role', 'like', '%consultant%')
-            ->whereNull('deletedAt');
+            ->whereNull('dateDeleted');
 
         if ($onlyCompleted) {
             $q->whereNotNull('questionnaireCompletedAt');

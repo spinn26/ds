@@ -107,14 +107,16 @@ class AdminFinanceController extends Controller
 
         // Агрегаты по всем строкам фильтра (не только видимая страница) —
         // для итоговой панели сверху таблицы. Запрос отдельный, чтобы
-        // не тянуть JOIN'ы на справочники без надобности.
+        // не тянуть JOIN'ы на справочники без надобности. Префикс t.
+        // обязателен — contract тоже имеет колонку amountRUB
+        // (ambiguous column).
         $aggregates = (clone $query)
             ->selectRaw('
-                SUM("amountRUB") AS amount_rub,
-                SUM("commissionsAmountRUB") AS commissions_rub,
-                SUM("commissionsAmountUSD") AS commissions_usd,
-                SUM("netRevenueRUB") AS net_rub,
-                SUM("netRevenueUSD") AS net_usd
+                SUM(t."amountRUB") AS amount_rub,
+                SUM(t."commissionsAmountRUB") AS commissions_rub,
+                SUM(t."commissionsAmountUSD") AS commissions_usd,
+                SUM(t."netRevenueRUB") AS net_rub,
+                SUM(t."netRevenueUSD") AS net_usd
             ')
             ->first();
 
