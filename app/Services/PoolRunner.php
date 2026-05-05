@@ -114,6 +114,50 @@ class PoolRunner
             // в месяц — берём максимальный уровень.
             ->map(fn ($g) => $g->sortByDesc('level')->first());
 
+        // ДОБОР: партнёры с текущим status_and_lvl >= 6, у которых нет
+        // qualificationLog за период (например, не подтверждали квалификацию
+        // в этом месяце). В эталоне старой платформы они видны в верхней
+        // таблице как «партнёр уровня 6+, не участвует» — без галочки и без
+        // выплаты. Это важно чтобы оператор видел весь потенциальный состав
+        // лидерского пула, а не только тех, у кого был qualificationLog.
+        $alreadyHaveQl = $perPartnerLevel->keys()->map(fn ($k) => (int) $k)->all();
+        $extraConsultants = DB::table('consultant as c')
+            ->join('status_levels as sl', 'sl.id', '=', 'c.status_and_lvl')
+            ->where('c.activity', 1)
+            ->whereNull('c.dateDeleted')
+            ->where('sl.level', '>=', PoolCalculator::LEADER_LEVEL_MIN)
+            ->where('sl.level', '<=', PoolCalculator::LEADER_LEVEL_MAX)
+            ->when($alreadyHaveQl, fn ($q) => $q->whereNotIn('c.id', $alreadyHaveQl))
+            ->select([
+                'c.id as consultant',
+                'sl.level',
+                'sl.title',
+                'sl.id as level_id',
+                'sl.mandatoryGP',
+            ])
+            ->get();
+
+        // Конвертируем в формат perPartnerLevel и доливаем. У этих
+        // консультантов нет ОП-данных за период, поэтому groupVolume=0,
+        // gapValuePercentage=0 → они автоматически попадут в "ОП не выполнен".
+        // Помечаем флагом isExtra=true: в эталоне старой платформы такие
+        // партнёры видны в верхней таблице, но НЕ участвуют в счётчике
+        // долей (фонд делится только на тех, у кого есть qualificationLog).
+        $extraIds = [];
+        foreach ($extraConsultants as $row) {
+            $perPartnerLevel[$row->consultant] = (object) [
+                'consultant' => $row->consultant,
+                'level' => $row->level,
+                'title' => $row->title,
+                'level_id' => $row->level_id,
+                'mandatoryGP' => $row->mandatoryGP,
+                'groupVolume' => 0,
+                'gapValuePercentage' => 0,
+                'isExtra' => true,
+            ];
+            $extraIds[(int) $row->consultant] = true;
+        }
+
         // Активный? — глобальный флаг (терминированные исключаются всегда,
         // даже если у них есть qualificationLog за период). Фильтруем
         // null/пустые id (legacy-данные могут содержать orphan-строки).
@@ -176,7 +220,15 @@ class PoolRunner
             if ($level < PoolCalculator::LEADER_LEVEL_MIN) continue;
             if (! $activeIds->has($consultantId)) continue;
 
-            $nominalCounts[$level] = ($nominalCounts[$level] ?? 0) + 1;
+            // Extras (нет qualificationLog за период) НЕ участвуют в счётчике
+            // фонда — эталон старой платформы делит только на тех, у кого
+            // есть подтверждённая квалификация в этом месяце. Сняли галочку
+            // вручную — остаются в счётчике (доля не выплачивается, но
+            // делитель не уменьшается).
+            $isExtra = (bool) ($row->isExtra ?? false);
+            if (! $isExtra) {
+                $nominalCounts[$level] = ($nominalCounts[$level] ?? 0) + 1;
+            }
 
             $mandatoryGp = (float) ($row->mandatoryGP ?? 0);
             $groupVolume = (float) ($row->groupVolume ?? 0);
@@ -190,7 +242,11 @@ class PoolRunner
             $modOk = $modParticipates === null ? true : (bool) $modParticipates;
 
             $disqualifyReason = null;
-            if (! $opOk) {
+            if ($isExtra) {
+                $disqualifyReason = 'Не подтвердил квалификацию';
+                // Для extras eligibility всегда false (не получают выплату).
+                $opOk = false;
+            } elseif (! $opOk) {
                 $disqualifyReason = 'ОП не выполнен';
             } elseif (! $gapOk) {
                 $disqualifyReason = sprintf('Отрыв %.0f%% > 90%%', $gapPct);

@@ -130,45 +130,38 @@
           </tr>
         </thead>
         <tbody>
-          <!-- Итого по уровням -->
+          <!-- Итого: эталон старой платформы показывает FUND (revenue × 1%)
+               для каждого активного уровня и сумму по всем активным уровням
+               как теоретический максимум — а не реально выплаченное. -->
           <tr class="pool-total-row">
-            <td colspan="3" class="font-weight-bold text-success">ИТОГО (фонд × #голов)</td>
-            <td class="text-end">—</td>
+            <td colspan="3" class="font-weight-bold text-success">ИТОГО (фонд × #активных уровней)</td>
+            <td class="text-end font-weight-bold text-success">{{ fmt2(result.revenue || 0) }} ₽</td>
             <td v-for="lvl in [6,7,8,9,10]" :key="'tot-'+lvl" class="text-end font-weight-bold text-success">
-              {{ fmt2(result.shareValues?.[lvl] || 0) }}
+              {{ fmt2(activeLevels.includes(lvl) ? (result.fund || 0) : 0) }}
             </td>
-            <td class="text-end font-weight-bold text-success">{{ fmt2(result.totalPaid) }}</td>
+            <td class="text-end font-weight-bold text-success">{{ fmt2((result.fund || 0) * activeLevels.length) }} ₽</td>
           </tr>
 
-          <tr v-for="p in payoutRows" :key="'pay-' + p.id" :class="{ 'pool-row-excluded': !p.payoutRub }">
+          <tr v-for="p in payoutRows" :key="'pay-' + p.id">
             <td>{{ monthLabel }}</td>
-            <td>
-              {{ p.personName }}
-              <v-tooltip v-if="!p.payoutRub && p.disqualifyReason" location="top" :text="p.disqualifyReason">
-                <template #activator="{ props }">
-                  <v-icon v-bind="props" size="14" color="warning" class="ml-1">mdi-information-outline</v-icon>
-                </template>
-              </v-tooltip>
-            </td>
+            <td>{{ p.personName }}</td>
             <td>
               <v-chip size="x-small" :color="levelColor(p.level)" variant="tonal">
                 {{ p.level }} {{ p.levelName }}
               </v-chip>
             </td>
-            <td class="text-end">{{ fmt2(p.groupBonusRub || 0) }} ₽</td>
+            <td class="text-end">{{ fmt2(p.groupBonusRub) }} ₽</td>
             <td v-for="lvl in [6,7,8,9,10]" :key="'r-' + p.id + '-' + lvl" class="text-end">
               <span :class="p.byLevel[lvl] > 0 ? 'text-success' : 'text-medium-emphasis'">
                 {{ fmt2(p.byLevel[lvl] || 0) }}
               </span>
             </td>
-            <td class="text-end font-weight-bold" :class="p.payoutRub > 0 ? '' : 'text-medium-emphasis'">
-              {{ fmt2(p.payoutRub) }} ₽
-            </td>
+            <td class="text-end font-weight-bold">{{ fmt2(p.payoutRub) }} ₽</td>
           </tr>
 
           <tr v-if="!payoutRows.length">
             <td :colspan="9" class="text-center text-medium-emphasis pa-4">
-              Нет партнёров уровня 6+ за этот месяц.
+              Никому не начислено (никто не подтвердил квалификацию или все исключены оператором).
             </td>
           </tr>
         </tbody>
@@ -243,31 +236,41 @@ const filteredParticipants = computed(() => {
   );
 });
 
+// Уровни (6..10), у которых есть хотя бы один партнёр в счётчике.
+// Используется в ИТОГО-строке: фонд показываем только для активных уровней,
+// сумма total = fund × число активных уровней (как в эталоне).
+const activeLevels = computed(() => {
+  if (!result.value?.shareValues) return [];
+  return [6, 7, 8, 9, 10].filter(lvl => (result.value.shareValues[lvl] || 0) > 0);
+});
+
 // Per-partner матрёшка breakdown by level: для уровня L он получает share(6)+share(7)+...+share(L).
-// Выводим ВСЕХ кандидатов уровня 6+ (даже неучаствующих и тех у кого 0):
-// колонки матрёшки заполняются только если payoutRub > 0; иначе строка
-// dim-ится в UI и показывается причина исключения через tooltip.
+// Эталон старой платформы: в нижней таблице — только партнёры с галочкой
+// «Участвует» И у которых был расчёт выплаты. Колонка «Групповой бонус»
+// показывает выручку DS за месяц (одна для всех — справочный контекст
+// откуда взялся фонд), а не персональный partner-group-bonus.
 const payoutRows = computed(() => {
   if (!result.value) return [];
   const shares = result.value.shareValues || {};
-  return (result.value.participants || []).map(p => {
-    const byLevel = { 6: 0, 7: 0, 8: 0, 9: 0, 10: 0 };
-    if (p.payoutRub > 0) {
+  const revenue = Number(result.value.revenue || 0);
+  return (result.value.participants || [])
+    .filter(p => p.participates && p.payoutRub > 0)
+    .map(p => {
+      const byLevel = { 6: 0, 7: 0, 8: 0, 9: 0, 10: 0 };
       for (let lvl = 6; lvl <= p.level; lvl++) {
         byLevel[lvl] = shares[lvl] || 0;
       }
-    }
-    return {
-      id: p.id,
-      personName: p.personName,
-      level: p.level,
-      levelName: p.levelName,
-      byLevel,
-      payoutRub: p.payoutRub,
-      groupBonusRub: p.groupBonusRub || 0,
-      disqualifyReason: p.disqualifyReason,
-    };
-  });
+      return {
+        id: p.id,
+        personName: p.personName,
+        level: p.level,
+        levelName: p.levelName,
+        byLevel,
+        payoutRub: p.payoutRub,
+        // Выручка DS без НДС за месяц — общая для всех (как в эталоне).
+        groupBonusRub: revenue,
+      };
+    });
 });
 
 function resetFilters() {
