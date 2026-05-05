@@ -37,8 +37,40 @@ class PoolRunner
      *   written:int, frozen?:bool
      * }
      */
+    /**
+     * До этой границы (включительно) пул выводится как историческая
+     * выгрузка — snapshot из poolLog (БД), либо fallback на CSV
+     * `Db/Pool/poolLog.csv`. Live-расчёт по новой формуле начинается
+     * с месяца LIVE_CALC_FROM (включительно).
+     *
+     * Февраль 2026 — последний месяц зафиксированной истории.
+     * Март 2026 граница (если ещё не закрыт) — оператор сам решает
+     * переходить на live или нет, для этого freeze-логика остаётся.
+     */
+    public const HISTORICAL_BEFORE = ['year' => 2026, 'month' => 4]; // < апрель 2026
+
     public function run(int $year, int $month, bool $applyWrite = false): array
     {
+        $isHistorical = $this->isHistoricalMonth($year, $month);
+
+        // Исторические периоды read-only: только snapshot, никакого
+        // applyWrite. Защита от случайного перезатирания эталонных
+        // данных Directual-импорта или CSV.
+        if ($applyWrite && $isHistorical) {
+            return [
+                'year' => $year, 'month' => $month,
+                'revenue' => 0.0, 'fund' => 0.0,
+                'shareValues' => [], 'participants' => [],
+                'totalPaid' => 0.0, 'totalForfeited' => 0.0,
+                'written' => 0, 'frozen' => true,
+                'message' => sprintf(
+                    'Период %02d.%d — исторический (до апреля 2026). Расчёт пула '.
+                    'и фиксация для таких периодов запрещены.',
+                    $month, $year,
+                ),
+            ];
+        }
+
         // Заморозка: если период закрыт, запись в poolLog запрещена (spec ✅Пул.md
         // + «Закрытые периоды заморожены» в commission-spec). Preview-прогон
         // (applyWrite=false) разрешён — оператор может посмотреть на числа,
@@ -65,11 +97,21 @@ class PoolRunner
             return $this->emptyResult($year, $month, $revenue);
         }
 
-        // Snapshot из poolLog возвращается ТОЛЬКО для заморожённых периодов.
-        // Открытый месяц всегда считается на лету, чтобы оператор (Богданова)
-        // видел актуальные числа по последним qualificationLog/transaction
-        // и мог нажать «Зафиксировать», когда готов. После фиксации период
-        // закрывается через period_closures и UI начинает читать снимок.
+        // Исторический период (до апреля 2026): всегда snapshot.
+        // Сначала пытаемся БД (poolLog), если пусто — читаем CSV
+        // (Db/Pool/poolLog.csv). Это точная выгрузка из старой Directual.
+        if ($isHistorical) {
+            $logged = $this->participantsFromPoolLog($year, $month, $leaderLevelIds, $revenue);
+            if ($logged !== null) return $logged;
+            $fromCsv = $this->participantsFromCsv($year, $month, $leaderLevelIds, $revenue);
+            if ($fromCsv !== null) return $fromCsv;
+            // Ни в БД, ни в CSV нет данных — отдаём пустой результат.
+            return $this->emptyResult($year, $month, $revenue);
+        }
+
+        // Snapshot из poolLog для заморожённого периода (после фиксации).
+        // Live-расчёт обходим только для frozen — иначе оператор должен
+        // видеть актуальные числа.
         if (! $applyWrite && $this->periodFreeze->isFrozen($year, $month)) {
             $logged = $this->participantsFromPoolLog($year, $month, $leaderLevelIds, $revenue);
             if ($logged !== null) {
@@ -514,6 +556,120 @@ class PoolRunner
             'totalForfeited' => 0.0,
             'written' => 0,
             'fromPoolLog' => true,  // флаг для UI: данные из реального лога
+        ];
+    }
+
+    /**
+     * true, если период <= февраля 2026 (исторический Directual-импорт).
+     * Live-расчёт работает с марта 2026 включительно (HISTORICAL_BEFORE).
+     */
+    private function isHistoricalMonth(int $year, int $month): bool
+    {
+        $border = self::HISTORICAL_BEFORE;
+        return ($year < $border['year'])
+            || ($year === $border['year'] && $month < $border['month']);
+    }
+
+    /**
+     * Снимок «как было» из CSV `Db/Pool/poolLog.csv` — fallback для
+     * исторических периодов (Directual выгрузка), когда в БД ничего
+     * нет (например, импорт пропустил часть строк).
+     *
+     * Формат CSV: `id;consultant;poolBonus;networkGroupBonus;date;createdAt;@dateCreated;@dateChanged`
+     * Возвращает null если файл не найден / пуст / нет строк за период.
+     */
+    private function participantsFromCsv(int $year, int $month, array $leaderLevelIds, float $revenue): ?array
+    {
+        $path = base_path('Db/Pool/poolLog.csv');
+        if (! is_file($path)) return null;
+
+        $start = sprintf('%04d-%02d-01', $year, $month);
+        $end = date('Y-m-t', strtotime($start));
+
+        $rows = [];
+        $fh = @fopen($path, 'r');
+        if (! $fh) return null;
+        try {
+            $header = fgetcsv($fh, 0, ';');
+            if (! $header) return null;
+            // BOM защита: первое поле может содержать UTF-8 BOM \xEF\xBB\xBF.
+            if (isset($header[0])) {
+                $header[0] = preg_replace('/^\xEF\xBB\xBF/u', '', (string) $header[0]);
+            }
+            $idx = array_flip($header);
+            while (($r = fgetcsv($fh, 0, ';')) !== false) {
+                $date = $r[$idx['date'] ?? 4] ?? '';
+                if ($date < $start || $date > $end . 'T23:59:59') continue;
+                $rows[] = [
+                    'consultant' => (int) ($r[$idx['consultant'] ?? 1] ?? 0),
+                    'poolBonus' => (float) ($r[$idx['poolBonus'] ?? 2] ?? 0),
+                    'networkGroupBonus' => $r[$idx['networkGroupBonus'] ?? 3] ?? null,
+                ];
+            }
+        } finally {
+            fclose($fh);
+        }
+        if (empty($rows)) return null;
+
+        $consIds = array_unique(array_column($rows, 'consultant'));
+        $consultants = DB::table('consultant')->whereIn('id', $consIds)
+            ->pluck('personName', 'id');
+
+        // Подтягиваем уровень из qualificationLog за тот же период (как
+        // в participantsFromPoolLog) — для UI отображения квалификации.
+        $perCons = DB::table('qualificationLog as ql')
+            ->whereBetween('ql.date', [$start, $end])
+            ->whereNull('ql.dateDeleted')
+            ->whereIn('ql.consultant', $consIds)
+            ->select(
+                'ql.consultant',
+                DB::raw('COALESCE(ql."calculationLevel", ql."nominalLevel") AS lvl_id'),
+            )
+            ->orderByDesc('ql.date')
+            ->get()->keyBy('consultant');
+        $levelTitles = DB::table('status_levels')
+            ->pluck('title', 'id')->toArray();
+        $levelNumbers = DB::table('status_levels')
+            ->pluck('level', 'id')->toArray();
+
+        $participants = [];
+        $nominalCounts = array_fill_keys(array_keys($leaderLevelIds), 0);
+        foreach ($rows as $r) {
+            $consId = $r['consultant'];
+            $qlRow = $perCons[$consId] ?? null;
+            $lvlId = $qlRow->lvl_id ?? null;
+            $level = (int) ($levelNumbers[$lvlId] ?? 0);
+            $title = $levelTitles[$lvlId] ?? '';
+            if ($level >= PoolCalculator::LEADER_LEVEL_MIN
+                && $level <= PoolCalculator::LEADER_LEVEL_MAX) {
+                $nominalCounts[$level] = ($nominalCounts[$level] ?? 0) + 1;
+            }
+            $participants[] = [
+                'id' => $consId,
+                'level' => $level,
+                'levelName' => $title,
+                'personName' => $consultants[$consId] ?? '—',
+                'participates' => true,
+                'payoutRub' => round($r['poolBonus'], 2),
+                'groupBonusRub' => 0,
+            ];
+        }
+
+        $totalPaid = array_sum(array_column($participants, 'payoutRub'));
+        $fund = $revenue * PoolCalculator::POOL_PERCENT;
+        $shareValues = $this->calculator->shareValues($revenue, $nominalCounts);
+
+        return [
+            'year' => $year,
+            'month' => $month,
+            'revenue' => $revenue,
+            'fund' => $fund,
+            'shareValues' => $shareValues,
+            'participants' => $participants,
+            'totalPaid' => $totalPaid,
+            'totalForfeited' => 0.0,
+            'written' => 0,
+            'fromCsv' => true,
         ];
     }
 
