@@ -39,6 +39,10 @@ class CalculatorController extends Controller
                 ->where(function ($q) {
                     $q->where('visibleToCalculator', true)->orWhereNull('visibleToCalculator');
                 })
+                // Только опубликованные — drafts не должны попадать в
+                // калькулятор партнёра. Раньше показывались все active.
+                ->when(\Illuminate\Support\Facades\Schema::hasColumn('product', 'publish_status'),
+                    fn ($q) => $q->where('publish_status', 'published'))
                 ->orderBy('name')->get()
                 ->map(fn ($p) => [
                     'id' => $p->id,
