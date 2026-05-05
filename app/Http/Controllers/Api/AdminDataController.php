@@ -992,8 +992,21 @@ class AdminDataController extends Controller
             }
         }
 
-        $total = $query->count();
-        $rows = $query->orderByDesc('id')
+        // Дедуп: один реквизит на консультанта. Приоритет — verified=true,
+        // затем самая новая запись (по id DESC). Раньше у Зарипова было
+        // 4 строки в списке (3 unverified + 1 verified) — теперь 1.
+        // Берём id-белый список через подзапрос, чтобы пагинация и
+        // count работали корректно с фильтрами выше.
+        $primaryIds = (clone $query)
+            ->select(DB::raw('DISTINCT ON (consultant) id'))
+            ->orderBy('consultant')
+            ->orderByDesc('verified')
+            ->orderByDesc('id')
+            ->pluck('id');
+
+        $query2 = Requisite::whereIn('id', $primaryIds);
+        $total = $query2->count();
+        $rows = $query2->orderByDesc('id')
             ->offset($this->paginationOffset($request))
             ->limit($this->paginationPerPage($request))
             ->get();
