@@ -58,6 +58,11 @@
                   placeholder="Программа" density="compact" hide-details rounded clearable variant="outlined"
                   @update:model-value="loadContracts" />
               </v-col>
+              <v-col cols="12" md="2">
+                <v-autocomplete v-model="filters.currency" :items="currencyOptions" item-title="name" item-value="id"
+                  placeholder="Валюта" density="compact" hide-details rounded clearable variant="outlined"
+                  @update:model-value="loadContracts" />
+              </v-col>
               <v-col cols="12" md="auto" class="d-flex align-center">
                 <v-btn variant="text" size="small" prepend-icon="mdi-filter-remove" @click="resetContractFilters">
                   Очистить фильтры
@@ -488,7 +493,7 @@ const contractPage = ref(1);
 const contractPerPage = ref(15);
 const filters = ref({
   consultantName: '', clientName: '', number: '',
-  supplier: null, provider: null, product: null, program: null,
+  supplier: null, provider: null, product: null, program: null, currency: null,
 });
 const productList = ref([]);
 const programList = ref([]);
@@ -498,7 +503,7 @@ const currencyOptions = ref([]);
 const productRates = ref([]);
 
 function resetContractFilters() {
-  filters.value = { consultantName: '', clientName: '', number: '', supplier: null, provider: null, product: null, program: null };
+  filters.value = { consultantName: '', clientName: '', number: '', supplier: null, provider: null, product: null, program: null, currency: null };
   loadContracts();
 }
 
@@ -862,6 +867,16 @@ onMounted(async () => {
     }));
     lookupSuppliers.value = lookups.data?.suppliers || [];
     lookupProviders.value = lookups.data?.providers || [];
+
+    // Programs не были загружены — фильтр «Программа» оставался пустым.
+    // Берём из общего contract form-data — там programs уже сгруппированы
+    // по продуктам.
+    try {
+      const fd = await api.get('/admin/contracts/form-data');
+      programList.value = (fd.data?.programs || []).map(p => ({
+        id: p.id, name: p.name,
+      }));
+    } catch {}
   } catch {}
 });
 </script>

@@ -169,8 +169,11 @@ const filteredItems = computed(() => {
   // consultant-таблице — фильтрация на server-side слишком дорого.
   // activityFilter теперь идёт на server (см. loadData) — пагинация и
   // total остаются консистентными.
-  if (qualFilter.value) {
-    arr = arr.filter(i => i.current?.levelNum === qualFilter.value || i.previous?.levelNum === qualFilter.value);
+  if (qualFilter.value != null) {
+    const lvl = Number(qualFilter.value);
+    arr = arr.filter(i =>
+      Number(i.current?.levelNum) === lvl || Number(i.previous?.levelNum) === lvl
+    );
   }
   return arr;
 });
