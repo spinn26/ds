@@ -1546,8 +1546,17 @@ class AdminDataController extends Controller
                 ->get()->map(fn ($c) => ['id' => $c->id, 'name' => $c->countryNameRu]),
             'riskProfiles' => DB::table('riskProfile')->orderBy('id')
                 ->get()->map(fn ($r) => ['id' => $r->id, 'name' => $r->name]),
-            'setups' => DB::table('setup')->orderBy('id')
-                ->get()->map(fn ($s) => ['id' => $s->id, 'name' => $s->setup]),
+            // Сетап + ФИО ФК — оператору проще выбирать «565395 Иванов И.И.»
+            // чем угадывать кому принадлежит код.
+            'setups' => DB::table('setup as s')
+                ->leftJoin('consultant as c', 'c.id', '=', 's.consultant')
+                ->orderBy('s.id')
+                ->select('s.id', 's.setup', 'c.personName')
+                ->get()
+                ->map(fn ($s) => [
+                    'id' => $s->id,
+                    'name' => trim($s->setup . ' ' . ($s->personName ?? '')),
+                ]),
             'suppliers' => $suppliers,
             'programs'  => $programs,
         ]);

@@ -541,16 +541,20 @@ const isStaff = computed(() =>
   userRoles.value.some(r => ['admin', 'backoffice', 'support', 'finance', 'head', 'calculations', 'corrections', 'education'].includes(r))
 );
 
-// Cabinet sections per role — exact mapping from spec docs
+// Cabinet sections per role — exact mapping from spec docs.
+// «contests» (Конкурсы) намеренно скрыты у всех ролей по запросу
+// продакта (правки 2026-05-05) — раздел не используется на проде.
 const cabinetSections = {
-  admin: ['calculator', 'structure', 'partners', 'statuses', 'clients', 'contracts', 'upload', 'acceptance', 'requisites', 'transfers', 'transactions', 'import', 'commissions', 'pool', 'qualifications', 'charges', 'payments', 'products', 'contests', 'communication', 'chat-analytics', 'reports', 'currencies', 'education', 'education-analytics', 'partner-questionnaires'],
-  backoffice: ['calculator', 'structure', 'partners', 'statuses', 'clients', 'contracts', 'upload', 'acceptance', 'requisites', 'transfers', 'products', 'contests', 'communication', 'chat-analytics', 'reports', 'pool', 'partner-questionnaires'],
+  admin: ['calculator', 'structure', 'partners', 'statuses', 'clients', 'contracts', 'upload', 'acceptance', 'requisites', 'transfers', 'transactions', 'import', 'commissions', 'pool', 'qualifications', 'charges', 'payments', 'products', 'communication', 'chat-analytics', 'reports', 'currencies', 'education', 'education-analytics', 'partner-questionnaires'],
+  backoffice: ['calculator', 'structure', 'partners', 'statuses', 'clients', 'contracts', 'upload', 'acceptance', 'requisites', 'transfers', 'products', 'communication', 'chat-analytics', 'reports', 'pool', 'partner-questionnaires', 'commissions'],
   support: ['partners', 'statuses', 'structure', 'clients', 'contracts', 'acceptance', 'products', 'communication', 'calculator', 'partner-questionnaires'],
-  head: ['calculator', 'structure', 'partners', 'statuses', 'clients', 'contracts', 'acceptance', 'transfers', 'products', 'contests', 'communication', 'chat-analytics', 'reports', 'owner-dashboard', 'reconciliation', 'anomalies', 'funnel', 'cohorts', 'pool', 'partner-questionnaires'],
+  head: ['calculator', 'structure', 'partners', 'statuses', 'clients', 'contracts', 'acceptance', 'transfers', 'products', 'communication', 'chat-analytics', 'reports', 'owner-dashboard', 'reconciliation', 'anomalies', 'funnel', 'cohorts', 'pool', 'partner-questionnaires'],
   finance: ['calculator', 'requisites', 'charges', 'payments', 'reports', 'communication', 'pool'],
-  calculations: ['calculator', 'commissions', 'qualifications', 'pool', 'transactions', 'import', 'products', 'reports', 'currencies'],
+  // Богданова — Руководитель по расчётам. По запросу: ей нужен полный
+  // доступ к данным партнёров, выплатам, реквизитам, акцепту и т.п.
+  calculations: ['calculator', 'structure', 'partners', 'statuses', 'clients', 'contracts', 'acceptance', 'transfers', 'requisites', 'transactions', 'import', 'commissions', 'pool', 'qualifications', 'charges', 'payments', 'products', 'communication', 'reports', 'currencies'],
   corrections: ['calculator', 'clients', 'contracts', 'partners'],
-  education: ['education', 'education-analytics', 'partner-questionnaires', 'partners', 'products', 'instructions', 'contests', 'communication'],
+  education: ['education', 'education-analytics', 'partner-questionnaires', 'partners', 'products', 'instructions', 'communication'],
 };
 
 const availableSections = computed(() => {

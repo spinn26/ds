@@ -46,11 +46,8 @@
                   placeholder="Поставщик" density="compact" hide-details rounded clearable variant="outlined"
                   @update:model-value="loadContracts" />
               </v-col>
-              <v-col cols="12" md="2">
-                <v-autocomplete v-model="filters.provider" :items="lookupProviders"
-                  placeholder="Провайдер" density="compact" hide-details rounded clearable variant="outlined"
-                  @update:model-value="loadContracts" />
-              </v-col>
+              <!-- «Провайдер» убран — на платформе понятие не используется,
+                   только «Поставщик». Запрошено правками 2026-05-05. -->
               <v-col cols="12" md="3">
                 <v-autocomplete v-model="filters.product" :items="productList" item-title="name" item-value="id"
                   placeholder="Продукт" density="compact" hide-details rounded clearable variant="outlined"
@@ -513,7 +510,6 @@ const contractHeaders = [
   { title: 'Открыт', key: 'openDate', width: 110 },
   { title: 'Срок', key: 'term', width: 70 },
   { title: 'Поставщик', key: 'supplierName' },
-  { title: 'Провайдер', key: 'providerName' },
   { title: 'Продукт', key: 'productName' },
   { title: 'Программа', key: 'programName' },
   { title: 'Сумма', key: 'amount', align: 'end', width: 140 },

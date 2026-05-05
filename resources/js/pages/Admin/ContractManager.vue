@@ -9,11 +9,7 @@
     </PageHeader>
 
     <FilterBar
-      :search="search"
-      search-placeholder="ФИО клиента / консультанта / №"
-      :search-cols="3"
       :show-reset="activeFilterCount > 0"
-      @update:search="v => { search = v ?? ''; debouncedLoad(); }"
       @reset="resetFilters"
     >
       <v-col cols="12" md="2">
@@ -574,7 +570,12 @@ const { debounced: debouncedLoad } = useDebounce(loadData, 400);
 
 function onOptions(opts) {
   page.value = opts.page;
-  if (opts.itemsPerPage) perPage.value = opts.itemsPerPage;
+  if (opts.itemsPerPage) {
+    // Vuetify шлёт -1 при выборе «All» — бэк трактует как невалид и
+    // возвращает одну запись. Заменяем на большое значение чтобы
+    // действительно получить весь список.
+    perPage.value = opts.itemsPerPage === -1 ? 100000 : opts.itemsPerPage;
+  }
   loadData();
 }
 

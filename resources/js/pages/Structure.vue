@@ -8,8 +8,6 @@
           rounded prepend-inner-icon="mdi-magnify" clearable hide-details style="max-width:240px" @update:model-value="debouncedLoad" />
         <v-select v-model="filters.qualification" :items="qualificationOptions" label="Квалификация"
           multiple clearable hide-details style="max-width:240px" @update:model-value="loadData" />
-        <v-select v-model="filters.levels" :items="qualificationOptions" label="Уровни"
-          multiple clearable hide-details style="max-width:240px" @update:model-value="loadData" />
         <v-select v-model="filters.status" :items="statusOptions" label="Статус"
           multiple clearable hide-details style="max-width:240px" @update:model-value="loadData" />
         <v-btn variant="text" size="small" :prepend-icon="showAdvanced ? 'mdi-chevron-up' : 'mdi-chevron-down'"
@@ -22,18 +20,12 @@
       </div>
       <v-expand-transition>
         <div v-if="showAdvanced" class="d-flex ga-2 flex-wrap align-center mt-3">
-          <v-text-field v-model="filters.last_name" placeholder="Фамилия"
-            hide-details style="max-width:150px" @update:model-value="debouncedLoad" />
-          <v-text-field v-model="filters.first_name" placeholder="Имя"
-            hide-details style="max-width:150px" @update:model-value="debouncedLoad" />
-          <v-text-field v-model="filters.patronymic" placeholder="Отчество"
-            hide-details style="max-width:170px" @update:model-value="debouncedLoad" />
           <v-text-field v-model="filters.birth_date_from" label="Дата рождения с" type="date"
             hide-details style="max-width:170px" @update:model-value="debouncedLoad" />
           <v-text-field v-model="filters.birth_date_to" label="Дата рождения по" type="date"
             hide-details style="max-width:170px" @update:model-value="debouncedLoad" />
           <v-autocomplete v-model="filters.city" :items="cityOptions"
-            :loading="citySearchLoading" placeholder="Город"
+            :loading="citySearchLoading" label="Город"
             item-title="name" item-value="name"
             hide-details hide-no-data clearable
             @update:search="onCitySearch"
