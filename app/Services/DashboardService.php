@@ -106,6 +106,16 @@ class DashboardService
 
         $statusLevel = $calcStatusLevel;
 
+        // Fallback per ✅Бизнес-логика «ОП по ГП»: если qualificationLog
+        // за период ещё не сформирован (партнёр новый, или month_close
+        // не отработал), берём status_and_lvl из consultant — он
+        // обновляется in-place синхронно с расчётами квалификаций.
+        // Без этого fallback'а блок «ОП по ГП» молча пропадал в начале
+        // месяца, до первой переоценки.
+        if (! $statusLevel && $consultant->status_and_lvl) {
+            $statusLevel = DB::table('status_levels')->where('id', $consultant->status_and_lvl)->first();
+        }
+
         // Consultant status name (batch with breakaway branch name)
         $lookupIds = array_filter([$consultant->status ? $consultant->status : null]);
         $statusName = $consultant->status

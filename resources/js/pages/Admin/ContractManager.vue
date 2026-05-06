@@ -206,6 +206,40 @@
                 :subtitle="idx === 0 ? 'Прямой партнёр' : `Уровень ${idx}`" />
             </v-list>
           </template>
+
+          <!-- Блок «Реквизиты прямого партнёра» (только при редактировании) -->
+          <template v-if="editingId && chain.length">
+            <div class="d-flex align-center mt-3 mb-2">
+              <div class="text-subtitle-2 font-weight-bold">Реквизиты партнёра (read-only)</div>
+              <v-spacer />
+              <v-btn v-if="chain[0]" size="x-small" variant="text" prepend-icon="mdi-open-in-new"
+                :href="'/admin/requisites?consultant=' + chain[0].id" target="_blank">
+                В Реквизиты
+              </v-btn>
+            </div>
+            <v-skeleton-loader v-if="reqLoading" type="list-item-three-line" />
+            <v-alert v-else-if="!partnerRequisites.length" type="info" variant="tonal" density="compact">
+              У партнёра нет ни одной заполненной анкеты ИП.
+            </v-alert>
+            <v-card v-else variant="outlined" class="pa-3" density="compact">
+              <div class="d-flex align-center mb-2">
+                <v-chip size="x-small" :color="partnerRequisites[0].verified ? 'success' : 'warning'">
+                  {{ partnerRequisites[0].verified ? 'Верифицирован' : 'На проверке' }}
+                </v-chip>
+                <v-spacer />
+                <span class="text-caption text-medium-emphasis">
+                  {{ partnerRequisites[0].entityType === 'self_employed' ? 'Самозанятый' : 'ИП' }}
+                </span>
+              </div>
+              <div class="text-body-2"><b>ИНН:</b> {{ partnerRequisites[0].inn || '—' }}</div>
+              <div v-if="partnerRequisites[0].ogrnip" class="text-body-2"><b>ОГРНИП:</b> {{ partnerRequisites[0].ogrnip }}</div>
+              <div v-if="partnerRequisites[0].fullName" class="text-body-2"><b>ФИО:</b> {{ partnerRequisites[0].fullName }}</div>
+              <div v-if="partnerRequisites[0].address" class="text-body-2"><b>Адрес:</b> {{ partnerRequisites[0].address }}</div>
+              <div v-if="partnerRequisites[0].bankAccount" class="text-body-2"><b>Р/счёт:</b> {{ partnerRequisites[0].bankAccount }}</div>
+              <div v-if="partnerRequisites[0].bankName" class="text-body-2"><b>Банк:</b> {{ partnerRequisites[0].bankName }}</div>
+              <div v-if="partnerRequisites[0].bik" class="text-body-2"><b>БИК:</b> {{ partnerRequisites[0].bik }}</div>
+            </v-card>
+          </template>
         </v-card-text>
 
         <v-card-actions class="d-flex flex-wrap ga-2">
@@ -351,6 +385,8 @@ const editingId = ref(null);
 const saving = ref(false);
 const deleteDialog = ref(false);
 const chain = ref([]);
+const partnerRequisites = ref([]);
+const reqLoading = ref(false);
 
 const formData = ref({ statuses: [], currencies: [], countries: [], riskProfiles: [], setups: [], suppliers: [], programs: [] });
 const productOptions = ref([]);
@@ -433,9 +469,34 @@ async function openEdit(item) {
     }
     chain.value = data.chain || [];
     editOpen.value = true;
+    // После открытия — подгружаем реквизиты прямого партнёра контракта.
+    loadPartnerRequisites();
   } catch (e) {
     notify(e.response?.data?.message || 'Не удалось загрузить контракт', 'error');
   }
+}
+
+async function loadPartnerRequisites() {
+  partnerRequisites.value = [];
+  if (!chain.value.length) return;
+  const consultantId = chain.value[0]?.id;
+  if (!consultantId) return;
+  reqLoading.value = true;
+  try {
+    const { data } = await api.get('/admin/requisites', {
+      params: { consultant: consultantId, per_page: 5 },
+    });
+    // Сортируем: верифицированные сверху, затем по id desc — самая свежая
+    // версия первой. Тот же приоритет, что в Requisites.vue (DISTINCT ON).
+    const rows = (data?.data || []).slice().sort((a, b) => {
+      if ((b.verified ? 1 : 0) - (a.verified ? 1 : 0) !== 0) {
+        return (b.verified ? 1 : 0) - (a.verified ? 1 : 0);
+      }
+      return (b.id || 0) - (a.id || 0);
+    });
+    partnerRequisites.value = rows;
+  } catch {}
+  reqLoading.value = false;
 }
 
 async function ensureFormData() {
