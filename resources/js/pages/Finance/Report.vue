@@ -82,7 +82,10 @@
             <v-icon size="18" color="blue">mdi-account-group</v-icon>
             <span class="text-body-2 text-medium-emphasis">Групповые продажи</span>
           </div>
-          <div class="text-body-2"><span class="font-weight-medium">Баллы (ОП по ГП):</span> {{ fmt(summary.groupSales?.points) }}</div>
+          <!-- «Баллы (ОП по ГП)» = групповой объём за месяц (volumes.gp),
+               а не sum(personalVolume) из downline-комиссий — там было 0
+               пока не построится цепочка наставников. -->
+          <div class="text-body-2"><span class="font-weight-medium">Баллы (ОП по ГП):</span> {{ fmt(summary.volumes?.gp) }}</div>
           <div class="text-body-2"><span class="font-weight-medium">Бонус баллы по разнице %:</span> {{ fmt(summary.groupSales?.bonus) }}</div>
           <div class="text-body-2"><span class="font-weight-medium">Бонус, ₽:</span> {{ fmt2(summary.groupSales?.bonusRub) }}</div>
         </v-card>
