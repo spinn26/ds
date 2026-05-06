@@ -134,7 +134,7 @@ Route::prefix('v1')->group(function () {
             Route::post('/impersonate/leave', [ImpersonateController::class, 'leave']);
         });
 
-        Route::middleware(['role:admin,backoffice,support,finance,head,calculations,corrections,education', 'restrict.education', 'throttle:600,1'])->group(function () {
+        Route::middleware(['role:admin,backoffice,support,finance,head,calculations,corrections,education', 'restrict.education', 'throttle:1200,1'])->group(function () {
         Route::get('/admin/dashboard', [\App\Http\Controllers\Api\AdminDashboardController::class, 'index']);
         Route::get('/admin/export/{type}', [\App\Http\Controllers\Api\ExportController::class, 'export'])->middleware('throttle:10,1');
         Route::get('/admin/users', [AdminUserController::class, 'index']);

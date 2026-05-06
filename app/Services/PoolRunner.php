@@ -253,12 +253,14 @@ class PoolRunner
             ->pluck('participates', 'consultant');
 
         // Considered = active + level ≥ 6 + has qualificationLog за период.
-        // Per spec ✅Расчет пула §6.4: пул делится на ВСЕХ участников
-        // (nominalCounts), но выплачивается только тем, кто:
-        //   1) выполнил план по ГП (groupVolume ≥ mandatoryGP);
-        //   2) не имеет отрыва ≥ 90% по одной ветке.
-        //   3) не снят галочкой «Участвует» вручную (модерация).
-        // Не выплаченные доли «остаются в компании» — НЕ перераспределяются.
+        // Per spec ✅Расчет пула §6.4 + правка от 2026-05-06:
+        // пул делится на участников с УЧЁТОМ модерации:
+        //   • Дисквалификация ОП/отрыв → доля forfeited (остаётся в компании,
+        //     делитель не уменьшается).
+        //   • Снята галочка «Участвует» вручную → ПОЛНОСТЬЮ исключаем
+        //     из делителя; доля перераспределяется между остальными.
+        //   Раньше делитель был общим — оператор снимал галку и пул
+        //   уменьшался для всех (а ожидание было — увеличивался).
         $considered = [];
         $nominalCounts = array_fill_keys(array_keys($leaderLevelIds), 0);
         $rowsForUi = [];
@@ -315,7 +317,12 @@ class PoolRunner
             // остаются в счётчике (доля не выплачивается, но делитель
             // не уменьшается).
             $isExtra = (bool) ($row->isExtra ?? false) || $isOpFailExtra;
-            if (! $isExtra) {
+            $modParticipates = $modByConsId[$consultantId] ?? null;
+            $modExcluded = $modParticipates === false; // галка явно снята
+            // Снятая вручную галка ПОЛНОСТЬЮ исключает из делителя
+            // (доля перераспределяется). Дисквалификация по ОП/отрыву —
+            // delitель остаётся, доля forfeited.
+            if (! $isExtra && ! $modExcluded) {
                 $nominalCounts[$level] = ($nominalCounts[$level] ?? 0) + 1;
             }
 
@@ -327,8 +334,7 @@ class PoolRunner
             // Per spec ✅Расчет пула §6.4: дисквалификация при отрыве > 90%
             // (строго больше; если ровно 90% — пул выплачивается).
             $gapOk = $gapPct <= 90.0;
-            $modParticipates = $modByConsId[$consultantId] ?? null;
-            $modOk = $modParticipates === null ? true : (bool) $modParticipates;
+            $modOk = ! $modExcluded;
 
             $disqualifyReason = null;
             if ($isOpFailExtra ?? false) {
