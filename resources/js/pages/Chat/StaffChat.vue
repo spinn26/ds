@@ -8,42 +8,61 @@
     </div>
     <!-- Left: ticket list (hidden in Kanban mode on mobile / collapsed on desktop) -->
     <aside class="chat-sidebar" :class="{ 'mobile-hidden': mobile && (activeChat || viewMode === 'kanban'), 'compact': viewMode === 'kanban' && !mobile }">
-      <div class="sidebar-head">
-        <div class="d-flex align-center justify-space-between">
-          <h3>Обращения</h3>
-          <button class="filter-chip bulk-toggle" :class="{ active: bulkMode }"
-            @click="toggleBulk" title="Массовые операции">
-            <v-icon size="14">{{ bulkMode ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline' }}</v-icon>
+      <div class="sidebar-head pa-3">
+        <div class="d-flex align-center justify-space-between mb-2">
+          <div class="text-subtitle-1 font-weight-bold">Обращения</div>
+          <v-btn size="x-small" :variant="bulkMode ? 'flat' : 'tonal'"
+            :color="bulkMode ? 'primary' : undefined"
+            :prepend-icon="bulkMode ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline'"
+            title="Массовые операции" @click="toggleBulk">
             Выбор
-          </button>
+          </v-btn>
         </div>
-        <div class="sidebar-search-row">
-          <v-icon size="16">mdi-magnify</v-icon>
-          <input v-model="filter.search" placeholder="Поиск по теме / клиенту…" @input="debouncedLoad" />
-          <button v-if="filter.search" class="clear-btn" @click="filter.search = ''; loadChats()"><v-icon size="14">mdi-close</v-icon></button>
+        <v-text-field v-model="filter.search"
+          placeholder="Поиск по теме / клиенту…"
+          prepend-inner-icon="mdi-magnify"
+          variant="outlined" density="compact" hide-details clearable
+          class="mb-2"
+          @input="debouncedLoad"
+          @click:clear="filter.search = ''; loadChats()" />
+        <!-- Smart views (как в Intercom Inbox / Zendesk Views) -->
+        <div class="d-flex flex-wrap ga-1 mb-2">
+          <v-chip size="small"
+            :color="smartView === 'all' ? 'primary' : undefined"
+            :variant="smartView === 'all' ? 'flat' : 'tonal'"
+            @click="smartView = 'all'">
+            Все <span class="ms-1 text-caption">{{ chats.length }}</span>
+          </v-chip>
+          <v-chip size="small"
+            :color="smartView === 'mine' ? 'primary' : undefined"
+            :variant="smartView === 'mine' ? 'flat' : 'tonal'"
+            @click="smartView = 'mine'">
+            Мои <span class="ms-1 text-caption">{{ countMine }}</span>
+          </v-chip>
+          <v-chip size="small"
+            :color="smartView === 'unassigned' ? 'primary' : undefined"
+            :variant="smartView === 'unassigned' ? 'flat' : 'tonal'"
+            @click="smartView = 'unassigned'">
+            Без ответственного <span class="ms-1 text-caption">{{ countUnassigned }}</span>
+          </v-chip>
+          <v-chip size="small"
+            :color="smartView === 'stale' ? 'warning' : undefined"
+            :variant="smartView === 'stale' ? 'flat' : 'tonal'"
+            @click="smartView = 'stale'">
+            Просрочено <span class="ms-1 text-caption">{{ countStale }}</span>
+          </v-chip>
         </div>
-        <!-- Smart views (как в Intercom Inbox / Zendesk Views): быстрые
-             фильтры по «кому принадлежит» — самая частая операция оператора. -->
-        <div class="filter-row smart-views">
-          <button class="filter-chip" :class="{ active: smartView === 'all' }"
-            @click="smartView = 'all'">Все<span class="vw-count">{{ chats.length }}</span></button>
-          <button class="filter-chip" :class="{ active: smartView === 'mine' }"
-            @click="smartView = 'mine'">Мои<span class="vw-count">{{ countMine }}</span></button>
-          <button class="filter-chip" :class="{ active: smartView === 'unassigned' }"
-            @click="smartView = 'unassigned'">Без ответственного<span class="vw-count">{{ countUnassigned }}</span></button>
-          <button class="filter-chip" :class="{ active: smartView === 'stale' }"
-            @click="smartView = 'stale'">Просрочено<span class="vw-count">{{ countStale }}</span></button>
+        <div class="d-flex flex-wrap ga-1 mb-2">
+          <v-chip v-for="s in statusFilterPills" :key="s.value" size="small"
+            :color="filter.status === s.value ? 'primary' : undefined"
+            :variant="filter.status === s.value ? 'flat' : 'tonal'"
+            @click="filter.status = s.value; loadChats()">{{ s.label }}</v-chip>
         </div>
-        <div class="filter-row">
-          <button v-for="s in statusFilterPills" :key="s.value"
-            class="filter-chip" :class="{ active: filter.status === s.value }"
-            @click="filter.status = s.value; loadChats()">{{ s.label }}</button>
-        </div>
-        <div class="filter-row">
-          <button v-for="p in priorityFilterPills" :key="p.value"
-            class="filter-chip small" :class="{ active: filter.priority === p.value }"
-            :style="filter.priority === p.value ? { background: p.color + '22', color: p.color, borderColor: p.color } : {}"
-            @click="filter.priority = p.value; loadChats()">{{ p.label }}</button>
+        <div class="d-flex flex-wrap ga-1">
+          <v-chip v-for="p in priorityFilterPills" :key="p.value" size="x-small"
+            :color="filter.priority === p.value ? p.color : undefined"
+            :variant="filter.priority === p.value ? 'flat' : 'tonal'"
+            @click="filter.priority = p.value; loadChats()">{{ p.label }}</v-chip>
         </div>
       </div>
       <div class="sidebar-list">
@@ -85,19 +104,19 @@
             ★ {{ t.csat_rating }}
           </span>
         </div>
-        <div v-if="!chats.length && !loading" class="sidebar-empty">
+        <div v-if="!chats.length && !loading" class="sidebar-empty pa-4 text-center">
           <v-icon size="40" color="grey">mdi-inbox-outline</v-icon>
-          <p>Ничего не найдено</p>
+          <div class="text-body-2 text-medium-emphasis mt-2">Ничего не найдено</div>
         </div>
       </div>
 
       <!-- Bulk action bar (list-mode). В Канбане свой — это для list-view. -->
       <transition name="bulk-slide">
-        <div v-if="bulkMode && anySelected && viewMode === 'list'" class="bulk-bar list-bulk-bar">
-          <div class="bulk-count">Выбрано: <strong>{{ selectedIds.size }}</strong></div>
+        <div v-if="bulkMode && anySelected && viewMode === 'list'" class="bulk-bar list-bulk-bar pa-2 d-flex flex-wrap align-center ga-2">
+          <div class="text-body-2">Выбрано: <strong>{{ selectedIds.size }}</strong></div>
           <v-menu>
             <template #activator="{ props }">
-              <button v-bind="props" class="bulk-btn"><v-icon size="14">mdi-arrow-right-bold</v-icon> Статус</button>
+              <v-btn v-bind="props" size="small" variant="tonal" prepend-icon="mdi-arrow-right-bold">Статус</v-btn>
             </template>
             <v-list density="compact">
               <v-list-item v-for="s in statuses" :key="s.value" @click="bulkSetStatus(s.value)">
@@ -108,7 +127,7 @@
           </v-menu>
           <v-menu>
             <template #activator="{ props }">
-              <button v-bind="props" class="bulk-btn"><v-icon size="14">mdi-flag</v-icon> Приоритет</button>
+              <v-btn v-bind="props" size="small" variant="tonal" prepend-icon="mdi-flag">Приоритет</v-btn>
             </template>
             <v-list density="compact">
               <v-list-item v-for="p in priorities" :key="p.value" @click="bulkSetPriority(p.value)">
@@ -119,7 +138,7 @@
           </v-menu>
           <v-menu>
             <template #activator="{ props }">
-              <button v-bind="props" class="bulk-btn"><v-icon size="14">mdi-account-plus</v-icon> Назначить</button>
+              <v-btn v-bind="props" size="small" variant="tonal" prepend-icon="mdi-account-plus">Назначить</v-btn>
             </template>
             <v-list density="compact" style="max-height: 320px; overflow-y: auto">
               <v-list-item @click="bulkAssign(currentUserId, currentUserName)">
@@ -132,49 +151,74 @@
               </v-list-item>
             </v-list>
           </v-menu>
-          <button class="bulk-btn cancel" @click="selectedIds = new Set()">Сбросить</button>
-          <button class="bulk-btn cancel" @click="bulkMode = false">Выйти</button>
+          <v-btn size="small" variant="text" @click="selectedIds = new Set()">Сбросить</v-btn>
+          <v-btn size="small" variant="text" color="error" @click="bulkMode = false">Выйти</v-btn>
         </div>
       </transition>
     </aside>
 
     <!-- View toggle: floating vertical rail on the right edge -->
     <div class="view-toggle">
-      <button class="view-toggle-btn" :class="{ active: viewMode === 'list' }" @click="viewMode = 'list'" title="Список">
+      <v-btn class="view-toggle-btn"
+        :variant="viewMode === 'list' ? 'flat' : 'text'"
+        :color="viewMode === 'list' ? 'primary' : undefined"
+        size="small" stacked
+        @click="viewMode = 'list'" title="Список">
         <v-icon size="20">mdi-format-list-bulleted</v-icon>
-        <span class="view-toggle-label">Список</span>
-      </button>
-      <button class="view-toggle-btn" :class="{ active: viewMode === 'kanban' }" @click="viewMode = 'kanban'" title="Канбан">
+        <span class="text-caption">Список</span>
+      </v-btn>
+      <v-btn class="view-toggle-btn"
+        :variant="viewMode === 'kanban' ? 'flat' : 'text'"
+        :color="viewMode === 'kanban' ? 'primary' : undefined"
+        size="small" stacked
+        @click="viewMode = 'kanban'" title="Канбан">
         <v-icon size="20">mdi-view-column-outline</v-icon>
-        <span class="view-toggle-label">Доска</span>
-      </button>
+        <span class="text-caption">Доска</span>
+      </v-btn>
     </div>
 
     <!-- Kanban mode container -->
     <div v-if="viewMode === 'kanban'" class="kanban-wrap">
       <!-- Kanban toolbar -->
-      <div class="kanban-toolbar">
-        <label class="toolbar-toggle">
-          <input type="checkbox" v-model="myBoardOnly" />
-          <v-icon size="14">mdi-account-star</v-icon>
-          Только мои
-        </label>
-        <div class="toolbar-group">
-          <span class="toolbar-label">Сортировка:</span>
-          <button class="toolbar-chip" :class="{ active: kanbanSort === 'time' }" @click="kanbanSort = 'time'">Время</button>
-          <button class="toolbar-chip" :class="{ active: kanbanSort === 'priority' }" @click="kanbanSort = 'priority'">Приоритет</button>
-          <button class="toolbar-chip" :class="{ active: kanbanSort === 'assignee' }" @click="kanbanSort = 'assignee'">Исполнитель</button>
+      <div class="kanban-toolbar pa-2 d-flex flex-wrap align-center ga-3">
+        <v-checkbox v-model="myBoardOnly" hide-details density="compact"
+          prepend-icon="mdi-account-star" label="Только мои" />
+        <div class="d-flex align-center ga-1">
+          <span class="text-caption text-medium-emphasis">Сортировка:</span>
+          <v-chip size="small"
+            :color="kanbanSort === 'time' ? 'primary' : undefined"
+            :variant="kanbanSort === 'time' ? 'flat' : 'tonal'"
+            @click="kanbanSort = 'time'">Время</v-chip>
+          <v-chip size="small"
+            :color="kanbanSort === 'priority' ? 'primary' : undefined"
+            :variant="kanbanSort === 'priority' ? 'flat' : 'tonal'"
+            @click="kanbanSort = 'priority'">Приоритет</v-chip>
+          <v-chip size="small"
+            :color="kanbanSort === 'assignee' ? 'primary' : undefined"
+            :variant="kanbanSort === 'assignee' ? 'flat' : 'tonal'"
+            @click="kanbanSort = 'assignee'">Исполнитель</v-chip>
         </div>
-        <div class="toolbar-group">
-          <span class="toolbar-label">Ряды:</span>
-          <button class="toolbar-chip" :class="{ active: swimlaneMode === 'none' }" @click="swimlaneMode = 'none'">Нет</button>
-          <button class="toolbar-chip" :class="{ active: swimlaneMode === 'priority' }" @click="swimlaneMode = 'priority'">По приоритету</button>
-          <button class="toolbar-chip" :class="{ active: swimlaneMode === 'assignee' }" @click="swimlaneMode = 'assignee'">По исполнителю</button>
+        <div class="d-flex align-center ga-1">
+          <span class="text-caption text-medium-emphasis">Ряды:</span>
+          <v-chip size="small"
+            :color="swimlaneMode === 'none' ? 'primary' : undefined"
+            :variant="swimlaneMode === 'none' ? 'flat' : 'tonal'"
+            @click="swimlaneMode = 'none'">Нет</v-chip>
+          <v-chip size="small"
+            :color="swimlaneMode === 'priority' ? 'primary' : undefined"
+            :variant="swimlaneMode === 'priority' ? 'flat' : 'tonal'"
+            @click="swimlaneMode = 'priority'">По приоритету</v-chip>
+          <v-chip size="small"
+            :color="swimlaneMode === 'assignee' ? 'primary' : undefined"
+            :variant="swimlaneMode === 'assignee' ? 'flat' : 'tonal'"
+            @click="swimlaneMode = 'assignee'">По исполнителю</v-chip>
         </div>
-        <button class="toolbar-chip bulk-toggle" :class="{ active: bulkMode }" @click="toggleBulk">
-          <v-icon size="14">{{ bulkMode ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline' }}</v-icon>
+        <v-btn size="x-small" :variant="bulkMode ? 'flat' : 'tonal'"
+          :color="bulkMode ? 'primary' : undefined"
+          :prepend-icon="bulkMode ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline'"
+          @click="toggleBulk">
           Выбор
-        </button>
+        </v-btn>
       </div>
 
       <!-- Kanban board -->
@@ -318,25 +362,32 @@
     <main v-else class="chat-main" :class="{ 'mobile-hidden': mobile && !activeChat }">
       <template v-if="activeChat">
         <!-- Header with actions -->
-        <div class="chat-header">
-          <button v-if="mobile" class="btn-back" @click="closeActiveChat"><v-icon>mdi-arrow-left</v-icon></button>
+        <div class="chat-header pa-3">
+          <v-btn v-if="mobile" icon variant="text" size="small" @click="closeActiveChat">
+            <v-icon>mdi-arrow-left</v-icon>
+          </v-btn>
           <div class="chat-header-info">
-            <div class="chat-header-subject">{{ activeChat.subject }}</div>
-            <div class="chat-header-meta">
-              <span class="customer-name">{{ activeChat.customer_name }}</span>
-              <span class="meta-status-chip" :style="{ background: statusClr(activeChat.status) + '22', color: statusClr(activeChat.status) }">
-                <v-icon size="10">{{ statusIcon(activeChat.status) }}</v-icon>
+            <div class="text-subtitle-1 font-weight-bold">{{ activeChat.subject }}</div>
+            <div class="d-flex flex-wrap align-center ga-2 mt-1">
+              <span class="text-caption text-medium-emphasis">{{ activeChat.customer_name }}</span>
+              <v-chip size="x-small" :color="statusClr(activeChat.status)" variant="tonal"
+                :prepend-icon="statusIcon(activeChat.status)">
                 {{ statusTxt(activeChat.status) }}
-              </span>
-              <span v-if="activeChat.priority && activeChat.priority !== 'medium'" class="meta-priority-chip" :style="{ background: prioClr(activeChat.priority) + '22', color: prioClr(activeChat.priority) }">
-                <v-icon size="10">mdi-flag</v-icon> {{ prioLabel(activeChat.priority) }}
-              </span>
-              <span v-if="activeChat.recipient_name" class="recipient-tag">
-                <v-icon size="12">mdi-arrow-right</v-icon> {{ activeChat.recipient_name }}
-              </span>
-              <span v-if="slaLabel" class="sla-chip" :class="slaClass">
-                <v-icon size="10">mdi-clock-outline</v-icon> {{ slaLabel }}
-              </span>
+              </v-chip>
+              <v-chip v-if="activeChat.priority && activeChat.priority !== 'medium'"
+                size="x-small" :color="prioClr(activeChat.priority)" variant="tonal"
+                prepend-icon="mdi-flag">
+                {{ prioLabel(activeChat.priority) }}
+              </v-chip>
+              <v-chip v-if="activeChat.recipient_name" size="x-small" variant="tonal"
+                prepend-icon="mdi-arrow-right">
+                {{ activeChat.recipient_name }}
+              </v-chip>
+              <v-chip v-if="slaLabel" size="x-small" variant="tonal"
+                :color="slaClass === 'sla-overdue' ? 'error' : (slaClass === 'sla-warning' ? 'warning' : 'success')"
+                prepend-icon="mdi-clock-outline">
+                {{ slaLabel }}
+              </v-chip>
             </div>
           </div>
           <div class="chat-header-actions">
@@ -571,33 +622,38 @@
           </div>
         </div>
 
-        <button v-if="showJumpToBottom" class="jump-to-bottom" @click="scrollDown(true)">
-          <v-icon size="16">mdi-arrow-down</v-icon>
-          <span v-if="pendingMessages > 0">{{ pendingMessages }}</span>
-        </button>
+        <v-btn v-if="showJumpToBottom" class="jump-to-bottom"
+          icon size="small" color="primary" elevation="3"
+          @click="scrollDown(true)">
+          <v-icon size="18">mdi-arrow-down</v-icon>
+          <v-badge v-if="pendingMessages > 0" :content="pendingMessages" color="error" floating />
+        </v-btn>
 
         <!-- Reply preview -->
-        <div v-if="replyTo && activeChat.status !== 'closed'" class="reply-bar">
-          <v-icon size="16" color="primary">mdi-reply</v-icon>
-          <div class="reply-bar-body">
-            <div class="reply-bar-sender">Ответ на: {{ replyTo.senderName }}</div>
-            <div class="reply-bar-text">{{ replyTo.content }}</div>
-          </div>
-          <button class="reply-bar-close" @click="cancelReply"><v-icon size="14">mdi-close</v-icon></button>
-        </div>
+        <v-alert v-if="replyTo && activeChat.status !== 'closed'"
+          density="compact" variant="tonal" color="primary"
+          icon="mdi-reply" closable class="reply-bar"
+          @click:close="cancelReply">
+          <div class="text-caption font-weight-medium">Ответ на: {{ replyTo.senderName }}</div>
+          <div class="text-body-2 text-truncate">{{ replyTo.content }}</div>
+        </v-alert>
 
         <!-- Input -->
-        <div v-if="activeChat.status !== 'closed'" class="chat-input"
+        <div v-if="activeChat.status !== 'closed'" class="chat-input pa-2"
           :class="{ 'drag-over': dragOver }"
           @dragover.prevent="dragOver = true"
           @dragleave.prevent="dragOver = false"
           @drop.prevent="onFileDrop">
           <input ref="fileRef" type="file" hidden @change="e => setFile(e.target.files?.[0])" />
-          <button class="input-btn" title="Прикрепить файл" @click="$refs.fileRef.click()"><v-icon size="20">mdi-paperclip</v-icon></button>
+          <v-btn icon variant="text" size="small" title="Прикрепить файл" @click="$refs.fileRef.click()">
+            <v-icon>mdi-paperclip</v-icon>
+          </v-btn>
           <!-- Quick replies -->
           <v-menu v-if="quickReplies.length">
             <template #activator="{ props }">
-              <button v-bind="props" class="input-btn" title="Быстрые ответы"><v-icon size="20">mdi-lightning-bolt-outline</v-icon></button>
+              <v-btn v-bind="props" icon variant="text" size="small" title="Быстрые ответы">
+                <v-icon>mdi-lightning-bolt-outline</v-icon>
+              </v-btn>
             </template>
             <v-list density="compact" style="max-width: 360px; max-height: 400px; overflow-y: auto">
               <v-list-item v-for="q in quickReplies" :key="q.id" @click="insertQuickReply(q)">
@@ -607,34 +663,40 @@
             </v-list>
           </v-menu>
           <div class="input-area">
-            <textarea ref="taRef" v-model="msgText"
+            <v-textarea ref="taRef" v-model="msgText"
               placeholder="Ответ… (Enter — отправить, Shift+Enter — перенос строки)"
-              rows="1"
+              variant="outlined" density="compact" rows="1" auto-grow hide-details
+              max-rows="6"
               @keydown.enter.exact.prevent="send"
               @input="onInput"
-              @paste="onPaste"></textarea>
+              @paste="onPaste" />
             <div v-if="file" class="input-file-preview">
               <img v-if="filePreviewUrl" :src="filePreviewUrl" alt="preview" />
               <div v-else class="input-file-icon"><v-icon size="16">mdi-file</v-icon></div>
               <div class="input-file-info">
                 <div class="input-file-name">{{ file.name }}</div>
-                <div class="input-file-size">{{ fmtFileSize(file.size) }}</div>
+                <div class="text-caption text-medium-emphasis">{{ fmtFileSize(file.size) }}</div>
               </div>
-              <button class="input-file-remove" @click="clearFile"><v-icon size="14">mdi-close</v-icon></button>
+              <v-btn icon size="x-small" variant="text" @click="clearFile">
+                <v-icon size="14">mdi-close</v-icon>
+              </v-btn>
             </div>
           </div>
-          <button class="input-send" :disabled="sending || (!msgText.trim() && !file)" title="Отправить (Enter)" @click="send">
-            <v-icon size="20">mdi-send</v-icon>
-          </button>
+          <v-btn icon color="primary"
+            :disabled="sending || (!msgText.trim() && !file)"
+            :loading="sending"
+            title="Отправить (Enter)" @click="send">
+            <v-icon>mdi-send</v-icon>
+          </v-btn>
           <div v-if="dragOver" class="drop-overlay">
             <v-icon size="32">mdi-file-upload</v-icon>
             <span>Отпустите файл для прикрепления</span>
           </div>
         </div>
       </template>
-      <div v-else class="chat-placeholder">
+      <div v-else class="chat-placeholder pa-8 text-center">
         <v-icon size="64" color="grey-lighten-2">mdi-forum-outline</v-icon>
-        <p>Выберите чат из списка</p>
+        <div class="text-body-1 text-medium-emphasis mt-3">Выберите чат из списка</div>
       </div>
     </main>
 

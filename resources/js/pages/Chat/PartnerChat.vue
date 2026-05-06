@@ -7,30 +7,42 @@
     </div>
     <!-- Left sidebar: dialog list -->
     <aside class="chat-sidebar" :class="{ 'mobile-hidden': mobile && activeChat }">
-      <div class="sidebar-head">
-        <h3>Мои обращения</h3>
-        <button class="btn-new" @click="showNew = true"><v-icon size="18">mdi-plus</v-icon> Новый чат</button>
+      <div class="sidebar-head pa-3">
+        <div class="text-subtitle-1 font-weight-bold">Мои обращения</div>
+        <v-btn color="primary" size="small" prepend-icon="mdi-plus" @click="showNew = true">
+          Новый чат
+        </v-btn>
       </div>
-      <div class="sidebar-quick">
-        <button class="quick-btn" @click="openFounder"><v-icon size="14">mdi-email-edit</v-icon> Написать основателю</button>
-        <button class="quick-btn" @click="openCase"><v-icon size="14">mdi-briefcase-plus</v-icon> Оставить кейс</button>
+      <div class="sidebar-quick px-3 pb-2 d-flex flex-wrap ga-2">
+        <v-btn variant="tonal" size="small" prepend-icon="mdi-email-edit" @click="openFounder">
+          Написать основателю
+        </v-btn>
+        <v-btn variant="tonal" size="small" prepend-icon="mdi-briefcase-plus" @click="openCase">
+          Оставить кейс
+        </v-btn>
       </div>
       <!-- Search + filter chips -->
-      <div class="sidebar-search">
-        <v-icon size="16">mdi-magnify</v-icon>
-        <input v-model="searchQuery" type="text" placeholder="Поиск по теме…" />
-        <button v-if="searchQuery" class="clear-btn" @click="searchQuery = ''"><v-icon size="14">mdi-close</v-icon></button>
+      <div class="px-3 pb-2">
+        <v-text-field v-model="searchQuery"
+          placeholder="Поиск по теме…"
+          prepend-inner-icon="mdi-magnify"
+          variant="outlined" density="compact" hide-details clearable />
       </div>
-      <div class="filter-row">
-        <button v-for="opt in statusFilters" :key="opt.value"
-          class="filter-chip" :class="{ active: statusFilter === opt.value }"
-          @click="statusFilter = opt.value">{{ opt.label }}</button>
+      <div class="px-3 pb-2 d-flex flex-wrap ga-1">
+        <v-chip v-for="opt in statusFilters" :key="opt.value"
+          :color="statusFilter === opt.value ? 'primary' : undefined"
+          :variant="statusFilter === opt.value ? 'flat' : 'tonal'"
+          size="small" @click="statusFilter = opt.value">
+          {{ opt.label }}
+        </v-chip>
       </div>
-      <div class="filter-row">
-        <button v-for="opt in categoryFilters" :key="opt.value"
-          class="filter-chip small" :class="{ active: categoryFilter === opt.value }"
-          :style="categoryFilter === opt.value ? { background: catColor(opt.value) + '22', color: catColor(opt.value), borderColor: catColor(opt.value) } : {}"
-          @click="categoryFilter = opt.value">{{ opt.label }}</button>
+      <div class="px-3 pb-2 d-flex flex-wrap ga-1">
+        <v-chip v-for="opt in categoryFilters" :key="opt.value"
+          :color="categoryFilter === opt.value ? catColor(opt.value) : undefined"
+          :variant="categoryFilter === opt.value ? 'flat' : 'tonal'"
+          size="x-small" @click="categoryFilter = opt.value">
+          {{ opt.label }}
+        </v-chip>
       </div>
       <div class="sidebar-list">
         <div v-for="t in visibleChats" :key="t.id" class="chat-item" :class="{ active: activeChat?.id === t.id, 'has-unread': t.unread > 0, pinned: t.pinned_at }" @click="openChat(t)">
@@ -56,17 +68,26 @@
               <span class="chat-item-status-chip" :style="{ background: statusClr(t.status) + '22', color: statusClr(t.status) }">{{ statusTxt(t.status) }}</span>
             </div>
           </div>
-          <button class="chat-item-pin" :class="{ active: t.pinned_at }" :title="t.pinned_at ? 'Открепить' : 'Закрепить'" @click.stop="togglePin(t, $event)">
+          <v-btn class="chat-item-pin" :class="{ active: t.pinned_at }"
+            icon size="x-small" variant="text"
+            :title="t.pinned_at ? 'Открепить' : 'Закрепить'"
+            @click.stop="togglePin(t, $event)">
             <v-icon size="14">{{ t.pinned_at ? 'mdi-pin' : 'mdi-pin-outline' }}</v-icon>
-          </button>
+          </v-btn>
           <span v-if="t.unread > 0" class="unread-badge">{{ t.unread }}</span>
         </div>
-        <div v-if="!visibleChats.length && !loading" class="sidebar-empty">
+        <div v-if="!visibleChats.length && !loading" class="sidebar-empty pa-4 text-center">
           <v-icon size="40" color="grey">mdi-chat-outline</v-icon>
-          <p v-if="chats.length">Ничего не найдено по фильтрам</p>
-          <p v-else>Нет обращений</p>
-          <button v-if="!chats.length" class="btn-new small" @click="showNew = true">Создать первое</button>
-          <button v-else-if="searchQuery || statusFilter !== 'all' || categoryFilter !== 'all'" class="btn-new small" @click="resetFilters">Сбросить фильтры</button>
+          <div class="text-body-2 text-medium-emphasis mt-2 mb-3">
+            {{ chats.length ? 'Ничего не найдено по фильтрам' : 'Нет обращений' }}
+          </div>
+          <v-btn v-if="!chats.length" color="primary" size="small" prepend-icon="mdi-plus" @click="showNew = true">
+            Создать первое
+          </v-btn>
+          <v-btn v-else-if="searchQuery || statusFilter !== 'all' || categoryFilter !== 'all'"
+            variant="text" size="small" prepend-icon="mdi-filter-off-outline" @click="resetFilters">
+            Сбросить фильтры
+          </v-btn>
         </div>
       </div>
     </aside>
@@ -75,19 +96,23 @@
     <main class="chat-main" :class="{ 'mobile-hidden': mobile && !activeChat }">
       <template v-if="activeChat">
         <!-- Header -->
-        <div class="chat-header">
-          <button v-if="mobile" class="btn-back" @click="closeActiveChat"><v-icon>mdi-arrow-left</v-icon></button>
+        <div class="chat-header pa-3">
+          <v-btn v-if="mobile" icon variant="text" size="small" @click="closeActiveChat">
+            <v-icon>mdi-arrow-left</v-icon>
+          </v-btn>
           <div class="chat-header-info">
-            <div class="chat-header-subject">{{ activeChat.subject }}</div>
-            <div class="chat-header-meta">
-              <span class="meta-cat" :style="{ background: catColor(activeChat.category) + '22', color: catColor(activeChat.category) }">{{ catLabel(activeChat.category) }}</span>
-              <span class="meta-status-chip" :style="{ background: statusClr(activeChat.status) + '22', color: statusClr(activeChat.status) }">
-                <v-icon size="10">{{ statusIcon(activeChat.status) }}</v-icon>
+            <div class="text-subtitle-1 font-weight-bold">{{ activeChat.subject }}</div>
+            <div class="d-flex flex-wrap align-center ga-2 mt-1">
+              <v-chip size="x-small" :color="catColor(activeChat.category)" variant="tonal">
+                {{ catLabel(activeChat.category) }}
+              </v-chip>
+              <v-chip size="x-small" :color="statusClr(activeChat.status)" variant="tonal"
+                :prepend-icon="statusIcon(activeChat.status)">
                 {{ statusTxt(activeChat.status) }}
-              </span>
-              <span v-if="activeChat.assigned_name" class="meta-agent">
-                <v-icon size="12">mdi-account</v-icon> {{ activeChat.assigned_name }}
-              </span>
+              </v-chip>
+              <v-chip v-if="activeChat.assigned_name" size="x-small" variant="tonal" prepend-icon="mdi-account">
+                {{ activeChat.assigned_name }}
+              </v-chip>
             </div>
           </div>
         </div>
@@ -187,93 +212,101 @@
         </div>
 
         <!-- Jump to bottom button -->
-        <button v-if="showJumpToBottom" class="jump-to-bottom" @click="scrollDown(true)">
-          <v-icon size="16">mdi-arrow-down</v-icon>
-          <span v-if="pendingMessages > 0">{{ pendingMessages }}</span>
-        </button>
+        <v-btn v-if="showJumpToBottom" class="jump-to-bottom"
+          icon size="small" color="primary" elevation="3"
+          @click="scrollDown(true)">
+          <v-icon size="18">mdi-arrow-down</v-icon>
+          <v-badge v-if="pendingMessages > 0" :content="pendingMessages" color="error" floating />
+        </v-btn>
 
         <!-- Reply preview (above input) -->
-        <div v-if="replyTo && activeChat.status !== 'closed'" class="reply-bar">
-          <v-icon size="16" color="primary">mdi-reply</v-icon>
-          <div class="reply-bar-body">
-            <div class="reply-bar-sender">Ответ на: {{ replyTo.senderName }}</div>
-            <div class="reply-bar-text">{{ replyTo.content }}</div>
-          </div>
-          <button class="reply-bar-close" @click="cancelReply"><v-icon size="14">mdi-close</v-icon></button>
-        </div>
+        <v-alert v-if="replyTo && activeChat.status !== 'closed'"
+          density="compact" variant="tonal" color="primary"
+          icon="mdi-reply" closable class="reply-bar"
+          @click:close="cancelReply">
+          <div class="text-caption font-weight-medium">Ответ на: {{ replyTo.senderName }}</div>
+          <div class="text-body-2 text-truncate">{{ replyTo.content }}</div>
+        </v-alert>
+
         <!-- Input -->
-        <div v-if="activeChat.status !== 'closed'" class="chat-input"
+        <div v-if="activeChat.status !== 'closed'" class="chat-input pa-2"
           :class="{ 'drag-over': dragOver }"
           @dragover.prevent="dragOver = true"
           @dragleave.prevent="dragOver = false"
           @drop.prevent="onFileDrop">
           <input ref="fileRef" type="file" hidden @change="e => setFile(e.target.files?.[0])" />
-          <button class="input-btn" title="Прикрепить файл" @click="$refs.fileRef.click()"><v-icon size="20">mdi-paperclip</v-icon></button>
+          <v-btn icon variant="text" size="small" title="Прикрепить файл" @click="$refs.fileRef.click()">
+            <v-icon>mdi-paperclip</v-icon>
+          </v-btn>
           <div class="input-area">
-            <textarea ref="taRef" v-model="msgText"
+            <v-textarea ref="taRef" v-model="msgText"
               placeholder="Введите сообщение… (Enter — отправить, Shift+Enter — перенос строки)"
-              rows="1"
+              variant="outlined" density="compact" rows="1" auto-grow hide-details
+              max-rows="6"
               @keydown.enter.exact.prevent="send"
               @input="onInput"
-              @paste="onPaste"></textarea>
+              @paste="onPaste" />
             <div v-if="file" class="input-file-preview">
               <img v-if="filePreviewUrl" :src="filePreviewUrl" alt="preview" />
               <div v-else class="input-file-icon"><v-icon size="16">mdi-file</v-icon></div>
               <div class="input-file-info">
                 <div class="input-file-name">{{ file.name }}</div>
-                <div class="input-file-size">{{ fmtFileSize(file.size) }}</div>
+                <div class="text-caption text-medium-emphasis">{{ fmtFileSize(file.size) }}</div>
               </div>
-              <button class="input-file-remove" @click="clearFile"><v-icon size="14">mdi-close</v-icon></button>
+              <v-btn icon size="x-small" variant="text" @click="clearFile">
+                <v-icon size="14">mdi-close</v-icon>
+              </v-btn>
             </div>
           </div>
-          <button class="input-send" :disabled="sending || (!msgText.trim() && !file)" title="Отправить (Enter)" @click="send">
-            <v-icon size="20">mdi-send</v-icon>
-          </button>
+          <v-btn icon color="primary"
+            :disabled="sending || (!msgText.trim() && !file)"
+            :loading="sending"
+            title="Отправить (Enter)" @click="send">
+            <v-icon>mdi-send</v-icon>
+          </v-btn>
           <div v-if="dragOver" class="drop-overlay">
             <v-icon size="32">mdi-file-upload</v-icon>
             <span>Отпустите файл для прикрепления</span>
           </div>
         </div>
-        <div v-else class="chat-closed">
-          <v-icon size="16">mdi-lock</v-icon> Чат закрыт
-        </div>
+        <v-alert v-else type="info" variant="tonal" density="compact" icon="mdi-lock" class="ma-3">
+          Чат закрыт
+        </v-alert>
 
         <!-- CSAT — оценка ответа после resolve/closed. Показывается только если
              ещё не оценено партнёром. После submit заменяется на сообщение
              благодарности. -->
-        <div v-if="canRateChat" class="csat-prompt">
-          <div class="csat-title">
-            <v-icon size="16" color="primary">mdi-star-circle</v-icon>
-            Оцените, как мы помогли
+        <v-card v-if="canRateChat" variant="tonal" color="primary" class="ma-3 pa-3">
+          <div class="d-flex align-center ga-2 mb-2">
+            <v-icon color="primary">mdi-star-circle</v-icon>
+            <span class="text-subtitle-2 font-weight-bold">Оцените, как мы помогли</span>
           </div>
-          <div class="csat-stars">
-            <button v-for="n in 5" :key="n"
-              class="csat-star" :class="{ filled: csatHover >= n || csatRating >= n }"
-              @click="csatRating = n"
-              @mouseenter="csatHover = n"
-              @mouseleave="csatHover = 0">
-              <v-icon size="22">{{ (csatHover >= n || csatRating >= n) ? 'mdi-star' : 'mdi-star-outline' }}</v-icon>
-            </button>
-          </div>
-          <textarea v-if="csatRating > 0" v-model="csatComment"
-            class="csat-comment" rows="2" maxlength="1000"
-            placeholder="Комментарий (необязательно)"></textarea>
-          <button v-if="csatRating > 0" class="csat-submit" :disabled="csatSubmitting" @click="submitCsat">
-            <v-icon size="14">mdi-send</v-icon>
-            {{ csatSubmitting ? 'Отправка…' : 'Оценить' }}
-          </button>
-        </div>
-        <div v-else-if="activeChat && activeChat.csat_rating" class="csat-shown">
-          <v-icon size="14" color="success">mdi-check</v-icon>
+          <v-rating v-model="csatRating" color="warning" half-increments="false"
+            density="compact" size="32" hover />
+          <v-textarea v-if="csatRating > 0" v-model="csatComment"
+            placeholder="Комментарий (необязательно)" maxlength="1000"
+            variant="outlined" density="compact" rows="2" auto-grow hide-details
+            class="mt-2" />
+          <v-btn v-if="csatRating > 0" color="primary" size="small"
+            prepend-icon="mdi-send" :loading="csatSubmitting" class="mt-2"
+            @click="submitCsat">
+            Оценить
+          </v-btn>
+        </v-card>
+        <v-alert v-else-if="activeChat && activeChat.csat_rating"
+          type="success" variant="tonal" density="compact" class="ma-3"
+          icon="mdi-check">
           Вы поставили оценку
-          <span class="csat-rate">{{ '★'.repeat(activeChat.csat_rating) }}{{ '☆'.repeat(5 - activeChat.csat_rating) }}</span>
-        </div>
+          <v-rating :model-value="activeChat.csat_rating" readonly size="14" density="compact" color="warning" class="ms-2" />
+        </v-alert>
       </template>
 
       <!-- No chat selected -->
-      <div v-else class="chat-placeholder">
+      <div v-else class="chat-placeholder pa-8 text-center">
         <v-icon size="64" color="grey-lighten-2">mdi-forum-outline</v-icon>
-        <p>Выберите чат или создайте новый</p>
+        <div class="text-body-1 text-medium-emphasis mt-3">
+          Выберите чат или создайте новый
+        </div>
       </div>
     </main>
 
@@ -1029,26 +1062,8 @@ onUnmounted(() => {
 
 /* Sidebar */
 .chat-sidebar { width: 340px; flex-shrink: 0; border-right: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); display: flex; flex-direction: column; background: rgba(var(--v-theme-surface), 1); }
-.sidebar-head { display: flex; align-items: center; justify-content: space-between; padding: 16px; border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); }
-.sidebar-head h3 { font-size: 16px; font-weight: 700; margin: 0; }
-.btn-new { display: flex; align-items: center; gap: 4px; padding: 6px 14px; border-radius: 10px; border: none; background: rgb(var(--v-theme-primary)); color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; }
-.btn-new.small { margin-top: 8px; }
-.sidebar-quick { display: flex; gap: 6px; padding: 8px 16px; border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); }
-.quick-btn { display: flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 8px; border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); background: transparent; color: inherit; font-size: 11px; cursor: pointer; white-space: nowrap; }
-.quick-btn:hover { background: rgba(var(--v-theme-primary), 0.08); }
+.sidebar-head { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); }
 .sidebar-list { flex: 1; overflow-y: auto; }
-.sidebar-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 48px 16px; gap: 8px; color: rgba(var(--v-theme-on-surface), 0.4); text-align: center; }
-.sidebar-empty p { margin: 0; font-size: 13px; }
-
-/* Search + filters */
-.sidebar-search { display: flex; align-items: center; gap: 6px; padding: 8px 12px; border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); color: rgba(var(--v-theme-on-surface), 0.5); }
-.sidebar-search input { flex: 1; border: none; outline: none; background: transparent; color: inherit; font-size: 13px; font-family: inherit; }
-.sidebar-search .clear-btn { background: none; border: none; cursor: pointer; color: inherit; padding: 2px; }
-.filter-row { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 10px; border-bottom: 1px solid rgba(var(--v-border-color), 0.15); }
-.filter-chip { padding: 3px 10px; border-radius: 14px; border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); background: transparent; color: rgba(var(--v-theme-on-surface), 0.7); font-size: 11px; cursor: pointer; white-space: nowrap; transition: all 0.15s; }
-.filter-chip:hover { background: rgba(var(--v-theme-primary), 0.06); }
-.filter-chip.active { background: rgb(var(--v-theme-primary)); color: #fff; border-color: rgb(var(--v-theme-primary)); }
-.filter-chip.small { font-size: 10px; padding: 2px 8px; }
 
 /* Chat item */
 .chat-item { display: flex; align-items: center; gap: 12px; padding: 12px 16px; cursor: pointer; border-bottom: 1px solid rgba(var(--v-border-color), 0.3); transition: background 0.1s; position: relative; }
@@ -1066,17 +1081,6 @@ onUnmounted(() => {
 .chat-item-preview-text { overflow: hidden; text-overflow: ellipsis; }
 .chat-item.has-unread .chat-item-preview { color: rgba(var(--v-theme-on-surface), 0.92); font-weight: 500; }
 .conn-banner { position: absolute; top: 0; left: 0; right: 0; z-index: 100; padding: 6px 12px; background: rgba(var(--v-theme-warning), 0.18); color: rgb(var(--v-theme-warning)); font-size: 12px; display: flex; align-items: center; gap: 6px; border-bottom: 1px solid rgba(var(--v-theme-warning), 0.3); }
-.csat-prompt { padding: 14px 16px; background: rgba(var(--v-theme-primary), 0.06); border-top: 1px solid rgba(var(--v-theme-primary), 0.18); display: flex; flex-direction: column; gap: 8px; }
-.csat-title { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
-.csat-stars { display: flex; gap: 4px; }
-.csat-star { background: transparent; border: none; padding: 2px; cursor: pointer; color: rgba(var(--v-theme-on-surface), 0.35); transition: color 0.15s, transform 0.1s; }
-.csat-star:hover { transform: scale(1.15); }
-.csat-star.filled { color: #f5a524; }
-.csat-comment { width: 100%; resize: vertical; min-height: 50px; padding: 6px 10px; border-radius: 8px; border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); background: rgb(var(--v-theme-surface)); color: inherit; font-size: 13px; }
-.csat-submit { align-self: flex-start; display: inline-flex; align-items: center; gap: 4px; padding: 6px 14px; border-radius: 8px; border: none; background: rgb(var(--v-theme-primary)); color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; }
-.csat-submit:disabled { opacity: 0.5; cursor: not-allowed; }
-.csat-shown { padding: 12px 16px; font-size: 12px; color: rgba(var(--v-theme-on-surface), 0.6); display: flex; align-items: center; gap: 6px; border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); }
-.csat-rate { color: #f5a524; letter-spacing: 1px; font-weight: 600; }
 .chat-item-status-chip { padding: 2px 8px; border-radius: 10px; font-weight: 600; font-size: 10px; }
 .unread-badge { position: absolute; right: 12px; top: 12px; background: rgb(var(--v-theme-error)); color: #fff; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 10px; min-width: 18px; text-align: center; }
 .chat-item.has-unread { background: rgba(var(--v-theme-primary), 0.06); }
@@ -1089,17 +1093,11 @@ onUnmounted(() => {
 
 /* Main chat area */
 .chat-main { flex: 1; display: flex; flex-direction: column; min-width: 0; position: relative; }
-.chat-placeholder { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 12px; color: rgba(var(--v-theme-on-surface), 0.3); }
-.chat-placeholder p { font-size: 15px; }
+.chat-placeholder { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; }
 
 /* Header */
-.chat-header { padding: 12px 20px; border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); display: flex; align-items: center; gap: 12px; }
-.btn-back { background: none; border: none; cursor: pointer; color: inherit; padding: 4px; }
-.chat-header-subject { font-size: 15px; font-weight: 700; }
-.chat-header-meta { display: flex; gap: 8px; align-items: center; margin-top: 4px; font-size: 12px; flex-wrap: wrap; }
-.meta-cat { padding: 2px 8px; border-radius: 6px; font-weight: 600; }
-.meta-status-chip { display: inline-flex; align-items: center; gap: 3px; padding: 2px 8px; border-radius: 10px; font-weight: 600; font-size: 11px; }
-.meta-agent { display: flex; align-items: center; gap: 4px; color: rgba(var(--v-theme-on-surface), 0.5); }
+.chat-header { border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); display: flex; align-items: flex-start; gap: 8px; }
+.chat-header-info { flex: 1; min-width: 0; }
 
 /* Messages */
 .chat-messages { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 12px; scroll-behavior: smooth; }
@@ -1166,13 +1164,8 @@ onUnmounted(() => {
 .msg-edit-btn.cancel { background: transparent; color: rgba(var(--v-theme-on-surface), 0.6); }
 .msg-edit-btn.save { background: rgb(var(--v-theme-primary)); color: #fff; }
 
-/* Reply preview bar above input */
-.reply-bar { display: flex; align-items: center; gap: 8px; padding: 8px 14px; background: rgba(var(--v-theme-primary), 0.06); border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); border-left: 3px solid rgb(var(--v-theme-primary)); }
-.reply-bar-body { flex: 1; min-width: 0; font-size: 12px; }
-.reply-bar-sender { font-weight: 700; color: rgb(var(--v-theme-primary)); }
-.reply-bar-text { color: rgba(var(--v-theme-on-surface), 0.6); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.reply-bar-close { background: none; border: none; cursor: pointer; color: rgba(var(--v-theme-on-surface), 0.5); padding: 4px; border-radius: 6px; }
-.reply-bar-close:hover { background: rgba(var(--v-theme-error), 0.1); color: rgb(var(--v-theme-error)); }
+/* Reply preview bar above input — Vuetify v-alert, лишь margin-сброс */
+.reply-bar { margin: 0 12px; }
 
 /* Hotkeys modal rows */
 .hotkey-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px dashed rgba(var(--v-border-color), 0.3); font-size: 13px; }
@@ -1188,31 +1181,19 @@ onUnmounted(() => {
 .typing-dots span:nth-child(3) { animation-delay: 0.3s; }
 @keyframes typing-blink { 0%, 80%, 100% { opacity: 0.2; } 40% { opacity: 1; } }
 
-/* Jump to bottom */
-.jump-to-bottom { position: absolute; right: 24px; bottom: 90px; display: flex; align-items: center; gap: 4px; padding: 6px 10px; border-radius: 16px; background: rgb(var(--v-theme-primary)); color: #fff; border: none; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.15); font-size: 12px; font-weight: 600; z-index: 5; }
-.jump-to-bottom:hover { opacity: 0.9; }
+/* Jump to bottom — Vuetify v-btn, нужны лишь position+offset */
+.jump-to-bottom { position: absolute; right: 24px; bottom: 90px; z-index: 5; }
 
-/* Input */
-.chat-input { display: flex; align-items: flex-end; gap: 8px; padding: 12px 20px; border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); position: relative; transition: background 0.15s; }
+/* Input — обёртки + drop-overlay + file-preview */
+.chat-input { display: flex; align-items: flex-end; gap: 8px; border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); position: relative; transition: background 0.15s; }
 .chat-input.drag-over { background: rgba(var(--v-theme-primary), 0.08); }
-.input-btn { background: none; border: none; cursor: pointer; color: rgba(var(--v-theme-on-surface), 0.5); padding: 6px; border-radius: 8px; }
-.input-btn:hover { background: rgba(var(--v-theme-primary), 0.1); }
-.input-area { flex: 1; }
-.input-area textarea { width: 100%; border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); border-radius: 12px; padding: 10px 14px; font-size: 14px; resize: none; background: rgba(var(--v-theme-surface-variant), 0.3); color: inherit; outline: none; font-family: inherit; }
-.input-area textarea:focus { border-color: rgb(var(--v-theme-primary)); }
+.input-area { flex: 1; min-width: 0; }
 .input-file-preview { display: flex; align-items: center; gap: 8px; margin-top: 6px; padding: 6px 8px; border-radius: 10px; background: rgba(var(--v-theme-primary), 0.08); border: 1px solid rgba(var(--v-theme-primary), 0.2); }
 .input-file-preview img { width: 40px; height: 40px; object-fit: cover; border-radius: 6px; }
 .input-file-icon { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 6px; background: rgba(var(--v-theme-primary), 0.15); color: rgb(var(--v-theme-primary)); }
 .input-file-info { flex: 1; min-width: 0; }
 .input-file-name { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.input-file-size { font-size: 10px; color: rgba(var(--v-theme-on-surface), 0.5); }
-.input-file-remove { background: none; border: none; cursor: pointer; color: rgba(var(--v-theme-on-surface), 0.5); padding: 4px; border-radius: 6px; }
-.input-file-remove:hover { background: rgba(var(--v-theme-error), 0.1); color: rgb(var(--v-theme-error)); }
 .drop-overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; background: rgba(var(--v-theme-primary), 0.15); border: 2px dashed rgb(var(--v-theme-primary)); border-radius: 8px; color: rgb(var(--v-theme-primary)); font-weight: 600; font-size: 13px; pointer-events: none; z-index: 10; }
-.input-send { background: rgb(var(--v-theme-primary)); color: #fff; border: none; border-radius: 10px; padding: 8px 12px; cursor: pointer; transition: opacity 0.15s; }
-.input-send:hover { opacity: 0.9; }
-.input-send:disabled { opacity: 0.4; cursor: not-allowed; }
-.chat-closed { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 16px; border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); color: rgba(var(--v-theme-on-surface), 0.4); font-size: 13px; }
 
 /* Mobile */
 @media (max-width: 959px) {
