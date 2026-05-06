@@ -239,27 +239,79 @@ class FinanceReportService
             $gapPct = (float) ($qLogCurrent->gapValuePercentage ?? 0);
             $gapVal = (float) ($qLogCurrent->gapValue ?? 0);
 
-            // Если qLog не сохранил топ-ветку — ищем сами:
-            // прямые потомки и их groupVolumeCumulative за период.
-            if (! $branchId) {
+            // Имени ветки нет — пробуем найти.
+            //
+            // Раньше fallback стрелял только при $branchId=null, но в проде
+            // встречаются ещё две ситуации:
+            //   1. branchWithGap указывает на консультанта, у которого
+            //      consultant.personName=NULL (orphan-импорт из Directual).
+            //   2. branchWithGap NULL, но branchWithGapGroupVolume есть —
+            //      ветка с отрывом находится глубже первой линии (например,
+            //      сильный лидер 2-3 уровня вниз). Прямой потомок может
+            //      вообще не иметь qualificationLog за этот месяц.
+            //
+            // Решение: триггер на empty($branchName). Сначала ищем по прямой
+            // линии, затем рекурсивным CTE по всему поддереву. Берём
+            // партнёра с максимальным groupVolumeCumulative за месяц.
+            if (empty($branchName)) {
                 $myGv = (float) ($qLogCurrent->groupVolumeCumulative ?? 0);
+                $monthStart = $month . '-01';
+                $monthEnd = date('Y-m-d', strtotime("$monthStart +1 month"));
+
                 $top = DB::table('qualificationLog as ql')
                     ->join('consultant as c', 'c.id', '=', 'ql.consultant')
                     ->where('c.inviter', $consultant->id)
                     ->whereNull('c.dateDeleted')
                     ->whereNull('ql.dateDeleted')
-                    ->where('ql.date', '>=', $month . '-01')
-                    ->where('ql.date', '<', date('Y-m-d', strtotime("$month-01 +1 month")))
+                    ->where('ql.date', '>=', $monthStart)
+                    ->where('ql.date', '<', $monthEnd)
                     ->orderByDesc('ql.groupVolumeCumulative')
                     ->select(['c.id', 'c.personName', 'ql.groupVolumeCumulative as gv'])
                     ->first();
-                if ($top && (float) $top->gv > 0) {
-                    $branchId = $top->id;
-                    $branchName = $top->personName;
-                    $branchGv = (float) $top->gv;
-                    $gapPct = $myGv > 0 ? round($branchGv / $myGv * 100, 2) : 0;
-                    $gapVal = max(0, $branchGv - $myGv * 0.7);
+
+                // Если в первой линии никого с qLog за период не нашли —
+                // спускаемся ниже по дереву через рекурсивный CTE.
+                if (! $top || (float) ($top->gv ?? 0) <= 0) {
+                    $top = DB::selectOne('
+                        WITH RECURSIVE descendants AS (
+                            SELECT id FROM consultant
+                            WHERE inviter = ? AND "dateDeleted" IS NULL
+                            UNION ALL
+                            SELECT c.id FROM consultant c
+                            JOIN descendants d ON c.inviter = d.id
+                            WHERE c."dateDeleted" IS NULL
+                        )
+                        SELECT c.id, c."personName", ql."groupVolumeCumulative" AS gv
+                        FROM descendants d
+                        JOIN consultant c ON c.id = d.id
+                        JOIN "qualificationLog" ql ON ql.consultant = c.id
+                        WHERE ql.date >= ? AND ql.date < ?
+                          AND ql."dateDeleted" IS NULL
+                        ORDER BY ql."groupVolumeCumulative" DESC NULLS LAST
+                        LIMIT 1
+                    ', [$consultant->id, $monthStart, $monthEnd]);
                 }
+
+                if ($top && (float) ($top->gv ?? 0) > 0) {
+                    $branchId = $top->id;
+                    $branchName = $top->personName ?: ('Партнёр #' . $top->id);
+                    // Если qLog уже сохранил branchWithGapGroupVolume —
+                    // оставляем его как достоверное значение и не пересчитываем
+                    // gapPct/gapVal, чтобы цифры в карточке не «прыгали»
+                    // относительно того, что зафиксировал ночной finalize.
+                    if ($branchGv <= 0) {
+                        $branchGv = (float) $top->gv;
+                        $gapPct = $myGv > 0 ? round($branchGv / $myGv * 100, 2) : 0;
+                        $gapVal = max(0, $branchGv - $myGv * 0.7);
+                    }
+                }
+            }
+
+            // Последний fallback: если имя так и не нашли, но есть branchId
+            // — выводим хотя бы «Партнёр #ID», чтобы карточка не выглядела
+            // битой. UI всё равно вынужден рендерить «—» если null.
+            if (empty($branchName) && $branchId) {
+                $branchName = 'Партнёр #' . $branchId;
             }
 
             $breakaway = [
