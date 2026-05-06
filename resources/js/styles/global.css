@@ -265,6 +265,24 @@
   opacity: 0.65;
 }
 
+/* Стабильный лейаут фильтр-баров: в density="compact" все поля
+   имеют одинаковый row-height, не «прыгают» при focus.
+   Vuetify в compact-режиме иногда уменьшает height на 4px при наличии
+   label, что вызывает дрожание layout. Фиксируем на 40px. */
+.v-card .v-row > .v-col > .v-text-field.v-input--density-compact > .v-input__control,
+.v-card .v-row > .v-col > .v-select.v-input--density-compact > .v-input__control,
+.v-card .v-row > .v-col > .v-autocomplete.v-input--density-compact > .v-input__control {
+  min-height: 40px;
+}
+
+/* Лейблы внутри outlined-полей не должны срезаться по высоте.
+   На тёмной теме их fg по умолчанию rgba(255,255,255,0.55) — слишком тусклый,
+   поднимаем до 0.7 для читаемости. */
+.v-theme--dark .v-field--variant-outlined .v-label,
+.v-theme--dark .v-field--variant-outlined .v-field-label {
+  color: rgba(255, 255, 255, 0.72);
+}
+
 /* Print */
 @media print {
   .v-navigation-drawer, .v-app-bar, .v-btn, .v-fab { display: none !important; }

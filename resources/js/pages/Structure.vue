@@ -314,7 +314,9 @@ async function loadFilterOptions() {
       api.get('/structure/qualification-levels'),
     ]);
     // activity-statuses can override statusOptions if backend provides them
-    qualificationOptions.value = qual.data.map(q => ({ title: `${q.level} [${q.title}]`, value: q.id }));
+    // value = q.level (число 1..10), а не q.id — backend сравнивает с
+    // m.qualification.level (см. ConsultantService::applyFilters).
+    qualificationOptions.value = qual.data.map(q => ({ title: `${q.level} [${q.title}]`, value: q.level }));
   } catch {}
 }
 

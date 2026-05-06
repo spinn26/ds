@@ -820,6 +820,8 @@ const logMonth = ref(new Date().toISOString().slice(0, 7));
 const logHideZero = ref(true);
 const logPage = ref(1);
 const logPerPage = ref(25);
+const logSortBy = ref('');
+const logSortDir = ref('desc');
 const defaultMonth = new Date().toISOString().slice(0, 7);
 
 const logHeaders = [
@@ -929,6 +931,14 @@ const { debounced: debouncedLogLoad } = useDebounce(loadLog, 400);
 function onLogOptions(opts) {
   logPage.value = opts.page;
   if (opts.itemsPerPage) logPerPage.value = opts.itemsPerPage;
+  // Sort: opts.sortBy = [{ key, order: 'asc'|'desc' }]
+  if (Array.isArray(opts.sortBy) && opts.sortBy.length) {
+    logSortBy.value = opts.sortBy[0].key;
+    logSortDir.value = opts.sortBy[0].order || 'desc';
+  } else {
+    logSortBy.value = '';
+    logSortDir.value = 'desc';
+  }
   loadLog();
 }
 
@@ -940,6 +950,10 @@ async function loadLog() {
     if (logChainPartner.value) params.chain_partner = logChainPartner.value;
     if (logMonth.value) params.month = logMonth.value;
     if (logHideZero.value) params.hide_zero = 1;
+    if (logSortBy.value) {
+      params.sort_by = logSortBy.value;
+      params.sort_dir = logSortDir.value;
+    }
     const { data } = await api.get('/admin/transactions', { params });
     logItems.value = data.data;
     logTotal.value = data.total;

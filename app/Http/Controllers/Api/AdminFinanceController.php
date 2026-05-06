@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Controllers\Api\Concerns\AppliesSorting;
 use App\Http\Controllers\Api\Concerns\PaginatesRequests;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
@@ -11,6 +12,7 @@ use Illuminate\Support\Facades\DB;
 class AdminFinanceController extends Controller
 {
     use PaginatesRequests;
+    use AppliesSorting;
 
     /**
      * Транзакции (per spec ✅Комиссии §1.2). Расширенный набор колонок:
@@ -120,7 +122,20 @@ class AdminFinanceController extends Controller
             ')
             ->first();
 
-        $rows = $query->orderByDesc('t.date')
+        $this->applySorting($query, $request, [
+            'date' => 't.date',
+            'contractNumber' => 'c.number',
+            'contractOpenDate' => 'c."openDate"',
+            'clientName' => 'c."clientName"',
+            'consultantName' => 'co."personName"',
+            'amount' => 't.amount',
+            'amountRUB' => 't."amountRUB"',
+            'commissionsAmountRUB' => 't."commissionsAmountRUB"',
+            'netRevenueRUB' => 't."netRevenueRUB"',
+            'dsCommissionPercentage' => 't."dsCommissionPercentage"',
+            'yearKV' => 't.score',
+        ], 't.date', 'desc');
+        $rows = $query
             ->offset($this->paginationOffset($request))
             ->limit($this->paginationPerPage($request))
             ->get([
@@ -236,7 +251,14 @@ class AdminFinanceController extends Controller
         }
 
         $total = $query->count();
-        $rows = $query->orderByDesc('date')
+        $this->applySorting($query, $request, [
+            'date' => 'date',
+            'amountRUB' => '"amountRUB"',
+            'personalVolume' => '"personalVolume"',
+            'groupVolume' => '"groupVolume"',
+            'groupBonusRub' => '"groupBonusRub"',
+        ], 'date', 'desc');
+        $rows = $query
             ->offset($this->paginationOffset($request))
             ->limit($this->paginationPerPage($request))
             ->get();

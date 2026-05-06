@@ -211,6 +211,8 @@ const aggregates = ref(null);
 const loading = ref(false);
 const page = ref(1);
 const perPage = ref(25);
+const sortBy = ref('');
+const sortDir = ref('desc');
 const expanded = ref([]);
 const chainCache = ref({});
 const supplierOptions = ref([]);
@@ -286,6 +288,13 @@ const { debounced: debouncedLoad } = useDebounce(loadData, 400);
 function onOptions(opts) {
   page.value = opts.page;
   if (opts.itemsPerPage) perPage.value = opts.itemsPerPage;
+  if (Array.isArray(opts.sortBy) && opts.sortBy.length) {
+    sortBy.value = opts.sortBy[0].key;
+    sortDir.value = opts.sortBy[0].order || 'desc';
+  } else {
+    sortBy.value = '';
+    sortDir.value = 'desc';
+  }
   loadData();
 }
 
@@ -311,6 +320,10 @@ async function loadData() {
     if (filters.value.supplier) params.supplier = filters.value.supplier;
     if (filters.value.comment) params.comment = filters.value.comment;
     if (filters.value.hideZero) params.hide_zero = 1;
+    if (sortBy.value) {
+      params.sort_by = sortBy.value;
+      params.sort_dir = sortDir.value;
+    }
     const { data } = await api.get('/admin/transactions', { params });
     items.value = data.data || [];
     total.value = data.total || 0;
