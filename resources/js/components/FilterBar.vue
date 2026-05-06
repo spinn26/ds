@@ -20,10 +20,20 @@
 
         <slot />
 
-        <v-col v-if="showReset" cols="auto" class="ms-auto">
+        <!-- Чип-сводка по активным фильтрам — единый стиль на всех страницах. -->
+        <v-col v-if="activeCount > 0" cols="auto" class="d-flex align-center">
+          <v-chip size="small" color="info" variant="tonal">
+            <v-icon size="14" start>mdi-filter</v-icon>
+            {{ activeCount }} {{ countLabel }}
+          </v-chip>
+        </v-col>
+
+        <v-col v-if="showReset || activeCount > 0" cols="auto" class="ms-auto">
           <v-btn
+            v-if="activeCount > 0 || showReset"
             variant="text"
             size="small"
+            color="secondary"
             prepend-icon="mdi-filter-off-outline"
             @click="$emit('reset')"
           >
@@ -40,10 +50,19 @@
 </template>
 
 <script setup>
-defineProps({
+import { computed } from 'vue';
+
+const props = defineProps({
   search: { type: String, default: undefined },
   searchPlaceholder: { type: String, default: 'Поиск…' },
   searchCols: { type: [String, Number], default: 4 },
+
+  /**
+   * Количество активных фильтров — рендерит чип «N фильтров»
+   * с правильным числом (1 фильтр / 2 фильтра / 5 фильтров).
+   * Чтобы каждая страница не дублировала эту логику.
+   */
+  activeCount: { type: Number, default: 0 },
 
   showReset: { type: Boolean, default: false },
   resetText: { type: String, default: 'Сбросить' },
@@ -52,4 +71,11 @@ defineProps({
 });
 
 defineEmits(['update:search', 'reset']);
+
+const countLabel = computed(() => {
+  const n = props.activeCount;
+  if (n === 1) return 'фильтр';
+  if (n >= 2 && n <= 4) return 'фильтра';
+  return 'фильтров';
+});
 </script>

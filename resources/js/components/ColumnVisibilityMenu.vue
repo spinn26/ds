@@ -30,6 +30,9 @@
 
 <script setup>
 import { computed, watch, onMounted } from 'vue';
+import { useColumnPrefsStore } from '@/stores/columnPrefs';
+
+const prefs = useColumnPrefsStore();
 
 const props = defineProps({
   /** Исходные headers таблицы — как в v-data-table. */
@@ -94,14 +97,26 @@ function showAll() {
 
 function persist(state) {
   if (!props.storageKey) return;
-  try { localStorage.setItem(`cols:${props.storageKey}`, JSON.stringify(state)); } catch {}
+  prefs.save(props.storageKey, state);
 }
 
 onMounted(() => {
   if (!props.storageKey) return;
+  // Сначала читаем по новой схеме (per-user). Если пусто — fallback
+  // на старый ключ `cols:${storageKey}`, разово мигрируем в новый.
+  const loaded = prefs.load(props.storageKey);
+  if (loaded) {
+    emit('update:visible', loaded);
+    return;
+  }
   try {
-    const raw = localStorage.getItem(`cols:${props.storageKey}`);
-    if (raw) emit('update:visible', JSON.parse(raw));
+    const legacy = localStorage.getItem(`cols:${props.storageKey}`);
+    if (legacy) {
+      const parsed = JSON.parse(legacy);
+      emit('update:visible', parsed);
+      prefs.save(props.storageKey, parsed);
+      localStorage.removeItem(`cols:${props.storageKey}`);
+    }
   } catch {}
 });
 </script>

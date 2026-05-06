@@ -250,6 +250,21 @@
 /* Chat message bubble theme colors */
 .bg-surface-variant { background: rgba(var(--v-theme-surface-variant), 1); }
 
+/* Filter inputs — читаемый placeholder в обеих темах.
+   Vuetify по умолчанию делает placeholder сильно прозрачным (~0.4),
+   на тёмной теме он сливается с outlined-обводкой. Поднимаем до 0.7. */
+.v-text-field input::placeholder,
+.v-text-field textarea::placeholder,
+.v-field input::placeholder {
+  opacity: 0.7;
+  color: rgb(var(--v-theme-on-surface)) !important;
+}
+.v-theme--dark .v-text-field input::placeholder,
+.v-theme--dark .v-text-field textarea::placeholder,
+.v-theme--dark .v-field input::placeholder {
+  opacity: 0.65;
+}
+
 /* Print */
 @media print {
   .v-navigation-drawer, .v-app-bar, .v-btn, .v-fab { display: none !important; }
