@@ -254,60 +254,73 @@
                 @dragover.prevent="dragOverCol = cellKey(col.value, lane.key)"
                 @dragleave="dragOverCol === cellKey(col.value, lane.key) && (dragOverCol = null)"
                 @drop.prevent="onKanbanDrop(col.value, lane.key)">
-                <div v-for="t in cardsInCell(col.value, lane.key)" :key="t.id"
+                <v-card v-for="t in cardsInCell(col.value, lane.key)" :key="t.id"
                   class="kanban-card"
                   :class="{ 'is-dragging': draggingId === t.id, stale: isStale(t), selected: selectedIds.has(t.id), 'bulk-mode': bulkMode }"
-                  :style="t.priority && t.priority !== 'medium' ? { borderLeftColor: prioClr(t.priority) } : {}"
+                  :style="t.priority && t.priority !== 'medium' ? { borderLeftColor: prioClr(t.priority), borderLeftWidth: '3px', borderLeftStyle: 'solid' } : {}"
+                  variant="outlined"
                   :draggable="!bulkMode"
                   @dragstart="onKanbanDragStart(t, $event)"
                   @dragend="onKanbanDragEnd"
                   @click="openFromKanban(t, $event)">
-                  <div class="kanban-card-head">
-                    <input v-if="bulkMode" type="checkbox"
-                      class="kanban-card-check"
-                      :checked="selectedIds.has(t.id)"
+                  <div class="kanban-card-head d-flex align-center ga-2 px-2 pt-2">
+                    <v-checkbox-btn v-if="bulkMode"
+                      :model-value="selectedIds.has(t.id)"
+                      density="compact" hide-details
                       @click.stop="toggleCardSelect(t, $event)" />
                     <div class="kanban-card-avatar" :style="{ background: catColor(t.category || t.department) }">
                       <v-icon size="12" color="white">{{ catIcon(t.category || t.department) }}</v-icon>
                     </div>
-                    <v-icon v-if="t.pinned_at" size="12" color="primary" :title="'Закреплён'">mdi-pin</v-icon>
-                    <div class="kanban-card-subject">{{ t.subject }}</div>
-                    <span v-if="t.unread > 0" class="kanban-card-unread">{{ t.unread }}</span>
+                    <v-icon v-if="t.pinned_at" size="12" color="primary" title="Закреплён">mdi-pin</v-icon>
+                    <div class="kanban-card-subject text-body-2 font-weight-medium text-truncate flex-grow-1">{{ t.subject }}</div>
+                    <v-chip v-if="t.unread > 0" size="x-small" color="primary" variant="flat" label density="comfortable">
+                      {{ t.unread }}
+                    </v-chip>
                   </div>
-                  <div class="kanban-card-customer">{{ t.customer_name }}</div>
-                  <div class="kanban-card-meta">
-                    <span class="kanban-card-time" :class="{ stale: isStale(t) }">
-                      <v-icon size="10">mdi-clock-outline</v-icon> {{ ago(t.last_message_at) }}
-                    </span>
-                    <span v-if="t.assigned_name" class="kanban-card-assignee" :title="'Назначен: ' + t.assigned_name">
-                      <v-icon size="10">mdi-account</v-icon> {{ shortName(t.assigned_name) }}
-                    </span>
-                    <span v-if="t.priority && t.priority !== 'medium'" class="kanban-card-prio" :style="{ color: prioClr(t.priority) }">
-                      <v-icon size="10">mdi-flag</v-icon>
-                    </span>
+                  <div class="text-caption text-medium-emphasis text-truncate px-2 mt-1">
+                    {{ t.customer_name }}
                   </div>
-                  <div v-if="parseTags(t.tags).length" class="kanban-card-tags">
-                    <span v-for="tag in parseTags(t.tags).slice(0, 3)" :key="tag" class="kanban-card-tag">#{{ tag }}</span>
+                  <div class="d-flex flex-wrap align-center ga-2 px-2 pt-1 text-caption text-medium-emphasis">
+                    <span :class="{ 'text-error font-weight-bold': isStale(t) }" class="d-flex align-center ga-1">
+                      <v-icon size="11">mdi-clock-outline</v-icon>
+                      <span class="ctx-num">{{ ago(t.last_message_at) }}</span>
+                    </span>
+                    <span v-if="t.assigned_name" class="d-flex align-center ga-1" :title="'Назначен: ' + t.assigned_name">
+                      <v-icon size="11">mdi-account</v-icon>
+                      {{ shortName(t.assigned_name) }}
+                    </span>
+                    <v-icon v-if="t.priority && t.priority !== 'medium'" size="11" :color="prioClr(t.priority)">
+                      mdi-flag
+                    </v-icon>
                   </div>
+                  <div v-if="parseTags(t.tags).length" class="d-flex flex-wrap ga-1 px-2 pt-1 pb-2">
+                    <v-chip v-for="tag in parseTags(t.tags).slice(0, 3)" :key="tag"
+                      size="x-small" variant="tonal" label density="comfortable">
+                      #{{ tag }}
+                    </v-chip>
+                  </div>
+                  <div v-else class="pb-2" />
                   <!-- Quick actions on hover -->
                   <div v-if="!bulkMode" class="kanban-quick-actions">
-                    <button class="kanban-qa-btn" :class="{ active: t.pinned_at }"
+                    <v-btn icon variant="text" size="x-small"
+                      :color="t.pinned_at ? 'primary' : undefined"
                       :title="t.pinned_at ? 'Открепить' : 'Закрепить'"
                       @click="togglePin(t, $event)">
-                      <v-icon size="12">{{ t.pinned_at ? 'mdi-pin' : 'mdi-pin-outline' }}</v-icon>
-                    </button>
-                    <button v-if="String(t.assigned_to) !== String(currentUserId)"
-                      class="kanban-qa-btn" title="Взять себе"
-                      @click="quickAssignToMe(t, $event)">
-                      <v-icon size="12">mdi-account-arrow-left</v-icon>
-                    </button>
+                      <v-icon size="14">{{ t.pinned_at ? 'mdi-pin' : 'mdi-pin-outline' }}</v-icon>
+                    </v-btn>
+                    <v-btn v-if="String(t.assigned_to) !== String(currentUserId)"
+                      icon variant="text" size="x-small"
+                      title="Взять себе" @click="quickAssignToMe(t, $event)">
+                      <v-icon size="14">mdi-account-arrow-left</v-icon>
+                    </v-btn>
                     <v-menu location="bottom end">
                       <template #activator="{ props }">
-                        <button v-bind="props" class="kanban-qa-btn" title="Приоритет" @click.stop>
-                          <v-icon size="12">mdi-flag-variant</v-icon>
-                        </button>
+                        <v-btn v-bind="props" icon variant="text" size="x-small"
+                          title="Приоритет" @click.stop>
+                          <v-icon size="14">mdi-flag-variant</v-icon>
+                        </v-btn>
                       </template>
-                      <v-list density="compact" style="min-width: 160px">
+                      <v-list density="compact" min-width="160">
                         <v-list-item v-for="p in priorities" :key="p.value" @click="quickSetPriority(t, p.value, $event)">
                           <template #prepend><v-icon size="12" :color="p.color">mdi-circle</v-icon></template>
                           <v-list-item-title class="text-caption">{{ p.label }}</v-list-item-title>
@@ -315,21 +328,21 @@
                       </v-list>
                     </v-menu>
                   </div>
-                </div>
-                <div v-if="!cardsInCell(col.value, lane.key).length" class="kanban-col-empty">—</div>
+                </v-card>
+                <div v-if="!cardsInCell(col.value, lane.key).length" class="kanban-col-empty text-caption text-medium-emphasis text-center py-4">—</div>
               </div>
             </template>
           </div>
         </div>
       </div>
 
-      <!-- Bulk action bar -->
+      <!-- Bulk action bar (kanban-mode) -->
       <transition name="bulk-slide">
-        <div v-if="bulkMode && anySelected" class="bulk-bar">
-          <div class="bulk-count">Выбрано: <strong>{{ selectedIds.size }}</strong></div>
+        <div v-if="bulkMode && anySelected" class="bulk-bar pa-2 d-flex flex-wrap align-center ga-2">
+          <div class="text-body-2">Выбрано: <strong>{{ selectedIds.size }}</strong></div>
           <v-menu>
             <template #activator="{ props }">
-              <button v-bind="props" class="bulk-btn"><v-icon size="14">mdi-arrow-right-bold</v-icon> Статус</button>
+              <v-btn v-bind="props" size="small" variant="tonal" prepend-icon="mdi-arrow-right-bold">Статус</v-btn>
             </template>
             <v-list density="compact">
               <v-list-item v-for="s in statuses" :key="s.value" @click="bulkSetStatus(s.value)">
@@ -340,7 +353,7 @@
           </v-menu>
           <v-menu>
             <template #activator="{ props }">
-              <button v-bind="props" class="bulk-btn"><v-icon size="14">mdi-flag</v-icon> Приоритет</button>
+              <v-btn v-bind="props" size="small" variant="tonal" prepend-icon="mdi-flag">Приоритет</v-btn>
             </template>
             <v-list density="compact">
               <v-list-item v-for="p in priorities" :key="p.value" @click="bulkSetPriority(p.value)">
@@ -351,7 +364,7 @@
           </v-menu>
           <v-menu>
             <template #activator="{ props }">
-              <button v-bind="props" class="bulk-btn"><v-icon size="14">mdi-account-plus</v-icon> Назначить</button>
+              <v-btn v-bind="props" size="small" variant="tonal" prepend-icon="mdi-account-plus">Назначить</v-btn>
             </template>
             <v-list density="compact" style="max-height: 320px; overflow-y: auto">
               <v-list-item @click="bulkAssign(currentUserId, currentUserName)">
@@ -364,8 +377,8 @@
               </v-list-item>
             </v-list>
           </v-menu>
-          <button class="bulk-btn cancel" @click="selectedIds = new Set()">Сбросить</button>
-          <button class="bulk-btn cancel" @click="bulkMode = false">Выйти</button>
+          <v-btn size="small" variant="text" @click="selectedIds = new Set()">Сбросить</v-btn>
+          <v-btn size="small" variant="text" color="error" @click="bulkMode = false">Выйти</v-btn>
         </div>
       </transition>
     </div>
@@ -2386,46 +2399,25 @@ onUnmounted(() => {
 .swimlane-drop { display: flex; flex-direction: column; gap: 6px; min-height: 30px; border-radius: 8px; transition: background 0.15s; padding: 2px; }
 .swimlane-drop.drop-target { background: rgba(var(--v-theme-primary), 0.1); outline: 2px dashed rgba(var(--v-theme-primary), 0.4); outline-offset: -2px; }
 
-.kanban-card { padding: 10px; border-radius: 10px; background: rgb(var(--v-theme-surface)); border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); border-left: 3px solid transparent; cursor: grab; transition: all 0.15s; user-select: none; position: relative; }
+/* Kanban card — Vuetify v-card variant="outlined" + лёгкий hover-эффект */
+.kanban-card { cursor: grab; transition: all 0.15s; user-select: none; position: relative; }
 .kanban-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); transform: translateY(-1px); }
 .kanban-card:hover .kanban-quick-actions { opacity: 1; pointer-events: auto; }
 .kanban-card.is-dragging { opacity: 0.4; cursor: grabbing; }
-.kanban-card.stale { background: rgba(239, 68, 68, 0.04); }
+.kanban-card.stale { background: rgba(var(--v-theme-error), 0.04); }
 .kanban-card.bulk-mode { cursor: pointer; }
-.kanban-card.selected { border-color: rgb(var(--v-theme-primary)); background: rgba(var(--v-theme-primary), 0.08); box-shadow: 0 0 0 2px rgba(var(--v-theme-primary), 0.3); }
-.kanban-card-check { width: 16px; height: 16px; cursor: pointer; accent-color: rgb(var(--v-theme-primary)); flex-shrink: 0; }
-.kanban-card-head { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.kanban-card.selected { border-color: rgb(var(--v-theme-primary)) !important; background: rgba(var(--v-theme-primary), 0.08); box-shadow: 0 0 0 2px rgba(var(--v-theme-primary), 0.3); }
 .kanban-card-avatar { width: 22px; height: 22px; border-radius: 6px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.kanban-card-subject { flex: 1; font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.kanban-card-unread { background: rgb(var(--v-theme-error)); color: #fff; font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 10px; min-width: 16px; text-align: center; }
-.kanban-card-customer { font-size: 11px; color: rgba(var(--v-theme-on-surface), 0.7); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px; }
-.kanban-card-meta { display: flex; align-items: center; gap: 8px; font-size: 10px; color: rgba(var(--v-theme-on-surface), 0.5); }
-.kanban-card-meta > span { display: inline-flex; align-items: center; gap: 2px; }
-.kanban-card-time.stale { color: #ef4444; font-weight: 700; }
-.kanban-card-prio { margin-left: auto; }
-.kanban-card-tags { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 5px; }
-.kanban-card-tag { font-size: 9px; padding: 1px 6px; border-radius: 8px; background: rgba(var(--v-theme-primary), 0.1); color: rgb(var(--v-theme-primary)); font-weight: 600; }
+.kanban-card-subject { line-height: 1.3; }
 
 /* Quick actions on card hover */
-.kanban-quick-actions { position: absolute; top: 6px; right: 6px; display: flex; gap: 2px; padding: 2px; border-radius: 6px; background: rgb(var(--v-theme-surface)); border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); box-shadow: 0 2px 6px rgba(0,0,0,0.08); opacity: 0; pointer-events: none; transition: opacity 0.15s; }
-.kanban-qa-btn { background: none; border: none; cursor: pointer; padding: 3px; border-radius: 4px; color: rgba(var(--v-theme-on-surface), 0.6); display: inline-flex; align-items: center; justify-content: center; }
-.kanban-qa-btn:hover { background: rgba(var(--v-theme-primary), 0.1); color: rgb(var(--v-theme-primary)); }
+.kanban-quick-actions { position: absolute; top: 4px; right: 4px; display: flex; gap: 1px; padding: 2px; border-radius: 6px; background: rgb(var(--v-theme-surface)); border: 1px solid rgba(var(--v-border-color), 0.2); box-shadow: 0 2px 6px rgba(0,0,0,0.08); opacity: 0; pointer-events: none; transition: opacity 0.15s; }
 
 /* Bulk action bar */
-.bulk-bar { position: sticky; bottom: 0; display: flex; align-items: center; gap: 8px; padding: 10px 16px; background: rgb(var(--v-theme-surface)); border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); box-shadow: 0 -4px 16px rgba(0,0,0,0.08); flex-wrap: wrap; }
-.list-bulk-bar { padding: 8px 12px; gap: 6px; }
-.list-bulk-bar .bulk-btn { padding: 4px 8px; font-size: 11px; }
+/* Bulk bar (kanban + list) — Vuetify-first, остался лишь sticky-layout */
+.bulk-bar { position: sticky; bottom: 0; background: rgb(var(--v-theme-surface)); border-top: 1px solid rgba(var(--v-border-color), 0.12); box-shadow: 0 -4px 16px rgba(0,0,0,0.08); }
 .chat-item.bulk-mode { padding-left: 36px; }
-.chat-item-cb { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; cursor: pointer; }
-.chat-item.selected { background: rgba(var(--v-theme-primary), 0.08); border-left: 3px solid rgb(var(--v-theme-primary)); }
-.bulk-toggle { font-size: 11px; padding: 3px 8px; }
-.bulk-slide-enter-active, .bulk-slide-leave-active { transition: transform 0.2s, opacity 0.2s; }
-.bulk-slide-enter-from, .bulk-slide-leave-to { transform: translateY(20px); opacity: 0; }
-.bulk-count { font-size: 13px; color: rgba(var(--v-theme-on-surface), 0.7); margin-right: auto; }
-.bulk-btn { display: inline-flex; align-items: center; gap: 4px; padding: 6px 12px; border-radius: 8px; border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); background: rgb(var(--v-theme-surface)); color: inherit; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
-.bulk-btn:hover { background: rgba(var(--v-theme-primary), 0.08); border-color: rgb(var(--v-theme-primary)); }
-.bulk-btn.cancel { background: transparent; color: rgba(var(--v-theme-on-surface), 0.6); }
-.bulk-btn.cancel:hover { background: rgba(var(--v-theme-error), 0.08); border-color: rgba(var(--v-theme-error), 0.4); color: rgb(var(--v-theme-error)); }
+.chat-item.selected { background: rgba(var(--v-theme-primary), 0.08); }
 .bulk-slide-enter-active, .bulk-slide-leave-active { transition: transform 0.2s ease, opacity 0.2s ease; }
 .bulk-slide-enter-from, .bulk-slide-leave-to { transform: translateY(100%); opacity: 0; }
 
