@@ -917,8 +917,12 @@ class ChatController extends Controller
      */
     private function buildPartnerContext(int $webUserId): array
     {
+        // ВАЖНО: в WebUser колонка `avatar` (хранит относительный путь),
+        // а наружу через UserResource всегда отдаётся `avatarUrl`. Здесь
+        // выбираем `avatar` и собираем URL ниже — иначе SQL падает с
+        // "column avatarUrl does not exist".
         $user = DB::table('WebUser')->where('id', $webUserId)
-            ->select('id', 'lastName', 'firstName', 'patronymic', 'email', 'phone', 'avatarUrl')
+            ->select('id', 'lastName', 'firstName', 'patronymic', 'email', 'phone', 'avatar')
             ->first();
         if (! $user) {
             return ['user' => null, 'consultant' => null, 'recentContracts' => collect()];
@@ -1008,7 +1012,7 @@ class ChatController extends Controller
                 'patronymic' => $user->patronymic,
                 'email' => $user->email,
                 'phone' => $user->phone,
-                'avatarUrl' => $user->avatarUrl,
+                'avatarUrl' => $user->avatar ? '/storage/' . $user->avatar : null,
             ],
             'consultant' => $consultant,
             'recentContracts' => $recentContracts,
