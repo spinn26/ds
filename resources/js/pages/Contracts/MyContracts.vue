@@ -139,7 +139,7 @@ const statusOptions = ref([]);
 
 const filteredPrograms = computed(() => {
   if (!filters.value.product) return programOptions.value;
-  return programOptions.value.filter(p => p.productId == filters.value.product);
+  return programOptions.value.filter(p => String(p.productId) === String(filters.value.product));
 });
 
 function onProductChange() {

@@ -65,10 +65,10 @@
         <span class="text-body-2 font-weight-bold ml-2">{{ currentLevel?.percent ?? 15 }}%</span>
       </div>
 
-      <!-- GP progress bar -->
+      <!-- ОП по ГП progress bar (per spec — отдельный ГП не показываем) -->
       <div v-if="data.mandatoryPlan" class="mb-3">
         <div class="d-flex justify-space-between align-center mb-1">
-          <span class="text-body-2 text-medium-emphasis">ГП</span>
+          <span class="text-body-2 text-medium-emphasis">ОП по ГП</span>
           <span class="text-body-2 font-weight-medium">
             {{ fmt(data.mandatoryPlan.currentGP) }} / {{ fmt(data.mandatoryPlan.mandatoryGP) }}
           </span>
@@ -145,7 +145,7 @@
           <v-progress-linear :model-value="data.mandatoryPlan.fulfillment" height="12" rounded
             :color="data.mandatoryPlan.fulfilled ? 'success' : data.mandatoryPlan.fulfillment >= 80 ? 'warning' : 'error'" />
           <div class="text-caption text-medium-emphasis mt-1">
-            {{ fmt(data.mandatoryPlan.currentGP) }} / {{ fmt(data.mandatoryPlan.mandatoryGP) }} баллов ГП за месяц
+            {{ fmt(data.mandatoryPlan.currentGP) }} / {{ fmt(data.mandatoryPlan.mandatoryGP) }} баллов за месяц
           </div>
         </v-col>
         <v-col cols="12" md="6">
@@ -354,7 +354,7 @@ const volumeCards = computed(() => {
   const ngp = pct(v.groupVolumeCumulative, v.prevGroupVolumeCumulative);
   return [
     { title: 'Личные продажи (ЛП)', value: v.personalVolume, change: lp.value, changeType: lp.type, icon: 'mdi-bank', color: 'green' },
-    { title: 'Накопленные ГП (НГП)', value: v.groupVolumeCumulative, change: ngp.value, changeType: ngp.type, icon: 'mdi-trending-up', color: 'orange' },
+    { title: 'НГП', value: v.groupVolumeCumulative, change: ngp.value, changeType: ngp.type, icon: 'mdi-trending-up', color: 'orange' },
   ];
 });
 

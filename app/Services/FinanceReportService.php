@@ -166,17 +166,59 @@ class FinanceReportService
         // breakaway всегда (если есть qualificationLog), с фактическими
         // значениями. Если отрыва нет — gapPercentage=0, frontend сам
         // решает рендерить «Не зафиксирован» или скрыть.
+        // Breakaway: показываем всегда самую крупную ветку с её % от моего ГП.
+        // Пороги (Бизнес-логика «Отрыв»):
+        //   70% → ветка не учитывается в ГП родителя (удержание),
+        //   90% → пул лидеров не выплачивается родителю.
+        // Если qualificationLog уже зафиксировал branchWithGap (gap=true)
+        // — берём оттуда. Иначе самостоятельно ищем ветку с max ГП.
         $breakaway = null;
         if ($qLogCurrent) {
-            $branchName = $qLogCurrent->branchWithGap
-                ? DB::table('consultant')->where('id', $qLogCurrent->branchWithGap)->value('personName')
+            $hasGap = (bool) ($qLogCurrent->gap ?? false);
+            $branchId = $qLogCurrent->branchWithGap;
+            $branchName = $branchId
+                ? DB::table('consultant')->where('id', $branchId)->value('personName')
                 : null;
+            $branchGv = (float) ($qLogCurrent->branchWithGapGroupVolume ?? 0);
+            $gapPct = (float) ($qLogCurrent->gapValuePercentage ?? 0);
+            $gapVal = (float) ($qLogCurrent->gapValue ?? 0);
+
+            // Если qLog не сохранил топ-ветку — ищем сами:
+            // прямые потомки и их groupVolumeCumulative за период.
+            if (! $branchId) {
+                $myGv = (float) ($qLogCurrent->groupVolumeCumulative ?? 0);
+                $top = DB::table('qualificationLog as ql')
+                    ->join('consultant as c', 'c.id', '=', 'ql.consultant')
+                    ->where('c.inviter', $consultant->id)
+                    ->whereNull('c.dateDeleted')
+                    ->whereNull('ql.dateDeleted')
+                    ->where('ql.date', '>=', $month . '-01')
+                    ->where('ql.date', '<', date('Y-m-d', strtotime("$month-01 +1 month")))
+                    ->orderByDesc('ql.groupVolumeCumulative')
+                    ->select(['c.id', 'c.personName', 'ql.groupVolumeCumulative as gv'])
+                    ->first();
+                if ($top && (float) $top->gv > 0) {
+                    $branchId = $top->id;
+                    $branchName = $top->personName;
+                    $branchGv = (float) $top->gv;
+                    $gapPct = $myGv > 0 ? round($branchGv / $myGv * 100, 2) : 0;
+                    $gapVal = max(0, $branchGv - $myGv * 0.7);
+                }
+            }
+
             $breakaway = [
-                'hasGap' => (bool) $qLogCurrent->gap,
+                'hasGap' => $hasGap,
                 'partnerName' => $branchName,
-                'groupVolume' => round((float) ($qLogCurrent->branchWithGapGroupVolume ?? 0), 2),
-                'gapPercentage' => round((float) ($qLogCurrent->gapValuePercentage ?? 0), 2),
-                'gapValue' => round((float) ($qLogCurrent->gapValue ?? 0), 2),
+                'groupVolume' => round($branchGv, 2),
+                'gapPercentage' => round($gapPct, 2),
+                'gapValue' => round($gapVal, 2),
+                // Пороги, чтобы UI рисовал шкалу с подписями
+                'holdThresholdPercent' => 70,
+                'poolThresholdPercent' => 90,
+                // Удержание ГП родителя начиная с 70%
+                'gpHeld' => $gapPct >= 70,
+                // Пул блокируется начиная с 90%
+                'poolBlocked' => $gapPct >= 90,
             ];
         }
 

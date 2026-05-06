@@ -371,7 +371,8 @@ const supplierOptions = ref([]);
 const filterPrograms = computed(() => {
   const all = formData.value.programs || [];
   if (!filters.value.product) return all;
-  return all.filter(p => p.productId == filters.value.product);
+  // Coerce — productId на бекэнде int, filters.product может быть int или string
+  return all.filter(p => String(p.productId) === String(filters.value.product));
 });
 
 function onFilterProductChange() {

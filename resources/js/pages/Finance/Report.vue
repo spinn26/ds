@@ -116,35 +116,61 @@
       </v-col>
     </v-row>
 
-    <!-- Breakaway card. Раньше показывалось только при наличии отрыва;
-         теперь — всегда (когда есть qualificationLog), чтобы партнёр
-         видел текущее состояние. Цвет зависит от hasGap. -->
+    <!-- Breakaway card — всегда показывает топ-ветку и её % от моего ГП.
+         Цвет/иконка отражают пройденные пороги: 70% (gpHeld) и 90% (poolBlocked). -->
     <v-card v-if="summary.breakaway" class="mb-4 pa-4"
-      :color="summary.breakaway.hasGap ? 'amber-lighten-5' : 'green-lighten-5'" variant="tonal">
+      :color="summary.breakaway.poolBlocked ? 'amber-lighten-5'
+            : summary.breakaway.gpHeld ? 'orange-lighten-5'
+            : 'green-lighten-5'" variant="tonal">
       <div class="d-flex align-center ga-2 mb-2">
-        <v-icon :color="summary.breakaway.hasGap ? 'amber-darken-2' : 'success'">
-          {{ summary.breakaway.hasGap ? 'mdi-alert-decagram' : 'mdi-check-decagram' }}
+        <v-icon :color="summary.breakaway.poolBlocked ? 'amber-darken-2'
+                       : summary.breakaway.gpHeld ? 'orange-darken-2'
+                       : 'success'">
+          {{ summary.breakaway.poolBlocked ? 'mdi-alert-decagram'
+           : summary.breakaway.gpHeld ? 'mdi-alert-circle-outline'
+           : 'mdi-check-decagram' }}
         </v-icon>
-        <span class="font-weight-bold" :class="summary.breakaway.hasGap ? 'text-amber-darken-3' : 'text-success'">
-          {{ summary.breakaway.hasGap ? 'Отрыв зафиксирован' : 'Отрыв не зафиксирован' }}
+        <span class="font-weight-bold">
+          {{ summary.breakaway.poolBlocked ? 'Отрыв ≥ 90% — пул не выплачивается'
+           : summary.breakaway.gpHeld ? 'Отрыв ≥ 70% — ветка не учитывается в ГП'
+           : 'Отрыва нет' }}
         </span>
       </div>
-      <v-row v-if="summary.breakaway.hasGap">
+      <v-row>
         <v-col cols="6" md="3">
-          <div class="text-body-2 text-medium-emphasis">Разница</div>
-          <div class="font-weight-medium">{{ fmt(summary.breakaway.gapValue) }} ({{ summary.breakaway.gapPercentage ?? 0 }}%)</div>
-        </v-col>
-        <v-col cols="6" md="3">
-          <div class="text-body-2 text-medium-emphasis">Ветка с наибольшим ГП</div>
+          <div class="text-body-2 text-medium-emphasis">Топ ветка</div>
           <div class="font-weight-medium">{{ summary.breakaway.partnerName || '—' }}</div>
         </v-col>
         <v-col cols="6" md="3">
           <div class="text-body-2 text-medium-emphasis">ГП ветки</div>
           <div class="font-weight-medium">{{ fmt(summary.breakaway.groupVolume) }}</div>
         </v-col>
+        <v-col cols="6" md="3">
+          <div class="text-body-2 text-medium-emphasis">Доля от моего ГП</div>
+          <div class="font-weight-medium" :class="summary.breakaway.poolBlocked ? 'text-amber-darken-3'
+                                                : summary.breakaway.gpHeld ? 'text-orange-darken-2' : 'text-success'">
+            {{ summary.breakaway.gapPercentage ?? 0 }}%
+          </div>
+        </v-col>
+        <v-col cols="6" md="3">
+          <div class="text-body-2 text-medium-emphasis">Превышение</div>
+          <div class="font-weight-medium">{{ fmt(summary.breakaway.gapValue) }}</div>
+        </v-col>
       </v-row>
-      <div v-else class="text-body-2 text-medium-emphasis">
-        Ни одна ветка не превышает 90% от вашего ГП — пул выплачивается.
+      <!-- Пороговая шкала: 70% / 90% -->
+      <div class="mt-3">
+        <v-progress-linear
+          :model-value="Math.min(summary.breakaway.gapPercentage || 0, 100)"
+          height="8" rounded
+          :color="summary.breakaway.poolBlocked ? 'amber-darken-2'
+                : summary.breakaway.gpHeld ? 'orange-darken-2'
+                : 'success'" />
+        <div class="d-flex justify-space-between text-caption text-medium-emphasis mt-1">
+          <span>0%</span>
+          <span>70% — удержание ГП</span>
+          <span>90% — блокировка пула</span>
+          <span>100%</span>
+        </div>
       </div>
     </v-card>
 
