@@ -115,7 +115,11 @@
       <v-card-title class="text-subtitle-1">
         <v-icon size="20" class="mr-1">mdi-calculator</v-icon>
         Начисления пула
-        <v-chip v-if="result" size="x-small" color="info" variant="tonal" class="ml-2">
+        <v-chip v-if="result && isHistoricalView" size="x-small" color="warning" variant="tonal" class="ml-2"
+          title="Данные взяты из poolLog/CSV «как есть» — фонд и доли не пересчитываются по текущему qualificationLog">
+          snapshot
+        </v-chip>
+        <v-chip v-else-if="result" size="x-small" color="info" variant="tonal" class="ml-2">
           preview
         </v-chip>
       </v-card-title>
@@ -141,16 +145,20 @@
           </tr>
         </thead>
         <tbody>
-          <!-- Итого: эталон старой платформы показывает FUND (revenue × 1%)
-               для каждого активного уровня и сумму по всем активным уровням
-               как теоретический максимум — а не реально выплаченное. -->
+          <!-- Итого:
+               • Live-период (открытый): FUND × #активных уровней — теоретический
+                 максимум распределения (как в эталоне старой платформы).
+               • Исторический/закрытый: сумма реально выплаченного per level
+                 + общий totalPaid. Так список ФК сходится с цифрой ИТОГО. -->
           <tr class="pool-total-row">
-            <td colspan="3" class="font-weight-bold text-success">ИТОГО (фонд × #активных уровней)</td>
+            <td colspan="3" class="font-weight-bold text-success">
+              {{ isHistoricalView ? 'ИТОГО (выплачено по snapshot)' : 'ИТОГО (фонд × #активных уровней)' }}
+            </td>
             <td class="text-end font-weight-bold text-success">{{ fmt2(result.revenue || 0) }} ₽</td>
             <td v-for="lvl in [6,7,8,9,10]" :key="'tot-'+lvl" class="text-end font-weight-bold text-success">
-              {{ fmt2(activeLevels.includes(lvl) ? (result.fund || 0) : 0) }}
+              {{ fmt2(totalCellForLevel(lvl)) }}
             </td>
-            <td class="text-end font-weight-bold text-success">{{ fmt2((result.fund || 0) * activeLevels.length) }} ₽</td>
+            <td class="text-end font-weight-bold text-success">{{ fmt2(totalRowSum) }} ₽</td>
           </tr>
 
           <tr v-for="p in payoutRows" :key="'pay-' + p.id">
@@ -259,29 +267,76 @@ const filteredParticipants = computed(() => {
   );
 });
 
+// Историческая выгрузка vs live-расчёт. Backend ставит fromPoolLog=true
+// (либо fromCsv=true) для закрытых периодов — там shareValues пустой,
+// payoutRub каждого партнёра берётся из poolLog «как есть». Для новых
+// периодов считаем по формуле: матрёшка share(6)..share(L), ИТОГО =
+// fund × #активных уровней.
+const isHistoricalView = computed(() => !!(result.value?.fromPoolLog || result.value?.fromCsv));
+
 // Уровни (6..10), у которых есть хотя бы один партнёр в счётчике.
-// Используется в ИТОГО-строке: фонд показываем только для активных уровней,
-// сумма total = fund × число активных уровней (как в эталоне).
+// Для исторических — берём из реальных выплат (есть payoutRub > 0
+// на партнёре уровня L). Для новых — из shareValues[L] > 0.
 const activeLevels = computed(() => {
-  if (!result.value?.shareValues) return [];
-  return [6, 7, 8, 9, 10].filter(lvl => (result.value.shareValues[lvl] || 0) > 0);
+  if (!result.value) return [];
+  if (isHistoricalView.value) {
+    const levels = new Set();
+    for (const p of result.value.participants || []) {
+      if (p.payoutRub > 0 && p.level >= 6 && p.level <= 10) levels.add(p.level);
+    }
+    return [6, 7, 8, 9, 10].filter(l => levels.has(l));
+  }
+  const shares = result.value.shareValues || {};
+  return [6, 7, 8, 9, 10].filter(lvl => (shares[lvl] || 0) > 0);
 });
 
-// Per-partner матрёшка breakdown by level: для уровня L он получает share(6)+share(7)+...+share(L).
-// Эталон старой платформы: в нижней таблице — только партнёры с галочкой
-// «Участвует» И у которых был расчёт выплаты. Колонка «Групповой бонус»
-// показывает выручку DS за месяц (одна для всех — справочный контекст
-// откуда взялся фонд), а не персональный partner-group-bonus.
+// Сумма по строке «ИТОГО» в нижней таблице.
+// Историческая: реально выплаченное (totalPaid из snapshot).
+// Live: теоретический максимум = fund × #активных уровней.
+const totalRowSum = computed(() => {
+  if (!result.value) return 0;
+  if (isHistoricalView.value) return Number(result.value.totalPaid || 0);
+  return Number(result.value.fund || 0) * activeLevels.value.length;
+});
+
+// Значение ячейки уровня в строке «ИТОГО».
+// Историческая: сумма payoutRub партнёров чей level == lvl. Это даёт
+//   честную картину «сколько уехало на уровень L», даже если матрёшка
+//   старого расчёта неизвестна.
+// Live: fund (если уровень активен) — теоретическая «доля уровня».
+function totalCellForLevel(lvl) {
+  if (!result.value) return 0;
+  if (isHistoricalView.value) {
+    let s = 0;
+    for (const p of result.value.participants || []) {
+      if (p.level === lvl && p.payoutRub > 0) s += Number(p.payoutRub);
+    }
+    return s;
+  }
+  return activeLevels.value.includes(lvl) ? Number(result.value.fund || 0) : 0;
+}
+
+// Per-partner матрёшка breakdown by level: для уровня L он получает
+// share(6)+share(7)+...+share(L). Это работает только для live-расчёта,
+// где известны корректные shareValues. Для исторических периодов
+// shareValues=[] — ячейку рендерим только в колонке СВОЕГО уровня
+// партнёра (payoutRub целиком), остальные пустые.
 const payoutRows = computed(() => {
   if (!result.value) return [];
   const shares = result.value.shareValues || {};
   const revenue = Number(result.value.revenue || 0);
+  const historical = isHistoricalView.value;
   return (result.value.participants || [])
     .filter(p => p.participates && p.payoutRub > 0)
     .map(p => {
       const byLevel = { 6: 0, 7: 0, 8: 0, 9: 0, 10: 0 };
-      for (let lvl = 6; lvl <= p.level; lvl++) {
-        byLevel[lvl] = shares[lvl] || 0;
+      if (historical) {
+        // Без матрёшки — реальная выплата сидит в колонке партнёра.
+        if (p.level >= 6 && p.level <= 10) byLevel[p.level] = p.payoutRub;
+      } else {
+        for (let lvl = 6; lvl <= p.level; lvl++) {
+          byLevel[lvl] = shares[lvl] || 0;
+        }
       }
       return {
         id: p.id,

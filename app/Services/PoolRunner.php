@@ -101,9 +101,9 @@ class PoolRunner
         // Сначала пытаемся БД (poolLog), если пусто — читаем CSV
         // (Db/Pool/poolLog.csv). Это точная выгрузка из старой Directual.
         if ($isHistorical) {
-            $logged = $this->participantsFromPoolLog($year, $month, $leaderLevelIds, $revenue);
+            $logged = $this->participantsFromPoolLog($year, $month, $revenue);
             if ($logged !== null) return $logged;
-            $fromCsv = $this->participantsFromCsv($year, $month, $leaderLevelIds, $revenue);
+            $fromCsv = $this->participantsFromCsv($year, $month, $revenue);
             if ($fromCsv !== null) return $fromCsv;
             // Ни в БД, ни в CSV нет данных — отдаём пустой результат.
             return $this->emptyResult($year, $month, $revenue);
@@ -113,7 +113,7 @@ class PoolRunner
         // Live-расчёт обходим только для frozen — иначе оператор должен
         // видеть актуальные числа.
         if (! $applyWrite && $this->periodFreeze->isFrozen($year, $month)) {
-            $logged = $this->participantsFromPoolLog($year, $month, $leaderLevelIds, $revenue);
+            $logged = $this->participantsFromPoolLog($year, $month, $revenue);
             if ($logged !== null) {
                 return $logged;
             }
@@ -474,7 +474,7 @@ class PoolRunner
      * consultant.status_and_lvl мог измениться. Реальный выплаченный
      * пул лежит только в poolLog.
      */
-    private function participantsFromPoolLog(int $year, int $month, array $leaderLevelIds, float $revenue): ?array
+    private function participantsFromPoolLog(int $year, int $month, float $revenue): ?array
     {
         $start = sprintf('%04d-%02d-01', $year, $month);
         $end = date('Y-m-t', strtotime($start));
@@ -567,56 +567,29 @@ class PoolRunner
 
         $fund = $revenue * PoolCalculator::POOL_PERCENT;
 
-        // shareValues[L] = «доля одного партнёра уровня L» = fund / nominalCount(L).
-        // ВНИМАНИЕ: брать max(payoutRub) на уровне НЕЛЬЗЯ — это уже накопленная
-        // матрёшка (share(6)+...+share(L)). Frontend ожидает именно share(L)
-        // как отдельное значение и сам строит матрёшку через цикл, поэтому
-        // мы вернули бы дублированные суммы.
+        // ИСТОРИЧЕСКИЙ / ЗАМОРОЖЕННЫЙ ПЕРИОД — выводим «как есть».
         //
-        // Считаем nominalCount(L) из qualificationLog за период (как в
-        // основной ветке). Партнёры из poolLog входят в nominalCount, плюс
-        // дисквалифицированные тоже считаются (они в фонде но без выплаты).
-        $start = sprintf('%04d-%02d-01', $year, $month);
-        $end = date('Y-m-t', strtotime($start));
-        $nominalCounts = array_fill_keys(array_keys($leaderLevelIds), 0);
-        $qlogCounts = DB::select('
-            SELECT COALESCE(ql."calculationLevel", ql."nominalLevel") AS lvl_id, COUNT(DISTINCT ql.consultant) AS cnt
-            FROM "qualificationLog" ql
-            JOIN consultant c ON c.id = ql.consultant
-            WHERE ql.date BETWEEN ? AND ?
-              AND ql."dateDeleted" IS NULL
-              AND c."dateDeleted" IS NULL
-              AND c.activity = 1
-            GROUP BY COALESCE(ql."calculationLevel", ql."nominalLevel")
-        ', [$start, $end]);
-        $countByLevelId = collect($qlogCounts)->pluck('cnt', 'lvl_id')->toArray();
-        $levelByLevelId = DB::table('status_levels')
-            ->whereIn('id', array_keys($countByLevelId))
-            ->pluck('level', 'id')->toArray();
-        foreach ($countByLevelId as $lvlId => $cnt) {
-            $level = (int) ($levelByLevelId[$lvlId] ?? 0);
-            if ($level >= PoolCalculator::LEADER_LEVEL_MIN && $level <= PoolCalculator::LEADER_LEVEL_MAX) {
-                $nominalCounts[$level] = ($nominalCounts[$level] ?? 0) + (int) $cnt;
-            }
-        }
-        // shareValues[L] = fund / count(L+) — каждая доля делится на ВСЕХ
-        // её получателей (партнёры уровня L и выше получают долю L через
-        // матрёшку), а не только на ровно-L. См. PoolCalculator::shareValues.
-        $shareValues = [];
-        for ($level = PoolCalculator::LEADER_LEVEL_MIN; $level <= PoolCalculator::LEADER_LEVEL_MAX; $level++) {
-            $cum = 0;
-            for ($l = $level; $l <= PoolCalculator::LEADER_LEVEL_MAX; $l++) {
-                $cum += (int) ($nominalCounts[$l] ?? 0);
-            }
-            $shareValues[$level] = $cum > 0 ? round($fund / $cum, 2) : 0;
-        }
-
+        // Раньше здесь shareValues пересчитывались из ТЕКУЩЕГО qualificationLog
+        // и подсунутого fund (revenue × 1%). Это давало рассинхрон:
+        //   • partner.payoutRub приходит из poolLog (реальная выплата),
+        //   • shareValues пересчитываются «на лету» — могут отличаться,
+        //     если qualificationLog после фиксации редактировали или
+        //     активность партнёров поменялась,
+        //   • в результате сумма по колонкам «6 кв./7 кв./…» в нижней
+        //     таблице не сходилась с payoutRub, а ИТОГО показывало
+        //     теоретический fund × #активных уровней — тоже мимо
+        //     реальных выплат.
+        //
+        // Решение: для исторических данных не считаем shareValues вовсе —
+        // отдаём пустой массив + флаг fromPoolLog=true. Frontend по этому
+        // флагу рендерит payoutRub в колонке СВОЕГО уровня партнёра без
+        // матрёшки и считает ИТОГО как сумму реальных выплат.
         return [
             'year' => $year,
             'month' => $month,
             'revenue' => $revenue,
             'fund' => $fund,
-            'shareValues' => $shareValues,
+            'shareValues' => [],
             'participants' => $participants,
             'totalPaid' => $totalPaid,
             'totalForfeited' => 0.0,
@@ -644,7 +617,7 @@ class PoolRunner
      * Формат CSV: `id;consultant;poolBonus;networkGroupBonus;date;createdAt;@dateCreated;@dateChanged`
      * Возвращает null если файл не найден / пуст / нет строк за период.
      */
-    private function participantsFromCsv(int $year, int $month, array $leaderLevelIds, float $revenue): ?array
+    private function participantsFromCsv(int $year, int $month, float $revenue): ?array
     {
         $path = base_path('Db/Pool/poolLog.csv');
         if (! is_file($path)) return null;
@@ -699,17 +672,12 @@ class PoolRunner
             ->pluck('level', 'id')->toArray();
 
         $participants = [];
-        $nominalCounts = array_fill_keys(array_keys($leaderLevelIds), 0);
         foreach ($rows as $r) {
             $consId = $r['consultant'];
             $qlRow = $perCons[$consId] ?? null;
             $lvlId = $qlRow->lvl_id ?? null;
             $level = (int) ($levelNumbers[$lvlId] ?? 0);
             $title = $levelTitles[$lvlId] ?? '';
-            if ($level >= PoolCalculator::LEADER_LEVEL_MIN
-                && $level <= PoolCalculator::LEADER_LEVEL_MAX) {
-                $nominalCounts[$level] = ($nominalCounts[$level] ?? 0) + 1;
-            }
             $participants[] = [
                 'id' => $consId,
                 'level' => $level,
@@ -723,14 +691,15 @@ class PoolRunner
 
         $totalPaid = array_sum(array_column($participants, 'payoutRub'));
         $fund = $revenue * PoolCalculator::POOL_PERCENT;
-        $shareValues = $this->calculator->shareValues($revenue, $nominalCounts);
 
+        // CSV — тоже исторический snapshot. Не считаем shareValues, фронт
+        // отрисует выплаты «как есть» по флагу fromCsv (см. participantsFromPoolLog).
         return [
             'year' => $year,
             'month' => $month,
             'revenue' => $revenue,
             'fund' => $fund,
-            'shareValues' => $shareValues,
+            'shareValues' => [],
             'participants' => $participants,
             'totalPaid' => $totalPaid,
             'totalForfeited' => 0.0,
