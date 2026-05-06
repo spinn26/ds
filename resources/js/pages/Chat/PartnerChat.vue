@@ -5,88 +5,107 @@
       <v-icon size="14">mdi-wifi-off</v-icon>
       Соединение потеряно. Сообщения придут с задержкой ~15 сек.
     </div>
-    <!-- Left sidebar: dialog list -->
+    <!-- Left sidebar: dialog list — Linear-style минимализм, плотные отступы -->
     <aside class="chat-sidebar" :class="{ 'mobile-hidden': mobile && activeChat }">
-      <div class="sidebar-head pa-3">
-        <div class="text-subtitle-1 font-weight-bold">Мои обращения</div>
-        <v-btn color="primary" size="small" prepend-icon="mdi-plus" @click="showNew = true">
-          Новый чат
-        </v-btn>
+      <!-- Header: заголовок + primary CTA + overflow меню для второстепенного -->
+      <div class="sidebar-head px-3 py-2">
+        <div class="text-body-1 font-weight-bold">Обращения</div>
+        <div class="d-flex align-center ga-1">
+          <v-btn color="primary" size="x-small" prepend-icon="mdi-plus" @click="showNew = true">
+            Новый
+          </v-btn>
+          <v-menu location="bottom end">
+            <template #activator="{ props: tip }">
+              <v-btn v-bind="tip" icon variant="text" size="x-small" title="Ещё">
+                <v-icon size="18">mdi-dots-horizontal</v-icon>
+              </v-btn>
+            </template>
+            <v-list density="compact" min-width="220">
+              <v-list-item prepend-icon="mdi-email-edit" title="Написать основателю" @click="openFounder" />
+              <v-list-item prepend-icon="mdi-briefcase-plus" title="Оставить кейс" @click="openCase" />
+            </v-list>
+          </v-menu>
+        </div>
       </div>
-      <div class="sidebar-quick px-3 pb-2 d-flex flex-wrap ga-2">
-        <v-btn variant="tonal" size="small" prepend-icon="mdi-email-edit" @click="openFounder">
-          Написать основателю
-        </v-btn>
-        <v-btn variant="tonal" size="small" prepend-icon="mdi-briefcase-plus" @click="openCase">
-          Оставить кейс
-        </v-btn>
-      </div>
-      <!-- Search + filter chips -->
+
+      <!-- Search -->
       <div class="px-3 pb-2">
         <v-text-field v-model="searchQuery"
-          placeholder="Поиск по теме…"
+          placeholder="Поиск…"
           prepend-inner-icon="mdi-magnify"
           variant="outlined" density="compact" hide-details clearable />
       </div>
-      <div class="px-3 pb-2 d-flex flex-wrap ga-1">
-        <v-chip v-for="opt in statusFilters" :key="opt.value"
-          :color="statusFilter === opt.value ? 'primary' : undefined"
-          :variant="statusFilter === opt.value ? 'flat' : 'tonal'"
-          size="small" @click="statusFilter = opt.value">
-          {{ opt.label }}
-        </v-chip>
+
+      <!-- Filters: status + category в одной плотной группе -->
+      <div class="sidebar-filters px-3 pb-2">
+        <div class="d-flex flex-wrap ga-1">
+          <v-chip v-for="opt in statusFilters" :key="opt.value"
+            :color="statusFilter === opt.value ? 'primary' : undefined"
+            :variant="statusFilter === opt.value ? 'flat' : 'tonal'"
+            size="x-small" label
+            @click="statusFilter = opt.value">
+            {{ opt.label }}
+          </v-chip>
+        </div>
+        <div class="d-flex flex-wrap ga-1 mt-1">
+          <v-chip v-for="opt in categoryFilters" :key="opt.value"
+            :color="categoryFilter === opt.value ? catColor(opt.value) : undefined"
+            :variant="categoryFilter === opt.value ? 'flat' : 'tonal'"
+            size="x-small" label
+            @click="categoryFilter = opt.value">
+            {{ opt.label }}
+          </v-chip>
+        </div>
       </div>
-      <div class="px-3 pb-2 d-flex flex-wrap ga-1">
-        <v-chip v-for="opt in categoryFilters" :key="opt.value"
-          :color="categoryFilter === opt.value ? catColor(opt.value) : undefined"
-          :variant="categoryFilter === opt.value ? 'flat' : 'tonal'"
-          size="x-small" @click="categoryFilter = opt.value">
-          {{ opt.label }}
-        </v-chip>
-      </div>
+
+      <v-divider />
+
+      <!-- Conversation list -->
       <div class="sidebar-list">
-        <div v-for="t in visibleChats" :key="t.id" class="chat-item" :class="{ active: activeChat?.id === t.id, 'has-unread': t.unread > 0, pinned: t.pinned_at }" @click="openChat(t)">
+        <div v-for="t in visibleChats" :key="t.id" class="chat-item"
+          :class="{ active: activeChat?.id === t.id, 'has-unread': t.unread > 0, pinned: t.pinned_at }"
+          @click="openChat(t)">
           <div class="chat-item-avatar" :style="{ background: catColor(t.category) }">
-            <v-icon size="18" color="white">{{ catIcon(t.category) }}</v-icon>
+            <v-icon size="16" color="white">{{ catIcon(t.category) }}</v-icon>
           </div>
           <div class="chat-item-body">
             <div class="chat-item-top">
               <span class="chat-item-subject">
-                <v-icon v-if="t.pinned_at" size="12" color="primary" class="mr-1">mdi-pin</v-icon>{{ t.subject }}
+                <v-icon v-if="t.pinned_at" size="11" color="primary" class="mr-1">mdi-pin</v-icon>{{ t.subject }}
               </span>
               <span class="chat-item-time">{{ ago(t.last_message_at) }}</span>
             </div>
-            <!-- Last message preview — Telegram/Slack стиль. «Вы:» если автор я,
-                 ⚙️ для системных, 📎 для вложений уже в preview. -->
             <div v-if="t.last_message_preview" class="chat-item-preview">
               <span v-if="t.last_message_is_system" class="chat-item-preview-prefix">⚙</span>
               <span v-else-if="t.last_message_from_me" class="chat-item-preview-prefix">Вы:</span>
               <span class="chat-item-preview-text">{{ t.last_message_preview }}</span>
             </div>
             <div class="chat-item-bottom">
-              <span class="chat-item-cat">{{ catLabel(t.category) }}</span>
-              <span class="chat-item-status-chip" :style="{ background: statusClr(t.status) + '22', color: statusClr(t.status) }">{{ statusTxt(t.status) }}</span>
+              <v-chip size="x-small" variant="tonal" :color="statusClr(t.status)" label density="comfortable">
+                {{ statusTxt(t.status) }}
+              </v-chip>
+              <span class="chat-item-cat text-caption text-medium-emphasis">{{ catLabel(t.category) }}</span>
             </div>
           </div>
           <v-btn class="chat-item-pin" :class="{ active: t.pinned_at }"
             icon size="x-small" variant="text"
             :title="t.pinned_at ? 'Открепить' : 'Закрепить'"
             @click.stop="togglePin(t, $event)">
-            <v-icon size="14">{{ t.pinned_at ? 'mdi-pin' : 'mdi-pin-outline' }}</v-icon>
+            <v-icon size="13">{{ t.pinned_at ? 'mdi-pin' : 'mdi-pin-outline' }}</v-icon>
           </v-btn>
           <span v-if="t.unread > 0" class="unread-badge">{{ t.unread }}</span>
         </div>
         <div v-if="!visibleChats.length && !loading" class="sidebar-empty pa-4 text-center">
-          <v-icon size="40" color="grey">mdi-chat-outline</v-icon>
+          <v-icon size="36" color="grey">mdi-chat-outline</v-icon>
           <div class="text-body-2 text-medium-emphasis mt-2 mb-3">
-            {{ chats.length ? 'Ничего не найдено по фильтрам' : 'Нет обращений' }}
+            {{ chats.length ? 'Ничего не найдено' : 'Нет обращений' }}
           </div>
-          <v-btn v-if="!chats.length" color="primary" size="small" prepend-icon="mdi-plus" @click="showNew = true">
+          <v-btn v-if="!chats.length" color="primary" size="x-small" prepend-icon="mdi-plus" @click="showNew = true">
             Создать первое
           </v-btn>
           <v-btn v-else-if="searchQuery || statusFilter !== 'all' || categoryFilter !== 'all'"
-            variant="text" size="small" prepend-icon="mdi-filter-off-outline" @click="resetFilters">
-            Сбросить фильтры
+            variant="text" size="x-small" prepend-icon="mdi-filter-off-outline" @click="resetFilters">
+            Сбросить
           </v-btn>
         </div>
       </div>
@@ -1060,36 +1079,35 @@ onUnmounted(() => {
 <style scoped>
 .chat-wrap { display: flex; height: calc(100vh - 64px); overflow: hidden; position: relative; }
 
-/* Sidebar */
-.chat-sidebar { width: 340px; flex-shrink: 0; border-right: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); display: flex; flex-direction: column; background: rgba(var(--v-theme-surface), 1); }
-.sidebar-head { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); }
+/* Sidebar — Linear-style: 320px, минимум хрома, тонкие dividers */
+.chat-sidebar { width: 320px; flex-shrink: 0; border-right: 1px solid rgba(var(--v-border-color), 0.12); display: flex; flex-direction: column; background: rgba(var(--v-theme-surface), 1); }
+.sidebar-head { display: flex; align-items: center; justify-content: space-between; }
 .sidebar-list { flex: 1; overflow-y: auto; }
 
-/* Chat item */
-.chat-item { display: flex; align-items: center; gap: 12px; padding: 12px 16px; cursor: pointer; border-bottom: 1px solid rgba(var(--v-border-color), 0.3); transition: background 0.1s; position: relative; }
-.chat-item:hover { background: rgba(var(--v-theme-primary), 0.04); }
-.chat-item.active { background: rgba(var(--v-theme-primary), 0.08); border-left: 3px solid rgb(var(--v-theme-primary)); }
-.chat-item-avatar { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+/* Chat item — Linear: компактный, тонкие границы, плавный hover */
+.chat-item { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; cursor: pointer; transition: background 0.1s; position: relative; }
+.chat-item:not(:last-child)::after { content: ''; position: absolute; left: 12px; right: 12px; bottom: 0; border-bottom: 1px solid rgba(var(--v-border-color), 0.08); }
+.chat-item:hover { background: rgba(var(--v-theme-on-surface), 0.04); }
+.chat-item.active { background: rgba(var(--v-theme-primary), 0.08); }
+.chat-item.active::before { content: ''; position: absolute; left: 0; top: 8px; bottom: 8px; width: 2px; background: rgb(var(--v-theme-primary)); border-radius: 0 2px 2px 0; }
+.chat-item-avatar { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
 .chat-item-body { flex: 1; min-width: 0; }
-.chat-item-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-.chat-item-subject { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.chat-item-time { font-size: 11px; color: rgba(var(--v-theme-on-surface), 0.4); flex-shrink: 0; }
-.chat-item-bottom { display: flex; gap: 6px; margin-top: 4px; font-size: 11px; align-items: center; }
-.chat-item-cat { color: rgba(var(--v-theme-on-surface), 0.5); }
-.chat-item-preview { display: flex; gap: 4px; margin-top: 2px; font-size: 12px; color: rgba(var(--v-theme-on-surface), 0.62); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.chat-item-preview-prefix { color: rgba(var(--v-theme-on-surface), 0.45); flex-shrink: 0; }
+.chat-item-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.chat-item-subject { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3; }
+.chat-item-time { font-size: 11px; color: rgba(var(--v-theme-on-surface), 0.45); flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.chat-item-bottom { display: flex; gap: 6px; margin-top: 4px; align-items: center; }
+.chat-item-cat { color: rgba(var(--v-theme-on-surface), 0.55); }
+.chat-item-preview { display: flex; gap: 4px; margin-top: 2px; font-size: 12px; color: rgba(var(--v-theme-on-surface), 0.6); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; line-height: 1.3; }
+.chat-item-preview-prefix { color: rgba(var(--v-theme-on-surface), 0.4); flex-shrink: 0; }
 .chat-item-preview-text { overflow: hidden; text-overflow: ellipsis; }
-.chat-item.has-unread .chat-item-preview { color: rgba(var(--v-theme-on-surface), 0.92); font-weight: 500; }
-.conn-banner { position: absolute; top: 0; left: 0; right: 0; z-index: 100; padding: 6px 12px; background: rgba(var(--v-theme-warning), 0.18); color: rgb(var(--v-theme-warning)); font-size: 12px; display: flex; align-items: center; gap: 6px; border-bottom: 1px solid rgba(var(--v-theme-warning), 0.3); }
-.chat-item-status-chip { padding: 2px 8px; border-radius: 10px; font-weight: 600; font-size: 10px; }
-.unread-badge { position: absolute; right: 12px; top: 12px; background: rgb(var(--v-theme-error)); color: #fff; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 10px; min-width: 18px; text-align: center; }
-.chat-item.has-unread { background: rgba(var(--v-theme-primary), 0.06); }
-.chat-item.has-unread .chat-item-subject { color: rgb(var(--v-theme-primary)); font-weight: 700; }
-.chat-item.pinned { background: rgba(var(--v-theme-primary), 0.04); }
-.chat-item-pin { position: absolute; right: 12px; bottom: 10px; background: none; border: none; padding: 2px; border-radius: 4px; cursor: pointer; color: rgba(var(--v-theme-on-surface), 0.3); opacity: 0; transition: opacity 0.15s, color 0.15s; }
-.chat-item:hover .chat-item-pin { opacity: 1; }
-.chat-item-pin.active { color: rgb(var(--v-theme-primary)); opacity: 1; }
-.chat-item-pin:hover { color: rgb(var(--v-theme-primary)); }
+.chat-item.has-unread .chat-item-subject { font-weight: 600; color: rgb(var(--v-theme-on-surface)); }
+.chat-item.has-unread .chat-item-preview { color: rgba(var(--v-theme-on-surface), 0.85); }
+.conn-banner { position: absolute; top: 0; left: 0; right: 0; z-index: 100; padding: 6px 12px; background: rgba(var(--v-theme-warning), 0.15); color: rgb(var(--v-theme-warning)); font-size: 12px; display: flex; align-items: center; gap: 6px; }
+.unread-badge { position: absolute; right: 12px; top: 12px; background: rgb(var(--v-theme-primary)); color: #fff; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 10px; min-width: 18px; text-align: center; line-height: 1.4; }
+.chat-item.pinned { background: rgba(var(--v-theme-primary), 0.03); }
+.chat-item-pin { position: absolute; right: 8px; bottom: 8px; opacity: 0; transition: opacity 0.15s; }
+.chat-item:hover .chat-item-pin,
+.chat-item-pin.active { opacity: 1; }
 
 /* Main chat area */
 .chat-main { flex: 1; display: flex; flex-direction: column; min-width: 0; position: relative; }
@@ -1099,33 +1117,32 @@ onUnmounted(() => {
 .chat-header { border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); display: flex; align-items: flex-start; gap: 8px; }
 .chat-header-info { flex: 1; min-width: 0; }
 
-/* Messages */
-.chat-messages { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 12px; scroll-behavior: smooth; }
-.chat-empty-msg { text-align: center; color: rgba(var(--v-theme-on-surface), 0.3); padding: 48px; }
-.date-divider { display: flex; align-items: center; justify-content: center; margin: 8px 0; position: relative; }
-.date-divider::before { content: ''; position: absolute; left: 0; right: 0; top: 50%; border-top: 1px solid rgba(var(--v-border-color), 0.3); z-index: 0; }
-.date-divider span { position: relative; z-index: 1; background: rgb(var(--v-theme-background)); padding: 2px 12px; font-size: 11px; font-weight: 600; color: rgba(var(--v-theme-on-surface), 0.5); text-transform: capitalize; }
+/* Messages — Telegram-style bubbles, asymmetric tail */
+.chat-messages { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 8px; scroll-behavior: smooth; }
+.chat-empty-msg { text-align: center; color: rgba(var(--v-theme-on-surface), 0.4); padding: 48px; font-size: 13px; }
+.date-divider { display: flex; align-items: center; justify-content: center; margin: 12px 0 4px; position: relative; }
+.date-divider span { padding: 3px 10px; font-size: 11px; font-weight: 600; color: rgba(var(--v-theme-on-surface), 0.5); text-transform: capitalize; background: rgba(var(--v-theme-on-surface), 0.06); border-radius: 12px; }
 .msg-row { display: flex; align-items: flex-end; gap: 8px; }
 .msg-row.mine { flex-direction: row-reverse; }
 .msg-row.system { justify-content: center; }
-.msg-system { font-size: 12px; color: rgba(var(--v-theme-on-surface), 0.4); font-style: italic; padding: 4px 12px; background: rgba(var(--v-theme-surface-variant), 0.5); border-radius: 12px; }
+.msg-system { font-size: 12px; color: rgba(var(--v-theme-on-surface), 0.5); padding: 3px 10px; background: rgba(var(--v-theme-on-surface), 0.04); border-radius: 8px; }
 .msg-avatar { flex-shrink: 0; }
-.avatar-circle { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: #fff; letter-spacing: -0.5px; }
+.avatar-circle { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; color: #fff; letter-spacing: -0.3px; }
 .avatar-circle.agent { background: rgb(var(--v-theme-secondary)); }
 .avatar-circle.mine { background: rgb(var(--v-theme-primary)); }
-.msg-bubble { max-width: 65%; padding: 10px 14px; border-radius: 16px; position: relative; }
-.msg-bubble.agent { background: rgba(var(--v-theme-surface-variant), 1); border-bottom-left-radius: 4px; }
+.msg-bubble { max-width: 65%; padding: 8px 12px; border-radius: 14px; position: relative; line-height: 1.4; }
+.msg-bubble.agent { background: rgba(var(--v-theme-on-surface), 0.06); border-bottom-left-radius: 4px; }
 .msg-bubble.mine { background: rgb(var(--v-theme-primary)); color: #fff; border-bottom-right-radius: 4px; }
 .msg-sender { font-size: 11px; font-weight: 600; margin-bottom: 2px; color: rgba(var(--v-theme-on-surface), 0.6); }
-.msg-bubble.mine .msg-sender { color: rgba(255,255,255,0.8); }
-.msg-text { font-size: 14px; line-height: 1.5; white-space: pre-line; word-break: break-word; }
+.msg-bubble.mine .msg-sender { color: rgba(255,255,255,0.85); }
+.msg-text { font-size: 14px; line-height: 1.45; white-space: pre-line; word-break: break-word; }
 .msg-attach { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; margin-top: 6px; }
-.msg-bubble.mine .msg-attach { color: rgba(255,255,255,0.85); }
+.msg-bubble.mine .msg-attach { color: rgba(255,255,255,0.9); }
 .msg-image-link { display: block; margin-top: 6px; border-radius: 10px; overflow: hidden; max-width: 320px; }
 .msg-image { display: block; width: 100%; height: auto; max-height: 280px; object-fit: cover; border-radius: 10px; background: rgba(0,0,0,0.05); }
-.msg-time { font-size: 10px; margin-top: 4px; opacity: 0.5; display: inline-flex; align-items: center; gap: 4px; }
+.msg-time { font-size: 10px; margin-top: 4px; opacity: 0.55; display: inline-flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; }
 .msg-bubble.mine .msg-time { text-align: right; justify-content: flex-end; width: 100%; }
-.msg-edited { font-style: italic; opacity: 0.7; }
+.msg-edited { font-style: italic; opacity: 0.75; }
 .msg-check { opacity: 0.6; }
 .msg-check.seen { color: #4fc3f7 !important; opacity: 1; }
 
