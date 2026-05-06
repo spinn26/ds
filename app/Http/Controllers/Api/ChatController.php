@@ -167,9 +167,22 @@ class ChatController extends Controller
             $recipientName = $recipient ? trim(($recipient->lastName ?? '') . ' ' . ($recipient->firstName ?? '')) : null;
         }
 
+        // Если тикет создан из конкретного раздела (StartChatButton со
+        // страниц Контракты/Клиенты/Транзакции/Реквизиты/Комиссии/Акцепт),
+        // обогащаем первое сообщение деталями из БД — оператор видит
+        // о чём речь без открытия отдельной вкладки.
+        $messageBody = (string) $request->message;
+        $contextSummary = $this->buildContextSummary(
+            (string) $request->input('context_type', ''),
+            (string) $request->input('context_id', ''),
+        );
+        if ($contextSummary !== '') {
+            $messageBody = trim($messageBody) . "\n\n" . $contextSummary;
+        }
+
         // Transaction: the ticket row is meaningless without its first message,
         // so either both land or neither does.
-        $ticketId = DB::transaction(function () use ($request, $user, $name, $recipientId, $recipientName, $now) {
+        $ticketId = DB::transaction(function () use ($request, $user, $name, $recipientId, $recipientName, $now, $messageBody) {
             $id = DB::table('chat_tickets')->insertGetId([
                 'subject' => $request->subject,
                 'description' => $request->description,
@@ -194,7 +207,7 @@ class ChatController extends Controller
                 'ticket_id' => $id,
                 'sender_id' => $user->id,
                 'sender_name' => $name,
-                'content' => $request->message,
+                'content' => $messageBody,
                 'is_agent' => $request->user()->isStaff(),
                 'created_at' => $now,
                 'updated_at' => $now,
@@ -915,6 +928,162 @@ class ChatController extends Controller
      *
      * @return array{user:?array,consultant:?array,recentContracts:\Illuminate\Support\Collection}
      */
+    /**
+     * Сформировать текстовую сводку по объекту, из которого создан тикет.
+     * Возвращает многострочный markdown-стиль (без HTML — content рендерится
+     * через text-биндинг). Если `context_type` не известен или объект
+     * не найден — возвращает пустую строку.
+     *
+     * Используется при создании тикета через StartChatButton, чтобы первое
+     * сообщение содержало полную картину (клиент / контракт / сумма / даты),
+     * а не только «Чат создан из раздела: Контракт — #69171».
+     */
+    private function buildContextSummary(string $type, string $id): string
+    {
+        if ($type === '' || $id === '' || ! ctype_digit($id)) return '';
+        $idInt = (int) $id;
+        $lines = [];
+
+        switch ($type) {
+            case 'Контракт':
+                $r = DB::table('contract as c')
+                    ->leftJoin('product as p', 'p.id', '=', 'c.product')
+                    ->leftJoin('client as cl', 'cl.id', '=', 'c.client')
+                    ->leftJoin('consultant as co', 'co.id', '=', 'c.consultant')
+                    ->leftJoin('currency as cur', 'cur.id', '=', 'c.currency')
+                    ->where('c.id', $idInt)
+                    ->select([
+                        'c.id', 'c.number', 'c.ammount', 'c.status',
+                        'c.createDate', 'c.openDate', 'c.closeDate',
+                        'p.name as productName',
+                        'cl.personName as clientName',
+                        'co.personName as consultantName',
+                        'cur.symbol as currencySymbol',
+                    ])
+                    ->first();
+                if (! $r) return '';
+                $lines[] = "**Контракт #{$r->number}**" . ($r->productName ? " · {$r->productName}" : '');
+                if ($r->clientName)     $lines[] = "• Клиент: {$r->clientName}";
+                if ($r->consultantName) $lines[] = "• Партнёр: {$r->consultantName}";
+                if ($r->ammount)        $lines[] = "• Сумма: " . number_format((float) $r->ammount, 0, ',', ' ') . ' ' . ($r->currencySymbol ?? '');
+                if ($r->openDate)       $lines[] = "• Открыт: " . substr($r->openDate, 0, 10);
+                if ($r->closeDate)      $lines[] = "• Закрыт: " . substr($r->closeDate, 0, 10);
+                break;
+
+            case 'Клиент':
+                $r = DB::table('client as cl')
+                    ->leftJoin('person as pe', 'pe.id', '=', 'cl.person')
+                    ->leftJoin('consultant as co', 'co.id', '=', 'cl.consultant')
+                    ->where('cl.id', $idInt)
+                    ->select([
+                        'cl.id', 'cl.personName',
+                        'pe.email', 'pe.phone', 'pe.birthDate',
+                        'co.personName as consultantName',
+                    ])
+                    ->first();
+                if (! $r) return '';
+                $lines[] = "**Клиент #{$r->id}** · " . ($r->personName ?? '—');
+                if ($r->consultantName) $lines[] = "• Партнёр: {$r->consultantName}";
+                if ($r->email)          $lines[] = "• Email: {$r->email}";
+                if ($r->phone)          $lines[] = "• Телефон: {$r->phone}";
+                if ($r->birthDate)      $lines[] = "• ДР: " . substr($r->birthDate, 0, 10);
+                $contractCount = (int) DB::table('contract')->where('client', $idInt)->whereNull('deletedAt')->count();
+                if ($contractCount > 0) $lines[] = "• Активных контрактов: {$contractCount}";
+                break;
+
+            case 'Транзакция':
+                $r = DB::table('transaction as t')
+                    ->leftJoin('contract as c', 'c.id', '=', 't.contract')
+                    ->leftJoin('product as p', 'p.id', '=', 'c.product')
+                    ->leftJoin('client as cl', 'cl.id', '=', 'c.client')
+                    ->leftJoin('consultant as co', 'co.id', '=', 'c.consultant')
+                    ->where('t.id', $idInt)
+                    ->select([
+                        't.id', 't."amountRUB" as amountRUB', 't.score', 't.date',
+                        'c.number as contractNumber',
+                        'p.name as productName',
+                        'cl.personName as clientName',
+                        'co.personName as consultantName',
+                    ])
+                    ->first();
+                if (! $r) return '';
+                $lines[] = "**Транзакция #{$r->id}**";
+                if ($r->contractNumber) $lines[] = "• Контракт: #{$r->contractNumber}" . ($r->productName ? " · {$r->productName}" : '');
+                if ($r->clientName)     $lines[] = "• Клиент: {$r->clientName}";
+                if ($r->consultantName) $lines[] = "• Партнёр: {$r->consultantName}";
+                if ($r->amountRUB)      $lines[] = "• Сумма ₽: " . number_format((float) $r->amountRUB, 0, ',', ' ');
+                if ($r->date)           $lines[] = "• Дата: " . substr($r->date, 0, 10);
+                if ($r->score)          $lines[] = "• Год КВ: {$r->score}";
+                break;
+
+            case 'Реквизиты':
+                $r = DB::table('requisites as r')
+                    ->leftJoin('consultant as co', 'co.id', '=', 'r.consultant')
+                    ->where('r.id', $idInt)
+                    ->select([
+                        'r.id', 'r.individualEntrepreneur', 'r.inn',
+                        'r.verified', 'r.status',
+                        'co.personName as consultantName',
+                    ])
+                    ->first();
+                if (! $r) return '';
+                $lines[] = "**Реквизиты #{$r->id}**" . ($r->individualEntrepreneur ? " · {$r->individualEntrepreneur}" : '');
+                if ($r->consultantName) $lines[] = "• Партнёр: {$r->consultantName}";
+                if ($r->inn)            $lines[] = "• ИНН: {$r->inn}";
+                $lines[] = "• Статус: " . ($r->verified ? 'Верифицированы' : 'На проверке');
+                break;
+
+            case 'Комиссия':
+                $r = DB::table('commission as cm')
+                    ->leftJoin('contract as c', 'c.id', '=', 'cm.contract')
+                    ->leftJoin('product as p', 'p.id', '=', 'c.product')
+                    ->leftJoin('consultant as co', 'co.id', '=', 'cm.consultant')
+                    ->where('cm.id', $idInt)
+                    ->select([
+                        'cm.id', 'cm."amountRUB" as amountRUB', 'cm."chainOrder" as chainOrder',
+                        'cm.date', 'cm."personalVolume" as personalVolume', 'cm."groupVolume" as groupVolume',
+                        'c.number as contractNumber',
+                        'p.name as productName',
+                        'co.personName as consultantName',
+                    ])
+                    ->first();
+                if (! $r) return '';
+                $lines[] = "**Комиссия #{$r->id}**";
+                if ($r->consultantName) $lines[] = "• Партнёр: {$r->consultantName}";
+                if ($r->contractNumber) $lines[] = "• Контракт: #{$r->contractNumber}" . ($r->productName ? " · {$r->productName}" : '');
+                if ($r->amountRUB)      $lines[] = "• Сумма ₽: " . number_format((float) $r->amountRUB, 0, ',', ' ');
+                if ($r->personalVolume) $lines[] = "• ЛП: " . number_format((float) $r->personalVolume, 0, ',', ' ');
+                if ($r->groupVolume)    $lines[] = "• ГП: " . number_format((float) $r->groupVolume, 0, ',', ' ');
+                if ($r->chainOrder)     $lines[] = "• Уровень в цепочке: {$r->chainOrder}";
+                if ($r->date)           $lines[] = "• Период: " . substr($r->date, 0, 7);
+                break;
+
+            case 'Акцепт':
+                // taxAcceptanceLog хранит логи акцепта налоговых деклараций;
+                // структура — id, consultant, year, status и т.п.
+                if (\Illuminate\Support\Facades\Schema::hasTable('taxAcceptanceLog')) {
+                    $r = DB::table('taxAcceptanceLog as a')
+                        ->leftJoin('consultant as co', 'co.id', '=', 'a.consultant')
+                        ->where('a.id', $idInt)
+                        ->select(['a.id', 'a.year', 'a.status', 'co.personName as consultantName'])
+                        ->first();
+                    if ($r) {
+                        $lines[] = "**Акцепт #{$r->id}**";
+                        if ($r->consultantName) $lines[] = "• Партнёр: {$r->consultantName}";
+                        if ($r->year)           $lines[] = "• Год: {$r->year}";
+                        if ($r->status)         $lines[] = "• Статус: {$r->status}";
+                    }
+                }
+                break;
+
+            default:
+                return '';
+        }
+
+        if (empty($lines)) return '';
+        return implode("\n", $lines);
+    }
+
     private function buildPartnerContext(int $webUserId): array
     {
         // ВАЖНО: в WebUser колонка `avatar` (хранит относительный путь),
