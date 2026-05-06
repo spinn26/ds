@@ -82,22 +82,68 @@ class FinanceReportService
                 ->get()->keyBy('id')
             : collect();
 
+        // Programs (для commissionCalcProperty → "Свойство") и
+        // commissionCalcProperty.title — догружаем батчем, чтобы UI мог
+        // показывать «Свойство», а не "%-ставку" в колонке параметр.
+        $programIds = $contracts->pluck('program')->filter()->unique();
+        $programs = $programIds->isNotEmpty()
+            ? DB::table('program')->whereIn('id', $programIds)
+                ->get(['id', 'commissionCalcProperty'])->keyBy('id')
+            : collect();
+        $propIds = $programs->pluck('commissionCalcProperty')->filter()->unique();
+        $properties = $propIds->isNotEmpty()
+            ? DB::table('commissionCalcProperty')->whereIn('id', $propIds)
+                ->pluck('title', 'id')
+            : collect();
+
+        // Config-флаги продукта — UI скрывает «Свойство»/«Срок»/«Год КВ»
+        // у тех продуктов, где они не релевантны (миграция
+        // 2026_05_05_000090_add_product_field_flags).
+        $productIds = $contracts->pluck('product')->filter()->unique();
+        $productFlags = $productIds->isNotEmpty()
+            ? DB::table('product')->whereIn('id', $productIds)
+                ->get(['id', 'has_property', 'has_term', 'has_year_kv'])
+                ->keyBy('id')
+            : collect();
+
         // Helper to get tx details from pre-loaded data
-        $getTxData = function (?int $transactionId) use ($transactions, $contracts): array {
-            if (! $transactionId) {
-                return ['contractNumber' => null, 'clientName' => null, 'productName' => null, 'programName' => null, 'amount' => null];
-            }
+        $getTxData = function (?int $transactionId) use ($transactions, $contracts, $programs, $properties, $productFlags): array {
+            $empty = [
+                'contractNumber' => null, 'clientName' => null, 'productName' => null,
+                'programName' => null, 'amount' => null,
+                'propertyTitle' => null, 'contractTerm' => null, 'yearKV' => null,
+                'productHasProperty' => true, 'productHasTerm' => true, 'productHasYearKv' => true,
+            ];
+            if (! $transactionId) return $empty;
+
             $tx = $transactions[$transactionId] ?? null;
-            if (! $tx || ! $tx->contract) {
-                return ['contractNumber' => null, 'clientName' => null, 'productName' => null, 'programName' => null, 'amount' => $tx?->amount ?? null];
+            if (! $tx) return $empty;
+            $contract = $tx->contract ? ($contracts[$tx->contract] ?? null) : null;
+            if (! $contract) {
+                return array_merge($empty, ['amount' => $tx->amount ?? null]);
             }
-            $contract = $contracts[$tx->contract] ?? null;
+            $flags = $contract->product ? ($productFlags[$contract->product] ?? null) : null;
+            $hasProperty = $flags ? (bool) $flags->has_property : true;
+            $hasTerm = $flags ? (bool) $flags->has_term : true;
+            $hasYearKv = $flags ? (bool) $flags->has_year_kv : true;
+            $program = $contract->program ? ($programs[$contract->program] ?? null) : null;
+            $propId = $program?->commissionCalcProperty;
+
             return [
                 'contractNumber' => $contract->number ?? null,
                 'clientName' => $contract->clientName ?? null,
                 'productName' => $contract->productName ?? null,
                 'programName' => $contract->programName ?? null,
                 'amount' => $tx->amount ?? null,
+                // Гейтим по флагу продукта: если у продукта has_*=false —
+                // отдаём null. Это позволяет UI скрывать ячейку в строках,
+                // где параметр не релевантен этому конкретному продукту.
+                'propertyTitle' => $hasProperty && $propId ? ($properties[$propId] ?? null) : null,
+                'contractTerm' => $hasTerm ? ($contract->term ?? null) : null,
+                'yearKV' => $hasYearKv ? ($tx->score ?? null) : null,
+                'productHasProperty' => $hasProperty,
+                'productHasTerm' => $hasTerm,
+                'productHasYearKv' => $hasYearKv,
             ];
         };
 
@@ -112,7 +158,12 @@ class FinanceReportService
                 'productName' => $txData['productName'],
                 'programName' => $txData['programName'],
                 'paymentAmount' => round((float) ($txData['amount'] ?? 0), 2),
-                'parameter' => $c->percent,
+                'propertyTitle' => $txData['propertyTitle'],
+                'contractTerm' => $txData['contractTerm'],
+                'yearKV' => $txData['yearKV'],
+                'productHasProperty' => $txData['productHasProperty'],
+                'productHasTerm' => $txData['productHasTerm'],
+                'productHasYearKv' => $txData['productHasYearKv'],
                 'amountNoVat' => round((float) ($c->amount ?? 0), 2),
                 'personalVolume' => round((float) ($c->personalVolume ?? 0), 2),
                 'bonus' => round((float) ($c->groupBonus ?? 0), 2),
@@ -141,7 +192,12 @@ class FinanceReportService
                 'productName' => $txData['productName'],
                 'programName' => $txData['programName'],
                 'paymentAmount' => round((float) ($txData['amount'] ?? 0), 2),
-                'parameter' => $c->percent,
+                'propertyTitle' => $txData['propertyTitle'],
+                'contractTerm' => $txData['contractTerm'],
+                'yearKV' => $txData['yearKV'],
+                'productHasProperty' => $txData['productHasProperty'],
+                'productHasTerm' => $txData['productHasTerm'],
+                'productHasYearKv' => $txData['productHasYearKv'],
                 'amountNoVat' => round((float) ($c->amount ?? 0), 2),
                 'personalVolume' => round((float) ($c->personalVolume ?? 0), 2),
                 'bonus' => round((float) ($c->groupBonus ?? 0), 2),

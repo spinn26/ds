@@ -73,7 +73,7 @@
           </div>
           <div class="text-body-2"><span class="font-weight-medium">Баллы:</span> {{ fmt(summary.personalSales?.points) }}</div>
           <div class="text-body-2"><span class="font-weight-medium">Бонус в баллах ЛП:</span> {{ fmt(summary.personalSales?.bonus) }}</div>
-          <div class="text-body-2"><span class="font-weight-medium">Бонус, ₽:</span> {{ fmt2(summary.personalSales?.bonusRub) }}</div>
+          <div class="text-body-2"><span class="font-weight-medium">Бонус:</span> {{ fmt2(summary.personalSales?.bonusRub) }} ₽</div>
         </v-card>
       </v-col>
       <v-col cols="12" sm="6" md="3">
@@ -87,7 +87,7 @@
                пока не построится цепочка наставников. -->
           <div class="text-body-2"><span class="font-weight-medium">Баллы (ОП по ГП):</span> {{ fmt(summary.volumes?.gp) }}</div>
           <div class="text-body-2"><span class="font-weight-medium">Бонус баллы по разнице %:</span> {{ fmt(summary.groupSales?.bonus) }}</div>
-          <div class="text-body-2"><span class="font-weight-medium">Бонус, ₽:</span> {{ fmt2(summary.groupSales?.bonusRub) }}</div>
+          <div class="text-body-2"><span class="font-weight-medium">Бонус:</span> {{ fmt2(summary.groupSales?.bonusRub) }} ₽</div>
         </v-card>
       </v-col>
       <v-col cols="12" sm="6" md="3">
@@ -96,10 +96,13 @@
             <v-icon size="18" color="orange">mdi-sigma</v-icon>
             <span class="text-body-2 text-medium-emphasis">Итого продажи</span>
           </div>
-          <div class="text-body-2"><span class="font-weight-medium">Бонус:</span> {{ fmt(summary.totalSales?.bonus) }}</div>
-          <div class="text-body-2"><span class="font-weight-medium">Бонус (руб):</span> {{ fmt2(summary.totalSales?.bonusRub) }}</div>
-          <div class="text-body-2"><span class="font-weight-medium">Пул (руб):</span> {{ fmt2(summary.totalSales?.poolRub) }}</div>
-          <div class="text-body-2 font-weight-bold"><span class="font-weight-medium">Всего (руб):</span> {{ fmt2(summary.totalSales?.totalRub) }}</div>
+          <!-- Здесь «Бонус» — сумма в баллах (ЛП-бонус + ГП-бонус),
+               остальные строки в рублях. Чтобы партнёр не путал баллы
+               с рублями, явно подписываем единицу у каждой строки. -->
+          <div class="text-body-2"><span class="font-weight-medium">Бонус, баллы:</span> {{ fmt(summary.totalSales?.bonus) }}</div>
+          <div class="text-body-2"><span class="font-weight-medium">Бонус:</span> {{ fmt2(summary.totalSales?.bonusRub) }} ₽</div>
+          <div class="text-body-2"><span class="font-weight-medium">Пул:</span> {{ fmt2(summary.totalSales?.poolRub) }} ₽</div>
+          <div class="text-body-2 font-weight-bold"><span class="font-weight-medium">Всего:</span> {{ fmt2(summary.totalSales?.totalRub) }} ₽</div>
         </v-card>
       </v-col>
       <v-col cols="12" sm="6" md="3">
@@ -108,13 +111,13 @@
             <v-icon size="18" color="purple">mdi-calendar-check</v-icon>
             <span class="text-body-2 text-medium-emphasis">Итог за месяц</span>
           </div>
-          <div class="text-body-2"><span class="font-weight-medium">Баланс на начало:</span> {{ fmt2(summary.monthEnd?.balanceStart) }}</div>
+          <div class="text-body-2"><span class="font-weight-medium">Баланс на начало:</span> {{ fmt2(summary.monthEnd?.balanceStart) }} ₽</div>
           <div class="text-body-2"><span class="font-weight-medium">Прочие начисления:</span> {{ fmt2(summary.monthEnd?.otherAccrualsRub) }} ₽</div>
           <div v-if="summary.monthEnd?.otherAccrualsPoints" class="text-body-2 text-medium-emphasis text-caption">
             <span>в т.ч. в баллах:</span> {{ fmt(summary.monthEnd?.otherAccrualsPoints) }}
           </div>
-          <div class="text-body-2"><span class="font-weight-medium">Итого начислено:</span> {{ fmt2(summary.monthEnd?.totalAccrued) }}</div>
-          <div class="text-body-2 font-weight-bold"><span class="font-weight-medium">К выплате:</span> {{ fmt2(summary.monthEnd?.totalPayable) }}</div>
+          <div class="text-body-2"><span class="font-weight-medium">Итого начислено:</span> {{ fmt2(summary.monthEnd?.totalAccrued) }} ₽</div>
+          <div class="text-body-2 font-weight-bold"><span class="font-weight-medium">К выплате:</span> {{ fmt2(summary.monthEnd?.totalPayable) }} ₽</div>
         </v-card>
       </v-col>
     </v-row>
@@ -191,11 +194,14 @@
           <v-data-table :items="tables.personalSales || []" :headers="personalSalesHeaders" density="compact"
             hover no-data-text="Нет данных">
             <template #item.date="{ value }">{{ fmtShortDate(value) }}</template>
-            <template #item.paymentAmount="{ value }">{{ fmt2(value) }}</template>
-            <template #item.amountNoVat="{ value }">{{ fmt2(value) }}</template>
+            <template #item.paymentAmount="{ value }">{{ fmt2(value) }} ₽</template>
+            <template #item.propertyTitle="{ value }">{{ value || '—' }}</template>
+            <template #item.contractTerm="{ value }">{{ value ?? '—' }}</template>
+            <template #item.yearKV="{ value }">{{ value ?? '—' }}</template>
+            <template #item.amountNoVat="{ value }">{{ fmt2(value) }} ₽</template>
             <template #item.personalVolume="{ value }">{{ fmt(value) }}</template>
             <template #item.bonus="{ value }">{{ fmt(value) }}</template>
-            <template #item.bonusRub="{ value }">{{ fmt2(value) }}</template>
+            <template #item.bonusRub="{ value }">{{ fmt2(value) }} ₽</template>
           </v-data-table>
           </div>
         </v-expansion-panel-text>
@@ -213,11 +219,14 @@
           <v-data-table :items="tables.groupSales || []" :headers="groupSalesHeaders" density="compact"
             hover no-data-text="Нет данных">
             <template #item.date="{ value }">{{ fmtShortDate(value) }}</template>
-            <template #item.paymentAmount="{ value }">{{ fmt2(value) }}</template>
-            <template #item.amountNoVat="{ value }">{{ fmt2(value) }}</template>
+            <template #item.paymentAmount="{ value }">{{ fmt2(value) }} ₽</template>
+            <template #item.propertyTitle="{ value }">{{ value || '—' }}</template>
+            <template #item.contractTerm="{ value }">{{ value ?? '—' }}</template>
+            <template #item.yearKV="{ value }">{{ value ?? '—' }}</template>
+            <template #item.amountNoVat="{ value }">{{ fmt2(value) }} ₽</template>
             <template #item.personalVolume="{ value }">{{ fmt(value) }}</template>
             <template #item.bonus="{ value }">{{ fmt(value) }}</template>
-            <template #item.bonusRub="{ value }">{{ fmt2(value) }}</template>
+            <template #item.bonusRub="{ value }">{{ fmt2(value) }} ₽</template>
           </v-data-table>
           </div>
         </v-expansion-panel-text>
@@ -236,7 +245,7 @@
             hover no-data-text="Нет данных">
             <template #item.date="{ value }">{{ fmtShortDate(value) }}</template>
             <template #item.amount="{ value }">{{ fmt(value) }}</template>
-            <template #item.amountRUB="{ value }">{{ fmt2(value) }}</template>
+            <template #item.amountRUB="{ value }">{{ fmt2(value) }} ₽</template>
           </v-data-table>
           </div>
         </v-expansion-panel-text>
@@ -273,7 +282,7 @@
           <v-data-table :items="tables.payments || []" :headers="paymentsHeaders" density="compact"
             hover no-data-text="Нет данных">
             <template #item.date="{ value }">{{ fmtShortDate(value) }}</template>
-            <template #item.amount="{ value }">{{ fmt2(value) }}</template>
+            <template #item.amount="{ value }">{{ fmt2(value) }} ₽</template>
           </v-data-table>
           </div>
         </v-expansion-panel-text>
@@ -319,27 +328,32 @@ const qualTrend = computed(() => {
 });
 const tables = computed(() => data.value.tables || {});
 
-// Per spec ✅Отчет начислений и выплат партнера §4.1:
-// Дата, Контракт, Клиент, Продукт, Программа, Сумма оплаты,
-// Параметр (Свойство продукта), Сумма без НДС, ЛП, Бонус, Бонус ₽, Комментарий.
-const personalSalesHeaders = [
+// Per spec ✅Отчет начислений и выплат партнера §4.1.
+// «Параметр» исторически совмещал свойство продукта/срок/год КВ —
+// теперь у нас разные продукты могут иметь разные релевантные поля,
+// поэтому показываем три отдельные колонки. Бэкенд возвращает null,
+// если у продукта has_property/has_term/has_year_kv = false, и для
+// таких строк в ячейке выводится «—».
+const personalSalesHeaders = computed(() => filterByProductFlags([
   { title: 'Дата', key: 'date', width: 110 },
   { title: 'Контракт', key: 'contractNumber', width: 130 },
   { title: 'Клиент', key: 'clientName' },
   { title: 'Продукт', key: 'productName' },
   { title: 'Программа', key: 'programName' },
   { title: 'Сумма оплаты', key: 'paymentAmount', align: 'end', width: 130 },
-  { title: 'Параметр', key: 'parameter', width: 110 },
+  { title: 'Свойство', key: 'propertyTitle', width: 130, _flag: 'productHasProperty' },
+  { title: 'Срок, лет', key: 'contractTerm', align: 'end', width: 90, _flag: 'productHasTerm' },
+  { title: 'Год КВ', key: 'yearKV', align: 'end', width: 90, _flag: 'productHasYearKv' },
   { title: 'Сумма без НДС', key: 'amountNoVat', align: 'end', width: 130 },
   { title: 'ЛП', key: 'personalVolume', align: 'end', width: 90 },
   { title: 'Бонус', key: 'bonus', align: 'end', width: 90 },
   { title: 'Бонус, ₽', key: 'bonusRub', align: 'end', width: 110 },
   { title: 'Комментарий', key: 'comment' },
-];
+], tables.value.personalSales));
 
 // Per spec §4.2: Дата, Контракт, Партнёр сделки, Клиент, Продукт, Программа,
-// Сумма оплаты, Параметр, Сумма без НДС, ГП, Бонус, Бонус ₽, Комментарий.
-const groupSalesHeaders = [
+// Сумма оплаты, Свойство/Срок/Год КВ, Сумма без НДС, ГП, Бонус, Бонус ₽, Комментарий.
+const groupSalesHeaders = computed(() => filterByProductFlags([
   { title: 'Дата', key: 'date', width: 110 },
   { title: 'Контракт', key: 'contractNumber', width: 130 },
   { title: 'Партнёр сделки', key: 'partnerName' },
@@ -347,13 +361,15 @@ const groupSalesHeaders = [
   { title: 'Продукт', key: 'productName' },
   { title: 'Программа', key: 'programName' },
   { title: 'Сумма оплаты', key: 'paymentAmount', align: 'end', width: 130 },
-  { title: 'Параметр', key: 'parameter', width: 110 },
+  { title: 'Свойство', key: 'propertyTitle', width: 130, _flag: 'productHasProperty' },
+  { title: 'Срок, лет', key: 'contractTerm', align: 'end', width: 90, _flag: 'productHasTerm' },
+  { title: 'Год КВ', key: 'yearKV', align: 'end', width: 90, _flag: 'productHasYearKv' },
   { title: 'Сумма без НДС', key: 'amountNoVat', align: 'end', width: 130 },
   { title: 'ГП', key: 'personalVolume', align: 'end', width: 90 },
   { title: 'Бонус', key: 'bonus', align: 'end', width: 90 },
   { title: 'Бонус, ₽', key: 'bonusRub', align: 'end', width: 110 },
   { title: 'Комментарий', key: 'comment' },
-];
+], tables.value.groupSales));
 
 // Per spec §4.3: Дата, Сумма (₽), Комментарий.
 const otherAccrualsHeaders = [
@@ -369,6 +385,19 @@ const paymentsHeaders = [
   { title: 'Сумма, ₽', key: 'amount', align: 'end', width: 160 },
   { title: 'Комментарий', key: 'comment' },
 ];
+
+// Если ни одна строка таблицы не содержит флага productHasProperty/Term/YearKv
+// (т.е. все продукты в выборке этого параметра не имеют) — скрываем колонку
+// целиком. Если хотя бы у одной строки флаг true — оставляем, и в ячейках,
+// где значение null, выводим «—». `_flag` — наш внутренний маркер;
+// удаляем его из объекта заголовка перед передачей в Vuetify.
+function filterByProductFlags(headers, rows) {
+  const list = rows || [];
+  const hasFlag = (flag) => list.some(r => r && r[flag]);
+  return headers
+    .filter(h => !h._flag || list.length === 0 || hasFlag(h._flag))
+    .map(({ _flag, ...rest }) => rest);
+}
 
 const locked = ref(false);
 const lockedMessage = ref('');

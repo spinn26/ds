@@ -631,6 +631,9 @@ class ManualTransactionController extends Controller
                 'pr.vendorName as providerName',
                 'cur.symbol as currencySymbol',
                 'cur.nameRu as currencyName',
+                'p.has_property as productHasProperty',
+                'p.has_term as productHasTerm',
+                'p.has_year_kv as productHasYearKv',
             ]);
     }
 
@@ -663,6 +666,12 @@ class ManualTransactionController extends Controller
             'parameter' => $r->parameter,
             'availableParameters' => $params,
             'yearKV' => $r->yearKV,
+            // Флаги конкретного продукта — фронт скрывает колонки
+            // «Свойство», «Срок», «Год КВ» если у продукта они не релевантны.
+            // Дефолты true для legacy-черновиков без productId.
+            'productHasProperty' => isset($r->productHasProperty) ? (bool) $r->productHasProperty : true,
+            'productHasTerm'     => isset($r->productHasTerm)     ? (bool) $r->productHasTerm     : true,
+            'productHasYearKv'   => isset($r->productHasYearKv)   ? (bool) $r->productHasYearKv   : true,
             'dsCommissionPercentage' => $r->dsCommissionPercentage !== null ? (float) $r->dsCommissionPercentage : null,
             'commissionOverride' => (bool) $r->commissionOverride,
             'customCommission' => (bool) $r->customCommission,

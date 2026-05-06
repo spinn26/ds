@@ -158,7 +158,11 @@
                         @update:model-value="v => patchField(d, 'comment', v)" />
                     </template>
                     <template v-else-if="h.key === 'parameter'">
-                      <template v-if="(d.availableParameters?.length || 0) > 1">
+                      <!-- У продукта явно отключено «Свойство» — поле для
+                           этой строки неактивно (даже если в legacy осталось
+                           значение, его всё равно нельзя редактировать). -->
+                      <span v-if="d.productHasProperty === false" class="text-medium-emphasis">—</span>
+                      <template v-else-if="(d.availableParameters?.length || 0) > 1">
                         <v-select :model-value="d.parameter" :items="d.availableParameters"
                           item-title="title" item-value="title"
                           density="compact" hide-details variant="plain" placeholder="Выберите"
@@ -172,7 +176,11 @@
                       </template>
                     </template>
                     <template v-else-if="h.key === 'yearKV'">
-                      <v-select :model-value="d.yearKV" :items="yearKVOptions" density="compact" hide-details variant="plain" clearable
+                      <!-- Аналогично «Параметру»: у продуктов без has_year_kv
+                           ввод года КВ скрыт. -->
+                      <span v-if="d.productHasYearKv === false" class="text-medium-emphasis">—</span>
+                      <v-select v-else :model-value="d.yearKV" :items="yearKVOptions"
+                        density="compact" hide-details variant="plain" clearable
                         @update:model-value="v => patchField(d, 'yearKV', v)" />
                     </template>
                     <template v-else-if="h.key === 'amount'">

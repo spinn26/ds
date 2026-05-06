@@ -86,14 +86,21 @@ export async function exportFinanceReport(reportData, month) {
   wsSummary['!cols'] = [{ wch: 36 }, { wch: 22 }];
   XLSX.utils.book_append_sheet(wb, wsSummary, 'Сводная');
 
-  // Sheet 2: Личные продажи
+  // Sheet 2: Личные продажи.
+  // «Параметр» исторически был одной колонкой — теперь у разных продуктов
+  // могут быть свои поля (свойство / срок / год КВ). В Excel выводим все
+  // три, даже если конкретный продукт его не имеет (там будет '—'),
+  // потому что одна выгрузка может содержать сделки по разным продуктам.
   const personalHeaders = [
     'Дата', 'Контракт', 'Клиент', 'Продукт', 'Программа',
-    'Сумма оплаты', 'Сумма без НДС', 'Параметр', 'ЛП', 'Бонус', 'Бонус, ₽', 'Комментарий',
+    'Сумма оплаты', 'Сумма без НДС', 'Свойство', 'Срок, лет', 'Год КВ',
+    'ЛП', 'Бонус', 'Бонус, ₽', 'Комментарий',
   ];
+  const dash = (v) => v === null || v === undefined || v === '' ? '—' : v;
   const personalRows = (t.personalSales || []).map(r => [
     r.date, r.contractNumber, r.clientName, r.productName, r.programName,
-    r.paymentAmount ?? 0, r.amountNoVat ?? 0, r.parameter ?? '',
+    r.paymentAmount ?? 0, r.amountNoVat ?? 0,
+    dash(r.propertyTitle), dash(r.contractTerm), dash(r.yearKV),
     r.personalVolume ?? 0, r.bonus ?? 0, r.bonusRub ?? 0, r.comment ?? '',
   ]);
   const wsPersonal = XLSX.utils.aoa_to_sheet([personalHeaders, ...personalRows]);
@@ -103,11 +110,13 @@ export async function exportFinanceReport(reportData, month) {
   // Sheet 3: Групповые продажи
   const groupHeaders = [
     'Дата', 'Контракт', 'Клиент', 'Партнёр сделки', 'Продукт', 'Программа',
-    'Сумма оплаты', 'Сумма без НДС', 'Параметр', 'ГП', 'Бонус', 'Бонус, ₽', 'Комментарий',
+    'Сумма оплаты', 'Сумма без НДС', 'Свойство', 'Срок, лет', 'Год КВ',
+    'ГП', 'Бонус', 'Бонус, ₽', 'Комментарий',
   ];
   const groupRows = (t.groupSales || []).map(r => [
     r.date, r.contractNumber, r.clientName, r.partnerName, r.productName, r.programName,
-    r.paymentAmount ?? 0, r.amountNoVat ?? 0, r.parameter ?? '',
+    r.paymentAmount ?? 0, r.amountNoVat ?? 0,
+    dash(r.propertyTitle), dash(r.contractTerm), dash(r.yearKV),
     r.personalVolume ?? 0, r.bonus ?? 0, r.bonusRub ?? 0, r.comment ?? '',
   ]);
   const wsGroup = XLSX.utils.aoa_to_sheet([groupHeaders, ...groupRows]);
