@@ -67,6 +67,7 @@
             <th class="text-right" style="width:90px">Клиенты</th>
             <th class="text-right" style="width:100px">Контракты</th>
             <th class="text-right" style="width:100px">Партнёры</th>
+            <th style="width:50px"></th>
           </tr>
         </thead>
         <tbody>
@@ -101,10 +102,21 @@
               <td class="text-right">{{ row.clientCount ?? 0 }}</td>
               <td class="text-right">{{ row.contractCount ?? 0 }}</td>
               <td class="text-right">{{ row.partnersCount ?? 0 }}</td>
+              <td>
+                <v-tooltip text="Экспорт ветки в XLSX" location="top">
+                  <template #activator="{ props: tip }">
+                    <v-btn v-bind="tip" icon size="x-small" variant="text"
+                      :loading="exportingId === row.id"
+                      @click="exportSubtree(row)">
+                      <v-icon size="18">mdi-download</v-icon>
+                    </v-btn>
+                  </template>
+                </v-tooltip>
+              </td>
             </tr>
           </template>
           <tr v-if="!flatRows.length && !loading">
-            <td colspan="12"><EmptyState /></td>
+            <td colspan="13"><EmptyState /></td>
           </tr>
         </tbody>
       </v-table>
@@ -127,6 +139,29 @@ import { fmt, getActivityColorByName } from '../composables/useDesign';
 
 const loading = ref(false);
 const showAdvanced = ref(false);
+const exportingId = ref(null);
+
+async function exportSubtree(row) {
+  if (!row?.id) return;
+  exportingId.value = row.id;
+  try {
+    const resp = await api.get(`/structure/${row.id}/export`, { responseType: 'blob' });
+    const url = URL.createObjectURL(resp.data);
+    const a = document.createElement('a');
+    a.href = url;
+    // Имя файла берём из Content-Disposition если пришло, иначе генерим
+    const cd = resp.headers?.['content-disposition'] || '';
+    const m = /filename\*?=(?:UTF-8'')?\"?([^\";]+)/i.exec(cd);
+    a.download = m ? decodeURIComponent(m[1]) : `structure-${row.id}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    console.error('subtree export failed', e);
+  }
+  exportingId.value = null;
+}
 
 const activeFilterCount = computed(() => {
   const f = filters.value;

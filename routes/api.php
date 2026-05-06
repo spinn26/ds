@@ -95,6 +95,7 @@ Route::prefix('v1')->group(function () {
 
         Route::get('/structure', [StructureController::class, 'index']);
         Route::get('/structure/{consultantId}/children', [StructureController::class, 'children']);
+        Route::get('/structure/{consultantId}/export', [StructureController::class, 'exportSubtree'])->whereNumber('consultantId');
         Route::get('/structure/qualification-levels', [StructureController::class, 'qualificationLevels']);
         Route::get('/structure/activity-statuses', [StructureController::class, 'activityStatuses']);
         Route::get('/structure/cities', [StructureController::class, 'cities']);

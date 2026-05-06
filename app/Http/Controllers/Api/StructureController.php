@@ -6,14 +6,17 @@ use App\Enums\PartnerActivity;
 use App\Http\Controllers\Controller;
 use App\Models\Consultant;
 use App\Services\ConsultantService;
+use App\Services\XlsxExportService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class StructureController extends Controller
 {
     public function __construct(
         private readonly ConsultantService $consultantService,
+        private readonly XlsxExportService $xlsx,
     ) {}
 
     /**
@@ -93,6 +96,93 @@ class StructureController extends Controller
         $members = $this->consultantService->formatMembers($rows);
 
         return response()->json(['data' => $members->values()]);
+    }
+
+    /**
+     * XLSX-экспорт всей ветки от $consultantId вниз (рекурсивно).
+     *
+     * Формирует плоский лист со всеми descendants — чтобы наставник
+     * мог выгрузить свою структуру и работать с ней в Excel
+     * (фильтры, сводные, e-mail).
+     */
+    public function exportSubtree(Request $request, int $consultantId): StreamedResponse
+    {
+        $root = Consultant::whereNull('dateDeleted')->findOrFail($consultantId);
+        $this->authorize('viewTree', $root);
+
+        // Recursive CTE — соберём все id ветки с глубиной от корня.
+        $treeRows = DB::select(
+            'WITH RECURSIVE tree AS (
+                SELECT id, 0 AS depth FROM consultant WHERE id = ?
+                UNION ALL
+                SELECT c.id, t.depth + 1
+                FROM consultant c
+                JOIN tree t ON c.inviter = t.id
+                WHERE c."dateDeleted" IS NULL
+            )
+            SELECT id, depth FROM tree ORDER BY depth, id',
+            [$consultantId],
+        );
+        $depthById = [];
+        foreach ($treeRows as $r) {
+            $depthById[$r->id] = (int) $r->depth;
+        }
+
+        $consultants = Consultant::whereIn('id', array_keys($depthById))
+            ->whereNull('dateDeleted')
+            ->orderBy('personName')
+            ->get();
+        $members = $this->consultantService->formatMembers($consultants);
+
+        $headers = [
+            'Уровень дерева',
+            'ФИО',
+            'Email',
+            'Телефон',
+            'Город',
+            'Дата рождения',
+            'Квалификация',
+            'Статус активности',
+            'ЛП накопл.',
+            'ГП накопл.',
+            'НГП накопл.',
+            'Контрактов',
+            'Клиентов',
+            'Дата активации',
+        ];
+
+        $rows = $members->map(function ($m) use ($depthById) {
+            return [
+                $depthById[$m['id']] ?? null,
+                $m['personName'] ?? null,
+                $m['email'] ?? null,
+                $m['phone'] ?? null,
+                $m['city'] ?? null,
+                $m['birthDate'] ?? null,
+                $m['qualificationTitle'] ?? null,
+                $m['activityName'] ?? null,
+                $m['cumulativeLp'] ?? 0,
+                $m['cumulativeGp'] ?? 0,
+                $m['cumulativeNgp'] ?? 0,
+                $m['contractCount'] ?? 0,
+                $m['clientCount'] ?? 0,
+                $m['dateActivity'] ?? null,
+            ];
+        });
+
+        $rootName = preg_replace('/[^\p{L}\d\s\-]/u', '', $root->personName ?? "consultant-{$consultantId}");
+        $filename = 'structure-' . trim($rootName) . '-' . now()->format('Y-m-d');
+
+        return $this->xlsx->stream(
+            $filename,
+            'Структура ветки',
+            $headers,
+            $rows,
+            [
+                'numericColumns' => [9, 10, 11, 12, 13],
+                'dateColumns' => [6, 14],
+            ],
+        );
     }
 
     /**
