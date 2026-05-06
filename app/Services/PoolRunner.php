@@ -514,15 +514,54 @@ class PoolRunner
             return null;
         }
 
+        // Pool moderation overrides: оператор мог снять галку даже на
+        // историческом периоде (исключить из распределения post-factum).
+        $modByConsId = DB::table('pool_moderation')
+            ->where('year', $year)->where('month', $month)
+            ->pluck('participates', 'consultant');
+
         $participants = $rows->map(fn ($r) => [
             'id' => (int) $r->consultant,
             'level' => (int) ($r->level ?? 0),
             'levelName' => $r->title ?? '',
             'personName' => $r->personName ?? '—',
-            'participates' => true,
+            // Если в pool_moderation для этого месяца стоит false — UI
+            // показывает галку снятой; payout остаётся как был в snapshot
+            // (исторический snapshot не пересчитывается).
+            'participates' => $modByConsId[(int) $r->consultant] ?? true,
             'payoutRub' => round((float) ($r->poolBonus ?? 0), 2),
             'groupBonusRub' => round((float) ($r->networkGroupBonus ?? 0), 2),
         ])->all();
+
+        // «Теневые» участники: те, у кого ЕСТЬ запись в pool_moderation
+        // (operator снял/проставил галку), но по какой-то причине НЕТ в
+        // poolLog snapshot (impount пропустил, qualificationLog расходится
+        // с poolLog). Добавляем чтобы UI показал их со снятой галкой.
+        $alreadyHave = collect($participants)->pluck('id')->all();
+        $missingIds = $modByConsId->keys()->diff($alreadyHave)->all();
+        if (! empty($missingIds)) {
+            $shadowRows = DB::table('consultant as c')
+                ->whereIn('c.id', $missingIds)
+                ->whereNull('c.dateDeleted')
+                ->select(['c.id', 'c.personName', 'c.status_and_lvl'])
+                ->get();
+            $levelByLvlId = DB::table('status_levels')
+                ->whereIn('id', $shadowRows->pluck('status_and_lvl')->filter()->unique())
+                ->get(['id', 'level', 'title'])
+                ->keyBy('id');
+            foreach ($shadowRows as $sr) {
+                $lvl = $sr->status_and_lvl ? ($levelByLvlId[$sr->status_and_lvl] ?? null) : null;
+                $participants[] = [
+                    'id' => (int) $sr->id,
+                    'level' => (int) ($lvl?->level ?? 0),
+                    'levelName' => $lvl?->title ?? '',
+                    'personName' => $sr->personName ?? '—',
+                    'participates' => (bool) ($modByConsId[$sr->id] ?? false),
+                    'payoutRub' => 0,
+                    'groupBonusRub' => 0,
+                ];
+            }
+        }
 
         $totalPaid = array_sum(array_column($participants, 'payoutRub'));
 
