@@ -338,6 +338,8 @@ function resetFilters() {
 }
 const page = ref(1);
 const perPage = ref(25);
+const sortBy = ref('');
+const sortDir = ref('desc');
 const selected = ref([]);
 const bulkMsg = ref('');
 const bulkMsgType = ref('success');
@@ -561,6 +563,13 @@ const { debounced: debouncedLoad } = useDebounce(loadData, 400);
 function onOptions(opts) {
   page.value = opts.page;
   if (opts.itemsPerPage) perPage.value = opts.itemsPerPage;
+  if (Array.isArray(opts.sortBy) && opts.sortBy.length) {
+    sortBy.value = opts.sortBy[0].key;
+    sortDir.value = opts.sortBy[0].order || 'desc';
+  } else {
+    sortBy.value = '';
+    sortDir.value = 'desc';
+  }
   loadData();
 }
 
@@ -570,6 +579,10 @@ async function loadData() {
     const params = { page: page.value, per_page: perPage.value };
     if (search.value) params.search = search.value;
     if (statusFilter.value) params.status = statusFilter.value;
+    if (sortBy.value) {
+      params.sort_by = sortBy.value;
+      params.sort_dir = sortDir.value;
+    }
     const { data } = await api.get('/admin/requisites', { params });
     items.value = data.data;
     total.value = data.total;

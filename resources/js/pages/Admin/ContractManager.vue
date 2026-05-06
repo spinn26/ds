@@ -349,6 +349,8 @@ const filters = ref({
 });
 const page = ref(1);
 const perPage = ref(25);
+const sortBy = ref('');
+const sortDir = ref('desc');
 
 const headers = [
   { title: 'ID', key: 'id', width: 60 },
@@ -638,6 +640,13 @@ function onOptions(opts) {
     // действительно получить весь список.
     perPage.value = opts.itemsPerPage === -1 ? 100000 : opts.itemsPerPage;
   }
+  if (Array.isArray(opts.sortBy) && opts.sortBy.length) {
+    sortBy.value = opts.sortBy[0].key;
+    sortDir.value = opts.sortBy[0].order || 'desc';
+  } else {
+    sortBy.value = '';
+    sortDir.value = 'desc';
+  }
   loadData();
 }
 
@@ -650,6 +659,10 @@ async function loadData() {
     Object.entries(filters.value).forEach(([k, v]) => {
       if (v !== '' && v !== null && v !== undefined) params[k] = v;
     });
+    if (sortBy.value) {
+      params.sort_by = sortBy.value;
+      params.sort_dir = sortDir.value;
+    }
     const { data } = await api.get('/admin/contracts', { params });
     items.value = data.data;
     total.value = data.total;

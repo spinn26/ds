@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Enums\PartnerActivity;
+use App\Http\Controllers\Api\Concerns\AppliesSorting;
 use App\Http\Controllers\Api\Concerns\PaginatesRequests;
 use App\Http\Controllers\Controller;
 use App\Models\BankRequisite;
@@ -16,6 +17,7 @@ use Illuminate\Support\Facades\DB;
 class AdminDataController extends Controller
 {
     use PaginatesRequests;
+    use AppliesSorting;
 
     public function __construct(
         private readonly PartnerStatusService $statusService,
@@ -875,7 +877,12 @@ class AdminDataController extends Controller
         }
 
         $total = $query->count();
-        $rows = $query->orderByDesc('id')
+        $this->applySorting($query, $request, [
+            'personName' => '"personName"',
+            'consultantName' => '"consultantName"',
+            'dateCreated' => '"dateCreated"',
+        ], 'id', 'desc');
+        $rows = $query
             ->offset($this->paginationOffset($request))
             ->limit($this->paginationPerPage($request))
             ->get();
@@ -1008,7 +1015,13 @@ class AdminDataController extends Controller
 
         $query2 = Requisite::whereIn('id', $primaryIds);
         $total = $query2->count();
-        $rows = $query2->orderByDesc('id')
+        $this->applySorting($query2, $request, [
+            'individualEntrepreneur' => '"individualEntrepreneur"',
+            'inn' => 'inn',
+            'verified' => 'verified',
+            'createdAt' => '"createdAt"',
+        ], 'id', 'desc');
+        $rows = $query2
             ->offset($this->paginationOffset($request))
             ->limit($this->paginationPerPage($request))
             ->get();
@@ -1480,7 +1493,20 @@ class AdminDataController extends Controller
         if ($request->filled('closed_to')) $query->where('c.closeDate', '<=', $request->closed_to . ' 23:59:59');
 
         $total = $query->count();
-        $rows = $query->orderByDesc('c.id')
+        $this->applySorting($query, $request, [
+            'number' => 'c.number',
+            'clientName' => 'c."clientName"',
+            'consultantName' => 'c."consultantName"',
+            'productName' => 'c."productName"',
+            'programName' => 'c."programName"',
+            'ammount' => 'c.ammount',
+            'amount' => 'c.ammount',
+            'createDate' => 'c."createDate"',
+            'openDate' => 'c."openDate"',
+            'closeDate' => 'c."closeDate"',
+            'status' => 'c.status',
+        ], 'c.id', 'desc');
+        $rows = $query
             ->offset($this->paginationOffset($request))
             ->limit($this->paginationPerPage($request))
             ->select([

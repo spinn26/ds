@@ -223,6 +223,8 @@ const loading = ref(false);
 const search = ref('');
 const page = ref(1);
 const perPage = ref(25);
+const sortBy = ref('');
+const sortDir = ref('desc');
 const filters = ref({ id: '', consultantName: '', comment: '', created_from: '', created_to: '' });
 
 const activeFilterCount = computed(() => {
@@ -260,6 +262,13 @@ const { debounced: debouncedLoad } = useDebounce(loadData, 400);
 function onOptions(opts) {
   page.value = opts.page;
   if (opts.itemsPerPage) perPage.value = opts.itemsPerPage;
+  if (Array.isArray(opts.sortBy) && opts.sortBy.length) {
+    sortBy.value = opts.sortBy[0].key;
+    sortDir.value = opts.sortBy[0].order || 'desc';
+  } else {
+    sortBy.value = '';
+    sortDir.value = 'desc';
+  }
   loadData();
 }
 
@@ -273,6 +282,10 @@ async function loadData() {
     if (filters.value.comment) params.comment = filters.value.comment;
     if (filters.value.created_from) params.created_from = filters.value.created_from;
     if (filters.value.created_to) params.created_to = filters.value.created_to;
+    if (sortBy.value) {
+      params.sort_by = sortBy.value;
+      params.sort_dir = sortDir.value;
+    }
     const { data } = await api.get('/admin/clients', { params });
     items.value = data.data;
     total.value = data.total;
