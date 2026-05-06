@@ -96,11 +96,21 @@ class AuthController extends Controller
 
     /**
      * Validate referral code and return mentor info.
+     *
+     * Раньше требовалось consultant.active=true — это отрезало 717 из 1146
+     * партнёров с реф-кодами (Registered ещё не активированных, тех у кого
+     * флаг active не выставлен после Directual-импорта). Партнёр на любом
+     * валидном статусе должен мочь приглашать. Блокируем только
+     * Terminated (3) / Excluded (5) и soft-deleted.
      */
     public function checkReferral(CheckReferralRequest $request): JsonResponse
     {
         $consultant = Consultant::where('participantCode', $request->input('code'))
-            ->where('active', true)
+            ->whereNull('dateDeleted')
+            ->whereNotIn('activity', [
+                \App\Enums\PartnerActivity::Terminated->value,
+                \App\Enums\PartnerActivity::Excluded->value,
+            ])
             ->first();
 
         if (! $consultant) {
@@ -141,8 +151,14 @@ class AuthController extends Controller
 
             $inviter = null;
             if ($request->filled('refCode')) {
+                // Те же правила что в checkReferral: разрешаем всех кроме
+                // терминированных/исключённых/удалённых.
                 $inviter = Consultant::where('participantCode', $request->input('refCode'))
-                    ->where('active', true)
+                    ->whereNull('dateDeleted')
+                    ->whereNotIn('activity', [
+                        PartnerActivity::Terminated->value,
+                        PartnerActivity::Excluded->value,
+                    ])
                     ->first();
             }
 
