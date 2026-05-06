@@ -1506,7 +1506,20 @@ class AdminDataController extends Controller
         if ($request->filled('number')) $query->where('c.number', 'ilike', '%' . $request->number . '%');
         if ($request->filled('comment')) $query->where('c.comment', 'ilike', '%' . $request->comment . '%');
         if ($request->filled('product')) $query->where('c.product', $request->product);
-        if ($request->filled('program')) $query->where('c.program', $request->program);
+        // Программа: дропдаун дедуплицирован (один id-представитель на
+        // имя), поэтому фильтр матчит по contract.programName, чтобы
+        // выбор «Жизнь+» поднимал ВСЕ варианты этой программы. Если
+        // имя не разрезолвилось (id невалидный) — fallback на FK.
+        if ($request->filled('program')) {
+            $programName = DB::table('program')
+                ->where('id', $request->program)
+                ->value('name');
+            if ($programName) {
+                $query->where('c.programName', $programName);
+            } else {
+                $query->where('c.program', $request->program);
+            }
+        }
         if ($request->filled('setup')) $query->where('c.setup', $request->setup);
         if ($request->filled('supplier')) {
             $query->where('pr.providerName', 'ilike', '%' . $request->supplier . '%');

@@ -987,11 +987,24 @@ onMounted(async () => {
     // Programs не были загружены — фильтр «Программа» оставался пустым.
     // Берём из общего contract form-data — там programs уже сгруппированы
     // по продуктам.
+    //
+    // Дедуп: legacy `program` хранит одну и ту же программу («Жизнь+»)
+    // несколькими строками (разные vendorName/term/provider). Для
+    // фильтра-выбора это шум — отбираем по одному представителю на
+    // (name, productId). Фильтр на бэке матчит по contract.programName,
+    // так что выбор любого id из группы поднимает контракты по всем
+    // вариантам этой программы.
     try {
       const fd = await api.get('/admin/contracts/form-data');
-      programList.value = (fd.data?.programs || []).map(p => ({
-        id: p.id, name: p.name,
-      }));
+      const seen = new Set();
+      programList.value = (fd.data?.programs || [])
+        .filter(p => {
+          const key = `${p.name}|${p.productId ?? ''}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        })
+        .map(p => ({ id: p.id, name: p.name }));
     } catch {}
   } catch {}
 });

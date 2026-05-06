@@ -40,8 +40,21 @@ class ContractService
         if ($request->filled('product')) {
             $query->where('product', $request->product);
         }
+        // Программа: в дропдауне фронт получает дедуплицированный список
+        // (один id-представитель на каждое уникальное name). Чтобы выбор
+        // «Жизнь+» поднимал контракты по ВСЕМ вариантам этой программы
+        // (с разными vendorName/term/provider), фильтруем не по точному
+        // FK, а по contract.programName — он денормализован и одинаков
+        // у всех вариантов одного имени.
         if ($request->filled('program')) {
-            $query->where('program', $request->program);
+            $programName = DB::table('program')
+                ->where('id', $request->program)
+                ->value('name');
+            if ($programName) {
+                $query->where('programName', $programName);
+            } else {
+                $query->where('program', $request->program);
+            }
         }
 
         // Дата добавления контракта в систему (createDate).

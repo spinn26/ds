@@ -177,21 +177,38 @@ class ContractController extends Controller
     /**
      * Список программ (для фильтра-автокомплита).
      * Возвращает productId, чтобы фронт мог отфильтровать по выбранному продукту.
+     *
+     * В legacy `program` одна и та же программа («Жизнь+») может иметь
+     * 5–10 строк с разными vendorName / term / provider. Для фильтра
+     * на витрине это шум — пользователь видит «Жизнь+ ×8». Поэтому
+     * дедупим по (name, product): берём минимальный id-представитель,
+     * а на фильтрации в applyContractFilters матчим по programName,
+     * чтобы пикнутая «Жизнь+» поднимала контракты по ВСЕМ вариантам.
      */
     public function programs(Request $request): JsonResponse
     {
-        $query = DB::table('program');
+        $query = DB::table('program as p');
         if (\Illuminate\Support\Facades\Schema::hasColumn('program', 'active')) {
-            $query->where('active', true);
+            $query->where('p.active', true);
         }
         if ($request->filled('q')) {
-            $query->where('name', 'ilike', '%' . $request->q . '%');
+            $query->where('p.name', 'ilike', '%' . $request->q . '%');
         }
         if ($request->filled('product')) {
-            $query->where('product', $request->product);
+            $query->where('p.product', $request->product);
         }
-        $programs = $query->orderBy('name')->limit(500)
-            ->get(['id', 'name', 'product'])
+        // DISTINCT ON (name, product) — представитель с минимальным id
+        // на каждое уникальное имя в рамках продукта.
+        $programs = $query
+            ->select(['p.id', 'p.name', 'p.product'])
+            ->orderBy('p.name')
+            ->orderBy('p.product')
+            ->orderBy('p.id')
+            ->distinct('p.name', 'p.product')
+            ->limit(500)
+            ->get()
+            ->unique(fn ($p) => $p->name . '|' . ($p->product ?? ''))
+            ->values()
             ->map(fn ($p) => ['id' => $p->id, 'name' => $p->name, 'productId' => $p->product]);
         return response()->json($programs);
     }

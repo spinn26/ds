@@ -372,9 +372,22 @@ const headers = [
 const supplierOptions = ref([]);
 const filterPrograms = computed(() => {
   const all = formData.value.programs || [];
-  if (!filters.value.product) return all;
-  // Coerce — productId на бекэнде int, filters.product может быть int или string
-  return all.filter(p => String(p.productId) === String(filters.value.product));
+  const scoped = !filters.value.product
+    ? all
+    // Coerce — productId на бекэнде int, filters.product может быть int или string
+    : all.filter(p => String(p.productId) === String(filters.value.product));
+  // Дедуп: одна и та же программа («Жизнь+») в legacy `program` имеет
+  // 5–10 строк с разными vendorName/term/provider — оператор видел
+  // «Жизнь+ ×8» в фильтре. Оставляем по одному представителю на
+  // (name, productId); фильтрация на бэке идёт по contract.programName,
+  // так что выбор одного id поднимает контракты по всем вариантам.
+  const seen = new Set();
+  return scoped.filter(p => {
+    const key = `${p.name}|${p.productId ?? ''}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 });
 
 function onFilterProductChange() {
