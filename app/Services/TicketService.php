@@ -7,13 +7,72 @@ use Illuminate\Support\Facades\DB;
 
 class TicketService
 {
+    /**
+     * Категории тикетов + видимость по ролям стаффа.
+     *
+     * Правило: партнёр выбирает категорию → тикет виден только тем
+     * сотрудникам, чья роль есть в `roles`. Админы видят всё (особый
+     * случай — короткая дорожка ниже в visibleCategoriesForRoles()).
+     *
+     * `accounting` (старый «Бухгалтер») и `billing` (с фронта) свернуты
+     * в `accruals` — это backward-compat для старых тикетов; на фронте
+     * пользователю показывается только новый список.
+     */
     public const CATEGORIES = [
-        'support' => 'Техподдержка',
-        'backoffice' => 'Бэк-офис',
-        'legal' => 'Юрист',
-        'accounting' => 'Бухгалтер',
-        'accruals' => 'Начисления',
+        'support'    => ['label' => 'Техподдержка',         'roles' => ['admin', 'support']],
+        'backoffice' => ['label' => 'Бэк-офис / Документы', 'roles' => ['admin', 'backoffice']],
+        'accruals'   => ['label' => 'Начисления и выплаты', 'roles' => ['admin', 'finance', 'calculations', 'corrections']],
+        'legal'      => ['label' => 'Юридический вопрос',   'roles' => ['admin', 'head']],
+        'general'    => ['label' => 'Общий вопрос',         'roles' => ['admin', 'support', 'head']],
+        'owner'      => ['label' => 'Собственнику',         'roles' => ['admin', 'head']],
     ];
+
+    /** Backward-compat: старые ключи категорий → новые. */
+    public const CATEGORY_ALIASES = [
+        'accounting' => 'accruals',
+        'billing'    => 'accruals',
+    ];
+
+    /** Нормализуем legacy-ключ к актуальному. */
+    public static function normalizeCategory(?string $category): ?string
+    {
+        if ($category === null) return null;
+        return self::CATEGORY_ALIASES[$category] ?? $category;
+    }
+
+    /** Текстовая подпись для UI (label). */
+    public static function categoryLabel(?string $category): string
+    {
+        $key = self::normalizeCategory($category);
+        return self::CATEGORIES[$key]['label'] ?? ($category ?? '');
+    }
+
+    /**
+     * Список категорий, доступных стафф-сотруднику с заданными ролями.
+     * Админ всегда видит всё. Возвращает список ключей.
+     */
+    public static function visibleCategoriesForRoles(array $roles): array
+    {
+        if (in_array('admin', $roles, true)) {
+            return array_keys(self::CATEGORIES);
+        }
+        $visible = [];
+        foreach (self::CATEGORIES as $key => $cfg) {
+            if (array_intersect($roles, $cfg['roles'])) $visible[] = $key;
+        }
+        return $visible;
+    }
+
+    /** Может ли стафф с такими ролями видеть конкретный тикет (по category). */
+    public static function staffCanSeeCategory(array $roles, ?string $category): bool
+    {
+        $key = self::normalizeCategory($category);
+        if (! $key || ! isset(self::CATEGORIES[$key])) {
+            // Неизвестная категория — viewing разрешаем только админу.
+            return in_array('admin', $roles, true);
+        }
+        return (bool) array_intersect($roles, self::CATEGORIES[$key]['roles']);
+    }
 
     /**
      * Format ticket list with batch-loaded related data.
@@ -65,7 +124,7 @@ class TicketService
                 'id' => $t->id,
                 'subject' => $t->subject,
                 'category' => $t->category,
-                'categoryLabel' => self::CATEGORIES[$t->category] ?? $t->category,
+                'categoryLabel' => self::categoryLabel($t->category),
                 'status' => $t->status,
                 'priority' => $t->priority,
                 'createdBy' => $creator ? trim(($creator->lastName ?? '') . ' ' . ($creator->firstName ?? '')) : '—',
@@ -133,7 +192,7 @@ class TicketService
                 'id' => $ticket->id,
                 'subject' => $ticket->subject,
                 'category' => $ticket->category,
-                'categoryLabel' => self::CATEGORIES[$ticket->category] ?? $ticket->category,
+                'categoryLabel' => self::categoryLabel($ticket->category),
                 'status' => $ticket->status,
                 'priority' => $ticket->priority,
                 'createdBy' => $creator ? trim(($creator->lastName ?? '') . ' ' . ($creator->firstName ?? '')) : '—',

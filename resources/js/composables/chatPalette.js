@@ -41,12 +41,17 @@ export const chatPriorityLabels = {
   low: 'Низкий',
 };
 
+// Палитра/лейблы синхронизированы с TicketService::CATEGORIES (бэк).
+// billing/accounting — алиасы accruals для legacy-тикетов.
 export const chatCategoryColors = {
   support: '#3b82f6',
   backoffice: '#f97316',
+  accruals: '#22c55e',
   billing: '#22c55e',
+  accounting: '#22c55e',
   legal: '#a855f7',
   general: '#6b7280',
+  owner: '#eab308',
   technical: '#3b82f6',
   sales: '#f97316',
 };
@@ -54,9 +59,12 @@ export const chatCategoryColors = {
 export const chatCategoryLabels = {
   support: 'Техподдержка',
   backoffice: 'Бэк-офис',
+  accruals: 'Начисления',
   billing: 'Начисления',
+  accounting: 'Начисления',
   legal: 'Юридический',
   general: 'Общий',
+  owner: 'Собственнику',
   technical: 'Технический',
   sales: 'Продажи',
 };

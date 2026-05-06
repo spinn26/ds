@@ -536,7 +536,7 @@ const categoryFilters = [
   { label: 'Все', value: 'all' },
   { label: 'Техподдержка', value: 'support' },
   { label: 'Бэк-офис', value: 'backoffice' },
-  { label: 'Начисления', value: 'billing' },
+  { label: 'Начисления и выплаты', value: 'accruals' },
   { label: 'Юридический', value: 'legal' },
   { label: 'Общий', value: 'general' },
 ];
@@ -570,8 +570,24 @@ const categories = [
 
 function isMine(msg) { return String(msg.senderId) === String(currentUserId); }
 const catColor = getChatCategoryColor;
-function catIcon(c) { return { support: 'mdi-headset', backoffice: 'mdi-briefcase', billing: 'mdi-cash', legal: 'mdi-scale-balance', general: 'mdi-help-circle' }[c] || 'mdi-chat'; }
-function catLabel(c) { return { support: 'Техподдержка', backoffice: 'Бэк-офис', billing: 'Начисления', legal: 'Юридический', general: 'Общий' }[c] || c; }
+// Иконки/лейблы синхронизированы с TicketService::CATEGORIES (бэк).
+// Алиасы billing/accounting оставляем в map'е, чтобы UI корректно
+// рендерил legacy-тикеты, созданные до унификации категорий.
+function catIcon(c) {
+  return ({
+    support: 'mdi-headset', backoffice: 'mdi-briefcase',
+    accruals: 'mdi-cash', billing: 'mdi-cash', accounting: 'mdi-cash',
+    legal: 'mdi-scale-balance', general: 'mdi-help-circle',
+    owner: 'mdi-shield-crown',
+  })[c] || 'mdi-chat';
+}
+function catLabel(c) {
+  return ({
+    support: 'Техподдержка', backoffice: 'Бэк-офис',
+    accruals: 'Начисления', billing: 'Начисления', accounting: 'Начисления',
+    legal: 'Юридический', general: 'Общий', owner: 'Собственнику',
+  })[c] || c;
+}
 const statusClr = getChatStatusColor;
 function statusTxt(s) { return { new: 'Новый', open: 'В работе', pending: 'Ожидание', resolved: 'Решён', closed: 'Закрыт' }[s] || s; }
 function statusIcon(s) { return { new: 'mdi-circle-outline', open: 'mdi-progress-clock', pending: 'mdi-pause-circle', resolved: 'mdi-check-circle', closed: 'mdi-lock' }[s] || 'mdi-circle'; }

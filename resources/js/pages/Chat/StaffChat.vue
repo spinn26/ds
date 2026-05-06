@@ -1507,7 +1507,15 @@ const statusFilterPills = [{ label: 'Все', value: '' }, ...statuses.map(s => 
 const priorityFilterPills = [{ label: 'Все', value: '', color: '#888' }, ...priorities];
 
 const catColor = getChatCategoryColor;
-function catIcon(c) { return { support: 'mdi-headset', backoffice: 'mdi-briefcase', billing: 'mdi-cash', legal: 'mdi-scale-balance', general: 'mdi-help-circle', technical: 'mdi-headset', sales: 'mdi-handshake' }[c] || 'mdi-chat'; }
+function catIcon(c) {
+  return ({
+    support: 'mdi-headset', backoffice: 'mdi-briefcase',
+    accruals: 'mdi-cash', billing: 'mdi-cash', accounting: 'mdi-cash',
+    legal: 'mdi-scale-balance', general: 'mdi-help-circle',
+    owner: 'mdi-shield-crown',
+    technical: 'mdi-headset', sales: 'mdi-handshake',
+  })[c] || 'mdi-chat';
+}
 const statusClr = getChatStatusColor;
 function statusTxt(s) { return { new: 'Новый', open: 'В работе', pending: 'Ожидание', resolved: 'Решён', closed: 'Закрыт' }[s] || s; }
 function statusIcon(s) { return { new: 'mdi-circle-outline', open: 'mdi-progress-clock', pending: 'mdi-pause-circle', resolved: 'mdi-check-circle', closed: 'mdi-lock' }[s] || 'mdi-circle'; }

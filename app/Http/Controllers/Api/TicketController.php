@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Controller;
 use App\Models\Consultant;
 use App\Services\SocketService;
+use App\Services\TicketService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -20,26 +21,41 @@ class TicketController extends Controller
 
     /**
      * Check if current user can access a ticket.
-     * Returns true for staff or ticket creator/participant.
+     *
+     * Раньше любая стафф-роль видела ВСЕ тикеты. По требованию: партнёр
+     * выбирает категорию → тикет видит только стафф соответствующей
+     * роли (см. TicketService::CATEGORIES). Теперь:
+     *   - admin — всегда (все категории);
+     *   - стафф — если роль матчит category тикета;
+     *   - создатель — всегда;
+     *   - явный участник (ticket_participants) — всегда (ручное
+     *     добавление другого сотрудника по эскалации).
      */
     private function canAccessTicket(int $ticketId, int $userId): bool
     {
-        // Staff can access all tickets
-        $user = DB::table('WebUser')->where('id', $userId)->first();
-        if ($user) {
-            $roles = array_map('trim', explode(',', $user->role ?? ''));
-            if (array_intersect($roles, self::$staffRoles)) return true;
-        }
-
-        // Creator can access own tickets
         $ticket = DB::table('tickets')->where('id', $ticketId)->first();
-        if ($ticket && (int) $ticket->created_by === $userId) return true;
+        if (! $ticket) return false;
 
-        // Participant can access
-        return DB::table('ticket_participants')
+        // Создатель — всегда видит
+        if ((int) $ticket->created_by === $userId) return true;
+
+        // Явно добавленный участник — видит независимо от роли
+        $isParticipant = DB::table('ticket_participants')
             ->where('ticket_id', $ticketId)
             ->where('user_id', $userId)
             ->exists();
+        if ($isParticipant) return true;
+
+        // Стафф: роль должна матчить категорию тикета
+        $user = DB::table('WebUser')->where('id', $userId)->first();
+        if ($user) {
+            $roles = array_map('trim', explode(',', $user->role ?? ''));
+            if (TicketService::staffCanSeeCategory($roles, $ticket->category)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function isStaffUser(int $userId): bool
@@ -50,31 +66,40 @@ class TicketController extends Controller
         return (bool) array_intersect($roles, self::$staffRoles);
     }
 
-    const CATEGORIES = [
-        'support' => 'Техподдержка',
-        'backoffice' => 'Бэк-офис',
-        'legal' => 'Юрист',
-        'owner' => 'Собственнику',
-        'accounting' => 'Бухгалтер',
-        'accruals' => 'Начисления',
-    ];
-
-    /** Список тикетов (для партнёра — свои, для сотрудника — назначенные/все) */
+    /** Список тикетов (для партнёра — свои, для сотрудника — назначенные/доступные по роли) */
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
         $roles = array_map('trim', explode(',', $user->role ?? ''));
-        $isStaff = array_intersect($roles, ['admin', 'backoffice', 'support', 'finance', 'head', 'calculations', 'corrections']);
+        $isStaff = array_intersect($roles, self::$staffRoles);
 
         $query = DB::table('tickets');
 
         if ($isStaff) {
-            // Сотрудник — все тикеты или назначенные
+            // Сотрудник видит:
+            //   • тикеты тех категорий, что матчат его роль (TicketService),
+            //   • плюс тикеты где он явно создатель/назначен/участник
+            //     (если оператора эскалировали из чужой роли).
+            $allowedCategories = TicketService::visibleCategoriesForRoles($roles);
+            $query->where(function ($q) use ($user, $allowedCategories) {
+                if (! empty($allowedCategories)) {
+                    $q->whereIn('category', $allowedCategories);
+                }
+                $q->orWhere('created_by', $user->id)
+                  ->orWhere('assigned_to', $user->id)
+                  ->orWhereExists(function ($sub) use ($user) {
+                      $sub->select(DB::raw(1))
+                          ->from('ticket_participants')
+                          ->whereColumn('ticket_participants.ticket_id', 'tickets.id')
+                          ->where('ticket_participants.user_id', $user->id);
+                  });
+            });
+
             if ($request->filled('assigned_to_me')) {
                 $query->where('assigned_to', $user->id);
             }
             if ($request->filled('category')) {
-                $query->where('category', $request->category);
+                $query->where('category', TicketService::normalizeCategory($request->category));
             }
         } else {
             // Партнёр — только свои
@@ -140,7 +165,7 @@ class TicketController extends Controller
                     'id' => $t->id,
                     'subject' => $t->subject,
                     'category' => $t->category,
-                    'categoryLabel' => self::CATEGORIES[$t->category] ?? $t->category,
+                    'categoryLabel' => TicketService::categoryLabel($t->category),
                     'status' => $t->status,
                     'priority' => $t->priority,
                     'createdBy' => $creator ? trim(($creator->lastName ?? '') . ' ' . ($creator->firstName ?? '')) : '—',
@@ -165,18 +190,25 @@ class TicketController extends Controller
     /** Создать тикет (партнёр) */
     public function store(Request $request): JsonResponse
     {
+        $allowedKeys = array_merge(
+            array_keys(TicketService::CATEGORIES),
+            array_keys(TicketService::CATEGORY_ALIASES),
+        );
         $request->validate([
             'subject' => 'required|string|max:255',
-            'category' => 'required|in:support,backoffice,legal,accounting,accruals,owner',
+            'category' => 'required|in:' . implode(',', $allowedKeys),
             'message' => 'required|string',
         ]);
 
         $user = $request->user();
         $consultant = Consultant::where('webUser', $user->id)->first();
 
+        // Нормализуем legacy-ключи (billing/accounting → accruals).
+        $category = TicketService::normalizeCategory($request->category);
+
         // Auto-assign owner tickets to Александр Ламакин
         $assignedTo = null;
-        if ($request->category === 'owner') {
+        if ($category === 'owner') {
             $owner = DB::table('WebUser')->where('email', self::OWNER_EMAIL)->first();
             $assignedTo = $owner?->id;
         }
@@ -184,10 +216,10 @@ class TicketController extends Controller
         // Транзакция: insert tickets + первое сообщение + участники должны
         // либо все пройти, либо все откатиться. Иначе при сбое на одном из
         // INSERT'ов остаётся «полусозданный» тикет без первого сообщения.
-        $ticketId = DB::transaction(function () use ($request, $user, $consultant, $assignedTo) {
+        $ticketId = DB::transaction(function () use ($request, $user, $consultant, $assignedTo, $category) {
             $tid = DB::table('tickets')->insertGetId([
                 'subject' => $request->subject,
-                'category' => $request->category,
+                'category' => $category,
                 'created_by' => $user->id,
                 'consultant_id' => $consultant?->id,
                 'status' => 'open',
@@ -307,7 +339,7 @@ class TicketController extends Controller
                 'id' => $ticket->id,
                 'subject' => $ticket->subject,
                 'category' => $ticket->category,
-                'categoryLabel' => self::CATEGORIES[$ticket->category] ?? $ticket->category,
+                'categoryLabel' => TicketService::categoryLabel($ticket->category),
                 'status' => $ticket->status,
                 'priority' => $ticket->priority,
                 'createdBy' => $creator ? trim(($creator->lastName ?? '') . ' ' . ($creator->firstName ?? '')) : '—',
@@ -554,10 +586,16 @@ class TicketController extends Controller
         return response()->json(['count' => $count]);
     }
 
-    /** Категории */
+    /**
+     * Категории + видимость по ролям.
+     *
+     * Возвращает: { key: { label, roles[] } }. Партнёрский UI берёт
+     * только key+label; стафф-UI может использовать roles, чтобы
+     * подсветить «свою» категорию или скрыть фильтр.
+     */
     public function categories(): JsonResponse
     {
-        return response()->json(self::CATEGORIES);
+        return response()->json(TicketService::CATEGORIES);
     }
 
     /** Список сотрудников для назначения */
