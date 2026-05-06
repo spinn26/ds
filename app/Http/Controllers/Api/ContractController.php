@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Controllers\Api\Concerns\AppliesSorting;
 use App\Http\Controllers\Api\Concerns\PaginatesRequests;
 use App\Http\Controllers\Controller;
 use App\Models\Consultant;
@@ -14,7 +15,23 @@ use Illuminate\Support\Facades\DB;
 
 class ContractController extends Controller
 {
+    use AppliesSorting;
     use PaginatesRequests;
+
+    /** Whitelist для applySorting на /contracts/my и /contracts/team. */
+    private const CONTRACT_SORTABLE = [
+        'number'      => 'number',
+        'clientName'  => 'clientName',
+        'createDate'  => 'createDate',
+        'openDate'    => 'openDate',
+        'productName' => 'productName',
+        'programName' => 'programName',
+        'term'        => 'term',
+        'ammount'     => 'ammount',
+        'amount'      => 'ammount',
+        'statusName'  => 'statusName',
+        'consultantName' => 'consultantName',
+    ];
 
     public function __construct(
         private readonly ContractService $contractService,
@@ -43,8 +60,9 @@ class ContractController extends Controller
 
         $total = $query->count();
 
+        $this->applySorting($query, $request, self::CONTRACT_SORTABLE, 'id', 'desc');
+
         $contractRows = $query
-            ->orderByDesc('id')
             ->offset($this->paginationOffset($request))
             ->limit($this->paginationPerPage($request))
             ->get();
@@ -96,8 +114,9 @@ class ContractController extends Controller
 
         $total = $query->count();
 
+        $this->applySorting($query, $request, self::CONTRACT_SORTABLE, 'id', 'desc');
+
         $contractRows = $query
-            ->orderByDesc('id')
             ->offset($this->paginationOffset($request))
             ->limit($this->paginationPerPage($request))
             ->get();

@@ -578,9 +578,17 @@ class AdminFinanceController extends Controller
         $sub = DB::query()->fromSub($union, 'u');
         $total = (clone $sub)->count();
 
-        $rows = $sub->orderByDesc('accrual_date')
-            ->orderByDesc('created_at')
-            ->offset(($request->input('page', 1) - 1) * 25)
+        // Сортировка по клику на заголовок таблицы. Whitelist маппит
+        // фронтовые ключи на колонки UNION-подзапроса (snake_case
+        // обязателен — Postgres иначе складывает в lowercase).
+        $this->applySorting($sub, $request, [
+            'consultantName' => 'consultant_name',
+            'accrualDate'    => 'accrual_date',
+            'amount'         => 'amount',
+            'comment'        => 'comment',
+        ], 'accrual_date', 'desc');
+
+        $rows = $sub->offset(($request->input('page', 1) - 1) * 25)
             ->limit(25)
             ->get();
 
@@ -798,11 +806,17 @@ class AdminFinanceController extends Controller
         }
 
         $total = $query->count();
-        // Postgres sorts NULLs first on DESC by default; half the legacy rows
-        // have no paymentDate, so the first 25 were a wall of prochеrк's.
-        // Push real dates to the top; fall back to id for deterministic order.
-        $data = $query->orderByRaw('"paymentDate" DESC NULLS LAST')
-            ->orderByDesc('consultantPayment.id')
+        // Default — paymentDate DESC NULLS LAST (см. ниже). Если фронт
+        // прислал sort_by/sort_dir — применяем их через whitelist.
+        $this->applySorting($query, $request, [
+            'consultantName' => 'consultant.personName',
+            'paymentDate'    => 'consultantPayment.paymentDate',
+            'amount'         => 'consultantPayment.amount',
+            'status'         => 'consultantPayment.status',
+            'comment'        => 'consultantPayment.comment',
+        ], 'consultantPayment.paymentDate', 'desc');
+
+        $data = $query
             ->offset(($request->input('page', 1) - 1) * 25)
             ->limit(25)
             ->get()

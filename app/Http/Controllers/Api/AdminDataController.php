@@ -67,7 +67,19 @@ class AdminDataController extends Controller
         }
 
         $total = $query->count();
-        $rows = $query->orderByDesc('id')
+        $this->applySorting($query, $request, [
+            'id'                    => 'id',
+            'personName'            => 'personName',
+            'activityName'          => 'activity',
+            'personalVolume'        => 'personalVolume',
+            'groupVolumeCumulative' => 'groupVolumeCumulative',
+            'participantCode'       => 'participantCode',
+            'dateCreated'           => 'dateCreated',
+            'inviterName'           => 'inviterName',
+            'terminationCount'      => 'terminationCount',
+        ], 'id', 'desc');
+
+        $rows = $query
             ->offset($this->paginationOffset($request))
             ->limit($this->paginationPerPage($request))
             ->get();
@@ -624,7 +636,17 @@ class AdminDataController extends Controller
         if ($request->filled('term_to')) $detailQuery->where('dateDeterministic', '<=', $request->term_to . ' 23:59:59');
 
         $detailTotal = $detailQuery->count();
-        $detailRows = $detailQuery->orderBy('personName')
+        $this->applySorting($detailQuery, $request, [
+            'personName'    => 'personName',
+            'activityName'  => 'activity',
+            'dateCreated'   => 'dateCreated',
+            'dateActivity'  => 'dateActivity',
+            'dateDeterministicPlan' => 'dateDeterministicPlan',
+            'dateDeterministic'     => 'dateDeterministic',
+            'personalVolume'        => 'personalVolume',
+        ], 'personName', 'asc');
+
+        $detailRows = $detailQuery
             ->offset($this->paginationOffset($request))
             ->limit($this->paginationPerPage($request))
             ->get();
@@ -1811,7 +1833,14 @@ class AdminDataController extends Controller
         }
 
         $total = $query->count();
-        $rows = $query->orderByDesc('dateCreated')
+        $this->applySorting($query, $request, [
+            'dateCreated' => 'dateCreated',
+            'subjectName' => $tableConfig['subjectColumn'],
+            'oldName'     => $tab === 'partner' ? 'inviterOldName' : 'consultantOldName',
+            'newName'     => $tab === 'partner' ? 'inviterNewName' : 'consultantNewName',
+        ], 'dateCreated', 'desc');
+
+        $rows = $query
             ->offset($this->paginationOffset($request))
             ->limit($this->paginationPerPage($request))
             ->get();

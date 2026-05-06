@@ -110,6 +110,7 @@
 import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
+import { useTableSort } from '../../composables/useTableSort';
 import PageHeader from '../../components/PageHeader.vue';
 import EmptyState from '../../components/EmptyState.vue';
 import StatusChip from '../../components/StatusChip.vue';
@@ -211,9 +212,12 @@ function searchProducts(q) {
   }, 300);
 }
 
+const { applyOptions, applyParams } = useTableSort();
+
 function onOptions(opts) {
   page.value = opts.page;
   if (opts.itemsPerPage) perPage.value = opts.itemsPerPage;
+  applyOptions(opts);
   loadData();
 }
 
@@ -221,6 +225,7 @@ async function loadData() {
   loading.value = true;
   try {
     const params = { page: page.value, per_page: perPage.value };
+    applyParams(params);
     if (filters.value.number) params.number = filters.value.number;
     if (filters.value.clientName) params.client_name = filters.value.clientName;
     if (filters.value.product) params.product = filters.value.product;

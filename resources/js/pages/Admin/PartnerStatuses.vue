@@ -155,6 +155,7 @@
 import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
+import { useTableSort } from '../../composables/useTableSort';
 import PageHeader from '../../components/PageHeader.vue';
 import EmptyState from '../../components/EmptyState.vue';
 import StatusChip from '../../components/StatusChip.vue';
@@ -283,10 +284,12 @@ async function saveOverride() {
 }
 
 const { debounced: debouncedLoad } = useDebounce(loadData, 400);
+const { applyOptions, applyParams } = useTableSort('personName', 'asc');
 
 function onOptions(opts) {
   page.value = opts.page;
   if (opts.itemsPerPage) perPage.value = opts.itemsPerPage;
+  applyOptions(opts);
   loadData();
 }
 
@@ -294,6 +297,7 @@ async function loadData() {
   loading.value = true;
   try {
     const params = { page: page.value, per_page: perPage.value };
+    applyParams(params);
     if (search.value) params.search = search.value;
     if (activityFilter.value) params.activity = activityFilter.value;
     Object.entries(dateFilters.value).forEach(([k, v]) => {

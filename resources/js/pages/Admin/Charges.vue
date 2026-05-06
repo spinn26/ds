@@ -145,6 +145,7 @@
 import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
+import { useTableSort } from '../../composables/useTableSort';
 import PageHeader from '../../components/PageHeader.vue';
 import DataTableWrapper from '../../components/DataTableWrapper.vue';
 import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
@@ -263,9 +264,12 @@ function exportCsv() {
 }
 
 const { debounced: debouncedLoad } = useDebounce(loadData, 400);
+const { applyOptions, applyParams } = useTableSort('accrualDate', 'desc');
+
 function onOptions(opts) {
   page.value = opts.page;
   if (opts.itemsPerPage) perPage.value = opts.itemsPerPage;
+  applyOptions(opts);
   loadData();
 }
 
@@ -273,6 +277,7 @@ async function loadData() {
   loading.value = true;
   try {
     const params = { page: page.value, per_page: perPage.value };
+    applyParams(params);
     if (search.value) params.search = search.value;
     if (commentFilter.value) params.comment = commentFilter.value;
     if (typeFilter.value) params.type = typeFilter.value;
