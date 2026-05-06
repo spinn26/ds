@@ -6,7 +6,7 @@ return [
     /*
      * Этот файл переопределяет дефолты Laravel Sanctum (vendor/laravel/sanctum/config/sanctum.php).
      * Главное отличие — `expiration` читается из env: SANCTUM_TOKEN_EXPIRATION
-     * в МИНУТАХ. Дефолт: 30 дней (43200 минут). Без явного значения
+     * в МИНУТАХ. Дефолт: 7 дней (10080 минут). Без явного значения
      * токены жили бы вечно — украденный = пожизненный доступ.
      */
 
@@ -21,9 +21,9 @@ return [
 
     'guard' => ['web'],
 
-    // ВАЖНО: на проде ставь 43200 (30 дней) или меньше через .env.
+    // ВАЖНО: дефолт 10080 (7 дней). На проде можно увеличить через .env.
     // null = без срока жизни, использовать только для разработки.
-    'expiration' => env('SANCTUM_TOKEN_EXPIRATION', 43200),
+    'expiration' => env('SANCTUM_TOKEN_EXPIRATION', 10080),
 
     'token_prefix' => env('SANCTUM_TOKEN_PREFIX', ''),
 
