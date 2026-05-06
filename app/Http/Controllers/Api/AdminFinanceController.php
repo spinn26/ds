@@ -808,13 +808,17 @@ class AdminFinanceController extends Controller
         $total = $query->count();
         // Default — paymentDate DESC NULLS LAST (см. ниже). Если фронт
         // прислал sort_by/sort_dir — применяем их через whitelist.
+        // Postgres folds unquoted identifiers to lowercase, поэтому
+        // camelCase идентификаторы (таблица consultantPayment, колонки
+        // personName / paymentDate) обязаны быть в двойных кавычках —
+        // applySorting подставляет значения буквально через orderByRaw.
         $this->applySorting($query, $request, [
-            'consultantName' => 'consultant.personName',
-            'paymentDate'    => 'consultantPayment.paymentDate',
-            'amount'         => 'consultantPayment.amount',
-            'status'         => 'consultantPayment.status',
-            'comment'        => 'consultantPayment.comment',
-        ], 'consultantPayment.paymentDate', 'desc');
+            'consultantName' => 'consultant."personName"',
+            'paymentDate'    => '"consultantPayment"."paymentDate"',
+            'amount'         => '"consultantPayment".amount',
+            'status'         => '"consultantPayment".status',
+            'comment'        => '"consultantPayment".comment',
+        ], '"consultantPayment"."paymentDate"', 'desc');
 
         $data = $query
             ->offset(($request->input('page', 1) - 1) * 25)

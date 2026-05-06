@@ -18,19 +18,25 @@ class ContractController extends Controller
     use AppliesSorting;
     use PaginatesRequests;
 
-    /** Whitelist для applySorting на /contracts/my и /contracts/team. */
+    /**
+     * Whitelist для applySorting на /contracts/my и /contracts/team.
+     *
+     * Постгрес folds unquoted идентификаторы в lowercase, поэтому camelCase
+     * колонки legacy-таблицы `contract` обязаны быть в двойных кавычках.
+     * Ключ — алиас, который шлёт фронт; значение — точная SQL-форма колонки.
+     */
     private const CONTRACT_SORTABLE = [
-        'number'      => 'number',
-        'clientName'  => 'clientName',
-        'createDate'  => 'createDate',
-        'openDate'    => 'openDate',
-        'productName' => 'productName',
-        'programName' => 'programName',
-        'term'        => 'term',
-        'ammount'     => 'ammount',
-        'amount'      => 'ammount',
-        'statusName'  => 'statusName',
-        'consultantName' => 'consultantName',
+        'number'         => 'number',
+        'clientName'     => '"clientName"',
+        'createDate'     => '"createDate"',
+        'openDate'       => '"openDate"',
+        'productName'    => '"productName"',
+        'programName'    => '"programName"',
+        'term'           => 'term',
+        'ammount'        => 'ammount',
+        'amount'         => 'ammount',
+        'statusName'     => '"statusName"',
+        'consultantName' => '"consultantName"',
     ];
 
     public function __construct(

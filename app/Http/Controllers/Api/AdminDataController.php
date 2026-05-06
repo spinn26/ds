@@ -67,16 +67,19 @@ class AdminDataController extends Controller
         }
 
         $total = $query->count();
+        // Postgres + camelCase legacy-таблицы → колонки в whitelist
+        // обязаны быть в двойных кавычках (applySorting кладёт их
+        // буквально в orderByRaw, без авто-квотинга).
         $this->applySorting($query, $request, [
             'id'                    => 'id',
-            'personName'            => 'personName',
+            'personName'            => '"personName"',
             'activityName'          => 'activity',
-            'personalVolume'        => 'personalVolume',
-            'groupVolumeCumulative' => 'groupVolumeCumulative',
-            'participantCode'       => 'participantCode',
-            'dateCreated'           => 'dateCreated',
-            'inviterName'           => 'inviterName',
-            'terminationCount'      => 'terminationCount',
+            'personalVolume'        => '"personalVolume"',
+            'groupVolumeCumulative' => '"groupVolumeCumulative"',
+            'participantCode'       => '"participantCode"',
+            'dateCreated'           => '"dateCreated"',
+            'inviterName'           => '"inviterName"',
+            'terminationCount'      => '"terminationCount"',
         ], 'id', 'desc');
 
         $rows = $query
@@ -636,15 +639,16 @@ class AdminDataController extends Controller
         if ($request->filled('term_to')) $detailQuery->where('dateDeterministic', '<=', $request->term_to . ' 23:59:59');
 
         $detailTotal = $detailQuery->count();
+        // camelCase колонки квотируем — см. partners() выше.
         $this->applySorting($detailQuery, $request, [
-            'personName'    => 'personName',
-            'activityName'  => 'activity',
-            'dateCreated'   => 'dateCreated',
-            'dateActivity'  => 'dateActivity',
-            'dateDeterministicPlan' => 'dateDeterministicPlan',
-            'dateDeterministic'     => 'dateDeterministic',
-            'personalVolume'        => 'personalVolume',
-        ], 'personName', 'asc');
+            'personName'            => '"personName"',
+            'activityName'          => 'activity',
+            'dateCreated'           => '"dateCreated"',
+            'dateActivity'          => '"dateActivity"',
+            'dateDeterministicPlan' => '"dateDeterministicPlan"',
+            'dateDeterministic'     => '"dateDeterministic"',
+            'personalVolume'        => '"personalVolume"',
+        ], '"personName"', 'asc');
 
         $detailRows = $detailQuery
             ->offset($this->paginationOffset($request))
@@ -1833,12 +1837,14 @@ class AdminDataController extends Controller
         }
 
         $total = $query->count();
+        // tableConfig['subjectColumn'] и *Name-колонки в legacy-таблицах
+        // changeConsultant*Log — все camelCase, обязательно в кавычках.
         $this->applySorting($query, $request, [
-            'dateCreated' => 'dateCreated',
-            'subjectName' => $tableConfig['subjectColumn'],
-            'oldName'     => $tab === 'partner' ? 'inviterOldName' : 'consultantOldName',
-            'newName'     => $tab === 'partner' ? 'inviterNewName' : 'consultantNewName',
-        ], 'dateCreated', 'desc');
+            'dateCreated' => '"dateCreated"',
+            'subjectName' => '"' . $tableConfig['subjectColumn'] . '"',
+            'oldName'     => $tab === 'partner' ? '"inviterOldName"' : '"consultantOldName"',
+            'newName'     => $tab === 'partner' ? '"inviterNewName"' : '"consultantNewName"',
+        ], '"dateCreated"', 'desc');
 
         $rows = $query
             ->offset($this->paginationOffset($request))
