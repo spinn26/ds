@@ -492,71 +492,107 @@
         </div>
 
         <!-- Tags (editable) -->
-        <div class="chat-tags">
-          <v-chip v-for="tag in currentTags" :key="tag" size="x-small" variant="outlined" closable class="mr-1" @click:close="removeTag(tag)">{{ tag }}</v-chip>
-          <button v-if="!addingTag" class="add-tag-btn" @click="addingTag = true">
-            <v-icon size="12">mdi-plus</v-icon> тег
-          </button>
-          <input v-else v-model="newTag" ref="tagInput" class="tag-input"
-            @keydown.enter.prevent="addTag" @keydown.esc="cancelAddTag" @blur="addTag" />
+        <div class="chat-tags px-3 py-2 d-flex flex-wrap align-center ga-1">
+          <v-chip v-for="tag in currentTags" :key="tag"
+            size="x-small" variant="tonal" label closable
+            @click:close="removeTag(tag)">
+            {{ tag }}
+          </v-chip>
+          <v-btn v-if="!addingTag" size="x-small" variant="text"
+            prepend-icon="mdi-plus" @click="addingTag = true">
+            тег
+          </v-btn>
+          <v-text-field v-else v-model="newTag" ref="tagInput"
+            placeholder="Имя тега…"
+            variant="outlined" density="compact" hide-details
+            class="tag-input-field"
+            autofocus
+            @keydown.enter.prevent="addTag"
+            @keydown.esc="cancelAddTag"
+            @blur="addTag" />
         </div>
 
         <!-- In-chat search bar -->
-        <div v-if="messageSearch.open" class="msg-search-bar">
-          <v-icon size="16">mdi-magnify</v-icon>
-          <input class="msg-search-input" v-model="messageSearch.query" placeholder="Поиск по сообщениям этого чата…" />
-          <span class="msg-search-count" v-if="messageSearch.query">Найдено: {{ messageSearchMatches.size }}</span>
-          <button class="msg-search-close" @click="closeMessageSearch"><v-icon size="14">mdi-close</v-icon></button>
-        </div>
+        <v-card v-if="messageSearch.open" flat class="msg-search-bar px-3 py-2 d-flex align-center ga-2">
+          <v-text-field v-model="messageSearch.query"
+            placeholder="Поиск по сообщениям этого чата…"
+            prepend-inner-icon="mdi-magnify"
+            variant="outlined" density="compact" hide-details clearable
+            autofocus />
+          <v-chip v-if="messageSearch.query" size="small" variant="tonal" label>
+            Найдено: {{ messageSearchMatches.size }}
+          </v-chip>
+          <v-btn icon variant="text" size="small" @click="closeMessageSearch">
+            <v-icon size="18">mdi-close</v-icon>
+          </v-btn>
+        </v-card>
 
         <!-- Knowledge base panel -->
-        <div v-if="showKb" class="kb-panel">
-          <div class="kb-head">
-            <v-icon size="14" color="primary">mdi-book-open-variant</v-icon>
+        <v-card v-if="showKb" flat class="kb-panel mx-3 my-2" variant="tonal" color="primary">
+          <v-card-title class="d-flex align-center ga-2 py-2 px-3 text-body-2 font-weight-bold">
+            <v-icon size="16">mdi-book-open-variant</v-icon>
             <span>База знаний · предложения по теме</span>
-            <button class="action-btn small" aria-label="Обновить базу знаний" @click="loadKbSuggestions" title="Обновить"><v-icon size="12">mdi-refresh</v-icon></button>
+            <v-spacer />
+            <v-btn icon size="x-small" variant="text" title="Обновить" @click="loadKbSuggestions">
+              <v-icon size="14">mdi-refresh</v-icon>
+            </v-btn>
+          </v-card-title>
+          <v-divider />
+          <div v-if="kbLoading" class="pa-3 text-body-2 text-medium-emphasis">
+            <v-progress-circular indeterminate size="14" width="2" class="me-2" />
+            Ищу…
           </div>
-          <div v-if="kbLoading" class="kb-empty">Ищу…</div>
-          <div v-else-if="!kbArticles.length" class="kb-empty">
+          <div v-else-if="!kbArticles.length" class="pa-4 text-center">
             <v-icon size="24" color="grey">mdi-book-off-outline</v-icon>
-            Нет подходящих статей
+            <div class="text-body-2 text-medium-emphasis mt-1">Нет подходящих статей</div>
           </div>
-          <div v-else class="kb-list">
-            <div v-for="a in kbArticles" :key="a.id" class="kb-item" @click="insertKbArticle(a)">
-              <div class="kb-item-head">
-                <strong>{{ a.title }}</strong>
-                <span v-if="a.category" class="kb-item-category">{{ a.category }}</span>
-              </div>
-              <div class="kb-item-snippet">{{ (a.content || '').slice(0, 180) }}{{ (a.content || '').length > 180 ? '…' : '' }}</div>
-              <div class="kb-item-meta">
-                <span v-if="a.views"><v-icon size="10">mdi-eye</v-icon> {{ a.views }}</span>
-                <span class="kb-item-insert">Вставить ↵</span>
-              </div>
-            </div>
-          </div>
-        </div>
+          <v-list v-else density="compact" class="kb-list bg-transparent" style="max-height: 240px; overflow-y: auto">
+            <v-list-item v-for="a in kbArticles" :key="a.id"
+              :title="a.title"
+              :subtitle="(a.content || '').slice(0, 180) + ((a.content || '').length > 180 ? '…' : '')"
+              @click="insertKbArticle(a)">
+              <template #append>
+                <div class="d-flex align-center ga-2 text-caption text-medium-emphasis">
+                  <span v-if="a.views"><v-icon size="11">mdi-eye</v-icon> {{ a.views }}</span>
+                  <v-chip size="x-small" color="primary" variant="flat" label>Вставить ↵</v-chip>
+                </div>
+              </template>
+            </v-list-item>
+          </v-list>
+        </v-card>
 
         <!-- Notes panel (collapsible) -->
-        <div v-if="showNotes" class="notes-panel">
-          <div class="notes-head">
-            <v-icon size="14" color="warning">mdi-shield-account</v-icon>
+        <v-card v-if="showNotes" flat class="notes-panel mx-3 my-2" variant="tonal" color="warning">
+          <v-card-title class="d-flex align-center ga-2 py-2 px-3 text-body-2 font-weight-bold">
+            <v-icon size="16">mdi-shield-account</v-icon>
             <span>Внутренние заметки · видны только сотрудникам</span>
-          </div>
-          <div class="notes-list">
-            <div v-for="n in notes" :key="n.id" class="note-item">
-              <div class="note-meta">
-                <strong>{{ n.authorName || 'Staff' }}</strong>
-                <span class="note-time">{{ fmtTime(n.createdAt) }}</span>
+          </v-card-title>
+          <v-divider />
+          <div class="notes-list pa-2" style="max-height: 200px; overflow-y: auto">
+            <div v-for="n in notes" :key="n.id" class="note-item pa-2 mb-1 rounded">
+              <div class="d-flex align-center ga-2 text-caption text-medium-emphasis">
+                <strong class="text-body-2">{{ n.authorName || 'Staff' }}</strong>
+                <span style="font-variant-numeric: tabular-nums">{{ fmtTime(n.createdAt) }}</span>
               </div>
-              <div class="note-text">{{ n.content }}</div>
+              <div class="text-body-2 mt-1" style="white-space: pre-line; word-break: break-word">{{ n.content }}</div>
             </div>
-            <div v-if="!notes.length" class="notes-empty">Заметок нет</div>
+            <div v-if="!notes.length" class="text-center text-body-2 text-medium-emphasis py-3">
+              Заметок нет
+            </div>
           </div>
-          <div class="notes-input">
-            <textarea v-model="noteText" rows="2" placeholder="Добавить внутреннюю заметку…" @keydown.enter.exact.prevent="addNote"></textarea>
-            <button class="notes-send" :disabled="!noteText.trim()" @click="addNote"><v-icon size="16">mdi-send</v-icon></button>
+          <v-divider />
+          <div class="d-flex align-end ga-2 pa-2">
+            <v-textarea v-model="noteText"
+              placeholder="Добавить внутреннюю заметку… (Enter — отправить)"
+              variant="outlined" density="compact" rows="2" auto-grow hide-details
+              max-rows="6"
+              @keydown.enter.exact.prevent="addNote" />
+            <v-btn icon color="warning" size="small"
+              :disabled="!noteText.trim()" @click="addNote">
+              <v-icon>mdi-send</v-icon>
+            </v-btn>
           </div>
-        </div>
+        </v-card>
 
         <!-- Messages -->
         <div ref="msgsRef" class="chat-messages" @scroll="onMessagesScroll">
@@ -723,50 +759,52 @@
       </div>
     </main>
 
-    <!-- Right: Partner context panel -->
-    <aside v-if="viewMode === 'list' && activeChat && showContext && !mobile && !partnerContext"
-      class="context-panel">
-      <div class="context-head">
-        <v-icon size="14" color="primary">mdi-card-account-details-outline</v-icon>
-        <span>Карточка партнёра</span>
-        <button class="action-btn small" aria-label="Скрыть карточку партнёра" title="Скрыть" @click="showContext = false">
-          <v-icon size="14">mdi-close</v-icon>
-        </button>
+    <!-- Right: Partner context panel — единый блок (с/без partnerContext) -->
+    <aside v-if="viewMode === 'list' && activeChat && showContext && !mobile" class="context-panel">
+      <div class="context-head px-3 py-2 d-flex align-center ga-2">
+        <v-icon size="16" color="primary">mdi-card-account-details-outline</v-icon>
+        <span class="text-body-2 font-weight-bold">Карточка партнёра</span>
+        <v-spacer />
+        <v-btn icon variant="text" size="x-small" title="Скрыть" @click="showContext = false">
+          <v-icon size="16">mdi-close</v-icon>
+        </v-btn>
       </div>
-      <div class="context-body" style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 16px;text-align:center;color:rgba(var(--v-theme-on-surface),0.5);">
+      <v-divider />
+
+      <!-- Empty state — нет партнёрских данных -->
+      <div v-if="!partnerContext" class="pa-6 text-center">
         <v-icon size="40" color="grey-lighten-1" class="mb-2">mdi-account-question-outline</v-icon>
         <div class="text-body-2 mb-1">Нет партнёрских данных</div>
-        <div class="text-caption">Автор тикета не связан с активным консультантом или пока загружается.</div>
-      </div>
-    </aside>
-    <aside v-if="viewMode === 'list' && activeChat && showContext && partnerContext && !mobile"
-      class="context-panel">
-      <div class="context-head">
-        <v-icon size="14" color="primary">mdi-card-account-details-outline</v-icon>
-        <span>Карточка партнёра</span>
-        <button class="action-btn small" aria-label="Скрыть карточку партнёра" title="Скрыть" @click="showContext = false">
-          <v-icon size="14">mdi-close</v-icon>
-        </button>
+        <div class="text-caption text-medium-emphasis">
+          Автор тикета не связан с активным консультантом или пока загружается.
+        </div>
       </div>
 
-      <div class="context-body">
+      <!-- Полная карточка -->
+      <div v-else class="context-body pa-3">
         <!-- User block -->
-        <div class="ctx-user">
-          <div class="ctx-avatar" :style="{ background: 'rgb(var(--v-theme-primary))' }">
-            <img v-if="partnerContext.user.avatarUrl" :src="partnerContext.user.avatarUrl" alt="" />
-            <span v-else>{{ initials(`${partnerContext.user.lastName || ''} ${partnerContext.user.firstName || ''}`) }}</span>
-          </div>
-          <div class="ctx-user-info">
-            <div class="ctx-name">
+        <div class="d-flex align-center ga-3 mb-3">
+          <v-avatar size="44" color="primary">
+            <v-img v-if="partnerContext.user.avatarUrl" :src="partnerContext.user.avatarUrl" />
+            <span v-else class="text-body-1 font-weight-bold text-white">
+              {{ initials(`${partnerContext.user.lastName || ''} ${partnerContext.user.firstName || ''}`) }}
+            </span>
+          </v-avatar>
+          <div style="min-width: 0; flex: 1">
+            <div class="text-body-1 font-weight-bold text-truncate">
               {{ partnerContext.user.lastName }} {{ partnerContext.user.firstName }}
               {{ partnerContext.user.patronymic }}
             </div>
-            <div class="ctx-meta">
-              <a v-if="partnerContext.user.email" :href="`mailto:${partnerContext.user.email}`" class="ctx-link">
-                <v-icon size="11">mdi-email-outline</v-icon> {{ partnerContext.user.email }}
+            <div class="d-flex flex-column ga-1 mt-1">
+              <a v-if="partnerContext.user.email" :href="`mailto:${partnerContext.user.email}`"
+                class="text-caption d-flex align-center ga-1 ctx-link">
+                <v-icon size="12">mdi-email-outline</v-icon>
+                <span class="text-truncate">{{ partnerContext.user.email }}</span>
               </a>
-              <a v-if="partnerContext.user.phone" :href="`tel:${partnerContext.user.phone}`" class="ctx-link">
-                <v-icon size="11">mdi-phone-outline</v-icon> {{ partnerContext.user.phone }}
+              <a v-if="partnerContext.user.phone" :href="`tel:${partnerContext.user.phone}`"
+                class="text-caption d-flex align-center ga-1 ctx-link">
+                <v-icon size="12">mdi-phone-outline</v-icon>
+                <span class="text-truncate">{{ partnerContext.user.phone }}</span>
               </a>
             </div>
           </div>
@@ -774,78 +812,110 @@
 
         <!-- Consultant block -->
         <template v-if="partnerContext.consultant">
-          <div class="ctx-section-title">Партнёр</div>
-          <div class="ctx-kv">
-            <span>Статус</span>
-            <span class="ctx-chip" :style="{ background: activityChipBg(partnerContext.consultant.activityId), color: activityChipFg(partnerContext.consultant.activityId) }">
-              {{ partnerContext.consultant.activityName || '—' }}
-            </span>
-          </div>
-          <div v-if="partnerContext.consultant.qualificationName" class="ctx-kv">
-            <span>Квалификация</span>
-            <strong>{{ partnerContext.consultant.qualificationName }}</strong>
-          </div>
-          <div class="ctx-kv">
-            <span>Реф-код</span>
-            <code>{{ partnerContext.consultant.participantCode || '—' }}</code>
-          </div>
-          <div class="ctx-kv">
-            <span>ЛП</span>
-            <strong>{{ formatVolume(partnerContext.consultant.personalVolume) }}</strong>
-          </div>
-          <div class="ctx-kv">
-            <span>ГП</span>
-            <strong>{{ formatVolume(partnerContext.consultant.groupVolumeCumulative) }}</strong>
-          </div>
-          <div class="ctx-kv">
-            <span>Клиенты</span>
-            <strong>{{ partnerContext.consultant.clientsCount }}</strong>
-          </div>
-          <div class="ctx-kv">
-            <span>Контракты</span>
-            <strong>{{ partnerContext.consultant.contractsCount }}</strong>
-          </div>
-          <div v-if="partnerContext.consultant.dateActivity" class="ctx-kv">
-            <span>Активен с</span>
-            <span>{{ fmtDate(partnerContext.consultant.dateActivity) }}</span>
-          </div>
-          <div v-if="partnerContext.consultant.yearPeriodEnd" class="ctx-kv">
-            <span>Год до</span>
-            <span>{{ fmtDate(partnerContext.consultant.yearPeriodEnd) }}</span>
-          </div>
-          <div v-if="partnerContext.consultant.activationDeadline" class="ctx-kv">
-            <span>Дедлайн активации</span>
-            <span class="warn">{{ fmtDate(partnerContext.consultant.activationDeadline) }}</span>
-          </div>
-          <div v-if="(partnerContext.consultant.terminationCount || 0) > 0" class="ctx-kv">
-            <span>Терминаций</span>
-            <span class="warn">{{ partnerContext.consultant.terminationCount }} / 3</span>
-          </div>
-          <div v-if="partnerContext.consultant.inviterName" class="ctx-kv">
-            <span>Пригласил</span>
-            <span>{{ partnerContext.consultant.inviterName }}</span>
-          </div>
+          <div class="text-overline text-medium-emphasis mb-1">Партнёр</div>
+          <v-list density="compact" class="ctx-list bg-transparent" lines="one">
+            <v-list-item>
+              <v-list-item-title class="text-caption text-medium-emphasis">Статус</v-list-item-title>
+              <template #append>
+                <v-chip size="x-small" variant="tonal"
+                  :color="getActivityColorByName(partnerContext.consultant.activityName)" label>
+                  {{ partnerContext.consultant.activityName || '—' }}
+                </v-chip>
+              </template>
+            </v-list-item>
+            <v-list-item v-if="partnerContext.consultant.qualificationName">
+              <v-list-item-title class="text-caption text-medium-emphasis">Квалификация</v-list-item-title>
+              <template #append>
+                <strong class="text-body-2">{{ partnerContext.consultant.qualificationName }}</strong>
+              </template>
+            </v-list-item>
+            <v-list-item>
+              <v-list-item-title class="text-caption text-medium-emphasis">Реф-код</v-list-item-title>
+              <template #append>
+                <code class="text-caption">{{ partnerContext.consultant.participantCode || '—' }}</code>
+              </template>
+            </v-list-item>
+            <v-list-item>
+              <v-list-item-title class="text-caption text-medium-emphasis">ЛП</v-list-item-title>
+              <template #append>
+                <strong class="text-body-2 ctx-num">{{ formatVolume(partnerContext.consultant.personalVolume) }}</strong>
+              </template>
+            </v-list-item>
+            <v-list-item>
+              <v-list-item-title class="text-caption text-medium-emphasis">ГП</v-list-item-title>
+              <template #append>
+                <strong class="text-body-2 ctx-num">{{ formatVolume(partnerContext.consultant.groupVolumeCumulative) }}</strong>
+              </template>
+            </v-list-item>
+            <v-list-item>
+              <v-list-item-title class="text-caption text-medium-emphasis">Клиенты</v-list-item-title>
+              <template #append>
+                <strong class="text-body-2 ctx-num">{{ partnerContext.consultant.clientsCount }}</strong>
+              </template>
+            </v-list-item>
+            <v-list-item>
+              <v-list-item-title class="text-caption text-medium-emphasis">Контракты</v-list-item-title>
+              <template #append>
+                <strong class="text-body-2 ctx-num">{{ partnerContext.consultant.contractsCount }}</strong>
+              </template>
+            </v-list-item>
+            <v-list-item v-if="partnerContext.consultant.dateActivity">
+              <v-list-item-title class="text-caption text-medium-emphasis">Активен с</v-list-item-title>
+              <template #append>
+                <span class="text-body-2">{{ fmtDate(partnerContext.consultant.dateActivity) }}</span>
+              </template>
+            </v-list-item>
+            <v-list-item v-if="partnerContext.consultant.yearPeriodEnd">
+              <v-list-item-title class="text-caption text-medium-emphasis">Год до</v-list-item-title>
+              <template #append>
+                <span class="text-body-2">{{ fmtDate(partnerContext.consultant.yearPeriodEnd) }}</span>
+              </template>
+            </v-list-item>
+            <v-list-item v-if="partnerContext.consultant.activationDeadline">
+              <v-list-item-title class="text-caption text-medium-emphasis">Дедлайн активации</v-list-item-title>
+              <template #append>
+                <span class="text-body-2 text-warning">{{ fmtDate(partnerContext.consultant.activationDeadline) }}</span>
+              </template>
+            </v-list-item>
+            <v-list-item v-if="(partnerContext.consultant.terminationCount || 0) > 0">
+              <v-list-item-title class="text-caption text-medium-emphasis">Терминаций</v-list-item-title>
+              <template #append>
+                <span class="text-body-2 text-warning">{{ partnerContext.consultant.terminationCount }} / 3</span>
+              </template>
+            </v-list-item>
+            <v-list-item v-if="partnerContext.consultant.inviterName">
+              <v-list-item-title class="text-caption text-medium-emphasis">Пригласил</v-list-item-title>
+              <template #append>
+                <span class="text-body-2">{{ partnerContext.consultant.inviterName }}</span>
+              </template>
+            </v-list-item>
+          </v-list>
 
-          <router-link class="ctx-link-btn"
+          <v-btn block variant="tonal" size="small" prepend-icon="mdi-open-in-new" class="mt-2"
             :to="`/manage/partners?search=${encodeURIComponent(partnerContext.user.lastName || '')}`">
-            <v-icon size="12">mdi-open-in-new</v-icon> Открыть в админке
-          </router-link>
+            Открыть в админке
+          </v-btn>
         </template>
-        <div v-else class="ctx-note">
+        <v-alert v-else type="info" variant="tonal" density="compact" class="mt-2">
           Пользователь не является партнёром.
-        </div>
+        </v-alert>
 
         <!-- Recent contracts -->
         <template v-if="partnerContext.recentContracts && partnerContext.recentContracts.length">
-          <div class="ctx-section-title">Последние контракты</div>
-          <div v-for="c in partnerContext.recentContracts" :key="c.id" class="ctx-contract">
-            <div class="ctx-contract-head">
-              <strong>{{ c.number }}</strong>
-              <span v-if="c.amount">{{ formatVolume(c.amount) }}</span>
+          <div class="text-overline text-medium-emphasis mt-3 mb-1">Последние контракты</div>
+          <v-card v-for="c in partnerContext.recentContracts" :key="c.id"
+            variant="tonal" class="pa-2 mb-1" density="compact">
+            <div class="d-flex justify-space-between align-center">
+              <strong class="text-body-2">{{ c.number }}</strong>
+              <span v-if="c.amount" class="text-body-2 ctx-num">{{ formatVolume(c.amount) }}</span>
             </div>
-            <div class="ctx-contract-sub">{{ c.clientName }} · {{ c.productName }}</div>
-            <div v-if="c.openDate" class="ctx-contract-date">{{ fmtDate(c.openDate) }}</div>
-          </div>
+            <div class="text-caption text-medium-emphasis text-truncate">
+              {{ c.clientName }} · {{ c.productName }}
+            </div>
+            <div v-if="c.openDate" class="text-caption text-medium-emphasis ctx-num">
+              {{ fmtDate(c.openDate) }}
+            </div>
+          </v-card>
         </template>
       </div>
     </aside>
@@ -923,6 +993,7 @@ import { useDebounce } from '../../composables/useDebounce';
 import { useConfirm } from '../../composables/useConfirm';
 import { useSnackbar } from '../../composables/useSnackbar';
 import { useAuthStore } from '../../stores/auth';
+import { getActivityColorByName } from '../../composables/useDesign';
 
 const confirmDialog = useConfirm();
 const { showError, showSuccess } = useSnackbar();
@@ -2111,46 +2182,22 @@ onUnmounted(() => {
 .action-btn.active { background: rgba(var(--v-theme-primary), 0.12); color: rgb(var(--v-theme-primary)); border-color: rgba(var(--v-theme-primary), 0.4); }
 
 .chat-tags { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; padding: 6px 16px; border-bottom: 1px solid rgba(var(--v-border-color), 0.2); }
-.add-tag-btn { display: inline-flex; align-items: center; gap: 2px; padding: 2px 8px; border-radius: 10px; border: 1px dashed rgba(var(--v-border-color), var(--v-border-opacity)); background: transparent; color: rgba(var(--v-theme-on-surface), 0.5); font-size: 11px; cursor: pointer; }
-.add-tag-btn:hover { border-color: rgb(var(--v-theme-primary)); color: rgb(var(--v-theme-primary)); }
-.tag-input { padding: 2px 8px; border-radius: 10px; border: 1px solid rgb(var(--v-theme-primary)); background: transparent; font-size: 11px; color: inherit; font-family: inherit; outline: none; min-width: 80px; }
+.tag-input-field { max-width: 180px; }
 
 /* Notes panel */
-.notes-panel { border-bottom: 1px solid rgba(var(--v-border-color), 0.3); background: rgba(251,191,36,0.06); max-height: 240px; display: flex; flex-direction: column; }
-.notes-head { padding: 8px 16px; font-size: 11px; color: rgba(var(--v-theme-on-surface), 0.6); display: flex; align-items: center; gap: 6px; }
-.notes-list { flex: 1; overflow-y: auto; padding: 0 16px; }
-.note-item { padding: 8px 10px; background: rgba(var(--v-theme-surface-variant), 0.3); border-radius: 8px; margin-bottom: 6px; }
-.note-meta { display: flex; justify-content: space-between; gap: 8px; font-size: 10px; color: rgba(var(--v-theme-on-surface), 0.5); }
-.note-text { font-size: 12px; margin-top: 4px; white-space: pre-line; }
-.notes-empty { text-align: center; padding: 16px; font-size: 12px; color: rgba(var(--v-theme-on-surface), 0.4); }
-.notes-input { display: flex; gap: 6px; padding: 8px 16px; border-top: 1px solid rgba(var(--v-border-color), 0.2); align-items: flex-end; }
-.notes-input textarea { flex: 1; border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); border-radius: 8px; padding: 6px 10px; font-size: 12px; background: rgba(var(--v-theme-surface), 0.9); color: inherit; resize: none; outline: none; font-family: inherit; }
-.notes-send { background: rgb(var(--v-theme-primary)); color: #fff; border: none; border-radius: 8px; padding: 6px 10px; cursor: pointer; }
-.notes-send:disabled { opacity: 0.5; cursor: not-allowed; }
+/* notes-panel — Vuetify v-card variant="tonal" color="warning" */
+.notes-panel { max-height: 360px; display: flex; flex-direction: column; }
+.note-item { background: rgba(var(--v-theme-on-surface), 0.04); }
 
 /* In-chat search bar */
-.msg-search-bar { display: flex; align-items: center; gap: 8px; padding: 8px 16px; border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); background: rgba(var(--v-theme-primary), 0.04); }
-.msg-search-input { flex: 1; border: none; outline: none; background: transparent; font-size: 14px; color: inherit; font-family: inherit; }
-.msg-search-count { font-size: 11px; color: rgba(var(--v-theme-on-surface), 0.5); }
-.msg-search-close { background: none; border: none; cursor: pointer; padding: 2px; border-radius: 4px; color: rgba(var(--v-theme-on-surface), 0.5); }
-.msg-search-close:hover { background: rgba(var(--v-theme-error), 0.1); color: rgb(var(--v-theme-error)); }
+/* msg-search-bar — Vuetify v-card flat */
+.msg-search-bar { border-bottom: 1px solid rgba(var(--v-border-color), 0.12); }
 .msg-row.search-hit .msg-bubble { box-shadow: 0 0 0 2px #fbbf24; background: rgba(251,191,36,0.15); }
 
 /* KB suggestions panel */
-.kb-panel { border-bottom: 1px solid rgba(var(--v-border-color), 0.3); background: rgba(var(--v-theme-primary), 0.04); max-height: 260px; display: flex; flex-direction: column; }
-.kb-head { padding: 8px 16px; font-size: 11px; color: rgba(var(--v-theme-on-surface), 0.7); display: flex; align-items: center; gap: 6px; }
-.kb-head span { flex: 1; font-weight: 600; }
-.kb-empty { padding: 20px; text-align: center; font-size: 12px; color: rgba(var(--v-theme-on-surface), 0.4); display: flex; flex-direction: column; align-items: center; gap: 4px; }
-.kb-list { flex: 1; overflow-y: auto; padding: 0 12px 8px; }
-.kb-item { padding: 8px 10px; border-radius: 8px; background: rgb(var(--v-theme-surface)); border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); margin-bottom: 6px; cursor: pointer; transition: all 0.15s; }
-.kb-item:hover { border-color: rgb(var(--v-theme-primary)); background: rgba(var(--v-theme-primary), 0.06); }
-.kb-item-head { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; }
-.kb-item-head strong { flex: 1; font-weight: 700; }
-.kb-item-category { font-size: 10px; padding: 1px 6px; border-radius: 8px; background: rgba(var(--v-theme-primary), 0.12); color: rgb(var(--v-theme-primary)); font-weight: 600; }
-.kb-item-snippet { font-size: 11px; color: rgba(var(--v-theme-on-surface), 0.6); margin-top: 3px; white-space: pre-line; max-height: 48px; overflow: hidden; }
-.kb-item-meta { display: flex; justify-content: space-between; align-items: center; margin-top: 4px; font-size: 10px; color: rgba(var(--v-theme-on-surface), 0.5); }
-.kb-item-meta span { display: inline-flex; align-items: center; gap: 2px; }
-.kb-item-insert { color: rgb(var(--v-theme-primary)); font-weight: 600; }
+/* kb-panel — Vuetify v-card variant="tonal" color="primary" */
+.kb-panel { max-height: 360px; display: flex; flex-direction: column; }
+.kb-list { flex: 1; }
 
 /* Messages — Telegram-style bubbles, asymmetric tail */
 .chat-messages { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 8px; scroll-behavior: smooth; }
@@ -2383,39 +2430,13 @@ onUnmounted(() => {
 .bulk-slide-enter-from, .bulk-slide-leave-to { transform: translateY(100%); opacity: 0; }
 
 /* Partner context panel (right sidebar in list mode) */
-.context-panel { width: 300px; flex-shrink: 0; border-left: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); display: flex; flex-direction: column; background: rgba(var(--v-theme-surface), 1); overflow: hidden; }
-.context-head { display: flex; align-items: center; gap: 6px; padding: 10px 14px; border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); font-size: 12px; font-weight: 700; color: rgba(var(--v-theme-on-surface), 0.8); }
-.context-head span { flex: 1; }
-.action-btn.small { padding: 3px; border: none; }
-.context-body { flex: 1; overflow-y: auto; padding: 12px 14px; }
-
-.ctx-user { display: flex; align-items: center; gap: 10px; padding-bottom: 12px; border-bottom: 1px dashed rgba(var(--v-border-color), 0.3); margin-bottom: 12px; }
-.ctx-avatar { width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 14px; font-weight: 700; color: #fff; overflow: hidden; }
-.ctx-avatar img { width: 100%; height: 100%; object-fit: cover; }
-.ctx-user-info { flex: 1; min-width: 0; }
-.ctx-name { font-size: 13px; font-weight: 700; line-height: 1.2; }
-.ctx-meta { display: flex; flex-direction: column; gap: 3px; margin-top: 4px; }
-.ctx-link { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; color: rgba(var(--v-theme-on-surface), 0.6); text-decoration: none; }
+/* Right partner-context panel — Vuetify-first, остался лишь layout */
+.context-panel { width: 320px; flex-shrink: 0; border-left: 1px solid rgba(var(--v-border-color), 0.12); display: flex; flex-direction: column; background: rgba(var(--v-theme-surface), 1); overflow: hidden; }
+.context-body { flex: 1; overflow-y: auto; }
+.ctx-link { color: rgba(var(--v-theme-on-surface), 0.7); text-decoration: none; }
 .ctx-link:hover { color: rgb(var(--v-theme-primary)); }
-
-.ctx-section-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: rgba(var(--v-theme-on-surface), 0.4); margin: 12px 0 6px; }
-.ctx-kv { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 4px 0; font-size: 12px; border-bottom: 1px solid rgba(var(--v-border-color), 0.15); }
-.ctx-kv:last-child { border-bottom: none; }
-.ctx-kv > span:first-child { color: rgba(var(--v-theme-on-surface), 0.5); }
-.ctx-kv strong { font-weight: 700; }
-.ctx-kv code { font-family: ui-monospace, monospace; font-size: 11px; padding: 1px 6px; border-radius: 4px; background: rgba(var(--v-theme-primary), 0.08); color: rgb(var(--v-theme-primary)); }
-.ctx-kv .warn { color: #b45309; font-weight: 600; }
-.ctx-chip { padding: 2px 8px; border-radius: 10px; font-weight: 600; font-size: 11px; }
-
-.ctx-link-btn { display: inline-flex; align-items: center; gap: 4px; padding: 5px 10px; border-radius: 8px; background: rgba(var(--v-theme-primary), 0.1); color: rgb(var(--v-theme-primary)); text-decoration: none; font-size: 11px; font-weight: 600; margin-top: 10px; }
-.ctx-link-btn:hover { background: rgba(var(--v-theme-primary), 0.2); }
-.ctx-note { padding: 10px; border-radius: 8px; background: rgba(var(--v-theme-surface-variant), 0.4); font-size: 12px; color: rgba(var(--v-theme-on-surface), 0.5); text-align: center; }
-
-.ctx-contract { padding: 8px; border-radius: 8px; background: rgba(var(--v-theme-surface-variant), 0.3); margin-bottom: 6px; }
-.ctx-contract-head { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; }
-.ctx-contract-head strong { color: rgb(var(--v-theme-primary)); }
-.ctx-contract-sub { font-size: 11px; color: rgba(var(--v-theme-on-surface), 0.6); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ctx-contract-date { font-size: 10px; color: rgba(var(--v-theme-on-surface), 0.4); margin-top: 2px; }
+.ctx-num { font-variant-numeric: tabular-nums; }
+.ctx-list :deep(.v-list-item) { min-height: 32px; padding-inline: 0 !important; }
 
 /* Kanban mode: suppress chat-main, sidebar acts as filter strip */
 .chat-wrap.kanban-mode .chat-main { display: none; }
