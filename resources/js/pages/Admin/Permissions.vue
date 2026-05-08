@@ -1,6 +1,6 @@
 <template>
   <div>
-    <PageHeader title="Группы и права" icon="mdi-shield-account">
+    <PageHeader title="Группы и права" icon="mdi-shield-account" :count="groups.length">
       <template #actions>
         <v-btn color="primary" prepend-icon="mdi-plus" @click="openCreate">
           Добавить группу
@@ -8,90 +8,169 @@
       </template>
     </PageHeader>
 
-    <v-alert type="info" variant="tonal" density="compact" class="mb-3" icon="mdi-information-outline">
-      <strong>Уровни:</strong>
-      <v-chip size="x-small" color="info" variant="flat" class="mx-1">view</v-chip>только просмотр,
-      <v-chip size="x-small" color="warning" variant="flat" class="mx-1">edit</v-chip>добавление/редактирование,
-      <v-chip size="x-small" color="success" variant="flat" class="mx-1">full</v-chip>+ удаление и системные действия.
-      «—» = доступа нет, раздел в меню скрыт.
-      Системные группы (admin, backoffice, …) удалить нельзя — их ключи завязаны на код.
-    </v-alert>
-
-    <v-card v-if="!loading">
-      <div style="overflow-x: auto" class="permissions-wrap">
-        <v-table density="compact" class="permissions-table">
-          <thead>
-            <tr>
-              <th class="th-group">Группа</th>
-              <th v-for="s in sections" :key="s.key" class="th-section">
-                <div class="text-no-wrap">{{ s.label }}</div>
-                <div class="text-caption text-medium-emphasis text-no-wrap">{{ s.key }}</div>
-              </th>
-              <th class="th-actions">—</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="g in groups" :key="g.id" :class="{ 'tr-system': g.isSystem }">
-              <td class="td-group">
-                <div class="d-flex align-center ga-2">
-                  <v-icon size="16" :color="g.isSystem ? 'secondary' : 'primary'">
-                    {{ g.isSystem ? 'mdi-shield-lock' : 'mdi-shield' }}
-                  </v-icon>
-                  <div style="min-width:0; flex:1">
-                    <div class="font-weight-medium text-truncate" :title="g.name">{{ g.name }}</div>
-                    <div class="text-caption text-medium-emphasis font-mono">{{ g.key }}</div>
-                  </div>
-                  <v-btn icon="mdi-pencil" size="x-small" variant="text" title="Редактировать имя/ключ"
-                    @click="openEdit(g)" />
-                </div>
-                <div v-if="g.description" class="text-caption text-medium-emphasis mt-1"
-                  :title="g.description">{{ g.description }}</div>
-              </td>
-
-              <!-- Если это admin (системный with all-full) — рисуем «full»
-                   во всех ячейках без возможности правки. -->
-              <td v-for="s in sections" :key="s.key" class="td-cell">
-                <template v-if="g.key === 'admin'">
-                  <v-chip size="x-small" color="success" variant="flat">full</v-chip>
-                </template>
-                <template v-else>
-                  <v-select :model-value="g.permissions[s.key] || ''"
-                    :items="levelOptions" item-title="label" item-value="value"
-                    density="compact" variant="plain" hide-details
-                    :menu-props="{ maxWidth: 180 }"
-                    style="min-width: 96px"
-                    @update:model-value="v => onLevelChange(g, s.key, v)" />
-                </template>
-              </td>
-
-              <td class="td-actions">
-                <v-btn v-if="!g.isSystem" icon="mdi-trash-can-outline" size="x-small" variant="text"
-                  color="error" title="Удалить группу" @click="confirmDelete(g)" />
-                <v-icon v-else size="14" color="grey" title="Системная — удалить нельзя">mdi-lock</v-icon>
-              </td>
-            </tr>
-          </tbody>
-        </v-table>
+    <!-- Легенда + поиск + статистика -->
+    <v-card class="mb-3 pa-3 legend-card" elevation="0">
+      <div class="d-flex flex-wrap align-center ga-3">
+        <div class="d-flex align-center ga-2">
+          <span class="text-caption text-medium-emphasis">Уровни:</span>
+          <v-chip size="x-small" :color="levelColor('view')" variant="tonal" label>view</v-chip>
+          <span class="text-caption">просмотр</span>
+          <v-chip size="x-small" :color="levelColor('edit')" variant="tonal" label>edit</v-chip>
+          <span class="text-caption">+ редактирование</span>
+          <v-chip size="x-small" :color="levelColor('full')" variant="tonal" label>full</v-chip>
+          <span class="text-caption">+ удаление / системные действия</span>
+        </div>
+        <v-divider vertical class="mx-2" />
+        <v-text-field v-model="filterText" placeholder="Поиск группы или раздела"
+          density="compact" variant="outlined" hide-details clearable
+          prepend-inner-icon="mdi-magnify"
+          style="max-width: 280px; flex: 1 1 200px" />
+        <v-spacer />
+        <div class="text-caption text-medium-emphasis">
+          <strong>{{ groups.length }}</strong> групп
+          · <strong>{{ filteredSections.length }}</strong> разделов
+          · <strong>{{ totalGrants }}</strong> правил доступа
+        </div>
       </div>
     </v-card>
 
-    <div v-else class="d-flex justify-center pa-6">
-      <v-progress-circular indeterminate />
+    <v-card v-if="!loading" class="permissions-card">
+      <div class="permissions-wrap">
+        <table class="permissions-grid">
+          <thead>
+            <tr>
+              <th class="th-group">
+                <div class="d-flex align-center ga-1">
+                  <v-icon size="14">mdi-account-multiple</v-icon>
+                  Группа
+                </div>
+              </th>
+              <th v-for="s in filteredSections" :key="s.key" class="th-section" :title="s.key">
+                <div class="th-section__title">{{ s.label }}</div>
+                <code class="th-section__key">{{ s.key }}</code>
+              </th>
+              <th class="th-actions"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="g in filteredGroups" :key="g.id"
+              :class="{ 'tr-system': g.isSystem, 'tr-admin': g.key === 'admin' }">
+              <!-- Группа -->
+              <td class="td-group">
+                <div class="d-flex align-center ga-2">
+                  <v-avatar :color="g.isSystem ? 'secondary' : 'primary'" size="32" variant="tonal">
+                    <v-icon size="16">
+                      {{ g.isSystem ? 'mdi-shield-lock' : 'mdi-shield-account' }}
+                    </v-icon>
+                  </v-avatar>
+                  <div style="min-width:0; flex:1">
+                    <div class="td-group__name text-truncate" :title="g.name">{{ g.name }}</div>
+                    <div class="td-group__meta d-flex align-center ga-1">
+                      <code class="td-group__key">{{ g.key }}</code>
+                      <v-chip v-if="g.isSystem" size="x-small" color="secondary" variant="tonal" class="ml-1">
+                        системная
+                      </v-chip>
+                    </div>
+                  </div>
+                  <v-menu location="bottom end">
+                    <template #activator="{ props }">
+                      <v-btn v-bind="props" icon="mdi-dots-vertical" size="x-small" variant="text" />
+                    </template>
+                    <v-list density="compact">
+                      <v-list-item prepend-icon="mdi-pencil-outline" @click="openEdit(g)">
+                        <v-list-item-title>Редактировать</v-list-item-title>
+                      </v-list-item>
+                      <v-list-item v-if="g.key !== 'admin'" prepend-icon="mdi-eye-outline"
+                        @click="bulkSet(g, 'view')">
+                        <v-list-item-title>Все разделы → view</v-list-item-title>
+                      </v-list-item>
+                      <v-list-item v-if="g.key !== 'admin'" prepend-icon="mdi-close-circle-outline"
+                        @click="bulkSet(g, '')">
+                        <v-list-item-title>Сбросить все права</v-list-item-title>
+                      </v-list-item>
+                      <v-divider v-if="!g.isSystem" />
+                      <v-list-item v-if="!g.isSystem" prepend-icon="mdi-trash-can-outline"
+                        @click="confirmDelete(g)">
+                        <v-list-item-title class="text-error">Удалить группу</v-list-item-title>
+                      </v-list-item>
+                    </v-list>
+                  </v-menu>
+                </div>
+                <div v-if="g.description" class="td-group__desc"
+                  :title="g.description">{{ g.description }}</div>
+              </td>
+
+              <!-- Ячейки прав -->
+              <td v-for="s in filteredSections" :key="s.key" class="td-cell">
+                <v-chip v-if="g.key === 'admin'" size="small"
+                  :color="levelColor('full')" variant="flat" label>
+                  <v-icon size="12" start>mdi-check-bold</v-icon>full
+                </v-chip>
+                <v-menu v-else location="bottom" :close-on-content-click="true">
+                  <template #activator="{ props }">
+                    <v-chip v-bind="props"
+                      :color="g.permissions[s.key] ? levelColor(g.permissions[s.key]) : undefined"
+                      :variant="g.permissions[s.key] ? 'flat' : 'outlined'"
+                      size="small" label class="cell-chip"
+                      :class="{ 'cell-chip--empty': !g.permissions[s.key], 'cell-chip--saving': savingCells[`${g.id}:${s.key}`] }">
+                      <v-progress-circular v-if="savingCells[`${g.id}:${s.key}`]"
+                        size="10" width="2" indeterminate class="me-1" />
+                      <span>{{ g.permissions[s.key] || '—' }}</span>
+                      <v-icon size="12" end>mdi-chevron-down</v-icon>
+                    </v-chip>
+                  </template>
+                  <v-list density="compact" min-width="220">
+                    <v-list-item v-for="opt in cellOptions" :key="opt.value"
+                      :active="(g.permissions[s.key] || '') === opt.value"
+                      @click="onLevelChange(g, s.key, opt.value)">
+                      <template #prepend>
+                        <v-chip v-if="opt.value" size="x-small" :color="levelColor(opt.value)"
+                          variant="flat" label class="me-2">{{ opt.value }}</v-chip>
+                        <span v-else class="text-medium-emphasis me-2"
+                          style="display:inline-block;min-width:48px;text-align:center">—</span>
+                      </template>
+                      <v-list-item-title class="text-body-2">{{ opt.label }}</v-list-item-title>
+                    </v-list-item>
+                  </v-list>
+                </v-menu>
+              </td>
+
+              <td class="td-actions">
+                <v-icon v-if="g.isSystem" size="14" color="grey"
+                  title="Системная группа — удалить нельзя">mdi-lock</v-icon>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </v-card>
+
+    <div v-else class="d-flex justify-center pa-12">
+      <v-progress-circular indeterminate size="40" color="primary" />
     </div>
 
-    <!-- Add / Edit dialog (только мета-инфо: ключ/имя/описание) -->
-    <v-dialog v-model="dialogOpen" max-width="520" persistent>
+    <!-- Add / Edit dialog -->
+    <v-dialog v-model="dialogOpen" max-width="540" persistent>
       <v-card>
-        <v-card-title>
+        <v-card-title class="d-flex align-center ga-2">
+          <v-icon :color="dialogMode === 'create' ? 'primary' : 'secondary'">
+            {{ dialogMode === 'create' ? 'mdi-shield-plus' : 'mdi-shield-edit' }}
+          </v-icon>
           {{ dialogMode === 'create' ? 'Новая группа' : 'Редактировать группу' }}
         </v-card-title>
         <v-card-text>
           <v-text-field v-model="form.key" label="Ключ *"
-            hint="lower-snake-case, должен совпадать с ролью в WebUser.role"
+            hint="lower-snake-case (a-z, 0-9, _, -). Должен совпадать с ролью в WebUser.role"
             persistent-hint :disabled="dialogMode === 'edit' && form.isSystem"
-            class="mb-3" />
-          <v-text-field v-model="form.name" label="Название *" class="mb-3" />
-          <v-textarea v-model="form.description" label="Описание" rows="2" auto-grow />
+            prepend-inner-icon="mdi-key" class="mb-3" />
+          <v-text-field v-model="form.name" label="Название *"
+            prepend-inner-icon="mdi-label-outline" class="mb-3" />
+          <v-textarea v-model="form.description" label="Описание"
+            prepend-inner-icon="mdi-text-box-outline" rows="2" auto-grow />
+          <v-alert v-if="form.isSystem" type="info" variant="tonal" density="compact"
+            icon="mdi-shield-lock" class="mt-3">
+            Системная группа — ключ менять нельзя, удалить через UI тоже нельзя.
+          </v-alert>
           <v-alert v-if="formError" type="error" variant="tonal" density="compact" class="mt-3">
             {{ formError }}
           </v-alert>
@@ -99,14 +178,17 @@
         <v-card-actions>
           <v-spacer />
           <v-btn variant="text" @click="dialogOpen = false">Отмена</v-btn>
-          <v-btn color="primary" :loading="saving" @click="saveDialog">
+          <v-btn color="primary" variant="flat" :loading="saving" @click="saveDialog">
             {{ dialogMode === 'create' ? 'Создать' : 'Сохранить' }}
           </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
 
-    <v-snackbar v-model="snack.open" :color="snack.color" timeout="3500">{{ snack.text }}</v-snackbar>
+    <v-snackbar v-model="snack.open" :color="snack.color" timeout="2500" location="bottom right">
+      <v-icon class="me-2">{{ snack.icon }}</v-icon>
+      {{ snack.text }}
+    </v-snackbar>
   </div>
 </template>
 
@@ -115,21 +197,59 @@ import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
 import PageHeader from '../../components/PageHeader.vue';
 import { useConfirm } from '../../composables/useConfirm';
-import { useDebounce } from '../../composables/useDebounce';
 
 const confirm = useConfirm();
 const loading = ref(true);
 const groups = ref([]);
 const sections = ref([]);
-const levels = ref([]);
+const filterText = ref('');
+const savingCells = ref({});
 
-const levelOptions = computed(() => [
-  { label: '—', value: '' },
-  ...levels.value.map(l => ({ label: l, value: l })),
-]);
+const cellOptions = [
+  { value: '',     label: 'Нет доступа (раздел скрыт)' },
+  { value: 'view', label: 'Просмотр (read-only)' },
+  { value: 'edit', label: 'Редактирование (+добавление)' },
+  { value: 'full', label: 'Полный доступ (+удаление)' },
+];
 
-const snack = ref({ open: false, color: 'success', text: '' });
-function notify(text, color = 'success') { snack.value = { open: true, color, text }; }
+function levelColor(level) {
+  return { view: 'info', edit: 'warning', full: 'success' }[level] || 'default';
+}
+
+const filteredGroups = computed(() => {
+  if (!filterText.value) return groups.value;
+  const t = filterText.value.toLowerCase();
+  return groups.value.filter(g =>
+    g.name.toLowerCase().includes(t) ||
+    g.key.toLowerCase().includes(t) ||
+    (g.description || '').toLowerCase().includes(t)
+  );
+});
+
+const filteredSections = computed(() => {
+  if (!filterText.value) return sections.value;
+  const t = filterText.value.toLowerCase();
+  // Если запрос совпадает с группой — показываем все секции; иначе фильтруем секции.
+  const matchesGroup = groups.value.some(g =>
+    g.name.toLowerCase().includes(t) || g.key.toLowerCase().includes(t)
+  );
+  if (matchesGroup) return sections.value;
+  return sections.value.filter(s =>
+    s.label.toLowerCase().includes(t) || s.key.toLowerCase().includes(t)
+  );
+});
+
+const totalGrants = computed(() =>
+  groups.value.reduce((acc, g) => {
+    if (g.key === 'admin') return acc + sections.value.length;
+    return acc + Object.keys(g.permissions || {}).length;
+  }, 0)
+);
+
+const snack = ref({ open: false, color: 'success', text: '', icon: 'mdi-check-circle' });
+function notify(text, color = 'success', icon = 'mdi-check-circle') {
+  snack.value = { open: true, color, text, icon };
+}
 
 async function load() {
   loading.value = true;
@@ -137,41 +257,62 @@ async function load() {
     const { data } = await api.get('/admin/permissions/groups');
     groups.value = data.groups || [];
     sections.value = data.sections || [];
-    levels.value = data.levels || ['view', 'edit', 'full'];
   } catch (e) {
-    notify(e.response?.data?.message || 'Не удалось загрузить', 'error');
+    notify(e.response?.data?.message || 'Не удалось загрузить', 'error', 'mdi-alert');
   }
   loading.value = false;
 }
 
-// Сохранение ячейки — debounce, чтобы быстрые клики по дропдауну
-// не порождали 10 PATCH'ей подряд.
 const saveTimers = {};
 function onLevelChange(group, sectionKey, value) {
-  // Локально сразу применяем — UI отзывчивый.
   const next = { ...group.permissions };
   if (!value) delete next[sectionKey];
   else next[sectionKey] = value;
   group.permissions = next;
 
+  const key = `${group.id}:${sectionKey}`;
+  savingCells.value = { ...savingCells.value, [key]: true };
+
   clearTimeout(saveTimers[group.id]);
-  saveTimers[group.id] = setTimeout(() => savePermissions(group), 300);
+  saveTimers[group.id] = setTimeout(() => savePermissions(group, key), 250);
 }
 
-async function savePermissions(group) {
+async function savePermissions(group, savingKey) {
   try {
     await api.patch(`/admin/permissions/groups/${group.id}`, {
       permissions: group.permissions,
     });
+    notify(`Сохранено: ${group.name}`, 'success', 'mdi-check-circle');
   } catch (e) {
-    notify(e.response?.data?.message || 'Ошибка сохранения', 'error');
-    await load();   // откат к серверному состоянию
+    notify(e.response?.data?.message || 'Ошибка сохранения', 'error', 'mdi-alert');
+    await load();
+  } finally {
+    if (savingKey) {
+      const next = { ...savingCells.value };
+      delete next[savingKey];
+      savingCells.value = next;
+    }
   }
 }
 
-// === Add / Edit dialog ===
+async function bulkSet(group, level) {
+  const action = level ? `выставить «${level}» для всех разделов` : 'сбросить все права';
+  if (!await confirm.ask({
+    title: 'Массовое изменение',
+    message: `Группа «${group.name}» — ${action}? Действие применяется ко всем ${sections.value.length} разделам.`,
+    confirmText: 'Применить', confirmColor: level ? 'primary' : 'error',
+    icon: level ? 'mdi-flash' : 'mdi-close-circle',
+  })) return;
+
+  const next = {};
+  if (level) for (const s of sections.value) next[s.key] = level;
+  group.permissions = next;
+  await savePermissions(group);
+}
+
+// === Add / Edit ===
 const dialogOpen = ref(false);
-const dialogMode = ref('create');   // 'create' | 'edit'
+const dialogMode = ref('create');
 const form = ref({ key: '', name: '', description: '', isSystem: false });
 const editingId = ref(null);
 const saving = ref(false);
@@ -204,20 +345,18 @@ async function saveDialog() {
   saving.value = true;
   try {
     if (dialogMode.value === 'create') {
-      const payload = {
+      await api.post('/admin/permissions/groups', {
         key: form.value.key,
         name: form.value.name,
         description: form.value.description || null,
         permissions: {},
-      };
-      await api.post('/admin/permissions/groups', payload);
-      notify('Группа создана');
+      });
+      notify('Группа создана', 'success', 'mdi-shield-plus');
     } else {
       const payload = { name: form.value.name, description: form.value.description || null };
-      // Ключ системной не правим (бэк всё равно отклонит).
       if (!form.value.isSystem) payload.key = form.value.key;
       await api.patch(`/admin/permissions/groups/${editingId.value}`, payload);
-      notify('Сохранено');
+      notify('Сохранено', 'success', 'mdi-check-circle');
     }
     dialogOpen.value = false;
     await load();
@@ -237,10 +376,10 @@ async function confirmDelete(g) {
   })) return;
   try {
     await api.delete(`/admin/permissions/groups/${g.id}`);
-    notify('Группа удалена');
+    notify('Группа удалена', 'success', 'mdi-trash-can-outline');
     await load();
   } catch (e) {
-    notify(e.response?.data?.message || 'Не удалось удалить', 'error');
+    notify(e.response?.data?.message || 'Не удалось удалить', 'error', 'mdi-alert');
   }
 }
 
@@ -248,25 +387,64 @@ onMounted(load);
 </script>
 
 <style scoped>
+.legend-card {
+  background: rgba(var(--v-theme-surface-variant), 0.4);
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.06);
+}
+
+.permissions-card {
+  overflow: hidden;
+}
 .permissions-wrap {
-  max-height: calc(100vh - 240px);
+  max-height: calc(100vh - 280px);
   overflow: auto;
 }
-.permissions-table {
-  /* Sticky-первая колонка — чтобы при горизонтальном скролле имена групп
-     оставались видны. */
+
+/* Своя сетка вместо v-table — больше контроля над sticky/typography. */
+.permissions-grid {
   border-collapse: separate;
   border-spacing: 0;
+  width: 100%;
 }
-.permissions-table :deep(thead th) {
+.permissions-grid thead th {
   position: sticky;
   top: 0;
-  background: rgb(var(--v-theme-surface));
   z-index: 2;
+  background: rgb(var(--v-theme-surface));
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+  color: rgba(var(--v-theme-on-surface), 0.72);
+  padding: 10px 12px;
+  border-bottom: 2px solid rgba(var(--v-theme-on-surface), 0.08);
   white-space: nowrap;
+  text-align: left;
 }
-.permissions-table .th-group,
-.permissions-table .td-group {
+.th-section {
+  text-align: center !important;
+  min-width: 116px;
+  padding: 8px 6px !important;
+}
+.th-section__title {
+  font-size: 10.5px;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 130px;
+}
+.th-section__key {
+  display: block;
+  margin-top: 2px;
+  font-size: 9px;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  color: rgba(var(--v-theme-on-surface), 0.45);
+  text-transform: lowercase;
+  letter-spacing: 0;
+}
+
+.th-group, .td-group {
   position: sticky;
   left: 0;
   background: rgb(var(--v-theme-surface));
@@ -275,32 +453,83 @@ onMounted(load);
   max-width: 320px;
   border-right: 1px solid rgba(var(--v-theme-on-surface), 0.08);
 }
-.permissions-table .th-group {
-  z-index: 3;   /* поверх и top, и left sticky */
+.th-group { z-index: 3; }   /* пересечение sticky-row и sticky-col */
+
+.permissions-grid tbody td {
+  padding: 12px 6px;
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.04);
+  vertical-align: middle;
 }
-.permissions-table .th-section {
-  text-align: center;
+.td-group {
+  padding: 14px 12px !important;
+}
+.td-group__name {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.25;
+}
+.td-group__meta {
+  margin-top: 2px;
+}
+.td-group__key {
   font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  padding: 4px 6px !important;
-  min-width: 110px;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  color: rgba(var(--v-theme-on-surface), 0.55);
+  background: rgba(var(--v-theme-on-surface), 0.06);
+  padding: 1px 6px;
+  border-radius: 4px;
 }
-.permissions-table .td-cell {
-  padding: 2px 4px !important;
+.td-group__desc {
+  font-size: 11px;
+  line-height: 1.3;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  margin-top: 6px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.td-cell {
   text-align: center;
 }
-.permissions-table .th-actions,
-.permissions-table .td-actions {
-  width: 40px;
-  text-align: center;
+.cell-chip {
+  cursor: pointer;
+  min-width: 76px;
+  justify-content: center;
+  transition: transform 0.1s ease, box-shadow 0.15s ease;
+}
+.cell-chip:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+}
+.cell-chip--empty {
+  opacity: 0.55;
+}
+.cell-chip--empty:hover {
+  opacity: 1;
+}
+.cell-chip--saving {
+  opacity: 0.7;
+}
+
+.tr-system .td-group {
+  background: rgba(var(--v-theme-surface-variant), 0.18);
+}
+.tr-admin .td-group {
+  background: linear-gradient(90deg,
+    rgba(var(--v-theme-secondary), 0.1),
+    rgba(var(--v-theme-surface-variant), 0.18)
+  );
+}
+
+.th-actions, .td-actions {
+  width: 32px;
   position: sticky;
   right: 0;
   background: rgb(var(--v-theme-surface));
   border-left: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  text-align: center;
 }
-.permissions-table .tr-system {
-  background: rgba(var(--v-theme-surface-variant), 0.25);
-}
-.font-mono { font-family: 'SFMono-Regular', Consolas, monospace; }
+.th-actions { z-index: 3; }
 </style>
