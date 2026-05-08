@@ -125,21 +125,12 @@ class DashboardService
         // Ambassador products
         $ambassadorProducts = $consultant->ambassadorProductNames;
 
-        // Breakaway info (отрыв) from qualificationLog
-        $breakaway = null;
-        if ($currentQLog && $currentQLog->gap) {
-            $branchName = $currentQLog->branchWithGap
-                ? DB::table('consultant')->where('id', $currentQLog->branchWithGap)->value('personName')
-                : null;
-            $breakaway = [
-                'gap' => true,
-                'gapValue' => round((float) ($currentQLog->gapValue ?? 0), 2),
-                'gapValuePercentage' => round((float) ($currentQLog->gapValuePercentage ?? 0), 2),
-                'branchWithGap' => $currentQLog->branchWithGap,
-                'branchWithGapName' => $branchName,
-                'branchWithGapGroupVolume' => round((float) ($currentQLog->branchWithGapGroupVolume ?? 0), 2),
-            ];
-        }
+        // Breakaway info — единый формат с FinanceReportService::summary.breakaway,
+        // чтобы UI на дашборде и в финрезе использовал одну и ту же карточку
+        // («Отрыва нет» / «≥70% удержание ГП» / «≥90% блокировка пула»).
+        // Возвращаем всегда (если есть qualificationLog) с топ-веткой, даже
+        // когда отрыва формально нет — фронту нужно показать прогресс-шкалу.
+        $breakaway = $this->buildBreakawaySummary($consultant->id, $month, $currentQLog);
 
         // Personal/Group volumes for period
         $personalVolume = $periodQLog->personalVolume ?? $consultant->personalVolume ?? 0;
@@ -327,6 +318,108 @@ class DashboardService
             'mandatoryPlan' => $mandatoryPlan,
             'poolInfo' => $poolInfo,
             'period' => $month,
+        ];
+    }
+
+    /**
+     * Сводка по самой крупной ветке партнёра — для отрисовки шкалы
+     * «Отрыва нет / ≥70% удержание ГП / ≥90% блокировка пула».
+     *
+     * Логика идентична FinanceReportService::breakaway:
+     *   • если qualificationLog зафиксировал branchWithGap (gap=true) —
+     *     берём оттуда;
+     *   • иначе самостоятельно ищем топ-ветку по qualificationLog
+     *     текущего месяца (сначала первая линия, потом всё поддерево
+     *     через рекурсивный CTE).
+     *
+     * Возвращает null, если для партнёра нет qualificationLog
+     * (новичок, ещё не было пересчёта). Фронт рендерит карточку только
+     * когда $breakaway !== null.
+     *
+     * @return array{
+     *   hasGap:bool, partnerName:?string, groupVolume:float,
+     *   gapPercentage:float, gapValue:float,
+     *   holdThresholdPercent:int, poolThresholdPercent:int,
+     *   gpHeld:bool, poolBlocked:bool
+     * }|null
+     */
+    private function buildBreakawaySummary(int $consultantId, string $month, ?QualificationLog $qLogCurrent): ?array
+    {
+        if (! $qLogCurrent) return null;
+
+        $hasGap   = (bool) ($qLogCurrent->gap ?? false);
+        $branchId = $qLogCurrent->branchWithGap;
+        $branchName = $branchId
+            ? DB::table('consultant')->where('id', $branchId)->value('personName')
+            : null;
+        $branchGv = (float) ($qLogCurrent->branchWithGapGroupVolume ?? 0);
+        $gapPct   = (float) ($qLogCurrent->gapValuePercentage ?? 0);
+        $gapVal   = (float) ($qLogCurrent->gapValue ?? 0);
+
+        // Если в qLog имени нет (orphan-импорт / отрыв глубже первой
+        // линии / branchWithGap=null) — ищем сами.
+        if (empty($branchName)) {
+            $myGv = (float) ($qLogCurrent->groupVolumeCumulative ?? 0);
+            $monthStart = $month . '-01';
+            $monthEnd = date('Y-m-d', strtotime("$monthStart +1 month"));
+
+            $top = DB::table('qualificationLog as ql')
+                ->join('consultant as c', 'c.id', '=', 'ql.consultant')
+                ->where('c.inviter', $consultantId)
+                ->whereNull('c.dateDeleted')
+                ->whereNull('ql.dateDeleted')
+                ->where('ql.date', '>=', $monthStart)
+                ->where('ql.date', '<', $monthEnd)
+                ->orderByDesc('ql.groupVolumeCumulative')
+                ->select(['c.id', 'c.personName', 'ql.groupVolumeCumulative as gv'])
+                ->first();
+
+            if (! $top || (float) ($top->gv ?? 0) <= 0) {
+                $top = DB::selectOne('
+                    WITH RECURSIVE descendants AS (
+                        SELECT id FROM consultant
+                        WHERE inviter = ? AND "dateDeleted" IS NULL
+                        UNION ALL
+                        SELECT c.id FROM consultant c
+                        JOIN descendants d ON c.inviter = d.id
+                        WHERE c."dateDeleted" IS NULL
+                    )
+                    SELECT c.id, c."personName", ql."groupVolumeCumulative" AS gv
+                    FROM descendants d
+                    JOIN consultant c ON c.id = d.id
+                    JOIN "qualificationLog" ql ON ql.consultant = c.id
+                    WHERE ql.date >= ? AND ql.date < ?
+                      AND ql."dateDeleted" IS NULL
+                    ORDER BY ql."groupVolumeCumulative" DESC NULLS LAST
+                    LIMIT 1
+                ', [$consultantId, $monthStart, $monthEnd]);
+            }
+
+            if ($top && (float) ($top->gv ?? 0) > 0) {
+                $branchId = $top->id;
+                $branchName = $top->personName ?: ('Партнёр #' . $top->id);
+                if ($branchGv <= 0) {
+                    $branchGv = (float) $top->gv;
+                    $gapPct = $myGv > 0 ? round($branchGv / $myGv * 100, 2) : 0;
+                    $gapVal = max(0, $branchGv - $myGv * 0.7);
+                }
+            }
+        }
+
+        if (empty($branchName) && $branchId) {
+            $branchName = 'Партнёр #' . $branchId;
+        }
+
+        return [
+            'hasGap'        => $hasGap,
+            'partnerName'   => $branchName,
+            'groupVolume'   => round($branchGv, 2),
+            'gapPercentage' => round($gapPct, 2),
+            'gapValue'      => round($gapVal, 2),
+            'holdThresholdPercent' => 70,
+            'poolThresholdPercent' => 90,
+            'gpHeld'      => $gapPct >= 70,
+            'poolBlocked' => $gapPct >= 90,
         ];
     }
 }

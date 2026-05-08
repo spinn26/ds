@@ -77,17 +77,6 @@
           :color="data.mandatoryPlan.fulfilled ? 'success' : data.mandatoryPlan.fulfillment >= 80 ? 'warning' : 'error'" />
       </div>
 
-      <!-- Breakaway status -->
-      <div class="mb-1">
-        <span class="text-body-2 text-medium-emphasis">Отрыв</span>
-        <span v-if="data.breakaway" class="text-body-2 text-warning font-weight-medium ml-2">
-          Зафиксирован ({{ data.breakaway.gapValuePercentage }}% — ветка {{ data.breakaway.branchWithGapName }})
-        </span>
-        <span v-else class="text-body-2 text-medium-emphasis ml-2">
-          Продажи в дочерних ветках не зафиксированы
-        </span>
-      </div>
-
       <!-- Next level info -->
       <div v-if="data.qualification.nextLevel" class="mt-3">
         <v-divider class="mb-3" />
@@ -126,38 +115,64 @@
       </v-col>
     </v-row>
 
-    <!-- Обязательные продажи (ОП) -->
-    <v-card v-if="data.mandatoryPlan" class="mb-4 pa-4">
-      <div class="d-flex align-center ga-2 mb-3">
-        <v-icon :color="data.mandatoryPlan.fulfilled ? 'success' : 'warning'">
-          {{ data.mandatoryPlan.fulfilled ? 'mdi-check-circle' : 'mdi-alert-circle' }}
+    <!-- Отрыв (breakaway) — единая карточка с теми же порогами 70/90,
+         что в финрезе. Нужна как самостоятельный блок: партнёру важно
+         видеть «нет отрыва / удержание / блокировка пула» сразу, а не
+         только цифру в шапке квалификации. -->
+    <v-card v-if="data.breakaway" class="mb-4 pa-4"
+      :color="data.breakaway.poolBlocked ? 'amber-lighten-5'
+            : data.breakaway.gpHeld ? 'orange-lighten-5'
+            : 'green-lighten-5'" variant="tonal">
+      <div class="d-flex align-center ga-2 mb-2">
+        <v-icon :color="data.breakaway.poolBlocked ? 'amber-darken-2'
+                       : data.breakaway.gpHeld ? 'orange-darken-2'
+                       : 'success'">
+          {{ data.breakaway.poolBlocked ? 'mdi-alert-decagram'
+           : data.breakaway.gpHeld ? 'mdi-alert-circle-outline'
+           : 'mdi-check-decagram' }}
         </v-icon>
-        <span class="text-subtitle-1 font-weight-bold">Обязательные продажи (ОП по ГП)</span>
+        <span class="font-weight-bold">
+          {{ data.breakaway.poolBlocked ? 'Отрыв ≥ 90% — пул не выплачивается'
+           : data.breakaway.gpHeld ? 'Отрыв ≥ 70% — ветка не учитывается в ГП'
+           : 'Отрыва нет' }}
+        </span>
       </div>
-      <v-row align="center">
-        <v-col cols="12" md="6">
-          <div class="d-flex justify-space-between mb-1">
-            <span class="text-body-2">Выполнение плана</span>
-            <span class="text-body-2 font-weight-bold" :class="data.mandatoryPlan.fulfilled ? 'text-success' : 'text-warning'">
-              {{ data.mandatoryPlan.fulfillment }}%
-            </span>
-          </div>
-          <v-progress-linear :model-value="data.mandatoryPlan.fulfillment" height="12" rounded
-            :color="data.mandatoryPlan.fulfilled ? 'success' : data.mandatoryPlan.fulfillment >= 80 ? 'warning' : 'error'" />
-          <div class="text-caption text-medium-emphasis mt-1">
-            {{ fmt(data.mandatoryPlan.currentGP) }} / {{ fmt(data.mandatoryPlan.mandatoryGP) }} баллов за месяц
+      <v-row>
+        <v-col cols="6" md="3">
+          <div class="text-body-2 text-medium-emphasis">Топ ветка</div>
+          <div class="font-weight-medium">{{ data.breakaway.partnerName || '—' }}</div>
+        </v-col>
+        <v-col cols="6" md="3">
+          <div class="text-body-2 text-medium-emphasis">ГП ветки</div>
+          <div class="font-weight-medium">{{ fmt(data.breakaway.groupVolume) }}</div>
+        </v-col>
+        <v-col cols="6" md="3">
+          <div class="text-body-2 text-medium-emphasis">Доля от моего ГП</div>
+          <div class="font-weight-medium" :class="data.breakaway.poolBlocked ? 'text-amber-darken-3'
+                                                : data.breakaway.gpHeld ? 'text-orange-darken-2' : 'text-success'">
+            {{ data.breakaway.gapPercentage ?? 0 }}%
           </div>
         </v-col>
-        <v-col cols="12" md="6">
-          <v-alert v-if="!data.mandatoryPlan.fulfilled" type="warning" variant="tonal" density="compact">
-            При невыполнении ОП комиссия уменьшается на {{ data.mandatoryPlan.commissionReduction }}%.
-            Баллы объёмов не уменьшаются.
-          </v-alert>
-          <v-alert v-else type="success" variant="tonal" density="compact">
-            План выполнен. Комиссия рассчитывается по текущей квалификации.
-          </v-alert>
+        <v-col cols="6" md="3">
+          <div class="text-body-2 text-medium-emphasis">Превышение</div>
+          <div class="font-weight-medium">{{ fmt(data.breakaway.gapValue) }}</div>
         </v-col>
       </v-row>
+      <!-- Шкала с порогами 70% / 90% -->
+      <div class="mt-3">
+        <v-progress-linear
+          :model-value="Math.min(data.breakaway.gapPercentage || 0, 100)"
+          height="8" rounded
+          :color="data.breakaway.poolBlocked ? 'amber-darken-2'
+                : data.breakaway.gpHeld ? 'orange-darken-2'
+                : 'success'" />
+        <div class="d-flex justify-space-between text-caption text-medium-emphasis mt-1">
+          <span>0%</span>
+          <span>70% — удержание ГП</span>
+          <span>90% — блокировка пула</span>
+          <span>100%</span>
+        </div>
+      </div>
     </v-card>
 
     <!-- Показатели -->
