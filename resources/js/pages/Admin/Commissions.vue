@@ -6,68 +6,77 @@
       </template>
     </PageHeader>
 
+    <!-- Компактный layout (как в Контрактах/Клиентах): основные поля в одной
+         flex-строке, диапазон дат + редкие фильтры — за тогглом «Ещё». -->
     <v-card class="mb-3 pa-3">
-      <v-row dense align="center">
-        <v-col cols="12" md="2">
-          <v-text-field v-model="filters.partner" placeholder="ФИО Партнёра"
-            density="comfortable" variant="outlined" hide-details clearable
-            prepend-inner-icon="mdi-magnify"
+      <div class="d-flex flex-wrap ga-2 align-center">
+        <v-text-field v-model="filters.partner" placeholder="ФИО Партнёра"
+          density="compact" variant="outlined" hide-details clearable
+          prepend-inner-icon="mdi-magnify"
+          style="max-width: 220px; flex: 1 1 180px"
+          @update:model-value="debouncedLoad" />
+        <v-text-field v-model="filters.chainPartner" placeholder="Партнёр в цепочке"
+          density="compact" variant="outlined" hide-details clearable
+          prepend-inner-icon="mdi-account-tree"
+          title="Найти все сделки, с которых партнёр получал ГП"
+          style="max-width: 220px; flex: 1 1 180px"
+          @update:model-value="debouncedLoad" />
+        <v-text-field v-model="filters.client" placeholder="ФИО клиента"
+          density="compact" variant="outlined" hide-details clearable
+          style="max-width: 200px; flex: 1 1 160px"
+          @update:model-value="debouncedLoad" />
+        <v-text-field v-model="filters.contract" placeholder="№ контракта"
+          density="compact" variant="outlined" hide-details clearable
+          style="max-width: 160px; flex: 1 1 120px"
+          @update:model-value="debouncedLoad" />
+        <v-autocomplete v-model="filters.supplier" :items="supplierOptions"
+          placeholder="Поставщик" density="compact" variant="outlined"
+          hide-details clearable
+          style="max-width: 200px; flex: 1 1 160px"
+          @update:model-value="loadData" />
+        <v-checkbox v-model="filters.hideZero" label="Без нулевых"
+          density="compact" hide-details color="primary"
+          title="Скрыть транзакции с amountRUB=0"
+          style="flex: 0 0 auto"
+          @update:model-value="loadData" />
+
+        <v-spacer />
+
+        <v-btn :variant="advancedOpen ? 'tonal' : 'text'" size="small"
+          :prepend-icon="advancedOpen ? 'mdi-chevron-up' : 'mdi-tune'"
+          @click="advancedOpen = !advancedOpen">
+          Ещё
+          <v-chip v-if="advancedActiveCount > 0" size="x-small" color="info"
+            variant="elevated" class="ms-1">{{ advancedActiveCount }}</v-chip>
+        </v-btn>
+        <v-chip v-if="activeFilterCount > 0" size="small" color="info" variant="tonal">
+          {{ activeFilterCount }} {{ activeFilterCount === 1 ? 'фильтр' : 'фильтра' }}
+        </v-chip>
+        <v-btn v-if="activeFilterCount > 0" size="small" variant="text" color="secondary"
+          prepend-icon="mdi-filter-remove" @click="resetFilters">
+          Очистить
+        </v-btn>
+      </div>
+
+      <v-expand-transition>
+        <div v-show="advancedOpen" class="d-flex flex-wrap ga-3 mt-3">
+          <div class="filter-range">
+            <span class="text-caption text-medium-emphasis">Дата</span>
+            <div class="d-flex ga-1">
+              <v-text-field v-model="filters.dateFrom" type="date" placeholder="с"
+                density="compact" variant="outlined" hide-details
+                @update:model-value="loadData" />
+              <v-text-field v-model="filters.dateTo" type="date" placeholder="по"
+                density="compact" variant="outlined" hide-details
+                @update:model-value="loadData" />
+            </div>
+          </div>
+          <v-text-field v-model="filters.comment" placeholder="Комментарий"
+            density="compact" variant="outlined" hide-details clearable
+            style="max-width: 280px; flex: 1 1 220px"
             @update:model-value="debouncedLoad" />
-        </v-col>
-        <v-col cols="12" md="2">
-          <v-text-field v-model="filters.chainPartner" placeholder="Партнёр в цепочке"
-            density="comfortable" variant="outlined" hide-details clearable
-            prepend-inner-icon="mdi-account-tree"
-            @update:model-value="debouncedLoad"
-            title="Найти все сделки, с которых партнёр получал ГП" />
-        </v-col>
-        <v-col cols="12" md="2">
-          <v-text-field v-model="filters.client" placeholder="ФИО клиента"
-            density="comfortable" variant="outlined" hide-details clearable
-            @update:model-value="debouncedLoad" />
-        </v-col>
-        <v-col cols="12" md="2">
-          <v-text-field v-model="filters.contract" placeholder="№ контракта"
-            density="comfortable" variant="outlined" hide-details clearable
-            @update:model-value="debouncedLoad" />
-        </v-col>
-        <v-col cols="6" md="2">
-          <v-text-field v-model="filters.dateFrom" type="date" label="Дата с"
-            density="comfortable" variant="outlined" hide-details
-            @update:model-value="loadData" />
-        </v-col>
-        <v-col cols="6" md="2">
-          <v-text-field v-model="filters.dateTo" type="date" label="Дата по"
-            density="comfortable" variant="outlined" hide-details
-            @update:model-value="loadData" />
-        </v-col>
-        <v-col cols="12" md="3">
-          <v-autocomplete v-model="filters.supplier" :items="supplierOptions"
-            placeholder="Поставщик" density="comfortable" variant="outlined"
-            hide-details clearable
-            @update:model-value="loadData" />
-        </v-col>
-        <v-col cols="12" md="3">
-          <v-text-field v-model="filters.comment" placeholder="Поиск по комментарию"
-            density="comfortable" variant="outlined" hide-details clearable
-            @update:model-value="debouncedLoad" />
-        </v-col>
-        <v-col cols="12" md="3" class="d-flex align-center ga-2">
-          <v-checkbox v-model="filters.hideZero" label="Скрыть нулевые"
-            density="compact" hide-details color="primary"
-            title="Скрыть транзакции с amountRUB=0"
-            @update:model-value="loadData" />
-          <v-chip v-if="activeFilterCount > 0" size="small" color="info" variant="tonal">
-            {{ activeFilterCount }} {{ activeFilterCount === 1 ? 'фильтр' : 'фильтра' }}
-          </v-chip>
-        </v-col>
-        <v-col cols="auto" class="d-flex align-center ms-auto">
-          <v-btn v-if="activeFilterCount > 0" size="small" variant="text" color="secondary"
-            prepend-icon="mdi-filter-remove" @click="resetFilters">
-            Очистить фильтры
-          </v-btn>
-        </v-col>
-      </v-row>
+        </div>
+      </v-expand-transition>
     </v-card>
 
     <!-- Сводка сверху таблицы — суммы по основным денежным колонкам
@@ -260,6 +269,8 @@ const columnVisible = ref({
 });
 const visibleHeaders = computed(() => headers.filter(h => columnVisible.value[h.key] !== false));
 
+const advancedOpen = ref(false);
+
 const activeFilterCount = computed(() => {
   let c = 0;
   if (filters.value.partner) c++;
@@ -271,6 +282,16 @@ const activeFilterCount = computed(() => {
   if (filters.value.supplier) c++;
   if (filters.value.comment) c++;
   if (!filters.value.hideZero) c++;
+  return c;
+});
+
+// Активные фильтры в свёрнутом блоке «Ещё» — нужен индикатор на тогле,
+// чтобы пользователь не пропустил, что фильтрация уже идёт.
+const advancedActiveCount = computed(() => {
+  let c = 0;
+  if (filters.value.dateFrom) c++;
+  if (filters.value.dateTo) c++;
+  if (filters.value.comment) c++;
   return c;
 });
 
@@ -364,5 +385,15 @@ onMounted(() => { loadData(); loadSuppliers(); });
 /* Курсор pointer на строках основной таблицы — намёк что строка кликабельна. */
 .commissions-table :deep(tbody tr:not(.v-data-table__tr--expanded-content)) {
   cursor: pointer;
+}
+/* Компактный диапазон дат: подпись + два узких инпута в строку. */
+.filter-range {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 220px;
+}
+.filter-range :deep(.v-field) {
+  min-width: 100px;
 }
 </style>

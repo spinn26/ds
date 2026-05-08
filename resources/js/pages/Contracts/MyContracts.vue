@@ -11,26 +11,29 @@
       <div class="d-flex flex-wrap ga-2 align-center">
         <v-text-field v-model="filters.number" placeholder="№ контракта"
           density="compact" variant="outlined" hide-details clearable
-          prepend-inner-icon="mdi-file-document" style="max-width: 180px"
+          prepend-inner-icon="mdi-file-document"
+          style="max-width: 180px; flex: 1 1 140px"
           @update:model-value="debouncedLoad" />
         <v-text-field v-model="filters.clientName" placeholder="ФИО клиента"
           density="compact" variant="outlined" hide-details clearable
-          prepend-inner-icon="mdi-account" style="max-width: 220px"
+          prepend-inner-icon="mdi-account"
+          style="max-width: 220px; flex: 1 1 180px"
           @update:model-value="debouncedLoad" />
         <v-autocomplete v-model="filters.product" :items="productOptions"
           item-title="name" item-value="id" placeholder="Продукт"
           density="compact" variant="outlined" hide-details clearable
-          style="max-width: 200px"
+          style="max-width: 200px; flex: 1 1 160px"
           @update:model-value="onProductChange" />
         <v-autocomplete v-model="filters.program" :items="filteredPrograms"
           item-title="name" item-value="id" placeholder="Программа"
           density="compact" variant="outlined" hide-details clearable
-          :disabled="!filters.product" style="max-width: 200px"
+          :disabled="!filters.product"
+          style="max-width: 200px; flex: 1 1 160px"
           @update:model-value="loadData" />
         <v-select v-model="filters.status" :items="statusOptions"
           item-title="name" item-value="id" placeholder="Статус"
           density="compact" variant="outlined" hide-details clearable
-          style="max-width: 180px"
+          style="max-width: 180px; flex: 1 1 140px"
           @update:model-value="loadData" />
 
         <v-spacer />

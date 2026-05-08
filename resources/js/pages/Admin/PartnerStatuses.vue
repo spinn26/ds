@@ -20,62 +20,90 @@
       </v-col>
     </v-row>
 
-    <FilterBar
-      :search="search"
-      search-placeholder="ФИО партнёра..."
-      :search-cols="3"
-      :show-reset="activeFilterCount > 0"
-      @update:search="v => { search = v ?? ''; debouncedLoad(); }"
-      @reset="resetFilters"
-    >
-      <v-col cols="12" md="3">
-        <v-select v-model="activityFilter" :items="activityOptions" label="Статус"
-          variant="outlined" density="comfortable"
-          clearable hide-details @update:model-value="loadData" />
-      </v-col>
-      <v-col cols="12" md="3">
-        <v-btn variant="text" size="small"
-          :prepend-icon="showAdvancedDates ? 'mdi-chevron-up' : 'mdi-chevron-down'"
+    <!-- Компактный фильтр-бар: основное (поиск + статус) в одной строке.
+         Все 4 диапазона дат — за тогглом «Диапазоны дат», каждый диапазон
+         как одно поле «с — по» с общей подписью сверху. Убрали FilterBar
+         (он завязан на comfortable density и не даёт нужный layout). -->
+    <v-card class="mb-4 pa-3">
+      <div class="d-flex flex-wrap ga-2 align-center">
+        <v-text-field v-model="search" placeholder="ФИО партнёра…"
+          density="compact" variant="outlined" hide-details clearable
+          prepend-inner-icon="mdi-magnify" style="max-width: 280px; flex: 1 1 200px"
+          @update:model-value="debouncedLoad" />
+        <v-select v-model="activityFilter" :items="activityOptions" placeholder="Статус"
+          density="compact" variant="outlined" hide-details clearable
+          style="max-width: 220px; flex: 1 1 180px"
+          @update:model-value="loadData" />
+
+        <v-spacer />
+
+        <v-btn :variant="showAdvancedDates ? 'tonal' : 'text'" size="small"
+          :prepend-icon="showAdvancedDates ? 'mdi-chevron-up' : 'mdi-calendar-range'"
           @click="showAdvancedDates = !showAdvancedDates">
           Диапазоны дат
+          <v-chip v-if="advancedDatesActiveCount > 0" size="x-small" color="info"
+            variant="elevated" class="ms-1">{{ advancedDatesActiveCount }}</v-chip>
         </v-btn>
-      </v-col>
-      <template v-if="showAdvancedDates">
-        <!-- 4 диапазона дат per spec ✅Статусы партнеров §1 -->
-        <v-col cols="12" md="3"><v-text-field v-model="dateFilters.created_from"
-          label="Регистрация с" type="date" variant="outlined" density="comfortable"
-          hide-details @update:model-value="loadData" /></v-col>
-        <v-col cols="12" md="3"><v-text-field v-model="dateFilters.created_to"
-          label="Регистрация по" type="date" variant="outlined" density="comfortable"
-          hide-details @update:model-value="loadData" /></v-col>
-        <v-col cols="12" md="3"><v-text-field v-model="dateFilters.activity_from"
-          label="Активность с" type="date" variant="outlined" density="comfortable"
-          hide-details @update:model-value="loadData" /></v-col>
-        <v-col cols="12" md="3"><v-text-field v-model="dateFilters.activity_to"
-          label="Активность по" type="date" variant="outlined" density="comfortable"
-          hide-details @update:model-value="loadData" /></v-col>
-        <v-col cols="12" md="3"><v-text-field v-model="dateFilters.plan_from"
-          label="План. терминация с" type="date" variant="outlined" density="comfortable"
-          hide-details @update:model-value="loadData" /></v-col>
-        <v-col cols="12" md="3"><v-text-field v-model="dateFilters.plan_to"
-          label="План. терминация по" type="date" variant="outlined" density="comfortable"
-          hide-details @update:model-value="loadData" /></v-col>
-        <v-col cols="12" md="3"><v-text-field v-model="dateFilters.term_from"
-          label="Факт. терминация с" type="date" variant="outlined" density="comfortable"
-          hide-details @update:model-value="loadData" /></v-col>
-        <v-col cols="12" md="3"><v-text-field v-model="dateFilters.term_to"
-          label="Факт. терминация по" type="date" variant="outlined" density="comfortable"
-          hide-details @update:model-value="loadData" /></v-col>
-      </template>
-      <v-col v-if="activeFilterCount > 0" cols="auto" class="d-flex align-center">
-        <v-chip size="small" color="info" variant="tonal">
+        <v-chip v-if="activeFilterCount > 0" size="small" color="info" variant="tonal">
           {{ activeFilterCount }} {{ activeFilterCount === 1 ? 'фильтр' : 'фильтра' }}
         </v-chip>
-      </v-col>
-      <template #actions>
-        <ColumnVisibilityMenu :headers="headers" v-model:visible="columnVisible" storage-key="partner-statuses-cols" />
-      </template>
-    </FilterBar>
+        <v-btn v-if="activeFilterCount > 0" variant="text" size="small" color="secondary"
+          prepend-icon="mdi-filter-off-outline" @click="resetFilters">Сбросить</v-btn>
+        <ColumnVisibilityMenu :headers="headers" v-model:visible="columnVisible"
+          storage-key="partner-statuses-cols" />
+      </div>
+
+      <!-- 4 диапазона дат per spec ✅Статусы партнеров §1, в компактной
+           разбивке: один блок «с — по» вместо двух отдельных полей. -->
+      <v-expand-transition>
+        <div v-show="showAdvancedDates" class="d-flex flex-wrap ga-3 mt-3">
+          <div class="filter-range">
+            <span class="text-caption text-medium-emphasis">Регистрация</span>
+            <div class="d-flex ga-1">
+              <v-text-field v-model="dateFilters.created_from" type="date" placeholder="с"
+                density="compact" variant="outlined" hide-details
+                @update:model-value="loadData" />
+              <v-text-field v-model="dateFilters.created_to" type="date" placeholder="по"
+                density="compact" variant="outlined" hide-details
+                @update:model-value="loadData" />
+            </div>
+          </div>
+          <div class="filter-range">
+            <span class="text-caption text-medium-emphasis">Активность</span>
+            <div class="d-flex ga-1">
+              <v-text-field v-model="dateFilters.activity_from" type="date" placeholder="с"
+                density="compact" variant="outlined" hide-details
+                @update:model-value="loadData" />
+              <v-text-field v-model="dateFilters.activity_to" type="date" placeholder="по"
+                density="compact" variant="outlined" hide-details
+                @update:model-value="loadData" />
+            </div>
+          </div>
+          <div class="filter-range">
+            <span class="text-caption text-medium-emphasis">План. терминация</span>
+            <div class="d-flex ga-1">
+              <v-text-field v-model="dateFilters.plan_from" type="date" placeholder="с"
+                density="compact" variant="outlined" hide-details
+                @update:model-value="loadData" />
+              <v-text-field v-model="dateFilters.plan_to" type="date" placeholder="по"
+                density="compact" variant="outlined" hide-details
+                @update:model-value="loadData" />
+            </div>
+          </div>
+          <div class="filter-range">
+            <span class="text-caption text-medium-emphasis">Факт. терминация</span>
+            <div class="d-flex ga-1">
+              <v-text-field v-model="dateFilters.term_from" type="date" placeholder="с"
+                density="compact" variant="outlined" hide-details
+                @update:model-value="loadData" />
+              <v-text-field v-model="dateFilters.term_to" type="date" placeholder="по"
+                density="compact" variant="outlined" hide-details
+                @update:model-value="loadData" />
+            </div>
+          </div>
+        </div>
+      </v-expand-transition>
+    </v-card>
 
     <!-- Detail table -->
     <v-data-table-server :items="items" :items-length="total" :loading="loading"
@@ -159,7 +187,6 @@ import { useTableSort } from '../../composables/useTableSort';
 import PageHeader from '../../components/PageHeader.vue';
 import EmptyState from '../../components/EmptyState.vue';
 import StatusChip from '../../components/StatusChip.vue';
-import FilterBar from '../../components/FilterBar.vue';
 import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 import { fmt, fmtDate, getActivityColor } from '../../composables/useDesign';
 
@@ -183,6 +210,14 @@ const activeFilterCount = computed(() => {
   let c = 0;
   if (search.value) c++;
   if (activityFilter.value) c++;
+  Object.values(dateFilters.value).forEach(v => { if (v) c++; });
+  return c;
+});
+
+// Сколько активных диапазонов спрятано в «Диапазоны дат» — чип-счётчик
+// на тогле, чтобы оператор не пропустил активный фильтр после сворачивания.
+const advancedDatesActiveCount = computed(() => {
+  let c = 0;
   Object.values(dateFilters.value).forEach(v => { if (v) c++; });
   return c;
 });
@@ -327,5 +362,17 @@ onMounted(loadData);
 }
 .summary-tile__icon {
   opacity: 0.7;
+}
+/* Компактный диапазон дат: общая подпись сверху + два узких инпута
+   «с»/«по» в одну строку. Без floating-label на полях type=date —
+   на узких экранах (Mac Air ~1366px) лейблы режут outlined-рамку. */
+.filter-range {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 240px;
+}
+.filter-range :deep(.v-field) {
+  min-width: 110px;
 }
 </style>

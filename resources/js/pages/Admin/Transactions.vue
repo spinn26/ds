@@ -25,50 +25,46 @@
           </v-card-title>
 
           <v-card-text class="pt-0">
-            <v-row dense>
-              <v-col cols="12" md="3">
-                <v-text-field v-model="filters.consultantName" placeholder="ФИО консультанта"
-                  density="compact" hide-details rounded clearable variant="outlined"
-                  @update:model-value="debouncedSearch" />
-              </v-col>
-              <v-col cols="12" md="3">
-                <v-text-field v-model="filters.clientName" placeholder="ФИО клиента"
-                  density="compact" hide-details rounded clearable variant="outlined"
-                  @update:model-value="debouncedSearch" />
-              </v-col>
-              <v-col cols="12" md="2">
-                <v-text-field v-model="filters.number" placeholder="№ контракта"
-                  density="compact" hide-details rounded clearable variant="outlined"
-                  @update:model-value="debouncedSearch" />
-              </v-col>
-              <v-col cols="12" md="2">
-                <v-autocomplete v-model="filters.supplier" :items="lookupSuppliers"
-                  placeholder="Поставщик" density="compact" hide-details rounded clearable variant="outlined"
-                  @update:model-value="loadContracts" />
-              </v-col>
+            <!-- Компактный layout: 7 фильтров в одной flex-строке вместо v-row md="2-3"
+                 (на Mac Air ≤1470px перенос на 2-3 строки). -->
+            <div class="d-flex flex-wrap ga-2 align-center">
+              <v-text-field v-model="filters.consultantName" placeholder="ФИО консультанта"
+                density="compact" hide-details rounded clearable variant="outlined"
+                style="max-width: 220px; flex: 1 1 180px"
+                @update:model-value="debouncedSearch" />
+              <v-text-field v-model="filters.clientName" placeholder="ФИО клиента"
+                density="compact" hide-details rounded clearable variant="outlined"
+                style="max-width: 200px; flex: 1 1 160px"
+                @update:model-value="debouncedSearch" />
+              <v-text-field v-model="filters.number" placeholder="№ контракта"
+                density="compact" hide-details rounded clearable variant="outlined"
+                style="max-width: 160px; flex: 1 1 120px"
+                @update:model-value="debouncedSearch" />
+              <v-autocomplete v-model="filters.supplier" :items="lookupSuppliers"
+                placeholder="Поставщик" density="compact" hide-details rounded clearable variant="outlined"
+                style="max-width: 180px; flex: 1 1 140px"
+                @update:model-value="loadContracts" />
               <!-- «Провайдер» убран — на платформе понятие не используется,
                    только «Поставщик». Запрошено правками 2026-05-05. -->
-              <v-col cols="12" md="3">
-                <v-autocomplete v-model="filters.product" :items="productList" item-title="name" item-value="id"
-                  placeholder="Продукт" density="compact" hide-details rounded clearable variant="outlined"
-                  @update:model-value="loadContracts" />
-              </v-col>
-              <v-col cols="12" md="3">
-                <v-autocomplete v-model="filters.program" :items="programList" item-title="name" item-value="id"
-                  placeholder="Программа" density="compact" hide-details rounded clearable variant="outlined"
-                  @update:model-value="loadContracts" />
-              </v-col>
-              <v-col cols="12" md="2">
-                <v-autocomplete v-model="filters.currency" :items="currencyOptions" item-title="name" item-value="id"
-                  placeholder="Валюта" density="compact" hide-details rounded clearable variant="outlined"
-                  @update:model-value="loadContracts" />
-              </v-col>
-              <v-col cols="12" md="auto" class="d-flex align-center">
-                <v-btn variant="text" size="small" prepend-icon="mdi-filter-remove" @click="resetContractFilters">
-                  Очистить фильтры
-                </v-btn>
-              </v-col>
-            </v-row>
+              <v-autocomplete v-model="filters.product" :items="productList" item-title="name" item-value="id"
+                placeholder="Продукт" density="compact" hide-details rounded clearable variant="outlined"
+                style="max-width: 200px; flex: 1 1 160px"
+                @update:model-value="loadContracts" />
+              <v-autocomplete v-model="filters.program" :items="programList" item-title="name" item-value="id"
+                placeholder="Программа" density="compact" hide-details rounded clearable variant="outlined"
+                style="max-width: 200px; flex: 1 1 160px"
+                @update:model-value="loadContracts" />
+              <v-autocomplete v-model="filters.currency" :items="currencyOptions" item-title="name" item-value="id"
+                placeholder="Валюта" density="compact" hide-details rounded clearable variant="outlined"
+                style="max-width: 140px; flex: 1 1 100px"
+                @update:model-value="loadContracts" />
+
+              <v-spacer />
+
+              <v-btn variant="text" size="small" prepend-icon="mdi-filter-remove" @click="resetContractFilters">
+                Очистить
+              </v-btn>
+            </div>
           </v-card-text>
 
           <v-data-table-server

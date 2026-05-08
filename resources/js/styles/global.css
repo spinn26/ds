@@ -283,17 +283,17 @@
   color: rgba(255, 255, 255, 0.72);
 }
 
-/* === Узкие экраны (Mac Air / 13" laptop ≤ 1440px) ===
+/* === Узкие экраны (Mac Air / 13–14" laptop ≤ 1600px) ===
    Базовая Vuetify density="compact" всё равно оставляет таблицы слишком
-   "воздушными" на 13" дисплее. Чтобы пользователь не вынужден был
-   крутить браузер на 80%, дополнительно ужимаем шрифт и padding в
-   таблицах с density=compact на узких viewport'ах.
-   На 1441+ px — вид остаётся прежним.
+   "воздушными" на 13–14" дисплее. Mac Air 13.6" M4 при 100% даёт CSS-
+   viewport 1470px, 16" Mac — 1512px, FHD-ноуты — 1536–1600px. Чтобы
+   пользователь не вынужден был крутить браузер на 80%, ужимаем шрифт
+   и padding в таблицах + сжимаем фильтр-бары. На 1600+ px — вид прежний.
 
    Покрываем все три типа: v-data-table (Квалификации, Структура и т.п.),
    v-data-table-server (Контракты, Клиенты, Транзакции-журнал)
    и v-table (Pool «Начисления», Manual TX «Черновики»). */
-@media (max-width: 1440px) {
+@media (max-width: 1599.98px) {
   .v-data-table--density-compact th,
   .v-data-table-server--density-compact th,
   .v-table--density-compact th {
@@ -314,6 +314,18 @@
   .v-data-table-server--density-compact tbody tr,
   .v-table--density-compact tbody tr {
     height: auto !important;
+  }
+
+  /* Фильтр-бары: чуть меньше gap и узкий filter-range, чтобы строка
+     не ломалась на 2 ряда при активных «Ещё» + «Сбросить» + чипах. */
+  .v-card .d-flex.flex-wrap.ga-2 {
+    gap: 6px !important;
+  }
+  .v-card .filter-range {
+    min-width: 180px !important;
+  }
+  .v-card .filter-range .v-field {
+    min-width: 88px !important;
   }
 }
 
