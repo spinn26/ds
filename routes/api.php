@@ -198,6 +198,12 @@ Route::prefix('v1')->group(function () {
         Route::post('/admin/contract-import/{id}/rollback', [\App\Http\Controllers\Api\ContractImportController::class, 'rollback'])->whereNumber('id')->middleware('throttle:30,1');
         Route::get('/admin/transfers', [\App\Http\Controllers\Api\AdminDataController::class, 'transfers']);
 
+        // Permission groups — управление правами кабинетов через UI
+        Route::get('/admin/permissions/groups',          [\App\Http\Controllers\Api\AdminPermissionsController::class, 'index']);
+        Route::post('/admin/permissions/groups',         [\App\Http\Controllers\Api\AdminPermissionsController::class, 'store']);
+        Route::patch('/admin/permissions/groups/{id}',   [\App\Http\Controllers\Api\AdminPermissionsController::class, 'update'])->whereNumber('id');
+        Route::delete('/admin/permissions/groups/{id}',  [\App\Http\Controllers\Api\AdminPermissionsController::class, 'destroy'])->whereNumber('id');
+
         Route::get('/admin/transactions', [\App\Http\Controllers\Api\AdminFinanceController::class, 'transactions']);
         Route::post('/admin/finalize-month', [\App\Http\Controllers\Api\AdminFinanceController::class, 'finalizeMonth']);
         Route::get('/admin/commissions', [\App\Http\Controllers\Api\AdminFinanceController::class, 'commissions']);

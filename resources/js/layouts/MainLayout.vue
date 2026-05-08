@@ -668,6 +668,9 @@ const menuItems = [
   { label: 'Отчёты', icon: 'mdi-file-chart', path: '/manage/reports', adminSection: 'reports' },
   { label: 'Справочники для расчёта', icon: 'mdi-currency-usd', path: '/manage/currencies', adminSection: 'currencies' },
   { label: 'Инструкции', icon: 'mdi-book-edit-outline', path: '/manage/instructions', adminSection: 'products' },
+  // Управление группами и правами — только admin (раздел 'permissions'
+  // присутствует только в его карте прав через FULL-сентинел).
+  { label: 'Группы и права', icon: 'mdi-shield-account', path: '/manage/permissions', adminSection: 'permissions' },
 
   // Аналитика — для руководителя / админа
   { group: 'Аналитика', adminSection: 'owner-dashboard' },

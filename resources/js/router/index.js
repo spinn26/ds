@@ -45,6 +45,7 @@ const routes = [
             { path: 'manage/acceptance', component: () => import('../pages/Admin/Acceptance.vue'), meta: { staff: true } },
             { path: 'manage/requisites', component: () => import('../pages/Admin/Requisites.vue'), meta: { staff: true } },
             { path: 'manage/transfers', component: () => import('../pages/Admin/Transfers.vue'), meta: { staff: true } },
+            { path: 'manage/permissions', component: () => import('../pages/Admin/Permissions.vue'), meta: { staff: true } },
             { path: 'manage/instructions', component: () => import('../pages/Admin/Instructions.vue'), meta: { staff: true } },
             { path: 'manage/transactions/import', component: () => import('../pages/Admin/TransactionImport.vue'), meta: { staff: true } },
             { path: 'manage/transactions', component: () => import('../pages/Admin/Transactions.vue'), meta: { staff: true } },
