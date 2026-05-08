@@ -545,16 +545,21 @@ const isStaff = computed(() =>
 // «contests» (Конкурсы) намеренно скрыты у всех ролей по запросу
 // продакта (правки 2026-05-05) — раздел не используется на проде.
 const cabinetSections = {
+  // 'support-desk' (Тех. поддержка) — даём всем стафф-кабинетам, потому
+  // что в любую роль может прилететь эскалация / тикет-инцидент. Раньше
+  // было только у admin/support/head — backoffice/finance/calculations
+  // не видели входящих обращений и партнёр потом жаловался что «никто
+  // не отвечает». «corrections» исключён намеренно — у них read-only.
   admin: ['calculator', 'structure', 'partners', 'statuses', 'clients', 'contracts', 'upload', 'acceptance', 'requisites', 'transfers', 'transactions', 'import', 'commissions', 'pool', 'qualifications', 'charges', 'payments', 'products', 'communication', 'support-desk', 'chat-analytics', 'reports', 'currencies', 'education', 'education-analytics', 'partner-questionnaires'],
-  backoffice: ['calculator', 'structure', 'partners', 'statuses', 'clients', 'contracts', 'upload', 'acceptance', 'requisites', 'transfers', 'products', 'communication', 'chat-analytics', 'reports', 'pool', 'partner-questionnaires', 'commissions'],
+  backoffice: ['calculator', 'structure', 'partners', 'statuses', 'clients', 'contracts', 'upload', 'acceptance', 'requisites', 'transfers', 'products', 'communication', 'support-desk', 'chat-analytics', 'reports', 'pool', 'partner-questionnaires', 'commissions'],
   support: ['partners', 'statuses', 'structure', 'clients', 'contracts', 'acceptance', 'products', 'communication', 'support-desk', 'calculator', 'partner-questionnaires'],
   head: ['calculator', 'structure', 'partners', 'statuses', 'clients', 'contracts', 'acceptance', 'transfers', 'products', 'communication', 'support-desk', 'chat-analytics', 'reports', 'owner-dashboard', 'reconciliation', 'anomalies', 'funnel', 'cohorts', 'pool', 'partner-questionnaires'],
-  finance: ['calculator', 'requisites', 'charges', 'payments', 'reports', 'communication', 'pool'],
+  finance: ['calculator', 'requisites', 'charges', 'payments', 'reports', 'communication', 'support-desk', 'pool'],
   // Богданова — Руководитель по расчётам. По запросу: ей нужен полный
   // доступ к данным партнёров, выплатам, реквизитам, акцепту и т.п.
-  calculations: ['calculator', 'structure', 'partners', 'statuses', 'clients', 'contracts', 'acceptance', 'transfers', 'requisites', 'transactions', 'import', 'commissions', 'pool', 'qualifications', 'charges', 'payments', 'products', 'communication', 'reports', 'currencies'],
+  calculations: ['calculator', 'structure', 'partners', 'statuses', 'clients', 'contracts', 'acceptance', 'transfers', 'requisites', 'transactions', 'import', 'commissions', 'pool', 'qualifications', 'charges', 'payments', 'products', 'communication', 'support-desk', 'reports', 'currencies'],
   corrections: ['calculator', 'clients', 'contracts', 'partners'],
-  education: ['education', 'education-analytics', 'partner-questionnaires', 'partners', 'products', 'instructions', 'communication'],
+  education: ['education', 'education-analytics', 'partner-questionnaires', 'partners', 'products', 'instructions', 'communication', 'support-desk'],
 };
 
 const availableSections = computed(() => {
