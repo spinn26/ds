@@ -565,36 +565,32 @@ class PoolRunner
 
         $totalPaid = array_sum(array_column($participants, 'payoutRub'));
 
-        $fund = $revenue * PoolCalculator::POOL_PERCENT;
-
-        // ИСТОРИЧЕСКИЙ / ЗАМОРОЖЕННЫЙ ПЕРИОД — выводим «как есть».
+        // ИСТОРИЧЕСКИЙ / ЗАМОРОЖЕННЫЙ ПЕРИОД — выводим только то, что
+        // реально лежит в `poolLog`.
         //
-        // Раньше здесь shareValues пересчитывались из ТЕКУЩЕГО qualificationLog
-        // и подсунутого fund (revenue × 1%). Это давало рассинхрон:
-        //   • partner.payoutRub приходит из poolLog (реальная выплата),
-        //   • shareValues пересчитываются «на лету» — могут отличаться,
-        //     если qualificationLog после фиксации редактировали или
-        //     активность партнёров поменялась,
-        //   • в результате сумма по колонкам «6 кв./7 кв./…» в нижней
-        //     таблице не сходилась с payoutRub, а ИТОГО показывало
-        //     теоретический fund × #активных уровней — тоже мимо
-        //     реальных выплат.
+        // Раньше revenue считался по ТЕКУЩЕЙ transaction-таблице, fund =
+        // revenue × 1%, shareValues пересчитывались из текущего
+        // qualificationLog. Все три могут «уехать» относительно того,
+        // что было на момент фиксации (транзакции отредактировали,
+        // qLog пересчитали и т.п.). В UI это выглядело как:
+        //   • payoutRub в строках — реальные выплаты из poolLog,
+        //   • Выручка/Фонд/ИТОГО — расчёт «по сегодняшним данным»,
+        //   • цифры расходились на десятки процентов.
         //
-        // Решение: для исторических данных не считаем shareValues вовсе —
-        // отдаём пустой массив + флаг fromPoolLog=true. Frontend по этому
-        // флагу рендерит payoutRub в колонке СВОЕГО уровня партнёра без
-        // матрёшки и считает ИТОГО как сумму реальных выплат.
+        // Решение: revenue/fund/shareValues отдаём как null. Frontend
+        // по флагу fromPoolLog рендерит «—» в этих колонках, ИТОГО
+        // считает как фактическую сумму payoutRub из снимка.
         return [
             'year' => $year,
             'month' => $month,
-            'revenue' => $revenue,
-            'fund' => $fund,
+            'revenue' => null,
+            'fund' => null,
             'shareValues' => [],
             'participants' => $participants,
             'totalPaid' => $totalPaid,
-            'totalForfeited' => 0.0,
+            'totalForfeited' => null,
             'written' => 0,
-            'fromPoolLog' => true,  // флаг для UI: данные из реального лога
+            'fromPoolLog' => true,
         ];
     }
 
@@ -690,19 +686,20 @@ class PoolRunner
         }
 
         $totalPaid = array_sum(array_column($participants, 'payoutRub'));
-        $fund = $revenue * PoolCalculator::POOL_PERCENT;
 
-        // CSV — тоже исторический snapshot. Не считаем shareValues, фронт
-        // отрисует выплаты «как есть» по флагу fromCsv (см. participantsFromPoolLog).
+        // CSV — тоже исторический snapshot. revenue/fund/shareValues = null:
+        // данные могли «уехать» в текущей БД, и пересчитывать их для UI
+        // означает рисовать неконсистентные с poolLog цифры (см. подробный
+        // комментарий в participantsFromPoolLog выше).
         return [
             'year' => $year,
             'month' => $month,
-            'revenue' => $revenue,
-            'fund' => $fund,
+            'revenue' => null,
+            'fund' => null,
             'shareValues' => [],
             'participants' => $participants,
             'totalPaid' => $totalPaid,
-            'totalForfeited' => 0.0,
+            'totalForfeited' => null,
             'written' => 0,
             'fromCsv' => true,
         ];

@@ -88,11 +88,14 @@
           </v-btn>
         </template>
         <v-spacer />
+        <!-- В исторических периодах revenue/fund/forfeited приходят null —
+             эти цифры неконсистентны с poolLog (выручка/qLog могли
+             измениться). Показываем «—» вместо подделки. -->
         <span v-if="result" class="text-caption text-medium-emphasis">
-          Выручка ДС без НДС: <strong>{{ fmt2(result.revenue) }} ₽</strong>
-          · Фонд на уровень: <strong>{{ fmt2(result.fund) }} ₽</strong>
-          · К выплате: <strong class="text-success">{{ fmt2(result.totalPaid) }} ₽</strong>
-          · Остаётся ДС: <strong class="text-warning">{{ fmt2(result.totalForfeited) }} ₽</strong>
+          Выручка ДС без НДС: <strong>{{ moneyOrDash(result.revenue) }}</strong>
+          · Фонд на уровень: <strong>{{ moneyOrDash(result.fund) }}</strong>
+          · К выплате: <strong class="text-success">{{ moneyOrDash(result.totalPaid) }}</strong>
+          · Остаётся ДС: <strong class="text-warning">{{ moneyOrDash(result.totalForfeited) }}</strong>
         </span>
       </v-card-actions>
 
@@ -154,9 +157,11 @@
             <td colspan="3" class="font-weight-bold text-success">
               {{ isHistoricalView ? 'ИТОГО (выплачено по snapshot)' : 'ИТОГО (фонд × #активных уровней)' }}
             </td>
-            <td class="text-end font-weight-bold text-success">{{ fmt2(result.revenue || 0) }} ₽</td>
+            <!-- В историческом режиме revenue из poolLog неизвестен —
+                 показываем «—» вместо живого пересчёта. -->
+            <td class="text-end font-weight-bold text-success">{{ moneyOrDash(result.revenue) }}</td>
             <td v-for="lvl in [6,7,8,9,10]" :key="'tot-'+lvl" class="text-end font-weight-bold text-success">
-              {{ fmt2(totalCellForLevel(lvl)) }}
+              {{ isHistoricalView && totalCellForLevel(lvl) === 0 ? '—' : fmt2(totalCellForLevel(lvl)) }}
             </td>
             <td class="text-end font-weight-bold text-success">{{ fmt2(totalRowSum) }} ₽</td>
           </tr>
@@ -217,6 +222,13 @@ const toggling = ref({});
 
 const snack = ref({ open: false, color: 'success', text: '' });
 function notify(text, color = 'success') { snack.value = { open: true, color, text }; }
+
+// Формат «X ₽» или «—» для значений, которых нет в snapshot (revenue/fund
+// для исторических периодов приходят null — показываем «—», а не «0,00 ₽»).
+function moneyOrDash(v) {
+  if (v === null || v === undefined) return '—';
+  return `${fmt2(v)} ₽`;
+}
 
 // Развёрнутый формат "Февраль 2026" для заголовка карточки и для
 // поля «Период» в нижней таблице. Соответствует эталону старой платформы.
