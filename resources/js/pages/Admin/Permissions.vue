@@ -543,13 +543,24 @@ onMounted(load);
   opacity: 0.7;
 }
 
-.tr-system .td-group {
-  background: rgba(var(--v-theme-surface-variant), 0.18);
+/* Sticky-колонки (group + actions) ВСЕГДА имеют непрозрачный surface-фон.
+   Раньше .tr-system/.tr-admin переопределяли .td-group на полупрозрачный
+   rgba(...), и при горизонтальной прокрутке data-ячейки «просвечивали»
+   через sticky-группу — выглядело как наслоение. Теперь:
+     • sticky cells всегда solid (см. base .td-group, .td-actions);
+     • визуальная подсветка system/admin рядов идёт через .td-cell — это
+       обычные не-sticky ячейки, под ними никто не прокручивается. */
+.td-group,
+.td-actions {
+  background-color: rgb(var(--v-theme-surface)) !important;
 }
-.tr-admin .td-group {
+.tr-system .td-cell {
+  background-color: rgba(var(--v-theme-surface-variant), 0.25);
+}
+.tr-admin .td-cell {
   background: linear-gradient(90deg,
-    rgba(var(--v-theme-secondary), 0.1),
-    rgba(var(--v-theme-surface-variant), 0.18)
+    rgba(var(--v-theme-secondary), 0.08),
+    rgba(var(--v-theme-surface-variant), 0.2)
   );
 }
 
