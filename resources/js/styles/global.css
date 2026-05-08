@@ -283,6 +283,40 @@
   color: rgba(255, 255, 255, 0.72);
 }
 
+/* === Узкие экраны (Mac Air / 13" laptop ≤ 1440px) ===
+   Базовая Vuetify density="compact" всё равно оставляет таблицы слишком
+   "воздушными" на 13" дисплее. Чтобы пользователь не вынужден был
+   крутить браузер на 80%, дополнительно ужимаем шрифт и padding в
+   таблицах с density=compact на узких viewport'ах.
+   На 1441+ px — вид остаётся прежним.
+
+   Покрываем все три типа: v-data-table (Квалификации, Структура и т.п.),
+   v-data-table-server (Контракты, Клиенты, Транзакции-журнал)
+   и v-table (Pool «Начисления», Manual TX «Черновики»). */
+@media (max-width: 1440px) {
+  .v-data-table--density-compact th,
+  .v-data-table-server--density-compact th,
+  .v-table--density-compact th {
+    font-size: 0.65rem !important;
+    padding: 0 8px !important;
+  }
+  .v-data-table--density-compact td,
+  .v-data-table-server--density-compact td,
+  .v-table--density-compact td {
+    font-size: 0.8125rem !important; /* 13px вместо 14px */
+    padding: 4px 8px !important;
+    line-height: 1.25 !important;
+    word-break: normal;
+    overflow-wrap: anywhere;
+  }
+  /* Плотные строки — высота по контенту, без принудительных 40px */
+  .v-data-table--density-compact tbody tr,
+  .v-data-table-server--density-compact tbody tr,
+  .v-table--density-compact tbody tr {
+    height: auto !important;
+  }
+}
+
 /* Print */
 @media print {
   .v-navigation-drawer, .v-app-bar, .v-btn, .v-fab { display: none !important; }
