@@ -26,6 +26,15 @@ export const useAuthStore = defineStore('auth', {
             const overrides = ['admin', 'backoffice', 'finance', 'head', 'calculations', 'corrections'];
             return roles.includes('education') && !roles.some(r => overrides.includes(r));
         },
+        // «Руководитель по расчётам» (Богданова) — видит контракты, но не
+        // редактирует. Если у пользователя есть admin/backoffice/head — гард
+        // не активен (write разрешён). По запросу 2026-05-06 (отдельно для
+        // calculations: Менеджер контрактов только для просмотра).
+        isCalculationsOnly: (state) => {
+            const roles = (state.user?.role || '').split(',').map(r => r.trim());
+            const writeOverrides = ['admin', 'backoffice', 'head'];
+            return roles.includes('calculations') && !roles.some(r => writeOverrides.includes(r));
+        },
         isConsultant: (state) => state.user?.role?.includes('consultant'),
         isRegistered: (state) => state.user?.role === 'registered',
         isTerminated: (state) => state.user?.activityStatus === 3,

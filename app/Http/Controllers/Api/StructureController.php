@@ -95,6 +95,13 @@ class StructureController extends Controller
             ->get();
         $members = $this->consultantService->formatMembers($rows);
 
+        // Применяем те же фильтры, что и в /structure (search, qualification,
+        // status, ЛП/ГП/НГП, города, даты). Без этого при разворачивании
+        // ветки в дереве показывались ВСЕ потомки независимо от фильтра —
+        // оператор фильтровал «Активен», но в развёртке всё равно были
+        // терминированные. Frontend начал передавать filterParams() сюда.
+        $members = $this->consultantService->applyFilters($members, $request->all());
+
         return response()->json(['data' => $members->values()]);
     }
 

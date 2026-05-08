@@ -2,7 +2,10 @@
   <div>
     <PageHeader title="Менеджер контрактов" icon="mdi-file-document-edit" :count="total">
       <template #actions>
-        <v-btn color="success" prepend-icon="mdi-plus" @click="openCreate">
+        <v-chip v-if="readOnly" size="small" color="info" variant="tonal" prepend-icon="mdi-eye">
+          Только просмотр
+        </v-chip>
+        <v-btn v-else color="success" prepend-icon="mdi-plus" @click="openCreate">
           Новый контракт
         </v-btn>
       </template>
@@ -115,7 +118,11 @@
           context-type="Контракт" :context-id="item.id" :context-label="'#' + (item.number || item.id)" />
       </template>
       <template #item.actions="{ item }">
-        <v-btn icon="mdi-pencil" size="x-small" variant="text" color="success" title="Редактировать"
+        <!-- Для read-only роли (calculations) показываем «Просмотр» вместо
+             карандаша. openEdit() переиспользуется, drawer внутри сам
+             переключится в view-only через computed `readOnly`. -->
+        <v-btn :icon="readOnly ? 'mdi-eye' : 'mdi-pencil'" size="x-small" variant="text"
+          color="success" :title="readOnly ? 'Просмотр' : 'Редактировать'"
           @click="openEdit(item)" />
         <v-btn icon="mdi-history" size="x-small" variant="text" title="История изменений"
           @click="openHistory(item)" />
@@ -123,17 +130,23 @@
       <template #no-data><EmptyState /></template>
     </v-data-table-server>
 
-    <!-- Модалка создания/редактирования (per spec ✅Менеджер контрактов §3) -->
+    <!-- Модалка создания/редактирования (per spec ✅Менеджер контрактов §3).
+         Для read-only роли (calculations) drawer работает в view-only режиме:
+         все поля disabled через шаблонную привязку, кнопки save/delete скрыты. -->
     <v-navigation-drawer v-model="editOpen" location="right" temporary width="640">
       <v-card flat>
         <v-card-title class="d-flex align-center">
-          <v-icon class="mr-2">{{ editingId ? 'mdi-pencil' : 'mdi-plus' }}</v-icon>
-          {{ editingId ? 'Редактирование контракта' : 'Новый контракт' }}
+          <v-icon class="mr-2">{{ readOnly ? 'mdi-eye' : (editingId ? 'mdi-pencil' : 'mdi-plus') }}</v-icon>
+          {{ readOnly ? 'Просмотр контракта' : (editingId ? 'Редактирование контракта' : 'Новый контракт') }}
           <v-spacer />
           <v-btn icon="mdi-close" size="small" variant="text" @click="editOpen = false" />
         </v-card-title>
 
         <v-card-text>
+        <!-- v-form с :readonly пропагирует prop на все вложенные input'ы
+             Vuetify через provide/inject. Для роли calculations все поля
+             автоматически становятся read-only без правок каждого. -->
+        <v-form :readonly="readOnly">
           <!-- Блок «Основное» -->
           <div class="text-subtitle-2 font-weight-bold mb-2">Основное</div>
           <v-text-field v-model="form.number" label="Номер контракта *"
@@ -240,16 +253,17 @@
               <div v-if="partnerRequisites[0].bik" class="text-body-2"><b>БИК:</b> {{ partnerRequisites[0].bik }}</div>
             </v-card>
           </template>
+        </v-form>
         </v-card-text>
 
         <v-card-actions class="d-flex flex-wrap ga-2">
-          <v-btn v-if="editingId" color="error" variant="text"
+          <v-btn v-if="editingId && !readOnly" color="error" variant="text"
             prepend-icon="mdi-delete" @click="confirmDelete">
             Удалить контракт
           </v-btn>
           <v-spacer />
-          <v-btn @click="editOpen = false">Отмена</v-btn>
-          <v-btn color="success" prepend-icon="mdi-content-save" :loading="saving"
+          <v-btn @click="editOpen = false">{{ readOnly ? 'Закрыть' : 'Отмена' }}</v-btn>
+          <v-btn v-if="!readOnly" color="success" prepend-icon="mdi-content-save" :loading="saving"
             :disabled="!canSave" @click="saveContract">
             Сохранить контракт
           </v-btn>
@@ -331,6 +345,13 @@ import StatusChip from '../../components/StatusChip.vue';
 import FilterBar from '../../components/FilterBar.vue';
 import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 import { fmt, fmtDate, getContractStatusColor } from '../../composables/useDesign';
+import { useAuthStore } from '../../stores/auth';
+
+const auth = useAuthStore();
+// Read-only режим для роли calculations (Богданова) — менеджер контрактов
+// только для просмотра. Прячет «Новый контракт», «Редактировать», «Удалить»,
+// меняет drawer на view-only. Запрос 2026-05-06.
+const readOnly = computed(() => auth.isCalculationsOnly);
 
 const items = ref([]);
 const total = ref(0);

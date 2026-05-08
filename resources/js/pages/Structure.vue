@@ -267,11 +267,40 @@ async function toggleExpand(row) {
   }
   row._loadingChildren = true;
   try {
-    const { data } = await api.get(`/structure/${row.id}/children`);
+    // Передаём текущие фильтры в /children — раньше эндпоинт игнорил
+    // фильтры, поэтому развёрнутые ветки показывали ВСЕХ потомков
+    // (например, при выборе «Активен» в развёртке всё равно были
+    // терминированные).
+    const { data } = await api.get(`/structure/${row.id}/children`, { params: filterParams() });
     row._children = enrichRows(data.data || data, row._depth + 1);
     row._expanded = true;
   } catch {}
   row._loadingChildren = false;
+}
+
+// Сборка params — общая для loadData и toggleExpand. Извлечена в функцию,
+// чтобы при правке фильтров не забывать обновлять оба места.
+function filterParams() {
+  const params = {};
+  if (filters.value.search) params.search = filters.value.search;
+  if (filters.value.last_name) params.last_name = filters.value.last_name;
+  if (filters.value.first_name) params.first_name = filters.value.first_name;
+  if (filters.value.patronymic) params.patronymic = filters.value.patronymic;
+  if (filters.value.qualification?.length) params.qualification = filters.value.qualification.join(',');
+  if (filters.value.levels?.length) params.levels = filters.value.levels.join(',');
+  if (filters.value.status?.length) params.status = filters.value.status.join(',');
+  if (filters.value.birth_date_from) params.birth_date_from = filters.value.birth_date_from;
+  if (filters.value.birth_date_to) params.birth_date_to = filters.value.birth_date_to;
+  if (filters.value.city) params.city = filters.value.city;
+  if (filters.value.lp_min) params.lp_min = filters.value.lp_min;
+  if (filters.value.lp_max) params.lp_max = filters.value.lp_max;
+  if (filters.value.gp_min) params.gp_min = filters.value.gp_min;
+  if (filters.value.gp_max) params.gp_max = filters.value.gp_max;
+  if (filters.value.ngp_min) params.ngp_min = filters.value.ngp_min;
+  if (filters.value.ngp_max) params.ngp_max = filters.value.ngp_max;
+  if (filters.value.termination_from) params.termination_from = filters.value.termination_from;
+  if (filters.value.termination_to) params.termination_to = filters.value.termination_to;
+  return params;
 }
 
 const { debounced: debouncedLoad } = useDebounce(loadData, 400);
@@ -279,25 +308,7 @@ const { debounced: debouncedLoad } = useDebounce(loadData, 400);
 async function loadData() {
   loading.value = true;
   try {
-    const params = { page: page.value };
-    if (filters.value.search) params.search = filters.value.search;
-    if (filters.value.last_name) params.last_name = filters.value.last_name;
-    if (filters.value.first_name) params.first_name = filters.value.first_name;
-    if (filters.value.patronymic) params.patronymic = filters.value.patronymic;
-    if (filters.value.qualification?.length) params.qualification = filters.value.qualification.join(',');
-    if (filters.value.levels?.length) params.levels = filters.value.levels.join(',');
-    if (filters.value.status?.length) params.status = filters.value.status.join(',');
-    if (filters.value.birth_date_from) params.birth_date_from = filters.value.birth_date_from;
-    if (filters.value.birth_date_to) params.birth_date_to = filters.value.birth_date_to;
-    if (filters.value.city) params.city = filters.value.city;
-    if (filters.value.lp_min) params.lp_min = filters.value.lp_min;
-    if (filters.value.lp_max) params.lp_max = filters.value.lp_max;
-    if (filters.value.gp_min) params.gp_min = filters.value.gp_min;
-    if (filters.value.gp_max) params.gp_max = filters.value.gp_max;
-    if (filters.value.ngp_min) params.ngp_min = filters.value.ngp_min;
-    if (filters.value.ngp_max) params.ngp_max = filters.value.ngp_max;
-    if (filters.value.termination_from) params.termination_from = filters.value.termination_from;
-    if (filters.value.termination_to) params.termination_to = filters.value.termination_to;
+    const params = { page: page.value, ...filterParams() };
     const { data } = await api.get('/structure', { params });
     uidCounter = 0;
     const responseData = data.data || data;
