@@ -115,27 +115,27 @@
       </v-col>
     </v-row>
 
-    <!-- Отрыв (breakaway) — единая карточка с теми же порогами 70/90,
-         что в финрезе. Нужна как самостоятельный блок: партнёру важно
-         видеть «нет отрыва / удержание / блокировка пула» сразу, а не
-         только цифру в шапке квалификации. -->
-    <v-card v-if="data.breakaway" class="mb-4 pa-4"
-      :color="data.breakaway.poolBlocked ? 'amber-lighten-5'
-            : data.breakaway.gpHeld ? 'orange-lighten-5'
-            : 'green-lighten-5'" variant="tonal">
-      <div class="d-flex align-center ga-2 mb-2">
-        <v-icon :color="data.breakaway.poolBlocked ? 'amber-darken-2'
-                       : data.breakaway.gpHeld ? 'orange-darken-2'
-                       : 'success'">
-          {{ data.breakaway.poolBlocked ? 'mdi-alert-decagram'
-           : data.breakaway.gpHeld ? 'mdi-alert-circle-outline'
-           : 'mdi-check-decagram' }}
-        </v-icon>
-        <span class="font-weight-bold">
+    <!-- Отрыв (breakaway) — те же пороги 70/90, что в финрезе.
+         Цвет статуса видим только в чипе/прогрессе/доле — карточка
+         остаётся на surface, чтобы text-medium-emphasis читался. -->
+    <v-card v-if="data.breakaway" class="mb-4 pa-4 breakaway-card"
+      :class="`breakaway-card--${
+        data.breakaway.poolBlocked ? 'error'
+        : data.breakaway.gpHeld ? 'warning'
+        : 'success'
+      }`">
+      <div class="d-flex align-center ga-2 mb-3">
+        <v-chip size="small" variant="flat"
+          :color="data.breakaway.poolBlocked ? 'error'
+                : data.breakaway.gpHeld ? 'warning'
+                : 'success'"
+          :prepend-icon="data.breakaway.poolBlocked ? 'mdi-alert-decagram'
+                       : data.breakaway.gpHeld ? 'mdi-alert-circle-outline'
+                       : 'mdi-check-decagram'">
           {{ data.breakaway.poolBlocked ? 'Отрыв ≥ 90% — пул не выплачивается'
            : data.breakaway.gpHeld ? 'Отрыв ≥ 70% — ветка не учитывается в ГП'
            : 'Отрыва нет' }}
-        </span>
+        </v-chip>
       </div>
       <v-row>
         <v-col cols="6" md="3">
@@ -148,8 +148,10 @@
         </v-col>
         <v-col cols="6" md="3">
           <div class="text-body-2 text-medium-emphasis">Доля от моего ГП</div>
-          <div class="font-weight-medium" :class="data.breakaway.poolBlocked ? 'text-amber-darken-3'
-                                                : data.breakaway.gpHeld ? 'text-orange-darken-2' : 'text-success'">
+          <div class="font-weight-bold"
+            :class="data.breakaway.poolBlocked ? 'text-error'
+                  : data.breakaway.gpHeld ? 'text-warning'
+                  : 'text-success'">
             {{ data.breakaway.gapPercentage ?? 0 }}%
           </div>
         </v-col>
@@ -163,8 +165,8 @@
         <v-progress-linear
           :model-value="Math.min(data.breakaway.gapPercentage || 0, 100)"
           height="8" rounded
-          :color="data.breakaway.poolBlocked ? 'amber-darken-2'
-                : data.breakaway.gpHeld ? 'orange-darken-2'
+          :color="data.breakaway.poolBlocked ? 'error'
+                : data.breakaway.gpHeld ? 'warning'
                 : 'success'" />
         <div class="d-flex justify-space-between text-caption text-medium-emphasis mt-1">
           <span>0%</span>
@@ -408,4 +410,22 @@ onMounted(async () => {
   } catch {}
 });
 </script>
+
+<style scoped>
+/* Breakaway-карточка: цветной индикатор слева, surface-фон сохраняем,
+   чтобы text-medium-emphasis labels читались. См. одноимённый стиль
+   в Finance/Report.vue — общий паттерн. */
+.breakaway-card {
+  border-left: 4px solid transparent !important;
+}
+.breakaway-card--success {
+  border-left-color: rgb(var(--v-theme-success)) !important;
+}
+.breakaway-card--warning {
+  border-left-color: rgb(var(--v-theme-warning)) !important;
+}
+.breakaway-card--error {
+  border-left-color: rgb(var(--v-theme-error)) !important;
+}
+</style>
 
