@@ -30,30 +30,32 @@ class StructureController extends Controller
         $userRoles = array_map('trim', explode(',', $user->role ?? ''));
         $isStaff = array_intersect($userRoles, ['admin', 'backoffice', 'support', 'head', 'calculations', 'corrections']);
         $consultant = Consultant::where('webUser', $user->id)->first();
+        $hasFilters = $this->hasActiveFilters($request);
 
-        // Staff without consultant role → show top-level consultants (no inviter) as tree roots
+        // Staff without consultant role → top-level (no inviter) или flat-поиск
         if ($isStaff && ! in_array('consultant', $userRoles)) {
-            // If searching — flat search across all consultants
-            if ($request->filled('search')) {
+            // Если активен ЛЮБОЙ фильтр — flat search across all consultants.
+            // Раньше срабатывало только на `search`, а фильтры
+            // qualification/status/ЛП/ГП/НГП/город применялись поверх
+            // top-level (~ корни структуры) — большинство матчей оказывалось
+            // глубоко и просто не попадало в выдачу.
+            if ($hasFilters) {
                 $query = Consultant::whereNull('dateDeleted')
-                    ->where('personName', 'ilike', '%' . $request->search . '%');
-
-                $rows = $query->orderBy('personName')->limit(100)->get();
+                    ->whereNotIn('id', $this->systemConsultantIds());
+                if ($request->filled('search')) {
+                    $query->where('personName', 'ilike', '%' . $request->search . '%');
+                }
+                $rows = $query->orderBy('personName')->limit(500)->get();
                 $members = $this->consultantService->formatMembers($rows);
-                // Let the service map status/activity aliases and other filters
                 $members = $this->consultantService->applyFilters($members, $request->all());
 
                 return response()->json(['data' => $members->values()]);
             }
 
-            // No search → show top-level structure (consultants without inviter).
+            // Нет фильтров → top-level structure (consultants без inviter).
             // Терминированных-сирот в корне НЕ показываем: после терминации
-            // их структура улетает наставнику, поэтому видеть их «висящими»
-            // в верхушке нет смысла — они только засоряют дерево.
-            //
-            // Также скрываем системные аккаунты (role=supreme — глобальный
-            // супер-юзер; «Неизвестный консультант» — служебная сущность
-            // per spec ✅Бизнес-логика «Неизвестного консультанта»).
+            // их структура улетает наставнику. Также скрываем системные
+            // аккаунты (supreme, «Неизвестный консультант»).
             $topLevelRows = Consultant::whereNull('dateDeleted')
                 ->where(function ($q) {
                     $q->whereNull('inviter')->orWhere('inviter', 0);
@@ -63,26 +65,76 @@ class StructureController extends Controller
                 ->orderBy('personName')
                 ->get();
             $topLevel = $this->consultantService->formatMembers($topLevelRows);
-
-            $members = $this->consultantService->applyFilters($topLevel, $request->all());
-            return response()->json(['data' => $members->values()]);
+            return response()->json(['data' => $topLevel->values()]);
         }
 
-        // Consultant → show own team
+        // Consultant → собственное поддерево
         if (! $consultant) {
             return response()->json(['data' => []]);
         }
 
-        // Children = consultants whose inviter is this consultant
+        // С фильтрами → flat-поиск по ВСЕМ потомкам через recursive CTE.
+        // Раньше брались только прямые children (inviter=$consultant->id),
+        // и фильтр применялся поверх. Если матч глубже — оператор видел
+        // пустой результат и не мог развернуть. Теперь рекурсивно.
+        if ($hasFilters) {
+            $descendantIds = $this->descendantIds($consultant->id);
+            $rows = Consultant::whereIn('id', $descendantIds)
+                ->whereNull('dateDeleted')
+                ->orderBy('personName')
+                ->limit(500)
+                ->get();
+            $members = $this->consultantService->formatMembers($rows);
+            $members = $this->consultantService->applyFilters($members, $request->all());
+            return response()->json(['data' => $members->values()]);
+        }
+
+        // Без фильтров → 1-я линия команды как корень дерева.
         $rows = Consultant::where('inviter', $consultant->id)
             ->whereNull('dateDeleted')
             ->get();
         $members = $this->consultantService->formatMembers($rows);
-
-        // Apply filters
-        $members = $this->consultantService->applyFilters($members, $request->all());
-
         return response()->json(['data' => $members->values()]);
+    }
+
+    /**
+     * Активирован ли хоть один фильтр-параметр (исключая page/limit).
+     * Используется для переключения tree↔flat-режима в index/children.
+     */
+    private function hasActiveFilters(Request $request): bool
+    {
+        foreach (['search', 'last_name', 'first_name', 'patronymic',
+                  'qualification', 'levels', 'status', 'activity',
+                  'birth_date_from', 'birth_date_to', 'city',
+                  'lp_min', 'lp_max', 'gp_min', 'gp_max', 'ngp_min', 'ngp_max',
+                  'termination_from', 'termination_to'] as $key) {
+            if ($request->filled($key)) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Все consultant.id ниже корня (не включая сам корень) — рекурсивно
+     * через PostgreSQL CTE. Удаленные исключаются сразу, чтобы не тащить
+     * orphan-ветки через soft-deleted родителя.
+     *
+     * @return list<int>
+     */
+    private function descendantIds(int $rootId): array
+    {
+        $rows = DB::select(
+            'WITH RECURSIVE descendants AS (
+                SELECT id FROM consultant
+                 WHERE inviter = ? AND "dateDeleted" IS NULL
+                UNION ALL
+                SELECT c.id FROM consultant c
+                JOIN descendants d ON c.inviter = d.id
+                WHERE c."dateDeleted" IS NULL
+            )
+            SELECT id FROM descendants',
+            [$rootId]
+        );
+        return array_map(fn ($r) => (int) $r->id, $rows);
     }
 
     public function children(Request $request, int $consultantId): JsonResponse
