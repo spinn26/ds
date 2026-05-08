@@ -13,12 +13,12 @@
       <div class="d-flex flex-wrap align-center ga-3">
         <div class="d-flex align-center ga-2">
           <span class="text-caption text-medium-emphasis">Уровни:</span>
-          <v-chip size="x-small" :color="levelColor('view')" variant="tonal" label>view</v-chip>
-          <span class="text-caption">просмотр</span>
-          <v-chip size="x-small" :color="levelColor('edit')" variant="tonal" label>edit</v-chip>
-          <span class="text-caption">+ редактирование</span>
-          <v-chip size="x-small" :color="levelColor('full')" variant="tonal" label>full</v-chip>
-          <span class="text-caption">+ удаление / системные действия</span>
+          <v-chip size="x-small" :color="levelColor('view')" variant="tonal" label>Просмотр</v-chip>
+          <span class="text-caption text-medium-emphasis">read-only</span>
+          <v-chip size="x-small" :color="levelColor('edit')" variant="tonal" label>Правка</v-chip>
+          <span class="text-caption text-medium-emphasis">+ добавление/редактирование</span>
+          <v-chip size="x-small" :color="levelColor('full')" variant="tonal" label>Полный</v-chip>
+          <span class="text-caption text-medium-emphasis">+ удаление / системные действия</span>
         </div>
         <v-divider vertical class="mx-2" />
         <v-text-field v-model="filterText" placeholder="Поиск группы или раздела"
@@ -82,7 +82,7 @@
                       </v-list-item>
                       <v-list-item v-if="g.key !== 'admin'" prepend-icon="mdi-eye-outline"
                         @click="bulkSet(g, 'view')">
-                        <v-list-item-title>Все разделы → view</v-list-item-title>
+                        <v-list-item-title>Все разделы → Просмотр</v-list-item-title>
                       </v-list-item>
                       <v-list-item v-if="g.key !== 'admin'" prepend-icon="mdi-close-circle-outline"
                         @click="bulkSet(g, '')">
@@ -104,7 +104,7 @@
               <td v-for="s in filteredSections" :key="s.key" class="td-cell">
                 <v-chip v-if="g.key === 'admin'" size="small"
                   :color="levelColor('full')" variant="flat" label>
-                  <v-icon size="12" start>mdi-check-bold</v-icon>full
+                  <v-icon size="12" start>mdi-check-bold</v-icon>{{ levelLabel('full') }}
                 </v-chip>
                 <v-menu v-else location="bottom" :close-on-content-click="true">
                   <template #activator="{ props }">
@@ -115,19 +115,19 @@
                       :class="{ 'cell-chip--empty': !g.permissions[s.key], 'cell-chip--saving': savingCells[`${g.id}:${s.key}`] }">
                       <v-progress-circular v-if="savingCells[`${g.id}:${s.key}`]"
                         size="10" width="2" indeterminate class="me-1" />
-                      <span>{{ g.permissions[s.key] || '—' }}</span>
+                      <span>{{ levelLabel(g.permissions[s.key]) }}</span>
                       <v-icon size="12" end>mdi-chevron-down</v-icon>
                     </v-chip>
                   </template>
-                  <v-list density="compact" min-width="220">
+                  <v-list density="compact" min-width="240">
                     <v-list-item v-for="opt in cellOptions" :key="opt.value"
                       :active="(g.permissions[s.key] || '') === opt.value"
                       @click="onLevelChange(g, s.key, opt.value)">
                       <template #prepend>
                         <v-chip v-if="opt.value" size="x-small" :color="levelColor(opt.value)"
-                          variant="flat" label class="me-2">{{ opt.value }}</v-chip>
+                          variant="flat" label class="me-2">{{ levelLabel(opt.value) }}</v-chip>
                         <span v-else class="text-medium-emphasis me-2"
-                          style="display:inline-block;min-width:48px;text-align:center">—</span>
+                          style="display:inline-block;min-width:64px;text-align:center">—</span>
                       </template>
                       <v-list-item-title class="text-body-2">{{ opt.label }}</v-list-item-title>
                     </v-list-item>
@@ -206,14 +206,21 @@ const filterText = ref('');
 const savingCells = ref({});
 
 const cellOptions = [
-  { value: '',     label: 'Нет доступа (раздел скрыт)' },
-  { value: 'view', label: 'Просмотр (read-only)' },
-  { value: 'edit', label: 'Редактирование (+добавление)' },
-  { value: 'full', label: 'Полный доступ (+удаление)' },
+  { value: '',     label: 'Нет доступа — раздел скрыт в меню' },
+  { value: 'view', label: 'Только просмотр (read-only)' },
+  { value: 'edit', label: 'Правка: добавление и редактирование' },
+  { value: 'full', label: 'Полный доступ + удаление и системные действия' },
 ];
 
 function levelColor(level) {
   return { view: 'info', edit: 'warning', full: 'success' }[level] || 'default';
+}
+
+// Отображаемое название уровня (рус). Сами значения в БД и API
+// остаются английскими (view/edit/full) — так короче в коде, в JSON
+// и не зависит от локали при импорте/экспорте между средами.
+function levelLabel(level) {
+  return { view: 'Просмотр', edit: 'Правка', full: 'Полный' }[level] || '—';
 }
 
 const filteredGroups = computed(() => {
@@ -296,7 +303,9 @@ async function savePermissions(group, savingKey) {
 }
 
 async function bulkSet(group, level) {
-  const action = level ? `выставить «${level}» для всех разделов` : 'сбросить все права';
+  const action = level
+    ? `выставить «${levelLabel(level)}» для всех разделов`
+    : 'сбросить все права';
   if (!await confirm.ask({
     title: 'Массовое изменение',
     message: `Группа «${group.name}» — ${action}? Действие применяется ко всем ${sections.value.length} разделам.`,
@@ -452,6 +461,10 @@ onMounted(load);
   min-width: 280px;
   max-width: 320px;
   border-right: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  /* Тень-«край» — видно что контент уезжает под sticky-колонку при
+     горизонтальном скролле. Без этого пользователь не понимает где
+     заканчивается фиксированная часть и начинается прокручиваемая. */
+  box-shadow: 6px 0 8px -4px rgba(0, 0, 0, 0.1);
 }
 .th-group { z-index: 3; }   /* пересечение sticky-row и sticky-col */
 
@@ -527,9 +540,22 @@ onMounted(load);
   width: 32px;
   position: sticky;
   right: 0;
+  z-index: 1;
   background: rgb(var(--v-theme-surface));
   border-left: 1px solid rgba(var(--v-theme-on-surface), 0.08);
   text-align: center;
+  /* Аналогичная тень с правой стороны — симметрично левому sticky. */
+  box-shadow: -6px 0 8px -4px rgba(0, 0, 0, 0.1);
 }
 .th-actions { z-index: 3; }
+
+/* Тёмная тема — тени контрастнее, чтобы не сливались с фоном. */
+:global(.v-theme--dark) .th-group,
+:global(.v-theme--dark) .td-group {
+  box-shadow: 6px 0 12px -4px rgba(0, 0, 0, 0.4) !important;
+}
+:global(.v-theme--dark) .th-actions,
+:global(.v-theme--dark) .td-actions {
+  box-shadow: -6px 0 12px -4px rgba(0, 0, 0, 0.4) !important;
+}
 </style>
