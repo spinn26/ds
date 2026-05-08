@@ -122,27 +122,34 @@
       </v-col>
     </v-row>
 
-    <!-- Breakaway card — всегда показывает топ-ветку и её % от моего ГП.
-         Цвет отражает пороги: 70% (gpHeld) и 90% (poolBlocked).
-         Используем theme-токены success/warning/error + variant=tonal —
-         Vuetify сама подбирает читаемый текст и в light, и в dark теме.
-         Раньше на dark-теме карточка с green-lighten-5 (named color) делала
-         текст почти невидимым из-за наследуемого светлого text color. -->
-    <v-card v-if="summary.breakaway" class="mb-4 pa-4"
-      :color="summary.breakaway.poolBlocked ? 'error'
-            : summary.breakaway.gpHeld ? 'warning'
-            : 'success'" variant="tonal">
-      <div class="d-flex align-center ga-2 mb-2">
-        <v-icon>
-          {{ summary.breakaway.poolBlocked ? 'mdi-alert-decagram'
-           : summary.breakaway.gpHeld ? 'mdi-alert-circle-outline'
-           : 'mdi-check-decagram' }}
-        </v-icon>
-        <span class="font-weight-bold">
+    <!-- Breakaway card — топ-ветка + доля + шкала с порогами 70/90.
+         Цвет статуса (success / warning / error) виден только в:
+           • левой бордер-полосе карточки (индикатор),
+           • плашке-чипе в заголовке,
+           • прогресс-баре,
+           • значении «Доля от моего ГП».
+         Сама карточка остаётся на surface — text-medium-emphasis и
+         обычный текст читаемы. Раньше color='success' на v-card цеплял
+         tonal-фон + наследуемый зелёный text color, из-за чего labels
+         типа «Топ ветка», «ГП ветки» становились почти невидимыми. -->
+    <v-card v-if="summary.breakaway" class="mb-4 pa-4 breakaway-card"
+      :class="`breakaway-card--${
+        summary.breakaway.poolBlocked ? 'error'
+        : summary.breakaway.gpHeld ? 'warning'
+        : 'success'
+      }`">
+      <div class="d-flex align-center ga-2 mb-3">
+        <v-chip size="small" variant="flat"
+          :color="summary.breakaway.poolBlocked ? 'error'
+                : summary.breakaway.gpHeld ? 'warning'
+                : 'success'"
+          :prepend-icon="summary.breakaway.poolBlocked ? 'mdi-alert-decagram'
+                       : summary.breakaway.gpHeld ? 'mdi-alert-circle-outline'
+                       : 'mdi-check-decagram'">
           {{ summary.breakaway.poolBlocked ? 'Отрыв ≥ 90% — пул не выплачивается'
            : summary.breakaway.gpHeld ? 'Отрыв ≥ 70% — ветка не учитывается в ГП'
            : 'Отрыва нет' }}
-        </span>
+        </v-chip>
       </div>
       <v-row>
         <v-col cols="6" md="3">
@@ -155,7 +162,10 @@
         </v-col>
         <v-col cols="6" md="3">
           <div class="text-body-2 text-medium-emphasis">Доля от моего ГП</div>
-          <div class="font-weight-bold">
+          <div class="font-weight-bold"
+            :class="summary.breakaway.poolBlocked ? 'text-error'
+                  : summary.breakaway.gpHeld ? 'text-warning'
+                  : 'text-success'">
             {{ summary.breakaway.gapPercentage ?? 0 }}%
           </div>
         </v-col>
@@ -470,3 +480,21 @@ async function loadData() {
 
 onMounted(loadData);
 </script>
+
+<style scoped>
+/* Карточка breakaway — нейтральный surface + цветная полоса слева
+   как индикатор статуса. Цвет берём из theme-токенов через rgb()
+   обёртку, чтобы корректно реагировать на light/dark темы. */
+.breakaway-card {
+  border-left: 4px solid transparent !important;
+}
+.breakaway-card--success {
+  border-left-color: rgb(var(--v-theme-success)) !important;
+}
+.breakaway-card--warning {
+  border-left-color: rgb(var(--v-theme-warning)) !important;
+}
+.breakaway-card--error {
+  border-left-color: rgb(var(--v-theme-error)) !important;
+}
+</style>
