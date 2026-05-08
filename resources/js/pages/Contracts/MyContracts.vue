@@ -3,91 +3,103 @@
     <PageHeader title="Контракты моих клиентов" icon="mdi-file-document" :count="total" />
 
     <!-- Per spec ✅Контакты моих клиентов §1: фильтры по номеру, ФИО клиента,
-         датам (открытия/добавления), продукту, программе, сроку, сумме, статусу. -->
+         датам (открытия/добавления), продукту, программе, сроку, сумме, статусу.
+         Компактный layout: основные фильтры в одной строке, диапазоны
+         (даты/сумма/срок) и редко используемые — за тогглом «Ещё». -->
     <v-card class="mb-3 pa-3">
-      <v-row dense>
-        <v-col cols="12" md="2">
-          <v-text-field v-model="filters.number" placeholder="№ контракта"
-            density="comfortable" variant="outlined" hide-details clearable
-            prepend-inner-icon="mdi-file-document"
-            @update:model-value="debouncedLoad" />
-        </v-col>
-        <v-col cols="12" md="3">
-          <v-text-field v-model="filters.clientName" placeholder="ФИО клиента"
-            density="comfortable" variant="outlined" hide-details clearable
-            prepend-inner-icon="mdi-account"
-            @update:model-value="debouncedLoad" />
-        </v-col>
-        <v-col cols="12" md="2">
-          <v-text-field v-model="filters.openedFrom" type="date" label="Открыт с"
-            density="comfortable" variant="outlined" hide-details
-            @update:model-value="loadData" />
-        </v-col>
-        <v-col cols="12" md="2">
-          <v-text-field v-model="filters.openedTo" type="date" label="Открыт по"
-            density="comfortable" variant="outlined" hide-details
-            @update:model-value="loadData" />
-        </v-col>
-        <v-col cols="12" md="2">
-          <v-text-field v-model="filters.createdFrom" type="date" label="Заведён с"
-            density="comfortable" variant="outlined" hide-details
-            @update:model-value="loadData" />
-        </v-col>
-        <v-col cols="12" md="2">
-          <v-text-field v-model="filters.createdTo" type="date" label="Заведён по"
-            density="comfortable" variant="outlined" hide-details
-            @update:model-value="loadData" />
-        </v-col>
-        <v-col cols="12" md="3">
-          <v-autocomplete v-model="filters.product" :items="productOptions"
-            item-title="name" item-value="id" label="Продукт"
-            density="comfortable" variant="outlined" hide-details clearable
-            @update:model-value="onProductChange" />
-        </v-col>
-        <v-col cols="12" md="3">
-          <v-autocomplete v-model="filters.program" :items="filteredPrograms"
-            item-title="name" item-value="id" label="Программа"
-            density="comfortable" variant="outlined" hide-details clearable
-            :disabled="!filters.product"
-            @update:model-value="loadData" />
-        </v-col>
-        <v-col cols="6" md="2">
-          <v-text-field v-model.number="filters.amountMin" type="number" label="Сумма от"
-            density="comfortable" variant="outlined" hide-details clearable
-            @update:model-value="debouncedLoad" />
-        </v-col>
-        <v-col cols="6" md="2">
-          <v-text-field v-model.number="filters.amountMax" type="number" label="Сумма до"
-            density="comfortable" variant="outlined" hide-details clearable
-            @update:model-value="debouncedLoad" />
-        </v-col>
-        <v-col cols="6" md="2">
-          <v-text-field v-model.number="filters.termMin" type="number" label="Срок ≥, лет"
-            density="comfortable" variant="outlined" hide-details clearable
-            @update:model-value="debouncedLoad" />
-        </v-col>
-        <v-col cols="6" md="2">
-          <v-text-field v-model.number="filters.termMax" type="number" label="Срок ≤, лет"
-            density="comfortable" variant="outlined" hide-details clearable
-            @update:model-value="debouncedLoad" />
-        </v-col>
-        <v-col cols="12" md="3">
-          <v-select v-model="filters.status" :items="statusOptions" item-title="name" item-value="id"
-            label="Статус контракта"
-            density="comfortable" variant="outlined" hide-details clearable
-            @update:model-value="loadData" />
-        </v-col>
-        <v-col cols="auto" class="d-flex align-center">
-          <v-chip v-if="activeFilterCount > 0" size="small" color="info" variant="tonal" class="ms-1">
-            {{ activeFilterCount }} {{ activeFilterCount === 1 ? 'фильтр' : 'фильтра' }}
-          </v-chip>
-          <v-btn v-if="activeFilterCount > 0" size="small" variant="text" color="secondary"
-            prepend-icon="mdi-filter-remove" @click="resetFilters">Сбросить</v-btn>
-        </v-col>
-        <v-col cols="auto" class="d-flex align-center ms-auto">
-          <ColumnVisibilityMenu :headers="headers" v-model:visible="columnVisible" storage-key="my-contracts-cols" />
-        </v-col>
-      </v-row>
+      <!-- Primary filter row — most-used, always visible -->
+      <div class="d-flex flex-wrap ga-2 align-center">
+        <v-text-field v-model="filters.number" placeholder="№ контракта"
+          density="compact" variant="outlined" hide-details clearable
+          prepend-inner-icon="mdi-file-document" style="max-width: 180px"
+          @update:model-value="debouncedLoad" />
+        <v-text-field v-model="filters.clientName" placeholder="ФИО клиента"
+          density="compact" variant="outlined" hide-details clearable
+          prepend-inner-icon="mdi-account" style="max-width: 220px"
+          @update:model-value="debouncedLoad" />
+        <v-autocomplete v-model="filters.product" :items="productOptions"
+          item-title="name" item-value="id" placeholder="Продукт"
+          density="compact" variant="outlined" hide-details clearable
+          style="max-width: 200px"
+          @update:model-value="onProductChange" />
+        <v-autocomplete v-model="filters.program" :items="filteredPrograms"
+          item-title="name" item-value="id" placeholder="Программа"
+          density="compact" variant="outlined" hide-details clearable
+          :disabled="!filters.product" style="max-width: 200px"
+          @update:model-value="loadData" />
+        <v-select v-model="filters.status" :items="statusOptions"
+          item-title="name" item-value="id" placeholder="Статус"
+          density="compact" variant="outlined" hide-details clearable
+          style="max-width: 180px"
+          @update:model-value="loadData" />
+
+        <v-spacer />
+
+        <v-btn :variant="advancedOpen ? 'tonal' : 'text'" size="small"
+          :prepend-icon="advancedOpen ? 'mdi-chevron-up' : 'mdi-tune'"
+          @click="advancedOpen = !advancedOpen">
+          Ещё
+          <v-chip v-if="advancedActiveCount > 0" size="x-small" color="info"
+            variant="elevated" class="ms-1">{{ advancedActiveCount }}</v-chip>
+        </v-btn>
+        <v-chip v-if="activeFilterCount > 0" size="small" color="info" variant="tonal">
+          {{ activeFilterCount }} {{ activeFilterCount === 1 ? 'фильтр' : 'фильтра' }}
+        </v-chip>
+        <v-btn v-if="activeFilterCount > 0" size="small" variant="text" color="secondary"
+          prepend-icon="mdi-filter-remove" @click="resetFilters">Сбросить</v-btn>
+        <ColumnVisibilityMenu :headers="headers" v-model:visible="columnVisible"
+          storage-key="my-contracts-cols" />
+      </div>
+
+      <!-- Advanced filter row — date/amount/term ranges, hidden by default -->
+      <v-expand-transition>
+        <div v-show="advancedOpen" class="d-flex flex-wrap ga-3 mt-3">
+          <div class="filter-range">
+            <span class="text-caption text-medium-emphasis">Открыт</span>
+            <div class="d-flex ga-1">
+              <v-text-field v-model="filters.openedFrom" type="date" placeholder="с"
+                density="compact" variant="outlined" hide-details
+                @update:model-value="loadData" />
+              <v-text-field v-model="filters.openedTo" type="date" placeholder="по"
+                density="compact" variant="outlined" hide-details
+                @update:model-value="loadData" />
+            </div>
+          </div>
+          <div class="filter-range">
+            <span class="text-caption text-medium-emphasis">Заведён</span>
+            <div class="d-flex ga-1">
+              <v-text-field v-model="filters.createdFrom" type="date" placeholder="с"
+                density="compact" variant="outlined" hide-details
+                @update:model-value="loadData" />
+              <v-text-field v-model="filters.createdTo" type="date" placeholder="по"
+                density="compact" variant="outlined" hide-details
+                @update:model-value="loadData" />
+            </div>
+          </div>
+          <div class="filter-range">
+            <span class="text-caption text-medium-emphasis">Сумма</span>
+            <div class="d-flex ga-1">
+              <v-text-field v-model.number="filters.amountMin" type="number" placeholder="от"
+                density="compact" variant="outlined" hide-details clearable
+                @update:model-value="debouncedLoad" />
+              <v-text-field v-model.number="filters.amountMax" type="number" placeholder="до"
+                density="compact" variant="outlined" hide-details clearable
+                @update:model-value="debouncedLoad" />
+            </div>
+          </div>
+          <div class="filter-range">
+            <span class="text-caption text-medium-emphasis">Срок, лет</span>
+            <div class="d-flex ga-1">
+              <v-text-field v-model.number="filters.termMin" type="number" placeholder="≥"
+                density="compact" variant="outlined" hide-details clearable
+                @update:model-value="debouncedLoad" />
+              <v-text-field v-model.number="filters.termMax" type="number" placeholder="≤"
+                density="compact" variant="outlined" hide-details clearable
+                @update:model-value="debouncedLoad" />
+            </div>
+          </div>
+        </div>
+      </v-expand-transition>
     </v-card>
 
     <v-data-table-server :items="items" :items-length="total" :loading="loading"
@@ -100,6 +112,20 @@
       </template>
       <template #item.statusName="{ value }">
         <StatusChip :value="value" kind="contract" size="x-small" :text="value" />
+      </template>
+      <template #item.gpPoints="{ item }">
+        <span v-if="item.gpPoints != null" :class="item.isActual ? '' : 'text-medium-emphasis font-italic'">
+          {{ fmt(item.gpPoints) }}
+          <v-icon v-if="!item.isActual" size="12" class="ms-1" title="Прогноз">mdi-tilde</v-icon>
+        </span>
+        <span v-else class="text-medium-emphasis">—</span>
+      </template>
+      <template #item.myCommission="{ item }">
+        <span v-if="item.myCommission != null" :class="item.isActual ? '' : 'text-medium-emphasis font-italic'">
+          {{ fmt(item.myCommission) }} ₽
+          <v-icon v-if="!item.isActual" size="12" class="ms-1" title="Прогноз">mdi-tilde</v-icon>
+        </span>
+        <span v-else class="text-medium-emphasis">—</span>
       </template>
       <template #no-data><EmptyState /></template>
     </v-data-table-server>
@@ -122,6 +148,7 @@ const total = ref(0);
 const loading = ref(false);
 const page = ref(1);
 const perPage = ref(25);
+const advancedOpen = ref(false);
 const filters = ref({
   number: '',
   clientName: '',
@@ -154,6 +181,17 @@ const activeFilterCount = computed(() => {
     if (v !== '' && v !== null && v !== undefined) c++;
   });
   return c;
+});
+
+// Сколько активных фильтров спрятано в «Ещё» — нужен индикатор на тогле,
+// чтобы пользователь не пропустил, что фильтрация уже идёт по диапазонам.
+const ADVANCED_KEYS = ['openedFrom','openedTo','createdFrom','createdTo',
+                        'amountMin','amountMax','termMin','termMax'];
+const advancedActiveCount = computed(() => {
+  return ADVANCED_KEYS.reduce((acc, k) => {
+    const v = filters.value[k];
+    return acc + (v !== '' && v !== null && v !== undefined ? 1 : 0);
+  }, 0);
 });
 
 function resetFilters() {
@@ -192,6 +230,8 @@ const headers = [
   { title: 'Срок контракта', key: 'term', width: 120, cellProps: nowrap },
   { title: 'Сумма', key: 'ammount', width: 160, align: 'end', cellProps: nowrap },
   { title: 'Статус контракта', key: 'statusName', width: 170, cellProps: nowrap },
+  { title: 'ГП (баллы)', key: 'gpPoints', width: 130, align: 'end', cellProps: nowrap },
+  { title: 'Моё вознаграждение', key: 'myCommission', width: 180, align: 'end', cellProps: nowrap },
 ];
 
 const columnVisible = ref({});
@@ -251,3 +291,16 @@ onMounted(() => {
   loadFilterOptions();
 });
 </script>
+
+<style scoped>
+/* Компактные диапазоны: подпись + два узких инпута в строку. */
+.filter-range {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 220px;
+}
+.filter-range :deep(.v-field) {
+  min-width: 100px;
+}
+</style>

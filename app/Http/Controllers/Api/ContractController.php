@@ -75,6 +75,18 @@ class ContractController extends Controller
 
         $contracts = $this->contractService->formatContracts($contractRows);
 
+        // Прогноз/факт «ГП баллы» и «Моё вознаграждение» — единый формат
+        // с /contracts/team. Для своих клиентов viewer == seller, сервис
+        // считает полную комиссию по квалификации (а не маржу).
+        $forecasts = $this->forecast->forecastForContracts($contractRows, $consultant->id);
+        $contracts = $contracts->map(function ($c) use ($forecasts) {
+            $f = $forecasts[$c['id']] ?? null;
+            $c['gpPoints'] = $f['gp'] ?? null;
+            $c['myCommission'] = $f['commission'] ?? null;
+            $c['isActual'] = $f['isActual'] ?? false;
+            return $c;
+        });
+
         return response()->json(['data' => $contracts, 'total' => $total]);
     }
 

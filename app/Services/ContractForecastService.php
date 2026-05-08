@@ -98,11 +98,18 @@ class ContractForecastService
             }
 
             // Сценарий Б: прогноз
+            // Если это контракт самого viewer'а (свой клиент) — берём полную
+            // ставку квалификации, а не маржу (маржа = 0, продал сам себе).
+            // Это даёт корректную «Моё вознаграждение» на странице
+            // «Контракты моих клиентов», где консультант == viewer.
+            $isOwn = (int) ($c->consultant ?? 0) === $viewerConsultantId;
             $sellerPercent = (float) ($sellerLevels[$c->consultant]?->percent ?? 15);
-            $marginPercent = max(0, $viewerPercent - $sellerPercent);
+            $effectivePercent = $isOwn
+                ? $viewerPercent
+                : max(0, $viewerPercent - $sellerPercent);
             $dsPercent = (float) ($dsByProduct[$c->product] ?? 0);
 
-            if ($marginPercent <= 0 || $dsPercent <= 0) {
+            if ($effectivePercent <= 0 || $dsPercent <= 0) {
                 $result[$c->id] = ['gp' => 0, 'commission' => 0, 'isActual' => false];
                 continue;
             }
@@ -116,7 +123,7 @@ class ContractForecastService
             // ЛП = Выручка / 100 → база контракта в баллах
             $netRevenue = $amountRub * $dsPercent / 105;  // (×100/100)
             $points = $netRevenue / 100;
-            $commission = round($points * $marginPercent, 2);  // points × margin = rub (1 балл = 100 руб)
+            $commission = round($points * $effectivePercent, 2);  // points × % = rub (1 балл = 100 руб)
 
             $result[$c->id] = [
                 'gp' => round($points, 2),
