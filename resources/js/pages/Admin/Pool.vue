@@ -324,17 +324,21 @@ function activeCountAtLevel(lvl) {
   return n;
 }
 
-// Динамические share[L] для регулярного snapshot. Snapshot хранит share как
-// «делилось среди тех кто получил выплату на момент фиксации Directual», но
-// если оператор снимает галку — фонд должен перераздаться на оставшихся
-// (1% × выручка ÷ count(L+ active)). Не трогаем нерегулярные снапшоты —
-// у них в каждой строке свой payoutRub без матрёшки.
+// Динамические share[L]. Snapshot хранит share как «делилось среди тех
+// кто получил выплату на момент фиксации Directual», но если оператор
+// снимает галку — фонд должен перераздаться на оставшихся
+// (1% × выручка ÷ count(L+ активных)).
 //
-// Возвращает null если перераздача невозможна (нет fund / нерегулярка) —
-// тогда упадём на статический shareValues из бэка.
+// Условие применения — есть fund (revenue × POOL_PERCENT) и
+// detected как matryoshka layout (есть хоть один shareValues[L] > 0
+// ИЛИ это live-период). Нерегулярные snapshot (Apr-Aug 2025 с
+// прорейтом Архангельского) уже frozen — там toggleParticipates
+// заблокирован, эта computed не вызывается с другими цифрами.
+//
+// Возвращает null если перераздача невозможна (нет fund) — тогда
+// упадём на статический shareValues из бэка.
 const effectiveShares = computed(() => {
   if (!result.value) return null;
-  if (irregularSnapshot.value) return null;
   const fund = Number(result.value.fund || 0);
   if (fund <= 0) return null;
   const out = {};
@@ -365,36 +369,40 @@ const activeLevels = computed(() => {
   return [6, 7, 8, 9, 10].filter(lvl => shareForLevel(lvl) > 0);
 });
 
+// Если effectiveShares рассчитались (есть fund > 0), всегда идём по
+// матрёшке через них — даже если бэк пометил снапшот как irregular.
+// Это критично: при моде «оператор снимает галку» мы должны
+// перераздавать фонд, а не показывать static payoutRub из poolLog.
+// Static-fallback (через payoutRub) остаётся только когда fund
+// неизвестен — тогда back-derive невозможен.
+const useDynamicShares = computed(() => effectiveShares.value !== null);
+
 // Ячейка уровня в строке ИТОГО.
-//   Live: fund (если уровень активен).
-//   Регулярный snapshot: share(L) × cumulativeCount(L+ активных) — это и
-//     есть «1% × выручка», т.к. share = fund/count.
-//   Нерегулярный snapshot: сумма payoutRub участвующих партнёров уровня L.
+//   useDynamic (любой период с известным fund): share(L) × count(L+).
+//   Иначе (только legacy фолбек): сумма payoutRub partners уровня L.
 function totalCellForLevel(lvl) {
   if (!result.value) return 0;
-  if (irregularSnapshot.value) {
-    let s = 0;
-    for (const p of result.value.participants || []) {
-      if (p.level === lvl && isCountable(p)) s += Number(p.payoutRub);
-    }
-    return s;
-  }
-  if (isHistoricalView.value) {
+  if (useDynamicShares.value) {
     const share = shareForLevel(lvl);
     if (share <= 0) return 0;
     return share * activeCountAtLevel(lvl);
   }
-  return activeLevels.value.includes(lvl) ? Number(result.value.fund || 0) : 0;
+  // Fallback — fund неизвестен. Идём по статике payoutRub.
+  let s = 0;
+  for (const p of result.value.participants || []) {
+    if (p.level === lvl && isCountable(p)) s += Number(p.payoutRub);
+  }
+  return s;
 }
 
 // Матрёшка для строк партнёров.
-//   Live + регулярный snapshot: byLevel[L] = effectiveShare(L) для L≤partner.level.
-//     payoutRub партнёра пересчитывается = sum byLevel[6..level].
-//   Нерегулярный snapshot: byLevel[partner.level] = payoutRub целиком,
-//     перераздачи нет (back-derive не сходится).
+//   useDynamic: byLevel[L] = effectiveShare(L) для L≤partner.level,
+//     payoutRub = sum byLevel[6..level] — пересчитывается на лету при
+//     изменении галок.
+//   Fallback: berём static payoutRub из poolLog как одну ячейку.
 const payoutRows = computed(() => {
   if (!result.value) return [];
-  const irregular = irregularSnapshot.value;
+  const dynamic = useDynamicShares.value;
   const revenue = result.value.revenue === null || result.value.revenue === undefined
     ? null : Number(result.value.revenue);
   return (result.value.participants || [])
@@ -402,17 +410,15 @@ const payoutRows = computed(() => {
     .map(p => {
       const byLevel = { 6: 0, 7: 0, 8: 0, 9: 0, 10: 0 };
       let payout = 0;
-      if (irregular) {
-        if (p.level >= 6 && p.level <= 10) {
-          byLevel[p.level] = Number(p.payoutRub);
-          payout = Number(p.payoutRub);
-        }
-      } else {
+      if (dynamic) {
         for (let lvl = 6; lvl <= p.level; lvl++) {
           const s = shareForLevel(lvl);
           byLevel[lvl] = s;
           payout += s;
         }
+      } else if (p.level >= 6 && p.level <= 10) {
+        byLevel[p.level] = Number(p.payoutRub);
+        payout = Number(p.payoutRub);
       }
       return {
         id: p.id,
