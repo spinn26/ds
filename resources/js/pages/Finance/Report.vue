@@ -123,15 +123,17 @@
     </v-row>
 
     <!-- Breakaway card — всегда показывает топ-ветку и её % от моего ГП.
-         Цвет/иконка отражают пройденные пороги: 70% (gpHeld) и 90% (poolBlocked). -->
+         Цвет отражает пороги: 70% (gpHeld) и 90% (poolBlocked).
+         Используем theme-токены success/warning/error + variant=tonal —
+         Vuetify сама подбирает читаемый текст и в light, и в dark теме.
+         Раньше на dark-теме карточка с green-lighten-5 (named color) делала
+         текст почти невидимым из-за наследуемого светлого text color. -->
     <v-card v-if="summary.breakaway" class="mb-4 pa-4"
-      :color="summary.breakaway.poolBlocked ? 'amber-lighten-5'
-            : summary.breakaway.gpHeld ? 'orange-lighten-5'
-            : 'green-lighten-5'" variant="tonal">
+      :color="summary.breakaway.poolBlocked ? 'error'
+            : summary.breakaway.gpHeld ? 'warning'
+            : 'success'" variant="tonal">
       <div class="d-flex align-center ga-2 mb-2">
-        <v-icon :color="summary.breakaway.poolBlocked ? 'amber-darken-2'
-                       : summary.breakaway.gpHeld ? 'orange-darken-2'
-                       : 'success'">
+        <v-icon>
           {{ summary.breakaway.poolBlocked ? 'mdi-alert-decagram'
            : summary.breakaway.gpHeld ? 'mdi-alert-circle-outline'
            : 'mdi-check-decagram' }}
@@ -153,8 +155,7 @@
         </v-col>
         <v-col cols="6" md="3">
           <div class="text-body-2 text-medium-emphasis">Доля от моего ГП</div>
-          <div class="font-weight-medium" :class="summary.breakaway.poolBlocked ? 'text-amber-darken-3'
-                                                : summary.breakaway.gpHeld ? 'text-orange-darken-2' : 'text-success'">
+          <div class="font-weight-bold">
             {{ summary.breakaway.gapPercentage ?? 0 }}%
           </div>
         </v-col>
@@ -168,8 +169,8 @@
         <v-progress-linear
           :model-value="Math.min(summary.breakaway.gapPercentage || 0, 100)"
           height="8" rounded
-          :color="summary.breakaway.poolBlocked ? 'amber-darken-2'
-                : summary.breakaway.gpHeld ? 'orange-darken-2'
+          :color="summary.breakaway.poolBlocked ? 'error'
+                : summary.breakaway.gpHeld ? 'warning'
                 : 'success'" />
         <div class="d-flex justify-space-between text-caption text-medium-emphasis mt-1">
           <span>0%</span>
@@ -251,22 +252,23 @@
         </v-expansion-panel-text>
       </v-expansion-panel>
 
-      <!-- Breakaway Detail -->
-      <v-expansion-panel v-if="tables.breakaway">
+      <!-- Breakaway Detail — список ВСЕХ прямых приглашённых партнёров
+           с их НГП и долей от моего НГП (= «Отрыв»). Эталон легаси-отчёта.
+           Терминированные исключаются на бэке. -->
+      <v-expansion-panel v-if="tables.breakaway?.length">
         <v-expansion-panel-title>
           <v-icon class="mr-2" size="20">mdi-alert-decagram</v-icon>
           Детали отрыва
+          <v-chip size="x-small" class="ml-2" color="primary">{{ tables.breakaway.length }}</v-chip>
         </v-expansion-panel-title>
         <v-expansion-panel-text>
-          <v-table density="compact">
-            <tbody>
-              <tr><td class="text-medium-emphasis">Разница (gap)</td><td>{{ tables.breakaway.gap ?? '—' }}</td></tr>
-              <tr><td class="text-medium-emphasis">Значение</td><td>{{ fmt(tables.breakaway.gapValue) }}</td></tr>
-              <tr><td class="text-medium-emphasis">Процент</td><td>{{ tables.breakaway.gapValuePercentage ?? 0 }}%</td></tr>
-              <tr><td class="text-medium-emphasis">Ветка</td><td>{{ tables.breakaway.branchWithGapName || '—' }}</td></tr>
-              <tr><td class="text-medium-emphasis">ГП ветки</td><td>{{ fmt(tables.breakaway.branchWithGapGroupVolume) }}</td></tr>
-            </tbody>
-          </v-table>
+          <div style="overflow-x: auto">
+            <v-data-table :items="tables.breakaway" :headers="breakawayHeaders"
+              :items-per-page="50" density="compact" hover no-data-text="Нет приглашённых">
+              <template #item.groupVolume="{ value }">{{ fmt(value) }}</template>
+              <template #item.gapPercentage="{ value }">{{ fmt2(value) }}%</template>
+            </v-data-table>
+          </div>
         </v-expansion-panel-text>
       </v-expansion-panel>
 
@@ -405,6 +407,15 @@ const paymentsHeaders = [
   { title: 'Дата', key: 'date', width: 130 },
   { title: 'Сумма, ₽', key: 'amount', align: 'end', width: 160 },
   { title: 'Комментарий', key: 'comment' },
+];
+
+// Заголовки таблицы веток (детали отрыва) — эталон легаси-отчёта.
+// Сортировка по умолчанию приходит с бэка (gap% desc), но v-data-table
+// позволит оператору пересортировать кликом по заголовку.
+const breakawayHeaders = [
+  { title: 'Партнёр', key: 'partnerName' },
+  { title: 'ГП', key: 'groupVolume', align: 'end', width: 140 },
+  { title: 'Отрыв', key: 'gapPercentage', align: 'end', width: 120 },
 ];
 
 // Если ни одна строка таблицы не содержит флага productHasProperty/Term/YearKv

@@ -461,16 +461,87 @@ class FinanceReportService
                 'personalSales' => $personalSalesTable,
                 'groupSales' => $groupSalesTable,
                 'otherAccruals' => $otherAccrualsTable,
-                'breakaway' => $breakaway ? [[
-                    'partnerName' => $breakaway['partnerName'],
-                    'groupVolume' => $breakaway['groupVolume'],
-                    'gapPercentage' => $breakaway['gapPercentage'],
-                ]] : [],
+                // Список ВСЕХ прямых приглашённых партнёров с их НГП за месяц
+                // и долей от моего НГП. Эталон легаси-отчёта Directual: каждая
+                // ветка отдельной строкой, отсортировано по убыванию доли.
+                // Терминированные (activity=3) исключаются — они не должны
+                // фигурировать в рассчёте отрыва.
+                'breakaway' => $this->buildBranchTable($consultant, $month, $qLogCurrent),
                 'payments' => $payments,
             ],
             'currencyRates' => $currencyRates,
             'period' => $month,
         ];
+    }
+
+    /**
+     * Список первой линии (прямых приглашённых) для блока «Детали отрыва».
+     *
+     * Эталон легаси-отчёта Directual: каждая ветка отдельной строкой
+     * с её НГП за месяц и долей от моего НГП. Сортировка — по убыванию
+     * доли. Терминированные (PartnerActivity::Terminated) исключаются —
+     * их объёмы не должны участвовать в расчёте отрыва.
+     *
+     * Если у партнёра нет qualificationLog за период (не подтвердил
+     * квалификацию или зашёл недавно) — gv=0, gap%=0, но строка
+     * остаётся в таблице, чтобы оператор видел всех приглашённых.
+     *
+     * @param  object|null  $qLogCurrent  qualificationLog консультанта за месяц
+     */
+    private function buildBranchTable(Consultant $consultant, string $month, $qLogCurrent): array
+    {
+        $myGv = (float) ($qLogCurrent->groupVolumeCumulative ?? 0);
+        $monthStart = $month . '-01';
+        $monthEnd = date('Y-m-d', strtotime("$monthStart +1 month"));
+
+        // Берём latest qualificationLog в окне периода для каждого
+        // приглашённого. DISTINCT ON по consultant с ORDER BY date DESC
+        // даёт последнюю запись в месяце.
+        $rows = DB::select(
+            '
+            SELECT
+                c.id,
+                c."personName",
+                ql_last."groupVolumeCumulative" AS gv
+            FROM consultant c
+            LEFT JOIN LATERAL (
+                SELECT ql."groupVolumeCumulative"
+                FROM "qualificationLog" ql
+                WHERE ql.consultant = c.id
+                  AND ql.date >= ? AND ql.date < ?
+                  AND ql."dateDeleted" IS NULL
+                ORDER BY ql.date DESC
+                LIMIT 1
+            ) ql_last ON TRUE
+            WHERE c.inviter = ?
+              AND c."dateDeleted" IS NULL
+              AND c.activity <> ?
+            ',
+            [
+                $monthStart,
+                $monthEnd,
+                $consultant->id,
+                \App\Enums\PartnerActivity::Terminated->value,
+            ]
+        );
+
+        $items = array_map(function ($r) use ($myGv) {
+            $gv = (float) ($r->gv ?? 0);
+            return [
+                'id' => (int) $r->id,
+                'partnerName' => $r->personName ?: ('Партнёр #' . $r->id),
+                'groupVolume' => round($gv, 2),
+                'gapPercentage' => $myGv > 0 ? round($gv / $myGv * 100, 2) : 0,
+            ];
+        }, $rows);
+
+        // Сортировка по убыванию доли (gap%), при равенстве — по ГП.
+        usort($items, function ($a, $b) {
+            return $b['gapPercentage'] <=> $a['gapPercentage']
+                ?: $b['groupVolume'] <=> $a['groupVolume'];
+        });
+
+        return $items;
     }
 
     /**
