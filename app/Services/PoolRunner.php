@@ -565,27 +565,51 @@ class PoolRunner
 
         $totalPaid = array_sum(array_column($participants, 'payoutRub'));
 
-        // ИСТОРИЧЕСКИЙ / ЗАМОРОЖЕННЫЙ ПЕРИОД — выводим только то, что
-        // реально лежит в `poolLog`.
+        // ИСТОРИЧЕСКИЙ / ЗАМОРОЖЕННЫЙ ПЕРИОД — back-derive shareValues
+        // из реальных payoutRub в poolLog.
         //
-        // Раньше revenue считался по ТЕКУЩЕЙ transaction-таблице, fund =
-        // revenue × 1%, shareValues пересчитывались из текущего
-        // qualificationLog. Все три могут «уехать» относительно того,
-        // что было на момент фиксации (транзакции отредактировали,
-        // qLog пересчитали и т.п.). В UI это выглядело как:
-        //   • payoutRub в строках — реальные выплаты из poolLog,
-        //   • Выручка/Фонд/ИТОГО — расчёт «по сегодняшним данным»,
-        //   • цифры расходились на десятки процентов.
+        // Логика матрёшки: партнёр уровня L получил share(6)+share(7)+…+share(L).
+        // По одной строке poolLog мы видим суммарный payout, а не разбивку.
+        // Но если на нескольких уровнях есть участники, доли восстанавливаются
+        // последовательно:
+        //   share[6] = payout уровня 6 (только share(6))
+        //   share[7] = payout уровня 7 − share[6]
+        //   share[8] = payout уровня 8 − share[6] − share[7]
+        //   …
         //
-        // Решение: revenue/fund/shareValues отдаём как null. Frontend
-        // по флагу fromPoolLog рендерит «—» в этих колонках, ИТОГО
-        // считает как фактическую сумму payoutRub из снимка.
+        // По уровню берём MAX (а не среднее) — на уровне могут быть
+        // дисквалифицированные с payout=0; представительная доля — у тех,
+        // кому реально заплатили. Если на уровне никого нет — share[L]=0
+        // (информации нет, но это не влияет на сумму выплат).
+        //
+        // revenue/fund/forfeited по-прежнему null — этих чисел в poolLog нет,
+        // back-derive некорректен (forfeited зависит от ВСЕХ номинальных
+        // партнёров уровня, а у нас только те, кому что-то выплатили).
+        $maxByLevel = array_fill_keys(range(PoolCalculator::LEADER_LEVEL_MIN, PoolCalculator::LEADER_LEVEL_MAX), 0);
+        foreach ($participants as $p) {
+            $lvl = (int) ($p['level'] ?? 0);
+            if ($lvl >= PoolCalculator::LEADER_LEVEL_MIN && $lvl <= PoolCalculator::LEADER_LEVEL_MAX) {
+                $maxByLevel[$lvl] = max($maxByLevel[$lvl], (float) $p['payoutRub']);
+            }
+        }
+        $shareValues = [];
+        $cumulativeLower = 0;
+        for ($lvl = PoolCalculator::LEADER_LEVEL_MIN; $lvl <= PoolCalculator::LEADER_LEVEL_MAX; $lvl++) {
+            if ($maxByLevel[$lvl] > 0) {
+                $share = max(0, $maxByLevel[$lvl] - $cumulativeLower);
+                $shareValues[$lvl] = round($share, 2);
+                $cumulativeLower += $share;
+            } else {
+                $shareValues[$lvl] = 0;
+            }
+        }
+
         return [
             'year' => $year,
             'month' => $month,
             'revenue' => null,
             'fund' => null,
-            'shareValues' => [],
+            'shareValues' => $shareValues,
             'participants' => $participants,
             'totalPaid' => $totalPaid,
             'totalForfeited' => null,
@@ -687,16 +711,32 @@ class PoolRunner
 
         $totalPaid = array_sum(array_column($participants, 'payoutRub'));
 
-        // CSV — тоже исторический snapshot. revenue/fund/shareValues = null:
-        // данные могли «уехать» в текущей БД, и пересчитывать их для UI
-        // означает рисовать неконсистентные с poolLog цифры (см. подробный
-        // комментарий в participantsFromPoolLog выше).
+        // CSV — тоже исторический snapshot. shareValues back-derive
+        // из payoutRub (см. подробный комментарий в participantsFromPoolLog).
+        $maxByLevel = array_fill_keys(range(PoolCalculator::LEADER_LEVEL_MIN, PoolCalculator::LEADER_LEVEL_MAX), 0);
+        foreach ($participants as $p) {
+            $lvl = (int) ($p['level'] ?? 0);
+            if ($lvl >= PoolCalculator::LEADER_LEVEL_MIN && $lvl <= PoolCalculator::LEADER_LEVEL_MAX) {
+                $maxByLevel[$lvl] = max($maxByLevel[$lvl], (float) $p['payoutRub']);
+            }
+        }
+        $shareValues = [];
+        $cumulativeLower = 0;
+        for ($lvl = PoolCalculator::LEADER_LEVEL_MIN; $lvl <= PoolCalculator::LEADER_LEVEL_MAX; $lvl++) {
+            if ($maxByLevel[$lvl] > 0) {
+                $share = max(0, $maxByLevel[$lvl] - $cumulativeLower);
+                $shareValues[$lvl] = round($share, 2);
+                $cumulativeLower += $share;
+            } else {
+                $shareValues[$lvl] = 0;
+            }
+        }
         return [
             'year' => $year,
             'month' => $month,
             'revenue' => null,
             'fund' => null,
-            'shareValues' => [],
+            'shareValues' => $shareValues,
             'participants' => $participants,
             'totalPaid' => $totalPaid,
             'totalForfeited' => null,

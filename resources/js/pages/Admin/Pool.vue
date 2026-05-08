@@ -174,7 +174,7 @@
                 {{ p.level }} {{ p.levelName }}
               </v-chip>
             </td>
-            <td class="text-end">{{ fmt2(p.groupBonusRub) }} ₽</td>
+            <td class="text-end">{{ moneyOrDash(p.groupBonusRub) }}</td>
             <td v-for="lvl in [6,7,8,9,10]" :key="'r-' + p.id + '-' + lvl" class="text-end">
               <span :class="p.byLevel[lvl] > 0 ? 'text-success' : 'text-medium-emphasis'">
                 {{ fmt2(p.byLevel[lvl] || 0) }}
@@ -286,25 +286,18 @@ const filteredParticipants = computed(() => {
 // fund × #активных уровней.
 const isHistoricalView = computed(() => !!(result.value?.fromPoolLog || result.value?.fromCsv));
 
-// Уровни (6..10), у которых есть хотя бы один партнёр в счётчике.
-// Для исторических — берём из реальных выплат (есть payoutRub > 0
-// на партнёре уровня L). Для новых — из shareValues[L] > 0.
+// Уровни (6..10), у которых shareValues > 0. Backend для исторических
+// периодов back-derive shareValues из payoutRub в poolLog — поэтому
+// одна и та же логика работает и для live, и для snapshot.
 const activeLevels = computed(() => {
   if (!result.value) return [];
-  if (isHistoricalView.value) {
-    const levels = new Set();
-    for (const p of result.value.participants || []) {
-      if (p.payoutRub > 0 && p.level >= 6 && p.level <= 10) levels.add(p.level);
-    }
-    return [6, 7, 8, 9, 10].filter(l => levels.has(l));
-  }
   const shares = result.value.shareValues || {};
   return [6, 7, 8, 9, 10].filter(lvl => (shares[lvl] || 0) > 0);
 });
 
 // Сумма по строке «ИТОГО» в нижней таблице.
-// Историческая: реально выплаченное (totalPaid из snapshot).
 // Live: теоретический максимум = fund × #активных уровней.
+// Snapshot: реально выплаченное из poolLog.
 const totalRowSum = computed(() => {
   if (!result.value) return 0;
   if (isHistoricalView.value) return Number(result.value.totalPaid || 0);
@@ -312,43 +305,39 @@ const totalRowSum = computed(() => {
 });
 
 // Значение ячейки уровня в строке «ИТОГО».
-// Историческая: сумма payoutRub партнёров чей level == lvl. Это даёт
-//   честную картину «сколько уехало на уровень L», даже если матрёшка
-//   старого расчёта неизвестна.
 // Live: fund (если уровень активен) — теоретическая «доля уровня».
+// Snapshot: share(L) × cumulativeCount(L+) — сколько суммарно ушло на уровне
+//   через матрёшку. cumulativeCount считаем по реальным участникам snapshot.
 function totalCellForLevel(lvl) {
   if (!result.value) return 0;
+  const shares = result.value.shareValues || {};
   if (isHistoricalView.value) {
-    let s = 0;
+    const share = Number(shares[lvl] || 0);
+    if (share <= 0) return 0;
+    let count = 0;
     for (const p of result.value.participants || []) {
-      if (p.level === lvl && p.payoutRub > 0) s += Number(p.payoutRub);
+      if (p.payoutRub > 0 && p.level >= lvl && p.level <= 10) count++;
     }
-    return s;
+    return share * count;
   }
   return activeLevels.value.includes(lvl) ? Number(result.value.fund || 0) : 0;
 }
 
-// Per-partner матрёшка breakdown by level: для уровня L он получает
-// share(6)+share(7)+...+share(L). Это работает только для live-расчёта,
-// где известны корректные shareValues. Для исторических периодов
-// shareValues=[] — ячейку рендерим только в колонке СВОЕГО уровня
-// партнёра (payoutRub целиком), остальные пустые.
+// Матрёшка для каждого партнёра: byLevel[L] = share(L) если L <= partner.level.
+// Логика одинакова для live и snapshot — backend для snapshot уже отдал
+// shareValues, восстановленные из реальных выплат.
 const payoutRows = computed(() => {
   if (!result.value) return [];
   const shares = result.value.shareValues || {};
-  const revenue = Number(result.value.revenue || 0);
-  const historical = isHistoricalView.value;
+  // revenue=null в snapshot → пробрасываем null, чтобы moneyOrDash отрисовал «—».
+  const revenue = result.value.revenue === null || result.value.revenue === undefined
+    ? null : Number(result.value.revenue);
   return (result.value.participants || [])
     .filter(p => p.participates && p.payoutRub > 0)
     .map(p => {
       const byLevel = { 6: 0, 7: 0, 8: 0, 9: 0, 10: 0 };
-      if (historical) {
-        // Без матрёшки — реальная выплата сидит в колонке партнёра.
-        if (p.level >= 6 && p.level <= 10) byLevel[p.level] = p.payoutRub;
-      } else {
-        for (let lvl = 6; lvl <= p.level; lvl++) {
-          byLevel[lvl] = shares[lvl] || 0;
-        }
+      for (let lvl = 6; lvl <= p.level; lvl++) {
+        byLevel[lvl] = shares[lvl] || 0;
       }
       return {
         id: p.id,
@@ -358,6 +347,7 @@ const payoutRows = computed(() => {
         byLevel,
         payoutRub: p.payoutRub,
         // Выручка DS без НДС за месяц — общая для всех (как в эталоне).
+        // Для исторических null → отображается «—».
         groupBonusRub: revenue,
       };
     });
