@@ -8,56 +8,56 @@
       </template>
     </PageHeader>
 
-    <FilterBar
-      :search="search"
-      search-placeholder="ФИО партнёра"
-      :search-cols="2"
-      :show-reset="activeFilterCount > 0"
-      @update:search="v => { search = v ?? ''; debouncedLoad(); }"
-      @reset="resetFilters"
-    >
-      <v-col cols="12" md="2">
-        <v-text-field v-model="filters.partnerId" placeholder="ИД партнёра"
-          density="comfortable" variant="outlined" hide-details clearable
+    <!-- Компактный layout: 7 фильтров в одну flex-строку с density=compact.
+         FilterBar с v-row md="2" не использовали — на Mac Air ≤1470px
+         он переносил половину полей на 2-ю строку. -->
+    <v-card class="mb-3 pa-3">
+      <div class="d-flex flex-wrap ga-2 align-center">
+        <v-text-field :model-value="search" placeholder="ФИО партнёра"
+          density="compact" variant="outlined" hide-details clearable
+          prepend-inner-icon="mdi-magnify"
+          style="max-width: 220px; flex: 1 1 180px"
+          @update:model-value="v => { search = v ?? ''; debouncedLoad(); }" />
+        <v-text-field v-model="filters.partnerId" placeholder="ИД"
+          density="compact" variant="outlined" hide-details clearable
+          style="max-width: 110px; flex: 1 1 80px"
           @update:model-value="debouncedLoad" />
-      </v-col>
-      <v-col cols="12" md="2">
         <v-text-field v-model="filters.inviterName" placeholder="ФИО пригласителя"
-          density="comfortable" variant="outlined" hide-details clearable
+          density="compact" variant="outlined" hide-details clearable
+          style="max-width: 200px; flex: 1 1 160px"
           @update:model-value="debouncedLoad" />
-      </v-col>
-      <v-col cols="12" md="2">
-        <v-text-field v-model="filters.email" placeholder="Эл. почта"
-          density="comfortable" variant="outlined" hide-details clearable
+        <v-text-field v-model="filters.email" placeholder="Email"
+          density="compact" variant="outlined" hide-details clearable
+          style="max-width: 180px; flex: 1 1 140px"
           @update:model-value="debouncedLoad" />
-      </v-col>
-      <v-col cols="12" md="2">
         <v-text-field v-model="filters.phone" placeholder="Телефон"
-          density="comfortable" variant="outlined" hide-details clearable
+          density="compact" variant="outlined" hide-details clearable
+          style="max-width: 160px; flex: 1 1 120px"
           @update:model-value="debouncedLoad" />
-      </v-col>
-      <v-col cols="12" md="2">
-        <v-select v-model="activityFilter" :items="activityOptions" label="Активность"
-          variant="outlined" density="comfortable"
-          clearable hide-details @update:model-value="loadData" />
-      </v-col>
-      <v-col cols="12" md="2">
-        <v-select v-model="statusFilter" :items="statusOptions" label="Статус"
-          variant="outlined" density="comfortable"
-          clearable hide-details @update:model-value="loadData" />
-      </v-col>
-      <v-col v-if="activeFilterCount > 0" cols="auto" class="d-flex align-center">
-        <v-chip size="small" color="info" variant="tonal">
+        <v-select v-model="activityFilter" :items="activityOptions" placeholder="Активность"
+          density="compact" variant="outlined" clearable hide-details
+          style="max-width: 160px; flex: 1 1 120px"
+          @update:model-value="loadData" />
+        <v-select v-model="statusFilter" :items="statusOptions" placeholder="Статус"
+          density="compact" variant="outlined" clearable hide-details
+          style="max-width: 160px; flex: 1 1 120px"
+          @update:model-value="loadData" />
+
+        <v-spacer />
+
+        <v-chip v-if="activeFilterCount > 0" size="small" color="info" variant="tonal">
           {{ activeFilterCount }} {{ activeFilterCount === 1 ? 'фильтр' : 'фильтра' }}
         </v-chip>
-      </v-col>
-      <template #actions>
+        <v-btn v-if="activeFilterCount > 0" size="small" variant="text" color="secondary"
+          prepend-icon="mdi-filter-off-outline" @click="resetFilters">
+          Сбросить
+        </v-btn>
         <ColumnVisibilityMenu
           :headers="toggleableColumns"
           v-model:visible="columnVisible"
           storage-key="partners-cols" />
-      </template>
-    </FilterBar>
+      </div>
+    </v-card>
 
     <!-- Bulk action bar: two primary actions + destructive + overflow menu -->
     <v-slide-y-transition>
@@ -359,7 +359,6 @@ import { useTableSort } from '../../composables/useTableSort';
 import PageHeader from '../../components/PageHeader.vue';
 import DataTableWrapper from '../../components/DataTableWrapper.vue';
 import StatusChip from '../../components/StatusChip.vue';
-import FilterBar from '../../components/FilterBar.vue';
 import DialogShell from '../../components/DialogShell.vue';
 import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 import { useSnackbar } from '../../composables/useSnackbar';

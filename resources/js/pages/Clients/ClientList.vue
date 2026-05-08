@@ -2,26 +2,59 @@
   <div>
     <PageHeader title="Мои клиенты" icon="mdi-account-group" :count="total" />
 
+    <!-- Компактный layout: основное в одной flex-строке, диапазон даты
+         рождения — за тогглом «Ещё». density=compact + placeholder вместо
+         label на полях type=date (на узких экранах label резал outlined-рамку). -->
     <v-card class="mb-3 pa-3">
       <div class="d-flex ga-2 flex-wrap align-center">
         <v-text-field v-model="filters.search" placeholder="Поиск по ФИО..."
-          rounded prepend-inner-icon="mdi-magnify" clearable hide-details style="max-width:240px" @update:model-value="debouncedLoad" />
+          density="compact" variant="outlined" rounded
+          prepend-inner-icon="mdi-magnify" clearable hide-details
+          style="max-width: 240px; flex: 1 1 200px"
+          @update:model-value="debouncedLoad" />
         <v-text-field v-model="filters.city" placeholder="Город"
-          prepend-inner-icon="mdi-city" clearable hide-details style="max-width:200px" @update:model-value="debouncedLoad" />
-        <v-text-field v-model="filters.email" placeholder="Email..."
-          prepend-inner-icon="mdi-email" clearable hide-details style="max-width:220px" @update:model-value="debouncedLoad" />
-        <v-text-field v-model="filters.birth_date_from" label="Дата рождения с" type="date"
-          hide-details style="max-width:170px" @update:model-value="loadData" />
-        <v-text-field v-model="filters.birth_date_to" label="Дата рождения по" type="date"
-          hide-details style="max-width:170px" @update:model-value="loadData" />
-        <v-chip v-if="activeFilterCount > 0" size="small" color="info" variant="tonal" class="ml-1">
+          density="compact" variant="outlined"
+          prepend-inner-icon="mdi-city" clearable hide-details
+          style="max-width: 180px; flex: 1 1 140px"
+          @update:model-value="debouncedLoad" />
+        <v-text-field v-model="filters.email" placeholder="Email…"
+          density="compact" variant="outlined"
+          prepend-inner-icon="mdi-email" clearable hide-details
+          style="max-width: 220px; flex: 1 1 160px"
+          @update:model-value="debouncedLoad" />
+
+        <v-spacer />
+
+        <v-btn :variant="advancedOpen ? 'tonal' : 'text'" size="small"
+          :prepend-icon="advancedOpen ? 'mdi-chevron-up' : 'mdi-tune'"
+          @click="advancedOpen = !advancedOpen">
+          Ещё
+          <v-chip v-if="advancedActiveCount > 0" size="x-small" color="info"
+            variant="elevated" class="ms-1">{{ advancedActiveCount }}</v-chip>
+        </v-btn>
+        <v-chip v-if="activeFilterCount > 0" size="small" color="info" variant="tonal">
           {{ activeFilterCount }} {{ activeFilterCount === 1 ? 'фильтр' : 'фильтра' }}
         </v-chip>
         <v-btn v-if="activeFilterCount > 0" size="small" variant="text" color="secondary"
           prepend-icon="mdi-filter-remove" @click="resetFilters">Сбросить</v-btn>
-        <v-spacer />
         <ColumnVisibilityMenu :headers="headers" v-model:visible="columnVisible" storage-key="client-list-cols" />
       </div>
+
+      <v-expand-transition>
+        <div v-show="advancedOpen" class="d-flex flex-wrap ga-3 mt-3">
+          <div class="filter-range">
+            <span class="text-caption text-medium-emphasis">Дата рождения</span>
+            <div class="d-flex ga-1">
+              <v-text-field v-model="filters.birth_date_from" type="date" placeholder="с"
+                density="compact" variant="outlined" hide-details
+                @update:model-value="loadData" />
+              <v-text-field v-model="filters.birth_date_to" type="date" placeholder="по"
+                density="compact" variant="outlined" hide-details
+                @update:model-value="loadData" />
+            </div>
+          </div>
+        </div>
+      </v-expand-transition>
     </v-card>
 
     <v-data-table-server :items="items" :items-length="total" :loading="loading"
@@ -68,12 +101,21 @@ const statusOptions = [
   { title: 'Неактивен', value: 'inactive' },
 ];
 
+const advancedOpen = ref(false);
+
 const activeFilterCount = computed(() => {
   let c = 0;
   if (filters.value.search) c++;
   if (filters.value.status) c++;
   if (filters.value.city) c++;
   if (filters.value.email) c++;
+  if (filters.value.birth_date_from) c++;
+  if (filters.value.birth_date_to) c++;
+  return c;
+});
+
+const advancedActiveCount = computed(() => {
+  let c = 0;
   if (filters.value.birth_date_from) c++;
   if (filters.value.birth_date_to) c++;
   return c;
@@ -130,3 +172,15 @@ async function loadData() {
 
 onMounted(loadData);
 </script>
+
+<style scoped>
+.filter-range {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 220px;
+}
+.filter-range :deep(.v-field) {
+  min-width: 100px;
+}
+</style>

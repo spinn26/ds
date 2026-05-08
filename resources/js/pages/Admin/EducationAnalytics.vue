@@ -13,11 +13,13 @@
       <div class="d-flex ga-2 flex-wrap align-center">
         <v-text-field v-model="search" placeholder="Поиск по ФИО / e-mail"
           density="compact" variant="outlined" hide-details rounded clearable
-          prepend-inner-icon="mdi-magnify" style="max-width:320px"
+          prepend-inner-icon="mdi-magnify"
+          style="max-width: 280px; flex: 1 1 220px"
           @update:model-value="onFilterChange" />
         <v-autocomplete v-model="courseId" :items="courseOptions" item-title="title" item-value="id"
           placeholder="Курс" clearable density="compact" variant="outlined" hide-details
-          style="max-width:300px" prepend-inner-icon="mdi-school"
+          prepend-inner-icon="mdi-school"
+          style="max-width: 280px; flex: 1 1 220px"
           @update:model-value="onFilterChange" />
         <v-spacer />
         <span v-if="total" class="text-caption text-medium-emphasis">

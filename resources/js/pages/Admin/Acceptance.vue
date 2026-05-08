@@ -13,15 +13,18 @@
       <div class="d-flex ga-2 flex-wrap align-center">
         <v-text-field v-model="search" placeholder="ФИО партнёра"
           density="compact" variant="outlined" hide-details rounded clearable
-          prepend-inner-icon="mdi-magnify" style="max-width:280px"
+          prepend-inner-icon="mdi-magnify"
+          style="max-width: 260px; flex: 1 1 200px"
           @update:model-value="debouncedLoad" />
         <v-select v-model="acceptedFilter" :items="acceptedOptions" placeholder="Статус"
           density="compact" variant="outlined" clearable hide-details
-          style="max-width:200px" @update:model-value="loadData" />
+          style="max-width: 180px; flex: 1 1 140px"
+          @update:model-value="loadData" />
         <v-select v-model="documentTypeFilter" :items="documentOptions"
           item-title="name" item-value="id"
           placeholder="Вид документа" density="compact" variant="outlined"
-          clearable hide-details style="max-width:280px"
+          clearable hide-details
+          style="max-width: 240px; flex: 1 1 180px"
           @update:model-value="loadData" />
         <v-chip v-if="activeFilterCount > 0" size="small" color="info" variant="tonal" class="ml-1">
           {{ activeFilterCount }} {{ activeFilterCount === 1 ? 'фильтр' : 'фильтра' }}

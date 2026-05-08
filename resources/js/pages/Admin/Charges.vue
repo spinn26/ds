@@ -6,49 +6,68 @@
       </template>
     </PageHeader>
 
+    <!-- Компактный layout: основное (поиск + тип + год/месяц) в одной строке,
+         комментарий и диапазон дат — за тогглом «Ещё». placeholder вместо
+         label на дате. -->
     <v-card class="mb-3 pa-3">
       <div class="d-flex ga-2 flex-wrap align-center">
         <v-text-field v-model="search" placeholder="ФИО консультанта"
           density="compact" variant="outlined" hide-details rounded clearable
-          prepend-inner-icon="mdi-magnify" style="max-width:220px"
+          prepend-inner-icon="mdi-magnify"
+          style="max-width: 220px; flex: 1 1 180px"
           @update:model-value="debouncedLoad" />
-        <v-text-field v-model="commentFilter" placeholder="Поиск по комментарию"
-          density="compact" variant="outlined" hide-details rounded clearable
-          style="max-width:220px" @update:model-value="debouncedLoad" />
-        <v-select v-model="typeFilter" :items="typeOptions" label="Тип"
+        <v-select v-model="typeFilter" :items="typeOptions" placeholder="Тип"
           density="compact" variant="outlined" clearable hide-details
-          style="max-width:140px" @update:model-value="loadData" />
-        <!-- Год + Месяц (как в Реестре выплат) -->
-        <v-text-field v-model.number="yearFilter" label="Год" type="number"
+          style="max-width: 140px; flex: 1 1 110px"
+          @update:model-value="loadData" />
+        <v-text-field v-model.number="yearFilter" placeholder="Год" type="number"
           density="compact" variant="outlined" hide-details clearable
-          style="max-width:110px" @update:model-value="loadData" />
-        <v-select v-model="monthFilter" :items="monthOptions" label="Месяц"
+          style="max-width: 100px; flex: 1 1 80px"
+          @update:model-value="loadData" />
+        <v-select v-model="monthFilter" :items="monthOptions" placeholder="Месяц"
           density="compact" variant="outlined" clearable hide-details
-          style="max-width:160px" @update:model-value="loadData" />
-        <v-btn variant="text" size="small"
-          :prepend-icon="showAdvancedDates ? 'mdi-chevron-up' : 'mdi-chevron-down'"
+          style="max-width: 140px; flex: 1 1 110px"
+          @update:model-value="loadData" />
+
+        <v-spacer />
+
+        <v-btn :variant="showAdvancedDates ? 'tonal' : 'text'" size="small"
+          :prepend-icon="showAdvancedDates ? 'mdi-chevron-up' : 'mdi-tune'"
           @click="showAdvancedDates = !showAdvancedDates">
-          Дата с/по
+          Ещё
+          <v-chip v-if="advancedActiveCount > 0" size="x-small" color="info"
+            variant="elevated" class="ms-1">{{ advancedActiveCount }}</v-chip>
         </v-btn>
-        <template v-if="showAdvancedDates">
-          <v-text-field v-model="dateFrom" label="Дата с" type="date"
-            density="compact" variant="outlined" hide-details
-            style="max-width:160px" @update:model-value="loadData" />
-          <v-text-field v-model="dateTo" label="Дата по" type="date"
-            density="compact" variant="outlined" hide-details
-            style="max-width:160px" @update:model-value="loadData" />
-        </template>
-        <v-chip v-if="activeFilterCount > 0" size="small" color="info" variant="tonal" class="ml-1">
+        <v-chip v-if="activeFilterCount > 0" size="small" color="info" variant="tonal">
           {{ activeFilterCount }} {{ activeFilterCount === 1 ? 'фильтр' : 'фильтра' }}
         </v-chip>
         <v-btn v-if="activeFilterCount > 0" size="small" variant="text" color="secondary"
           prepend-icon="mdi-filter-remove" @click="resetFilters">Сбросить</v-btn>
-        <v-spacer />
         <v-btn variant="text" size="small" prepend-icon="mdi-download" @click="exportCsv">
-          Экспорт CSV
+          CSV
         </v-btn>
         <ColumnVisibilityMenu :headers="headers" v-model:visible="columnVisible" storage-key="charges-cols" />
       </div>
+
+      <v-expand-transition>
+        <div v-show="showAdvancedDates" class="d-flex flex-wrap ga-3 mt-3">
+          <v-text-field v-model="commentFilter" placeholder="Поиск по комментарию"
+            density="compact" variant="outlined" hide-details rounded clearable
+            style="max-width: 280px; flex: 1 1 220px"
+            @update:model-value="debouncedLoad" />
+          <div class="filter-range">
+            <span class="text-caption text-medium-emphasis">Дата</span>
+            <div class="d-flex ga-1">
+              <v-text-field v-model="dateFrom" type="date" placeholder="с"
+                density="compact" variant="outlined" hide-details
+                @update:model-value="loadData" />
+              <v-text-field v-model="dateTo" type="date" placeholder="по"
+                density="compact" variant="outlined" hide-details
+                @update:model-value="loadData" />
+            </div>
+          </div>
+        </div>
+      </v-expand-transition>
     </v-card>
 
     <DataTableWrapper
@@ -220,6 +239,14 @@ const activeFilterCount = computed(() => {
   return c;
 });
 
+const advancedActiveCount = computed(() => {
+  let c = 0;
+  if (commentFilter.value) c++;
+  if (dateFrom.value) c++;
+  if (dateTo.value) c++;
+  return c;
+});
+
 function resetFilters() {
   search.value = ''; commentFilter.value = ''; typeFilter.value = null;
   yearFilter.value = null; monthFilter.value = null;
@@ -353,3 +380,15 @@ async function deleteCharge() {
 
 onMounted(loadData);
 </script>
+
+<style scoped>
+.filter-range {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 220px;
+}
+.filter-range :deep(.v-field) {
+  min-width: 100px;
+}
+</style>

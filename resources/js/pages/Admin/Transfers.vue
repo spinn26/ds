@@ -19,15 +19,21 @@
       <div class="d-flex ga-2 flex-wrap align-center">
         <v-text-field v-model="search" :placeholder="searchPlaceholder"
           density="compact" variant="outlined" hide-details rounded clearable
-          prepend-inner-icon="mdi-magnify" style="max-width:280px"
+          prepend-inner-icon="mdi-magnify"
+          style="max-width: 280px; flex: 1 1 220px"
           @update:model-value="debouncedLoad" />
-        <v-text-field v-model="dateFrom" label="Дата с" type="date"
-          density="compact" variant="outlined" hide-details
-          style="max-width:160px" @update:model-value="loadData" />
-        <v-text-field v-model="dateTo" label="Дата по" type="date"
-          density="compact" variant="outlined" hide-details
-          style="max-width:160px" @update:model-value="loadData" />
-        <v-chip v-if="activeFilterCount > 0" size="small" color="info" variant="tonal" class="ml-1">
+        <div class="filter-range">
+          <span class="text-caption text-medium-emphasis">Дата</span>
+          <div class="d-flex ga-1">
+            <v-text-field v-model="dateFrom" type="date" placeholder="с"
+              density="compact" variant="outlined" hide-details
+              @update:model-value="loadData" />
+            <v-text-field v-model="dateTo" type="date" placeholder="по"
+              density="compact" variant="outlined" hide-details
+              @update:model-value="loadData" />
+          </div>
+        </div>
+        <v-chip v-if="activeFilterCount > 0" size="small" color="info" variant="tonal">
           {{ activeFilterCount }} {{ activeFilterCount === 1 ? 'фильтр' : 'фильтра' }}
         </v-chip>
         <v-btn v-if="activeFilterCount > 0" size="small" variant="text" color="secondary"
@@ -164,3 +170,15 @@ async function loadData() {
 
 onMounted(loadData);
 </script>
+
+<style scoped>
+.filter-range {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 220px;
+}
+.filter-range :deep(.v-field) {
+  min-width: 100px;
+}
+</style>

@@ -327,6 +327,31 @@
   .v-card .filter-range .v-field {
     min-width: 88px !important;
   }
+
+  /* Внутренний скролл таблиц: на Mac Air весь viewport ~956px, после
+     топбара/фильтров/пагинации остаётся ~600px. При items-per-page=25
+     таблица «съедает» весь экран и вынуждает скроллить страницу целиком,
+     теряя строку поиска и хедер. Включаем sticky thead + max-height на
+     wrapper, чтобы прокручивалось только тело таблицы.
+     На 1600+ px ничего не меняется — там высоты viewport хватает.
+
+     Высота ~5 строк + шапка: compact density 5 × 28px + 36px ≈ 180px,
+     comfortable 5 × 48px + 48px ≈ 290px. Берём 280px — на compact
+     влезет ~7 строк, на comfortable ровно 5; всё что выше — скроллится. */
+  .v-data-table .v-table__wrapper,
+  .v-data-table-server .v-table__wrapper,
+  .v-table .v-table__wrapper {
+    max-height: 280px;
+    overflow-y: auto;
+  }
+  .v-data-table thead th,
+  .v-data-table-server thead th,
+  .v-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: rgb(var(--v-theme-surface)) !important;
+  }
 }
 
 /* Print */

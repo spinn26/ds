@@ -173,12 +173,15 @@
         <!-- LOG TAB -->
         <v-tabs-window-item value="log" class="pa-5">
           <div class="d-flex align-center ga-2 mb-3 flex-wrap">
-            <v-text-field v-model="logFilter.search" placeholder="Поиск по email или теме..."
-              variant="outlined" density="compact" hide-details style="max-width:320px"
-              prepend-inner-icon="mdi-magnify" @update:model-value="debouncedLoadLog" />
-            <v-select v-model="logFilter.status" :items="logStatusOptions" label="Статус"
+            <v-text-field v-model="logFilter.search" placeholder="Поиск по email или теме…"
+              variant="outlined" density="compact" hide-details
+              prepend-inner-icon="mdi-magnify"
+              style="max-width: 320px; flex: 1 1 240px"
+              @update:model-value="debouncedLoadLog" />
+            <v-select v-model="logFilter.status" :items="logStatusOptions" placeholder="Статус"
               clearable hide-details density="compact" variant="outlined"
-              style="max-width:200px" @update:model-value="loadLog" />
+              style="max-width: 180px; flex: 1 1 140px"
+              @update:model-value="loadLog" />
             <v-spacer />
             <ColumnVisibilityMenu
               :headers="logHeaders"

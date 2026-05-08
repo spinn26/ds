@@ -4,27 +4,32 @@
 
     <v-card class="mb-3 pa-3">
       <div class="d-flex ga-2 flex-wrap align-center">
-        <v-text-field v-model="month" type="month" label="Отчётный месяц"
-          density="compact" variant="outlined" hide-details style="max-width:200px"
+        <v-text-field v-model="month" type="month" placeholder="Месяц"
+          density="compact" variant="outlined" hide-details
+          style="max-width: 160px; flex: 1 1 130px"
           @update:model-value="loadData" />
         <v-text-field v-model="search" placeholder="ФИО партнёра"
           density="compact" variant="outlined" hide-details rounded clearable
-          prepend-inner-icon="mdi-magnify" style="max-width:280px"
+          prepend-inner-icon="mdi-magnify"
+          style="max-width: 240px; flex: 1 1 200px"
           @update:model-value="debouncedLoad" />
         <v-select v-model="qualFilter" :items="qualOptions"
           density="compact" variant="outlined" hide-details clearable
-          placeholder="Квалификация" style="max-width:180px"
+          placeholder="Квалификация"
+          style="max-width: 180px; flex: 1 1 140px"
           @update:model-value="loadData" />
         <v-select v-model="activityFilter" :items="activityOptions"
           density="compact" variant="outlined" hide-details clearable
-          placeholder="Активность" style="max-width:180px"
+          placeholder="Активность"
+          style="max-width: 160px; flex: 1 1 120px"
           @update:model-value="loadData" />
-        <v-checkbox v-model="nonZeroOnly" label="Только ненулевые"
+        <v-checkbox v-model="nonZeroOnly" label="Ненулевые"
           density="compact" hide-details color="primary"
+          style="flex: 0 0 auto"
           @update:model-value="loadData" />
         <v-spacer />
         <v-btn variant="text" size="small" prepend-icon="mdi-filter-remove" @click="resetFilters">
-          Очистить фильтры
+          Сбросить
         </v-btn>
         <ColumnVisibilityMenu :headers="headers" v-model:visible="columnVisible" storage-key="qualifications-cols" />
       </div>
