@@ -94,7 +94,7 @@
               @click="openRequisitesPopup(item)" />
             <v-btn icon="mdi-file-document-outline" size="x-small" variant="text" color="primary"
               title="Открыть отчёт начислений и выплат"
-              :href="`/finance/report?consultant=${item.consultantId}&year=${filters.year}&month=${filters.month}`"
+              :href="`/finance/report?consultant=${item.consultantId}&month=${String(filters.year).padStart(4,'0')}-${String(filters.month).padStart(2,'0')}`"
               target="_blank" />
             <span>{{ item.personName }}</span>
             <v-chip v-if="item.activityName" size="x-small" variant="tonal"

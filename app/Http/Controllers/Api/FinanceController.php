@@ -27,7 +27,18 @@ class FinanceController extends Controller
     public function report(Request $request): JsonResponse
     {
         $user = $request->user();
-        $consultant = Consultant::where('webUser', $user->id)->first();
+
+        // Staff может смотреть отчёт другого партнёра через ?consultant=ID
+        // (используется на странице «Реестр выплат» — кнопка «Открыть
+        // отчёт»). Партнёр всегда видит только свой отчёт, параметр
+        // игнорируется, иначе любой партнёр мог бы подсмотреть чужой
+        // финрез через ручной URL.
+        $consultantId = $request->input('consultant');
+        if ($consultantId && $user->isStaff()) {
+            $consultant = Consultant::where('id', $consultantId)->first();
+        } else {
+            $consultant = Consultant::where('webUser', $user->id)->first();
+        }
 
         if (! $consultant) {
             return response()->json(['summary' => null, 'tables' => null]);

@@ -296,16 +296,37 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import api from '../../api';
 import MonthPicker from '../../components/MonthPicker.vue';
 import { exportFinanceReport } from '../../composables/useExport';
 import PageHeader from '../../components/PageHeader.vue';
 import { fmt, fmt2, fmtDate as fmtShortDate } from '../../composables/useDesign';
 
+const route = useRoute();
 const loading = ref(true);
 const exporting = ref(false);
-const month = ref(new Date().toISOString().slice(0, 7));
+
+// Месяц по умолчанию — текущий, но если пришли с PaymentRegistry
+// (staff жмёт «Открыть отчёт начислений»), URL содержит ?year=YYYY&month=M
+// или ?month=YYYY-MM — берём оттуда. Без этого страница всегда грузила
+// текущий период и партнёр выглядел «пустым».
+function monthFromQuery() {
+  const q = route.query || {};
+  if (q.month && /^\d{4}-\d{2}$/.test(String(q.month))) return String(q.month);
+  if (q.year && q.month) {
+    const y = String(q.year).padStart(4, '0');
+    const m = String(q.month).padStart(2, '0');
+    return `${y}-${m}`;
+  }
+  return new Date().toISOString().slice(0, 7);
+}
+
+const month = ref(monthFromQuery());
+// Staff может смотреть отчёт конкретного партнёра — ID идёт в query.
+// Партнёру backend всё равно подсунет его собственный consultant.
+const consultantId = ref(route.query.consultant || null);
 
 async function downloadXlsx() {
   exporting.value = true;
@@ -415,7 +436,11 @@ async function loadData() {
   locked.value = false;
   lockedMessage.value = '';
   try {
-    const { data: d } = await api.get('/finance/report', { params: { month: requestedMonth } });
+    const params = { month: requestedMonth };
+    // ID-консультанта — только для staff-просмотра. Для партнёра бэкенд
+    // игнорирует параметр и всегда возвращает его собственный отчёт.
+    if (consultantId.value) params.consultant = consultantId.value;
+    const { data: d } = await api.get('/finance/report', { params });
     if (myTag !== loadDataTag || month.value !== requestedMonth) return;
     data.value = d;
   } catch (e) {
