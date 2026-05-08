@@ -301,6 +301,14 @@ const irregularSnapshot = computed(() => {
   return false;
 });
 
+// Helper: партнёр должен включаться в подсчёт ИТОГО, если оператор НЕ
+// снял галку (participates !== false) и есть payoutRub. Без этого фильтра
+// исключённые галкой (как Денис в Март-2026) попадали в ИТОГО, хотя в
+// payoutRows их уже нет — UI противоречил сам себе.
+function isCountable(p) {
+  return p && p.participates !== false && Number(p.payoutRub || 0) > 0;
+}
+
 // Активные уровни — где есть shareValues>0 (live/регулярный snapshot)
 // либо есть выплата в payoutRub (нерегулярный snapshot).
 const activeLevels = computed(() => {
@@ -308,7 +316,7 @@ const activeLevels = computed(() => {
   if (irregularSnapshot.value) {
     const set = new Set();
     for (const p of result.value.participants || []) {
-      if (p.payoutRub > 0 && p.level >= 6 && p.level <= 10) set.add(p.level);
+      if (isCountable(p) && p.level >= 6 && p.level <= 10) set.add(p.level);
     }
     return [6, 7, 8, 9, 10].filter(l => set.has(l));
   }
@@ -317,25 +325,28 @@ const activeLevels = computed(() => {
 });
 
 // Live: fund × #активных уровней (теоретический max).
-// Snapshot (любой): реально выплаченное (totalPaid из poolLog).
+// Snapshot: сумма видимых выплат — только участвующие, иначе расходится
+// с payoutRows ниже.
 const totalRowSum = computed(() => {
   if (!result.value) return 0;
-  if (isHistoricalView.value) return Number(result.value.totalPaid || 0);
+  if (isHistoricalView.value) {
+    return (result.value.participants || [])
+      .filter(isCountable)
+      .reduce((s, p) => s + Number(p.payoutRub || 0), 0);
+  }
   return Number(result.value.fund || 0) * activeLevels.value.length;
 });
 
 // Ячейка уровня в строке ИТОГО.
 //   Live: fund (если уровень активен).
-//   Регулярный snapshot: share(L) × cumulativeCount(L+) — суммарно ушло
-//     на уровне через матрёшку, сходится с totalPaid.
-//   Нерегулярный snapshot: сумма payoutRub партнёров чей level == L —
-//     реально выплаченное на этом уровне без матрёшки-фантазии.
+//   Регулярный snapshot: share(L) × cumulativeCount(L+ среди участвующих).
+//   Нерегулярный snapshot: сумма payoutRub участвующих партнёров уровня L.
 function totalCellForLevel(lvl) {
   if (!result.value) return 0;
   if (irregularSnapshot.value) {
     let s = 0;
     for (const p of result.value.participants || []) {
-      if (p.level === lvl && p.payoutRub > 0) s += Number(p.payoutRub);
+      if (p.level === lvl && isCountable(p)) s += Number(p.payoutRub);
     }
     return s;
   }
@@ -345,7 +356,7 @@ function totalCellForLevel(lvl) {
     if (share <= 0) return 0;
     let count = 0;
     for (const p of result.value.participants || []) {
-      if (p.payoutRub > 0 && p.level >= lvl && p.level <= 10) count++;
+      if (isCountable(p) && p.level >= lvl && p.level <= 10) count++;
     }
     return share * count;
   }

@@ -617,9 +617,44 @@ class PoolRunner
         } else {
             // Fallback на back-derive — если по каким-то причинам в БД нет
             // ngb-записи (например, партиальный импорт). Мало где сработает.
+            [$shareValues, $regular] = $this->backDeriveShares($participants);
+
+            // Восстанавливаем revenue/fund из share × count(L+):
+            //   share[L] = fund / count(L+),  fund = revenue × POOL_PERCENT.
+            // Берём первый ненулевой уровень, считаем cumulative-count
+            // активных партнёров и обращаем формулу. Без этого «Групповой
+            // бонус» в строках UI рендерится как «—» и оператор не видит
+            // выручку, от которой шёл расчёт пула. Только регулярные
+            // снапшоты (где matryoshka сходится копейка-в-копейку); для
+            // нерегулярных оставляем null — back-derive дал бы кривой
+            // revenue.
             $revenue = null;
             $fund = null;
-            [$shareValues, $regular] = $this->backDeriveShares($participants);
+            if ($regular) {
+                foreach ([
+                    PoolCalculator::LEADER_LEVEL_MIN,
+                    PoolCalculator::LEADER_LEVEL_MIN + 1,
+                    PoolCalculator::LEADER_LEVEL_MIN + 2,
+                    PoolCalculator::LEADER_LEVEL_MIN + 3,
+                    PoolCalculator::LEADER_LEVEL_MAX,
+                ] as $lvl) {
+                    $share = $shareValues[$lvl] ?? 0;
+                    if ($share <= 0) continue;
+                    $count = 0;
+                    foreach ($participants as $p) {
+                        if (($p['payoutRub'] ?? 0) > 0
+                            && (int) $p['level'] >= $lvl
+                            && (int) $p['level'] <= PoolCalculator::LEADER_LEVEL_MAX) {
+                            $count++;
+                        }
+                    }
+                    if ($count > 0 && PoolCalculator::POOL_PERCENT > 0) {
+                        $fund = round($share * $count, 2);
+                        $revenue = round($fund / PoolCalculator::POOL_PERCENT, 2);
+                        break;
+                    }
+                }
+            }
         }
 
         return [
