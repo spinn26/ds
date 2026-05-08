@@ -565,21 +565,75 @@ class PoolRunner
 
         $totalPaid = array_sum(array_column($participants, 'payoutRub'));
 
-        // ИСТОРИЧЕСКИЙ / ЗАМОРОЖЕННЫЙ ПЕРИОД — выводим то, что в poolLog.
-        // shareValues по возможности back-derive (см. backDeriveShares()).
-        [$shareValues, $regular] = $this->backDeriveShares($participants);
+        // ИСТОРИЧЕСКИЙ / ЗАМОРОЖЕННЫЙ ПЕРИОД — авторитетные данные лежат
+        // в `networkGroupBonus`. Это таблица-snapshot, на которую ссылается
+        // каждая строка `poolLog.networkGroupBonus`. Хранит:
+        //   • value = выручка ДС без НДС за период,
+        //   • level{6..10}Count = cumulative-counts партнёров на уровне,
+        //   • level{6..10}PoolBonusAmount = доли share[L] точно как
+        //     рассчитал Directual в момент фиксации.
+        //
+        // Раньше я делал back-derive из payoutRub — оно работало только
+        // когда все партнёры уровня получили равные суммы. В Apr-Aug 2025
+        // данные нерегулярные (Архангельский получил 4× share[6]) и
+        // back-derive давал неверные share. С хранимым snapshot всё точно.
+        $ngbId = $rows->pluck('networkGroupBonus')->filter()->first();
+        $ngb = $ngbId
+            ? DB::table('networkGroupBonus')->where('id', $ngbId)->first()
+            : null;
+
+        $regular = true;
+        if ($ngb) {
+            $revenue = round((float) $ngb->value, 2);
+            $fund = round($revenue * PoolCalculator::POOL_PERCENT, 2);
+            $shareValues = [
+                6  => round((float) ($ngb->level6PoolBonusAmount ?? 0), 2),
+                7  => round((float) ($ngb->level7PoolBonusAmount ?? 0), 2),
+                8  => round((float) ($ngb->level8PoolBonusAmount ?? 0), 2),
+                9  => round((float) ($ngb->level9PoolBonusAmount ?? 0), 2),
+                10 => round((float) ($ngb->level10PoolBonusAmount ?? 0), 2),
+            ];
+
+            // Проверка: совпадает ли payoutRub каждого партнёра с
+            // матрёшкой share[6]+…+share[L]? Для большинства месяцев
+            // совпадает копейка-в-копейку. Для апреля-августа 2025 нет
+            // (отдельные партнёры получили кратное share — Архангельский
+            // 4× share[6]). В нерегулярном случае фронт fallback'ом
+            // рендерит реальный payoutRub в колонке СВОЕГО уровня партнёра,
+            // ИТОГО per-level = sum payouts на уровне.
+            foreach ($participants as $p) {
+                $lvl = (int) ($p['level'] ?? 0);
+                if ($lvl < PoolCalculator::LEADER_LEVEL_MIN || $lvl > PoolCalculator::LEADER_LEVEL_MAX) continue;
+                if (($p['payoutRub'] ?? 0) <= 0) continue;
+                $matryoshka = 0;
+                for ($l = PoolCalculator::LEADER_LEVEL_MIN; $l <= $lvl; $l++) {
+                    $matryoshka += $shareValues[$l] ?? 0;
+                }
+                if (abs($matryoshka - (float) $p['payoutRub']) > 0.05) {
+                    $regular = false;
+                    break;
+                }
+            }
+        } else {
+            // Fallback на back-derive — если по каким-то причинам в БД нет
+            // ngb-записи (например, партиальный импорт). Мало где сработает.
+            $revenue = null;
+            $fund = null;
+            [$shareValues, $regular] = $this->backDeriveShares($participants);
+        }
 
         return [
             'year' => $year,
             'month' => $month,
-            'revenue' => null,
-            'fund' => null,
+            'revenue' => $revenue,
+            'fund' => $fund,
             'shareValues' => $shareValues,
             'participants' => $participants,
             'totalPaid' => $totalPaid,
             'totalForfeited' => null,
             'written' => 0,
             'fromPoolLog' => true,
+            'snapshotSource' => $ngb ? 'networkGroupBonus' : 'derived',
             'irregularPayouts' => ! $regular,
         ];
     }
