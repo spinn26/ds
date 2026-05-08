@@ -354,10 +354,14 @@ class ChatController extends Controller
             ->where('user_id', '!=', $userId)
             ->max('last_read_at');
 
-        // Partner context — staff-only, lets the agent see who they're talking to
+        // Partner context — staff-only, lets the agent see who they're talking to.
+        // ВАЖНО: created_by — это инициатор тикета. Если staff завёл чат
+        // через StartChatButton (recipient_id != null), партнёр сидит на
+        // стороне recipient_id, а created_by указывает на самого staff.
+        // Поэтому строим карточку для не-staff участника.
         $partnerContext = null;
         if ($request->user()->isStaff()) {
-            $partnerContext = $this->buildPartnerContext((int) $ticket->created_by);
+            $partnerContext = $this->buildPartnerContext($this->resolvePartnerUserId($ticket));
         }
 
         return response()->json([
@@ -947,12 +951,12 @@ class ChatController extends Controller
         }
 
         $ticket = DB::table('chat_tickets')->where('id', $id)
-            ->select('id', 'created_by')->first();
+            ->select('id', 'created_by', 'recipient_id')->first();
         if (! $ticket) {
             return response()->json(['message' => 'Тикет не найден'], 404);
         }
 
-        $context = $this->buildPartnerContext((int) $ticket->created_by);
+        $context = $this->buildPartnerContext($this->resolvePartnerUserId($ticket));
         return response()->json($context);
     }
 
@@ -1118,6 +1122,27 @@ class ChatController extends Controller
 
         if (empty($lines)) return '';
         return implode("\n", $lines);
+    }
+
+    /**
+     * Определить WebUser.id «партнёрской» стороны тикета.
+     *
+     * Если staff завёл чат через StartChatButton, recipient_id указывает
+     * на партнёра, а created_by — на самого staff. Если же тикет открыл
+     * партнёр сам, recipient_id может быть null, а created_by уже партнёр.
+     * Возвращаем не-staff участника.
+     */
+    private function resolvePartnerUserId(object $ticket): int
+    {
+        $createdBy = (int) $ticket->created_by;
+        $recipientId = isset($ticket->recipient_id) ? (int) $ticket->recipient_id : 0;
+        if ($recipientId > 0) {
+            $creator = \App\Models\User::find($createdBy);
+            if ($creator && $creator->isStaff()) {
+                return $recipientId;
+            }
+        }
+        return $createdBy;
     }
 
     private function buildPartnerContext(int $webUserId): array

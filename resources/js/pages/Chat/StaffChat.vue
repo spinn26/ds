@@ -1001,6 +1001,7 @@
 <script setup>
 import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue';
 import { useDisplay } from 'vuetify';
+import { useRoute, useRouter } from 'vue-router';
 import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
 import { useConfirm } from '../../composables/useConfirm';
@@ -1020,6 +1021,8 @@ import {
 } from '../../composables/chatPalette';
 
 const { mobile } = useDisplay();
+const route = useRoute();
+const router = useRouter();
 const auth = useAuthStore();
 const currentUserId = auth.userId;
 const currentUserName = computed(() => `${auth.user?.lastName || ''} ${auth.user?.firstName || ''}`.trim() || 'Staff');
@@ -1709,6 +1712,47 @@ async function loadChats() {
   loading.value = false;
 }
 
+// Открытие конкретного тикета по id (используется для ?open=ID — переход
+// из StartChatButton на странице Контракты/Клиенты/Транзакции и т.д.).
+// Если тикет не попадает в текущий фильтр (например, фильтр «В работе»,
+// а у нового тикета status=new), сначала сбрасываем status-фильтр и
+// перезагружаем список — иначе пользователь увидит пустой правый блок.
+async function openTicketById(id) {
+  if (!id) return;
+  let t = chats.value.find(c => Number(c.id) === Number(id));
+  if (!t && filter.value.status) {
+    filter.value.status = null;
+    await loadChats();
+    t = chats.value.find(c => Number(c.id) === Number(id));
+  }
+  if (t) {
+    await openChat(t);
+  } else {
+    // Фильтр сняли, но тикет всё равно не нашёлся — открываем по stub'у
+    // (openChat сам подгрузит /chat/tickets/{id} с messages и
+    // partnerContext). Подписи вверху берутся из ticket-объекта,
+    // поэтому подменим activeChat ответом сервера.
+    try {
+      const { data } = await api.get(`/chat/tickets/${id}`);
+      if (data?.ticket) {
+        await openChat({ ...data.ticket, unread: 0 });
+      }
+    } catch (e) {
+      showError(e?.response?.data?.message || 'Не удалось открыть чат');
+    }
+  }
+}
+
+// При успешном переходе из ?open=ID убираем query, чтобы повторный
+// клик по той же ссылке (или back/forward) не дёргал openTicketById
+// без необходимости.
+async function consumeOpenQuery() {
+  const id = route.query.open;
+  if (!id) return;
+  await openTicketById(id);
+  router.replace({ query: { ...route.query, open: undefined } });
+}
+
 async function openChat(t) {
   if (socket && activeChat.value) socket.emit('ticket:leave', activeChat.value.id);
   activeChat.value = t;
@@ -2125,13 +2169,21 @@ function onGlobalKey(e) {
 }
 
 onMounted(async () => {
-  loadChats();
+  await loadChats();
+  await consumeOpenQuery();
   connectSocket();
   window.addEventListener('keydown', onGlobalKey);
   document.addEventListener('visibilitychange', onVisibilityChange);
   requestNotifPermission();
   try { const { data } = await api.get('/chat/tickets/staff'); staffList.value = data || []; } catch {}
   try { const { data } = await api.get('/chat/quick-replies'); quickReplies.value = data.data || data || []; } catch {}
+});
+
+// Если пользователь уже на /manage/chat и кликнул StartChatButton ещё раз
+// (роутер не размонтирует компонент, onMounted не повторится), реагируем
+// на изменение query.open.
+watch(() => route.query.open, async (id) => {
+  if (id) await consumeOpenQuery();
 });
 onUnmounted(() => {
   stopPoll();
