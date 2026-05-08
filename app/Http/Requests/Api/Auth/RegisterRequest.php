@@ -29,10 +29,18 @@ class RegisterRequest extends FormRequest
             // существующий consultant.participantCode.
             'refCode' => [
                 'required', 'string',
+                // Mirror checkReferral semantics:
+                //  - case-insensitive lookup (legacy DB has both gcpc=... and GCPC=...)
+                //  - allow any partner except Terminated/Excluded/soft-deleted
+                //    (the `active` flag is not reliably set for Registered partners
+                //    after the Directual import)
                 function ($attribute, $value, $fail) {
-                    $exists = \App\Models\Consultant::where('participantCode', $value)
-                        ->where('active', true)
+                    $exists = \App\Models\Consultant::whereRaw('LOWER("participantCode") = ?', [mb_strtolower((string) $value)])
                         ->whereNull('dateDeleted')
+                        ->whereNotIn('activity', [
+                            \App\Enums\PartnerActivity::Terminated->value,
+                            \App\Enums\PartnerActivity::Excluded->value,
+                        ])
                         ->exists();
                     if (! $exists) {
                         $fail('Реферальный код не найден или партнёр неактивен. Регистрация возможна только по ссылке от активного партнёра.');

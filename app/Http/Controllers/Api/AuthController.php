@@ -105,7 +105,10 @@ class AuthController extends Controller
      */
     public function checkReferral(CheckReferralRequest $request): JsonResponse
     {
-        $consultant = Consultant::where('participantCode', $request->input('code'))
+        // participantCode lookup is case-insensitive: Directual export left
+        // ~694 codes in lowercase and ~474 in uppercase, with no cross-case
+        // collisions. Matching ILIKE/LOWER lets both styles of links work.
+        $consultant = Consultant::whereRaw('LOWER("participantCode") = ?', [mb_strtolower((string) $request->input('code'))])
             ->whereNull('dateDeleted')
             ->whereNotIn('activity', [
                 \App\Enums\PartnerActivity::Terminated->value,

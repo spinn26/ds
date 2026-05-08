@@ -143,7 +143,10 @@ const mentor = ref(null);
 const refError = ref('');
 
 onMounted(async () => {
-  const code = (route.query.ref || '').toString().trim().toUpperCase();
+  // Legacy participantCode is case-sensitive in DB and historically lowercase
+  // (e.g. `gcpc=407ad`). Do NOT uppercase — backend lookup is case-insensitive
+  // anyway, but preserving original casing is the safer default.
+  const code = (route.query.ref || '').toString().trim();
   if (!code) {
     refError.value = 'Регистрация возможна только по реферальной ссылке от активного партнёра. Обратитесь к своему наставнику за персональной ссылкой приглашения.';
     return;
