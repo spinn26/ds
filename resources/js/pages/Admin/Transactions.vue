@@ -176,8 +176,15 @@
                         <span class="text-medium-emphasis">—</span>
                       </template>
                     </template>
+                    <template v-else-if="h.key === 'contractTerm'">
+                      <!-- Год контракта = c.term из контракта (срок в годах).
+                           Read-only — изменяется на стороне самого контракта,
+                           не в черновике транзакции. -->
+                      <span v-if="d.contractTerm != null">{{ d.contractTerm }}</span>
+                      <span v-else class="text-medium-emphasis">—</span>
+                    </template>
                     <template v-else-if="h.key === 'yearKV'">
-                      <!-- Аналогично «Параметру»: у продуктов без has_year_kv
+                      <!-- Аналогично «Свойству»: у продуктов без has_year_kv
                            ввод года КВ скрыт. -->
                       <span v-if="d.productHasYearKv === false" class="text-medium-emphasis">—</span>
                       <v-select v-else :model-value="d.yearKV" :items="yearKVOptions"
@@ -624,7 +631,8 @@ const draftHeaders = [
   { title: 'Поставщик', key: 'supplier' },
   { title: 'Дата', key: 'date', style: 'min-width:140px' },
   { title: 'Комментарий', key: 'comment', style: 'min-width:160px' },
-  { title: 'Параметр', key: 'parameter', style: 'min-width:130px' },
+  { title: 'Свойство', key: 'parameter', style: 'min-width:130px' },
+  { title: 'Год контракта', key: 'contractTerm', thClass: 'text-end', tdClass: 'text-end text-no-wrap', style: 'min-width:110px' },
   { title: 'Год КВ', key: 'yearKV', style: 'min-width:110px' },
   { title: 'Транзакция', key: 'amount', thClass: 'text-end', tdClass: 'text-end', style: 'min-width:140px' },
   { title: 'Без комиссии', key: 'noCommission', thClass: 'text-end', tdClass: 'text-end text-no-wrap', style: 'min-width:140px' },

@@ -87,7 +87,25 @@ const vuetify = createVuetify({
         VCombobox: { variant: 'outlined', density: 'compact', rounded: 'lg' },
         VFileInput: { variant: 'outlined', density: 'compact', rounded: 'lg' },
         VChip: { size: 'small', rounded: 'lg' },
-        VDataTableServer: { density: 'comfortable', hover: true },
+        // Vuetify локаль 'ru' уже подключена выше, но v-data-table footer
+        // в 3.12 берёт тексты из своих собственных пропов, минуя $vuetify.
+        // Поэтому дублируем явно — иначе видно «Items per page: 25 of 1858».
+        VDataTableServer: {
+            density: 'compact',
+            hover: true,
+            itemsPerPageText: 'Записей на странице:',
+            pageText: '{0}-{1} из {2}',
+            noDataText: 'Нет данных',
+            loadingText: 'Загрузка…',
+        },
+        VDataTable: {
+            density: 'compact',
+            hover: true,
+            itemsPerPageText: 'Записей на странице:',
+            pageText: '{0}-{1} из {2}',
+            noDataText: 'Нет данных',
+            loadingText: 'Загрузка…',
+        },
         VDialog: { rounded: 'xl' },
         VAlert: { rounded: 'lg', variant: 'tonal' },
         VNavigationDrawer: { rounded: 0 },
