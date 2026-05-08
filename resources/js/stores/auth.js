@@ -9,6 +9,11 @@ export const useAuthStore = defineStore('auth', {
         user: null,
         token: null,
         initialized: false,
+        // Effective permissions для текущего user'а — карта section→level.
+        // Загружается из БД через GET /auth/me/permissions при логине / boot'е.
+        // {} означает «не загружено или ошибка» — composable usePermissions
+        // в этом случае фоллбэкает на статический cabinetPermissions.js.
+        permissions: {},
     }),
     getters: {
         isAdmin: (state) => {
@@ -51,9 +56,14 @@ export const useAuthStore = defineStore('auth', {
             try {
                 const { data } = await api.get('/auth/me');
                 this.user = data;
+                // Параллельно подтягиваем effective permissions из БД.
+                // Не await'им: если упадёт — composable usePermissions
+                // фоллбэкнет на static cabinetPermissions.js.
+                this.fetchPermissions();
             } catch {
                 this.token = null;
                 this.user = null;
+                this.permissions = {};
             }
             this.initialized = true;
         },
@@ -62,17 +72,34 @@ export const useAuthStore = defineStore('auth', {
             this.token = data.token;
             this.user = data.user;
             this.initialized = true;
+            this.fetchPermissions();
         },
         async register(form) {
             const { data } = await api.post('/auth/register', form);
             this.token = data.token;
             this.user = data.user;
             this.initialized = true;
+            this.fetchPermissions();
+        },
+
+        /**
+         * GET /auth/me/permissions — actual rights from БД (permission_groups).
+         * Тихо игнорируем ошибки — фоллбэк на static config работает и без них.
+         */
+        async fetchPermissions() {
+            if (!this.token) return;
+            try {
+                const { data } = await api.get('/auth/me/permissions');
+                this.permissions = data?.permissions || {};
+            } catch {
+                this.permissions = {};
+            }
         },
         logout() {
             api.post('/auth/logout').catch(() => {});
             this.token = null;
             this.user = null;
+            this.permissions = {};
             // Pinia-persist cleared via removing the 'auth' key. The other
             // three are leftovers from the pre-single-source migration;
             // clearing them here until every returning session has rotated out.

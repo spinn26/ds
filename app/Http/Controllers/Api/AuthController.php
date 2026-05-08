@@ -229,6 +229,30 @@ class AuthController extends Controller
         return response()->json(UserResource::make($request->user()));
     }
 
+    /**
+     * GET /auth/me/permissions — effective permissions для текущего user'а.
+     *
+     * Источник — таблица permission_groups (управляется через
+     * /manage/permissions). admin → 'full' на все известные секции.
+     * Несколько ролей → merge по max-level (full > edit > view).
+     *
+     * Эндпоинт читается фронтом при логине / на app-init и кэшируется
+     * в auth-store. Composable usePermissions() читает из этого кэша,
+     * а не из статического resources/js/config/cabinetPermissions.js.
+     */
+    public function permissions(Request $request, \App\Services\PermissionResolverService $resolver): JsonResponse
+    {
+        $user = $request->user();
+        if (! $user) {
+            return response()->json(['permissions' => [], 'roles' => []]);
+        }
+        $roles = $user->getRolesArray();
+        return response()->json([
+            'roles' => $roles,
+            'permissions' => $resolver->effectivePermissions($roles),
+        ]);
+    }
+
     public function logout(Request $request): JsonResponse
     {
         $token = $request->user()->currentAccessToken();

@@ -542,16 +542,17 @@ const isStaff = computed(() =>
   userRoles.value.some(r => ['admin', 'backoffice', 'support', 'finance', 'head', 'calculations', 'corrections', 'education'].includes(r))
 );
 
-// Видимость секций и уровень прав вынесены в config/cabinetPermissions.js
-// — единый source of truth (view/edit/full per spec). Здесь оставлен только
-// computed для меню — реальные проверки на страницах через usePermissions().
-// «contests» (Конкурсы) намеренно скрыты у всех ролей по запросу продакта
-// (правки 2026-05-05) — раздел не используется на проде.
+// Видимость секций — auth-store.permissions (загружается из БД через
+// GET /auth/me/permissions при логине / boot'е). Если БД-данные ещё
+// не пришли — фоллбэкаем на static config/cabinetPermissions.js.
+// admin: sentinel '*' расширяется до всех adminSection из menuItems.
 const availableSections = computed(() => {
+  const dbPerms = auth.permissions;
+  if (dbPerms && Object.keys(dbPerms).length > 0) {
+    return new Set(Object.keys(dbPerms));
+  }
+  // Fallback — пока permissions не пришли из БД.
   const set = configAvailableSections(userRoles.value);
-  // admin → set содержит sentinel '*'. Расширяем до всех существующих
-  // adminSection из menuItems, чтобы visibleMenu.has() работал одинаково
-  // для всех ролей без отдельной ветки.
   if (set.has('*')) {
     const all = new Set();
     for (const it of menuItems) {

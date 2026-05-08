@@ -1,15 +1,15 @@
 /**
  * usePermissions() — хелпер для страниц.
  *
- * Берёт роли из auth-store и возвращает реактивные геттеры:
- *   permission(section)   — 'view' / 'edit' / 'full' / null
- *   canView(section)      — bool (есть хоть какой-то доступ)
- *   canEdit(section)      — bool (можно добавлять/редактировать)
- *   canFull(section)      — bool (можно удалять / системные действия)
- *   isReadOnly(section)   — bool (доступ есть, но ТОЛЬКО на чтение)
+ * Источник прав — auth-store (state.permissions), который загружается
+ * через GET /auth/me/permissions при логине / boot'е приложения.
+ * Это обновляемый из БД набор: правки в админке /manage/permissions
+ * подхватываются автоматически после следующего fetch'а.
  *
- * Пример:
- *   const { canEdit, canFull, isReadOnly } = usePermissions();
+ * Если БД-данные не загружены (ещё не залогинились / временно упало)
+ * — фоллбэк на статический config/cabinetPermissions.js по ролям.
+ *
+ *   const { canView, canEdit, canFull, isReadOnly, permission } = usePermissions();
  *   <v-btn v-if="canEdit('clients')">Добавить клиента</v-btn>
  *   <v-btn v-if="canFull('clients')" @click="del">Удалить</v-btn>
  *   <v-alert v-if="isReadOnly('clients')">Режим только для просмотра</v-alert>
@@ -17,24 +17,46 @@
 import { computed } from 'vue';
 import { useAuthStore } from '../stores/auth';
 import {
-  getPermission,
-  canView as canViewFn,
-  canEdit as canEditFn,
-  canFull as canFullFn,
+  getPermission as staticGetPermission,
 } from '../config/cabinetPermissions';
+
+const LEVEL_RANK = { view: 1, edit: 2, full: 3 };
 
 export function usePermissions() {
   const auth = useAuthStore();
 
-  // Roles меняются при логине/обновлении профиля — оборачиваем в computed,
-  // чтобы реактивные шаблоны переиспользовали значение без лишних геттеров.
-  const userRoles = computed(() => auth.user?.roles || []);
+  const userRoles = computed(() => {
+    const role = auth.user?.role || '';
+    return String(role).split(',').map(r => r.trim().toLowerCase()).filter(Boolean);
+  });
 
-  const permission = (section) => getPermission(userRoles.value, section);
-  const canView = (section) => canViewFn(userRoles.value, section);
-  const canEdit = (section) => canEditFn(userRoles.value, section);
-  const canFull = (section) => canFullFn(userRoles.value, section);
-  const isReadOnly = (section) => permission(section) === 'view';
+  // Грузил ли БД successfull (хоть одна запись — значит response пришёл,
+  // даже если для роли прав нет)? Используем простой признак: объект
+  // permissions заполнен. Если auth-store ещё не дёрнул API или вернул
+  // пусто — фоллбэк на static.
+  const dbLoaded = computed(() =>
+    auth.permissions && Object.keys(auth.permissions).length > 0
+  );
+
+  function permission(section) {
+    if (!section) return null;
+    if (dbLoaded.value) return auth.permissions[section] || null;
+    return staticGetPermission(userRoles.value, section);
+  }
+
+  function canView(section) {
+    return permission(section) !== null;
+  }
+  function canEdit(section) {
+    const p = permission(section);
+    return p === 'edit' || p === 'full';
+  }
+  function canFull(section) {
+    return permission(section) === 'full';
+  }
+  function isReadOnly(section) {
+    return permission(section) === 'view';
+  }
 
   return { userRoles, permission, canView, canEdit, canFull, isReadOnly };
 }
