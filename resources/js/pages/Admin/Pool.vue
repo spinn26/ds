@@ -286,30 +286,59 @@ const filteredParticipants = computed(() => {
 // fund × #активных уровней.
 const isHistoricalView = computed(() => !!(result.value?.fromPoolLog || result.value?.fromCsv));
 
-// Уровни (6..10), у которых shareValues > 0. Backend для исторических
-// периодов back-derive shareValues из payoutRub в poolLog — поэтому
-// одна и та же логика работает и для live, и для snapshot.
+// Нерегулярный snapshot: на одном уровне партнёры получили разные суммы
+// (legacy Directual-прорейт). Бэк не строит shareValues и ставит флаг
+// `irregularPayouts`; фронт в этом режиме рисует payoutRub в колонке
+// СВОЕГО уровня, без матрёшки. Дублируем проверку по shareValues —
+// fallback если бэк-флага нет (старые ответы).
+const irregularSnapshot = computed(() => {
+  if (!result.value) return false;
+  if (result.value.irregularPayouts) return true;
+  if (isHistoricalView.value) {
+    const shares = result.value.shareValues || {};
+    return ![6, 7, 8, 9, 10].some(l => (shares[l] || 0) > 0);
+  }
+  return false;
+});
+
+// Активные уровни — где есть shareValues>0 (live/регулярный snapshot)
+// либо есть выплата в payoutRub (нерегулярный snapshot).
 const activeLevels = computed(() => {
   if (!result.value) return [];
+  if (irregularSnapshot.value) {
+    const set = new Set();
+    for (const p of result.value.participants || []) {
+      if (p.payoutRub > 0 && p.level >= 6 && p.level <= 10) set.add(p.level);
+    }
+    return [6, 7, 8, 9, 10].filter(l => set.has(l));
+  }
   const shares = result.value.shareValues || {};
   return [6, 7, 8, 9, 10].filter(lvl => (shares[lvl] || 0) > 0);
 });
 
-// Сумма по строке «ИТОГО» в нижней таблице.
-// Live: теоретический максимум = fund × #активных уровней.
-// Snapshot: реально выплаченное из poolLog.
+// Live: fund × #активных уровней (теоретический max).
+// Snapshot (любой): реально выплаченное (totalPaid из poolLog).
 const totalRowSum = computed(() => {
   if (!result.value) return 0;
   if (isHistoricalView.value) return Number(result.value.totalPaid || 0);
   return Number(result.value.fund || 0) * activeLevels.value.length;
 });
 
-// Значение ячейки уровня в строке «ИТОГО».
-// Live: fund (если уровень активен) — теоретическая «доля уровня».
-// Snapshot: share(L) × cumulativeCount(L+) — сколько суммарно ушло на уровне
-//   через матрёшку. cumulativeCount считаем по реальным участникам snapshot.
+// Ячейка уровня в строке ИТОГО.
+//   Live: fund (если уровень активен).
+//   Регулярный snapshot: share(L) × cumulativeCount(L+) — суммарно ушло
+//     на уровне через матрёшку, сходится с totalPaid.
+//   Нерегулярный snapshot: сумма payoutRub партнёров чей level == L —
+//     реально выплаченное на этом уровне без матрёшки-фантазии.
 function totalCellForLevel(lvl) {
   if (!result.value) return 0;
+  if (irregularSnapshot.value) {
+    let s = 0;
+    for (const p of result.value.participants || []) {
+      if (p.level === lvl && p.payoutRub > 0) s += Number(p.payoutRub);
+    }
+    return s;
+  }
   const shares = result.value.shareValues || {};
   if (isHistoricalView.value) {
     const share = Number(shares[lvl] || 0);
@@ -323,21 +352,26 @@ function totalCellForLevel(lvl) {
   return activeLevels.value.includes(lvl) ? Number(result.value.fund || 0) : 0;
 }
 
-// Матрёшка для каждого партнёра: byLevel[L] = share(L) если L <= partner.level.
-// Логика одинакова для live и snapshot — backend для snapshot уже отдал
-// shareValues, восстановленные из реальных выплат.
+// Матрёшка для строк партнёров.
+//   Live + регулярный snapshot: byLevel[L] = share(L) для L≤partner.level.
+//   Нерегулярный snapshot: byLevel[partner.level] = payoutRub целиком.
 const payoutRows = computed(() => {
   if (!result.value) return [];
   const shares = result.value.shareValues || {};
-  // revenue=null в snapshot → пробрасываем null, чтобы moneyOrDash отрисовал «—».
+  const irregular = irregularSnapshot.value;
+  // revenue=null в snapshot → пробрасываем null, moneyOrDash → «—».
   const revenue = result.value.revenue === null || result.value.revenue === undefined
     ? null : Number(result.value.revenue);
   return (result.value.participants || [])
     .filter(p => p.participates && p.payoutRub > 0)
     .map(p => {
       const byLevel = { 6: 0, 7: 0, 8: 0, 9: 0, 10: 0 };
-      for (let lvl = 6; lvl <= p.level; lvl++) {
-        byLevel[lvl] = shares[lvl] || 0;
+      if (irregular) {
+        if (p.level >= 6 && p.level <= 10) byLevel[p.level] = p.payoutRub;
+      } else {
+        for (let lvl = 6; lvl <= p.level; lvl++) {
+          byLevel[lvl] = shares[lvl] || 0;
+        }
       }
       return {
         id: p.id,
@@ -346,8 +380,6 @@ const payoutRows = computed(() => {
         levelName: p.levelName,
         byLevel,
         payoutRub: p.payoutRub,
-        // Выручка DS без НДС за месяц — общая для всех (как в эталоне).
-        // Для исторических null → отображается «—».
         groupBonusRub: revenue,
       };
     });

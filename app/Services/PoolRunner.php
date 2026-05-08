@@ -565,44 +565,9 @@ class PoolRunner
 
         $totalPaid = array_sum(array_column($participants, 'payoutRub'));
 
-        // ИСТОРИЧЕСКИЙ / ЗАМОРОЖЕННЫЙ ПЕРИОД — back-derive shareValues
-        // из реальных payoutRub в poolLog.
-        //
-        // Логика матрёшки: партнёр уровня L получил share(6)+share(7)+…+share(L).
-        // По одной строке poolLog мы видим суммарный payout, а не разбивку.
-        // Но если на нескольких уровнях есть участники, доли восстанавливаются
-        // последовательно:
-        //   share[6] = payout уровня 6 (только share(6))
-        //   share[7] = payout уровня 7 − share[6]
-        //   share[8] = payout уровня 8 − share[6] − share[7]
-        //   …
-        //
-        // По уровню берём MAX (а не среднее) — на уровне могут быть
-        // дисквалифицированные с payout=0; представительная доля — у тех,
-        // кому реально заплатили. Если на уровне никого нет — share[L]=0
-        // (информации нет, но это не влияет на сумму выплат).
-        //
-        // revenue/fund/forfeited по-прежнему null — этих чисел в poolLog нет,
-        // back-derive некорректен (forfeited зависит от ВСЕХ номинальных
-        // партнёров уровня, а у нас только те, кому что-то выплатили).
-        $maxByLevel = array_fill_keys(range(PoolCalculator::LEADER_LEVEL_MIN, PoolCalculator::LEADER_LEVEL_MAX), 0);
-        foreach ($participants as $p) {
-            $lvl = (int) ($p['level'] ?? 0);
-            if ($lvl >= PoolCalculator::LEADER_LEVEL_MIN && $lvl <= PoolCalculator::LEADER_LEVEL_MAX) {
-                $maxByLevel[$lvl] = max($maxByLevel[$lvl], (float) $p['payoutRub']);
-            }
-        }
-        $shareValues = [];
-        $cumulativeLower = 0;
-        for ($lvl = PoolCalculator::LEADER_LEVEL_MIN; $lvl <= PoolCalculator::LEADER_LEVEL_MAX; $lvl++) {
-            if ($maxByLevel[$lvl] > 0) {
-                $share = max(0, $maxByLevel[$lvl] - $cumulativeLower);
-                $shareValues[$lvl] = round($share, 2);
-                $cumulativeLower += $share;
-            } else {
-                $shareValues[$lvl] = 0;
-            }
-        }
+        // ИСТОРИЧЕСКИЙ / ЗАМОРОЖЕННЫЙ ПЕРИОД — выводим то, что в poolLog.
+        // shareValues по возможности back-derive (см. backDeriveShares()).
+        [$shareValues, $regular] = $this->backDeriveShares($participants);
 
         return [
             'year' => $year,
@@ -615,6 +580,7 @@ class PoolRunner
             'totalForfeited' => null,
             'written' => 0,
             'fromPoolLog' => true,
+            'irregularPayouts' => ! $regular,
         ];
     }
 
@@ -711,26 +677,11 @@ class PoolRunner
 
         $totalPaid = array_sum(array_column($participants, 'payoutRub'));
 
-        // CSV — тоже исторический snapshot. shareValues back-derive
-        // из payoutRub (см. подробный комментарий в participantsFromPoolLog).
-        $maxByLevel = array_fill_keys(range(PoolCalculator::LEADER_LEVEL_MIN, PoolCalculator::LEADER_LEVEL_MAX), 0);
-        foreach ($participants as $p) {
-            $lvl = (int) ($p['level'] ?? 0);
-            if ($lvl >= PoolCalculator::LEADER_LEVEL_MIN && $lvl <= PoolCalculator::LEADER_LEVEL_MAX) {
-                $maxByLevel[$lvl] = max($maxByLevel[$lvl], (float) $p['payoutRub']);
-            }
-        }
-        $shareValues = [];
-        $cumulativeLower = 0;
-        for ($lvl = PoolCalculator::LEADER_LEVEL_MIN; $lvl <= PoolCalculator::LEADER_LEVEL_MAX; $lvl++) {
-            if ($maxByLevel[$lvl] > 0) {
-                $share = max(0, $maxByLevel[$lvl] - $cumulativeLower);
-                $shareValues[$lvl] = round($share, 2);
-                $cumulativeLower += $share;
-            } else {
-                $shareValues[$lvl] = 0;
-            }
-        }
+        // CSV-ветка использует ту же гибридную логику что и БД:
+        // регулярные данные → back-derive shareValues, иначе → пусто
+        // (см. подробный комментарий в participantsFromPoolLog).
+        [$shareValues, $regular] = $this->backDeriveShares($participants);
+
         return [
             'year' => $year,
             'month' => $month,
@@ -742,7 +693,79 @@ class PoolRunner
             'totalForfeited' => null,
             'written' => 0,
             'fromCsv' => true,
+            'irregularPayouts' => ! $regular,
         ];
+    }
+
+    /**
+     * Back-derive shareValues из payoutRub в snapshot.
+     *
+     * Логика матрёшки: партнёр уровня L получил share(6)+share(7)+…+share(L).
+     * По одной строке мы видим суммарный payout, но если данные регулярны
+     * (все на одном уровне получили одинаково), доли восстанавливаются
+     * последовательно:
+     *   share[6] = payout уровня 6
+     *   share[7] = payout уровня 7 − share[6]
+     *   share[8] = payout уровня 8 − share[6] − share[7]
+     *   …
+     *
+     * НЕРЕГУЛЯРНОСТИ: в legacy Directual-данных (Apr-Aug 2025, Mar 2026 и др.)
+     * на уровне 6 разные партнёры получали разные суммы (1/4 от max — видимо
+     * прорейт за неполный срок активности). Тогда back-derive некорректен:
+     * share[6] × count выдаёт «накачанный» итог.
+     *
+     * Поэтому: проверяем регулярность (max == min на каждом непустом уровне).
+     * Регулярно → возвращаем shareValues + флаг regular=true.
+     * Нерегулярно → пустой массив + regular=false; фронт по этому флагу
+     * рендерит payoutRub в колонке СВОЕГО уровня без матрёшки.
+     *
+     * @return array{0: array<int,float>, 1: bool}
+     */
+    private function backDeriveShares(array $participants): array
+    {
+        $payoutsByLevel = array_fill_keys(
+            range(PoolCalculator::LEADER_LEVEL_MIN, PoolCalculator::LEADER_LEVEL_MAX),
+            []
+        );
+        foreach ($participants as $p) {
+            $lvl = (int) ($p['level'] ?? 0);
+            $pay = (float) ($p['payoutRub'] ?? 0);
+            if ($lvl >= PoolCalculator::LEADER_LEVEL_MIN
+                && $lvl <= PoolCalculator::LEADER_LEVEL_MAX
+                && $pay > 0) {
+                $payoutsByLevel[$lvl][] = $pay;
+            }
+        }
+
+        $regular = true;
+        $maxByLevel = [];
+        foreach ($payoutsByLevel as $lvl => $payouts) {
+            if (empty($payouts)) {
+                $maxByLevel[$lvl] = 0;
+                continue;
+            }
+            $maxByLevel[$lvl] = max($payouts);
+            // Допуск 1 копейка для legacy-округлений Directual.
+            if ((max($payouts) - min($payouts)) > 0.01) {
+                $regular = false;
+            }
+        }
+
+        if (! $regular) return [[], false];
+
+        $shareValues = [];
+        $cum = 0;
+        for ($lvl = PoolCalculator::LEADER_LEVEL_MIN; $lvl <= PoolCalculator::LEADER_LEVEL_MAX; $lvl++) {
+            if (($maxByLevel[$lvl] ?? 0) > 0) {
+                $share = max(0, $maxByLevel[$lvl] - $cum);
+                $shareValues[$lvl] = round($share, 2);
+                $cum += $share;
+            } else {
+                $shareValues[$lvl] = 0;
+            }
+        }
+
+        return [$shareValues, true];
     }
 
     private function emptyResult(int $year, int $month, float $revenue): array
