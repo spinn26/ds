@@ -99,6 +99,25 @@
               <v-chip size="x-small" color="warning" variant="tonal" class="ml-1">{{ drafts.length }}</v-chip>
             </span>
             <v-spacer />
+            <!-- Per spec ✅Ручной ввод транзакций §2.1 — два тумблера для
+                 быстрого скрытия групп колонок. По умолчанию «Показать
+                 продукт» выключен (product/program/supplier дублируются
+                 с верхней таблицей и съедают место), главные расчётные
+                 колонки сразу видны. -->
+            <v-chip
+              :color="showProductCols ? 'primary' : undefined"
+              :variant="showProductCols ? 'flat' : 'tonal'"
+              size="small" prepend-icon="mdi-package-variant"
+              @click="toggleProductCols">
+              Показать продукт
+            </v-chip>
+            <v-chip
+              :color="showAdvancedCols ? 'primary' : undefined"
+              :variant="showAdvancedCols ? 'flat' : 'tonal'"
+              size="small" prepend-icon="mdi-cog-outline"
+              @click="toggleAdvancedCols">
+              Показать доп. настройки
+            </v-chip>
             <ColumnVisibilityMenu :headers="draftHeaders"
               v-model:visible="draftColsVisible"
               storage-key="manual-tx-drafts-cols"
@@ -109,7 +128,12 @@
             Выберите контракты сверху и нажмите «Добавить в черновики»
           </v-card-text>
 
-          <v-table v-else density="compact" class="manual-tx-table">
+          <!-- Обёртка с горизонтальным скроллом — таблица 13+ колонок
+               не помещается на 1080px вьюпорте, без overflow часть колонок
+               (Доход ДС / Без НДС / Партнёр / Прибыль ДС) уходила за
+               правый край. -->
+          <div v-else class="manual-tx-scroll" style="overflow-x: auto">
+          <v-table density="compact" class="manual-tx-table">
             <thead>
               <tr>
                 <th v-for="h in visibleDraftHeaders" :key="h.key" :class="h.thClass" :style="h.style">
@@ -327,6 +351,7 @@
               </tr>
             </tbody>
           </v-table>
+          </div><!-- /manual-tx-scroll -->
 
           <v-card-actions class="d-flex flex-wrap ga-2">
             <v-btn color="primary" :disabled="!calculableIds.length || calculating" prepend-icon="mdi-calculator"
@@ -593,13 +618,38 @@ const draftHeaders = [
   { title: 'Прибыль ДС', key: 'profit', thClass: 'text-end', tdClass: 'text-end text-no-wrap' },
   { title: '', key: 'actions', style: 'width:48px' },
 ];
-// По умолчанию все колонки видимы — тогглы «Показать продукт» / «Показать
-// доп. настройки» убраны per user request. Управление через
-// ColumnVisibilityMenu остаётся.
-const draftColsVisible = ref({});
+// Per spec ✅Ручной ввод транзакций §2.1 — два quick-preset тумблера:
+//   • showProductCols — product/program/supplier (дублируются с верхней
+//     таблицей контрактов, по умолчанию скрыты);
+//   • showAdvancedCols — noVatUsd/vat/profit (расчётные колонки, в
+//     обычном flow не нужны до фиксации).
+// Главные расчётные колонки (incomeDS, noVatRub, partner) видимы всегда.
+const PRODUCT_COLS = ['product', 'program', 'supplier'];
+const ADVANCED_COLS = ['noVatUsd', 'vat', 'profit'];
+
+const draftColsVisible = ref({
+  product: false, program: false, supplier: false,
+  noVatUsd: false, vat: false, profit: false,
+});
 const visibleDraftHeaders = computed(() =>
   draftHeaders.filter(h => draftColsVisible.value[h.key] !== false)
 );
+
+const showProductCols = computed(() =>
+  PRODUCT_COLS.every(k => draftColsVisible.value[k] !== false)
+);
+const showAdvancedCols = computed(() =>
+  ADVANCED_COLS.every(k => draftColsVisible.value[k] !== false)
+);
+
+function toggleProductCols() {
+  const next = ! showProductCols.value;
+  PRODUCT_COLS.forEach(k => { draftColsVisible.value[k] = next; });
+}
+function toggleAdvancedCols() {
+  const next = ! showAdvancedCols.value;
+  ADVANCED_COLS.forEach(k => { draftColsVisible.value[k] = next; });
+}
 
 const { debounced: debouncedSearch } = useDebounce(loadContracts, 400);
 
