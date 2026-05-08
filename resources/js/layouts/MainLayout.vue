@@ -255,6 +255,7 @@ import OnboardingQuestionnaire from '../components/OnboardingQuestionnaire.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import GlobalSnackbar from '../components/GlobalSnackbar.vue';
 import { provideConfirm } from '../composables/useConfirm';
+import { availableSections as configAvailableSections } from '../config/cabinetPermissions';
 import api from '../api';
 
 const confirmRef = ref(null);
@@ -541,33 +542,24 @@ const isStaff = computed(() =>
   userRoles.value.some(r => ['admin', 'backoffice', 'support', 'finance', 'head', 'calculations', 'corrections', 'education'].includes(r))
 );
 
-// Cabinet sections per role — exact mapping from spec docs.
-// «contests» (Конкурсы) намеренно скрыты у всех ролей по запросу
-// продакта (правки 2026-05-05) — раздел не используется на проде.
-const cabinetSections = {
-  // 'support-desk' (Тех. поддержка — desk обработчиков тикетов) остаётся
-  // только у admin/support/head. Остальные стафф-роли могут НАПИСАТЬ
-  // о проблеме через «Тех. проблема» (см. menuItems ниже), но самого
-  // desk-а у них нет.
-  admin: ['calculator', 'structure', 'partners', 'statuses', 'clients', 'contracts', 'upload', 'acceptance', 'requisites', 'transfers', 'transactions', 'import', 'commissions', 'pool', 'qualifications', 'charges', 'payments', 'products', 'communication', 'support-desk', 'chat-analytics', 'reports', 'currencies', 'education', 'education-analytics', 'partner-questionnaires'],
-  backoffice: ['calculator', 'structure', 'partners', 'statuses', 'clients', 'contracts', 'upload', 'acceptance', 'requisites', 'transfers', 'products', 'communication', 'chat-analytics', 'reports', 'pool', 'partner-questionnaires', 'commissions'],
-  support: ['partners', 'statuses', 'structure', 'clients', 'contracts', 'acceptance', 'products', 'communication', 'support-desk', 'calculator', 'partner-questionnaires'],
-  head: ['calculator', 'structure', 'partners', 'statuses', 'clients', 'contracts', 'acceptance', 'transfers', 'products', 'communication', 'support-desk', 'chat-analytics', 'reports', 'owner-dashboard', 'reconciliation', 'anomalies', 'funnel', 'cohorts', 'pool', 'partner-questionnaires'],
-  finance: ['calculator', 'requisites', 'charges', 'payments', 'reports', 'communication', 'pool'],
-  // Богданова — Руководитель по расчётам. По запросу: ей нужен полный
-  // доступ к данным партнёров, выплатам, реквизитам, акцепту и т.п.
-  calculations: ['calculator', 'structure', 'partners', 'statuses', 'clients', 'contracts', 'acceptance', 'transfers', 'requisites', 'transactions', 'import', 'commissions', 'pool', 'qualifications', 'charges', 'payments', 'products', 'communication', 'reports', 'currencies'],
-  corrections: ['calculator', 'clients', 'contracts', 'partners'],
-  education: ['education', 'education-analytics', 'partner-questionnaires', 'partners', 'products', 'instructions', 'communication'],
-};
-
+// Видимость секций и уровень прав вынесены в config/cabinetPermissions.js
+// — единый source of truth (view/edit/full per spec). Здесь оставлен только
+// computed для меню — реальные проверки на страницах через usePermissions().
+// «contests» (Конкурсы) намеренно скрыты у всех ролей по запросу продакта
+// (правки 2026-05-05) — раздел не используется на проде.
 const availableSections = computed(() => {
-  const sections = new Set();
-  for (const role of userRoles.value) {
-    const s = cabinetSections[role];
-    if (s) s.forEach(sec => sections.add(sec));
+  const set = configAvailableSections(userRoles.value);
+  // admin → set содержит sentinel '*'. Расширяем до всех существующих
+  // adminSection из menuItems, чтобы visibleMenu.has() работал одинаково
+  // для всех ролей без отдельной ветки.
+  if (set.has('*')) {
+    const all = new Set();
+    for (const it of menuItems) {
+      if (it.adminSection) all.add(it.adminSection);
+    }
+    return all;
   }
-  return sections;
+  return set;
 });
 
 const cabinetName = computed(() => {
