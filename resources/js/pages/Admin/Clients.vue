@@ -8,50 +8,61 @@
       </template>
     </PageHeader>
 
+    <!-- Компактный layout фильтров: основные поля в одной flex-строке,
+         диапазон дат — за тогглом «Ещё». Без floating-label на полях
+         типа date — на узких экранах (Mac Air ~1366px) лейбл резал
+         outlined-рамку. -->
     <v-card class="mb-3 pa-3">
-      <v-row dense align="center">
-        <v-col cols="12" md="3">
-          <v-text-field v-model="search" placeholder="ФИО / Email / Телефон"
-            density="comfortable" variant="outlined" hide-details clearable
-            prepend-inner-icon="mdi-magnify"
-            @update:model-value="debouncedLoad" />
-        </v-col>
-        <v-col cols="12" md="2">
-          <v-text-field v-model="filters.id" placeholder="ID клиента"
-            density="comfortable" variant="outlined" hide-details clearable
-            @update:model-value="debouncedLoad" />
-        </v-col>
-        <v-col cols="12" md="2">
-          <v-text-field v-model="filters.consultantName" placeholder="ФИО консультанта"
-            density="comfortable" variant="outlined" hide-details clearable
-            @update:model-value="debouncedLoad" />
-        </v-col>
-        <v-col cols="12" md="2">
-          <v-text-field v-model="filters.comment" placeholder="Комментарий"
-            density="comfortable" variant="outlined" hide-details clearable
-            @update:model-value="debouncedLoad" />
-        </v-col>
-        <v-col cols="12" md="3">
-          <div class="d-flex ga-2">
-            <v-text-field v-model="filters.created_from" label="Заведён с" type="date"
-              density="comfortable" variant="outlined" hide-details
-              @update:model-value="loadData" />
-            <v-text-field v-model="filters.created_to" label="по" type="date"
-              density="comfortable" variant="outlined" hide-details
-              @update:model-value="loadData" />
+      <div class="d-flex flex-wrap ga-2 align-center">
+        <v-text-field v-model="search" placeholder="ФИО / Email / Телефон"
+          density="compact" variant="outlined" hide-details clearable
+          prepend-inner-icon="mdi-magnify" style="max-width: 260px; flex: 1 1 200px"
+          @update:model-value="debouncedLoad" />
+        <v-text-field v-model="filters.id" placeholder="ID клиента"
+          density="compact" variant="outlined" hide-details clearable
+          style="max-width: 140px"
+          @update:model-value="debouncedLoad" />
+        <v-text-field v-model="filters.consultantName" placeholder="ФИО консультанта"
+          density="compact" variant="outlined" hide-details clearable
+          style="max-width: 220px; flex: 1 1 180px"
+          @update:model-value="debouncedLoad" />
+        <v-text-field v-model="filters.comment" placeholder="Комментарий"
+          density="compact" variant="outlined" hide-details clearable
+          style="max-width: 200px; flex: 1 1 160px"
+          @update:model-value="debouncedLoad" />
+
+        <v-spacer />
+
+        <v-btn :variant="advancedOpen ? 'tonal' : 'text'" size="small"
+          :prepend-icon="advancedOpen ? 'mdi-chevron-up' : 'mdi-tune'"
+          @click="advancedOpen = !advancedOpen">
+          Ещё
+          <v-chip v-if="advancedActiveCount > 0" size="x-small" color="info"
+            variant="elevated" class="ms-1">{{ advancedActiveCount }}</v-chip>
+        </v-btn>
+        <v-chip v-if="activeFilterCount > 0" size="small" color="info" variant="tonal">
+          {{ activeFilterCount }} {{ activeFilterCount === 1 ? 'фильтр' : 'фильтра' }}
+        </v-chip>
+        <v-btn v-if="activeFilterCount > 0" size="small" variant="text" color="secondary"
+          prepend-icon="mdi-filter-remove" @click="resetFilters">Сбросить</v-btn>
+        <ColumnVisibilityMenu :headers="headers" v-model:visible="columnVisible" storage-key="clients-cols" />
+      </div>
+
+      <v-expand-transition>
+        <div v-show="advancedOpen" class="d-flex flex-wrap ga-3 mt-3">
+          <div class="filter-range">
+            <span class="text-caption text-medium-emphasis">Заведён</span>
+            <div class="d-flex ga-1">
+              <v-text-field v-model="filters.created_from" type="date" placeholder="с"
+                density="compact" variant="outlined" hide-details
+                @update:model-value="loadData" />
+              <v-text-field v-model="filters.created_to" type="date" placeholder="по"
+                density="compact" variant="outlined" hide-details
+                @update:model-value="loadData" />
+            </div>
           </div>
-        </v-col>
-        <v-col cols="auto" class="d-flex align-center">
-          <v-chip v-if="activeFilterCount > 0" size="small" color="info" variant="tonal" class="ml-1">
-            {{ activeFilterCount }} {{ activeFilterCount === 1 ? 'фильтр' : 'фильтра' }}
-          </v-chip>
-          <v-btn v-if="activeFilterCount > 0" size="small" variant="text" color="secondary"
-            prepend-icon="mdi-filter-remove" @click="resetFilters">Сбросить</v-btn>
-        </v-col>
-        <v-col cols="auto" class="d-flex align-center ms-auto">
-          <ColumnVisibilityMenu :headers="headers" v-model:visible="columnVisible" storage-key="clients-cols" />
-        </v-col>
-      </v-row>
+        </div>
+      </v-expand-transition>
     </v-card>
 
     <v-data-table-server :items="items" :items-length="total" :loading="loading"
@@ -226,11 +237,21 @@ const perPage = ref(25);
 const sortBy = ref('');
 const sortDir = ref('desc');
 const filters = ref({ id: '', consultantName: '', comment: '', created_from: '', created_to: '' });
+const advancedOpen = ref(false);
 
 const activeFilterCount = computed(() => {
   let c = 0;
   if (search.value) c++;
   Object.values(filters.value).forEach(v => { if (v) c++; });
+  return c;
+});
+
+// Активные диапазоны (спрятаны за «Ещё») — нужно подсветить чипом, чтобы
+// пользователь не пропустил, что фильтр уже работает.
+const advancedActiveCount = computed(() => {
+  let c = 0;
+  if (filters.value.created_from) c++;
+  if (filters.value.created_to) c++;
   return c;
 });
 
@@ -362,3 +383,18 @@ async function saveNewClient() {
 
 onMounted(loadData);
 </script>
+
+<style scoped>
+/* Компактный диапазон: подпись и два узких инпута в одну строку.
+   Не используем floating-label на полях type=date — на узких экранах
+   лейбл «с»/«по» резал бы outlined-рамку. */
+.filter-range {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 220px;
+}
+.filter-range :deep(.v-field) {
+  min-width: 100px;
+}
+</style>
