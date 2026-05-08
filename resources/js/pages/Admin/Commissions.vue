@@ -59,7 +59,7 @@
       </div>
 
       <v-expand-transition>
-        <div v-show="advancedOpen" class="d-flex flex-wrap ga-3 mt-3">
+        <div v-show="advancedOpen" class="d-flex flex-wrap ga-3 mt-3 align-end">
           <div class="filter-range">
             <span class="text-caption text-medium-emphasis">Дата</span>
             <div class="d-flex ga-1">
@@ -71,10 +71,16 @@
                 @update:model-value="loadData" />
             </div>
           </div>
-          <v-text-field v-model="filters.comment" placeholder="Комментарий"
-            density="compact" variant="outlined" hide-details clearable
-            style="max-width: 280px; flex: 1 1 220px"
-            @update:model-value="debouncedLoad" />
+          <!-- Обёртка с такой же подписью, чтобы инпут не растягивался
+               на всю высоту блока «Дата» (label + 2 инпута). Раньше из-за
+               flex align-items=stretch Комментарий получался выше всех. -->
+          <div class="filter-range">
+            <span class="text-caption text-medium-emphasis">Комментарий</span>
+            <v-text-field v-model="filters.comment" placeholder="Поиск по тексту"
+              density="compact" variant="outlined" hide-details clearable
+              style="min-width: 240px"
+              @update:model-value="debouncedLoad" />
+          </div>
         </div>
       </v-expand-transition>
     </v-card>
@@ -99,6 +105,11 @@
       </div>
     </v-card>
 
+    <!-- Обёртка с горизонтальным скроллом — у Комиссий 12+ колонок,
+         цифры вроде «156,19 ₽» рвались по символам из-за глобального
+         overflow-wrap: anywhere в global.css. Теперь если таблица не
+         помещается в viewport — появляется scrollbar внизу. -->
+    <div class="commissions-table-wrap">
     <v-data-table-server :items="items" :items-length="total" :loading="loading"
       :headers="visibleHeaders" :items-per-page="25"
       v-model:expanded="expanded" item-value="id" show-expand
@@ -130,15 +141,25 @@
       <template #item.amount="{ item }">
         <span class="text-no-wrap">{{ fmt(item.amount) }} {{ item.currencySymbol || '' }}</span>
       </template>
-      <template #item.amountRUB="{ value }">{{ fmt(value) }} ₽</template>
+      <template #item.amountRUB="{ value }">
+        <span class="text-no-wrap">{{ fmt(value) }} ₽</span>
+      </template>
       <template #item.dsCommissionPercentage="{ value }">
-        <span v-if="value != null">{{ value }}%</span>
+        <span v-if="value != null" class="text-no-wrap">{{ value }}%</span>
         <span v-else class="text-medium-emphasis">—</span>
       </template>
-      <template #item.commissionsAmountRUB="{ value }">{{ fmt(value) }} ₽</template>
-      <template #item.commissionsAmountUSD="{ value }">{{ fmt(value) }} $</template>
-      <template #item.netRevenueRUB="{ value }">{{ fmt(value) }} ₽</template>
-      <template #item.netRevenueUSD="{ value }">{{ fmt(value) }} $</template>
+      <template #item.commissionsAmountRUB="{ value }">
+        <span class="text-no-wrap">{{ fmt(value) }} ₽</span>
+      </template>
+      <template #item.commissionsAmountUSD="{ value }">
+        <span class="text-no-wrap">{{ fmt(value) }} $</span>
+      </template>
+      <template #item.netRevenueRUB="{ value }">
+        <span class="text-no-wrap">{{ fmt(value) }} ₽</span>
+      </template>
+      <template #item.netRevenueUSD="{ value }">
+        <span class="text-no-wrap">{{ fmt(value) }} $</span>
+      </template>
 
       <!-- Аккордеон: цепочка выплат -->
       <template #expanded-row="{ columns, item }">
@@ -202,6 +223,7 @@
 
       <template #no-data><EmptyState message="Транзакции не найдены" icon="mdi-receipt-outline" /></template>
     </v-data-table-server>
+    </div>
   </div>
 </template>
 
@@ -395,5 +417,17 @@ onMounted(() => { loadData(); loadSuppliers(); });
 }
 .filter-range :deep(.v-field) {
   min-width: 100px;
+}
+/* Горизонтальный скролл — таблица не помещается в viewport, особенно на
+   Mac Air ≤1440px. У Vuetify v-data-table-server overflow-x:auto уже на
+   .v-table__wrapper, но из-за глобального overflow-wrap:anywhere цифры
+   рвались по символам внутри ячеек. Здесь явно отключаем wrap. */
+.commissions-table-wrap {
+  overflow-x: auto;
+}
+.commissions-table :deep(td),
+.commissions-table :deep(th) {
+  overflow-wrap: normal !important;
+  word-break: normal !important;
 }
 </style>

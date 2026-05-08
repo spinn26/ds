@@ -3,6 +3,9 @@ import { createPinia } from 'pinia';
 import piniaPluginPersistedstate from 'pinia-plugin-persistedstate';
 import { VueQueryPlugin } from '@tanstack/vue-query';
 import { createVuetify } from 'vuetify';
+// Vuetify-локаль для встроенных текстов (pagination, no-data, etc).
+// Без неё пагинация рендерит «Items per page» — пользователю надо ru.
+import { ru as vuetifyRu, en as vuetifyEn } from 'vuetify/locale';
 import { createI18n } from 'vue-i18n';
 import * as components from 'vuetify/components';
 import * as directives from 'vuetify/directives';
@@ -29,6 +32,11 @@ const savedTheme = localStorage.getItem('theme') || 'light';
 const vuetify = createVuetify({
     components,
     directives,
+    locale: {
+        locale: 'ru',
+        fallback: 'en',
+        messages: { ru: vuetifyRu, en: vuetifyEn },
+    },
     theme: {
         defaultTheme: savedTheme,
         themes: {
