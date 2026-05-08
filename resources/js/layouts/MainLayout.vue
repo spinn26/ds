@@ -545,10 +545,10 @@ const isStaff = computed(() =>
 // «contests» (Конкурсы) намеренно скрыты у всех ролей по запросу
 // продакта (правки 2026-05-05) — раздел не используется на проде.
 const cabinetSections = {
-  admin: ['calculator', 'structure', 'partners', 'statuses', 'clients', 'contracts', 'upload', 'acceptance', 'requisites', 'transfers', 'transactions', 'import', 'commissions', 'pool', 'qualifications', 'charges', 'payments', 'products', 'communication', 'chat-analytics', 'reports', 'currencies', 'education', 'education-analytics', 'partner-questionnaires'],
+  admin: ['calculator', 'structure', 'partners', 'statuses', 'clients', 'contracts', 'upload', 'acceptance', 'requisites', 'transfers', 'transactions', 'import', 'commissions', 'pool', 'qualifications', 'charges', 'payments', 'products', 'communication', 'support-desk', 'chat-analytics', 'reports', 'currencies', 'education', 'education-analytics', 'partner-questionnaires'],
   backoffice: ['calculator', 'structure', 'partners', 'statuses', 'clients', 'contracts', 'upload', 'acceptance', 'requisites', 'transfers', 'products', 'communication', 'chat-analytics', 'reports', 'pool', 'partner-questionnaires', 'commissions'],
-  support: ['partners', 'statuses', 'structure', 'clients', 'contracts', 'acceptance', 'products', 'communication', 'calculator', 'partner-questionnaires'],
-  head: ['calculator', 'structure', 'partners', 'statuses', 'clients', 'contracts', 'acceptance', 'transfers', 'products', 'communication', 'chat-analytics', 'reports', 'owner-dashboard', 'reconciliation', 'anomalies', 'funnel', 'cohorts', 'pool', 'partner-questionnaires'],
+  support: ['partners', 'statuses', 'structure', 'clients', 'contracts', 'acceptance', 'products', 'communication', 'support-desk', 'calculator', 'partner-questionnaires'],
+  head: ['calculator', 'structure', 'partners', 'statuses', 'clients', 'contracts', 'acceptance', 'transfers', 'products', 'communication', 'support-desk', 'chat-analytics', 'reports', 'owner-dashboard', 'reconciliation', 'anomalies', 'funnel', 'cohorts', 'pool', 'partner-questionnaires'],
   finance: ['calculator', 'requisites', 'charges', 'payments', 'reports', 'communication', 'pool'],
   // Богданова — Руководитель по расчётам. По запросу: ей нужен полный
   // доступ к данным партнёров, выплатам, реквизитам, акцепту и т.п.
@@ -606,6 +606,9 @@ const menuItems = [
 
   { group: 'Связь', partner: true },
   { label: 'Обратная связь', icon: 'mdi-chat-outline', path: '/chat', partner: true },
+  // Открывает чат-диалог с предзаполненной категорией «Техподдержка».
+  // Партнёр сразу попадает в нужный отдел без ручного выбора темы.
+  { label: 'Тех. проблема', icon: 'mdi-bug', path: '/chat?new=support', partner: true },
   { label: 'Написать собственику', icon: 'mdi-email-edit-outline', path: '', partner: true, action: () => openQuickMsg('Сообщение собственику', 'mdi-email-edit-outline') },
   // Per spec ✅Оставить кейс — внешняя ссылка, без диалога.
   { label: 'Оставить кейс', icon: 'mdi-briefcase-plus-outline', path: '', partner: true, action: () => window.open('https://dsconsalting.academy/bankcases', '_blank', 'noopener') },
@@ -655,6 +658,9 @@ const menuItems = [
   // Конкурсы скрыты у staff-кабинетов по запросу 2026-05-05.
   // { label: 'Конкурсы', icon: 'mdi-trophy', path: '/manage/contests', adminSection: 'contests' },
   { label: 'Чат / Тикеты', icon: 'mdi-chat-processing', path: '/manage/chat', adminSection: 'communication' },
+  // Рабочий стол техподдержки: KPI, тикеты department=support и инциденты
+  // (любой категории). Доступен ролям admin/support/head.
+  { label: 'Тех. поддержка', icon: 'mdi-lifebuoy', path: '/manage/support', adminSection: 'support-desk' },
   { label: 'Аналитика чата', icon: 'mdi-chart-box-outline', path: '/manage/chat/analytics', adminSection: 'chat-analytics' },
   { label: 'Отчёты', icon: 'mdi-file-chart', path: '/manage/reports', adminSection: 'reports' },
   { label: 'Справочники для расчёта', icon: 'mdi-currency-usd', path: '/manage/currencies', adminSection: 'currencies' },

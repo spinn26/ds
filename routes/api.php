@@ -73,6 +73,10 @@ Route::prefix('v1')->group(function () {
         Route::post('/chat/tickets/{id}/save-to-kb', [\App\Http\Controllers\Api\ChatController::class, 'saveTicketAsArticle']);
         Route::get('/chat/analytics', [\App\Http\Controllers\Api\ChatController::class, 'analytics']);
         Route::get('/chat/my-open', [\App\Http\Controllers\Api\ChatController::class, 'myOpenTickets']);
+        // Инциденты + рабочий стол техподдержки
+        Route::post('/chat/tickets/{id}/incident', [\App\Http\Controllers\Api\ChatController::class, 'markIncident'])->whereNumber('id');
+        Route::post('/chat/tickets/{id}/incident/resolve', [\App\Http\Controllers\Api\ChatController::class, 'resolveIncident'])->whereNumber('id');
+        Route::get('/support/desk', [\App\Http\Controllers\Api\ChatController::class, 'supportDesk']);
         Route::get('/dashboard', [DashboardController::class, 'index']);
         Route::get('/status-levels', [DashboardController::class, 'statusLevels']);
 

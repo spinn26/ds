@@ -936,6 +936,13 @@ function checkQuery() {
   } else if (route.query.type === 'case') {
     newForm.value = { category: 'general', subject: 'Кейс', message: '' };
     showNew.value = true;
+  } else if (route.query.new) {
+    // Меню «Тех. проблема» (?new=support) и т.п. — открыть форму с
+    // предзаполненной категорией. Если ключ не известен — fallback support.
+    const knownCategories = categories.map(c => c.value);
+    const cat = knownCategories.includes(String(route.query.new)) ? String(route.query.new) : 'support';
+    newForm.value = { category: cat, subject: '', message: '' };
+    showNew.value = true;
   }
 }
 

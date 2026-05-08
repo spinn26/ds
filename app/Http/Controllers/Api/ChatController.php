@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Controller;
 use App\Models\ChatTicket;
+use App\Services\TicketService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -38,12 +39,33 @@ class ChatController extends Controller
                 $q->where('created_by', $user->id)
                   ->orWhere('recipient_id', $user->id);
             });
+        } else {
+            // Стафф: видимость по роли. Раньше любой стафф видел все
+            // тикеты (поддержка читала юристические переписки и наоборот).
+            // Теперь — только department, что матчит его роль; плюс
+            // личное участие через OR (создатель / получатель / assigned).
+            $roles = array_map('trim', explode(',', $user->role ?? ''));
+            $allowed = TicketService::visibleCategoriesForRoles($roles);
+            // Расширяем allowed legacy-алиасами, чтобы старые тикеты
+            // с department=technical/billing/sales не выпадали из выдачи.
+            $expanded = $allowed;
+            foreach (TicketService::CATEGORY_ALIASES as $legacy => $modern) {
+                if (in_array($modern, $allowed, true)) $expanded[] = $legacy;
+            }
+            $query->where(function ($q) use ($user, $expanded) {
+                if (! empty($expanded)) {
+                    $q->whereIn('department', $expanded);
+                }
+                $q->orWhere('created_by', $user->id)
+                  ->orWhere('recipient_id', $user->id)
+                  ->orWhere('assigned_to', $user->id);
+            });
         }
 
         // Filters
         if ($request->filled('status')) $query->where('status', $request->status);
         if ($request->filled('priority')) $query->where('priority', $request->priority);
-        if ($request->filled('department')) $query->where('department', $request->department);
+        if ($request->filled('department')) $query->where('department', TicketService::normalizeCategory($request->department));
         if ($request->filled('assigned_to')) $query->where('assigned_to', $request->assigned_to);
         if ($request->filled('search')) {
             $s = '%' . $request->search . '%';
@@ -132,10 +154,17 @@ class ChatController extends Controller
     /** Create ticket */
     public function store(Request $request): JsonResponse
     {
+        // Валидация принимает и новые ключи (TicketService::CATEGORIES),
+        // и legacy-алиасы (technical/billing/sales/accounting) — фронт
+        // на разных страницах пока шлёт разное; нормализуем перед INSERT.
+        $allowedDepartments = array_merge(
+            array_keys(TicketService::CATEGORIES),
+            array_keys(TicketService::CATEGORY_ALIASES),
+        );
         $request->validate([
             'subject' => 'required|string|max:255',
             'description' => 'nullable|string|max:10000',
-            'department' => 'required|in:technical,billing,sales,general',
+            'department' => 'required|in:' . implode(',', $allowedDepartments),
             'priority' => 'nullable|in:critical,high,medium,low',
             'message' => 'required|string|max:10000',
             'recipient_id' => 'nullable|integer|exists:WebUser,id',
@@ -143,6 +172,13 @@ class ChatController extends Controller
             'context_id' => 'nullable|string|max:50',
             'tags' => 'nullable|array|max:20',
             'tags.*' => 'string|max:50',
+        ]);
+
+        // Нормализуем legacy-ключ к актуальному (technical → support и т.д.).
+        // Stored всегда modern key, чтобы фильтрация по роли работала
+        // одинаково на новых и старых тикетах после backfill.
+        $request->merge([
+            'department' => TicketService::normalizeCategory($request->input('department')),
         ]);
 
         // Защита от XSS на write-side. Сейчас фронт рендерит content через
@@ -1702,5 +1738,209 @@ class ChatController extends Controller
             ]);
 
         return response()->json($staff);
+    }
+
+    // ==================== INCIDENTS / SUPPORT DESK ====================
+
+    /**
+     * POST /chat/tickets/{id}/incident — пометить тикет как инцидент.
+     *
+     * Доступно стафф-ролям admin/support/head — кто работает на рабочем
+     * столе техподдержки. Идемпотентно: повторный POST на уже зафиксированном
+     * — обновляет severity, не плодит новый incident_no.
+     */
+    public function markIncident(Request $request, int $id): JsonResponse
+    {
+        $request->validate([
+            'severity' => 'nullable|in:critical,high,medium,low',
+            'note' => 'nullable|string|max:500',
+        ]);
+
+        $user = $request->user();
+        $roles = array_map('trim', explode(',', $user->role ?? ''));
+        if (! array_intersect($roles, ['admin', 'support', 'head'])) {
+            return response()->json([
+                'message' => 'Фиксация инцидентов — только техподдержка/админ',
+            ], 403);
+        }
+
+        $ticket = DB::table('chat_tickets')->where('id', $id)->first();
+        if (! $ticket) return response()->json(['message' => 'Не найден'], 404);
+
+        $severity = $request->input('severity', $ticket->incident_severity ?? 'medium');
+        $isNew = ! ($ticket->is_incident ?? false);
+
+        $incidentNo = $ticket->incident_no;
+        if ($isNew) {
+            $incidentNo = $this->nextIncidentNumber();
+        }
+
+        DB::table('chat_tickets')->where('id', $id)->update([
+            'is_incident' => true,
+            'incident_no' => $incidentNo,
+            'incident_severity' => $severity,
+            'incident_logged_at' => $isNew ? now() : ($ticket->incident_logged_at ?? now()),
+            'incident_logged_by' => $isNew ? $user->id : ($ticket->incident_logged_by ?? $user->id),
+            'incident_resolved_at' => null,
+            'updated_at' => now(),
+        ]);
+
+        // System-сообщение в чат, чтобы участники видели смену статуса.
+        $msg = $isNew
+            ? "Зафиксирован инцидент {$incidentNo} (приоритет: {$severity})"
+            : "Изменён приоритет инцидента {$incidentNo}: {$severity}";
+        if ($request->filled('note')) {
+            $msg .= ". " . $request->input('note');
+        }
+        DB::table('chat_messages')->insert([
+            'ticket_id' => $id,
+            'sender_id' => $user->id,
+            'sender_name' => trim(($user->lastName ?? '') . ' ' . ($user->firstName ?? '')),
+            'content' => $msg,
+            'is_agent' => true,
+            'is_system' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return response()->json([
+            'message' => $isNew ? 'Инцидент зафиксирован' : 'Приоритет обновлён',
+            'incidentNo' => $incidentNo,
+            'severity' => $severity,
+        ]);
+    }
+
+    /** Закрыть инцидент. Сам тикет может оставаться в любом статусе. */
+    public function resolveIncident(Request $request, int $id): JsonResponse
+    {
+        $user = $request->user();
+        $roles = array_map('trim', explode(',', $user->role ?? ''));
+        if (! array_intersect($roles, ['admin', 'support', 'head'])) {
+            return response()->json(['message' => 'Только для техподдержки/админа'], 403);
+        }
+
+        $ticket = DB::table('chat_tickets')->where('id', $id)->first();
+        if (! $ticket || ! $ticket->is_incident) {
+            return response()->json(['message' => 'Инцидент не найден'], 404);
+        }
+
+        DB::table('chat_tickets')->where('id', $id)->update([
+            'incident_resolved_at' => now(),
+            'updated_at' => now(),
+        ]);
+        DB::table('chat_messages')->insert([
+            'ticket_id' => $id,
+            'sender_id' => $user->id,
+            'sender_name' => trim(($user->lastName ?? '') . ' ' . ($user->firstName ?? '')),
+            'content' => "Инцидент {$ticket->incident_no} закрыт",
+            'is_agent' => true,
+            'is_system' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return response()->json(['message' => 'Инцидент закрыт']);
+    }
+
+    /**
+     * GET /support/desk — данные для рабочего стола техподдержки.
+     *
+     * Один эндпоинт отдаёт: KPI (open/incidents/resolved-сегодня),
+     * тикеты department=support, плюс активные инциденты любой категории.
+     */
+    public function supportDesk(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $roles = array_map('trim', explode(',', $user->role ?? ''));
+        if (! array_intersect($roles, ['admin', 'support', 'head'])) {
+            return response()->json(['message' => 'Только для техподдержки/админа'], 403);
+        }
+
+        $today = now()->startOfDay();
+        // Учитываем legacy-алиас 'technical' наравне с 'support' —
+        // некоторые старые тикеты ещё с этим department'ом.
+        $supportDepts = ['support', 'technical'];
+
+        $kpi = [
+            'open' => (int) DB::table('chat_tickets')
+                ->whereIn('department', $supportDepts)
+                ->whereIn('status', ['new', 'open', 'in_progress'])->count(),
+            'incidentsActive' => (int) DB::table('chat_tickets')
+                ->where('is_incident', true)
+                ->whereNull('incident_resolved_at')->count(),
+            'resolvedToday' => (int) DB::table('chat_tickets')
+                ->whereIn('department', $supportDepts)
+                ->where('status', 'resolved')
+                ->where('updated_at', '>=', $today)->count(),
+            'closedToday' => (int) DB::table('chat_tickets')
+                ->whereIn('department', $supportDepts)
+                ->where('status', 'closed')
+                ->where('updated_at', '>=', $today)->count(),
+        ];
+
+        $statusFilter = $request->input('status');
+        $q = DB::table('chat_tickets as t')
+            ->where(function ($w) use ($supportDepts) {
+                $w->whereIn('t.department', $supportDepts)
+                  ->orWhere('t.is_incident', true);
+            })
+            ->select([
+                't.id', 't.subject', 't.department', 't.status', 't.priority',
+                't.is_incident', 't.incident_no', 't.incident_severity',
+                't.incident_logged_at', 't.incident_resolved_at',
+                't.created_at', 't.updated_at', 't.last_message_at',
+                't.customer_name',
+            ]);
+        if ($statusFilter && in_array($statusFilter, ['new', 'open', 'in_progress', 'pending', 'resolved', 'closed'], true)) {
+            $q->where('t.status', $statusFilter);
+        }
+        if ($request->boolean('incidents_only')) {
+            $q->where('t.is_incident', true)->whereNull('t.incident_resolved_at');
+        }
+
+        $rows = $q->orderByDesc('t.is_incident')
+            ->orderByDesc('t.last_message_at')
+            ->orderByDesc('t.updated_at')
+            ->limit(200)
+            ->get();
+
+        $tickets = $rows->map(fn ($t) => [
+            'id' => $t->id,
+            'subject' => $t->subject,
+            'department' => $t->department,
+            'departmentLabel' => TicketService::categoryLabel($t->department),
+            'status' => $t->status,
+            'priority' => $t->priority,
+            'isIncident' => (bool) $t->is_incident,
+            'incidentNo' => $t->incident_no,
+            'incidentSeverity' => $t->incident_severity,
+            'incidentLoggedAt' => $t->incident_logged_at,
+            'incidentResolvedAt' => $t->incident_resolved_at,
+            'customerName' => $t->customer_name,
+            'createdAt' => $t->created_at,
+            'updatedAt' => $t->updated_at,
+            'lastMessageAt' => $t->last_message_at,
+        ]);
+
+        return response()->json([
+            'kpi' => $kpi,
+            'tickets' => $tickets,
+        ]);
+    }
+
+    /**
+     * INC-YYYYMM-NNNN. NNNN — порядковый номер за месяц по уже выданным
+     * incident_no. Без отдельной sequence — sequence не работает
+     * корректно после dump/restore legacy-БД.
+     */
+    private function nextIncidentNumber(): string
+    {
+        $prefix = 'INC-' . now()->format('Ym') . '-';
+        $maxRow = DB::table('chat_tickets')
+            ->where('incident_no', 'like', $prefix . '%')
+            ->selectRaw("MAX(CAST(SUBSTRING(incident_no FROM ?) AS INTEGER)) AS n", [strlen($prefix) + 1])
+            ->first();
+        $n = ((int) ($maxRow->n ?? 0)) + 1;
+        return $prefix . str_pad((string) $n, 4, '0', STR_PAD_LEFT);
     }
 }

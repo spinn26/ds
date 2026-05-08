@@ -27,10 +27,22 @@ class TicketService
         'owner'      => ['label' => 'Собственнику',         'roles' => ['admin', 'head']],
     ];
 
-    /** Backward-compat: старые ключи категорий → новые. */
+    /**
+     * Backward-compat: старые ключи категорий → новые.
+     *
+     * Источники legacy-ключей:
+     *   - chat_tickets.department: technical / billing / sales / general
+     *     (старая enum'ка ChatController, до унификации с TicketService).
+     *   - tickets.category: accounting (старый «Бухгалтер»).
+     *
+     * sales → backoffice — был раздел «Продажи» обслуживался бэк-офисом.
+     * technical → support, billing/accounting → accruals.
+     */
     public const CATEGORY_ALIASES = [
         'accounting' => 'accruals',
         'billing'    => 'accruals',
+        'technical'  => 'support',
+        'sales'      => 'backoffice',
     ];
 
     /** Нормализуем legacy-ключ к актуальному. */
