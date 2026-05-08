@@ -26,6 +26,23 @@ class PeriodFreezeService
     }
 
     /**
+     * Месяц БЫЛ закрыт, но потом явно разморожен админом
+     * (period_closures.reopened_at IS NOT NULL).
+     *
+     * Используется как escape-hatch для исторических периодов: обычно
+     * < HISTORICAL_BEFORE = read-only, но если админ явно разморозил —
+     * разрешаем live-пересчёт и фиксацию заново.
+     */
+    public function wasReopened(int $year, int $month): bool
+    {
+        return DB::table('period_closures')
+            ->where('year', $year)
+            ->where('month', $month)
+            ->whereNotNull('reopened_at')
+            ->exists();
+    }
+
+    /**
      * Закрыть месяц. Повторный вызов — no-op.
      */
     public function close(int $year, int $month, ?int $userId = null, ?string $note = null): void

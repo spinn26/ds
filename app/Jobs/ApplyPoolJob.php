@@ -55,7 +55,16 @@ class ApplyPoolJob implements ShouldQueue
             $result = $runner->run($this->year, $this->month, applyWrite: true);
 
             if ($result['frozen'] ?? false) {
-                $this->setProgress('error', 100, 'Период заморозился пока шёл расчёт');
+                // PoolRunner возвращает frozen=true в двух случаях:
+                //   • период исторический (< HISTORICAL_BEFORE) → message
+                //     «Период %02d.%d — исторический...»
+                //   • период закрыт между dispatch и run() (race) → message
+                //     «Период %02d.%d закрыт — пул не переписывается»
+                // Раньше мы показывали единое «Период заморозился пока шёл
+                // расчёт», и пользователь не понимал, что именно мешает
+                // (особенно для разморожённых исторических периодов).
+                $this->setProgress('error', 100,
+                    $result['message'] ?? 'Период закрыт во время расчёта — пул не записан');
                 return;
             }
 

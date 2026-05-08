@@ -56,7 +56,13 @@ class PoolRunner
         // Исторические периоды read-only: только snapshot, никакого
         // applyWrite. Защита от случайного перезатирания эталонных
         // данных Directual-импорта или CSV.
-        if ($applyWrite && $isHistorical) {
+        //
+        // ИСКЛЮЧЕНИЕ: если админ явно разморозил период
+        // (period_closures.reopened_at IS NOT NULL) — это явный сигнал
+        // «нужен live-пересчёт», и мы пропускаем historical-блокировку.
+        // Это случай март 2026: разморожен 2026-05-06 для пересчёта пула
+        // после изменения qualificationLog/выручки.
+        if ($applyWrite && $isHistorical && ! $this->periodFreeze->wasReopened($year, $month)) {
             return [
                 'year' => $year, 'month' => $month,
                 'revenue' => 0.0, 'fund' => 0.0,
@@ -64,8 +70,9 @@ class PoolRunner
                 'totalPaid' => 0.0, 'totalForfeited' => 0.0,
                 'written' => 0, 'frozen' => true,
                 'message' => sprintf(
-                    'Период %02d.%d — исторический (до апреля 2026). Расчёт пула '.
-                    'и фиксация для таких периодов запрещены.',
+                    'Период %02d.%d — исторический (до апреля 2026). '.
+                    'Чтобы пересчитать пул, админу нужно сначала явно разморозить период '.
+                    '(POST /admin/pool/reopen).',
                     $month, $year,
                 ),
             ];
@@ -97,10 +104,15 @@ class PoolRunner
             return $this->emptyResult($year, $month, $revenue);
         }
 
-        // Исторический период (до апреля 2026): всегда snapshot.
+        // Исторический период (до апреля 2026): обычно snapshot.
         // Сначала пытаемся БД (poolLog), если пусто — читаем CSV
         // (Db/Pool/poolLog.csv). Это точная выгрузка из старой Directual.
-        if ($isHistorical) {
+        //
+        // ИСКЛЮЧЕНИЕ: если админ явно разморозил период
+        // (period_closures.reopened_at IS NOT NULL) — пользователь хочет
+        // увидеть LIVE-пересчёт, чтобы знать, что именно запишется в
+        // poolLog при фиксации. Snapshot тут вводит в заблуждение.
+        if ($isHistorical && ! $this->periodFreeze->wasReopened($year, $month)) {
             $logged = $this->participantsFromPoolLog($year, $month, $revenue);
             if ($logged !== null) return $logged;
             $fromCsv = $this->participantsFromCsv($year, $month, $revenue);
