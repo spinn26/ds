@@ -457,16 +457,23 @@ onMounted(load);
   position: sticky;
   left: 0;
   background: rgb(var(--v-theme-surface));
-  z-index: 1;
-  min-width: 280px;
-  max-width: 320px;
-  border-right: 1px solid rgba(var(--v-theme-on-surface), 0.08);
-  /* Тень-«край» — видно что контент уезжает под sticky-колонку при
-     горизонтальном скролле. Без этого пользователь не понимает где
-     заканчивается фиксированная часть и начинается прокручиваемая. */
-  box-shadow: 6px 0 8px -4px rgba(0, 0, 0, 0.1);
+  z-index: 2;
+  min-width: 260px;
+  max-width: 300px;
+  /* Чёткая 2px-разделительная линия вместо box-shadow — раньше тень
+     bleed'ила вправо и визуально накладывалась на первую data-колонку
+     (chip «Полный» казался влитым в группу). Линия — без перекрытия. */
+  border-right: 2px solid rgba(var(--v-theme-on-surface), 0.12);
 }
-.th-group { z-index: 3; }   /* пересечение sticky-row и sticky-col */
+.th-group { z-index: 4; }   /* пересечение sticky-row и sticky-col */
+/* Узкие экраны (мобилка) — ужимаем sticky-колонку, иначе на 400px
+   она занимает 80% ширины и чипы наезжают визуально. */
+@media (max-width: 600px) {
+  .th-group, .td-group {
+    min-width: 200px;
+    max-width: 220px;
+  }
+}
 
 .permissions-grid tbody td {
   padding: 12px 6px;
@@ -474,7 +481,17 @@ onMounted(load);
   vertical-align: middle;
 }
 .td-group {
-  padding: 14px 12px !important;
+  padding: 14px 16px 14px 12px !important;
+}
+/* Первая data-ячейка сразу после sticky-группы — больше воздуха слева,
+   иначе chip визуально наезжает на 2px-border-границу. Adjacent
+   sibling селектор: точно первый .td-cell после .td-group. */
+.td-group + .td-cell {
+  padding-left: 14px !important;
+}
+/* То же для шапки — первая section-колонка после group-заголовка. */
+.th-group + .th-section {
+  padding-left: 14px !important;
 }
 .td-group__name {
   font-size: 14px;
@@ -540,22 +557,10 @@ onMounted(load);
   width: 32px;
   position: sticky;
   right: 0;
-  z-index: 1;
+  z-index: 2;
   background: rgb(var(--v-theme-surface));
-  border-left: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  border-left: 2px solid rgba(var(--v-theme-on-surface), 0.12);
   text-align: center;
-  /* Аналогичная тень с правой стороны — симметрично левому sticky. */
-  box-shadow: -6px 0 8px -4px rgba(0, 0, 0, 0.1);
 }
-.th-actions { z-index: 3; }
-
-/* Тёмная тема — тени контрастнее, чтобы не сливались с фоном. */
-:global(.v-theme--dark) .th-group,
-:global(.v-theme--dark) .td-group {
-  box-shadow: 6px 0 12px -4px rgba(0, 0, 0, 0.4) !important;
-}
-:global(.v-theme--dark) .th-actions,
-:global(.v-theme--dark) .td-actions {
-  box-shadow: -6px 0 12px -4px rgba(0, 0, 0, 0.4) !important;
-}
+.th-actions { z-index: 4; }
 </style>
