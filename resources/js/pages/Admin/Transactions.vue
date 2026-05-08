@@ -99,25 +99,6 @@
               <v-chip size="x-small" color="warning" variant="tonal" class="ml-1">{{ drafts.length }}</v-chip>
             </span>
             <v-spacer />
-            <!-- Per spec ✅Ручной ввод транзакций §2.1 — два тумблера для
-                 быстрого скрытия групп колонок. По умолчанию «Показать
-                 продукт» выключен (product/program/supplier дублируются
-                 с верхней таблицей и съедают место), главные расчётные
-                 колонки сразу видны. -->
-            <v-chip
-              :color="showProductCols ? 'primary' : undefined"
-              :variant="showProductCols ? 'flat' : 'tonal'"
-              size="small" prepend-icon="mdi-package-variant"
-              @click="toggleProductCols">
-              Показать продукт
-            </v-chip>
-            <v-chip
-              :color="showAdvancedCols ? 'primary' : undefined"
-              :variant="showAdvancedCols ? 'flat' : 'tonal'"
-              size="small" prepend-icon="mdi-cog-outline"
-              @click="toggleAdvancedCols">
-              Показать доп. настройки
-            </v-chip>
             <ColumnVisibilityMenu :headers="draftHeaders"
               v-model:visible="draftColsVisible"
               storage-key="manual-tx-drafts-cols"
@@ -128,10 +109,10 @@
             Выберите контракты сверху и нажмите «Добавить в черновики»
           </v-card-text>
 
-          <!-- Обёртка с горизонтальным скроллом — таблица 13+ колонок
-               не помещается на 1080px вьюпорте, без overflow часть колонок
-               (Доход ДС / Без НДС / Партнёр / Прибыль ДС) уходила за
-               правый край. -->
+          <!-- Обёртка с горизонтальным скроллом — таблица не помещается
+               на стандартном вьюпорте, без overflow часть правых колонок
+               (Доход ДС / Без НДС / Партнёр / ЛП / Σ / Прибыль ДС)
+               уходила за правый край. -->
           <div v-else class="manual-tx-scroll" style="overflow-x: auto">
           <v-table density="compact" class="manual-tx-table">
             <thead>
@@ -210,6 +191,10 @@
                     <template v-else-if="h.key === 'amount'">
                       <v-text-field :model-value="d.amount" type="number" density="compact" hide-details variant="plain"
                         reverse @update:model-value="v => patchField(d, 'amount', v)" />
+                    </template>
+                    <template v-else-if="h.key === 'noCommission'">
+                      <span v-if="d.preview?.ready">{{ fmt2((Number(d.amount) || 0) - (d.preview.incomeDS || 0)) }}</span>
+                      <span v-else>{{ fmt2(Number(d.amount) || 0) }}</span>
                     </template>
                     <template v-else-if="h.key === 'currency'">
                       <v-select :model-value="d.currencyId" :items="currencyOptions" item-title="symbol" item-value="id"
@@ -295,6 +280,18 @@
                         </v-card>
                       </v-menu>
                     </template>
+                    <template v-else-if="h.key === 'lpPoints'">
+                      <span v-if="d.preview?.ready">{{ fmt2(d.preview.personalVolume || 0) }}</span>
+                      <span v-else class="text-medium-emphasis">—</span>
+                    </template>
+                    <template v-else-if="h.key === 'pointsCount'">
+                      <span v-if="d.preview?.ready">{{ fmt2(d.preview.chain?.[0]?.points || 0) }}</span>
+                      <span v-else class="text-medium-emphasis">—</span>
+                    </template>
+                    <template v-else-if="h.key === 'partnersTotal'">
+                      <span v-if="d.preview?.ready">{{ fmt2(d.preview.partnersTotal || 0) }} RUB</span>
+                      <span v-else class="text-medium-emphasis">—</span>
+                    </template>
                     <template v-else-if="h.key === 'profit'">
                       <span v-if="d.preview?.ready" class="font-weight-bold">{{ fmt2(d.preview.profitDS) }} RUB</span>
                       <span v-else class="text-medium-emphasis">—</span>
@@ -306,13 +303,29 @@
                   </td>
                 </tr>
 
-                <!-- Строка «Своя комиссия» — теперь всегда видна (тогглы убраны) -->
+                <!-- Строка под транзакцией: три флага редактирования.
+                     «Своя комиссия» — пользовательский ввод Дохода ДС (%ДС
+                     считается обратно). «Нулевой доход ДС» / «Курс от
+                     поставщика» — UI-only, бэкенд пока не использует. -->
                 <tr class="tx-extra-row">
                   <td :colspan="visibleDraftHeaders.length" class="pa-2">
-                    <v-checkbox :model-value="d.customCommission"
-                      :label="'Своя комиссия для ' + contractNum(d) + ' — введите Доход ДС вручную, %ДС посчитается обратно (для Брокер+ и подобных)'"
-                      hide-details density="compact" color="warning"
-                      @update:model-value="v => patchField(d, 'customCommission', v)" />
+                    <div class="d-flex flex-wrap ga-4 align-center">
+                      <v-checkbox :model-value="d.customCommission"
+                        label="Своя комиссия"
+                        :title="'Введите Доход ДС вручную, %ДС посчитается обратно (для Брокер+ и подобных). Контракт ' + contractNum(d)"
+                        hide-details density="compact" color="warning"
+                        @update:model-value="v => patchField(d, 'customCommission', v)" />
+                      <v-checkbox :model-value="d.zeroDsIncome"
+                        label="Нулевой доход ДС"
+                        title="Не начислять Доход ДС по этой транзакции"
+                        hide-details density="compact" color="warning"
+                        @update:model-value="v => (d.zeroDsIncome = v)" />
+                      <v-checkbox :model-value="d.supplierRate"
+                        label="Курс от поставщика"
+                        title="Использовать курс валюты, переданный поставщиком, а не системный"
+                        hide-details density="compact" color="warning"
+                        @update:model-value="v => (d.supplierRate = v)" />
+                    </div>
                   </td>
                 </tr>
               </template>
@@ -332,6 +345,9 @@
                   <template v-else-if="h.key === 'amount'">
                     <span class="text-end text-success font-weight-bold d-block">{{ fmt2(totals.amount) }}</span>
                   </template>
+                  <template v-else-if="h.key === 'noCommission'">
+                    <span class="text-end text-success font-weight-bold d-block">{{ fmt2(totals.noCommission) }}</span>
+                  </template>
                   <template v-else-if="h.key === 'currency'">
                     <span class="text-success">{{ totals.currencySymbol || 'RUB' }}</span>
                   </template>
@@ -343,6 +359,15 @@
                   </template>
                   <template v-else-if="h.key === 'noVatUsd'">
                     <span class="text-end text-success font-weight-bold d-block">{{ fmt2(totals.noVatUsd) }} USD</span>
+                  </template>
+                  <template v-else-if="h.key === 'lpPoints'">
+                    <span class="text-end text-success font-weight-bold d-block">{{ fmt2(totals.lpPoints) }}</span>
+                  </template>
+                  <template v-else-if="h.key === 'pointsCount'">
+                    <span class="text-end text-success font-weight-bold d-block">{{ fmt2(totals.pointsCount) }}</span>
+                  </template>
+                  <template v-else-if="h.key === 'partnersTotal'">
+                    <span class="text-end text-success font-weight-bold d-block">{{ fmt2(totals.partnersTotal) }} RUB</span>
                   </template>
                   <template v-else-if="h.key === 'profit'">
                     <span class="text-end text-success font-weight-bold d-block">{{ fmt2(totals.profit) }} RUB</span>
@@ -592,8 +617,7 @@ const visibleContractHeaders = computed(() =>
 );
 
 // Колонки таблицы черновиков. select/icon/actions — always-visible.
-// Тогглы «Показать продукт» / «Показать доп. настройки» — quick-presets,
-// которые пакетно меняют видимость связанных колонок в draftColsVisible.
+// Видимость остальных колонок управляется через ColumnVisibilityMenu.
 const draftHeaders = [
   { title: '', key: 'select', style: 'width:36px' },
   { title: '', key: 'icon', style: 'width:32px' },
@@ -607,6 +631,7 @@ const draftHeaders = [
   { title: 'Параметр', key: 'parameter', style: 'min-width:130px' },
   { title: 'Год КВ', key: 'yearKV', style: 'min-width:110px' },
   { title: 'Транзакция', key: 'amount', thClass: 'text-end', tdClass: 'text-end', style: 'min-width:140px' },
+  { title: 'Без комиссии', key: 'noCommission', thClass: 'text-end', tdClass: 'text-end text-no-wrap', style: 'min-width:140px' },
   { title: 'Валюта', key: 'currency', style: 'min-width:90px' },
   { title: '% ДС', key: 'dsPercent', thClass: 'text-end', tdClass: 'text-end', style: 'min-width:80px' },
   { title: 'Изменить', key: 'change', thClass: 'text-center', tdClass: 'text-center', style: 'width:50px' },
@@ -615,41 +640,17 @@ const draftHeaders = [
   { title: 'Без НДС, USD', key: 'noVatUsd', thClass: 'text-end', tdClass: 'text-end text-no-wrap' },
   { title: 'НДС', key: 'vat', thClass: 'text-end', tdClass: 'text-end text-no-wrap' },
   { title: 'Партнёр', key: 'partner' },
+  { title: 'ЛП', key: 'lpPoints', thClass: 'text-end', tdClass: 'text-end text-no-wrap', style: 'min-width:70px' },
+  { title: 'Баллы', key: 'pointsCount', thClass: 'text-end', tdClass: 'text-end text-no-wrap', style: 'min-width:80px' },
+  { title: 'Σ по партнёрам', key: 'partnersTotal', thClass: 'text-end', tdClass: 'text-end text-no-wrap', style: 'min-width:130px' },
   { title: 'Прибыль ДС', key: 'profit', thClass: 'text-end', tdClass: 'text-end text-no-wrap' },
   { title: '', key: 'actions', style: 'width:48px' },
 ];
-// Per spec ✅Ручной ввод транзакций §2.1 — два quick-preset тумблера:
-//   • showProductCols — product/program/supplier (дублируются с верхней
-//     таблицей контрактов, по умолчанию скрыты);
-//   • showAdvancedCols — noVatUsd/vat/profit (расчётные колонки, в
-//     обычном flow не нужны до фиксации).
-// Главные расчётные колонки (incomeDS, noVatRub, partner) видимы всегда.
-const PRODUCT_COLS = ['product', 'program', 'supplier'];
-const ADVANCED_COLS = ['noVatUsd', 'vat', 'profit'];
 
-const draftColsVisible = ref({
-  product: false, program: false, supplier: false,
-  noVatUsd: false, vat: false, profit: false,
-});
+const draftColsVisible = ref({});
 const visibleDraftHeaders = computed(() =>
   draftHeaders.filter(h => draftColsVisible.value[h.key] !== false)
 );
-
-const showProductCols = computed(() =>
-  PRODUCT_COLS.every(k => draftColsVisible.value[k] !== false)
-);
-const showAdvancedCols = computed(() =>
-  ADVANCED_COLS.every(k => draftColsVisible.value[k] !== false)
-);
-
-function toggleProductCols() {
-  const next = ! showProductCols.value;
-  PRODUCT_COLS.forEach(k => { draftColsVisible.value[k] = next; });
-}
-function toggleAdvancedCols() {
-  const next = ! showAdvancedCols.value;
-  ADVANCED_COLS.forEach(k => { draftColsVisible.value[k] = next; });
-}
 
 const { debounced: debouncedSearch } = useDebounce(loadContracts, 400);
 
@@ -731,9 +732,16 @@ const totals = computed(() => {
     maxDate: maxDate ? fmtDate(maxDate) : null,
     currencySymbol: sym,
     amount: drafts.value.reduce((s, d) => s + Number(d.amount || 0), 0),
+    noCommission: drafts.value.reduce((s, d) => {
+      const inc = d.preview?.ready ? Number(d.preview.incomeDS || 0) : 0;
+      return s + (Number(d.amount || 0) - inc);
+    }, 0),
     incomeDS: ready.reduce((s, d) => s + Number(d.preview.incomeDS || 0), 0),
     noVatRub: ready.reduce((s, d) => s + Number(d.preview.amountNoVat || 0), 0),
     noVatUsd: ready.reduce((s, d) => s + Number(d.preview.amountNoVatUSD || 0), 0),
+    lpPoints: ready.reduce((s, d) => s + Number(d.preview.personalVolume || 0), 0),
+    pointsCount: ready.reduce((s, d) => s + Number(d.preview.chain?.[0]?.points || 0), 0),
+    partnersTotal: ready.reduce((s, d) => s + Number(d.preview.partnersTotal || 0), 0),
     profit: ready.reduce((s, d) => s + Number(d.preview.profitDS || 0), 0),
   };
 });
