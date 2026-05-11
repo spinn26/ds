@@ -55,6 +55,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/chat/unread-count', [\App\Http\Controllers\Api\ChatController::class, 'unreadCount']);
         Route::get('/chat/tickets/staff', [\App\Http\Controllers\Api\ChatController::class, 'staffList']);
         Route::get('/chat/tickets/{id}', [\App\Http\Controllers\Api\ChatController::class, 'show']);
+        Route::delete('/chat/tickets/{id}', [\App\Http\Controllers\Api\ChatController::class, 'destroy'])->whereNumber('id');
         Route::get('/chat/tickets/{id}/can-access', [\App\Http\Controllers\Api\ChatController::class, 'canAccess']);
         Route::get('/chat/tickets/{id}/changes', [\App\Http\Controllers\Api\ChatController::class, 'changes']);
         Route::get('/chat/tickets/{id}/partner-context', [\App\Http\Controllers\Api\ChatController::class, 'partnerContext']);

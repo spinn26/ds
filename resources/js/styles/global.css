@@ -222,6 +222,34 @@
   border-radius: 12px !important;
 }
 
+/* v-data-table footer — компактнее. Дефолтные стрелки |< < > >| ~40px,
+   при density=compact это диссонирует с высотой строки 36px. Сжимаем
+   высоту футера и кнопок до 32px, шрифт счётчика — caption. */
+.v-data-table-footer {
+  min-height: 40px !important;
+  padding: 4px 12px !important;
+  font-size: 12px !important;
+}
+.v-data-table-footer__items-per-page,
+.v-data-table-footer__info,
+.v-data-table-footer__pagination {
+  font-size: 12px !important;
+}
+.v-data-table-footer .v-btn {
+  width: 28px !important;
+  height: 28px !important;
+}
+.v-data-table-footer .v-btn .v-icon {
+  font-size: 18px !important;
+}
+.v-data-table-footer .v-field {
+  --v-field-padding-top: 0;
+  --v-field-padding-bottom: 0;
+}
+.v-data-table-footer__items-per-page .v-select {
+  min-width: 64px !important;
+}
+
 /* Focus visible for accessibility */
 :focus-visible {
   outline: 2px solid var(--v-theme-primary);

@@ -109,7 +109,7 @@
       @update:options="onOptions"
     >
       <template #item.id="{ item }">
-        <div class="d-flex align-center ga-1">
+        <div class="d-flex align-center ga-1 text-no-wrap">
           <span>{{ item.id }}</span>
           <v-btn icon="mdi-content-copy" size="x-small" variant="text"
             title="Скопировать ID"
@@ -443,7 +443,7 @@ const activityOptions = [
 // Column metadata: `always` = never hideable (ФИО / Активность / Действия);
 // `default` = shown out of the box; others are opt-in via the «Колонки» menu.
 const allColumns = [
-  { title: 'ID',               key: 'id',             width: 80, default: true },
+  { title: 'ID',               key: 'id',             width: 110, default: true },
   { title: 'ФИО',              key: 'personName',     always: true },
   { title: 'Активность',       key: 'activityName',   width: 130, always: true },
   { title: 'Код',              key: 'participantCode', width: 100, default: true },

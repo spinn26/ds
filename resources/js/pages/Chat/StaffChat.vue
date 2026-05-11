@@ -499,6 +499,13 @@
                 <v-divider />
                 <v-list-item prepend-icon="mdi-keyboard-outline" title="Горячие клавиши (?)"
                   @click="showHotkeys = true" />
+                <template v-if="auth.isAdmin">
+                  <v-divider />
+                  <v-list-item prepend-icon="mdi-delete-outline"
+                    base-color="error"
+                    title="Удалить чат"
+                    @click="deleteChat" />
+                </template>
               </v-list>
             </v-menu>
           </div>
@@ -1232,6 +1239,27 @@ async function togglePin(ticket, e) {
     chats.value = [...chats.value].sort(sortChats);
   } catch {
     ticket.pinned_at = prev;
+  }
+}
+
+// Удаление чата (admin-only). Полностью необратимо: backend сносит
+// сообщения, заметки, реакции и вложения. Поэтому всегда подтверждаем.
+async function deleteChat() {
+  if (!activeChat.value) return;
+  if (!auth.isAdmin) return;
+  const t = activeChat.value;
+  if (!await confirmDialog.ask({
+    title: 'Удалить чат?',
+    message: `Чат «${t.subject}» и вся переписка будут удалены без возможности восстановления.`,
+    confirmText: 'Удалить', confirmColor: 'error',
+  })) return;
+  try {
+    await api.delete(`/chat/tickets/${t.id}`);
+    chats.value = chats.value.filter(x => x.id !== t.id);
+    activeChat.value = null;
+    showSuccess('Чат удалён');
+  } catch (e) {
+    showError(e?.response?.data?.message || 'Не удалось удалить чат');
   }
 }
 function sortChats(a, b) {
@@ -2066,6 +2094,17 @@ async function connectSocket() {
         else msg.reactions.push({ emoji: e.emoji, count: 1, mine: false });
       } else if (e.action === 'removed') {
         if (r) { r.count--; if (r.count <= 0) msg.reactions = msg.reactions.filter(x => x.emoji !== e.emoji); }
+      }
+    });
+
+    // Удаление тикета другим админом — убираем карточку из списка
+    // и закрываем активный чат, если открыт именно он.
+    socket.on('chat:ticket-deleted', (e) => {
+      const id = Number(e.ticketId);
+      chats.value = chats.value.filter(x => Number(x.id) !== id);
+      if (activeChat.value && Number(activeChat.value.id) === id) {
+        activeChat.value = null;
+        showError('Этот чат был удалён администратором');
       }
     });
 

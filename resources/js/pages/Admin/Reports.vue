@@ -12,15 +12,15 @@
         <v-row dense>
           <v-col cols="12" sm="3">
             <v-text-field v-model="form.dateFrom" label="Период с" type="date"
-              variant="outlined" density="comfortable" />
+              variant="outlined" density="compact" />
           </v-col>
           <v-col cols="12" sm="3">
             <v-text-field v-model="form.dateTo" label="Период по" type="date"
-              variant="outlined" density="comfortable" />
+              variant="outlined" density="compact" />
           </v-col>
           <v-col cols="12" sm="6">
             <v-select v-model="form.type" :items="reportTypes" item-title="label" item-value="value"
-              label="Тип отчёта" variant="outlined" density="comfortable" />
+              label="Тип отчёта" variant="outlined" density="compact" />
           </v-col>
         </v-row>
 
@@ -28,7 +28,7 @@
         <v-row v-if="form.type === 'partner_status'" dense>
           <v-col cols="12" sm="6">
             <v-select v-model="form.activity" :items="activityOptions" label="Статус активности"
-              variant="outlined" density="comfortable" clearable />
+              variant="outlined" density="compact" clearable />
           </v-col>
         </v-row>
 
@@ -36,6 +36,12 @@
           :disabled="!canGenerate" :loading="generating" @click="generate">
           {{ generateLabel }}
         </v-btn>
+        <!-- Hint когда кнопка disabled — иначе пользователь видит «бледную»
+             зелёную кнопку и не понимает, что от него ждут. -->
+        <div v-if="!canGenerate" class="text-caption text-medium-emphasis mt-2">
+          <v-icon size="14" class="mr-1">mdi-information-outline</v-icon>
+          Заполните период (с / по) и выберите тип отчёта
+        </div>
       </v-card-text>
     </v-card>
 

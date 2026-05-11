@@ -35,4 +35,16 @@ class ChatTicketPolicy
     {
         return $user->isStaff();
     }
+
+    /**
+     * Полное удаление чата вместе со всей перепиской и вложениями.
+     * Деструктивная операция без отката, поэтому только админ —
+     * support/finance/etc. при необходимости пользуются «закрытием»
+     * через updateStatus.
+     */
+    public function delete(User $user, ChatTicket $ticket): bool
+    {
+        $roles = array_map('trim', explode(',', $user->role ?? ''));
+        return in_array('admin', $roles, true);
+    }
 }

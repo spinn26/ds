@@ -110,8 +110,9 @@ const props = defineProps({
   search: { type: String, default: '' },
   searchPlaceholder: { type: String, default: 'Поиск…' },
 
-  // Density
-  density: { type: String, default: 'comfortable' },
+  // Density: compact по умолчанию — админские таблицы рендерят >25 строк,
+  // и при density=comfortable ФИО ломаются на 3 строки на 1366px.
+  density: { type: String, default: 'compact' },
 
   // Empty state
   emptyIcon: { type: String, default: 'mdi-file-search-outline' },

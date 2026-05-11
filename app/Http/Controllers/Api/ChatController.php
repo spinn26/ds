@@ -596,6 +596,76 @@ class ChatController extends Controller
     }
 
     /**
+     * Полное удаление тикета (admin-only).
+     *
+     * chat_messages / chat_internal_notes / chat_read_status удаляются
+     * каскадом через FK; reactions / watchers / changes FK не имеют —
+     * чистим вручную внутри транзакции. Файлы вложений удаляются
+     * после commit, чтобы не оставить мусор при rollback.
+     */
+    public function destroy(Request $request, int $id): JsonResponse
+    {
+        $ticket = ChatTicket::find($id);
+        if (! $ticket) return response()->json(['message' => 'Не найден'], 404);
+
+        if ($request->user()->cannot('delete', $ticket)) {
+            return response()->json(['message' => 'Удалять чаты может только администратор'], 403);
+        }
+
+        // Собираем message_id и пути к вложениям ДО удаления, чтобы
+        // потом почистить reactions и физические файлы.
+        $messages = DB::table('chat_messages')
+            ->where('ticket_id', $id)
+            ->select('id', 'attachment_path')
+            ->get();
+        $messageIds = $messages->pluck('id')->all();
+        $attachmentPaths = $messages->pluck('attachment_path')->filter()->all();
+
+        DB::transaction(function () use ($id, $messageIds) {
+            if (! empty($messageIds)) {
+                DB::table('chat_message_reactions')->whereIn('message_id', $messageIds)->delete();
+            }
+            DB::table('chat_ticket_watchers')->where('ticket_id', $id)->delete();
+            DB::table('chat_ticket_changes')->where('ticket_id', $id)->delete();
+            // chat_messages / chat_internal_notes / chat_read_status уйдут каскадом
+            DB::table('chat_tickets')->where('id', $id)->delete();
+        });
+
+        // Файлы — после commit. Disk 'local' = storage/app/, пути вида "chat/{id}/...".
+        try {
+            $disk = \Illuminate\Support\Facades\Storage::disk('local');
+            foreach ($attachmentPaths as $path) {
+                if ($disk->exists($path)) $disk->delete($path);
+            }
+            // На всякий случай прибиваем директорию тикета целиком.
+            if ($disk->exists("chat/{$id}")) $disk->deleteDirectory("chat/{$id}");
+        } catch (\Exception $e) {
+            Log::warning('chat: attachment cleanup failed after ticket delete', [
+                'ticket_id' => $id, 'exception' => $e->getMessage(),
+            ]);
+        }
+
+        Log::info('chat: ticket deleted by admin', [
+            'ticket_id' => $id,
+            'admin_id' => $request->user()->id,
+            'subject' => $ticket->subject,
+        ]);
+
+        // Уведомляем подключённых клиентов — они уберут карточку из списка.
+        try {
+            app(\App\Services\SocketService::class)->emit('chat:ticket-deleted', null, [
+                'ticketId' => $id,
+            ]);
+        } catch (\Exception $e) {
+            Log::warning('chat socket emit failed: ticket-deleted', [
+                'ticket_id' => $id, 'exception' => $e->getMessage(),
+            ]);
+        }
+
+        return response()->json(['id' => $id, 'deleted' => true]);
+    }
+
+    /**
      * Toggle a reaction on a message. If the same (message, user, emoji) tuple
      * exists — remove it; otherwise insert.
      */
