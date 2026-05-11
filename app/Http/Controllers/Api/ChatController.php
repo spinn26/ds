@@ -599,9 +599,11 @@ class ChatController extends Controller
      * Полное удаление тикета (admin-only).
      *
      * chat_messages / chat_internal_notes / chat_read_status удаляются
-     * каскадом через FK; reactions / watchers / changes FK не имеют —
-     * чистим вручную внутри транзакции. Файлы вложений удаляются
-     * после commit, чтобы не оставить мусор при rollback.
+     * каскадом через FK; reactions / watchers FK не имеют — чистим
+     * вручную внутри транзакции. История chat_ticket_changes
+     * НАМЕРЕННО не удаляется — это аудит-журнал, и финальная запись
+     * field='deleted' пишется как последний штрих. Файлы вложений
+     * удаляются после commit, чтобы не оставить мусор при rollback.
      */
     public function destroy(Request $request, int $id): JsonResponse
     {
@@ -621,12 +623,28 @@ class ChatController extends Controller
         $messageIds = $messages->pluck('id')->all();
         $attachmentPaths = $messages->pluck('attachment_path')->filter()->all();
 
-        DB::transaction(function () use ($id, $messageIds) {
+        $admin = $request->user();
+        $adminName = $this->userName($request) ?: ('user#' . $admin->id);
+
+        DB::transaction(function () use ($id, $messageIds, $admin, $adminName, $ticket) {
             if (! empty($messageIds)) {
                 DB::table('chat_message_reactions')->whereIn('message_id', $messageIds)->delete();
             }
             DB::table('chat_ticket_watchers')->where('ticket_id', $id)->delete();
-            DB::table('chat_ticket_changes')->where('ticket_id', $id)->delete();
+
+            // Аудит: финальная запись об удалении. ticket_id останется
+            // "висячим" в chat_ticket_changes — у таблицы нет FK, и это
+            // by design: журнал должен переживать удаление субъекта.
+            DB::table('chat_ticket_changes')->insert([
+                'ticket_id' => $id,
+                'field' => 'deleted',
+                'old_value' => $ticket->subject,
+                'new_value' => null,
+                'changed_by' => $admin->id,
+                'changed_by_name' => $adminName,
+                'changed_at' => now(),
+            ]);
+
             // chat_messages / chat_internal_notes / chat_read_status уйдут каскадом
             DB::table('chat_tickets')->where('id', $id)->delete();
         });
