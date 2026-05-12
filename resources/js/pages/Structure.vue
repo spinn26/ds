@@ -24,7 +24,7 @@
             v-model:from="filters.birth_date_from"
             v-model:to="filters.birth_date_to"
             @update:from="debouncedLoad" @update:to="debouncedLoad" />
-          <SmartRangeFilter label="Терминация" kind="date"
+          <SmartRangeFilter label="Дата смены статуса" kind="date"
             v-model:from="filters.termination_from"
             v-model:to="filters.termination_to"
             @update:from="debouncedLoad" @update:to="debouncedLoad" />
