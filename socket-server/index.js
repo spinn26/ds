@@ -82,9 +82,14 @@ async function validateToken(token) {
       return null;
     }
     const u = await res.json();
+    // Fallback цепочка: ФИО → email (без домена) → #id. Не пишем
+    // 'Unknown' — это «прилипает» в typing-indicator у клиентов
+    // (например, «Unknown печатает…» вместо реального имени).
+    const fullName = [u.lastName, u.firstName].filter(Boolean).join(' ').trim();
+    const emailHandle = typeof u.email === 'string' ? u.email.split('@')[0] : '';
     const user = {
       userId: String(u.id),
-      userName: [u.lastName, u.firstName].filter(Boolean).join(' ').trim() || 'Unknown',
+      userName: fullName || emailHandle || `Пользователь #${u.id}`,
     };
     tokenCache.set(token, { user, expiresAt: Date.now() + TOKEN_CACHE_TTL_MS });
     return user;

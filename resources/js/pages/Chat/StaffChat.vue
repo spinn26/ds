@@ -2085,7 +2085,8 @@ async function connectSocket() {
     });
     socket.on('ticket:typing', (e) => {
       if (!activeChat.value || String(e.userId) === String(currentUserId)) return;
-      typingName.value = e.userName || 'Собеседник';
+      const name = (e.userName || '').trim();
+      typingName.value = (name && name !== 'Unknown') ? name : 'Собеседник';
       if (typingClearTimer) clearTimeout(typingClearTimer);
       typingClearTimer = setTimeout(() => { typingName.value = ''; }, 3500);
     });
