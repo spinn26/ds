@@ -10,13 +10,9 @@
       </v-card-title>
       <v-card-text>
         <v-row dense>
-          <v-col cols="12" sm="3">
-            <v-text-field v-model="form.dateFrom" label="Период с" type="date"
-              variant="outlined" density="compact" />
-          </v-col>
-          <v-col cols="12" sm="3">
-            <v-text-field v-model="form.dateTo" label="Период по" type="date"
-              variant="outlined" density="compact" />
+          <v-col cols="12" sm="6">
+            <SmartRangeFilter label="Период" kind="date"
+              v-model:from="form.dateFrom" v-model:to="form.dateTo" />
           </v-col>
           <v-col cols="12" sm="6">
             <v-select v-model="form.type" :items="reportTypes" item-title="label" item-value="value"
@@ -94,6 +90,7 @@ import api from '../../api';
 import PageHeader from '../../components/PageHeader.vue';
 import EmptyState from '../../components/EmptyState.vue';
 import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
+import SmartRangeFilter from '../../components/SmartRangeFilter.vue';
 import { fmtDate } from '../../composables/useDesign';
 import { usePermissions } from '../../composables/usePermissions';
 

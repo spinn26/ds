@@ -65,18 +65,24 @@
           @click="showAdvanced = !showAdvanced">Доп. фильтры</v-btn>
       </v-col>
       <template v-if="showAdvanced">
-        <v-col cols="12" md="2"><v-text-field v-model="filters.created_from" label="Создан с" type="date"
-          density="comfortable" variant="outlined" hide-details @update:model-value="loadData" /></v-col>
-        <v-col cols="12" md="2"><v-text-field v-model="filters.created_to" label="Создан по" type="date"
-          density="comfortable" variant="outlined" hide-details @update:model-value="loadData" /></v-col>
-        <v-col cols="12" md="2"><v-text-field v-model="filters.opened_from" label="Открыт с" type="date"
-          density="comfortable" variant="outlined" hide-details @update:model-value="loadData" /></v-col>
-        <v-col cols="12" md="2"><v-text-field v-model="filters.opened_to" label="Открыт по" type="date"
-          density="comfortable" variant="outlined" hide-details @update:model-value="loadData" /></v-col>
-        <v-col cols="12" md="2"><v-text-field v-model="filters.closed_from" label="Закрыт с" type="date"
-          density="comfortable" variant="outlined" hide-details @update:model-value="loadData" /></v-col>
-        <v-col cols="12" md="2"><v-text-field v-model="filters.closed_to" label="Закрыт по" type="date"
-          density="comfortable" variant="outlined" hide-details @update:model-value="loadData" /></v-col>
+        <v-col cols="12" md="4">
+          <SmartRangeFilter label="Создан" kind="date"
+            v-model:from="filters.created_from"
+            v-model:to="filters.created_to"
+            @update:from="loadData" @update:to="loadData" />
+        </v-col>
+        <v-col cols="12" md="4">
+          <SmartRangeFilter label="Открыт" kind="date"
+            v-model:from="filters.opened_from"
+            v-model:to="filters.opened_to"
+            @update:from="loadData" @update:to="loadData" />
+        </v-col>
+        <v-col cols="12" md="4">
+          <SmartRangeFilter label="Закрыт" kind="date"
+            v-model:from="filters.closed_from"
+            v-model:to="filters.closed_to"
+            @update:from="loadData" @update:to="loadData" />
+        </v-col>
       </template>
       <v-col v-if="activeFilterCount > 0" cols="auto" class="d-flex align-center">
         <v-chip size="small" color="info" variant="tonal">
@@ -344,6 +350,7 @@ import StartChatButton from '../../components/StartChatButton.vue';
 import StatusChip from '../../components/StatusChip.vue';
 import FilterBar from '../../components/FilterBar.vue';
 import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
+import SmartRangeFilter from '../../components/SmartRangeFilter.vue';
 import { fmt, fmtDate, getContractStatusColor } from '../../composables/useDesign';
 import { useAuthStore } from '../../stores/auth';
 import { usePermissions } from '../../composables/usePermissions';

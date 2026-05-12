@@ -55,17 +55,9 @@
             density="compact" variant="outlined" hide-details rounded clearable
             style="max-width: 280px; flex: 1 1 220px"
             @update:model-value="debouncedLoad" />
-          <div class="filter-range">
-            <span class="text-caption text-medium-emphasis">Дата</span>
-            <div class="d-flex ga-1">
-              <v-text-field v-model="dateFrom" type="date" placeholder="с"
-                density="compact" variant="outlined" hide-details
-                @update:model-value="loadData" />
-              <v-text-field v-model="dateTo" type="date" placeholder="по"
-                density="compact" variant="outlined" hide-details
-                @update:model-value="loadData" />
-            </div>
-          </div>
+          <SmartRangeFilter label="Дата" kind="date"
+            v-model:from="dateFrom" v-model:to="dateTo"
+            @update:from="loadData" @update:to="loadData" />
         </div>
       </v-expand-transition>
     </v-card>
@@ -168,6 +160,7 @@ import { useTableSort } from '../../composables/useTableSort';
 import PageHeader from '../../components/PageHeader.vue';
 import DataTableWrapper from '../../components/DataTableWrapper.vue';
 import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
+import SmartRangeFilter from '../../components/SmartRangeFilter.vue';
 import { fmt2 as fmt, fmtDate } from '../../composables/useDesign';
 import { usePermissions } from '../../composables/usePermissions';
 

@@ -53,54 +53,27 @@
           storage-key="partner-statuses-cols" />
       </div>
 
-      <!-- 4 диапазона дат per spec ✅Статусы партнеров §1, в компактной
-           разбивке: один блок «с — по» вместо двух отдельных полей. -->
+      <!-- 4 диапазона дат per spec ✅Статусы партнеров §1, через
+           SmartRangeFilter — общий компонент с переключателем режима
+           (Диапазон / Дата / Месяц / Квартал / Год). -->
       <v-expand-transition>
         <div v-show="showAdvancedDates" class="d-flex flex-wrap ga-3 mt-3">
-          <div class="filter-range">
-            <span class="text-caption text-medium-emphasis">Регистрация</span>
-            <div class="d-flex ga-1">
-              <v-text-field v-model="dateFilters.created_from" type="date" placeholder="с"
-                density="compact" variant="outlined" hide-details
-                @update:model-value="loadData" />
-              <v-text-field v-model="dateFilters.created_to" type="date" placeholder="по"
-                density="compact" variant="outlined" hide-details
-                @update:model-value="loadData" />
-            </div>
-          </div>
-          <div class="filter-range">
-            <span class="text-caption text-medium-emphasis">Активность</span>
-            <div class="d-flex ga-1">
-              <v-text-field v-model="dateFilters.activity_from" type="date" placeholder="с"
-                density="compact" variant="outlined" hide-details
-                @update:model-value="loadData" />
-              <v-text-field v-model="dateFilters.activity_to" type="date" placeholder="по"
-                density="compact" variant="outlined" hide-details
-                @update:model-value="loadData" />
-            </div>
-          </div>
-          <div class="filter-range">
-            <span class="text-caption text-medium-emphasis">План. терминация</span>
-            <div class="d-flex ga-1">
-              <v-text-field v-model="dateFilters.plan_from" type="date" placeholder="с"
-                density="compact" variant="outlined" hide-details
-                @update:model-value="loadData" />
-              <v-text-field v-model="dateFilters.plan_to" type="date" placeholder="по"
-                density="compact" variant="outlined" hide-details
-                @update:model-value="loadData" />
-            </div>
-          </div>
-          <div class="filter-range">
-            <span class="text-caption text-medium-emphasis">Факт. терминация</span>
-            <div class="d-flex ga-1">
-              <v-text-field v-model="dateFilters.term_from" type="date" placeholder="с"
-                density="compact" variant="outlined" hide-details
-                @update:model-value="loadData" />
-              <v-text-field v-model="dateFilters.term_to" type="date" placeholder="по"
-                density="compact" variant="outlined" hide-details
-                @update:model-value="loadData" />
-            </div>
-          </div>
+          <SmartRangeFilter label="Регистрация" kind="date"
+            v-model:from="dateFilters.created_from"
+            v-model:to="dateFilters.created_to"
+            @update:from="loadData" @update:to="loadData" />
+          <SmartRangeFilter label="Активность" kind="date"
+            v-model:from="dateFilters.activity_from"
+            v-model:to="dateFilters.activity_to"
+            @update:from="loadData" @update:to="loadData" />
+          <SmartRangeFilter label="План. терминация" kind="date"
+            v-model:from="dateFilters.plan_from"
+            v-model:to="dateFilters.plan_to"
+            @update:from="loadData" @update:to="loadData" />
+          <SmartRangeFilter label="Факт. терминация" kind="date"
+            v-model:from="dateFilters.term_from"
+            v-model:to="dateFilters.term_to"
+            @update:from="loadData" @update:to="loadData" />
         </div>
       </v-expand-transition>
     </v-card>
@@ -188,6 +161,7 @@ import PageHeader from '../../components/PageHeader.vue';
 import EmptyState from '../../components/EmptyState.vue';
 import StatusChip from '../../components/StatusChip.vue';
 import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
+import SmartRangeFilter from '../../components/SmartRangeFilter.vue';
 import { fmt, fmtDate, getActivityColor } from '../../composables/useDesign';
 
 const loading = ref(true);

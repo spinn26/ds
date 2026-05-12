@@ -50,17 +50,10 @@
 
       <v-expand-transition>
         <div v-show="advancedOpen" class="d-flex flex-wrap ga-3 mt-3">
-          <div class="filter-range">
-            <span class="text-caption text-medium-emphasis">Заведён</span>
-            <div class="d-flex ga-1">
-              <v-text-field v-model="filters.created_from" type="date" placeholder="с"
-                density="compact" variant="outlined" hide-details
-                @update:model-value="loadData" />
-              <v-text-field v-model="filters.created_to" type="date" placeholder="по"
-                density="compact" variant="outlined" hide-details
-                @update:model-value="loadData" />
-            </div>
-          </div>
+          <SmartRangeFilter label="Заведён" kind="date"
+            v-model:from="filters.created_from"
+            v-model:to="filters.created_to"
+            @update:from="loadData" @update:to="loadData" />
         </div>
       </v-expand-transition>
     </v-card>
@@ -194,6 +187,7 @@ import EmptyState from '../../components/EmptyState.vue';
 import StartChatButton from '../../components/StartChatButton.vue';
 import DialogShell from '../../components/DialogShell.vue';
 import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
+import SmartRangeFilter from '../../components/SmartRangeFilter.vue';
 
 const columnVisible = ref({});
 const visibleHeaders = computed(() => headers.filter(h => columnVisible.value[h.key] !== false));
