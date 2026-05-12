@@ -86,6 +86,7 @@ export const cabinetPermissions = {
   head: {
     calculator:                 VIEW,
     structure:                  VIEW,
+    contests:                   FULL,   // спека §3: добавление/архив/удаление + предпросмотр
     contracts:                  VIEW,
     clients:                    VIEW,
     partners:                   VIEW,
@@ -110,7 +111,7 @@ export const cabinetPermissions = {
   // ===== Фин. менеджер (Спирькова, Петряшина) =====
   // Спека ✅Кабинет-фин.менеджера-по-выплатам.md
   finance: {
-    calculator:                 EDIT,   // спека: расчёты, без системных действий
+    calculator:                 FULL,   // спека §1: полный доступ к пользовательскому функционалу расчёта
     payments:                   FULL,   // Реестр выплат — основной раздел
     charges:                    FULL,   // Прочие начисления
     reports:                    EDIT,   // спека: формирование + выгрузка, публикация — calculations
@@ -137,11 +138,13 @@ export const cabinetPermissions = {
     statuses:                   FULL,   // ручная смена статуса
     acceptance:                 VIEW,
     transfers:                  VIEW,
+    contests:                   FULL,   // спека §16: добавление/архив/удаление + предпросмотр
     currencies:                 FULL,   // Валюты и НДС
     payments:                   FULL,   // Реестр выплат + принудительный пересчёт
     products:                   FULL,   // создание + редактирование
     contracts:                  VIEW,   // Read-Only
     clients:                    VIEW,   // Read-Only
+    instructions:               VIEW,   // спека §22: справочная база знаний
     communication:              EDIT,   // спека: переписка по реквизитам/финвопросам
   },
 
@@ -161,6 +164,7 @@ export const cabinetPermissions = {
     'partner-questionnaires':   FULL,   // работа с анкетами
     partners:                   VIEW,
     products:                   VIEW,
+    contests:                   VIEW,   // спека §5: read-only-просмотр конкурсов
     communication:              EDIT,   // спец. ветка по обучению
     instructions:               VIEW,
   },
