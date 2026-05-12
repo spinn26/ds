@@ -2074,9 +2074,15 @@ class ChatController extends Controller
     private function nextIncidentNumber(): string
     {
         $prefix = 'INC-' . now()->format('Ym') . '-';
+        // start — позиция начала номера в incident_no (1-indexed). Используем
+        // литералом, без bindings: Laravel биндинги в selectRaw/where
+        // нумеруются по порядку добавления к билдеру, и предыдущая
+        // версия с `?` в selectRaw перепутала $1/$2 → MAX считал по
+        // пустой выборке → возвращал 0001 → unique violation.
+        $start = strlen($prefix) + 1;
         $maxRow = DB::table('chat_tickets')
             ->where('incident_no', 'like', $prefix . '%')
-            ->selectRaw("MAX(CAST(SUBSTRING(incident_no FROM ?) AS INTEGER)) AS n", [strlen($prefix) + 1])
+            ->selectRaw("MAX(CAST(SUBSTRING(incident_no FROM {$start}) AS INTEGER)) AS n")
             ->first();
         $n = ((int) ($maxRow->n ?? 0)) + 1;
         return $prefix . str_pad((string) $n, 4, '0', STR_PAD_LEFT);
