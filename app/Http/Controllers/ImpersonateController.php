@@ -9,17 +9,21 @@ use Illuminate\Http\Request;
 class ImpersonateController extends Controller
 {
     /**
-     * Impersonate user — creates Sanctum token and returns it.
+     * Impersonate user — creates Sanctum token with original-id encoded
+     * в abilities (impersonate:from:{adminId}). leave() читает её для
+     * валидации, иначе любой admin мог бы выпустить токен любого другого
+     * admin'а через POST {impersonator_id: X}.
      */
     public function impersonate(Request $request, User $user): JsonResponse
     {
         $currentUser = $request->user();
 
-        if (! $currentUser || ! $currentUser->isAdmin()) {
+        // Strict: only role admin (не backoffice).
+        if (! $currentUser || ! $currentUser->hasAnyRole(['admin'])) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
-        $token = $user->createToken('impersonate')->plainTextToken;
+        $token = $user->createToken('impersonate', ['impersonate:from:' . $currentUser->id])->plainTextToken;
 
         return response()->json([
             'token' => $token,
@@ -35,25 +39,38 @@ class ImpersonateController extends Controller
     }
 
     /**
-     * Leave impersonation — return to original admin.
+     * Leave impersonation — возвращается на оригинального admin'а.
+     * Original-id берётся из Sanctum-abilities текущего токена
+     * (impersonate:from:{adminId}), а не из тела запроса — body можно
+     * подделать.
      */
     public function leave(Request $request): JsonResponse
     {
-        $impersonatorId = $request->input('impersonator_id');
+        $token = $request->user()?->currentAccessToken();
+        $impersonatorId = null;
+        foreach ((array) ($token?->abilities ?? []) as $ability) {
+            if (str_starts_with((string) $ability, 'impersonate:from:')) {
+                $impersonatorId = (int) substr($ability, strlen('impersonate:from:'));
+                break;
+            }
+        }
 
         if (! $impersonatorId) {
-            return response()->json(['message' => 'No impersonator'], 400);
+            return response()->json(['message' => 'Not impersonating'], 400);
         }
 
         $admin = User::find($impersonatorId);
-        if (! $admin || ! $admin->isAdmin()) {
-            return response()->json(['message' => 'Forbidden'], 403);
+        if (! $admin || ! $admin->hasAnyRole(['admin'])) {
+            return response()->json(['message' => 'Original admin not found or no longer admin'], 403);
         }
 
-        $token = $admin->createToken('return')->plainTextToken;
+        // Удаляем impersonation-токен после выхода — иначе он остаётся валидным.
+        $token?->delete();
+
+        $newToken = $admin->createToken('return')->plainTextToken;
 
         return response()->json([
-            'token' => $token,
+            'token' => $newToken,
             'user' => [
                 'id' => $admin->id,
                 'email' => $admin->email,

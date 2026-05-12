@@ -40,15 +40,21 @@ class ZammadWebhookController extends Controller
             $request->ip(), null, $ticketId ?: null, $payload,
         );
 
-        $secret = $settings->get('zammad.webhook_secret');
-        if ($secret) {
-            $signature = (string) $request->header('X-Hub-Signature', '');
-            $expected = 'sha1=' . hash_hmac('sha1', $request->getContent(), (string) $secret);
-            if (! hash_equals($expected, $signature)) {
-                Log::warning('Zammad webhook: bad signature', ['ip' => $request->ip()]);
-                $logger->finish($event, 'error', 'Unauthorized: bad HMAC signature');
-                return response()->json(['message' => 'Unauthorized'], 401);
-            }
+        $secret = $settings->get('zammad.webhook_secret') ?: config('services.zammad.webhook_secret');
+        if (! $secret) {
+            // Раньше при отсутствии секрета auth-чек просто пропускался —
+            // webhook становился открытым для всех. Теперь: 401, пока
+            // не настроят секрет.
+            Log::error('Zammad webhook: secret not configured', ['ip' => $request->ip()]);
+            $logger->finish($event, 'error', 'Webhook secret not configured');
+            return response()->json(['message' => 'Webhook secret not configured'], 401);
+        }
+        $signature = (string) $request->header('X-Hub-Signature', '');
+        $expected = 'sha1=' . hash_hmac('sha1', $request->getContent(), (string) $secret);
+        if (! hash_equals($expected, $signature)) {
+            Log::warning('Zammad webhook: bad signature', ['ip' => $request->ip()]);
+            $logger->finish($event, 'error', 'Unauthorized: bad HMAC signature');
+            return response()->json(['message' => 'Unauthorized'], 401);
         }
 
         $title = (string) data_get($payload, 'ticket.title', '—');

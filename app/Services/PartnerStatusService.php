@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Enums\PartnerActivity;
 use App\Http\Controllers\Api\NotificationController;
 use App\Models\Consultant;
+use App\Support\LegacyId;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -367,7 +368,11 @@ class PartnerStatusService
             $row['source'] = $source;
             $row['changed_by'] = $changedBy;
         }
-        DB::table('chageConsultanStatusLog')->insert($row);
+        // Legacy-таблица без серийного id → генерируем явный id под advisory lock.
+        DB::transaction(function () use ($row) {
+            $row['id'] = LegacyId::next('chageConsultanStatusLog');
+            DB::table('chageConsultanStatusLog')->insert($row);
+        });
 
         // 3. Laravel log для разборок.
         Log::info('Partner status change', [

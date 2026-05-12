@@ -281,6 +281,9 @@ class AdminDataController extends Controller
     public function updatePartner(Request $request, int $id): JsonResponse
     {
         $consultant = Consultant::findOrFail($id);
+        // Strict: только роль admin может менять role/password/isBlocked.
+        // isAdmin() в User модели пускает ещё и backoffice — это не то.
+        $isAdmin = $request->user()->hasAnyRole(['admin']);
 
         $data = $request->validate([
             // consultant fields
@@ -301,8 +304,16 @@ class AdminDataController extends Controller
             'birthDate' => ['sometimes', 'nullable', 'date'],
             'role' => ['sometimes', 'nullable', 'string', 'max:255'],
             'isBlocked' => ['sometimes', 'boolean'],
-            'newPassword' => ['sometimes', 'nullable', 'string', 'min:6', 'max:255'],
+            'newPassword' => ['sometimes', 'nullable', 'string',
+                'min:8', \Illuminate\Validation\Rules\Password::min(8)->letters()->numbers(),
+            ],
         ]);
+
+        // Critical поля доступны только admin'у — иначе любой staff
+        // мог бы выдать себе/коллеге роль admin или сбросить пароль.
+        if (! $isAdmin) {
+            unset($data['role'], $data['newPassword'], $data['isBlocked']);
+        }
 
         DB::transaction(function () use ($consultant, $data, $request) {
             // --- consultant columns ---
@@ -318,11 +329,11 @@ class AdminDataController extends Controller
                 $userUpdates = [];
                 $map = ['firstName', 'lastName', 'patronymic', 'email', 'phone', 'nicTG', 'gender', 'birthDate', 'role'];
                 foreach ($map as $col) {
-                    if ($request->has($col)) {
+                    if (array_key_exists($col, $data)) {
                         $userUpdates[$col] = $data[$col] ?: null;
                     }
                 }
-                if ($request->has('isBlocked')) {
+                if (array_key_exists('isBlocked', $data)) {
                     $userUpdates['isBlocked'] = (bool) $data['isBlocked'];
                 }
                 if (! empty($data['newPassword'])) {

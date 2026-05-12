@@ -166,7 +166,11 @@ class AuthController extends Controller
             }
 
             $consultant = new Consultant();
-            $consultant->person = $user->id;
+            // consultant.person → person.id (Directual-namespace, не WebUser).
+            // Раньше тут стоял $user->id (WebUser.id), что давало битый FK на
+            // случайную person-запись с тем же численным id (см. CLAUDE.md
+            // про split id-spaces). Корректная связка — через webUser FK.
+            $consultant->webUser = $user->id;
             $consultant->personName = trim("{$request->input('lastName')} {$request->input('firstName')} {$request->input('patronymic')}");
             $consultant->active = false;
             $consultant->status = 1;

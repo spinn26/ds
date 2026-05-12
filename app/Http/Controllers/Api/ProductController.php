@@ -255,17 +255,21 @@ class ProductController extends Controller
             return $req;
         });
 
-        // Если ФИО не совпало — создать тикет финменеджеру (если есть таблица)
+        // Если ФИО не совпало — создать тикет финменеджеру (если есть таблица).
+        // Колонок title/description в tickets нет — это subject/context_info
+        // (см. реальную схему). Раньше эта ветка падала 42703.
         if (! $autoVerify && \Schema::hasTable('tickets')) {
             \Illuminate\Support\Facades\DB::table('tickets')->insert([
-                'title' => 'Проверка реквизитов партнёра: ФИО не совпадает с ИНН',
-                'description' => "Партнёр {$consultant->personName} (ID {$consultant->id}) ввёл ИНН {$innClean}, "
+                'subject' => 'Проверка реквизитов партнёра: ФИО не совпадает с ИНН',
+                'context_info' => "Партнёр {$consultant->personName} (ID {$consultant->id}) ввёл ИНН {$innClean}, "
                     . 'который отличается по ФИО от профиля. Требуется ручная проверка.',
                 'category' => 'accruals',
-                'status' => 'new',
-                'created_by' => $request->user()->id,
-                'assigned_to' => null,
+                'status' => 'open',
                 'priority' => 'high',
+                'created_by' => $request->user()->id,
+                'consultant_id' => $consultant->id,
+                'context_type' => 'requisites',
+                'context_id' => (string) $requisite->id,
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);

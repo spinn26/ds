@@ -404,6 +404,15 @@ Route::prefix('v1')->group(function () {
         }); // end role:staff
     });
 
+    // Документы партнёра (паспорта/заявления) — публичный signed-роут.
+    // Подпись (URL::temporarySignedRoute) выдаётся бэком в /documents и
+    // /documents/upload только владельцу. Файлы лежат в private storage
+    // (local), браузер ходит сюда без Bearer-токена.
+    Route::get('/documents/{consultantId}/{type}', [\App\Http\Controllers\Api\DocumentController::class, 'download'])
+        ->whereNumber('consultantId')
+        ->name('documents.download')
+        ->middleware('signed');
+
     // Скачивание вложений чата — публичный signed-роут.
     // Подпись (URL::temporarySignedRoute) выдаётся бэком уже после
     // авторизации в getMessages, имеет короткий expiry. Браузер при

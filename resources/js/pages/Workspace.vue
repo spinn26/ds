@@ -290,7 +290,7 @@ const auth = useAuthStore();
 const loading = ref(true);
 const data = ref({});
 
-const isConsultant = computed(() => auth.user?.role?.includes('consultant'));
+const isConsultant = computed(() => auth.isConsultant);
 
 const greeting = computed(() => {
   const h = new Date().getHours();

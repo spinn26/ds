@@ -40,7 +40,9 @@ export const useAuthStore = defineStore('auth', {
             const writeOverrides = ['admin', 'backoffice', 'head'];
             return roles.includes('calculations') && !roles.some(r => writeOverrides.includes(r));
         },
-        isConsultant: (state) => state.user?.role?.includes('consultant'),
+        // Точный матч по списку ролей. Раньше .includes('consultant')
+        // ложно срабатывал на business_consultant/subconsultant.
+        isConsultant: (state) => (state.user?.role || '').split(',').map(r => r.trim()).includes('consultant'),
         isRegistered: (state) => state.user?.role === 'registered',
         isTerminated: (state) => state.user?.activityStatus === 3,
         isExcluded: (state) => state.user?.activityStatus === 5,

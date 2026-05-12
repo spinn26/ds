@@ -80,9 +80,11 @@ class AdminUserController extends Controller
 
     public function store(Request $request): JsonResponse
     {
+        // Strict: только роль admin (не backoffice).
+        $isAdmin = $request->user()->hasAnyRole(['admin']);
         $request->validate([
             'email' => 'required|email|unique:WebUser,email',
-            'password' => 'required|string|min:6',
+            'password' => ['required', 'string', \Illuminate\Validation\Rules\Password::min(8)->letters()->numbers()],
             'firstName' => 'required|string',
             'lastName' => 'required|string',
         ]);
@@ -94,10 +96,11 @@ class AdminUserController extends Controller
             'lastName' => $request->lastName,
             'patronymic' => $request->patronymic,
             'phone' => $request->phone,
-            'role' => $request->input('role', 'registered'),
+            // Только admin может задавать роль при создании. Иначе всегда 'registered'.
+            'role' => $isAdmin ? $request->input('role', 'registered') : 'registered',
             'gender' => $request->gender,
             'birthDate' => $request->birthDate,
-            'isBlocked' => $request->boolean('isBlocked'),
+            'isBlocked' => $isAdmin ? $request->boolean('isBlocked') : false,
             'agreement' => $request->boolean('agreement'),
         ]);
 
@@ -108,9 +111,14 @@ class AdminUserController extends Controller
     {
         $user = User::findOrFail($id);
         $consultant = Consultant::where('webUser', $id)->first();
+        // Strict: только роль admin может править role/password/isBlocked.
+        $isAdmin = $request->user()->hasAnyRole(['admin']);
 
         $request->validate([
             'email' => "required|email|unique:WebUser,email,{$id}",
+            'password' => ['sometimes', 'nullable', 'string',
+                \Illuminate\Validation\Rules\Password::min(8)->letters()->numbers(),
+            ],
             'participantCode' => [
                 'nullable', 'string', 'max:32',
                 function ($attribute, $value, $fail) use ($consultant) {
@@ -127,20 +135,23 @@ class AdminUserController extends Controller
             ],
         ]);
 
-        DB::transaction(function () use ($request, $user, $consultant) {
+        DB::transaction(function () use ($request, $user, $consultant, $isAdmin) {
             $user->email = $request->input('email', $user->email);
             $user->firstName = $request->input('firstName', $user->firstName);
             $user->lastName = $request->input('lastName', $user->lastName);
             $user->patronymic = $request->input('patronymic', $user->patronymic);
             $user->phone = $request->input('phone', $user->phone);
-            $user->role = $request->input('role', $user->role);
             $user->gender = $request->input('gender', $user->gender);
             $user->birthDate = $request->input('birthDate', $user->birthDate);
-            $user->isBlocked = $request->boolean('isBlocked');
             $user->agreement = $request->boolean('agreement');
 
-            if ($request->filled('password')) {
-                $user->password = Hash::make($request->password);
+            // role / isBlocked / password — только admin.
+            if ($isAdmin) {
+                $user->role = $request->input('role', $user->role);
+                $user->isBlocked = $request->boolean('isBlocked');
+                if ($request->filled('password')) {
+                    $user->password = Hash::make($request->password);
+                }
             }
 
             $user->saveQuietly();
