@@ -654,21 +654,22 @@ const menuItems = [
   { group: 'Прочее', adminSection: 'products' },
   { label: 'Продукты', icon: 'mdi-package-variant-closed', path: '/manage/products', adminSection: 'products' },
   { label: 'Конкурсы и события', icon: 'mdi-trophy', path: '/manage/contests', adminSection: 'contests' },
+  { label: 'Аналитика чата', icon: 'mdi-chart-box-outline', path: '/manage/chat/analytics', adminSection: 'chat-analytics' },
+  { label: 'Отчёты', icon: 'mdi-file-chart', path: '/manage/reports', adminSection: 'reports' },
+  { label: 'Справочники для расчёта', icon: 'mdi-currency-usd', path: '/manage/currencies', adminSection: 'currencies' },
+  { label: 'Инструкции', icon: 'mdi-book-edit-outline', path: '/manage/instructions', adminSection: 'products' },
+
+  // Помощь — общая группа для чатов, тех-обращений и статуса системы.
+  { group: 'Помощь', adminSection: 'communication' },
   { label: 'Чат / Тикеты', icon: 'mdi-chat-processing', path: '/manage/chat', adminSection: 'communication' },
   // «Тех. проблема» — staff-side кнопка «написать о технической проблеме».
   // Открывает PartnerChat.vue с предзаполненной формой category=support;
   // тикет создаётся от имени staff-аккаунта и попадает в
   // /manage/support desk, где его обрабатывают admin/support/head.
-  // Доступна всем staff с разделом communication, чтобы любая роль
-  // (бэк-офис / финансы / расчёты / куратор) могла сообщить о баге.
   { label: 'Тех. проблема', icon: 'mdi-bug', path: '/chat?new=support', adminSection: 'communication' },
   // Рабочий стол техподдержки: KPI, тикеты department=support и инциденты
-  // (любой категории). Доступен ролям admin/support/head.
+  // (любой категории). Доступен только admin (см. tab-fix 2026-05-10).
   { label: 'Тех. поддержка', icon: 'mdi-lifebuoy', path: '/manage/support', adminSection: 'support-desk', adminOnly: true },
-  { label: 'Аналитика чата', icon: 'mdi-chart-box-outline', path: '/manage/chat/analytics', adminSection: 'chat-analytics' },
-  { label: 'Отчёты', icon: 'mdi-file-chart', path: '/manage/reports', adminSection: 'reports' },
-  { label: 'Справочники для расчёта', icon: 'mdi-currency-usd', path: '/manage/currencies', adminSection: 'currencies' },
-  { label: 'Инструкции', icon: 'mdi-book-edit-outline', path: '/manage/instructions', adminSection: 'products' },
   { label: 'Статус системы', icon: 'mdi-monitor-dashboard', path: '/manage/system-status', adminSection: 'support-desk', adminOnly: true },
   // Управление группами и правами — только admin (раздел 'permissions'
   // присутствует только в его карте прав через FULL-сентинел).
