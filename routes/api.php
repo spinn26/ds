@@ -62,7 +62,9 @@ Route::prefix('v1')->group(function () {
         Route::post('/chat/tickets/{id}/messages', [\App\Http\Controllers\Api\ChatController::class, 'sendMessage'])->middleware('throttle:60,1');
         Route::put('/chat/messages/{messageId}', [\App\Http\Controllers\Api\ChatController::class, 'editMessage'])->middleware('throttle:30,1');
         Route::post('/chat/messages/{messageId}/reactions', [\App\Http\Controllers\Api\ChatController::class, 'toggleReaction'])->middleware('throttle:60,1');
-        Route::get('/chat/messages/{messageId}/attachment', [\App\Http\Controllers\Api\ChatController::class, 'downloadAttachment'])->whereNumber('messageId');
+        // Attachment route вынесен из auth:sanctum в публичный signed-блок
+        // ниже — иначе при клике по ссылке (открытие в новой вкладке)
+        // браузер не передаёт Bearer и получает 401 Unauthenticated.
         Route::post('/chat/tickets/{id}/pin', [\App\Http\Controllers\Api\ChatController::class, 'togglePin']);
         Route::post('/chat/tickets/{id}/status', [\App\Http\Controllers\Api\ChatController::class, 'updateStatus']);
         Route::post('/chat/tickets/{id}/assign', [\App\Http\Controllers\Api\ChatController::class, 'assign']);
@@ -397,4 +399,14 @@ Route::prefix('v1')->group(function () {
         Route::delete('/admin/education/courses/{id}/tests/{testId}', [\App\Http\Controllers\Api\AdminEducationController::class, 'destroyTest']);
         }); // end role:staff
     });
+
+    // Скачивание вложений чата — публичный signed-роут.
+    // Подпись (URL::temporarySignedRoute) выдаётся бэком уже после
+    // авторизации в getMessages, имеет короткий expiry. Браузер при
+    // клике по ссылке не передаёт Authorization Bearer — поэтому
+    // обычный auth:sanctum middleware тут не подходит.
+    Route::get('/chat/messages/{messageId}/attachment', [\App\Http\Controllers\Api\ChatController::class, 'downloadAttachment'])
+        ->whereNumber('messageId')
+        ->name('chat.attachment')
+        ->middleware('signed');
 });

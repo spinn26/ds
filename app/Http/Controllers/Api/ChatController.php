@@ -10,6 +10,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\URL;
 
 class ChatController extends Controller
 {
@@ -332,8 +333,11 @@ class ChatController extends Controller
                 'isAgent' => (bool) $m->is_agent,
                 'isSystem' => (bool) $m->is_system,
                 // Защищённый endpoint: путь скрыт, фронт скачивает по id.
-                // Партнёр без доступа к тикету получит 403 на /api/v1/chat/messages/{id}/attachment.
-                'attachmentPath' => $m->attachment_path ? "/api/v1/chat/messages/{$m->id}/attachment" : null,
+                // Подписанный URL с TTL 1 час — браузер открывает напрямую,
+                // Bearer-токен не нужен. Подпись валидируется middleware('signed').
+                'attachmentPath' => $m->attachment_path
+                    ? URL::temporarySignedRoute('chat.attachment', now()->addHour(), ['messageId' => $m->id])
+                    : null,
                 'attachmentName' => $m->attachment_name,
                 'createdAt' => $m->created_at,
                 'editedAt' => $m->edited_at ?? null,
@@ -1387,17 +1391,14 @@ class ChatController extends Controller
      */
     public function downloadAttachment(Request $request, int $messageId): \Symfony\Component\HttpFoundation\Response
     {
+        // Подпись URL (middleware('signed')) выдаётся бэком только тем
+        // пользователям, у которых есть доступ к тикету (см. getMessages).
+        // Само скачивание полагается на validity подписи + короткий TTL.
         $msg = DB::table('chat_messages')->where('id', $messageId)
             ->select('id', 'ticket_id', 'attachment_path', 'attachment_name')
             ->first();
         if (! $msg || ! $msg->attachment_path) {
             abort(404, 'Вложение не найдено');
-        }
-
-        $ticket = ChatTicket::find($msg->ticket_id);
-        if (! $ticket) abort(404);
-        if ($request->user()->cannot('view', $ticket)) {
-            abort(403, 'Доступ запрещён');
         }
 
         $disk = \Illuminate\Support\Facades\Storage::disk('local');
