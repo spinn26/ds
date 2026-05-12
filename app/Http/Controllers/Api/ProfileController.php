@@ -12,6 +12,7 @@ use App\Http\Requests\Api\Profile\UploadAvatarRequest;
 use App\Http\Resources\AgreementDocumentResource;
 use App\Http\Resources\BankRequisiteResource;
 use App\Http\Resources\RequisiteResource;
+use App\Support\LegacyId;
 use App\Models\AgreementDocument;
 use App\Models\BankRequisite;
 use App\Models\Consultant;
@@ -127,7 +128,12 @@ class ProfileController extends Controller
             if ($cityName) {
                 $cityId = DB::table('city')->where('cityNameRu', $cityName)->value('id');
                 if (! $cityId) {
-                    $cityId = DB::table('city')->insertGetId(['cityNameRu' => $cityName]);
+                    // Legacy city без серийного id — генерим вручную.
+                    $cityId = DB::transaction(function () use ($cityName) {
+                        $id = LegacyId::next('city');
+                        DB::table('city')->insert(['id' => $id, 'cityNameRu' => $cityName]);
+                        return $id;
+                    });
                 }
                 $user->city = $cityId;
             } else {

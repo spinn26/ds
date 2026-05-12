@@ -28,7 +28,11 @@ Route::prefix('v1')->group(function () {
     // Insmart webhook — без auth:sanctum (внешний источник),
     // защищён shared-secret в заголовке X-Insmart-Secret + throttle.
     Route::middleware('throttle:60,1')->group(function () {
-        Route::post('/webhooks/insmart/paid', [\App\Http\Controllers\Api\InsmartWebhookController::class, 'paid']);
+        // Insmart-вебхук временно отключён — InsmartIntegrationService пишет
+        // в client колонки email/phone/createDate, которых нет в legacy-схеме,
+        // и в product/program без серийного id. Включить после рефактора
+        // на person + advisory-lock id-генерацию.
+        // Route::post('/webhooks/insmart/paid', [\App\Http\Controllers\Api\InsmartWebhookController::class, 'paid']);
         Route::post('/webhooks/zammad', [\App\Http\Controllers\Api\ZammadWebhookController::class, 'handle']);
     });
 

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Api\Concerns\AppliesSorting;
 use App\Http\Controllers\Api\Concerns\PaginatesRequests;
 use App\Http\Controllers\Controller;
+use App\Support\LegacyId;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -945,7 +946,9 @@ class AdminFinanceController extends Controller
             if ($current) {
                 DB::table('vat')->where('id', $current->id)->update(['dateTo' => $closeDate]);
             }
+            // Legacy-таблица vat без серийного default → нужен явный id.
             DB::table('vat')->insert([
+                'id' => LegacyId::next('vat'),
                 'value' => $request->value,
                 'dateFrom' => $newFrom,
                 'dateTo' => '2050-01-01 00:00:00', // дальняя дата = «настоящее время»

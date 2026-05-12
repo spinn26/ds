@@ -9,6 +9,7 @@ use App\Http\Controllers\Controller;
 use App\Models\BankRequisite;
 use App\Models\Consultant;
 use App\Models\Requisite;
+use App\Support\LegacyId;
 use App\Services\PartnerStatusService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -1375,16 +1376,19 @@ class AdminDataController extends Controller
         $requisite->dateChange = now();
         $requisite->save();
 
-        // Отправка комментария через коммуникацию
+        // Отправка комментария через коммуникацию (legacy-таблица без серийного id).
         if ($request->filled('comment')) {
-            DB::table('platformCommunication')->insert([
-                'consultant' => $requisite->consultant,
-                'category' => 1, // Верификация реквизитов
-                'message' => $request->comment,
-                'date' => now(),
-                'direction' => 'ds2p',
-                'read' => false,
-            ]);
+            DB::transaction(function () use ($requisite, $request) {
+                DB::table('platformCommunication')->insert([
+                    'id' => LegacyId::next('platformCommunication'),
+                    'consultant' => $requisite->consultant,
+                    'category' => 1, // Верификация реквизитов
+                    'message' => $request->comment,
+                    'date' => now(),
+                    'direction' => 'ds2p',
+                    'read' => false,
+                ]);
+            });
         }
 
         if ($consultantUserId) {
@@ -1955,14 +1959,17 @@ class AdminDataController extends Controller
                 $r->save();
 
                 if ($data['action'] === 'reject' && ! empty($data['comment'])) {
-                    DB::table('platformCommunication')->insert([
-                        'consultant' => $r->consultant,
-                        'category' => 1,
-                        'message' => $data['comment'],
-                        'date' => now(),
-                        'direction' => 'ds2p',
-                        'read' => false,
-                    ]);
+                    DB::transaction(function () use ($r, $data) {
+                        DB::table('platformCommunication')->insert([
+                            'id' => LegacyId::next('platformCommunication'),
+                            'consultant' => $r->consultant,
+                            'category' => 1,
+                            'message' => $data['comment'],
+                            'date' => now(),
+                            'direction' => 'ds2p',
+                            'read' => false,
+                        ]);
+                    });
                 }
                 $ok++;
             } catch (\Throwable) {

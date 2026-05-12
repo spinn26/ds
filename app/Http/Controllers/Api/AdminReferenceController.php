@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Support\LegacyId;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -183,7 +184,13 @@ class AdminReferenceController extends Controller
         $cfg = $this->catalog($catalog);
         $payload = $this->validated($request, $cfg);
 
-        $id = DB::table($cfg['table'])->insertGetId($payload);
+        // Все 12 справочников — legacy Directual без серийного id.
+        // Генерируем явно через advisory-lock'нутый max+1.
+        $id = DB::transaction(function () use ($cfg, $payload) {
+            $newId = LegacyId::next($cfg['table']);
+            DB::table($cfg['table'])->insert(['id' => $newId] + $payload);
+            return $newId;
+        });
 
         return response()->json(['id' => $id], 201);
     }

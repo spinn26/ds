@@ -235,7 +235,9 @@ class ProductController extends Controller
             $req->statusName = $autoVerify ? 'verified' : 'pending';
             $req->save();
 
-            \Illuminate\Support\Facades\DB::table('bankRequisites')->updateOrInsert(
+            // Реальная таблица — bankrequisites (lowercase). Laravel
+            // квотирует имя как есть, поэтому camelCase ломает Postgres.
+            \Illuminate\Support\Facades\DB::table('bankrequisites')->updateOrInsert(
                 ['requisites' => $req->id, 'deletedAt' => null],
                 [
                     'bankName' => $data['bankName'],
