@@ -3,11 +3,12 @@
     <PageHeader title="Статус системы" icon="mdi-monitor-dashboard" />
 
     <!-- Overall banner -->
-    <v-card :color="overallColor" variant="flat" class="pa-4 mb-4 d-flex align-center ga-3">
-      <v-icon size="28" color="white">{{ overallIcon }}</v-icon>
+    <v-card :class="['pa-4 mb-4 d-flex align-center ga-3 overall-banner', `overall-${overall.status}`]"
+      variant="flat">
+      <v-icon size="32" color="white">{{ overallIcon }}</v-icon>
       <div class="text-white">
         <div class="text-h6 font-weight-bold">{{ overall.label || 'Загрузка...' }}</div>
-        <div class="text-caption">Обновлено {{ updatedAt }}</div>
+        <div class="text-caption" style="opacity: 0.9">Обновлено {{ updatedAt }}</div>
       </div>
       <v-spacer />
       <v-btn v-if="auth.isAdmin" color="white" variant="outlined" size="small"
@@ -109,7 +110,6 @@ async function load() {
   } catch {}
 }
 
-const overallColor = computed(() => statusColor(overall.value.status) + '-darken-1');
 const overallIcon = computed(() => statusIcon(overall.value.status));
 
 function statusColor(s) {
@@ -171,4 +171,13 @@ onMounted(() => {
 .incident-row {
   background: rgba(var(--v-theme-surface-variant), 0.3);
 }
+.overall-banner {
+  color: #fff !important;
+  border-left: 8px solid rgba(255, 255, 255, 0.35);
+}
+.overall-operational    { background: linear-gradient(135deg, #43a047 0%, #1b5e20 100%) !important; }
+.overall-maintenance    { background: linear-gradient(135deg, #1e88e5 0%, #1565c0 100%) !important; }
+.overall-degraded       { background: linear-gradient(135deg, #f5a623 0%, #d77c00 100%) !important; }
+.overall-partial_outage { background: linear-gradient(135deg, #fb8c00 0%, #e65100 100%) !important; }
+.overall-major_outage   { background: linear-gradient(135deg, #e53935 0%, #b71c1c 100%) !important; }
 </style>
