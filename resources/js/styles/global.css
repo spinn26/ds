@@ -356,29 +356,23 @@
     min-width: 88px !important;
   }
 
-  /* Внутренний скролл таблиц: на Mac Air весь viewport ~956px, после
-     топбара/фильтров/пагинации остаётся ~600px. При items-per-page=25
-     таблица «съедает» весь экран и вынуждает скроллить страницу целиком,
-     теряя строку поиска и хедер. Включаем sticky thead + max-height на
-     wrapper, чтобы прокручивалось только тело таблицы.
-     На 1600+ px ничего не меняется — там высоты viewport хватает.
+  /* Горизонтальный скролл при широких таблицах: на Mac Air main-
+     content ≈ 1100px, при 6+ колонок (×~180px) таблица перестаёт
+     помещаться и сжимает ячейки до нечитаемого. min-width:max-content
+     на <table> заставляет её занять natural-width контента; если
+     не влезла — wrapper включает горизонтальный скролл.
 
-     Высота ~5 строк + шапка: compact density 5 × 28px + 36px ≈ 180px,
-     comfortable 5 × 48px + 48px ≈ 290px. Берём 280px — на compact
-     влезет ~7 строк, на comfortable ровно 5; всё что выше — скроллится. */
+     Количество строк здесь НЕ ограничиваем — это работа footer'а
+     items-per-page (5/10/25/50). Никакого max-height/sticky thead. */
+  .v-data-table table,
+  .v-data-table-server table,
+  .v-table table {
+    min-width: max-content;
+  }
   .v-data-table .v-table__wrapper,
   .v-data-table-server .v-table__wrapper,
   .v-table .v-table__wrapper {
-    max-height: 280px;
-    overflow-y: auto;
-  }
-  .v-data-table thead th,
-  .v-data-table-server thead th,
-  .v-table thead th {
-    position: sticky;
-    top: 0;
-    z-index: 2;
-    background: rgb(var(--v-theme-surface)) !important;
+    overflow-x: auto;
   }
 }
 
