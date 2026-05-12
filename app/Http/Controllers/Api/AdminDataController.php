@@ -829,22 +829,25 @@ class AdminDataController extends Controller
         $personName = trim("{$data['lastName']} {$data['firstName']}" . (! empty($data['patronymic']) ? ' ' . $data['patronymic'] : ''));
 
         $clientId = DB::transaction(function () use ($data, $personName) {
-            // 1. WebUser — единственный источник истины (per CLAUDE.md).
-            $webUserId = DB::table('WebUser')->insertGetId([
+            // Клиент — это legacy person-запись (Directual). client.person →
+            // person.id (своя id-namespace, не WebUser). WebUser не создаём:
+            // у клиента нет login-аккаунта, он живёт только в person.
+            // Если клиент позже станет партнёром, регистрация заведёт
+            // отдельную WebUser-запись.
+            $personId = DB::table('person')->insertGetId([
                 'firstName' => $data['firstName'],
                 'lastName' => $data['lastName'],
                 'patronymic' => $data['patronymic'] ?? null,
                 'email' => $data['email'] ?? null,
                 'phone' => $data['phone'] ?? null,
                 'birthDate' => $data['birthDate'] ?? null,
+                'city' => $data['city'] ?? null,
                 'role' => 'client',
-                'dateCreated' => now(),
+                'dateCreated' => now()->toIso8601String(),
             ]);
 
-            // city — поле формы, но в client его нет (legacy: city = integer FK
-            // в WebUser на справочник). Пока не сохраняем; см. TODO ниже.
             return DB::table('client')->insertGetId([
-                'person' => $webUserId,
+                'person' => $personId,
                 'personName' => $personName,
                 'consultant' => $data['consultant'],
                 'comment' => $data['comment'] ?? null,
@@ -994,6 +997,7 @@ class AdminDataController extends Controller
                     'email' => $person?->email ?? null,
                     'phone' => $person?->phone ?? null,
                     'birthDate' => $person?->birthDate ?? null,
+                    'city' => $person?->city ?? null,
                 ];
             });
 
