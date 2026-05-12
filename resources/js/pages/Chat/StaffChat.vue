@@ -499,7 +499,7 @@
                 <v-divider />
                 <v-list-item prepend-icon="mdi-keyboard-outline" title="Горячие клавиши (?)"
                   @click="showHotkeys = true" />
-                <template v-if="auth.isAdmin">
+                <template v-if="canFullChat">
                   <v-divider />
                   <v-list-item prepend-icon="mdi-delete-outline"
                     base-color="error"
@@ -1020,6 +1020,11 @@ import { useSnackbar } from '../../composables/useSnackbar';
 import { useAuthStore } from '../../stores/auth';
 import { getActivityColorByName } from '../../composables/useDesign';
 import ImageLightbox from '../../components/ImageLightbox.vue';
+import { usePermissions } from '../../composables/usePermissions';
+
+// destructured-rename — в файле уже есть локальный function canEdit(msg).
+const { canFull: hasFullPermission } = usePermissions();
+const canFullChat = computed(() => hasFullPermission('communication'));
 
 const confirmDialog = useConfirm();
 const { showError, showSuccess } = useSnackbar();
@@ -1251,7 +1256,7 @@ async function togglePin(ticket, e) {
 // сообщения, заметки, реакции и вложения. Поэтому всегда подтверждаем.
 async function deleteChat() {
   if (!activeChat.value) return;
-  if (!auth.isAdmin) return;
+  if (!canFullChat.value) return;
   const t = activeChat.value;
   if (!await confirmDialog.ask({
     title: 'Удалить чат?',

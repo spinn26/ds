@@ -30,13 +30,11 @@ export function usePermissions() {
     return String(role).split(',').map(r => r.trim().toLowerCase()).filter(Boolean);
   });
 
-  // Грузил ли БД successfull (хоть одна запись — значит response пришёл,
-  // даже если для роли прав нет)? Используем простой признак: объект
-  // permissions заполнен. Если auth-store ещё не дёрнул API или вернул
-  // пусто — фоллбэк на static.
-  const dbLoaded = computed(() =>
-    auth.permissions && Object.keys(auth.permissions).length > 0
-  );
+  // Явный флаг — БД-permissions гарантированно загружены и валидны
+  // (даже если для роли прав нет, флаг true и {} = «реально пусто»).
+  // Раньше использовали Object.keys().length > 0, что для legit-пустой
+  // роли фоллбэкалось на static config — иногда давая больше прав.
+  const dbLoaded = computed(() => auth.permissionsFetched === true);
 
   function permission(section) {
     if (!section) return null;

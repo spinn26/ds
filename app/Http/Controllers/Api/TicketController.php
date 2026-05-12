@@ -12,6 +12,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\URL;
 
 class TicketController extends Controller
 {
@@ -316,7 +317,10 @@ class TicketController extends Controller
                     'userId' => $m->user_id,
                     'userName' => $user ? trim(($user->lastName ?? '') . ' ' . ($user->firstName ?? '')) : '—',
                     'message' => $m->message,
-                    'attachmentPath' => $m->attachment_path,
+                    // Signed URL — браузер откроет файл без Bearer-токена.
+                    'attachmentPath' => $m->attachment_path
+                        ? URL::temporarySignedRoute('tickets.attachment', now()->addHour(), ['messageId' => $m->id])
+                        : null,
                     'attachmentName' => $m->attachment_name,
                     'isSystem' => (bool) $m->is_system,
                     'createdAt' => $m->created_at,
@@ -376,7 +380,10 @@ class TicketController extends Controller
 
         if ($request->hasFile('attachment')) {
             $file = $request->file('attachment');
-            $attachmentPath = $file->store("tickets/{$id}", 'public');
+            // Private диск — доступ только через signed URL, выдаваемый
+            // в getMessages. Раньше был 'public' — паспорт мог утечь
+            // по предсказуемому /storage/tickets/{id}/...
+            $attachmentPath = $file->store("tickets/{$id}", 'local');
             $attachmentName = $file->getClientOriginalName();
         }
 
@@ -417,7 +424,9 @@ class TicketController extends Controller
                 'userId' => $user->id,
                 'userName' => trim(($user->lastName ?? '') . ' ' . ($user->firstName ?? '')),
                 'message' => $request->message,
-                'attachmentPath' => $attachmentPath ? '/storage/' . $attachmentPath : null,
+                'attachmentPath' => $attachmentPath
+                    ? URL::temporarySignedRoute('tickets.attachment', now()->addHour(), ['messageId' => $msgId])
+                    : null,
                 'attachmentName' => $attachmentName,
                 'isSystem' => false,
                 'createdAt' => now()->toIso8601String(),
@@ -439,6 +448,41 @@ class TicketController extends Controller
         }
 
         return response()->json(['message' => 'Отправлено', 'id' => $msgId]);
+    }
+
+    /**
+     * GET /tickets/messages/{messageId}/attachment — signed-route раздача.
+     * Подпись валидируется middleware('signed') в роутах. Выдаётся бэком
+     * в getMessages только пользователю, имеющему доступ к тикету.
+     */
+    public function downloadAttachment(int $messageId): \Symfony\Component\HttpFoundation\Response
+    {
+        $msg = DB::table('ticket_messages')->where('id', $messageId)
+            ->select('id', 'attachment_path', 'attachment_name')
+            ->first();
+        if (! $msg || ! $msg->attachment_path) {
+            abort(404, 'Вложение не найдено');
+        }
+        $disk = Storage::disk('local');
+        if (! $disk->exists($msg->attachment_path)) {
+            abort(404, 'Файл не найден на диске');
+        }
+
+        $mime = $disk->mimeType($msg->attachment_path) ?: 'application/octet-stream';
+        $name = $msg->attachment_name ?: basename($msg->attachment_path);
+        $disposition = (str_starts_with($mime, 'image/') || $mime === 'application/pdf')
+            ? 'inline' : 'attachment';
+
+        return response()->stream(function () use ($disk, $msg) {
+            $stream = $disk->readStream($msg->attachment_path);
+            if ($stream) {
+                fpassthru($stream);
+                fclose($stream);
+            }
+        }, 200, [
+            'Content-Type' => $mime,
+            'Content-Disposition' => $disposition . '; filename="' . addslashes($name) . '"',
+        ]);
     }
 
     /** Назначить тикет на сотрудника */

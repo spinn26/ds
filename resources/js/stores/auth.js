@@ -11,9 +11,11 @@ export const useAuthStore = defineStore('auth', {
         initialized: false,
         // Effective permissions для текущего user'а — карта section→level.
         // Загружается из БД через GET /auth/me/permissions при логине / boot'е.
-        // {} означает «не загружено или ошибка» — composable usePermissions
-        // в этом случае фоллбэкает на статический cabinetPermissions.js.
+        // Флаг permissionsFetched отдельный — иначе пустой permissions
+        // у legit-роли (например, registered) фоллбэкается на static config
+        // и может дать БОЛЬШЕ прав чем БД явно настроила.
         permissions: {},
+        permissionsFetched: false,
     }),
     getters: {
         isAdmin: (state) => {
@@ -66,6 +68,7 @@ export const useAuthStore = defineStore('auth', {
                 this.token = null;
                 this.user = null;
                 this.permissions = {};
+                this.permissionsFetched = false;
             }
             this.initialized = true;
         },
@@ -93,8 +96,10 @@ export const useAuthStore = defineStore('auth', {
             try {
                 const { data } = await api.get('/auth/me/permissions');
                 this.permissions = data?.permissions || {};
+                this.permissionsFetched = true;
             } catch {
                 this.permissions = {};
+                this.permissionsFetched = false;
             }
         },
         logout() {
@@ -102,6 +107,7 @@ export const useAuthStore = defineStore('auth', {
             this.token = null;
             this.user = null;
             this.permissions = {};
+            this.permissionsFetched = false;
             // Pinia-persist cleared via removing the 'auth' key. The other
             // three are leftovers from the pre-single-source migration;
             // clearing them here until every returning session has rotated out.
