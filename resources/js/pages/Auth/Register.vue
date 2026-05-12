@@ -55,12 +55,12 @@
                 <v-row dense>
                   <v-col cols="12" sm="4"><v-text-field v-model="form.lastName" label="Фамилия *" /></v-col>
                   <v-col cols="12" sm="4"><v-text-field v-model="form.firstName" label="Имя *" /></v-col>
-                  <v-col cols="12" sm="4"><v-text-field v-model="form.patronymic" label="Отчество" /></v-col>
+                  <v-col cols="12" sm="4"><v-text-field v-model="form.patronymic" label="Отчество *" /></v-col>
                   <v-col cols="12"><v-text-field v-model="form.email" label="Электронная почта *" type="email" prepend-inner-icon="mdi-email" /></v-col>
-                  <v-col cols="12" sm="6"><v-text-field v-model="form.phone" label="Телефон" prepend-inner-icon="mdi-phone" /></v-col>
-                  <v-col cols="12" sm="6"><v-text-field v-model="form.telegram" label="Телеграм" prepend-inner-icon="mdi-send" placeholder="@username" /></v-col>
-                  <v-col cols="12" sm="6"><v-text-field v-model="form.birthDate" label="Дата рождения" type="date" /></v-col>
-                  <v-col cols="12" sm="6"><v-text-field v-model="form.city" label="Город" prepend-inner-icon="mdi-city" /></v-col>
+                  <v-col cols="12" sm="6"><v-text-field v-model="form.phone" label="Телефон *" prepend-inner-icon="mdi-phone" /></v-col>
+                  <v-col cols="12" sm="6"><v-text-field v-model="form.telegram" label="Телеграм *" prepend-inner-icon="mdi-send" placeholder="@username" /></v-col>
+                  <v-col cols="12" sm="6"><v-text-field v-model="form.birthDate" label="Дата рождения *" type="date" /></v-col>
+                  <v-col cols="12" sm="6"><v-text-field v-model="form.city" label="Город *" prepend-inner-icon="mdi-city" /></v-col>
                   <v-col cols="12"><v-text-field v-model="form.password" label="Пароль *" :type="showPw ? 'text' : 'password'" prepend-inner-icon="mdi-lock" :append-inner-icon="showPw ? 'mdi-eye-off' : 'mdi-eye'" @click:append-inner="showPw = !showPw" /></v-col>
                   <v-col cols="12"><v-text-field v-model="form.password_confirmation" label="Подтверждение пароля *" type="password" prepend-inner-icon="mdi-lock" /></v-col>
                   <v-col cols="12">
@@ -193,8 +193,22 @@ const reviewItems = computed(() => [
 
 async function nextStep() {
   error.value = '';
-  if (!form.value.lastName || !form.value.firstName || !form.value.email || !form.value.password) {
-    error.value = 'Заполните все обязательные поля'; return;
+  const requiredFields = [
+    ['lastName', 'Фамилия'],
+    ['firstName', 'Имя'],
+    ['patronymic', 'Отчество'],
+    ['email', 'Электронная почта'],
+    ['phone', 'Телефон'],
+    ['telegram', 'Телеграм'],
+    ['birthDate', 'Дата рождения'],
+    ['city', 'Город'],
+    ['password', 'Пароль'],
+    ['password_confirmation', 'Подтверждение пароля'],
+  ];
+  const missing = requiredFields.filter(([key]) => !String(form.value[key] ?? '').trim());
+  if (missing.length) {
+    error.value = `Заполните: ${missing.map(([, name]) => name).join(', ')}`;
+    return;
   }
   if (form.value.password !== form.value.password_confirmation) {
     error.value = 'Пароли не совпадают'; return;

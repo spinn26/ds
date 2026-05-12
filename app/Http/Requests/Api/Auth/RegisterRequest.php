@@ -17,12 +17,12 @@ class RegisterRequest extends FormRequest
         return [
             'firstName' => ['required', 'string', 'max:255'],
             'lastName' => ['required', 'string', 'max:255'],
-            'patronymic' => ['nullable', 'string', 'max:255'],
+            'patronymic' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'unique:WebUser,email'],
-            'phone' => ['nullable', 'string', 'max:50'],
-            'telegram' => ['nullable', 'string', 'max:100'],
-            'birthDate' => ['nullable', 'date'],
-            'city' => ['nullable', 'string', 'max:255'],
+            'phone' => ['required', 'string', 'max:50'],
+            'telegram' => ['required', 'string', 'max:100'],
+            'birthDate' => ['required', 'date'],
+            'city' => ['required', 'string', 'max:255'],
             'password' => ['required', 'confirmed', Password::min(8)->letters()->numbers()],
             // Закрытая регистрация: можно попасть только по реф-ссылке от
             // активного партнёра. refCode обязателен и должен матчить
