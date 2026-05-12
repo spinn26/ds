@@ -179,6 +179,9 @@ class ConsultantService
                 'birthDate' => $birthDate,
                 'city' => $cityName,
                 'dateActivity' => $c->dateActivity?->format('d.m.Y'),
+                'dateDeterministic' => $c->dateDeterministic
+                    ? \Carbon\Carbon::parse($c->dateDeterministic)->format('d.m.Y')
+                    : null,
                 'yearPeriodEnd' => $c->yearPeriodEnd?->format('d.m.Y'),
                 'activationDeadline' => $c->activationDeadline?->format('d.m.Y'),
             ];
@@ -274,8 +277,10 @@ class ConsultantService
             $members = $members->filter(fn ($m) => $m['city'] && str_contains(mb_strtolower($m['city']), $city));
         }
 
-        // Дата терминации (range). dateActivity = дата последней смены активности;
-        // для терминированных партнёров это и есть дата терминации.
+        // Дата терминации (range). Используем dateDeterministic — то же поле,
+        // что и на странице «Статусы партнёров». dateActivity для terminated
+        // часто хранит дату последней смены активности (= регистрации),
+        // а не реальную дату терминации.
         $termFrom = $filters['termination_from'] ?? null;
         $termTo = $filters['termination_to'] ?? null;
         if ($termFrom || $termTo) {
@@ -289,9 +294,9 @@ class ConsultantService
             $to = $parseDate($termTo);
             $members = $members->filter(function ($m) use ($from, $to, $terminatedId, $excludedId) {
                 if (! in_array($m['activityId'], [$terminatedId, $excludedId], true)) return false;
-                if (empty($m['dateActivity'])) return false;
+                if (empty($m['dateDeterministic'])) return false;
                 try {
-                    $d = \Carbon\Carbon::createFromFormat('d.m.Y', $m['dateActivity']);
+                    $d = \Carbon\Carbon::createFromFormat('d.m.Y', $m['dateDeterministic']);
                 } catch (\Throwable) {
                     return false;
                 }

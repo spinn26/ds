@@ -98,11 +98,15 @@ class StructureController extends Controller
     }
 
     /**
-     * SQL-предфильтр по диапазону даты терминации. Без него limit(500)
-     * по personName обрезал совпадения по дате до их формирования
-     * в applyFilters() — терминированные с фамилиями из «хвоста»
-     * алфавита не попадали в выдачу. applyFilters() в сервисе
-     * остаётся как есть — он накладывает тот же фильтр поверх.
+     * SQL-предфильтр по диапазону фактической даты терминации.
+     * Используем поле dateDeterministic — то же, что и на странице
+     * «Статусы партнёров» (AdminDataController::partnerStatuses).
+     * dateActivity для терминированных — это дата последней смены
+     * активности (часто = регистрация), а не реальная терминация.
+     *
+     * activity IN (Terminated, Excluded) обязателен: для Active/Registered
+     * в dateDeterministic лежат другие значения (срок активации, конец
+     * годового цикла), а не дата терминации.
      */
     private function applyDateRangePrefilter($query, Request $request): void
     {
@@ -114,10 +118,10 @@ class StructureController extends Controller
             PartnerActivity::Excluded->value,
         ]);
         if ($request->filled('termination_from')) {
-            $query->whereDate('dateActivity', '>=', $request->input('termination_from'));
+            $query->whereDate('dateDeterministic', '>=', $request->input('termination_from'));
         }
         if ($request->filled('termination_to')) {
-            $query->whereDate('dateActivity', '<=', $request->input('termination_to'));
+            $query->whereDate('dateDeterministic', '<=', $request->input('termination_to'));
         }
     }
 
