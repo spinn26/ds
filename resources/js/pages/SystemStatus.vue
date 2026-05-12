@@ -1,0 +1,174 @@
+<template>
+  <div>
+    <PageHeader title="Статус системы" icon="mdi-monitor-dashboard" />
+
+    <!-- Overall banner -->
+    <v-card :color="overallColor" variant="flat" class="pa-4 mb-4 d-flex align-center ga-3">
+      <v-icon size="28" color="white">{{ overallIcon }}</v-icon>
+      <div class="text-white">
+        <div class="text-h6 font-weight-bold">{{ overall.label || 'Загрузка...' }}</div>
+        <div class="text-caption">Обновлено {{ updatedAt }}</div>
+      </div>
+      <v-spacer />
+      <v-btn v-if="auth.isAdmin" color="white" variant="outlined" size="small"
+        prepend-icon="mdi-cog" to="/manage/system-status">Управление</v-btn>
+    </v-card>
+
+    <!-- Components grid -->
+    <v-card class="mb-4 pa-3">
+      <div class="text-subtitle-1 font-weight-bold mb-2">Компоненты</div>
+      <div v-if="!components.length" class="text-medium-emphasis py-3">
+        Компоненты не настроены.
+      </div>
+      <v-list density="comfortable" v-else>
+        <v-list-item v-for="c in components" :key="c.id"
+          class="component-row mb-1 rounded">
+          <div class="d-flex align-center ga-3 w-100 py-1">
+            <v-icon :color="statusColor(c.status)" size="20">{{ statusIcon(c.status) }}</v-icon>
+            <div class="flex-grow-1 min-w-0">
+              <div class="font-weight-medium">{{ c.name }}</div>
+              <div v-if="c.description" class="text-caption text-medium-emphasis">{{ c.description }}</div>
+            </div>
+            <v-chip :color="statusColor(c.status)" size="small" variant="tonal">
+              {{ statusLabel(c.status) }}
+            </v-chip>
+          </div>
+        </v-list-item>
+      </v-list>
+    </v-card>
+
+    <!-- Active incidents -->
+    <v-card v-if="active.length" class="mb-4 pa-3">
+      <div class="text-subtitle-1 font-weight-bold mb-2 d-flex align-center ga-2">
+        <v-icon color="warning">mdi-alert-circle</v-icon>
+        Активные инциденты
+      </div>
+      <v-list density="comfortable">
+        <v-list-item v-for="i in active" :key="i.id" class="incident-row mb-1 rounded pa-3">
+          <div class="d-flex align-start ga-3">
+            <v-chip :color="severityColor(i.severity)" size="x-small" variant="flat" class="mt-1">
+              {{ severityLabel(i.severity) }}
+            </v-chip>
+            <div class="flex-grow-1">
+              <div class="font-weight-medium">{{ i.title }}</div>
+              <div v-if="i.description" class="text-body-2 text-medium-emphasis mt-1">{{ i.description }}</div>
+              <div class="text-caption text-medium-emphasis mt-1">
+                Начало: {{ fmtDateTime(i.started_at) }} · Статус: {{ incidentStatusLabel(i.status) }}
+              </div>
+            </div>
+          </div>
+        </v-list-item>
+      </v-list>
+    </v-card>
+
+    <!-- History -->
+    <v-card class="pa-3">
+      <div class="text-subtitle-1 font-weight-bold mb-2">История</div>
+      <div v-if="!history.length" class="text-medium-emphasis py-3">
+        История пуста.
+      </div>
+      <v-list density="comfortable" v-else>
+        <v-list-item v-for="h in history" :key="h.id" class="incident-row mb-1 rounded pa-3">
+          <div class="d-flex align-start ga-3">
+            <v-icon color="success" size="20" class="mt-1">mdi-check-circle</v-icon>
+            <div class="flex-grow-1">
+              <div class="font-weight-medium">{{ h.title }}</div>
+              <div v-if="h.description" class="text-body-2 text-medium-emphasis mt-1">{{ h.description }}</div>
+              <div class="text-caption text-medium-emphasis mt-1">
+                {{ fmtDateTime(h.started_at) }} → {{ fmtDateTime(h.resolved_at) }}
+              </div>
+            </div>
+          </div>
+        </v-list-item>
+      </v-list>
+    </v-card>
+  </div>
+</template>
+
+<script setup>
+import { ref, computed, onMounted } from 'vue';
+import api from '../api';
+import PageHeader from '../components/PageHeader.vue';
+import { useAuthStore } from '../stores/auth';
+
+const auth = useAuthStore();
+const overall = ref({ status: 'operational', label: '' });
+const components = ref([]);
+const active = ref([]);
+const history = ref([]);
+const updatedAt = ref('');
+
+async function load() {
+  try {
+    const { data } = await api.get('/system-status');
+    overall.value = data.overall || { status: 'operational', label: '' };
+    components.value = data.components || [];
+    active.value = data.active || [];
+    history.value = data.history || [];
+    updatedAt.value = new Date().toLocaleTimeString('ru-RU');
+  } catch {}
+}
+
+const overallColor = computed(() => statusColor(overall.value.status) + '-darken-1');
+const overallIcon = computed(() => statusIcon(overall.value.status));
+
+function statusColor(s) {
+  return {
+    operational: 'success',
+    maintenance: 'info',
+    degraded: 'warning',
+    partial_outage: 'orange',
+    major_outage: 'error',
+  }[s] || 'grey';
+}
+function statusIcon(s) {
+  return {
+    operational: 'mdi-check-circle',
+    maintenance: 'mdi-tools',
+    degraded: 'mdi-alert',
+    partial_outage: 'mdi-alert-octagon',
+    major_outage: 'mdi-close-octagon',
+  }[s] || 'mdi-help-circle';
+}
+function statusLabel(s) {
+  return {
+    operational: 'Работает',
+    maintenance: 'Тех. работы',
+    degraded: 'Замедление',
+    partial_outage: 'Частичный сбой',
+    major_outage: 'Серьёзный сбой',
+  }[s] || s;
+}
+function severityColor(s) {
+  return { minor: 'warning', major: 'orange', critical: 'error', maintenance: 'info' }[s] || 'grey';
+}
+function severityLabel(s) {
+  return { minor: 'Незначительно', major: 'Серьёзно', critical: 'Критично', maintenance: 'Тех. работы' }[s] || s;
+}
+function incidentStatusLabel(s) {
+  return {
+    investigating: 'Расследуется', identified: 'Причина найдена',
+    monitoring: 'Мониторинг', resolved: 'Решено',
+    scheduled: 'Запланировано', in_progress: 'В процессе', completed: 'Завершено',
+  }[s] || s;
+}
+function fmtDateTime(v) {
+  if (!v) return '—';
+  try { return new Date(v).toLocaleString('ru-RU'); } catch { return v; }
+}
+
+onMounted(() => {
+  load();
+  // Автообновление раз в минуту — статус-страница должна показывать актуальное.
+  setInterval(load, 60000);
+});
+</script>
+
+<style scoped>
+.component-row {
+  background: rgba(var(--v-theme-surface-variant), 0.4);
+}
+.incident-row {
+  background: rgba(var(--v-theme-surface-variant), 0.3);
+}
+</style>

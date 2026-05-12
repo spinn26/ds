@@ -40,6 +40,15 @@ Route::prefix('v1')->group(function () {
     });
 
     Route::middleware('auth:sanctum')->group(function () {
+        // Status page — read для всех auth, write только для admin (внутри контроллера).
+        Route::get('/system-status', [\App\Http\Controllers\Api\SystemStatusController::class, 'index']);
+        Route::post('/system-status/components', [\App\Http\Controllers\Api\SystemStatusController::class, 'storeComponent']);
+        Route::put('/system-status/components/{id}', [\App\Http\Controllers\Api\SystemStatusController::class, 'updateComponent'])->whereNumber('id');
+        Route::delete('/system-status/components/{id}', [\App\Http\Controllers\Api\SystemStatusController::class, 'destroyComponent'])->whereNumber('id');
+        Route::post('/system-status/incidents', [\App\Http\Controllers\Api\SystemStatusController::class, 'storeIncident']);
+        Route::put('/system-status/incidents/{id}', [\App\Http\Controllers\Api\SystemStatusController::class, 'updateIncident'])->whereNumber('id');
+        Route::delete('/system-status/incidents/{id}', [\App\Http\Controllers\Api\SystemStatusController::class, 'destroyIncident'])->whereNumber('id');
+
         Route::get('/auth/me', [AuthController::class, 'me']);
         Route::get('/auth/me/permissions', [AuthController::class, 'permissions']);
         Route::post('/auth/logout', [AuthController::class, 'logout']);

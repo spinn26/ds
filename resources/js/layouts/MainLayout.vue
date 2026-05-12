@@ -597,6 +597,7 @@ const menuItems = [
   { group: 'Развитие', partner: true },
   { label: 'Обучение', icon: 'mdi-school-outline', path: '/education', partner: true },
   { label: 'Инструкции', icon: 'mdi-book-open-variant', path: '/instructions', partner: true },
+  { label: 'Статус системы', icon: 'mdi-monitor-dashboard', path: '/status', partner: true },
   { label: 'Продукты', icon: 'mdi-package-variant-closed', path: '/products', partner: true },
   // Конкурсы скрыты у всех кабинетов по запросу 2026-05-05.
   // { label: 'Конкурсы и события', icon: 'mdi-trophy-outline', path: '/contests', partner: true },
@@ -668,6 +669,7 @@ const menuItems = [
   { label: 'Отчёты', icon: 'mdi-file-chart', path: '/manage/reports', adminSection: 'reports' },
   { label: 'Справочники для расчёта', icon: 'mdi-currency-usd', path: '/manage/currencies', adminSection: 'currencies' },
   { label: 'Инструкции', icon: 'mdi-book-edit-outline', path: '/manage/instructions', adminSection: 'products' },
+  { label: 'Статус системы', icon: 'mdi-monitor-dashboard', path: '/manage/system-status', adminSection: 'support-desk', adminOnly: true },
   // Управление группами и правами — только admin (раздел 'permissions'
   // присутствует только в его карте прав через FULL-сентинел).
   { label: 'Группы и права', icon: 'mdi-shield-account', path: '/manage/permissions', adminSection: 'permissions' },

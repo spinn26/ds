@@ -74,6 +74,8 @@ const routes = [
             { path: 'manage/funnel', component: () => import('../pages/Admin/Funnel.vue'), meta: { staff: true } },
             { path: 'manage/cohorts', component: () => import('../pages/Admin/Cohorts.vue'), meta: { staff: true } },
             { path: 'manage/contests', component: () => import('../pages/Admin/Contests.vue'), meta: { staff: true } },
+            { path: 'status', component: () => import('../pages/SystemStatus.vue') },
+            { path: 'manage/system-status', component: () => import('../pages/Admin/SystemStatus.vue'), meta: { staff: true, admin: true } },
             { path: 'forbidden', component: () => import('../pages/Forbidden.vue') },
         ],
     },
