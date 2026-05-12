@@ -36,7 +36,9 @@ async function startChat() {
       department: 'general',
       context_type: props.contextType,
       context_id: String(props.contextId),
-      recipient_id: props.partnerId,
+      // partnerId — это consultant.id из listing. Бэк сам резолвит
+      // в WebUser.id (разные id-namespace per CLAUDE.md).
+      consultant_id: props.partnerId,
     });
 
     router.push(`/manage/chat?open=${data.ticket?.id || ''}`);

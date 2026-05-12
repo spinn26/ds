@@ -169,11 +169,26 @@ class ChatController extends Controller
             'priority' => 'nullable|in:critical,high,medium,low',
             'message' => 'required|string|max:10000',
             'recipient_id' => 'nullable|integer|exists:WebUser,id',
+            // consultant_id — алиас для recipient_id со StartChatButton'a,
+            // где есть только consultant.id из listing. Бэк сам резолвит
+            // через consultant.webUser → WebUser.id (разные id-namespace
+            // per CLAUDE.md). Решает кейс «открылся чужой чат».
+            'consultant_id' => 'nullable|integer|exists:consultant,id',
             'context_type' => 'nullable|string|max:50',
             'context_id' => 'nullable|string|max:50',
             'tags' => 'nullable|array|max:20',
             'tags.*' => 'string|max:50',
         ]);
+
+        // Резолв consultant_id → recipient_id (WebUser.id).
+        if (! $request->filled('recipient_id') && $request->filled('consultant_id')) {
+            $webUserId = DB::table('consultant')
+                ->where('id', $request->input('consultant_id'))
+                ->value('webUser');
+            if ($webUserId) {
+                $request->merge(['recipient_id' => (int) $webUserId]);
+            }
+        }
 
         // Нормализуем legacy-ключ к актуальному (technical → support и т.д.).
         // Stored всегда modern key, чтобы фильтрация по роли работала
