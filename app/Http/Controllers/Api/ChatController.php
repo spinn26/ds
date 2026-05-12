@@ -1128,7 +1128,7 @@ class ChatController extends Controller
                 $lines[] = "**Контракт #{$r->number}**" . ($r->productName ? " · {$r->productName}" : '');
                 if ($r->clientName)     $lines[] = "• Клиент: {$r->clientName}";
                 if ($r->consultantName) $lines[] = "• Партнёр: {$r->consultantName}";
-                if ($r->ammount)        $lines[] = "• Сумма: " . number_format((float) $r->ammount, 2, ',', ' ') . ' ' . ($r->currencySymbol ?? '');
+                if ($r->ammount)        $lines[] = "• Сумма: " . str_replace('.', ',', (string) $r->ammount) . ' ' . ($r->currencySymbol ?? '');
                 if ($r->openDate)       $lines[] = "• Открыт: " . substr($r->openDate, 0, 10);
                 if ($r->closeDate)      $lines[] = "• Закрыт: " . substr($r->closeDate, 0, 10);
                 break;
@@ -1174,7 +1174,7 @@ class ChatController extends Controller
                 if ($r->contractNumber) $lines[] = "• Контракт: #{$r->contractNumber}" . ($r->productName ? " · {$r->productName}" : '');
                 if ($r->clientName)     $lines[] = "• Клиент: {$r->clientName}";
                 if ($r->consultantName) $lines[] = "• Партнёр: {$r->consultantName}";
-                if ($r->amountRUB)      $lines[] = "• Сумма ₽: " . number_format((float) $r->amountRUB, 2, ',', ' ');
+                if ($r->amountRUB)      $lines[] = "• Сумма ₽: " . str_replace('.', ',', (string) $r->amountRUB);
                 if ($r->date)           $lines[] = "• Дата: " . substr($r->date, 0, 10);
                 if ($r->score)          $lines[] = "• Год КВ: {$r->score}";
                 break;
@@ -1214,9 +1214,9 @@ class ChatController extends Controller
                 $lines[] = "**Комиссия #{$r->id}**";
                 if ($r->consultantName) $lines[] = "• Партнёр: {$r->consultantName}";
                 if ($r->contractNumber) $lines[] = "• Контракт: #{$r->contractNumber}" . ($r->productName ? " · {$r->productName}" : '');
-                if ($r->amountRUB)      $lines[] = "• Сумма ₽: " . number_format((float) $r->amountRUB, 2, ',', ' ');
-                if ($r->personalVolume) $lines[] = "• ЛП: " . number_format((float) $r->personalVolume, 2, ',', ' ');
-                if ($r->groupVolume)    $lines[] = "• ГП: " . number_format((float) $r->groupVolume, 2, ',', ' ');
+                if ($r->amountRUB)      $lines[] = "• Сумма ₽: " . str_replace('.', ',', (string) $r->amountRUB);
+                if ($r->personalVolume) $lines[] = "• ЛП: " . str_replace('.', ',', (string) $r->personalVolume);
+                if ($r->groupVolume)    $lines[] = "• ГП: " . str_replace('.', ',', (string) $r->groupVolume);
                 if ($r->chainOrder)     $lines[] = "• Уровень в цепочке: {$r->chainOrder}";
                 if ($r->date)           $lines[] = "• Период: " . substr($r->date, 0, 7);
                 break;
