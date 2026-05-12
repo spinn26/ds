@@ -14,6 +14,13 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // Laravel 11 по умолчанию делает redirectGuestsTo(fn() => route('login')),
+        // но у нас login — это Vue-страница, а Laravel-роута 'login' нет.
+        // Для API возвращаем null → exception handler ниже выдаст 401 JSON;
+        // для web возвращаем строковый '/login' — Vue SPA сам отрисует логин.
+        $middleware->redirectGuestsTo(fn (Request $request) =>
+            $request->expectsJson() || $request->is('api/*') ? null : '/login'
+        );
         $middleware->alias([
             'role' => \App\Http\Middleware\CheckRole::class,
             'restrict.education' => \App\Http\Middleware\RestrictEducationWrites::class,
