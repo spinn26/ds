@@ -34,21 +34,22 @@ class PermissionGroupsSeeder extends Seeder
                 'permissions' => [
                     'calculator' => 'full',
                     'structure' => 'view',
-                    'contracts' => 'full',
+                    'contracts' => 'edit',          // спека: ручное добавление + редактирование, без удаления
                     'upload' => 'full',
-                    'clients' => 'full',
+                    'clients' => 'edit',            // спека: двухшаговое добавление + редактирование, без удаления
                     'partners' => 'edit',
                     'statuses' => 'view',
                     'transfers' => 'view',
                     'acceptance' => 'view',
                     'commissions' => 'view',
-                    'reports' => 'full',
+                    'reports' => 'edit',            // спека: формирование + выгрузка, без публикации
                     'products' => 'view',
-                    'communication' => 'full',
+                    'communication' => 'edit',      // спека: обработка тикетов своей ветки, без закрытия
                     'chat-analytics' => 'view',
                     'pool' => 'view',
                     'partner-questionnaires' => 'view',
                     'requisites' => 'view',
+                    'instructions' => 'view',
                 ],
             ],
             [
@@ -64,10 +65,11 @@ class PermissionGroupsSeeder extends Seeder
                     'products' => 'edit',
                     'clients' => 'view',
                     'contracts' => 'view',
-                    'communication' => 'full',
+                    'communication' => 'edit',      // спека: ведение/закрытие своих тикетов
                     'support-desk' => 'full',
                     'calculator' => 'view',
                     'partner-questionnaires' => 'view',
+                    'instructions' => 'edit',       // спека: добавление/редактирование разделов БЗ
                 ],
             ],
             [
@@ -96,6 +98,7 @@ class PermissionGroupsSeeder extends Seeder
                     'anomalies' => 'full',
                     'funnel' => 'full',
                     'cohorts' => 'full',
+                    'instructions' => 'view',
                 ],
             ],
             [
@@ -104,10 +107,10 @@ class PermissionGroupsSeeder extends Seeder
                 'description' => 'Реестр выплат, начисления, отчёты для бухгалтерии.',
                 'is_system' => true,
                 'permissions' => [
-                    'calculator' => 'full',
+                    'calculator' => 'edit',         // спека: расчёты, без системных действий
                     'payments' => 'full',
                     'charges' => 'full',
-                    'reports' => 'full',
+                    'reports' => 'edit',            // спека: формирование + выгрузка, без публикации
                     'requisites' => 'view',
                     'pool' => 'view',
                     'communication' => 'edit',
@@ -123,11 +126,12 @@ class PermissionGroupsSeeder extends Seeder
                     'structure' => 'view',
                     'import' => 'full',
                     'transactions' => 'full',
-                    'commissions' => 'view',
+                    'commissions' => 'edit',        // спека: настройка интерфейса/скрытие колонок
                     'charges' => 'full',
                     'pool' => 'full',
                     'qualifications' => 'view',
-                    'reports' => 'full',
+                    'reports' => 'edit',            // формирование/выгрузка — edit, публикация — отдельная секция reports-access
+                    'reports-access' => 'full',     // публикация, закрытие периода, принудительный пересчёт
                     'partners' => 'edit',
                     'requisites' => 'edit',
                     'statuses' => 'full',
@@ -138,7 +142,7 @@ class PermissionGroupsSeeder extends Seeder
                     'products' => 'full',
                     'contracts' => 'view',
                     'clients' => 'view',
-                    'communication' => 'full',
+                    'communication' => 'edit',      // спека: переписка по реквизитам/финвопросам
                 ],
             ],
             [
@@ -165,6 +169,7 @@ class PermissionGroupsSeeder extends Seeder
                     'partners' => 'view',
                     'products' => 'view',
                     'communication' => 'edit',
+                    'instructions' => 'view',
                 ],
             ],
         ];

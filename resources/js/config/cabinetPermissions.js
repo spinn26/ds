@@ -45,21 +45,22 @@ export const cabinetPermissions = {
   backoffice: {
     calculator:                 FULL,   // полный режим расчётов
     structure:                  VIEW,
-    contracts:                  FULL,   // Менеджер контрактов: добавление/редактирование
+    contracts:                  EDIT,   // спека: ручное добавление + редактирование, без удаления
     upload:                     FULL,   // Загрузка контрактов (массовый импорт)
-    clients:                    FULL,   // двухшаговое добавление + редактирование
+    clients:                    EDIT,   // спека: двухшаговое добавление + редактирование, без удаления
     partners:                   EDIT,   // редактирование карточек, без удаления
     statuses:                   VIEW,
     transfers:                  VIEW,   // История перестановок
     acceptance:                 VIEW,   // Read-Only по спеке
     commissions:                VIEW,   // Read-Only по спеке
-    reports:                    FULL,
+    reports:                    EDIT,   // спека: формирование + выгрузка, публикация — calculations
     products:                   VIEW,
-    communication:              FULL,   // обработка тикетов
+    communication:              EDIT,   // спека: обработка тикетов своей ветки, без закрытия
     'chat-analytics':           VIEW,
     pool:                       VIEW,
     'partner-questionnaires':   VIEW,
     requisites:                 VIEW,
+    instructions:               VIEW,
   },
 
   // ===== Техподдержка (Левенко, Саблина, Каприеловы) =====
@@ -72,10 +73,11 @@ export const cabinetPermissions = {
     products:                   EDIT,   // добавление продукта на витрину
     clients:                    VIEW,
     contracts:                  VIEW,   // Менеджер контрактов
-    communication:              FULL,   // Helpdesk: маршрутизация, закрытие
+    communication:              EDIT,   // спека: ведение/закрытие своих тикетов
     'support-desk':             FULL,
     calculator:                 VIEW,   // вне спеки, дают «по факту» всем стафф
     'partner-questionnaires':   VIEW,
+    instructions:               EDIT,   // спека: добавление/редактирование разделов БЗ
   },
 
   // ===== Руководитель (Медведева, Ламакин, Угарова, Архангельский) =====
@@ -101,15 +103,16 @@ export const cabinetPermissions = {
     anomalies:                  FULL,
     funnel:                     FULL,
     cohorts:                    FULL,
+    instructions:               VIEW,
   },
 
   // ===== Фин. менеджер (Спирькова, Петряшина) =====
   // Спека ✅Кабинет-фин.менеджера-по-выплатам.md
   finance: {
-    calculator:                 FULL,
+    calculator:                 EDIT,   // спека: расчёты, без системных действий
     payments:                   FULL,   // Реестр выплат — основной раздел
     charges:                    FULL,   // Прочие начисления
-    reports:                    FULL,
+    reports:                    EDIT,   // спека: формирование + выгрузка, публикация — calculations
     requisites:                 VIEW,   // вне спеки, для контекста
     pool:                       VIEW,
     communication:              EDIT,   // вне спеки — нужен для ответов партнёрам
@@ -122,11 +125,12 @@ export const cabinetPermissions = {
     structure:                  VIEW,
     import:                     FULL,   // Импорт транзакций
     transactions:               FULL,   // Manual TX
-    commissions:                VIEW,
+    commissions:                EDIT,   // спека: настройка интерфейса/скрытие колонок
     charges:                    FULL,   // Прочие начисления
     pool:                       FULL,   // запуск расчёта + ручная модерация
     qualifications:             VIEW,
-    reports:                    FULL,   // публикация, закрытие периода
+    reports:                    EDIT,   // формирование/выгрузка; публикация — отдельная reports-access
+    'reports-access':           FULL,   // публикация, закрытие периода, принудительный пересчёт
     partners:                   EDIT,   // редактирование карточек
     requisites:                 EDIT,   // изменение статуса верификации
     statuses:                   FULL,   // ручная смена статуса
@@ -137,7 +141,7 @@ export const cabinetPermissions = {
     products:                   FULL,   // создание + редактирование
     contracts:                  VIEW,   // Read-Only
     clients:                    VIEW,   // Read-Only
-    communication:              FULL,   // переписка по реквизитам и финвопросам
+    communication:              EDIT,   // спека: переписка по реквизитам/финвопросам
   },
 
   // ===== Правки (corrections) — yonote-спеки нет, ставим VIEW по умолчанию =====
@@ -157,6 +161,7 @@ export const cabinetPermissions = {
     partners:                   VIEW,
     products:                   VIEW,
     communication:              EDIT,   // спец. ветка по обучению
+    instructions:               VIEW,
   },
 };
 
