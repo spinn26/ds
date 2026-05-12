@@ -87,7 +87,7 @@
     </v-dialog>
 
     <!-- Incident Dialog -->
-    <v-dialog v-model="incidentDialog" max-width="640" persistent>
+    <v-dialog v-model="incidentDialog" max-width="720" persistent>
       <v-card>
         <v-card-title>{{ incidentForm.id ? 'Редактировать' : 'Создать' }} инцидент</v-card-title>
         <v-card-text>
@@ -105,6 +105,38 @@
                 item-title="name" item-value="id" label="Компонент (необязательно)" clearable />
             </v-col>
           </v-row>
+
+          <!-- Timeline апдейтов — добавление новых + список существующих. -->
+          <template v-if="incidentForm.id">
+            <v-divider class="my-3" />
+            <div class="text-subtitle-2 font-weight-bold mb-2">Лента апдейтов</div>
+            <v-row dense>
+              <v-col cols="12" sm="4">
+                <v-select v-model="newUpdate.status" :items="incidentStatusOptions"
+                  label="Статус" density="compact" />
+              </v-col>
+              <v-col cols="12" sm="8">
+                <v-text-field v-model="newUpdate.message" label="Сообщение для пользователей"
+                  density="compact"
+                  hint="Например: «Локализовали причину», «Раскатили фикс», «Решено»"
+                  persistent-hint />
+              </v-col>
+              <v-col cols="12">
+                <v-btn size="small" color="primary" :loading="postingUpdate"
+                  prepend-icon="mdi-plus" @click="postUpdate">Опубликовать апдейт</v-btn>
+              </v-col>
+            </v-row>
+            <div v-if="incidentForm.updates?.length" class="mt-3">
+              <div v-for="u in [...incidentForm.updates].reverse()" :key="u.id"
+                class="update-row pa-2 mb-1 rounded">
+                <div class="d-flex align-center ga-2">
+                  <v-chip size="x-small" variant="tonal">{{ incidentStatusLabel(u.status) }}</v-chip>
+                  <span class="text-caption text-medium-emphasis">{{ fmtDateTime(u.created_at) }}</span>
+                </div>
+                <div class="text-body-2 mt-1">{{ u.message }}</div>
+              </div>
+            </div>
+          </template>
         </v-card-text>
         <v-card-actions>
           <v-spacer />
@@ -137,6 +169,8 @@ const componentDialog = ref(false);
 const componentForm = ref({});
 const incidentDialog = ref(false);
 const incidentForm = ref({});
+const newUpdate = ref({ status: 'investigating', message: '' });
+const postingUpdate = ref(false);
 
 const componentHeaders = [
   { title: 'Название', key: 'name' },
@@ -248,7 +282,24 @@ function openIncident(item) {
   incidentForm.value = item
     ? { ...item }
     : { title: '', description: '', status: 'investigating', severity: 'minor', component_id: null };
+  newUpdate.value = { status: incidentForm.value.status || 'investigating', message: '' };
   incidentDialog.value = true;
+}
+
+async function postUpdate() {
+  if (!incidentForm.value.id) { showError('Сначала сохраните инцидент'); return; }
+  if (!newUpdate.value.message.trim()) { showError('Введите сообщение апдейта'); return; }
+  postingUpdate.value = true;
+  try {
+    await api.post(`/system-status/incidents/${incidentForm.value.id}/updates`, newUpdate.value);
+    showSuccess('Апдейт опубликован');
+    newUpdate.value.message = '';
+    await load();
+    // Освежаем форму — подтягиваем свежие updates + статус.
+    const fresh = allIncidents.value.find(x => x.id === incidentForm.value.id);
+    if (fresh) incidentForm.value = { ...fresh };
+  } catch (e) { showError(e.response?.data?.message || 'Ошибка'); }
+  postingUpdate.value = false;
 }
 async function saveIncident() {
   if (!incidentForm.value.title) { showError('Заголовок обязателен'); return; }
@@ -276,3 +327,9 @@ async function deleteIncident(item) {
 
 onMounted(load);
 </script>
+
+<style scoped>
+.update-row {
+  background: rgba(var(--v-theme-surface-variant), 0.4);
+}
+</style>

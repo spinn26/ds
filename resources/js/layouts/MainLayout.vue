@@ -242,6 +242,10 @@
       @completed="onQuestionnaireCompleted"
     />
 
+    <!-- Глобальный поиск (Ctrl+K). Слушает keydown глобально, можно
+         открыть программно через ref. -->
+    <GlobalSearch />
+
   </v-layout>
 </template>
 
@@ -254,6 +258,7 @@ import { useSnackbar } from '../composables/useSnackbar';
 import OnboardingQuestionnaire from '../components/OnboardingQuestionnaire.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import GlobalSnackbar from '../components/GlobalSnackbar.vue';
+import GlobalSearch from '../components/GlobalSearch.vue';
 import { provideConfirm } from '../composables/useConfirm';
 import { availableSections as configAvailableSections } from '../config/cabinetPermissions';
 import api from '../api';

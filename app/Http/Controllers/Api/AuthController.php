@@ -32,6 +32,7 @@ class AuthController extends Controller
         }
 
         $token = $user->createToken('spa')->plainTextToken;
+        \App\Support\Audit::log('login', 'WebUser', $user->id, ['email' => $user->email]);
 
         return response()->json([
             'token' => $token,

@@ -15,6 +15,10 @@ use App\Http\Controllers\ImpersonateController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
+    // Health check — публичный, без Sanctum (чтобы можно было пинговать
+    // даже если БД/auth сломан). Используется uptime-monitoring.
+    Route::get('/health', [\App\Http\Controllers\Api\HealthController::class, 'check']);
+
     // Auth routes with rate limiting (5 attempts per minute)
     Route::middleware('throttle:5,1')->group(function () {
         Route::post('/auth/login', [AuthController::class, 'login']);
@@ -40,6 +44,12 @@ Route::prefix('v1')->group(function () {
     });
 
     Route::middleware('auth:sanctum')->group(function () {
+        // Глобальный поиск (Ctrl+K) — все auth.
+        Route::get('/search', [\App\Http\Controllers\Api\SearchController::class, 'index']);
+
+        // Аудит — только admin (проверка внутри).
+        Route::get('/audit-log', [\App\Http\Controllers\Api\AuditLogController::class, 'index']);
+
         // Status page — read для всех auth, write только для admin (внутри контроллера).
         Route::get('/system-status', [\App\Http\Controllers\Api\SystemStatusController::class, 'index']);
         Route::post('/system-status/components', [\App\Http\Controllers\Api\SystemStatusController::class, 'storeComponent']);
@@ -48,6 +58,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/system-status/incidents', [\App\Http\Controllers\Api\SystemStatusController::class, 'storeIncident']);
         Route::put('/system-status/incidents/{id}', [\App\Http\Controllers\Api\SystemStatusController::class, 'updateIncident'])->whereNumber('id');
         Route::delete('/system-status/incidents/{id}', [\App\Http\Controllers\Api\SystemStatusController::class, 'destroyIncident'])->whereNumber('id');
+        Route::post('/system-status/incidents/{id}/updates', [\App\Http\Controllers\Api\SystemStatusController::class, 'storeIncidentUpdate'])->whereNumber('id');
 
         Route::get('/auth/me', [AuthController::class, 'me']);
         Route::get('/auth/me/permissions', [AuthController::class, 'permissions']);

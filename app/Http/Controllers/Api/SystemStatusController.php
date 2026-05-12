@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Support\Audit;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -35,6 +36,17 @@ class SystemStatusController extends Controller
             ->limit(30)
             ->get();
 
+        // Batch-load updates timeline для активных и истории.
+        $incidentIds = collect($active)->pluck('id')->merge(collect($history)->pluck('id'))->all();
+        $updates = $incidentIds
+            ? DB::table('system_incident_updates')
+                ->whereIn('incident_id', $incidentIds)
+                ->orderBy('created_at')
+                ->get()->groupBy('incident_id')
+            : collect();
+        foreach ($active as $i) $i->updates = $updates[$i->id] ?? [];
+        foreach ($history as $i) $i->updates = $updates[$i->id] ?? [];
+
         $overall = $this->aggregateOverall($components, $active);
 
         return response()->json([
@@ -43,6 +55,34 @@ class SystemStatusController extends Controller
             'active' => $active,
             'history' => $history,
         ]);
+    }
+
+    /** POST /system-status/incidents/{id}/updates — добавить апдейт. */
+    public function storeIncidentUpdate(Request $request, int $id): JsonResponse
+    {
+        $this->ensureAdmin($request);
+        $data = $request->validate([
+            'message' => 'required|string|max:5000',
+            'status' => 'required|in:investigating,identified,monitoring,resolved,scheduled,in_progress,completed',
+        ]);
+        $now = now();
+        DB::transaction(function () use ($id, $data, $request, $now) {
+            DB::table('system_incident_updates')->insert([
+                'incident_id' => $id,
+                'status' => $data['status'],
+                'message' => $data['message'],
+                'created_by' => $request->user()?->id,
+                'created_at' => $now,
+            ]);
+            // Синхронизируем актуальный статус инцидента.
+            $patch = ['status' => $data['status'], 'updated_at' => $now];
+            if (in_array($data['status'], ['resolved', 'completed'], true)) {
+                $patch['resolved_at'] = $now;
+            }
+            DB::table('system_incidents')->where('id', $id)->update($patch);
+        });
+        Audit::log('incident_update_post', 'system_incident', $id, $data);
+        return response()->json(['message' => 'Апдейт добавлен'], 201);
     }
 
     public function storeComponent(Request $request): JsonResponse
@@ -111,6 +151,9 @@ class SystemStatusController extends Controller
             'created_by' => $request->user()?->id,
             'created_at' => now(), 'updated_at' => now(),
         ]);
+        Audit::log('incident_create', 'system_incident', $id, [
+            'title' => $data['title'], 'severity' => $data['severity'] ?? 'minor', 'status' => $status,
+        ]);
         return response()->json(['id' => $id], 201);
     }
 
@@ -136,6 +179,7 @@ class SystemStatusController extends Controller
         }
         $data['updated_at'] = now();
         DB::table('system_incidents')->where('id', $id)->update($data);
+        Audit::log('incident_update', 'system_incident', $id, $data);
         return response()->json(['message' => 'Обновлено']);
     }
 
@@ -143,6 +187,7 @@ class SystemStatusController extends Controller
     {
         $this->ensureAdmin($request);
         DB::table('system_incidents')->where('id', $id)->delete();
+        Audit::log('incident_delete', 'system_incident', $id);
         return response()->json(['message' => 'Удалено']);
     }
 

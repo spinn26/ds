@@ -56,6 +56,16 @@
               <div class="text-caption text-medium-emphasis mt-1">
                 Начало: {{ fmtDateTime(i.started_at) }} · Статус: {{ incidentStatusLabel(i.status) }}
               </div>
+              <!-- Timeline апдейтов: новые сверху. Каждый — статус + сообщение + время. -->
+              <div v-if="i.updates?.length" class="incident-timeline mt-3">
+                <div v-for="u in [...i.updates].reverse()" :key="u.id" class="timeline-entry">
+                  <div class="d-flex align-center ga-2">
+                    <v-chip size="x-small" variant="tonal">{{ incidentStatusLabel(u.status) }}</v-chip>
+                    <span class="text-caption text-medium-emphasis">{{ fmtDateTime(u.created_at) }}</span>
+                  </div>
+                  <div class="text-body-2 mt-1">{{ u.message }}</div>
+                </div>
+              </div>
             </div>
           </div>
         </v-list-item>
@@ -180,4 +190,15 @@ onMounted(() => {
 .overall-degraded       { background: linear-gradient(135deg, #f5a623 0%, #d77c00 100%) !important; }
 .overall-partial_outage { background: linear-gradient(135deg, #fb8c00 0%, #e65100 100%) !important; }
 .overall-major_outage   { background: linear-gradient(135deg, #e53935 0%, #b71c1c 100%) !important; }
+.incident-timeline {
+  border-left: 2px solid rgba(var(--v-theme-primary), 0.4);
+  padding-left: 12px;
+  margin-left: 4px;
+}
+.timeline-entry {
+  padding: 6px 0;
+}
+.timeline-entry + .timeline-entry {
+  border-top: 1px dashed rgba(var(--v-theme-on-surface), 0.1);
+}
 </style>

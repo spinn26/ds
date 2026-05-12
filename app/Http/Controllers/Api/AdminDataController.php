@@ -9,6 +9,7 @@ use App\Http\Controllers\Controller;
 use App\Models\BankRequisite;
 use App\Models\Consultant;
 use App\Models\Requisite;
+use App\Support\Audit;
 use App\Support\LegacyId;
 use App\Services\PartnerStatusService;
 use Illuminate\Http\JsonResponse;
@@ -352,6 +353,12 @@ class AdminDataController extends Controller
 
             $consultant->save();
         });
+
+        Audit::log('partner_update', 'consultant', $consultant->id, [
+            'fields' => array_keys($data),
+            'role_changed' => array_key_exists('role', $data),
+            'password_changed' => ! empty($data['newPassword']),
+        ]);
 
         return response()->json(['message' => 'Обновлён', 'id' => $consultant->id]);
     }
@@ -898,14 +905,7 @@ class AdminDataController extends Controller
             'dateDeleted' => now(),
         ]);
 
-        if (function_exists('activity')) {
-            try {
-                activity('client_delete')
-                    ->causedBy($request->user())
-                    ->withProperties(['clientId' => $id, 'reason' => $request->input('reason')])
-                    ->log('client soft-deleted');
-            } catch (\Throwable) {}
-        }
+        Audit::log('delete', 'client', $id, ['reason' => $request->input('reason')]);
 
         return response()->json(['message' => 'Клиент удалён']);
     }
