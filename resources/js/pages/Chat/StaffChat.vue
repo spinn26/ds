@@ -1204,21 +1204,40 @@ const REACTION_PALETTE = ['👍', '❤️', '😂', '🎉', '🙏', '✅'];
 const notifyEnabled = ref(localStorage.getItem('staff-chat-notify') !== '0');
 watch(notifyEnabled, v => localStorage.setItem('staff-chat-notify', v ? '1' : '0'));
 
+// Двух-нотный «динь-дон» (E5 → A5, минорная терция вверх) с мягкой
+// синусной огибающей и hi-pass envelope — звучит как у iOS-уведомлений,
+// гораздо приятнее единичного beep'а 880→1320Hz.
 function playPing() {
   if (!notifyEnabled.value) return;
   try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(880, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(1320, ctx.currentTime + 0.1);
-    gain.gain.setValueAtTime(0.15, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.25);
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.25);
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    const ctx = new Ctx();
+    const now = ctx.currentTime;
+    const master = ctx.createGain();
+    master.gain.value = 0.18;
+    master.connect(ctx.destination);
+
+    const playNote = (freq, start, duration) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      // ADSR: быстрый attack, мягкий decay/release — без щелчка.
+      gain.gain.setValueAtTime(0, now + start);
+      gain.gain.linearRampToValueAtTime(1, now + start + 0.02);
+      gain.gain.linearRampToValueAtTime(0.6, now + start + 0.08);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + start + duration);
+      osc.connect(gain);
+      gain.connect(master);
+      osc.start(now + start);
+      osc.stop(now + start + duration + 0.02);
+    };
+
+    playNote(659.25, 0, 0.18);   // E5
+    playNote(880.00, 0.12, 0.32); // A5
+
+    // Освободить AudioContext через секунду после звука.
+    setTimeout(() => ctx.close().catch(() => {}), 700);
   } catch {}
 }
 
@@ -2080,10 +2099,15 @@ async function connectSocket() {
         if (wasAtBottom) scrollDown(true); else pendingMessages.value++;
       }
 
-      if (!isOwn && (document.hidden || !isActive)) {
+      // Звук на любое не-своё сообщение (активный чат тоже). Desktop-
+      // нотификация — только когда вкладка скрыта или это другой чат,
+      // иначе всплывало бы лишнее у оператора, который и так смотрит.
+      if (!isOwn) {
         playPing();
-        notifyDesktop(m.senderName || 'Новое сообщение',
-          (m.content || '').slice(0, 120) || 'Прислали сообщение');
+        if (document.hidden || !isActive) {
+          notifyDesktop(m.senderName || 'Новое сообщение',
+            (m.content || '').slice(0, 120) || 'Прислали сообщение');
+        }
       }
 
       loadChats();

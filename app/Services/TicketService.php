@@ -65,7 +65,13 @@ class TicketService
      */
     public static function visibleCategoriesForRoles(array $roles): array
     {
-        if (in_array('admin', $roles, true)) {
+        // Любой staff видит все категории — без этого backoffice/finance
+        // не видят support-тикеты партнёров, /manage/chat показывает
+        // только «свои» через personal participation, и оператор не
+        // может разобрать общий пул. Узкая видимость по роли
+        // (legal/owner закрытые) — отдельная задача через permissions.
+        $staffRoles = ['admin', 'backoffice', 'support', 'finance', 'head', 'calculations', 'corrections', 'education'];
+        if (array_intersect($roles, $staffRoles)) {
             return array_keys(self::CATEGORIES);
         }
         $visible = [];
