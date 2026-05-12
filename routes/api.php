@@ -33,7 +33,10 @@ Route::prefix('v1')->group(function () {
         // и в product/program без серийного id. Включить после рефактора
         // на person + advisory-lock id-генерацию.
         // Route::post('/webhooks/insmart/paid', [\App\Http\Controllers\Api\InsmartWebhookController::class, 'paid']);
-        Route::post('/webhooks/zammad', [\App\Http\Controllers\Api\ZammadWebhookController::class, 'handle']);
+        // Zammad-вебхук закомментирован — интеграция не используется
+        // (по запросу 2026-05-12). Включить обратно — добавить
+        // shared-secret через api_settings, раскомментировать.
+        // Route::post('/webhooks/zammad', [\App\Http\Controllers\Api\ZammadWebhookController::class, 'handle']);
     });
 
     Route::middleware('auth:sanctum')->group(function () {
