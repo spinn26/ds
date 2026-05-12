@@ -2,7 +2,12 @@
   <div>
     <PageHeader title="Калькулятор объёмов" icon="mdi-calculator" />
 
-    <v-card class="mb-4 pa-4">
+    <v-alert v-if="isReadOnly('calculator')" type="info" density="compact" variant="tonal"
+      class="mb-4" icon="mdi-eye-outline">
+      Режим только для просмотра — доступна история расчётов.
+    </v-alert>
+
+    <v-card v-if="!isReadOnly('calculator')" class="mb-4 pa-4">
       <v-row dense>
         <!-- 1. Квалификация — всегда видно -->
         <v-col cols="12" sm="6" md="4">
@@ -69,7 +74,7 @@
     </v-card>
 
     <!-- Results -->
-    <v-card v-if="result && !result.error" class="mb-4 pa-4">
+    <v-card v-if="result && !result.error && !isReadOnly('calculator')" class="mb-4 pa-4">
       <v-row>
         <v-col cols="12" md="6">
           <div class="text-body-2 text-medium-emphasis">Комиссионные</div>
@@ -81,7 +86,7 @@
         </v-col>
       </v-row>
     </v-card>
-    <v-alert v-if="result?.error" type="error" density="compact" class="mb-4">{{ result.error }}</v-alert>
+    <v-alert v-if="result?.error && !isReadOnly('calculator')" type="error" density="compact" class="mb-4">{{ result.error }}</v-alert>
 
     <!-- History -->
     <v-card class="pa-4">
@@ -92,8 +97,8 @@
             :headers="historyHeaders"
             v-model:visible="historyColumnVisible"
             storage-key="calculator-history-cols" />
-          <v-btn size="small" variant="text" prepend-icon="mdi-broom" @click="clearHistory"
-            :disabled="!history.length">Очистить</v-btn>
+          <v-btn v-if="!isReadOnly('calculator')" size="small" variant="text" prepend-icon="mdi-broom"
+            @click="clearHistory" :disabled="!history.length">Очистить</v-btn>
         </div>
       </div>
       <v-data-table :items="history" :headers="visibleHistoryHeaders" density="compact" hover
@@ -115,6 +120,9 @@ import api from '../../api';
 import PageHeader from '../../components/PageHeader.vue';
 import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 import { fmt2 as fmt } from '../../composables/useDesign';
+import { usePermissions } from '../../composables/usePermissions';
+
+const { isReadOnly } = usePermissions();
 
 const matrixLoading = ref(true);
 const calculating = ref(false);
