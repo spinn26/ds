@@ -658,7 +658,8 @@
                     @click.prevent="openLightbox(item.msg.attachmentPath, item.msg.attachmentName)">
                     <img :src="item.msg.attachmentPath" :alt="item.msg.attachmentName || 'Изображение'" class="msg-image" loading="lazy" />
                   </a>
-                  <a v-else :href="item.msg.attachmentPath" target="_blank" rel="noopener noreferrer" class="msg-attach">
+                  <a v-else href="#" class="msg-attach"
+                    @click.prevent="openLightbox(item.msg.attachmentPath, item.msg.attachmentName)">
                     <v-icon size="14">mdi-paperclip</v-icon> {{ item.msg.attachmentName || 'Файл' }}
                   </a>
                 </template>
