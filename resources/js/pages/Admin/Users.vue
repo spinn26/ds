@@ -164,15 +164,8 @@ function roleColor(r) {
 const auth = useAuthStore();
 const router = useRouter();
 
-// Short list — для фильтра справа (оставляем основные)
-const roleOptions = [
-  { title: 'Администратор', value: 'admin' },
-  { title: 'Бэкофис', value: 'backoffice' },
-  { title: 'Консультант', value: 'consultant' },
-  { title: 'Зарегистрирован-Партнёр', value: 'registered' },
-];
-
-// Full list — все 8 ролей для формы редактирования
+// Единый список ролей — используется и в фильтре, и в форме редактирования.
+// Источник истины — config/cabinetPermissions.js + партнёрские роли.
 const allRoleOptions = [
   { title: 'Администратор', value: 'admin' },
   { title: 'Бэкофис (БЭК)', value: 'backoffice' },
@@ -181,9 +174,11 @@ const allRoleOptions = [
   { title: 'Фин. менеджер', value: 'finance' },
   { title: 'Расчёты (Богданова)', value: 'calculations' },
   { title: 'Правки', value: 'corrections' },
+  { title: 'Отдел обучения', value: 'education' },
   { title: 'Консультант', value: 'consultant' },
   { title: 'Зарегистрирован-Партнёр', value: 'registered' },
 ];
+const roleOptions = allRoleOptions;
 
 const blockedOptions = [
   { title: 'Да', value: 'true' },
