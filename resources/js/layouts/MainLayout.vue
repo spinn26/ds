@@ -664,7 +664,7 @@ const menuItems = [
   { label: 'Тех. проблема', icon: 'mdi-bug', path: '/chat?new=support', adminSection: 'communication' },
   // Рабочий стол техподдержки: KPI, тикеты department=support и инциденты
   // (любой категории). Доступен ролям admin/support/head.
-  { label: 'Тех. поддержка', icon: 'mdi-lifebuoy', path: '/manage/support', adminSection: 'support-desk' },
+  { label: 'Тех. поддержка', icon: 'mdi-lifebuoy', path: '/manage/support', adminSection: 'support-desk', adminOnly: true },
   { label: 'Аналитика чата', icon: 'mdi-chart-box-outline', path: '/manage/chat/analytics', adminSection: 'chat-analytics' },
   { label: 'Отчёты', icon: 'mdi-file-chart', path: '/manage/reports', adminSection: 'reports' },
   { label: 'Справочники для расчёта', icon: 'mdi-currency-usd', path: '/manage/currencies', adminSection: 'currencies' },
@@ -709,6 +709,7 @@ const activeBottomNav = computed(() => {
 });
 
 const visibleMenu = computed(() => menuItems.filter((item) => {
+  if (item.adminOnly) return auth.isAdmin;
   if (item.adminSection) return isStaff.value && availableSections.value.has(item.adminSection);
   if (item.partner) return isConsultant.value;
   return true;
