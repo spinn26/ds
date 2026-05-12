@@ -2,7 +2,7 @@
   <div>
     <PageHeader title="Клиенты" icon="mdi-account-group" :count="total">
       <template #actions>
-        <v-btn color="success" prepend-icon="mdi-plus" @click="openAddClient">
+        <v-btn v-if="canEdit('clients')" color="success" prepend-icon="mdi-plus" @click="openAddClient">
           Добавить клиента
         </v-btn>
       </template>
@@ -81,7 +81,7 @@
         {{ fmtDate(value) }}
       </template>
       <template #item.actions="{ item }">
-        <v-btn icon="mdi-delete" size="x-small" variant="text" color="error"
+        <v-btn v-if="canEdit('clients')" icon="mdi-delete" size="x-small" variant="text" color="error"
           title="Удалить" @click.stop="confirmDeleteClient(item)" />
       </template>
       <template #no-data><EmptyState /></template>
@@ -199,6 +199,9 @@ const columnVisible = ref({});
 const visibleHeaders = computed(() => headers.filter(h => columnVisible.value[h.key] !== false));
 import { useSnackbar } from '../../composables/useSnackbar';
 import { fmtDate } from '../../composables/useDesign';
+import { usePermissions } from '../../composables/usePermissions';
+
+const { canEdit } = usePermissions();
 
 const { showSuccess, showError } = useSnackbar();
 const deleteDialogOpen = ref(false);

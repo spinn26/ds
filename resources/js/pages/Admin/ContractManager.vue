@@ -346,12 +346,14 @@ import FilterBar from '../../components/FilterBar.vue';
 import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 import { fmt, fmtDate, getContractStatusColor } from '../../composables/useDesign';
 import { useAuthStore } from '../../stores/auth';
+import { usePermissions } from '../../composables/usePermissions';
 
 const auth = useAuthStore();
-// Read-only режим для роли calculations (Богданова) — менеджер контрактов
-// только для просмотра. Прячет «Новый контракт», «Редактировать», «Удалить»,
-// меняет drawer на view-only. Запрос 2026-05-06.
-const readOnly = computed(() => auth.isCalculationsOnly);
+const { canEdit } = usePermissions();
+// Read-only режим для всех view-ролей секции contracts (calculations,
+// support, head, corrections). Прячет «Новый контракт», «Удалить»,
+// меняет drawer на view-only.
+const readOnly = computed(() => !canEdit('contracts'));
 
 const items = ref([]);
 const total = ref(0);

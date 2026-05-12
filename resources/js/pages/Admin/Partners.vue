@@ -2,7 +2,7 @@
   <div>
     <PageHeader title="Партнёры" icon="mdi-account-search" :count="total">
       <template #actions>
-        <v-btn v-if="!auth.isEducationOnly" color="success" prepend-icon="mdi-plus" @click="openAddPartner">
+        <v-btn v-if="canEdit('partners')" color="success" prepend-icon="mdi-plus" @click="openAddPartner">
           Добавить партнёра
         </v-btn>
       </template>
@@ -154,7 +154,7 @@
             <v-btn v-bind="tipProps" icon="mdi-pencil" size="x-small" variant="text" @click="openEdit(item)" />
           </template>
         </v-tooltip>
-        <v-tooltip text="Удалить" location="top">
+        <v-tooltip v-if="canEdit('partners')" text="Удалить" location="top">
           <template #activator="{ props: tipProps }">
             <v-btn v-bind="tipProps" icon="mdi-delete" size="x-small" variant="text" color="error"
               @click.stop="confirmDeletePartner(item)" />
@@ -363,8 +363,10 @@ import DialogShell from '../../components/DialogShell.vue';
 import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 import { useSnackbar } from '../../composables/useSnackbar';
 import { useAuthStore } from '../../stores/auth';
+import { usePermissions } from '../../composables/usePermissions';
 
 const auth = useAuthStore();
+const { canEdit } = usePermissions();
 import { useConfirm } from '../../composables/useConfirm';
 import { fmtDate, getActivityColorByName } from '../../composables/useDesign';
 
