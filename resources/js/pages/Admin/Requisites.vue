@@ -26,9 +26,9 @@
             <v-icon start size="16">mdi-checkbox-multiple-marked</v-icon>
             Выбрано: {{ selected.length }}
           </v-chip>
-          <v-btn size="small" variant="tonal" color="success"
+          <v-btn v-if="canEdit('requisites')" size="small" variant="tonal" color="success"
             prepend-icon="mdi-check" @click="bulkRun('verify')">Верифицировать</v-btn>
-          <v-btn size="small" variant="tonal" color="error"
+          <v-btn v-if="canEdit('requisites')" size="small" variant="tonal" color="error"
             prepend-icon="mdi-close" @click="bulkRun('reject')">Отклонить</v-btn>
           <v-spacer />
           <v-btn size="small" variant="text" prepend-icon="mdi-close" @click="selected = []">Снять выбор</v-btn>
@@ -54,9 +54,9 @@
       <template #item.actions="{ item }">
         <v-btn icon="mdi-eye" size="x-small" variant="text" color="primary"
           title="Просмотреть" @click="openDrawer(item)" />
-        <v-btn v-if="item.verificationStatus !== 'verified'" icon="mdi-check" size="x-small" variant="text" color="success"
+        <v-btn v-if="canEdit('requisites') && item.verificationStatus !== 'verified'" icon="mdi-check" size="x-small" variant="text" color="success"
           title="Подтвердить" :loading="item._verifying" @click="verify(item)" />
-        <v-btn v-if="item.verificationStatus !== 'rejected'" icon="mdi-close" size="x-small" variant="text" color="error"
+        <v-btn v-if="canEdit('requisites') && item.verificationStatus !== 'rejected'" icon="mdi-close" size="x-small" variant="text" color="error"
           title="Отклонить" :loading="item._rejecting" @click="reject(item)" />
         <StartChatButton :partner-id="item.consultantId || item.consultant" :partner-name="item.consultantName || item.personName"
           context-type="Реквизиты" :context-id="item.id" :context-label="item.individualEntrepreneur || '#' + item.id" />
@@ -163,11 +163,11 @@
 
           <!-- Actions -->
           <div class="d-flex ga-2">
-            <v-btn v-if="selectedItem.verificationStatus !== 'verified'" color="success" variant="flat"
+            <v-btn v-if="canEdit('requisites') && selectedItem.verificationStatus !== 'verified'" color="success" variant="flat"
               prepend-icon="mdi-check" :loading="drawerVerifying" @click="drawerVerify">
               Верифицировать
             </v-btn>
-            <v-btn v-if="selectedItem.verificationStatus !== 'rejected'" color="error" variant="flat"
+            <v-btn v-if="canEdit('requisites') && selectedItem.verificationStatus !== 'rejected'" color="error" variant="flat"
               prepend-icon="mdi-close" @click="rejectDialogOpen = true">
               Отклонить
             </v-btn>
@@ -317,6 +317,9 @@ import PageHeader from '../../components/PageHeader.vue';
 import EmptyState from '../../components/EmptyState.vue';
 import StartChatButton from '../../components/StartChatButton.vue';
 import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
+import { usePermissions } from '../../composables/usePermissions';
+
+const { canEdit } = usePermissions();
 
 const items = ref([]);
 const total = ref(0);

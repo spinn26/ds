@@ -73,7 +73,7 @@
             density="compact"
             @update:options="onContractOpts">
             <template #item.add="{ item }">
-              <v-btn icon="mdi-plus-circle" size="small" variant="text" color="primary"
+              <v-btn v-if="canFull('transactions')" icon="mdi-plus-circle" size="small" variant="text" color="primary"
                 title="Добавить в черновики"
                 @click="addContractToDrafts(item.id)" />
             </template>
@@ -300,7 +300,7 @@
                       <span v-else class="text-medium-emphasis">—</span>
                     </template>
                     <template v-else-if="h.key === 'actions'">
-                      <v-btn icon="mdi-trash-can-outline" size="x-small" variant="text" color="error"
+                      <v-btn v-if="canFull('transactions')" icon="mdi-trash-can-outline" size="x-small" variant="text" color="error"
                         @click="removeDraft(d)" />
                     </template>
                   </td>
@@ -382,14 +382,14 @@
           </div><!-- /manual-tx-scroll -->
 
           <v-card-actions class="d-flex flex-wrap ga-2">
-            <v-btn color="primary" :disabled="!calculableIds.length || calculating" prepend-icon="mdi-calculator"
+            <v-btn v-if="canFull('transactions')" color="primary" :disabled="!calculableIds.length || calculating" prepend-icon="mdi-calculator"
               :loading="calculating" @click="calcAll" size="large">
               Рассчитать транзакции
               <v-chip v-if="dirtyCount" size="x-small" color="white" variant="elevated" class="ms-2">
                 {{ dirtyCount }}
               </v-chip>
             </v-btn>
-            <v-btn color="success" :disabled="!fixableIds.length || fixing" prepend-icon="mdi-content-save"
+            <v-btn v-if="canFull('transactions')" color="success" :disabled="!fixableIds.length || fixing" prepend-icon="mdi-content-save"
               :loading="fixing" @click="fixAll" size="large" variant="outlined">
               Зафиксировать транзакции
               <v-chip v-if="fixableIds.length" size="x-small" color="success" variant="elevated" class="ms-2">
@@ -397,7 +397,7 @@
               </v-chip>
             </v-btn>
             <v-spacer />
-            <v-btn v-if="drafts.length" color="error" variant="text" prepend-icon="mdi-trash-can-outline" @click="clearAll">
+            <v-btn v-if="canFull('transactions') && drafts.length" color="error" variant="text" prepend-icon="mdi-trash-can-outline" @click="clearAll">
               Очистить все транзакции
             </v-btn>
           </v-card-actions>
@@ -575,6 +575,9 @@ import DataTableWrapper from '../../components/DataTableWrapper.vue';
 import StartChatButton from '../../components/StartChatButton.vue';
 import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 import { fmt2, fmtDate } from '../../composables/useDesign';
+import { usePermissions } from '../../composables/usePermissions';
+
+const { canFull } = usePermissions();
 
 const tab = ref('manual');
 const snack = ref({ open: false, color: 'success', text: '' });

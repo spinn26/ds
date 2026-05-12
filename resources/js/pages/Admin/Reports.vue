@@ -32,7 +32,7 @@
           </v-col>
         </v-row>
 
-        <v-btn color="primary" size="large" prepend-icon="mdi-download"
+        <v-btn v-if="canEdit('reports')" color="primary" size="large" prepend-icon="mdi-download"
           :disabled="!canGenerate" :loading="generating" @click="generate">
           {{ generateLabel }}
         </v-btn>
@@ -95,6 +95,9 @@ import PageHeader from '../../components/PageHeader.vue';
 import EmptyState from '../../components/EmptyState.vue';
 import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 import { fmtDate } from '../../composables/useDesign';
+import { usePermissions } from '../../composables/usePermissions';
+
+const { canEdit } = usePermissions();
 
 const generating = ref(false);
 const archive = ref([]);

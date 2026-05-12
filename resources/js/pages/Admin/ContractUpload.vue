@@ -16,7 +16,7 @@
             label="Валюта по умолчанию" density="compact" variant="outlined" clearable />
         </v-col>
         <v-col cols="12" sm="3" class="d-flex align-center">
-          <v-btn color="primary" size="large" prepend-icon="mdi-upload"
+          <v-btn v-if="canFull('upload')" color="primary" size="large" prepend-icon="mdi-upload"
             :loading="loadingPreview" :disabled="!form.sheet"
             @click="loadPreview" block>
             Загрузить контракты
@@ -44,7 +44,7 @@
           ✗ {{ stats.invalidCount }} с ошибками
         </v-chip>
         <v-spacer />
-        <v-btn variant="text" color="error" prepend-icon="mdi-trash-can-outline"
+        <v-btn v-if="canFull('upload')" variant="text" color="error" prepend-icon="mdi-trash-can-outline"
           @click="clearAll">
           Удалить все контракты
         </v-btn>
@@ -94,7 +94,7 @@
             <td>
               <v-btn icon="mdi-pencil" size="x-small" variant="text" color="success"
                 title="Редактировать" @click="openEdit(row)" />
-              <v-btn icon="mdi-trash-can-outline" size="x-small" variant="text" color="error"
+              <v-btn v-if="canFull('upload')" icon="mdi-trash-can-outline" size="x-small" variant="text" color="error"
                 title="Удалить строку" @click="deleteRow(row)" />
             </td>
           </tr>
@@ -108,7 +108,7 @@
         <v-spacer />
         <v-btn variant="text" @click="exitPreview">Отменить весь импорт</v-btn>
         <!-- Per spec §3.2: большая зелёная кнопка появляется ТОЛЬКО когда нет ошибок -->
-        <v-btn v-if="canFinalize" color="success" size="large" prepend-icon="mdi-content-save"
+        <v-btn v-if="canFull('upload') && canFinalize" color="success" size="large" prepend-icon="mdi-content-save"
           :loading="finalizing" @click="finalizeImport">
           Сохранить заполненные контракты ({{ stats.validCount }})
         </v-btn>
@@ -188,8 +188,10 @@ import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
 import PageHeader from '../../components/PageHeader.vue';
 import { useConfirm } from '../../composables/useConfirm';
+import { usePermissions } from '../../composables/usePermissions';
 
 const confirm = useConfirm();
+const { canFull } = usePermissions();
 
 const form = ref({ sheet: null, currency: null });
 const sheetNames = ref([]);

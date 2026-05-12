@@ -43,7 +43,7 @@
               :headers="vatHeaders"
               v-model:visible="vatColumnVisible"
               storage-key="currencies-vat-cols" />
-            <v-btn color="primary" size="small" prepend-icon="mdi-plus"
+            <v-btn v-if="canEdit('currencies')" color="primary" size="small" prepend-icon="mdi-plus"
               @click="openAddVat">Добавить ставку</v-btn>
           </v-card-title>
           <v-data-table :items="vat" :headers="visibleVatHeaders" density="compact" hover>
@@ -108,6 +108,9 @@ import api from '../../api';
 import PageHeader from '../../components/PageHeader.vue';
 import EmptyState from '../../components/EmptyState.vue';
 import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
+import { usePermissions } from '../../composables/usePermissions';
+
+const { canEdit } = usePermissions();
 
 const loading = ref(true);
 const saving = ref(false);

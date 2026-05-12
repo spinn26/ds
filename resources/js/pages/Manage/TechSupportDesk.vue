@@ -90,13 +90,13 @@
         <template #item.actions="{ item }">
           <v-btn icon="mdi-message-text" size="x-small" variant="text" color="primary"
             title="Открыть чат" @click="openChat(item)" />
-          <v-btn v-if="!item.isIncident"
+          <v-btn v-if="canFull('support-desk') && !item.isIncident"
             icon="mdi-alert-decagram" size="x-small" variant="text" color="error"
             title="Зафиксировать как инцидент" @click="openIncidentDialog(item)" />
-          <v-btn v-else-if="!item.incidentResolvedAt"
+          <v-btn v-else-if="canFull('support-desk') && !item.incidentResolvedAt"
             icon="mdi-alert-decagram-outline" size="x-small" variant="text" color="warning"
             title="Изменить приоритет" @click="openIncidentDialog(item)" />
-          <v-btn v-if="item.isIncident && !item.incidentResolvedAt"
+          <v-btn v-if="canFull('support-desk') && item.isIncident && !item.incidentResolvedAt"
             icon="mdi-check-decagram" size="x-small" variant="text" color="success"
             title="Закрыть инцидент" @click="resolveIncident(item)" />
         </template>
@@ -142,6 +142,9 @@ import { useRouter } from 'vue-router';
 import api from '../../api';
 import PageHeader from '../../components/PageHeader.vue';
 import { fmtDateTime } from '../../composables/useDesign';
+import { usePermissions } from '../../composables/usePermissions';
+
+const { canFull } = usePermissions();
 
 const router = useRouter();
 

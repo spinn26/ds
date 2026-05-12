@@ -2,7 +2,7 @@
   <div>
     <PageHeader title="Прочие начисления" icon="mdi-cash-plus" :count="total">
       <template #actions>
-        <v-btn color="primary" prepend-icon="mdi-plus" @click="openCreate">Добавить начисление</v-btn>
+        <v-btn v-if="canEdit('charges')" color="primary" prepend-icon="mdi-plus" @click="openCreate">Добавить начисление</v-btn>
       </template>
     </PageHeader>
 
@@ -100,7 +100,7 @@
              Delete — для всех (legacy soft-deletes commission row). -->
         <v-btn v-if="item.editable" icon="mdi-pencil" size="x-small" variant="text"
           title="Редактировать" @click="openEdit(item)" />
-        <v-btn icon="mdi-delete" size="x-small" variant="text" color="error"
+        <v-btn v-if="canEdit('charges')" icon="mdi-delete" size="x-small" variant="text" color="error"
           :title="item.editable ? 'Удалить' : 'Удалить (legacy — soft-delete)'"
           @click="confirmDelete(item)" />
         <v-chip v-if="!item.editable" size="x-small" color="grey" variant="tonal"
@@ -169,6 +169,9 @@ import PageHeader from '../../components/PageHeader.vue';
 import DataTableWrapper from '../../components/DataTableWrapper.vue';
 import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 import { fmt2 as fmt, fmtDate } from '../../composables/useDesign';
+import { usePermissions } from '../../composables/usePermissions';
+
+const { canEdit } = usePermissions();
 
 const items = ref([]);
 const total = ref(0);

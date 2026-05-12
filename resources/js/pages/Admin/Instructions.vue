@@ -6,7 +6,7 @@
           :headers="headers"
           v-model:visible="columnVisible"
           storage-key="instructions-cols" />
-        <v-btn color="primary" prepend-icon="mdi-plus" @click="openCreate">Новая инструкция</v-btn>
+        <v-btn v-if="canEdit('instructions')" color="primary" prepend-icon="mdi-plus" @click="openCreate">Новая инструкция</v-btn>
       </template>
     </PageHeader>
 
@@ -36,7 +36,7 @@
       </template>
       <template #item.actions="{ item }">
         <v-btn icon="mdi-pencil" size="x-small" variant="text" color="success" @click="openEdit(item)" />
-        <v-btn icon="mdi-delete" size="x-small" variant="text" color="error" @click="confirmDelete(item)" />
+        <v-btn v-if="canFull('instructions')" icon="mdi-delete" size="x-small" variant="text" color="error" @click="confirmDelete(item)" />
       </template>
     </v-data-table>
 
@@ -96,8 +96,10 @@ import api from '../../api';
 import PageHeader from '../../components/PageHeader.vue';
 import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 import { useConfirm } from '../../composables/useConfirm';
+import { usePermissions } from '../../composables/usePermissions';
 
 const confirm = useConfirm();
+const { canEdit, canFull } = usePermissions();
 
 const items = ref([]);
 const search = ref('');

@@ -2,7 +2,7 @@
   <div>
     <PageHeader title="Продукты и программы" icon="mdi-package-variant-closed">
       <template #actions>
-        <v-btn v-if="!auth.isEducationOnly" color="primary" prepend-icon="mdi-plus" @click="openCreateProduct">Добавить продукт</v-btn>
+        <v-btn v-if="canEdit('products')" color="primary" prepend-icon="mdi-plus" @click="openCreateProduct">Добавить продукт</v-btn>
       </template>
     </PageHeader>
 
@@ -67,7 +67,7 @@
           </v-chip>
         </template>
         <template #item.actions="{ item }">
-          <v-btn
+          <v-btn v-if="canFull('products')"
             :icon="item.publishStatus === 'published' ? 'mdi-arrow-down-bold-circle' : 'mdi-rocket-launch'"
             size="x-small" variant="text"
             :color="item.publishStatus === 'published' ? 'grey' : 'success'"
@@ -75,7 +75,7 @@
             :loading="publishingId === item.id"
             @click.stop="togglePublish(item)" />
           <v-btn icon="mdi-pencil" size="x-small" variant="text" @click.stop="openEditProduct(item)" />
-          <v-btn icon="mdi-delete" size="x-small" variant="text" color="error" @click.stop="confirmDeleteProduct(item)" />
+          <v-btn v-if="canFull('products')" icon="mdi-delete" size="x-small" variant="text" color="error" @click.stop="confirmDeleteProduct(item)" />
         </template>
 
         <!-- Expanded row: Programs -->
@@ -84,7 +84,7 @@
             <td :colspan="columns.length" class="pa-4 bg-grey-lighten-5">
               <div class="d-flex justify-space-between align-center mb-2">
                 <span class="text-subtitle-2 font-weight-bold">Программы продукта «{{ item.name }}»</span>
-                <v-btn v-if="!auth.isEducationOnly" size="small" color="primary" prepend-icon="mdi-plus" variant="tonal"
+                <v-btn v-if="canEdit('products')" size="small" color="primary" prepend-icon="mdi-plus" variant="tonal"
                   @click="openCreateProgram(item)">Добавить программу</v-btn>
               </div>
               <v-data-table
@@ -110,7 +110,7 @@
                 </template>
                 <template #item.actions="{ item: prog }">
                   <v-btn icon="mdi-pencil" size="x-small" variant="text" @click="openEditProgram(item, prog)" />
-                  <v-btn icon="mdi-delete" size="x-small" variant="text" color="error" @click="confirmDeleteProgram(item, prog)" />
+                  <v-btn v-if="canFull('products')" icon="mdi-delete" size="x-small" variant="text" color="error" @click="confirmDeleteProgram(item, prog)" />
                 </template>
               </v-data-table>
             </td>
@@ -348,8 +348,10 @@ import StatusChip from '../../components/StatusChip.vue';
 import FilterBar from '../../components/FilterBar.vue';
 import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 import { useAuthStore } from '../../stores/auth';
+import { usePermissions } from '../../composables/usePermissions';
 
 const auth = useAuthStore();
+const { canEdit, canFull } = usePermissions();
 
 const loading = ref(false);
 const saving = ref(false);

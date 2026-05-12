@@ -48,7 +48,7 @@
             label="Валюта" density="compact" variant="outlined" clearable />
         </v-col>
         <v-col cols="12" sm="2" class="d-flex align-end">
-          <v-btn color="primary" block prepend-icon="mdi-import" :loading="importing"
+          <v-btn v-if="canFull('import')" color="primary" block prepend-icon="mdi-import" :loading="importing"
             :disabled="!form.sheet || (!selectedSheet?.profiled && !form.counterparty)"
             @click="runSheetsImport">
             Импортировать
@@ -71,7 +71,7 @@
             accept=".csv,.txt,.xlsx" prepend-icon="" prepend-inner-icon="mdi-file-delimited" hide-details />
         </v-col>
         <v-col cols="12" sm="2" class="d-flex align-end">
-          <v-btn color="primary" block prepend-icon="mdi-import" :loading="importing"
+          <v-btn v-if="canFull('import')" color="primary" block prepend-icon="mdi-import" :loading="importing"
             :disabled="!form.counterparty || !form.file" @click="runImport">
             Импортировать
           </v-btn>
@@ -112,12 +112,12 @@
         </template>
         <template #item.createdAt="{ value }">{{ fmtDate(value) }}</template>
         <template #item.actions="{ item }">
-          <v-btn v-if="item.status === 'success' || item.status === 'partial'" icon size="x-small" variant="text" color="primary"
+          <v-btn v-if="canFull('import') && (item.status === 'success' || item.status === 'partial')" icon size="x-small" variant="text" color="primary"
             :loading="calculatingId === item.id" @click="runCalculation(item)">
             <v-icon>mdi-calculator</v-icon>
             <v-tooltip activator="parent">Рассчитать комиссии</v-tooltip>
           </v-btn>
-          <v-btn v-if="item.status !== 'rolled_back'" icon size="x-small" variant="text" color="warning"
+          <v-btn v-if="canFull('import') && item.status !== 'rolled_back'" icon size="x-small" variant="text" color="warning"
             @click="confirmRollback(item)">
             <v-icon>mdi-undo</v-icon>
             <v-tooltip activator="parent">Откатить</v-tooltip>
@@ -180,6 +180,9 @@ import PageHeader from '../../components/PageHeader.vue';
 import DialogShell from '../../components/DialogShell.vue';
 import ImportProgressDialog from '../../components/ImportProgressDialog.vue';
 import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
+import { usePermissions } from '../../composables/usePermissions';
+
+const { canFull } = usePermissions();
 
 const counterparties = ref([]);
 const currencies = ref([]);

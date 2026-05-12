@@ -68,12 +68,12 @@
              но это не понятно пользователю; теперь оператор всегда может
              нажать «Рассчитать», даже на месяце без партнёров (получит
              корректный 0). -->
-        <v-btn color="success" prepend-icon="mdi-account-multiple-plus" size="large"
+        <v-btn v-if="canFull('pool')" color="success" prepend-icon="mdi-account-multiple-plus" size="large"
           :disabled="isFrozen" :loading="calcing"
           @click="calcPool">
           Рассчитать пул
         </v-btn>
-        <v-btn v-if="result && !isFrozen" color="primary" prepend-icon="mdi-lock-check"
+        <v-btn v-if="canFull('pool') && result && !isFrozen" color="primary" prepend-icon="mdi-lock-check"
           size="large" variant="flat" :loading="applying" @click="applyPool">
           Зафиксировать пул
         </v-btn>
@@ -209,9 +209,11 @@ import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 import { fmt2 } from '../../composables/useDesign';
 import { useConfirm } from '../../composables/useConfirm';
 import { useAuthStore } from '../../stores/auth';
+import { usePermissions } from '../../composables/usePermissions';
 
 const confirm = useConfirm();
 const auth = useAuthStore();
+const { canFull } = usePermissions();
 
 const month = ref(new Date().toISOString().slice(0, 7));
 const defaultMonth = month.value;

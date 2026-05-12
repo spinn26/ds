@@ -9,7 +9,7 @@
         <v-btn variant="text" prepend-icon="mdi-eye" href="/education" target="_blank">
           Просмотр как партнёр
         </v-btn>
-        <v-btn color="primary" prepend-icon="mdi-plus" @click="openCreateCourse">Добавить курс</v-btn>
+        <v-btn v-if="canEdit('education')" color="primary" prepend-icon="mdi-plus" @click="openCreateCourse">Добавить курс</v-btn>
       </template>
     </PageHeader>
 
@@ -60,7 +60,7 @@
             </template>
           </v-tooltip>
           <v-btn icon="mdi-pencil" size="x-small" variant="text" @click.stop="openEditCourse(item)" />
-          <v-btn icon="mdi-delete" size="x-small" variant="text" color="error" @click.stop="confirmDeleteCourse(item)" />
+          <v-btn v-if="canFull('education')" icon="mdi-delete" size="x-small" variant="text" color="error" @click.stop="confirmDeleteCourse(item)" />
         </template>
 
         <!-- Expanded row: Lessons & Tests tabs -->
@@ -81,7 +81,7 @@
                       :headers="lessonHeaders"
                       v-model:visible="lessonColumnVisible"
                       storage-key="education-lessons-cols" />
-                    <v-btn size="small" color="primary" prepend-icon="mdi-plus" variant="flat"
+                    <v-btn v-if="canEdit('education')" size="small" color="primary" prepend-icon="mdi-plus" variant="flat"
                       @click="openCreateLesson(item)">Добавить урок</v-btn>
                   </div>
                 </div>
@@ -106,7 +106,7 @@
                   </template>
                   <template #item.actions="{ item: lesson }">
                     <v-btn icon="mdi-pencil" size="x-small" variant="text" @click="openEditLesson(item, lesson)" />
-                    <v-btn icon="mdi-delete" size="x-small" variant="text" color="error" @click="confirmDeleteLesson(item, lesson)" />
+                    <v-btn v-if="canFull('education')" icon="mdi-delete" size="x-small" variant="text" color="error" @click="confirmDeleteLesson(item, lesson)" />
                   </template>
                 </v-data-table>
               </div>
@@ -120,7 +120,7 @@
                       :headers="testHeaders"
                       v-model:visible="testColumnVisible"
                       storage-key="education-tests-cols" />
-                    <v-btn size="small" color="primary" prepend-icon="mdi-plus" variant="flat"
+                    <v-btn v-if="canEdit('education')" size="small" color="primary" prepend-icon="mdi-plus" variant="flat"
                       @click="openCreateTest(item)">Добавить вопрос</v-btn>
                   </div>
                 </div>
@@ -143,7 +143,7 @@
                   </template>
                   <template #item.actions="{ item: test }">
                     <v-btn icon="mdi-pencil" size="x-small" variant="text" @click="openEditTest(item, test)" />
-                    <v-btn icon="mdi-delete" size="x-small" variant="text" color="error" @click="confirmDeleteTest(item, test)" />
+                    <v-btn v-if="canFull('education')" icon="mdi-delete" size="x-small" variant="text" color="error" @click="confirmDeleteTest(item, test)" />
                   </template>
                 </v-data-table>
               </div>
@@ -321,6 +321,9 @@ import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
 import PageHeader from '../../components/PageHeader.vue';
 import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
+import { usePermissions } from '../../composables/usePermissions';
+
+const { canEdit, canFull } = usePermissions();
 
 const loading = ref(false);
 const saving = ref(false);

@@ -3,7 +3,7 @@
     <PageHeader title="Реестр выплат" icon="mdi-cash-multiple">
       <template #actions>
         <ColumnVisibilityMenu :headers="headers" v-model:visible="columnVisible" storage-key="payment-registry-cols" />
-        <v-btn variant="text" prepend-icon="mdi-refresh" :loading="loading" @click="load">Пересчитать</v-btn>
+        <v-btn v-if="canFull('payments')" variant="text" prepend-icon="mdi-refresh" :loading="loading" @click="load">Пересчитать</v-btn>
       </template>
     </PageHeader>
 
@@ -120,7 +120,7 @@
         </template>
 
         <template #item.actions="{ item }">
-          <v-btn icon="mdi-plus" size="x-small" variant="text" color="primary"
+          <v-btn v-if="canFull('payments')" icon="mdi-plus" size="x-small" variant="text" color="primary"
             :disabled="!canAddPayment(item)" :title="paymentBlockedReason(item) || 'Добавить платёж'"
             @click="openPayment(item)" />
         </template>
@@ -186,9 +186,11 @@ import { PageHeader, FilterBar, DialogShell, MoneyCell, ColumnVisibilityMenu } f
 import { useDebounce } from '../../composables/useDebounce';
 import { useSnackbar } from '../../composables/useSnackbar';
 import { useAuthStore } from '../../stores/auth';
+import { usePermissions } from '../../composables/usePermissions';
 
 const { showSuccess, showError } = useSnackbar();
 const authStore = useAuthStore();
+const { canFull } = usePermissions();
 
 // Override-роль (Богданова) — может вносить выплаты в обход блокировок
 // (per spec ✅Реестр выплат §2 «Шаг 4»). Роль 'calculations' маркируется
