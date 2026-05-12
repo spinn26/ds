@@ -45,6 +45,7 @@ class StructureController extends Controller
                 if ($request->filled('search')) {
                     $query->where('personName', 'ilike', '%' . $request->search . '%');
                 }
+                $this->applyDateRangePrefilter($query, $request);
                 $rows = $query->orderBy('personName')->limit(500)->get();
                 $members = $this->consultantService->formatMembers($rows);
                 $members = $this->consultantService->applyFilters($members, $request->all());
@@ -79,11 +80,10 @@ class StructureController extends Controller
         // пустой результат и не мог развернуть. Теперь рекурсивно.
         if ($hasFilters) {
             $descendantIds = $this->descendantIds($consultant->id);
-            $rows = Consultant::whereIn('id', $descendantIds)
-                ->whereNull('dateDeleted')
-                ->orderBy('personName')
-                ->limit(500)
-                ->get();
+            $query = Consultant::whereIn('id', $descendantIds)
+                ->whereNull('dateDeleted');
+            $this->applyDateRangePrefilter($query, $request);
+            $rows = $query->orderBy('personName')->limit(500)->get();
             $members = $this->consultantService->formatMembers($rows);
             $members = $this->consultantService->applyFilters($members, $request->all());
             return response()->json(['data' => $members->values()]);
@@ -95,6 +95,30 @@ class StructureController extends Controller
             ->get();
         $members = $this->consultantService->formatMembers($rows);
         return response()->json(['data' => $members->values()]);
+    }
+
+    /**
+     * SQL-предфильтр по диапазону даты терминации. Без него limit(500)
+     * по personName обрезал совпадения по дате до их формирования
+     * в applyFilters() — терминированные с фамилиями из «хвоста»
+     * алфавита не попадали в выдачу. applyFilters() в сервисе
+     * остаётся как есть — он накладывает тот же фильтр поверх.
+     */
+    private function applyDateRangePrefilter($query, Request $request): void
+    {
+        if (! $request->filled('termination_from') && ! $request->filled('termination_to')) {
+            return;
+        }
+        $query->whereIn('activity', [
+            PartnerActivity::Terminated->value,
+            PartnerActivity::Excluded->value,
+        ]);
+        if ($request->filled('termination_from')) {
+            $query->whereDate('dateActivity', '>=', $request->input('termination_from'));
+        }
+        if ($request->filled('termination_to')) {
+            $query->whereDate('dateActivity', '<=', $request->input('termination_to'));
+        }
     }
 
     /**
