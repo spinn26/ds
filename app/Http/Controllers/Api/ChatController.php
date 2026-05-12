@@ -2014,21 +2014,38 @@ class ChatController extends Controller
         // некоторые старые тикеты ещё с этим department'ом.
         $supportDepts = ['support', 'technical'];
 
+        // Чистый admin без support/head — видит только свои тикеты.
+        $isAdminOnly = in_array('admin', $roles, true)
+            && ! array_intersect($roles, ['support', 'head']);
+        $scopeMine = static function ($q) use ($user, $isAdminOnly) {
+            if ($isAdminOnly) {
+                $q->where(function ($w) use ($user) {
+                    $w->where('created_by', $user->id)
+                      ->orWhere('assigned_to', $user->id)
+                      ->orWhere('recipient_id', $user->id);
+                });
+            }
+        };
+
         $kpi = [
             'open' => (int) DB::table('chat_tickets')
                 ->whereIn('department', $supportDepts)
-                ->whereIn('status', ['new', 'open', 'in_progress'])->count(),
+                ->whereIn('status', ['new', 'open', 'in_progress'])
+                ->tap($scopeMine)->count(),
             'incidentsActive' => (int) DB::table('chat_tickets')
                 ->where('is_incident', true)
-                ->whereNull('incident_resolved_at')->count(),
+                ->whereNull('incident_resolved_at')
+                ->tap($scopeMine)->count(),
             'resolvedToday' => (int) DB::table('chat_tickets')
                 ->whereIn('department', $supportDepts)
                 ->where('status', 'resolved')
-                ->where('updated_at', '>=', $today)->count(),
+                ->where('updated_at', '>=', $today)
+                ->tap($scopeMine)->count(),
             'closedToday' => (int) DB::table('chat_tickets')
                 ->whereIn('department', $supportDepts)
                 ->where('status', 'closed')
-                ->where('updated_at', '>=', $today)->count(),
+                ->where('updated_at', '>=', $today)
+                ->tap($scopeMine)->count(),
         ];
 
         $statusFilter = $request->input('status');
@@ -2044,6 +2061,18 @@ class ChatController extends Controller
                 't.created_at', 't.updated_at', 't.last_message_at',
                 't.customer_name',
             ]);
+
+        // Админ видит только «свои» тикеты тех-поддержки: те, где он
+        // создатель, назначен или вторая сторона приватного диалога.
+        // Support и head — супервизия, видят всё.
+        if ($isAdminOnly) {
+            $q->where(function ($w) use ($user) {
+                $w->where('t.created_by', $user->id)
+                  ->orWhere('t.assigned_to', $user->id)
+                  ->orWhere('t.recipient_id', $user->id);
+            });
+        }
+
         if ($statusFilter && in_array($statusFilter, ['new', 'open', 'in_progress', 'pending', 'resolved', 'closed'], true)) {
             $q->where('t.status', $statusFilter);
         }

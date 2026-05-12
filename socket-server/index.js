@@ -18,6 +18,10 @@
  *   The secret is shared with Laravel via env.
  */
 
+// Загружаем .env из директории сервера. Без этого pm2-форк не видит
+// LARAVEL_API_URL/SOCKET_EMIT_SECRET → токены не валидируются.
+try { require('dotenv').config(); } catch {}
+
 const { Server } = require('socket.io');
 const http = require('http');
 
