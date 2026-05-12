@@ -1884,20 +1884,25 @@ class ChatController extends Controller
         $severity = $request->input('severity', $ticket->incident_severity ?? 'medium');
         $isNew = ! ($ticket->is_incident ?? false);
 
+        // Advisory lock + транзакция, чтобы между nextIncidentNumber() и
+        // UPDATE нельзя было «вклиниться» с тем же max и получить дубль.
+        // Реальный кейс: тикеты 24 и 25 одновременно получили INC-202605-0001.
         $incidentNo = $ticket->incident_no;
-        if ($isNew) {
-            $incidentNo = $this->nextIncidentNumber();
-        }
-
-        DB::table('chat_tickets')->where('id', $id)->update([
-            'is_incident' => true,
-            'incident_no' => $incidentNo,
-            'incident_severity' => $severity,
-            'incident_logged_at' => $isNew ? now() : ($ticket->incident_logged_at ?? now()),
-            'incident_logged_by' => $isNew ? $user->id : ($ticket->incident_logged_by ?? $user->id),
-            'incident_resolved_at' => null,
-            'updated_at' => now(),
-        ]);
+        DB::transaction(function () use ($id, $user, $ticket, $severity, $isNew, &$incidentNo) {
+            if ($isNew) {
+                DB::statement("SELECT pg_advisory_xact_lock(hashtext('chat-incident-number'))");
+                $incidentNo = $this->nextIncidentNumber();
+            }
+            DB::table('chat_tickets')->where('id', $id)->update([
+                'is_incident' => true,
+                'incident_no' => $incidentNo,
+                'incident_severity' => $severity,
+                'incident_logged_at' => $isNew ? now() : ($ticket->incident_logged_at ?? now()),
+                'incident_logged_by' => $isNew ? $user->id : ($ticket->incident_logged_by ?? $user->id),
+                'incident_resolved_at' => null,
+                'updated_at' => now(),
+            ]);
+        });
 
         // System-сообщение в чат, чтобы участники видели смену статуса.
         $msg = $isNew
