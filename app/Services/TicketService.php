@@ -19,12 +19,16 @@ class TicketService
      * пользователю показывается только новый список.
      */
     public const CATEGORIES = [
+        // Per запрос пользователя 2026-05-12: admin видит только
+        // support-тикеты (как «тех. саппорт системы»). В остальные
+        // категории admin не попадает — backoffice сам разбирает
+        // свои тикеты, finance — accruals, head — legal/owner.
         'support'    => ['label' => 'Техподдержка',         'roles' => ['admin', 'support']],
-        'backoffice' => ['label' => 'Бэк-офис / Документы', 'roles' => ['admin', 'backoffice']],
-        'accruals'   => ['label' => 'Начисления и выплаты', 'roles' => ['admin', 'finance', 'calculations', 'corrections']],
-        'legal'      => ['label' => 'Юридический вопрос',   'roles' => ['admin', 'head']],
-        'general'    => ['label' => 'Общий вопрос',         'roles' => ['admin', 'support', 'head']],
-        'owner'      => ['label' => 'Собственнику',         'roles' => ['admin', 'head']],
+        'backoffice' => ['label' => 'Бэк-офис / Документы', 'roles' => ['backoffice']],
+        'accruals'   => ['label' => 'Начисления и выплаты', 'roles' => ['finance', 'calculations', 'corrections']],
+        'legal'      => ['label' => 'Юридический вопрос',   'roles' => ['head']],
+        'general'    => ['label' => 'Общий вопрос',         'roles' => ['support', 'head']],
+        'owner'      => ['label' => 'Собственнику',         'roles' => ['head']],
     ];
 
     /**
@@ -65,13 +69,9 @@ class TicketService
      */
     public static function visibleCategoriesForRoles(array $roles): array
     {
-        // Только admin видит все категории. Остальные staff-роли —
-        // только те, что прописаны для них в CATEGORIES[*].roles.
-        // Это by-design: backoffice не должен лазить в support-тикеты,
-        // support — в accruals и т.п. (запрос пользователя 2026-05-12).
-        if (in_array('admin', $roles, true)) {
-            return array_keys(self::CATEGORIES);
-        }
+        // Каждая роль видит только свои категории по матрице выше.
+        // Раньше admin получал все 6 через early-return — отменено
+        // по запросу пользователя 2026-05-12 (admin = support only).
         $visible = [];
         foreach (self::CATEGORIES as $key => $cfg) {
             if (array_intersect($roles, $cfg['roles'])) $visible[] = $key;
