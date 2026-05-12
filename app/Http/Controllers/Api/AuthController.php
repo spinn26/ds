@@ -31,6 +31,20 @@ class AuthController extends Controller
             return response()->json(['message' => 'Неверный email или пароль'], 401);
         }
 
+        // Если 2FA включён — отдаём challenge, не выдавая полноценный
+        // токен до проверки TOTP-кода.
+        if ($user->two_factor_enabled) {
+            $expires = time() + 300; // 5 минут
+            $payload = "{$user->id}|{$expires}";
+            $sig = hash_hmac('sha256', $payload, config('app.key'));
+            $challenge = base64_encode("{$payload}|{$sig}");
+            \App\Support\Audit::log('login_2fa_challenge', 'WebUser', $user->id);
+            return response()->json([
+                'requires_2fa' => true,
+                'challenge' => $challenge,
+            ]);
+        }
+
         $token = $user->createToken('spa')->plainTextToken;
         \App\Support\Audit::log('login', 'WebUser', $user->id, ['email' => $user->email]);
 

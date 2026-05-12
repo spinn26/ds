@@ -31,7 +31,7 @@
 
             <v-alert v-if="error" type="error" class="mb-4" density="compact" variant="tonal">{{ error }}</v-alert>
 
-            <v-form @submit.prevent="handleLogin">
+            <v-form v-if="!challenge" @submit.prevent="handleLogin">
               <v-text-field v-model="email" label="Электронная почта" type="email"
                 prepend-inner-icon="mdi-email" variant="outlined" rounded="lg" required class="mb-3" />
               <v-text-field v-model="password" label="Пароль"
@@ -45,6 +45,24 @@
                 style="font-size: 16px; letter-spacing: 1px">
                 Войти
               </v-btn>
+            </v-form>
+
+            <!-- 2FA step — после успешного email+password у юзера с
+                 включённым 2FA. -->
+            <v-form v-else @submit.prevent="handleVerify2fa">
+              <div class="text-body-2 text-center mb-3">
+                Откройте Google Authenticator (или совместимое приложение)
+                и введите 6-значный код для вашего аккаунта.
+              </div>
+              <v-text-field v-model="totpCode" label="Код из приложения"
+                prepend-inner-icon="mdi-shield-key" variant="outlined" rounded="lg"
+                maxlength="6" inputmode="numeric" autofocus class="mb-5"
+                :rules="[v => /^\d{6}$/.test(v) || '6 цифр']" />
+              <v-btn type="submit" block size="large" color="primary" :loading="loading"
+                rounded="lg" elevation="4" class="mb-2 text-none font-weight-bold">
+                Подтвердить
+              </v-btn>
+              <v-btn block variant="text" @click="cancelVerify">Назад</v-btn>
             </v-form>
 
             <div class="text-center text-body-2">
@@ -76,6 +94,9 @@ const password = ref('');
 const showPw = ref(false);
 const error = ref('');
 const loading = ref(false);
+// 2FA challenge state — null до выдачи; после выдачи показывается шаг ввода кода.
+const challenge = ref(null);
+const totpCode = ref('');
 
 // Mouse position relative to viewport center (-1..1)
 const mx = ref(0);
@@ -99,13 +120,39 @@ async function handleLogin() {
   error.value = '';
   loading.value = true;
   try {
-    await auth.login(email.value, password.value);
-    router.push('/');
+    const res = await auth.login(email.value, password.value);
+    if (res?.requires2fa) {
+      challenge.value = res.challenge;
+      totpCode.value = '';
+    } else {
+      router.push('/');
+    }
   } catch (e) {
     error.value = e.response?.data?.message || 'Неверная почта или пароль';
   } finally {
     loading.value = false;
   }
+}
+
+async function handleVerify2fa() {
+  if (!/^\d{6}$/.test(totpCode.value)) { error.value = 'Введите 6 цифр'; return; }
+  error.value = '';
+  loading.value = true;
+  try {
+    await auth.verify2fa(challenge.value, totpCode.value);
+    router.push('/');
+  } catch (e) {
+    error.value = e.response?.data?.message || 'Неверный код';
+  } finally {
+    loading.value = false;
+  }
+}
+
+function cancelVerify() {
+  challenge.value = null;
+  totpCode.value = '';
+  password.value = '';
+  error.value = '';
 }
 </script>
 

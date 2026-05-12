@@ -43,7 +43,19 @@ Route::prefix('v1')->group(function () {
         // Route::post('/webhooks/zammad', [\App\Http\Controllers\Api\ZammadWebhookController::class, 'handle']);
     });
 
+    // 2FA verify — БЕЗ auth (это шаг 2 логина: юзер прошёл email+пароль,
+    // получил challenge, теперь подтверждает TOTP-код). Throttled.
+    Route::middleware('throttle:10,1')->group(function () {
+        Route::post('/2fa/verify', [\App\Http\Controllers\Api\TwoFactorController::class, 'verify']);
+    });
+
     Route::middleware('auth:sanctum')->group(function () {
+        // 2FA setup/confirm/disable/status — под авторизацией.
+        Route::get('/2fa/status', [\App\Http\Controllers\Api\TwoFactorController::class, 'status']);
+        Route::post('/2fa/setup', [\App\Http\Controllers\Api\TwoFactorController::class, 'setup']);
+        Route::post('/2fa/confirm', [\App\Http\Controllers\Api\TwoFactorController::class, 'confirm']);
+        Route::post('/2fa/disable', [\App\Http\Controllers\Api\TwoFactorController::class, 'disable']);
+
         // Глобальный поиск (Ctrl+K) — все auth.
         Route::get('/search', [\App\Http\Controllers\Api\SearchController::class, 'index']);
 

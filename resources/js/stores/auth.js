@@ -74,6 +74,20 @@ export const useAuthStore = defineStore('auth', {
         },
         async login(email, password) {
             const { data } = await api.post('/auth/login', { email, password });
+            // 2FA включён — backend вернул challenge, токен ещё не выдан.
+            // Caller проверит data.requires_2fa и покажет шаг ввода кода.
+            if (data.requires_2fa) {
+                return { requires2fa: true, challenge: data.challenge };
+            }
+            this.token = data.token;
+            this.user = data.user;
+            this.initialized = true;
+            this.fetchPermissions();
+            return { requires2fa: false };
+        },
+        /** Подтверждение TOTP-кода после challenge от login(). */
+        async verify2fa(challenge, code) {
+            const { data } = await api.post('/2fa/verify', { challenge, code });
             this.token = data.token;
             this.user = data.user;
             this.initialized = true;
