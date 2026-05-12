@@ -14,6 +14,33 @@ class AdminProductController extends Controller
 {
     use PaginatesRequests;
 
+    /**
+     * Справочники для формы редактирования продукта — productType с
+     * предзаполненной категорией, productCategory списком, и активные
+     * education_courses для селекта «Привязанное обучение».
+     */
+    public function references(): JsonResponse
+    {
+        $categories = DB::table('productCategory')
+            ->orderBy('productCategoryName')
+            ->get(['id', 'productCategoryName as name']);
+
+        $types = DB::table('productType')
+            ->orderBy('productTypeName')
+            ->get(['id', 'productTypeName as name', 'productTypeCategory as categoryId']);
+
+        $courses = DB::table('education_courses')
+            ->where('active', true)
+            ->orderBy('title')
+            ->get(['id', 'title', 'product_id']);
+
+        return response()->json([
+            'categories' => $categories,
+            'types' => $types,
+            'courses' => $courses,
+        ]);
+    }
+
     /** Список продуктов */
     public function index(Request $request): JsonResponse
     {
@@ -27,17 +54,32 @@ class AdminProductController extends Controller
         }
 
         $total = $query->count();
-        $products = $query->orderBy('name')
+        $rows = $query->orderBy('name')
             ->offset($this->paginationOffset($request))
             ->limit($this->paginationPerPage($request))
-            ->get()
-            ->map(fn ($p) => [
+            ->get();
+
+        // Batch: привязанные education_courses (FK на стороне курса)
+        // и количество программ — чтобы не плодить N+1 в .map().
+        $productIds = $rows->pluck('id');
+        $courseByProduct = DB::table('education_courses')
+            ->whereIn('product_id', $productIds)
+            ->pluck('id', 'product_id');
+        $programCountByProduct = DB::table('program')
+            ->whereIn('product', $productIds)
+            ->select('product', DB::raw('count(*) as cnt'))
+            ->groupBy('product')
+            ->pluck('cnt', 'product');
+
+        $products = $rows->map(fn ($p) => [
                 'id' => $p->id,
                 'name' => $p->name,
                 'description' => $p->description,
                 'imageUrl' => $p->imageUrl,
                 'heroImage' => $p->hero_image ?? null,
+                'productType' => $p->productType,
                 'educationUrl' => $p->educationUrl,
+                'educationCourseId' => $courseByProduct[$p->id] ?? null,
                 'instructionUrl' => $p->instructionUrl,
                 'openProductUrl' => $p->openProductUrl,
                 'active' => (bool) $p->active,
@@ -52,7 +94,7 @@ class AdminProductController extends Controller
                 'hasYearKv' => (bool) ($p->has_year_kv ?? false),
                 'publishStatus' => $p->publish_status ?? 'published',
                 'publishedAt' => $p->published_at,
-                'programCount' => Program::where('product', $p->id)->count(),
+                'programCount' => (int) ($programCountByProduct[$p->id] ?? 0),
             ]);
 
         return response()->json(['data' => $products, 'total' => $total]);
@@ -63,6 +105,8 @@ class AdminProductController extends Controller
     {
         $request->validate([
             'name' => 'required|string|max:255',
+            'productType' => 'nullable|integer|exists:productType,id',
+            'educationCourseId' => 'nullable|integer|exists:education_courses,id',
         ]);
 
         $status = $request->input('publishStatus', 'draft');
@@ -71,6 +115,7 @@ class AdminProductController extends Controller
             'description' => $request->description,
             'imageUrl' => $request->imageUrl,
             'hero_image' => $request->input('heroImage'),
+            'productType' => $request->input('productType'),
             'educationUrl' => $request->educationUrl,
             'instructionUrl' => $request->instructionUrl,
             'openProductUrl' => $request->openProductUrl,
@@ -86,7 +131,23 @@ class AdminProductController extends Controller
             'published_by' => $status === 'published' ? $request->user()?->id : null,
         ]);
 
+        $this->syncEducationCourse($product->id, $request->input('educationCourseId'));
+
         return response()->json(['message' => 'Продукт создан', 'id' => $product->id], 201);
+    }
+
+    /**
+     * Привязать education_course к продукту через product_id.
+     * Снимает product_id со старого курса (если был) и проставляет
+     * на новый — связь 1:1 на стороне курса.
+     */
+    private function syncEducationCourse(int $productId, $courseId): void
+    {
+        // Снять product_id со всех курсов, привязанных к этому продукту.
+        DB::table('education_courses')->where('product_id', $productId)->update(['product_id' => null]);
+        if ($courseId) {
+            DB::table('education_courses')->where('id', (int) $courseId)->update(['product_id' => $productId]);
+        }
     }
 
     /** Обновить продукт */
@@ -94,12 +155,17 @@ class AdminProductController extends Controller
     {
         $product = Product::findOrFail($id);
 
-        $request->validate(['name' => 'required|string|max:255']);
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'productType' => 'nullable|integer|exists:productType,id',
+            'educationCourseId' => 'nullable|integer|exists:education_courses,id',
+        ]);
 
         $product->name = $request->name;
         $product->description = $request->description;
         $product->imageUrl = $request->imageUrl;
         $product->hero_image = $request->input('heroImage');
+        $product->productType = $request->input('productType');
         $product->educationUrl = $request->educationUrl;
         $product->instructionUrl = $request->instructionUrl;
         $product->openProductUrl = $request->openProductUrl;
@@ -121,6 +187,10 @@ class AdminProductController extends Controller
             }
         }
         $product->save();
+
+        if ($request->has('educationCourseId')) {
+            $this->syncEducationCourse($product->id, $request->input('educationCourseId'));
+        }
 
         return response()->json(['message' => 'Продукт обновлён']);
     }

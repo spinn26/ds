@@ -282,7 +282,16 @@ const products = ref([]);
 const search = ref('');
 const category = ref(null);
 const currency = ref(null);
-const categoryOptions = ref([]);
+const allCategories = ref([]);
+// Только используемые в данный момент категории (хотя бы один активный
+// product опубликован и виден партнёру). Иначе фильтр забивается пустыми
+// разделами.
+const categoryOptions = computed(() => {
+  const usedIds = new Set(products.value.map(p => p.category?.id).filter(Boolean));
+  return allCategories.value
+    .filter(c => usedIds.has(c.value))
+    .sort((a, b) => a.title.localeCompare(b.title));
+});
 const currencyOptions = ref([]);
 const access = ref({ testsPassed: false, requisitesVerified: false, documentsAccepted: false });
 const accessChecked = ref(false);
@@ -431,7 +440,7 @@ async function loadProducts() {
       products.value = data.products || data.data || [];
       if (data.accessCheck) access.value = data.accessCheck;
       else if (data.access) access.value = data.access;
-      if (data.categories) categoryOptions.value = data.categories.map(c => ({ title: c.name, value: c.id }));
+      if (data.categories) allCategories.value = data.categories.map(c => ({ title: c.name, value: c.id }));
     }
     // Валюты — пересечение из всех продуктов (dedupe by id)
     const seen = new Set();

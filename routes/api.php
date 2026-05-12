@@ -368,6 +368,7 @@ Route::prefix('v1')->group(function () {
         Route::delete('/admin/contests/{id}', [\App\Http\Controllers\Api\AdminContestController::class, 'destroy']);
 
         // Admin Products CRUD
+        Route::get('/admin/products/references', [\App\Http\Controllers\Api\AdminProductController::class, 'references']);
         Route::get('/admin/products', [\App\Http\Controllers\Api\AdminProductController::class, 'index']);
         Route::post('/admin/products', [\App\Http\Controllers\Api\AdminProductController::class, 'store']);
         Route::put('/admin/products/{id}', [\App\Http\Controllers\Api\AdminProductController::class, 'update']);

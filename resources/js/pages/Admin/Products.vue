@@ -159,9 +159,24 @@
             <v-col cols="12" v-if="editProduct.heroImage">
               <v-img :src="editProduct.heroImage" height="140" class="rounded border" />
             </v-col>
+            <v-col cols="12" md="6">
+              <v-select v-model="editProduct.productType" :items="productTypeItems"
+                item-title="name" item-value="id" label="Тип / категория"
+                clearable hint="Определяет категорию продукта" persistent-hint
+                prepend-inner-icon="mdi-shape" />
+            </v-col>
+            <v-col cols="12" md="6">
+              <v-select v-model="editProduct.educationCourseId" :items="courseItems"
+                item-title="title" item-value="id" label="Привязанное обучение"
+                clearable prepend-inner-icon="mdi-school"
+                hint="Курс из конструктора LMS" persistent-hint
+                no-data-text="Активных курсов нет" />
+            </v-col>
             <v-col cols="12">
-              <v-text-field v-model="editProduct.educationUrl" label="Ссылка на обучение"
-                prepend-inner-icon="mdi-school" hint="Кнопка 'Перейти к обучению'" persistent-hint />
+              <v-text-field v-model="editProduct.educationUrl" label="Внешняя ссылка на обучение"
+                prepend-inner-icon="mdi-link"
+                hint="Опционально — старая внешняя ссылка. Если выбран курс выше, она не используется."
+                persistent-hint />
             </v-col>
             <v-col cols="12">
               <v-text-field v-model="editProduct.instructionUrl" label="Инструкция по открытию"
@@ -215,6 +230,14 @@
           <v-alert v-if="productError" type="error" density="compact" class="mt-2">{{ productError }}</v-alert>
         </v-card-text>
         <v-card-actions>
+          <!-- Добавить программу прямо из формы продукта. Открывает
+               существующий program-dialog. Доступно только при canEdit
+               и для уже сохранённого продукта (иначе нет product.id). -->
+          <v-btn v-if="editProduct.id && canEdit('products')"
+            size="small" variant="tonal" color="primary" prepend-icon="mdi-plus"
+            @click="openCreateProgram(editProduct)">
+            Добавить программу
+          </v-btn>
           <v-spacer />
           <v-btn @click="productDialog = false">Отмена</v-btn>
           <v-btn color="primary" @click="saveProduct" :loading="saving">Сохранить</v-btn>
@@ -523,6 +546,7 @@ async function togglePublish(product) {
 function openCreateProduct() {
   editProduct.value = {
     name: '', description: '', imageUrl: '', heroImage: '',
+    productType: null, educationCourseId: null,
     educationUrl: '', instructionUrl: '', openProductUrl: '',
     active: true, noComission: false, visibleToResident: true, visibleToCalculator: true,
     hasProperty: false, hasTerm: false, hasYearKv: false,
@@ -630,8 +654,20 @@ async function deleteProgram() {
   saving.value = false;
 }
 
+// Справочники для формы редактирования продукта.
+const productTypeItems = ref([]);
+const courseItems = ref([]);
+async function loadProductReferences() {
+  try {
+    const { data } = await api.get('/admin/products/references');
+    productTypeItems.value = data.types || [];
+    courseItems.value = data.courses || [];
+  } catch {}
+}
+
 onMounted(() => {
   loadProducts();
   loadCurrencies();
+  loadProductReferences();
 });
 </script>
