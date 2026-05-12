@@ -177,7 +177,8 @@
                 </template>
                 <template v-if="item.msg.attachmentPath">
                   <a v-if="isImageAttachment(item.msg.attachmentName || item.msg.attachmentPath)"
-                    :href="item.msg.attachmentPath" target="_blank" rel="noopener noreferrer" class="msg-image-link">
+                    href="#" class="msg-image-link"
+                    @click.prevent="openLightbox(item.msg.attachmentPath, item.msg.attachmentName)">
                     <img :src="item.msg.attachmentPath" :alt="item.msg.attachmentName || 'Изображение'" class="msg-image" loading="lazy" />
                   </a>
                   <a v-else :href="item.msg.attachmentPath" target="_blank" rel="noopener noreferrer" class="msg-attach">
@@ -371,6 +372,8 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <ImageLightbox v-model="lightboxOpen" :src="lightboxSrc" :alt="lightboxAlt" />
   </div>
 </template>
 
@@ -382,6 +385,7 @@ import api from '../../api';
 import { useAuthStore } from '../../stores/auth';
 import { useSnackbar } from '../../composables/useSnackbar';
 import { getChatStatusColor, getChatCategoryColor } from '../../composables/chatPalette';
+import ImageLightbox from '../../components/ImageLightbox.vue';
 
 const { showError } = useSnackbar();
 
@@ -662,6 +666,15 @@ function autoGrow() {
 const IMAGE_EXT = /\.(jpe?g|png|gif|webp|bmp|svg)(\?|$)/i;
 function isImageAttachment(path) {
   return !!path && IMAGE_EXT.test(path);
+}
+
+const lightboxOpen = ref(false);
+const lightboxSrc = ref('');
+const lightboxAlt = ref('');
+function openLightbox(src, alt) {
+  lightboxSrc.value = src;
+  lightboxAlt.value = alt || 'Изображение';
+  lightboxOpen.value = true;
 }
 function fmtFileSize(bytes) {
   if (!bytes) return '';

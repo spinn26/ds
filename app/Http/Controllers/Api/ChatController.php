@@ -217,13 +217,24 @@ class ChatController extends Controller
             $messageBody = trim($messageBody) . "\n\n" . $contextSummary;
         }
 
+        // Тех. поддержка → тикет сразу инцидент: присваиваем INC-номер,
+        // ставим is_incident=true, статус 'open'. Прочие departments
+        // (backoffice/finance/admin/business) работают как раньше.
+        $isSupport = in_array($request->input('department'), ['support', 'technical'], true);
+
         // Transaction: the ticket row is meaningless without its first message,
         // so either both land or neither does.
-        $ticketId = DB::transaction(function () use ($request, $user, $name, $recipientId, $recipientName, $now, $messageBody) {
+        $ticketId = DB::transaction(function () use ($request, $user, $name, $recipientId, $recipientName, $now, $messageBody, $isSupport) {
+            $incidentNo = null;
+            if ($isSupport) {
+                DB::statement("SELECT pg_advisory_xact_lock(hashtext('chat-incident-number'))");
+                $incidentNo = $this->nextIncidentNumber();
+            }
+
             $id = DB::table('chat_tickets')->insertGetId([
                 'subject' => $request->subject,
                 'description' => $request->description,
-                'status' => 'new',
+                'status' => $isSupport ? 'open' : 'new',
                 'priority' => $request->input('priority', 'medium'),
                 'department' => $request->department,
                 'created_by' => $user->id,
@@ -235,6 +246,11 @@ class ChatController extends Controller
                 'context_id' => $request->input('context_id'),
                 'tags' => $request->tags ? json_encode($request->tags) : null,
                 'messages_count' => 1,
+                'is_incident' => $isSupport,
+                'incident_no' => $incidentNo,
+                'incident_severity' => $isSupport ? 'medium' : null,
+                'incident_logged_at' => $isSupport ? $now : null,
+                'incident_logged_by' => $isSupport ? $user->id : null,
                 'last_message_at' => $now,
                 'created_at' => $now,
                 'updated_at' => $now,
@@ -1943,8 +1959,11 @@ class ChatController extends Controller
             return response()->json(['message' => 'Инцидент не найден'], 404);
         }
 
+        // Закрытие инцидента переводит сам тикет в статус «Решён» —
+        // KPI «Решено сегодня» считается по chat_tickets.status='resolved'.
         DB::table('chat_tickets')->where('id', $id)->update([
             'incident_resolved_at' => now(),
+            'status' => 'resolved',
             'updated_at' => now(),
         ]);
         DB::table('chat_messages')->insert([

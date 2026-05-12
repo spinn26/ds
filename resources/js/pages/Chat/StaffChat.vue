@@ -654,7 +654,8 @@
                 </template>
                 <template v-if="item.msg.attachmentPath">
                   <a v-if="isImageAttachment(item.msg.attachmentName || item.msg.attachmentPath)"
-                    :href="item.msg.attachmentPath" target="_blank" rel="noopener noreferrer" class="msg-image-link">
+                    href="#" class="msg-image-link"
+                    @click.prevent="openLightbox(item.msg.attachmentPath, item.msg.attachmentName)">
                     <img :src="item.msg.attachmentPath" :alt="item.msg.attachmentName || 'Изображение'" class="msg-image" loading="lazy" />
                   </a>
                   <a v-else :href="item.msg.attachmentPath" target="_blank" rel="noopener noreferrer" class="msg-attach">
@@ -1002,6 +1003,8 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <ImageLightbox v-model="lightboxOpen" :src="lightboxSrc" :alt="lightboxAlt" />
   </div>
 </template>
 
@@ -1015,6 +1018,7 @@ import { useConfirm } from '../../composables/useConfirm';
 import { useSnackbar } from '../../composables/useSnackbar';
 import { useAuthStore } from '../../stores/auth';
 import { getActivityColorByName } from '../../composables/useDesign';
+import ImageLightbox from '../../components/ImageLightbox.vue';
 
 const confirmDialog = useConfirm();
 const { showError, showSuccess } = useSnackbar();
@@ -1591,6 +1595,15 @@ function dateLabel(date) {
 
 const IMAGE_EXT = /\.(jpe?g|png|gif|webp|bmp|svg)(\?|$)/i;
 function isImageAttachment(path) { return !!path && IMAGE_EXT.test(path); }
+
+const lightboxOpen = ref(false);
+const lightboxSrc = ref('');
+const lightboxAlt = ref('');
+function openLightbox(src, alt) {
+  lightboxSrc.value = src;
+  lightboxAlt.value = alt || 'Изображение';
+  lightboxOpen.value = true;
+}
 function fmtFileSize(bytes) { if (!bytes) return ''; if (bytes < 1024) return bytes + ' B'; if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'; return (bytes / 1024 / 1024).toFixed(1) + ' MB'; }
 function parseTags(t) { if (!t) return []; if (Array.isArray(t)) return t; try { return JSON.parse(t); } catch { return []; } }
 
