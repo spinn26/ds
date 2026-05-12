@@ -64,7 +64,14 @@ class ChatController extends Controller
         }
 
         // Filters
-        if ($request->filled('status')) $query->where('status', $request->status);
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        } else {
+            // По умолчанию скрываем закрытые/решённые — оператор видит
+            // только активный пул. Если пользователь явно выберет
+            // «Закрыт» или «Решён», условие выше переопределит.
+            $query->whereNotIn('status', ['resolved', 'closed']);
+        }
         if ($request->filled('priority')) $query->where('priority', $request->priority);
         if ($request->filled('department')) $query->where('department', TicketService::normalizeCategory($request->department));
         if ($request->filled('assigned_to')) $query->where('assigned_to', $request->assigned_to);
