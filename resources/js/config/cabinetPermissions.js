@@ -115,9 +115,6 @@ export const cabinetPermissions = {
     payments:                   FULL,   // Реестр выплат — основной раздел
     charges:                    FULL,   // Прочие начисления
     reports:                    EDIT,   // спека: формирование + выгрузка, публикация — calculations
-    requisites:                 VIEW,   // вне спеки, для контекста
-    pool:                       VIEW,
-    communication:              EDIT,   // вне спеки — нужен для ответов партнёрам
   },
 
   // ===== Руководитель по расчётам — Богданова Е. =====
