@@ -1,5 +1,8 @@
 <template>
   <div>
+    <!-- Плашка статуса системы — видна всем; скрывается когда всё OK. -->
+    <SystemStatusBanner />
+
     <!-- Welcome header -->
     <div class="d-flex justify-space-between align-center mb-4 flex-wrap ga-2">
       <div>
@@ -282,6 +285,7 @@ import { ref, computed, onMounted } from 'vue';
 import { useDisplay } from 'vuetify';
 import { useAuthStore } from '../stores/auth';
 import api from '../api';
+import SystemStatusBanner from '../components/SystemStatusBanner.vue';
 
 const { mobile } = useDisplay();
 import { fmt, fmtDate } from '../composables/useDesign';
