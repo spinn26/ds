@@ -19,33 +19,34 @@
           prepend-icon="mdi-filter-remove" @click="resetFilters">Сбросить</v-btn>
       </div>
       <v-expand-transition>
-        <div v-if="showAdvanced" class="d-flex ga-2 flex-wrap align-center mt-3">
-          <v-text-field v-model="filters.birth_date_from" label="Дата рождения с" type="date"
-            hide-details style="max-width:170px" @update:model-value="debouncedLoad" />
-          <v-text-field v-model="filters.birth_date_to" label="Дата рождения по" type="date"
-            hide-details style="max-width:170px" @update:model-value="debouncedLoad" />
-          <v-autocomplete v-model="filters.city" :items="cityOptions"
-            :loading="citySearchLoading" label="Город"
-            item-title="name" item-value="name"
-            hide-details hide-no-data clearable
-            @update:search="onCitySearch"
-            style="max-width:220px" @update:model-value="loadData" />
-          <v-text-field v-model="filters.lp_min" placeholder="ЛП от" type="number"
-            hide-details style="max-width:110px" @update:model-value="debouncedLoad" />
-          <v-text-field v-model="filters.lp_max" placeholder="ЛП до" type="number"
-            hide-details style="max-width:110px" @update:model-value="debouncedLoad" />
-          <v-text-field v-model="filters.gp_min" placeholder="ГП от" type="number"
-            hide-details style="max-width:110px" @update:model-value="debouncedLoad" />
-          <v-text-field v-model="filters.gp_max" placeholder="ГП до" type="number"
-            hide-details style="max-width:110px" @update:model-value="debouncedLoad" />
-          <v-text-field v-model="filters.ngp_min" placeholder="НГП от" type="number"
-            hide-details style="max-width:110px" @update:model-value="debouncedLoad" />
-          <v-text-field v-model="filters.ngp_max" placeholder="НГП до" type="number"
-            hide-details style="max-width:110px" @update:model-value="debouncedLoad" />
-          <v-text-field v-model="filters.termination_from" label="Терминация с" type="date"
-            hide-details style="max-width:170px" @update:model-value="debouncedLoad" />
-          <v-text-field v-model="filters.termination_to" label="Терминация по" type="date"
-            hide-details style="max-width:170px" @update:model-value="debouncedLoad" />
+        <div v-if="showAdvanced" class="d-flex ga-3 flex-wrap align-start mt-3">
+          <SmartRangeFilter label="Дата рождения" kind="date"
+            v-model:from="filters.birth_date_from"
+            v-model:to="filters.birth_date_to"
+            @update:from="debouncedLoad" @update:to="debouncedLoad" />
+          <SmartRangeFilter label="Терминация" kind="date"
+            v-model:from="filters.termination_from"
+            v-model:to="filters.termination_to"
+            @update:from="debouncedLoad" @update:to="debouncedLoad" />
+          <SmartRangeFilter label="ЛП" kind="number"
+            v-model:from="filters.lp_min" v-model:to="filters.lp_max"
+            @update:from="debouncedLoad" @update:to="debouncedLoad" />
+          <SmartRangeFilter label="ГП" kind="number"
+            v-model:from="filters.gp_min" v-model:to="filters.gp_max"
+            @update:from="debouncedLoad" @update:to="debouncedLoad" />
+          <SmartRangeFilter label="НГП" kind="number"
+            v-model:from="filters.ngp_min" v-model:to="filters.ngp_max"
+            @update:from="debouncedLoad" @update:to="debouncedLoad" />
+          <div class="d-flex flex-column">
+            <div class="text-caption text-medium-emphasis mb-1">Город</div>
+            <v-autocomplete v-model="filters.city" :items="cityOptions"
+              :loading="citySearchLoading" placeholder="Город"
+              item-title="name" item-value="name"
+              density="compact" variant="outlined"
+              hide-details hide-no-data clearable
+              @update:search="onCitySearch"
+              style="max-width:220px; min-width:180px" @update:model-value="loadData" />
+          </div>
         </div>
       </v-expand-transition>
     </v-card>
@@ -135,6 +136,7 @@ import { useDebounce } from '../composables/useDebounce';
 import PageHeader from '../components/PageHeader.vue';
 import EmptyState from '../components/EmptyState.vue';
 import StatusChip from '../components/StatusChip.vue';
+import SmartRangeFilter from '../components/SmartRangeFilter.vue';
 import { fmt, getActivityColorByName } from '../composables/useDesign';
 
 const loading = ref(false);
@@ -242,12 +244,27 @@ const flatRows = computed(() => {
 });
 
 
-// "Дата смены статуса" по правилам: Активен → до какого надо набрать 500 ЛП,
-// Зарегистрирован → до какого надо активироваться (90 дней с регистрации),
-// иначе — дата последней смены активности.
+// "Дата смены статуса" по спеке ✅Структура §4:
+//  - Активен → dateActivity + 12 месяцев (конец годового цикла, yearPeriodEnd).
+//    Fallback: если yearPeriodEnd пуст (legacy-партнёры), считаем
+//    dateActivity + 12 месяцев на лету.
+//  - Зарегистрирован → activationDeadline (90 дней с регистрации).
+//  - Терминирован/Исключён → не отображается.
 function statusChangeDate(row) {
   const name = (row.activityName || '').toLowerCase();
-  if (name.includes('актив')) return row.yearPeriodEnd || row.dateActivity;
+  if (name.includes('терм') || name.includes('исключ')) return null;
+  if (name.includes('актив')) {
+    if (row.yearPeriodEnd) return row.yearPeriodEnd;
+    if (row.dateActivity) {
+      // dateActivity приходит как 'd.m.Y' — превращаем в Date и добавляем год.
+      const [d, m, y] = row.dateActivity.split('.');
+      if (d && m && y) {
+        const dt = new Date(+y + 1, +m - 1, +d);
+        return `${String(dt.getDate()).padStart(2, '0')}.${String(dt.getMonth() + 1).padStart(2, '0')}.${dt.getFullYear()}`;
+      }
+    }
+    return null;
+  }
   if (name.includes('зарег')) return row.activationDeadline;
   return row.dateActivity;
 }
