@@ -36,6 +36,7 @@ class ContractImportPreviewService
         $invalid = 0;
 
         foreach ($rows as $row) {
+            $row = $this->normaliseRow($row);
             $errors = $this->validate($row);
             $status = empty($errors) ? 'valid' : 'invalid';
             DB::table('contract_import_preview')->insert([
@@ -54,6 +55,99 @@ class ContractImportPreviewService
     }
 
     /**
+     * Привести row из шаблона к каноничному формату:
+     * — резолв строковых значений (client/product/program/consultant/riskProfile/currency)
+     *   в FK-id'ы, чтобы validate() и finalize() работали с числами;
+     * — поддержка clientPlatform/personPlatform как явных id;
+     * — парс дат dd.mm.yyyy → Y-m-d.
+     */
+    private function normaliseRow(array $row): array
+    {
+        // 1. Client: clientPlatform (id) → client (строка-имя)
+        if (! empty($row['clientPlatform']) && is_numeric($row['clientPlatform'])) {
+            $row['client'] = (int) $row['clientPlatform'];
+        } elseif (! empty($row['client']) && ! is_numeric($row['client'])) {
+            $found = DB::table('client')
+                ->where('personName', 'ilike', '%' . trim($row['client']) . '%')
+                ->whereNull('dateDeleted')
+                ->value('id');
+            if ($found) $row['client'] = (int) $found;
+        }
+        // personPlatform — справочный, проверяется в validate.
+
+        // 2. Product: по name ilike
+        if (! empty($row['product']) && ! is_numeric($row['product'])) {
+            $found = DB::table('product')
+                ->where('name', 'ilike', '%' . trim($row['product']) . '%')
+                ->where('active', true)
+                ->value('id');
+            if ($found) $row['product'] = (int) $found;
+        }
+
+        // 3. Program: по name внутри выбранного product
+        if (! empty($row['program']) && ! is_numeric($row['program'])) {
+            $progQ = DB::table('program')
+                ->where('name', 'ilike', '%' . trim($row['program']) . '%')
+                ->whereNull('dateDeleted');
+            if (! empty($row['product']) && is_numeric($row['product'])) {
+                $progQ->where('product', (int) $row['product']);
+            }
+            $found = $progQ->value('id');
+            if ($found) $row['program'] = (int) $found;
+        }
+
+        // 4. Consultant: по personName — переопределяет client.consultant
+        if (! empty($row['consultant']) && ! is_numeric($row['consultant'])) {
+            $found = DB::table('consultant')
+                ->where('personName', 'ilike', '%' . trim($row['consultant']) . '%')
+                ->whereNull('dateDeleted')
+                ->value('id');
+            if ($found) $row['consultant'] = (int) $found;
+        }
+
+        // 5. RiskProfile: по name
+        if (! empty($row['riskProfile']) && ! is_numeric($row['riskProfile'])) {
+            $found = DB::table('riskProfile')
+                ->where('name', 'ilike', '%' . trim($row['riskProfile']) . '%')
+                ->value('id');
+            if ($found) $row['riskProfile'] = (int) $found;
+        }
+
+        // 6. Currency: тикер (RUB/USD/EUR) → id
+        if (! empty($row['currency']) && ! is_numeric($row['currency'])) {
+            $code = trim($row['currency']);
+            $found = DB::table('currency')
+                ->where(function ($q) use ($code) {
+                    $q->where('nameEn', 'ilike', $code)
+                      ->orWhere('symbol', $code);
+                })->value('id');
+            if ($found) $row['currency'] = (int) $found;
+        }
+
+        // 7. Даты: поддержка dd.mm.yyyy кроме ISO
+        foreach (['createDate', 'openDate', 'closeDate'] as $f) {
+            if (! empty($row[$f]) && is_string($row[$f])) {
+                $row[$f] = $this->parseDdMmYyyy($row[$f]) ?? $row[$f];
+            }
+        }
+
+        return $row;
+    }
+
+    private function parseDdMmYyyy(string $s): ?string
+    {
+        $s = trim($s);
+        if (preg_match('/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/', $s, $m)) {
+            try {
+                return \Carbon\Carbon::create((int) $m[3], (int) $m[2], (int) $m[1])->toDateString();
+            } catch (\Throwable) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    /**
      * Применить правки к строке буфера и перезапустить валидацию.
      * @return array{status:string, errors:list<array{field:string,message:string}>}
      */
@@ -65,7 +159,7 @@ class ContractImportPreviewService
         }
 
         $existing = json_decode($row->row_data, true) ?: [];
-        $merged = array_merge($existing, $patch);
+        $merged = $this->normaliseRow(array_merge($existing, $patch));
         $errors = $this->validate($merged);
         $status = empty($errors) ? 'valid' : 'invalid';
 
@@ -127,20 +221,27 @@ class ContractImportPreviewService
         $product = ! empty($row['product']) ? DB::table('product')->where('id', $row['product'])->first() : null;
         $program = ! empty($row['program']) ? DB::table('program')->where('id', $row['program'])->first() : null;
 
+        // Consultant: явный из шаблона приоритетнее, чем client.consultant.
+        $consultantId = ! empty($row['consultant']) && is_numeric($row['consultant'])
+            ? (int) $row['consultant']
+            : $client->consultant;
+        $consultantName = $consultantId
+            ? DB::table('consultant')->where('id', $consultantId)->value('personName')
+            : null;
+
         return [
             'number' => $row['number'],
             'counterpartyContractId' => $row['counterpartyContractId'] ?? null,
             'status' => $row['status'] ?? null,
             'client' => $row['client'],
             'clientName' => $client->personName,
-            'consultant' => $client->consultant,
-            'consultantName' => $client->consultant
-                ? DB::table('consultant')->where('id', $client->consultant)->value('personName')
-                : null,
+            'consultant' => $consultantId,
+            'consultantName' => $consultantName,
             'product' => $row['product'] ?? null,
             'productName' => $product?->name,
             'program' => $row['program'] ?? null,
             'programName' => $program?->name,
+            'riskProfile' => $row['riskProfile'] ?? null,
             'currency' => $row['currency'] ?? null,
             'ammount' => $row['ammount'] ?? $row['amount'] ?? 0,
             'createDate' => $row['createDate'] ?? now()->toDateString(),
