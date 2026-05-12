@@ -121,18 +121,19 @@ class User extends Authenticatable
             return false;
         }
 
-        if (Hash::check($password, $this->password)) {
-            return true;
+        // Legacy MD5 (32 hex chars) — проверяем ПЕРВЫМ. Laravel 11
+        // BcryptHasher::check() бросает RuntimeException на не-bcrypt
+        // хэше, поэтому вызывать его на MD5-строке нельзя.
+        if (strlen($this->password) === 32 && ctype_xdigit($this->password)) {
+            if ($this->password === md5($password)) {
+                $this->password = Hash::make($password);
+                $this->saveQuietly();
+                \Log::info("MD5 password migrated to bcrypt for user {$this->id} ({$this->email})");
+                return true;
+            }
+            return false;
         }
 
-        // Legacy MD5 migration — rehash to bcrypt on successful login
-        if (strlen($this->password) === 32 && $this->password === md5($password)) {
-            $this->password = Hash::make($password);
-            $this->saveQuietly();
-            \Log::info("MD5 password migrated to bcrypt for user {$this->id} ({$this->email})");
-            return true;
-        }
-
-        return false;
+        return Hash::check($password, $this->password);
     }
 }
