@@ -52,4 +52,18 @@ return [
         'api_key' => env('INSMART_API_KEY'),
     ],
 
+    // Внутренний host для socket-server, используется HealthController.
+    'socket' => [
+        'host' => env('SOCKET_HOST', '127.0.0.1'),
+        'port' => (int) env('SOCKET_HTTP_PORT', 3002),
+    ],
+
+    // Telegram-уведомления. Создать бота через @BotFather, получить токен,
+    // положить в TELEGRAM_BOT_TOKEN. Пользователи привязывают chat_id
+    // в своём профиле (вкладка «Безопасность»).
+    'telegram' => [
+        'bot_token' => env('TELEGRAM_BOT_TOKEN'),
+        'bot_username' => env('TELEGRAM_BOT_USERNAME'),
+    ],
+
 ];

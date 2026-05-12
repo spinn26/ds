@@ -331,6 +331,52 @@
             </div>
           </template>
         </v-card>
+
+        <!-- Telegram-уведомления -->
+        <v-card v-if="telegram.enabled" class="pa-4">
+          <div class="d-flex align-center ga-2 mb-3">
+            <v-icon color="primary">mdi-send</v-icon>
+            <div class="text-subtitle-1 font-weight-bold">Telegram-уведомления</div>
+          </div>
+          <template v-if="telegram.linked">
+            <v-alert type="success" variant="tonal" density="compact" class="mb-3">
+              <v-icon class="mr-1">mdi-check-circle</v-icon>
+              Привязан chat_id <code>{{ telegram.chat_id }}</code>.
+              Сюда будут приходить критические уведомления.
+            </v-alert>
+            <v-btn variant="tonal" prepend-icon="mdi-send-check"
+              :loading="telegramBusy" @click="sendTestTelegram" class="me-2">
+              Отправить тест
+            </v-btn>
+            <v-btn variant="tonal" color="error" prepend-icon="mdi-link-off"
+              :loading="telegramBusy" @click="unlinkTelegram">
+              Отвязать
+            </v-btn>
+          </template>
+          <template v-else>
+            <div class="text-body-2 text-medium-emphasis mb-3">
+              1. Откройте бота
+              <a v-if="telegram.bot_username"
+                :href="`https://t.me/${telegram.bot_username}`" target="_blank">
+                @{{ telegram.bot_username }}
+              </a>
+              <span v-else>(имя бота не настроено в .env)</span>,
+              нажмите Start.<br/>
+              2. Напишите боту <code>@userinfobot</code> чтобы узнать свой chat_id (Number).<br/>
+              3. Вставьте chat_id ниже и нажмите «Привязать».
+            </div>
+            <v-row dense>
+              <v-col cols="12" sm="8">
+                <v-text-field v-model="telegramChatId" label="Ваш Telegram chat_id"
+                  prepend-inner-icon="mdi-pound" variant="outlined" density="compact" />
+              </v-col>
+              <v-col cols="12" sm="4">
+                <v-btn block color="primary" prepend-icon="mdi-link"
+                  :loading="telegramBusy" @click="linkTelegram">Привязать</v-btn>
+              </v-col>
+            </v-row>
+          </template>
+        </v-card>
       </v-tabs-window-item>
     </v-tabs-window>
 
@@ -578,7 +624,50 @@ onMounted(() => {
   loadDocuments();
   loadCities();
   load2faStatus();
+  loadTelegram();
 });
+
+// === Telegram ===
+const telegram = ref({ enabled: false, linked: false, chat_id: null, bot_username: null });
+const telegramChatId = ref('');
+const telegramBusy = ref(false);
+
+async function loadTelegram() {
+  try {
+    const { data } = await api.get('/telegram/status');
+    telegram.value = data;
+  } catch {}
+}
+async function linkTelegram() {
+  if (!telegramChatId.value.trim()) { showError('Введите chat_id'); return; }
+  telegramBusy.value = true;
+  try {
+    const { data } = await api.post('/telegram/link', { chat_id: telegramChatId.value.trim() });
+    if (data.test_ok) showSuccess(data.message);
+    else showError(data.message);
+    telegramChatId.value = '';
+    await loadTelegram();
+  } catch (e) { showError(e.response?.data?.message || 'Ошибка'); }
+  telegramBusy.value = false;
+}
+async function unlinkTelegram() {
+  telegramBusy.value = true;
+  try {
+    await api.post('/telegram/unlink');
+    await loadTelegram();
+    showSuccess('Отвязано');
+  } catch (e) { showError(e.response?.data?.message || 'Ошибка'); }
+  telegramBusy.value = false;
+}
+async function sendTestTelegram() {
+  telegramBusy.value = true;
+  try {
+    const { data } = await api.post('/telegram/test');
+    if (data.sent) showSuccess('Тестовое сообщение отправлено');
+    else showError('Не удалось отправить — проверьте chat_id и что бот настроен');
+  } catch (e) { showError(e.response?.data?.message || 'Ошибка'); }
+  telegramBusy.value = false;
+}
 
 // === 2FA ===
 const twoFa = ref({ enabled: false, confirmedAt: null });

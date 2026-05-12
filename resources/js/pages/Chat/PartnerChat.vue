@@ -137,7 +137,12 @@
         </div>
 
         <!-- Messages -->
-        <div ref="msgsRef" class="chat-messages" @scroll="onMessagesScroll">
+        <div ref="msgsRef" class="chat-messages" :class="{ 'drop-active': dropActive }"
+          @scroll="onMessagesScroll"
+          @dragenter.prevent="dropActive = true"
+          @dragover.prevent="dropActive = true"
+          @dragleave.prevent="dropActive = false"
+          @drop.prevent="onDropFile">
           <template v-for="item in groupedMessages" :key="item.key">
             <!-- Date divider -->
             <div v-if="item.type === 'divider'" class="date-divider">
@@ -702,6 +707,12 @@ function setFile(f) {
   if (filePreviewUrl.value) URL.revokeObjectURL(filePreviewUrl.value);
   filePreviewUrl.value = f.type?.startsWith('image/') ? URL.createObjectURL(f) : null;
 }
+const dropActive = ref(false);
+function onDropFile(e) {
+  dropActive.value = false;
+  const f = e.dataTransfer?.files?.[0];
+  if (f) setFile(f);
+}
 function clearFile() {
   if (filePreviewUrl.value) URL.revokeObjectURL(filePreviewUrl.value);
   filePreviewUrl.value = null;
@@ -1172,7 +1183,17 @@ onUnmounted(() => {
 .chat-header-info { flex: 1; min-width: 0; }
 
 /* Messages — Telegram-style bubbles, asymmetric tail */
-.chat-messages { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 8px; scroll-behavior: smooth; }
+.chat-messages { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 8px; scroll-behavior: smooth; position: relative; }
+.chat-messages.drop-active::before {
+  content: 'Отпустите файл, чтобы прикрепить';
+  position: absolute; inset: 12px;
+  border: 2px dashed rgba(var(--v-theme-primary), 0.7);
+  border-radius: 12px;
+  background: rgba(var(--v-theme-primary), 0.08);
+  color: rgb(var(--v-theme-primary));
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 600; pointer-events: none; z-index: 10;
+}
 .chat-empty-msg { text-align: center; color: rgba(var(--v-theme-on-surface), 0.4); padding: 48px; font-size: 13px; }
 .date-divider { display: flex; align-items: center; justify-content: center; margin: 12px 0 4px; position: relative; }
 .date-divider span { padding: 3px 10px; font-size: 11px; font-weight: 600; color: rgba(var(--v-theme-on-surface), 0.5); text-transform: capitalize; background: rgba(var(--v-theme-on-surface), 0.06); border-radius: 12px; }

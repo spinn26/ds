@@ -59,6 +59,12 @@ Route::prefix('v1')->group(function () {
         // Глобальный поиск (Ctrl+K) — все auth.
         Route::get('/search', [\App\Http\Controllers\Api\SearchController::class, 'index']);
 
+        // Telegram-привязка.
+        Route::get('/telegram/status', [\App\Http\Controllers\Api\TelegramController::class, 'status']);
+        Route::post('/telegram/link', [\App\Http\Controllers\Api\TelegramController::class, 'link']);
+        Route::post('/telegram/unlink', [\App\Http\Controllers\Api\TelegramController::class, 'unlink']);
+        Route::post('/telegram/test', [\App\Http\Controllers\Api\TelegramController::class, 'test']);
+
         // Аудит — только admin (проверка внутри).
         Route::get('/audit-log', [\App\Http\Controllers\Api\AuditLogController::class, 'index']);
 

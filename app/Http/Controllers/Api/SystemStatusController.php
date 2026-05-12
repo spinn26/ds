@@ -154,6 +154,17 @@ class SystemStatusController extends Controller
         Audit::log('incident_create', 'system_incident', $id, [
             'title' => $data['title'], 'severity' => $data['severity'] ?? 'minor', 'status' => $status,
         ]);
+
+        // Telegram-рассылка по admin/head если severity=critical.
+        if (($data['severity'] ?? 'minor') === 'critical') {
+            \App\Support\Telegram::broadcastToRoles(['admin', 'head'],
+                "🔴 <b>Критический инцидент</b>\n"
+                . "<b>" . $data['title'] . "</b>\n"
+                . (! empty($data['description']) ? $data['description'] . "\n" : '')
+                . "Статус: " . $status
+            );
+        }
+
         return response()->json(['id' => $id], 201);
     }
 
