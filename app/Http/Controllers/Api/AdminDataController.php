@@ -841,11 +841,12 @@ class AdminDataController extends Controller
                 'dateCreated' => now(),
             ]);
 
+            // city — поле формы, но в client его нет (legacy: city = integer FK
+            // в WebUser на справочник). Пока не сохраняем; см. TODO ниже.
             return DB::table('client')->insertGetId([
                 'person' => $webUserId,
                 'personName' => $personName,
                 'consultant' => $data['consultant'],
-                'city' => $data['city'] ?? null,
                 'comment' => $data['comment'] ?? null,
                 'dateCreated' => now(),
             ]);
