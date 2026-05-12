@@ -2,7 +2,7 @@
   <div>
     <PageHeader title="Конкурсы и события" icon="mdi-trophy" :count="total">
       <template #actions>
-        <v-btn v-if="!auth.isEducationOnly" color="primary" prepend-icon="mdi-plus" @click="openCreate">Добавить</v-btn>
+        <v-btn v-if="canEdit('contests')" color="primary" prepend-icon="mdi-plus" @click="openCreate">Добавить</v-btn>
       </template>
     </PageHeader>
 
@@ -36,7 +36,8 @@
       <template #item.start="{ value }">{{ fmtDate(value) }}</template>
       <template #item.end="{ value }">{{ fmtDate(value) }}</template>
       <template #item.actions="{ item }">
-        <ActionsCell @edit="openEdit(item)" @delete="confirmDelete(item)" />
+        <ActionsCell :editable="canEdit('contests')" :deletable="canFull('contests')"
+          @edit="openEdit(item)" @delete="confirmDelete(item)" />
       </template>
     </v-data-table-server>
 
@@ -175,8 +176,10 @@ import {
 } from '../../components';
 import { useCrud } from '../../composables/useCrud';
 import { useAuthStore } from '../../stores/auth';
+import { usePermissions } from '../../composables/usePermissions';
 
 const auth = useAuthStore();
+const { canEdit, canFull } = usePermissions();
 
 const typeOptions = ref([]);
 const statusOptions = ref([]);

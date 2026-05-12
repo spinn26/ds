@@ -652,8 +652,7 @@ const menuItems = [
   // Прочее
   { group: 'Прочее', adminSection: 'products' },
   { label: 'Продукты', icon: 'mdi-package-variant-closed', path: '/manage/products', adminSection: 'products' },
-  // Конкурсы скрыты у staff-кабинетов по запросу 2026-05-05.
-  // { label: 'Конкурсы', icon: 'mdi-trophy', path: '/manage/contests', adminSection: 'contests' },
+  { label: 'Конкурсы и события', icon: 'mdi-trophy', path: '/manage/contests', adminSection: 'contests' },
   { label: 'Чат / Тикеты', icon: 'mdi-chat-processing', path: '/manage/chat', adminSection: 'communication' },
   // «Тех. проблема» — staff-side кнопка «написать о технической проблеме».
   // Открывает PartnerChat.vue с предзаполненной формой category=support;

@@ -55,6 +55,7 @@ export const cabinetPermissions = {
     commissions:                VIEW,   // Read-Only по спеке
     reports:                    EDIT,   // спека: формирование + выгрузка, публикация — calculations
     products:                   VIEW,
+    contests:                   FULL,   // спека §13: добавление/архив/удаление + предпросмотр
     communication:              EDIT,   // спека: обработка тикетов своей ветки, без закрытия
     'chat-analytics':           VIEW,
     pool:                       VIEW,
