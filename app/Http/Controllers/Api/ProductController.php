@@ -78,11 +78,21 @@ class ProductController extends Controller
             ->get(['product', 'currency'])
             ->groupBy('product');
 
+        // Programs per-product: для модалки «Программы продукта» на витрине.
+        // Только активные и не удалённые, в порядке имени.
+        $productPrograms = DB::table('program')
+            ->whereIn('product', $productRows->pluck('id'))
+            ->whereNull('dateDeleted')
+            ->where('active', true)
+            ->orderBy('name')
+            ->get(['id', 'product', 'name', 'formLink', 'providerName', 'categoryName', 'currency'])
+            ->groupBy('product');
+
         $currencyMap = DB::table('currency')
             ->get(['id', 'nameRu', 'nameEn', 'symbol'])
             ->keyBy('id');
 
-        $products = $productRows->map(function ($p) use ($consultant, $typeToCategory, $allCategories, $hasAccess, $coursesByProduct, $completedSet, $productCurrencies, $currencyMap) {
+        $products = $productRows->map(function ($p) use ($consultant, $typeToCategory, $allCategories, $hasAccess, $coursesByProduct, $completedSet, $productCurrencies, $currencyMap, $productPrograms) {
             $testPassed = $consultant
                 ? $this->isTestPassedForProduct($consultant, $p->id)
                 : false;
@@ -113,6 +123,20 @@ class ProductController extends Controller
                 return ['id' => $c->id, 'nameRu' => $c->nameRu, 'nameEn' => $c->nameEn, 'symbol' => $c->symbol];
             })->filter()->values();
 
+            // Programs списком — фронт показывает их в модалке при клике
+            // «Открыть продукт». Если массив пуст — fallback на product.url.
+            $programs = ($productPrograms[$p->id] ?? collect())->map(function ($pr) use ($currencyMap) {
+                $cur = $pr->currency ? ($currencyMap[$pr->currency] ?? null) : null;
+                return [
+                    'id' => $pr->id,
+                    'name' => $pr->name,
+                    'formLink' => $pr->formLink ?? null,
+                    'providerName' => $pr->providerName ?? null,
+                    'categoryName' => $pr->categoryName ?? null,
+                    'currencySymbol' => $cur->symbol ?? null,
+                ];
+            })->values();
+
             return [
                 'id' => $p->id,
                 'name' => $p->name,
@@ -133,6 +157,7 @@ class ProductController extends Controller
                     'name' => $cat->productCategoryName,
                 ] : null,
                 'currencies' => $currencies,
+                'programs' => $programs,
                 'requiredCourses' => $linkedCourses->map(fn ($c) => [
                     'id' => $c->id,
                     'title' => $c->title,

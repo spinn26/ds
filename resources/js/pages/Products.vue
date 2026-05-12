@@ -219,6 +219,51 @@
       </v-card>
     </v-dialog>
 
+    <!-- Программы продукта — открывается при клике «Открыть продукт»,
+         если у продукта есть привязанные программы. -->
+    <v-dialog v-model="programsDialog" max-width="720" scrollable>
+      <v-card v-if="selectedProduct">
+        <v-card-title class="d-flex align-center ga-2">
+          <v-icon color="primary">mdi-package-variant</v-icon>
+          <span>Программы продукта «{{ selectedProduct.name }}»</span>
+          <v-spacer />
+          <v-btn icon="mdi-close" size="small" variant="text" @click="programsDialog = false" />
+        </v-card-title>
+        <v-divider />
+        <v-card-text class="pa-3">
+          <div v-if="!selectedProduct.programs?.length" class="text-center text-medium-emphasis py-6">
+            У продукта пока нет программ.
+          </div>
+          <v-list v-else density="comfortable">
+            <v-list-item v-for="p in selectedProduct.programs" :key="p.id"
+              class="program-row mb-2 pa-3 rounded">
+              <div class="d-flex align-center ga-3 flex-wrap w-100">
+                <div class="flex-grow-1 min-w-0">
+                  <div class="text-body-1 font-weight-medium text-truncate">{{ p.name }}</div>
+                  <div class="text-caption text-medium-emphasis d-flex ga-2 flex-wrap mt-1">
+                    <span v-if="p.providerName">{{ p.providerName }}</span>
+                    <span v-if="p.categoryName">· {{ p.categoryName }}</span>
+                    <v-chip v-if="p.currencySymbol" size="x-small" variant="outlined" color="primary">
+                      {{ p.currencySymbol }}
+                    </v-chip>
+                  </div>
+                </div>
+                <v-btn v-if="p.formLink" size="small" color="primary" variant="flat"
+                  :href="p.formLink" target="_blank" rel="noopener" prepend-icon="mdi-open-in-new">
+                  Открыть
+                </v-btn>
+                <v-chip v-else size="small" variant="tonal" color="grey">Ссылка не указана</v-chip>
+              </div>
+            </v-list-item>
+          </v-list>
+        </v-card-text>
+        <v-card-actions class="pa-3">
+          <v-spacer />
+          <v-btn variant="text" @click="programsDialog = false">Закрыть</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <v-progress-linear v-if="loading" indeterminate color="primary"
       style="position:fixed;top:0;left:0;right:0;z-index:2000" />
   </div>
@@ -300,12 +345,22 @@ const filteredProducts = computed(() => {
   return list;
 });
 
+const programsDialog = ref(false);
+const selectedProduct = ref(null);
+
 function openProduct(product) {
   // Реквизиты/акцепт проверены ещё на входе (блокирующие окна), но
   // оставляем защиту на случай если пользователь дошёл до карточки с
   // частично-выполненными шагами.
   if (!access.value.requisitesVerified) { reqDialog.value = true; return; }
   if (!access.value.documentsAccepted)  { acceptDialog.value = true; return; }
+  // Если у продукта есть программы — открываем модалку со списком
+  // и ссылками. Иначе fallback на старое поведение (product.url).
+  if (product.programs?.length) {
+    selectedProduct.value = product;
+    programsDialog.value = true;
+    return;
+  }
   if (product.url) window.open(product.url, '_blank');
 }
 
@@ -419,5 +474,12 @@ onMounted(() => { loadProducts(); loadAgreementDocs(); });
 }
 .hero-placeholder {
   text-align: center;
+}
+.program-row {
+  background: rgba(var(--v-theme-surface-variant), 0.4);
+  transition: background 0.15s;
+}
+.program-row:hover {
+  background: rgba(var(--v-theme-primary), 0.08);
 }
 </style>
