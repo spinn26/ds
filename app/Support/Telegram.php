@@ -32,20 +32,23 @@ class Telegram
         return self::raw((string) $chatId, $text);
     }
 
-    /** Отправка по chat_id напрямую (используется при тестовой кнопке). */
-    public static function raw(string $chatId, string $text): bool
+    /**
+     * Отправка по chat_id напрямую. Опционально reply_markup
+     * (keyboard / inline_keyboard / remove_keyboard) — Bot API формат.
+     */
+    public static function raw(string $chatId, string $text, ?array $replyMarkup = null): bool
     {
         $token = config('services.telegram.bot_token');
         if (! $token) return false;
         try {
-            $res = Http::timeout(8)
-                ->asJson()
-                ->post("https://api.telegram.org/bot{$token}/sendMessage", [
-                    'chat_id' => $chatId,
-                    'text' => $text,
-                    'parse_mode' => 'HTML',
-                    'disable_web_page_preview' => true,
-                ]);
+            $payload = [
+                'chat_id' => $chatId,
+                'text' => $text,
+                'parse_mode' => 'HTML',
+                'disable_web_page_preview' => true,
+            ];
+            if ($replyMarkup !== null) $payload['reply_markup'] = $replyMarkup;
+            $res = Http::timeout(8)->asJson()->post("https://api.telegram.org/bot{$token}/sendMessage", $payload);
             if (! $res->ok()) {
                 Log::warning('telegram send failed', ['chat_id' => $chatId, 'status' => $res->status(), 'body' => $res->body()]);
                 return false;
@@ -55,6 +58,19 @@ class Telegram
             Log::warning('telegram send error', ['error' => $e->getMessage()]);
             return false;
         }
+    }
+
+    /** Главная reply-клавиатура для бота. */
+    public static function mainKeyboard(): array
+    {
+        return [
+            'keyboard' => [
+                [['text' => '📊 Мой статус'], ['text' => 'ℹ️ Справка']],
+                [['text' => '❌ Отвязать аккаунт']],
+            ],
+            'resize_keyboard' => true,
+            'is_persistent' => true,
+        ];
     }
 
     /** Рассылка по ролям всем у кого привязан chat_id. */
