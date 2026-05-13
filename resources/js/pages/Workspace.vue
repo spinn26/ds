@@ -1,7 +1,7 @@
 <template>
   <div>
-    <!-- Плашка статуса системы — видна всем; скрывается когда всё OK. -->
-    <SystemStatusBanner />
+    <!-- Статус системы вынесен в шапку (SystemStatusChip в MainLayout)
+         — он там виден на всех страницах с мигающим индикатором. -->
 
     <!-- Welcome header -->
     <div class="d-flex justify-space-between align-center mb-4 flex-wrap ga-2">
@@ -285,7 +285,6 @@ import { ref, computed, onMounted } from 'vue';
 import { useDisplay } from 'vuetify';
 import { useAuthStore } from '../stores/auth';
 import api from '../api';
-import SystemStatusBanner from '../components/SystemStatusBanner.vue';
 
 const { mobile } = useDisplay();
 import { fmt, fmtDate } from '../composables/useDesign';

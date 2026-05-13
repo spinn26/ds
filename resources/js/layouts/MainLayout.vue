@@ -60,6 +60,10 @@
 
       <v-spacer />
 
+      <!-- Статус системы — мигающий кружок + лейбл; на всех страницах
+           всем пользователям, кликом ведёт на /status. -->
+      <SystemStatusChip class="mr-2" />
+
       <template v-if="!mobile">
         <!-- Referral link copy button (only for consultants with active status) -->
         <v-btn v-if="isConsultant && statusInfo?.canInvite && statusInfo?.referralCode" size="small" variant="tonal" color="primary"
@@ -259,6 +263,7 @@ import OnboardingQuestionnaire from '../components/OnboardingQuestionnaire.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import GlobalSnackbar from '../components/GlobalSnackbar.vue';
 import GlobalSearch from '../components/GlobalSearch.vue';
+import SystemStatusChip from '../components/SystemStatusChip.vue';
 import { provideConfirm } from '../composables/useConfirm';
 import { availableSections as configAvailableSections } from '../config/cabinetPermissions';
 import api from '../api';
