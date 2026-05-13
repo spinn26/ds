@@ -11,6 +11,8 @@ import * as components from 'vuetify/components';
 import * as directives from 'vuetify/directives';
 import '@mdi/font/css/materialdesignicons.css';
 import 'vuetify/styles';
+import VueTelInput from 'vue-tel-input';
+import 'vue-tel-input/vue-tel-input.css';
 import './styles/global.css';
 import router from './router';
 import App from './App.vue';
@@ -144,4 +146,14 @@ app.use(vuetify);
 app.use(router);
 app.use(VueQueryPlugin, vueQueryOptions);
 app.use(i18n);
+// Глобальные дефолты vue-tel-input. mode=international — всегда вид
+// "+7 999 123-45-67"; список stsk-стран в preferred — наверху селекта.
+app.use(VueTelInput, {
+    mode: 'international',
+    defaultCountry: 'RU',
+    preferredCountries: ['RU', 'BY', 'KZ', 'UA', 'UZ', 'AM', 'AZ', 'KG', 'TJ', 'MD'],
+    inputOptions: { showDialCode: false, placeholder: 'Номер телефона' },
+    dropdownOptions: { showSearchBox: true, showFlags: true, showDialCodeInSelection: true },
+    validCharactersOnly: true,
+});
 app.mount('#app');

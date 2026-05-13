@@ -52,23 +52,38 @@
               <!-- Step 1 -->
               <v-stepper-window-item :value="1">
                 <v-alert v-if="error" type="error" class="mb-3" density="compact">{{ error }}</v-alert>
-                <v-row dense>
-                  <v-col cols="12" sm="4"><v-text-field v-model="form.lastName" label="Фамилия *" /></v-col>
-                  <v-col cols="12" sm="4"><v-text-field v-model="form.firstName" label="Имя *" /></v-col>
-                  <v-col cols="12" sm="4"><v-text-field v-model="form.patronymic" label="Отчество *" /></v-col>
-                  <v-col cols="12"><v-text-field v-model="form.email" label="Электронная почта *" type="email" prepend-inner-icon="mdi-email" /></v-col>
-                  <v-col cols="12" sm="6"><v-text-field v-model="form.phone" label="Телефон *" prepend-inner-icon="mdi-phone" /></v-col>
-                  <v-col cols="12" sm="6"><v-text-field v-model="form.telegram" label="Телеграм *" prepend-inner-icon="mdi-send" placeholder="@username" /></v-col>
-                  <v-col cols="12" sm="6"><v-text-field v-model="form.birthDate" label="Дата рождения *" type="date" /></v-col>
-                  <v-col cols="12" sm="6"><v-text-field v-model="form.city" label="Город *" prepend-inner-icon="mdi-city" /></v-col>
-                  <v-col cols="12"><v-text-field v-model="form.password" label="Пароль *" :type="showPw ? 'text' : 'password'" prepend-inner-icon="mdi-lock" :append-inner-icon="showPw ? 'mdi-eye-off' : 'mdi-eye'" @click:append-inner="showPw = !showPw" /></v-col>
-                  <v-col cols="12"><v-text-field v-model="form.password_confirmation" label="Подтверждение пароля *" type="password" prepend-inner-icon="mdi-lock" /></v-col>
-                  <v-col cols="12">
-                    <v-checkbox v-model="form.consentPersonalData" label="Согласен на обработку персональных данных *" density="compact" />
-                    <v-checkbox v-model="form.consentTerms" label="Согласен с правилами использования платформы *" density="compact" />
-                  </v-col>
-                </v-row>
-                <v-btn block color="primary" size="large" @click="nextStep" :loading="loading">Далее →</v-btn>
+                <v-form v-model="formValid" @submit.prevent="nextStep">
+                  <v-row dense>
+                    <v-col cols="12" sm="4"><v-text-field v-model="form.lastName" :rules="cyrillicRequiredRules" label="Фамилия *" /></v-col>
+                    <v-col cols="12" sm="4"><v-text-field v-model="form.firstName" :rules="cyrillicRequiredRules" label="Имя *" /></v-col>
+                    <v-col cols="12" sm="4"><v-text-field v-model="form.patronymic" :rules="cyrillicRequiredRules" label="Отчество *" /></v-col>
+                    <v-col cols="12"><v-text-field v-model="form.email" :rules="emailRequiredRules" label="Электронная почта *" type="email" prepend-inner-icon="mdi-email" /></v-col>
+                    <v-col cols="12" sm="6">
+                      <!-- vue-tel-input: код страны + маска под выбранную.
+                           Глобальные дефолты — в app.js. @validate ставит
+                           phoneValid, кнопка «Далее» блокируется если false. -->
+                      <label class="text-caption text-medium-emphasis d-block mb-1">Телефон *</label>
+                      <vue-tel-input v-model="form.phone"
+                        @validate="onPhoneValidate"
+                        :input-options="{ placeholder: 'Телефон' }" />
+                      <div v-if="phoneTouched && !phoneValid"
+                        class="text-error text-caption mt-1">
+                        Введите корректный номер телефона
+                      </div>
+                    </v-col>
+                    <v-col cols="12" sm="6"><v-text-field v-model="form.telegram" :rules="telegramRequiredRules" label="Телеграм *" prepend-inner-icon="mdi-send" placeholder="@username" /></v-col>
+                    <v-col cols="12" sm="6"><v-text-field v-model="form.birthDate" :rules="requiredRule" label="Дата рождения *" type="date" /></v-col>
+                    <v-col cols="12" sm="6"><v-text-field v-model="form.city" :rules="cyrillicRequiredRules" label="Город *" prepend-inner-icon="mdi-city" /></v-col>
+                    <v-col cols="12"><v-text-field v-model="form.password" :rules="passwordRules" label="Пароль *" :type="showPw ? 'text' : 'password'" prepend-inner-icon="mdi-lock" :append-inner-icon="showPw ? 'mdi-eye-off' : 'mdi-eye'" @click:append-inner="showPw = !showPw" /></v-col>
+                    <v-col cols="12"><v-text-field v-model="form.password_confirmation" :rules="passwordConfirmRules" label="Подтверждение пароля *" type="password" prepend-inner-icon="mdi-lock" /></v-col>
+                    <v-col cols="12">
+                      <v-checkbox v-model="form.consentPersonalData" :rules="[v => !!v || 'Необходимо согласие']" label="Согласен на обработку персональных данных *" density="compact" />
+                      <v-checkbox v-model="form.consentTerms" :rules="[v => !!v || 'Необходимо согласие']" label="Согласен с правилами использования платформы *" density="compact" />
+                    </v-col>
+                  </v-row>
+                  <v-btn block color="primary" size="large" type="submit"
+                    :disabled="!formValid || !phoneValid" :loading="loading">Далее →</v-btn>
+                </v-form>
               </v-stepper-window-item>
 
               <!-- Step 2 -->
@@ -123,6 +138,11 @@ import { useRouter, useRoute } from 'vue-router';
 import { useAuthStore } from '../../stores/auth';
 import api from '../../api';
 import BrandWaves from '../../components/BrandWaves.vue';
+import {
+  cyrillicRequiredRules,
+  emailRequiredRules,
+  telegramRequiredRules,
+} from '../../composables/useFormRules';
 
 const auth = useAuthStore();
 const router = useRouter();
@@ -136,6 +156,28 @@ const form = ref({
   telegram: '', birthDate: '', city: '', password: '', password_confirmation: '',
   consentPersonalData: false, consentTerms: false, refCode: '',
 });
+
+const formValid = ref(false);
+const phoneValid = ref(false);
+const phoneTouched = ref(false);
+
+function onPhoneValidate(obj) {
+  phoneTouched.value = true;
+  // Регистрация: телефон обязателен. valid=false при пустом или невалидном.
+  phoneValid.value = !!obj?.valid;
+}
+
+const requiredRule = [v => !!v || 'Обязательное поле'];
+const passwordRules = [
+  v => !!v || 'Обязательное поле',
+  v => (v && v.length >= 8) || 'Минимум 8 символов',
+  v => /[A-Za-zА-Яа-я]/.test(v || '') || 'Должна быть хотя бы одна буква',
+  v => /\d/.test(v || '') || 'Должна быть хотя бы одна цифра',
+];
+const passwordConfirmRules = [
+  v => !!v || 'Обязательное поле',
+  v => v === form.value.password || 'Пароли не совпадают',
+];
 
 // Реф-код и пригласивший партнёр
 const refChecking = ref(false);

@@ -735,18 +735,50 @@
             <v-icon>mdi-paperclip</v-icon>
           </v-btn>
           <!-- Quick replies -->
-          <v-menu v-if="quickReplies.length">
+          <v-menu :close-on-content-click="false">
             <template #activator="{ props }">
               <v-btn v-bind="props" icon variant="text" size="small" title="Быстрые ответы">
                 <v-icon>mdi-lightning-bolt-outline</v-icon>
               </v-btn>
             </template>
-            <v-list density="compact" style="max-width: 360px; max-height: 400px; overflow-y: auto">
-              <v-list-item v-for="q in quickReplies" :key="q.id" @click="insertQuickReply(q)">
-                <v-list-item-title class="text-body-2 font-weight-bold">{{ q.title }}</v-list-item-title>
-                <v-list-item-subtitle class="text-caption" style="white-space: normal">{{ q.content }}</v-list-item-subtitle>
-              </v-list-item>
-            </v-list>
+            <v-card width="380" max-width="380">
+              <v-list density="compact" style="max-height: 400px; overflow-y: auto" class="pa-0">
+                <!-- Кнопка «+ Добавить» — прямо в списке, первая строкой -->
+                <v-list-item class="qr-add" @click="openQuickReplyEditor(null)">
+                  <div class="d-flex align-center ga-2 w-100">
+                    <v-icon color="primary">mdi-plus-circle</v-icon>
+                    <span class="text-body-2 font-weight-medium">Добавить свой шаблон</span>
+                  </div>
+                </v-list-item>
+                <v-divider />
+                <v-list-item v-if="!quickReplies.length">
+                  <v-list-item-subtitle class="text-caption">
+                    Шаблонов пока нет — создайте первый.
+                  </v-list-item-subtitle>
+                </v-list-item>
+                <v-list-item v-for="q in quickReplies" :key="q.id"
+                  class="qr-row" @click="insertQuickReply(q)">
+                  <div class="d-flex align-start ga-2 w-100">
+                    <div class="flex-grow-1 min-w-0">
+                      <div class="d-flex align-center ga-1">
+                        <span class="text-body-2 font-weight-bold">{{ q.title }}</span>
+                        <v-chip v-if="q.is_own" size="x-small" color="primary" variant="tonal">мой</v-chip>
+                        <v-chip v-else-if="q.is_shared" size="x-small" color="grey" variant="tonal">общий</v-chip>
+                      </div>
+                      <div class="text-caption text-medium-emphasis" style="white-space: pre-wrap">{{ q.content }}</div>
+                    </div>
+                    <div class="d-flex flex-column ga-1">
+                      <v-btn v-if="canEditQuickReply(q)" icon="mdi-pencil" size="x-small"
+                        variant="text" title="Редактировать"
+                        @click.stop="openQuickReplyEditor(q)" />
+                      <v-btn v-if="canEditQuickReply(q)" icon="mdi-delete" size="x-small"
+                        variant="text" color="error" title="Удалить"
+                        @click.stop="deleteQuickReply(q)" />
+                    </div>
+                  </div>
+                </v-list-item>
+              </v-list>
+            </v-card>
           </v-menu>
           <div class="input-area">
             <v-textarea ref="taRef" v-model="msgText"
@@ -1011,6 +1043,40 @@
     </v-dialog>
 
     <ImageLightbox v-model="lightboxOpen" :src="lightboxSrc" :alt="lightboxAlt" />
+
+    <!-- Редактирование/создание шаблона быстрых ответов -->
+    <v-dialog v-model="qrDialog" max-width="560">
+      <v-card>
+        <v-card-title class="d-flex align-center ga-2">
+          <v-icon color="primary">mdi-lightning-bolt</v-icon>
+          {{ qrForm.id ? 'Редактирование шаблона' : 'Новый шаблон' }}
+          <v-spacer />
+          <v-btn icon="mdi-close" size="small" variant="text" @click="qrDialog = false" />
+        </v-card-title>
+        <v-divider />
+        <v-card-text class="pt-4">
+          <v-text-field v-model="qrForm.title" label="Заголовок" variant="outlined"
+            density="comfortable" class="mb-2" autofocus />
+          <v-textarea v-model="qrForm.content" label="Текст ответа"
+            variant="outlined" density="comfortable" rows="6" auto-grow class="mb-2"
+            hint="Доступны плейсхолдеры: {client_name}, {staff_name}, {agent_name}, {ticket_id}"
+            persistent-hint />
+          <div class="d-flex ga-2 mt-3">
+            <v-text-field v-model="qrForm.category" label="Категория" variant="outlined"
+              density="comfortable" hide-details style="max-width: 220px" />
+            <v-text-field v-model="qrForm.shortcut" label="Шорткат (/hi)"
+              variant="outlined" density="comfortable" hide-details style="max-width: 180px" />
+          </div>
+        </v-card-text>
+        <v-divider />
+        <v-card-actions class="pa-3">
+          <v-spacer />
+          <v-btn variant="text" @click="qrDialog = false">Отмена</v-btn>
+          <v-btn color="primary" :loading="qrSaving" @click="saveQuickReply"
+            prepend-icon="mdi-content-save">Сохранить</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
@@ -1701,7 +1767,12 @@ function onMessagesScroll() {
   else showJumpToBottom.value = true;
 }
 function scrollDown(force = false) {
-  nextTick(() => {
+  // Двойной nextTick + rAF: одного nextTick не хватает, когда в чате
+  // есть картинки/файлы — высота контейнера ещё растёт после первого
+  // тика и `scrollTop = scrollHeight` уезжает в середину переписки.
+  // Повторно скроллим по событию `load` каждой картинки внутри
+  // контейнера, чтобы догонять реальный scrollHeight.
+  const doScroll = () => {
     const el = msgsRef.value;
     if (!el) return;
     if (force || isAtBottom()) {
@@ -1709,6 +1780,32 @@ function scrollDown(force = false) {
       pendingMessages.value = 0;
       showJumpToBottom.value = false;
     }
+  };
+  nextTick(() => {
+    nextTick(() => {
+      requestAnimationFrame(() => {
+        doScroll();
+        if (!force) return;
+        const el = msgsRef.value;
+        if (!el) return;
+        // Догоняем после подгрузки картинок (≤ 3 сек, дольше — это уже
+        // не «открытие чата», пусть пользователь сам прокрутит).
+        const imgs = el.querySelectorAll('img');
+        let pending = 0;
+        const cleanup = setTimeout(() => { pending = 0; }, 3000);
+        imgs.forEach(img => {
+          if (img.complete) return;
+          pending++;
+          const onDone = () => {
+            img.removeEventListener('load', onDone);
+            img.removeEventListener('error', onDone);
+            if (--pending <= 0) { clearTimeout(cleanup); doScroll(); }
+          };
+          img.addEventListener('load', onDone);
+          img.addEventListener('error', onDone);
+        });
+      });
+    });
   });
 }
 
@@ -2053,9 +2150,72 @@ function insertQuickReply(q) {
   const content = (q.content || '')
     .replace(/\{client_name\}/g, activeChat.value?.customer_name || '')
     .replace(/\{ticket_id\}/g, activeChat.value?.id || '')
-    .replace(/\{staff_name\}/g, currentUserName.value);
+    .replace(/\{staff_name\}/g, currentUserName.value)
+    .replace(/\{agent_name\}/g, currentUserName.value);
   msgText.value = msgText.value ? `${msgText.value}\n${content}` : content;
   nextTick(() => { taRef.value?.focus(); autoGrow(); });
+}
+
+// --- CRUD шаблонов быстрых ответов ---
+// is_own — личный шаблон, всегда можно править; is_shared — глобальный,
+// править может только admin (фронт даёт ему ту же кнопку — бэк решает).
+const isAdmin = computed(() => /admin/.test(auth.user?.role || ''));
+function canEditQuickReply(q) {
+  return !!q.is_own || (q.is_shared && isAdmin.value);
+}
+
+const qrDialog = ref(false);
+const qrSaving = ref(false);
+const qrForm = ref({ id: null, title: '', content: '', category: 'Личные', shortcut: '' });
+
+function openQuickReplyEditor(q) {
+  qrForm.value = q
+    ? { id: q.id, title: q.title || '', content: q.content || '', category: q.category || 'Личные', shortcut: q.shortcut || '' }
+    : { id: null, title: '', content: '', category: 'Личные', shortcut: '' };
+  qrDialog.value = true;
+}
+
+async function saveQuickReply() {
+  if (!qrForm.value.title.trim() || !qrForm.value.content.trim()) {
+    showError('Заголовок и текст обязательны');
+    return;
+  }
+  qrSaving.value = true;
+  try {
+    const payload = {
+      title: qrForm.value.title.trim(),
+      content: qrForm.value.content,
+      category: qrForm.value.category || 'Личные',
+      shortcut: qrForm.value.shortcut || null,
+    };
+    if (qrForm.value.id) {
+      await api.put(`/chat/quick-replies/${qrForm.value.id}`, payload);
+    } else {
+      await api.post('/chat/quick-replies', payload);
+    }
+    await reloadQuickReplies();
+    qrDialog.value = false;
+  } catch (e) {
+    showError(e.response?.data?.message || 'Не удалось сохранить шаблон');
+  }
+  qrSaving.value = false;
+}
+
+async function deleteQuickReply(q) {
+  if (!confirm(`Удалить шаблон «${q.title}»?`)) return;
+  try {
+    await api.delete(`/chat/quick-replies/${q.id}`);
+    await reloadQuickReplies();
+  } catch (e) {
+    showError(e.response?.data?.message || 'Не удалось удалить шаблон');
+  }
+}
+
+async function reloadQuickReplies() {
+  try {
+    const { data } = await api.get('/chat/quick-replies');
+    quickReplies.value = data.data || data || [];
+  } catch {}
 }
 
 // Polling работает только пока вкладка активна. Скрытая вкладка
@@ -2451,6 +2611,14 @@ onUnmounted(() => {
 .reply-bar-text { color: rgba(var(--v-theme-on-surface), 0.6); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .reply-bar-close { background: none; border: none; cursor: pointer; color: rgba(var(--v-theme-on-surface), 0.5); padding: 4px; border-radius: 6px; }
 
+.qr-row { cursor: pointer; }
+.qr-row:hover { background: rgba(var(--v-theme-primary), 0.06); }
+.qr-add {
+  cursor: pointer;
+  background: rgba(var(--v-theme-primary), 0.10);
+  border-bottom: 1px solid rgba(var(--v-theme-primary), 0.20);
+}
+.qr-add:hover { background: rgba(var(--v-theme-primary), 0.18); }
 .chat-input { display: flex; align-items: flex-end; gap: 8px; padding: 10px 16px; border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); position: relative; transition: background 0.15s; }
 .chat-input.drag-over { background: rgba(var(--v-theme-primary), 0.08); }
 .input-btn { background: none; border: none; cursor: pointer; color: rgba(var(--v-theme-on-surface), 0.5); padding: 6px; border-radius: 8px; }

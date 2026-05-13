@@ -214,7 +214,8 @@ async function load() {
 
 function openChat(item) {
   // Используем существующий staff-чат, открывая нужный тикет.
-  router.push({ path: '/manage/chat', query: { id: item.id } });
+  // StaffChat слушает query.open (см. consumeOpenQuery), не query.id.
+  router.push({ path: '/manage/chat', query: { open: item.id } });
 }
 
 const incidentDialog = ref(false);

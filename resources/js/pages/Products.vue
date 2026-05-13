@@ -271,9 +271,12 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import api from '../api';
 import PageHeader from '../components/PageHeader.vue';
 import { useSnackbar } from '../composables/useSnackbar';
+
+const router = useRouter();
 
 const { showError } = useSnackbar();
 
@@ -363,6 +366,12 @@ function openProduct(product) {
   // частично-выполненными шагами.
   if (!access.value.requisitesVerified) { reqDialog.value = true; return; }
   if (!access.value.documentsAccepted)  { acceptDialog.value = true; return; }
+  // Internal route (openProductUrl начинается с «/») — открываем
+  // во SPA через router.push. Используется, например, для InSmart-виджета.
+  if (product.url && /^\/(?!\/)/.test(product.url)) {
+    router.push(product.url);
+    return;
+  }
   // Если у продукта есть программы — открываем модалку со списком
   // и ссылками. Иначе fallback на старое поведение (product.url).
   if (product.programs?.length) {

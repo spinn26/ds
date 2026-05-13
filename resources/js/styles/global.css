@@ -382,3 +382,24 @@
   .v-main { padding: 0 !important; }
   .v-card { border: 1px solid #ddd !important; box-shadow: none !important; }
 }
+
+/* vue-tel-input — выравниваем под Vuetify outlined-инпуты: радиус, высота,
+   primary-цвет при фокусе. Подключён глобально в app.js, используется в
+   формах Clients/Partners/Register. */
+.vue-tel-input {
+  border-radius: 8px !important;
+  border-color: rgba(var(--v-theme-on-surface), 0.38) !important;
+  min-height: 44px;
+}
+.vue-tel-input:focus-within {
+  border-color: rgb(var(--v-theme-primary)) !important;
+  box-shadow: 0 0 0 1px rgb(var(--v-theme-primary)) inset;
+}
+.v-theme--dark .vue-tel-input {
+  background: rgb(var(--v-theme-surface));
+  color: rgb(var(--v-theme-on-surface));
+}
+.v-theme--dark .vue-tel-input .vti__dropdown-list {
+  background: rgb(var(--v-theme-surface));
+  color: rgb(var(--v-theme-on-surface));
+}

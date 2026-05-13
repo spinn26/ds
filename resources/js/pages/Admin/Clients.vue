@@ -14,21 +14,27 @@
          outlined-рамку. -->
     <v-card class="mb-3 pa-3">
       <div class="d-flex flex-wrap ga-2 align-center">
-        <v-text-field v-model="search" placeholder="ФИО / Email / Телефон"
+        <v-text-field v-model="search" placeholder="ФИО клиента"
           density="compact" variant="outlined" hide-details clearable
-          prepend-inner-icon="mdi-magnify" style="max-width: 260px; flex: 1 1 200px"
+          prepend-inner-icon="mdi-magnify" style="max-width: 240px; flex: 1 1 200px"
           @update:model-value="debouncedLoad" />
         <v-text-field v-model="filters.id" placeholder="ID клиента"
           density="compact" variant="outlined" hide-details clearable
-          style="max-width: 140px"
+          style="max-width: 130px"
           @update:model-value="debouncedLoad" />
         <v-text-field v-model="filters.consultantName" placeholder="ФИО консультанта"
           density="compact" variant="outlined" hide-details clearable
-          style="max-width: 220px; flex: 1 1 180px"
+          style="max-width: 200px; flex: 1 1 160px"
           @update:model-value="debouncedLoad" />
+        <v-select v-model="filters.consultantStatusId" :items="statusLevels"
+          item-title="title" item-value="id"
+          placeholder="Статус наставника (ФК…)"
+          density="compact" variant="outlined" hide-details clearable
+          style="max-width: 220px; flex: 1 1 180px"
+          @update:model-value="loadData" />
         <v-text-field v-model="filters.comment" placeholder="Комментарий"
           density="compact" variant="outlined" hide-details clearable
-          style="max-width: 200px; flex: 1 1 160px"
+          style="max-width: 180px; flex: 1 1 140px"
           @update:model-value="debouncedLoad" />
 
         <v-spacer />
@@ -74,7 +80,9 @@
         {{ fmtDate(value) }}
       </template>
       <template #item.actions="{ item }">
-        <v-btn v-if="canEdit('clients')" icon="mdi-delete" size="x-small" variant="text" color="error"
+        <v-btn v-if="canEdit('clients')" icon="mdi-pencil" size="x-small" variant="text" color="primary"
+          title="Редактировать" @click.stop="openEditClient(item)" />
+        <v-btn v-if="canFull('clients')" icon="mdi-delete" size="x-small" variant="text" color="error"
           title="Удалить" @click.stop="confirmDeleteClient(item)" />
       </template>
       <template #no-data><EmptyState /></template>
@@ -104,13 +112,15 @@
     <v-dialog v-model="addOpen" max-width="640" persistent>
       <v-card>
         <v-card-title class="d-flex align-center">
-          <v-icon class="me-2">mdi-account-plus</v-icon>
-          {{ addStep === 1 ? 'Шаг 1: проверка на дубли' : 'Шаг 2: новый клиент' }}
+          <v-icon class="me-2">{{ editingId ? 'mdi-account-edit' : 'mdi-account-plus' }}</v-icon>
+          {{ editingId
+              ? 'Редактирование клиента'
+              : (addStep === 1 ? 'Шаг 1: проверка на дубли' : 'Шаг 2: новый клиент') }}
           <v-spacer />
           <v-btn icon="mdi-close" size="small" variant="text" @click="addOpen = false" />
         </v-card-title>
 
-        <v-card-text v-if="addStep === 1">
+        <v-card-text v-if="addStep === 1 && !editingId">
           <div class="text-body-2 mb-3">
             Введите фамилию или email — система найдёт совпадения, чтобы избежать дубля.
           </div>
@@ -133,44 +143,71 @@
         </v-card-text>
 
         <v-card-text v-else>
-          <v-row dense>
-            <v-col cols="12" sm="4"><v-text-field v-model="addForm.lastName"
-              label="Фамилия *" variant="outlined" density="comfortable" /></v-col>
-            <v-col cols="12" sm="4"><v-text-field v-model="addForm.firstName"
-              label="Имя *" variant="outlined" density="comfortable" /></v-col>
-            <v-col cols="12" sm="4"><v-text-field v-model="addForm.patronymic"
-              label="Отчество" variant="outlined" density="comfortable" /></v-col>
-            <v-col cols="12" sm="6"><v-text-field v-model="addForm.email"
-              label="Email" type="email" variant="outlined" density="comfortable" /></v-col>
-            <v-col cols="12" sm="6"><v-text-field v-model="addForm.phone"
-              label="Телефон" variant="outlined" density="comfortable" /></v-col>
-            <v-col cols="12" sm="6"><v-text-field v-model="addForm.birthDate"
-              label="Дата рождения" type="date" variant="outlined" density="comfortable" /></v-col>
-            <v-col cols="12" sm="6"><v-text-field v-model="addForm.city"
-              label="Город" variant="outlined" density="comfortable" /></v-col>
-            <v-col cols="12" sm="6"><v-text-field v-model="addForm.consultant"
-              label="Консультант (ID)" type="number" variant="outlined" density="comfortable"
-              hint="ID партнёра-наставника" persistent-hint /></v-col>
-            <v-col cols="12"><v-textarea v-model="addForm.comment"
-              label="Комментарий" variant="outlined" density="comfortable" rows="2" /></v-col>
-          </v-row>
-          <v-alert v-if="addError" type="error" density="compact" class="mt-2">{{ addError }}</v-alert>
+          <v-form v-model="formValid" @submit.prevent="saveNewClient">
+            <v-row dense>
+              <v-col cols="12" sm="4"><v-text-field v-model="addForm.lastName"
+                :rules="cyrillicRequiredRules" label="Фамилия *"
+                variant="outlined" density="comfortable" /></v-col>
+              <v-col cols="12" sm="4"><v-text-field v-model="addForm.firstName"
+                :rules="cyrillicRequiredRules" label="Имя *"
+                variant="outlined" density="comfortable" /></v-col>
+              <v-col cols="12" sm="4"><v-text-field v-model="addForm.patronymic"
+                :rules="cyrillicOptionalRules" label="Отчество"
+                variant="outlined" density="comfortable" /></v-col>
+              <v-col cols="12" sm="6"><v-text-field v-model="addForm.email"
+                :rules="emailRules" label="Email" type="email"
+                variant="outlined" density="comfortable" /></v-col>
+              <v-col cols="12" sm="6">
+                <!-- vue-tel-input: код страны + маска под выбранную страну.
+                     Глобальные дефолты заданы в app.js. @validate даёт
+                     phoneValid ref → используется в disable-условии save. -->
+                <label class="text-caption text-medium-emphasis d-block mb-1">Телефон</label>
+                <vue-tel-input v-model="addForm.phone"
+                  @validate="onPhoneValidate"
+                  :input-options="{ placeholder: 'Телефон' }" />
+                <div v-if="addForm.phone && !phoneValid && phoneTouched"
+                  class="text-error text-caption mt-1">
+                  Неверный номер телефона
+                </div>
+              </v-col>
+              <v-col cols="12" sm="6"><v-text-field v-model="addForm.birthDate"
+                label="Дата рождения" type="date"
+                variant="outlined" density="comfortable" /></v-col>
+              <v-col cols="12" sm="6"><v-text-field v-model="addForm.city"
+                :rules="cyrillicOptionalRules" label="Город"
+                variant="outlined" density="comfortable" /></v-col>
+              <v-col cols="12" sm="6"><v-autocomplete v-model="addForm.consultant"
+                :items="consultantOptions" item-title="personName" item-value="id"
+                :loading="searchingConsultants"
+                @update:search="searchConsultants"
+                :rules="[v => !!v || 'Выберите наставника']"
+                label="Консультант *" placeholder="Начните вводить ФИО"
+                variant="outlined" density="comfortable"
+                hint="Партнёр-наставник" persistent-hint
+                no-data-text="Начните вводить ФИО"
+                :no-filter="true" hide-no-data clearable /></v-col>
+              <v-col cols="12"><v-textarea v-model="addForm.comment"
+                label="Комментарий" variant="outlined" density="comfortable" rows="2" /></v-col>
+            </v-row>
+            <v-alert v-if="addError" type="error" density="compact" class="mt-2">{{ addError }}</v-alert>
+          </v-form>
         </v-card-text>
 
         <v-card-actions>
-          <v-btn v-if="addStep === 2" variant="text" prepend-icon="mdi-arrow-left"
+          <v-btn v-if="addStep === 2 && !editingId" variant="text" prepend-icon="mdi-arrow-left"
             @click="addStep = 1">Назад</v-btn>
           <v-spacer />
-          <v-btn v-if="addStep === 1" variant="text" @click="addOpen = false">Отмена</v-btn>
-          <v-btn v-if="addStep === 1" color="success" prepend-icon="mdi-plus"
+          <v-btn v-if="addStep === 1 && !editingId" variant="text" @click="addOpen = false">Отмена</v-btn>
+          <v-btn v-if="editingId" variant="text" @click="addOpen = false">Отмена</v-btn>
+          <v-btn v-if="addStep === 1 && !editingId" color="success" prepend-icon="mdi-plus"
             :disabled="!addSearch || addSearch.length < 2" @click="gotoNewClientStep">
             + Добавить нового клиента
           </v-btn>
-          <v-btn v-else color="success" prepend-icon="mdi-content-save"
+          <v-btn v-if="addStep === 2" color="success" prepend-icon="mdi-content-save"
             :loading="addSaving"
-            :disabled="!addForm.firstName || !addForm.lastName || !addForm.consultant"
+            :disabled="!formValid || !phoneValid"
             @click="saveNewClient">
-            Создать клиента
+            {{ editingId ? 'Сохранить' : 'Создать клиента' }}
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -194,8 +231,9 @@ const visibleHeaders = computed(() => headers.filter(h => columnVisible.value[h.
 import { useSnackbar } from '../../composables/useSnackbar';
 import { fmtDate } from '../../composables/useDesign';
 import { usePermissions } from '../../composables/usePermissions';
+import { cyrillicRequiredRules, cyrillicOptionalRules, emailRules } from '../../composables/useFormRules';
 
-const { canEdit } = usePermissions();
+const { canEdit, canFull } = usePermissions();
 
 const { showSuccess, showError } = useSnackbar();
 const deleteDialogOpen = ref(false);
@@ -233,8 +271,11 @@ const page = ref(1);
 const perPage = ref(25);
 const sortBy = ref('');
 const sortDir = ref('desc');
-const filters = ref({ id: '', consultantName: '', comment: '', created_from: '', created_to: '' });
+const filters = ref({ id: '', consultantName: '', consultantStatusId: null, comment: '', created_from: '', created_to: '' });
 const advancedOpen = ref(false);
+// 10-уровневая матрица квалификации — для фильтра «Статус наставника»
+// per memory project_commission_spec. Загружаем разово из GET /status-levels.
+const statusLevels = ref([]);
 
 const activeFilterCount = computed(() => {
   let c = 0;
@@ -254,8 +295,20 @@ const advancedActiveCount = computed(() => {
 
 function resetFilters() {
   search.value = '';
-  filters.value = { id: '', consultantName: '', comment: '', created_from: '', created_to: '' };
+  filters.value = { id: '', consultantName: '', consultantStatusId: null, comment: '', created_from: '', created_to: '' };
   loadData();
+}
+
+async function loadStatusLevels() {
+  try {
+    const { data } = await api.get('/status-levels');
+    // /status-levels отдаёт массив { id, level, title, percent, … }.
+    // Префиксуем title порядковым level, чтобы пользователь видел иерархию.
+    statusLevels.value = (data?.data || data || []).map(l => ({
+      id: l.id,
+      title: `${l.level} ${l.title}`,
+    }));
+  } catch {}
 }
 
 const headers = [
@@ -297,6 +350,7 @@ async function loadData() {
     if (search.value) params.search = search.value;
     if (filters.value.id) params.id = filters.value.id;
     if (filters.value.consultantName) params.consultant_name = filters.value.consultantName;
+    if (filters.value.consultantStatusId) params.consultant_status_id = filters.value.consultantStatusId;
     if (filters.value.comment) params.comment = filters.value.comment;
     if (filters.value.created_from) params.created_from = filters.value.created_from;
     if (filters.value.created_to) params.created_to = filters.value.created_to;
@@ -312,6 +366,8 @@ async function loadData() {
 }
 
 // Двухшаг «Добавить клиента» per spec ✅Клиенты §3.
+// Тот же диалог используем и для редактирования: editingId != null →
+// шаг 1 (поиск дублей) скрываем, save идёт через PUT.
 const addOpen = ref(false);
 const addStep = ref(1);
 const addSearch = ref('');
@@ -319,6 +375,17 @@ const addCandidates = ref([]);
 const addSearching = ref(false);
 const addSaving = ref(false);
 const addError = ref('');
+const editingId = ref(null);
+const formValid = ref(false);
+const phoneValid = ref(true);   // true когда пусто (поле опциональное)
+const phoneTouched = ref(false);
+
+function onPhoneValidate(obj) {
+  phoneTouched.value = true;
+  // vue-tel-input даёт {valid, possible, country, ...}. Если поле пустое,
+  // считаем валидным (телефон опционален) — иначе требуем obj.valid.
+  phoneValid.value = !addForm.value.phone ? true : !!obj?.valid;
+}
 const addForm = ref({
   firstName: '', lastName: '', patronymic: '',
   email: '', phone: '', birthDate: '',
@@ -326,17 +393,83 @@ const addForm = ref({
 });
 let addSearchTimer;
 
-function openAddClient() {
-  addOpen.value = true;
-  addStep.value = 1;
-  addSearch.value = '';
-  addCandidates.value = [];
-  addError.value = '';
+// Autocomplete партнёра-наставника. Поиск идёт по существующему
+// /admin/partners?search=… (паттерн как в Charges.vue).
+// При редактировании в consultantOptions пред-кладём текущего наставника,
+// чтобы autocomplete отобразил его ФИО до того, как юзер начнёт искать.
+const consultantOptions = ref([]);
+const searchingConsultants = ref(false);
+let consultantTimer;
+async function searchConsultants(q) {
+  clearTimeout(consultantTimer);
+  if (!q || q.length < 2) return;
+  consultantTimer = setTimeout(async () => {
+    searchingConsultants.value = true;
+    try {
+      const { data } = await api.get('/admin/partners', { params: { search: q, per_page: 20 } });
+      // Сохраняем текущий выбор (если он не попал в результаты поиска),
+      // иначе Vuetify покажет в инпуте сырой ID вместо ФИО.
+      const currentId = addForm.value.consultant;
+      const current = currentId
+        ? consultantOptions.value.find(o => o.id === currentId)
+        : null;
+      const next = data.data || [];
+      consultantOptions.value = current && !next.find(o => o.id === currentId)
+        ? [current, ...next]
+        : next;
+    } catch {}
+    searchingConsultants.value = false;
+  }, 300);
+}
+
+function resetAddForm() {
   addForm.value = {
     firstName: '', lastName: '', patronymic: '',
     email: '', phone: '', birthDate: '',
     city: '', consultant: null, comment: '',
   };
+  consultantOptions.value = [];
+}
+
+function openAddClient() {
+  editingId.value = null;
+  addOpen.value = true;
+  addStep.value = 1;
+  addSearch.value = '';
+  addCandidates.value = [];
+  addError.value = '';
+  phoneTouched.value = false;
+  phoneValid.value = true;
+  resetAddForm();
+}
+
+function openEditClient(item) {
+  editingId.value = item.id;
+  addOpen.value = true;
+  addStep.value = 2;
+  addError.value = '';
+  phoneTouched.value = false;
+  phoneValid.value = true;
+  // Раскладываем personName → ФИО, если firstName/lastName на ответе нет.
+  // /admin/clients сейчас отдаёт только personName + поля person.*, поэтому
+  // делаем split «Фамилия Имя Отчество».
+  const parts = (item.personName || '').trim().split(/\s+/);
+  addForm.value = {
+    lastName: parts[0] || '',
+    firstName: parts[1] || '',
+    patronymic: parts.slice(2).join(' ') || '',
+    email: item.email || '',
+    phone: item.phone || '',
+    birthDate: item.birthDate ? String(item.birthDate).slice(0, 10) : '',
+    city: item.city || '',
+    consultant: item.consultantId || null,
+    comment: item.comment || '',
+  };
+  // Подготовим опцию autocomplete, чтобы текущий наставник отображался
+  // до того, как пользователь начнёт искать.
+  consultantOptions.value = item.consultantId
+    ? [{ id: item.consultantId, personName: item.consultantName || `ID ${item.consultantId}` }]
+    : [];
 }
 
 function searchAddCandidates(q) {
@@ -368,17 +501,25 @@ async function saveNewClient() {
   addSaving.value = true;
   addError.value = '';
   try {
-    await api.post('/admin/clients', addForm.value);
+    if (editingId.value) {
+      await api.put(`/admin/clients/${editingId.value}`, addForm.value);
+      showSuccess('Клиент обновлён');
+    } else {
+      await api.post('/admin/clients', addForm.value);
+      showSuccess('Клиент создан');
+    }
     addOpen.value = false;
     await loadData();
-    showSuccess('Клиент создан');
   } catch (e) {
     addError.value = e.response?.data?.message || 'Ошибка сохранения';
   }
   addSaving.value = false;
 }
 
-onMounted(loadData);
+onMounted(() => {
+  loadData();
+  loadStatusLevels();
+});
 </script>
 
 <style scoped>

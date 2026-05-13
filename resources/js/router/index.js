@@ -26,6 +26,7 @@ const routes = [
             { path: 'contracts/team', component: () => import('../pages/Contracts/TeamContracts.vue') },
             { path: 'structure', component: () => import('../pages/Structure.vue') },
             { path: 'products', component: () => import('../pages/Products.vue') },
+            { path: 'insmart-widget', component: () => import('../pages/InsmartWidget.vue') },
             { path: 'contests', component: () => import('../pages/Contests.vue') },
             { path: 'chat', component: () => import('../pages/Chat/PartnerChat.vue') },
             { path: 'communication', redirect: '/chat' },

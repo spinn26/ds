@@ -663,7 +663,10 @@ function onMessagesScroll() {
   }
 }
 function scrollDown(force = false) {
-  nextTick(() => {
+  // Двойной nextTick + rAF + дослушивание img.load — одного nextTick
+  // мало, когда в чате есть картинки/файлы: высота растёт после
+  // первого тика и scrollTop уезжает в середину переписки.
+  const doScroll = () => {
     const el = msgsRef.value;
     if (!el) return;
     if (force || isAtBottom()) {
@@ -671,6 +674,30 @@ function scrollDown(force = false) {
       pendingMessages.value = 0;
       showJumpToBottom.value = false;
     }
+  };
+  nextTick(() => {
+    nextTick(() => {
+      requestAnimationFrame(() => {
+        doScroll();
+        if (!force) return;
+        const el = msgsRef.value;
+        if (!el) return;
+        const imgs = el.querySelectorAll('img');
+        let pending = 0;
+        const cleanup = setTimeout(() => { pending = 0; }, 3000);
+        imgs.forEach(img => {
+          if (img.complete) return;
+          pending++;
+          const onDone = () => {
+            img.removeEventListener('load', onDone);
+            img.removeEventListener('error', onDone);
+            if (--pending <= 0) { clearTimeout(cleanup); doScroll(); }
+          };
+          img.addEventListener('load', onDone);
+          img.addEventListener('error', onDone);
+        });
+      });
+    });
   });
 }
 

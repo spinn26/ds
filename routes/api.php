@@ -36,11 +36,11 @@ Route::prefix('v1')->group(function () {
     // Insmart webhook — без auth:sanctum (внешний источник),
     // защищён shared-secret в заголовке X-Insmart-Secret + throttle.
     Route::middleware('throttle:60,1')->group(function () {
-        // Insmart-вебхук временно отключён — InsmartIntegrationService пишет
-        // в client колонки email/phone/createDate, которых нет в legacy-схеме,
-        // и в product/program без серийного id. Включить после рефактора
-        // на person + advisory-lock id-генерацию.
-        // Route::post('/webhooks/insmart/paid', [\App\Http\Controllers\Api\InsmartWebhookController::class, 'paid']);
+        // Insmart-вебхук (per spec ✅Инсмарт.md). Авторизация —
+        // HMAC X-Insmart-Signature (или fallback X-Insmart-Secret).
+        // Сервис пишет person+client+contract+transaction в одной транзакции,
+        // id для product/program/contract/transaction берутся через LegacyId::next.
+        Route::post('/webhooks/insmart/paid', [\App\Http\Controllers\Api\InsmartWebhookController::class, 'paid']);
         // Zammad-вебхук закомментирован — интеграция не используется
         // (по запросу 2026-05-12). Включить обратно — добавить
         // shared-secret через api_settings, раскомментировать.
@@ -122,6 +122,9 @@ Route::prefix('v1')->group(function () {
         Route::get('/chat/tickets/{id}/notes', [\App\Http\Controllers\Api\ChatController::class, 'notes']);
         Route::post('/chat/tickets/{id}/notes', [\App\Http\Controllers\Api\ChatController::class, 'addNote']);
         Route::get('/chat/quick-replies', [\App\Http\Controllers\Api\ChatController::class, 'quickReplies']);
+        Route::post('/chat/quick-replies', [\App\Http\Controllers\Api\ChatController::class, 'storeQuickReply']);
+        Route::put('/chat/quick-replies/{id}', [\App\Http\Controllers\Api\ChatController::class, 'updateQuickReply'])->whereNumber('id');
+        Route::delete('/chat/quick-replies/{id}', [\App\Http\Controllers\Api\ChatController::class, 'destroyQuickReply'])->whereNumber('id');
         Route::get('/chat/knowledge', [\App\Http\Controllers\Api\ChatController::class, 'knowledgeArticles']);
         Route::get('/chat/tickets/{id}/knowledge-suggest', [\App\Http\Controllers\Api\ChatController::class, 'knowledgeSuggest']);
         Route::post('/chat/tickets/{id}/save-to-kb', [\App\Http\Controllers\Api\ChatController::class, 'saveTicketAsArticle']);
@@ -178,6 +181,9 @@ Route::prefix('v1')->group(function () {
         Route::post('/products/accept-documents', [ProductController::class, 'acceptDocuments']);
         Route::post('/requisites/check-inn', [ProductController::class, 'checkInn']);
         Route::post('/requisites', [ProductController::class, 'setupRequisites']);
+
+        // InSmart-виджет: партнёр получает временный токен для встраивания.
+        Route::get('/insmart/widget-token', [\App\Http\Controllers\Api\InsmartController::class, 'widgetToken']);
         Route::get('/contests', [ContestController::class, 'index']);
         Route::get('/instructions', [\App\Http\Controllers\Api\InstructionController::class, 'partnerList']);
         Route::get('/instructions/{slug}', [\App\Http\Controllers\Api\InstructionController::class, 'show']);
@@ -211,6 +217,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/admin/partner-statuses', [\App\Http\Controllers\Api\AdminDataController::class, 'partnerStatuses']);
         Route::get('/admin/clients', [\App\Http\Controllers\Api\AdminDataController::class, 'clients']);
         Route::post('/admin/clients', [\App\Http\Controllers\Api\AdminDataController::class, 'storeClient']);
+        Route::put('/admin/clients/{id}', [\App\Http\Controllers\Api\AdminDataController::class, 'updateClient'])->whereNumber('id');
         Route::delete('/admin/clients/{id}', [\App\Http\Controllers\Api\AdminDataController::class, 'deleteClient'])->whereNumber('id');
         Route::get('/admin/requisites', [\App\Http\Controllers\Api\AdminDataController::class, 'requisites']);
         Route::post('/admin/requisites/bulk', [\App\Http\Controllers\Api\AdminDataController::class, 'bulkRequisites'])->middleware('throttle:10,1');

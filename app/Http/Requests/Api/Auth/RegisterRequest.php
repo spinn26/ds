@@ -14,15 +14,18 @@ class RegisterRequest extends FormRequest
 
     public function rules(): array
     {
+        // Строгий формат ФИО/города — только кириллица + пробел/дефис
+        // (заказчик 2026-05-13: «не как попало»). Фронт делает то же regex.
+        $cyrillic = '/^[А-Яа-яЁё][А-Яа-яЁё\s\-]*$/u';
         return [
-            'firstName' => ['required', 'string', 'max:255'],
-            'lastName' => ['required', 'string', 'max:255'],
-            'patronymic' => ['required', 'string', 'max:255'],
+            'firstName' => ['required', 'string', 'max:255', 'regex:' . $cyrillic],
+            'lastName' => ['required', 'string', 'max:255', 'regex:' . $cyrillic],
+            'patronymic' => ['required', 'string', 'max:255', 'regex:' . $cyrillic],
             'email' => ['required', 'email', 'unique:WebUser,email'],
             'phone' => ['required', 'string', 'max:50'],
             'telegram' => ['required', 'string', 'max:100'],
             'birthDate' => ['required', 'date'],
-            'city' => ['required', 'string', 'max:255'],
+            'city' => ['required', 'string', 'max:255', 'regex:' . $cyrillic],
             'password' => ['required', 'confirmed', Password::min(8)->letters()->numbers()],
             // Закрытая регистрация: можно попасть только по реф-ссылке от
             // активного партнёра. refCode обязателен и должен матчить
@@ -49,6 +52,16 @@ class RegisterRequest extends FormRequest
             ],
             'consentPersonalData' => ['accepted'],
             'consentTerms' => ['accepted'],
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'firstName.regex' => 'Имя — только русские буквы',
+            'lastName.regex' => 'Фамилия — только русские буквы',
+            'patronymic.regex' => 'Отчество — только русские буквы',
+            'city.regex' => 'Город — только русские буквы',
         ];
     }
 }

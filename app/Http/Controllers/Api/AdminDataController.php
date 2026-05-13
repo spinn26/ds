@@ -226,16 +226,22 @@ class AdminDataController extends Controller
      */
     public function storePartner(Request $request): JsonResponse
     {
+        // Кириллица в ФИО — единый формат для регистрации/партнёров/клиентов.
+        $cyrillicRegex = '/^[А-Яа-яЁё][А-Яа-яЁё\s\-]*$/u';
         $data = $request->validate([
-            'firstName' => ['required', 'string', 'max:255'],
-            'lastName' => ['required', 'string', 'max:255'],
-            'patronymic' => ['nullable', 'string', 'max:255'],
+            'firstName' => ['required', 'string', 'max:255', 'regex:' . $cyrillicRegex],
+            'lastName' => ['required', 'string', 'max:255', 'regex:' . $cyrillicRegex],
+            'patronymic' => ['nullable', 'string', 'max:255', 'regex:' . $cyrillicRegex],
             'email' => ['nullable', 'email', 'max:255', 'unique:WebUser,email'],
             'phone' => ['nullable', 'string', 'max:64'],
             'birthDate' => ['nullable', 'date'],
             'activity' => ['required', 'integer', 'in:1,3,4,5'],
             'inviter' => ['nullable', 'integer', 'exists:consultant,id'],
             'participantCode' => ['nullable', 'string', 'max:64', 'unique:consultant,participantCode'],
+        ], [
+            'firstName.regex' => 'Имя — только русские буквы',
+            'lastName.regex' => 'Фамилия — только русские буквы',
+            'patronymic.regex' => 'Отчество — только русские буквы',
         ]);
 
         $personName = trim("{$data['lastName']} {$data['firstName']}" . ($data['patronymic'] ?? '' ? ' ' . $data['patronymic'] : ''));
@@ -286,6 +292,10 @@ class AdminDataController extends Controller
         // isAdmin() в User модели пускает ещё и backoffice — это не то.
         $isAdmin = $request->user()->hasAnyRole(['admin']);
 
+        // ФИО: только кириллица + пробел/дефис. Поля sometimes — если они
+        // вообще пришли в запросе, валидируем формат; если null/пусто,
+        // правило regex автоматически пропускается (nullable).
+        $cyrillicRegex = '/^[А-Яа-яЁё][А-Яа-яЁё\s\-]*$/u';
         $data = $request->validate([
             // consultant fields
             'participantCode' => ['nullable', 'string', 'max:64',
@@ -293,9 +303,9 @@ class AdminDataController extends Controller
             ],
             'inviter' => ['nullable', 'integer', 'exists:consultant,id'],
             // web user fields
-            'firstName' => ['sometimes', 'nullable', 'string', 'max:255'],
-            'lastName' => ['sometimes', 'nullable', 'string', 'max:255'],
-            'patronymic' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'firstName' => ['sometimes', 'nullable', 'string', 'max:255', 'regex:' . $cyrillicRegex],
+            'lastName' => ['sometimes', 'nullable', 'string', 'max:255', 'regex:' . $cyrillicRegex],
+            'patronymic' => ['sometimes', 'nullable', 'string', 'max:255', 'regex:' . $cyrillicRegex],
             'email' => ['sometimes', 'nullable', 'email', 'max:255',
                 ($consultant->webUser ? "unique:WebUser,email,{$consultant->webUser},id" : 'unique:WebUser,email'),
             ],
@@ -308,6 +318,10 @@ class AdminDataController extends Controller
             'newPassword' => ['sometimes', 'nullable', 'string',
                 'min:8', \Illuminate\Validation\Rules\Password::min(8)->letters()->numbers(),
             ],
+        ], [
+            'firstName.regex' => 'Имя — только русские буквы',
+            'lastName.regex' => 'Фамилия — только русские буквы',
+            'patronymic.regex' => 'Отчество — только русские буквы',
         ]);
 
         // Critical поля доступны только admin'у — иначе любой staff
@@ -823,9 +837,39 @@ class AdminDataController extends Controller
     }
 
     /**
-     * Soft-delete клиента. Если у клиента есть активные контракты —
-     * блокируем. FK из contract/commission остаются.
+     * Единые правила валидации формы клиента (storeClient + updateClient).
+     *
+     * ФИО/город — только кириллица + пробел/дефис (строгий формат
+     * по запросу заказчика 2026-05-13: «не как попало»).
+     * Email — стандартный, фронт дополнительно режет нелатиницу.
+     * Phone — формат +CC… от vue-tel-input (E.164), храним как пришло.
      */
+    private static function clientValidationRules(): array
+    {
+        $cyrillicRegex = '/^[А-Яа-яЁё][А-Яа-яЁё\s\-]*$/u';
+        return [
+            'firstName' => ['required', 'string', 'max:255', 'regex:' . $cyrillicRegex],
+            'lastName' => ['required', 'string', 'max:255', 'regex:' . $cyrillicRegex],
+            'patronymic' => ['nullable', 'string', 'max:255', 'regex:' . $cyrillicRegex],
+            'email' => ['nullable', 'email', 'max:255'],
+            'phone' => ['nullable', 'string', 'max:64'],
+            'birthDate' => ['nullable', 'date'],
+            'city' => ['nullable', 'string', 'max:128', 'regex:' . $cyrillicRegex],
+            'consultant' => ['required', 'integer', 'exists:consultant,id'],
+            'comment' => ['nullable', 'string', 'max:2000'],
+        ];
+    }
+
+    private static function clientValidationMessages(): array
+    {
+        return [
+            'firstName.regex' => 'Имя — только русские буквы',
+            'lastName.regex' => 'Фамилия — только русские буквы',
+            'patronymic.regex' => 'Отчество — только русские буквы',
+            'city.regex' => 'Город — только русские буквы',
+        ];
+    }
+
     /**
      * POST /admin/clients — создать клиента per spec ✅Клиенты §3.
      * Двухшаг (антидубль) делается на фронте, эндпоинт принимает уже
@@ -833,17 +877,7 @@ class AdminDataController extends Controller
      */
     public function storeClient(Request $request): JsonResponse
     {
-        $data = $request->validate([
-            'firstName' => ['required', 'string', 'max:255'],
-            'lastName' => ['required', 'string', 'max:255'],
-            'patronymic' => ['nullable', 'string', 'max:255'],
-            'email' => ['nullable', 'email', 'max:255'],
-            'phone' => ['nullable', 'string', 'max:64'],
-            'birthDate' => ['nullable', 'date'],
-            'city' => ['nullable', 'string', 'max:128'],
-            'consultant' => ['required', 'integer', 'exists:consultant,id'],
-            'comment' => ['nullable', 'string', 'max:2000'],
-        ]);
+        $data = $request->validate(self::clientValidationRules(), self::clientValidationMessages());
 
         $personName = trim("{$data['lastName']} {$data['firstName']}" . (! empty($data['patronymic']) ? ' ' . $data['patronymic'] : ''));
 
@@ -875,6 +909,55 @@ class AdminDataController extends Controller
         });
 
         return response()->json(['message' => 'Клиент создан', 'id' => $clientId], 201);
+    }
+
+    /**
+     * Редактирование карточки клиента.
+     *
+     * Per spec ✅Клиенты §4 + cabinetPermissions backoffice.clients=EDIT.
+     * Пишем в person (личные данные) и client (наставник + комментарий)
+     * одной транзакцией. personName на client денормализован — обновляем
+     * вместе с firstName/lastName/patronymic.
+     */
+    public function updateClient(Request $request, int $id): JsonResponse
+    {
+        $data = $request->validate(self::clientValidationRules(), self::clientValidationMessages());
+
+        $client = DB::table('client')->where('id', $id)->first();
+        if (! $client) {
+            return response()->json(['message' => 'Клиент не найден'], 404);
+        }
+        if ($client->dateDeleted ?? null) {
+            return response()->json(['message' => 'Клиент удалён, редактирование недоступно'], 422);
+        }
+
+        $personName = trim("{$data['lastName']} {$data['firstName']}" . (! empty($data['patronymic']) ? ' ' . $data['patronymic'] : ''));
+
+        DB::transaction(function () use ($client, $data, $personName) {
+            if ($client->person) {
+                DB::table('person')->where('id', $client->person)->update([
+                    'firstName' => $data['firstName'],
+                    'lastName' => $data['lastName'],
+                    'patronymic' => $data['patronymic'] ?? null,
+                    'email' => $data['email'] ?? null,
+                    'phone' => $data['phone'] ?? null,
+                    'birthDate' => $data['birthDate'] ?? null,
+                    'city' => $data['city'] ?? null,
+                ]);
+            }
+
+            DB::table('client')->where('id', $client->id)->update([
+                'personName' => $personName,
+                'consultant' => $data['consultant'],
+                'comment' => $data['comment'] ?? null,
+            ]);
+        });
+
+        Audit::log('update', 'client', $id, [
+            'consultant' => $data['consultant'],
+        ]);
+
+        return response()->json(['message' => 'Клиент обновлён']);
     }
 
     public function deleteClient(Request $request, int $id): JsonResponse
@@ -931,6 +1014,17 @@ class AdminDataController extends Controller
             $consName = '%' . $request->consultant_name . '%';
             $query->whereIn('consultant', function ($sub) use ($consName) {
                 $sub->select('id')->from('consultant')->where('personName', 'ilike', $consName);
+            });
+        }
+        // Фильтр по статусу/квалификации наставника (10-уровневая матрица
+        // status_levels, см. project_commission_spec). Юзер выбирает уровень
+        // в выпадашке «Статус наставника» — оператор хочет фильтровать
+        // клиентов по ФК/Эксперт/… своего наставника.
+        if ($request->filled('consultant_status_id')) {
+            $statusId = (int) $request->consultant_status_id;
+            $query->whereIn('consultant', function ($sub) use ($statusId) {
+                $sub->select('id')->from('consultant')
+                    ->where('status_and_lvl', $statusId);
             });
         }
         if ($request->filled('comment')) {

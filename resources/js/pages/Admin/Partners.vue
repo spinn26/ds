@@ -202,15 +202,25 @@
             <v-progress-circular indeterminate />
           </div>
           <template v-else>
+            <v-form v-model="editFormValid">
             <v-row dense>
               <v-col cols="12"><div class="text-subtitle-2 font-weight-bold mb-2">ФИО (WebUser)</div></v-col>
-              <v-col cols="12" sm="4"><v-text-field v-model="editForm.lastName" label="Фамилия" variant="outlined" density="compact" :error-messages="editErrors.lastName" /></v-col>
-              <v-col cols="12" sm="4"><v-text-field v-model="editForm.firstName" label="Имя" variant="outlined" density="compact" :error-messages="editErrors.firstName" /></v-col>
-              <v-col cols="12" sm="4"><v-text-field v-model="editForm.patronymic" label="Отчество" variant="outlined" density="compact" :error-messages="editErrors.patronymic" /></v-col>
+              <v-col cols="12" sm="4"><v-text-field v-model="editForm.lastName" :rules="cyrillicOptionalRules" label="Фамилия" variant="outlined" density="compact" :error-messages="editErrors.lastName" /></v-col>
+              <v-col cols="12" sm="4"><v-text-field v-model="editForm.firstName" :rules="cyrillicOptionalRules" label="Имя" variant="outlined" density="compact" :error-messages="editErrors.firstName" /></v-col>
+              <v-col cols="12" sm="4"><v-text-field v-model="editForm.patronymic" :rules="cyrillicOptionalRules" label="Отчество" variant="outlined" density="compact" :error-messages="editErrors.patronymic" /></v-col>
 
               <v-col cols="12" class="mt-2"><div class="text-subtitle-2 font-weight-bold mb-2">Контакты</div></v-col>
-              <v-col cols="12" sm="6"><v-text-field v-model="editForm.email" label="Email" type="email" variant="outlined" density="compact" :error-messages="editErrors.email" /></v-col>
-              <v-col cols="12" sm="3"><v-text-field v-model="editForm.phone" label="Телефон" variant="outlined" density="compact" :error-messages="editErrors.phone" /></v-col>
+              <v-col cols="12" sm="6"><v-text-field v-model="editForm.email" :rules="emailRules" label="Email" type="email" variant="outlined" density="compact" :error-messages="editErrors.email" /></v-col>
+              <v-col cols="12" sm="3">
+                <label class="text-caption text-medium-emphasis d-block mb-1">Телефон</label>
+                <vue-tel-input v-model="editForm.phone"
+                  @validate="onEditPhoneValidate"
+                  :input-options="{ placeholder: 'Телефон' }" />
+                <div v-if="editForm.phone && !editPhoneValid && editPhoneTouched"
+                  class="text-error text-caption mt-1">
+                  Неверный номер телефона
+                </div>
+              </v-col>
               <v-col cols="12" sm="3"><v-text-field v-model="editForm.nicTG" label="Telegram" variant="outlined" density="compact" :error-messages="editErrors.nicTG" /></v-col>
 
               <v-col cols="12" class="mt-2"><div class="text-subtitle-2 font-weight-bold mb-2">Персональные данные</div></v-col>
@@ -241,6 +251,7 @@
                   variant="outlined" density="compact" :error-messages="editErrors.newPassword" />
               </v-col>
             </v-row>
+            </v-form>
 
             <v-divider class="my-4" />
             <div class="text-subtitle-2 font-weight-bold mb-2">Смена статуса</div>
@@ -263,7 +274,9 @@
         <v-card-actions>
           <v-spacer />
           <v-btn @click="editDialog = false">Отмена</v-btn>
-          <v-btn color="primary" :loading="saving" @click="saveEdit">Сохранить</v-btn>
+          <v-btn color="primary" :loading="saving"
+            :disabled="editFormValid === false || (!!editForm.phone && !editPhoneValid)"
+            @click="saveEdit">Сохранить</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -301,17 +314,30 @@
         </v-card-text>
 
         <v-card-text v-else>
+          <v-form v-model="addFormValid">
           <v-row dense>
             <v-col cols="12" sm="4"><v-text-field v-model="addForm.lastName"
+              :rules="cyrillicRequiredRules"
               label="Фамилия *" variant="outlined" density="comfortable" /></v-col>
             <v-col cols="12" sm="4"><v-text-field v-model="addForm.firstName"
+              :rules="cyrillicRequiredRules"
               label="Имя *" variant="outlined" density="comfortable" /></v-col>
             <v-col cols="12" sm="4"><v-text-field v-model="addForm.patronymic"
+              :rules="cyrillicOptionalRules"
               label="Отчество" variant="outlined" density="comfortable" /></v-col>
             <v-col cols="12" sm="6"><v-text-field v-model="addForm.email"
+              :rules="emailRules"
               label="Email" type="email" variant="outlined" density="comfortable" /></v-col>
-            <v-col cols="12" sm="6"><v-text-field v-model="addForm.phone"
-              label="Телефон" variant="outlined" density="comfortable" /></v-col>
+            <v-col cols="12" sm="6">
+              <label class="text-caption text-medium-emphasis d-block mb-1">Телефон</label>
+              <vue-tel-input v-model="addForm.phone"
+                @validate="onAddPhoneValidate"
+                :input-options="{ placeholder: 'Телефон' }" />
+              <div v-if="addForm.phone && !addPhoneValid && addPhoneTouched"
+                class="text-error text-caption mt-1">
+                Неверный номер телефона
+              </div>
+            </v-col>
             <v-col cols="12" sm="6"><v-text-field v-model="addForm.birthDate"
               label="Дата рождения" type="date" variant="outlined" density="comfortable" /></v-col>
             <v-col cols="12" sm="6"><v-text-field v-model="addForm.participantCode"
@@ -328,6 +354,7 @@
               hint="ID существующего партнёра-наставника" persistent-hint /></v-col>
           </v-row>
           <v-alert v-if="addError" type="error" density="compact" class="mt-2">{{ addError }}</v-alert>
+          </v-form>
         </v-card-text>
 
         <v-card-actions>
@@ -341,7 +368,7 @@
           </v-btn>
           <v-btn v-else color="success" prepend-icon="mdi-content-save"
             :loading="addSaving"
-            :disabled="!addForm.firstName || !addForm.lastName"
+            :disabled="!addFormValid || (!!addForm.phone && !addPhoneValid)"
             @click="saveNewPartner">
             Создать партнёра
           </v-btn>
@@ -364,9 +391,33 @@ import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 import { useSnackbar } from '../../composables/useSnackbar';
 import { useAuthStore } from '../../stores/auth';
 import { usePermissions } from '../../composables/usePermissions';
+import {
+  cyrillicRequiredRules,
+  cyrillicOptionalRules,
+  emailRules,
+} from '../../composables/useFormRules';
 
 const auth = useAuthStore();
 const { canEdit } = usePermissions();
+
+// Валидация форм редактирования/добавления партнёра (строгий формат
+// по запросу заказчика 2026-05-13). Edit-форма мягче — поля sometimes,
+// поэтому правила optional. Add-форма — required.
+const editFormValid = ref(true);
+const editPhoneValid = ref(true);
+const editPhoneTouched = ref(false);
+function onEditPhoneValidate(obj) {
+  editPhoneTouched.value = true;
+  editPhoneValid.value = !editForm.value?.phone ? true : !!obj?.valid;
+}
+
+const addFormValid = ref(false);
+const addPhoneValid = ref(true);
+const addPhoneTouched = ref(false);
+function onAddPhoneValidate(obj) {
+  addPhoneTouched.value = true;
+  addPhoneValid.value = !addForm.value?.phone ? true : !!obj?.valid;
+}
 import { useConfirm } from '../../composables/useConfirm';
 import { fmtDate, getActivityColorByName } from '../../composables/useDesign';
 

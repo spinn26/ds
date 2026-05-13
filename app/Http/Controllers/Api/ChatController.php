@@ -1029,9 +1029,88 @@ class ChatController extends Controller
 
     // ==================== QUICK REPLIES ====================
 
-    public function quickReplies(): JsonResponse
+    /**
+     * Список доступных шаблонов: глобальные (created_by IS NULL) + личные
+     * текущего пользователя. UI рисует pencil/корзину только над теми
+     * шаблонами, у которых `is_own = true` (созданы текущим юзером).
+     * Админ может редактировать и глобальные — отдельная пометка `is_shared`.
+     */
+    public function quickReplies(Request $request): JsonResponse
     {
-        return response()->json(DB::table('chat_quick_replies')->orderBy('category')->get());
+        $userId = $request->user()?->id;
+        $rows = DB::table('chat_quick_replies')
+            ->where(function ($q) use ($userId) {
+                $q->whereNull('created_by')->orWhere('created_by', $userId);
+            })
+            ->orderBy('category')->orderBy('title')
+            ->get();
+
+        $rows = $rows->map(function ($r) use ($userId) {
+            $r->is_shared = $r->created_by === null;
+            $r->is_own = $r->created_by !== null && (int) $r->created_by === (int) $userId;
+            return $r;
+        });
+
+        return response()->json($rows);
+    }
+
+    public function storeQuickReply(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'title' => 'required|string|max:200',
+            'content' => 'required|string|max:5000',
+            'category' => 'nullable|string|max:50',
+            'shortcut' => 'nullable|string|max:20',
+        ]);
+        $id = DB::table('chat_quick_replies')->insertGetId([
+            'title' => $data['title'],
+            'content' => $data['content'],
+            'category' => $data['category'] ?: 'Личные',
+            'shortcut' => $data['shortcut'] ?? null,
+            'created_by' => $request->user()->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        return response()->json(['id' => $id], 201);
+    }
+
+    public function updateQuickReply(Request $request, int $id): JsonResponse
+    {
+        $row = DB::table('chat_quick_replies')->where('id', $id)->first();
+        if (! $row) return response()->json(['message' => 'Шаблон не найден'], 404);
+        $this->ensureCanEditQuickReply($request, $row);
+
+        $data = $request->validate([
+            'title' => 'sometimes|required|string|max:200',
+            'content' => 'sometimes|required|string|max:5000',
+            'category' => 'sometimes|nullable|string|max:50',
+            'shortcut' => 'sometimes|nullable|string|max:20',
+        ]);
+        $data['updated_at'] = now();
+        DB::table('chat_quick_replies')->where('id', $id)->update($data);
+        return response()->json(['message' => 'Шаблон обновлён']);
+    }
+
+    public function destroyQuickReply(Request $request, int $id): JsonResponse
+    {
+        $row = DB::table('chat_quick_replies')->where('id', $id)->first();
+        if (! $row) return response()->json(['message' => 'Шаблон не найден'], 404);
+        $this->ensureCanEditQuickReply($request, $row);
+
+        DB::table('chat_quick_replies')->where('id', $id)->delete();
+        return response()->json(['message' => 'Шаблон удалён']);
+    }
+
+    /**
+     * Право на редактирование: владелец личного шаблона — всегда; admin —
+     * также может править глобальные (created_by IS NULL). Остальные нет.
+     */
+    private function ensureCanEditQuickReply(Request $request, $row): void
+    {
+        $user = $request->user();
+        if ($row->created_by !== null && (int) $row->created_by === (int) $user->id) return;
+        if ($row->created_by === null && $user->hasAnyRole(['admin'])) return;
+        abort(403, 'Нельзя редактировать чужой шаблон');
     }
 
     // ==================== KNOWLEDGE BASE ====================
