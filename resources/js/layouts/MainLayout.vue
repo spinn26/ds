@@ -398,12 +398,19 @@ onMounted(async () => {
   // после 5+ минут idle (DB pool / PHP-FPM / Socket засыпают, первый
   // запрос уходит в таймаут).
   const POLL_MS = 30000;
+  // Heartbeat для виджета «Кто онлайн»: бэк ставит WebUser.last_seen_at = now().
+  const sendHeartbeat = () => {
+    if (document.visibilityState !== 'visible') return;
+    api.put('/me/heartbeat').catch(() => {});
+  };
+  sendHeartbeat();
   const startPolling = () => {
     if (unreadInterval) clearInterval(unreadInterval);
     unreadInterval = setInterval(() => {
       if (document.visibilityState !== 'visible') return;
       loadNotifications();
       loadChatUnread();
+      sendHeartbeat();
     }, POLL_MS);
   };
   startPolling();

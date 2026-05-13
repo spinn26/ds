@@ -98,6 +98,11 @@ Route::prefix('v1')->group(function () {
         Route::get('/my-note', [\App\Http\Controllers\Api\UserDashboardController::class, 'getNote']);
         Route::put('/my-note', [\App\Http\Controllers\Api\UserDashboardController::class, 'saveNote']);
 
+        // Presence для «Кто онлайн» + метрики «Мой день».
+        Route::put('/me/heartbeat', [\App\Http\Controllers\Api\UserDashboardController::class, 'heartbeat']);
+        Route::get('/staff/online', [\App\Http\Controllers\Api\UserDashboardController::class, 'whoOnline']);
+        Route::get('/my-day', [\App\Http\Controllers\Api\UserDashboardController::class, 'myDay']);
+
         // Per spec ✅Написать собственику — отправка в Telegram-группу
         Route::post('/founder-message', [\App\Http\Controllers\Api\FounderMessageController::class, 'send'])
             ->middleware('throttle:5,1'); // антиспам: 5 сообщений в минуту с пользователя

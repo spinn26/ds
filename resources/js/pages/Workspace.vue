@@ -190,6 +190,12 @@
 
       <!-- Right column -->
       <v-col cols="12" md="4">
+        <!-- Мой день — статистика сотрудника за сегодня -->
+        <MyDayWidget v-if="isStaff" class="mb-4" />
+
+        <!-- Кто сейчас онлайн из коллег (только staff) -->
+        <WhosOnlineWidget v-if="isStaff" class="mb-4" />
+
         <!-- Личные задачи: TODO-чек-лист с inline-формой добавления -->
         <MyTasksWidget class="mb-4" />
 
@@ -293,6 +299,8 @@ import { useAuthStore } from '../stores/auth';
 import api from '../api';
 import MyTasksWidget from '../components/MyTasksWidget.vue';
 import MyNoteWidget from '../components/MyNoteWidget.vue';
+import MyDayWidget from '../components/MyDayWidget.vue';
+import WhosOnlineWidget from '../components/WhosOnlineWidget.vue';
 
 const { mobile } = useDisplay();
 import { fmt, fmtDate } from '../composables/useDesign';
@@ -302,6 +310,9 @@ const loading = ref(true);
 const data = ref({});
 
 const isConsultant = computed(() => auth.isConsultant);
+const isStaff = computed(() =>
+  /admin|backoffice|support|head|finance|calculations|corrections|education/i.test(auth.user?.role || '')
+);
 
 const greeting = computed(() => {
   const h = new Date().getHours();

@@ -102,4 +102,102 @@ class UserDashboardController extends Controller
         );
         return response()->json(['message' => 'Сохранено', 'updated_at' => now()]);
     }
+
+    // ==================== PRESENCE / HEARTBEAT ====================
+
+    /**
+     * Тик от Vue раз в 30 сек: обновляем WebUser.last_seen_at.
+     * Внутри UPDATE по PK — дешёво, без коллизий с другими полями.
+     */
+    public function heartbeat(Request $request): JsonResponse
+    {
+        DB::table('WebUser')->where('id', $request->user()->id)
+            ->update(['last_seen_at' => now()]);
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Список staff'а с разделением «онлайн» (≤90 сек) / «недавно»
+     * (90 сек — 10 мин). Используется виджетом «Кто онлайн».
+     */
+    public function whoOnline(Request $request): JsonResponse
+    {
+        $now = now();
+        $rows = DB::table('WebUser')
+            ->whereNull('dateDeleted')
+            ->whereNotNull('last_seen_at')
+            ->where('last_seen_at', '>=', $now->copy()->subMinutes(10))
+            ->where(function ($q) {
+                foreach (['admin', 'backoffice', 'support', 'head', 'finance', 'calculations', 'corrections', 'education'] as $r) {
+                    $q->orWhere('role', 'ilike', "%{$r}%");
+                }
+            })
+            ->orderByDesc('last_seen_at')
+            ->limit(40)
+            ->get(['id', 'firstName', 'lastName', 'role', 'last_seen_at']);
+
+        $online = [];
+        $recent = [];
+        foreach ($rows as $r) {
+            if ((int) $r->id === (int) $request->user()->id) continue;
+            $secAgo = $now->diffInSeconds($r->last_seen_at);
+            $entry = [
+                'id' => $r->id,
+                'name' => trim(($r->lastName ?? '') . ' ' . ($r->firstName ?? '')),
+                'role' => $r->role,
+                'secAgo' => $secAgo,
+            ];
+            if ($secAgo <= 90) $online[] = $entry;
+            else $recent[] = $entry;
+        }
+        return response()->json(['online' => $online, 'recent' => $recent]);
+    }
+
+    /**
+     * «Мой день» — личные метрики сотрудника за сегодня:
+     *   - тикетов закрыто (chat_tickets.closed_by + status='resolved'/'closed');
+     *   - сообщений отправлено;
+     *   - назначено активных тикетов сейчас;
+     *   - действий в audit-log за день (любой write со стороны юзера).
+     */
+    public function myDay(Request $request): JsonResponse
+    {
+        $userId = $request->user()->id;
+        $startOfDay = now()->startOfDay();
+
+        $closedToday = DB::table('chat_tickets')
+            ->where('closed_by', $userId)
+            ->whereIn('status', ['resolved', 'closed'])
+            ->where('closed_at', '>=', $startOfDay)
+            ->count();
+
+        $messagesToday = DB::table('chat_messages')
+            ->where('sender_id', $userId)
+            ->where('is_system', false)
+            ->where('created_at', '>=', $startOfDay)
+            ->count();
+
+        $assignedActive = DB::table('chat_tickets')
+            ->where('assigned_to', $userId)
+            ->whereNotIn('status', ['resolved', 'closed'])
+            ->count();
+
+        // audit_log может ещё не быть в legacy окружении — best-effort.
+        $auditToday = 0;
+        try {
+            $auditToday = DB::table('audit_log')
+                ->where('user_id', $userId)
+                ->where('created_at', '>=', $startOfDay)
+                ->count();
+        } catch (\Throwable $e) {
+            // schema absent — silently 0
+        }
+
+        return response()->json([
+            'closedToday' => $closedToday,
+            'messagesToday' => $messagesToday,
+            'assignedActive' => $assignedActive,
+            'auditToday' => $auditToday,
+        ]);
+    }
 }
