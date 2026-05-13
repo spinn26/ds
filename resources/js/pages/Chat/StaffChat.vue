@@ -655,7 +655,7 @@
                   </div>
                 </template>
                 <template v-else>
-                  <div v-if="item.msg.content" class="msg-text">{{ item.msg.content }}</div>
+                  <div v-if="item.msg.content" class="msg-text" v-html="linkify(item.msg.content)"></div>
                 </template>
                 <template v-if="item.msg.attachmentPath">
                   <a v-if="isImageAttachment(item.msg.attachmentName || item.msg.attachmentPath)"
@@ -1092,6 +1092,7 @@ import { useAuthStore } from '../../stores/auth';
 import { getActivityColorByName } from '../../composables/useDesign';
 import ImageLightbox from '../../components/ImageLightbox.vue';
 import { usePermissions } from '../../composables/usePermissions';
+import { linkify } from '../../composables/useLinkify';
 
 // destructured-rename — в файле уже есть локальный function canEdit(msg).
 const { canFull: hasFullPermission } = usePermissions();
@@ -2555,6 +2556,9 @@ onUnmounted(() => {
 .msg-sender { font-size: 11px; font-weight: 600; margin-bottom: 2px; color: #f97316; }
 .msg-bubble.mine .msg-sender { color: rgba(255,255,255,0.85); }
 .msg-text { font-size: 14px; line-height: 1.45; white-space: pre-line; word-break: break-word; }
+.msg-text a { color: inherit; text-decoration: underline; word-break: break-all; }
+.msg-text a:hover { opacity: 0.8; }
+.msg-bubble.mine .msg-text a { color: #fff; text-decoration-color: rgba(255,255,255,0.6); }
 .msg-attach { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; margin-top: 6px; }
 .msg-bubble.mine .msg-attach { color: rgba(255,255,255,0.9); }
 .msg-image-link { display: block; margin-top: 6px; border-radius: 10px; overflow: hidden; max-width: 320px; }

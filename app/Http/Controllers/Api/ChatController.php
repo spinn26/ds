@@ -830,16 +830,23 @@ class ChatController extends Controller
         // System message only for status changes (other changes are silent)
         if ($statusChanged) {
             $statusLabels = ['new' => 'Новый', 'open' => 'Открыт', 'pending' => 'Ожидание', 'resolved' => 'Решён', 'closed' => 'Закрыт'];
+            $statusLabel = $statusLabels[$request->status] ?? $request->status;
             DB::table('chat_messages')->insert([
                 'ticket_id' => $id,
                 'sender_id' => $request->user()->id,
                 'sender_name' => $this->userName($request),
-                'content' => 'Статус изменён → ' . ($statusLabels[$request->status] ?? $request->status),
+                'content' => 'Статус изменён → ' . $statusLabel,
                 'is_system' => true,
                 'is_agent' => true,
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
+
+            // Push-уведомления участникам тикета (кроме того, кто менял
+            // статус). Раньше отписки о решении приходилось ловить
+            // вручную, проходя по чатам — теперь автор тикета и вторая
+            // сторона получают bell + sound + Telegram (если привязан).
+            $this->notifyStatusChange($existing, $request->user(), $statusLabel, $request->status);
         }
 
         // Broadcast so other staff see the change live (Kanban board, ticket list)
@@ -1456,6 +1463,66 @@ class ChatController extends Controller
     }
 
     /**
+     * Уведомить участников тикета о смене статуса. В адресаты идут
+     * created_by, recipient_id и assigned_to — кроме самого инициатора
+     * действия. Канал: bell-нотификация (NotificationController::create
+     * пишет в `notifications` и эмитит socket) + Telegram, если у юзера
+     * привязан чат. Best-effort: исключения не валим UI-запрос.
+     */
+    private function notifyStatusChange($ticket, $actor, string $statusLabel, string $statusKey): void
+    {
+        $actorId = (int) ($actor->id ?? 0);
+        $candidates = array_filter([
+            (int) ($ticket->created_by ?? 0),
+            (int) ($ticket->recipient_id ?? 0),
+            (int) ($ticket->assigned_to ?? 0),
+        ]);
+        $recipients = array_values(array_unique(array_filter(
+            $candidates,
+            fn ($uid) => $uid > 0 && $uid !== $actorId,
+        )));
+        if (empty($recipients)) return;
+
+        $subject = trim((string) ($ticket->subject ?? '')) ?: ('Тикет #' . $ticket->id);
+        $title = "Статус: {$statusLabel} — {$subject}";
+        $emoji = match ($statusKey) {
+            'resolved' => '✅',
+            'closed' => '🔒',
+            'pending' => '⏳',
+            'open' => '📩',
+            'new' => '🆕',
+            default => '🔔',
+        };
+        $actorName = trim(($actor->lastName ?? '') . ' ' . ($actor->firstName ?? '')) ?: 'Сотрудник';
+        $message = "{$actorName} изменил(а) статус → «{$statusLabel}»";
+
+        foreach ($recipients as $userId) {
+            // Bell + DB-уведомление. Линк role-aware: staff отправляем
+            // в /manage/chat, остальных — в партнёрский /chat.
+            $role = DB::table('WebUser')->where('id', $userId)->value('role') ?? '';
+            $isStaff = (bool) preg_match('/admin|backoffice|support|head|finance|calculations|corrections|education/i', $role);
+            $link = ($isStaff ? '/manage/chat' : '/chat') . '?open=' . $ticket->id;
+
+            try {
+                NotificationController::create($userId, 'chat', $title, $message, $link);
+            } catch (\Throwable $e) {
+                Log::debug('chat status notify failed: ' . $e->getMessage(), ['user' => $userId]);
+            }
+
+            // Telegram — отдельный канал, best-effort.
+            try {
+                \App\Support\Telegram::send($userId,
+                    "{$emoji} <b>" . e($subject) . "</b>\n"
+                    . "Статус: <b>" . e($statusLabel) . "</b>\n"
+                    . e($actorName) . " изменил(а) статус тикета."
+                );
+            } catch (\Throwable $e) {
+                Log::debug('chat status telegram failed: ' . $e->getMessage(), ['user' => $userId]);
+            }
+        }
+    }
+
+    /**
      * Записать изменение тикета в audit-log. Best-effort: если таблица
      * ещё не существует (старая БД без миграции), молчим.
      */
@@ -2062,6 +2129,7 @@ class ChatController extends Controller
 
         // Закрытие инцидента переводит сам тикет в статус «Решён» —
         // KPI «Решено сегодня» считается по chat_tickets.status='resolved'.
+        $wasResolved = $ticket->status === 'resolved';
         DB::table('chat_tickets')->where('id', $id)->update([
             'incident_resolved_at' => now(),
             'status' => 'resolved',
@@ -2077,6 +2145,11 @@ class ChatController extends Controller
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+
+        // Уведомление участникам — если статус действительно перешёл в resolved.
+        if (! $wasResolved) {
+            $this->notifyStatusChange($ticket, $user, 'Решён', 'resolved');
+        }
 
         return response()->json(['message' => 'Инцидент закрыт']);
     }

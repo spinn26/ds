@@ -178,7 +178,7 @@
                   </div>
                 </template>
                 <template v-else>
-                  <div v-if="item.msg.content" class="msg-text">{{ item.msg.content }}</div>
+                  <div v-if="item.msg.content" class="msg-text" v-html="linkify(item.msg.content)"></div>
                 </template>
                 <template v-if="item.msg.attachmentPath">
                   <a v-if="isImageAttachment(item.msg.attachmentName || item.msg.attachmentPath)"
@@ -295,9 +295,13 @@
             <span>Отпустите файл для прикрепления</span>
           </div>
         </div>
-        <v-alert v-else type="info" variant="tonal" density="compact" icon="mdi-lock" class="ma-3">
-          Чат закрыт
-        </v-alert>
+        <!-- Тонкая плашка вместо громоздкого v-alert: статус уже виден в
+             шапке/divider'е, поэтому здесь нужен только маркер «нельзя
+             писать», по высоте сопоставимый со строкой chat-input. -->
+        <div v-else class="chat-closed-bar">
+          <v-icon size="16">mdi-lock-outline</v-icon>
+          <span>Чат закрыт</span>
+        </div>
 
         <!-- CSAT — оценка ответа после resolve/closed. Показывается только если
              ещё не оценено партнёром. После submit заменяется на сообщение
@@ -391,6 +395,7 @@ import api from '../../api';
 import { useAuthStore } from '../../stores/auth';
 import { useSnackbar } from '../../composables/useSnackbar';
 import { getChatStatusColor, getChatCategoryColor } from '../../composables/chatPalette';
+import { linkify } from '../../composables/useLinkify';
 import ImageLightbox from '../../components/ImageLightbox.vue';
 
 const { showError } = useSnackbar();
@@ -1238,6 +1243,9 @@ onUnmounted(() => {
 .msg-sender { font-size: 11px; font-weight: 600; margin-bottom: 2px; color: rgba(var(--v-theme-on-surface), 0.6); }
 .msg-bubble.mine .msg-sender { color: rgba(255,255,255,0.85); }
 .msg-text { font-size: 14px; line-height: 1.45; white-space: pre-line; word-break: break-word; }
+.msg-text a { color: inherit; text-decoration: underline; word-break: break-all; }
+.msg-text a:hover { opacity: 0.8; }
+.msg-bubble.mine .msg-text a { color: #fff; text-decoration-color: rgba(255,255,255,0.6); }
 .msg-attach { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; margin-top: 6px; }
 .msg-bubble.mine .msg-attach { color: rgba(255,255,255,0.9); }
 .msg-image-link { display: block; margin-top: 6px; border-radius: 10px; overflow: hidden; max-width: 320px; }
@@ -1306,6 +1314,16 @@ onUnmounted(() => {
 /* Input — обёртки + drop-overlay + file-preview */
 .chat-input { display: flex; align-items: flex-end; gap: 8px; border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); position: relative; transition: background 0.15s; }
 .chat-input.drag-over { background: rgba(var(--v-theme-primary), 0.08); }
+/* Закрытый чат: тонкая полоса вместо большого v-alert. По высоте
+   совпадает с chat-input, чтобы layout не «прыгал» при смене статуса. */
+.chat-closed-bar {
+  display: flex; align-items: center; gap: 6px;
+  padding: 10px 16px;
+  border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  font-size: 13px;
+  flex: 0 0 auto;
+}
 .input-area { flex: 1; min-width: 0; }
 .input-file-preview { display: flex; align-items: center; gap: 8px; margin-top: 6px; padding: 6px 8px; border-radius: 10px; background: rgba(var(--v-theme-primary), 0.08); border: 1px solid rgba(var(--v-theme-primary), 0.2); }
 .input-file-preview img { width: 40px; height: 40px; object-fit: cover; border-radius: 6px; }
