@@ -30,38 +30,16 @@ class ChatController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
-        $isStaff = $request->user()->isStaff();
 
-        $query = DB::table('chat_tickets');
-
-        if (!$isStaff) {
-            // Partner sees chats they created OR chats addressed to them
-            $query->where(function ($q) use ($user) {
-                $q->where('created_by', $user->id)
-                  ->orWhere('recipient_id', $user->id);
-            });
-        } else {
-            // Стафф: видимость по роли. Раньше любой стафф видел все
-            // тикеты (поддержка читала юристические переписки и наоборот).
-            // Теперь — только department, что матчит его роль; плюс
-            // личное участие через OR (создатель / получатель / assigned).
-            $roles = array_map('trim', explode(',', $user->role ?? ''));
-            $allowed = TicketService::visibleCategoriesForRoles($roles);
-            // Расширяем allowed legacy-алиасами, чтобы старые тикеты
-            // с department=technical/billing/sales не выпадали из выдачи.
-            $expanded = $allowed;
-            foreach (TicketService::CATEGORY_ALIASES as $legacy => $modern) {
-                if (in_array($modern, $allowed, true)) $expanded[] = $legacy;
-            }
-            $query->where(function ($q) use ($user, $expanded) {
-                if (! empty($expanded)) {
-                    $q->whereIn('department', $expanded);
-                }
-                $q->orWhere('created_by', $user->id)
-                  ->orWhere('recipient_id', $user->id)
-                  ->orWhere('assigned_to', $user->id);
-            });
-        }
+        // Запрос пользователя 2026-05-12: каждый видит только «свои» тикеты,
+        // независимо от роли. Свой = автор / получатель / назначенный agent.
+        // Раньше staff видел весь общий пул по visibleCategoriesForRoles —
+        // отменено: оператор не должен «случайно» лазить в чужие переписки.
+        $query = DB::table('chat_tickets')->where(function ($q) use ($user) {
+            $q->where('created_by', $user->id)
+              ->orWhere('recipient_id', $user->id)
+              ->orWhere('assigned_to', $user->id);
+        });
 
         // Filters
         if ($request->filled('status')) {
