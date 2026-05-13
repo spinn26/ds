@@ -392,7 +392,26 @@
             <v-icon>mdi-arrow-left</v-icon>
           </v-btn>
           <div class="chat-header-info">
-            <div class="text-subtitle-1 font-weight-bold">{{ activeChat.subject }}</div>
+            <!-- Inline-редактор названия: поиск по чатам идёт ТОЛЬКО по
+                 subject, поэтому staff подбирает удобный для поиска ключ. -->
+            <div v-if="editingSubject" class="d-flex align-center ga-2">
+              <v-text-field v-model="editedSubject"
+                density="compact" variant="outlined" hide-details autofocus
+                maxlength="255" counter="255"
+                @keydown.enter.prevent="saveSubject"
+                @keydown.esc.prevent="cancelEditSubject"
+                @blur="saveSubject" />
+              <v-btn icon="mdi-check" size="x-small" color="success" variant="text"
+                :loading="savingSubject" @mousedown.prevent="saveSubject" />
+              <v-btn icon="mdi-close" size="x-small" variant="text"
+                @mousedown.prevent="cancelEditSubject" />
+            </div>
+            <div v-else class="d-flex align-center ga-1 chat-subject-row">
+              <div class="text-subtitle-1 font-weight-bold">{{ activeChat.subject }}</div>
+              <v-btn icon="mdi-pencil" size="x-small" variant="text"
+                title="Переименовать"
+                @click="startEditSubject" />
+            </div>
             <div class="d-flex flex-wrap align-center ga-2 mt-1">
               <span class="text-caption text-medium-emphasis">{{ activeChat.customer_name }}</span>
               <v-chip size="x-small" :color="statusClr(activeChat.status)" variant="tonal"
@@ -715,14 +734,18 @@
           <v-badge v-if="pendingMessages > 0" :content="pendingMessages" color="error" floating />
         </v-btn>
 
-        <!-- Reply preview -->
-        <v-alert v-if="replyTo && activeChat.status !== 'closed'"
-          density="compact" variant="tonal" color="primary"
-          icon="mdi-reply" closable class="reply-bar"
-          @click:close="cancelReply">
-          <div class="text-caption font-weight-medium">Ответ на: {{ replyTo.senderName }}</div>
-          <div class="text-body-2 text-truncate">{{ replyTo.content }}</div>
-        </v-alert>
+        <!-- Reply preview — компактный одно-двухстрочный блок. Раньше тут
+             был v-alert: на high-DPI его внутренний padding+icon растягивал
+             блок почти на полэкрана при пустом активном чате. -->
+        <div v-if="replyTo && activeChat.status !== 'closed'" class="reply-bar">
+          <v-icon size="14" color="primary" class="me-1">mdi-reply</v-icon>
+          <div class="reply-bar-body">
+            <div class="reply-bar-sender">Ответ на: {{ replyTo.senderName }}</div>
+            <div class="reply-bar-text text-truncate">{{ replyTo.content }}</div>
+          </div>
+          <v-btn icon="mdi-close" size="x-small" variant="text"
+            title="Отменить ответ" @click="cancelReply" />
+        </div>
 
         <!-- Input -->
         <div v-if="activeChat.status !== 'closed'" class="chat-input pa-2"
@@ -1120,6 +1143,40 @@ const chats = ref([]);
 const loading = ref(false);
 const activeChat = ref(null);
 const messages = ref([]);
+
+// Inline-редактирование названия. Поиск по списку идёт только по subject,
+// поэтому staff подбирает удобный ключ — это критично для большой ленты.
+const editingSubject = ref(false);
+const editedSubject = ref('');
+const savingSubject = ref(false);
+function startEditSubject() {
+  if (!activeChat.value) return;
+  editedSubject.value = activeChat.value.subject || '';
+  editingSubject.value = true;
+}
+function cancelEditSubject() {
+  editingSubject.value = false;
+  editedSubject.value = '';
+}
+async function saveSubject() {
+  if (!editingSubject.value || !activeChat.value) return;
+  const next = (editedSubject.value || '').trim();
+  if (!next) { cancelEditSubject(); return; }
+  if (next === activeChat.value.subject) { cancelEditSubject(); return; }
+  savingSubject.value = true;
+  try {
+    const { data } = await api.post(`/chat/tickets/${activeChat.value.id}/subject`, { subject: next });
+    activeChat.value.subject = data.subject;
+    const inList = chats.value.find(c => c.id === activeChat.value.id);
+    if (inList) inList.subject = data.subject;
+    editingSubject.value = false;
+    showSuccess('Название обновлено');
+  } catch (e) {
+    showError(e.response?.data?.message || 'Не удалось переименовать');
+  } finally {
+    savingSubject.value = false;
+  }
+}
 const msgText = ref('');
 const file = ref(null);
 const sending = ref(false);
@@ -2333,12 +2390,14 @@ async function connectSocket() {
       if (e.assignedTo !== undefined) t.assigned_to = e.assignedTo;
       if (e.assignedName !== undefined) t.assigned_name = e.assignedName;
       if (e.tags !== undefined) t.tags = e.tags;
+      if (e.subject !== undefined) t.subject = e.subject;
       if (e.pinnedAt !== undefined) { t.pinned_at = e.pinnedAt; chats.value = [...chats.value].sort(sortChats); }
       if (activeChat.value && Number(activeChat.value.id) === Number(e.ticketId)) {
         if (e.status !== undefined) activeChat.value.status = e.status;
         if (e.priority !== undefined) activeChat.value.priority = e.priority;
         if (e.assignedTo !== undefined) activeChat.value.assigned_to = e.assignedTo;
         if (e.assignedName !== undefined) activeChat.value.assigned_name = e.assignedName;
+        if (e.subject !== undefined && !editingSubject.value) activeChat.value.subject = e.subject;
         if (e.pinnedAt !== undefined) activeChat.value.pinned_at = e.pinnedAt;
       }
     });
@@ -2494,6 +2553,9 @@ onUnmounted(() => {
 .chat-header { border-bottom: 1px solid rgba(var(--v-border-color), 0.12); display: flex; align-items: flex-start; gap: 8px; }
 .chat-header-info { flex: 1; min-width: 0; }
 .chat-header-actions { flex-shrink: 0; }
+/* Карандаш переименования — приглушённый, ярче по hover. */
+.chat-subject-row :deep(.v-btn) { opacity: 0.55; transition: opacity 0.15s; }
+.chat-subject-row:hover :deep(.v-btn) { opacity: 1; }
 .btn-back { background: none; border: none; cursor: pointer; color: inherit; padding: 4px; }
 .chat-header-info { flex: 1; min-width: 0; }
 .chat-header-subject { font-size: 14px; font-weight: 700; }

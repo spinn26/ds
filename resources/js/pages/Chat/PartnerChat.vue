@@ -120,7 +120,27 @@
             <v-icon>mdi-arrow-left</v-icon>
           </v-btn>
           <div class="chat-header-info">
-            <div class="text-subtitle-1 font-weight-bold">{{ activeChat.subject }}</div>
+            <!-- Inline-редактор названия: поиск по чатам идёт ТОЛЬКО по subject,
+                 поэтому участник может переименовать чат под удобный для
+                 себя поисковый ключ. Enter — сохранить, Esc — отмена. -->
+            <div v-if="editingSubject" class="d-flex align-center ga-2">
+              <v-text-field v-model="editedSubject"
+                density="compact" variant="outlined" hide-details autofocus
+                maxlength="255" counter="255"
+                @keydown.enter.prevent="saveSubject"
+                @keydown.esc.prevent="cancelEditSubject"
+                @blur="saveSubject" />
+              <v-btn icon="mdi-check" size="x-small" color="success" variant="text"
+                :loading="savingSubject" @mousedown.prevent="saveSubject" />
+              <v-btn icon="mdi-close" size="x-small" variant="text"
+                @mousedown.prevent="cancelEditSubject" />
+            </div>
+            <div v-else class="d-flex align-center ga-1 chat-subject-row">
+              <div class="text-subtitle-1 font-weight-bold">{{ activeChat.subject }}</div>
+              <v-btn icon="mdi-pencil" size="x-small" variant="text"
+                title="Переименовать"
+                @click="startEditSubject" />
+            </div>
             <div class="d-flex flex-wrap align-center ga-2 mt-1">
               <v-chip size="x-small" :color="catColor(activeChat.category)" variant="tonal">
                 {{ catLabel(activeChat.category) }}
@@ -453,6 +473,41 @@ const canRateChat = computed(() =>
   && ['resolved', 'closed'].includes(activeChat.value.status)
   && !activeChat.value.csat_rating
 );
+
+// Inline-редактирование названия чата. Поиск идёт только по subject,
+// поэтому юзер сам выставляет удобный ключ для поиска.
+const editingSubject = ref(false);
+const editedSubject = ref('');
+const savingSubject = ref(false);
+function startEditSubject() {
+  if (!activeChat.value) return;
+  editedSubject.value = activeChat.value.subject || '';
+  editingSubject.value = true;
+}
+function cancelEditSubject() {
+  editingSubject.value = false;
+  editedSubject.value = '';
+}
+async function saveSubject() {
+  if (!editingSubject.value || !activeChat.value) return;
+  const next = (editedSubject.value || '').trim();
+  if (!next) { cancelEditSubject(); return; }
+  if (next === activeChat.value.subject) { cancelEditSubject(); return; }
+  savingSubject.value = true;
+  try {
+    const { data } = await api.post(`/chat/tickets/${activeChat.value.id}/subject`, { subject: next });
+    activeChat.value.subject = data.subject;
+    // Также синхронизуем в списке слева, чтобы карточка обновилась.
+    const inList = chats.value.find(c => c.id === activeChat.value.id);
+    if (inList) inList.subject = data.subject;
+    editingSubject.value = false;
+    showSuccess('Название обновлено');
+  } catch (e) {
+    showError(e.response?.data?.message || 'Не удалось переименовать');
+  } finally {
+    savingSubject.value = false;
+  }
+}
 
 async function submitCsat() {
   if (!activeChat.value || !csatRating.value) return;
@@ -1112,12 +1167,14 @@ async function connectSocket() {
         if (e.status !== undefined) t.status = e.status;
         if (e.priority !== undefined) t.priority = e.priority;
         if (e.assignedName !== undefined) t.assigned_name = e.assignedName;
+        if (e.subject !== undefined) t.subject = e.subject;
         if (e.pinnedAt !== undefined) { t.pinned_at = e.pinnedAt; chats.value = [...chats.value].sort(sortChats); }
       }
       if (activeChat.value && Number(activeChat.value.id) === Number(e.ticketId)) {
         if (e.status !== undefined) activeChat.value.status = e.status;
         if (e.priority !== undefined) activeChat.value.priority = e.priority;
         if (e.assignedName !== undefined) activeChat.value.assigned_name = e.assignedName;
+        if (e.subject !== undefined && !editingSubject.value) activeChat.value.subject = e.subject;
         if (e.pinnedAt !== undefined) activeChat.value.pinned_at = e.pinnedAt;
       }
     });
@@ -1213,6 +1270,9 @@ onUnmounted(() => {
 /* Header */
 .chat-header { border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); display: flex; align-items: flex-start; gap: 8px; }
 .chat-header-info { flex: 1; min-width: 0; }
+/* Карандаш переименования — приглушённый, ярче по hover. */
+.chat-subject-row :deep(.v-btn) { opacity: 0.55; transition: opacity 0.15s; }
+.chat-subject-row:hover :deep(.v-btn) { opacity: 1; }
 
 /* Messages — Telegram-style bubbles, asymmetric tail */
 .chat-messages { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 8px; scroll-behavior: smooth; position: relative; }

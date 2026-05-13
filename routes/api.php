@@ -117,6 +117,7 @@ Route::prefix('v1')->group(function () {
         // браузер не передаёт Bearer и получает 401 Unauthenticated.
         Route::post('/chat/tickets/{id}/pin', [\App\Http\Controllers\Api\ChatController::class, 'togglePin']);
         Route::post('/chat/tickets/{id}/status', [\App\Http\Controllers\Api\ChatController::class, 'updateStatus']);
+        Route::post('/chat/tickets/{id}/subject', [\App\Http\Controllers\Api\ChatController::class, 'updateSubject']);
         Route::post('/chat/tickets/{id}/assign', [\App\Http\Controllers\Api\ChatController::class, 'assign']);
         Route::post('/chat/tickets/{id}/csat', [\App\Http\Controllers\Api\ChatController::class, 'submitCsat'])->middleware('throttle:5,1');
         Route::get('/chat/tickets/{id}/notes', [\App\Http\Controllers\Api\ChatController::class, 'notes']);

@@ -778,6 +778,61 @@ class ChatController extends Controller
     }
 
     /** Change ticket status */
+    /**
+     * Переименование тикета. Поиск по чатам идёт только по subject, поэтому
+     * пользователю (staff или участник тикета) важно подобрать осмысленное
+     * название самостоятельно. Без system-сообщения в ленте (как priority/
+     * tags — silent change), но с записью в chat_ticket_changes и broadcast'ом.
+     */
+    public function updateSubject(Request $request, int $id): JsonResponse
+    {
+        $data = $request->validate([
+            'subject' => 'required|string|max:255',
+        ]);
+        // strip_tags + trim — единый sanitize-паттерн, как в store().
+        $newSubject = trim(strip_tags($data['subject']));
+        if ($newSubject === '') {
+            return response()->json(['message' => 'Название не может быть пустым'], 422);
+        }
+
+        $ticket = DB::table('chat_tickets')->where('id', $id)->first();
+        if (! $ticket) return response()->json(['message' => 'Не найден'], 404);
+
+        // Право редактировать: staff (любая роль staff) или участник тикета
+        // (created_by / recipient_id). Это совпадает с правом писать сообщения.
+        $user = $request->user();
+        $userId = (int) $user->id;
+        $isParticipant = (int) $ticket->created_by === $userId
+            || (int) ($ticket->recipient_id ?? 0) === $userId;
+        if (! $user->isStaff() && ! $isParticipant) {
+            return response()->json(['message' => 'Нет прав на редактирование'], 403);
+        }
+
+        if ($newSubject === (string) $ticket->subject) {
+            return response()->json(['subject' => $ticket->subject, 'changed' => false]);
+        }
+
+        DB::table('chat_tickets')->where('id', $id)->update([
+            'subject' => $newSubject,
+            'updated_at' => now(),
+        ]);
+
+        $this->logTicketChange($id, 'subject', $ticket->subject, $newSubject, $user);
+
+        try {
+            app(\App\Services\SocketService::class)->emit('chat:ticket-updated', null, [
+                'ticketId' => $id,
+                'subject' => $newSubject,
+            ]);
+        } catch (\Exception $e) {
+            Log::warning('chat socket emit failed: subject', [
+                'ticket_id' => $id, 'exception' => $e->getMessage(),
+            ]);
+        }
+
+        return response()->json(['subject' => $newSubject, 'changed' => true]);
+    }
+
     public function updateStatus(Request $request, int $id): JsonResponse
     {
         if (!$request->user()->isStaff()) {
