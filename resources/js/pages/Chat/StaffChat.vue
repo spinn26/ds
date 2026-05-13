@@ -9,8 +9,20 @@
     <!-- Left: ticket list (hidden in Kanban mode on mobile / collapsed on desktop) -->
     <aside class="chat-sidebar" :class="{ 'mobile-hidden': mobile && (activeChat || viewMode === 'kanban'), 'compact': viewMode === 'kanban' && !mobile }">
       <div class="sidebar-head px-3 py-2">
-        <div class="d-flex align-center justify-space-between">
-          <div class="text-body-1 font-weight-bold">Обращения</div>
+        <div class="d-flex align-center ga-2">
+          <div class="text-body-1 font-weight-bold flex-grow-1">Обращения</div>
+          <!-- Переключатель Список / Доска: раньше висел плавающей панелью
+               у правого края экрана и перекрывал контекст-панель партнёра. -->
+          <v-btn-toggle v-model="viewMode" mandatory density="compact"
+            variant="outlined" color="primary" class="view-mode-toggle"
+            divided>
+            <v-btn value="list" size="x-small" title="Список" icon>
+              <v-icon size="16">mdi-format-list-bulleted</v-icon>
+            </v-btn>
+            <v-btn value="kanban" size="x-small" title="Канбан-доска" icon>
+              <v-icon size="16">mdi-view-column-outline</v-icon>
+            </v-btn>
+          </v-btn-toggle>
           <v-btn size="x-small" :variant="bulkMode ? 'flat' : 'text'"
             :color="bulkMode ? 'primary' : undefined"
             :icon="!bulkMode"
@@ -169,25 +181,8 @@
       </transition>
     </aside>
 
-    <!-- View toggle: floating vertical rail on the right edge -->
-    <div class="view-toggle">
-      <v-btn class="view-toggle-btn"
-        :variant="viewMode === 'list' ? 'flat' : 'text'"
-        :color="viewMode === 'list' ? 'primary' : undefined"
-        size="small" stacked
-        @click="viewMode = 'list'" title="Список">
-        <v-icon size="20">mdi-format-list-bulleted</v-icon>
-        <span class="text-caption">Список</span>
-      </v-btn>
-      <v-btn class="view-toggle-btn"
-        :variant="viewMode === 'kanban' ? 'flat' : 'text'"
-        :color="viewMode === 'kanban' ? 'primary' : undefined"
-        size="small" stacked
-        @click="viewMode = 'kanban'" title="Канбан">
-        <v-icon size="20">mdi-view-column-outline</v-icon>
-        <span class="text-caption">Доска</span>
-      </v-btn>
-    </div>
+    <!-- View toggle переехал в sidebar-head (см. .view-mode-toggle) — раньше
+         плавающий .view-toggle перекрывал контекст-панель партнёра. -->
 
     <!-- Kanban mode container -->
     <div v-if="viewMode === 'kanban'" class="kanban-wrap">
@@ -406,10 +401,10 @@
               <v-btn icon="mdi-close" size="x-small" variant="text"
                 @mousedown.prevent="cancelEditSubject" />
             </div>
-            <div v-else class="d-flex align-center ga-1 chat-subject-row">
+            <div v-else class="d-flex align-center ga-2 chat-subject-row">
               <div class="text-subtitle-1 font-weight-bold">{{ activeChat.subject }}</div>
-              <v-btn icon="mdi-pencil" size="x-small" variant="text"
-                title="Переименовать"
+              <v-btn icon="mdi-pencil" size="x-small" variant="tonal" color="primary"
+                title="Переименовать чат (Enter — сохранить, Esc — отмена)"
                 @click="startEditSubject" />
             </div>
             <div class="d-flex flex-wrap align-center ga-2 mt-1">
@@ -2555,9 +2550,12 @@ onUnmounted(() => {
 .chat-header { border-bottom: 1px solid rgba(var(--v-border-color), 0.12); display: flex; align-items: flex-start; gap: 8px; }
 .chat-header-info { flex: 1; min-width: 0; }
 .chat-header-actions { flex-shrink: 0; }
-/* Карандаш переименования — приглушённый, ярче по hover. */
-.chat-subject-row :deep(.v-btn) { opacity: 0.55; transition: opacity 0.15s; }
-.chat-subject-row:hover :deep(.v-btn) { opacity: 1; }
+/* Карандаш переименования — variant=tonal даёт зелёный чип-фон, видно
+   на любой теме (важно для AdminLayout с forced dark). Без opacity-
+   скрытия — пользователь должен сразу понимать, что чат можно
+   переименовать (это критичный UX: поиск работает только по subject). */
+.chat-subject-row :deep(.v-btn) { transition: transform 0.15s; }
+.chat-subject-row :deep(.v-btn:hover) { transform: scale(1.08); }
 .btn-back { background: none; border: none; cursor: pointer; color: inherit; padding: 4px; }
 .chat-header-info { flex: 1; min-width: 0; }
 .chat-header-subject { font-size: 14px; font-weight: 700; }
@@ -2725,58 +2723,8 @@ onUnmounted(() => {
 .hotkey-row span { flex: 1; color: rgba(var(--v-theme-on-surface), 0.8); }
 
 /* ================== VIEW TOGGLE ================== */
-.view-toggle {
-  position: fixed;
-  right: 12px;
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 6;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 6px;
-  border-radius: 16px;
-  background: rgba(var(--v-theme-surface), 0.72);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
-}
-.view-toggle-btn {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
-  width: 64px;
-  padding: 10px 6px;
-  border-radius: 12px;
-  border: none;
-  background: transparent;
-  color: rgba(var(--v-theme-on-surface), 0.55);
-  cursor: pointer;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.2px;
-  transition: all 0.18s ease;
-}
-.view-toggle-btn:hover {
-  color: rgb(var(--v-theme-on-surface));
-  background: rgba(var(--v-theme-on-surface), 0.06);
-}
-.view-toggle-btn.active {
-  background: rgb(var(--v-theme-primary));
-  color: #fff;
-  box-shadow: 0 4px 12px rgba(var(--v-theme-primary), 0.35);
-  transform: scale(1.02);
-}
-.view-toggle-btn.active:hover {
-  background: rgb(var(--v-theme-primary));
-}
-.view-toggle-label {
-  display: inline;
-  line-height: 1;
-}
+/* Компактный inline-переключатель в sidebar-head. */
+.view-mode-toggle :deep(.v-btn) { min-width: 32px; padding: 0 8px; }
 
 /* Sidebar compact variant in Kanban mode — list acts like quick filter preview */
 .chat-sidebar.compact { width: 260px; }
@@ -2851,9 +2799,6 @@ onUnmounted(() => {
 @media (max-width: 959px) {
   .chat-sidebar { width: 100%; }
   .mobile-hidden { display: none !important; }
-  .view-toggle-label { display: none; }
-  .view-toggle { right: 8px; padding: 4px; }
-  .view-toggle-btn { width: 44px; padding: 8px 4px; }
   .kanban-board { padding: 56px 8px 8px; }
   .kanban-column { min-width: 220px; }
   .chat-sidebar.compact { display: none !important; }

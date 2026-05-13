@@ -135,10 +135,10 @@
               <v-btn icon="mdi-close" size="x-small" variant="text"
                 @mousedown.prevent="cancelEditSubject" />
             </div>
-            <div v-else class="d-flex align-center ga-1 chat-subject-row">
+            <div v-else class="d-flex align-center ga-2 chat-subject-row">
               <div class="text-subtitle-1 font-weight-bold">{{ activeChat.subject }}</div>
-              <v-btn icon="mdi-pencil" size="x-small" variant="text"
-                title="Переименовать"
+              <v-btn icon="mdi-pencil" size="x-small" variant="tonal" color="primary"
+                title="Переименовать чат (Enter — сохранить, Esc — отмена)"
                 @click="startEditSubject" />
             </div>
             <div class="d-flex flex-wrap align-center ga-2 mt-1">
@@ -1272,9 +1272,11 @@ onUnmounted(() => {
 /* Header */
 .chat-header { border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); display: flex; align-items: flex-start; gap: 8px; }
 .chat-header-info { flex: 1; min-width: 0; }
-/* Карандаш переименования — приглушённый, ярче по hover. */
-.chat-subject-row :deep(.v-btn) { opacity: 0.55; transition: opacity 0.15s; }
-.chat-subject-row:hover :deep(.v-btn) { opacity: 1; }
+/* Карандаш переименования — variant=tonal даёт зелёный чип-фон, видно
+   на любой теме. Без opacity-скрытия: пользователь должен сразу
+   понимать, что чат можно переименовать (поиск идёт только по subject). */
+.chat-subject-row :deep(.v-btn) { transition: transform 0.15s; }
+.chat-subject-row :deep(.v-btn:hover) { transform: scale(1.08); }
 
 /* Messages — Telegram-style bubbles, asymmetric tail */
 .chat-messages { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 8px; scroll-behavior: smooth; position: relative; }
