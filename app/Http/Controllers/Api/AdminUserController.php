@@ -45,6 +45,15 @@ class AdminUserController extends Controller
         }
         if ($request->filled('role')) {
             $query->where('role', 'ilike', "%{$request->role}%");
+        } elseif (! $request->boolean('include_clients')) {
+            // По умолчанию скрываем role=client — это CRM-клиенты
+            // (без login-аккаунта по факту, legacy от Directual + от
+            // прошлого storeClient'а с багом). Они не нужны в админке
+            // пользователей. Чтобы показать — фильтр «Роль» = «Клиент»
+            // или ?include_clients=1.
+            $query->where(function ($w) {
+                $w->whereNull('role')->orWhere('role', '!=', 'client');
+            });
         }
         if ($request->filled('blocked')) {
             $query->where('isBlocked', $request->blocked === 'true');
