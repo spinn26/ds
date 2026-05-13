@@ -1816,14 +1816,17 @@ class ChatController extends Controller
     public function unreadCount(Request $request): JsonResponse
     {
         $userId = $request->user()->id;
-        $isStaff = $request->user()->isStaff();
 
-        $query = DB::table('chat_tickets');
-        if (!$isStaff) {
-            $query->where(function ($q) use ($userId) {
-                $q->where('created_by', $userId)->orWhere('recipient_id', $userId);
-            });
-        }
+        // Считаем unread только в тех тикетах, где пользователь
+        // лично участник — автор / получатель / назначенный agent.
+        // Иначе у staff копится счётчик с чужих незакреплённых
+        // тикетов, в которые он никогда не заходил — приходит «2»
+        // когда реально пользователю никто не писал.
+        $query = DB::table('chat_tickets')->where(function ($q) use ($userId) {
+            $q->where('created_by', $userId)
+              ->orWhere('recipient_id', $userId)
+              ->orWhere('assigned_to', $userId);
+        });
 
         $ticketIds = $query->whereIn('status', ['new', 'open', 'pending'])->pluck('id');
         if ($ticketIds->isEmpty()) {
