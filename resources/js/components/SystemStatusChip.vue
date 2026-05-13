@@ -20,12 +20,12 @@ defineProps({
 });
 
 const status = ref('operational');
-const label = ref('Все системы работают');
+const label = ref('Все работает в штатном режиме');
 const activeCount = ref(0);
 let timer = null;
 
 const STATUS_LABELS = {
-  operational: 'Все системы работают',
+  operational: 'Все работает в штатном режиме',
   maintenance: 'Тех. работы',
   degraded: 'Снижение производительности',
   partial_outage: 'Частичный сбой',
@@ -118,19 +118,20 @@ onUnmounted(() => {
   100% { transform: scale(2.4);  opacity: 0;    }
 }
 
-/* Подсветка контейнера на серьёзных статусах */
+/* Подсветка контейнера по статусу */
+.status-operational     { background: rgba(67, 160, 71, 0.12); color: #66bb6a; }
 .status-major_outage    { background: rgba(229, 57, 53, 0.15); color: #ef5350; }
 .status-partial_outage  { background: rgba(251, 140, 0, 0.15); color: #ffa726; }
 .status-degraded        { background: rgba(245, 166, 35, 0.12); color: #ffb74d; }
 .status-maintenance     { background: rgba(30, 136, 229, 0.15); color: #64b5f6; }
 
 .status-label {
-  max-width: 240px;
+  max-width: 260px;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-@media (max-width: 960px) {
+@media (max-width: 720px) {
   .status-label { display: none; }
   .status-chip-link { padding: 4px; }
 }
