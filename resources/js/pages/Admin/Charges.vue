@@ -70,7 +70,7 @@
       :items-per-page="25"
       server-side
       empty-icon="mdi-cash-remove"
-      empty-message="Начисления не найдены"
+      empty-message="Прочие начисления не найдены"
       @update:options="onOptions"
     >
       <template #item.type="{ value }">
