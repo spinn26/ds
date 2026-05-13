@@ -16,12 +16,16 @@ class TelegramController extends Controller
     public function status(Request $request): JsonResponse
     {
         $user = $request->user();
-        $chatId = DB::table('WebUser')->where('id', $user->id)->value('telegram_chat_id');
+        $row = DB::table('WebUser')->where('id', $user->id)
+            ->first(['telegram_chat_id', 'telegram_user_id', 'telegram_username', 'telegram_linked_at']);
         return response()->json([
             'enabled' => Telegram::enabled(),
             'bot_username' => config('services.telegram.bot_username'),
-            'linked' => ! empty($chatId),
-            'chat_id' => $chatId,
+            'linked' => ! empty($row?->telegram_chat_id),
+            'chat_id' => $row?->telegram_chat_id,
+            'user_id' => $row?->telegram_user_id,
+            'username' => $row?->telegram_username,
+            'linked_at' => $row?->telegram_linked_at,
         ]);
     }
 
@@ -78,6 +82,9 @@ class TelegramController extends Controller
         $user = $request->user();
         DB::table('WebUser')->where('id', $user->id)->update([
             'telegram_chat_id' => null,
+            'telegram_user_id' => null,
+            'telegram_username' => null,
+            'telegram_linked_at' => null,
             'dateChanged' => now(),
         ]);
         Audit::log('telegram_unlink', 'WebUser', $user->id);

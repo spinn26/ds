@@ -155,14 +155,21 @@ class SystemStatusController extends Controller
             'title' => $data['title'], 'severity' => $data['severity'] ?? 'minor', 'status' => $status,
         ]);
 
-        // Telegram-рассылка по admin/head если severity=critical.
-        if (($data['severity'] ?? 'minor') === 'critical') {
-            \App\Support\Telegram::broadcastToRoles(['admin', 'head'],
-                "🔴 <b>Критический инцидент</b>\n"
-                . "<b>" . $data['title'] . "</b>\n"
-                . (! empty($data['description']) ? $data['description'] . "\n" : '')
-                . "Статус: " . $status
+        // Telegram-рассылка по admin/head на «серьёзные» инциденты —
+        // major и critical (minor/maintenance не шлём, чтобы не спамить).
+        $sev = $data['severity'] ?? 'minor';
+        if (in_array($sev, ['major', 'critical'], true)) {
+            $emoji = $sev === 'critical' ? '🔴' : '🟠';
+            $sevLabel = $sev === 'critical' ? 'Критический инцидент' : 'Серьёзный инцидент';
+            $sent = \App\Support\Telegram::broadcastToRoles(['admin', 'head'],
+                "{$emoji} <b>{$sevLabel}</b>\n"
+                . "<b>" . e($data['title']) . "</b>\n"
+                . (! empty($data['description']) ? e($data['description']) . "\n" : '')
+                . "Статус: " . e($status)
             );
+            \Illuminate\Support\Facades\Log::info('telegram incident broadcast', [
+                'incident_id' => $id, 'severity' => $sev, 'sent' => $sent,
+            ]);
         }
 
         return response()->json(['id' => $id], 201);

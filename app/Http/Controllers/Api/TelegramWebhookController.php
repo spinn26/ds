@@ -40,11 +40,15 @@ class TelegramWebhookController extends Controller
 
         $chatId = (string) ($message['chat']['id'] ?? '');
         $text = trim((string) ($message['text'] ?? ''));
+        // from.id — Telegram user-id, не меняется (в отличие от chat_id
+        // у супергрупп). Сохраняем при привязке для трекинга.
+        $fromId = (string) ($message['from']['id'] ?? '');
+        $fromUsername = $message['from']['username'] ?? null;
         if (! $chatId || ! $text) return response()->json(['ok' => true]);
 
         // /start <token> — привязка через deeplink.
         if (preg_match('/^\/start\s+(\S+)/', $text, $m)) {
-            return $this->handleStart($chatId, $m[1]);
+            return $this->handleStart($chatId, $m[1], $fromId, $fromUsername);
         }
 
         // Кнопки reply-keyboard + текстовые fallback-команды.
@@ -56,7 +60,7 @@ class TelegramWebhookController extends Controller
         };
     }
 
-    private function handleStart(string $chatId, string $token): JsonResponse
+    private function handleStart(string $chatId, string $token, string $fromId = '', ?string $fromUsername = null): JsonResponse
     {
         $row = DB::table('telegram_link_tokens')->where('token', $token)->first();
         if (! $row) {
@@ -72,9 +76,12 @@ class TelegramWebhookController extends Controller
             return response()->json(['ok' => true]);
         }
 
-        DB::transaction(function () use ($row, $chatId, $token) {
+        DB::transaction(function () use ($row, $chatId, $token, $fromId, $fromUsername) {
             DB::table('WebUser')->where('id', $row->user_id)->update([
                 'telegram_chat_id' => $chatId,
+                'telegram_user_id' => $fromId ?: null,
+                'telegram_username' => $fromUsername,
+                'telegram_linked_at' => now(),
                 'dateChanged' => now(),
             ]);
             DB::table('telegram_link_tokens')->where('token', $token)->update([
@@ -84,7 +91,9 @@ class TelegramWebhookController extends Controller
             ]);
         });
 
-        Audit::log('telegram_link_done', 'WebUser', $row->user_id, ['chat_id' => $chatId]);
+        Audit::log('telegram_link_done', 'WebUser', $row->user_id, [
+            'chat_id' => $chatId, 'user_id' => $fromId, 'username' => $fromUsername,
+        ]);
         Telegram::raw(
             $chatId,
             "✅ <b>Аккаунт привязан!</b>\nСюда будут приходить уведомления DS Consulting.",
@@ -142,6 +151,9 @@ class TelegramWebhookController extends Controller
         }
         DB::table('WebUser')->where('id', $user->id)->update([
             'telegram_chat_id' => null,
+            'telegram_user_id' => null,
+            'telegram_username' => null,
+            'telegram_linked_at' => null,
             'dateChanged' => now(),
         ]);
         Audit::log('telegram_unlink', 'WebUser', $user->id, ['via' => 'bot']);
