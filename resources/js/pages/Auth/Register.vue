@@ -58,10 +58,12 @@
                     <v-col cols="12" sm="4"><v-text-field v-model="form.firstName" :rules="cyrillicRequiredRules" label="Имя *" /></v-col>
                     <v-col cols="12" sm="4"><v-text-field v-model="form.patronymic" :rules="cyrillicRequiredRules" label="Отчество *" /></v-col>
                     <v-col cols="12"><v-text-field v-model="form.email" :rules="emailRequiredRules" label="Электронная почта *" type="email" prepend-inner-icon="mdi-email" /></v-col>
+                    <!-- Телефон/Телеграм идут парой на одной строке. У обоих
+                         внешний label-сверху, чтобы input'ы стартовали с
+                         одной высоты — иначе Телеграм визуально «улетает»
+                         (его встроенный outlined-label опускал поле ниже
+                         старта vue-tel-input). -->
                     <v-col cols="12" sm="6">
-                      <!-- vue-tel-input: код страны + маска под выбранную.
-                           Глобальные дефолты — в app.js. @validate ставит
-                           phoneValid, кнопка «Далее» блокируется если false. -->
                       <label class="text-caption text-medium-emphasis d-block mb-1">Телефон *</label>
                       <vue-tel-input v-model="form.phone"
                         @validate="onPhoneValidate"
@@ -71,7 +73,12 @@
                         Введите корректный номер телефона
                       </div>
                     </v-col>
-                    <v-col cols="12" sm="6"><v-text-field v-model="form.telegram" :rules="telegramRequiredRules" label="Телеграм *" prepend-inner-icon="mdi-send" placeholder="@username" /></v-col>
+                    <v-col cols="12" sm="6">
+                      <label class="text-caption text-medium-emphasis d-block mb-1">Телеграм *</label>
+                      <v-text-field v-model="form.telegram"
+                        :rules="telegramRequiredRules"
+                        prepend-inner-icon="mdi-send" placeholder="@username" />
+                    </v-col>
                     <v-col cols="12" sm="6"><v-text-field v-model="form.birthDate" :rules="requiredRule" label="Дата рождения *" type="date" /></v-col>
                     <v-col cols="12" sm="6"><v-text-field v-model="form.city" :rules="cyrillicRequiredRules" label="Город *" prepend-inner-icon="mdi-city" /></v-col>
                     <v-col cols="12"><v-text-field v-model="form.password" :rules="passwordRules" label="Пароль *" :type="showPw ? 'text' : 'password'" prepend-inner-icon="mdi-lock" :append-inner-icon="showPw ? 'mdi-eye-off' : 'mdi-eye'" @click:append-inner="showPw = !showPw" /></v-col>
@@ -101,10 +108,14 @@
                   </v-row>
                 </v-card>
 
+                <!-- Текст про Стартовый период — версия заказчика 2026-05-13. -->
                 <v-card color="amber-lighten-5" class="mb-4 pa-3" variant="flat">
                   <div class="text-subtitle-2 text-amber-darken-3 mb-1">Стартовый период</div>
+                  <div class="text-body-2 mb-2">
+                    Стартовый период — время, в течение которого ваш аккаунт должен быть активирован. Для этого вам нужно сделать <strong>Личный объём не менее 500 баллов</strong> сумарно за 90 дней с дати регистрации.
+                  </div>
                   <div class="text-body-2">
-                    Для активации аккаунта необходимо набрать <strong>500 баллов</strong> личного объёма за 90 дней с даты регистрации.
+                    Если объём 500 баллов не будет выполнен — <strong>Соглашение о партнёрстве автоматически аннулируется</strong> после даты окончания Стартового периода.
                   </div>
                 </v-card>
 
