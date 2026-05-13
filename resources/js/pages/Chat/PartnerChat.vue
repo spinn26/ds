@@ -282,9 +282,19 @@
           @dragover.prevent="dragOver = true"
           @dragleave.prevent="dragOver = false"
           @drop.prevent="onFileDrop">
-          <input ref="fileRef" type="file" hidden @change="e => setFile(e.target.files?.[0])" />
-          <v-btn icon variant="text" size="small" title="Прикрепить файл" @click="$refs.fileRef.click()">
+          <!-- multiple binding явным prop'ом и style="display:none" вместо
+               hidden — на некоторых Chromium-сборках `hidden` срабатывает
+               раньше, чем Vue прикладывает атрибут `multiple`, и диалог
+               открывается в single-select. Прокинули :multiple="true" и
+               через display:none — гарантирует одинаковое поведение. -->
+          <input ref="fileRef" type="file" :multiple="true"
+            style="display:none"
+            @change="e => { addFiles(e.target.files); e.target.value = ''; }" />
+          <v-btn icon variant="text" size="small"
+            :title="files.length ? `Прикреплено: ${files.length} · добавить ещё` : 'Прикрепить файл (можно несколько)'"
+            @click="$refs.fileRef.click()">
             <v-icon>mdi-paperclip</v-icon>
+            <v-badge v-if="files.length > 0" :content="files.length" color="primary" floating />
           </v-btn>
           <div class="input-area">
             <v-textarea ref="taRef" v-model="msgText"
@@ -294,22 +304,25 @@
               @keydown.enter.exact.prevent="send"
               @input="onInput"
               @paste="onPaste" />
-            <div v-if="file" class="input-file-preview">
-              <img v-if="filePreviewUrl" :src="filePreviewUrl" alt="preview" />
-              <div v-else class="input-file-icon"><v-icon size="16">mdi-file</v-icon></div>
-              <div class="input-file-info">
-                <div class="input-file-name">{{ file.name }}</div>
-                <div class="text-caption text-medium-emphasis">{{ fmtFileSize(file.size) }}</div>
+            <div v-if="files.length" class="input-files-list">
+              <div v-for="(item, idx) in files" :key="idx" class="input-file-preview">
+                <img v-if="item.previewUrl" :src="item.previewUrl" alt="preview" />
+                <div v-else class="input-file-icon"><v-icon size="16">mdi-file</v-icon></div>
+                <div class="input-file-info">
+                  <div class="input-file-name">{{ item.file.name }}</div>
+                  <div class="text-caption text-medium-emphasis">{{ fmtFileSize(item.file.size) }}</div>
+                </div>
+                <v-btn icon size="x-small" variant="text" title="Удалить" @click="removeFile(idx)">
+                  <v-icon size="14">mdi-close</v-icon>
+                </v-btn>
               </div>
-              <v-btn icon size="x-small" variant="text" @click="clearFile">
-                <v-icon size="14">mdi-close</v-icon>
-              </v-btn>
             </div>
           </div>
           <v-btn icon color="primary"
-            :disabled="sending || (!msgText.trim() && !file)"
+            :disabled="sending || (!msgText.trim() && !files.length)"
             :loading="sending"
-            title="Отправить (Enter)" @click="send">
+            :title="files.length > 1 ? `Отправить ${files.length} файла(ов)` : 'Отправить (Enter)'"
+            @click="send">
             <v-icon>mdi-send</v-icon>
           </v-btn>
           <div v-if="dragOver" class="drop-overlay">
@@ -432,7 +445,10 @@ const loading = ref(false);
 const activeChat = ref(null);
 const messages = ref([]);
 const msgText = ref('');
-const file = ref(null);
+// files: массив { file: File, previewUrl: string|null } — поддержка
+// мульти-выбора. На отправке шлём по одному сообщению на файл (текст
+// прикрепляется к первому).
+const files = ref([]);
 const sending = ref(false);
 const msgsRef = ref(null);
 const fileRef = ref(null);
@@ -451,9 +467,8 @@ const showJumpToBottom = ref(false);
 const pendingMessages = ref(0);
 const BASE_TITLE = 'Обращения';
 
-// Drag-drop + file preview
+// Drag-drop
 const dragOver = ref(false);
-const filePreviewUrl = ref(null);
 
 // Read receipts
 const otherLastReadAt = ref(null);
@@ -790,35 +805,41 @@ function fmtFileSize(bytes) {
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
   return (bytes / 1024 / 1024).toFixed(1) + ' MB';
 }
-function setFile(f) {
-  if (!f) return;
-  file.value = f;
-  if (filePreviewUrl.value) URL.revokeObjectURL(filePreviewUrl.value);
-  filePreviewUrl.value = f.type?.startsWith('image/') ? URL.createObjectURL(f) : null;
+function addFiles(fileList) {
+  if (!fileList) return;
+  for (const f of Array.from(fileList)) {
+    const previewUrl = f.type?.startsWith('image/') ? URL.createObjectURL(f) : null;
+    files.value.push({ file: f, previewUrl });
+  }
+}
+function removeFile(idx) {
+  const item = files.value[idx];
+  if (item?.previewUrl) URL.revokeObjectURL(item.previewUrl);
+  files.value.splice(idx, 1);
+}
+function clearAllFiles() {
+  for (const item of files.value) {
+    if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+  }
+  files.value = [];
 }
 const dropActive = ref(false);
-function onDropFile(e) {
-  dropActive.value = false;
-  const f = e.dataTransfer?.files?.[0];
-  if (f) setFile(f);
-}
-function clearFile() {
-  if (filePreviewUrl.value) URL.revokeObjectURL(filePreviewUrl.value);
-  filePreviewUrl.value = null;
-  file.value = null;
-}
 function onFileDrop(e) {
   dragOver.value = false;
-  const f = e.dataTransfer?.files?.[0];
-  if (f) setFile(f);
+  addFiles(e.dataTransfer?.files);
 }
 function onPaste(e) {
   const items = e.clipboardData?.items || [];
+  const pasted = [];
   for (const it of items) {
     if (it.kind === 'file') {
       const f = it.getAsFile();
-      if (f) { setFile(f); e.preventDefault(); return; }
+      if (f) pasted.push(f);
     }
+  }
+  if (pasted.length) {
+    addFiles(pasted);
+    e.preventDefault();
   }
 }
 
@@ -984,22 +1005,35 @@ async function toggleReaction(msg, emoji) {
 }
 
 async function send() {
-  if (!msgText.value?.trim() && !file.value) return;
+  const text = msgText.value?.trim() || '';
+  const fileItems = files.value.slice();
+  if (!text && !fileItems.length) return;
   sending.value = true;
-  // Идемпотентный токен — backend дедуплицирует, фронт игнорирует
-  // socket-emit с этим же id.
-  const clientMessageId = (crypto?.randomUUID?.() ?? `cmid-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  const newClientId = () => (crypto?.randomUUID?.() ?? `cmid-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  const replyId = replyTo.value?.id ?? null;
   try {
-    const fd = new FormData();
-    fd.append('message', msgText.value || '');
-    fd.append('client_message_id', clientMessageId);
-    if (file.value) fd.append('attachment', file.value);
-    if (replyTo.value) fd.append('reply_to_id', String(replyTo.value.id));
-    await api.post(`/chat/tickets/${activeChat.value.id}/messages`, fd);
-    // Clear draft on successful send
+    if (!fileItems.length) {
+      const fd = new FormData();
+      fd.append('message', text);
+      fd.append('client_message_id', newClientId());
+      if (replyId) fd.append('reply_to_id', String(replyId));
+      await api.post(`/chat/tickets/${activeChat.value.id}/messages`, fd);
+    } else {
+      // Несколько файлов: текст идёт с первым, остальные — только файл.
+      // Отправляем последовательно, чтобы порядок сообщений в БД совпадал
+      // с порядком выбранных файлов.
+      for (let i = 0; i < fileItems.length; i++) {
+        const fd = new FormData();
+        fd.append('message', i === 0 ? text : '');
+        fd.append('client_message_id', newClientId());
+        fd.append('attachment', fileItems[i].file);
+        if (replyId) fd.append('reply_to_id', String(replyId));
+        await api.post(`/chat/tickets/${activeChat.value.id}/messages`, fd);
+      }
+    }
     localStorage.removeItem(draftKey(activeChat.value.id));
     msgText.value = '';
-    clearFile();
+    clearAllFiles();
     replyTo.value = null;
     nextTick(autoGrow);
     await refreshMessages();
@@ -1233,7 +1267,7 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.chat-wrap { display: flex; height: calc(100vh - 64px); overflow: hidden; position: relative; }
+.chat-wrap { display: flex; height: 100%; min-height: 0; overflow: hidden; position: relative; }
 
 /* Sidebar — Linear-style: 320px, минимум хрома, тонкие dividers */
 .chat-sidebar { width: 320px; flex-shrink: 0; border-right: 1px solid rgba(var(--v-border-color), 0.12); display: flex; flex-direction: column; background: rgba(var(--v-theme-surface), 1); }
@@ -1404,6 +1438,8 @@ onUnmounted(() => {
   flex: 0 0 auto;
 }
 .input-area { flex: 1; min-width: 0; }
+.input-files-list { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; max-height: 180px; overflow-y: auto; }
+.input-files-list .input-file-preview { margin-top: 0; }
 .input-file-preview { display: flex; align-items: center; gap: 8px; margin-top: 6px; padding: 6px 8px; border-radius: 10px; background: rgba(var(--v-theme-primary), 0.08); border: 1px solid rgba(var(--v-theme-primary), 0.2); }
 .input-file-preview img { width: 40px; height: 40px; object-fit: cover; border-radius: 6px; }
 .input-file-icon { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 6px; background: rgba(var(--v-theme-primary), 0.15); color: rgb(var(--v-theme-primary)); }

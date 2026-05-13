@@ -24,22 +24,14 @@ class AdminMailController extends Controller
     ) {}
 
     /**
-     * Load current SMTP settings (password masked on the way out).
+     * Legacy single-mailbox endpoint — отдаёт default-ящик.
+     * Сохранён ради backward-compat; новый UI ходит через /mailboxes.
      */
     public function settings(): JsonResponse
     {
         $s = $this->mailSettings->current();
 
-        return response()->json($s ? [
-            'host' => $s->host,
-            'port' => $s->port,
-            'username' => $s->username,
-            'hasPassword' => ! empty($s->password),
-            'encryption' => $s->encryption,
-            'from_address' => $s->from_address,
-            'from_name' => $s->from_name,
-            'updated_at' => $s->updated_at,
-        ] : [
+        return response()->json($s ? $this->serializeMailbox($s) : [
             'host' => null, 'port' => 587, 'username' => null, 'hasPassword' => false,
             'encryption' => 'tls', 'from_address' => null, 'from_name' => null,
             'updated_at' => null,
@@ -48,10 +40,79 @@ class AdminMailController extends Controller
 
     /**
      * Save SMTP settings. Empty password keeps the previous value.
+     * Legacy: пишет в default-ящик (или создаёт первый, если ящиков нет).
      */
     public function updateSettings(Request $request): JsonResponse
     {
-        $data = $request->validate([
+        $data = $this->validateMailbox($request, requireName: false);
+        $data['name'] = $data['name'] ?? 'Основной';
+
+        $existing = $this->mailSettings->current();
+        if (empty($data['password'])) {
+            $data['password'] = $existing->password ?? null;
+        }
+
+        $this->mailSettings->save($existing?->id, $data);
+
+        return response()->json(['message' => 'Настройки сохранены']);
+    }
+
+    // ===== MAILBOXES (multi-SMTP) =====
+
+    /**
+     * Список SMTP-ящиков. Default-ящик идёт первым.
+     */
+    public function mailboxes(): JsonResponse
+    {
+        $list = $this->mailSettings->list()->map(fn ($m) => $this->serializeMailbox($m));
+        return response()->json(['data' => $list->values()]);
+    }
+
+    public function storeMailbox(Request $request): JsonResponse
+    {
+        $data = $this->validateMailbox($request, requireName: true);
+        $row = $this->mailSettings->save(null, $data);
+
+        return response()->json($this->serializeMailbox($row), 201);
+    }
+
+    public function updateMailbox(Request $request, int $id): JsonResponse
+    {
+        $existing = $this->mailSettings->find($id);
+        if (! $existing) return response()->json(['message' => 'Ящик не найден'], 404);
+
+        $data = $this->validateMailbox($request, requireName: true);
+        // Пустой пароль = не менять (стандартный паттерн админ-форм).
+        if (empty($data['password'])) {
+            $data['password'] = $existing->password;
+        }
+
+        $row = $this->mailSettings->save($id, $data);
+        return response()->json($this->serializeMailbox($row));
+    }
+
+    public function destroyMailbox(int $id): JsonResponse
+    {
+        return $this->mailSettings->delete($id)
+            ? response()->json(['ok' => true])
+            : response()->json(['message' => 'Ящик не найден'], 404);
+    }
+
+    public function setDefaultMailbox(int $id): JsonResponse
+    {
+        return $this->mailSettings->setDefault($id)
+            ? response()->json(['ok' => true])
+            : response()->json(['message' => 'Ящик не найден'], 404);
+    }
+
+    /**
+     * Единая валидация для create/update/legacy-update.
+     * $requireName=true для новых ящиков, false для legacy-settings.
+     */
+    private function validateMailbox(Request $request, bool $requireName): array
+    {
+        $rules = [
+            'name' => [$requireName ? 'required' : 'nullable', 'string', 'max:120'],
             'host' => ['required', 'string', 'max:255'],
             'port' => ['required', 'integer', 'between:1,65535'],
             'username' => ['nullable', 'string', 'max:255'],
@@ -59,21 +120,31 @@ class AdminMailController extends Controller
             'encryption' => ['nullable', 'string', 'in:tls,ssl,null'],
             'from_address' => ['required', 'email', 'max:255'],
             'from_name' => ['nullable', 'string', 'max:255'],
-        ]);
+        ];
+        $data = $request->validate($rules);
 
         if (($data['encryption'] ?? null) === 'null') {
             $data['encryption'] = null;
         }
 
-        // Empty password: keep the existing one
-        if (empty($data['password'])) {
-            $existing = $this->mailSettings->current();
-            $data['password'] = $existing->password ?? null;
-        }
+        return $data;
+    }
 
-        $this->mailSettings->save($data);
-
-        return response()->json(['message' => 'Настройки сохранены']);
+    private function serializeMailbox(object $s): array
+    {
+        return [
+            'id' => $s->id ?? null,
+            'name' => $s->name ?? null,
+            'host' => $s->host,
+            'port' => $s->port,
+            'username' => $s->username,
+            'hasPassword' => ! empty($s->password),
+            'encryption' => $s->encryption,
+            'from_address' => $s->from_address,
+            'from_name' => $s->from_name,
+            'is_default' => (bool) ($s->is_default ?? false),
+            'updated_at' => $s->updated_at,
+        ];
     }
 
     /**
@@ -83,9 +154,11 @@ class AdminMailController extends Controller
     {
         $data = $request->validate([
             'to' => ['required', 'email'],
+            // mailbox_id — какой ящик использовать; null = default.
+            'mailbox_id' => ['nullable', 'integer', 'exists:mail_settings,id'],
         ]);
 
-        if (! $this->mailSettings->applyRuntimeConfig()) {
+        if (! $this->mailSettings->applyRuntimeConfig($data['mailbox_id'] ?? null)) {
             return response()->json([
                 'message' => 'SMTP-настройки не заполнены (host / from_address)',
             ], 422);
@@ -120,9 +193,11 @@ class AdminMailController extends Controller
             'subject' => ['required', 'string', 'max:255'],
             'body' => ['required', 'string'],
             'is_html' => ['boolean'],
+            // С какого ящика слать; null = default.
+            'mailbox_id' => ['nullable', 'integer', 'exists:mail_settings,id'],
         ]);
 
-        if (! $this->mailSettings->applyRuntimeConfig()) {
+        if (! $this->mailSettings->applyRuntimeConfig($data['mailbox_id'] ?? null)) {
             return response()->json([
                 'message' => 'SMTP-настройки не заполнены (host / from_address)',
             ], 422);
@@ -136,6 +211,7 @@ class AdminMailController extends Controller
         $broadcastId = (string) Str::uuid();
         $senderId = (int) $request->user()->id;
         $isHtml = (bool) ($data['is_html'] ?? true);
+        $mailboxId = $data['mailbox_id'] ?? null;
 
         foreach ($recipients as $r) {
             SendBroadcastEmail::dispatch(
@@ -145,6 +221,7 @@ class AdminMailController extends Controller
                 $data['subject'],
                 $data['body'],
                 $isHtml,
+                $mailboxId,
             );
         }
 

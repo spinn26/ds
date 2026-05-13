@@ -182,8 +182,8 @@
     </v-app-bar>
 
     <!-- Content -->
-    <v-main class="content-main">
-      <v-container fluid class="pa-4 pa-md-6">
+    <v-main class="content-main" :class="{ 'content-main--full-bleed': isFullBleedRoute }">
+      <v-container fluid :class="isFullBleedRoute ? 'pa-0' : 'pa-4 pa-md-6'">
         <router-view />
       </v-container>
     </v-main>
@@ -286,6 +286,13 @@ const router = useRouter();
 const theme = useTheme();
 const { mobile } = useDisplay();
 const drawer = ref(true);
+
+// Чат-страницы должны занимать всю доступную высоту v-main без отступов
+// контейнера, иначе при низком вьюпорте поле ввода уходит ниже экрана
+// (жалоба Джабиевой 2026-05-13).
+const isFullBleedRoute = computed(() => {
+  return route.path === '/chat' || route.path === '/manage/chat';
+});
 
 // Rail (minimalist) sidebar — persists across sessions
 const rail = ref(localStorage.getItem('main-nav-rail') === '1');
@@ -760,6 +767,22 @@ const visibleMenu = computed(() => menuItems.filter((item) => {
 
 .content-main {
   background: rgba(var(--v-theme-background), 1);
+}
+
+/* Чат-страницы: v-main как flex-контейнер с фиксированной высотой viewport,
+   чтобы дочерний .chat-wrap мог занять всё доступное пространство через
+   height:100% без жёсткого calc(100vh - X), который ломается при разных
+   высотах AppBar/bottom-nav. */
+.content-main--full-bleed {
+  display: flex !important;
+  flex-direction: column;
+}
+.content-main--full-bleed > :deep(.v-container) {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .menu-item {

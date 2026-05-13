@@ -166,12 +166,17 @@ class ChatController extends Controller
             array_keys(TicketService::CATEGORIES),
             array_keys(TicketService::CATEGORY_ALIASES),
         );
+        // silent=true → тикет создаётся без обычного первого сообщения,
+        // вместо него пишется системная строка («Чат создан …»). Нужно
+        // для StartChatButton с silent=true (раздел Партнёры — общий чат
+        // без авто-приветствия).
+        $silent = (bool) $request->input('silent', false);
         $request->validate([
             'subject' => 'required|string|max:255',
             'description' => 'nullable|string|max:10000',
             'department' => 'required|in:' . implode(',', $allowedDepartments),
             'priority' => 'nullable|in:critical,high,medium,low',
-            'message' => 'required|string|max:10000',
+            'message' => ($silent ? 'nullable' : 'required') . '|string|max:10000',
             'recipient_id' => 'nullable|integer|exists:WebUser,id',
             // consultant_id — алиас для recipient_id со StartChatButton'a,
             // где есть только consultant.id из listing. Бэк сам резолвит
@@ -182,6 +187,7 @@ class ChatController extends Controller
             'context_id' => 'nullable|string|max:50',
             'tags' => 'nullable|array|max:20',
             'tags.*' => 'string|max:50',
+            'silent' => 'nullable|boolean',
         ]);
 
         // Резолв consultant_id → recipient_id (WebUser.id).
@@ -208,7 +214,7 @@ class ChatController extends Controller
             'subject' => strip_tags((string) $request->input('subject')),
             'description' => $request->input('description') !== null
                 ? strip_tags((string) $request->input('description')) : null,
-            'message' => strip_tags((string) $request->input('message')),
+            'message' => strip_tags((string) ($request->input('message') ?? '')),
         ]);
 
         $user = $request->user();
@@ -243,7 +249,7 @@ class ChatController extends Controller
 
         // Transaction: the ticket row is meaningless without its first message,
         // so either both land or neither does.
-        $ticketId = DB::transaction(function () use ($request, $user, $name, $recipientId, $recipientName, $now, $messageBody, $isSupport) {
+        $ticketId = DB::transaction(function () use ($request, $user, $name, $recipientId, $recipientName, $now, $messageBody, $isSupport, $silent) {
             $incidentNo = null;
             if ($isSupport) {
                 DB::statement("SELECT pg_advisory_xact_lock(hashtext('chat-incident-number'))");
@@ -275,12 +281,19 @@ class ChatController extends Controller
                 'updated_at' => $now,
             ]);
 
+            // silent=true: первое сообщение — системная строка ("Чат
+            // создан администратором X"). Без бабла в ленте (is_system=true),
+            // тикет имеет хотя бы одну запись для last_message_at/preview.
+            $firstContent = $silent
+                ? "Чат создан администратором {$name}"
+                : $messageBody;
             DB::table('chat_messages')->insert([
                 'ticket_id' => $id,
                 'sender_id' => $user->id,
                 'sender_name' => $name,
-                'content' => $messageBody,
+                'content' => $firstContent,
                 'is_agent' => $request->user()->isStaff(),
+                'is_system' => $silent,
                 'created_at' => $now,
                 'updated_at' => $now,
             ]);

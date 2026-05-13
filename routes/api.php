@@ -337,6 +337,12 @@ Route::prefix('v1')->group(function () {
         // Admin Mail (SMTP settings, broadcast, templates, send log)
         Route::get('/admin/mail/settings', [\App\Http\Controllers\Api\AdminMailController::class, 'settings']);
         Route::put('/admin/mail/settings', [\App\Http\Controllers\Api\AdminMailController::class, 'updateSettings']);
+        // Множественные SMTP-ящики (system / маркетинг / поддержка / …).
+        Route::get('/admin/mail/mailboxes', [\App\Http\Controllers\Api\AdminMailController::class, 'mailboxes']);
+        Route::post('/admin/mail/mailboxes', [\App\Http\Controllers\Api\AdminMailController::class, 'storeMailbox']);
+        Route::put('/admin/mail/mailboxes/{id}', [\App\Http\Controllers\Api\AdminMailController::class, 'updateMailbox'])->whereNumber('id');
+        Route::delete('/admin/mail/mailboxes/{id}', [\App\Http\Controllers\Api\AdminMailController::class, 'destroyMailbox'])->whereNumber('id');
+        Route::post('/admin/mail/mailboxes/{id}/default', [\App\Http\Controllers\Api\AdminMailController::class, 'setDefaultMailbox'])->whereNumber('id');
         Route::post('/admin/mail/test', [\App\Http\Controllers\Api\AdminMailController::class, 'test']);
         Route::post('/admin/mail/broadcast', [\App\Http\Controllers\Api\AdminMailController::class, 'broadcast'])->middleware('throttle:10,1');
         Route::get('/admin/mail/broadcast/{id}/progress', [\App\Http\Controllers\Api\AdminMailController::class, 'broadcastProgress']);

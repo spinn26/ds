@@ -6,7 +6,7 @@
       <v-tabs v-model="tab" color="primary" show-arrows>
         <v-tab value="compose">Рассылка</v-tab>
         <v-tab value="templates">Шаблоны</v-tab>
-        <v-tab value="settings">Настройки SMTP</v-tab>
+        <v-tab value="mailboxes">Ящики</v-tab>
         <v-tab value="log">Журнал</v-tab>
       </v-tabs>
       <v-divider />
@@ -36,17 +36,22 @@
             </v-col>
 
             <v-col cols="12" md="7">
-              <div class="d-flex align-center ga-2 mb-3">
+              <div class="d-flex align-center ga-2 mb-3 flex-wrap">
                 <v-select v-model="selectedTemplateId" :items="templateOptions"
                   item-title="name" item-value="id"
                   label="Шаблон (необязательно)"
                   variant="outlined" density="compact" hide-details
-                  clearable style="max-width:320px"
+                  clearable style="max-width:300px; flex:1 1 220px"
                   @update:model-value="applyTemplate" />
-                <v-chip size="small" variant="tonal" color="info"
-                  prepend-icon="mdi-code-braces" class="ml-2">
-                  Подставим переменные
-                </v-chip>
+                <!-- Выбор ящика для рассылки. null = ящик по умолчанию.
+                     Показываем только если в системе больше одного ящика. -->
+                <v-select v-if="mailboxes.length > 1"
+                  v-model="compose.mailbox_id" :items="mailboxOptions"
+                  item-title="title" item-value="id"
+                  label="Отправить с ящика"
+                  variant="outlined" density="compact" hide-details
+                  prepend-inner-icon="mdi-email-outline"
+                  style="max-width:280px; flex:1 1 200px" />
               </div>
               <v-text-field v-model="compose.subject" label="Тема письма *"
                 variant="outlined" density="compact" class="mb-3" />
@@ -122,52 +127,36 @@
           </v-data-table>
         </v-tabs-window-item>
 
-        <!-- SETTINGS TAB -->
-        <v-tabs-window-item value="settings" class="pa-5">
-          <div class="text-subtitle-1 font-weight-bold mb-3">SMTP-подключение</div>
-          <v-row>
-            <v-col cols="12" sm="8">
-              <v-text-field v-model="smtp.host" label="Хост *" variant="outlined" density="compact" class="mb-3" />
-            </v-col>
-            <v-col cols="12" sm="4">
-              <v-text-field v-model.number="smtp.port" type="number" label="Порт *" variant="outlined" density="compact" class="mb-3" />
-            </v-col>
-            <v-col cols="12" sm="6">
-              <v-text-field v-model="smtp.username" label="Логин" variant="outlined" density="compact" class="mb-3" />
-            </v-col>
-            <v-col cols="12" sm="6">
-              <v-text-field v-model="smtp.password" type="password" label="Пароль"
-                :placeholder="smtp.hasPassword ? 'Оставьте пустым, чтобы не менять' : ''"
-                variant="outlined" density="compact" class="mb-3" />
-            </v-col>
-            <v-col cols="12" sm="4">
-              <v-select v-model="smtp.encryption" :items="encOptions" label="Шифрование"
-                variant="outlined" density="compact" class="mb-3" />
-            </v-col>
-            <v-col cols="12" sm="4">
-              <v-text-field v-model="smtp.from_address" label="Отправитель — email *" variant="outlined" density="compact" class="mb-3" />
-            </v-col>
-            <v-col cols="12" sm="4">
-              <v-text-field v-model="smtp.from_name" label="Отправитель — имя" variant="outlined" density="compact" class="mb-3" />
-            </v-col>
-          </v-row>
-
-          <div class="d-flex align-center ga-2 flex-wrap">
-            <v-btn color="primary" :loading="savingSmtp" prepend-icon="mdi-content-save" @click="saveSmtp">
-              Сохранить
-            </v-btn>
-            <v-divider vertical class="mx-2" />
-            <v-text-field v-model="testTo" label="Тест на email" variant="outlined" density="compact" hide-details style="max-width: 280px" />
-            <v-btn variant="tonal" color="secondary" :loading="testing" prepend-icon="mdi-email-check" @click="sendTest">
-              Проверить
+        <!-- MAILBOXES TAB — несколько SMTP-ящиков, default-ящик помечен -->
+        <v-tabs-window-item value="mailboxes" class="pa-5">
+          <div class="d-flex align-center mb-3">
+            <div class="text-subtitle-1 font-weight-bold">SMTP-ящики</div>
+            <v-spacer />
+            <v-btn color="primary" prepend-icon="mdi-plus" @click="openMailbox(null)">
+              Добавить ящик
             </v-btn>
           </div>
-          <v-alert v-if="smtpMsg" :type="smtpMsgType" density="compact" class="mt-3" closable @click:close="smtpMsg = ''">
-            {{ smtpMsg }}
-          </v-alert>
-          <div v-if="smtp.updated_at" class="text-caption text-medium-emphasis mt-3">
-            Последнее обновление: {{ fmtDateTime(smtp.updated_at) }}
-          </div>
+          <v-data-table :items="mailboxes" :headers="mailboxHeaders" :loading="loadingMailboxes"
+            density="compact" hover no-data-text="Ящиков пока нет. Добавьте первый — он автоматически станет основным."
+            :items-per-page="25">
+            <template #item.is_default="{ value }">
+              <v-chip v-if="value" size="x-small" color="success" variant="tonal" prepend-icon="mdi-star">
+                По умолчанию
+              </v-chip>
+            </template>
+            <template #item.encryption="{ value }">
+              <v-chip size="x-small" variant="outlined">{{ value || 'без шифрования' }}</v-chip>
+            </template>
+            <template #item.actions="{ item }">
+              <v-btn icon="mdi-email-check" size="x-small" variant="text" color="secondary"
+                title="Отправить тестовое письмо" @click="openTestDialog(item)" />
+              <v-btn v-if="!item.is_default" icon="mdi-star-outline" size="x-small" variant="text"
+                title="Сделать ящиком по умолчанию" @click="setDefaultMailbox(item)" />
+              <v-btn icon="mdi-pencil" size="x-small" variant="text" @click="openMailbox(item)" />
+              <v-btn icon="mdi-delete" size="x-small" variant="text" color="error"
+                @click="deleteMailbox(item)" />
+            </template>
+          </v-data-table>
         </v-tabs-window-item>
 
         <!-- LOG TAB -->
@@ -242,6 +231,83 @@
       </v-card>
     </v-dialog>
 
+    <!-- Mailbox create/edit dialog -->
+    <v-dialog v-model="mailboxDialog" max-width="720" persistent>
+      <v-card>
+        <v-card-title>{{ mailboxForm.id ? 'Редактировать ящик' : 'Новый SMTP-ящик' }}</v-card-title>
+        <v-card-text>
+          <v-text-field v-model="mailboxForm.name" label="Название ящика *"
+            placeholder="Например: Системные уведомления / Маркетинг / Поддержка"
+            variant="outlined" density="compact" class="mb-3" />
+          <v-row dense>
+            <v-col cols="12" sm="8">
+              <v-text-field v-model="mailboxForm.host" label="Хост *"
+                variant="outlined" density="compact" />
+            </v-col>
+            <v-col cols="12" sm="4">
+              <v-text-field v-model.number="mailboxForm.port" type="number" label="Порт *"
+                variant="outlined" density="compact" />
+            </v-col>
+            <v-col cols="12" sm="6">
+              <v-text-field v-model="mailboxForm.username" label="Логин"
+                variant="outlined" density="compact" />
+            </v-col>
+            <v-col cols="12" sm="6">
+              <v-text-field v-model="mailboxForm.password" type="password" label="Пароль"
+                :placeholder="mailboxForm.hasPassword ? 'Оставьте пустым, чтобы не менять' : ''"
+                variant="outlined" density="compact" />
+            </v-col>
+            <v-col cols="12" sm="4">
+              <v-select v-model="mailboxForm.encryption" :items="encOptions" label="Шифрование"
+                variant="outlined" density="compact" />
+            </v-col>
+            <v-col cols="12" sm="4">
+              <v-text-field v-model="mailboxForm.from_address" label="Email отправителя *"
+                variant="outlined" density="compact" />
+            </v-col>
+            <v-col cols="12" sm="4">
+              <v-text-field v-model="mailboxForm.from_name" label="Имя отправителя"
+                variant="outlined" density="compact" />
+            </v-col>
+          </v-row>
+          <v-alert v-if="mailboxMsg" type="error" density="compact" class="mt-2">
+            {{ mailboxMsg }}
+          </v-alert>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="mailboxDialog = false">Отмена</v-btn>
+          <v-btn color="primary" :loading="savingMailbox"
+            :disabled="!mailboxForm.name || !mailboxForm.host || !mailboxForm.from_address"
+            @click="saveMailbox">Сохранить</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Test send dialog (per-mailbox) -->
+    <v-dialog v-model="testDialog" max-width="480">
+      <v-card>
+        <v-card-title>Тестовое письмо</v-card-title>
+        <v-card-text>
+          <div class="text-body-2 text-medium-emphasis mb-3">
+            Ящик: <strong>{{ testTargetMailbox?.name }}</strong>
+            ({{ testTargetMailbox?.from_address }})
+          </div>
+          <v-text-field v-model="testTo" label="Email получателя *" type="email"
+            variant="outlined" density="compact" autofocus />
+          <v-alert v-if="testMsg" :type="testMsgType" density="compact" class="mt-2">
+            {{ testMsg }}
+          </v-alert>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="testDialog = false">Закрыть</v-btn>
+          <v-btn color="primary" :loading="testing" :disabled="!testTo"
+            prepend-icon="mdi-email-check" @click="sendTest">Отправить</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- Confirm send dialog -->
     <v-dialog v-model="confirmDialog" max-width="420">
       <v-card>
@@ -274,17 +340,29 @@ import RichTextEditor from '../../components/RichTextEditor.vue';
 
 const tab = ref('compose');
 
-// ========== SMTP SETTINGS ==========
-const smtp = ref({
-  host: '', port: 587, username: '', password: '',
+// ========== MAILBOXES (multi-SMTP) ==========
+// Список SMTP-ящиков. Заказчик хотел возможность держать несколько
+// ящиков (system / маркетинг / поддержка) и переключаться между ними
+// в рассылке. Один помечен is_default=true — используется при тесте
+// и при рассылке, если не выбран другой.
+const mailboxes = ref([]);
+const loadingMailboxes = ref(false);
+const mailboxDialog = ref(false);
+const savingMailbox = ref(false);
+const mailboxMsg = ref('');
+const mailboxForm = ref({
+  id: null, name: '', host: '', port: 587, username: '', password: '',
   encryption: 'tls', from_address: '', from_name: '',
-  hasPassword: false, updated_at: null,
+  hasPassword: false,
 });
-const savingSmtp = ref(false);
+
+// Test send dialog: спрашиваем email и шлём с конкретного ящика.
+const testDialog = ref(false);
+const testTargetMailbox = ref(null);
 const testing = ref(false);
 const testTo = ref('');
-const smtpMsg = ref('');
-const smtpMsgType = ref('success');
+const testMsg = ref('');
+const testMsgType = ref('success');
 
 const encOptions = [
   { title: 'TLS', value: 'tls' },
@@ -292,56 +370,118 @@ const encOptions = [
   { title: 'Без шифрования', value: 'null' },
 ];
 
-async function loadSmtp() {
+const mailboxHeaders = [
+  { title: 'Название', key: 'name' },
+  { title: 'Хост', key: 'host' },
+  { title: 'Отправитель', key: 'from_address' },
+  { title: 'Шифрование', key: 'encryption', width: 130 },
+  { title: '', key: 'is_default', width: 150, sortable: false },
+  { title: '', key: 'actions', sortable: false, width: 160 },
+];
+
+// Опции для селекта в рассылке: явный «По умолчанию» (null) + все ящики.
+const mailboxOptions = computed(() => [
+  { id: null, title: 'По умолчанию' },
+  ...mailboxes.value.map(m => ({
+    id: m.id,
+    title: m.name + (m.is_default ? ' (default)' : ''),
+  })),
+]);
+
+async function loadMailboxes() {
+  loadingMailboxes.value = true;
   try {
-    const { data } = await api.get('/admin/mail/settings');
-    smtp.value = {
-      ...smtp.value,
-      ...data,
-      password: '',
-      encryption: data.encryption ?? 'null',
+    const { data } = await api.get('/admin/mail/mailboxes');
+    mailboxes.value = data.data || [];
+  } catch {}
+  loadingMailboxes.value = false;
+}
+
+function openMailbox(item) {
+  mailboxMsg.value = '';
+  mailboxForm.value = item
+    ? {
+        id: item.id, name: item.name, host: item.host, port: item.port,
+        username: item.username || '', password: '',
+        encryption: item.encryption ?? 'null',
+        from_address: item.from_address, from_name: item.from_name || '',
+        hasPassword: !!item.hasPassword,
+      }
+    : {
+        id: null, name: '', host: '', port: 587, username: '', password: '',
+        encryption: 'tls', from_address: '', from_name: '',
+        hasPassword: false,
+      };
+  mailboxDialog.value = true;
+}
+
+async function saveMailbox() {
+  savingMailbox.value = true;
+  mailboxMsg.value = '';
+  try {
+    const payload = {
+      name: mailboxForm.value.name,
+      host: mailboxForm.value.host,
+      port: mailboxForm.value.port,
+      username: mailboxForm.value.username,
+      password: mailboxForm.value.password,
+      encryption: mailboxForm.value.encryption,
+      from_address: mailboxForm.value.from_address,
+      from_name: mailboxForm.value.from_name,
     };
+    if (mailboxForm.value.id) {
+      await api.put(`/admin/mail/mailboxes/${mailboxForm.value.id}`, payload);
+    } else {
+      await api.post('/admin/mail/mailboxes', payload);
+    }
+    mailboxDialog.value = false;
+    await loadMailboxes();
+  } catch (e) {
+    mailboxMsg.value = e.response?.data?.message || 'Ошибка сохранения';
+  }
+  savingMailbox.value = false;
+}
+
+async function deleteMailbox(item) {
+  if (!await confirm.ask({
+    title: 'Удалить ящик?',
+    message: `«${item.name}» будет удалён. Если это default — default'ом станет другой ящик.`,
+    confirmText: 'Удалить', confirmColor: 'error', icon: 'mdi-trash-can',
+  })) return;
+  try {
+    await api.delete(`/admin/mail/mailboxes/${item.id}`);
+    await loadMailboxes();
   } catch {}
 }
 
-async function saveSmtp() {
-  savingSmtp.value = true;
-  smtpMsg.value = '';
+async function setDefaultMailbox(item) {
   try {
-    await api.put('/admin/mail/settings', {
-      host: smtp.value.host,
-      port: smtp.value.port,
-      username: smtp.value.username,
-      password: smtp.value.password,
-      encryption: smtp.value.encryption,
-      from_address: smtp.value.from_address,
-      from_name: smtp.value.from_name,
-    });
-    smtpMsg.value = 'Настройки сохранены';
-    smtpMsgType.value = 'success';
-    await loadSmtp();
-  } catch (e) {
-    smtpMsg.value = e.response?.data?.message || 'Ошибка сохранения';
-    smtpMsgType.value = 'error';
-  }
-  savingSmtp.value = false;
+    await api.post(`/admin/mail/mailboxes/${item.id}/default`);
+    await loadMailboxes();
+  } catch {}
+}
+
+function openTestDialog(item) {
+  testTargetMailbox.value = item;
+  testTo.value = '';
+  testMsg.value = '';
+  testDialog.value = true;
 }
 
 async function sendTest() {
-  if (!testTo.value) {
-    smtpMsg.value = 'Укажите email для теста';
-    smtpMsgType.value = 'error';
-    return;
-  }
+  if (!testTo.value || !testTargetMailbox.value) return;
   testing.value = true;
-  smtpMsg.value = '';
+  testMsg.value = '';
   try {
-    await api.post('/admin/mail/test', { to: testTo.value });
-    smtpMsg.value = 'Тестовое письмо отправлено';
-    smtpMsgType.value = 'success';
+    await api.post('/admin/mail/test', {
+      to: testTo.value,
+      mailbox_id: testTargetMailbox.value.id,
+    });
+    testMsg.value = 'Тестовое письмо отправлено';
+    testMsgType.value = 'success';
   } catch (e) {
-    smtpMsg.value = e.response?.data?.message || 'Ошибка отправки';
-    smtpMsgType.value = 'error';
+    testMsg.value = e.response?.data?.message || 'Ошибка отправки';
+    testMsgType.value = 'error';
   }
   testing.value = false;
 }
@@ -353,6 +493,7 @@ const compose = ref({
   subject: '',
   body: '',
   is_html: true,
+  mailbox_id: null,   // null = ящик по умолчанию
 });
 const audienceCount = ref(0);
 const sending = ref(false);
@@ -395,6 +536,7 @@ async function doSend() {
       subject: compose.value.subject,
       body: compose.value.body,
       is_html: compose.value.is_html,
+      mailbox_id: compose.value.mailbox_id,
     };
     if (compose.value.audience === 'ids') payload.ids = parseIds();
     const { data } = await api.post('/admin/mail/broadcast', payload);
@@ -576,10 +718,11 @@ watch(tab, (v) => {
   if (v === 'log') loadLog();
   if (v === 'compose') refreshPreview();
   if (v === 'templates') loadTemplates();
+  if (v === 'mailboxes') loadMailboxes();
 });
 
 onMounted(() => {
-  loadSmtp();
+  loadMailboxes();
   loadTemplates();
   refreshPreview();
 });

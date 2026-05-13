@@ -149,6 +149,7 @@
       <template #item.birthDate="{ value }">{{ fmtDate(value) }}</template>
       <template #item.createdAt="{ value }">{{ fmtDate(value) }}</template>
       <template #item.actions="{ item }">
+        <StartChatButton :partner-id="item.id" :partner-name="item.personName" silent />
         <v-tooltip text="Редактировать" location="top">
           <template #activator="{ props: tipProps }">
             <v-btn v-bind="tipProps" icon="mdi-pencil" size="x-small" variant="text" @click="openEdit(item)" />
@@ -388,6 +389,7 @@ import DataTableWrapper from '../../components/DataTableWrapper.vue';
 import StatusChip from '../../components/StatusChip.vue';
 import DialogShell from '../../components/DialogShell.vue';
 import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
+import StartChatButton from '../../components/StartChatButton.vue';
 import { useSnackbar } from '../../composables/useSnackbar';
 import { useAuthStore } from '../../stores/auth';
 import { usePermissions } from '../../composables/usePermissions';

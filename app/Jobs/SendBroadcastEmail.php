@@ -32,11 +32,12 @@ class SendBroadcastEmail implements ShouldQueue
         public string $subject,
         public string $body,
         public bool $isHtml,
+        public ?int $mailboxId = null,
     ) {}
 
     public function handle(MailSettingsService $settings, MailTemplateRenderer $renderer): void
     {
-        if (! $settings->applyRuntimeConfig()) {
+        if (! $settings->applyRuntimeConfig($this->mailboxId)) {
             $this->logFail(null, 'SMTP-настройки не заполнены');
             return;
         }
