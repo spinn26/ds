@@ -59,11 +59,15 @@ return [
     ],
 
     // Telegram-уведомления. Создать бота через @BotFather, получить токен,
-    // положить в TELEGRAM_BOT_TOKEN. Пользователи привязывают chat_id
-    // в своём профиле (вкладка «Безопасность»).
+    // положить в TELEGRAM_BOT_TOKEN. Пользователи привязывают аккаунт
+    // через deeplink t.me/<bot>?start=<one-time-token>. Webhook
+    // регистрируется один раз: php artisan telegram:setup-webhook.
     'telegram' => [
         'bot_token' => env('TELEGRAM_BOT_TOKEN'),
         'bot_username' => env('TELEGRAM_BOT_USERNAME'),
+        // openssl rand -hex 32 — подпись X-Telegram-Bot-Api-Secret-Token,
+        // которую Telegram передаёт в каждом update'е.
+        'webhook_secret' => env('TELEGRAM_WEBHOOK_SECRET'),
     ],
 
 ];

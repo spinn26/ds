@@ -29,6 +29,10 @@ Route::prefix('v1')->group(function () {
         Route::post('/auth/check-referral', [AuthController::class, 'checkReferral']);
     });
 
+    // Telegram webhook — без auth, валидация через
+    // X-Telegram-Bot-Api-Secret-Token (config services.telegram.webhook_secret).
+    Route::post('/webhooks/telegram', [\App\Http\Controllers\Api\TelegramWebhookController::class, 'handle']);
+
     // Insmart webhook — без auth:sanctum (внешний источник),
     // защищён shared-secret в заголовке X-Insmart-Secret + throttle.
     Route::middleware('throttle:60,1')->group(function () {
@@ -59,9 +63,10 @@ Route::prefix('v1')->group(function () {
         // Глобальный поиск (Ctrl+K) — все auth.
         Route::get('/search', [\App\Http\Controllers\Api\SearchController::class, 'index']);
 
-        // Telegram-привязка.
+        // Telegram-привязка через бота.
         Route::get('/telegram/status', [\App\Http\Controllers\Api\TelegramController::class, 'status']);
-        Route::post('/telegram/link', [\App\Http\Controllers\Api\TelegramController::class, 'link']);
+        Route::post('/telegram/start-link', [\App\Http\Controllers\Api\TelegramController::class, 'startLink']);
+        Route::get('/telegram/check-link', [\App\Http\Controllers\Api\TelegramController::class, 'checkLink']);
         Route::post('/telegram/unlink', [\App\Http\Controllers\Api\TelegramController::class, 'unlink']);
         Route::post('/telegram/test', [\App\Http\Controllers\Api\TelegramController::class, 'test']);
 

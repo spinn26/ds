@@ -332,7 +332,7 @@
           </template>
         </v-card>
 
-        <!-- Telegram-уведомления -->
+        <!-- Telegram-уведомления через бота -->
         <v-card v-if="telegram.enabled" class="pa-4">
           <div class="d-flex align-center ga-2 mb-3">
             <v-icon color="primary">mdi-send</v-icon>
@@ -341,8 +341,7 @@
           <template v-if="telegram.linked">
             <v-alert type="success" variant="tonal" density="compact" class="mb-3">
               <v-icon class="mr-1">mdi-check-circle</v-icon>
-              Привязан chat_id <code>{{ telegram.chat_id }}</code>.
-              Сюда будут приходить критические уведомления.
+              Аккаунт привязан к Telegram. Сюда будут приходить критические уведомления.
             </v-alert>
             <v-btn variant="tonal" prepend-icon="mdi-send-check"
               :loading="telegramBusy" @click="sendTestTelegram" class="me-2">
@@ -353,28 +352,39 @@
               Отвязать
             </v-btn>
           </template>
-          <template v-else>
+
+          <template v-else-if="!tgLink">
             <div class="text-body-2 text-medium-emphasis mb-3">
-              1. Откройте бота
+              Привязка через бота
               <a v-if="telegram.bot_username"
                 :href="`https://t.me/${telegram.bot_username}`" target="_blank">
                 @{{ telegram.bot_username }}
-              </a>
-              <span v-else>(имя бота не настроено в .env)</span>,
-              нажмите Start.<br/>
-              2. Напишите боту <code>@userinfobot</code> чтобы узнать свой chat_id (Number).<br/>
-              3. Вставьте chat_id ниже и нажмите «Привязать».
+              </a>:
+              жмёте кнопку → открывается Telegram с уже введённой командой
+              <code>/start</code>. Просто подтвердите — аккаунт привяжется автоматически.
             </div>
-            <v-row dense>
-              <v-col cols="12" sm="8">
-                <v-text-field v-model="telegramChatId" label="Ваш Telegram chat_id"
-                  prepend-inner-icon="mdi-pound" variant="outlined" density="compact" />
-              </v-col>
-              <v-col cols="12" sm="4">
-                <v-btn block color="primary" prepend-icon="mdi-link"
-                  :loading="telegramBusy" @click="linkTelegram">Привязать</v-btn>
-              </v-col>
-            </v-row>
+            <v-btn color="primary" prepend-icon="mdi-send" :loading="telegramBusy"
+              @click="startTelegramLink">Привязать через бота</v-btn>
+          </template>
+
+          <template v-else>
+            <v-alert type="info" variant="tonal" density="compact" class="mb-3">
+              <div class="font-weight-medium mb-1">Откройте бота в Telegram и нажмите Start.</div>
+              <div class="text-caption">Ссылка действует 15 минут. После старта вернитесь сюда — статус обновится сам.</div>
+            </v-alert>
+            <div class="d-flex ga-2 flex-wrap">
+              <v-btn color="primary" prepend-icon="mdi-open-in-new"
+                :href="tgLink" target="_blank" rel="noopener">
+                Открыть в Telegram
+              </v-btn>
+              <v-btn variant="text" prepend-icon="mdi-refresh"
+                :loading="telegramBusy" @click="checkTelegramLink">Проверить статус</v-btn>
+              <v-btn variant="text" color="grey" @click="tgLink = null; tgToken = null;">Отменить</v-btn>
+            </div>
+            <div v-if="tgPolling" class="text-caption text-medium-emphasis mt-2">
+              <v-progress-circular indeterminate size="14" width="2" class="me-1" />
+              Ожидаем подтверждения в Telegram…
+            </div>
           </template>
         </v-card>
       </v-tabs-window-item>
@@ -627,10 +637,13 @@ onMounted(() => {
   loadTelegram();
 });
 
-// === Telegram ===
+// === Telegram (привязка через бота) ===
 const telegram = ref({ enabled: false, linked: false, chat_id: null, bot_username: null });
-const telegramChatId = ref('');
 const telegramBusy = ref(false);
+const tgLink = ref(null);        // deeplink t.me/<bot>?start=<token>
+const tgToken = ref(null);
+const tgPolling = ref(false);
+let tgPollTimer = null;
 
 async function loadTelegram() {
   try {
@@ -638,18 +651,47 @@ async function loadTelegram() {
     telegram.value = data;
   } catch {}
 }
-async function linkTelegram() {
-  if (!telegramChatId.value.trim()) { showError('Введите chat_id'); return; }
+
+async function startTelegramLink() {
   telegramBusy.value = true;
   try {
-    const { data } = await api.post('/telegram/link', { chat_id: telegramChatId.value.trim() });
-    if (data.test_ok) showSuccess(data.message);
-    else showError(data.message);
-    telegramChatId.value = '';
-    await loadTelegram();
+    const { data } = await api.post('/telegram/start-link');
+    tgToken.value = data.token;
+    tgLink.value = data.deeplink;
+    // Запускаем polling — раз в 3 сек проверяем, привязался ли уже.
+    tgPolling.value = true;
+    if (tgPollTimer) clearInterval(tgPollTimer);
+    tgPollTimer = setInterval(checkTelegramLink, 3000);
+    // Авто-стоп через 15 минут (TTL токена).
+    setTimeout(() => { if (tgPollTimer) { clearInterval(tgPollTimer); tgPollTimer = null; tgPolling.value = false; } }, 15 * 60 * 1000);
   } catch (e) { showError(e.response?.data?.message || 'Ошибка'); }
   telegramBusy.value = false;
 }
+
+async function checkTelegramLink() {
+  if (!tgToken.value) return;
+  try {
+    const { data } = await api.get('/telegram/check-link', { params: { token: tgToken.value } });
+    if (data.linked) {
+      stopTgPoll();
+      tgLink.value = null;
+      tgToken.value = null;
+      await loadTelegram();
+      showSuccess('Telegram привязан!');
+    } else if (data.expired) {
+      stopTgPoll();
+      tgLink.value = null;
+      tgToken.value = null;
+      showError('Ссылка просрочена. Сгенерируйте новую.');
+    }
+  } catch {}
+}
+
+function stopTgPoll() {
+  if (tgPollTimer) { clearInterval(tgPollTimer); tgPollTimer = null; }
+  tgPolling.value = false;
+}
+
 async function unlinkTelegram() {
   telegramBusy.value = true;
   try {
@@ -659,12 +701,13 @@ async function unlinkTelegram() {
   } catch (e) { showError(e.response?.data?.message || 'Ошибка'); }
   telegramBusy.value = false;
 }
+
 async function sendTestTelegram() {
   telegramBusy.value = true;
   try {
     const { data } = await api.post('/telegram/test');
     if (data.sent) showSuccess('Тестовое сообщение отправлено');
-    else showError('Не удалось отправить — проверьте chat_id и что бот настроен');
+    else showError('Не удалось отправить — проверьте что бот настроен');
   } catch (e) { showError(e.response?.data?.message || 'Ошибка'); }
   telegramBusy.value = false;
 }

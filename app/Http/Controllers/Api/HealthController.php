@@ -27,6 +27,7 @@ class HealthController extends Controller
             'storage' => $this->checkStorage(),
             'socket' => $this->checkSocket(),
             'migrations' => $this->checkMigrations(),
+            'telegram' => $this->checkTelegram(),
         ];
 
         $allOk = collect($checks)->every(fn ($c) => $c['ok'] ?? false);
@@ -99,6 +100,32 @@ class HealthController extends Controller
             }
             fclose($fp);
             return ['ok' => true, 'host' => $host, 'port' => $port];
+        } catch (Throwable $e) {
+            return ['ok' => false, 'error' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Telegram-бот опционален. Если токен не задан — возвращаем
+     * ok=true со статусом 'not_configured', чтобы /health не валился.
+     * Если задан — проверяем что webhook реально зарегистрирован.
+     */
+    private function checkTelegram(): array
+    {
+        if (! \App\Support\Telegram::enabled()) {
+            return ['ok' => true, 'status' => 'not_configured'];
+        }
+        try {
+            $info = \App\Support\Telegram::getWebhookInfo();
+            $url = $info['body']['result']['url'] ?? '';
+            $pending = (int) ($info['body']['result']['pending_update_count'] ?? 0);
+            $lastError = $info['body']['result']['last_error_message'] ?? null;
+            return [
+                'ok' => $info['ok'] && $url !== '',
+                'status' => $url !== '' ? 'configured' : 'webhook_missing',
+                'pending_updates' => $pending,
+                'last_error' => $lastError,
+            ];
         } catch (Throwable $e) {
             return ['ok' => false, 'error' => $e->getMessage()];
         }

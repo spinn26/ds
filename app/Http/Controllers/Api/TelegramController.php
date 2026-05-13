@@ -8,9 +8,11 @@ use App\Support\Telegram;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class TelegramController extends Controller
 {
+    /** Текущий статус привязки + конфиг для UI. */
     public function status(Request $request): JsonResponse
     {
         $user = $request->user();
@@ -23,20 +25,51 @@ class TelegramController extends Controller
         ]);
     }
 
-    public function link(Request $request): JsonResponse
+    /**
+     * Сгенерировать одноразовый токен и вернуть deeplink t.me/<bot>?start=<token>.
+     * Пользователь жмёт ссылку → попадает в Telegram → жмёт Start →
+     * бот ловит /start <token> через webhook и привязывает chat_id.
+     */
+    public function startLink(Request $request): JsonResponse
     {
-        $data = $request->validate(['chat_id' => 'required|string|max:64']);
-        $user = $request->user();
-        DB::table('WebUser')->where('id', $user->id)->update([
-            'telegram_chat_id' => trim($data['chat_id']),
-            'dateChanged' => now(),
+        if (! Telegram::enabled()) {
+            return response()->json(['message' => 'Telegram-бот не настроен (TELEGRAM_BOT_TOKEN отсутствует)'], 422);
+        }
+        $bot = config('services.telegram.bot_username');
+        if (! $bot) {
+            return response()->json(['message' => 'TELEGRAM_BOT_USERNAME не задан'], 422);
+        }
+
+        $token = Str::random(48);
+        DB::table('telegram_link_tokens')->insert([
+            'token' => $token,
+            'user_id' => $request->user()->id,
+            'expires_at' => now()->addMinutes(15),
+            'created_at' => now(),
+            'updated_at' => now(),
         ]);
-        Audit::log('telegram_link', 'WebUser', $user->id, ['chat_id' => $data['chat_id']]);
-        // Отправим welcome-сообщение чтобы проверить chat_id сразу.
-        $ok = Telegram::raw($data['chat_id'], "✅ DS Consulting: привязка успешна. Тут будут приходить уведомления.");
+
+        Audit::log('telegram_link_started', 'WebUser', $request->user()->id);
+
         return response()->json([
-            'message' => $ok ? 'Привязано и проверено' : 'Привязано, но тестовое сообщение не доставлено (проверьте, что начали диалог с ботом)',
-            'test_ok' => $ok,
+            'token' => $token,
+            'deeplink' => "https://t.me/{$bot}?start={$token}",
+            'expires_in' => 15 * 60,
+        ]);
+    }
+
+    /** Опрос «привязалось ли»: фронт периодически дёргает после открытия deeplink. */
+    public function checkLink(Request $request): JsonResponse
+    {
+        $token = (string) $request->input('token', '');
+        if (! $token) return response()->json(['linked' => false]);
+        $row = DB::table('telegram_link_tokens')
+            ->where('token', $token)
+            ->where('user_id', $request->user()->id)
+            ->first();
+        return response()->json([
+            'linked' => $row && ! empty($row->used_at),
+            'expired' => $row ? now()->greaterThan($row->expires_at) : true,
         ]);
     }
 

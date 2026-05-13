@@ -73,4 +73,38 @@ class Telegram
         }
         return $sent;
     }
+
+    /**
+     * Зарегистрировать webhook у Telegram. Вызывается артизан-командой
+     * или вручную после смены домена/секрета.
+     */
+    public static function setWebhook(string $url, ?string $secret = null): array
+    {
+        $token = config('services.telegram.bot_token');
+        if (! $token) return ['ok' => false, 'error' => 'TELEGRAM_BOT_TOKEN not set'];
+        try {
+            $res = Http::timeout(8)->post("https://api.telegram.org/bot{$token}/setWebhook", [
+                'url' => $url,
+                'secret_token' => $secret,
+                'allowed_updates' => ['message'],
+                'drop_pending_updates' => true,
+            ]);
+            return ['ok' => $res->ok(), 'status' => $res->status(), 'body' => $res->json()];
+        } catch (Throwable $e) {
+            return ['ok' => false, 'error' => $e->getMessage()];
+        }
+    }
+
+    /** Получить инфо о текущем webhook (для health-check). */
+    public static function getWebhookInfo(): array
+    {
+        $token = config('services.telegram.bot_token');
+        if (! $token) return ['ok' => false, 'error' => 'TELEGRAM_BOT_TOKEN not set'];
+        try {
+            $res = Http::timeout(5)->get("https://api.telegram.org/bot{$token}/getWebhookInfo");
+            return ['ok' => $res->ok(), 'body' => $res->json()];
+        } catch (Throwable $e) {
+            return ['ok' => false, 'error' => $e->getMessage()];
+        }
+    }
 }
