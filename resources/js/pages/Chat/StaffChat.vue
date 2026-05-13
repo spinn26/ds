@@ -2215,11 +2215,13 @@ function insertQuickReply(q) {
 }
 
 // --- CRUD шаблонов быстрых ответов ---
-// is_own — личный шаблон, всегда можно править; is_shared — глобальный,
-// править может только admin (фронт даёт ему ту же кнопку — бэк решает).
-const isAdmin = computed(() => /admin/.test(auth.user?.role || ''));
+// is_own — личный шаблон, всегда можно править; is_shared — общий,
+// править/удалять может любой staff (этот файл — staff-чат, сюда
+// партнёры всё равно не попадают, но проверку оставим явной).
+const STAFF_ROLES_RE = /admin|backoffice|support|head|finance|calculations|corrections|education/i;
+const isStaffUser = computed(() => STAFF_ROLES_RE.test(auth.user?.role || ''));
 function canEditQuickReply(q) {
-  return !!q.is_own || (q.is_shared && isAdmin.value);
+  return !!q.is_own || (q.is_shared && isStaffUser.value);
 }
 
 const qrDialog = ref(false);
@@ -2671,7 +2673,21 @@ onUnmounted(() => {
 
 .jump-to-bottom { position: absolute; right: 24px; bottom: 90px; display: flex; align-items: center; gap: 4px; padding: 6px 10px; border-radius: 16px; background: rgb(var(--v-theme-primary)); color: #fff; border: none; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.15); font-size: 12px; font-weight: 600; z-index: 5; }
 
-.reply-bar { display: flex; align-items: center; gap: 8px; padding: 8px 14px; background: rgba(var(--v-theme-primary), 0.06); border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); border-left: 3px solid rgb(var(--v-theme-primary)); }
+.reply-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: rgba(var(--v-theme-primary), 0.08);
+  border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  border-left: 3px solid rgb(var(--v-theme-primary));
+  min-height: 0;
+  max-height: 48px;
+  overflow: hidden;
+}
+.reply-bar-body { flex: 1 1 auto; min-width: 0; line-height: 1.25; }
+.reply-bar-sender { font-size: 11px; font-weight: 600; color: rgb(var(--v-theme-primary)); }
+.reply-bar-text { font-size: 12px; color: rgba(var(--v-theme-on-surface), 0.75); }
 .reply-bar-body { flex: 1; min-width: 0; font-size: 12px; }
 .reply-bar-sender { font-weight: 700; color: rgb(var(--v-theme-primary)); }
 .reply-bar-text { color: rgba(var(--v-theme-on-surface), 0.6); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

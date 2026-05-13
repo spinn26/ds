@@ -1164,14 +1164,15 @@ class ChatController extends Controller
     }
 
     /**
-     * Право на редактирование: владелец личного шаблона — всегда; admin —
-     * также может править глобальные (created_by IS NULL). Остальные нет.
+     * Право на редактирование: владелец личного шаблона — всегда;
+     * любой staff — также может править общие шаблоны
+     * (created_by IS NULL). Партнёры — нет.
      */
     private function ensureCanEditQuickReply(Request $request, $row): void
     {
         $user = $request->user();
         if ($row->created_by !== null && (int) $row->created_by === (int) $user->id) return;
-        if ($row->created_by === null && $user->hasAnyRole(['admin'])) return;
+        if ($row->created_by === null && $user->isStaff()) return;
         abort(403, 'Нельзя редактировать чужой шаблон');
     }
 

@@ -265,14 +265,16 @@
           <v-badge v-if="pendingMessages > 0" :content="pendingMessages" color="error" floating />
         </v-btn>
 
-        <!-- Reply preview (above input) -->
-        <v-alert v-if="replyTo && activeChat.status !== 'closed'"
-          density="compact" variant="tonal" color="primary"
-          icon="mdi-reply" closable class="reply-bar"
-          @click:close="cancelReply">
-          <div class="text-caption font-weight-medium">Ответ на: {{ replyTo.senderName }}</div>
-          <div class="text-body-2 text-truncate">{{ replyTo.content }}</div>
-        </v-alert>
+        <!-- Reply preview (above input) — компактный блок без v-alert -->
+        <div v-if="replyTo && activeChat.status !== 'closed'" class="reply-bar">
+          <v-icon size="14" color="primary" class="me-1">mdi-reply</v-icon>
+          <div class="reply-bar-body">
+            <div class="reply-bar-sender">Ответ на: {{ replyTo.senderName }}</div>
+            <div class="reply-bar-text text-truncate">{{ replyTo.content }}</div>
+          </div>
+          <v-btn icon="mdi-close" size="x-small" variant="text"
+            title="Отменить ответ" @click="cancelReply" />
+        </div>
 
         <!-- Input -->
         <div v-if="activeChat.status !== 'closed'" class="chat-input pa-2"
@@ -1351,8 +1353,23 @@ onUnmounted(() => {
 .msg-edit-btn.cancel { background: transparent; color: rgba(var(--v-theme-on-surface), 0.6); }
 .msg-edit-btn.save { background: rgb(var(--v-theme-primary)); color: #fff; }
 
-/* Reply preview bar above input — Vuetify v-alert, лишь margin-сброс */
-.reply-bar { margin: 0 12px; }
+/* Reply preview bar above input — компактный без v-alert */
+.reply-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 12px;
+  padding: 4px 10px;
+  background: rgba(var(--v-theme-primary), 0.08);
+  border-left: 3px solid rgb(var(--v-theme-primary));
+  border-radius: 4px;
+  min-height: 0;
+  max-height: 48px;
+  overflow: hidden;
+}
+.reply-bar-body { flex: 1 1 auto; min-width: 0; line-height: 1.25; }
+.reply-bar-sender { font-size: 11px; font-weight: 600; color: rgb(var(--v-theme-primary)); }
+.reply-bar-text { font-size: 12px; color: rgba(var(--v-theme-on-surface), 0.75); }
 
 /* Hotkeys modal rows */
 .hotkey-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px dashed rgba(var(--v-border-color), 0.3); font-size: 13px; }
