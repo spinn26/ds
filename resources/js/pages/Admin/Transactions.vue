@@ -195,10 +195,6 @@
                       <v-text-field :model-value="d.amount" type="number" density="compact" hide-details variant="plain"
                         reverse @update:model-value="v => patchField(d, 'amount', v)" />
                     </template>
-                    <template v-else-if="h.key === 'noCommission'">
-                      <span v-if="d.preview?.ready">{{ fmt2((Number(d.amount) || 0) - (d.preview.incomeDS || 0)) }}</span>
-                      <span v-else>{{ fmt2(Number(d.amount) || 0) }}</span>
-                    </template>
                     <template v-else-if="h.key === 'currency'">
                       <v-select :model-value="d.currencyId" :items="currencyOptions" item-title="symbol" item-value="id"
                         density="compact" hide-details variant="plain"
@@ -361,9 +357,6 @@
                   </template>
                   <template v-else-if="h.key === 'amount'">
                     <span class="text-end text-success font-weight-bold d-block">{{ fmt2(totals.amount) }}</span>
-                  </template>
-                  <template v-else-if="h.key === 'noCommission'">
-                    <span class="text-end text-success font-weight-bold d-block">{{ fmt2(totals.noCommission) }}</span>
                   </template>
                   <template v-else-if="h.key === 'currency'">
                     <span class="text-success">{{ totals.currencySymbol || 'RUB' }}</span>
@@ -658,7 +651,6 @@ const draftHeaders = [
   { title: 'Год контракта', key: 'contractTerm', thClass: 'text-end', tdClass: 'text-end text-no-wrap', style: 'min-width:110px' },
   { title: 'Год КВ', key: 'yearKV', style: 'min-width:110px' },
   { title: 'Транзакция', key: 'amount', thClass: 'text-end', tdClass: 'text-end', style: 'min-width:140px' },
-  { title: 'Без комиссии', key: 'noCommission', thClass: 'text-end', tdClass: 'text-end text-no-wrap', style: 'min-width:140px' },
   { title: 'Валюта', key: 'currency', style: 'min-width:90px' },
   { title: 'Сумма, RUB', key: 'amountRub', thClass: 'text-end', tdClass: 'text-end text-no-wrap', style: 'min-width:140px' },
   { title: '% ДС', key: 'dsPercent', thClass: 'text-end', tdClass: 'text-end', style: 'min-width:80px' },
@@ -761,10 +753,6 @@ const totals = computed(() => {
     maxDate: maxDate ? fmtDate(maxDate) : null,
     currencySymbol: sym,
     amount: drafts.value.reduce((s, d) => s + Number(d.amount || 0), 0),
-    noCommission: drafts.value.reduce((s, d) => {
-      const inc = d.preview?.ready ? Number(d.preview.incomeDS || 0) : 0;
-      return s + (Number(d.amount || 0) - inc);
-    }, 0),
     amountRub: ready.reduce((s, d) => s + Number(d.preview.amountRUB || 0), 0),
     incomeDS: ready.reduce((s, d) => s + Number(d.preview.incomeDS || 0) * (1 + Number(d.preview.vatPercent || 0) / 100), 0),
     incomeDsNoVat: ready.reduce((s, d) => s + Number(d.preview.incomeDS || 0), 0),
