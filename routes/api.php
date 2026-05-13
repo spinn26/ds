@@ -90,6 +90,14 @@ Route::prefix('v1')->group(function () {
 
         Route::get('/workspace', [\App\Http\Controllers\Api\WorkspaceController::class, 'index']);
 
+        // Личные виджеты Workspace: TODO-задачи и заметка-scratchpad.
+        Route::get('/my-tasks', [\App\Http\Controllers\Api\UserDashboardController::class, 'listTasks']);
+        Route::post('/my-tasks', [\App\Http\Controllers\Api\UserDashboardController::class, 'storeTask']);
+        Route::put('/my-tasks/{id}', [\App\Http\Controllers\Api\UserDashboardController::class, 'updateTask'])->whereNumber('id');
+        Route::delete('/my-tasks/{id}', [\App\Http\Controllers\Api\UserDashboardController::class, 'destroyTask'])->whereNumber('id');
+        Route::get('/my-note', [\App\Http\Controllers\Api\UserDashboardController::class, 'getNote']);
+        Route::put('/my-note', [\App\Http\Controllers\Api\UserDashboardController::class, 'saveNote']);
+
         // Per spec ✅Написать собственику — отправка в Telegram-группу
         Route::post('/founder-message', [\App\Http\Controllers\Api\FounderMessageController::class, 'send'])
             ->middleware('throttle:5,1'); // антиспам: 5 сообщений в минуту с пользователя

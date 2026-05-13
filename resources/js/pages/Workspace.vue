@@ -190,6 +190,12 @@
 
       <!-- Right column -->
       <v-col cols="12" md="4">
+        <!-- Личные задачи: TODO-чек-лист с inline-формой добавления -->
+        <MyTasksWidget class="mb-4" />
+
+        <!-- Заметка-scratchpad с автосохранением -->
+        <MyNoteWidget class="mb-4" />
+
         <!-- Quick actions -->
         <v-card class="mb-4 pa-4">
           <div class="text-subtitle-1 font-weight-bold mb-3">
@@ -285,6 +291,8 @@ import { ref, computed, onMounted } from 'vue';
 import { useDisplay } from 'vuetify';
 import { useAuthStore } from '../stores/auth';
 import api from '../api';
+import MyTasksWidget from '../components/MyTasksWidget.vue';
+import MyNoteWidget from '../components/MyNoteWidget.vue';
 
 const { mobile } = useDisplay();
 import { fmt, fmtDate } from '../composables/useDesign';
