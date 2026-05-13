@@ -30,16 +30,36 @@ class ChatController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
+        $isStaff = $request->user()->isStaff();
 
-        // Запрос пользователя 2026-05-12: каждый видит только «свои» тикеты,
-        // независимо от роли. Свой = автор / получатель / назначенный agent.
-        // Раньше staff видел весь общий пул по visibleCategoriesForRoles —
-        // отменено: оператор не должен «случайно» лазить в чужие переписки.
-        $query = DB::table('chat_tickets')->where(function ($q) use ($user) {
-            $q->where('created_by', $user->id)
-              ->orWhere('recipient_id', $user->id)
-              ->orWhere('assigned_to', $user->id);
-        });
+        $query = DB::table('chat_tickets');
+
+        if (! $isStaff) {
+            // Партнёр видит только свои (автор / получатель).
+            $query->where(function ($q) use ($user) {
+                $q->where('created_by', $user->id)
+                  ->orWhere('recipient_id', $user->id);
+            });
+        } else {
+            // Staff: видимость по своим категориям + личное участие.
+            // Категории = TicketService::CATEGORIES[*].roles (admin → support,
+            // backoffice → backoffice, finance/calculations → accruals, head →
+            // legal/general/owner). Расширяем legacy-алиасами department'а.
+            $roles = array_map('trim', explode(',', $user->role ?? ''));
+            $allowed = TicketService::visibleCategoriesForRoles($roles);
+            $expanded = $allowed;
+            foreach (TicketService::CATEGORY_ALIASES as $legacy => $modern) {
+                if (in_array($modern, $allowed, true)) $expanded[] = $legacy;
+            }
+            $query->where(function ($q) use ($user, $expanded) {
+                if (! empty($expanded)) {
+                    $q->whereIn('department', $expanded);
+                }
+                $q->orWhere('created_by', $user->id)
+                  ->orWhere('recipient_id', $user->id)
+                  ->orWhere('assigned_to', $user->id);
+            });
+        }
 
         // Filters
         if ($request->filled('status')) {
