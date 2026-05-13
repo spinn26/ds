@@ -204,6 +204,13 @@
                         density="compact" hide-details variant="plain"
                         @update:model-value="v => patchField(d, 'currency', v)" />
                     </template>
+                    <template v-else-if="h.key === 'amountRub'">
+                      <span v-if="d.preview?.ready"
+                        :title="d.currencyRate ? `Курс платформы: ${fmt2(d.currencyRate)}` : ''">
+                        {{ fmt2(d.preview.amountRUB) }} RUB
+                      </span>
+                      <span v-else class="text-medium-emphasis">—</span>
+                    </template>
                     <template v-else-if="h.key === 'dsPercent'">
                       <span v-if="d.preview?.ready">{{ fmt2(d.preview.dsCommissionPercentage) }}%</span>
                       <span v-else class="text-medium-emphasis">—</span>
@@ -215,6 +222,13 @@
                         @click="openRateModal(d)" />
                     </template>
                     <template v-else-if="h.key === 'incomeDS'">
+                      <span v-if="d.preview?.ready"
+                        :title="`Сумма комиссии с НДС ${d.preview.vatPercent || 0}%`">
+                        {{ fmt2(Number(d.preview.incomeDS || 0) * (1 + Number(d.preview.vatPercent || 0) / 100)) }} RUB
+                      </span>
+                      <span v-else class="text-medium-emphasis">—</span>
+                    </template>
+                    <template v-else-if="h.key === 'incomeDsNoVat'">
                       <template v-if="d.customCommission">
                         <v-text-field :model-value="d.dsCommissionAbsolute" type="number" density="compact" hide-details variant="plain"
                           style="max-width:120px; display:inline-block"
@@ -354,8 +368,14 @@
                   <template v-else-if="h.key === 'currency'">
                     <span class="text-success">{{ totals.currencySymbol || 'RUB' }}</span>
                   </template>
+                  <template v-else-if="h.key === 'amountRub'">
+                    <span class="text-end text-success font-weight-bold d-block">{{ fmt2(totals.amountRub) }} RUB</span>
+                  </template>
                   <template v-else-if="h.key === 'incomeDS'">
                     <span class="text-end text-success font-weight-bold d-block">{{ fmt2(totals.incomeDS) }} RUB</span>
+                  </template>
+                  <template v-else-if="h.key === 'incomeDsNoVat'">
+                    <span class="text-end text-success font-weight-bold d-block">{{ fmt2(totals.incomeDsNoVat) }} RUB</span>
                   </template>
                   <template v-else-if="h.key === 'noVatRub'">
                     <span class="text-end text-success font-weight-bold d-block">{{ fmt2(totals.noVatRub) }} RUB</span>
@@ -640,9 +660,11 @@ const draftHeaders = [
   { title: 'Транзакция', key: 'amount', thClass: 'text-end', tdClass: 'text-end', style: 'min-width:140px' },
   { title: 'Без комиссии', key: 'noCommission', thClass: 'text-end', tdClass: 'text-end text-no-wrap', style: 'min-width:140px' },
   { title: 'Валюта', key: 'currency', style: 'min-width:90px' },
+  { title: 'Сумма, RUB', key: 'amountRub', thClass: 'text-end', tdClass: 'text-end text-no-wrap', style: 'min-width:140px' },
   { title: '% ДС', key: 'dsPercent', thClass: 'text-end', tdClass: 'text-end', style: 'min-width:80px' },
   { title: 'Изменить', key: 'change', thClass: 'text-center', tdClass: 'text-center', style: 'width:50px' },
   { title: 'Доход ДС', key: 'incomeDS', thClass: 'text-end', tdClass: 'text-end text-no-wrap' },
+  { title: 'Доход ДС без НДС', key: 'incomeDsNoVat', thClass: 'text-end', tdClass: 'text-end text-no-wrap', style: 'min-width:140px' },
   { title: 'Без НДС, RUB', key: 'noVatRub', thClass: 'text-end', tdClass: 'text-end text-no-wrap' },
   { title: 'Без НДС, USD', key: 'noVatUsd', thClass: 'text-end', tdClass: 'text-end text-no-wrap' },
   { title: 'НДС', key: 'vat', thClass: 'text-end', tdClass: 'text-end text-no-wrap' },
@@ -743,7 +765,9 @@ const totals = computed(() => {
       const inc = d.preview?.ready ? Number(d.preview.incomeDS || 0) : 0;
       return s + (Number(d.amount || 0) - inc);
     }, 0),
-    incomeDS: ready.reduce((s, d) => s + Number(d.preview.incomeDS || 0), 0),
+    amountRub: ready.reduce((s, d) => s + Number(d.preview.amountRUB || 0), 0),
+    incomeDS: ready.reduce((s, d) => s + Number(d.preview.incomeDS || 0) * (1 + Number(d.preview.vatPercent || 0) / 100), 0),
+    incomeDsNoVat: ready.reduce((s, d) => s + Number(d.preview.incomeDS || 0), 0),
     noVatRub: ready.reduce((s, d) => s + Number(d.preview.amountNoVat || 0), 0),
     noVatUsd: ready.reduce((s, d) => s + Number(d.preview.amountNoVatUSD || 0), 0),
     lpPoints: ready.reduce((s, d) => s + Number(d.preview.personalVolume || 0), 0),
