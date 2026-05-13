@@ -250,6 +250,10 @@
          открыть программно через ref. -->
     <GlobalSearch />
 
+    <!-- Плавающий виджет «Мои чаты» снизу-справа.
+         Скрывается на самой странице чата. -->
+    <ChatLauncher />
+
   </v-layout>
 </template>
 
@@ -264,6 +268,7 @@ import ConfirmDialog from '../components/ConfirmDialog.vue';
 import GlobalSnackbar from '../components/GlobalSnackbar.vue';
 import GlobalSearch from '../components/GlobalSearch.vue';
 import SystemStatusChip from '../components/SystemStatusChip.vue';
+import ChatLauncher from '../components/ChatLauncher.vue';
 import { provideConfirm } from '../composables/useConfirm';
 import { availableSections as configAvailableSections } from '../config/cabinetPermissions';
 import api from '../api';
