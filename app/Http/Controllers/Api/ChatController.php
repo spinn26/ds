@@ -82,7 +82,8 @@ class ChatController extends Controller
         if ($request->filled('department')) $query->where('department', TicketService::normalizeCategory($request->department));
         if ($request->filled('assigned_to')) $query->where('assigned_to', $request->assigned_to);
         if ($request->filled('search')) {
-            $s = '%' . $request->search . '%';
+            $raw = trim((string) $request->search);
+            $s = '%' . $raw . '%';
 
             // Поиск по ФИО клиента: тикеты с context_type=Клиент ссылаются
             // на client.id (хранится как string). Ищем матчинг клиентов
@@ -95,11 +96,16 @@ class ChatController extends Controller
                 ->map(fn ($i) => (string) $i)
                 ->all();
 
-            $query->where(function ($q) use ($s, $clientIds) {
+            $query->where(function ($q) use ($s, $raw, $clientIds) {
                 $q->where('subject', 'ilike', $s)
                   ->orWhere('customer_name', 'ilike', $s)  // ФИО партнёра-автора
-                  ->orWhere('recipient_name', 'ilike', $s) // ФИО второй стороны (partner↔partner / staff↔partner)
-                  ->orWhere('id', 'ilike', $s);
+                  ->orWhere('recipient_name', 'ilike', $s); // ФИО второй стороны
+                // chat_tickets.id — integer; ILIKE на integer падает 42883
+                // и обнуляет весь search. Точное совпадение по id только
+                // если запрос полностью числовой.
+                if (ctype_digit($raw)) {
+                    $q->orWhere('id', (int) $raw);
+                }
                 if (! empty($clientIds)) {
                     $q->orWhere(function ($q2) use ($clientIds) {
                         $q2->where('context_type', 'ilike', 'клиент%')
