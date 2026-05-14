@@ -4,10 +4,24 @@
 
     <v-card class="mb-3 pa-3">
       <div class="d-flex ga-2 flex-wrap align-center">
-        <v-text-field v-model="month" type="month" placeholder="Месяц"
-          density="compact" variant="outlined" hide-details
-          style="max-width: 160px; flex: 1 1 130px"
-          @update:model-value="loadData" />
+        <!-- Vuetify-меню с date-picker в режиме месяцев — нативный
+             type="month" не открывается в Firefox и в части Chromium-сборок;
+             меню работает одинаково везде. -->
+        <v-menu v-model="monthMenu" :close-on-content-click="false"
+          location="bottom start" offset="4">
+          <template #activator="{ props }">
+            <v-text-field v-bind="props" :model-value="monthLabel || month"
+              placeholder="Месяц" readonly
+              prepend-inner-icon="mdi-calendar"
+              density="compact" variant="outlined" hide-details
+              style="max-width: 180px; flex: 1 1 130px" />
+          </template>
+          <v-card>
+            <v-date-picker :model-value="monthAsDate"
+              view-mode="months" :show-adjacent-months="false"
+              hide-header @update:model-value="onMonthPicked" />
+          </v-card>
+        </v-menu>
         <v-text-field v-model="search" placeholder="ФИО партнёра"
           density="compact" variant="outlined" hide-details rounded clearable
           prepend-inner-icon="mdi-magnify"
@@ -120,6 +134,22 @@ const search = ref('');
 const month = ref(new Date().toISOString().slice(0, 7));
 const monthLabel = ref('');
 const prevMonthLabel = ref('');
+
+const monthMenu = ref(false);
+// JS Date для v-date-picker (день берём 1-й — режим months показывает сетку
+// месяцев). Возвращается тоже Date — конвертируем обратно в 'YYYY-MM'.
+const monthAsDate = computed(() => {
+  const [y, m] = (month.value || '').split('-').map(Number);
+  if (!y || !m) return new Date();
+  return new Date(y, m - 1, 1);
+});
+function onMonthPicked(val) {
+  if (!val) return;
+  const d = val instanceof Date ? val : new Date(val);
+  month.value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  monthMenu.value = false;
+  loadData();
+}
 const qualFilter = ref(null);
 const activityFilter = ref(null);
 const nonZeroOnly = ref(false);
