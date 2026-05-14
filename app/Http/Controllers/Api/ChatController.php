@@ -87,8 +87,7 @@ class ChatController extends Controller
 
             // Поиск по ФИО клиента: тикеты с context_type=Клиент ссылаются
             // на client.id (хранится как string). Ищем матчинг клиентов
-            // первым шагом, затем подмешиваем их id в общий OR — без
-            // CAST'ов на legacy-таблице.
+            // первым шагом, затем подмешиваем их id в общий OR.
             $clientIds = DB::table('client')
                 ->where('personName', 'ilike', $s)
                 ->limit(500)
@@ -96,13 +95,53 @@ class ChatController extends Controller
                 ->map(fn ($i) => (string) $i)
                 ->all();
 
-            $query->where(function ($q) use ($s, $raw, $clientIds) {
+            // Поиск по любому участнику переписки: вытягиваем WebUser-ids
+            // по lastName/firstName и склеенному ФИО, затем JOIN'им их
+            // через 4 канала — created_by / recipient_id / assigned_to /
+            // chat_ticket_participants / chat_messages.sender_id.
+            // customer_name / recipient_name (snapshot-поля на тикете) —
+            // оставлены для legacy-тикетов, где WebUser мог быть удалён
+            // или переименован.
+            $userIds = DB::table('WebUser')
+                ->where(function ($q) use ($s) {
+                    $q->where('lastName', 'ilike', $s)
+                      ->orWhere('firstName', 'ilike', $s)
+                      ->orWhere(DB::raw("coalesce(\"lastName\",'') || ' ' || coalesce(\"firstName\",'')"), 'ilike', $s);
+                })
+                ->limit(500)
+                ->pluck('id')
+                ->all();
+
+            $participantTickets = empty($userIds) ? [] : DB::table('chat_ticket_participants')
+                ->whereIn('user_id', $userIds)
+                ->distinct()
+                ->pluck('ticket_id')
+                ->all();
+
+            $senderTickets = empty($userIds) ? [] : DB::table('chat_messages')
+                ->whereIn('sender_id', $userIds)
+                ->where('is_system', false)
+                ->distinct()
+                ->limit(2000)
+                ->pluck('ticket_id')
+                ->all();
+
+            $query->where(function ($q) use ($s, $raw, $clientIds, $userIds, $participantTickets, $senderTickets) {
                 $q->where('subject', 'ilike', $s)
-                  ->orWhere('customer_name', 'ilike', $s)  // ФИО партнёра-автора
-                  ->orWhere('recipient_name', 'ilike', $s); // ФИО второй стороны
-                // chat_tickets.id — integer; ILIKE на integer падает 42883
-                // и обнуляет весь search. Точное совпадение по id только
-                // если запрос полностью числовой.
+                  ->orWhere('customer_name', 'ilike', $s)
+                  ->orWhere('recipient_name', 'ilike', $s);
+                if (! empty($userIds)) {
+                    $q->orWhereIn('created_by', $userIds)
+                      ->orWhereIn('recipient_id', $userIds)
+                      ->orWhereIn('assigned_to', $userIds);
+                }
+                if (! empty($participantTickets)) {
+                    $q->orWhereIn('id', $participantTickets);
+                }
+                if (! empty($senderTickets)) {
+                    $q->orWhereIn('id', $senderTickets);
+                }
+                // chat_tickets.id — integer; ILIKE на integer падает 42883.
                 if (ctype_digit($raw)) {
                     $q->orWhere('id', (int) $raw);
                 }
