@@ -82,11 +82,12 @@ export const cabinetPermissions = {
   },
 
   // ===== Руководитель (Медведева, Ламакин, Угарова, Архангельский) =====
-  // Спека ✅Кабинет-Руководителя.md — почти всё Read-Only
+  // Спека ✅Кабинет-Руководителя.md — полностью Read-Only (по запросу
+  // 2026-05-14: убрать возможность менять и вносить данные у этой роли).
   head: {
     calculator:                 VIEW,
     structure:                  VIEW,
-    contests:                   FULL,   // спека §3: добавление/архив/удаление + предпросмотр
+    contests:                   VIEW,
     contracts:                  VIEW,
     clients:                    VIEW,
     partners:                   VIEW,
@@ -94,17 +95,17 @@ export const cabinetPermissions = {
     acceptance:                 VIEW,
     transfers:                  VIEW,
     products:                   VIEW,
-    reports:                    FULL,   // полный (формирование, выгрузка)
+    reports:                    VIEW,   // формирование/выгрузка — без модификации БД
     communication:              VIEW,   // супервизия — просмотр всех тикетов
     'support-desk':             VIEW,
     'chat-analytics':           VIEW,
     pool:                       VIEW,
     'partner-questionnaires':   VIEW,
-    'owner-dashboard':          FULL,
-    reconciliation:             FULL,
-    anomalies:                  FULL,
-    funnel:                     FULL,
-    cohorts:                    FULL,
+    'owner-dashboard':          VIEW,
+    reconciliation:             VIEW,
+    anomalies:                  VIEW,
+    funnel:                     VIEW,
+    cohorts:                    VIEW,
     instructions:               VIEW,
   },
 
