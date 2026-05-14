@@ -19,6 +19,9 @@ Route::prefix('v1')->group(function () {
     // даже если БД/auth сломан). Используется uptime-monitoring.
     Route::get('/health', [\App\Http\Controllers\Api\HealthController::class, 'check']);
 
+    // Публичный роадмап — без auth, читается /roadmap-страницей.
+    Route::get('/roadmap', [\App\Http\Controllers\Api\RoadmapController::class, 'publicIndex']);
+
     // Auth routes with rate limiting (5 attempts per minute)
     Route::middleware('throttle:5,1')->group(function () {
         Route::post('/auth/login', [AuthController::class, 'login']);
@@ -315,6 +318,12 @@ Route::prefix('v1')->group(function () {
         Route::post('/admin/news', [\App\Http\Controllers\Api\WorkspaceController::class, 'createNews']);
         Route::put('/admin/news/{id}', [\App\Http\Controllers\Api\WorkspaceController::class, 'updateNews']);
         Route::delete('/admin/news/{id}', [\App\Http\Controllers\Api\WorkspaceController::class, 'deleteNews']);
+
+        // Roadmap CRUD (admin) — публичный list лежит в начале файла без auth.
+        Route::get('/admin/roadmap', [\App\Http\Controllers\Api\RoadmapController::class, 'adminIndex']);
+        Route::post('/admin/roadmap', [\App\Http\Controllers\Api\RoadmapController::class, 'store']);
+        Route::put('/admin/roadmap/{id}', [\App\Http\Controllers\Api\RoadmapController::class, 'update'])->whereNumber('id');
+        Route::delete('/admin/roadmap/{id}', [\App\Http\Controllers\Api\RoadmapController::class, 'destroy'])->whereNumber('id');
         Route::get('/admin/transaction-import/history', [\App\Http\Controllers\Api\TransactionImportController::class, 'history']);
         Route::post('/admin/transaction-import/{id}/rollback', [\App\Http\Controllers\Api\TransactionImportController::class, 'rollback']);
         Route::post('/admin/transaction-import/{id}/calculate', [\App\Http\Controllers\Api\TransactionImportController::class, 'calculateCommissions']);

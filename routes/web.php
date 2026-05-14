@@ -21,7 +21,13 @@ Route::get('/storage/{path}', function (string $path) {
     return Storage::disk('public')->response($path);
 })->where('path', '.*');
 
+// Публичный роадмап продукта — standalone Blade страница (не SPA),
+// чтобы открывалась без Vuetify-бутстрапа и индексировалась поисковиками.
+Route::get('/roadmap', function () {
+    return view('roadmap');
+})->name('public.roadmap');
+
 // All non-API / non-storage routes serve the Vue SPA.
 Route::get('/{any?}', function () {
     return view('app');
-})->where('any', '^(?!api|sanctum|storage).*$');
+})->where('any', '^(?!api|sanctum|storage|roadmap).*$');

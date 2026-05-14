@@ -90,6 +90,7 @@ const routes = [
             { path: '', redirect: '/admin/dashboard' },
             { path: 'dashboard', component: () => import('../pages/Admin/Dashboard.vue') },
             { path: 'news', component: () => import('../pages/Admin/News.vue') },
+            { path: 'roadmap', component: () => import('../pages/Admin/Roadmap.vue') },
             { path: 'users', component: () => import('../pages/Admin/Users.vue') },
             { path: 'partners', component: () => import('../pages/Admin/Partners.vue') },
             { path: 'partners/statuses', component: () => import('../pages/Admin/PartnerStatuses.vue') },
