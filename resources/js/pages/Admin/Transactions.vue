@@ -236,20 +236,6 @@
                         <span v-else class="text-medium-emphasis">—</span>
                       </template>
                     </template>
-                    <template v-else-if="h.key === 'noVatRub'">
-                      <span v-if="d.preview?.ready">{{ fmt2(d.preview.amountNoVat) }} RUB</span>
-                      <span v-else class="text-medium-emphasis">—</span>
-                    </template>
-                    <template v-else-if="h.key === 'noVatUsd'">
-                      <span v-if="d.preview?.ready">{{ fmt2(d.preview.amountNoVatUSD) }} USD</span>
-                      <span v-else class="text-medium-emphasis">—</span>
-                    </template>
-                    <template v-else-if="h.key === 'vat'">
-                      <span v-if="d.preview?.ready" :title="`Ставка НДС: ${d.preview.vatPercent}%`">
-                        {{ fmt2(d.preview.vat) }} RUB
-                      </span>
-                      <span v-else class="text-medium-emphasis">—</span>
-                    </template>
                     <template v-else-if="h.key === 'partner'">
                       <v-menu open-on-hover open-delay="150" close-delay="100" location="bottom start">
                         <template #activator="{ props: pprops }">
@@ -369,12 +355,6 @@
                   </template>
                   <template v-else-if="h.key === 'incomeDsNoVat'">
                     <span class="text-end text-success font-weight-bold d-block">{{ fmt2(totals.incomeDsNoVat) }} RUB</span>
-                  </template>
-                  <template v-else-if="h.key === 'noVatRub'">
-                    <span class="text-end text-success font-weight-bold d-block">{{ fmt2(totals.noVatRub) }} RUB</span>
-                  </template>
-                  <template v-else-if="h.key === 'noVatUsd'">
-                    <span class="text-end text-success font-weight-bold d-block">{{ fmt2(totals.noVatUsd) }} USD</span>
                   </template>
                   <template v-else-if="h.key === 'lpPoints'">
                     <span class="text-end text-success font-weight-bold d-block">{{ fmt2(totals.lpPoints) }}</span>
@@ -657,9 +637,6 @@ const draftHeaders = [
   { title: 'Изменить', key: 'change', thClass: 'text-center', tdClass: 'text-center', style: 'width:50px' },
   { title: 'Доход ДС', key: 'incomeDS', thClass: 'text-end', tdClass: 'text-end text-no-wrap' },
   { title: 'Доход ДС без НДС', key: 'incomeDsNoVat', thClass: 'text-end', tdClass: 'text-end text-no-wrap', style: 'min-width:140px' },
-  { title: 'Без НДС, RUB', key: 'noVatRub', thClass: 'text-end', tdClass: 'text-end text-no-wrap' },
-  { title: 'Без НДС, USD', key: 'noVatUsd', thClass: 'text-end', tdClass: 'text-end text-no-wrap' },
-  { title: 'НДС', key: 'vat', thClass: 'text-end', tdClass: 'text-end text-no-wrap' },
   { title: 'Партнёр', key: 'partner' },
   { title: 'ЛП', key: 'lpPoints', thClass: 'text-end', tdClass: 'text-end text-no-wrap', style: 'min-width:70px' },
   { title: 'Баллы', key: 'pointsCount', thClass: 'text-end', tdClass: 'text-end text-no-wrap', style: 'min-width:80px' },
@@ -756,8 +733,6 @@ const totals = computed(() => {
     amountRub: ready.reduce((s, d) => s + Number(d.preview.amountRUB || 0), 0),
     incomeDS: ready.reduce((s, d) => s + Number(d.preview.incomeDS || 0) * (1 + Number(d.preview.vatPercent || 0) / 100), 0),
     incomeDsNoVat: ready.reduce((s, d) => s + Number(d.preview.incomeDS || 0), 0),
-    noVatRub: ready.reduce((s, d) => s + Number(d.preview.amountNoVat || 0), 0),
-    noVatUsd: ready.reduce((s, d) => s + Number(d.preview.amountNoVatUSD || 0), 0),
     lpPoints: ready.reduce((s, d) => s + Number(d.preview.personalVolume || 0), 0),
     pointsCount: ready.reduce((s, d) => s + Number(d.preview.chain?.[0]?.points || 0), 0),
     partnersTotal: ready.reduce((s, d) => s + Number(d.preview.partnersTotal || 0), 0),
