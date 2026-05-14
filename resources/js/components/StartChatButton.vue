@@ -39,11 +39,17 @@ const tooltipText = computed(() => {
 async function startChat() {
   starting.value = true;
   try {
+    // Для «Клиент» — узнаваемый префикс «Чат по клиенту:» (по запросу
+    // staff'а: на странице чатов проще искать нужный диалог по клиенту,
+    // если тема унифицирована).
+    const isClient = /клиент|client/i.test(props.contextType || '');
     let subject;
     if (props.customSubject) {
       subject = props.customSubject;
     } else if (props.silent) {
       subject = `Чат по общим вопросам ${props.partnerName || ''}`.trim();
+    } else if (isClient && props.contextLabel) {
+      subject = `Чат по клиенту: ${props.contextLabel}`;
     } else if (props.contextLabel) {
       subject = `${props.contextType}: ${props.contextLabel}`;
     } else {

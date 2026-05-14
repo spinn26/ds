@@ -74,10 +74,28 @@ class ChatController extends Controller
         if ($request->filled('assigned_to')) $query->where('assigned_to', $request->assigned_to);
         if ($request->filled('search')) {
             $s = '%' . $request->search . '%';
-            $query->where(function ($q) use ($s) {
+
+            // Поиск по ФИО клиента: тикеты с context_type=Клиент ссылаются
+            // на client.id (хранится как string). Ищем матчинг клиентов
+            // первым шагом, затем подмешиваем их id в общий OR — без
+            // CAST'ов на legacy-таблице.
+            $clientIds = DB::table('client')
+                ->where('personName', 'ilike', $s)
+                ->limit(500)
+                ->pluck('id')
+                ->map(fn ($i) => (string) $i)
+                ->all();
+
+            $query->where(function ($q) use ($s, $clientIds) {
                 $q->where('subject', 'ilike', $s)
-                  ->orWhere('customer_name', 'ilike', $s)
+                  ->orWhere('customer_name', 'ilike', $s)  // ФИО партнёра
                   ->orWhere('id', 'ilike', $s);
+                if (! empty($clientIds)) {
+                    $q->orWhere(function ($q2) use ($clientIds) {
+                        $q2->where('context_type', 'ilike', 'клиент%')
+                           ->whereIn('context_id', $clientIds);
+                    });
+                }
             });
         }
 
@@ -538,6 +556,20 @@ class ChatController extends Controller
             ]);
         } catch (\Exception $e) {
             Log::warning('chat socket emit failed: new-message', ['ticket_id' => $id, 'message_id' => $msgId, 'exception' => $e->getMessage()]);
+        }
+
+        // Broadcast: «где-то поменялся unread» → каждый онлайн-клиент
+        // (с debounce) дёрнет /chat/unread-count и обновит свой бейдж.
+        // Это покрывает кейсы, где личное `notification` не уходит:
+        // тикет в общей категории без recipient_id/assigned_to, или
+        // адресат отключён от ticket-комнаты. Без целевого targeting'а
+        // payload не содержит ничего чувствительного (только ticketId).
+        try {
+            app(\App\Services\SocketService::class)->emit('chat:unread-changed', null, [
+                'ticketId' => $id,
+            ]);
+        } catch (\Exception $e) {
+            Log::debug('chat socket emit failed: unread-changed', ['ticket_id' => $id, 'exception' => $e->getMessage()]);
         }
 
         // Personal notification to the other side of the ticket.
@@ -2034,13 +2066,19 @@ class ChatController extends Controller
         // Иначе у staff копится счётчик с чужих незакреплённых
         // тикетов, в которые он никогда не заходил — приходит «2»
         // когда реально пользователю никто не писал.
+        //
+        // Статус (new/open/pending/resolved/closed) НЕ фильтруем — список
+        // /chat/tickets отдаёт unread на карточках без фильтра по статусу,
+        // и шапочный счётчик должен совпадать с суммой циферок (иначе
+        // бейдж в меню показывает 0, а в карточках висят 3/2/1).
+        // Юзер прочитал тикет → его unread обнуляется при load show().
         $query = DB::table('chat_tickets')->where(function ($q) use ($userId) {
             $q->where('created_by', $userId)
               ->orWhere('recipient_id', $userId)
               ->orWhere('assigned_to', $userId);
         });
 
-        $ticketIds = $query->whereIn('status', ['new', 'open', 'pending'])->pluck('id');
+        $ticketIds = $query->pluck('id');
         if ($ticketIds->isEmpty()) {
             return response()->json(['count' => 0, 'tickets' => 0]);
         }

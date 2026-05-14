@@ -491,6 +491,27 @@ onMounted(async () => {
     // chat:new-message). Слушаем и тут — server-side фильтрация по
     // комнатам гарантирует, что чужие сообщения не прилетят.
     notifSocket.on('chat:new-message', () => loadChatUnread());
+
+    // Глобальный broadcast «unread поменялся» (ChatController::sendMessage
+    // эмитит на каждое отправленное сообщение). Каждый онлайн-клиент
+    // через debounce дёргает /chat/unread-count и обновляет свой бейдж.
+    // Это фиксит кейс, когда NotificationController::create не вызывался
+    // (тикет в общей категории без recipient_id) — раньше счётчик
+    // обновлялся только через 30-сек polling или после refresh.
+    let unreadDebounce = null;
+    const refreshUnread = () => {
+      clearTimeout(unreadDebounce);
+      unreadDebounce = setTimeout(loadChatUnread, 400);
+    };
+    notifSocket.on('chat:unread-changed', refreshUnread);
+
+    // После (re)connect — подтянуть свежий счётчик, т.к. в offline-период
+    // мы пропустили все события. Без этого после короткого разрыва WiFi
+    // индикатор оставался устаревшим до следующего polling.
+    notifSocket.on('connect', () => {
+      loadChatUnread();
+      loadNotifications();
+    });
   } catch {}
 });
 
