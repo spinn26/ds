@@ -386,6 +386,12 @@ class AdminDataController extends Controller
      */
     public function bulkPartners(Request $request): JsonResponse
     {
+        // Смена статуса / блокировка / роль наставника — только admin.
+        // Раньше любой staff из admin-route-group мог дёрнуть и обойти UI.
+        if (! $request->user()->hasAnyRole(['admin'])) {
+            return response()->json(['message' => 'Недостаточно прав'], 403);
+        }
+
         $data = $request->validate([
             'ids' => ['required', 'array', 'min:1'],
             'ids.*' => ['integer'],
@@ -454,9 +460,13 @@ class AdminDataController extends Controller
         ]);
     }
 
-    /** Смена статуса активности партнёра */
+    /** Смена статуса активности партнёра — только для роли admin. */
     public function changePartnerStatus(Request $request, int $id): JsonResponse
     {
+        if (! $request->user()->hasAnyRole(['admin'])) {
+            return response()->json(['message' => 'Недостаточно прав'], 403);
+        }
+
         $consultant = Consultant::findOrFail($id);
 
         $request->validate([
@@ -538,6 +548,62 @@ class AdminDataController extends Controller
         });
 
         return response()->json(['message' => 'Статус обновлён вручную, изменение зафиксировано в аудит-логе']);
+    }
+
+    /**
+     * История смены статусов партнёра.
+     *
+     * Источник — Spatie\Activitylog `activity_log`. Consultant уже логирует
+     * `activity` через LogsActivity (см. Consultant::getActivitylogOptions).
+     * Возвращаем только события, где реально менялось поле activity:
+     * автор (ФИО сотрудника или «Система»), дата, было → стало.
+     */
+    public function partnerStatusHistory(int $id): JsonResponse
+    {
+        $rows = DB::table('activity_log')
+            ->where('subject_type', \App\Models\Consultant::class)
+            ->where('subject_id', $id)
+            ->orderByDesc('created_at')
+            ->limit(100)
+            ->get();
+
+        $causerIds = $rows->pluck('causer_id')->filter()->unique();
+        $causers = $causerIds->isNotEmpty()
+            ? DB::table('WebUser')->whereIn('id', $causerIds)
+                ->select(['id', 'firstName', 'lastName', 'patronymic'])->get()->keyBy('id')
+            : collect();
+
+        $activityLabel = function ($v) {
+            if ($v === null || $v === '') return null;
+            $enum = PartnerActivity::tryFrom((int) $v);
+            return $enum ? $enum->label() : (string) $v;
+        };
+
+        $history = [];
+        foreach ($rows as $r) {
+            $props = json_decode($r->properties ?: '{}', true);
+            $oldA = $props['old']['activity'] ?? null;
+            $newA = $props['attributes']['activity'] ?? null;
+            // Берём только события, где реально менялась activity.
+            if ($oldA === null && $newA === null) continue;
+            if ($oldA === $newA) continue;
+
+            $causer = $r->causer_id ? ($causers[$r->causer_id] ?? null) : null;
+            $author = $causer
+                ? trim("{$causer->lastName} {$causer->firstName} {$causer->patronymic}")
+                : 'Система';
+
+            $history[] = [
+                'id' => $r->id,
+                'createdAt' => $r->created_at,
+                'author' => $author,
+                'oldStatus' => $activityLabel($oldA),
+                'newStatus' => $activityLabel($newA),
+                'comment' => $props['comment'] ?? null,
+            ];
+        }
+
+        return response()->json(['data' => $history]);
     }
 
     /**

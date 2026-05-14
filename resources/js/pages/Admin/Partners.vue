@@ -211,17 +211,17 @@
               <v-col cols="12" sm="4"><v-text-field v-model="editForm.patronymic" :rules="cyrillicOptionalRules" label="Отчество" variant="outlined" density="compact" :error-messages="editErrors.patronymic" /></v-col>
 
               <v-col cols="12" class="mt-2"><div class="text-subtitle-2 font-weight-bold mb-2">Контакты</div></v-col>
-              <v-col cols="12" sm="6"><v-text-field v-model="editForm.email" :rules="emailRules" label="Email" type="email" variant="outlined" density="compact" :error-messages="editErrors.email" /></v-col>
-              <v-col cols="12" sm="3">
+              <v-col cols="12" md="4"><v-text-field v-model="editForm.email" :rules="emailRules" label="Email" type="email" variant="outlined" density="compact" :error-messages="editErrors.email" /></v-col>
+              <v-col cols="12" md="4">
                 <label class="text-caption text-medium-emphasis d-block mb-1">Телефон</label>
                 <vue-tel-input v-model="editForm.phone"
                   @validate="onEditPhoneValidate" />
-                <div v-if="editForm.phone && !editPhoneValid && editPhoneTouched"
+                <div v-if="editPhoneShowError"
                   class="text-error text-caption mt-1">
                   Неверный номер телефона
                 </div>
               </v-col>
-              <v-col cols="12" sm="3"><v-text-field v-model="editForm.nicTG" label="Telegram" variant="outlined" density="compact" :error-messages="editErrors.nicTG" /></v-col>
+              <v-col cols="12" md="4"><v-text-field v-model="editForm.nicTG" label="Telegram" variant="outlined" density="compact" :error-messages="editErrors.nicTG" /></v-col>
 
               <v-col cols="12" class="mt-2"><div class="text-subtitle-2 font-weight-bold mb-2">Персональные данные</div></v-col>
               <v-col cols="12" sm="4"><v-select v-model="editForm.gender" :items="genderOptions" label="Пол" variant="outlined" density="compact" clearable :error-messages="editErrors.gender" /></v-col>
@@ -244,38 +244,80 @@
                 <v-checkbox v-model="editForm.isBlocked" label="Заблокирован" density="compact" hide-details />
               </v-col>
 
-              <v-col cols="12" class="mt-2"><div class="text-subtitle-2 font-weight-bold mb-2">Смена пароля</div></v-col>
-              <v-col cols="12" sm="6">
-                <v-text-field v-model="editForm.newPassword" type="password"
-                  label="Новый пароль (пусто — не менять)"
-                  variant="outlined" density="compact" :error-messages="editErrors.newPassword" />
-              </v-col>
+              <template v-if="auth.isAdmin">
+                <v-col cols="12" class="mt-2"><div class="text-subtitle-2 font-weight-bold mb-2">Смена пароля</div></v-col>
+                <v-col cols="12" sm="6">
+                  <v-text-field v-model="editForm.newPassword" type="password"
+                    label="Новый пароль (пусто — не менять)"
+                    variant="outlined" density="compact" :error-messages="editErrors.newPassword" />
+                </v-col>
+              </template>
             </v-row>
             </v-form>
 
-            <v-divider class="my-4" />
-            <div class="text-subtitle-2 font-weight-bold mb-2">Смена статуса</div>
-            <div class="d-flex ga-2 flex-wrap">
-              <v-btn size="small" variant="tonal" color="success" prepend-icon="mdi-account-check"
-                :disabled="editForm.activityId === 1"
-                @click="changeStatus('activate')">Активировать</v-btn>
-              <v-btn size="small" variant="tonal" color="warning" prepend-icon="mdi-account-cancel"
-                @click="changeStatus('terminate')">Терминировать</v-btn>
-              <v-btn size="small" variant="tonal" color="error" prepend-icon="mdi-account-remove"
-                @click="changeStatus('exclude')">Исключить</v-btn>
-              <v-btn size="small" variant="tonal" color="info" prepend-icon="mdi-account-reactivate"
-                @click="changeStatus('re-register')">Перерегистрировать</v-btn>
-            </div>
-            <v-alert v-if="statusMsg" :type="statusMsgType" density="compact" class="mt-3" closable @click:close="statusMsg = ''">
-              {{ statusMsg }}
-            </v-alert>
+            <template v-if="auth.isAdmin">
+              <v-divider class="my-4" />
+              <div class="d-flex align-center mb-2 ga-2">
+                <div class="text-subtitle-2 font-weight-bold">Смена статуса</div>
+                <!-- История смены статуса: иконка с попапом по наведению.
+                     Источник — Spatie Activitylog, поле activity у Consultant. -->
+                <v-menu open-on-hover open-on-focus :close-on-content-click="false"
+                  location="bottom start" offset="6">
+                  <template #activator="{ props: tipProps }">
+                    <v-btn v-bind="tipProps" icon="mdi-history" size="x-small"
+                      variant="text" color="info" aria-label="История смены статуса" />
+                  </template>
+                  <v-card min-width="320" max-width="460" class="pa-2">
+                    <div class="text-subtitle-2 px-2 py-1">История смены статуса</div>
+                    <v-divider />
+                    <div v-if="statusHistoryLoading" class="pa-3 text-center">
+                      <v-progress-circular indeterminate size="20" />
+                    </div>
+                    <div v-else-if="!statusHistory.length"
+                      class="pa-3 text-caption text-medium-emphasis text-center">
+                      Изменений пока нет
+                    </div>
+                    <v-list v-else density="compact" lines="two" class="py-0">
+                      <v-list-item v-for="h in statusHistory" :key="h.id">
+                        <template #prepend>
+                          <v-icon size="18" color="info">mdi-circle-small</v-icon>
+                        </template>
+                        <v-list-item-title class="text-body-2">
+                          <span class="text-medium-emphasis">{{ h.oldStatus || '—' }}</span>
+                          <v-icon size="14" class="mx-1">mdi-arrow-right</v-icon>
+                          <strong>{{ h.newStatus || '—' }}</strong>
+                        </v-list-item-title>
+                        <v-list-item-subtitle class="text-caption">
+                          {{ fmtDateTime(h.createdAt) }} · {{ h.author }}
+                          <span v-if="h.comment"> · {{ h.comment }}</span>
+                        </v-list-item-subtitle>
+                      </v-list-item>
+                    </v-list>
+                  </v-card>
+                </v-menu>
+              </div>
+              <div class="d-flex ga-2 flex-wrap">
+                <v-btn size="small" variant="tonal" color="success" prepend-icon="mdi-account-check"
+                  :disabled="editForm.activityId === 1"
+                  @click="changeStatus('activate')">Активировать</v-btn>
+                <v-btn size="small" variant="tonal" color="warning" prepend-icon="mdi-account-cancel"
+                  @click="changeStatus('terminate')">Терминировать</v-btn>
+                <v-btn size="small" variant="tonal" color="error" prepend-icon="mdi-account-remove"
+                  @click="changeStatus('exclude')">Исключить</v-btn>
+                <v-btn size="small" variant="tonal" color="info" prepend-icon="mdi-account-reactivate"
+                  @click="changeStatus('re-register')">Перерегистрировать</v-btn>
+              </div>
+              <v-alert v-if="statusMsg" :type="statusMsgType" density="compact" class="mt-3" closable @click:close="statusMsg = ''">
+                {{ statusMsg }}
+              </v-alert>
+            </template>
           </template>
         </v-card-text>
         <v-card-actions>
           <v-spacer />
           <v-btn @click="editDialog = false">Отмена</v-btn>
           <v-btn color="primary" :loading="saving"
-            :disabled="editFormValid === false || (!!editForm.phone && !editPhoneValid)"
+            :disabled="editFormValid === false || (!phoneIsEmpty(editForm.phone) && !editPhoneValid)"
             @click="saveEdit">Сохранить</v-btn>
         </v-card-actions>
       </v-card>
@@ -406,10 +448,25 @@ const { canEdit } = usePermissions();
 const editFormValid = ref(true);
 const editPhoneValid = ref(true);
 const editPhoneTouched = ref(false);
-function onEditPhoneValidate(obj) {
-  editPhoneTouched.value = true;
-  editPhoneValid.value = !editForm.value?.phone ? true : !!obj?.valid;
+// vue-tel-input при пустом значении сам вставляет dial-code (+7, +374, …).
+// Любой набор ≤3 цифр считаем «пусто», иначе на свежеоткрытом диалоге
+// сразу горел красный «Неверный номер» только из-за dial-кода.
+function phoneIsEmpty(v) {
+  const digits = String(v || '').replace(/\D/g, '');
+  return digits.length <= 3;
 }
+function onEditPhoneValidate(obj) {
+  if (phoneIsEmpty(editForm.value?.phone)) {
+    editPhoneValid.value = true;
+    editPhoneTouched.value = false;
+    return;
+  }
+  editPhoneTouched.value = true;
+  editPhoneValid.value = !!obj?.valid;
+}
+const editPhoneShowError = computed(() =>
+  !phoneIsEmpty(editForm.value?.phone) && !editPhoneValid.value && editPhoneTouched.value
+);
 
 const addFormValid = ref(false);
 const addPhoneValid = ref(true);
@@ -419,7 +476,7 @@ function onAddPhoneValidate(obj) {
   addPhoneValid.value = !addForm.value?.phone ? true : !!obj?.valid;
 }
 import { useConfirm } from '../../composables/useConfirm';
-import { fmtDate, getActivityColorByName } from '../../composables/useDesign';
+import { fmtDate, fmtDateTime, getActivityColorByName } from '../../composables/useDesign';
 
 const confirm = useConfirm();
 
@@ -668,6 +725,20 @@ const editErrors = ref({});
 const saving = ref(false);
 const statusMsg = ref('');
 const statusMsgType = ref('success');
+const statusHistory = ref([]);
+const statusHistoryLoading = ref(false);
+
+async function loadStatusHistory(id) {
+  if (!id) return;
+  statusHistoryLoading.value = true;
+  try {
+    const { data } = await api.get(`/admin/partners/${id}/status-history`);
+    statusHistory.value = data?.data || [];
+  } catch {
+    statusHistory.value = [];
+  }
+  statusHistoryLoading.value = false;
+}
 
 const genderOptions = [
   { title: 'Мужской', value: 'male' },
@@ -693,7 +764,12 @@ async function openEdit(item) {
   editLoading.value = true;
   editErrors.value = {};
   statusMsg.value = '';
+  statusHistory.value = [];
+  editPhoneTouched.value = false;
   editForm.value = { id: item.id, personName: item.personName };
+  // История параллельно — нужна только админу, но грузим всегда:
+  // ACL на бэке, а тут логика проще без условного fetch.
+  if (auth.isAdmin) loadStatusHistory(item.id);
   try {
     const { data } = await api.get(`/admin/partners/${item.id}`);
     const c = data.consultant || {};
@@ -734,7 +810,7 @@ async function saveEdit() {
       lastName: f.lastName || null,
       patronymic: f.patronymic || null,
       email: f.email || null,
-      phone: f.phone || null,
+      phone: phoneIsEmpty(f.phone) ? null : f.phone,
       nicTG: f.nicTG || null,
       gender: f.gender || null,
       birthDate: f.birthDate || null,
@@ -832,10 +908,11 @@ async function changeStatus(action) {
     const { data } = await api.post(`/admin/partners/${editForm.value.id}/status`, { action, reason });
     statusMsg.value = data.message || 'Статус обновлён';
     statusMsgType.value = 'success';
-    // Reload partner + list
+    // Reload partner + list + history (новая запись попадёт в попап).
     const { data: fresh } = await api.get(`/admin/partners/${editForm.value.id}`);
     editForm.value.activityId = fresh.consultant.activityId;
     editForm.value.activityName = fresh.consultant.activityName;
+    loadStatusHistory(editForm.value.id);
     loadData();
   } catch (e) {
     statusMsg.value = e.response?.data?.message || 'Ошибка смены статуса';
