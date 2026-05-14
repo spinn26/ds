@@ -2446,17 +2446,18 @@ class ChatController extends Controller
         // Закрытие инцидента переводит сам тикет в статус «Решён» —
         // KPI «Решено сегодня» считается по chat_tickets.status='resolved'.
         $wasResolved = $ticket->status === 'resolved';
+        $now = now();
         DB::table('chat_tickets')->where('id', $id)->update([
-            'incident_resolved_at' => now(),
+            'incident_resolved_at' => $now,
             'status' => 'resolved',
-            'updated_at' => now(),
+            'last_message_at' => $now,
+            'updated_at' => $now,
         ]);
 
-        // Системное сообщение в ленту тикета: номер инцидента + ФИО
-        // исполнителя. is_system=true → отрисуется без бабла,
-        // плашкой по центру. Если в шапке тикета есть assigned_to,
-        // показываем именно его как «исполнителя» (а не того, кто
-        // нажал кнопку — это может быть супервайзер).
+        // Полноценное сообщение от агента в ленте тикета (бабл, не
+        // системная плашка) — чтобы клиент получил его как обычный
+        // ответ оператора + push-уведомление от socket-эмита.
+        // Исполнитель: assigned_to через WebUser, иначе — резолвер.
         $resolverName = trim(($user->lastName ?? '') . ' ' . ($user->firstName ?? ''));
         $assigneeName = null;
         if (! empty($ticket->assigned_to)) {
@@ -2466,18 +2467,36 @@ class ChatController extends Controller
             }
         }
         $executor = $assigneeName ?: $resolverName;
-        $sysContent = "✅ Инцидент {$ticket->incident_no} решён · Исполнитель: {$executor}";
+        $messageContent = "✅ Инцидент {$ticket->incident_no} решён.\nИсполнитель: {$executor}";
 
-        DB::table('chat_messages')->insert([
+        $newMsgId = DB::table('chat_messages')->insertGetId([
             'ticket_id' => $id,
             'sender_id' => $user->id,
             'sender_name' => $resolverName,
-            'content' => $sysContent,
+            'content' => $messageContent,
             'is_agent' => true,
-            'is_system' => true,
-            'created_at' => now(),
-            'updated_at' => now(),
+            'is_system' => false,
+            'created_at' => $now,
+            'updated_at' => $now,
         ]);
+
+        // Real-time эмит — клиент получит сообщение мгновенно, без
+        // ожидания polling/перезагрузки тикета.
+        try {
+            app(\App\Services\SocketService::class)->emit('chat:new-message', "ticket:{$id}", [
+                'id' => $newMsgId,
+                'ticketId' => $id,
+                'senderId' => $user->id,
+                'senderName' => $resolverName,
+                'content' => $messageContent,
+                'isAgent' => true,
+                'createdAt' => $now->toIso8601String(),
+            ]);
+        } catch (\Exception $e) {
+            Log::warning('chat socket emit failed: resolve-incident-message', [
+                'ticket_id' => $id, 'message_id' => $newMsgId, 'exception' => $e->getMessage(),
+            ]);
+        }
 
         // Уведомление участникам — если статус действительно перешёл в resolved.
         if (! $wasResolved) {
