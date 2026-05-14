@@ -2451,11 +2451,28 @@ class ChatController extends Controller
             'status' => 'resolved',
             'updated_at' => now(),
         ]);
+
+        // Системное сообщение в ленту тикета: номер инцидента + ФИО
+        // исполнителя. is_system=true → отрисуется без бабла,
+        // плашкой по центру. Если в шапке тикета есть assigned_to,
+        // показываем именно его как «исполнителя» (а не того, кто
+        // нажал кнопку — это может быть супервайзер).
+        $resolverName = trim(($user->lastName ?? '') . ' ' . ($user->firstName ?? ''));
+        $assigneeName = null;
+        if (! empty($ticket->assigned_to)) {
+            $assignee = DB::table('WebUser')->where('id', $ticket->assigned_to)->first();
+            if ($assignee) {
+                $assigneeName = trim(($assignee->lastName ?? '') . ' ' . ($assignee->firstName ?? ''));
+            }
+        }
+        $executor = $assigneeName ?: $resolverName;
+        $sysContent = "✅ Инцидент {$ticket->incident_no} решён · Исполнитель: {$executor}";
+
         DB::table('chat_messages')->insert([
             'ticket_id' => $id,
             'sender_id' => $user->id,
-            'sender_name' => trim(($user->lastName ?? '') . ' ' . ($user->firstName ?? '')),
-            'content' => "Инцидент {$ticket->incident_no} закрыт",
+            'sender_name' => $resolverName,
+            'content' => $sysContent,
             'is_agent' => true,
             'is_system' => true,
             'created_at' => now(),
