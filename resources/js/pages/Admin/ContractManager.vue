@@ -156,7 +156,21 @@
           <!-- Блок «Основное» -->
           <div class="text-subtitle-2 font-weight-bold mb-2">Основное</div>
           <v-text-field v-model="form.number" label="Номер контракта *"
-            variant="outlined" density="comfortable" class="mb-2" />
+            variant="outlined" density="comfortable" class="mb-1"
+            :error="numberCheck.exists"
+            :error-messages="numberCheck.exists ? 'Этот номер уже используется' : ''"
+            :loading="numberCheck.loading" />
+          <!-- Подсказка с деталями дубля: какой клиент/партнёр уже занимает
+               этот номер. Позволяет оператору сразу понять, что это не его
+               случайный дубль, а реальный отдельный контракт. -->
+          <v-alert v-if="numberCheck.exists && numberCheck.existing"
+            type="error" density="compact" variant="tonal" class="mb-3">
+            Контракт <strong>«{{ numberCheck.existing.number }}»</strong>
+            уже существует:
+            <span v-if="numberCheck.existing.clientName">клиент {{ numberCheck.existing.clientName }}</span>
+            <span v-if="numberCheck.existing.consultantName">, партнёр {{ numberCheck.existing.consultantName }}</span>
+            <span v-if="numberCheck.existing.createDate">, создан {{ fmtDate(numberCheck.existing.createDate) }}</span>.
+          </v-alert>
           <v-text-field v-model="form.counterpartyContractId" label="Идентификатор контрагента"
             variant="outlined" density="comfortable" class="mb-2" />
           <v-select v-model="form.status" :items="formData.statuses" item-title="name" item-value="id"
@@ -341,7 +355,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
 import PageHeader from '../../components/PageHeader.vue';
@@ -469,10 +483,41 @@ const autoConsultant = computed(() => {
   return c?.consultantName || '';
 });
 
+// Живая проверка дубля номера. Дергаем /admin/contracts/check-number
+// дебоунсом, чтобы не валить бэк при каждом вводе символа. Save
+// блокируется, если бэк сказал, что такой номер уже есть.
+const numberCheck = ref({ exists: false, existing: null, loading: false });
+let numberCheckTimer = null;
+async function checkNumberDuplicate() {
+  const value = (form.value.number || '').trim();
+  if (!value) {
+    numberCheck.value = { exists: false, existing: null, loading: false };
+    return;
+  }
+  numberCheck.value.loading = true;
+  try {
+    const { data } = await api.get('/admin/contracts/check-number', {
+      params: { number: value, excludeId: editingId.value || 0 },
+    });
+    numberCheck.value = {
+      exists: !!data.exists,
+      existing: data.existing || null,
+      loading: false,
+    };
+  } catch {
+    numberCheck.value.loading = false;
+  }
+}
+watch(() => form.value.number, () => {
+  clearTimeout(numberCheckTimer);
+  numberCheckTimer = setTimeout(checkNumberDuplicate, 350);
+});
+
 const canSave = computed(() =>
   form.value.number && form.value.status && form.value.client &&
   form.value.product && form.value.program &&
-  form.value.createDate && form.value.ammount > 0 && form.value.currency
+  form.value.createDate && form.value.ammount > 0 && form.value.currency &&
+  !numberCheck.value.exists
 );
 
 const snack = ref({ open: false, color: 'success', text: '' });
@@ -482,12 +527,14 @@ function openCreate() {
   editingId.value = null;
   form.value = blankForm();
   chain.value = [];
+  numberCheck.value = { exists: false, existing: null, loading: false };
   ensureFormData();
   editOpen.value = true;
 }
 
 async function openEdit(item) {
   editingId.value = item.id;
+  numberCheck.value = { exists: false, existing: null, loading: false };
   ensureFormData();
   try {
     const { data } = await api.get(`/admin/contracts/${item.id}`);

@@ -241,6 +241,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/admin/requisites/{id}/verify', [\App\Http\Controllers\Api\AdminDataController::class, 'verifyRequisites']);
         Route::get('/admin/acceptance', [\App\Http\Controllers\Api\AdminDataController::class, 'acceptance']);
         Route::get('/admin/contracts', [\App\Http\Controllers\Api\AdminDataController::class, 'contracts']);
+        Route::get('/admin/contracts/check-number', [\App\Http\Controllers\Api\AdminDataController::class, 'checkContractNumber']);
         Route::get('/admin/contracts/form-data', [\App\Http\Controllers\Api\AdminDataController::class, 'contractFormData']);
         Route::get('/admin/contracts/upload-history', fn () => response()->json([]));
         Route::post('/admin/contracts', [\App\Http\Controllers\Api\AdminDataController::class, 'storeContract']);

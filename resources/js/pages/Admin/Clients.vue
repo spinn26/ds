@@ -158,16 +158,14 @@
                 :rules="emailRules" label="Email" type="email"
                 variant="outlined" density="comfortable" /></v-col>
               <v-col cols="12" sm="6">
-                <!-- vue-tel-input: код страны + маска под выбранную страну.
-                     Глобальные дефолты заданы в app.js. @validate даёт
-                     phoneValid ref → используется в disable-условии save. -->
-                <label class="text-caption text-medium-emphasis d-block mb-1">Телефон</label>
-                <vue-tel-input v-model="addForm.phone"
-                  @validate="onPhoneValidate" />
-                <div v-if="addForm.phone && !phoneValid && phoneTouched"
-                  class="text-error text-caption mt-1">
-                  Неверный номер телефона
-                </div>
+                <!-- vue-tel-input: код страны + маска под выбранную.
+                     Глобальные дефолты в app.js. Поле опциональное —
+                     не валидируем @validate'ом, чтобы Save никогда не
+                     блокировался из-за телефона (заказчик 2026-05-13). -->
+                <label class="text-caption text-medium-emphasis d-block mb-1">
+                  Телефон <span class="text-medium-emphasis">(необязательно)</span>
+                </label>
+                <vue-tel-input v-model="addForm.phone" />
               </v-col>
               <v-col cols="12" sm="6"><v-text-field v-model="addForm.birthDate"
                 label="Дата рождения" type="date"
@@ -204,7 +202,7 @@
           </v-btn>
           <v-btn v-if="addStep === 2" color="success" prepend-icon="mdi-content-save"
             :loading="addSaving"
-            :disabled="!formValid || !phoneValid"
+            :disabled="!formValid"
             @click="saveNewClient">
             {{ editingId ? 'Сохранить' : 'Создать клиента' }}
           </v-btn>
@@ -376,15 +374,6 @@ const addSaving = ref(false);
 const addError = ref('');
 const editingId = ref(null);
 const formValid = ref(false);
-const phoneValid = ref(true);   // true когда пусто (поле опциональное)
-const phoneTouched = ref(false);
-
-function onPhoneValidate(obj) {
-  phoneTouched.value = true;
-  // vue-tel-input даёт {valid, possible, country, ...}. Если поле пустое,
-  // считаем валидным (телефон опционален) — иначе требуем obj.valid.
-  phoneValid.value = !addForm.value.phone ? true : !!obj?.valid;
-}
 const addForm = ref({
   firstName: '', lastName: '', patronymic: '',
   email: '', phone: '', birthDate: '',
@@ -437,8 +426,6 @@ function openAddClient() {
   addSearch.value = '';
   addCandidates.value = [];
   addError.value = '';
-  phoneTouched.value = false;
-  phoneValid.value = true;
   resetAddForm();
 }
 
@@ -447,8 +434,6 @@ function openEditClient(item) {
   addOpen.value = true;
   addStep.value = 2;
   addError.value = '';
-  phoneTouched.value = false;
-  phoneValid.value = true;
   // Раскладываем personName → ФИО, если firstName/lastName на ответе нет.
   // /admin/clients сейчас отдаёт только personName + поля person.*, поэтому
   // делаем split «Фамилия Имя Отчество».

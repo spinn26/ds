@@ -1822,10 +1822,62 @@ class AdminDataController extends Controller
      * Создать контракт (per spec ✅Менеджер контрактов §3 «Сохранить контракт»).
      * Партнёр подтягивается автоматически из выбранного клиента.
      */
+    /**
+     * GET /admin/contracts/check-number?number=Ш38&excludeId=N
+     *
+     * Лёгкий probe для формы создания/редактирования: фронт показывает
+     * предупреждение до того, как юзер нажмёт «Сохранить». Регистронезависимо,
+     * soft-deleted игнорируем. excludeId — id редактируемого контракта.
+     */
+    public function checkContractNumber(Request $request): JsonResponse
+    {
+        $number = trim((string) $request->input('number', ''));
+        if ($number === '') {
+            return response()->json(['exists' => false]);
+        }
+        $excludeId = (int) $request->input('excludeId', 0);
+
+        $query = DB::table('contract')
+            ->whereRaw('LOWER("number") = ?', [mb_strtolower($number)])
+            ->whereNull('deletedAt');
+        if ($excludeId > 0) {
+            $query->where('id', '!=', $excludeId);
+        }
+
+        $existing = $query->select('id', 'number', 'clientName', 'consultantName', 'createDate')
+            ->orderBy('id')
+            ->first();
+
+        return response()->json([
+            'exists' => (bool) $existing,
+            'existing' => $existing ? [
+                'id' => $existing->id,
+                'number' => $existing->number,
+                'clientName' => $existing->clientName,
+                'consultantName' => $existing->consultantName,
+                'createDate' => $existing->createDate,
+            ] : null,
+        ]);
+    }
+
     public function storeContract(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'number' => 'required|string|max:255',
+            'number' => [
+                'required', 'string', 'max:255',
+                // Case-insensitive проверка дубля, игнорируем soft-deleted.
+                // Через closure, потому что Laravel-rule `unique` не умеет ilike,
+                // а у заказчика номера кириллические («Ш38», «ш38» = один и тот же).
+                function ($attribute, $value, $fail) {
+                    $exists = DB::table('contract')
+                        ->whereRaw('LOWER("number") = ?', [mb_strtolower((string) $value)])
+                        ->whereNull('deletedAt')
+                        ->exists();
+                    if ($exists) {
+                        $fail("Контракт с номером «{$value}» уже существует");
+                    }
+                },
+            ],
             'counterpartyContractId' => 'nullable|string|max:255',
             'status' => 'required|integer|exists:contractStatus,id',
             'client' => 'required|integer|exists:client,id',
@@ -1893,7 +1945,21 @@ class AdminDataController extends Controller
         if (! $contract) return response()->json(['message' => 'Контракт не найден'], 404);
 
         $data = $request->validate([
-            'number' => 'sometimes|string|max:255',
+            'number' => [
+                'sometimes', 'string', 'max:255',
+                // Тот же case-insensitive дубль-чек, что и в storeContract,
+                // но исключаем сам редактируемый контракт ($id).
+                function ($attribute, $value, $fail) use ($id) {
+                    $exists = DB::table('contract')
+                        ->whereRaw('LOWER("number") = ?', [mb_strtolower((string) $value)])
+                        ->where('id', '!=', $id)
+                        ->whereNull('deletedAt')
+                        ->exists();
+                    if ($exists) {
+                        $fail("Контракт с номером «{$value}» уже существует");
+                    }
+                },
+            ],
             'counterpartyContractId' => 'nullable|string|max:255',
             'status' => 'sometimes|integer|exists:contractStatus,id',
             'client' => 'sometimes|integer|exists:client,id',
