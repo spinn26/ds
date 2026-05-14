@@ -1,0 +1,171 @@
+/* Mobile-first reset + safe-area defaults */
+* { -webkit-tap-highlight-color: transparent; }
+
+html, body, #app {
+  margin: 0; padding: 0; height: 100%;
+  background: #fafafa;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  overscroll-behavior-y: contain;
+  touch-action: manipulation;
+}
+
+a { color: inherit; }
+
+/* Vuetify density tuning под мобильный экран — минимум touch-target 44px */
+.v-btn--size-large { min-height: 48px !important; }
+.v-text-field .v-field { border-radius: 12px !important; }
+
+/* === Общие классы для список-страниц === */
+
+/* Поиск-бар сверху страницы */
+.search-bar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.search-bar .v-text-field { flex: 1; }
+
+/* Лента фильтр-чипов (горизонтальный скролл) */
+.chip-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: none;
+}
+.chip-row::-webkit-scrollbar { display: none; }
+.chip-row .v-chip { flex-shrink: 0; }
+
+/* Карточка элемента списка */
+.list-card {
+  background: #fff;
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+.list-card:active { transform: scale(0.99); }
+
+.list-card-avatar {
+  width: 40px; height: 40px;
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.list-card-body {
+  flex: 1;
+  min-width: 0;
+}
+.list-card-title {
+  font-size: 14px; font-weight: 600;
+  color: #1b1b1b;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.list-card-sub {
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.55);
+  margin-top: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.list-card-aside {
+  text-align: right;
+  flex-shrink: 0;
+}
+.list-card-amount {
+  font-size: 14px; font-weight: 700;
+  color: #1b1b1b;
+  font-variant-numeric: tabular-nums;
+}
+.list-card-meta {
+  font-size: 11px;
+  color: rgba(0, 0, 0, 0.45);
+  margin-top: 2px;
+}
+
+/* Пустое состояние */
+.empty-state {
+  padding: 60px 24px;
+  text-align: center;
+}
+.empty-state .v-icon {
+  color: rgba(0, 0, 0, 0.2);
+  margin-bottom: 12px;
+}
+.empty-state-text {
+  font-size: 14px;
+  color: rgba(0, 0, 0, 0.5);
+}
+
+/* Floating Action Button */
+.fab {
+  position: fixed;
+  bottom: calc(80px + env(safe-area-inset-bottom));
+  right: 16px;
+  z-index: 9;
+}
+
+/* Карточка-секция (используется на детальных экранах) */
+.detail-card {
+  background: #fff;
+  border-radius: 14px;
+  padding: 14px;
+  margin-bottom: 10px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+}
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  font-size: 13px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+}
+.detail-row:last-child { border-bottom: 0; }
+.detail-row-key {
+  color: rgba(0, 0, 0, 0.55);
+}
+.detail-row-val {
+  color: #1b1b1b;
+  font-weight: 500;
+  text-align: right;
+}
+
+/* Меню-секция (cells со стрелкой) */
+.menu-cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: #fff;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+}
+.menu-cell:active { background: rgba(0, 0, 0, 0.02); }
+.menu-cell:last-child { border-bottom: 0; }
+.menu-cell-title {
+  flex: 1;
+  font-size: 14px;
+  color: #1b1b1b;
+}
+.menu-cell-arrow {
+  color: rgba(0, 0, 0, 0.3);
+}
+.menu-group {
+  background: #fff;
+  border-radius: 14px;
+  overflow: hidden;
+  margin-bottom: 12px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+}

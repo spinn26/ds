@@ -34,30 +34,39 @@ class ChatController extends Controller
 
         $query = DB::table('chat_tickets');
 
+        // Тикеты, где юзер — дополнительный участник (chat_ticket_participants).
+        $participantTicketIds = DB::table('chat_ticket_participants')
+            ->where('user_id', $user->id)
+            ->pluck('ticket_id')
+            ->all();
+
         if (! $isStaff) {
-            // Партнёр видит только свои (автор / получатель).
-            $query->where(function ($q) use ($user) {
+            // Партнёр видит только свои (автор / получатель) + где приглашён.
+            $query->where(function ($q) use ($user, $participantTicketIds) {
                 $q->where('created_by', $user->id)
                   ->orWhere('recipient_id', $user->id);
+                if (! empty($participantTicketIds)) {
+                    $q->orWhereIn('id', $participantTicketIds);
+                }
             });
         } else {
             // Staff: видимость по своим категориям + личное участие.
-            // Категории = TicketService::CATEGORIES[*].roles (admin → support,
-            // backoffice → backoffice, finance/calculations → accruals, head →
-            // legal/general/owner). Расширяем legacy-алиасами department'а.
             $roles = array_map('trim', explode(',', $user->role ?? ''));
             $allowed = TicketService::visibleCategoriesForRoles($roles);
             $expanded = $allowed;
             foreach (TicketService::CATEGORY_ALIASES as $legacy => $modern) {
                 if (in_array($modern, $allowed, true)) $expanded[] = $legacy;
             }
-            $query->where(function ($q) use ($user, $expanded) {
+            $query->where(function ($q) use ($user, $expanded, $participantTicketIds) {
                 if (! empty($expanded)) {
                     $q->whereIn('department', $expanded);
                 }
                 $q->orWhere('created_by', $user->id)
                   ->orWhere('recipient_id', $user->id)
                   ->orWhere('assigned_to', $user->id);
+                if (! empty($participantTicketIds)) {
+                    $q->orWhereIn('id', $participantTicketIds);
+                }
             });
         }
 
@@ -2144,6 +2153,160 @@ class ChatController extends Controller
             ]);
 
         return response()->json($staff);
+    }
+
+    // ==================== PARTICIPANTS (доп. участники чата) ====================
+
+    /**
+     * GET /chat/tickets/{id}/participants — список участников чата
+     * (created_by + recipient + assigned + явно добавленные через
+     * chat_ticket_participants), все с пометкой role.
+     */
+    public function listParticipants(Request $request, int $id): JsonResponse
+    {
+        $ticket = DB::table('chat_tickets')->where('id', $id)->first();
+        if (! $ticket) return response()->json(['message' => 'Не найден'], 404);
+        $ticketModel = ChatTicket::find($id);
+        if ($request->user()->cannot('view', $ticketModel)) {
+            return response()->json(['message' => 'Нет доступа'], 403);
+        }
+
+        $rows = DB::table('chat_ticket_participants as p')
+            ->leftJoin('WebUser as u', 'u.id', '=', 'p.user_id')
+            ->where('p.ticket_id', $id)
+            ->orderBy('p.added_at')
+            ->get(['p.id as pid', 'p.user_id', 'p.user_name', 'p.added_by', 'p.added_at',
+                'u.firstName', 'u.lastName', 'u.role']);
+
+        $participants = $rows->map(fn ($r) => [
+            'id' => $r->pid,
+            'userId' => (int) $r->user_id,
+            'name' => trim(($r->lastName ?? '') . ' ' . ($r->firstName ?? '')) ?: ($r->user_name ?? 'Сотрудник'),
+            'role' => $r->role,
+            'addedAt' => $r->added_at,
+        ])->values();
+
+        return response()->json($participants);
+    }
+
+    /**
+     * POST /chat/tickets/{id}/participants — добавить сотрудника в чат.
+     * Только staff может приглашать. Идемпотентно по уникальному ключу
+     * (ticket_id, user_id). Пишет системное сообщение.
+     */
+    public function addParticipant(Request $request, int $id): JsonResponse
+    {
+        $ticket = DB::table('chat_tickets')->where('id', $id)->first();
+        if (! $ticket) return response()->json(['message' => 'Не найден'], 404);
+        if (! $request->user()->isStaff()) {
+            return response()->json(['message' => 'Добавлять участников может только сотрудник'], 403);
+        }
+        $ticketModel = ChatTicket::find($id);
+        if ($request->user()->cannot('view', $ticketModel)) {
+            return response()->json(['message' => 'Нет доступа к чату'], 403);
+        }
+
+        $data = $request->validate([
+            'user_id' => 'required|integer',
+        ]);
+        $newUserId = (int) $data['user_id'];
+
+        $newUser = DB::table('WebUser')->where('id', $newUserId)->first();
+        if (! $newUser) return response()->json(['message' => 'Пользователь не найден'], 404);
+
+        // Только staff можно приглашать. Партнёр не должен получить
+        // доступ к чужому чату через эту дверь.
+        $newUserModel = \App\Models\User::find($newUserId);
+        if (! $newUserModel?->isStaff()) {
+            return response()->json(['message' => 'Можно добавлять только сотрудников'], 422);
+        }
+
+        $newUserName = trim(($newUser->lastName ?? '') . ' ' . ($newUser->firstName ?? ''));
+
+        // Защита от дублей: идемпотентный insert или return 200.
+        $existing = DB::table('chat_ticket_participants')
+            ->where('ticket_id', $id)
+            ->where('user_id', $newUserId)
+            ->exists();
+        if ($existing) {
+            return response()->json(['message' => 'Уже участник', 'deduplicated' => true]);
+        }
+
+        DB::transaction(function () use ($id, $newUserId, $newUserName, $request) {
+            DB::table('chat_ticket_participants')->insert([
+                'ticket_id' => $id,
+                'user_id' => $newUserId,
+                'user_name' => $newUserName,
+                'added_by' => $request->user()->id,
+                'added_at' => now(),
+            ]);
+            // Системное сообщение в чат: «X добавил(а) Y».
+            $actor = trim(($request->user()->lastName ?? '') . ' ' . ($request->user()->firstName ?? '')) ?: 'Сотрудник';
+            DB::table('chat_messages')->insert([
+                'ticket_id' => $id,
+                'sender_id' => $request->user()->id,
+                'sender_name' => $actor,
+                'content' => "{$actor} добавил(а) участника: {$newUserName}",
+                'is_system' => true,
+                'is_agent' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        });
+
+        // Уведомить добавленного сотрудника.
+        try {
+            NotificationController::create(
+                $newUserId,
+                'chat',
+                'Вас добавили в чат',
+                'Тема: ' . ($ticket->subject ?: 'Тикет #' . $id),
+                '/manage/chat?open=' . $id,
+            );
+        } catch (\Throwable $e) {
+            Log::debug('participant notify failed: ' . $e->getMessage());
+        }
+
+        return response()->json(['message' => 'Добавлен', 'userId' => $newUserId], 201);
+    }
+
+    /**
+     * DELETE /chat/tickets/{id}/participants/{userId} — убрать сотрудника
+     * из чата. Доступно staff'у; пишет системное сообщение «убрал(а)».
+     */
+    public function removeParticipant(Request $request, int $id, int $userId): JsonResponse
+    {
+        $ticket = DB::table('chat_tickets')->where('id', $id)->first();
+        if (! $ticket) return response()->json(['message' => 'Не найден'], 404);
+        if (! $request->user()->isStaff()) {
+            return response()->json(['message' => 'Только сотрудник'], 403);
+        }
+
+        $row = DB::table('chat_ticket_participants')
+            ->where('ticket_id', $id)
+            ->where('user_id', $userId)
+            ->first();
+        if (! $row) return response()->json(['message' => 'Не участник'], 404);
+
+        DB::transaction(function () use ($row, $id, $userId, $request) {
+            DB::table('chat_ticket_participants')
+                ->where('ticket_id', $id)
+                ->where('user_id', $userId)
+                ->delete();
+            $actor = trim(($request->user()->lastName ?? '') . ' ' . ($request->user()->firstName ?? '')) ?: 'Сотрудник';
+            DB::table('chat_messages')->insert([
+                'ticket_id' => $id,
+                'sender_id' => $request->user()->id,
+                'sender_name' => $actor,
+                'content' => "{$actor} убрал(а) участника: " . ($row->user_name ?: '#' . $userId),
+                'is_system' => true,
+                'is_agent' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        });
+
+        return response()->json(['message' => 'Удалён']);
     }
 
     // ==================== INCIDENTS / SUPPORT DESK ====================

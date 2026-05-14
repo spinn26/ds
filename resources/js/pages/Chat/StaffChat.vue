@@ -477,6 +477,14 @@
               </v-list>
             </v-menu>
             <v-btn icon variant="text" size="small"
+              :title="participants.length ? `Участники чата: ${participants.length + 1}` : 'Добавить участников в чат'"
+              @click="openParticipantsDialog">
+              <v-badge v-if="participants.length" :content="participants.length + 1" color="primary" floating>
+                <v-icon size="18">mdi-account-multiple-plus-outline</v-icon>
+              </v-badge>
+              <v-icon v-else size="18">mdi-account-multiple-plus-outline</v-icon>
+            </v-btn>
+            <v-btn icon variant="text" size="small"
               :color="showContext ? 'primary' : undefined"
               title="Карточка партнёра" @click="showContext = !showContext">
               <v-icon size="18">mdi-card-account-details-outline</v-icon>
@@ -1074,6 +1082,58 @@
 
     <ImageLightbox v-model="lightboxOpen" :src="lightboxSrc" :alt="lightboxAlt" />
 
+    <!-- Диалог управления участниками чата -->
+    <v-dialog v-model="participantsDialog" max-width="520">
+      <v-card>
+        <v-card-title class="d-flex align-center ga-2">
+          <v-icon color="primary">mdi-account-multiple-plus</v-icon>
+          Участники чата
+          <v-spacer />
+          <v-btn icon="mdi-close" size="small" variant="text" @click="participantsDialog = false" />
+        </v-card-title>
+        <v-divider />
+        <v-card-text class="pa-0">
+          <v-list density="compact">
+            <v-list-subheader class="text-caption">Текущие участники</v-list-subheader>
+            <v-list-item v-for="p in participants" :key="'p-' + p.id">
+              <template #prepend>
+                <v-avatar size="32" color="primary" variant="tonal">
+                  <span class="text-caption font-weight-bold">{{ pInitials(p.name) }}</span>
+                </v-avatar>
+              </template>
+              <v-list-item-title class="text-body-2">{{ p.name }}</v-list-item-title>
+              <v-list-item-subtitle class="text-caption">
+                {{ pShortRole(p.role) }} · добавлен {{ pAddedAt(p.addedAt) }}
+              </v-list-item-subtitle>
+              <template #append>
+                <v-btn icon="mdi-close" size="x-small" variant="text" color="error"
+                  title="Убрать из чата" @click="removeParticipant(p)" />
+              </template>
+            </v-list-item>
+            <v-list-item v-if="!participants.length" class="text-medium-emphasis">
+              <v-list-item-subtitle class="text-caption">
+                Никого ещё не добавили — выберите сотрудника ниже.
+              </v-list-item-subtitle>
+            </v-list-item>
+            <v-divider />
+            <v-list-subheader class="text-caption">Добавить сотрудника</v-list-subheader>
+            <div class="px-3 pb-3">
+              <v-autocomplete v-model="participantToAdd" :items="addableStaff"
+                item-title="name" item-value="id"
+                placeholder="Начните вводить ФИО…"
+                variant="outlined" density="compact" hide-details clearable
+                :loading="participantSaving" />
+              <v-btn class="mt-2" color="primary" :loading="participantSaving"
+                :disabled="!participantToAdd"
+                prepend-icon="mdi-plus" @click="addParticipant" block>
+                Добавить в чат
+              </v-btn>
+            </div>
+          </v-list>
+        </v-card-text>
+      </v-card>
+    </v-dialog>
+
     <!-- Редактирование/создание шаблона быстрых ответов -->
     <v-dialog v-model="qrDialog" max-width="560">
       <v-card>
@@ -1202,6 +1262,87 @@ const staffList = ref([]);
 const quickReplies = ref([]);
 const filter = ref({ status: '', priority: '', search: '' });
 let poll = null;
+
+// === Доп. участники чата ===
+const participants = ref([]); // [{ id, userId, name, role, addedAt }]
+const participantsDialog = ref(false);
+const participantToAdd = ref(null);
+const participantSaving = ref(false);
+
+// Список сотрудников, которых можно добавить = staffList минус уже
+// участвующие (включая created_by, recipient, assigned).
+const addableStaff = computed(() => {
+  const taken = new Set([
+    ...participants.value.map(p => p.userId),
+    Number(activeChat.value?.created_by) || 0,
+    Number(activeChat.value?.recipient_id) || 0,
+    Number(activeChat.value?.assigned_to) || 0,
+  ]);
+  return (staffList.value || []).filter(s => !taken.has(Number(s.id)));
+});
+
+function pInitials(name) {
+  if (!name) return '?';
+  const p = name.trim().split(/\s+/);
+  return ((p[0]?.[0] || '') + (p[1]?.[0] || '')).toUpperCase() || '?';
+}
+function pShortRole(role) {
+  if (!role) return '—';
+  const map = {
+    admin: 'Админ', backoffice: 'Бэк-офис', support: 'Поддержка',
+    head: 'Руководитель', finance: 'Финансы', calculations: 'Расчёты',
+    corrections: 'Корректировки', education: 'Обучение',
+  };
+  const first = String(role).split(',')[0].trim();
+  return map[first] || first;
+}
+function pAddedAt(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+}
+
+async function loadParticipants() {
+  if (!activeChat.value?.id) { participants.value = []; return; }
+  try {
+    const { data } = await api.get(`/chat/tickets/${activeChat.value.id}/participants`);
+    participants.value = Array.isArray(data) ? data : [];
+  } catch {
+    participants.value = [];
+  }
+}
+
+function openParticipantsDialog() {
+  participantToAdd.value = null;
+  participantsDialog.value = true;
+  loadParticipants();
+}
+
+async function addParticipant() {
+  if (!participantToAdd.value || !activeChat.value?.id) return;
+  participantSaving.value = true;
+  try {
+    await api.post(`/chat/tickets/${activeChat.value.id}/participants`, {
+      user_id: participantToAdd.value,
+    });
+    participantToAdd.value = null;
+    await loadParticipants();
+    await refreshMessages();
+  } catch (e) {
+    showError(e?.response?.data?.message || 'Не удалось добавить');
+  }
+  participantSaving.value = false;
+}
+
+async function removeParticipant(p) {
+  if (!confirm(`Убрать ${p.name} из чата?`)) return;
+  try {
+    await api.delete(`/chat/tickets/${activeChat.value.id}/participants/${p.userId}`);
+    await loadParticipants();
+    await refreshMessages();
+  } catch (e) {
+    showError(e?.response?.data?.message || 'Не удалось убрать');
+  }
+}
 
 // Smart-views: быстрые фильтры по принадлежности тикета (как Intercom Inbox).
 // Применяются на client-side после fetch — backend и так присылает <=25 строк.
@@ -2028,6 +2169,7 @@ async function openChat(t) {
   if (socket) socket.emit('ticket:join', t.id);
   startPoll();
   loadNotes();
+  loadParticipants();
   if (showKb.value) loadKbSuggestions();
 }
 

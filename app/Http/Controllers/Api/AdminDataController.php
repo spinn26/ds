@@ -1837,8 +1837,11 @@ class AdminDataController extends Controller
         }
         $excludeId = (int) $request->input('excludeId', 0);
 
+        // ILIKE надёжнее, чем LOWER() — особенно для кириллицы
+        // («Ш38»/«ш38»). TRIM обоих сторон, потому что в legacy-данных
+        // встречаются номера с trailing-пробелом ("Ш38 ").
         $query = DB::table('contract')
-            ->whereRaw('LOWER("number") = ?', [mb_strtolower($number)])
+            ->whereRaw('TRIM("number") ILIKE ?', [$number])
             ->whereNull('deletedAt');
         if ($excludeId > 0) {
             $query->where('id', '!=', $excludeId);
@@ -1866,11 +1869,11 @@ class AdminDataController extends Controller
             'number' => [
                 'required', 'string', 'max:255',
                 // Case-insensitive проверка дубля, игнорируем soft-deleted.
-                // Через closure, потому что Laravel-rule `unique` не умеет ilike,
-                // а у заказчика номера кириллические («Ш38», «ш38» = один и тот же).
+                // ILIKE + TRIM надёжнее LOWER() для кириллицы и для legacy-
+                // записей с trailing-пробелом ("Ш38 " в БД vs "Ш38" ввод).
                 function ($attribute, $value, $fail) {
                     $exists = DB::table('contract')
-                        ->whereRaw('LOWER("number") = ?', [mb_strtolower((string) $value)])
+                        ->whereRaw('TRIM("number") ILIKE ?', [trim((string) $value)])
                         ->whereNull('deletedAt')
                         ->exists();
                     if ($exists) {
@@ -1951,7 +1954,7 @@ class AdminDataController extends Controller
                 // но исключаем сам редактируемый контракт ($id).
                 function ($attribute, $value, $fail) use ($id) {
                     $exists = DB::table('contract')
-                        ->whereRaw('LOWER("number") = ?', [mb_strtolower((string) $value)])
+                        ->whereRaw('TRIM("number") ILIKE ?', [trim((string) $value)])
                         ->where('id', '!=', $id)
                         ->whereNull('deletedAt')
                         ->exists();

@@ -135,6 +135,10 @@ Route::prefix('v1')->group(function () {
         Route::post('/chat/tickets/{id}/csat', [\App\Http\Controllers\Api\ChatController::class, 'submitCsat'])->middleware('throttle:5,1');
         Route::get('/chat/tickets/{id}/notes', [\App\Http\Controllers\Api\ChatController::class, 'notes']);
         Route::post('/chat/tickets/{id}/notes', [\App\Http\Controllers\Api\ChatController::class, 'addNote']);
+        // Дополнительные участники чата (приглашённые сотрудники)
+        Route::get('/chat/tickets/{id}/participants', [\App\Http\Controllers\Api\ChatController::class, 'listParticipants'])->whereNumber('id');
+        Route::post('/chat/tickets/{id}/participants', [\App\Http\Controllers\Api\ChatController::class, 'addParticipant'])->whereNumber('id');
+        Route::delete('/chat/tickets/{id}/participants/{userId}', [\App\Http\Controllers\Api\ChatController::class, 'removeParticipant'])->whereNumber('id')->whereNumber('userId');
         Route::get('/chat/quick-replies', [\App\Http\Controllers\Api\ChatController::class, 'quickReplies']);
         Route::post('/chat/quick-replies', [\App\Http\Controllers\Api\ChatController::class, 'storeQuickReply']);
         Route::put('/chat/quick-replies/{id}', [\App\Http\Controllers\Api\ChatController::class, 'updateQuickReply'])->whereNumber('id');
