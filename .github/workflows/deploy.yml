@@ -1,9 +1,25 @@
 name: Deploy to Server
 
+# Автодеплой в /var/www/newds на dev.dsconsult.ru (он же prod).
+# Секреты GitHub:
+#   SERVER_HOST     — dev.dsconsult.ru
+#   SERVER_USER     — root
+#   SERVER_PASSWORD — пароль root
+#
+# Workflow триггерится на каждый push в main и:
+#   1) подтягивает код,
+#   2) пересобирает PHP- и JS-зависимости,
+#   3) накатывает миграции,
+#   4) перезапускает queue-воркеры (новый код job'ов) и socket-server (pm2),
+#   5) кэширует config/route/view через `artisan optimize` (прод-режим),
+#   6) фиксит owner/group для storage и bootstrap/cache (root-операции
+#      ломают права, php-fpm как www-data потом не пишет в логи/кэш).
+
 on:
   push:
     branches:
       - main
+  workflow_dispatch:   # ручной запуск из GitHub UI
 
 jobs:
   deploy:
@@ -16,18 +32,57 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           password: ${{ secrets.SERVER_PASSWORD }}
+          script_stop: true
+          command_timeout: 15m
           script: |
+            set -euo pipefail
             cd /var/www/newds
 
+            echo "::group::Pull"
             git fetch origin main
             git reset --hard origin/main
+            git log -1 --oneline
+            echo "::endgroup::"
 
-            COMPOSER_ALLOW_SUPERUSER=1 composer update --no-dev --no-interaction --prefer-dist --optimize-autoloader
+            echo "::group::Composer"
+            COMPOSER_ALLOW_SUPERUSER=1 composer install \
+              --no-dev --no-interaction --prefer-dist --optimize-autoloader
+            echo "::endgroup::"
 
-            npm install
+            echo "::group::Frontend build"
+            npm ci --no-audit --no-fund
             npm run build
+            echo "::endgroup::"
 
+            echo "::group::DB migrations"
             php artisan migrate --force
+            echo "::endgroup::"
+
+            echo "::group::Cache rebuild"
+            # clear → optimize кэширует фрэш-конфиг/маршруты в bootstrap/cache,
+            # это и быстрее, и закрывает риск устаревшего route:cache.
             php artisan config:clear
             php artisan route:clear
             php artisan view:clear
+            php artisan optimize
+            echo "::endgroup::"
+
+            echo "::group::Restart workers"
+            # Queue: graceful — текущий job дорабатывает, потом подхватывает
+            # новый код. Если supervisor стоит на autorestart=true — он
+            # сразу запустит новый процесс.
+            php artisan queue:restart || true
+            # Socket-server под pm2 — reload без даунтайма.
+            pm2 reload socket-server 2>/dev/null \
+              || pm2 start socket-server/index.js --name socket-server
+            pm2 save
+            echo "::endgroup::"
+
+            echo "::group::Fix permissions"
+            # composer/npm/git под root → файлы становятся root:root, php-fpm
+            # как www-data потом не пишет в storage/logs и bootstrap/cache.
+            chown -R www-data:www-data storage bootstrap/cache
+            chmod -R ug+rwX storage bootstrap/cache
+            echo "::endgroup::"
+
+            echo "Deploy OK — $(git log -1 --oneline)"
