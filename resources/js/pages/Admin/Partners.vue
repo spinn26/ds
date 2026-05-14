@@ -236,9 +236,32 @@
                   variant="outlined" density="compact" :error-messages="editErrors.participantCode" />
               </v-col>
               <v-col cols="12" sm="4">
-                <v-text-field v-model.number="editForm.inviter" type="number" label="Пригласивший (ID)"
-                  :hint="editForm.inviterName ? `Сейчас: ${editForm.inviterName}` : ''" persistent-hint
-                  variant="outlined" density="compact" :error-messages="editErrors.inviter" />
+                <!-- Автокомплит по ФИО: ищем по personName / participantCode,
+                     отдаём наверх consultant.id. В подсказке — ID и реф. код
+                     текущего выбора, чтобы оператор видел всё нужное. -->
+                <v-autocomplete
+                  v-model="editForm.inviter"
+                  :items="inviterOptions"
+                  item-title="personName"
+                  item-value="id"
+                  label="Пригласивший"
+                  placeholder="Поиск по ФИО или коду"
+                  prepend-inner-icon="mdi-account-search"
+                  variant="outlined" density="compact"
+                  clearable hide-no-data
+                  :loading="inviterLoading"
+                  :hint="inviterHint" persistent-hint
+                  :error-messages="editErrors.inviter"
+                  @update:search="onInviterSearch"
+                >
+                  <template #item="{ props: itemProps, item }">
+                    <v-list-item v-bind="itemProps">
+                      <template #subtitle>
+                        ID {{ item.raw.id }}<span v-if="item.raw.participantCode"> · код {{ item.raw.participantCode }}</span>
+                      </template>
+                    </v-list-item>
+                  </template>
+                </v-autocomplete>
               </v-col>
               <v-col cols="12" sm="4">
                 <v-checkbox v-model="editForm.isBlocked" label="Заблокирован" density="compact" hide-details />
@@ -728,6 +751,51 @@ const statusMsgType = ref('success');
 const statusHistory = ref([]);
 const statusHistoryLoading = ref(false);
 
+// === Inviter autocomplete state ===
+// items для v-autocomplete (ФИО + ID + код) и подсказка под полем.
+const inviterOptions = ref([]);
+const inviterLoading = ref(false);
+const inviterHint = computed(() => {
+  const id = editForm.value?.inviter;
+  if (!id) return 'Начните вводить ФИО или код пригласителя';
+  const opt = inviterOptions.value.find(o => o.id === id);
+  if (!opt) return `ID ${id}`;
+  const code = opt.participantCode ? `, код ${opt.participantCode}` : '';
+  return `ID ${opt.id}${code}`;
+});
+
+let inviterSearchTimer = null;
+async function fetchInviterOptions(q, ids = []) {
+  inviterLoading.value = true;
+  try {
+    const params = {};
+    if (q && q.length >= 1) params.q = q;
+    if (ids.length) params.ids = ids;
+    const { data } = await api.get('/admin/partners/lookup', { params });
+    const items = data?.items || [];
+    // Сохраняем уже выбранного пригласителя, чтобы он не пропал из items
+    // когда пользователь начнёт искать другого — иначе v-autocomplete
+    // отрисует пустой title.
+    const currentId = editForm.value?.inviter;
+    const currentInOptions = currentId
+      ? items.find(i => i.id === currentId) || inviterOptions.value.find(i => i.id === currentId)
+      : null;
+    const merged = currentInOptions
+      ? [currentInOptions, ...items.filter(i => i.id !== currentId)]
+      : items;
+    inviterOptions.value = merged;
+  } catch {
+    /* тишина — сеть упадёт, оставим прежние options */
+  } finally {
+    inviterLoading.value = false;
+  }
+}
+
+function onInviterSearch(q) {
+  clearTimeout(inviterSearchTimer);
+  inviterSearchTimer = setTimeout(() => fetchInviterOptions(q || ''), 300);
+}
+
 async function loadStatusHistory(id) {
   if (!id) return;
   statusHistoryLoading.value = true;
@@ -774,6 +842,11 @@ async function openEdit(item) {
     const { data } = await api.get(`/admin/partners/${item.id}`);
     const c = data.consultant || {};
     const u = data.webUser || {};
+    // Сразу подкладываем текущего пригласителя в options автокомплита,
+    // чтобы он отрисовал ФИО а не пустой title (items пустые до поиска).
+    inviterOptions.value = (c.inviter && c.inviterName)
+      ? [{ id: c.inviter, personName: c.inviterName, participantCode: null }]
+      : [];
     editForm.value = {
       id: c.id,
       personName: c.personName,

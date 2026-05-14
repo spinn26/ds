@@ -228,6 +228,7 @@ Route::prefix('v1')->group(function () {
         Route::delete('/admin/users/{id}', [AdminUserController::class, 'destroy']);
 
         Route::get('/admin/partners', [\App\Http\Controllers\Api\AdminDataController::class, 'partners']);
+        Route::get('/admin/partners/lookup', [\App\Http\Controllers\Api\AdminDataController::class, 'partnerLookup']);
         Route::post('/admin/partners', [\App\Http\Controllers\Api\AdminDataController::class, 'storePartner']);
         Route::post('/admin/partners/bulk', [\App\Http\Controllers\Api\AdminDataController::class, 'bulkPartners'])->middleware('throttle:10,1');
         Route::get('/admin/partners/{id}', [\App\Http\Controllers\Api\AdminDataController::class, 'showPartner'])->whereNumber('id');

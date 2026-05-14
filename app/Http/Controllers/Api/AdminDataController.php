@@ -50,6 +50,43 @@ class AdminDataController extends Controller
         private readonly PartnerStatusService $statusService,
     ) {}
 
+    /**
+     * Лёгкий lookup партнёров для автокомплита (поле «Пригласивший» и др.).
+     * GET /api/v1/admin/partners/lookup?q=Иванов&ids[]=1374
+     *  - q — поиск по personName / participantCode (минимум 1 символ).
+     *  - ids[] — гарантированно вернуть указанных партнёров (например,
+     *    текущий выбранный inviter), чтобы автокомплит мог отобразить
+     *    ФИО без дополнительного запроса.
+     * Возвращает максимум 30 строк: id, personName, participantCode.
+     */
+    public function partnerLookup(Request $request): JsonResponse
+    {
+        $q   = trim((string) $request->input('q', ''));
+        $ids = array_filter(array_map('intval', (array) $request->input('ids', [])));
+
+        $query = DB::table('consultant')->whereNull('dateDeleted');
+        $query->where(function ($w) use ($q, $ids) {
+            if ($q !== '') {
+                $like = '%' . $q . '%';
+                $w->where('personName', 'ilike', $like)
+                  ->orWhere('participantCode', 'ilike', $like);
+            }
+            if ($ids) {
+                $w->orWhereIn('id', $ids);
+            }
+            // Если ничего не передано — пустой результат (а не вся таблица).
+            if ($q === '' && ! $ids) {
+                $w->whereRaw('1 = 0');
+            }
+        });
+
+        $rows = $query->orderBy('personName')
+            ->limit(30)
+            ->get(['id', 'personName', 'participantCode']);
+
+        return response()->json(['items' => $rows]);
+    }
+
     /** Партнёры — список с фильтрами */
     public function partners(Request $request): JsonResponse
     {

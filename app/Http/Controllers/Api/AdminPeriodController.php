@@ -131,7 +131,10 @@ class AdminPeriodController extends Controller
             (int) $request->user()->id,
         );
 
-        NotificationController::notifyStaff(
+        // Шумовое уведомление — целимся только в admin и сотрудников расчётов
+        // (роль calculations). Остальным staff знать о переоткрытии не нужно.
+        NotificationController::notifyRoles(
+            ['admin', 'calculations'],
             'system',
             sprintf('Период %02d.%d переоткрыт', $data['month'], $data['year']),
             'Закрытие месяца отменено — будьте внимательны к последующим правкам',

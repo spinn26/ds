@@ -72,8 +72,10 @@ class ApplyPoolJob implements ShouldQueue
             $freeze->close($this->year, $this->month, $this->userId,
                 'Зафиксировано через расчёт пула');
 
-            // Уведомление staff — как было в синхронном flow.
-            NotificationController::notifyStaff(
+            // Узкая рассылка: только admin и сотрудники расчётов.
+            // Остальным staff пул не релевантен — лишний шум в шторке.
+            NotificationController::notifyRoles(
+                ['admin', 'calculations'],
                 'payment',
                 sprintf('Пул зафиксирован: %02d.%d', $this->month, $this->year),
                 sprintf('Записано %d строк, выплачено %s ₽',
