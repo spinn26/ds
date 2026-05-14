@@ -8,7 +8,8 @@ class Product extends Model
 {
     protected $table = 'product';
     public $timestamps = false;
-    protected $guarded = ['id'];
+    public $incrementing = false;
+    protected $guarded = [];
 
     protected function casts(): array
     {

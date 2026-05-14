@@ -9,7 +9,8 @@ class Program extends Model
 {
     protected $table = 'program';
     public $timestamps = false;
-    protected $guarded = ['id'];
+    public $incrementing = false;
+    protected $guarded = [];
 
     protected function casts(): array
     {

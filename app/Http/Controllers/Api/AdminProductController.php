@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\Concerns\PaginatesRequests;
 use App\Http\Controllers\Controller;
 use App\Models\Product;
 use App\Models\Program;
+use App\Support\LegacyId;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -110,26 +111,34 @@ class AdminProductController extends Controller
         ]);
 
         $status = $request->input('publishStatus', 'draft');
-        $product = Product::create([
-            'name' => $request->name,
-            'description' => $request->description,
-            'imageUrl' => $request->imageUrl,
-            'hero_image' => $request->input('heroImage'),
-            'productType' => $request->input('productType'),
-            'educationUrl' => $request->educationUrl,
-            'instructionUrl' => $request->instructionUrl,
-            'openProductUrl' => $request->openProductUrl,
-            'active' => $request->boolean('active', true),
-            'noComission' => $request->boolean('noComission', false),
-            'visibleToResident' => $request->boolean('visibleToResident', false),
-            'visibleToCalculator' => $request->boolean('visibleToCalculator', true),
-            'has_property' => $request->boolean('hasProperty', false),
-            'has_term' => $request->boolean('hasTerm', false),
-            'has_year_kv' => $request->boolean('hasYearKv', false),
-            'publish_status' => $status,
-            'published_at' => $status === 'published' ? now() : null,
-            'published_by' => $status === 'published' ? $request->user()?->id : null,
-        ]);
+
+        // Legacy Directual-таблица `product`: колонка id — integer NOT NULL
+        // без sequence/default, поэтому id генерим вручную через
+        // LegacyId::next под advisory_xact_lock внутри транзакции.
+        $product = DB::transaction(function () use ($request, $status) {
+            $attrs = [
+                'id' => LegacyId::next('product'),
+                'name' => $request->name,
+                'description' => $request->description,
+                'imageUrl' => $request->imageUrl,
+                'hero_image' => $request->input('heroImage'),
+                'productType' => $request->input('productType'),
+                'educationUrl' => $request->educationUrl,
+                'instructionUrl' => $request->instructionUrl,
+                'openProductUrl' => $request->openProductUrl,
+                'active' => $request->boolean('active', true),
+                'noComission' => $request->boolean('noComission', false),
+                'visibleToResident' => $request->boolean('visibleToResident', false),
+                'visibleToCalculator' => $request->boolean('visibleToCalculator', true),
+                'has_property' => $request->boolean('hasProperty', false),
+                'has_term' => $request->boolean('hasTerm', false),
+                'has_year_kv' => $request->boolean('hasYearKv', false),
+                'publish_status' => $status,
+                'published_at' => $status === 'published' ? now() : null,
+                'published_by' => $status === 'published' ? $request->user()?->id : null,
+            ];
+            return Product::create($attrs);
+        });
 
         $this->syncEducationCourse($product->id, $request->input('educationCourseId'));
 
@@ -274,10 +283,13 @@ class AdminProductController extends Controller
     {
         $request->validate($this->programRules());
 
-        $program = Program::create(array_merge(
-            ['product' => $productId],
-            $this->extractProgramPayload($request)
-        ));
+        // Legacy `program.id` — integer NOT NULL без default, см. store().
+        $program = DB::transaction(function () use ($request, $productId) {
+            return Program::create(array_merge(
+                ['id' => LegacyId::next('program'), 'product' => $productId],
+                $this->extractProgramPayload($request)
+            ));
+        });
 
         return response()->json(['message' => 'Программа создана', 'id' => $program->id], 201);
     }
