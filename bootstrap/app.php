@@ -24,6 +24,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'role' => \App\Http\Middleware\CheckRole::class,
             'restrict.education' => \App\Http\Middleware\RestrictEducationWrites::class,
+            'restrict.head' => \App\Http\Middleware\RestrictHeadWrites::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
