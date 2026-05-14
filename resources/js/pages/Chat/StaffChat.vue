@@ -2563,7 +2563,13 @@ onUnmounted(() => {
 .chat-item-subject { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3; }
 .chat-item-time { font-size: 11px; color: rgba(var(--v-theme-on-surface), 0.45); flex-shrink: 0; font-variant-numeric: tabular-nums; }
 .chat-item-time.stale { color: rgb(var(--v-theme-error)); font-weight: 600; }
-.chat-item-bottom { font-size: 11px; color: rgba(var(--v-theme-on-surface), 0.55); margin-top: 4px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+/* Одна строка, обрезаем многоточием — иначе при двух ФИО + чипе статуса
+   wrap переносил статус на вторую строку, она наезжала на следующую
+   карточку и текст «→ Лаврова Ирина» визуально обрезался сверху. */
+.chat-item-bottom { font-size: 11px; color: rgba(var(--v-theme-on-surface), 0.55); margin-top: 4px; display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; min-width: 0; overflow: hidden; line-height: 1.5; }
+.chat-item-bottom .customer,
+.chat-item-bottom .recipient { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.chat-item-bottom .chat-item-status-chip { flex-shrink: 0; }
 .chat-item-preview { display: flex; gap: 4px; margin-top: 2px; font-size: 12px; color: rgba(var(--v-theme-on-surface), 0.6); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; line-height: 1.3; }
 .chat-item-preview-prefix { color: rgba(var(--v-theme-on-surface), 0.4); flex-shrink: 0; }
 .chat-item-preview-text { overflow: hidden; text-overflow: ellipsis; }

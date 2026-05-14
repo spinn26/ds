@@ -88,7 +88,8 @@ class ChatController extends Controller
 
             $query->where(function ($q) use ($s, $clientIds) {
                 $q->where('subject', 'ilike', $s)
-                  ->orWhere('customer_name', 'ilike', $s)  // ФИО партнёра
+                  ->orWhere('customer_name', 'ilike', $s)  // ФИО партнёра-автора
+                  ->orWhere('recipient_name', 'ilike', $s) // ФИО второй стороны (partner↔partner / staff↔partner)
                   ->orWhere('id', 'ilike', $s);
                 if (! empty($clientIds)) {
                     $q->orWhere(function ($q2) use ($clientIds) {
