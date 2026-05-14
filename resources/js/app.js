@@ -147,13 +147,19 @@ app.use(router);
 app.use(VueQueryPlugin, vueQueryOptions);
 app.use(i18n);
 // Глобальные дефолты vue-tel-input. mode=international — всегда вид
-// "+7 999 123-45-67"; список stsk-стран в preferred — наверху селекта.
+// "+7 999 123-45-67"; список cstk-стран в preferred — наверху селекта.
+// showDialCode=true фиксирует диал-код в начале инпута (нельзя стереть
+// или переписать другой страной набором +XX — меняется только через
+// селектор), autoFormat применяет маску под выбранную страну,
+// dynamicPlaceholder показывает example номера для текущей страны.
 app.use(VueTelInput, {
     mode: 'international',
     defaultCountry: 'RU',
     preferredCountries: ['RU', 'BY', 'KZ', 'UA', 'UZ', 'AM', 'AZ', 'KG', 'TJ', 'MD'],
-    inputOptions: { showDialCode: false, placeholder: 'Номер телефона' },
+    inputOptions: { showDialCode: true, placeholder: 'Номер телефона' },
     dropdownOptions: { showSearchBox: true, showFlags: true, showDialCodeInSelection: true },
     validCharactersOnly: true,
+    autoFormat: true,
+    dynamicPlaceholder: true,
 });
 app.mount('#app');

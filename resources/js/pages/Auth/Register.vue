@@ -66,8 +66,7 @@
                     <v-col cols="12" sm="6">
                       <label class="text-caption text-medium-emphasis d-block mb-1">Телефон *</label>
                       <vue-tel-input v-model="form.phone"
-                        @validate="onPhoneValidate"
-                        :input-options="{ placeholder: 'Телефон' }" />
+                        @validate="onPhoneValidate" />
                       <div v-if="phoneTouched && !phoneValid"
                         class="text-error text-caption mt-1">
                         Введите корректный номер телефона

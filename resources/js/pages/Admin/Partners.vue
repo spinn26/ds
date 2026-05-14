@@ -215,8 +215,7 @@
               <v-col cols="12" sm="3">
                 <label class="text-caption text-medium-emphasis d-block mb-1">Телефон</label>
                 <vue-tel-input v-model="editForm.phone"
-                  @validate="onEditPhoneValidate"
-                  :input-options="{ placeholder: 'Телефон' }" />
+                  @validate="onEditPhoneValidate" />
                 <div v-if="editForm.phone && !editPhoneValid && editPhoneTouched"
                   class="text-error text-caption mt-1">
                   Неверный номер телефона
@@ -332,8 +331,7 @@
             <v-col cols="12" sm="6">
               <label class="text-caption text-medium-emphasis d-block mb-1">Телефон</label>
               <vue-tel-input v-model="addForm.phone"
-                @validate="onAddPhoneValidate"
-                :input-options="{ placeholder: 'Телефон' }" />
+                @validate="onAddPhoneValidate" />
               <div v-if="addForm.phone && !addPhoneValid && addPhoneTouched"
                 class="text-error text-caption mt-1">
                 Неверный номер телефона

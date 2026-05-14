@@ -163,8 +163,7 @@
                      phoneValid ref → используется в disable-условии save. -->
                 <label class="text-caption text-medium-emphasis d-block mb-1">Телефон</label>
                 <vue-tel-input v-model="addForm.phone"
-                  @validate="onPhoneValidate"
-                  :input-options="{ placeholder: 'Телефон' }" />
+                  @validate="onPhoneValidate" />
                 <div v-if="addForm.phone && !phoneValid && phoneTouched"
                   class="text-error text-caption mt-1">
                   Неверный номер телефона
