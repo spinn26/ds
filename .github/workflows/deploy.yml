@@ -73,8 +73,9 @@ jobs:
             # сразу запустит новый процесс.
             php artisan queue:restart || true
             # Socket-server под pm2 — reload без даунтайма.
-            pm2 reload socket-server 2>/dev/null \
-              || pm2 start socket-server/index.js --name socket-server
+            # Имя процесса — `ds-socket` (см. `pm2 list` на сервере).
+            pm2 reload ds-socket 2>/dev/null \
+              || pm2 start socket-server/index.js --name ds-socket
             pm2 save
             echo "::endgroup::"
 
