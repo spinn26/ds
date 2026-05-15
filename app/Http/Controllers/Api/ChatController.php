@@ -960,6 +960,14 @@ class ChatController extends Controller
         $priorityChanged = false;
         if ($request->filled('priority') && $request->priority !== $existing->priority) {
             $update['priority'] = $request->priority;
+            // Тикеты-инциденты держат severity и priority в одних значениях
+            // (critical/high/medium/low). Раньше эти поля жили независимо,
+            // что давало смешные кейсы: priority=high, severity=medium у того
+            // же тикета. Теперь синхронизируем — при смене priority обновляем
+            // и severity, если тикет — инцидент.
+            if (! empty($existing->is_incident)) {
+                $update['incident_severity'] = $request->priority;
+            }
             $priorityChanged = true;
         }
 
@@ -2436,6 +2444,9 @@ class ChatController extends Controller
                 'is_incident' => true,
                 'incident_no' => $incidentNo,
                 'incident_severity' => $severity,
+                // Зеркалим в priority — чтобы шапка чата и таблица
+                // поддержки показывали одно и то же значение.
+                'priority' => $severity,
                 'incident_logged_at' => $isNew ? now() : ($ticket->incident_logged_at ?? now()),
                 'incident_logged_by' => $isNew ? $user->id : ($ticket->incident_logged_by ?? $user->id),
                 'incident_resolved_at' => null,
