@@ -226,7 +226,12 @@
                     </template>
                     <template v-else-if="h.key === 'incomeDsNoVat'">
                       <template v-if="d.customCommission">
-                        <v-text-field :model-value="d.dsCommissionAbsolute" type="number" density="compact" hide-details variant="plain"
+                        <!-- variant=underlined вместо plain — иначе пустой инпут
+                             при variant=plain выглядит как пустое место рядом с
+                             « RUB», и непонятно, куда вводить (баг 2026-05-15). -->
+                        <v-text-field :model-value="d.dsCommissionAbsolute" type="number"
+                          density="compact" hide-details variant="underlined"
+                          placeholder="0.00"
                           style="max-width:120px; display:inline-block"
                           reverse @update:model-value="v => patchField(d, 'dsCommissionAbsolute', v)" />
                         RUB
@@ -313,7 +318,7 @@
                         label="Своя комиссия"
                         :title="'Введите Доход ДС вручную, %ДС посчитается обратно (для Брокер+ и подобных). Контракт ' + contractNum(d)"
                         hide-details density="compact" color="warning"
-                        @update:model-value="v => patchField(d, 'customCommission', v)" />
+                        @update:model-value="v => onCustomCommissionToggle(d, v)" />
                       <v-checkbox :model-value="d.zeroDsIncome"
                         label="Нулевой доход ДС"
                         title="Не начислять Доход ДС по этой транзакции"
@@ -710,6 +715,17 @@ function parseDate(v) {
   if (!v) return null;
   const d = new Date(v);
   return isNaN(d) ? null : d;
+}
+
+// При включении «Своя комиссия» предзаполняем dsCommissionAbsolute текущим
+// рассчитанным incomeDS (без НДС) — иначе поле появлялось пустым и
+// пользователь не понимал, что именно вводить. При выключении трогать
+// dsCommissionAbsolute не нужно: бэкенд игнорирует его, если customCommission=false.
+function onCustomCommissionToggle(d, v) {
+  patchField(d, 'customCommission', !!v);
+  if (v && (d.dsCommissionAbsolute == null || d.dsCommissionAbsolute === '') && d.preview?.incomeDS != null) {
+    patchField(d, 'dsCommissionAbsolute', Math.round(Number(d.preview.incomeDS) * 100) / 100);
+  }
 }
 
 function formatYmd(d) {
