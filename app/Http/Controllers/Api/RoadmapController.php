@@ -19,9 +19,12 @@ class RoadmapController extends Controller
     {
         $rows = DB::table('roadmap_entries')
             ->where('published', true)
-            ->orderBy('sort_order')
+            // Сначала группируем по статусу (in_progress → planned → shipped),
+            // потом по sort_order. Для shipped дополнительно — по released_at
+            // DESC, чтобы самые свежие релизы были сверху раздела «Выпущено».
             ->orderByRaw('CASE status WHEN \'in_progress\' THEN 0 WHEN \'planned\' THEN 1 WHEN \'shipped\' THEN 2 ELSE 3 END')
             ->orderByDesc('released_at')
+            ->orderBy('sort_order')
             ->orderByDesc('created_at')
             ->get([
                 'id', 'title', 'description', 'status',
