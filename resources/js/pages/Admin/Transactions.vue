@@ -247,23 +247,6 @@
                         <span v-else class="text-medium-emphasis">—</span>
                       </template>
                     </template>
-                    <template v-else-if="h.key === 'flags'">
-                      <!-- Опции редактирования транзакции: «Своя комиссия» + «Нулевой доход».
-                           Раньше жили в отдельной строке tx-extra-row под каждой транзакцией —
-                           вынесены в конец строки по запросу заказчика для компактности. -->
-                      <div class="d-flex flex-column align-start" style="gap:2px">
-                        <v-checkbox :model-value="d.customCommission"
-                          label="Своя комиссия"
-                          :title="'Ввести Доход ДС вручную, %ДС посчитается обратно (Брокер+ и подобные). Контракт ' + contractNum(d)"
-                          hide-details density="compact" color="warning"
-                          @update:model-value="v => patchField(d, 'customCommission', v)" />
-                        <v-checkbox :model-value="d.zeroDsIncome"
-                          label="Нулевой доход"
-                          title="Не начислять Доход ДС по этой транзакции"
-                          hide-details density="compact" color="warning"
-                          @update:model-value="v => (d.zeroDsIncome = v)" />
-                      </div>
-                    </template>
                     <template v-else-if="h.key === 'partner'">
                       <v-menu open-on-hover open-delay="150" close-delay="100" location="bottom start">
                         <template #activator="{ props: pprops }">
@@ -376,6 +359,26 @@
             </tbody>
           </v-table>
           </div><!-- /manual-tx-scroll -->
+
+          <!-- Глобальные опции для всех черновиков. Заменяют per-row флаги:
+               один тоггл применяется ко всем транзакциям в таблице.
+               Indeterminate-состояние, если у части drafts флаг включён,
+               у части — нет. -->
+          <div v-if="drafts.length" class="px-4 pt-3 d-flex flex-wrap ga-4 align-center">
+            <span class="text-caption text-medium-emphasis">Опции для всех транзакций:</span>
+            <v-checkbox :model-value="bulkCustomCommission"
+              :indeterminate="bulkCustomCommissionIndeterminate"
+              label="Своя комиссия"
+              title="Включить ручной ввод Дохода ДС для всех черновиков (для Брокер+ и подобных)"
+              hide-details density="compact" color="warning"
+              @update:model-value="setBulkCustomCommission" />
+            <v-checkbox :model-value="bulkZeroDsIncome"
+              :indeterminate="bulkZeroDsIncomeIndeterminate"
+              label="Нулевой доход ДС"
+              title="Не начислять Доход ДС ни по одной из транзакций"
+              hide-details density="compact" color="warning"
+              @update:model-value="setBulkZeroDsIncome" />
+          </div>
 
           <v-card-actions class="d-flex flex-wrap ga-2">
             <v-btn v-if="canFull('transactions')" color="primary" :disabled="!calculableIds.length || calculating" prepend-icon="mdi-calculator"
@@ -645,7 +648,6 @@ const draftHeaders = [
   { title: 'Баллы', key: 'pointsCount', thClass: 'text-end', tdClass: 'text-end text-no-wrap', style: 'min-width:80px' },
   { title: 'Σ по партнёрам', key: 'partnersTotal', thClass: 'text-end', tdClass: 'text-end text-no-wrap', style: 'min-width:130px' },
   { title: 'Прибыль ДС', key: 'profit', thClass: 'text-end', tdClass: 'text-end text-no-wrap' },
-  { title: 'Опции', key: 'flags', style: 'min-width:160px; width:160px' },
   { title: '', key: 'actions', style: 'width:48px' },
 ];
 
@@ -736,6 +738,38 @@ function setIncomeDsWithVat(d, v) {
   // Округляем до 2 знаков, чтобы из-за плавающей точки в БД не сохранялись
   // длинные хвосты вроде 12345.67891234567.
   patchField(d, 'dsCommissionAbsolute', Math.round(noVat * 100) / 100);
+}
+
+// Глобальные тогглы «Своя комиссия» / «Нулевой доход ДС» под таблицей.
+// «true» если флаг включён У ВСЕХ; indeterminate — если только у части.
+// При изменении применяем ко всем drafts разом (через patchField — чтобы
+// для customCommission серверный пересчёт сработал).
+const bulkCustomCommission = computed(() =>
+  drafts.value.length > 0 && drafts.value.every(d => !!d.customCommission)
+);
+const bulkCustomCommissionIndeterminate = computed(() => {
+  const some = drafts.value.some(d => !!d.customCommission);
+  const all = drafts.value.every(d => !!d.customCommission);
+  return some && !all;
+});
+function setBulkCustomCommission(v) {
+  drafts.value.forEach(d => {
+    if (!!d.customCommission !== !!v) patchField(d, 'customCommission', !!v);
+  });
+}
+
+const bulkZeroDsIncome = computed(() =>
+  drafts.value.length > 0 && drafts.value.every(d => !!d.zeroDsIncome)
+);
+const bulkZeroDsIncomeIndeterminate = computed(() => {
+  const some = drafts.value.some(d => !!d.zeroDsIncome);
+  const all = drafts.value.every(d => !!d.zeroDsIncome);
+  return some && !all;
+});
+function setBulkZeroDsIncome(v) {
+  // zeroDsIncome — UI-only флаг (бэкенд не используют), достаточно
+  // прописать локально без patchField.
+  drafts.value.forEach(d => { d.zeroDsIncome = !!v; });
 }
 
 function formatYmd(d) {
