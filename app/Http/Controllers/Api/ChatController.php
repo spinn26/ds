@@ -1010,16 +1010,37 @@ class ChatController extends Controller
             $prioLabels = ['critical' => 'Критический', 'high' => 'Высокий', 'medium' => 'Средний', 'low' => 'Низкий'];
             $newLabel = $prioLabels[$request->priority] ?? $request->priority;
             $oldLabel = $prioLabels[$existing->priority ?? 'medium'] ?? ($existing->priority ?? '—');
-            DB::table('chat_messages')->insert([
+            $prioContent = "Приоритет изменён: {$oldLabel} → {$newLabel}";
+            $prioNow = now();
+            $prioMsgId = DB::table('chat_messages')->insertGetId([
                 'ticket_id' => $id,
                 'sender_id' => $request->user()->id,
                 'sender_name' => $this->userName($request),
-                'content' => "Приоритет изменён: {$oldLabel} → {$newLabel}",
+                'content' => $prioContent,
                 'is_system' => true,
                 'is_agent' => true,
-                'created_at' => now(),
-                'updated_at' => now(),
+                'created_at' => $prioNow,
+                'updated_at' => $prioNow,
             ]);
+
+            // Real-time эмит, чтобы вторая сторона видела системку
+            // мгновенно (а не только при следующей загрузке тикета).
+            try {
+                app(\App\Services\SocketService::class)->emit('chat:new-message', "ticket:{$id}", [
+                    'id' => $prioMsgId,
+                    'ticketId' => $id,
+                    'senderId' => $request->user()->id,
+                    'senderName' => $this->userName($request),
+                    'content' => $prioContent,
+                    'isSystem' => true,
+                    'isAgent' => true,
+                    'createdAt' => $prioNow->toIso8601String(),
+                ]);
+            } catch (\Exception $e) {
+                Log::warning('chat socket emit failed: priority-message', [
+                    'ticket_id' => $id, 'message_id' => $prioMsgId, 'exception' => $e->getMessage(),
+                ]);
+            }
         }
 
         // Broadcast so other staff see the change live (Kanban board, ticket list)
