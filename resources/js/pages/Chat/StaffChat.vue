@@ -430,6 +430,35 @@
             </div>
           </div>
           <div class="chat-header-actions d-flex align-center ga-1">
+            <!-- Быстрая кнопка «Решён» — один клик, без меню статусов.
+                 Скрыта если тикет уже resolved/closed — там нечего закрывать. -->
+            <v-btn
+              v-if="!['resolved', 'closed'].includes(activeChat.status)"
+              size="small" variant="tonal" color="success"
+              prepend-icon="mdi-check-bold"
+              title="Пометить тикет как решённый"
+              @click="setStatus('resolved')">
+              Решён
+            </v-btn>
+            <!-- Кнопка смены приоритета — теперь в начале блока, рядом с «Решён»,
+                 чтобы не зарываться в середину панели. Цвет/название отражают
+                 текущий приоритет. -->
+            <v-menu>
+              <template #activator="{ props }">
+                <v-btn v-bind="props" size="small" variant="tonal"
+                  :color="prioClr(activeChat.priority) || 'grey'"
+                  prepend-icon="mdi-flag"
+                  :title="'Приоритет: ' + prioLabel(activeChat.priority || 'medium')">
+                  {{ prioLabel(activeChat.priority || 'medium') }}
+                </v-btn>
+              </template>
+              <v-list density="compact" min-width="160">
+                <v-list-item v-for="p in priorities" :key="p.value" @click="setPriority(p.value)">
+                  <template #prepend><v-icon size="14" :color="p.color">mdi-circle</v-icon></template>
+                  <v-list-item-title class="text-body-2">{{ p.label }}</v-list-item-title>
+                </v-list-item>
+              </v-list>
+            </v-menu>
             <!-- 4 первичных действия видимые: Status, Assign, Priority, Context -->
             <v-menu>
               <template #activator="{ props }">
@@ -459,20 +488,6 @@
                 <v-divider />
                 <v-list-item v-for="s in staffList" :key="s.id" @click="assignTo(s.id, s.name)">
                   <v-list-item-title class="text-body-2">{{ s.name }}</v-list-item-title>
-                </v-list-item>
-              </v-list>
-            </v-menu>
-            <v-menu>
-              <template #activator="{ props }">
-                <v-btn v-bind="props" icon variant="text" size="small"
-                  :title="'Приоритет: ' + prioLabel(activeChat.priority || 'medium')">
-                  <v-icon size="18" :color="prioClr(activeChat.priority)">mdi-flag-outline</v-icon>
-                </v-btn>
-              </template>
-              <v-list density="compact" min-width="160">
-                <v-list-item v-for="p in priorities" :key="p.value" @click="setPriority(p.value)">
-                  <template #prepend><v-icon size="14" :color="p.color">mdi-circle</v-icon></template>
-                  <v-list-item-title class="text-body-2">{{ p.label }}</v-list-item-title>
                 </v-list-item>
               </v-list>
             </v-menu>
