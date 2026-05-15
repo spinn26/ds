@@ -658,6 +658,21 @@
           @dragover.prevent="dropActive = true"
           @dragleave.prevent="dropActive = false"
           @drop.prevent="onDrop">
+          <!-- Info-карточка сверху: номер тикета/инцидента и время создания.
+               Видна всегда при открытом чате, не зависит от истории сообщений. -->
+          <div v-if="activeChat" class="ticket-info-card">
+            <v-icon size="14" class="me-1">
+              {{ activeChat.is_incident ? 'mdi-alert-octagon-outline' : 'mdi-pound' }}
+            </v-icon>
+            <span class="ticket-info-num">
+              {{ activeChat.is_incident && activeChat.incident_no
+                ? `Инцидент ${activeChat.incident_no}`
+                : `Тикет #${activeChat.id}` }}
+            </span>
+            <span v-if="activeChat.created_at" class="ticket-info-time">
+              · создан {{ fmtTicketCreated(activeChat.created_at) }}
+            </span>
+          </div>
           <template v-for="item in groupedMessages" :key="item.key">
             <div v-if="item.type === 'divider'" class="date-divider">
               <span>{{ item.label }}</span>
@@ -1887,6 +1902,16 @@ function initials(name) {
 function ago(d) { if (!d) return ''; const s = Math.floor((Date.now() - new Date(d).getTime()) / 1000); if (s < 60) return 'сейчас'; if (s < 3600) return Math.floor(s/60) + 'м'; if (s < 86400) return Math.floor(s/3600) + 'ч'; return Math.floor(s/86400) + 'д'; }
 function fmtTime(d) { if (!d) return ''; const dt = new Date(d); if (isNaN(dt)) return ''; return dt.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }); }
 function fmtDate(d) { if (!d) return ''; const dt = new Date(d); if (isNaN(dt)) return ''; return dt.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit' }); }
+
+/** Формат для info-карточки тикета: «12.05.2026 в 14:23». */
+function fmtTicketCreated(d) {
+  if (!d) return '';
+  const dt = new Date(d);
+  if (isNaN(dt)) return '';
+  const date = dt.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const time = dt.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  return `${date} в ${time}`;
+}
 function formatVolume(n) {
   const v = Number(n || 0);
   if (!v) return '0';
@@ -2304,8 +2329,17 @@ async function send() {
 
 async function setStatus(status) {
   try {
-    await api.post(`/chat/tickets/${activeChat.value.id}/status`, { status });
-    activeChat.value.status = status;
+    // Для тикетов-инцидентов (is_incident=true) при переводе в «Решён»
+    // используем дедикейтед-эндпоинт /incident/resolve — он шлёт в чат
+    // полноценное сообщение «✅ Инцидент #N решён. Исполнитель: …»
+    // вместо короткой системки «Статус изменён → Решён».
+    if (status === 'resolved' && activeChat.value?.is_incident) {
+      await api.post(`/chat/tickets/${activeChat.value.id}/incident/resolve`);
+      activeChat.value.status = 'resolved';
+    } else {
+      await api.post(`/chat/tickets/${activeChat.value.id}/status`, { status });
+      activeChat.value.status = status;
+    }
     await refreshMessages();
     loadChats();
   } catch (e) {
@@ -2317,6 +2351,9 @@ async function setPriority(priority) {
   try {
     await api.post(`/chat/tickets/${activeChat.value.id}/status`, { status: activeChat.value.status, priority });
     activeChat.value.priority = priority;
+    // Бэкенд теперь пишет в чат системку «Приоритет изменён: X → Y» —
+    // обновим ленту, чтобы оператор её увидел сразу.
+    await refreshMessages();
     loadChats();
   } catch (e) {
     showError(e?.response?.data?.message || 'Не удалось изменить приоритет');
@@ -2807,6 +2844,25 @@ onUnmounted(() => {
 .msg-row.system { justify-content: center; }
 .msg-system { font-size: 12px; color: rgba(var(--v-theme-on-surface), 0.55); padding: 3px 10px; background: rgba(var(--v-theme-on-surface), 0.04); border-radius: 8px; display: inline-flex; align-items: center; gap: 4px; }
 .msg-system-time { color: rgba(var(--v-theme-on-surface), 0.4); margin-left: 4px; font-size: 11px; font-variant-numeric: tabular-nums; }
+/* Info-карточка тикета поверх ленты: показывает номер и время создания
+   независимо от наличия сообщений. Стилизована как тонкая sticky-плашка. */
+.ticket-info-card {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 4px auto 12px;
+  padding: 6px 14px;
+  font-size: 12px;
+  color: rgba(var(--v-theme-on-surface), 0.65);
+  background: rgba(var(--v-theme-on-surface), 0.05);
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  border-radius: 14px;
+  width: max-content;
+  max-width: 90%;
+  font-variant-numeric: tabular-nums;
+}
+.ticket-info-num { font-weight: 600; }
+.ticket-info-time { color: rgba(var(--v-theme-on-surface), 0.45); margin-left: 4px; }
 .msg-avatar { flex-shrink: 0; }
 .avatar-circle { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; color: #fff; letter-spacing: -0.3px; }
 .avatar-circle.partner { background: #f97316; }

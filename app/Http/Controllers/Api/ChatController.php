@@ -982,7 +982,7 @@ class ChatController extends Controller
             $this->logTicketChange($id, 'tags', $existing->tags, $update['tags'], $request->user());
         }
 
-        // System message only for status changes (other changes are silent)
+        // System message for status changes.
         if ($statusChanged) {
             $statusLabels = ['new' => 'Новый', 'open' => 'Открыт', 'pending' => 'Ожидание', 'resolved' => 'Решён', 'closed' => 'Закрыт'];
             $statusLabel = $statusLabels[$request->status] ?? $request->status;
@@ -1002,6 +1002,24 @@ class ChatController extends Controller
             // вручную, проходя по чатам — теперь автор тикета и вторая
             // сторона получают bell + sound + Telegram (если привязан).
             $this->notifyStatusChange($existing, $request->user(), $statusLabel, $request->status);
+        }
+
+        // System message для смены приоритета — раньше было silent,
+        // но сотрудники не видели изменений и спрашивали в чате.
+        if ($priorityChanged) {
+            $prioLabels = ['critical' => 'Критический', 'high' => 'Высокий', 'medium' => 'Средний', 'low' => 'Низкий'];
+            $newLabel = $prioLabels[$request->priority] ?? $request->priority;
+            $oldLabel = $prioLabels[$existing->priority ?? 'medium'] ?? ($existing->priority ?? '—');
+            DB::table('chat_messages')->insert([
+                'ticket_id' => $id,
+                'sender_id' => $request->user()->id,
+                'sender_name' => $this->userName($request),
+                'content' => "Приоритет изменён: {$oldLabel} → {$newLabel}",
+                'is_system' => true,
+                'is_agent' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
         }
 
         // Broadcast so other staff see the change live (Kanban board, ticket list)
