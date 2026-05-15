@@ -208,8 +208,11 @@
               <v-col cols="12" class="mt-2"><div class="text-subtitle-2 font-weight-bold mb-2">Контакты</div></v-col>
               <v-col cols="12" md="4"><v-text-field v-model="editForm.email" :rules="emailRules" label="Email" type="email" variant="outlined" density="compact" :error-messages="editErrors.email" /></v-col>
               <v-col cols="12" md="4">
-                <label class="text-caption text-medium-emphasis d-block mb-1">Телефон</label>
+                <!-- Без внешнего <label>Телефон</label> — он добавлял ~22px высоты,
+                     из-за чего инпут визуально проседал ниже Email/Telegram в строке.
+                     Плейсхолдер «Номер телефона» уже задан глобально в app.js. -->
                 <vue-tel-input v-model="editForm.phone"
+                  class="phone-compact"
                   @validate="onEditPhoneValidate" />
                 <div v-if="editPhoneShowError"
                   class="text-error text-caption mt-1">
@@ -222,7 +225,12 @@
               <v-col cols="12" sm="4"><v-select v-model="editForm.gender" :items="genderOptions" label="Пол" variant="outlined" density="compact" clearable :error-messages="editErrors.gender" /></v-col>
               <v-col cols="12" sm="4"><v-text-field v-model="editBirthDate" type="date" label="Дата рождения" variant="outlined" density="compact" :error-messages="editErrors.birthDate" /></v-col>
               <v-col cols="12" sm="4">
-                <v-text-field v-model="editForm.role" label="Роль(и)" hint="Через запятую: consultant, admin, support" persistent-hint variant="outlined" density="compact" :error-messages="editErrors.role" />
+                <!-- Роли в БД — CSV-строка; в UI — массив. Список ролей —
+                     зеркало Admin/Users.vue (источник: config/cabinetPermissions.js). -->
+                <v-select v-model="editFormRoles" :items="roleOptions"
+                  label="Роль(и)" variant="outlined" density="compact"
+                  multiple chips closable-chips clearable
+                  :error-messages="editErrors.role" />
               </v-col>
 
               <v-col cols="12" class="mt-2"><div class="text-subtitle-2 font-weight-bold mb-2">Сеть</div></v-col>
@@ -328,6 +336,60 @@
               <v-alert v-if="statusMsg" :type="statusMsgType" density="compact" class="mt-3" closable @click:close="statusMsg = ''">
                 {{ statusMsg }}
               </v-alert>
+
+              <!-- История изменений: объединённый поток
+                   activity_log (Spatie, изменения Consultant) + audit_log
+                   (partner_update с diff'ом полей WebUser).
+                   Показываем кто, когда и что менял с указанием поля и
+                   значений «было → стало». -->
+              <v-divider class="my-4" />
+              <div class="d-flex align-center mb-2 ga-2">
+                <div class="text-subtitle-2 font-weight-bold">История изменений</div>
+                <v-chip v-if="changeLog.length" size="x-small" variant="tonal">
+                  {{ changeLog.length }}
+                </v-chip>
+                <v-spacer />
+                <v-btn size="x-small" variant="text" prepend-icon="mdi-refresh"
+                  :loading="changeLogLoading" @click="loadChangeLog(editForm.id)">
+                  Обновить
+                </v-btn>
+              </div>
+
+              <div v-if="changeLogLoading && !changeLog.length" class="text-center pa-4">
+                <v-progress-circular indeterminate size="22" />
+              </div>
+              <div v-else-if="!changeLog.length"
+                class="pa-3 text-caption text-medium-emphasis text-center">
+                Изменений пока нет
+              </div>
+              <v-list v-else density="compact" lines="two"
+                class="change-log-list py-0" style="max-height:320px;overflow:auto">
+                <v-list-item v-for="entry in changeLog" :key="entry.id">
+                  <template #prepend>
+                    <v-icon size="18" :color="changeIconColor(entry)">
+                      {{ changeIcon(entry) }}
+                    </v-icon>
+                  </template>
+                  <v-list-item-title class="text-body-2">
+                    <strong>{{ entry.author }}</strong>
+                    <span class="text-medium-emphasis"> · {{ fmtDateTime(entry.createdAt) }}</span>
+                    <span v-if="entry.comment" class="text-caption text-medium-emphasis">
+                      · {{ entry.comment }}
+                    </span>
+                  </v-list-item-title>
+                  <v-list-item-subtitle class="text-caption" style="white-space:normal">
+                    <template v-if="entry.changes && entry.changes.length">
+                      <div v-for="(c, i) in entry.changes" :key="i" class="mb-1">
+                        <strong>{{ c.fieldLabel }}:</strong>
+                        <span class="text-medium-emphasis">{{ c.from || '—' }}</span>
+                        <v-icon size="12" class="mx-1">mdi-arrow-right</v-icon>
+                        <span>{{ c.to || '—' }}</span>
+                      </div>
+                    </template>
+                    <span v-else class="text-medium-emphasis">{{ entry.action }}</span>
+                  </v-list-item-subtitle>
+                </v-list-item>
+              </v-list>
             </template>
           </template>
         </v-card-text>
@@ -744,6 +806,36 @@ const statusMsg = ref('');
 const statusMsgType = ref('success');
 const statusHistory = ref([]);
 const statusHistoryLoading = ref(false);
+const changeLog = ref([]);
+const changeLogLoading = ref(false);
+
+// Иконка по типу события — статус-смены отдельно от обычных правок,
+// чтобы оператор сразу видел «крупные» изменения в потоке.
+function changeIcon(entry) {
+  if (entry?.action === 'manual-status-override') return 'mdi-shield-edit';
+  if (entry?.changes?.some(c => c.field === 'activity')) return 'mdi-account-switch';
+  if (entry?.changes?.some(c => c.field === 'role')) return 'mdi-account-key';
+  if (entry?.changes?.some(c => c.field === 'password')) return 'mdi-lock-reset';
+  if (entry?.action === 'partner_update') return 'mdi-pencil';
+  return 'mdi-circle-small';
+}
+function changeIconColor(entry) {
+  if (entry?.changes?.some(c => c.field === 'activity')) return 'warning';
+  if (entry?.changes?.some(c => c.field === 'role')) return 'info';
+  return 'primary';
+}
+
+async function loadChangeLog(id) {
+  if (!id) return;
+  changeLogLoading.value = true;
+  try {
+    const { data } = await api.get(`/admin/partners/${id}/change-log`);
+    changeLog.value = data?.data || [];
+  } catch {
+    changeLog.value = [];
+  }
+  changeLogLoading.value = false;
+}
 
 // === Inviter autocomplete state ===
 // items для v-autocomplete (ФИО + ID + код) и подсказка под полем.
@@ -807,6 +899,33 @@ const genderOptions = [
   { title: 'Женский', value: 'female' },
 ];
 
+// Роли — единый перечень с Admin/Users.vue. WebUser.role хранится как
+// CSV (например "registered,consultant"), поэтому работаем через прокси
+// editFormRoles: array ↔ string.
+const roleOptions = [
+  { title: 'Администратор', value: 'admin' },
+  { title: 'Бэкофис (БЭК)', value: 'backoffice' },
+  { title: 'Техподдержка', value: 'support' },
+  { title: 'Руководитель', value: 'head' },
+  { title: 'Фин. менеджер', value: 'finance' },
+  { title: 'Расчёты (Богданова)', value: 'calculations' },
+  { title: 'Правки', value: 'corrections' },
+  { title: 'Отдел обучения', value: 'education' },
+  { title: 'Консультант', value: 'consultant' },
+  { title: 'Зарегистрирован-Партнёр', value: 'registered' },
+];
+
+const editFormRoles = computed({
+  get: () => {
+    const raw = editForm.value?.role;
+    if (!raw) return [];
+    return String(raw).split(',').map(s => s.trim()).filter(Boolean);
+  },
+  set: (arr) => {
+    if (editForm.value) editForm.value.role = (arr || []).join(',');
+  },
+});
+
 const editBirthDate = computed({
   get: () => editForm.value?.birthDate ? editForm.value.birthDate.split('T')[0] : '',
   set: (v) => { if (editForm.value) editForm.value.birthDate = v || null; },
@@ -827,11 +946,15 @@ async function openEdit(item) {
   editErrors.value = {};
   statusMsg.value = '';
   statusHistory.value = [];
+  changeLog.value = [];
   editPhoneTouched.value = false;
   editForm.value = { id: item.id, personName: item.personName };
   // История параллельно — нужна только админу, но грузим всегда:
   // ACL на бэке, а тут логика проще без условного fetch.
-  if (auth.isAdmin) loadStatusHistory(item.id);
+  if (auth.isAdmin) {
+    loadStatusHistory(item.id);
+    loadChangeLog(item.id);
+  }
   try {
     const { data } = await api.get(`/admin/partners/${item.id}`);
     const c = data.consultant || {};
@@ -980,6 +1103,7 @@ async function changeStatus(action) {
     editForm.value.activityId = fresh.consultant.activityId;
     editForm.value.activityName = fresh.consultant.activityName;
     loadStatusHistory(editForm.value.id);
+    loadChangeLog(editForm.value.id);
     loadData();
   } catch (e) {
     statusMsg.value = e.response?.data?.message || 'Ошибка смены статуса';

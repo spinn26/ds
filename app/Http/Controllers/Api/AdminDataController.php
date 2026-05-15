@@ -367,8 +367,22 @@ class AdminDataController extends Controller
             unset($data['role'], $data['newPassword'], $data['isBlocked']);
         }
 
-        DB::transaction(function () use ($consultant, $data, $request) {
+        // diff: per-field {from, to} — даёт возможность построить
+        // «История изменений» в карточке партнёра. Старые значения
+        // снимаем ДО апдейта, новые — после нормализации.
+        $diff = [];
+
+        DB::transaction(function () use ($consultant, $data, &$diff) {
             // --- consultant columns ---
+            $consultantFields = ['participantCode', 'inviter'];
+            foreach ($consultantFields as $col) {
+                if (! array_key_exists($col, $data)) continue;
+                $old = $consultant->{$col};
+                $new = $data[$col] ?: null;
+                if ((string) $old !== (string) $new) {
+                    $diff[$col] = ['from' => $old, 'to' => $new];
+                }
+            }
             if (array_key_exists('participantCode', $data)) {
                 $consultant->participantCode = $data['participantCode'] ?: null;
             }
@@ -378,18 +392,30 @@ class AdminDataController extends Controller
 
             // --- WebUser columns ---
             if ($consultant->webUser) {
+                $current = DB::table('WebUser')->where('id', $consultant->webUser)->first();
+
                 $userUpdates = [];
                 $map = ['firstName', 'lastName', 'patronymic', 'email', 'phone', 'nicTG', 'gender', 'birthDate', 'role'];
                 foreach ($map as $col) {
-                    if (array_key_exists($col, $data)) {
-                        $userUpdates[$col] = $data[$col] ?: null;
+                    if (! array_key_exists($col, $data)) continue;
+                    $new = $data[$col] ?: null;
+                    $old = $current->{$col} ?? null;
+                    if ((string) $old !== (string) $new) {
+                        $diff[$col] = ['from' => $old, 'to' => $new];
                     }
+                    $userUpdates[$col] = $new;
                 }
                 if (array_key_exists('isBlocked', $data)) {
-                    $userUpdates['isBlocked'] = (bool) $data['isBlocked'];
+                    $newBlocked = (bool) $data['isBlocked'];
+                    $oldBlocked = (bool) ($current->isBlocked ?? false);
+                    if ($newBlocked !== $oldBlocked) {
+                        $diff['isBlocked'] = ['from' => $oldBlocked, 'to' => $newBlocked];
+                    }
+                    $userUpdates['isBlocked'] = $newBlocked;
                 }
                 if (! empty($data['newPassword'])) {
                     $userUpdates['password'] = \Illuminate\Support\Facades\Hash::make($data['newPassword']);
+                    $diff['password'] = ['from' => '***', 'to' => '***'];
                 }
                 if (! empty($userUpdates)) {
                     DB::table('WebUser')->where('id', $consultant->webUser)->update($userUpdates);
@@ -405,11 +431,13 @@ class AdminDataController extends Controller
             $consultant->save();
         });
 
-        Audit::log('partner_update', 'consultant', $consultant->id, [
-            'fields' => array_keys($data),
-            'role_changed' => array_key_exists('role', $data),
-            'password_changed' => ! empty($data['newPassword']),
-        ]);
+        // В audit_log пишем только если действительно что-то поменялось,
+        // иначе «История изменений» забивалась бы пустыми «нажал Сохранить».
+        if (! empty($diff)) {
+            Audit::log('partner_update', 'consultant', $consultant->id, [
+                'diff' => $diff,
+            ]);
+        }
 
         return response()->json(['message' => 'Обновлён', 'id' => $consultant->id]);
     }
@@ -595,6 +623,152 @@ class AdminDataController extends Controller
      * Возвращаем только события, где реально менялось поле activity:
      * автор (ФИО сотрудника или «Система»), дата, было → стало.
      */
+    /**
+     * Полная история изменений партнёра — для блока «История изменений»
+     * под смены статуса. Объединяем:
+     *   1. activity_log (Spatie) — изменения колонок Consultant + ручные
+     *      override-статусы (manual-status-override).
+     *   2. audit_log — partner_update (включая поля WebUser, обновляемые
+     *      через DB::table мимо Eloquent — Spatie их не видит).
+     *
+     * Каждая запись формата:
+     *   { id, source, createdAt, author, action, changes: [{field, from, to}] }
+     */
+    public function partnerChangeLog(int $id): JsonResponse
+    {
+        // --- 1. Spatie activity_log (Consultant) ---
+        $spatieRows = DB::table('activity_log')
+            ->where('subject_type', \App\Models\Consultant::class)
+            ->where('subject_id', $id)
+            ->orderByDesc('created_at')
+            ->limit(200)
+            ->get();
+
+        // --- 2. audit_log (partner_update + статус-смены через сервис) ---
+        $auditRows = DB::table('audit_log')
+            ->where('entity', 'consultant')
+            ->where('entity_id', (string) $id)
+            ->orderByDesc('created_at')
+            ->limit(200)
+            ->get();
+
+        // Авторы — собираем все WebUser id одним запросом, без N+1.
+        $causerIds = $spatieRows->pluck('causer_id')->filter()
+            ->merge($auditRows->pluck('user_id')->filter())
+            ->unique();
+        $causers = $causerIds->isNotEmpty()
+            ? DB::table('WebUser')->whereIn('id', $causerIds)
+                ->select(['id', 'firstName', 'lastName', 'patronymic'])->get()->keyBy('id')
+            : collect();
+        $authorOf = function ($uid) use ($causers) {
+            if (! $uid) return 'Система';
+            $u = $causers[$uid] ?? null;
+            if (! $u) return "Пользователь #{$uid}";
+            $name = trim("{$u->lastName} {$u->firstName} {$u->patronymic}");
+            return $name !== '' ? $name : "Пользователь #{$uid}";
+        };
+
+        // Лейблы полей (англ. → русский) для UI. Что не покрыто — показываем как есть.
+        $fieldLabels = [
+            'firstName' => 'Имя', 'lastName' => 'Фамилия', 'patronymic' => 'Отчество',
+            'email' => 'Email', 'phone' => 'Телефон', 'nicTG' => 'Telegram',
+            'gender' => 'Пол', 'birthDate' => 'Дата рождения', 'role' => 'Роль(и)',
+            'isBlocked' => 'Блокировка', 'password' => 'Пароль',
+            'participantCode' => 'Реф. код', 'inviter' => 'Пригласивший',
+            'activity' => 'Статус активности', 'status' => 'Квалификация',
+            'active' => 'Активен', 'acceptance' => 'Согласие',
+            'webUser' => 'WebUser', 'person' => 'Person',
+            'activationDeadline' => 'Дедлайн активации',
+            'yearPeriodEnd' => 'Конец годового периода',
+            'terminationCount' => 'Кол-во терминаций',
+            'dateActivity' => 'Дата активации',
+            'dateDeactivity' => 'Дата деактивации',
+            'dateDeleted' => 'Дата удаления (soft)',
+            'status_and_lvl' => 'Статус + уровень',
+            'qualificationLocked' => 'Квалификация заблок.',
+            'personName' => 'ФИО',
+        ];
+        $activityLabel = function ($v) {
+            if ($v === null || $v === '') return null;
+            $enum = PartnerActivity::tryFrom((int) $v);
+            return $enum ? $enum->label() : (string) $v;
+        };
+        $renderValue = function ($field, $val) use ($activityLabel) {
+            if ($val === null || $val === '') return null;
+            if ($field === 'activity') return $activityLabel($val);
+            if (is_bool($val)) return $val ? 'да' : 'нет';
+            return (string) $val;
+        };
+
+        $entries = [];
+
+        foreach ($spatieRows as $r) {
+            $props = json_decode($r->properties ?: '{}', true);
+            $newAttrs = $props['attributes'] ?? [];
+            $oldAttrs = $props['old'] ?? [];
+            $changes = [];
+            $keys = array_unique(array_merge(array_keys($newAttrs), array_keys($oldAttrs)));
+            foreach ($keys as $k) {
+                $oldV = $oldAttrs[$k] ?? null;
+                $newV = $newAttrs[$k] ?? null;
+                if ((string) $oldV === (string) $newV) continue;
+                $changes[] = [
+                    'field' => $k,
+                    'fieldLabel' => $fieldLabels[$k] ?? $k,
+                    'from' => $renderValue($k, $oldV),
+                    'to' => $renderValue($k, $newV),
+                ];
+            }
+            // Override-логи проходят с пустыми атрибутами (logged через activity()->log).
+            // Покажем их как отдельные события с комментарием.
+            $action = $r->event ?: ($r->description ?: 'change');
+            if (empty($changes) && empty($props['comment'])) {
+                continue;
+            }
+            $entries[] = [
+                'id' => 'a' . $r->id,
+                'source' => 'activity',
+                'createdAt' => $r->created_at,
+                'author' => $authorOf($r->causer_id),
+                'action' => $action,
+                'comment' => $props['comment'] ?? null,
+                'changes' => $changes,
+            ];
+        }
+
+        foreach ($auditRows as $r) {
+            $payload = json_decode($r->payload ?: '{}', true);
+            $diff = $payload['diff'] ?? [];
+            // Пропускаем старые partner_update-записи без diff'а — они
+            // содержали только список названий полей и ничего не дают UI.
+            if ($r->action === 'partner_update' && empty($diff)) continue;
+            $changes = [];
+            foreach ($diff as $field => $pair) {
+                $changes[] = [
+                    'field' => $field,
+                    'fieldLabel' => $fieldLabels[$field] ?? $field,
+                    'from' => $renderValue($field, $pair['from'] ?? null),
+                    'to' => $renderValue($field, $pair['to'] ?? null),
+                ];
+            }
+            $entries[] = [
+                'id' => 'u' . $r->id,
+                'source' => 'audit',
+                'createdAt' => $r->created_at,
+                'author' => $authorOf($r->user_id) ?: ($r->user_email ?: 'Система'),
+                'action' => $r->action,
+                'comment' => $payload['comment'] ?? null,
+                'changes' => $changes,
+            ];
+        }
+
+        // Сортировка по дате убыв., обрезаем до 100 — больше в UI не нужно.
+        usort($entries, fn ($a, $b) => strcmp((string) $b['createdAt'], (string) $a['createdAt']));
+        $entries = array_slice($entries, 0, 100);
+
+        return response()->json(['data' => $entries]);
+    }
+
     public function partnerStatusHistory(int $id): JsonResponse
     {
         $rows = DB::table('activity_log')

@@ -236,6 +236,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/admin/partners/{id}/status', [\App\Http\Controllers\Api\AdminDataController::class, 'changePartnerStatus'])->whereNumber('id');
         Route::post('/admin/partners/{id}/status-override', [\App\Http\Controllers\Api\AdminDataController::class, 'overridePartnerStatus'])->whereNumber('id');
         Route::get('/admin/partners/{id}/status-history', [\App\Http\Controllers\Api\AdminDataController::class, 'partnerStatusHistory'])->whereNumber('id');
+        Route::get('/admin/partners/{id}/change-log', [\App\Http\Controllers\Api\AdminDataController::class, 'partnerChangeLog'])->whereNumber('id');
         Route::delete('/admin/partners/{id}', [\App\Http\Controllers\Api\AdminDataController::class, 'deletePartner'])->whereNumber('id');
         Route::get('/admin/partner-statuses', [\App\Http\Controllers\Api\AdminDataController::class, 'partnerStatuses']);
         Route::get('/admin/clients', [\App\Http\Controllers\Api\AdminDataController::class, 'clients']);
