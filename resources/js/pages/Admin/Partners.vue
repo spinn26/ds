@@ -132,11 +132,6 @@
         </span>
         <span v-else class="text-medium-emphasis">—</span>
       </template>
-      <template #item.active="{ value }">
-        <v-icon :color="value ? 'success' : 'grey'" size="small">
-          {{ value ? 'mdi-check-circle' : 'mdi-minus-circle' }}
-        </v-icon>
-      </template>
       <template #item.platformAccess="{ value }">
         <v-tooltip :text="value ? 'Доступ открыт' : 'Доступ заблокирован'" location="top">
           <template #activator="{ props: tipProps }">
@@ -587,7 +582,6 @@ const allColumns = [
   { title: 'Email',            key: 'email' },
   { title: 'Телефон',          key: 'phone',          width: 140 },
   { title: 'Дата рождения',    key: 'birthDate',      width: 130 },
-  { title: 'Активен',          key: 'active',         width: 80 },
   { title: 'Куратор',          key: 'curatorName' },
   { title: 'Дата регистрации', key: 'createdAt',      width: 140 },
   { title: 'Смена статуса',    key: 'statusChangeDate', width: 140, default: true },
