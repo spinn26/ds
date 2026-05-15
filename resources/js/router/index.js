@@ -72,7 +72,8 @@ const routes = [
             { path: 'manage/owner-dashboard', component: () => import('../pages/Admin/OwnerDashboard.vue'), meta: { staff: true } },
             { path: 'manage/reconciliation', component: () => import('../pages/Admin/Reconciliation.vue'), meta: { staff: true } },
             { path: 'manage/anomalies', component: () => import('../pages/Admin/Anomalies.vue'), meta: { staff: true } },
-            { path: 'manage/funnel', component: () => import('../pages/Admin/Funnel.vue'), meta: { staff: true } },
+            // Воронка партнёров объединена в дашборд руководителя.
+            { path: 'manage/funnel', redirect: '/manage/owner-dashboard' },
             { path: 'manage/cohorts', component: () => import('../pages/Admin/Cohorts.vue'), meta: { staff: true } },
             { path: 'manage/contests', component: () => import('../pages/Admin/Contests.vue'), meta: { staff: true } },
             { path: 'status', component: () => import('../pages/SystemStatus.vue') },
@@ -122,7 +123,8 @@ const routes = [
             { path: 'anomalies', component: () => import('../pages/Admin/Anomalies.vue') },
             { path: 'calendar', component: () => import('../pages/Admin/OpsCalendar.vue') },
             { path: 'bulk-ops', component: () => import('../pages/Admin/BulkOps.vue') },
-            { path: 'funnel', component: () => import('../pages/Admin/Funnel.vue') },
+            // Воронка партнёров объединена в дашборд руководителя.
+            { path: 'funnel', redirect: '/admin/owner-dashboard' },
             { path: 'cohorts', component: () => import('../pages/Admin/Cohorts.vue') },
             { path: 'triggers', component: () => import('../pages/Admin/Triggers.vue') },
             { path: 'integrations', component: () => import('../pages/Admin/Integrations.vue') },

@@ -1,8 +1,8 @@
 <template>
   <div>
-    <PageHeader title="Дашборд владельца" icon="mdi-crown" />
+    <PageHeader title="Дашборд руководителя" icon="mdi-crown" />
 
-    <!-- KPI tiles -->
+    <!-- KPI плитки: основные цифры за текущий месяц. -->
     <v-row dense class="mb-3">
       <v-col cols="6" sm="3">
         <v-card variant="tonal" color="primary" class="pa-3">
@@ -38,7 +38,7 @@
     </v-row>
 
     <v-row dense>
-      <!-- Revenue chart (bars as simple progress) -->
+      <!-- Выручка по месяцам — гистограмма. -->
       <v-col cols="12" md="7">
         <v-card>
           <v-card-title class="pa-3">Выручка ДС по месяцам</v-card-title>
@@ -61,7 +61,7 @@
         </v-card>
       </v-col>
 
-      <!-- Top-10 partners -->
+      <!-- Топ-10 партнёров по ГП. -->
       <v-col cols="12" md="5">
         <v-card>
           <v-card-title class="pa-3">Топ-10 партнёров по ГП</v-card-title>
@@ -83,6 +83,71 @@
         </v-card>
       </v-col>
     </v-row>
+
+    <!-- ===========================================================
+         Воронка нового партнёра: путь от регистрации до лидерской
+         квалификации. Раньше была отдельной страницей /admin/funnel,
+         теперь — единый дашборд для руководителя.
+         =========================================================== -->
+    <v-card class="mt-4">
+      <v-card-title class="pa-3 d-flex align-center ga-2">
+        <v-icon color="primary">mdi-filter-variant</v-icon>
+        Воронка нового партнёра
+      </v-card-title>
+      <v-card-text>
+        <div class="text-body-2 text-medium-emphasis mb-4">
+          Путь от регистрации до лидерской квалификации. Видно, на каком этапе партнёры теряются,
+          чтобы можно было точечно работать со слабыми конверсиями.
+        </div>
+        <div v-for="(s, i) in funnelSteps" :key="s.key" class="mb-4">
+          <div class="d-flex align-center mb-1">
+            <span class="text-body-1 font-weight-medium">{{ s.label }}</span>
+            <v-spacer />
+            <span class="text-body-1 font-weight-bold">
+              {{ s.count.toLocaleString('ru-RU') }}
+            </span>
+            <span v-if="i > 0" class="text-caption text-medium-emphasis ms-3" style="min-width: 100px; text-align:right">
+              {{ s.rate }}% от пред. шага
+            </span>
+          </div>
+          <v-progress-linear
+            :model-value="widthOf(s)"
+            :color="s.negative ? 'error' : 'primary'"
+            height="28"
+          >
+            <span class="text-caption text-white px-2">
+              {{ widthOf(s).toFixed(1) }}% от {{ totalEver.toLocaleString('ru-RU') }} зарегистрированных
+            </span>
+          </v-progress-linear>
+        </div>
+        <div v-if="!funnelSteps.length" class="text-center text-medium-emphasis pa-4">
+          Нет данных по воронке за выбранный период
+        </div>
+      </v-card-text>
+    </v-card>
+
+    <!-- Пояснение к воронке — для нетехнических читателей. -->
+    <v-card class="mt-3" variant="tonal" color="info">
+      <v-card-title class="d-flex align-center ga-2 pa-3">
+        <v-icon>mdi-help-circle-outline</v-icon>
+        Как читать воронку
+      </v-card-title>
+      <v-card-text class="pb-4">
+        <p class="mb-2">
+          Каждая полоса — это <strong>этап жизненного пути партнёра</strong> от момента регистрации до выхода на уровень лидера.
+          Чем длиннее полоса — тем больше людей дошло до этого шага.
+        </p>
+        <ul class="ps-4 mb-2">
+          <li class="mb-1"><strong>Цифра справа</strong> — сколько партнёров прошли этот этап.</li>
+          <li class="mb-1"><strong>«% от пред. шага»</strong> — конверсия: какая доля партнёров с предыдущего этапа добралась сюда.</li>
+          <li class="mb-1"><strong>Красная полоса</strong> — этап, который означает «выпал» (терминирован, не дошёл).</li>
+        </ul>
+        <p class="mb-0">
+          Если конверсия между двумя соседними этапами сильно проседает — это и есть «узкое место» воронки. Там стоит разобраться,
+          почему партнёры теряются: слабый онбординг, отсутствие сопровождения, нет первой продажи и т.&nbsp;п.
+        </p>
+      </v-card-text>
+    </v-card>
   </div>
 </template>
 
@@ -92,6 +157,8 @@ import api from '../../api';
 import { PageHeader, MoneyCell } from '../../components';
 
 const data = ref({});
+const funnelSteps = ref([]);
+const totalEver = ref(0);
 
 const latestMonth = computed(() => {
   const arr = data.value.monthlyRevenue || [];
@@ -104,6 +171,10 @@ const maxRev = computed(() => {
 });
 
 function barFor(v) { return maxRev.value > 0 ? (Number(v) / maxRev.value) * 100 : 0; }
+function widthOf(s) {
+  if (!totalEver.value) return 0;
+  return (s.count / totalEver.value) * 100;
+}
 
 function formatMonth(v) {
   if (!v) return '';
@@ -111,9 +182,16 @@ function formatMonth(v) {
 }
 
 async function load() {
+  // Грузим оба эндпоинта параллельно — единый дашборд показывает обе
+  // секции (KPI/Топ + воронка) одним экраном.
   try {
-    const { data: d } = await api.get('/admin/analytics/owner-dashboard');
-    data.value = d;
+    const [dash, funnel] = await Promise.all([
+      api.get('/admin/analytics/owner-dashboard'),
+      api.get('/admin/analytics/funnel'),
+    ]);
+    data.value = dash.data || {};
+    funnelSteps.value = funnel.data?.steps || [];
+    totalEver.value = funnel.data?.totalEverRegistered || 0;
   } catch {}
 }
 onMounted(load);

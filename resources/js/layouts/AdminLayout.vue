@@ -122,7 +122,7 @@ function toggleRail() {
 
 const menuItems = [
   { to: '/admin/dashboard', icon: 'mdi-chart-areaspline', title: 'Дашборд' },
-  { to: '/admin/owner-dashboard', icon: 'mdi-crown', title: 'Дашборд владельца' },
+  { to: '/admin/owner-dashboard', icon: 'mdi-crown', title: 'Дашборд руководителя' },
   { to: '/admin/users', icon: 'mdi-account-cog', title: 'Пользователи' },
   { to: '/admin/partners', icon: 'mdi-account-group', title: 'Партнёры' },
   { to: '/admin/clients', icon: 'mdi-account-multiple', title: 'Клиенты' },
@@ -148,11 +148,10 @@ const menuItems = [
       { to: '/admin/references/meetingType',         title: 'Типы встреч',            icon: 'mdi-calendar-account' },
     ],
   },
-  { to: '/admin/reconciliation', icon: 'mdi-scale-balance', title: 'Реконсиляция' },
+  { to: '/admin/reconciliation', icon: 'mdi-scale-balance', title: 'Сверка балансов' },
   { to: '/admin/anomalies', icon: 'mdi-alert-decagram', title: 'Аномалии' },
   { to: '/admin/calendar', icon: 'mdi-calendar-check', title: 'Календарь операций' },
   { to: '/admin/bulk-ops', icon: 'mdi-format-list-bulleted-square', title: 'Массовые операции' },
-  { to: '/admin/funnel', icon: 'mdi-filter-variant', title: 'Воронка партнёров' },
   { to: '/admin/cohorts', icon: 'mdi-chart-line', title: 'Когорты' },
   { to: '/admin/mail', icon: 'mdi-email-fast', title: 'Почтовая рассылка' },
   { to: '/admin/triggers', icon: 'mdi-robot', title: 'Триггеры уведомлений' },

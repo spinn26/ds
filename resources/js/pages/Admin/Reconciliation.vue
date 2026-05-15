@@ -1,10 +1,22 @@
 <template>
   <div>
-    <PageHeader title="Реконсиляция балансов" icon="mdi-scale-balance">
+    <PageHeader title="Сверка балансов" icon="mdi-scale-balance">
       <template #actions>
         <v-btn variant="text" prepend-icon="mdi-refresh" :loading="loading" @click="load">Пересчитать</v-btn>
       </template>
     </PageHeader>
+
+    <!-- Шапка-объяснение: что такое сверка балансов и зачем она нужна.
+         Адресовано руководителю и финдиру, не разработчикам. -->
+    <v-alert type="info" variant="tonal" density="comfortable" class="mb-3" icon="mdi-information-outline">
+      <div class="text-subtitle-2 font-weight-bold mb-1">Что это за раздел</div>
+      <div class="text-body-2">
+        Здесь система сравнивает несколько ключевых сумм за месяц: суммы транзакций, суммы начисленных комиссий, суммы выплат
+        и остатки балансов. Если все суммы совпадают — «зелёная галочка», расхождения нет, отчёт можно публиковать.
+        Если где-то отличаются — отображается <strong>«Разница»</strong> с подсветкой красным, и эту запись нужно проверить
+        вручную до закрытия периода.
+      </div>
+    </v-alert>
 
     <v-card class="mb-3">
       <v-card-text class="pa-3">
@@ -50,7 +62,7 @@
                 <MoneyCell :value="c.a" currency="₽" /> vs <MoneyCell :value="c.b" currency="₽" />
               </div>
               <div class="text-caption" :class="Math.abs(c.delta) < 1 ? 'text-success' : 'text-error'">
-                Δ = <MoneyCell :value="c.delta" currency="₽" :colored="true" :signed="true" />
+                Разница: <MoneyCell :value="c.delta" currency="₽" :colored="true" :signed="true" />
               </div>
             </div>
           </template>
@@ -80,13 +92,15 @@ const monthOptions = Array.from({ length: 12 }, (_, i) => ({
 
 const aggTiles = computed(() => {
   const a = data.value.aggregates || {};
+  // Подписи плиток — человечные, без технических идентификаторов
+  // (Σ, имена таблиц БД). Это страница для руководителя/финдира.
   return [
     { key: 'gross', label: 'Оборот клиентов', value: a.transactionsGross },
     { key: 'net', label: 'Выручка ДС', value: a.transactionsNet },
-    { key: 'commSum', label: 'Σ commission.amountRUB', value: a.commissionSum },
-    { key: 'poolSum', label: 'Σ poolLog', value: a.poolSum },
-    { key: 'balAccrTx', label: 'Балансы: начислено tx', value: a.balanceAccruedTx },
-    { key: 'balAccrPool', label: 'Балансы: пул', value: a.balanceAccruedPool },
+    { key: 'commSum', label: 'Сумма начисленных комиссий', value: a.commissionSum },
+    { key: 'poolSum', label: 'Сумма начислений из пула', value: a.poolSum },
+    { key: 'balAccrTx', label: 'Балансы: начислено по транзакциям', value: a.balanceAccruedTx },
+    { key: 'balAccrPool', label: 'Балансы: начислено из пула', value: a.balanceAccruedPool },
     { key: 'balPayable', label: 'К оплате (всего)', value: a.balanceTotalPayable },
     { key: 'balPayed', label: 'Оплачено', value: a.balancePayed },
   ];

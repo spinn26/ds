@@ -745,9 +745,8 @@ const menuItems = [
   // Аналитика — для руководителя / админа
   { group: 'Аналитика', adminSection: 'owner-dashboard' },
   { label: 'Дашборд руководителя', icon: 'mdi-crown', path: '/manage/owner-dashboard', adminSection: 'owner-dashboard' },
-  { label: 'Реконсиляция', icon: 'mdi-scale-balance', path: '/manage/reconciliation', adminSection: 'reconciliation' },
+  { label: 'Сверка балансов', icon: 'mdi-scale-balance', path: '/manage/reconciliation', adminSection: 'reconciliation' },
   { label: 'Аномалии', icon: 'mdi-alert-decagram', path: '/manage/anomalies', adminSection: 'anomalies' },
-  { label: 'Воронка партнёров', icon: 'mdi-filter-variant', path: '/manage/funnel', adminSection: 'funnel' },
   { label: 'Когорты', icon: 'mdi-chart-line', path: '/manage/cohorts', adminSection: 'cohorts' },
 ];
 
