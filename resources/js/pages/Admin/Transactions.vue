@@ -218,22 +218,11 @@
                         @click="openRateModal(d)" />
                     </template>
                     <template v-else-if="h.key === 'incomeDS'">
-                      <!-- При «Своя комиссия» поле становится редактируемым:
-                           вводим Доход ДС с НДС, в БД пишем dsCommissionAbsolute
-                           без НДС (= value / (1+vat%/100)). -->
-                      <template v-if="d.customCommission">
-                        <v-text-field :model-value="incomeDsWithVat(d)" type="number" density="compact" hide-details variant="plain"
-                          style="max-width:120px; display:inline-block"
-                          reverse @update:model-value="v => setIncomeDsWithVat(d, v)" />
-                        RUB
-                      </template>
-                      <template v-else>
-                        <span v-if="d.preview?.ready"
-                          :title="`Сумма комиссии с НДС ${d.preview.vatPercent || 0}%`">
-                          {{ fmt2(Number(d.preview.incomeDS || 0) * (1 + Number(d.preview.vatPercent || 0) / 100)) }} RUB
-                        </span>
-                        <span v-else class="text-medium-emphasis">—</span>
-                      </template>
+                      <span v-if="d.preview?.ready"
+                        :title="`Сумма комиссии с НДС ${d.preview.vatPercent || 0}%`">
+                        {{ fmt2(Number(d.preview.incomeDS || 0) * (1 + Number(d.preview.vatPercent || 0) / 100)) }} RUB
+                      </span>
+                      <span v-else class="text-medium-emphasis">—</span>
                     </template>
                     <template v-else-if="h.key === 'incomeDsNoVat'">
                       <template v-if="d.customCommission">
@@ -313,6 +302,31 @@
                   </td>
                 </tr>
 
+                <!-- Строка под транзакцией: три флага редактирования.
+                     «Своя комиссия» — пользовательский ввод Дохода ДС (%ДС
+                     считается обратно). «Нулевой доход ДС» / «Курс от
+                     поставщика» — UI-only, бэкенд пока не использует. -->
+                <tr class="tx-extra-row">
+                  <td :colspan="visibleDraftHeaders.length" class="pa-2">
+                    <div class="d-flex flex-wrap ga-4 align-center">
+                      <v-checkbox :model-value="d.customCommission"
+                        label="Своя комиссия"
+                        :title="'Введите Доход ДС вручную, %ДС посчитается обратно (для Брокер+ и подобных). Контракт ' + contractNum(d)"
+                        hide-details density="compact" color="warning"
+                        @update:model-value="v => patchField(d, 'customCommission', v)" />
+                      <v-checkbox :model-value="d.zeroDsIncome"
+                        label="Нулевой доход ДС"
+                        title="Не начислять Доход ДС по этой транзакции"
+                        hide-details density="compact" color="warning"
+                        @update:model-value="v => (d.zeroDsIncome = v)" />
+                      <v-checkbox :model-value="d.supplierRate"
+                        label="Курс от поставщика"
+                        title="Использовать курс валюты, переданный поставщиком, а не системный"
+                        hide-details density="compact" color="warning"
+                        @update:model-value="v => (d.supplierRate = v)" />
+                    </div>
+                  </td>
+                </tr>
               </template>
 
               <!-- Строка-итог снизу таблицы -->
@@ -359,26 +373,6 @@
             </tbody>
           </v-table>
           </div><!-- /manual-tx-scroll -->
-
-          <!-- Глобальные опции для всех черновиков. Заменяют per-row флаги:
-               один тоггл применяется ко всем транзакциям в таблице.
-               Indeterminate-состояние, если у части drafts флаг включён,
-               у части — нет. -->
-          <div v-if="drafts.length" class="px-4 pt-3 d-flex flex-wrap ga-4 align-center">
-            <span class="text-caption text-medium-emphasis">Опции для всех транзакций:</span>
-            <v-checkbox :model-value="bulkCustomCommission"
-              :indeterminate="bulkCustomCommissionIndeterminate"
-              label="Своя комиссия"
-              title="Включить ручной ввод Дохода ДС для всех черновиков (для Брокер+ и подобных)"
-              hide-details density="compact" color="warning"
-              @update:model-value="setBulkCustomCommission" />
-            <v-checkbox :model-value="bulkZeroDsIncome"
-              :indeterminate="bulkZeroDsIncomeIndeterminate"
-              label="Нулевой доход ДС"
-              title="Не начислять Доход ДС ни по одной из транзакций"
-              hide-details density="compact" color="warning"
-              @update:model-value="setBulkZeroDsIncome" />
-          </div>
 
           <v-card-actions class="d-flex flex-wrap ga-2">
             <v-btn v-if="canFull('transactions')" color="primary" :disabled="!calculableIds.length || calculating" prepend-icon="mdi-calculator"
@@ -716,60 +710,6 @@ function parseDate(v) {
   if (!v) return null;
   const d = new Date(v);
   return isNaN(d) ? null : d;
-}
-
-// «Доход ДС с НДС» ↔ dsCommissionAbsolute (без НДС). Когда включена «Своя
-// комиссия», пользователь может ввести любое из двух значений — второе
-// показывается в соседней колонке как пересчёт. В БД храним без НДС
-// (dsCommissionAbsolute), как и раньше.
-function vatMul(d) {
-  return 1 + Number(d.preview?.vatPercent || 0) / 100;
-}
-function incomeDsWithVat(d) {
-  if (d.dsCommissionAbsolute == null || d.dsCommissionAbsolute === '') return '';
-  return Number(d.dsCommissionAbsolute) * vatMul(d);
-}
-function setIncomeDsWithVat(d, v) {
-  if (v == null || v === '') {
-    patchField(d, 'dsCommissionAbsolute', null);
-    return;
-  }
-  const noVat = Number(v) / vatMul(d);
-  // Округляем до 2 знаков, чтобы из-за плавающей точки в БД не сохранялись
-  // длинные хвосты вроде 12345.67891234567.
-  patchField(d, 'dsCommissionAbsolute', Math.round(noVat * 100) / 100);
-}
-
-// Глобальные тогглы «Своя комиссия» / «Нулевой доход ДС» под таблицей.
-// «true» если флаг включён У ВСЕХ; indeterminate — если только у части.
-// При изменении применяем ко всем drafts разом (через patchField — чтобы
-// для customCommission серверный пересчёт сработал).
-const bulkCustomCommission = computed(() =>
-  drafts.value.length > 0 && drafts.value.every(d => !!d.customCommission)
-);
-const bulkCustomCommissionIndeterminate = computed(() => {
-  const some = drafts.value.some(d => !!d.customCommission);
-  const all = drafts.value.every(d => !!d.customCommission);
-  return some && !all;
-});
-function setBulkCustomCommission(v) {
-  drafts.value.forEach(d => {
-    if (!!d.customCommission !== !!v) patchField(d, 'customCommission', !!v);
-  });
-}
-
-const bulkZeroDsIncome = computed(() =>
-  drafts.value.length > 0 && drafts.value.every(d => !!d.zeroDsIncome)
-);
-const bulkZeroDsIncomeIndeterminate = computed(() => {
-  const some = drafts.value.some(d => !!d.zeroDsIncome);
-  const all = drafts.value.every(d => !!d.zeroDsIncome);
-  return some && !all;
-});
-function setBulkZeroDsIncome(v) {
-  // zeroDsIncome — UI-only флаг (бэкенд не используют), достаточно
-  // прописать локально без patchField.
-  drafts.value.forEach(d => { d.zeroDsIncome = !!v; });
 }
 
 function formatYmd(d) {
