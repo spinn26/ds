@@ -2161,24 +2161,51 @@ class ChatController extends Controller
      */
     public function unreadCount(Request $request): JsonResponse
     {
-        $userId = $request->user()->id;
+        $user = $request->user();
+        $userId = $user->id;
+        $isStaff = $user->isStaff();
 
-        // Считаем unread только в тех тикетах, где пользователь
-        // лично участник — автор / получатель / назначенный agent.
-        // Иначе у staff копится счётчик с чужих незакреплённых
-        // тикетов, в которые он никогда не заходил — приходит «2»
-        // когда реально пользователю никто не писал.
-        //
-        // Статус (new/open/pending/resolved/closed) НЕ фильтруем — список
-        // /chat/tickets отдаёт unread на карточках без фильтра по статусу,
-        // и шапочный счётчик должен совпадать с суммой циферок (иначе
-        // бейдж в меню показывает 0, а в карточках висят 3/2/1).
-        // Юзер прочитал тикет → его unread обнуляется при load show().
-        $query = DB::table('chat_tickets')->where(function ($q) use ($userId) {
-            $q->where('created_by', $userId)
-              ->orWhere('recipient_id', $userId)
-              ->orWhere('assigned_to', $userId);
-        });
+        // Видимость тикетов должна совпадать со списком /chat/tickets index:
+        //  - staff видит тикеты своих категорий + где автор/получатель/agent
+        //    + где приглашён в chat_ticket_participants;
+        //  - партнёр — где автор/получатель + где приглашён.
+        // Раньше unread фильтровался ТОЛЬКО по автор/получатель/agent —
+        // отсюда баг «тикет пришёл, виден в списке, бейдж 0»: для staff
+        // тикета в общей категории (recipient_id=NULL, assigned_to=NULL)
+        // /chat/unread-count его не считал, хотя в списке он отображается.
+        $participantTicketIds = DB::table('chat_ticket_participants')
+            ->where('user_id', $userId)
+            ->pluck('ticket_id')
+            ->all();
+
+        $query = DB::table('chat_tickets');
+        if (! $isStaff) {
+            $query->where(function ($q) use ($userId, $participantTicketIds) {
+                $q->where('created_by', $userId)
+                  ->orWhere('recipient_id', $userId);
+                if (! empty($participantTicketIds)) {
+                    $q->orWhereIn('id', $participantTicketIds);
+                }
+            });
+        } else {
+            $roles = array_map('trim', explode(',', $user->role ?? ''));
+            $allowed = TicketService::visibleCategoriesForRoles($roles);
+            $expanded = $allowed;
+            foreach (TicketService::CATEGORY_ALIASES as $legacy => $modern) {
+                if (in_array($modern, $allowed, true)) $expanded[] = $legacy;
+            }
+            $query->where(function ($q) use ($userId, $expanded, $participantTicketIds) {
+                if (! empty($expanded)) {
+                    $q->whereIn('department', $expanded);
+                }
+                $q->orWhere('created_by', $userId)
+                  ->orWhere('recipient_id', $userId)
+                  ->orWhere('assigned_to', $userId);
+                if (! empty($participantTicketIds)) {
+                    $q->orWhereIn('id', $participantTicketIds);
+                }
+            });
+        }
 
         $ticketIds = $query->pluck('id');
         if ($ticketIds->isEmpty()) {
