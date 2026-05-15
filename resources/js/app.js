@@ -146,15 +146,14 @@ app.use(vuetify);
 app.use(router);
 app.use(VueQueryPlugin, vueQueryOptions);
 app.use(i18n);
-// Глобальные дефолты vue-tel-input. mode=national — инпут показывает
-// национальный формат с маской (libphonenumber AsYouType). Для RU это
-// "(999) 123-45-67"; код страны (+7) остаётся только в country-selector
-// слева, чтобы не было дубля "+7 +7" в инпуте. autoFormat применяет
-// маску под выбранную страну, dynamicPlaceholder подставляет пример.
-// При сабмите v-model всё равно содержит полный международный номер
-// "+79991234567" — формат отображения не влияет на сохраняемое значение.
+// Глобальные дефолты vue-tel-input. mode=international + showDialCode=false:
+// код страны "+7" виден только в country-selector слева (с флагом), а в
+// самом инпуте остаются только цифры в международной маске libphonenumber:
+// для RU это "911 835-08-92" (с тире). Так нет дублирования "+7"/"8" между
+// чипом и инпутом. v-model по-прежнему хранит "+79118350892" — формат
+// отображения не влияет на сохраняемое в БД значение.
 app.use(VueTelInput, {
-    mode: 'national',
+    mode: 'international',
     defaultCountry: 'RU',
     preferredCountries: ['RU', 'BY', 'KZ', 'UA', 'UZ', 'AM', 'AZ', 'KG', 'TJ', 'MD'],
     inputOptions: { showDialCode: false, placeholder: 'Номер телефона' },
