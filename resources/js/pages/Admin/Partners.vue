@@ -208,16 +208,11 @@
               <v-col cols="12" class="mt-2"><div class="text-subtitle-2 font-weight-bold mb-2">Контакты</div></v-col>
               <v-col cols="12" md="4"><v-text-field v-model="editForm.email" :rules="emailRules" label="Email" type="email" variant="outlined" density="compact" :error-messages="editErrors.email" /></v-col>
               <v-col cols="12" md="4">
-                <!-- Без внешнего <label>Телефон</label> — он добавлял ~22px высоты,
-                     из-за чего инпут визуально проседал ниже Email/Telegram в строке.
-                     Плейсхолдер «Номер телефона» уже задан глобально в app.js. -->
-                <vue-tel-input v-model="editForm.phone"
-                  class="phone-compact"
+                <!-- PhoneInput: статичный префикс «🇷🇺 +7» + маска (XXX) XXX-XX-XX.
+                     v-model хранит «+79991234567» — формат сохранения не изменился. -->
+                <PhoneInput v-model="editForm.phone" label="Телефон"
+                  :error-messages="editPhoneShowError ? 'Неверный номер телефона' : (editErrors.phone || [])"
                   @validate="onEditPhoneValidate" />
-                <div v-if="editPhoneShowError"
-                  class="text-error text-caption mt-1">
-                  Неверный номер телефона
-                </div>
               </v-col>
               <v-col cols="12" md="4"><v-text-field v-model="editForm.nicTG" label="Telegram" variant="outlined" density="compact" :error-messages="editErrors.nicTG" /></v-col>
 
@@ -451,13 +446,10 @@
               :rules="emailRules"
               label="Email" type="email" variant="outlined" density="comfortable" /></v-col>
             <v-col cols="12" sm="6">
-              <label class="text-caption text-medium-emphasis d-block mb-1">Телефон</label>
-              <vue-tel-input v-model="addForm.phone"
+              <PhoneInput v-model="addForm.phone" label="Телефон"
+                density="comfortable"
+                :error-messages="(addForm.phone && !addPhoneValid && addPhoneTouched) ? 'Неверный номер телефона' : []"
                 @validate="onAddPhoneValidate" />
-              <div v-if="addForm.phone && !addPhoneValid && addPhoneTouched"
-                class="text-error text-caption mt-1">
-                Неверный номер телефона
-              </div>
             </v-col>
             <v-col cols="12" sm="6"><v-text-field v-model="addForm.birthDate"
               label="Дата рождения" type="date" variant="outlined" density="comfortable" /></v-col>
@@ -510,6 +502,7 @@ import StatusChip from '../../components/StatusChip.vue';
 import DialogShell from '../../components/DialogShell.vue';
 import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 import StartChatButton from '../../components/StartChatButton.vue';
+import PhoneInput from '../../components/PhoneInput.vue';
 import { useSnackbar } from '../../composables/useSnackbar';
 import { useAuthStore } from '../../stores/auth';
 import { usePermissions } from '../../composables/usePermissions';
@@ -528,9 +521,10 @@ const { canEdit } = usePermissions();
 const editFormValid = ref(true);
 const editPhoneValid = ref(true);
 const editPhoneTouched = ref(false);
-// vue-tel-input при пустом значении сам вставляет dial-code (+7, +374, …).
-// Любой набор ≤3 цифр считаем «пусто», иначе на свежеоткрытом диалоге
-// сразу горел красный «Неверный номер» только из-за dial-кода.
+// PhoneInput v-model хранит «+7XXXXXXXXXX» (пустой инпут → ''). На всякий
+// случай считаем «пусто» и любой набор ≤3 цифр (legacy от vue-tel-input,
+// который сам подставлял dial-code) — чтобы не было ложного «Неверный
+// номер» сразу после открытия диалога.
 function phoneIsEmpty(v) {
   const digits = String(v || '').replace(/\D/g, '');
   return digits.length <= 3;
