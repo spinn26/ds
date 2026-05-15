@@ -2,37 +2,18 @@
   <div>
     <PageHeader title="Когорты и retention" icon="mdi-chart-line" />
 
-    <v-card>
-      <v-card-text>
-        Партнёры сгруппированы по месяцу регистрации. Показывается, сколько из
-        каждой когорты сейчас активно / терминировано.
-      </v-card-text>
-      <div class="d-flex justify-end px-3 pb-2">
-        <ColumnVisibilityMenu :headers="headers" v-model:visible="columnVisible" storage-key="cohorts-cols" />
-      </div>
-      <v-data-table :items="rows" :headers="visibleHeaders" density="comfortable" hover>
-        <template #item.cohort_month="{ value }">{{ formatMonth(value) }}</template>
-        <template #item.retention_pct="{ item }">
-          <span :class="retentionClass(item)">{{ retention(item) }}%</span>
-        </template>
-        <template #item.termination_pct="{ item }">
-          <span :class="terminationClass(item)">{{ termination(item) }}%</span>
-        </template>
-        <template #no-data>
-          <EmptyState message="Нет данных за последние 12 месяцев" icon="mdi-chart-bell-curve" />
-        </template>
-      </v-data-table>
-    </v-card>
-
-    <!-- Развёрнутая подсказка-объяснение: что такое когорта, как читать
-         таблицу, на что смотреть. Целевая аудитория — руководители,
-         не разработчики. -->
-    <v-card class="mt-4" variant="tonal" color="info">
+    <!-- Единый блок-описание над таблицей: коротко зачем + развёрнутое
+         объяснение для нетехнических читателей. -->
+    <v-card class="mb-3" variant="tonal" color="info">
       <v-card-title class="d-flex align-center ga-2 pa-3">
         <v-icon>mdi-help-circle-outline</v-icon>
         Что такое когорта и как читать эту таблицу
       </v-card-title>
       <v-card-text class="pb-4">
+        <p class="mb-3">
+          Партнёры сгруппированы по месяцу регистрации. Видно, сколько из каждой когорты
+          сейчас активно и сколько терминировано.
+        </p>
         <p class="mb-3">
           <strong>Когорта</strong> — это группа партнёров, которые подключились в один и тот же месяц.
           Например, «когорта апреля 2026» — все, кто зарегистрировался в апреле 2026 года.
@@ -74,6 +55,24 @@
           </li>
         </ul>
       </v-card-text>
+    </v-card>
+
+    <v-card>
+      <div class="d-flex justify-end px-3 pt-2 pb-2">
+        <ColumnVisibilityMenu :headers="headers" v-model:visible="columnVisible" storage-key="cohorts-cols" />
+      </div>
+      <v-data-table :items="rows" :headers="visibleHeaders" density="comfortable" hover>
+        <template #item.cohort_month="{ value }">{{ formatMonth(value) }}</template>
+        <template #item.retention_pct="{ item }">
+          <span :class="retentionClass(item)">{{ retention(item) }}%</span>
+        </template>
+        <template #item.termination_pct="{ item }">
+          <span :class="terminationClass(item)">{{ termination(item) }}%</span>
+        </template>
+        <template #no-data>
+          <EmptyState message="Нет данных за последние 12 месяцев" icon="mdi-chart-bell-curve" />
+        </template>
+      </v-data-table>
     </v-card>
   </div>
 </template>
