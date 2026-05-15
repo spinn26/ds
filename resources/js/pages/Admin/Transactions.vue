@@ -218,11 +218,22 @@
                         @click="openRateModal(d)" />
                     </template>
                     <template v-else-if="h.key === 'incomeDS'">
-                      <span v-if="d.preview?.ready"
-                        :title="`Сумма комиссии с НДС ${d.preview.vatPercent || 0}%`">
-                        {{ fmt2(Number(d.preview.incomeDS || 0) * (1 + Number(d.preview.vatPercent || 0) / 100)) }} RUB
-                      </span>
-                      <span v-else class="text-medium-emphasis">—</span>
+                      <!-- При «Своя комиссия» поле становится редактируемым:
+                           вводим Доход ДС с НДС, в БД пишем dsCommissionAbsolute
+                           без НДС (= value / (1+vat%/100)). -->
+                      <template v-if="d.customCommission">
+                        <v-text-field :model-value="incomeDsWithVat(d)" type="number" density="compact" hide-details variant="plain"
+                          style="max-width:120px; display:inline-block"
+                          reverse @update:model-value="v => setIncomeDsWithVat(d, v)" />
+                        RUB
+                      </template>
+                      <template v-else>
+                        <span v-if="d.preview?.ready"
+                          :title="`Сумма комиссии с НДС ${d.preview.vatPercent || 0}%`">
+                          {{ fmt2(Number(d.preview.incomeDS || 0) * (1 + Number(d.preview.vatPercent || 0) / 100)) }} RUB
+                        </span>
+                        <span v-else class="text-medium-emphasis">—</span>
+                      </template>
                     </template>
                     <template v-else-if="h.key === 'incomeDsNoVat'">
                       <template v-if="d.customCommission">
@@ -235,6 +246,23 @@
                         <span v-if="d.preview?.ready">{{ fmt2(d.preview.incomeDS) }} RUB</span>
                         <span v-else class="text-medium-emphasis">—</span>
                       </template>
+                    </template>
+                    <template v-else-if="h.key === 'flags'">
+                      <!-- Опции редактирования транзакции: «Своя комиссия» + «Нулевой доход».
+                           Раньше жили в отдельной строке tx-extra-row под каждой транзакцией —
+                           вынесены в конец строки по запросу заказчика для компактности. -->
+                      <div class="d-flex flex-column align-start" style="gap:2px">
+                        <v-checkbox :model-value="d.customCommission"
+                          label="Своя комиссия"
+                          :title="'Ввести Доход ДС вручную, %ДС посчитается обратно (Брокер+ и подобные). Контракт ' + contractNum(d)"
+                          hide-details density="compact" color="warning"
+                          @update:model-value="v => patchField(d, 'customCommission', v)" />
+                        <v-checkbox :model-value="d.zeroDsIncome"
+                          label="Нулевой доход"
+                          title="Не начислять Доход ДС по этой транзакции"
+                          hide-details density="compact" color="warning"
+                          @update:model-value="v => (d.zeroDsIncome = v)" />
+                      </div>
                     </template>
                     <template v-else-if="h.key === 'partner'">
                       <v-menu open-on-hover open-delay="150" close-delay="100" location="bottom start">
@@ -302,31 +330,6 @@
                   </td>
                 </tr>
 
-                <!-- Строка под транзакцией: три флага редактирования.
-                     «Своя комиссия» — пользовательский ввод Дохода ДС (%ДС
-                     считается обратно). «Нулевой доход ДС» / «Курс от
-                     поставщика» — UI-only, бэкенд пока не использует. -->
-                <tr class="tx-extra-row">
-                  <td :colspan="visibleDraftHeaders.length" class="pa-2">
-                    <div class="d-flex flex-wrap ga-4 align-center">
-                      <v-checkbox :model-value="d.customCommission"
-                        label="Своя комиссия"
-                        :title="'Введите Доход ДС вручную, %ДС посчитается обратно (для Брокер+ и подобных). Контракт ' + contractNum(d)"
-                        hide-details density="compact" color="warning"
-                        @update:model-value="v => patchField(d, 'customCommission', v)" />
-                      <v-checkbox :model-value="d.zeroDsIncome"
-                        label="Нулевой доход ДС"
-                        title="Не начислять Доход ДС по этой транзакции"
-                        hide-details density="compact" color="warning"
-                        @update:model-value="v => (d.zeroDsIncome = v)" />
-                      <v-checkbox :model-value="d.supplierRate"
-                        label="Курс от поставщика"
-                        title="Использовать курс валюты, переданный поставщиком, а не системный"
-                        hide-details density="compact" color="warning"
-                        @update:model-value="v => (d.supplierRate = v)" />
-                    </div>
-                  </td>
-                </tr>
               </template>
 
               <!-- Строка-итог снизу таблицы -->
@@ -642,6 +645,7 @@ const draftHeaders = [
   { title: 'Баллы', key: 'pointsCount', thClass: 'text-end', tdClass: 'text-end text-no-wrap', style: 'min-width:80px' },
   { title: 'Σ по партнёрам', key: 'partnersTotal', thClass: 'text-end', tdClass: 'text-end text-no-wrap', style: 'min-width:130px' },
   { title: 'Прибыль ДС', key: 'profit', thClass: 'text-end', tdClass: 'text-end text-no-wrap' },
+  { title: 'Опции', key: 'flags', style: 'min-width:160px; width:160px' },
   { title: '', key: 'actions', style: 'width:48px' },
 ];
 
@@ -710,6 +714,28 @@ function parseDate(v) {
   if (!v) return null;
   const d = new Date(v);
   return isNaN(d) ? null : d;
+}
+
+// «Доход ДС с НДС» ↔ dsCommissionAbsolute (без НДС). Когда включена «Своя
+// комиссия», пользователь может ввести любое из двух значений — второе
+// показывается в соседней колонке как пересчёт. В БД храним без НДС
+// (dsCommissionAbsolute), как и раньше.
+function vatMul(d) {
+  return 1 + Number(d.preview?.vatPercent || 0) / 100;
+}
+function incomeDsWithVat(d) {
+  if (d.dsCommissionAbsolute == null || d.dsCommissionAbsolute === '') return '';
+  return Number(d.dsCommissionAbsolute) * vatMul(d);
+}
+function setIncomeDsWithVat(d, v) {
+  if (v == null || v === '') {
+    patchField(d, 'dsCommissionAbsolute', null);
+    return;
+  }
+  const noVat = Number(v) / vatMul(d);
+  // Округляем до 2 знаков, чтобы из-за плавающей точки в БД не сохранялись
+  // длинные хвосты вроде 12345.67891234567.
+  patchField(d, 'dsCommissionAbsolute', Math.round(noVat * 100) / 100);
 }
 
 function formatYmd(d) {
