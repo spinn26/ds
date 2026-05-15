@@ -66,9 +66,6 @@
 
     <v-data-table-server :items="items" :items-length="total" :loading="loading"
       :headers="visibleHeaders" :items-per-page="25" @update:options="onOptions">
-      <template #item.isPartner="{ value }">
-        <v-icon v-if="value" color="success" size="small">mdi-check-circle</v-icon>
-      </template>
       <template #item.products="{ value }">
         <v-chip v-for="p in (value || [])" :key="p" size="x-small" class="mr-1" color="primary" variant="outlined">{{ p }}</v-chip>
       </template>
@@ -316,8 +313,7 @@ const headers = [
   { title: 'Город', key: 'city' },
   { title: 'Работаем с', key: 'workSince', width: 130 },
   { title: 'Контракты', key: 'contractCount', width: 110, align: 'end' },
-  { title: 'Партнёр?', key: 'isPartner', width: 90, sortable: false },
-  { title: 'Консультант', key: 'consultantName' },
+  { title: 'Партнёр', key: 'consultantName' },
   { title: 'Статус партнёра', key: 'consultantStatus', width: 160 },
   { title: 'Комментарий', key: 'comment' },
   { title: 'Продукты', key: 'products', sortable: false },

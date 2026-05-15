@@ -1,5 +1,48 @@
 <template>
-  <v-tooltip location="bottom" max-width="380">
+  <!-- Админу: меню со списком активных инцидентов и кнопкой «Решить» у каждого.
+       Остальным: чип-ссылка на /status с rich-tooltip как раньше. -->
+  <v-menu v-if="auth.isAdmin && incidents.length" v-model="menuOpen"
+    location="bottom end" :close-on-content-click="false" offset="6">
+    <template #activator="{ props: menuProps }">
+      <a v-bind="menuProps" href="#" class="status-chip-link" :class="['status-' + status]"
+        @click.prevent>
+        <span class="status-dot" :class="['dot-' + status]">
+          <span class="dot-ping" />
+        </span>
+        <span v-if="!compact" class="status-label">
+          <span class="status-label-main">{{ label }}</span>
+          <span v-if="detail" class="status-label-detail">· {{ detail }}</span>
+        </span>
+      </a>
+    </template>
+    <v-card min-width="380" max-width="460">
+      <v-list density="compact" class="py-1">
+        <v-list-subheader class="text-uppercase">
+          Активные инциденты ({{ incidents.length }})
+        </v-list-subheader>
+        <v-list-item v-for="i in incidents" :key="i.id" :title="i.title"
+          :subtitle="i.componentName || severityLabel(i.severity)">
+          <template #prepend>
+            <span class="row-bullet" :class="'sev-' + (i.severity || 'minor')" />
+          </template>
+          <template #append>
+            <v-btn size="small" variant="tonal" color="success"
+              prepend-icon="mdi-check-circle"
+              :loading="resolvingId === i.id"
+              @click="resolveIncident(i.id)">
+              Решён
+            </v-btn>
+          </template>
+        </v-list-item>
+        <v-divider class="my-1" />
+        <v-list-item to="/status" prepend-icon="mdi-page-next-outline" @click="menuOpen = false">
+          <v-list-item-title>Открыть страницу статуса</v-list-item-title>
+        </v-list-item>
+      </v-list>
+    </v-card>
+  </v-menu>
+
+  <v-tooltip v-else location="bottom" max-width="380">
     <template #activator="{ props: tip }">
       <router-link v-bind="tip" to="/status" class="status-chip-link" :class="['status-' + status]">
         <span class="status-dot" :class="['dot-' + status]">
@@ -11,7 +54,6 @@
         </span>
       </router-link>
     </template>
-    <!-- Rich tooltip: список активных инцидентов + проблемные компоненты -->
     <div class="status-tooltip">
       <div class="status-tooltip-head">{{ label }}</div>
       <template v-if="incidents.length">
@@ -45,16 +87,52 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import api from '../api';
+import { useAuthStore } from '../stores/auth';
+import { useSnackbar } from '../composables/useSnackbar';
 
 defineProps({
   compact: { type: Boolean, default: false },
 });
 
+const auth = useAuthStore();
+const { showSuccess, showError } = useSnackbar();
+
 const status = ref('operational');
 const label = ref('Все работает в штатном режиме');
 const incidents = ref([]);        // { id, title, severity, component_id, componentName }
 const brokenComponents = ref([]); // { id, name, status } — только не-operational
+const menuOpen = ref(false);
+const resolvingId = ref(null);
 let timer = null;
+
+const SEVERITY_LABELS = {
+  minor: 'Низкий',
+  major: 'Серьёзный',
+  critical: 'Критический',
+  maintenance: 'Тех. работы',
+};
+function severityLabel(s) { return SEVERITY_LABELS[s] || s; }
+
+/**
+ * Быстрое закрытие инцидента из чипа в шапке (только admin).
+ * Шлёт PUT /system-status/incidents/{id} status=resolved и обновляет
+ * локальный список — без перезагрузки страницы.
+ */
+async function resolveIncident(id) {
+  resolvingId.value = id;
+  try {
+    await api.put(`/system-status/incidents/${id}`, { status: 'resolved' });
+    incidents.value = incidents.value.filter(i => i.id !== id);
+    if (! incidents.value.length) menuOpen.value = false;
+    showSuccess('Инцидент закрыт');
+    // Перетянуть полный статус (overall может смениться, компоненты обновятся).
+    await load();
+  } catch (e) {
+    showError(e?.response?.data?.message || 'Не удалось закрыть инцидент');
+  } finally {
+    resolvingId.value = null;
+  }
+}
 
 const STATUS_LABELS = {
   operational: 'Все работает в штатном режиме',
