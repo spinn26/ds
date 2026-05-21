@@ -140,13 +140,17 @@
       <v-card>
         <v-card-title class="d-flex align-center ga-2">
           <v-icon color="warning">mdi-shield-account</v-icon>
-          Шаг 1: Юридические реквизиты
+          <span>Шаг 1: Юридические реквизиты</span>
+          <v-spacer />
+          <v-btn icon="mdi-close" size="small" variant="text"
+            title="Закрыть и вернуться позже" @click="reqDialog = false" />
         </v-card-title>
         <v-card-text>
           <p class="text-body-2 mb-3">
             Чтобы открыть раздел «Продукты», необходимо заполнить данные
             вашего ИП и банковские реквизиты. Заполните ИНН — остальные данные
-            подтянутся из реестров автоматически.
+            подтянутся из реестров автоматически. Можно закрыть окно и
+            вернуться позже — продукты будут заблокированы до заполнения.
           </p>
           <v-text-field
             v-model="inn"
@@ -191,12 +195,16 @@
       <v-card>
         <v-card-title class="d-flex align-center ga-2">
           <v-icon color="warning">mdi-file-check</v-icon>
-          Шаг 2: Акцепт документов
+          <span>Шаг 2: Акцепт документов</span>
+          <v-spacer />
+          <v-btn icon="mdi-close" size="small" variant="text"
+            title="Закрыть и вернуться позже" @click="acceptDialog = false" />
         </v-card-title>
         <v-card-text>
           <p class="text-body-2 mb-3">
             Перед началом работы с продуктами необходимо ознакомиться с
-            документами и принять условия.
+            документами и принять условия. Можно закрыть окно и вернуться
+            позже — продукты будут заблокированы до акцепта.
           </p>
           <v-checkbox v-for="d in requiredDocs" :key="d.key"
             v-model="acceptedDocs[d.key]" density="compact" hide-details>

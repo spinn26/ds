@@ -257,7 +257,9 @@ class ProductController extends Controller
             }
             $req->inn = $innClean;
             $req->verified = $autoVerify;
-            $req->statusName = $autoVerify ? 'verified' : 'pending';
+            // status — FK на status_requisites: 1=backoffice, 2=consultant, 3=verified.
+            // Авто-верификация (ФИО совпало) → 3; иначе ждём ручную проверку → 1.
+            $req->status = $autoVerify ? 3 : 1;
             $req->save();
 
             // Реальная таблица — bankrequisites (lowercase). Laravel
