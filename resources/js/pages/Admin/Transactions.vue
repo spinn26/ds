@@ -211,6 +211,20 @@
                       <span v-if="d.preview?.ready">{{ fmt2(d.preview.dsCommissionPercentage) }}%</span>
                       <span v-else class="text-medium-emphasis">—</span>
                     </template>
+                    <template v-else-if="h.key === 'customCommission'">
+                      <v-checkbox :model-value="d.customCommission"
+                        :title="'Введите Доход ДС вручную, %ДС посчитается обратно'"
+                        hide-details density="compact" color="warning"
+                        class="d-inline-flex"
+                        @update:model-value="v => onCustomCommissionToggle(d, v)" />
+                    </template>
+                    <template v-else-if="h.key === 'zeroDsIncome'">
+                      <v-checkbox :model-value="d.zeroDsIncome"
+                        title="Не начислять Доход ДС по этой транзакции"
+                        hide-details density="compact" color="warning"
+                        class="d-inline-flex"
+                        @update:model-value="v => (d.zeroDsIncome = v)" />
+                    </template>
                     <template v-else-if="h.key === 'change'">
                       <v-btn icon="mdi-pencil-outline" size="x-small" variant="text"
                         :disabled="!isRateChangeable(d)"
@@ -316,31 +330,6 @@
                   </td>
                 </tr>
 
-                <!-- Строка под транзакцией: три флага редактирования.
-                     «Своя комиссия» — пользовательский ввод Дохода ДС (%ДС
-                     считается обратно). «Нулевой доход ДС» / «Курс от
-                     поставщика» — UI-only, бэкенд пока не использует. -->
-                <tr class="tx-extra-row">
-                  <td :colspan="visibleDraftHeaders.length" class="pa-2">
-                    <div class="d-flex flex-wrap ga-4 align-center">
-                      <v-checkbox :model-value="d.customCommission"
-                        label="Своя комиссия"
-                        :title="'Введите Доход ДС вручную, %ДС посчитается обратно (для Брокер+ и подобных). Контракт ' + contractNum(d)"
-                        hide-details density="compact" color="warning"
-                        @update:model-value="v => onCustomCommissionToggle(d, v)" />
-                      <v-checkbox :model-value="d.zeroDsIncome"
-                        label="Нулевой доход ДС"
-                        title="Не начислять Доход ДС по этой транзакции"
-                        hide-details density="compact" color="warning"
-                        @update:model-value="v => (d.zeroDsIncome = v)" />
-                      <v-checkbox :model-value="d.supplierRate"
-                        label="Курс от поставщика"
-                        title="Использовать курс валюты, переданный поставщиком, а не системный"
-                        hide-details density="compact" color="warning"
-                        @update:model-value="v => (d.supplierRate = v)" />
-                    </div>
-                  </td>
-                </tr>
               </template>
 
               <!-- Строка-итог снизу таблицы -->
@@ -657,6 +646,8 @@ const draftHeaders = [
   { title: 'Валюта', key: 'currency', style: 'min-width:90px' },
   { title: 'Сумма, RUB', key: 'amountRub', thClass: 'text-end', tdClass: 'text-end text-no-wrap', style: 'min-width:140px' },
   { title: '% ДС', key: 'dsPercent', thClass: 'text-end', tdClass: 'text-end', style: 'min-width:80px' },
+  { title: 'Своя комиссия', key: 'customCommission', thClass: 'text-center', tdClass: 'text-center', style: 'width:110px' },
+  { title: 'Нулевой доход ДС', key: 'zeroDsIncome', thClass: 'text-center', tdClass: 'text-center', style: 'width:130px' },
   { title: 'Изменить', key: 'change', thClass: 'text-center', tdClass: 'text-center', style: 'width:50px' },
   { title: 'Доход ДС', key: 'incomeDS', thClass: 'text-end', tdClass: 'text-end text-no-wrap' },
   { title: 'Доход ДС без НДС', key: 'incomeDsNoVat', thClass: 'text-end', tdClass: 'text-end text-no-wrap', style: 'min-width:140px' },
