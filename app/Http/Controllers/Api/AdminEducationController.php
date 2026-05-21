@@ -302,45 +302,69 @@ class AdminEducationController extends Controller
         return response()->json($lessons);
     }
 
-    /** Разворачиваем JSONB-массив URL’ов с fallback на легаси single-поле. */
+    /**
+     * Разворачиваем JSONB-массив элементов урока к единому формату
+     * [{url, label}, ...]. Поддерживаем два legacy-формата:
+     *   - массив строк ["http://..."] (был с миграции 2026_05_21_000030)
+     *   - одиночный video_url/document_url (был до JSONB-миграции)
+     *
+     * Возвращаемый формат единый для фронта: array of {url, label}.
+     */
     private function urlArray($jsonbValue, $legacySingle): array
     {
+        $items = [];
         if ($jsonbValue !== null && $jsonbValue !== '') {
             $decoded = is_array($jsonbValue) ? $jsonbValue : json_decode((string) $jsonbValue, true);
             if (is_array($decoded)) {
-                return array_values(array_filter($decoded, fn ($v) => is_string($v) && $v !== ''));
+                foreach ($decoded as $item) {
+                    if (is_string($item) && trim($item) !== '') {
+                        $items[] = ['url' => trim($item), 'label' => null];
+                    } elseif (is_array($item) && isset($item['url']) && trim((string) $item['url']) !== '') {
+                        $items[] = [
+                            'url' => trim((string) $item['url']),
+                            'label' => isset($item['label']) ? trim((string) $item['label']) : null,
+                        ];
+                    }
+                }
             }
         }
-        return $legacySingle ? [$legacySingle] : [];
+        if (! $items && $legacySingle) {
+            $items[] = ['url' => $legacySingle, 'label' => null];
+        }
+        return $items;
     }
 
     /** Подготовка payload для урока: JSONB-массивы + legacy first-item зеркала. */
     private function lessonPayload(Request $request): array
     {
-        $videoUrls = $this->cleanUrlList($request->input('video_urls'));
-        $documentUrls = $this->cleanUrlList($request->input('document_urls'));
+        $videoItems = $this->cleanItemList($request->input('video_urls'));
+        $documentItems = $this->cleanItemList($request->input('document_urls'));
 
         // Бэкауорд: если фронт ещё шлёт single video_url/document_url —
-        // подмешиваем их в начало массива.
-        if ($request->filled('video_url') && ! in_array($request->input('video_url'), $videoUrls, true)) {
-            array_unshift($videoUrls, $request->input('video_url'));
+        // подмешиваем их в начало массива (без label).
+        if ($request->filled('video_url')) {
+            $url = trim((string) $request->input('video_url'));
+            $exists = array_filter($videoItems, fn ($i) => $i['url'] === $url);
+            if (! $exists) array_unshift($videoItems, ['url' => $url, 'label' => null]);
         }
-        if ($request->filled('document_url') && ! in_array($request->input('document_url'), $documentUrls, true)) {
-            array_unshift($documentUrls, $request->input('document_url'));
+        if ($request->filled('document_url')) {
+            $url = trim((string) $request->input('document_url'));
+            $exists = array_filter($documentItems, fn ($i) => $i['url'] === $url);
+            if (! $exists) array_unshift($documentItems, ['url' => $url, 'label' => null]);
         }
 
         $payload = [
             'title' => $request->title,
             'content' => $request->input('content'),
-            // Single-колонки = первый элемент массива (для легаси-потребителей).
-            'video_url' => $videoUrls[0] ?? null,
-            'document_url' => $documentUrls[0] ?? null,
+            // Single-колонки = url первого элемента (для легаси-потребителей).
+            'video_url' => $videoItems[0]['url'] ?? null,
+            'document_url' => $documentItems[0]['url'] ?? null,
             'sort_order' => $request->input('sort_order', 0),
         ];
 
         if (Schema::hasColumn('education_lessons', 'video_urls')) {
-            $payload['video_urls'] = $videoUrls ? json_encode(array_values($videoUrls)) : null;
-            $payload['document_urls'] = $documentUrls ? json_encode(array_values($documentUrls)) : null;
+            $payload['video_urls'] = $videoItems ? json_encode(array_values($videoItems), JSON_UNESCAPED_UNICODE) : null;
+            $payload['document_urls'] = $documentItems ? json_encode(array_values($documentItems), JSON_UNESCAPED_UNICODE) : null;
         }
         // content_type оставлено в схеме но больше не дёргаем — урок
         // содержит произвольный микс текста/видео/ссылок одновременно.
@@ -348,14 +372,36 @@ class AdminEducationController extends Controller
         return $payload;
     }
 
-    private function cleanUrlList($input): array
+    /**
+     * Нормализуем входящий массив к [{url, label}]. Принимаем:
+     *  - массив строк (старый фронт без лейблов)
+     *  - массив объектов {url, label?}
+     * Пустые элементы выбрасываем, обрезаем пробелы.
+     */
+    private function cleanItemList($input): array
     {
         if (! is_array($input)) return [];
         $out = [];
         foreach ($input as $v) {
-            if (is_string($v) && trim($v) !== '') $out[] = trim($v);
+            if (is_string($v)) {
+                $url = trim($v);
+                if ($url !== '') $out[] = ['url' => $url, 'label' => null];
+            } elseif (is_array($v) && isset($v['url'])) {
+                $url = trim((string) $v['url']);
+                if ($url === '') continue;
+                $label = isset($v['label']) ? trim((string) $v['label']) : null;
+                $out[] = ['url' => $url, 'label' => $label !== '' ? $label : null];
+            }
         }
-        return array_values(array_unique($out));
+        // Уникализация по URL: оставляем первый встретившийся.
+        $seen = [];
+        $unique = [];
+        foreach ($out as $item) {
+            if (isset($seen[$item['url']])) continue;
+            $seen[$item['url']] = true;
+            $unique[] = $item;
+        }
+        return $unique;
     }
 
     /** CRUD урока */
@@ -364,9 +410,7 @@ class AdminEducationController extends Controller
         $request->validate([
             'title' => 'required|string|max:255',
             'video_urls' => 'nullable|array',
-            'video_urls.*' => 'nullable|string|max:2000',
             'document_urls' => 'nullable|array',
-            'document_urls.*' => 'nullable|string|max:2000',
         ]);
 
         $attrs = array_merge($this->lessonPayload($request), [
@@ -385,9 +429,7 @@ class AdminEducationController extends Controller
         $request->validate([
             'title' => 'required|string|max:255',
             'video_urls' => 'nullable|array',
-            'video_urls.*' => 'nullable|string|max:2000',
             'document_urls' => 'nullable|array',
-            'document_urls.*' => 'nullable|string|max:2000',
         ]);
 
         $attrs = array_merge($this->lessonPayload($request), [

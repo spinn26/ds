@@ -178,19 +178,33 @@ class EducationController extends Controller
     }
 
     /**
-     * Разворачиваем JSONB-массив URL’ов с fallback на легаси single-поле.
-     * Дублирует AdminEducationController::urlArray, но контроллеры не
-     * расшаривают трейт — копия дешевле, чем новый сервис.
+     * Разворачиваем JSONB-массив элементов урока к [{url, label}, ...].
+     * Поддерживаем legacy-форматы: массив строк и одиночный video_url/
+     * document_url. Дублирует AdminEducationController::urlArray.
      */
     private function expandUrlArray($jsonbValue, $legacySingle): array
     {
+        $items = [];
         if ($jsonbValue !== null && $jsonbValue !== '') {
             $decoded = is_array($jsonbValue) ? $jsonbValue : json_decode((string) $jsonbValue, true);
             if (is_array($decoded)) {
-                return array_values(array_filter($decoded, fn ($v) => is_string($v) && $v !== ''));
+                foreach ($decoded as $item) {
+                    if (is_string($item) && trim($item) !== '') {
+                        $items[] = ['url' => trim($item), 'label' => null];
+                    } elseif (is_array($item) && isset($item['url']) && trim((string) $item['url']) !== '') {
+                        $items[] = [
+                            'url' => trim((string) $item['url']),
+                            'label' => isset($item['label']) && trim((string) $item['label']) !== ''
+                                ? trim((string) $item['label']) : null,
+                        ];
+                    }
+                }
             }
         }
-        return $legacySingle ? [$legacySingle] : [];
+        if (! $items && $legacySingle) {
+            $items[] = ['url' => $legacySingle, 'label' => null];
+        }
+        return $items;
     }
 
     /** Mark a lesson as viewed (idempotent upsert). */

@@ -19,20 +19,20 @@
           </v-expansion-panel-title>
           <v-expansion-panel-text>
             <div v-if="l.content" class="text-body-2 mb-3" style="white-space: pre-wrap">{{ l.content }}</div>
-            <!-- Видео: массив + fallback на single video_url для legacy. -->
+            <!-- Видео: массив объектов {url, label} с fallback на legacy. -->
             <div v-if="lessonVideos(l).length" class="d-flex flex-wrap ga-2 mb-3">
-              <v-btn v-for="(url, vi) in lessonVideos(l)" :key="'v' + vi"
-                :href="url" target="_blank" rel="noopener"
+              <v-btn v-for="(item, vi) in lessonVideos(l)" :key="'v' + vi"
+                :href="item.url" target="_blank" rel="noopener"
                 color="primary" variant="tonal" size="small" prepend-icon="mdi-play">
-                Смотреть видео<span v-if="lessonVideos(l).length > 1"> {{ vi + 1 }}</span>
+                {{ item.label || (lessonVideos(l).length > 1 ? `Смотреть видео ${vi + 1}` : 'Смотреть видео') }}
               </v-btn>
             </div>
-            <!-- Документы / ссылки: массив + fallback. -->
+            <!-- Документы / ссылки: массив объектов {url, label} с fallback. -->
             <div v-if="lessonDocs(l).length" class="d-flex flex-wrap ga-2 mb-3">
-              <v-btn v-for="(url, di) in lessonDocs(l)" :key="'d' + di"
-                :href="url" target="_blank" rel="noopener"
+              <v-btn v-for="(item, di) in lessonDocs(l)" :key="'d' + di"
+                :href="item.url" target="_blank" rel="noopener"
                 variant="tonal" size="small" prepend-icon="mdi-file-document">
-                Открыть<span v-if="lessonDocs(l).length > 1"> {{ di + 1 }}</span>
+                {{ item.label || (lessonDocs(l).length > 1 ? `Открыть ${di + 1}` : 'Открыть') }}
               </v-btn>
             </div>
             <v-btn
@@ -116,18 +116,20 @@ const submitting = ref(false);
 const answers = ref({});
 const testResult = ref(null);
 
-function lessonVideos(l) {
-  if (Array.isArray(l.video_urls) && l.video_urls.length) {
-    return l.video_urls.filter(Boolean);
+// Нормализуем элементы урока к {url, label}. Бэк сейчас отдаёт массив
+// объектов; на всякий случай умеем массив строк (старый формат) и
+// одиночный legacy video_url/document_url.
+function normalize(arr, legacySingle) {
+  if (Array.isArray(arr) && arr.length) {
+    return arr.map(item => typeof item === 'string'
+      ? { url: item, label: null }
+      : { url: item?.url ?? '', label: item?.label ?? null })
+      .filter(i => i.url);
   }
-  return l.video_url ? [l.video_url] : [];
+  return legacySingle ? [{ url: legacySingle, label: null }] : [];
 }
-function lessonDocs(l) {
-  if (Array.isArray(l.document_urls) && l.document_urls.length) {
-    return l.document_urls.filter(Boolean);
-  }
-  return l.document_url ? [l.document_url] : [];
-}
+function lessonVideos(l) { return normalize(l.video_urls, l.video_url); }
+function lessonDocs(l)   { return normalize(l.document_urls, l.document_url); }
 
 const allLessonsViewed = computed(() =>
   props.course.lessons.length > 0 && props.course.lessons.every(l => l.viewed)

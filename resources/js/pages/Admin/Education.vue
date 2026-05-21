@@ -226,11 +226,17 @@
                   Добавить видео
                 </v-btn>
               </div>
-              <div v-for="(_, i) in editLesson.video_urls" :key="'v' + i" class="d-flex align-center ga-2 mb-2">
-                <v-text-field v-model="editLesson.video_urls[i]"
+              <div v-for="(item, i) in editLesson.video_urls" :key="'v' + i"
+                class="d-flex align-center ga-2 mb-2">
+                <v-text-field v-model="item.url"
                   placeholder="https://youtu.be/..."
                   prepend-inner-icon="mdi-play-circle"
-                  variant="outlined" density="comfortable" hide-details />
+                  variant="outlined" density="comfortable" hide-details
+                  style="flex: 2 1 0" />
+                <v-text-field v-model="item.label"
+                  placeholder="Подпись кнопки (необязательно)"
+                  variant="outlined" density="comfortable" hide-details
+                  style="flex: 1 1 0" />
                 <v-btn icon="mdi-close" size="small" variant="text" color="error"
                   @click="editLesson.video_urls.splice(i, 1)" />
               </div>
@@ -249,11 +255,17 @@
                   Добавить ссылку
                 </v-btn>
               </div>
-              <div v-for="(_, i) in editLesson.document_urls" :key="'d' + i" class="d-flex align-center ga-2 mb-2">
-                <v-text-field v-model="editLesson.document_urls[i]"
+              <div v-for="(item, i) in editLesson.document_urls" :key="'d' + i"
+                class="d-flex align-center ga-2 mb-2">
+                <v-text-field v-model="item.url"
                   placeholder="https://..."
                   prepend-inner-icon="mdi-link-variant"
-                  variant="outlined" density="comfortable" hide-details />
+                  variant="outlined" density="comfortable" hide-details
+                  style="flex: 2 1 0" />
+                <v-text-field v-model="item.label"
+                  placeholder="Подпись кнопки (необязательно)"
+                  variant="outlined" density="comfortable" hide-details
+                  style="flex: 1 1 0" />
                 <v-btn icon="mdi-close" size="small" variant="text" color="error"
                   @click="editLesson.document_urls.splice(i, 1)" />
               </div>
@@ -613,28 +625,40 @@ function openCreateLesson(course) {
   lessonDialog.value = true;
 }
 
+/**
+ * Нормализуем поле video_urls/document_urls к [{url, label}].
+ * Бэк может прислать:
+ *   - массив объектов [{url, label}] (актуальный формат)
+ *   - массив строк ["http://..."] (старый формат до лейблов)
+ *   - single video_url/document_url в legacy-поле
+ */
+function normalizeUrlList(arr, legacySingle) {
+  if (Array.isArray(arr) && arr.length) {
+    return arr.map(item => typeof item === 'string'
+      ? { url: item, label: '' }
+      : { url: item?.url ?? '', label: item?.label ?? '' });
+  }
+  return legacySingle ? [{ url: legacySingle, label: '' }] : [];
+}
+
 function openEditLesson(course, lesson) {
   editLessonCourseId.value = course.id;
-  // Бэк отдаёт массивы; если их нет (старый ответ) — упаковываем
-  // single video_url/document_url в массив.
-  const videoUrls = Array.isArray(lesson.video_urls) && lesson.video_urls.length
-    ? [...lesson.video_urls]
-    : (lesson.video_url ? [lesson.video_url] : []);
-  const documentUrls = Array.isArray(lesson.document_urls) && lesson.document_urls.length
-    ? [...lesson.document_urls]
-    : (lesson.document_url ? [lesson.document_url] : []);
-  editLesson.value = { ...lesson, video_urls: videoUrls, document_urls: documentUrls };
+  editLesson.value = {
+    ...lesson,
+    video_urls: normalizeUrlList(lesson.video_urls, lesson.video_url),
+    document_urls: normalizeUrlList(lesson.document_urls, lesson.document_url),
+  };
   lessonError.value = '';
   lessonDialog.value = true;
 }
 
 function addVideoUrl() {
   if (!Array.isArray(editLesson.value.video_urls)) editLesson.value.video_urls = [];
-  editLesson.value.video_urls.push('');
+  editLesson.value.video_urls.push({ url: '', label: '' });
 }
 function addDocumentUrl() {
   if (!Array.isArray(editLesson.value.document_urls)) editLesson.value.document_urls = [];
-  editLesson.value.document_urls.push('');
+  editLesson.value.document_urls.push({ url: '', label: '' });
 }
 
 async function saveLesson() {
@@ -645,11 +669,24 @@ async function saveLesson() {
   saving.value = true;
   lessonError.value = '';
   const courseId = editLessonCourseId.value;
+  // Готовим payload: выкидываем пары с пустым URL, тримим, отправляем
+  // как [{url, label}]. Это и есть актуальный формат бэка.
+  const cleanList = (arr) => (Array.isArray(arr) ? arr : [])
+    .map(i => ({
+      url: String(i?.url ?? '').trim(),
+      label: String(i?.label ?? '').trim() || null,
+    }))
+    .filter(i => i.url);
+  const payload = {
+    ...editLesson.value,
+    video_urls: cleanList(editLesson.value.video_urls),
+    document_urls: cleanList(editLesson.value.document_urls),
+  };
   try {
     if (editLesson.value.id) {
-      await api.put(`/admin/education/courses/${courseId}/lessons/${editLesson.value.id}`, editLesson.value);
+      await api.put(`/admin/education/courses/${courseId}/lessons/${editLesson.value.id}`, payload);
     } else {
-      await api.post(`/admin/education/courses/${courseId}/lessons`, editLesson.value);
+      await api.post(`/admin/education/courses/${courseId}/lessons`, payload);
     }
     lessonDialog.value = false;
     loadLessons(courseId);
