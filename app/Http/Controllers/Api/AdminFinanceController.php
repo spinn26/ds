@@ -55,11 +55,18 @@ class AdminFinanceController extends Controller
         if ($request->filled('supplier')) {
             // supplier — это program.providerName / vendorName на legacy. Делаем
             // join один раз, без N+1.
+            // Insmart-канал не лежит в providerName (там страховщик-партнёр) —
+            // дополнительно матчим по contract.productName для запроса
+            // «Insmart» (см. SupplierResolver).
             $query->join('program as pr', 'pr.id', '=', 'c.program')
                   ->where(function ($w) use ($request) {
                       $sup = '%' . $request->supplier . '%';
                       $w->where('pr.providerName', 'ilike', $sup)
                         ->orWhere('pr.vendorName', 'ilike', $sup);
+                      if (preg_match('/ins+mart/i', (string) $request->supplier)) {
+                          $w->orWhere('c.productName', 'ilike', '%insmart%')
+                            ->orWhere('c.productName', 'ilike', '%inssmart%');
+                      }
                   });
         }
         if ($request->filled('date_from')) {
@@ -203,7 +210,10 @@ class AdminFinanceController extends Controller
                 'contractTerm' => $flags && ! $flags->has_term ? null : $t->contractTerm,
                 'clientName' => $t->clientName,
                 'consultantName' => $t->consultantName,
-                'providerName' => $prog?->providerName ?? $prog?->vendorName ?? null,
+                'providerName' => \App\Support\SupplierResolver::resolve(
+                    $flags?->name,
+                    $prog?->providerName ?? $prog?->vendorName ?? null,
+                ),
                 'productName' => $flags?->name ?? null,
                 'programName' => $prog?->name ?? null,
                 'amount' => round((float) ($t->amount ?? 0), 2),

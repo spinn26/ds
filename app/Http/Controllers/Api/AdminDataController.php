@@ -1938,7 +1938,18 @@ class AdminDataController extends Controller
         }
         if ($request->filled('setup')) $query->where('c.setup', $request->setup);
         if ($request->filled('supplier')) {
-            $query->where('pr.providerName', 'ilike', '%' . $request->supplier . '%');
+            $sup = '%' . $request->supplier . '%';
+            // Для Insmart-договоров program.providerName хранит страховщика-
+            // партнёра (Зетта/Пари/...), а UI отдаёт «Insmart». Чтобы фильтр
+            // «Поставщик = Insmart» работал, дополнительно матчим по
+            // contract.productName на ins+mart (см. SupplierResolver).
+            $query->where(function ($w) use ($sup, $request) {
+                $w->where('pr.providerName', 'ilike', $sup);
+                if (preg_match('/ins+mart/i', (string) $request->supplier)) {
+                    $w->orWhere('c.productName', 'ilike', '%insmart%')
+                      ->orWhere('c.productName', 'ilike', '%inssmart%');
+                }
+            });
         }
         if ($request->filled('created_from')) $query->where('c.createDate', '>=', $request->created_from);
         if ($request->filled('created_to')) $query->where('c.createDate', '<=', $request->created_to . ' 23:59:59');
@@ -1994,7 +2005,10 @@ class AdminDataController extends Controller
                 'consultantName' => $c->consultantName,
                 'productName' => $c->productName,
                 'programName' => $c->programName,
-                'supplierName' => $c->supplierName,
+                'supplierName' => \App\Support\SupplierResolver::resolve($c->productName, $c->supplierName),
+                // Реальный страховщик-партнёр для Insmart-продуктов
+                // (для тултипа / детальной формы — UI может его игнорировать).
+                'supplierSubName' => \App\Support\SupplierResolver::subProvider($c->productName, $c->supplierName),
                 'comment' => $c->comment,
                 'statusName' => $c->status ? ($contractStatuses[$c->status] ?? null) : null,
                 'ammount' => $c->ammount,
