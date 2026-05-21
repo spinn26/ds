@@ -37,10 +37,11 @@
         :items-length="total"
         :loading="loading"
         :items-per-page="25"
-        :expanded="expanded"
+        v-model:expanded="expanded"
+        item-value="id"
         show-expand
         @update:page="page = $event; loadProducts()"
-        @click:row="(e, { item }) => toggleExpand(item)"
+        @update:expanded="onExpandedChange"
       >
         <template #item.active="{ item }">
           <StatusChip
@@ -518,13 +519,15 @@ async function loadProducts() {
   loading.value = false;
 }
 
-function toggleExpand(item) {
-  const idx = expanded.value.findIndex(e => e === item);
-  if (idx >= 0) {
-    expanded.value.splice(idx, 1);
-  } else {
-    expanded.value.push(item);
-    loadPrograms(item.id);
+// Vuetify v-data-table-server хранит в expanded массив item-value (мы
+// сказали item-value="id" — значит здесь id'ы продуктов). Раскрытие
+// может произойти через chevron-кнопку или клик на строку — оба теперь
+// обновят массив, и мы догрузим программы для всех новых id.
+function onExpandedChange(newExpanded) {
+  for (const id of newExpanded) {
+    if (programsByProduct[id] === undefined) {
+      loadPrograms(id);
+    }
   }
 }
 
