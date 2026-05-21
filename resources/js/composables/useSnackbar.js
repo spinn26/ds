@@ -4,37 +4,46 @@ const snackbar = ref(false);
 const snackbarText = ref('');
 const snackbarColor = ref('error');
 const snackbarTimeout = ref(4000);
+// Опциональный action: { label: string, to: RouteLocationRaw | string }
+// Показывается как кнопка справа от текста; клик переходит и закрывает snackbar.
+const snackbarAction = ref(null);
 
 export function useSnackbar() {
+  function show(msg, color, timeout, action = null) {
+    snackbarText.value = msg;
+    snackbarColor.value = color;
+    snackbarTimeout.value = timeout;
+    snackbarAction.value = action;
+    snackbar.value = true;
+  }
+
   function showError(msg = 'Произошла ошибка') {
-    snackbarText.value = msg;
-    snackbarColor.value = 'error';
-    snackbarTimeout.value = 5000;
-    snackbar.value = true;
+    show(msg, 'error', 5000);
   }
 
-  function showSuccess(msg = 'Готово') {
-    snackbarText.value = msg;
-    snackbarColor.value = 'success';
-    snackbarTimeout.value = 3000;
-    snackbar.value = true;
+  function showSuccess(msg = 'Готово', action = null) {
+    show(msg, 'success', action ? 7000 : 3000, action);
   }
 
-  function showInfo(msg) {
-    snackbarText.value = msg;
-    snackbarColor.value = 'info';
-    snackbarTimeout.value = 3000;
-    snackbar.value = true;
+  function showInfo(msg, action = null) {
+    show(msg, 'info', action ? 7000 : 3000, action);
+  }
+
+  /**
+   * Для real-time-уведомлений (новое сообщение в чате и т.п.): высокий
+   * приоритет, заметный цвет, есть кнопка «Открыть», но автодиссмис.
+   * Чуть дольше — 8 секунд — чтобы успел заметить даже если отвернулся.
+   */
+  function showNotification(msg, action = null) {
+    show(msg, 'primary', 8000, action);
   }
 
   /**
    * Wrap an async API call with error handling.
-   * Usage: const data = await apiCall(() => api.get('/url'));
    */
   async function apiCall(fn, errorMsg) {
     try {
-      const result = await fn();
-      return result;
+      return await fn();
     } catch (e) {
       const msg = e.response?.data?.message || errorMsg || 'Ошибка запроса';
       showError(msg);
@@ -42,5 +51,8 @@ export function useSnackbar() {
     }
   }
 
-  return { snackbar, snackbarText, snackbarColor, snackbarTimeout, showError, showSuccess, showInfo, apiCall };
+  return {
+    snackbar, snackbarText, snackbarColor, snackbarTimeout, snackbarAction,
+    showError, showSuccess, showInfo, showNotification, apiCall,
+  };
 }

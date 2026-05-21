@@ -114,6 +114,12 @@
           <div v-else class="text-center pa-6 text-medium-emphasis text-caption">
             Нет уведомлений
           </div>
+          <v-divider />
+          <div class="d-flex align-center justify-space-between pa-2 pl-3">
+            <span class="text-caption">Звук уведомлений</span>
+            <v-switch v-model="notifSoundOn" hide-details density="compact" color="primary"
+              @update:model-value="onSoundToggle" />
+          </div>
         </v-card>
       </v-menu>
 
@@ -271,7 +277,18 @@ import SystemStatusChip from '../components/SystemStatusChip.vue';
 import ChatLauncher from '../components/ChatLauncher.vue';
 import { provideConfirm } from '../composables/useConfirm';
 import { availableSections as configAvailableSections } from '../config/cabinetPermissions';
+import { useSnackbar } from '../composables/useSnackbar';
+import { useNotificationSound } from '../composables/useNotificationSound';
 import api from '../api';
+
+const { showNotification } = useSnackbar();
+const { play: playNotifSound, isEnabled: soundEnabled, setEnabled: setSoundEnabled } = useNotificationSound();
+
+const notifSoundOn = ref(soundEnabled());
+function onSoundToggle(value) {
+  setSoundEnabled(!!value);
+  if (value) playNotifSound(); // короткий пример звука при включении
+}
 
 const confirmRef = ref(null);
 provideConfirm(confirmRef);
@@ -404,7 +421,10 @@ onMounted(async () => {
   // свежие данные и перезапускаем интервал. Это фиксит зависание UI
   // после 5+ минут idle (DB pool / PHP-FPM / Socket засыпают, первый
   // запрос уходит в таймаут).
-  const POLL_MS = 30000;
+  // 15 сек (раньше было 30) — fallback на случай, если сокет отвалился
+  // и события `chat:new-message` не доходят: жалоба Богдановой
+  // «не всегда срабатывает счётчик» 2026-05-21.
+  const POLL_MS = 15000;
   // Heartbeat для виджета «Кто онлайн»: бэк ставит WebUser.last_seen_at = now().
   const sendHeartbeat = () => {
     if (document.visibilityState !== 'visible') return;
@@ -474,14 +494,23 @@ onMounted(async () => {
       });
       notifCount.value++;
 
-      // Если это уведомление от чата — оптимистично инкрементим
-      // счётчик чата и через секунду свериваемся с сервером (на случай
-      // если юзер уже в открытом тикете и сообщение помечается
-      // прочитанным сразу). Раньше счётчик чата обновлялся только из
-      // 30-сек поллинга, и индикатор показывался лишь после рефреша.
+      // Чат-уведомление: обновляем счётчик с сервера (без локального
+      // оптимистичного инкремента — раньше счётчик «не всегда срабатывал»
+      // из-за рассинхрона между inc и polling-refresh), играем звук,
+      // показываем всплывашку с кнопкой «Открыть».
       if (data.type === 'chat') {
-        chatUnread.value++;
-        setTimeout(loadChatUnread, 1500);
+        loadChatUnread();
+        playNotifSound();
+        const text = data.title
+          ? `${data.title}${data.message ? ': ' + data.message : ''}`
+          : (data.message || 'Новое сообщение в чате');
+        showNotification(text, {
+          label: 'Открыть',
+          to: data.link || '/chat',
+        });
+      } else {
+        // Любое другое уведомление — звук тише и без всплывашки.
+        playNotifSound();
       }
     });
 
@@ -490,7 +519,13 @@ onMounted(async () => {
     // тикет — partner не уведомляется через create, а только через
     // chat:new-message). Слушаем и тут — server-side фильтрация по
     // комнатам гарантирует, что чужие сообщения не прилетят.
-    notifSocket.on('chat:new-message', () => loadChatUnread());
+    // Если до этого пришёл `notification` (type=chat) — звук/тоаст уже
+    // были, дебаунс внутри useNotificationSound и таймаут snackbar
+    // предотвратят дубликат.
+    notifSocket.on('chat:new-message', () => {
+      loadChatUnread();
+      playNotifSound();
+    });
 
     // Глобальный broadcast «unread поменялся» (ChatController::sendMessage
     // эмитит на каждое отправленное сообщение). Каждый онлайн-клиент
@@ -501,7 +536,7 @@ onMounted(async () => {
     let unreadDebounce = null;
     const refreshUnread = () => {
       clearTimeout(unreadDebounce);
-      unreadDebounce = setTimeout(loadChatUnread, 400);
+      unreadDebounce = setTimeout(loadChatUnread, 200);
     };
     notifSocket.on('chat:unread-changed', refreshUnread);
 
