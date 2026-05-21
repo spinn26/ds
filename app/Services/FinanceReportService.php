@@ -207,14 +207,32 @@ class FinanceReportService
             ];
         })->values();
 
-        // Other accruals table
+        // Other accruals table — мерджим легаси commission (transaction IS NULL)
+        // и новую таблицу other_accruals (ручные начисления из /manage/charges).
+        // Без этого пункт «Прочие начисления» в отчёте партнёра не показывает
+        // суммы, заведённые админом через UI (он пишет в other_accruals).
+        $extraAccruals = DB::table('other_accruals')
+            ->where('consultant', $consultant->id)
+            ->whereBetween('accrual_date', [$periodStart, $periodEnd])
+            ->orderByDesc('accrual_date')
+            ->get(['id', 'accrual_date', 'amount', 'comment']);
+
+        $extraSum = round((float) $extraAccruals->sum('amount'), 2);
+
         $otherAccrualsTable = $otherAccruals->map(fn ($c) => [
             'id' => $c->id,
             'date' => $c->date,
             'amount' => round((float) ($c->amount ?? 0), 2),
             'amountRUB' => round((float) ($c->amountRUB ?? 0), 2),
             'comment' => $c->comment,
-        ])->values();
+        ])->concat($extraAccruals->map(fn ($e) => [
+            // Префиксуем id, чтобы не было коллизий с commission.id во v-data-table.
+            'id' => 'extra_' . $e->id,
+            'date' => $e->accrual_date,
+            'amount' => round((float) ($e->amount ?? 0), 2),
+            'amountRUB' => round((float) ($e->amount ?? 0), 2),
+            'comment' => $e->comment,
+        ]))->values();
 
         // Breakaway info from qualificationLog. Раньше блок появлялся только
         // при $qLogCurrent->gap=true → партнёры без отрыва не видели окно
@@ -444,17 +462,20 @@ class FinanceReportService
                 'breakaway' => $breakaway,
                 'monthEnd' => $balance ? [
                     'balanceStart' => round((float) ($balance->balance ?? 0), 2),
-                    'otherAccruals' => round((float) ($balance->accruedNonTransactional ?? 0), 2),
+                    // К легаси-снимку из consultantBalance добавляем сумму
+                    // ручных начислений из other_accruals — иначе «Прочее за
+                    // месяц» в UI показывает 0, хотя админ их завёл.
+                    'otherAccruals' => round((float) ($balance->accruedNonTransactional ?? 0) + $extraSum, 2),
                     // «Прочие начисления» в commission (transaction IS NULL)
                     // выражены в РУБЛЯХ, не в баллах. Раньше отдавалось как
                     // otherAccrualsPoints — UI показывал «Прочие (баллы)»,
                     // что вводило в заблуждение.
-                    'otherAccrualsRub' => round($otherAccruals->sum(fn ($c) => (float) ($c->amount ?? 0)), 2),
+                    'otherAccrualsRub' => round($otherAccruals->sum(fn ($c) => (float) ($c->amount ?? 0)) + $extraSum, 2),
                     'otherAccrualsPoints' => round($otherAccruals->sum(fn ($c) => (float) ($c->groupBonus ?? 0)), 2),
-                    'totalAccrued' => round((float) ($balance->accruedTotal ?? 0), 2),
-                    'totalPayable' => round((float) ($balance->totalPayable ?? 0), 2),
+                    'totalAccrued' => round((float) ($balance->accruedTotal ?? 0) + $extraSum, 2),
+                    'totalPayable' => round((float) ($balance->totalPayable ?? 0) + $extraSum, 2),
                     'payed' => round((float) ($balance->payed ?? 0), 2),
-                    'remaining' => round((float) ($balance->remaining ?? 0), 2),
+                    'remaining' => round((float) ($balance->remaining ?? 0) + $extraSum, 2),
                 ] : null,
             ],
             'tables' => [

@@ -114,6 +114,18 @@ class AdminPaymentRegistryController extends Controller
 
         $rows = $q->orderByDesc('b.totalPayable')->limit(2000)->get();
 
+        // Прочие начисления (other_accruals) — отдельная таблица для ручных
+        // бонусов/штрафов, заведённых через /manage/charges. consultantBalance
+        // её не агрегирует (это denormalized легаси-снимок Directual), так что
+        // тянем сумму по месяцу батчем и складываем в колонку «Прочее».
+        $periodFrom = sprintf('%04d-%02d-01 00:00:00', $year, $month);
+        $periodTo = \Carbon\Carbon::parse($periodFrom)->endOfMonth()->format('Y-m-d 23:59:59');
+        $extraByCons = DB::table('other_accruals')
+            ->whereBetween('accrual_date', [$periodFrom, $periodTo])
+            ->select('consultant', DB::raw('SUM(COALESCE(amount, 0)) as extra'))
+            ->groupBy('consultant')
+            ->pluck('extra', 'consultant');
+
         // Batch-load requisite verification for every partner in the result.
         $consultantIds = $rows->pluck('consultant')->filter()->unique()->values()->all();
         $verified = [];
@@ -129,6 +141,9 @@ class AdminPaymentRegistryController extends Controller
         // Activity name lookup for partner-status filter UI.
         $activityNames = DB::table('directory_of_activities')->pluck('name', 'id');
 
+        // Сумма прочих начислений из new-таблицы — для тоталов снизу/сверху.
+        $extraTotal = (float) $extraByCons->sum();
+
         // Dashboard totals (same filters minus pagination limit).
         $totals = [
             'rows' => $rows->count(),
@@ -137,35 +152,42 @@ class AdminPaymentRegistryController extends Controller
             'accruedBeforeGap' => (float) $rows->sum('accruedTransactional')
                 + (float) $rows->sum('withheldForGap'),
             'accruedTransactional' => (float) $rows->sum('accruedTransactional'),
-            'accruedNonTransactional' => (float) $rows->sum('accruedNonTransactional'),
+            'accruedNonTransactional' => (float) $rows->sum('accruedNonTransactional') + $extraTotal,
             'accruedPool' => (float) $rows->sum('accruedPool'),
-            'accruedTotal' => (float) $rows->sum('accruedTotal'),
-            'totalPayable' => (float) $rows->sum('totalPayable'),
+            'accruedTotal' => (float) $rows->sum('accruedTotal') + $extraTotal,
+            'totalPayable' => (float) $rows->sum('totalPayable') + $extraTotal,
             'payed' => (float) $rows->sum('payed'),
-            'remaining' => (float) $rows->sum('remaining'),
+            'remaining' => (float) $rows->sum('remaining') + $extraTotal,
             'withheldForGap' => (float) $rows->sum('withheldForGap'),
             'withheldForCommissions' => (float) $rows->sum('withheldForCommissions'),
         ];
 
-        $items = $rows->map(fn ($r) => [
-            'id' => $r->id,
-            'consultantId' => $r->consultant,
-            'personName' => $r->consultantPersonName ?? $r->personName ?? '—',
-            'activityId' => $r->activityId,
-            'activityName' => $r->activityId ? ($activityNames[$r->activityId] ?? null) : null,
-            'status' => $r->status,
-            'balance' => (float) ($r->balance ?? 0),
-            'accrued' => (float) ($r->accruedTransactional ?? 0),
-            'other' => (float) ($r->accruedNonTransactional ?? 0),
-            'pool' => (float) ($r->accruedPool ?? 0),
-            'accruedTotal' => (float) ($r->accruedTotal ?? 0),
-            'totalPayable' => (float) ($r->totalPayable ?? 0),
-            'payed' => (float) ($r->payed ?? 0),
-            'remaining' => (float) ($r->remaining ?? 0),
-            'withheldForGap' => (float) ($r->withheldForGap ?? 0),
-            'withheldForCommissions' => (float) ($r->withheldForCommissions ?? 0),
-            'verifiedRequisites' => isset($verified[$r->consultant]),
-        ]);
+        $items = $rows->map(function ($r) use ($verified, $activityNames, $extraByCons) {
+            $extra = (float) ($extraByCons[$r->consultant] ?? 0);
+            $other = (float) ($r->accruedNonTransactional ?? 0) + $extra;
+            $accruedTotal = (float) ($r->accruedTotal ?? 0) + $extra;
+            $totalPayable = (float) ($r->totalPayable ?? 0) + $extra;
+            $remaining = (float) ($r->remaining ?? 0) + $extra;
+            return [
+                'id' => $r->id,
+                'consultantId' => $r->consultant,
+                'personName' => $r->consultantPersonName ?? $r->personName ?? '—',
+                'activityId' => $r->activityId,
+                'activityName' => $r->activityId ? ($activityNames[$r->activityId] ?? null) : null,
+                'status' => $r->status,
+                'balance' => (float) ($r->balance ?? 0),
+                'accrued' => (float) ($r->accruedTransactional ?? 0),
+                'other' => $other,
+                'pool' => (float) ($r->accruedPool ?? 0),
+                'accruedTotal' => $accruedTotal,
+                'totalPayable' => $totalPayable,
+                'payed' => (float) ($r->payed ?? 0),
+                'remaining' => $remaining,
+                'withheldForGap' => (float) ($r->withheldForGap ?? 0),
+                'withheldForCommissions' => (float) ($r->withheldForCommissions ?? 0),
+                'verifiedRequisites' => isset($verified[$r->consultant]),
+            ];
+        });
 
         return response()->json([
             'year' => $year,

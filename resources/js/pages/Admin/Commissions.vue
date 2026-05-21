@@ -132,6 +132,13 @@
       <template #item.clientName="{ value }">
         <span class="text-no-wrap">{{ value || '—' }}</span>
       </template>
+      <template #item.providerName="{ value }">{{ value || '—' }}</template>
+      <template #item.productName="{ value }">
+        <span class="text-no-wrap">{{ value || '—' }}</span>
+      </template>
+      <template #item.programName="{ value }">
+        <span class="text-no-wrap">{{ value || '—' }}</span>
+      </template>
       <template #item.date="{ value }">{{ fmtDate(value) }}</template>
       <template #item.comment="{ value }">{{ value || '—' }}</template>
       <template #item.propertyTitle="{ value }">{{ value || '—' }}</template>
@@ -266,6 +273,9 @@ const headers = [
   { title: 'Открыт', key: 'contractOpenDate', width: 110 },
   { title: 'Клиент', key: 'clientName' },
   { title: 'Партнёр', key: 'consultantName' },
+  { title: 'Поставщик', key: 'providerName', width: 140 },
+  { title: 'Продукт', key: 'productName', width: 160 },
+  { title: 'Программа', key: 'programName', width: 160 },
   { title: 'Дата', key: 'date', width: 110 },
   { title: 'Комментарий', key: 'comment' },
   { title: 'Свойство', key: 'propertyTitle', width: 120 },

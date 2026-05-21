@@ -709,7 +709,7 @@ const menuItems = [
   // Выплаты
   { group: 'Выплаты', adminSection: 'charges' },
   { label: 'Прочие начисления', icon: 'mdi-bank', path: '/manage/charges', adminSection: 'charges' },
-  { label: 'Выплаты', icon: 'mdi-cash', path: '/manage/payments', adminSection: 'payments' },
+  { label: 'Реестр выплат', icon: 'mdi-cash', path: '/manage/payments', adminSection: 'payments' },
 
   // Обучение (LMS) — конструктор курсов и куратор обучения партнёров
   { group: 'Обучение', adminSection: 'education' },

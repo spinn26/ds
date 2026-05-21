@@ -147,6 +147,7 @@ class AdminFinanceController extends Controller
                 'c.openDate as contractOpenDate',
                 'c.term as contractTerm',
                 'c.product as productId',
+                'c.program as programId',
             ]);
 
         $currencyIds = $rows->pluck('currency')->filter()->unique();
@@ -161,10 +162,19 @@ class AdminFinanceController extends Controller
 
         // Config-флаги продукта — UI скрывает «Свойство»/«Срок»/«Год КВ»
         // у тех продуктов, где они не релевантны.
+        // Также берём product.name для колонки «Продукт».
         $productIds = $rows->pluck('productId')->filter()->unique();
         $productFlags = $productIds->isNotEmpty()
             ? DB::table('product')->whereIn('id', $productIds)
-                ->get(['id', 'has_property', 'has_term', 'has_year_kv'])
+                ->get(['id', 'name', 'has_property', 'has_term', 'has_year_kv'])
+                ->keyBy('id')
+            : collect();
+
+        // Программа и поставщик — батчем по c.program.
+        $programIds = $rows->pluck('programId')->filter()->unique();
+        $programMeta = $programIds->isNotEmpty()
+            ? DB::table('program')->whereIn('id', $programIds)
+                ->get(['id', 'name', 'providerName', 'vendorName'])
                 ->keyBy('id')
             : collect();
 
@@ -178,11 +188,12 @@ class AdminFinanceController extends Controller
             }
         }
 
-        $data = $rows->map(function ($t) use ($currencies, $properties, $frozenSet, $productFlags) {
+        $data = $rows->map(function ($t) use ($currencies, $properties, $frozenSet, $productFlags, $programMeta) {
             $month = (int) substr((string) $t->dateMonth, -2);
             $year = (int) $t->dateYear;
             $isFrozen = $frozenSet->get("$year-$month", false);
             $flags = $t->productId ? ($productFlags[$t->productId] ?? null) : null;
+            $prog = $t->programId ? ($programMeta[$t->programId] ?? null) : null;
             return [
                 'id' => $t->id,
                 'periodFrozen' => $isFrozen,
@@ -192,6 +203,9 @@ class AdminFinanceController extends Controller
                 'contractTerm' => $flags && ! $flags->has_term ? null : $t->contractTerm,
                 'clientName' => $t->clientName,
                 'consultantName' => $t->consultantName,
+                'providerName' => $prog?->providerName ?? $prog?->vendorName ?? null,
+                'productName' => $flags?->name ?? null,
+                'programName' => $prog?->name ?? null,
                 'amount' => round((float) ($t->amount ?? 0), 2),
                 'amountRUB' => round((float) ($t->amountRUB ?? 0), 2),
                 'amountUSD' => round((float) ($t->amountUSD ?? 0), 2),
