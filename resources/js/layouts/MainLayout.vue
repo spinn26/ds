@@ -277,7 +277,6 @@ import SystemStatusChip from '../components/SystemStatusChip.vue';
 import ChatLauncher from '../components/ChatLauncher.vue';
 import { provideConfirm } from '../composables/useConfirm';
 import { availableSections as configAvailableSections } from '../config/cabinetPermissions';
-import { useSnackbar } from '../composables/useSnackbar';
 import { useNotificationSound } from '../composables/useNotificationSound';
 import api from '../api';
 
