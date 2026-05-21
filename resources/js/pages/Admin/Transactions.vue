@@ -301,7 +301,16 @@
                       <span v-else class="text-medium-emphasis">—</span>
                     </template>
                     <template v-else-if="h.key === 'actions'">
+                      <!-- «Дублировать» — для случая нескольких одинаковых
+                           взносов по одному контракту (напр. два 10 000 RUB
+                           на одну дату). Копируем contract+amount+date+
+                           currency+comment+parameter+yearKV; commission-флаги
+                           сбрасываются — пусть оператор решает заново. -->
+                      <v-btn v-if="canFull('transactions')" icon="mdi-content-duplicate" size="x-small" variant="text" color="primary"
+                        title="Дублировать черновик"
+                        @click="duplicateDraft(d)" />
                       <v-btn v-if="canFull('transactions')" icon="mdi-trash-can-outline" size="x-small" variant="text" color="error"
+                        title="Удалить черновик"
                         @click="removeDraft(d)" />
                     </template>
                   </td>
@@ -556,7 +565,14 @@
       </v-card>
     </v-dialog>
 
-    <v-snackbar v-model="snack.open" :color="snack.color" timeout="4000">{{ snack.text }}</v-snackbar>
+    <v-snackbar v-model="snack.open" :color="snack.color" :timeout="snack.action ? 12000 : 4000">
+      {{ snack.text }}
+      <template v-if="snack.action" #actions>
+        <v-btn variant="text" size="small" :to="snack.action.to" @click="snack.open = false">
+          {{ snack.action.label }}
+        </v-btn>
+      </template>
+    </v-snackbar>
   </div>
 </template>
 
@@ -578,8 +594,10 @@ import { usePermissions } from '../../composables/usePermissions';
 const { canFull } = usePermissions();
 
 const tab = ref('manual');
-const snack = ref({ open: false, color: 'success', text: '' });
-function notify(text, color = 'success') { snack.value = { open: true, color, text }; }
+const snack = ref({ open: false, color: 'success', text: '', action: null });
+function notify(text, color = 'success', action = null) {
+  snack.value = { open: true, color, text, action };
+}
 
 // === Manual entry: contracts top zone ===
 const contracts = ref([]);
@@ -647,7 +665,7 @@ const draftHeaders = [
   { title: 'Баллы', key: 'pointsCount', thClass: 'text-end', tdClass: 'text-end text-no-wrap', style: 'min-width:80px' },
   { title: 'Σ по партнёрам', key: 'partnersTotal', thClass: 'text-end', tdClass: 'text-end text-no-wrap', style: 'min-width:130px' },
   { title: 'Прибыль ДС', key: 'profit', thClass: 'text-end', tdClass: 'text-end text-no-wrap' },
-  { title: '', key: 'actions', style: 'width:48px' },
+  { title: '', key: 'actions', style: 'width:88px; min-width:88px' },
 ];
 
 const draftColsVisible = ref({});
@@ -798,6 +816,17 @@ async function removeDraft(draft) {
   drafts.value = drafts.value.filter(d => d.id !== draft.id);
 }
 
+// Дублировать черновик — для случая «два одинаковых взноса по одному
+// контракту на одну дату» без перелистывания списка контрактов.
+async function duplicateDraft(draft) {
+  try {
+    await api.post('/admin/manual-tx/drafts/' + draft.id + '/duplicate');
+    await loadDrafts();
+  } catch {
+    notify('Не удалось дублировать черновик', 'error');
+  }
+}
+
 async function clearAll() {
   if (!await confirmDialog.ask({
     title: 'Очистить все черновики?',
@@ -842,9 +871,24 @@ async function calcAll() {
 async function fixAll() {
   if (!fixableIds.value.length) return;
   fixing.value = true;
+  // Запоминаем диапазон дат фиксируемых черновиков — после успеха ведём
+  // юзера прямо в Комиссии с этим фильтром. Иначе на /manage/commissions
+  // свежая транзакция теряется среди десятков тысяч записей с такой же
+  // (или более поздней) датой — сортировка по date DESC.
+  const dates = drafts.value
+    .filter(d => fixableIds.value.includes(d.id) && d.date)
+    .map(d => String(d.date).slice(0, 10))
+    .sort();
+  const dateFrom = dates[0];
+  const dateTo = dates[dates.length - 1];
   try {
     const { data } = await api.post('/admin/manual-tx/fix', { ids: fixableIds.value });
-    if (data.fixed?.length) notify(`Зафиксировано: ${data.fixed.length}`);
+    if (data.fixed?.length) {
+      const action = dateFrom
+        ? { label: 'Открыть в Комиссиях', to: { path: '/manage/commissions', query: { date_from: dateFrom, date_to: dateTo } } }
+        : null;
+      notify(`Зафиксировано: ${data.fixed.length}`, 'success', action);
+    }
     if (data.errors?.length) notify(`Ошибки: ${data.errors.length}`, 'warning');
     await loadDrafts();
     if (data.fixed?.length) loadLog();

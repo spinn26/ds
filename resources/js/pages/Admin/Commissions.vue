@@ -236,6 +236,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
 import PageHeader from '../../components/PageHeader.vue';
@@ -403,7 +404,18 @@ async function loadSuppliers() {
   } catch {}
 }
 
-onMounted(() => { loadData(); loadSuppliers(); });
+const route = useRoute();
+onMounted(() => {
+  // Поддержка глубоких ссылок: /manage/commissions?date_from=YYYY-MM-DD&date_to=...
+  // Используется кнопкой «Открыть в Комиссиях» после фиксации ручных транзакций —
+  // иначе свежие апрельские записи теряются среди тысяч таких же по дате.
+  if (route.query.date_from) filters.value.dateFrom = String(route.query.date_from);
+  if (route.query.date_to) filters.value.dateTo = String(route.query.date_to);
+  if (route.query.partner) filters.value.partner = String(route.query.partner);
+  if (route.query.contract) filters.value.contract = String(route.query.contract);
+  loadData();
+  loadSuppliers();
+});
 </script>
 
 <style scoped>
