@@ -209,21 +209,25 @@ class FinanceReportService
 
         // Other accruals table — мерджим легаси commission (transaction IS NULL)
         // и новую таблицу other_accruals (ручные начисления из /manage/charges).
-        // Без этого пункт «Прочие начисления» в отчёте партнёра не показывает
-        // суммы, заведённые админом через UI (он пишет в other_accruals).
+        // У other_accruals две независимых колонки: amount (рубли) и points
+        // (баллы — могут быть отрицательными при удержании). Раньше учитывались
+        // только рубли — удержания баллов терялись в отчёте партнёра.
         $extraAccruals = DB::table('other_accruals')
             ->where('consultant', $consultant->id)
             ->whereBetween('accrual_date', [$periodStart, $periodEnd])
             ->orderByDesc('accrual_date')
-            ->get(['id', 'accrual_date', 'amount', 'comment']);
+            ->get(['id', 'accrual_date', 'amount', 'points', 'type', 'comment']);
 
         $extraSum = round((float) $extraAccruals->sum('amount'), 2);
+        $extraPointsSum = round((float) $extraAccruals->sum('points'), 2);
 
         $otherAccrualsTable = $otherAccruals->map(fn ($c) => [
             'id' => $c->id,
             'date' => $c->date,
             'amount' => round((float) ($c->amount ?? 0), 2),
             'amountRUB' => round((float) ($c->amountRUB ?? 0), 2),
+            'points' => round((float) ($c->groupBonus ?? 0), 2),
+            'type' => $c->amount ? 'rub' : 'points',
             'comment' => $c->comment,
         ])->concat($extraAccruals->map(fn ($e) => [
             // Префиксуем id, чтобы не было коллизий с commission.id во v-data-table.
@@ -231,6 +235,8 @@ class FinanceReportService
             'date' => $e->accrual_date,
             'amount' => round((float) ($e->amount ?? 0), 2),
             'amountRUB' => round((float) ($e->amount ?? 0), 2),
+            'points' => round((float) ($e->points ?? 0), 2),
+            'type' => $e->type ?: ((float) $e->points !== 0.0 ? 'points' : 'rub'),
             'comment' => $e->comment,
         ]))->values();
 
@@ -471,7 +477,11 @@ class FinanceReportService
                     // otherAccrualsPoints — UI показывал «Прочие (баллы)»,
                     // что вводило в заблуждение.
                     'otherAccrualsRub' => round($otherAccruals->sum(fn ($c) => (float) ($c->amount ?? 0)) + $extraSum, 2),
-                    'otherAccrualsPoints' => round($otherAccruals->sum(fn ($c) => (float) ($c->groupBonus ?? 0)), 2),
+                    // К легаси-баллам из commission прибавляем баллы из other_accruals.points
+                    // (могут быть отрицательными при удержании). Без этого
+                    // удержание баллов через /manage/charges не отображалось
+                    // в личном отчёте — жалоба Богдановой 2026-05-21.
+                    'otherAccrualsPoints' => round($otherAccruals->sum(fn ($c) => (float) ($c->groupBonus ?? 0)) + $extraPointsSum, 2),
                     'totalAccrued' => round((float) ($balance->accruedTotal ?? 0) + $extraSum, 2),
                     'totalPayable' => round((float) ($balance->totalPayable ?? 0) + $extraSum, 2),
                     'payed' => round((float) ($balance->payed ?? 0), 2),

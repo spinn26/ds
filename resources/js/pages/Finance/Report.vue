@@ -404,11 +404,14 @@ const groupSalesHeaders = computed(() => filterByProductFlags([
   { title: 'Комментарий', key: 'comment' },
 ], tables.value.groupSales));
 
-// Per spec §4.3: Дата, Сумма (₽), Комментарий.
+// Per spec §4.3: Дата, Сумма (₽), Баллы, Комментарий.
+// «Баллы» теперь читаются из отдельного поля points (раньше брались
+// из amount, что совпадало с рублёвой суммой для записей из other_accruals
+// и удержания баллов терялись — жалоба Богдановой 2026-05-21).
 const otherAccrualsHeaders = [
   { title: 'Дата', key: 'date', width: 130 },
   { title: 'Сумма, ₽', key: 'amountRUB', align: 'end', width: 140 },
-  { title: 'Баллы', key: 'amount', align: 'end', width: 110 },
+  { title: 'Баллы', key: 'points', align: 'end', width: 110 },
   { title: 'Комментарий', key: 'comment' },
 ];
 

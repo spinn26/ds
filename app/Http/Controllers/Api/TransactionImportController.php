@@ -15,6 +15,22 @@ class TransactionImportController extends Controller
         private readonly PeriodFreezeService $periodFreeze,
     ) {}
 
+    /**
+     * Унифицированный 422-ответ импорта: всегда включает success/errors/
+     * errorDetails — фронт показывает детали под общим сообщением вместо
+     * скудного «Ошибка импорта» без подсказки.
+     */
+    private function importError(string $message, int $status = 422, array $extraDetails = []): JsonResponse
+    {
+        $details = array_filter(array_merge([$message], $extraDetails), fn ($v) => $v !== null && $v !== '');
+        return response()->json([
+            'message' => $message,
+            'success' => 0,
+            'errors' => 1,
+            'errorDetails' => array_values($details),
+        ], $status);
+    }
+
 
     /**
      * Справочники для формы импорта.
@@ -113,7 +129,7 @@ class TransactionImportController extends Controller
             config('services.google_sheets.api_key', env('GOOGLE_SHEETS_API_KEY')));
 
         if (! $spreadsheetId || ! $apiKey) {
-            return response()->json(['message' => 'Google Sheets не настроен. Заполните «Google Sheets API Key» и «ID таблицы Импорт транзакций» в /admin/api-keys'], 422);
+            return $this->importError('Google Sheets не настроен. Заполните «Google Sheets API Key» и «ID таблицы Импорт транзакций» в /admin/api-keys');
         }
 
         // Прямой запрос в Sheets API — нам нужна и шапка, и строки, generic-
@@ -123,12 +139,16 @@ class TransactionImportController extends Controller
         $response = \Illuminate\Support\Facades\Http::timeout(20)->get($url);
         if (! $response->ok()) {
             \Log::error('Sheet read failed', ['status' => $response->status(), 'body' => mb_substr((string) $response->body(), 0, 200)]);
-            return response()->json(['message' => "Ошибка чтения листа: HTTP {$response->status()}. Проверьте ID и название листа."], 422);
+            return $this->importError(
+                "Ошибка чтения листа: HTTP {$response->status()}. Проверьте ID и название листа.",
+                422,
+                [mb_substr((string) $response->body(), 0, 200)],
+            );
         }
 
         $values = $response->json('values') ?? [];
         if (count($values) < 2) {
-            return response()->json(['message' => 'Лист пустой или нет строк данных'], 422);
+            return $this->importError('Лист пустой или нет строк данных');
         }
 
         $headers = $values[0];
@@ -141,7 +161,7 @@ class TransactionImportController extends Controller
 
         // Fallback: старый generic-парсер требует counterparty явно.
         if (! $request->counterparty) {
-            return response()->json(['message' => 'Лист не распознан в профилях. Выберите поставщика вручную.'], 422);
+            return $this->importError('Лист не распознан в профилях. Выберите поставщика вручную.');
         }
         $assoc = array_map(function ($row) use ($headers) {
             $out = [];
@@ -166,7 +186,7 @@ class TransactionImportController extends Controller
         $rows = $this->parseCsv($file->getPathname());
 
         if (empty($rows)) {
-            return response()->json(['message' => 'Файл пустой или неверный формат'], 422);
+            return $this->importError('Файл пустой или неверный формат');
         }
 
         return $this->processRows($rows, (int) $request->counterparty, $request->currency ? (int) $request->currency : 67, $request);
@@ -423,9 +443,9 @@ class TransactionImportController extends Controller
         $counterpartyId = \App\Services\SheetProfiles::resolveCounterpartyId($profile['counterpartyName'] ?? '')
             ?? (int) $request->counterparty;
         if (! $counterpartyId) {
-            return response()->json([
-                'message' => 'Counterparty «' . ($profile['counterpartyName'] ?? '—') . '» не найден в БД. Создайте его или выберите вручную.',
-            ], 422);
+            return $this->importError(
+                'Counterparty «' . ($profile['counterpartyName'] ?? '—') . '» не найден в БД. Создайте его или выберите вручную.',
+            );
         }
 
         $currencyId = isset($profile['currency'])
