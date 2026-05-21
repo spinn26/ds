@@ -98,10 +98,11 @@
                   no-data-text="Нет уроков"
                   hide-default-footer
                 >
-                  <template #item.content_type="{ item: lesson }">
-                    <v-chip size="x-small" :color="contentTypeColor(lesson.content_type)">
-                      {{ contentTypeLabel(lesson.content_type) }}
-                    </v-chip>
+                  <template #item.videoCount="{ item: lesson }">
+                    <span class="text-no-wrap">{{ (lesson.video_urls || []).length || (lesson.video_url ? 1 : 0) }}</span>
+                  </template>
+                  <template #item.docCount="{ item: lesson }">
+                    <span class="text-no-wrap">{{ (lesson.document_urls || []).length || (lesson.document_url ? 1 : 0) }}</span>
                   </template>
                   <template #item.active="{ item: lesson }">
                     <v-chip :color="lesson.active ? 'success' : 'grey'" size="x-small">
@@ -211,22 +212,60 @@
               <v-text-field v-model="editLesson.title" label="Название *" :rules="[v => !!v || 'Обязательное поле']" />
             </v-col>
             <v-col cols="12">
-              <v-textarea v-model="editLesson.content" label="Содержание" rows="5" auto-grow />
+              <v-textarea v-model="editLesson.content" label="Содержание" rows="5" auto-grow
+                hint="Произвольный текст. Видео и ссылки добавляются ниже отдельными полями." persistent-hint />
             </v-col>
+
+            <!-- Видео — динамический список -->
+            <v-col cols="12">
+              <div class="d-flex align-center mb-1 mt-2">
+                <v-icon size="18" color="primary" class="me-1">mdi-video</v-icon>
+                <span class="text-subtitle-2">Видео</span>
+                <v-spacer />
+                <v-btn size="small" variant="text" prepend-icon="mdi-plus" @click="addVideoUrl">
+                  Добавить видео
+                </v-btn>
+              </div>
+              <div v-for="(_, i) in editLesson.video_urls" :key="'v' + i" class="d-flex align-center ga-2 mb-2">
+                <v-text-field v-model="editLesson.video_urls[i]"
+                  placeholder="https://youtu.be/..."
+                  prepend-inner-icon="mdi-play-circle"
+                  variant="outlined" density="comfortable" hide-details />
+                <v-btn icon="mdi-close" size="small" variant="text" color="error"
+                  @click="editLesson.video_urls.splice(i, 1)" />
+              </div>
+              <div v-if="!editLesson.video_urls.length" class="text-caption text-medium-emphasis">
+                Видео не добавлены.
+              </div>
+            </v-col>
+
+            <!-- Документы / ссылки — динамический список -->
+            <v-col cols="12">
+              <div class="d-flex align-center mb-1 mt-2">
+                <v-icon size="18" color="primary" class="me-1">mdi-file-document</v-icon>
+                <span class="text-subtitle-2">Документы и ссылки</span>
+                <v-spacer />
+                <v-btn size="small" variant="text" prepend-icon="mdi-plus" @click="addDocumentUrl">
+                  Добавить ссылку
+                </v-btn>
+              </div>
+              <div v-for="(_, i) in editLesson.document_urls" :key="'d' + i" class="d-flex align-center ga-2 mb-2">
+                <v-text-field v-model="editLesson.document_urls[i]"
+                  placeholder="https://..."
+                  prepend-inner-icon="mdi-link-variant"
+                  variant="outlined" density="comfortable" hide-details />
+                <v-btn icon="mdi-close" size="small" variant="text" color="error"
+                  @click="editLesson.document_urls.splice(i, 1)" />
+              </div>
+              <div v-if="!editLesson.document_urls.length" class="text-caption text-medium-emphasis">
+                Ссылки не добавлены.
+              </div>
+            </v-col>
+
             <v-col cols="12" sm="4">
-              <v-select v-model="editLesson.content_type" label="Тип контента"
-                :items="contentTypeOptions" />
-            </v-col>
-            <v-col cols="12" sm="8">
-              <v-text-field v-model="editLesson.video_url" label="URL видео" prepend-inner-icon="mdi-video" />
-            </v-col>
-            <v-col cols="12" sm="8">
-              <v-text-field v-model="editLesson.document_url" label="URL документа" prepend-inner-icon="mdi-file-document" />
-            </v-col>
-            <v-col cols="12" sm="2">
               <v-text-field v-model.number="editLesson.sort_order" label="Сортировка" type="number" />
             </v-col>
-            <v-col cols="12" sm="2">
+            <v-col cols="12" sm="4">
               <v-checkbox v-model="editLesson.active" label="Активен" density="compact" />
             </v-col>
           </v-row>
@@ -360,8 +399,8 @@ const courseHeaders = [
 
 const lessonHeaders = [
   { title: 'Название', key: 'title' },
-  { title: 'Тип', key: 'content_type', width: 100 },
-  { title: 'URL видео', key: 'video_url', width: 200 },
+  { title: 'Видео', key: 'videoCount', width: 90, align: 'end' },
+  { title: 'Ссылки', key: 'docCount', width: 90, align: 'end' },
   { title: 'Статус', key: 'active', width: 110 },
   { title: 'Действия', key: 'actions', sortable: false, width: 100 },
 ];
@@ -565,16 +604,37 @@ async function deleteCourse() {
 // Lesson CRUD
 function openCreateLesson(course) {
   editLessonCourseId.value = course.id;
-  editLesson.value = { title: '', content: '', content_type: 'text', video_url: '', document_url: '', sort_order: 0, active: true };
+  editLesson.value = {
+    title: '', content: '',
+    video_urls: [], document_urls: [],
+    sort_order: 0, active: true,
+  };
   lessonError.value = '';
   lessonDialog.value = true;
 }
 
 function openEditLesson(course, lesson) {
   editLessonCourseId.value = course.id;
-  editLesson.value = { ...lesson };
+  // Бэк отдаёт массивы; если их нет (старый ответ) — упаковываем
+  // single video_url/document_url в массив.
+  const videoUrls = Array.isArray(lesson.video_urls) && lesson.video_urls.length
+    ? [...lesson.video_urls]
+    : (lesson.video_url ? [lesson.video_url] : []);
+  const documentUrls = Array.isArray(lesson.document_urls) && lesson.document_urls.length
+    ? [...lesson.document_urls]
+    : (lesson.document_url ? [lesson.document_url] : []);
+  editLesson.value = { ...lesson, video_urls: videoUrls, document_urls: documentUrls };
   lessonError.value = '';
   lessonDialog.value = true;
+}
+
+function addVideoUrl() {
+  if (!Array.isArray(editLesson.value.video_urls)) editLesson.value.video_urls = [];
+  editLesson.value.video_urls.push('');
+}
+function addDocumentUrl() {
+  if (!Array.isArray(editLesson.value.document_urls)) editLesson.value.document_urls = [];
+  editLesson.value.document_urls.push('');
 }
 
 async function saveLesson() {

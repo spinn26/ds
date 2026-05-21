@@ -279,6 +279,8 @@ class AdminEducationController extends Controller
     /** Уроки курса */
     public function lessons(int $courseId): JsonResponse
     {
+        $hasArrays = Schema::hasColumn('education_lessons', 'video_urls');
+
         $lessons = DB::table('education_lessons')
             ->where('course_id', $courseId)
             ->orderBy('sort_order')
@@ -287,9 +289,12 @@ class AdminEducationController extends Controller
                 'id' => $l->id,
                 'title' => $l->title,
                 'content' => $l->content,
-                'content_type' => $l->content_type, // text, video, audio
+                // Legacy single-fields оставлены для совместимости — фронт
+                // может смотреть только массивы.
                 'video_url' => $l->video_url,
                 'document_url' => $l->document_url,
+                'video_urls' => $this->urlArray($hasArrays ? ($l->video_urls ?? null) : null, $l->video_url ?? null),
+                'document_urls' => $this->urlArray($hasArrays ? ($l->document_urls ?? null) : null, $l->document_url ?? null),
                 'sort_order' => $l->sort_order,
                 'active' => (bool) $l->active,
             ]);
@@ -297,38 +302,100 @@ class AdminEducationController extends Controller
         return response()->json($lessons);
     }
 
+    /** Разворачиваем JSONB-массив URL’ов с fallback на легаси single-поле. */
+    private function urlArray($jsonbValue, $legacySingle): array
+    {
+        if ($jsonbValue !== null && $jsonbValue !== '') {
+            $decoded = is_array($jsonbValue) ? $jsonbValue : json_decode((string) $jsonbValue, true);
+            if (is_array($decoded)) {
+                return array_values(array_filter($decoded, fn ($v) => is_string($v) && $v !== ''));
+            }
+        }
+        return $legacySingle ? [$legacySingle] : [];
+    }
+
+    /** Подготовка payload для урока: JSONB-массивы + legacy first-item зеркала. */
+    private function lessonPayload(Request $request): array
+    {
+        $videoUrls = $this->cleanUrlList($request->input('video_urls'));
+        $documentUrls = $this->cleanUrlList($request->input('document_urls'));
+
+        // Бэкауорд: если фронт ещё шлёт single video_url/document_url —
+        // подмешиваем их в начало массива.
+        if ($request->filled('video_url') && ! in_array($request->input('video_url'), $videoUrls, true)) {
+            array_unshift($videoUrls, $request->input('video_url'));
+        }
+        if ($request->filled('document_url') && ! in_array($request->input('document_url'), $documentUrls, true)) {
+            array_unshift($documentUrls, $request->input('document_url'));
+        }
+
+        $payload = [
+            'title' => $request->title,
+            'content' => $request->input('content'),
+            // Single-колонки = первый элемент массива (для легаси-потребителей).
+            'video_url' => $videoUrls[0] ?? null,
+            'document_url' => $documentUrls[0] ?? null,
+            'sort_order' => $request->input('sort_order', 0),
+        ];
+
+        if (Schema::hasColumn('education_lessons', 'video_urls')) {
+            $payload['video_urls'] = $videoUrls ? json_encode(array_values($videoUrls)) : null;
+            $payload['document_urls'] = $documentUrls ? json_encode(array_values($documentUrls)) : null;
+        }
+        // content_type оставлено в схеме но больше не дёргаем — урок
+        // содержит произвольный микс текста/видео/ссылок одновременно.
+
+        return $payload;
+    }
+
+    private function cleanUrlList($input): array
+    {
+        if (! is_array($input)) return [];
+        $out = [];
+        foreach ($input as $v) {
+            if (is_string($v) && trim($v) !== '') $out[] = trim($v);
+        }
+        return array_values(array_unique($out));
+    }
+
     /** CRUD урока */
     public function storeLesson(Request $request, int $courseId): JsonResponse
     {
-        $request->validate(['title' => 'required|string|max:255']);
+        $request->validate([
+            'title' => 'required|string|max:255',
+            'video_urls' => 'nullable|array',
+            'video_urls.*' => 'nullable|string|max:2000',
+            'document_urls' => 'nullable|array',
+            'document_urls.*' => 'nullable|string|max:2000',
+        ]);
 
-        $id = DB::table('education_lessons')->insertGetId([
+        $attrs = array_merge($this->lessonPayload($request), [
             'course_id' => $courseId,
-            'title' => $request->title,
-            'content' => $request->input('content'),
-            'content_type' => $request->input('content_type', 'text'),
-            'video_url' => $request->video_url,
-            'document_url' => $request->document_url,
-            'sort_order' => $request->input('sort_order', 0),
             'active' => $request->boolean('active', true),
             'created_at' => now(),
         ]);
+
+        $id = DB::table('education_lessons')->insertGetId($attrs);
 
         return response()->json(['message' => 'Урок создан', 'id' => $id], 201);
     }
 
     public function updateLesson(Request $request, int $courseId, int $lessonId): JsonResponse
     {
-        DB::table('education_lessons')->where('id', $lessonId)->update([
-            'title' => $request->title,
-            'content' => $request->input('content'),
-            'content_type' => $request->input('content_type', 'text'),
-            'video_url' => $request->video_url,
-            'document_url' => $request->document_url,
-            'sort_order' => $request->input('sort_order', 0),
+        $request->validate([
+            'title' => 'required|string|max:255',
+            'video_urls' => 'nullable|array',
+            'video_urls.*' => 'nullable|string|max:2000',
+            'document_urls' => 'nullable|array',
+            'document_urls.*' => 'nullable|string|max:2000',
+        ]);
+
+        $attrs = array_merge($this->lessonPayload($request), [
             'active' => $request->boolean('active'),
             'updated_at' => now(),
         ]);
+
+        DB::table('education_lessons')->where('id', $lessonId)->update($attrs);
 
         return response()->json(['message' => 'Урок обновлён']);
     }

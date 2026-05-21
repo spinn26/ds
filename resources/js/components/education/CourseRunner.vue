@@ -18,17 +18,23 @@
             </div>
           </v-expansion-panel-title>
           <v-expansion-panel-text>
-            <div v-if="l.video_url" class="mb-3">
-              <v-btn :href="l.video_url" target="_blank" color="primary" variant="tonal" size="small" prepend-icon="mdi-play">
-                Смотреть видео
-              </v-btn>
-            </div>
-            <div v-if="l.document_url" class="mb-3">
-              <v-btn :href="l.document_url" target="_blank" variant="tonal" size="small" prepend-icon="mdi-file-document">
-                Открыть документ
-              </v-btn>
-            </div>
             <div v-if="l.content" class="text-body-2 mb-3" style="white-space: pre-wrap">{{ l.content }}</div>
+            <!-- Видео: массив + fallback на single video_url для legacy. -->
+            <div v-if="lessonVideos(l).length" class="d-flex flex-wrap ga-2 mb-3">
+              <v-btn v-for="(url, vi) in lessonVideos(l)" :key="'v' + vi"
+                :href="url" target="_blank" rel="noopener"
+                color="primary" variant="tonal" size="small" prepend-icon="mdi-play">
+                Смотреть видео<span v-if="lessonVideos(l).length > 1"> {{ vi + 1 }}</span>
+              </v-btn>
+            </div>
+            <!-- Документы / ссылки: массив + fallback. -->
+            <div v-if="lessonDocs(l).length" class="d-flex flex-wrap ga-2 mb-3">
+              <v-btn v-for="(url, di) in lessonDocs(l)" :key="'d' + di"
+                :href="url" target="_blank" rel="noopener"
+                variant="tonal" size="small" prepend-icon="mdi-file-document">
+                Открыть<span v-if="lessonDocs(l).length > 1"> {{ di + 1 }}</span>
+              </v-btn>
+            </div>
             <v-btn
               v-if="!l.viewed"
               size="small"
@@ -109,6 +115,19 @@ const marking = ref(null);
 const submitting = ref(false);
 const answers = ref({});
 const testResult = ref(null);
+
+function lessonVideos(l) {
+  if (Array.isArray(l.video_urls) && l.video_urls.length) {
+    return l.video_urls.filter(Boolean);
+  }
+  return l.video_url ? [l.video_url] : [];
+}
+function lessonDocs(l) {
+  if (Array.isArray(l.document_urls) && l.document_urls.length) {
+    return l.document_urls.filter(Boolean);
+  }
+  return l.document_url ? [l.document_url] : [];
+}
 
 const allLessonsViewed = computed(() =>
   props.course.lessons.length > 0 && props.course.lessons.every(l => l.viewed)

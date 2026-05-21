@@ -151,15 +151,23 @@ class EducationController extends Controller
                 'description' => $course->description,
                 'product_id' => $course->product_id,
             ],
-            'lessons' => $lessons->map(fn ($l) => [
-                'id' => $l->id,
-                'title' => $l->title,
-                'content' => $l->content,
-                'content_type' => $l->content_type,
-                'video_url' => $l->video_url,
-                'document_url' => $l->document_url,
-                'viewed' => isset($viewedSet[$l->id]),
-            ])->values(),
+            'lessons' => $lessons->map(function ($l) use ($viewedSet) {
+                $hasArrays = Schema::hasColumn('education_lessons', 'video_urls');
+                $videos = $this->expandUrlArray($hasArrays ? ($l->video_urls ?? null) : null, $l->video_url ?? null);
+                $docs = $this->expandUrlArray($hasArrays ? ($l->document_urls ?? null) : null, $l->document_url ?? null);
+                return [
+                    'id' => $l->id,
+                    'title' => $l->title,
+                    'content' => $l->content,
+                    'content_type' => $l->content_type,
+                    // Legacy single-поля оставлены на случай старого фронта.
+                    'video_url' => $videos[0] ?? null,
+                    'document_url' => $docs[0] ?? null,
+                    'video_urls' => $videos,
+                    'document_urls' => $docs,
+                    'viewed' => isset($viewedSet[$l->id]),
+                ];
+            })->values(),
             'tests' => $tests,
             'completion' => $completion ? [
                 'score' => $completion->score,
@@ -167,6 +175,22 @@ class EducationController extends Controller
                 'completed_at' => $completion->completed_at,
             ] : null,
         ]);
+    }
+
+    /**
+     * Разворачиваем JSONB-массив URL’ов с fallback на легаси single-поле.
+     * Дублирует AdminEducationController::urlArray, но контроллеры не
+     * расшаривают трейт — копия дешевле, чем новый сервис.
+     */
+    private function expandUrlArray($jsonbValue, $legacySingle): array
+    {
+        if ($jsonbValue !== null && $jsonbValue !== '') {
+            $decoded = is_array($jsonbValue) ? $jsonbValue : json_decode((string) $jsonbValue, true);
+            if (is_array($decoded)) {
+                return array_values(array_filter($decoded, fn ($v) => is_string($v) && $v !== ''));
+            }
+        }
+        return $legacySingle ? [$legacySingle] : [];
     }
 
     /** Mark a lesson as viewed (idempotent upsert). */
