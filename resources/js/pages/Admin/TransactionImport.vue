@@ -261,9 +261,17 @@ async function runSheetsImport() {
     progressResult.value = data;
     loadHistory();
   } catch (e) {
-    const msg = e.response?.data?.message || 'Ошибка импорта из Google Sheets';
-    result.value = { message: msg, errors: 1, success: 0 };
-    progressResult.value = { message: msg, errors: 1, success: 0 };
+    // При атомарном импорте (новое правило) backend возвращает 422 со
+    // списком ошибок валидации в errorDetails — пробрасываем их в UI.
+    const d = e.response?.data;
+    const payload = {
+      message: d?.message || 'Ошибка импорта из Google Sheets',
+      success: d?.success ?? 0,
+      errors: d?.errors ?? 1,
+      errorDetails: d?.errorDetails || [],
+    };
+    result.value = payload;
+    progressResult.value = payload;
   }
   progressFinished.value = true;
   importing.value = false;
@@ -283,7 +291,13 @@ async function runImport() {
     form.value.file = null;
     loadHistory();
   } catch (e) {
-    result.value = { message: e.response?.data?.message || 'Ошибка импорта', errors: 1, success: 0 };
+    const d = e.response?.data;
+    result.value = {
+      message: d?.message || 'Ошибка импорта',
+      success: d?.success ?? 0,
+      errors: d?.errors ?? 1,
+      errorDetails: d?.errorDetails || [],
+    };
   }
   importing.value = false;
 }

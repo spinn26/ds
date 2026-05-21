@@ -174,28 +174,23 @@ class TransactionImportController extends Controller
 
     /**
      * Общая логика обработки строк (для файла и Google Sheets).
+     *
+     * Правила (заказ продакта 2026-05-21):
+     *  1. Никаких проверок на дубли — оператор сам отвечает за повторный
+     *     залив того же файла.
+     *  2. Импорт атомарный «всё или ничего»: если на ЭТАПЕ ВАЛИДАЦИИ хоть
+     *     одна строка не прошла (пустой номер контракта, контракт не
+     *     найден), НИЧЕГО не вставляется — возвращаем 422 со списком
+     *     ошибок, transaction_import_log не создаётся.
+     *  3. Если все валидны — INSERT внутри DB::transaction(). Любая ошибка
+     *     INSERT'а — rollback всего файла.
+     *  4. После успешного commit'а сразу запускается расчёт комиссий
+     *     по всем импортированным транзакциям.
      */
     private function processRows(array $rows, int $counterpartyId, int $currencyId, Request $request): JsonResponse
     {
         $this->ensureImportLogTable();
 
-        // Создаём запись лога импорта
-        $importLogId = DB::table('transaction_import_log')->insertGetId([
-            'counterparty' => $counterpartyId,
-            'currency' => $currencyId,
-            'status' => 'processing',
-            'total_rows' => count($rows),
-            'success_count' => 0,
-            'error_count' => 0,
-            'created_by' => $request->user()->id,
-            'created_at' => now(),
-        ]);
-
-        $successCount = 0;
-        $errorCount = 0;
-        $skippedDupes = 0;
-        $errors = [];
-        $createdIds = [];
         $tracker = $request->input('tracker');
         $totalRows = count($rows);
 
@@ -207,6 +202,27 @@ class TransactionImportController extends Controller
             );
         }
 
+        // === PHASE 1: validation ===
+        // Парсим, матчим контракт, готовим payload — НЕ пишем в БД. На любой
+        // ошибке копим её, продолжаем дальше: оператор получает полный список
+        // того, что нужно исправить в файле.
+        $errors = [];
+        $prepared = []; // [[i => int, contract => row, amount, date, raw], ...]
+
+        // Курс целевой валюты — один на весь импорт (currencyRate колонки
+        // не зависят от даты строки в текущей логике).
+        $currencyRate = 1.0;
+        if ($currencyId !== 67) {
+            $rate = DB::table('currencyRate')
+                ->where('currency', $currencyId)
+                ->orderByDesc('date')
+                ->first();
+            $currencyRate = (float) ($rate->rate ?? 1);
+        }
+        $usdRate = 1.0;
+        $rateUsd = DB::table('currencyRate')->where('currency', 5)->orderByDesc('date')->first();
+        if ($rateUsd) $usdRate = (float) $rateUsd->rate;
+
         foreach ($rows as $i => $row) {
             $contractNumber = trim($row['contract_number'] ?? $row['number'] ?? $row['номер_контракта'] ?? $row['contract'] ?? '');
             $amount = (float) str_replace([' ', ','], ['', '.'], $row['amount'] ?? $row['сумма'] ?? $row['sum'] ?? '0');
@@ -214,118 +230,157 @@ class TransactionImportController extends Controller
 
             if (empty($contractNumber)) {
                 $errors[] = "Строка " . ($i + 2) . ": пустой номер контракта";
-                $errorCount++;
                 continue;
             }
 
-            // Матчинг — ищем контракт по номеру
+            // Матчинг — ищем контракт по точному номеру, потом по ilike.
             $contract = DB::table('contract')
                 ->where('number', $contractNumber)
                 ->whereNull('deletedAt')
                 ->first();
-
             if (! $contract) {
-                // Попробуем частичное совпадение
                 $contract = DB::table('contract')
                     ->where('number', 'ilike', '%' . $contractNumber . '%')
                     ->whereNull('deletedAt')
                     ->first();
             }
-
             if (! $contract) {
                 $errors[] = "Строка " . ($i + 2) . ": контракт «{$contractNumber}» не найден";
-                $errorCount++;
                 continue;
             }
 
-            // Дедупликация: если транзакция по этому контракту с такой же
-            // датой и суммой уже существует — пропускаем (spec: основной
-            // параметр сверки = номер контракта + дата/сумма).
-            $txDate = $date ? date('Y-m-d', strtotime($date)) : null;
-            if ($txDate) {
-                $dup = DB::table('transaction')
-                    ->where('contract', $contract->id)
-                    ->whereRaw('DATE(date) = ?', [$txDate])
-                    ->whereBetween('amount', [$amount - 0.01, $amount + 0.01])
-                    ->whereNull('deletedAt')
-                    ->exists();
-                if ($dup) {
-                    $skippedDupes++;
-                    continue;
-                }
-            }
-
-            // Получаем курс валюты
-            $currencyRate = 1.0;
-            if ($currencyId !== 67) {
-                $rate = DB::table('currencyRate')
-                    ->where('currency', $currencyId)
-                    ->orderByDesc('date')
-                    ->first();
-                $currencyRate = (float) ($rate->rate ?? 1);
-            }
-
             $amountRub = $amount * $currencyRate;
-            $usdRate = 1.0;
-            $rateUsd = DB::table('currencyRate')->where('currency', 5)->orderByDesc('date')->first();
-            if ($rateUsd) $usdRate = (float) $rateUsd->rate;
             $amountUsd = $usdRate > 0 ? $amountRub / $usdRate : 0;
 
-            // Создаём транзакцию
-            try {
-                $txId = DB::table('transaction')->insertGetId([
-                    'contract' => $contract->id,
-                    'amount' => $amount,
-                    'amountRUB' => round($amountRub, 2),
-                    'amountUSD' => round($amountUsd, 2),
-                    'currency' => $currencyId,
-                    'currencyRate' => $currencyRate,
-                    'date' => $date ? date('Y-m-d\TH:i:s', strtotime($date)) : now()->toIso8601String(),
-                    'dateMonth' => $date ? date('Y-m', strtotime($date)) : now()->format('Y-m'),
-                    'dateYear' => $date ? date('Y', strtotime($date)) : now()->format('Y'),
-                    'comment' => 'Импорт #' . $importLogId,
-                    'dsCommissionPercentage' => $row['ds_percent'] ?? $row['процент_дс'] ?? null,
-                    'commissionCalcProperty' => $row['property'] ?? $row['свойство'] ?? null,
-                ]);
-                $createdIds[] = (int) $txId;
-                $successCount++;
-            } catch (\Exception $e) {
-                \Log::warning("Import row " . ($i + 2) . " failed: " . $e->getMessage());
-                // Берём первую значимую часть ошибки (до "CONTEXT" / "SQL" — PG
-                // часто возвращает трёхуровневый текст с дампом запроса).
-                $msg = $e->getMessage();
-                if (preg_match('/([^:\n]+(?:violation|violates|exists|not-null|duplicate)[^\n]*)/i', $msg, $m)) {
-                    $msg = trim($m[1]);
-                }
-                $errors[] = "Строка " . ($i + 2) . ": " . mb_substr($msg, 0, 200);
-                $errorCount++;
-            }
+            $prepared[] = [
+                'i' => $i,
+                'contract_id' => $contract->id,
+                'amount' => $amount,
+                'amountRub' => $amountRub,
+                'amountUsd' => $amountUsd,
+                'date' => $date,
+                'ds_percent' => $row['ds_percent'] ?? $row['процент_дс'] ?? null,
+                'property' => $row['property'] ?? $row['свойство'] ?? null,
+            ];
+        }
 
+        if ($errors) {
+            // Ничего не вставляем, лог импорта не создаём.
             if ($tracker) {
                 \Illuminate\Support\Facades\Cache::put(
                     "import:tracker:{$tracker}",
                     [
                         'total' => $totalRows,
-                        'processed' => $i + 1,
-                        'success' => $successCount,
-                        'errors' => $errorCount + $skippedDupes,
-                        'status' => 'running',
+                        'processed' => $totalRows,
+                        'success' => 0,
+                        'errors' => count($errors),
+                        'status' => 'done',
                     ],
                     600,
                 );
             }
+            return response()->json([
+                'message' => 'Импорт отменён: найдено ' . count($errors) . ' ошибок. Ничего не загружено.',
+                'success' => 0,
+                'errors' => count($errors),
+                'errorDetails' => array_slice($errors, 0, 100),
+            ], 422);
         }
 
-        if ($skippedDupes > 0) {
-            $errors[] = "Пропущено дублей (contract+date+amount уже существуют): {$skippedDupes}";
+        // === PHASE 2: atomic insert + auto-calc ===
+        // Создаём лог + вставляем строки в одной DB::transaction(). Любая
+        // ошибка INSERT'а откатит файл целиком.
+        $importLogId = null;
+        $createdIds = [];
+        try {
+            [$importLogId, $createdIds] = DB::transaction(function () use (
+                $prepared, $counterpartyId, $currencyId, $currencyRate, $totalRows, $request
+            ) {
+                $logId = DB::table('transaction_import_log')->insertGetId([
+                    'counterparty' => $counterpartyId,
+                    'currency' => $currencyId,
+                    'status' => 'processing',
+                    'total_rows' => $totalRows,
+                    'success_count' => 0,
+                    'error_count' => 0,
+                    'created_by' => $request->user()->id,
+                    'created_at' => now(),
+                ]);
+
+                $ids = [];
+                foreach ($prepared as $p) {
+                    $txId = DB::table('transaction')->insertGetId([
+                        'contract' => $p['contract_id'],
+                        'amount' => $p['amount'],
+                        'amountRUB' => round($p['amountRub'], 2),
+                        'amountUSD' => round($p['amountUsd'], 2),
+                        'currency' => $currencyId,
+                        'currencyRate' => $currencyRate,
+                        'date' => $p['date'] ? date('Y-m-d\TH:i:s', strtotime($p['date'])) : now()->toIso8601String(),
+                        'dateMonth' => $p['date'] ? date('Y-m', strtotime($p['date'])) : now()->format('Y-m'),
+                        'dateYear' => $p['date'] ? date('Y', strtotime($p['date'])) : now()->format('Y'),
+                        'comment' => 'Импорт #' . $logId,
+                        'dsCommissionPercentage' => $p['ds_percent'],
+                        'commissionCalcProperty' => $p['property'],
+                    ]);
+                    $ids[] = (int) $txId;
+                }
+                return [$logId, $ids];
+            });
+        } catch (\Throwable $e) {
+            \Log::error('Import atomic insert failed: ' . $e->getMessage());
+            $msg = $e->getMessage();
+            if (preg_match('/([^:\n]+(?:violation|violates|exists|not-null|duplicate)[^\n]*)/i', $msg, $m)) {
+                $msg = trim($m[1]);
+            }
+            if ($tracker) {
+                \Illuminate\Support\Facades\Cache::put(
+                    "import:tracker:{$tracker}",
+                    ['total' => $totalRows, 'processed' => $totalRows, 'success' => 0, 'errors' => 1, 'status' => 'done'],
+                    600,
+                );
+            }
+            return response()->json([
+                'message' => 'Импорт отменён из-за ошибки БД. Ничего не загружено.',
+                'success' => 0,
+                'errors' => 1,
+                'errorDetails' => [mb_substr($msg, 0, 300)],
+            ], 422);
         }
 
-        // Обновляем лог
+        $successCount = count($createdIds);
+
+        // === PHASE 3: auto-calc commissions ===
+        // Расчёт идёт ВНЕ insert-транзакции — частичные ошибки расчёта
+        // не должны откатывать вставленные транзакции (это отдельная
+        // операция, её можно потом повторить через /calculate).
+        $calcStats = null;
+        try {
+            $calculator = app(\App\Services\CommissionCalculator::class);
+            $calcStats = $calculator->calculateForImport($importLogId);
+        } catch (\Throwable $e) {
+            \Log::warning("Auto-calc commissions failed for import #{$importLogId}: " . $e->getMessage());
+            // Не валим импорт — транзакции есть в БД, расчёт можно повторить
+            // через ручную кнопку «Рассчитать комиссии».
+        }
+
+        // Финальный апдейт лога: всегда success (всё вставилось),
+        // расчёт-метаданные просто пишем в errors как информационный лог.
+        $infoMessages = [];
+        if ($calcStats) {
+            $infoMessages[] = "Расчёт комиссий: {$calcStats['success']} из {$calcStats['total']}";
+            if (! empty($calcStats['errors'])) {
+                foreach (array_slice($calcStats['errors'], 0, 20) as $err) {
+                    $infoMessages[] = is_array($err) ? json_encode($err, JSON_UNESCAPED_UNICODE) : (string) $err;
+                }
+            }
+        }
+
         DB::table('transaction_import_log')->where('id', $importLogId)->update([
-            'status' => $errorCount === 0 && $skippedDupes === 0 ? 'success' : ($successCount > 0 ? 'partial' : 'error'),
+            'status' => 'success',
             'success_count' => $successCount,
-            'error_count' => $errorCount + $skippedDupes,
-            'errors' => json_encode($errors, JSON_UNESCAPED_UNICODE),
+            'error_count' => 0,
+            'errors' => $infoMessages ? json_encode($infoMessages, JSON_UNESCAPED_UNICODE) : null,
             'created_ids' => json_encode($createdIds),
             'updated_at' => now(),
         ]);
@@ -337,7 +392,7 @@ class TransactionImportController extends Controller
                     'total' => $totalRows,
                     'processed' => $totalRows,
                     'success' => $successCount,
-                    'errors' => $errorCount + $skippedDupes,
+                    'errors' => 0,
                     'status' => 'done',
                     'importId' => $importLogId,
                 ],
@@ -345,13 +400,17 @@ class TransactionImportController extends Controller
             );
         }
 
+        $msg = "Импорт завершён: {$successCount} транзакций загружено";
+        if ($calcStats) {
+            $msg .= ", комиссии рассчитаны: {$calcStats['success']} из {$calcStats['total']}";
+        }
+
         return response()->json([
-            'message' => "Импорт завершён: {$successCount} успешно, {$errorCount} ошибок, {$skippedDupes} дублей пропущено",
+            'message' => $msg,
             'importId' => $importLogId,
             'success' => $successCount,
-            'errors' => $errorCount,
-            'skipped' => $skippedDupes,
-            'errorDetails' => array_slice($errors, 0, 20),
+            'errors' => 0,
+            'calc' => $calcStats,
         ]);
     }
 
