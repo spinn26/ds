@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class EducationController extends Controller
 {
@@ -51,20 +52,38 @@ class EducationController extends Controller
             ->get()
             ->keyBy('course_id');
 
-        $data = $courses->map(function ($c) use ($lessonTotals, $lessonViewed, $completions) {
+        // Категории (миграция 2026_05_21_000020) — отдаём id+name, чтобы
+        // витрина группировала курсы по ним вместо легаси-блоков.
+        $hasCategory = Schema::hasColumn('education_courses', 'category_id');
+        $categories = $hasCategory && Schema::hasTable('education_course_categories')
+            ? DB::table('education_course_categories')
+                ->whereNull('deleted_at')
+                ->where('active', true)
+                ->orderBy('sort_order')
+                ->orderBy('name')
+                ->get(['id', 'name', 'sort_order'])
+            : collect();
+        $categoryNameById = $categories->pluck('name', 'id');
+
+        $data = $courses->map(function ($c) use ($lessonTotals, $lessonViewed, $completions, $hasCategory, $categoryNameById) {
             $total = (int) ($lessonTotals[$c->id] ?? 0);
             $viewed = (int) ($lessonViewed[$c->id] ?? 0);
             $completion = $completions[$c->id] ?? null;
             $testPassed = (bool) $completion;
             $allLessonsViewed = $total > 0 && $viewed >= $total;
+            $categoryId = $hasCategory ? ($c->category_id ?? null) : null;
 
             return [
                 'id' => $c->id,
                 'title' => $c->title,
                 'description' => $c->description,
                 'product_id' => $c->product_id,
-                // Per spec ✅Обучение §3 — 9 блоков + 0 «База знаний».
+                // Per spec ✅Обучение §3 — 9 блоков + 0 «База знаний». Оставлен
+                // для бакауорд-совместимости (фронт fallback'ит сюда, если
+                // ни одной категории нет).
                 'block' => $c->block ?? 0,
+                'category_id' => $categoryId,
+                'categoryName' => $categoryId ? ($categoryNameById[$categoryId] ?? null) : null,
                 'lessonCount' => $total,
                 'lessonViewed' => $viewed,
                 'testPassed' => $testPassed,
@@ -74,7 +93,14 @@ class EducationController extends Controller
             ];
         })->values();
 
-        return response()->json(['data' => $data]);
+        return response()->json([
+            'data' => $data,
+            'categories' => $categories->map(fn ($cat) => [
+                'id' => $cat->id,
+                'name' => $cat->name,
+                'sort_order' => (int) $cat->sort_order,
+            ])->values(),
+        ]);
     }
 
     /**

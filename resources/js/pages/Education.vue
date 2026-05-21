@@ -15,18 +15,19 @@
       description="Администратор добавит учебные материалы позже."
     />
 
-    <!-- Группировка по 9 смысловым блокам per spec ✅Обучение §3 -->
+    <!-- Группировка: если отдел продуктов завёл категории — по ним;
+         иначе — fallback на 9 семантических блоков per spec ✅Обучение §3. -->
     <div v-else>
-      <div v-for="block in blocksWithCourses" :key="block.id" class="mb-6">
+      <div v-for="group in groupsWithCourses" :key="group.kind + ':' + group.id" class="mb-6">
         <div class="d-flex align-center ga-2 mb-2">
-          <v-icon size="20" color="primary">{{ block.icon }}</v-icon>
-          <h3 class="text-h6 font-weight-bold">{{ block.title }}</h3>
+          <v-icon size="20" color="primary">{{ group.icon }}</v-icon>
+          <h3 class="text-h6 font-weight-bold">{{ group.title }}</h3>
           <v-chip size="x-small" variant="tonal">
-            {{ block.courses.length }} {{ block.courses.length === 1 ? 'курс' : 'курсов' }}
+            {{ group.courses.length }} {{ group.courses.length === 1 ? 'курс' : 'курсов' }}
           </v-chip>
         </div>
         <v-expansion-panels v-model="openedPanel">
-          <v-expansion-panel v-for="c in block.courses" :key="c.id" :value="c.id">
+          <v-expansion-panel v-for="c in group.courses" :key="c.id" :value="c.id">
             <v-expansion-panel-title>
               <div class="d-flex align-center ga-3 flex-grow-1">
                 <v-icon :color="c.completed ? 'success' : (c.testPassed || c.lessonViewed > 0 ? 'primary' : 'grey')">
@@ -68,12 +69,14 @@ import EmptyState from '../components/EmptyState.vue';
 import CourseRunner from '../components/education/CourseRunner.vue';
 
 const courses = ref([]);
+const categories = ref([]);
 const detail = ref({});
 const openedPanel = ref(null);
 const loading = ref(true);
 const loadError = ref('');
 
-// 9 смысловых блоков per spec ✅Обучение §3 + «База знаний» (block=0).
+// Легаси-фоллбэк: 9 семантических блоков per spec ✅Обучение §3 + «База
+// знаний» (block=0). Используется, пока админ не создал ни одной категории.
 const BLOCKS = [
   { id: 1, title: 'DS: кто мы и как у нас устроен бизнес', icon: 'mdi-domain' },
   { id: 2, title: 'Продукты DS', icon: 'mdi-package-variant' },
@@ -87,9 +90,33 @@ const BLOCKS = [
   { id: 0, title: 'База знаний', icon: 'mdi-book-open-variant' },
 ];
 
-const blocksWithCourses = computed(() => {
+const groupsWithCourses = computed(() => {
+  // Категории — если они вообще заведены или хотя бы у одного курса есть category_id.
+  const useCategories = categories.value.length > 0 || courses.value.some(c => c.category_id);
+
+  if (useCategories) {
+    const groups = categories.value.map(cat => ({
+      kind: 'category',
+      id: cat.id,
+      title: cat.name,
+      icon: 'mdi-folder-outline',
+      courses: courses.value.filter(c => c.category_id === cat.id),
+    }));
+    // Курсы без категории — последняя группа.
+    const orphans = courses.value.filter(c => !c.category_id);
+    if (orphans.length) {
+      groups.push({
+        kind: 'category', id: 'none',
+        title: 'Без категории', icon: 'mdi-folder-question-outline',
+        courses: orphans,
+      });
+    }
+    return groups.filter(g => g.courses.length > 0);
+  }
+
+  // Fallback: легаси-блоки.
   return BLOCKS
-    .map(b => ({ ...b, courses: courses.value.filter(c => (c.block ?? 0) === b.id) }))
+    .map(b => ({ kind: 'block', ...b, courses: courses.value.filter(c => (c.block ?? 0) === b.id) }))
     .filter(b => b.courses.length > 0);
 });
 
@@ -99,6 +126,7 @@ async function loadCourses() {
   try {
     const { data } = await api.get('/education/courses');
     courses.value = data.data || [];
+    categories.value = data.categories || [];
   } catch (e) {
     loadError.value = e.response?.data?.message || 'Не удалось загрузить курсы';
   } finally {

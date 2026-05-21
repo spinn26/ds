@@ -339,6 +339,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/admin/manual-tx/drafts', [\App\Http\Controllers\Api\ManualTransactionController::class, 'listDrafts']);
         Route::patch('/admin/manual-tx/drafts/{id}', [\App\Http\Controllers\Api\ManualTransactionController::class, 'updateDraft'])->whereNumber('id');
         Route::delete('/admin/manual-tx/drafts/{id}', [\App\Http\Controllers\Api\ManualTransactionController::class, 'deleteDraft'])->whereNumber('id');
+        Route::post('/admin/manual-tx/drafts/{id}/duplicate', [\App\Http\Controllers\Api\ManualTransactionController::class, 'duplicateDraft'])->whereNumber('id');
         Route::delete('/admin/manual-tx/drafts', [\App\Http\Controllers\Api\ManualTransactionController::class, 'clearDrafts']);
         Route::post('/admin/manual-tx/calc', [\App\Http\Controllers\Api\ManualTransactionController::class, 'calculateDrafts']);
         Route::post('/admin/manual-tx/fix', [\App\Http\Controllers\Api\ManualTransactionController::class, 'fixDrafts']);
@@ -480,6 +481,10 @@ Route::prefix('v1')->group(function () {
 
         Route::get('/admin/education/analytics', [\App\Http\Controllers\Api\AdminEducationController::class, 'analytics']);
         Route::get('/admin/education/analytics/export', [\App\Http\Controllers\Api\AdminEducationController::class, 'analyticsExport']);
+        Route::get('/admin/education/categories', [\App\Http\Controllers\Api\AdminEducationController::class, 'categories']);
+        Route::post('/admin/education/categories', [\App\Http\Controllers\Api\AdminEducationController::class, 'storeCategory']);
+        Route::put('/admin/education/categories/{id}', [\App\Http\Controllers\Api\AdminEducationController::class, 'updateCategory'])->whereNumber('id');
+        Route::delete('/admin/education/categories/{id}', [\App\Http\Controllers\Api\AdminEducationController::class, 'destroyCategory'])->whereNumber('id');
         Route::get('/admin/education/courses', [\App\Http\Controllers\Api\AdminEducationController::class, 'courses']);
         Route::post('/admin/education/courses', [\App\Http\Controllers\Api\AdminEducationController::class, 'storeCourse']);
         Route::put('/admin/education/courses/{id}', [\App\Http\Controllers\Api\AdminEducationController::class, 'updateCourse']);

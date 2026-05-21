@@ -41,6 +41,10 @@
         @update:expanded="onExpandedChange"
         no-data-text="Курсы не найдены"
       >
+        <template #item.categoryName="{ value }">
+          <v-chip v-if="value" size="x-small" variant="tonal" color="primary">{{ value }}</v-chip>
+          <span v-else class="text-medium-emphasis">—</span>
+        </template>
         <template #item.active="{ item }">
           <v-chip :color="item.active ? 'success' : 'grey'" size="x-small">
             {{ item.active ? 'Активен' : 'Неактивен' }}
@@ -169,10 +173,16 @@
               <v-select v-model="editCourse.product_id" label="Продукт" :items="productOptions"
                 item-title="name" item-value="id" clearable />
             </v-col>
-            <v-col cols="12" sm="3">
+            <v-col cols="12" sm="6">
+              <v-select v-model="editCourse.category_id" label="Категория"
+                :items="categoryOptions" item-title="name" item-value="id" clearable
+                :hint="categoryOptions.length ? '' : 'Категорий пока нет — создайте в разделе «Категории курсов»'"
+                persistent-hint />
+            </v-col>
+            <v-col cols="12" sm="6">
               <v-text-field v-model.number="editCourse.sort_order" label="Сортировка" type="number" />
             </v-col>
-            <v-col cols="12" sm="3">
+            <v-col cols="12" sm="6">
               <v-checkbox v-model="editCourse.active" label="Активен" density="compact" />
             </v-col>
           </v-row>
@@ -333,11 +343,13 @@ const page = ref(1);
 const expanded = ref([]);
 const activeTab = reactive({});
 const productOptions = ref([]);
+const categoryOptions = ref([]);
 
 const filters = ref({ search: '' });
 
 const courseHeaders = [
   { title: 'Название', key: 'title' },
+  { title: 'Категория', key: 'categoryName', width: 160 },
   { title: 'Продукт', key: 'productName', width: 180 },
   { title: 'Статус', key: 'active', width: 120 },
   { title: 'Уроков', key: 'lessonCount', width: 90 },
@@ -442,6 +454,13 @@ async function loadProductOptions() {
   } catch {}
 }
 
+async function loadCategoryOptions() {
+  try {
+    const { data } = await api.get('/admin/education/categories', { params: { only_active: 1 } });
+    categoryOptions.value = data.data || [];
+  } catch {}
+}
+
 // Vuetify 3's v-data-table-server stores `expanded` as an array of
 // item-value keys (here: id). Fire off lazy loads whenever a new id appears.
 function onExpandedChange(newExpanded) {
@@ -492,7 +511,7 @@ async function loadTests(courseId) {
 
 // Course CRUD
 function openCreateCourse() {
-  editCourse.value = { title: '', description: '', product_id: null, active: true, sort_order: 0 };
+  editCourse.value = { title: '', description: '', product_id: null, category_id: null, active: true, sort_order: 0 };
   courseError.value = '';
   courseDialog.value = true;
 }
@@ -673,6 +692,7 @@ async function deleteTest() {
 onMounted(() => {
   loadCourses();
   loadProductOptions();
+  loadCategoryOptions();
 });
 </script>
 

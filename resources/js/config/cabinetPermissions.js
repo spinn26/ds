@@ -158,6 +158,7 @@ export const cabinetPermissions = {
   // Спека ✅Сотрудник-отдела-обучения.md
   education: {
     education:                  FULL,   // конструктор LMS
+    'education-categories':     FULL,   // категории курсов
     'education-analytics':      FULL,   // статистика обучения
     'partner-questionnaires':   FULL,   // работа с анкетами
     partners:                   VIEW,

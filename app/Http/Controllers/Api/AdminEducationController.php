@@ -195,12 +195,21 @@ class AdminEducationController extends Controller
             ? DB::table('product')->whereIn('id', $productIds)->pluck('name', 'id')
             : collect();
 
+        // category_id появилась в миграции 2026_05_21_000020 — проверяем
+        // через hasColumn, чтобы старая БД без миграции не отдавала 500.
+        $hasCategory = Schema::hasColumn('education_courses', 'category_id');
+        $categoryNames = $hasCategory && Schema::hasTable('education_course_categories')
+            ? DB::table('education_course_categories')->pluck('name', 'id')
+            : collect();
+
         $courses = $rows->map(fn ($c) => [
             'id' => $c->id,
             'title' => $c->title,
             'description' => $c->description,
             'product_id' => $c->product_id,
             'productName' => $c->product_id ? ($productNames[$c->product_id] ?? null) : null,
+            'category_id' => $hasCategory ? ($c->category_id ?? null) : null,
+            'categoryName' => $hasCategory && $c->category_id ? ($categoryNames[$c->category_id] ?? null) : null,
             'active' => (bool) $c->active,
             'sort_order' => $c->sort_order,
             'lessonCount' => (int) ($lessonCounts[$c->id] ?? 0),
@@ -215,16 +224,22 @@ class AdminEducationController extends Controller
     {
         $request->validate([
             'title' => 'required|string|max:255',
+            'category_id' => 'nullable|integer|exists:education_course_categories,id',
         ]);
 
-        $id = DB::table('education_courses')->insertGetId([
+        $attrs = [
             'title' => $request->title,
             'description' => $request->description,
             'product_id' => $request->product_id,
             'active' => $request->boolean('active', true),
             'sort_order' => $request->input('sort_order', 0),
             'created_at' => now(),
-        ]);
+        ];
+        if (Schema::hasColumn('education_courses', 'category_id')) {
+            $attrs['category_id'] = $request->input('category_id');
+        }
+
+        $id = DB::table('education_courses')->insertGetId($attrs);
 
         return response()->json(['message' => 'Курс создан', 'id' => $id], 201);
     }
@@ -232,16 +247,24 @@ class AdminEducationController extends Controller
     /** Обновить курс */
     public function updateCourse(Request $request, int $id): JsonResponse
     {
-        $request->validate(['title' => 'required|string|max:255']);
+        $request->validate([
+            'title' => 'required|string|max:255',
+            'category_id' => 'nullable|integer|exists:education_course_categories,id',
+        ]);
 
-        DB::table('education_courses')->where('id', $id)->update([
+        $attrs = [
             'title' => $request->title,
             'description' => $request->description,
             'product_id' => $request->product_id,
             'active' => $request->boolean('active'),
             'sort_order' => $request->input('sort_order', 0),
             'updated_at' => now(),
-        ]);
+        ];
+        if (Schema::hasColumn('education_courses', 'category_id')) {
+            $attrs['category_id'] = $request->input('category_id');
+        }
+
+        DB::table('education_courses')->where('id', $id)->update($attrs);
 
         return response()->json(['message' => 'Курс обновлён']);
     }
@@ -390,6 +413,99 @@ class AdminEducationController extends Controller
         }
 
         return response()->json(['message' => 'Вопрос удалён']);
+    }
+
+    // === КАТЕГОРИИ КУРСОВ ===
+    // Произвольное группирование курсов для отдела продуктов (миграция
+    // 2026_05_21_000020). На витрине партнёра группы заменяют hard-coded
+    // блоки. Курсы без category_id показываются в группе «Без категории».
+
+    /** GET /admin/education/categories — список (для админ-CRUD и селектов). */
+    public function categories(Request $request): JsonResponse
+    {
+        if (! Schema::hasTable('education_course_categories')) {
+            return response()->json(['data' => [], 'total' => 0]);
+        }
+
+        $q = DB::table('education_course_categories')->whereNull('deleted_at');
+        if ($request->boolean('only_active')) {
+            $q->where('active', true);
+        }
+        if ($request->filled('search')) {
+            $q->where('name', 'ilike', '%' . $request->search . '%');
+        }
+
+        $rows = $q->orderBy('sort_order')->orderBy('name')->get();
+
+        // Курсов в категории — для столбца «Курсов» в админке.
+        $courseCounts = Schema::hasColumn('education_courses', 'category_id')
+            ? DB::table('education_courses')
+                ->whereNotNull('category_id')
+                ->select('category_id', DB::raw('count(*) as cnt'))
+                ->groupBy('category_id')
+                ->pluck('cnt', 'category_id')
+            : collect();
+
+        $data = $rows->map(fn ($c) => [
+            'id' => $c->id,
+            'name' => $c->name,
+            'sort_order' => (int) $c->sort_order,
+            'active' => (bool) $c->active,
+            'courseCount' => (int) ($courseCounts[$c->id] ?? 0),
+        ]);
+
+        return response()->json(['data' => $data, 'total' => $rows->count()]);
+    }
+
+    public function storeCategory(Request $request): JsonResponse
+    {
+        $request->validate([
+            'name' => 'required|string|max:200',
+            'sort_order' => 'nullable|integer',
+        ]);
+
+        $id = DB::table('education_course_categories')->insertGetId([
+            'name' => $request->name,
+            'sort_order' => (int) $request->input('sort_order', 0),
+            'active' => $request->boolean('active', true),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return response()->json(['message' => 'Категория создана', 'id' => $id], 201);
+    }
+
+    public function updateCategory(Request $request, int $id): JsonResponse
+    {
+        $request->validate([
+            'name' => 'required|string|max:200',
+            'sort_order' => 'nullable|integer',
+        ]);
+
+        $affected = DB::table('education_course_categories')
+            ->where('id', $id)
+            ->whereNull('deleted_at')
+            ->update([
+                'name' => $request->name,
+                'sort_order' => (int) $request->input('sort_order', 0),
+                'active' => $request->boolean('active'),
+                'updated_at' => now(),
+            ]);
+
+        if (! $affected) {
+            return response()->json(['message' => 'Категория не найдена'], 404);
+        }
+        return response()->json(['message' => 'Категория обновлена']);
+    }
+
+    public function destroyCategory(int $id): JsonResponse
+    {
+        // Soft-delete (через deleted_at), привязанные курсы НЕ отвязываем —
+        // category_id у них останется, восстановление вернёт связку как было.
+        DB::table('education_course_categories')
+            ->where('id', $id)
+            ->update(['deleted_at' => now(), 'active' => false]);
+        return response()->json(['message' => 'Категория удалена']);
     }
 
     /** Создать таблицы если их нет */
