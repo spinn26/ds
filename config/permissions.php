@@ -39,6 +39,7 @@ return [
         ['key' => 'currencies',              'label' => 'Валюты и НДС'],
         ['key' => 'products',                'label' => 'Продукты / Инструкции'],
         ['key' => 'education',               'label' => 'Конструктор курсов'],
+        ['key' => 'education-categories',    'label' => 'Категории курсов'],
         ['key' => 'education-analytics',     'label' => 'Статистика обучения'],
         ['key' => 'partner-questionnaires',  'label' => 'Анкеты партнёров'],
         ['key' => 'communication',           'label' => 'Чат / Тикеты'],
