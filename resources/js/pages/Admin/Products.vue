@@ -264,6 +264,12 @@
               <v-text-field v-model="editProgram.vendorName" label="Свойство продукта"
                 hint="Например: «МФ», «Standard», «Apfront»" persistent-hint />
             </v-col>
+            <v-col cols="12">
+              <v-text-field v-model="editProgram.formLink" label="Ссылка на форму"
+                placeholder="https://..." prepend-inner-icon="mdi-link-variant"
+                hint="URL для кнопки «Открыть» в модалке «Программы продукта» на витрине партнёра"
+                persistent-hint />
+            </v-col>
             <v-col cols="6">
               <v-text-field v-model="editProgram.term" label="Срок контракта, лет" type="number" />
             </v-col>

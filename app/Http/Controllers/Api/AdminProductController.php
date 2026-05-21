@@ -349,6 +349,7 @@ class AdminProductController extends Controller
             'vendor' => $p->vendor,
             'providerName' => $p->providerName,
             'vendorName' => $p->vendorName,
+            'formLink' => $p->formLink,
             'calcComment' => $p->calcComment,
             'category' => $p->category,
             'productType' => $p->productType,
@@ -385,6 +386,7 @@ class AdminProductController extends Controller
             // справочниках нужного варианта нет.
             'providerName' => 'nullable|string|max:255',
             'vendorName' => 'nullable|string|max:255',
+            'formLink' => 'nullable|string|max:2000|url',
         ];
     }
 
@@ -396,7 +398,7 @@ class AdminProductController extends Controller
             'pointsMin', 'pointsMax', 'kvPayoutYear', 'term', 'termContract',
             'currency', 'commissionCalcProperty', 'calcComment', 'category',
             'productType', 'provider', 'vendor',
-            'providerName', 'vendorName',
+            'providerName', 'vendorName', 'formLink',
         ];
         $out = [];
         foreach ($keys as $k) {
