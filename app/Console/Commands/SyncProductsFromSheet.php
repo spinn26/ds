@@ -199,19 +199,52 @@ class SyncProductsFromSheet extends Command
         }
 
         // Soft-deactivate: программы и продукты, которых нет в targets.
+        // SAFETY: программы, на которые ссылаются НЕудалённые контракты, НЕ
+        // деактивируем — иначе у партнёров пропадут связки в исторических
+        // выплатах, в калькуляторе и в их карточках клиентов.
+        $programsWithContracts = DB::table('contract')
+            ->whereNull('deletedAt')
+            ->whereNotNull('program')
+            ->pluck('program')
+            ->unique()
+            ->flip()
+            ->toArray();
+
+        $plan['programs_kept_with_contracts'] = [];
         foreach ($existingPrograms as $p) {
             if (! $p['active']) continue;
             $productName = DB::table('product')->where('id', $p['product'])->value('name');
             $progKey = mb_strtolower(trim((string) $productName)) . '||' . mb_strtolower(trim($p['name']))
                 . '||' . ($p['term'] ?? '') . '||' . ($p['kvPayoutYear'] ?? '');
-            if (! isset($targetProgramKeys[$progKey])) {
-                $plan['programs_deactivate'][] = $p['id'];
+            if (isset($targetProgramKeys[$progKey])) continue;
+
+            if (isset($programsWithContracts[$p['id']])) {
+                $plan['programs_kept_with_contracts'][] = $p['id'];
+                continue;
             }
+            $plan['programs_deactivate'][] = $p['id'];
         }
+
+        // Продукт деактивируем только если ВСЕ его активные программы тоже
+        // деактивируем (или их у него нет). Иначе оставляем — на нём
+        // продолжают висеть «защищённые» программы с контрактами.
+        $programsByProductActive = $existingPrograms->groupBy('product')
+            ->map(fn ($list) => $list->filter(fn ($p) => $p['active']));
+
+        $plan['products_kept_with_active_programs'] = [];
         foreach ($existingProducts as $key => $p) {
             if (! $p->active) continue;
-            if (! isset($targetProductNames[$key])) {
+            if (isset($targetProductNames[$key])) continue;
+
+            // Если на продукте остаются активные программы (которых мы не
+            // деактивируем) — продукт оставляем.
+            $activePrograms = $programsByProductActive[$p->id] ?? collect();
+            $allWillBeDeactivated = $activePrograms->isNotEmpty()
+                && $activePrograms->every(fn ($pp) => in_array($pp['id'], $plan['programs_deactivate'], true));
+            if ($activePrograms->isEmpty() || $allWillBeDeactivated) {
                 $plan['products_deactivate'][] = $p->id;
+            } else {
+                $plan['products_kept_with_active_programs'][] = $p->id;
             }
         }
 
@@ -232,6 +265,8 @@ class SyncProductsFromSheet extends Command
         }
         $this->line("Программы — обновить: " . count($plan['programs_update']));
         $this->line("Программы — деактивировать: " . count($plan['programs_deactivate']));
+        $this->line("Программы — сохранить активными (есть контракты): " . count($plan['programs_kept_with_contracts']));
+        $this->line("Продукты — сохранить активными (висят защищённые программы): " . count($plan['products_kept_with_active_programs']));
 
         // === STEP 6: Apply (если --apply) ===
         if (! $apply) {
