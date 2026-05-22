@@ -134,13 +134,15 @@ class CommissionCalculator
             $totalPayable = $balance + $accruedTotal;
             $remaining = $totalPayable - $payed;
 
+            // В легаси-схеме consultantBalance нет колонки changedAt/updatedAt
+            // (только createdAt/dateCreated на момент INSERT). Не пишем
+            // несуществующее поле — иначе UPDATE падает 42703.
             DB::table('consultantBalance')->where('id', $row->id)->update([
                 'accruedTransactional' => $accruedTransactional,
                 'accruedNonTransactional' => $accruedNonTransactional,
                 'accruedTotal' => $accruedTotal,
                 'totalPayable' => $totalPayable,
                 'remaining' => $remaining,
-                'changedAt' => now(),
             ]);
         } else {
             // Новый месяц без записи — создаём минимальную, чтобы реестр
@@ -160,7 +162,6 @@ class CommissionCalculator
                 'totalPayable' => $accruedTotal,
                 'remaining' => $accruedTotal,
                 'dateCreated' => now(),
-                'changedAt' => now(),
             ]);
         }
     }
