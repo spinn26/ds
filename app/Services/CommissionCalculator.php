@@ -56,9 +56,113 @@ class CommissionCalculator
                     'error' => $e->getMessage(),
                 ]);
             }
+
+            // consultantBalance — это (consultant, dateMonth) агрегат, на
+            // котором держится «Реестр выплат» (колонка «Начислено») и
+            // блок «Итог за месяц» в отчёте. Раньше его пересчитывала
+            // только большая миграция 2026_04_28_…_resync_*; после ручной
+            // фиксации/импорта он оставался устаревшим, и партнёр в
+            // реестре висел с «Начислено=0», хотя commission уже есть.
+            try {
+                $this->rebuildBalancesForTransaction($transactionId);
+            } catch (\Throwable $e) {
+                Log::warning('Rebuild consultantBalance after commission calc failed', [
+                    'transaction' => $transactionId,
+                    'error' => $e->getMessage(),
+                ]);
+            }
         }
 
         return $result;
+    }
+
+    /**
+     * Пересобрать `consultantBalance` для всех (consultant, dateMonth) пар,
+     * затронутых данной транзакцией. Формула — та же, что в миграции
+     * 2026_04_28_000040_resync_consultant_balance_aggregates.php:
+     *   accruedTransactional ← SUM(commission.amountRUB WHERE type='transaction')
+     *   accruedNonTransactional ← SUM(commission.amountRUB WHERE type='nonTransactional')
+     *   accruedTotal ← accruedTransactional + accruedNonTransactional + accruedPool
+     *   totalPayable ← balance + accruedTotal
+     *   remaining ← totalPayable - payed
+     *
+     * Если строки за этот месяц для консультанта ещё нет — создаём
+     * минимальную (balance=0, payed=0, accruedPool=0). Старые строки
+     * никогда не трогает поля, которые ведёт отдельная логика (payed,
+     * accruedPool, balance).
+     */
+    private function rebuildBalancesForTransaction(int $transactionId): void
+    {
+        $pairs = DB::table('commission')
+            ->where('transaction', $transactionId)
+            ->whereNull('deletedAt')
+            ->select('consultant', 'dateMonth', 'dateYear')
+            ->distinct()
+            ->get();
+
+        foreach ($pairs as $p) {
+            if (! $p->consultant || ! $p->dateMonth) continue;
+            $this->rebuildBalance((int) $p->consultant, (string) $p->dateMonth, (string) ($p->dateYear ?? substr($p->dateMonth, 0, 4)));
+        }
+    }
+
+    private function rebuildBalance(int $consultantId, string $dateMonth, string $dateYear): void
+    {
+        $sums = DB::table('commission')
+            ->where('consultant', $consultantId)
+            ->where('dateMonth', $dateMonth)
+            ->whereNull('deletedAt')
+            ->selectRaw("
+                COALESCE(SUM(CASE WHEN type = 'transaction' THEN \"amountRUB\" ELSE 0 END), 0) AS tx,
+                COALESCE(SUM(CASE WHEN type = 'nonTransactional' THEN \"amountRUB\" ELSE 0 END), 0) AS nontx
+            ")
+            ->first();
+
+        $accruedTransactional = (float) ($sums->tx ?? 0);
+        $accruedNonTransactional = (float) ($sums->nontx ?? 0);
+
+        $row = DB::table('consultantBalance')
+            ->where('consultant', $consultantId)
+            ->where('dateMonth', $dateMonth)
+            ->first();
+
+        if ($row) {
+            $accruedPool = (float) ($row->accruedPool ?? 0);
+            $balance = (float) ($row->balance ?? 0);
+            $payed = (float) ($row->payed ?? 0);
+            $accruedTotal = $accruedTransactional + $accruedNonTransactional + $accruedPool;
+            $totalPayable = $balance + $accruedTotal;
+            $remaining = $totalPayable - $payed;
+
+            DB::table('consultantBalance')->where('id', $row->id)->update([
+                'accruedTransactional' => $accruedTransactional,
+                'accruedNonTransactional' => $accruedNonTransactional,
+                'accruedTotal' => $accruedTotal,
+                'totalPayable' => $totalPayable,
+                'remaining' => $remaining,
+                'changedAt' => now(),
+            ]);
+        } else {
+            // Новый месяц без записи — создаём минимальную, чтобы реестр
+            // выплат и отчёт могли её прочитать. accruedPool/balance/payed
+            // = 0 по умолчанию, их при необходимости проставит пул-runner.
+            $accruedTotal = $accruedTransactional + $accruedNonTransactional;
+            DB::table('consultantBalance')->insert([
+                'consultant' => $consultantId,
+                'dateMonth' => $dateMonth,
+                'dateYear' => $dateYear,
+                'accruedTransactional' => $accruedTransactional,
+                'accruedNonTransactional' => $accruedNonTransactional,
+                'accruedPool' => 0,
+                'accruedTotal' => $accruedTotal,
+                'balance' => 0,
+                'payed' => 0,
+                'totalPayable' => $accruedTotal,
+                'remaining' => $accruedTotal,
+                'dateCreated' => now(),
+                'changedAt' => now(),
+            ]);
+        }
     }
 
     private function calculateInTransaction(int $transactionId): array
@@ -226,11 +330,49 @@ class CommissionCalculator
             $currentConsultantId = $inviterId;
         }
 
-        // Обновить объёмы на транзакции
+        // Обновить агрегаты на транзакции — иначе в /manage/commissions
+        // колонки «% ДС», «Доход ДС», «Без НДС» остаются пустыми после
+        // ручной фиксации, хотя commission уже создан (жалоба Богдановой
+        // 2026-05-22: «при ручном занесении не подтянулась дата открытия
+        // контракта и не рассчитался доход ДС»).
+        //
+        // Доход ДС (commissionsAmountRUB) = amountNoVat × %ДС / 100.
+        // netRevenueRUB = amountNoVat − Σ комиссии цепочке = «остаток ДС».
+        // USD-зеркала пересчитываем через текущий USD-курс.
+        $incomeDsRub = round($amountNoVat * $dsComPercent / 100, 2);
+        $chainTotalRub = array_sum(array_map(fn ($c) => (float) ($c['amountRUB'] ?? 0), $commissions));
+        $netRevenueRub = round($amountNoVat - $chainTotalRub, 2);
+
+        $usdRow = DB::table('currencyRate')->where('currency', 5)->orderByDesc('date')->first();
+        $usdRate = (float) ($usdRow->rate ?? 1);
+        $incomeDsUsd = $usdRate > 0 ? round($incomeDsRub / $usdRate, 2) : 0;
+        $netRevenueUsd = $usdRate > 0 ? round($netRevenueRub / $usdRate, 2) : 0;
+
         DB::table('transaction')->where('id', $transactionId)->update([
             'personalVolume' => round($personalVolume, 6),
             'groupVolume' => round($personalVolume, 6),
+            'dsCommissionPercentage' => round($dsComPercent, 4),
+            'commissionsAmountRUB' => $incomeDsRub,
+            'commissionsAmountUSD' => $incomeDsUsd,
+            'netRevenueRUB' => $netRevenueRub,
+            'netRevenueUSD' => $netRevenueUsd,
         ]);
+
+        // openDate контракта подтягиваем из транзакции, если контракт ещё
+        // без даты открытия (legacy-импорт оставлял её NULL — оператор
+        // в Менеджере контрактов мог не заполнить). Берём минимальную
+        // дату из всех неудалённых транзакций по этому контракту.
+        if ($contract->openDate === null || $contract->openDate === '') {
+            $firstTxDate = DB::table('transaction')
+                ->where('contract', $contract->id)
+                ->whereNull('deletedAt')
+                ->whereNotNull('date')
+                ->min('date');
+            if ($firstTxDate) {
+                DB::table('contract')->where('id', $contract->id)
+                    ->update(['openDate' => $firstTxDate]);
+            }
+        }
 
         return [
             'success' => true,
