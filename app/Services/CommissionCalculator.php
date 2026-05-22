@@ -255,8 +255,13 @@ class CommissionCalculator
         $groupBonusRub = $groupBonus * 100; // 1 балл = 100 руб
 
         $commissions = [];
+        // Σ всех комиссий цепочке в рублях — для transaction.netRevenueRUB.
+        // Раньше считалось через array_map по $commissions, но createCommission
+        // возвращает int (insert id), не массив data — sum получался 0.
+        $chainTotalRub = 0.0;
 
         // 1. Комиссия прямого партнёра (chainOrder = 1)
+        $chainTotalRub += round($groupBonusRub, 2);
         $commissions[] = $this->createCommission([
             'transaction' => $transactionId,
             'consultant' => $consultantId,
@@ -302,6 +307,7 @@ class CommissionCalculator
             if ($marginPercent > 0) {
                 $inviterBonus = $personalVolume * $marginPercent / 100;
                 $inviterBonusRub = $inviterBonus * 100;
+                $chainTotalRub += round($inviterBonusRub, 2);
 
                 $commissions[] = $this->createCommission([
                     'transaction' => $transactionId,
@@ -341,7 +347,6 @@ class CommissionCalculator
         // netRevenueRUB = amountNoVat − Σ комиссии цепочке = «остаток ДС».
         // USD-зеркала пересчитываем через текущий USD-курс.
         $incomeDsRub = round($amountNoVat * $dsComPercent / 100, 2);
-        $chainTotalRub = array_sum(array_map(fn ($c) => (float) ($c['amountRUB'] ?? 0), $commissions));
         $netRevenueRub = round($amountNoVat - $chainTotalRub, 2);
 
         $usdRow = DB::table('currencyRate')->where('currency', 5)->orderByDesc('date')->first();
