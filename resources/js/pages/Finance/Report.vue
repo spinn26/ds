@@ -308,7 +308,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import api from '../../api';
 import MonthPicker from '../../components/MonthPicker.vue';

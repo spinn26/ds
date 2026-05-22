@@ -239,7 +239,6 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
-import { getImportStatusColor } from '../../composables/useDesign';
 import StatusChip from '../../components/StatusChip.vue';
 import PageHeader from '../../components/PageHeader.vue';
 import DialogShell from '../../components/DialogShell.vue';

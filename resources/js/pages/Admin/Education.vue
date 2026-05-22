@@ -447,24 +447,6 @@ const visibleLessonHeaders = computed(() =>
   lessonHeaders.filter(h => lessonColumnVisible.value[h.key] !== false)
 );
 const testColumnVisible = ref({});
-const visibleTestHeaders = computed(() =>
-  testHeaders.filter(h => testColumnVisible.value[h.key] !== false)
-);
-
-const contentTypeOptions = [
-  { title: 'Текст', value: 'text' },
-  { title: 'Видео', value: 'video' },
-  { title: 'Аудио', value: 'audio' },
-];
-
-function contentTypeColor(type) {
-  return type === 'video' ? 'blue' : type === 'audio' ? 'purple' : 'grey';
-}
-
-function contentTypeLabel(type) {
-  return type === 'video' ? 'Видео' : type === 'audio' ? 'Аудио' : 'Текст';
-}
-
 // Course dialog
 const courseDialog = ref(false);
 const courseError = ref('');

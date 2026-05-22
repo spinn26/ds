@@ -184,6 +184,17 @@ class ImportTransactionsJob implements ShouldQueue
 
                 $amountRub = $amount * $currencyRate;
                 $amountUsd = $usdRate > 0 ? $amountRub / $usdRate : 0;
+
+                // ds_percent: «0,028» (русская локаль Excel) — приходит из
+                // Google Sheets и валит PG bulk INSERT с invalid numeric
+                // syntax. Нормализуем запятую → точка и проверяем тип.
+                $dsPercentRaw = $row['ds_percent'] ?? $row['процент_дс'] ?? null;
+                $dsPercent = null;
+                if ($dsPercentRaw !== null && $dsPercentRaw !== '') {
+                    $s = str_replace([' ', ','], ['', '.'], (string) $dsPercentRaw);
+                    if (is_numeric($s)) $dsPercent = (float) $s;
+                }
+
                 $prepared[] = [
                     'line' => $lineNo,
                     'contract_id' => $contract->id,
@@ -191,7 +202,7 @@ class ImportTransactionsJob implements ShouldQueue
                     'amountRub' => $amountRub,
                     'amountUsd' => $amountUsd,
                     'date' => $date,
-                    'ds_percent' => $row['ds_percent'] ?? $row['процент_дс'] ?? null,
+                    'ds_percent' => $dsPercent,
                     'property' => $row['property'] ?? $row['свойство'] ?? null,
                 ];
 
