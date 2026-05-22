@@ -134,16 +134,28 @@ function startPolling() {
   stopPolling();
   // 1 sec: достаточно плавно для пользователя, 60 req/min на polling —
   // не даст 429 на group-throttle (600/min).
+  let stalledTicks = 0;
   pollTimer = setInterval(async () => {
     if (document.visibilityState !== 'visible') return;
     try {
       const { data } = await api.get('/admin/import-progress', { params: { tracker: props.tracker } });
       progress.value = { ...progress.value, ...data };
-      if (data.status === 'done') {
+
+      // Safety-net: иногда tracker не успевает дописать status=done
+      // (например, job упал между bulk INSERT и финальным putTracker).
+      // Если processed===total>0 и errors=0 несколько секунд подряд,
+      // финализируем диалог сами — данные в БД уже есть.
+      const doneByStatus = data.status === 'done';
+      const doneByCounts = data.total > 0 && data.processed >= data.total
+        && (data.success > 0 || data.errors > 0);
+      if (!doneByStatus && doneByCounts) {
+        stalledTicks++;
+      } else {
+        stalledTicks = 0;
+      }
+
+      if (doneByStatus || stalledTicks >= 5) {
         stopPolling();
-        // С новым async-flow (POST 202 → job в очереди) сервер финализирует
-        // результат именно в tracker'е. Родителю отдаём готовый result, он
-        // обновит «История» и не будет ждать ответа POST'а.
         emit('finish', {
           message: data.message || (data.errors > 0 ? 'Импорт завершён с ошибками' : 'Импорт завершён'),
           success: data.success ?? 0,
