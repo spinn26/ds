@@ -41,7 +41,8 @@
 
     <v-data-table-server v-model="selected" show-select return-object item-value="id"
       :items="items" :items-length="total" :loading="loading"
-      :headers="visibleHeaders" :items-per-page="25" @update:options="onOptions">
+      :headers="visibleHeaders" :items-per-page="perPage"
+      :items-per-page-options="[25, 50, 100, 200]" @update:options="onOptions">
       <template #item.hasBankRequisites="{ item }">
         <v-icon v-if="item.hasBankRequisites" color="success" size="18">mdi-check-circle</v-icon>
         <v-icon v-else color="grey" size="18">mdi-minus-circle-outline</v-icon>

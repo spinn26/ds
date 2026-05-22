@@ -111,7 +111,8 @@
          помещается в viewport — появляется scrollbar внизу. -->
     <div class="commissions-table-wrap">
     <v-data-table-server :items="items" :items-length="total" :loading="loading"
-      :headers="visibleHeaders" :items-per-page="25"
+      :headers="visibleHeaders" :items-per-page="perPage"
+      :items-per-page-options="[25, 50, 100, 200]"
       v-model:expanded="expanded" item-value="id" show-expand
       hover class="commissions-table"
       @click:row="onRowClick"

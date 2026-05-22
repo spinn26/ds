@@ -102,7 +102,9 @@
       </div>
 
       <v-data-table-server :items="history" :items-length="historyTotal" :loading="historyLoading"
-        :headers="visibleHistoryHeaders" :items-per-page="25" @update:options="onHistoryOptions" density="compact" hover>
+        :headers="visibleHistoryHeaders" :items-per-page="historyPerPage"
+        :items-per-page-options="[25, 50, 100, 200]"
+        @update:options="onHistoryOptions" density="compact" hover>
         <template #item.status="{ value }">
           <StatusChip :value="value" kind="import" size="x-small" :text="statusLabel(value)" />
         </template>
@@ -167,6 +169,7 @@
       :result="progressResult"
       :finished="progressFinished"
       title="Импорт транзакций"
+      @finish="onImportFinish"
     />
   </div>
 </template>
@@ -207,6 +210,7 @@ const history = ref([]);
 const historyTotal = ref(0);
 const historyLoading = ref(false);
 const historyPage = ref(1);
+const historyPerPage = ref(25);
 
 // Dialogs
 const rollbackDialog = ref(false);
@@ -251,18 +255,19 @@ async function runSheetsImport() {
   progressOpen.value = true;
 
   try {
-    const { data } = await api.post('/admin/transaction-import/from-sheets', {
+    // Бэк возвращает 202 + {importId, tracker, status:'queued'} — job
+    // продолжит в очереди, фронт берёт финальный результат из polling'а
+    // (см. onImportFinish), а не из этого ответа.
+    await api.post('/admin/transaction-import/from-sheets', {
       sheet: form.value.sheet,
       counterparty: form.value.counterparty,
       currency: form.value.currency,
       tracker: progressTracker.value,
     });
-    result.value = data;
-    progressResult.value = data;
-    loadHistory();
   } catch (e) {
-    // При атомарном импорте (новое правило) backend возвращает 422 со
-    // списком ошибок валидации в errorDetails — пробрасываем их в UI.
+    // 422 уйдёт только когда контроллер не успел поставить в очередь
+    // (не настроен Sheets, нет counterparty для generic-листа и т.п.) —
+    // в очередь ничего не легло, диалог сразу финализируем как ошибку.
     const d = e.response?.data;
     const payload = {
       message: d?.message || 'Ошибка импорта из Google Sheets',
@@ -272,42 +277,66 @@ async function runSheetsImport() {
     };
     result.value = payload;
     progressResult.value = payload;
+    progressFinished.value = true;
+    importing.value = false;
   }
-  progressFinished.value = true;
-  importing.value = false;
+  // Успех: importing держим включённым пока ImportProgressDialog не
+  // эмитнёт finish — тогда onImportFinish сбросит флаги.
 }
 
 async function runImport() {
   if (!form.value.counterparty || !form.value.file) return;
   importing.value = true;
   result.value = null;
+  progressResult.value = null;
+  progressFinished.value = false;
+  progressTracker.value = 'tx-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+  progressOpen.value = true;
+
   try {
     const fd = new FormData();
     fd.append('file', form.value.file);
     fd.append('counterparty', form.value.counterparty);
     if (form.value.currency) fd.append('currency', form.value.currency);
-    const { data } = await api.post('/admin/transaction-import', fd);
-    result.value = data;
+    fd.append('tracker', progressTracker.value);
+    // Аналогично runSheetsImport: 202 + tracker, финал — через polling.
+    await api.post('/admin/transaction-import', fd);
     form.value.file = null;
-    loadHistory();
   } catch (e) {
     const d = e.response?.data;
-    result.value = {
+    const payload = {
       message: d?.message || 'Ошибка импорта',
       success: d?.success ?? 0,
       errors: d?.errors ?? 1,
       errorDetails: d?.errorDetails || [],
     };
+    result.value = payload;
+    progressResult.value = payload;
+    progressFinished.value = true;
+    importing.value = false;
   }
-  importing.value = false;
 }
 
-function onHistoryOptions(opts) { historyPage.value = opts.page; loadHistory(); }
+function onImportFinish(payload) {
+  result.value = payload;
+  progressResult.value = payload;
+  progressFinished.value = true;
+  importing.value = false;
+  loadHistory();
+}
+
+function onHistoryOptions(opts) {
+  historyPage.value = opts.page;
+  if (opts.itemsPerPage) historyPerPage.value = opts.itemsPerPage;
+  loadHistory();
+}
 
 async function loadHistory() {
   historyLoading.value = true;
   try {
-    const { data } = await api.get('/admin/transaction-import/history', { params: { page: historyPage.value } });
+    const { data } = await api.get('/admin/transaction-import/history', {
+      params: { page: historyPage.value, per_page: historyPerPage.value },
+    });
     history.value = data.data;
     historyTotal.value = data.total;
   } catch {}

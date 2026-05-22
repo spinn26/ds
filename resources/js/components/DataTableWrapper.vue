@@ -50,6 +50,7 @@
         v-model="selectedProxy"
         :show-select="selectable"
         :items-per-page="itemsPerPage"
+        :items-per-page-options="itemsPerPageOptions"
         :items-length="itemsLength"
         :items="items"
         :headers="headers"
@@ -103,6 +104,7 @@ const props = defineProps({
   serverSide: { type: Boolean, default: false },
   page: { type: Number, default: 1 },
   itemsPerPage: { type: Number, default: 25 },
+  itemsPerPageOptions: { type: Array, default: () => [25, 50, 100, 200] },
   itemsLength: { type: Number, default: 0 },
 
   // Search

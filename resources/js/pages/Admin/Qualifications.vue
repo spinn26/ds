@@ -50,7 +50,8 @@
     </v-card>
 
     <v-data-table-server :items="filteredItems" :items-length="total" :loading="loading"
-      :headers="visibleHeaders" :items-per-page="25" density="compact" hover
+      :headers="visibleHeaders" :items-per-page="perPage"
+      :items-per-page-options="[25, 50, 100, 200]" density="compact" hover
       @update:options="onOptions">
 
       <template #item.activity="{ value }">

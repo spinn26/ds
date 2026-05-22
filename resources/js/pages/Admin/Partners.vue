@@ -100,7 +100,8 @@
       :items-length="total"
       :loading="loading"
       :headers="visibleHeaders"
-      :items-per-page="25"
+      :items-per-page="perPage"
+      :items-per-page-options="[25, 50, 100, 200]"
       :row-props="rowProps"
       server-side
       empty-icon="mdi-account-search-outline"

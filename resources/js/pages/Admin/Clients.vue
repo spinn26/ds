@@ -65,7 +65,8 @@
     </v-card>
 
     <v-data-table-server :items="items" :items-length="total" :loading="loading"
-      :headers="visibleHeaders" :items-per-page="25" @update:options="onOptions">
+      :headers="visibleHeaders" :items-per-page="perPage"
+      :items-per-page-options="[25, 50, 100, 200]" @update:options="onOptions">
       <template #item.products="{ value }">
         <v-chip v-for="p in (value || [])" :key="p" size="x-small" class="mr-1" color="primary" variant="outlined">{{ p }}</v-chip>
       </template>

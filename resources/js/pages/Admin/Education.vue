@@ -33,11 +33,13 @@
         :items="courses"
         :items-length="total"
         :loading="loading"
-        :items-per-page="25"
+        :items-per-page="perPage"
+        :items-per-page-options="[25, 50, 100, 200]"
         v-model:expanded="expanded"
         item-value="id"
         show-expand
         @update:page="page = $event; loadCourses()"
+        @update:items-per-page="v => { perPage = v; page = 1; loadCourses(); }"
         @update:expanded="onExpandedChange"
         no-data-text="Курсы не найдены"
       >
@@ -393,6 +395,7 @@ const saving = ref(false);
 const courses = ref([]);
 const total = ref(0);
 const page = ref(1);
+const perPage = ref(25);
 const expanded = ref([]);
 const activeTab = reactive({});
 const productOptions = ref([]);
@@ -491,7 +494,7 @@ const { debounced: debouncedLoad } = useDebounce(loadCourses, 400);
 async function loadCourses() {
   loading.value = true;
   try {
-    const params = { page: page.value };
+    const params = { page: page.value, per_page: perPage.value };
     if (filters.value.search) params.search = filters.value.search;
     const { data } = await api.get('/admin/education/courses', { params });
     courses.value = data.data || data;

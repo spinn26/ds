@@ -36,11 +36,13 @@
         :items="products"
         :items-length="total"
         :loading="loading"
-        :items-per-page="25"
+        :items-per-page="perPage"
+        :items-per-page-options="[25, 50, 100, 200]"
         v-model:expanded="expanded"
         item-value="id"
         show-expand
         @update:page="page = $event; loadProducts()"
+        @update:items-per-page="v => { perPage = v; page = 1; loadProducts(); }"
         @update:expanded="onExpandedChange"
       >
         <template #item.active="{ item }">
@@ -95,6 +97,7 @@
                 density="compact"
                 hover
                 no-data-text="Нет программ"
+                :items-per-page="-1"
                 hide-default-footer
               >
                 <template #item.active="{ item: prog }">
@@ -388,6 +391,7 @@ const saving = ref(false);
 const products = ref([]);
 const total = ref(0);
 const page = ref(1);
+const perPage = ref(25);
 const expanded = ref([]);
 
 const filters = ref({ search: '', active: null });
@@ -509,7 +513,7 @@ const { debounced: debouncedLoad } = useDebounce(loadProducts, 400);
 async function loadProducts() {
   loading.value = true;
   try {
-    const params = { page: page.value };
+    const params = { page: page.value, per_page: perPage.value };
     if (filters.value.search) params.search = filters.value.search;
     if (filters.value.active) params.active = filters.value.active;
     const { data } = await api.get('/admin/products', { params });

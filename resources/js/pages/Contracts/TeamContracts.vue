@@ -73,7 +73,8 @@
     </v-card>
 
     <v-data-table-server :items="items" :items-length="total" :loading="loading"
-      :headers="visibleHeaders" :items-per-page="25" @update:options="onOptions">
+      :headers="visibleHeaders" :items-per-page="perPage"
+      :items-per-page-options="[25, 50, 100, 200]" @update:options="onOptions">
       <template #item.ammount="{ item }">
         {{ fmt(item.ammount) }} {{ item.currencySymbol }}
       </template>

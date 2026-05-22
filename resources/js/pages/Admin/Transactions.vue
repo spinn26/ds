@@ -480,7 +480,8 @@
           :items-length="logTotal"
           :loading="logLoading"
           :headers="logVisibleHeaders"
-          :items-per-page="25"
+          :items-per-page="logPerPage"
+          :items-per-page-options="[25, 50, 100, 200]"
           server-side
           empty-icon="mdi-swap-horizontal-variant"
           empty-message="Транзакции не найдены"

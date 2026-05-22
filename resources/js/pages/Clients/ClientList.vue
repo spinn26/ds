@@ -58,7 +58,8 @@
     </v-card>
 
     <v-data-table-server :items="items" :items-length="total" :loading="loading"
-      :headers="visibleHeaders" :items-per-page="25" :sort-by="sortBy"
+      :headers="visibleHeaders" :items-per-page="perPage"
+      :items-per-page-options="[25, 50, 100, 200]" :sort-by="sortBy"
       @update:options="onOptions">
       <template #item.birthDate="{ value }">
         {{ fmtDate(value) }}

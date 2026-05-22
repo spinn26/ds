@@ -67,7 +67,8 @@
       :items-length="total"
       :loading="loading"
       :headers="visibleHeaders"
-      :items-per-page="25"
+      :items-per-page="perPage"
+      :items-per-page-options="[25, 50, 100, 200]"
       server-side
       empty-icon="mdi-cash-remove"
       empty-message="Прочие начисления не найдены"
