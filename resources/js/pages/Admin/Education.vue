@@ -96,6 +96,7 @@
                   density="compact"
                   hover
                   no-data-text="Нет уроков"
+                  :items-per-page="9999"
                   hide-default-footer
                 >
                   <template #item.videoCount="{ item: lesson }">
@@ -136,6 +137,7 @@
                   density="compact"
                   hover
                   no-data-text="Нет вопросов"
+                  :items-per-page="9999"
                   hide-default-footer
                 >
                   <template #item.answersCount="{ item: test }">
