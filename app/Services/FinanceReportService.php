@@ -278,7 +278,10 @@ class FinanceReportService
             // линии, затем рекурсивным CTE по всему поддереву. Берём
             // партнёра с максимальным groupVolumeCumulative за месяц.
             if (empty($branchName)) {
-                $myGv = (float) ($qLogCurrent->groupVolumeCumulative ?? 0);
+                // Сравнение «моя месячная база vs ГП ветки за тот же месяц» —
+                // см. комментарий в buildBranchTable. Кумулятив (НГП) тут
+                // тащил левые цифры для неактивных в этом месяце веток.
+                $myGv = (float) ($qLogCurrent->groupVolume ?? 0);
                 $monthStart = $month . '-01';
                 $monthEnd = date('Y-m-d', strtotime("$monthStart +1 month"));
 
@@ -289,8 +292,8 @@ class FinanceReportService
                     ->whereNull('ql.dateDeleted')
                     ->where('ql.date', '>=', $monthStart)
                     ->where('ql.date', '<', $monthEnd)
-                    ->orderByDesc('ql.groupVolumeCumulative')
-                    ->select(['c.id', 'c.personName', 'ql.groupVolumeCumulative as gv'])
+                    ->orderByDesc('ql.groupVolume')
+                    ->select(['c.id', 'c.personName', 'ql.groupVolume as gv'])
                     ->first();
 
                 // Если в первой линии никого с qLog за период не нашли —
@@ -305,13 +308,13 @@ class FinanceReportService
                             JOIN descendants d ON c.inviter = d.id
                             WHERE c."dateDeleted" IS NULL
                         )
-                        SELECT c.id, c."personName", ql."groupVolumeCumulative" AS gv
+                        SELECT c.id, c."personName", ql."groupVolume" AS gv
                         FROM descendants d
                         JOIN consultant c ON c.id = d.id
                         JOIN "qualificationLog" ql ON ql.consultant = c.id
                         WHERE ql.date >= ? AND ql.date < ?
                           AND ql."dateDeleted" IS NULL
-                        ORDER BY ql."groupVolumeCumulative" DESC NULLS LAST
+                        ORDER BY ql."groupVolume" DESC NULLS LAST
                         LIMIT 1
                     ', [$consultant->id, $monthStart, $monthEnd]);
                 }
@@ -432,17 +435,20 @@ class FinanceReportService
                     'title' => $commissionLevel->title,
                     'percent' => $commissionLevel->percent,
                 ] : null,
-                // Для исторических периодов fallback на consultant.* (текущие
-                // агрегаты) даёт неверную картину: нет qualificationLog за
-                // март — покажется ЛП за СЕГОДНЯ. Допускаем такой fallback
-                // только когда отчёт строится за текущий месяц.
-                'volumes' => (function () use ($qLogCurrent, $consultant, $month) {
+                // Дашборд ЛП/ГП считаем тем же агрегатом, что и таблицы ниже
+                // (`personalSales` / `groupSales`) — это `commission` за месяц.
+                // Раньше эти карточки тащились из qualificationLog, который
+                // обновляется только ночным финализом квалификаций; после
+                // ручной фиксации новой транзакции карточки показывали 0,
+                // хотя строка в «Личные продажи» уже видна.
+                //
+                // НГП оставляем из qualificationLog — это накопительный
+                // показатель уровня квалификации, его пересчитывает финализ.
+                'volumes' => (function () use ($qLogCurrent, $consultant, $month, $personalSalesPoints, $groupSalesPoints) {
                     $isCurrentMonth = $month === now()->format('Y-m');
                     return [
-                        'lp' => round((float) ($qLogCurrent->personalVolume
-                            ?? ($isCurrentMonth ? $consultant->personalVolume : 0)), 2),
-                        'gp' => round((float) ($qLogCurrent->groupVolume
-                            ?? ($isCurrentMonth ? $consultant->groupVolume : 0)), 2),
+                        'lp' => round((float) $personalSalesPoints, 2),
+                        'gp' => round((float) $groupSalesPoints, 2),
                         'ngp' => round((float) ($qLogCurrent->groupVolumeCumulative
                             ?? ($isCurrentMonth ? $consultant->groupVolumeCumulative : 0)), 2),
                     ];
@@ -502,6 +508,12 @@ class FinanceReportService
             ],
             'currencyRates' => $currencyRates,
             'period' => $month,
+            // Идентификация партнёра в шапке отчёта — staff часто открывает
+            // несколько отчётов в соседних вкладках, без имени их не отличить.
+            'consultant' => [
+                'id' => $consultant->id,
+                'personName' => $consultant->personName,
+            ],
         ];
     }
 
@@ -521,7 +533,12 @@ class FinanceReportService
      */
     private function buildBranchTable(Consultant $consultant, string $month, $qLogCurrent): array
     {
-        $myGv = (float) ($qLogCurrent->groupVolumeCumulative ?? 0);
+        // Отрыв считается на МЕСЯЧНОМ ГП, а не на накопительном (НГП).
+        // Раньше тут стоял groupVolumeCumulative — для неактивных в текущем
+        // месяце партнёров он показывал кумулятив за всё время (сотни тысяч),
+        // хотя бизнес-правило сравнивает ГП ветки за месяц с моим ГП за месяц
+        // (см. spec ✅Бизнес-логика: расчёт вознаграждений §5.1).
+        $myGv = (float) ($qLogCurrent->groupVolume ?? 0);
         $monthStart = $month . '-01';
         $monthEnd = date('Y-m-d', strtotime("$monthStart +1 month"));
 
@@ -533,10 +550,10 @@ class FinanceReportService
             SELECT
                 c.id,
                 c."personName",
-                ql_last."groupVolumeCumulative" AS gv
+                ql_last."groupVolume" AS gv
             FROM consultant c
             LEFT JOIN LATERAL (
-                SELECT ql."groupVolumeCumulative"
+                SELECT ql."groupVolume"
                 FROM "qualificationLog" ql
                 WHERE ql.consultant = c.id
                   AND ql.date >= ? AND ql.date < ?
