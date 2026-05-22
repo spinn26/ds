@@ -121,16 +121,18 @@ class ImportTransactionsJob implements ShouldQueue
                     if (! $contract) {
                         $errors[] = 'Строка ' . ($i + 2) . ': контракт «' . $contractNumber . '» не найден';
                     } else {
-                        // Period-freeze: дата транзакции не должна попадать
-                        // в закрытый месяц. Иначе commission по ней не
-                        // пересчитается, и оператор зальёт «потерянные»
-                        // транзакции, которые ничего не дадут партнёру.
+                        // Period-freeze: строки в закрытом месяце ПРОПУСКАЕМ
+                        // (не валим импорт целиком). Оператор может одним
+                        // файлом залить и старый, и текущий период — старое
+                        // не дойдёт до commission, текущее загрузится норм.
+                        // Пишем в warnings: «строка 17 — март закрыт, не
+                        // загружена», оператор увидит, проверит.
                         if ($date) {
                             $year = (int) date('Y', strtotime($date));
                             $month = (int) date('m', strtotime($date));
                             if ($year && $month && $periodFreeze->isFrozen($year, $month)) {
-                                $errors[] = sprintf(
-                                    'Строка %d: дата %s в закрытом периоде %02d.%d — импорт запрещён',
+                                $warnings[] = sprintf(
+                                    'Строка %d: дата %s в закрытом периоде %02d.%d — строка пропущена.',
                                     $i + 2, date('Y-m-d', strtotime($date)), $month, $year,
                                 );
                                 continue;
