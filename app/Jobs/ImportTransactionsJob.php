@@ -2,8 +2,6 @@
 
 namespace App\Jobs;
 
-use App\Services\CommissionCalculator;
-use App\Services\GoogleSheetsReader;
 use App\Services\SheetProfiles;
 use App\Services\ApiSettingsService;
 use Illuminate\Bus\Queueable;
@@ -19,23 +17,24 @@ use Illuminate\Support\Facades\Log;
 /**
  * Async-импорт транзакций (Google Sheets / CSV).
  *
- * Раньше POST /admin/transaction-import* делал всё синхронно: парсинг,
- * валидацию ~1000+ строк (× 2 SQL-запроса на матчинг контракта),
- * INSERT в DB::transaction(), а потом ещё каскад комиссий через
- * CommissionCalculator::calculateForImport. На 1267 строк это легко
- * пробивает 30s axios timeout — клиент видит «Нет связи с сервером»,
- * хотя сервер всё-таки доделывает работу и создаёт impor-лог. В итоге
- * пользователь жмёт повторно → задвоенные импорты в истории.
+ * Архитектура (правки 2026-05-22):
+ *   STEP 1: чтение источника (Sheets API / CSV).
+ *   STEP 2: валидация. ОДИН batch-SELECT по contract.number вместо
+ *           1267 row-by-row. Закрытые периоды → warnings, пропуск.
+ *           Любая другая ошибка → атомарный abort, ничего не вставляем.
+ *   STEP 3: bulk INSERT чанками по 500 через `INSERT ... RETURNING id`
+ *           (Postgres). Раньше — 1267 раздельных insertGetId.
  *
- * Здесь работа уезжает в очередь: контроллер сразу отдаёт 202 +
- * `importId` + `tracker`, фронт поллит /admin/import-progress, а Job
- * пишет tracker по ходу выполнения и финализирует transaction_import_log.
+ * Расчёт комиссий БОЛЬШЕ НЕ запускается автоматически — оператор жмёт
+ * «Рассчитать» в истории, когда удобно. Каскад наставников = ~5-10 мин
+ * на 1267 транзакций, и держать поллинг прогресса всё это время — плохой
+ * UX. Импорт теперь = только загрузка строк, ~5-10 секунд.
  */
 class ImportTransactionsJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public int $timeout = 1800;   // 30 минут: 1500 строк × calc цепочки = ~5-10 минут на dev
+    public int $timeout = 600;    // 10 минут — без авто-calc хватает с запасом на 5000+ строк
     public int $tries = 1;        // импорт не идемпотентен — ретраи создают дубликаты
     public int $maxExceptions = 1;
 
@@ -58,13 +57,13 @@ class ImportTransactionsJob implements ShouldQueue
         public readonly string $tracker,
     ) {}
 
-    public function handle(CommissionCalculator $calculator): void
+    public function handle(): void
     {
         $this->putTracker(['status' => 'running', 'total' => 0, 'processed' => 0, 'success' => 0, 'errors' => 0]);
 
         try {
             // === STEP 1: get rows (Sheets API call / CSV read) ===
-            [$rows, $resolvedCounterparty, $resolvedCurrency, $profile] = $this->loadRows();
+            [$rows, , $resolvedCurrency, ] = $this->loadRows();
             $total = count($rows);
 
             if ($total === 0) {
@@ -78,6 +77,7 @@ class ImportTransactionsJob implements ShouldQueue
             ]);
 
             // === STEP 2: validation (parse + match contract) ===
+            // Курсы валют — раз, не на каждой строке.
             $currencyRate = 1.0;
             if ($resolvedCurrency && $resolvedCurrency !== 67) {
                 $rate = DB::table('currencyRate')
@@ -90,189 +90,205 @@ class ImportTransactionsJob implements ShouldQueue
             $rateUsd = DB::table('currencyRate')->where('currency', 5)->orderByDesc('date')->first();
             if ($rateUsd) $usdRate = (float) $rateUsd->rate;
 
+            // Batch-загрузка контрактов: 1 SELECT вместо 1267 (раньше каждая
+            // строка делала отдельный exact SELECT — горлышко валидации).
+            $allNumbers = [];
+            foreach ($rows as $row) {
+                $n = trim((string) ($row['contract_number'] ?? $row['number'] ?? $row['номер_контракта'] ?? $row['contract'] ?? ''));
+                if ($n !== '') $allNumbers[$n] = true;
+            }
+            $allNumbers = array_keys($allNumbers);
+            $contractMap = $allNumbers
+                ? DB::table('contract')
+                    ->whereIn('number', $allNumbers)
+                    ->whereNull('deletedAt')
+                    ->get(['id', 'number', 'clientName'])
+                    ->keyBy('number')
+                : collect();
+
+            // Локальный кэш period-freeze: для 1267 строк одного-двух
+            // периодов вместо 1267 SELECT'ов делаем 1-2.
+            $periodFreeze = app(\App\Services\PeriodFreezeService::class);
+            $frozenCache = [];
+            $isFrozen = function (int $y, int $m) use ($periodFreeze, &$frozenCache): bool {
+                $key = "{$y}-{$m}";
+                if (! array_key_exists($key, $frozenCache)) {
+                    $frozenCache[$key] = $periodFreeze->isFrozen($y, $m);
+                }
+                return $frozenCache[$key];
+            };
+
             $errors = [];
             $warnings = [];
             $prepared = [];
-            $periodFreeze = app(\App\Services\PeriodFreezeService::class);
             foreach ($rows as $i => $row) {
+                $lineNo = $i + 2;
                 $contractNumber = trim((string) ($row['contract_number'] ?? $row['number'] ?? $row['номер_контракта'] ?? $row['contract'] ?? ''));
                 $amount = (float) str_replace([' ', ','], ['', '.'], (string) ($row['amount'] ?? $row['сумма'] ?? $row['sum'] ?? '0'));
                 $date = $row['date'] ?? $row['дата'] ?? $row['payment_date'] ?? null;
 
                 if ($contractNumber === '') {
-                    $errors[] = 'Строка ' . ($i + 2) . ': пустой номер контракта';
-                } else {
-                    // 1) точное совпадение
+                    $errors[] = "Строка {$lineNo}: пустой номер контракта";
+                    continue;
+                }
+
+                // 1) exact из batch-map (O(1))
+                $contract = $contractMap->get($contractNumber);
+                $matchedByIlike = false;
+                if (! $contract) {
+                    // 2) Fallback ilike — редкий путь, делаем per-row.
                     $contract = DB::table('contract')
-                        ->where('number', $contractNumber)
+                        ->where('number', 'ilike', '%' . $contractNumber . '%')
                         ->whereNull('deletedAt')
-                        ->first();
-                    $matchedByIlike = false;
-                    if (! $contract) {
-                        // 2) fallback ilike — оставляем для удобства, но
-                        // обязательно даём warning: молчаливое совпадение
-                        // «1234» с контрактом «1234567» бывает катастрофой.
-                        $contract = DB::table('contract')
-                            ->where('number', 'ilike', '%' . $contractNumber . '%')
-                            ->whereNull('deletedAt')
-                            ->first();
-                        $matchedByIlike = (bool) $contract;
+                        ->first(['id', 'number', 'clientName']);
+                    $matchedByIlike = (bool) $contract;
+                }
+                if (! $contract) {
+                    $errors[] = "Строка {$lineNo}: контракт «{$contractNumber}» не найден в БД (ни по точному, ни по частичному совпадению)";
+                    continue;
+                }
+
+                // Period-freeze: строки в закрытом месяце ПРОПУСКАЕМ
+                // (не валим импорт целиком).
+                if ($date) {
+                    $ts = strtotime($date);
+                    if ($ts === false) {
+                        $errors[] = "Строка {$lineNo}: не удалось распарсить дату «{$date}» (ожидается YYYY-MM-DD или DD.MM.YYYY)";
+                        continue;
                     }
-                    if (! $contract) {
-                        $errors[] = 'Строка ' . ($i + 2) . ': контракт «' . $contractNumber . '» не найден';
-                    } else {
-                        // Period-freeze: строки в закрытом месяце ПРОПУСКАЕМ
-                        // (не валим импорт целиком). Оператор может одним
-                        // файлом залить и старый, и текущий период — старое
-                        // не дойдёт до commission, текущее загрузится норм.
-                        // Пишем в warnings: «строка 17 — март закрыт, не
-                        // загружена», оператор увидит, проверит.
-                        if ($date) {
-                            $year = (int) date('Y', strtotime($date));
-                            $month = (int) date('m', strtotime($date));
-                            if ($year && $month && $periodFreeze->isFrozen($year, $month)) {
-                                $warnings[] = sprintf(
-                                    'Строка %d: дата %s в закрытом периоде %02d.%d — строка пропущена.',
-                                    $i + 2, date('Y-m-d', strtotime($date)), $month, $year,
-                                );
-                                continue;
-                            }
-                        }
-
-                        if ($matchedByIlike && $contract->number !== $contractNumber) {
-                            $warnings[] = sprintf(
-                                'Строка %d: точного совпадения нет, найден по частичному → контракт «%s» (id %d, клиент %s). Проверьте.',
-                                $i + 2,
-                                $contract->number ?? '?',
-                                $contract->id,
-                                $contract->clientName ?? '—',
-                            );
-                        }
-
-                        $amountRub = $amount * $currencyRate;
-                        $amountUsd = $usdRate > 0 ? $amountRub / $usdRate : 0;
-                        $prepared[] = [
-                            'contract_id' => $contract->id,
-                            'amount' => $amount,
-                            'amountRub' => $amountRub,
-                            'amountUsd' => $amountUsd,
-                            'date' => $date,
-                            'ds_percent' => $row['ds_percent'] ?? $row['процент_дс'] ?? null,
-                            'property' => $row['property'] ?? $row['свойство'] ?? null,
-                        ];
+                    $year = (int) date('Y', $ts);
+                    $month = (int) date('m', $ts);
+                    if ($year && $month && $isFrozen($year, $month)) {
+                        $warnings[] = sprintf(
+                            'Строка %d: дата %s в закрытом периоде %02d.%d — строка пропущена.',
+                            $lineNo, date('Y-m-d', $ts), $month, $year,
+                        );
+                        continue;
                     }
                 }
 
-                // Обновляем tracker каждые 50 строк или на последней — даёт живой прогресс
-                // в ImportProgressDialog без перегруза кэша (1500 строк / 50 = 30 апдейтов).
-                if (($i + 1) % 50 === 0 || $i === $total - 1) {
+                if ($amount <= 0) {
+                    $errors[] = "Строка {$lineNo}: сумма должна быть > 0 (получено: «{$amount}»)";
+                    continue;
+                }
+
+                if ($matchedByIlike && $contract->number !== $contractNumber) {
+                    $warnings[] = sprintf(
+                        'Строка %d: точного совпадения нет, найден по частичному → контракт «%s» (id %d, клиент %s). Проверьте.',
+                        $lineNo,
+                        $contract->number ?? '?',
+                        $contract->id,
+                        $contract->clientName ?? '—',
+                    );
+                }
+
+                $amountRub = $amount * $currencyRate;
+                $amountUsd = $usdRate > 0 ? $amountRub / $usdRate : 0;
+                $prepared[] = [
+                    'line' => $lineNo,
+                    'contract_id' => $contract->id,
+                    'amount' => $amount,
+                    'amountRub' => $amountRub,
+                    'amountUsd' => $amountUsd,
+                    'date' => $date,
+                    'ds_percent' => $row['ds_percent'] ?? $row['процент_дс'] ?? null,
+                    'property' => $row['property'] ?? $row['свойство'] ?? null,
+                ];
+
+                // Tracker — каждые 200 строк (вместо 50: меньше cache-overhead).
+                if (($i + 1) % 200 === 0 || $i === $total - 1) {
                     $this->putTracker([
                         'status' => 'running', 'total' => $total, 'processed' => $i + 1,
                         'success' => 0, 'errors' => count($errors),
+                        'phase' => 'validate',
                     ]);
                 }
             }
 
-            // Атомарность сохраняется: если хоть одна строка не валидна — ничего не вставляем.
+            // Атомарность: если есть ошибки валидации — ничего не вставляем.
+            // Закрытые периоды НЕ считаются ошибкой (они в warnings).
             if ($errors) {
                 $this->finalizeError(
-                    'Импорт отменён: найдено ' . count($errors) . ' ошибок. Ничего не загружено.',
+                    'Импорт отменён: найдено ' . count($errors) . ' ошибок валидации. Ничего не загружено. См. список ниже.',
                     $errors,
+                    $warnings,
                 );
                 return;
             }
 
-            // === STEP 3: atomic insert ===
+            if (empty($prepared)) {
+                // Все строки в закрытых периодах — нечего вставлять.
+                $this->finalizeSkipped(
+                    'Импорт завершён: все строки в закрытых периодах, ничего не загружено.',
+                    $warnings,
+                );
+                return;
+            }
+
+            // === STEP 3: bulk INSERT (chunks по 500, RETURNING id) ===
+            // Раньше: 1267 раздельных insertGetId внутри одной DB::transaction
+            // (1267 round-trip к Postgres). Теперь: ~3 INSERT'а на чанк по
+            // 500 строк с RETURNING — на порядок быстрее.
             $createdIds = [];
+            $this->putTracker([
+                'status' => 'running', 'total' => $total, 'processed' => $total,
+                'success' => 0, 'errors' => 0, 'phase' => 'insert',
+            ]);
+
             try {
-                $createdIds = DB::transaction(function () use ($prepared, $resolvedCurrency, $currencyRate) {
-                    $ids = [];
-                    foreach ($prepared as $p) {
-                        $txId = DB::table('transaction')->insertGetId([
-                            'contract' => $p['contract_id'],
-                            'amount' => $p['amount'],
-                            'amountRUB' => round($p['amountRub'], 2),
-                            'amountUSD' => round($p['amountUsd'], 2),
-                            'currency' => $resolvedCurrency,
-                            'currencyRate' => $currencyRate,
-                            'date' => $p['date'] ? date('Y-m-d\TH:i:s', strtotime($p['date'])) : now()->toIso8601String(),
-                            'dateMonth' => $p['date'] ? date('Y-m', strtotime($p['date'])) : now()->format('Y-m'),
-                            'dateYear' => $p['date'] ? date('Y', strtotime($p['date'])) : now()->format('Y'),
-                            'comment' => 'Импорт #' . $this->importLogId,
-                            'dsCommissionPercentage' => $p['ds_percent'],
-                            'commissionCalcProperty' => $p['property'],
-                        ]);
-                        $ids[] = (int) $txId;
-                    }
-                    return $ids;
-                });
-            } catch (\Throwable $e) {
-                $msg = $e->getMessage();
-                if (preg_match('/([^:\n]+(?:violation|violates|exists|not-null|duplicate)[^\n]*)/i', $msg, $m)) {
-                    $msg = trim($m[1]);
+                DB::beginTransaction();
+                foreach (array_chunk($prepared, 500) as $chunk) {
+                    $ids = $this->bulkInsertChunk($chunk, $resolvedCurrency, $currencyRate);
+                    $createdIds = array_merge($createdIds, $ids);
+
+                    $this->putTracker([
+                        'status' => 'running', 'total' => $total, 'processed' => $total,
+                        'success' => count($createdIds), 'errors' => 0, 'phase' => 'insert',
+                    ]);
                 }
-                Log::error('Import atomic insert failed', ['importId' => $this->importLogId, 'error' => $msg]);
-                $this->finalizeError('Импорт отменён из-за ошибки БД. Ничего не загружено.', [mb_substr($msg, 0, 300)]);
+                DB::commit();
+            } catch (\Throwable $e) {
+                DB::rollBack();
+                $this->finalizeError(
+                    'Импорт отменён из-за ошибки БД. Ничего не загружено.',
+                    $this->parseSqlError($e),
+                    $warnings,
+                );
+                Log::error('Import bulk insert failed', [
+                    'importId' => $this->importLogId, 'error' => $e->getMessage(),
+                ]);
                 return;
             }
 
             $successCount = count($createdIds);
 
-            // === STEP 4: auto-calc commissions ===
-            // Сначала обновляем лог success_count и created_ids, чтобы ошибка
-            // расчёта не оставила транзакции без записи в логе.
-            DB::table('transaction_import_log')->where('id', $this->importLogId)->update([
+            // STEP 4 (авто-расчёт комиссий) намеренно убран: расчёт каскадом
+            // наставников — самая медленная часть и занимает ~80-95% всего
+            // времени. Оператор запускает расчёт явно кнопкой «Рассчитать»
+            // в истории импортов, когда удобно. Импорт = только загрузка.
+            $update = [
+                'status' => 'success',
                 'success_count' => $successCount,
                 'error_count' => 0,
                 'created_ids' => json_encode($createdIds),
-                'updated_at' => now(),
-            ]);
-
-            $this->putTracker([
-                'status' => 'running', 'total' => $total, 'processed' => $total,
-                'success' => $successCount, 'errors' => 0,
-                'phase' => 'calc',
-            ]);
-
-            $calcStats = null;
-            try {
-                $calcStats = $calculator->calculateForImport($this->importLogId);
-            } catch (\Throwable $e) {
-                Log::warning("Auto-calc commissions failed for import #{$this->importLogId}: " . $e->getMessage());
-            }
-
-            $infoMessages = [];
-            if ($calcStats) {
-                $infoMessages[] = "Расчёт комиссий: {$calcStats['success']} из {$calcStats['total']}";
-                if (! empty($calcStats['errors'])) {
-                    foreach (array_slice($calcStats['errors'], 0, 20) as $err) {
-                        $infoMessages[] = is_array($err) ? json_encode($err, JSON_UNESCAPED_UNICODE) : (string) $err;
-                    }
-                }
-            }
-
-            $update = [
-                'status' => 'success',
-                'errors' => $infoMessages ? json_encode($infoMessages, JSON_UNESCAPED_UNICODE) : null,
+                'errors' => null,
                 'updated_at' => now(),
             ];
-            if ($warnings && \Illuminate\Support\Facades\Schema::hasColumn('transaction_import_log', 'warnings')) {
-                $update['warnings'] = json_encode($warnings, JSON_UNESCAPED_UNICODE);
+            if (\Illuminate\Support\Facades\Schema::hasColumn('transaction_import_log', 'warnings')) {
+                $update['warnings'] = $warnings ? json_encode($warnings, JSON_UNESCAPED_UNICODE) : null;
             }
             DB::table('transaction_import_log')->where('id', $this->importLogId)->update($update);
 
             $msg = "Импорт завершён: {$successCount} транзакций загружено";
-            if ($warnings) $msg .= ", предупреждений: " . count($warnings);
-            if ($calcStats) {
-                $msg .= ", комиссии рассчитаны: {$calcStats['success']} из {$calcStats['total']}";
-            }
+            if ($warnings) $msg .= ', предупреждений: ' . count($warnings);
+            $msg .= '. Запустите расчёт комиссий кнопкой «Рассчитать» в истории.';
 
             $this->putTracker([
                 'status' => 'done', 'total' => $total, 'processed' => $total,
                 'success' => $successCount, 'errors' => 0,
                 'warnings' => count($warnings),
                 'importId' => $this->importLogId, 'message' => $msg,
-                'calc' => $calcStats,
+                'needsCalc' => true,
             ]);
 
             // Cleanup: если CSV — удалить временный файл
@@ -421,15 +437,19 @@ class ImportTransactionsJob implements ShouldQueue
      * Зафиксировать ошибку в логе + в tracker'е, чтобы фронт корректно
      * отобразил финальный «status=done, errors>0» state.
      */
-    private function finalizeError(string $message, array $details = []): void
+    private function finalizeError(string $message, array $details = [], array $warnings = []): void
     {
-        DB::table('transaction_import_log')->where('id', $this->importLogId)->update([
+        $update = [
             'status' => 'error',
             'success_count' => 0,
             'error_count' => max(1, count($details)),
             'errors' => json_encode(array_slice($details, 0, 100) ?: [$message], JSON_UNESCAPED_UNICODE),
             'updated_at' => now(),
-        ]);
+        ];
+        if ($warnings && \Illuminate\Support\Facades\Schema::hasColumn('transaction_import_log', 'warnings')) {
+            $update['warnings'] = json_encode($warnings, JSON_UNESCAPED_UNICODE);
+        }
+        DB::table('transaction_import_log')->where('id', $this->importLogId)->update($update);
 
         $current = Cache::get("import:tracker:{$this->tracker}") ?? [];
         $this->putTracker([
@@ -438,6 +458,7 @@ class ImportTransactionsJob implements ShouldQueue
             'processed' => $current['total'] ?? 0,
             'success' => 0,
             'errors' => max(1, count($details)),
+            'warnings' => count($warnings),
             'importId' => $this->importLogId,
             'message' => $message,
             'errorDetails' => array_slice($details, 0, 100),
@@ -446,6 +467,119 @@ class ImportTransactionsJob implements ShouldQueue
         if ($this->source === 'csv' && file_exists($this->sourceRef)) {
             @unlink($this->sourceRef);
         }
+    }
+
+    /**
+     * Все строки попали в закрытый период — ничего не загрузили, но это
+     * не ошибка. Status=success, success_count=0, всё в warnings.
+     */
+    private function finalizeSkipped(string $message, array $warnings = []): void
+    {
+        $update = [
+            'status' => 'success',
+            'success_count' => 0,
+            'error_count' => 0,
+            'errors' => null,
+            'updated_at' => now(),
+        ];
+        if (\Illuminate\Support\Facades\Schema::hasColumn('transaction_import_log', 'warnings')) {
+            $update['warnings'] = $warnings ? json_encode($warnings, JSON_UNESCAPED_UNICODE) : null;
+        }
+        DB::table('transaction_import_log')->where('id', $this->importLogId)->update($update);
+
+        $current = Cache::get("import:tracker:{$this->tracker}") ?? [];
+        $this->putTracker([
+            'status' => 'done',
+            'total' => $current['total'] ?? 0,
+            'processed' => $current['total'] ?? 0,
+            'success' => 0,
+            'errors' => 0,
+            'warnings' => count($warnings),
+            'importId' => $this->importLogId,
+            'message' => $message,
+        ]);
+
+        if ($this->source === 'csv' && file_exists($this->sourceRef)) {
+            @unlink($this->sourceRef);
+        }
+    }
+
+    /**
+     * Bulk INSERT чанка строк в "transaction" с RETURNING id (Postgres).
+     * Возвращает массив новых id в порядке вставки.
+     *
+     * 12 колонок × 500 строк = 6000 параметров (Postgres лимит 65535 — ок).
+     */
+    private function bulkInsertChunk(array $chunk, ?int $currency, float $currencyRate): array
+    {
+        if (! $chunk) return [];
+
+        $columns = ['contract', 'amount', 'amountRUB', 'amountUSD', 'currency',
+            'currencyRate', 'date', 'dateMonth', 'dateYear', 'comment',
+            'dsCommissionPercentage', 'commissionCalcProperty'];
+        $quotedCols = array_map(fn ($c) => '"' . $c . '"', $columns);
+
+        $placeholderRow = '(' . implode(',', array_fill(0, count($columns), '?')) . ')';
+        $placeholders = implode(',', array_fill(0, count($chunk), $placeholderRow));
+
+        $bindings = [];
+        $comment = 'Импорт #' . $this->importLogId;
+        foreach ($chunk as $p) {
+            $ts = $p['date'] ? strtotime($p['date']) : false;
+            $bindings[] = $p['contract_id'];
+            $bindings[] = $p['amount'];
+            $bindings[] = round($p['amountRub'], 2);
+            $bindings[] = round($p['amountUsd'], 2);
+            $bindings[] = $currency;
+            $bindings[] = $currencyRate;
+            $bindings[] = $ts !== false ? date('Y-m-d\TH:i:s', $ts) : now()->toIso8601String();
+            $bindings[] = $ts !== false ? date('Y-m', $ts) : now()->format('Y-m');
+            $bindings[] = $ts !== false ? date('Y', $ts) : now()->format('Y');
+            $bindings[] = $comment;
+            $bindings[] = $p['ds_percent'];
+            $bindings[] = $p['property'];
+        }
+
+        $sql = 'INSERT INTO "transaction" (' . implode(',', $quotedCols) . ') VALUES '
+            . $placeholders . ' RETURNING id';
+
+        $rows = DB::select($sql, $bindings);
+        return array_map(fn ($r) => (int) $r->id, $rows);
+    }
+
+    /**
+     * Расшифровка PDO/PG-ошибок в человеко-читаемые сообщения для
+     * операторов. Тупо смотреть «SQLSTATE[23502]:...» бесполезно —
+     * нужно сказать «поле X обязательное» или «контракт N не существует».
+     */
+    private function parseSqlError(\Throwable $e): array
+    {
+        $raw = $e->getMessage();
+        $out = [];
+
+        // NOT NULL violation: "null value in column X violates not-null"
+        if (preg_match('/null value in column\s+"?([^"\s]+)"?[^"]*violates not-null/i', $raw, $m)) {
+            $out[] = "В одной из строк пустое обязательное поле «{$m[1]}» — заполните в источнике и перезалейте.";
+        }
+        // FK violation: "violates foreign key constraint ... Key (col)=(val) is not present"
+        if (preg_match('/violates foreign key constraint.*Key\s*\(([^)]+)\)\s*=\s*\(([^)]+)\)\s*is not present/is', $raw, $m)) {
+            $out[] = "Внешний ключ: «{$m[1]}»={$m[2]} не существует в БД (контракт/валюта/контрагент удалён или ID опечатан).";
+        }
+        // Duplicate key
+        if (preg_match('/duplicate key value violates unique constraint\s+"([^"]+)"/i', $raw, $m)) {
+            $out[] = "Дубликат: нарушено уникальное ограничение «{$m[1]}». Возможно эти транзакции уже импортированы.";
+        }
+        // Invalid type / out of range
+        if (preg_match('/invalid input syntax for type\s+(\w+):\s*"([^"]*)"/i', $raw, $m)) {
+            $out[] = "Неверный формат данных: ожидался тип «{$m[1]}», получено «{$m[2]}». Проверьте формат сумм/дат в файле.";
+        }
+        if (! $out) {
+            // Fallback: вытаскиваем хотя бы первую содержательную строку.
+            $first = trim(explode("\n", $raw)[0]);
+            $out[] = 'Ошибка БД: ' . mb_substr($first, 0, 400);
+        }
+        $out[] = 'Полный текст ошибки в логе job_failed (importId=' . $this->importLogId . ').';
+        return $out;
     }
 
     private function putTracker(array $state): void

@@ -85,6 +85,13 @@
         <div v-if="result.errorDetails?.length" class="mt-2">
           <div v-for="(err, i) in result.errorDetails" :key="i" class="text-caption">{{ err }}</div>
         </div>
+        <div v-if="result.needsCalc && result.importId" class="mt-3">
+          <v-btn size="small" color="primary" variant="flat" prepend-icon="mdi-calculator"
+            :loading="calculatingId === result.importId"
+            @click="runCalculation({ id: result.importId })">
+            Рассчитать комиссии сейчас
+          </v-btn>
+        </div>
       </v-alert>
     </v-card>
 

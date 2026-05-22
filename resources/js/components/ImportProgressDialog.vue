@@ -103,7 +103,7 @@ const props = defineProps({
   finished: { type: Boolean, default: false },
 });
 
-defineEmits(['update:modelValue']);
+const emit = defineEmits(['update:modelValue', 'finish']);
 
 const progress = ref({ total: 0, processed: 0, success: 0, errors: 0, status: 'starting' });
 let pollTimer = null;
@@ -139,7 +139,24 @@ function startPolling() {
     try {
       const { data } = await api.get('/admin/import-progress', { params: { tracker: props.tracker } });
       progress.value = { ...progress.value, ...data };
-      if (data.status === 'done') stopPolling();
+      if (data.status === 'done') {
+        stopPolling();
+        // С новым async-flow (POST 202 → job в очереди) сервер финализирует
+        // результат именно в tracker'е. Родителю отдаём готовый result, он
+        // обновит «История» и не будет ждать ответа POST'а.
+        emit('finish', {
+          message: data.message || (data.errors > 0 ? 'Импорт завершён с ошибками' : 'Импорт завершён'),
+          success: data.success ?? 0,
+          updated: data.updated,
+          skipped: data.skipped,
+          errors: data.errors ?? 0,
+          warnings: data.warnings ?? 0,
+          errorDetails: data.errorDetails || [],
+          importId: data.importId,
+          calc: data.calc,
+          needsCalc: data.needsCalc === true,
+        });
+      }
     } catch {}
   }, 1000);
 }
