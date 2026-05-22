@@ -501,23 +501,35 @@ class TransactionImportController extends Controller
             ], 422);
         }
 
+        // Откат бьём на чанки по 100 id: на legacy-схеме у commission есть
+        // FK-обратные проверки через "transaction.commissions" массив, и
+        // DELETE на 1267 id'шниках разом пробивает statement_timeout PG
+        // (FOR KEY SHARE по transaction × 1267 = серверная отмена).
+        // Снимаем тайм-аут на этой сессии и удаляем порциями.
         $result = DB::transaction(function () use ($importId, $txIdsFromLog) {
+            // Подняли таймаут на 5 минут (соединение всё равно одноразовое).
+            DB::statement("SET LOCAL statement_timeout = '300s'");
+
             $txIds = $txIdsFromLog
-                ? collect($txIdsFromLog)
+                ? collect($txIdsFromLog)->all()
                 : DB::table('transaction')
                     ->where('comment', 'Импорт #' . $importId)
-                    ->pluck('id');
+                    ->pluck('id')
+                    ->all();
 
             $deletedCommissions = 0;
-            if ($txIds->isNotEmpty()) {
-                $deletedCommissions = DB::table('commission')
-                    ->whereIn('transaction', $txIds)
+            foreach (array_chunk($txIds, 100) as $chunk) {
+                $deletedCommissions += DB::table('commission')
+                    ->whereIn('transaction', $chunk)
                     ->delete();
             }
 
-            $deletedTx = DB::table('transaction')
-                ->whereIn('id', $txIds)
-                ->delete();
+            $deletedTx = 0;
+            foreach (array_chunk($txIds, 100) as $chunk) {
+                $deletedTx += DB::table('transaction')
+                    ->whereIn('id', $chunk)
+                    ->delete();
+            }
 
             DB::table('transaction_import_log')
                 ->where('id', $importId)
