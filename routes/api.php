@@ -327,6 +327,7 @@ Route::prefix('v1')->group(function () {
         Route::put('/admin/roadmap/{id}', [\App\Http\Controllers\Api\RoadmapController::class, 'update'])->whereNumber('id');
         Route::delete('/admin/roadmap/{id}', [\App\Http\Controllers\Api\RoadmapController::class, 'destroy'])->whereNumber('id');
         Route::get('/admin/transaction-import/history', [\App\Http\Controllers\Api\TransactionImportController::class, 'history']);
+        Route::get('/admin/transaction-import/check-duplicate', [\App\Http\Controllers\Api\TransactionImportController::class, 'checkDuplicate']);
         Route::post('/admin/transaction-import/{id}/rollback', [\App\Http\Controllers\Api\TransactionImportController::class, 'rollback']);
         Route::post('/admin/transaction-import/{id}/calculate', [\App\Http\Controllers\Api\TransactionImportController::class, 'calculateCommissions']);
         Route::get('/admin/transaction-import/{id}/errors.csv', [\App\Http\Controllers\Api\TransactionImportController::class, 'errorsCsv'])->whereNumber('id');

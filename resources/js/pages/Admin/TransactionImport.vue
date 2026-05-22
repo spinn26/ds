@@ -114,15 +114,28 @@
         </template>
         <template #item.createdAt="{ value }">{{ fmtDate(value) }}</template>
         <template #item.actions="{ item }">
-          <v-btn v-if="canFull('import') && (item.status === 'success' || item.status === 'partial')" icon size="x-small" variant="text" color="primary"
-            :loading="calculatingId === item.id" @click="runCalculation(item)">
+          <v-chip v-if="item.frozen" size="x-small" color="grey" variant="tonal" prepend-icon="mdi-lock" class="mr-1">
+            закрыт
+            <v-tooltip activator="parent">Период закрыт — действия с импортом запрещены</v-tooltip>
+          </v-chip>
+          <v-btn v-if="canFull('import') && (item.status === 'success' || item.status === 'partial')"
+            icon size="x-small" variant="text" color="primary"
+            :loading="calculatingId === item.id"
+            :disabled="item.frozen"
+            @click="runCalculation(item)">
             <v-icon>mdi-calculator</v-icon>
-            <v-tooltip activator="parent">Рассчитать комиссии</v-tooltip>
+            <v-tooltip activator="parent">
+              {{ item.frozen ? 'Период закрыт — расчёт запрещён' : 'Рассчитать комиссии' }}
+            </v-tooltip>
           </v-btn>
-          <v-btn v-if="canFull('import') && item.status !== 'rolled_back'" icon size="x-small" variant="text" color="warning"
+          <v-btn v-if="canFull('import') && item.status !== 'rolled_back'"
+            icon size="x-small" variant="text" color="warning"
+            :disabled="item.frozen"
             @click="confirmRollback(item)">
             <v-icon>mdi-undo</v-icon>
-            <v-tooltip activator="parent">Откатить</v-tooltip>
+            <v-tooltip activator="parent">
+              {{ item.frozen ? 'Период закрыт — откат запрещён' : 'Откатить' }}
+            </v-tooltip>
           </v-btn>
           <v-btn v-if="item.errors?.length" icon size="x-small" variant="text" color="info"
             @click="showErrors(item)">
@@ -175,6 +188,35 @@
         </div>
       </div>
     </DialogShell>
+
+    <v-dialog v-model="dupDialog" max-width="520" persistent>
+      <v-card>
+        <v-card-title class="d-flex align-center">
+          <v-icon color="warning" class="mr-2">mdi-alert</v-icon>
+          В этом месяце уже был импорт
+        </v-card-title>
+        <v-card-text>
+          <div class="text-body-2 mb-2">
+            Для этого поставщика в текущем месяце уже выполнялся импорт.
+            Запуск повторного импорта <strong>может создать дубли транзакций</strong>.
+          </div>
+          <div class="text-caption text-medium-emphasis mb-2">Предыдущие импорты:</div>
+          <div v-for="r in dupRecent" :key="r.id" class="text-body-2 mb-1">
+            <v-chip size="x-small" color="primary" variant="tonal" class="mr-1">#{{ r.id }}</v-chip>
+            {{ r.successCount }} стр. · {{ fmtDate(r.createdAt) }}
+          </div>
+          <v-alert type="info" variant="tonal" density="compact" class="mt-3 text-caption">
+            Если этот файл — переимпорт того же периода, сначала откатите старый импорт
+            кнопкой «Откатить» в истории, иначе будут дубли.
+          </v-alert>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="dupCancel">Отмена</v-btn>
+          <v-btn color="warning" variant="flat" @click="dupConfirm">Импортировать всё равно</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
     <ImportProgressDialog
       v-model="progressOpen"
@@ -233,6 +275,42 @@ const calculatingId = ref(null);
 const calcResult = ref(null);
 const errorsDialog = ref(false);
 const errorsTarget = ref(null);
+const dupDialog = ref(false);
+const dupRecent = ref([]);
+let dupResolve = null;
+
+function preflightDuplicateCheck({ counterparty = null, sheet = null }) {
+  return new Promise(async (resolve) => {
+    try {
+      const params = {};
+      if (counterparty) params.counterparty = counterparty;
+      if (sheet) params.sheet = sheet;
+      const { data } = await api.get('/admin/transaction-import/check-duplicate', { params });
+      if (!data.has_recent) {
+        resolve(true);
+        return;
+      }
+      dupRecent.value = data.recent || [];
+      dupResolve = resolve;
+      dupDialog.value = true;
+    } catch {
+      // Не удалось проверить — не блокируем импорт, чтобы не парализовать
+      // оператора при упавшем endpoint'е.
+      resolve(true);
+    }
+  });
+}
+
+function dupConfirm() {
+  dupDialog.value = false;
+  if (dupResolve) dupResolve(true);
+  dupResolve = null;
+}
+function dupCancel() {
+  dupDialog.value = false;
+  if (dupResolve) dupResolve(false);
+  dupResolve = null;
+}
 
 const historyHeaders = [
   { title: 'ID', key: 'id', width: 60 },
@@ -259,6 +337,14 @@ function statusLabel(s) {
 async function runSheetsImport() {
   if (!form.value.sheet) return;
   if (!selectedSheet.value?.profiled && !form.value.counterparty) return;
+
+  // Анти-дубли «для тупых»: в этом месяце уже был успешный импорт того
+  // же поставщика? Просим оператора подтвердить.
+  const ok = await preflightDuplicateCheck({
+    counterparty: form.value.counterparty,
+    sheet: form.value.sheet,
+  });
+  if (!ok) return;
 
   importing.value = true;
   result.value = null;
@@ -299,6 +385,10 @@ async function runSheetsImport() {
 
 async function runImport() {
   if (!form.value.counterparty || !form.value.file) return;
+
+  const ok = await preflightDuplicateCheck({ counterparty: form.value.counterparty });
+  if (!ok) return;
+
   importing.value = true;
   result.value = null;
   progressResult.value = null;

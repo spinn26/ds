@@ -299,6 +299,11 @@ class TransactionImportController extends Controller
 
     /**
      * История импортов.
+     *
+     * Поле `frozen` (bool) — у импорта есть хотя бы одна транзакция в
+     * закрытом периоде. Фронт по этому флагу делает «Откатить» и
+     * «Рассчитать» disabled, чтобы оператор не пытался — всё равно
+     * упрётся в 422 от rollback/calculate.
      */
     public function history(Request $request): JsonResponse
     {
@@ -312,23 +317,146 @@ class TransactionImportController extends Controller
         }
 
         $total = $query->count();
-        $data = $query
+        $rows = $query
             ->offset(($request->input('page', 1) - 1) * 25)
             ->limit(25)
-            ->get()
-            ->map(fn ($r) => [
-                'id' => $r->id,
-                'counterpartyName' => $r->counterparty ? DB::table('counterparty')->where('id', $r->counterparty)->value('counterpartyName') : '—',
-                'status' => $r->status,
-                'totalRows' => $r->total_rows,
-                'successCount' => $r->success_count,
-                'errorCount' => $r->error_count,
-                'createdAt' => $r->created_at,
-                'errors' => $r->errors ? json_decode($r->errors, true) : [],
-                'warnings' => isset($r->warnings) && $r->warnings ? json_decode($r->warnings, true) : [],
-            ]);
+            ->get();
+
+        // Batch-проверка «есть ли в импорте транзакции в закрытом периоде»
+        // одним SQL для всей страницы — иначе на каждой записи делать
+        // отдельный запрос (×25 строк = 25 round-trip).
+        $frozenMap = $this->frozenMapForLogs($rows);
+
+        $data = $rows->map(fn ($r) => [
+            'id' => $r->id,
+            'counterpartyName' => $r->counterparty ? DB::table('counterparty')->where('id', $r->counterparty)->value('counterpartyName') : '—',
+            'status' => $r->status,
+            'totalRows' => $r->total_rows,
+            'successCount' => $r->success_count,
+            'errorCount' => $r->error_count,
+            'createdAt' => $r->created_at,
+            'errors' => $r->errors ? json_decode($r->errors, true) : [],
+            'warnings' => isset($r->warnings) && $r->warnings ? json_decode($r->warnings, true) : [],
+            'frozen' => $frozenMap[$r->id] ?? false,
+        ]);
 
         return response()->json(['data' => $data, 'total' => $total]);
+    }
+
+    /**
+     * GET /admin/transaction-import/check-duplicate?counterparty=N
+     *
+     * Анти-дубли «для тупых»: если в текущем календарном месяце уже был
+     * УСПЕШНЫЙ (или partial) импорт с этим counterparty — фронт
+     * показывает предупреждение перед запуском второго импорта.
+     * Считаем только не откаченные: rolled_back/processing/error в выдачу
+     * не идут, т.к. они НЕ создадут дублей.
+     */
+    public function checkDuplicate(Request $request): JsonResponse
+    {
+        $this->ensureImportLogTable();
+
+        // Принимаем либо counterparty (id) — для file-импорта, либо sheet
+        // (имя листа Google Sheets) — для sheets-импорта когда юзер
+        // полагается на авторезолв из профиля. Во втором случае резолвим
+        // counterparty на бэке тем же кодом, что и importFromSheets.
+        $counterparty = (int) $request->query('counterparty');
+        if (! $counterparty && $request->filled('sheet')) {
+            $profile = \App\Services\SheetProfiles::profile((string) $request->query('sheet'));
+            if ($profile) {
+                $counterparty = \App\Services\SheetProfiles::resolveCounterpartyId(
+                    $profile['counterpartyName'] ?? ''
+                ) ?? 0;
+            }
+        }
+        if (! $counterparty) {
+            return response()->json(['has_recent' => false, 'recent' => []]);
+        }
+
+        $monthStart = now()->startOfMonth();
+        $recent = DB::table('transaction_import_log')
+            ->where('counterparty', $counterparty)
+            ->whereIn('status', ['success', 'partial'])
+            ->where('created_at', '>=', $monthStart)
+            ->orderByDesc('id')
+            ->limit(10)
+            ->get(['id', 'success_count', 'created_at']);
+
+        return response()->json([
+            'has_recent' => $recent->isNotEmpty(),
+            'recent' => $recent->map(fn ($r) => [
+                'id' => $r->id,
+                'successCount' => $r->success_count,
+                'createdAt' => $r->created_at,
+            ]),
+        ]);
+    }
+
+    /**
+     * Внутренний helper: построить map [logId => bool frozen].
+     * Используется в history() для блокировки UI-действий над импортами
+     * закрытых периодов.
+     */
+    private function frozenMapForLogs(\Illuminate\Support\Collection $logs): array
+    {
+        if ($logs->isEmpty()) return [];
+
+        // Сначала пытаемся найти frozen по точечному списку created_ids
+        // (новые импорты), остатку — по comment='Импорт #N' (старые).
+        $allTxIds = [];
+        $idToTxIds = [];
+        $fallbackIds = [];
+        foreach ($logs as $log) {
+            $txIds = isset($log->created_ids) && $log->created_ids
+                ? array_filter((array) json_decode($log->created_ids, true))
+                : [];
+            if ($txIds) {
+                $idToTxIds[$log->id] = $txIds;
+                $allTxIds = array_merge($allTxIds, $txIds);
+            } else {
+                $fallbackIds[] = $log->id;
+            }
+        }
+
+        // Frozen tx по id-списку.
+        $frozenTxIds = [];
+        if ($allTxIds) {
+            $frozenTxIds = DB::table('transaction as t')
+                ->join('period_closures as p', function ($j) {
+                    $j->on(DB::raw('p.year::text'), '=', 't.dateYear')
+                      ->on(DB::raw("LPAD(p.month::text, 2, '0')"), '=', DB::raw("RIGHT(t.\"dateMonth\", 2)"))
+                      ->whereNull('p.reopened_at');
+                })
+                ->whereIn('t.id', $allTxIds)
+                ->pluck('t.id')
+                ->all();
+            $frozenTxIds = array_flip($frozenTxIds);
+        }
+
+        $result = [];
+        foreach ($idToTxIds as $logId => $txIds) {
+            $result[$logId] = false;
+            foreach ($txIds as $txId) {
+                if (isset($frozenTxIds[$txId])) {
+                    $result[$logId] = true;
+                    break;
+                }
+            }
+        }
+
+        // Fallback для старых импортов: comment='Импорт #N'.
+        foreach ($fallbackIds as $logId) {
+            $result[$logId] = DB::table('transaction as t')
+                ->join('period_closures as p', function ($j) {
+                    $j->on(DB::raw('p.year::text'), '=', 't.dateYear')
+                      ->on(DB::raw("LPAD(p.month::text, 2, '0')"), '=', DB::raw("RIGHT(t.\"dateMonth\", 2)"))
+                      ->whereNull('p.reopened_at');
+                })
+                ->where('t.comment', 'Импорт #' . $logId)
+                ->exists();
+        }
+
+        return $result;
     }
 
     /**
@@ -413,9 +541,26 @@ class TransactionImportController extends Controller
 
     /**
      * Запустить расчёт комиссий для импорта.
+     *
+     * Заморозка периода: если хоть одна транзакция импорта попадает в
+     * закрытый месяц — пересчёт запрещён (правки закрытых периодов
+     * идут через «Прочие начисления»).
      */
     public function calculateCommissions(Request $request, int $importId): JsonResponse
     {
+        $log = DB::table('transaction_import_log')->where('id', $importId)->first();
+        if (! $log) {
+            return response()->json(['message' => 'Импорт не найден'], 404);
+        }
+
+        $logCol = collect([$log]);
+        $frozenMap = $this->frozenMapForLogs($logCol);
+        if ($frozenMap[$importId] ?? false) {
+            return response()->json([
+                'message' => 'Период этого импорта закрыт — расчёт комиссий запрещён. Для корректировки используйте «Прочие начисления».',
+            ], 422);
+        }
+
         $calculator = app(\App\Services\CommissionCalculator::class);
         $results = $calculator->calculateForImport($importId);
 
