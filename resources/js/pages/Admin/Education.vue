@@ -122,39 +122,48 @@
               <!-- Tests Tab -->
               <div v-if="activeTab[item.id] === 'tests'">
                 <div class="d-flex justify-space-between align-center mb-2">
-                  <span class="text-subtitle-2 font-weight-bold">Тесты курса «{{ item.title }}»</span>
-                  <div class="d-flex align-center ga-2">
-                    <ColumnVisibilityMenu
-                      :headers="testHeaders"
-                      v-model:visible="testColumnVisible"
-                      storage-key="education-tests-cols" />
-                    <v-btn v-if="canEdit('education')" size="small" color="primary" prepend-icon="mdi-plus" variant="flat"
-                      @click="openCreateTest(item)">Добавить вопрос</v-btn>
-                  </div>
-                </div>
-                <v-data-table
-                  :headers="visibleTestHeaders"
-                  :items="testsByCourse[item.id] || []"
-                  :loading="testsLoading[item.id]"
-                  density="compact"
-                  hover
-                  no-data-text="Нет вопросов"
-                  :items-per-page="9999"
-                  hide-default-footer
-                >
-                  <template #item.answersCount="{ item: test }">
-                    {{ (test.answers || []).length }}
-                  </template>
-                  <template #item.correct_answer="{ item: test }">
-                    <v-chip size="x-small" color="success" prepend-icon="mdi-check">
-                      №{{ test.correct_answer + 1 }}
+                  <span class="text-subtitle-2 font-weight-bold">
+                    Тесты курса «{{ item.title }}»
+                    <v-chip v-if="(testsByCourse[item.id] || []).length" size="x-small"
+                      variant="tonal" color="primary" class="ms-2">
+                      {{ (testsByCourse[item.id] || []).length }}
                     </v-chip>
-                  </template>
-                  <template #item.actions="{ item: test }">
-                    <v-btn icon="mdi-pencil" size="x-small" variant="text" @click="openEditTest(item, test)" />
-                    <v-btn v-if="canFull('education')" icon="mdi-delete" size="x-small" variant="text" color="error" @click="confirmDeleteTest(item, test)" />
-                  </template>
-                </v-data-table>
+                  </span>
+                  <v-btn v-if="canEdit('education')" size="small" color="primary" prepend-icon="mdi-plus" variant="flat"
+                    @click="openCreateTest(item)">Добавить вопрос</v-btn>
+                </div>
+
+                <div v-if="testsLoading[item.id]" class="d-flex justify-center py-4">
+                  <v-progress-circular indeterminate size="24" />
+                </div>
+                <div v-else-if="!(testsByCourse[item.id] || []).length"
+                  class="text-center text-medium-emphasis py-4">
+                  Нет вопросов
+                </div>
+                <!-- Простой v-list вместо v-data-table — у data-table'ы Vuetify
+                     иногда срезает rows до items-per-page-options дефолта
+                     (10), даже если items-per-page=9999 (баг видели на 12
+                     вопросах). v-list гарантированно отрисует все. -->
+                <v-list v-else density="compact" class="pa-0">
+                  <v-list-item v-for="(test, i) in (testsByCourse[item.id] || [])"
+                    :key="test.id" class="border-b">
+                    <template #prepend>
+                      <span class="text-medium-emphasis me-2" style="min-width: 24px">{{ i + 1 }}.</span>
+                    </template>
+                    <v-list-item-title class="text-body-2">{{ test.question }}</v-list-item-title>
+                    <v-list-item-subtitle class="text-caption">
+                      Вариантов: {{ (test.answers || []).length }} ·
+                      Правильный: №{{ (test.correct_answer ?? 0) + 1 }}
+                    </v-list-item-subtitle>
+                    <template #append>
+                      <v-btn icon="mdi-pencil" size="x-small" variant="text"
+                        @click="openEditTest(item, test)" />
+                      <v-btn v-if="canFull('education')" icon="mdi-delete"
+                        size="x-small" variant="text" color="error"
+                        @click="confirmDeleteTest(item, test)" />
+                    </template>
+                  </v-list-item>
+                </v-list>
               </div>
             </td>
           </tr>
