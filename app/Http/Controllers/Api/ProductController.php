@@ -343,11 +343,23 @@ class ProductController extends Controller
         $testsPassed = ! empty($consultant->soldProducts);
 
         $requisitesVerified = ((int) $consultant->statusRequisites) === 3;
-        if (! $requisitesVerified && Schema::hasTable('requisites')) {
-            $requisitesVerified = Requisite::where('consultant', $consultant->id)
+        $requisitesSubmitted = $requisitesVerified;
+        if (Schema::hasTable('requisites')) {
+            // ЛЮБАЯ не-удалённая запись = «партнёр уже заполнил».
+            // Даже если verified=false и ждёт ручной проверки финменеджера —
+            // не показываем блокирующий диалог повторно. Иначе при каждом
+            // входе после ввода чужого/невалидного ИНН (когда ФИО не совпало
+            // с профилем и auto-verify=false) платформа просит вводить заново
+            // и партнёр впадает в петлю.
+            $requisitesSubmitted = $requisitesSubmitted || Requisite::where('consultant', $consultant->id)
                 ->whereNull('deletedAt')
-                ->where('verified', true)
                 ->exists();
+            if (! $requisitesVerified) {
+                $requisitesVerified = Requisite::where('consultant', $consultant->id)
+                    ->whereNull('deletedAt')
+                    ->where('verified', true)
+                    ->exists();
+            }
         }
 
         $documentsAccepted = (bool) $consultant->acceptance;
@@ -356,6 +368,7 @@ class ProductController extends Controller
             'hasAccess' => $isActive,
             'testsPassed' => $testsPassed,
             'requisitesVerified' => $requisitesVerified,
+            'requisitesSubmitted' => $requisitesSubmitted,
             'documentsAccepted' => $documentsAccepted,
             'needsRequisites' => false,
             'needsAcceptance' => false,

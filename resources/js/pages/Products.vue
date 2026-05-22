@@ -304,7 +304,7 @@ const categoryOptions = computed(() => {
     .sort((a, b) => a.title.localeCompare(b.title));
 });
 const currencyOptions = ref([]);
-const access = ref({ testsPassed: false, requisitesVerified: false, documentsAccepted: false });
+const access = ref({ testsPassed: false, requisitesVerified: false, requisitesSubmitted: false, documentsAccepted: false });
 const accessChecked = ref(false);
 const reqDialog = ref(false);
 const acceptDialog = ref(false);
@@ -369,10 +369,10 @@ const programsDialog = ref(false);
 const selectedProduct = ref(null);
 
 function openProduct(product) {
-  // Реквизиты/акцепт проверены ещё на входе (блокирующие окна), но
-  // оставляем защиту на случай если пользователь дошёл до карточки с
-  // частично-выполненными шагами.
-  if (!access.value.requisitesVerified) { reqDialog.value = true; return; }
+  // Блок-диалог реквизитов открываем только если партнёр НЕ заполнял
+  // их ни разу. Если запись есть (даже verified=false, ждёт проверки
+  // финменеджера) — не блокируем, просто показываем плашку статуса.
+  if (!access.value.requisitesSubmitted) { reqDialog.value = true; return; }
   if (!access.value.documentsAccepted)  { acceptDialog.value = true; return; }
   // Internal route (openProductUrl начинается с «/») — открываем
   // во SPA через router.push. Используется, например, для InSmart-виджета.
@@ -390,9 +390,12 @@ function openProduct(product) {
   if (product.url) window.open(product.url, '_blank');
 }
 
-/** Blocking gate: открыть соответствующее окно сразу после загрузки. */
+/** Blocking gate: открыть соответствующее окно сразу после загрузки.
+ * Реквизиты гейтим по "submitted" (хоть раз заполнял), а не по
+ * "verified" — иначе при verified=false (ФИО не совпало с ИНН, ждёт
+ * ручную проверку) партнёр снова и снова видит блок-диалог. */
 function gateIfNeeded() {
-  if (!access.value.requisitesVerified) {
+  if (!access.value.requisitesSubmitted) {
     reqDialog.value = true;
   } else if (!access.value.documentsAccepted) {
     acceptDialog.value = true;
@@ -425,7 +428,9 @@ async function saveRequisites() {
       // сервер сам решает auto-verify если ФИО совпали
       fioMatched: innMatch.value === true,
     });
-    access.value.requisitesVerified = true;
+    access.value.requisitesSubmitted = true;
+    // verified=true только если ФИО совпало с ИНН и backend авто-верифицировал.
+    if (innMatch.value === true) access.value.requisitesVerified = true;
     reqDialog.value = false;
     // Сразу переходим к следующему шагу
     if (!access.value.documentsAccepted) acceptDialog.value = true;
