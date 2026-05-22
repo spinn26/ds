@@ -472,27 +472,52 @@ class FinanceReportService
                     'totalRub' => round($totalBonusRub + (float) ($balance->accruedPool ?? 0), 2),
                 ],
                 'breakaway' => $breakaway,
-                'monthEnd' => $balance ? [
-                    'balanceStart' => round((float) ($balance->balance ?? 0), 2),
-                    // К легаси-снимку из consultantBalance добавляем сумму
-                    // ручных начислений из other_accruals — иначе «Прочее за
-                    // месяц» в UI показывает 0, хотя админ их завёл.
-                    'otherAccruals' => round((float) ($balance->accruedNonTransactional ?? 0) + $extraSum, 2),
-                    // «Прочие начисления» в commission (transaction IS NULL)
-                    // выражены в РУБЛЯХ, не в баллах. Раньше отдавалось как
-                    // otherAccrualsPoints — UI показывал «Прочие (баллы)»,
-                    // что вводило в заблуждение.
-                    'otherAccrualsRub' => round($otherAccruals->sum(fn ($c) => (float) ($c->amount ?? 0)) + $extraSum, 2),
-                    // К легаси-баллам из commission прибавляем баллы из other_accruals.points
-                    // (могут быть отрицательными при удержании). Без этого
-                    // удержание баллов через /manage/charges не отображалось
-                    // в личном отчёте — жалоба Богдановой 2026-05-21.
-                    'otherAccrualsPoints' => round($otherAccruals->sum(fn ($c) => (float) ($c->groupBonus ?? 0)) + $extraPointsSum, 2),
-                    'totalAccrued' => round((float) ($balance->accruedTotal ?? 0) + $extraSum, 2),
-                    'totalPayable' => round((float) ($balance->totalPayable ?? 0) + $extraSum, 2),
-                    'payed' => round((float) ($balance->payed ?? 0), 2),
-                    'remaining' => round((float) ($balance->remaining ?? 0) + $extraSum, 2),
-                ] : null,
+                'monthEnd' => (function () use ($balance, $allCommissions, $otherAccruals, $extraSum, $extraPointsSum, $consultant, $month) {
+                    // Live-агрегация: после ручной фиксации транзакции commission
+                    // уже создан, но consultantBalance ещё не пересчитан ночным
+                    // финализом. Берём max(снимок, live) — чтобы прирост сразу
+                    // отражался и в monthEnd-сводке, и в дашбордах партнёра.
+                    // Жалоба Богдановой 2026-05-22: «внесла начисление —
+                    // отразилось в детализации, но не проставилось в дашбордах».
+                    $liveAccrued = (float) $allCommissions->whereNotNull('transaction')->sum('amountRUB');
+                    $livePool = (float) DB::table('poolLog')
+                        ->where('consultant', $consultant->id)
+                        ->whereBetween('date', [
+                            $month . '-01 00:00:00',
+                            \Carbon\Carbon::parse($month . '-01')->endOfMonth()->format('Y-m-d 23:59:59'),
+                        ])
+                        ->sum('poolBonus');
+
+                    $balanceStart = $balance ? (float) ($balance->balance ?? 0) : 0.0;
+                    $payed = $balance ? (float) ($balance->payed ?? 0) : 0.0;
+
+                    $accrued = max((float) ($balance->accruedTransactional ?? 0), $liveAccrued);
+                    $pool = max((float) ($balance->accruedPool ?? 0), $livePool);
+                    $otherRub = round($otherAccruals->sum(fn ($c) => (float) ($c->amount ?? 0)) + $extraSum, 2);
+                    $totalAccrued = round($accrued + $otherRub + $pool, 2);
+                    $totalPayable = round($balanceStart + $totalAccrued, 2);
+                    $remaining = round($totalPayable - $payed, 2);
+
+                    return [
+                        'balanceStart' => round($balanceStart, 2),
+                        // К легаси-снимку из consultantBalance добавляем сумму
+                        // ручных начислений из other_accruals — иначе «Прочее за
+                        // месяц» в UI показывает 0, хотя админ их завёл.
+                        'otherAccruals' => $otherRub,
+                        'otherAccrualsRub' => $otherRub,
+                        // К легаси-баллам из commission прибавляем баллы из other_accruals.points
+                        // (могут быть отрицательными при удержании). Без этого
+                        // удержание баллов через /manage/charges не отображалось
+                        // в личном отчёте — жалоба Богдановой 2026-05-21.
+                        'otherAccrualsPoints' => round($otherAccruals->sum(fn ($c) => (float) ($c->groupBonus ?? 0)) + $extraPointsSum, 2),
+                        'accruedTransactional' => round($accrued, 2),
+                        'accruedPool' => round($pool, 2),
+                        'totalAccrued' => $totalAccrued,
+                        'totalPayable' => $totalPayable,
+                        'payed' => round($payed, 2),
+                        'remaining' => $remaining,
+                    ];
+                })(),
             ],
             'tables' => [
                 'personalSales' => $personalSalesTable,

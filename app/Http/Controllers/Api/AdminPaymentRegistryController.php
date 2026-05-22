@@ -126,6 +126,25 @@ class AdminPaymentRegistryController extends Controller
             ->groupBy('consultant')
             ->pluck('extra', 'consultant');
 
+        // Live SUM по commission и poolLog за месяц — на случай если
+        // consultantBalance.accruedTransactional/accruedPool ещё не пересчитан
+        // (Богданова: после ручной фиксации транзакции commission создан,
+        // но в Реестре выплат «Начислено: 0», т.к. снимок ночной).
+        // Если live-сумма больше снимка — используем её (новые транзакции),
+        // иначе оставляем снимок (там может быть учтена логика отрыва и т.п.).
+        $liveAccruedByCons = DB::table('commission')
+            ->where('dateMonth', $dm)
+            ->whereNull('deletedAt')
+            ->select('consultant', DB::raw('SUM(COALESCE("amountRUB", 0)) as accrued'))
+            ->groupBy('consultant')
+            ->pluck('accrued', 'consultant');
+
+        $livePoolByCons = DB::table('poolLog')
+            ->whereBetween('date', [$periodFrom, $periodTo])
+            ->select('consultant', DB::raw('SUM(COALESCE("poolBonus", 0)) as pool'))
+            ->groupBy('consultant')
+            ->pluck('pool', 'consultant');
+
         // Batch-load requisite verification for every partner in the result.
         $consultantIds = $rows->pluck('consultant')->filter()->unique()->values()->all();
         $verified = [];
@@ -141,33 +160,25 @@ class AdminPaymentRegistryController extends Controller
         // Activity name lookup for partner-status filter UI.
         $activityNames = DB::table('directory_of_activities')->pluck('name', 'id');
 
-        // Сумма прочих начислений из new-таблицы — для тоталов снизу/сверху.
-        $extraTotal = (float) $extraByCons->sum();
+        $items = $rows->map(function ($r) use ($verified, $activityNames, $extraByCons, $liveAccruedByCons, $livePoolByCons) {
+            // accrued = max(снимок, live SUM commission за месяц). Прирост от
+            // ручной фиксации транзакции (commission уже есть, снимок ещё нет)
+            // подхватывается тут же.
+            $snapshotAccrued = (float) ($r->accruedTransactional ?? 0);
+            $liveAccrued = (float) ($liveAccruedByCons[$r->consultant] ?? 0);
+            $accrued = max($snapshotAccrued, $liveAccrued);
 
-        // Dashboard totals (same filters minus pagination limit).
-        $totals = [
-            'rows' => $rows->count(),
-            'balance' => (float) $rows->sum('balance'),
-            // Spec ✅Реестр выплат §1.2: «Начислено за транзакции до уменьшения по отрыву»
-            'accruedBeforeGap' => (float) $rows->sum('accruedTransactional')
-                + (float) $rows->sum('withheldForGap'),
-            'accruedTransactional' => (float) $rows->sum('accruedTransactional'),
-            'accruedNonTransactional' => (float) $rows->sum('accruedNonTransactional') + $extraTotal,
-            'accruedPool' => (float) $rows->sum('accruedPool'),
-            'accruedTotal' => (float) $rows->sum('accruedTotal') + $extraTotal,
-            'totalPayable' => (float) $rows->sum('totalPayable') + $extraTotal,
-            'payed' => (float) $rows->sum('payed'),
-            'remaining' => (float) $rows->sum('remaining') + $extraTotal,
-            'withheldForGap' => (float) $rows->sum('withheldForGap'),
-            'withheldForCommissions' => (float) $rows->sum('withheldForCommissions'),
-        ];
+            $snapshotPool = (float) ($r->accruedPool ?? 0);
+            $livePool = (float) ($livePoolByCons[$r->consultant] ?? 0);
+            $pool = max($snapshotPool, $livePool);
 
-        $items = $rows->map(function ($r) use ($verified, $activityNames, $extraByCons) {
             $extra = (float) ($extraByCons[$r->consultant] ?? 0);
             $other = (float) ($r->accruedNonTransactional ?? 0) + $extra;
-            $accruedTotal = (float) ($r->accruedTotal ?? 0) + $extra;
-            $totalPayable = (float) ($r->totalPayable ?? 0) + $extra;
-            $remaining = (float) ($r->remaining ?? 0) + $extra;
+            $accruedTotal = $accrued + $other + $pool;
+            $balance = (float) ($r->balance ?? 0);
+            $totalPayable = $balance + $accruedTotal;
+            $payed = (float) ($r->payed ?? 0);
+            $remaining = $totalPayable - $payed;
             return [
                 'id' => $r->id,
                 'consultantId' => $r->consultant,
@@ -175,19 +186,36 @@ class AdminPaymentRegistryController extends Controller
                 'activityId' => $r->activityId,
                 'activityName' => $r->activityId ? ($activityNames[$r->activityId] ?? null) : null,
                 'status' => $r->status,
-                'balance' => (float) ($r->balance ?? 0),
-                'accrued' => (float) ($r->accruedTransactional ?? 0),
+                'balance' => $balance,
+                'accrued' => $accrued,
                 'other' => $other,
-                'pool' => (float) ($r->accruedPool ?? 0),
+                'pool' => $pool,
                 'accruedTotal' => $accruedTotal,
                 'totalPayable' => $totalPayable,
-                'payed' => (float) ($r->payed ?? 0),
+                'payed' => $payed,
                 'remaining' => $remaining,
                 'withheldForGap' => (float) ($r->withheldForGap ?? 0),
                 'withheldForCommissions' => (float) ($r->withheldForCommissions ?? 0),
                 'verifiedRequisites' => isset($verified[$r->consultant]),
             ];
         });
+
+        // Totals агрегируем из items (которые уже содержат live-корректировки),
+        // а не из исходных rows — иначе цифры в шапке расходятся со строками.
+        $totals = [
+            'rows' => $items->count(),
+            'balance' => (float) $items->sum('balance'),
+            'accruedBeforeGap' => (float) $items->sum('accrued') + (float) $rows->sum('withheldForGap'),
+            'accruedTransactional' => (float) $items->sum('accrued'),
+            'accruedNonTransactional' => (float) $items->sum('other'),
+            'accruedPool' => (float) $items->sum('pool'),
+            'accruedTotal' => (float) $items->sum('accruedTotal'),
+            'totalPayable' => (float) $items->sum('totalPayable'),
+            'payed' => (float) $items->sum('payed'),
+            'remaining' => (float) $items->sum('remaining'),
+            'withheldForGap' => (float) $rows->sum('withheldForGap'),
+            'withheldForCommissions' => (float) $rows->sum('withheldForCommissions'),
+        ];
 
         return response()->json([
             'year' => $year,
