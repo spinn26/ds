@@ -272,8 +272,33 @@ class AdminEducationController extends Controller
     /** Удалить курс */
     public function destroyCourse(int $id): JsonResponse
     {
-        DB::table('education_courses')->where('id', $id)->update(['active' => false]);
-        return response()->json(['message' => 'Курс деактивирован']);
+        $exists = DB::table('education_courses')->where('id', $id)->exists();
+        if (! $exists) {
+            return response()->json(['message' => 'Курс не найден'], 404);
+        }
+
+        // FK между education_* отсутствуют — каскад делаем руками.
+        // Порядок: сначала views (через lesson_id), потом lessons/tests
+        // и результаты прохождений, потом сам курс.
+        DB::transaction(function () use ($id) {
+            $lessonIds = DB::table('education_lessons')
+                ->where('course_id', $id)
+                ->pluck('id');
+            if ($lessonIds->isNotEmpty()) {
+                DB::table('education_lesson_views')
+                    ->whereIn('lesson_id', $lessonIds)
+                    ->delete();
+            }
+            DB::table('education_lessons')->where('course_id', $id)->delete();
+            DB::table('education_tests')->where('course_id', $id)->delete();
+            if (Schema::hasTable('education_test_attempts')) {
+                DB::table('education_test_attempts')->where('course_id', $id)->delete();
+            }
+            DB::table('education_course_completions')->where('course_id', $id)->delete();
+            DB::table('education_courses')->where('id', $id)->delete();
+        });
+
+        return response()->json(['message' => 'Курс удалён']);
     }
 
     /** Уроки курса */
