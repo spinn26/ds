@@ -64,8 +64,8 @@ class SyncProductsFromSheet extends Command
         $this->info("Mode: " . ($apply ? 'APPLY' : 'DRY-RUN'));
         $this->info("Source: spreadsheet={$spreadsheetId}, sheet={$sheetName}");
 
-        // === STEP 1: Read sheet ===
-        $values = $this->readSheet($spreadsheetId, $sheetName, $apiKey);
+        // === STEP 1: Read sheet (with colors for priority mapping) ===
+        $values = $this->readSheet($spreadsheetId, $sheetName, $apiKey, withColors: true);
         if (! $values) {
             $this->error('Лист пустой или недоступен.');
             return self::FAILURE;
@@ -73,25 +73,46 @@ class SyncProductsFromSheet extends Command
         $this->info("Прочитано строк: " . count($values));
 
         // === STEP 2: Parse + validate ===
-        $candidates = [];      // валидные строки → запишутся в БД
-        $skipped = [];         // невалидные → лог
+        $candidates = [];
+        $skipped = [];
+        $priorityCounts = ['1' => 0, '2' => 0, '3' => 0, 'archive' => 0];
         // Skip первые 3 заголовка (header + separator + col-numbers).
         for ($i = 3; $i < count($values); $i++) {
-            $row = $values[$i];
-            $rec = $this->parseRow($row);
+            $cells = $values[$i];
+            // Бэк отдаёт массив объектов {value, bg}. Цвет фона ячейки
+            // «ПРОДУКТ» (индекс 3) определяет priority этой строки.
+            $rowValues = array_map(fn ($c) => $c['value'] ?? '', $cells);
+            $productBg = $cells[3]['bg'] ?? null;
+
+            $rec = $this->parseRow($rowValues);
             if (! $rec) {
                 $skipped[] = ['line' => $i + 1, 'reason' => 'empty/header'];
                 continue;
             }
+
+            $colorMap = $this->colorToPriority($productBg);
+            if ($colorMap['skip']) {
+                $skipped[] = ['line' => $i + 1, 'reason' => "служебная строка (bg={$productBg})", 'product' => $rec['product']];
+                continue;
+            }
+
             $err = $this->validateRecord($rec);
             if ($err) {
                 $skipped[] = ['line' => $i + 1, 'reason' => $err, 'product' => $rec['product'] ?? '—', 'program' => $rec['program'] ?? '—'];
                 continue;
             }
+
+            $rec['priority'] = $colorMap['priority'];
+            $rec['visibleToResident'] = $colorMap['visibleToResident'];
             $candidates[] = $rec;
+
+            $bucket = $colorMap['priority'] === null ? 'archive' : (string) $colorMap['priority'];
+            $priorityCounts[$bucket]++;
         }
 
         $this->info('Валидных тарифов: ' . count($candidates));
+        $this->info(sprintf('  P1 зелёные: %d, P2 жёлтые: %d, P3 без заливки: %d, архив (красные): %d',
+            $priorityCounts['1'], $priorityCounts['2'], $priorityCounts['3'], $priorityCounts['archive']));
         $this->info('Пропущено (мусор/невалидные): ' . count($skipped));
         if (! $strict && $skipped) {
             $this->newLine();
@@ -131,21 +152,49 @@ class SyncProductsFromSheet extends Command
         // Set of target keys (для последующего deactivate)
         $targetProductNames = [];
         $targetProgramKeys = [];
+        $productPriority = [];      // productKey → агрегированный priority
+        $productVisible = [];       // productKey → bool
 
         foreach ($candidates as $rec) {
             $productNameKey = mb_strtolower(trim($rec['product']));
             $targetProductNames[$productNameKey] = $rec['product'];
-            $existingProduct = $existingProducts->get($productNameKey);
 
-            if (! $existingProduct) {
-                $plan['products_create'][$productNameKey] = $rec['product'];
-            } else if (! $existingProduct->active) {
-                $plan['products_update'][$existingProduct->id] = ['name' => $rec['product'], 'active' => true];
+            // Агрегация priority: продукт может встречаться в нескольких
+            // строках. Берём min(non-null) — самый «видимый» статус.
+            // Если все null (все красные) → priority=null, продукт-архив.
+            $rowP = $rec['priority'];
+            if (! array_key_exists($productNameKey, $productPriority)) {
+                $productPriority[$productNameKey] = $rowP;
+            } elseif ($rowP !== null) {
+                $cur = $productPriority[$productNameKey];
+                $productPriority[$productNameKey] = $cur === null ? $rowP : min($cur, $rowP);
             }
+            $productVisible[$productNameKey] = ($productVisible[$productNameKey] ?? false) || $rec['visibleToResident'];
 
             $progKey = $productNameKey . '||' . mb_strtolower(trim($rec['program']))
                 . '||' . ($rec['term'] ?? '') . '||' . ($rec['kvPayoutYear'] ?? '');
             $targetProgramKeys[$progKey] = true;
+        }
+
+        foreach ($targetProductNames as $productNameKey => $productName) {
+            $existingProduct = $existingProducts->get($productNameKey);
+            $priority = $productPriority[$productNameKey];
+            $visible = $productVisible[$productNameKey];
+
+            if (! $existingProduct) {
+                $plan['products_create'][$productNameKey] = [
+                    'name' => $productName,
+                    'priority' => $priority,
+                    'visibleToResident' => $visible,
+                ];
+            } else {
+                $plan['products_update'][$existingProduct->id] = [
+                    'name' => $productName,
+                    'active' => true,
+                    'priority' => $priority,
+                    'visibleToResident' => $visible,
+                ];
+            }
         }
 
         // Programs: match by (product_id, name, term, kvPayoutYear).
@@ -252,7 +301,12 @@ class SyncProductsFromSheet extends Command
         $this->newLine();
         $this->info('=== ПЛАН ===');
         $this->line("Продукты — создать: " . count($plan['products_create']));
-        foreach (array_slice($plan['products_create'], 0, 20) as $name) $this->line("  + {$name}");
+        foreach (array_slice($plan['products_create'], 0, 20) as $info) {
+            $this->line(sprintf('  + %s (priority=%s, visible=%s)',
+                $info['name'],
+                $info['priority'] ?? 'архив',
+                $info['visibleToResident'] ? 'yes' : 'no'));
+        }
 
         $this->line("Продукты — реактивировать: " . count($plan['products_update']));
         $this->line("Продукты — деактивировать: " . count($plan['products_deactivate']));
@@ -278,21 +332,26 @@ class SyncProductsFromSheet extends Command
         $this->newLine();
         $this->info('=== APPLY ===');
         DB::transaction(function () use ($plan, $candidates, &$productIdByNameLower, $counterpartyLower, $currencyMap) {
+            $hasPriority = \Illuminate\Support\Facades\Schema::hasColumn('product', 'priority');
+
             // Create products
-            foreach ($plan['products_create'] as $key => $name) {
+            foreach ($plan['products_create'] as $key => $info) {
                 $id = LegacyId::next('product');
-                DB::table('product')->insert([
+                $row = [
                     'id' => $id,
-                    'name' => $name,
+                    'name' => $info['name'],
                     'active' => true,
                     'visibleToCalculator' => true,
-                    'visibleToResident' => false,
-                    'publish_status' => 'draft',
-                ]);
+                    'visibleToResident' => (bool) $info['visibleToResident'],
+                    'publish_status' => $info['visibleToResident'] ? 'published' : 'draft',
+                ];
+                if ($hasPriority) $row['priority'] = $info['priority'];
+                DB::table('product')->insert($row);
                 $productIdByNameLower[$key] = $id;
             }
-            // Reactivate
+            // Reactivate / update priority+visibility
             foreach ($plan['products_update'] as $id => $upd) {
+                if (! $hasPriority) unset($upd['priority']);
                 DB::table('product')->where('id', $id)->update($upd);
             }
             // Create programs
@@ -327,17 +386,84 @@ class SyncProductsFromSheet extends Command
         return self::SUCCESS;
     }
 
-    /** Прочитать raw values из Google Sheets API. */
-    private function readSheet(string $spreadsheetId, string $sheetName, string $apiKey): array
+    /**
+     * Прочитать raw values из Google Sheets API.
+     * Если withColors=true — берём также effectiveFormat.backgroundColor
+     * для каждой ячейки и возвращаем `[[ ['value' => ..., 'bg' => '#FFFF00'], ... ], ...]`.
+     * Иначе — старый формат `[[v, v, ...], ...]`.
+     */
+    private function readSheet(string $spreadsheetId, string $sheetName, string $apiKey, bool $withColors = false): array
     {
+        if (! $withColors) {
+            $range = urlencode($sheetName);
+            $url = "https://sheets.googleapis.com/v4/spreadsheets/{$spreadsheetId}/values/{$range}?key={$apiKey}";
+            $response = Http::timeout(30)->get($url);
+            if (! $response->ok()) {
+                $this->error("Sheets API error: HTTP {$response->status()}");
+                return [];
+            }
+            return $response->json('values') ?? [];
+        }
+
+        // Чтение с форматированием — отдельный endpoint, payload намного больше.
         $range = urlencode($sheetName);
-        $url = "https://sheets.googleapis.com/v4/spreadsheets/{$spreadsheetId}/values/{$range}?key={$apiKey}";
-        $response = Http::timeout(30)->get($url);
+        $fields = urlencode('sheets(data.rowData.values(formattedValue,effectiveFormat.backgroundColor))');
+        $url = "https://sheets.googleapis.com/v4/spreadsheets/{$spreadsheetId}?includeGridData=true&ranges={$range}&fields={$fields}&key={$apiKey}";
+        $response = Http::timeout(60)->get($url);
         if (! $response->ok()) {
-            $this->error("Sheets API error: HTTP {$response->status()}");
+            $this->error("Sheets API (with colors) error: HTTP {$response->status()}");
             return [];
         }
-        return $response->json('values') ?? [];
+        $rows = $response->json('sheets.0.data.0.rowData') ?? [];
+        $out = [];
+        foreach ($rows as $row) {
+            $cells = $row['values'] ?? [];
+            $line = [];
+            foreach ($cells as $cell) {
+                $bg = $cell['effectiveFormat']['backgroundColor'] ?? null;
+                $hex = null;
+                if ($bg) {
+                    $hex = sprintf('#%02X%02X%02X',
+                        (int) round(($bg['red'] ?? 0) * 255),
+                        (int) round(($bg['green'] ?? 0) * 255),
+                        (int) round(($bg['blue'] ?? 0) * 255),
+                    );
+                }
+                $line[] = [
+                    'value' => (string) ($cell['formattedValue'] ?? ''),
+                    'bg' => $hex,
+                ];
+            }
+            $out[] = $line;
+        }
+        return $out;
+    }
+
+    /**
+     * Маппинг цвета фона ячейки «ПРОДУКТ» → приоритет витрины
+     * (per spec заказчика 2026-05-22).
+     *
+     * Возвращает массив:
+     *   - priority: 1|2|3|null (null = архив, скрыт с витрины)
+     *   - visibleToResident: bool (false для красных-архив)
+     *   - skip: bool (для строк-комментариев/заголовков таблицы)
+     */
+    private function colorToPriority(?string $hex): array
+    {
+        $hex = strtoupper((string) $hex);
+        // Жёлтый → 2, Зелёный → 1, Красный → архив, без заливки → 3.
+        // Бежевый #FFF2CC (пример расчёта) и серый #B7B7B7 (комментарии)
+        // не данные — skip. Синие #4285F4 — заголовки секций — skip.
+        switch ($hex) {
+            case '#FFFF00': return ['priority' => 2,    'visibleToResident' => true,  'skip' => false];
+            case '#00FF00': return ['priority' => 1,    'visibleToResident' => true,  'skip' => false];
+            case '#FF0000': return ['priority' => null, 'visibleToResident' => false, 'skip' => false];
+            case '#FFFFFF':
+            case '':
+            case '#000000': return ['priority' => 3,    'visibleToResident' => true,  'skip' => false];
+        }
+        // Любые другие — служебные строки (заголовки/пояснения), не данные.
+        return ['priority' => null, 'visibleToResident' => false, 'skip' => true];
     }
 
     /** Распарсить строку таблицы в каноническую запись. */

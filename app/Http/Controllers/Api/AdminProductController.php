@@ -94,6 +94,7 @@ class AdminProductController extends Controller
                 'hasTerm' => (bool) ($p->has_term ?? false),
                 'hasYearKv' => (bool) ($p->has_year_kv ?? false),
                 'publishStatus' => $p->publish_status ?? 'published',
+                'priority' => $p->priority ?? null,
                 'publishedAt' => $p->published_at,
                 'programCount' => (int) ($programCountByProduct[$p->id] ?? 0),
             ]);

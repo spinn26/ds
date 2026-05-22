@@ -43,7 +43,20 @@ class ProductController extends Controller
             ->keyBy('id');
 
         $hasAccess = $this->checkAccess($consultant)['hasAccess'] ?? false;
-        $productRows = $query->orderBy('name')->get();
+
+        // Партнёрская витрина: убираем продукты-архив (priority IS NULL)
+        // — у них visibleToResident=false выставлен, но дополнительно
+        // фильтруем по priority на случай ручных правок в админке.
+        // Сортировка ASC: priority 1 → 2 → 3, имя по алфавиту внутри.
+        if (Schema::hasColumn('product', 'priority')) {
+            $query->whereNotNull('priority');
+            $productRows = $query
+                ->orderByRaw('COALESCE(priority, 99) ASC')
+                ->orderBy('name')
+                ->get();
+        } else {
+            $productRows = $query->orderBy('name')->get();
+        }
 
         // Gate products by education-course completion:
         // if a product has an active linked course, it's only "available" when
