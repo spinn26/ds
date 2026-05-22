@@ -308,12 +308,15 @@ class SyncProductsFromSheet extends Command
     /** Распарсить строку таблицы в каноническую запись. */
     private function parseRow(array $row): ?array
     {
-        // Колонки по индексу (см. docblock команды).
-        $product = trim((string) ($row[2] ?? ''));
-        $program = trim((string) ($row[3] ?? ''));
+        // Реальная разметка листа: [0][1] две служебные пустые колонки слева,
+        // [2] ТИП, [3] ПРОДУКТ, [4] ПРОГРАММА, [5] Стоимость, [6] ВАЛЮТА,
+        // [7] ПОСТАВЩИК, [8] % DS, [9] Свойство, [10] Срок Контракта,
+        // [11] Год выплаты КВ, [12] Баллы, [13] МЕТОДИКА, [14] Комм, [15] Категория.
+        $product = trim((string) ($row[3] ?? ''));
+        $program = trim((string) ($row[4] ?? ''));
         if (! $product || ! $program) return null;
 
-        $dsPercentRaw = trim((string) ($row[7] ?? ''));
+        $dsPercentRaw = trim((string) ($row[8] ?? ''));
         // "77,50%" → 77.5
         $dsPercent = null;
         if ($dsPercentRaw !== '') {
@@ -322,31 +325,31 @@ class SyncProductsFromSheet extends Command
         }
 
         // Срок Контракта — number of years.
-        $termRaw = trim((string) ($row[9] ?? ''));
+        $termRaw = trim((string) ($row[10] ?? ''));
         $term = $termRaw !== '' && is_numeric(str_replace([',', ' '], ['.', ''], $termRaw))
             ? (int) str_replace([',', ' '], ['.', ''], $termRaw)
             : null;
 
         // Год выплаты КВ — "1 год", "2 год" → 1, 2. Иначе null.
-        $yearKvRaw = trim((string) ($row[10] ?? ''));
+        $yearKvRaw = trim((string) ($row[11] ?? ''));
         $kvPayoutYear = null;
         if (preg_match('/(\d+)/u', $yearKvRaw, $m)) {
             $kvPayoutYear = (int) $m[1];
         }
 
         return [
-            'type' => trim((string) ($row[1] ?? '')),
+            'type' => trim((string) ($row[2] ?? '')),
             'product' => $product,
             'program' => $program,
-            'fixedCost' => trim((string) ($row[4] ?? '')),
-            'currency' => mb_strtoupper(trim((string) ($row[5] ?? ''))),
-            'providerName' => trim((string) ($row[6] ?? '')),
+            'fixedCost' => trim((string) ($row[5] ?? '')),
+            'currency' => mb_strtoupper(trim((string) ($row[6] ?? ''))),
+            'providerName' => trim((string) ($row[7] ?? '')),
             'dsPercent' => $dsPercent,
-            'property' => trim((string) ($row[8] ?? '')),
+            'property' => trim((string) ($row[9] ?? '')),
             'term' => $term,
             'kvPayoutYear' => $kvPayoutYear,
-            'formula' => trim((string) ($row[12] ?? '')),
-            'category' => trim((string) ($row[14] ?? '')),
+            'formula' => trim((string) ($row[13] ?? '')),
+            'category' => trim((string) ($row[15] ?? '')),
         ];
     }
 
