@@ -329,6 +329,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/admin/transaction-import/history', [\App\Http\Controllers\Api\TransactionImportController::class, 'history']);
         Route::post('/admin/transaction-import/{id}/rollback', [\App\Http\Controllers\Api\TransactionImportController::class, 'rollback']);
         Route::post('/admin/transaction-import/{id}/calculate', [\App\Http\Controllers\Api\TransactionImportController::class, 'calculateCommissions']);
+        Route::get('/admin/transaction-import/{id}/errors.csv', [\App\Http\Controllers\Api\TransactionImportController::class, 'errorsCsv'])->whereNumber('id');
         Route::post('/admin/transactions/{id}/calculate', [\App\Http\Controllers\Api\TransactionImportController::class, 'calculateSingle']);
         Route::put('/admin/transactions/{id}', [\App\Http\Controllers\Api\TransactionImportController::class, 'update'])->whereNumber('id');
 

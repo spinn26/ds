@@ -154,12 +154,25 @@
     <DialogShell
       v-model="errorsDialog"
       :title="`Ошибки импорта #${errorsTarget?.id}`"
-      :max-width="600"
+      :max-width="700"
       :show-confirm="false"
       cancel-text="Закрыть"
     >
-      <div v-for="(err, i) in errorsTarget?.errors || []" :key="i" class="text-body-2 mb-1">
+      <template #header-extra>
+        <v-btn size="small" variant="tonal" color="primary"
+          prepend-icon="mdi-download"
+          @click="downloadErrorsCsv(errorsTarget?.id)">
+          Скачать CSV
+        </v-btn>
+      </template>
+      <div v-for="(err, i) in errorsTarget?.errors || []" :key="'e' + i" class="text-body-2 mb-1">
         <v-icon size="14" color="error" class="mr-1">mdi-alert</v-icon>{{ err }}
+      </div>
+      <div v-if="errorsTarget?.warnings?.length" class="mt-3">
+        <div class="text-caption text-medium-emphasis mb-1">Предупреждения (импорт прошёл, проверьте):</div>
+        <div v-for="(w, i) in errorsTarget.warnings" :key="'w' + i" class="text-body-2 mb-1">
+          <v-icon size="14" color="warning" class="mr-1">mdi-alert-outline</v-icon>{{ w }}
+        </div>
       </div>
     </DialogShell>
 
@@ -367,6 +380,25 @@ async function runCalculation(item) {
 }
 
 function showErrors(item) { errorsTarget.value = item; errorsDialog.value = true; }
+
+function downloadErrorsCsv(importId) {
+  if (!importId) return;
+  // Открываем в новой вкладке: Sanctum token живёт в localStorage, axios
+  // его автоматически подкладывает, но прямой <a download> идёт без header'ов.
+  // Используем api.get с responseType=blob и принудительно скачиваем.
+  api.get(`/admin/transaction-import/${importId}/errors.csv`, { responseType: 'blob' })
+    .then(resp => {
+      const blob = new Blob([resp.data], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `import-${importId}-errors.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    });
+}
 
 onMounted(async () => {
   try {
