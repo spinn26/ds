@@ -112,6 +112,82 @@
       </v-data-table>
     </v-card>
 
+    <!-- LOG FILE (laravel.log) -->
+    <v-card class="mt-4">
+      <div class="pa-4 d-flex align-center ga-2 flex-wrap">
+        <div class="text-subtitle-1 font-weight-bold">Журнал приложения</div>
+        <v-chip size="small" variant="tonal">{{ logErrors.length }}</v-chip>
+        <span v-if="logMeta.fileSizeHuman" class="text-caption text-medium-emphasis">
+          · файл: {{ logMeta.fileSizeHuman }}
+          <span v-if="logMeta.truncated">(показан последний 1 MB)</span>
+        </span>
+        <v-spacer />
+        <v-btn-toggle v-model="logLevel" mandatory density="comfortable" color="primary" variant="outlined">
+          <v-btn value="ALL_ERRORS" size="small">Ошибки + варнинги</v-btn>
+          <v-btn value="ERROR" size="small">Только ERROR</v-btn>
+          <v-btn value="WARNING" size="small">Только WARNING</v-btn>
+          <v-btn value="ALL" size="small">Все записи</v-btn>
+        </v-btn-toggle>
+        <v-btn size="small" variant="tonal" color="primary" prepend-icon="mdi-refresh"
+          :loading="loadingLogErrors" @click="loadLogErrors">Обновить</v-btn>
+        <v-btn size="small" variant="flat" color="primary" prepend-icon="mdi-download"
+          :loading="downloadingLog" @click="downloadLog">Скачать .log</v-btn>
+        <v-btn size="small" variant="tonal" color="error" prepend-icon="mdi-broom"
+          @click="clearLogDialog = true">Очистить</v-btn>
+      </div>
+      <v-divider />
+      <v-data-table :items="logErrors" :headers="logHeaders" :loading="loadingLogErrors"
+        density="compact" hover no-data-text="В логе нет записей по выбранному фильтру"
+        :items-per-page="50">
+        <template #item.level="{ value }">
+          <v-chip size="x-small" :color="levelColor(value)">{{ value }}</v-chip>
+        </template>
+        <template #item.timestamp="{ value }">
+          <span class="text-caption">{{ value }}</span>
+        </template>
+        <template #item.message="{ value }">
+          <span class="text-body-2">{{ value }}</span>
+        </template>
+        <template #item.actions="{ item }">
+          <v-btn icon="mdi-eye" size="x-small" variant="text" title="Подробности"
+            @click="openLogDetail(item)" />
+        </template>
+      </v-data-table>
+    </v-card>
+
+    <!-- Log detail dialog -->
+    <v-dialog v-model="logDetailDialog" max-width="900" scrollable>
+      <v-card v-if="logDetailItem">
+        <v-card-title class="d-flex align-center ga-2">
+          <v-chip size="small" :color="levelColor(logDetailItem.level)">{{ logDetailItem.level }}</v-chip>
+          <span class="text-body-2 text-medium-emphasis">{{ logDetailItem.timestamp }}</span>
+        </v-card-title>
+        <v-card-text style="max-height: 70vh">
+          <pre class="detail-pre">{{ logDetailItem.detail }}</pre>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="logDetailDialog = false">Закрыть</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Clear log confirm -->
+    <v-dialog v-model="clearLogDialog" max-width="420">
+      <v-card>
+        <v-card-title>Очистить laravel.log?</v-card-title>
+        <v-card-text>
+          Файл будет усечён до 0 байт. Перед этим рекомендуется скачать копию.
+          Действие необратимо.
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="clearLogDialog = false">Отмена</v-btn>
+          <v-btn color="error" :loading="clearingLog" @click="doClearLog">Очистить</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- META FOOTER -->
     <div class="text-caption text-medium-emphasis mt-3">
       <v-icon size="14" class="mr-1">mdi-database</v-icon>
@@ -181,6 +257,24 @@ const detailItem = ref(null);
 
 const flushDialog = ref(false);
 const flushing = ref(false);
+
+// Журнал приложения (laravel.log)
+const logErrors = ref([]);
+const logMeta = ref({});
+const logLevel = ref('ALL_ERRORS');
+const loadingLogErrors = ref(false);
+const downloadingLog = ref(false);
+const logDetailDialog = ref(false);
+const logDetailItem = ref(null);
+const clearLogDialog = ref(false);
+const clearingLog = ref(false);
+
+const logHeaders = [
+  { title: 'Уровень', key: 'level', width: 110 },
+  { title: 'Когда', key: 'timestamp', width: 170 },
+  { title: 'Сообщение', key: 'message' },
+  { title: '', key: 'actions', sortable: false, width: 60 },
+];
 
 let refreshTimer = null;
 
@@ -271,8 +365,67 @@ async function loadErrors() {
   loadingErrors.value = false;
 }
 
+async function loadLogErrors() {
+  loadingLogErrors.value = true;
+  try {
+    const { data } = await api.get('/admin/monitoring/log/errors', {
+      params: { level: logLevel.value, limit: 300 },
+    });
+    logErrors.value = data.items || [];
+    logMeta.value = {
+      fileSize: data.fileSize,
+      fileSizeHuman: data.fileSizeHuman,
+      mtime: data.mtime,
+      truncated: data.truncated,
+    };
+  } catch {}
+  loadingLogErrors.value = false;
+}
+
+function levelColor(lvl) {
+  return {
+    ERROR: 'error', CRITICAL: 'error', EMERGENCY: 'error', ALERT: 'error',
+    WARNING: 'warning', NOTICE: 'info', INFO: 'info', DEBUG: 'grey',
+  }[lvl] || 'grey';
+}
+
+function openLogDetail(item) {
+  logDetailItem.value = item;
+  logDetailDialog.value = true;
+}
+
+async function downloadLog() {
+  downloadingLog.value = true;
+  try {
+    // responseType: blob — иначе axios попытается JSON-парсить лог и упадёт.
+    const resp = await api.get('/admin/monitoring/log/download', {
+      responseType: 'blob',
+    });
+    const blob = new Blob([resp.data], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `laravel-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.log`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch {}
+  downloadingLog.value = false;
+}
+
+async function doClearLog() {
+  clearingLog.value = true;
+  try {
+    await api.post('/admin/monitoring/log/clear');
+    clearLogDialog.value = false;
+    await loadLogErrors();
+  } catch {}
+  clearingLog.value = false;
+}
+
 async function refreshAll() {
-  await Promise.all([loadStatus(), loadErrors()]);
+  await Promise.all([loadStatus(), loadErrors(), loadLogErrors()]);
 }
 
 function openDetail(item) {
@@ -309,6 +462,7 @@ async function doFlush() {
 }
 
 watch(errorSource, loadErrors);
+watch(logLevel, loadLogErrors);
 
 watch(autoRefresh, (v) => {
   if (refreshTimer) clearInterval(refreshTimer);

@@ -350,6 +350,9 @@ Route::prefix('v1')->group(function () {
         // Admin Monitoring (site status, error feed, queue control)
         Route::get('/admin/monitoring/status', [\App\Http\Controllers\Api\AdminMonitoringController::class, 'status']);
         Route::get('/admin/monitoring/errors', [\App\Http\Controllers\Api\AdminMonitoringController::class, 'errors']);
+        Route::get('/admin/monitoring/log/errors', [\App\Http\Controllers\Api\AdminMonitoringController::class, 'logErrors']);
+        Route::get('/admin/monitoring/log/download', [\App\Http\Controllers\Api\AdminMonitoringController::class, 'downloadLog']);
+        Route::post('/admin/monitoring/log/clear', [\App\Http\Controllers\Api\AdminMonitoringController::class, 'clearLog']);
         Route::post('/admin/monitoring/jobs/{id}/retry', [\App\Http\Controllers\Api\AdminMonitoringController::class, 'retryJob']);
         Route::delete('/admin/monitoring/jobs/{id}', [\App\Http\Controllers\Api\AdminMonitoringController::class, 'forgetJob']);
         Route::post('/admin/monitoring/jobs/flush', [\App\Http\Controllers\Api\AdminMonitoringController::class, 'flushJobs']);

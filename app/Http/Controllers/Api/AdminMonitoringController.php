@@ -240,6 +240,131 @@ class AdminMonitoringController extends Controller
     }
 
     /**
+     * GET /admin/monitoring/log/errors
+     *
+     * Парсит storage/logs/laravel.log и отдаёт структурированные записи.
+     * Берём только хвост файла (1 MB) — для админ-UI нужны свежие, не вся
+     * история. На фильтр level пропускаем ERROR/WARNING/CRITICAL по умолчанию.
+     *
+     * Query:
+     *   level: ERROR | WARNING | CRITICAL | ALL (default: ERROR+WARNING+CRITICAL)
+     *   limit: 1..500, default 200
+     */
+    public function logErrors(Request $request): JsonResponse
+    {
+        $path = storage_path('logs/laravel.log');
+        if (! is_file($path)) {
+            return response()->json(['items' => [], 'total' => 0, 'fileSize' => 0, 'mtime' => null]);
+        }
+
+        $level = strtoupper((string) $request->input('level', 'ALL_ERRORS'));
+        $limit = max(1, min(500, (int) $request->input('limit', 200)));
+
+        $size = filesize($path);
+        $chunk = min($size, 1024 * 1024); // последний MB
+        $fp = @fopen($path, 'rb');
+        if (! $fp) {
+            return response()->json(['items' => [], 'total' => 0, 'fileSize' => $size]);
+        }
+        if ($size > $chunk) fseek($fp, $size - $chunk);
+        $tail = stream_get_contents($fp);
+        fclose($fp);
+
+        // Если читали с середины — обрезаем до начала первой строки,
+        // иначе первый матч будет частичным.
+        if ($size > $chunk) {
+            $nl = strpos($tail, "\n");
+            if ($nl !== false) $tail = substr($tail, $nl + 1);
+        }
+
+        $items = [];
+        $pattern = '/^\[(\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2})\]\s+([a-z_]+)\.(\w+):\s+(.+?)(?=^\[\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}\]|\z)/sm';
+        if (preg_match_all($pattern, $tail, $matches, PREG_SET_ORDER)) {
+            foreach (array_reverse($matches) as $m) {
+                $entryLevel = strtoupper($m[3]);
+                $ok = match ($level) {
+                    'ALL' => true,
+                    'ERROR' => $entryLevel === 'ERROR',
+                    'WARNING' => $entryLevel === 'WARNING',
+                    'CRITICAL' => $entryLevel === 'CRITICAL',
+                    default => in_array($entryLevel, ['ERROR', 'WARNING', 'CRITICAL', 'EMERGENCY', 'ALERT'], true),
+                };
+                if (! $ok) continue;
+
+                $body = trim($m[4]);
+                $firstLine = trim(strtok($body, "\n"));
+                $items[] = [
+                    'timestamp' => $m[1],
+                    'env' => $m[2],
+                    'level' => $entryLevel,
+                    'message' => mb_substr($firstLine, 0, 500),
+                    'detail' => mb_substr($body, 0, 6000),
+                ];
+                if (count($items) >= $limit) break;
+            }
+        }
+
+        return response()->json([
+            'items' => $items,
+            'total' => count($items),
+            'fileSize' => $size,
+            'fileSizeHuman' => $this->formatBytes($size),
+            'mtime' => date('c', filemtime($path)),
+            'truncated' => $size > $chunk,
+        ]);
+    }
+
+    /**
+     * GET /admin/monitoring/log/download
+     *
+     * Стримит storage/logs/laravel.log как .log-файл. На больших логах
+     * (десятки MB) клиент скачивает напрямую без буферизации в память.
+     */
+    public function downloadLog(): \Symfony\Component\HttpFoundation\StreamedResponse
+    {
+        $path = storage_path('logs/laravel.log');
+        if (! is_file($path)) {
+            abort(404, 'Log file not found');
+        }
+
+        $filename = 'laravel-' . now()->format('Y-m-d_His') . '.log';
+        return response()->streamDownload(function () use ($path) {
+            $h = fopen($path, 'rb');
+            if (! $h) return;
+            while (! feof($h)) {
+                echo fread($h, 8192);
+                @ob_flush();
+                flush();
+            }
+            fclose($h);
+        }, $filename, [
+            'Content-Type' => 'text/plain; charset=utf-8',
+            'Content-Length' => (string) filesize($path),
+        ]);
+    }
+
+    /**
+     * POST /admin/monitoring/log/clear
+     *
+     * Усекает laravel.log до 0 байт (атомарно через ftruncate). Удобно
+     * после фикса инцидента — оператор обнуляет лог и наблюдает только
+     * новые ошибки.
+     */
+    public function clearLog(): JsonResponse
+    {
+        $path = storage_path('logs/laravel.log');
+        if (! is_file($path)) {
+            return response()->json(['message' => 'Log file not found'], 404);
+        }
+        $fp = @fopen($path, 'r+');
+        if (! $fp) return response()->json(['message' => 'Cannot open log for truncate'], 500);
+        ftruncate($fp, 0);
+        fclose($fp);
+
+        return response()->json(['message' => 'Лог очищен']);
+    }
+
+    /**
      * Clear all failed jobs.
      */
     public function flushJobs(): JsonResponse
