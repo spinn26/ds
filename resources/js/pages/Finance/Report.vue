@@ -1,6 +1,6 @@
 <template>
   <div>
-    <PageHeader title="Отчёт начислений и выплат" icon="mdi-bank">
+    <PageHeader :title="reportTitle" icon="mdi-bank">
       <template #actions>
         <div class="d-flex align-center ga-2">
           <v-btn variant="flat" color="primary" size="small" prepend-icon="mdi-download"
@@ -352,6 +352,16 @@ const data = ref({});
 const fmtRate = (n) => Number(n || 0).toLocaleString('ru-RU', { minimumFractionDigits: 4 });
 
 const summary = computed(() => data.value.summary || {});
+
+// Заголовок страницы. ФИО партнёра показываем ВСЕГДА, если backend
+// прислал — staff (Богданова) делает проверку по ветке, открывает
+// несколько отчётов в соседних вкладках, без имени их не отличить.
+const reportTitle = computed(() => {
+  const name = data.value.consultant?.personName;
+  return name
+    ? `Отчёт начислений и выплат · ${name}`
+    : 'Отчёт начислений и выплат';
+});
 const qualTrend = computed(() => {
   const cur = summary.value.qualificationCurrent?.percent ?? 0;
   const prev = summary.value.qualificationPrev?.percent ?? 0;
