@@ -354,6 +354,14 @@ class CommissionCalculator
         $incomeDsUsd = $usdRate > 0 ? round($incomeDsRub / $usdRate, 2) : 0;
         $netRevenueUsd = $usdRate > 0 ? round($netRevenueRub / $usdRate, 2) : 0;
 
+        // Прибыль DS = доход DS - выплаты партнёрам цепочки.
+        // *BeforeGapReduction — снимок ДО применения отрыва (на момент
+        // создания commission штраф ещё не применён, MonthlyPenaltyRunner
+        // подтянет reduction ночью). После отрыва profitRUB должен расти
+        // (удержание партнёра становится прибылью DS), но *BeforeGapReduction
+        // остаются как точка отсчёта — нужны для отчёта «комиссия до отрыва».
+        $profitRub = round($incomeDsRub - $chainTotalRub, 2);
+
         DB::table('transaction')->where('id', $transactionId)->update([
             'personalVolume' => round($personalVolume, 6),
             'groupVolume' => round($personalVolume, 6),
@@ -362,6 +370,9 @@ class CommissionCalculator
             'commissionsAmountUSD' => $incomeDsUsd,
             'netRevenueRUB' => $netRevenueRub,
             'netRevenueUSD' => $netRevenueUsd,
+            'profitRUB' => $profitRub,
+            'commissionAmountRubBeforeGapReduction' => round($chainTotalRub, 2),
+            'profitRubBeforeGapReduction' => $profitRub,
         ]);
 
         // openDate контракта подтягиваем из транзакции, если контракт ещё
