@@ -431,6 +431,7 @@ function onImportFinish(payload) {
   progressResult.value = payload;
   progressFinished.value = true;
   importing.value = false;
+  calculatingId.value = null;
   loadHistory();
 }
 
@@ -465,14 +466,27 @@ async function doRollback() {
 }
 
 async function runCalculation(item) {
+  // Расчёт async через очередь: 1267 транзакций × каскад = ~5-10 мин,
+  // axios timeout 30s раньше падал как «Ошибка расчёта». Бэк теперь
+  // отдаёт 202 + tracker, прогресс — через ImportProgressDialog.
   calculatingId.value = item.id;
+  progressResult.value = null;
+  progressFinished.value = false;
   try {
     const { data } = await api.post(`/admin/transaction-import/${item.id}/calculate`);
+    if (data?.tracker) {
+      progressTracker.value = data.tracker;
+      progressOpen.value = true;
+      // calculatingId сбросится в onImportFinish (когда диалог финализируется).
+      return;
+    }
+    // Старый sync-режим (на случай отката бэка).
     result.value = { message: data.message, success: data.success, errors: data.errors };
+    calculatingId.value = null;
   } catch (e) {
     result.value = { message: e.response?.data?.message || 'Ошибка расчёта', errors: 1, success: 0 };
+    calculatingId.value = null;
   }
-  calculatingId.value = null;
 }
 
 function showErrors(item) { errorsTarget.value = item; errorsDialog.value = true; }

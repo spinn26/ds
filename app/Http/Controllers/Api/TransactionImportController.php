@@ -573,13 +573,25 @@ class TransactionImportController extends Controller
             ], 422);
         }
 
-        $calculator = app(\App\Services\CommissionCalculator::class);
-        $results = $calculator->calculateForImport($importId);
+        // Async: 1267 транзакций × каскад наставников = 5-10 минут,
+        // axios timeout 30s падал как «Ошибка расчёта». Теперь Job в
+        // очереди, фронт поллит /admin/import-progress.
+        $tracker = 'calc-' . $importId . '-' . uniqid('', true);
+        \Illuminate\Support\Facades\Cache::put(
+            "import:tracker:{$tracker}",
+            ['status' => 'starting', 'total' => 0, 'processed' => 0, 'success' => 0, 'errors' => 0],
+            1800,
+        );
+        \App\Jobs\CalculateImportCommissionsJob::dispatch(
+            $importId, $tracker, (int) $request->user()->id,
+        );
 
         return response()->json([
-            'message' => "Расчёт завершён: {$results['success']} из {$results['total']}",
-            ...$results,
-        ]);
+            'message' => 'Расчёт комиссий поставлен в очередь',
+            'importId' => $importId,
+            'tracker' => $tracker,
+            'status' => 'queued',
+        ], 202);
     }
 
     /**
