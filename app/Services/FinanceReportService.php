@@ -408,7 +408,11 @@ class FinanceReportService
         $personalSalesBonusRub = $personalCommissions->sum(fn ($c) => (float) ($c->groupBonusRub ?? 0));
         $personalSalesClientPayments = $personalCommissions->sum(fn ($c) => (float) ($c->amount ?? 0));
 
-        $groupSalesPoints = $groupCommissions->sum(fn ($c) => (float) ($c->personalVolume ?? 0));
+        // ОП по ГП = групповой объём (баллы) по продажам команды. В
+        // commission.personalVolume хранится «личный объём по этой строке»,
+        // и для чужой продажи он всегда 0 (продал даун, не наставник).
+        // Правильный источник для ОП по ГП — commission.groupVolume.
+        $groupSalesPoints = $groupCommissions->sum(fn ($c) => (float) ($c->groupVolume ?? 0));
         $groupSalesBonus = $groupCommissions->sum(fn ($c) => (float) ($c->groupBonus ?? 0));
         $groupSalesBonusRub = $groupCommissions->sum(fn ($c) => (float) ($c->groupBonusRub ?? 0));
         $groupSalesClientPayments = $groupCommissions->sum(fn ($c) => (float) ($c->amount ?? 0));

@@ -133,8 +133,27 @@ class DashboardService
         $breakaway = $this->buildBreakawaySummary($consultant->id, $month, $currentQLog);
 
         // Personal/Group volumes for period
-        $personalVolume = $periodQLog->personalVolume ?? $consultant->personalVolume ?? 0;
-        $groupVolume = $periodQLog->groupVolume ?? $consultant->groupVolume ?? 0;
+        // qualificationLog обновляется ночным финализом (partners:check-statuses
+        // в 02:00). После ручной фиксации/импорта transaction новые commission
+        // уже есть, но snapshot ещё нет — карточка «ОП по ГП» показывала 0,
+        // прогресс-бар плана не двигался.
+        // Берём max(snapshot, live SUM) — паттерн из Реестра выплат.
+        $snapshotPersonal = (float) ($periodQLog->personalVolume ?? $consultant->personalVolume ?? 0);
+        $snapshotGroup = (float) ($periodQLog->groupVolume ?? $consultant->groupVolume ?? 0);
+
+        $livePersonal = (float) DB::table('commission')
+            ->where('consultant', $consultant->id)
+            ->where('dateMonth', $month)
+            ->whereNull('deletedAt')
+            ->sum('personalVolume');
+        $liveGroup = (float) DB::table('commission')
+            ->where('consultant', $consultant->id)
+            ->where('dateMonth', $month)
+            ->whereNull('deletedAt')
+            ->sum('groupVolume');
+
+        $personalVolume = max($snapshotPersonal, $livePersonal);
+        $groupVolume = max($snapshotGroup, $liveGroup);
         $groupVolumeCumulative = $currentQLog->groupVolumeCumulative ?? $consultant->groupVolumeCumulative ?? 0;
 
         // Previous period values for comparison
