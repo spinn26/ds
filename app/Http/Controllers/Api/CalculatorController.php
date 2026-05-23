@@ -410,6 +410,10 @@ class CalculatorController extends Controller
             case 'fixed':
                 // Плоское значение, без математики — например, «400 долларов ≈ pointsMin».
                 return (float) ($pointsMin ?? 0);
+            case 'amount_x_dsPercent':
+                // amount × dsPercent / 10000 — без вычета НДС. Пример:
+                // Axevil — pointsFormula «Сумма × курс / 100 × 0.03».
+                return $amountRub * $dsIncomePercent / 10000;
             case 'amount_times_ds':
             default:
                 // Legacy: amount_no_vat × %ДС / 10000.

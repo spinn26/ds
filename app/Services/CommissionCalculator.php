@@ -461,6 +461,12 @@ class CommissionCalculator
                 return $amountRub / 100;
             case 'fixed':
                 return (float) ($pointsMin ?? 0);
+            case 'amount_x_dsPercent':
+                // amount × dsPercent / 10000 — без вычета НДС. Используется
+                // когда баллы партнёра должны идти от дохода ДС (а не от
+                // суммы транзакции). Пример: Axevil — pointsFormula
+                // «Сумма × курс / 100 × 0.03» → math: amountRub × 3 / 10000.
+                return $amountRub * $dsComPercent / 10000;
             case 'amount_times_ds':
             default:
                 return $amountNoVat * $dsComPercent / 10000;
