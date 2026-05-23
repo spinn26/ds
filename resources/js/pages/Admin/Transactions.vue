@@ -49,10 +49,12 @@
               <v-autocomplete v-model="filters.product" :items="productList" item-title="name" item-value="id"
                 placeholder="Продукт" density="compact" hide-details rounded clearable variant="outlined"
                 style="max-width: 200px; flex: 1 1 160px"
-                @update:model-value="loadContracts" />
-              <v-autocomplete v-model="filters.program" :items="programList" item-title="name" item-value="id"
+                @update:model-value="onProductChange" />
+              <v-autocomplete v-model="filters.program" :items="programsForSelectedProduct"
+                item-title="name" item-value="id"
                 placeholder="Программа" density="compact" hide-details rounded clearable variant="outlined"
                 style="max-width: 200px; flex: 1 1 160px"
+                :no-data-text="filters.product ? 'У этого продукта нет программ' : 'Выберите продукт'"
                 @update:model-value="loadContracts" />
               <v-autocomplete v-model="filters.currency" :items="currencyOptions" item-title="name" item-value="id"
                 placeholder="Валюта" density="compact" hide-details rounded clearable variant="outlined"
@@ -611,6 +613,25 @@ function resetContractFilters() {
   loadContracts();
 }
 
+// Программы фильтра зависят от выбранного продукта. Если продукт не
+// выбран — показываем все программы. Иначе — только программы этого
+// продукта (по program.productId из form-data).
+const programsForSelectedProduct = computed(() => {
+  if (!filters.value.product) return programList.value;
+  return programList.value.filter(p => p.productId === filters.value.product);
+});
+
+// При смене продукта — сбрасываем выбранную программу, если она не
+// принадлежит новому продукту, и подгружаем список контрактов.
+function onProductChange() {
+  if (filters.value.program) {
+    const stillValid = programsForSelectedProduct.value
+      .some(p => p.id === filters.value.program);
+    if (!stillValid) filters.value.program = null;
+  }
+  loadContracts();
+}
+
 const contractHeaders = [
   { title: '', key: 'add', sortable: false, width: 50 },
   { title: 'Номер', key: 'number', width: 130 },
@@ -1108,7 +1129,7 @@ onMounted(async () => {
           seen.add(key);
           return true;
         })
-        .map(p => ({ id: p.id, name: p.name }));
+        .map(p => ({ id: p.id, name: p.name, productId: p.productId ?? null }));
     } catch {}
   } catch {}
 });
