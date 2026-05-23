@@ -171,6 +171,15 @@ class CommissionCalculator
         $tx = DB::table('transaction')->where('id', $transactionId)->whereNull('deletedAt')->first();
         if (! $tx) return ['error' => 'Транзакция не найдена или удалена'];
 
+        // Удаляем ранее посчитанные commission по этой транзакции — иначе
+        // повторный вызов calculateForTransaction (после правки тх, бэкфилла
+        // или ручного «Пересчитать») плодит дубли (наблюдалось: 6 commission
+        // вместо 3 на tx#60708 после backfill 2026-05-23).
+        DB::table('commission')
+            ->where('transaction', $transactionId)
+            ->whereNull('deletedAt')
+            ->update(['deletedAt' => now()]);
+
         // Заморозка: нельзя пересчитывать комиссии в закрытом месяце.
         // Per ./.claude/specs/✅Комиссии .md Part 2 §1.
         // ВАЖНО: dateMonth хранится как 'YYYY-MM' (например, '2026-02'),
@@ -217,12 +226,19 @@ class CommissionCalculator
             $dsComPercent = (float) $programRow->dsPercent;
         }
         if ($dsComPercent <= 0 && $contract->program) {
+            // Детерминированный выбор: если у программы несколько активных
+            // записей dsCommission (наблюдалось у Axevil/187: 3% и 30%),
+            // берём последнюю по id. Без orderBy ->first() возвращает
+            // случайную и платежи цепочке могут превысить доход DS
+            // (отрицательная прибыль).
             $dsCom = DB::table('dsCommission')
                 ->where('program', $contract->program)
                 ->where('active', true)
                 ->where('date', '<=', now())
                 ->where('dateFinish', '>=', now())
                 ->whereNull('dateDeleted')
+                ->orderByDesc('date')
+                ->orderByDesc('id')
                 ->first();
             $dsComPercent = (float) ($dsCom->comission ?? 0);
         }
