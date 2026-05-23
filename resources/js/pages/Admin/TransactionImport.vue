@@ -119,6 +119,35 @@
           <span class="text-success">{{ item.successCount }}</span>
           <span v-if="item.errorCount > 0" class="text-error ml-1">/ {{ item.errorCount }} ош.</span>
         </template>
+        <template #item.calc="{ item }">
+          <v-chip v-if="item.calcStatus === 'done'" size="x-small" color="success" variant="tonal"
+            prepend-icon="mdi-check-circle">
+            Рассчитано {{ item.calcSuccess }} / {{ item.calcTotal }}
+            <v-tooltip activator="parent">
+              Расчёт комиссий завершён {{ fmtDate(item.calcDoneAt) }}
+            </v-tooltip>
+          </v-chip>
+          <v-chip v-else-if="item.calcStatus === 'partial'" size="x-small" color="warning" variant="tonal"
+            prepend-icon="mdi-alert-circle-outline">
+            Частично {{ item.calcSuccess }} / {{ item.calcTotal }}
+            <v-tooltip activator="parent">
+              Расчёт частичный, ошибок: {{ item.calcErrors }} ({{ fmtDate(item.calcDoneAt) }})
+            </v-tooltip>
+          </v-chip>
+          <v-chip v-else-if="item.calcStatus === 'running'" size="x-small" color="info" variant="tonal"
+            prepend-icon="mdi-loading">
+            Считается {{ item.calcSuccess || 0 }} / {{ item.calcTotal }}
+          </v-chip>
+          <v-chip v-else-if="item.calcStatus === 'error'" size="x-small" color="error" variant="tonal"
+            prepend-icon="mdi-alert">
+            Ошибка расчёта
+          </v-chip>
+          <v-chip v-else-if="item.status === 'success' || item.status === 'partial'"
+            size="x-small" color="grey" variant="tonal">
+            Не рассчитан
+          </v-chip>
+          <span v-else class="text-medium-emphasis">—</span>
+        </template>
         <template #item.createdAt="{ value }">{{ fmtDate(value) }}</template>
         <template #item.actions="{ item }">
           <v-chip v-if="item.frozen" size="x-small" color="grey" variant="tonal" prepend-icon="mdi-lock" class="mr-1">
@@ -324,6 +353,7 @@ const historyHeaders = [
   { title: 'Статус', key: 'status', width: 150 },
   { title: 'Всего строк', key: 'totalRows', width: 100 },
   { title: 'Результат', key: 'counts', width: 130, sortable: false },
+  { title: 'Расчёт', key: 'calc', width: 200, sortable: false },
   { title: 'Дата', key: 'createdAt', width: 150 },
   { title: '', key: 'actions', sortable: false, width: 90 },
 ];

@@ -338,6 +338,12 @@ class TransactionImportController extends Controller
             'errors' => $r->errors ? json_decode($r->errors, true) : [],
             'warnings' => isset($r->warnings) && $r->warnings ? json_decode($r->warnings, true) : [],
             'frozen' => $frozenMap[$r->id] ?? false,
+            // Индикатор расчёта комиссий — для бейджа в строке истории.
+            'calcStatus' => $r->calc_status ?? null,
+            'calcTotal' => $r->calc_total ?? null,
+            'calcSuccess' => $r->calc_success ?? null,
+            'calcErrors' => $r->calc_errors ?? null,
+            'calcDoneAt' => $r->calc_done_at ?? null,
         ]);
 
         return response()->json(['data' => $data, 'total' => $total]);

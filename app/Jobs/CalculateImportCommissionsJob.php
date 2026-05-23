@@ -50,6 +50,13 @@ class CalculateImportCommissionsJob implements ShouldQueue
             'status' => 'running', 'total' => $total, 'processed' => 0,
             'success' => 0, 'errors' => 0, 'phase' => 'calc',
         ]);
+        $this->updateImportLog([
+            'calc_status' => 'running',
+            'calc_total' => $total,
+            'calc_success' => 0,
+            'calc_errors' => 0,
+            'calc_done_at' => null,
+        ]);
 
         if ($total === 0) {
             $this->putTracker([
@@ -58,13 +65,16 @@ class CalculateImportCommissionsJob implements ShouldQueue
                 'importId' => $this->importLogId,
                 'message' => 'В импорте нет транзакций для расчёта.',
             ]);
+            $this->updateImportLog([
+                'calc_status' => 'done',
+                'calc_done_at' => now(),
+            ]);
             return;
         }
 
         $success = 0;
         $errors = 0;
         $errorDetails = [];
-        $errorRows = [];
 
         foreach ($txIds as $i => $txId) {
             try {
@@ -73,23 +83,25 @@ class CalculateImportCommissionsJob implements ShouldQueue
                     $success++;
                 } else {
                     $errors++;
-                    $msg = "tx#{$txId}: " . ($result['error'] ?? 'unknown');
-                    $errorDetails[] = $msg;
-                    $errorRows[] = ['transaction' => $txId, 'error' => $result['error'] ?? null];
+                    $errorDetails[] = "tx#{$txId}: " . ($result['error'] ?? 'unknown');
                 }
             } catch (\Throwable $e) {
                 $errors++;
-                $msg = "tx#{$txId}: " . $e->getMessage();
-                $errorDetails[] = $msg;
-                $errorRows[] = ['transaction' => $txId, 'error' => $e->getMessage()];
+                $errorDetails[] = "tx#{$txId}: " . $e->getMessage();
                 Log::warning('Calc failed in job', ['tx' => $txId, 'error' => $e->getMessage()]);
             }
 
-            // Прогресс — каждые 25 строк (или на последней).
+            // Прогресс — каждые 25 строк (или на последней). Пишем и
+            // в tracker (для polling-фронта), и в transaction_import_log
+            // (для бейджа «Рассчитано: 350/1267» в истории).
             if (($i + 1) % 25 === 0 || $i === $total - 1) {
                 $this->putTracker([
                     'status' => 'running', 'total' => $total, 'processed' => $i + 1,
                     'success' => $success, 'errors' => $errors, 'phase' => 'calc',
+                ]);
+                $this->updateImportLog([
+                    'calc_success' => $success,
+                    'calc_errors' => $errors,
                 ]);
             }
         }
@@ -99,9 +111,14 @@ class CalculateImportCommissionsJob implements ShouldQueue
         $calcSummary = ["Расчёт комиссий: {$success} из {$total}"];
         $combined = array_merge($calcSummary, array_slice($errorDetails, 0, 50), $existingErrors);
 
-        DB::table('transaction_import_log')->where('id', $this->importLogId)->update([
+        $finalStatus = $errors === 0 ? 'done' : ($success > 0 ? 'partial' : 'error');
+        $this->updateImportLog([
+            'calc_status' => $finalStatus,
+            'calc_total' => $total,
+            'calc_success' => $success,
+            'calc_errors' => $errors,
+            'calc_done_at' => now(),
             'errors' => json_encode($combined, JSON_UNESCAPED_UNICODE),
-            'updated_at' => now(),
         ]);
 
         $this->putTracker([
@@ -116,6 +133,10 @@ class CalculateImportCommissionsJob implements ShouldQueue
 
     public function failed(\Throwable $e): void
     {
+        $this->updateImportLog([
+            'calc_status' => 'error',
+            'calc_done_at' => now(),
+        ]);
         $this->putTracker([
             'status' => 'done', 'total' => 0, 'processed' => 0,
             'success' => 0, 'errors' => 1,
@@ -128,5 +149,25 @@ class CalculateImportCommissionsJob implements ShouldQueue
     private function putTracker(array $state): void
     {
         Cache::put("import:tracker:{$this->tracker}", $state, 1800);
+    }
+
+    /**
+     * Безопасный апдейт transaction_import_log: пишем только те поля,
+     * для которых соответствующие колонки реально существуют. Миграция
+     * 2026_05_23_000010 могла не накатиться (старая ветка / dev) —
+     * без guard будет 42703.
+     */
+    private function updateImportLog(array $data): void
+    {
+        $allowed = ['calc_status', 'calc_total', 'calc_success', 'calc_errors',
+            'calc_done_at', 'errors'];
+        $update = ['updated_at' => now()];
+        foreach ($data as $col => $val) {
+            if (! in_array($col, $allowed, true)) continue;
+            if (\Illuminate\Support\Facades\Schema::hasColumn('transaction_import_log', $col)) {
+                $update[$col] = $val;
+            }
+        }
+        DB::table('transaction_import_log')->where('id', $this->importLogId)->update($update);
     }
 }
