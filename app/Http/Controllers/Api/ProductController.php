@@ -339,12 +339,21 @@ class ProductController extends Controller
 
             // Реальная таблица — bankrequisites (lowercase). Laravel
             // квотирует имя как есть, поэтому camelCase ломает Postgres.
+            //
+            // Получатель платежа (beneficiary) ЖЁСТКО проставляется бэком
+            // = данные из ЕГРИП/ЕГРЮЛ по введённому ИНН. У нас запрещены
+            // выплаты на третьих лиц — партнёр не может через DevTools
+            // или прямой API-запрос указать чужие beneficiaryName/Inn.
+            // Финменеджер при ручной проверке всё равно увидит, что
+            // beneficiary == владелец ИНН.
             \Illuminate\Support\Facades\DB::table('bankrequisites')->updateOrInsert(
                 ['requisites' => $req->id, 'deletedAt' => null],
                 [
                     'bankName' => $data['bankName'],
                     'bankBik' => $data['bankBik'],
                     'accountNumber' => $data['accountNumber'],
+                    'beneficiaryName' => $fns['name'] ?? null,
+                    'beneficiaryInn' => $fns['inn'] ?? $innClean,
                     'verified' => $autoVerify,
                 ],
             );
