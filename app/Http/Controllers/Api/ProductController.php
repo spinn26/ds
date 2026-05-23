@@ -238,8 +238,16 @@ class ProductController extends Controller
 
     /**
      * Партнёрский setup реквизитов (ИНН + банк) с витрины.
-     * Если ФИО ИП совпало с профилем — авто-верификация;
-     * иначе создаётся тикет финменеджеру.
+     *
+     * Per spec ✅Реквизиты §1.3 «Автоматическая сверка с ФНС (API)»:
+     *   — ИНН: строго 10 цифр (ООО/ЮЛ) или 12 цифр (ИП).
+     *   — Сверка ФИО из ЕГРИП с ФИО в профиле побуквенно, без учёта
+     *     регистра. Расхождение → ручная проверка.
+     *   — Ввод ИНН ЮЛ (ООО, 10 цифр) → ручная проверка (нужен бенефициар).
+     *   — Auto-verify ТОЛЬКО для ИП (12 цифр) при совпавшем ФИО.
+     *
+     * Решение принимает сервер: фронт-флаг fioMatched игнорируется
+     * (это анти-fraud — пользователь не может выставить себе verified=true).
      */
     public function setupRequisites(Request $request): JsonResponse
     {
@@ -248,6 +256,8 @@ class ProductController extends Controller
             'bankName' => 'required|string|max:200',
             'bankBik' => 'required|string|max:20',
             'accountNumber' => 'required|string|max:40',
+            // fioMatched от клиента принимаем «для совместимости», но
+            // НЕ используем — серверная сверка через DadataService ниже.
             'fioMatched' => 'nullable|boolean',
         ]);
 
@@ -257,9 +267,53 @@ class ProductController extends Controller
         }
 
         $innClean = preg_replace('/\D/', '', $data['inn']);
-        $autoVerify = (bool) ($data['fioMatched'] ?? false);
+        if (strlen($innClean) !== 10 && strlen($innClean) !== 12) {
+            return response()->json([
+                'message' => 'ИНН должен быть 10 цифр (для ООО) или 12 цифр (для ИП).',
+            ], 422);
+        }
 
-        $requisite = \Illuminate\Support\Facades\DB::transaction(function () use ($consultant, $innClean, $data, $autoVerify) {
+        // Серверная сверка с ФНС через DaData (ЕГРИП/ЕГРЮЛ).
+        $dadata = app(\App\Services\DadataService::class);
+        $fns = $dadata->findByInn($innClean);
+        if (empty($fns['found'])) {
+            return response()->json([
+                'message' => $fns['error'] ?? 'Не удалось найти ИНН в ЕГРИП/ЕГРЮЛ.',
+            ], 422);
+        }
+        if (($fns['status'] ?? null) === 'LIQUIDATED') {
+            return response()->json([
+                'message' => 'По данным ФНС, этот ИНН ликвидирован. Используйте действующий ИНН.',
+            ], 422);
+        }
+
+        $isIndividual = ($fns['type'] ?? null) === 'INDIVIDUAL';
+        $fioCheck = $isIndividual
+            ? $dadata->compareFio(
+                $fns['fio'] ?? null,
+                $request->user()->lastName ?? null,
+                $request->user()->firstName ?? null,
+                $request->user()->patronymic ?? null,
+            )
+            : ['match' => false];
+
+        // Auto-verify ТОЛЬКО если: тип = ИП (12 цифр) И ФИО совпало.
+        // ООО (10 цифр) всегда уходит на ручную проверку — нужен
+        // отдельный регламент сверки бенефициара.
+        $autoVerify = $isIndividual && ! empty($fioCheck['match']);
+
+        $manualReason = null;
+        if (! $isIndividual) {
+            $manualReason = 'ИНН юр. лица (ООО) — требуется ручная проверка бенефициара.';
+        } elseif (! ($fioCheck['match'] ?? false)) {
+            $manualReason = sprintf(
+                'ФИО из ЕГРИП («%s») не совпадает с профилем («%s»).',
+                $fioCheck['actual'] ?? '—',
+                $fioCheck['expected'] ?? '—',
+            );
+        }
+
+        $requisite = \Illuminate\Support\Facades\DB::transaction(function () use ($consultant, $innClean, $data, $autoVerify, $fns) {
             $req = \App\Models\Requisite::where('consultant', $consultant->id)
                 ->whereNull('deletedAt')
                 ->first();
@@ -269,9 +323,17 @@ class ProductController extends Controller
                 $req->consultant = $consultant->id;
             }
             $req->inn = $innClean;
+            // Сохраняем подтверждённые ФНС данные — оператору не нужно
+            // вытаскивать из DaData повторно при ручной проверке.
+            if (! empty($fns['name'])) {
+                $req->individualEntrepreneur = mb_substr($fns['name'], 0, 255);
+            }
+            if (! empty($fns['ogrn'])) $req->ogrn = $fns['ogrn'];
+            if (! empty($fns['address'])) $req->address = mb_substr($fns['address'], 0, 500);
+            if (! empty($fns['registrationDate'])) $req->registrationDate = $fns['registrationDate'];
+
             $req->verified = $autoVerify;
             // status — FK на status_requisites: 1=backoffice, 2=consultant, 3=verified.
-            // Авто-верификация (ФИО совпало) → 3; иначе ждём ручную проверку → 1.
             $req->status = $autoVerify ? 3 : 1;
             $req->save();
 
@@ -295,14 +357,13 @@ class ProductController extends Controller
             return $req;
         });
 
-        // Если ФИО не совпало — создать тикет финменеджеру (если есть таблица).
-        // Колонок title/description в tickets нет — это subject/context_info
-        // (см. реальную схему). Раньше эта ветка падала 42703.
+        // Если не auto-verify — создаём тикет финменеджеру с причиной.
         if (! $autoVerify && \Schema::hasTable('tickets')) {
             \Illuminate\Support\Facades\DB::table('tickets')->insert([
-                'subject' => 'Проверка реквизитов партнёра: ФИО не совпадает с ИНН',
-                'context_info' => "Партнёр {$consultant->personName} (ID {$consultant->id}) ввёл ИНН {$innClean}, "
-                    . 'который отличается по ФИО от профиля. Требуется ручная проверка.',
+                'subject' => 'Проверка реквизитов партнёра: ' . ($manualReason ?? 'ручная сверка'),
+                'context_info' => "Партнёр {$consultant->personName} (ID {$consultant->id}) ввёл ИНН {$innClean}.\n"
+                    . "ФНС: {$fns['name']} (ОГРН {$fns['ogrn']})\n"
+                    . "Причина: {$manualReason}",
                 'category' => 'accruals',
                 'status' => 'open',
                 'priority' => 'high',
@@ -317,10 +378,15 @@ class ProductController extends Controller
 
         return response()->json([
             'message' => $autoVerify
-                ? 'Реквизиты автоматически верифицированы'
-                : 'Реквизиты сохранены. Ожидают проверки финменеджером.',
+                ? 'Реквизиты автоматически верифицированы по данным ФНС.'
+                : 'Реквизиты сохранены. ' . $manualReason . ' Ожидают проверки финменеджером.',
             'verified' => $autoVerify,
             'requisiteId' => $requisite->id,
+            'fns' => [
+                'name' => $fns['name'] ?? null,
+                'type' => $fns['type'] ?? null,
+                'status' => $fns['status'] ?? null,
+            ],
         ]);
     }
 

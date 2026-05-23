@@ -286,7 +286,7 @@ import { useSnackbar } from '../composables/useSnackbar';
 
 const router = useRouter();
 
-const { showError } = useSnackbar();
+const { showError, showSuccess } = useSnackbar();
 
 const loading = ref(true);
 const products = ref([]);
@@ -422,16 +422,18 @@ async function lookupInn() {
 async function saveRequisites() {
   savingReq.value = true;
   try {
-    await api.post('/requisites', {
+    // Backend сам проверяет ИНН через ФНС (DaData → ЕГРИП/ЕГРЮЛ) и
+    // решает auto-verify. fioMatched оставляем как hint, но окончательное
+    // решение принимает сервер.
+    const { data } = await api.post('/requisites', {
       inn: inn.value.replace(/\D/g, ''),
       bankName: bankName.value, bankBik: bankBik.value, accountNumber: accountNumber.value,
-      // сервер сам решает auto-verify если ФИО совпали
       fioMatched: innMatch.value === true,
     });
     access.value.requisitesSubmitted = true;
-    // verified=true только если ФИО совпало с ИНН и backend авто-верифицировал.
-    if (innMatch.value === true) access.value.requisitesVerified = true;
+    access.value.requisitesVerified = data?.verified === true;
     reqDialog.value = false;
+    if (data?.message) showSuccess(data.message);
     // Сразу переходим к следующему шагу
     if (!access.value.documentsAccepted) acceptDialog.value = true;
   } catch (e) {
