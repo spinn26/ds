@@ -437,7 +437,10 @@ Route::prefix('v1')->group(function () {
         // Admin — Payment registry (spec ✅Реестр выплат.md)
         Route::get('/admin/payment-registry', [\App\Http\Controllers\Api\AdminPaymentRegistryController::class, 'index']);
         Route::get('/admin/payment-registry/{id}/requisites', [\App\Http\Controllers\Api\AdminPaymentRegistryController::class, 'requisites'])->whereNumber('id');
+        Route::get('/admin/payment-registry/{id}/payments', [\App\Http\Controllers\Api\AdminPaymentRegistryController::class, 'listPayments'])->whereNumber('id');
         Route::post('/admin/payment-registry/{id}/payments', [\App\Http\Controllers\Api\AdminPaymentRegistryController::class, 'addPayment'])->whereNumber('id');
+        Route::patch('/admin/payment-registry/payments/{paymentId}', [\App\Http\Controllers\Api\AdminPaymentRegistryController::class, 'updatePayment'])->whereNumber('paymentId');
+        Route::delete('/admin/payment-registry/payments/{paymentId}', [\App\Http\Controllers\Api\AdminPaymentRegistryController::class, 'deletePayment'])->whereNumber('paymentId');
 
         // Admin — Period freeze (close/reopen reporting months)
         Route::get('/admin/periods', [\App\Http\Controllers\Api\AdminPeriodController::class, 'index']);

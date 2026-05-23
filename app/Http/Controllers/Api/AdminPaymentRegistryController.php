@@ -257,6 +257,118 @@ class AdminPaymentRegistryController extends Controller
         ]);
     }
 
+    /** GET /admin/payment-registry/{balanceId}/payments — список платежей по строке. */
+    public function listPayments(int $balanceId): JsonResponse
+    {
+        $balance = DB::table('consultantBalance')->where('id', $balanceId)->first();
+        if (! $balance) {
+            return response()->json(['message' => 'Запись не найдена'], 404);
+        }
+
+        $payments = DB::table('consultantPayment as p')
+            ->leftJoin('WebUser as u', 'u.id', '=', 'p.webUser')
+            ->where('p.consultantBalance', $balanceId)
+            ->orderByDesc('p.paymentDate')
+            ->orderByDesc('p.id')
+            ->get([
+                'p.id', 'p.amount', 'p.paymentDate', 'p.status', 'p.comment',
+                DB::raw('TRIM(CONCAT(u."firstName", \' \', u."lastName")) as createdBy'),
+            ]);
+
+        $statuses = DB::table('consultantPaymentStatus')->pluck('title', 'id');
+
+        return response()->json([
+            'items' => $payments->map(fn ($p) => [
+                'id' => $p->id,
+                'amount' => (float) $p->amount,
+                'paymentDate' => $p->paymentDate,
+                'status' => $p->status,
+                'statusName' => $statuses[$p->status] ?? null,
+                'comment' => $p->comment,
+                'createdBy' => trim((string) $p->createdBy) ?: null,
+            ]),
+            'statuses' => $statuses->map(fn ($title, $id) => ['value' => (int) $id, 'title' => $title])->values(),
+        ]);
+    }
+
+    /**
+     * PATCH /admin/payment-registry/payments/{paymentId}
+     * Изменить статус / сумму / комментарий платежа + пересчёт балансa.
+     */
+    public function updatePayment(Request $request, int $paymentId): JsonResponse
+    {
+        $data = $request->validate([
+            'amount' => 'nullable|numeric|min:0',
+            'status' => 'nullable|integer|in:1,2,3',
+            'comment' => 'nullable|string|max:500',
+        ]);
+
+        $payment = DB::table('consultantPayment')->where('id', $paymentId)->first();
+        if (! $payment) {
+            return response()->json(['message' => 'Платёж не найден'], 404);
+        }
+
+        DB::transaction(function () use ($payment, $data) {
+            $update = [];
+            if (array_key_exists('amount', $data) && $data['amount'] !== null) $update['amount'] = $data['amount'];
+            if (array_key_exists('status', $data) && $data['status'] !== null) $update['status'] = $data['status'];
+            if (array_key_exists('comment', $data)) $update['comment'] = $data['comment'];
+            if ($update) {
+                DB::table('consultantPayment')->where('id', $payment->id)->update($update);
+            }
+            $this->recalcBalance((int) $payment->consultantBalance);
+        });
+
+        return response()->json(['message' => 'Платёж обновлён']);
+    }
+
+    /**
+     * DELETE /admin/payment-registry/payments/{paymentId}
+     * Удалить платёж + пересчёт балансa. Hard delete — в схеме нет deletedAt.
+     */
+    public function deletePayment(int $paymentId): JsonResponse
+    {
+        $payment = DB::table('consultantPayment')->where('id', $paymentId)->first();
+        if (! $payment) {
+            return response()->json(['message' => 'Платёж не найден'], 404);
+        }
+
+        DB::transaction(function () use ($payment) {
+            DB::table('consultantPayment')->where('id', $payment->id)->delete();
+            $this->recalcBalance((int) $payment->consultantBalance);
+        });
+
+        return response()->json(['message' => 'Платёж удалён']);
+    }
+
+    /**
+     * Пересчёт consultantBalance.payed/remaining/status из текущих платежей.
+     * Учитываем только status IN (1, 2): «Платёж отправлен», «Оплачено».
+     * Статус 3 «Отказ» не уменьшает остаток.
+     */
+    private function recalcBalance(int $balanceId): void
+    {
+        $balance = DB::table('consultantBalance')->where('id', $balanceId)->first();
+        if (! $balance) return;
+
+        $paid = (float) DB::table('consultantPayment')
+            ->where('consultantBalance', $balanceId)
+            ->whereIn('status', [1, 2])
+            ->sum('amount');
+
+        $totalPayable = (float) ($balance->totalPayable ?? 0);
+        $remaining = $totalPayable - $paid;
+        $newStatus = $paid <= 0
+            ? 'В обработке'
+            : ($remaining <= 0 ? 'Оплачено полностью' : 'Частично оплачено');
+
+        DB::table('consultantBalance')->where('id', $balanceId)->update([
+            'payed' => $paid,
+            'remaining' => $remaining,
+            'status' => $newStatus,
+        ]);
+    }
+
     /** POST /admin/payment-registry/{id}/payments — добавить платёж. */
     public function addPayment(Request $request, int $id): JsonResponse
     {

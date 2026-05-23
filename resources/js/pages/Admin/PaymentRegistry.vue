@@ -123,6 +123,10 @@
           <v-btn v-if="canFull('payments')" icon="mdi-plus" size="x-small" variant="text" color="primary"
             :disabled="!canAddPayment(item)" :title="paymentBlockedReason(item) || 'Добавить платёж'"
             @click="openPayment(item)" />
+          <v-btn v-if="item.payed > 0 || (item.status && item.status !== 'В обработке')"
+            icon="mdi-history" size="x-small" variant="text" color="secondary"
+            title="История платежей"
+            @click="openHistory(item)" />
         </template>
       </v-data-table>
     </v-card>
@@ -176,6 +180,97 @@
       <v-textarea v-model="paymentForm.comment" label="Комментарий" variant="outlined"
         density="comfortable" rows="2" />
     </DialogShell>
+
+    <!-- История платежей по строке: изменение статуса / удаление -->
+    <v-dialog v-model="historyDialog" max-width="780" scrollable>
+      <v-card v-if="historyTarget">
+        <v-card-title class="d-flex align-center">
+          История платежей: {{ historyTarget.personName }}
+          <v-spacer />
+          <v-btn icon="mdi-close" variant="text" size="small" @click="historyDialog = false" />
+        </v-card-title>
+        <v-card-text style="max-height: 70vh">
+          <div v-if="historyLoading" class="d-flex justify-center pa-4">
+            <v-progress-circular indeterminate color="primary" />
+          </div>
+          <div v-else-if="!historyPayments.length" class="text-body-2 text-medium-emphasis pa-2">
+            Платежей по этой строке нет.
+          </div>
+          <v-table v-else density="compact">
+            <thead>
+              <tr>
+                <th>Дата</th>
+                <th class="text-end">Сумма, ₽</th>
+                <th>Статус</th>
+                <th>Комментарий</th>
+                <th>Кем создано</th>
+                <th class="text-end" style="width:120px"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="p in historyPayments" :key="p.id">
+                <td class="text-caption">{{ fmtPayDate(p.paymentDate) }}</td>
+                <td class="text-end font-weight-medium">
+                  <MoneyCell :value="p.amount" currency="₽" :decimals="true" />
+                </td>
+                <td>
+                  <v-chip size="x-small" :color="payStatusColor(p.status)" class="me-1">
+                    {{ p.statusName || '—' }}
+                  </v-chip>
+                </td>
+                <td class="text-body-2">{{ p.comment || '—' }}</td>
+                <td class="text-caption text-medium-emphasis">{{ p.createdBy || '—' }}</td>
+                <td class="text-end">
+                  <v-menu>
+                    <template #activator="{ props: a }">
+                      <v-btn icon="mdi-dots-vertical" size="x-small" variant="text" v-bind="a" />
+                    </template>
+                    <v-list density="compact">
+                      <v-list-item v-for="opt in historyStatuses" :key="opt.value"
+                        :disabled="opt.value === p.status"
+                        @click="changePaymentStatus(p, opt.value)">
+                        <template #prepend>
+                          <v-icon size="18" :color="payStatusColor(opt.value)">mdi-circle-medium</v-icon>
+                        </template>
+                        <v-list-item-title>Сменить на «{{ opt.title }}»</v-list-item-title>
+                      </v-list-item>
+                      <v-divider class="my-1" />
+                      <v-list-item @click="deletePaymentConfirm(p)">
+                        <template #prepend>
+                          <v-icon size="18" color="error">mdi-delete</v-icon>
+                        </template>
+                        <v-list-item-title class="text-error">Удалить платёж</v-list-item-title>
+                      </v-list-item>
+                    </v-list>
+                  </v-menu>
+                </td>
+              </tr>
+            </tbody>
+          </v-table>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="historyDialog = false">Закрыть</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <v-dialog v-model="deleteDialog" max-width="420">
+      <v-card>
+        <v-card-title>Удалить платёж?</v-card-title>
+        <v-card-text>
+          Будет удалён платёж на сумму
+          <strong><MoneyCell :value="deleteTarget?.amount" currency="₽" /></strong>
+          от {{ fmtPayDate(deleteTarget?.paymentDate) }}.
+          Баланс пересчитается автоматически. Действие необратимо.
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="deleteDialog = false">Отмена</v-btn>
+          <v-btn color="error" :loading="deleting" @click="doDeletePayment">Удалить</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
@@ -287,6 +382,85 @@ const paymentDialog = ref(false);
 const paymentTarget = ref(null);
 const paymentForm = reactive({ amount: 0, comment: '' });
 const savingPayment = ref(false);
+
+// История платежей: показ + смена статуса / удаление.
+const historyDialog = ref(false);
+const historyTarget = ref(null);
+const historyLoading = ref(false);
+const historyPayments = ref([]);
+const historyStatuses = ref([
+  { value: 1, title: 'Платёж отправлен' },
+  { value: 2, title: 'Оплачено' },
+  { value: 3, title: 'Отказ' },
+]);
+
+const deleteDialog = ref(false);
+const deleteTarget = ref(null);
+const deleting = ref(false);
+
+function payStatusColor(s) {
+  if (s === 2) return 'success';
+  if (s === 3) return 'error';
+  return 'warning';
+}
+
+function fmtPayDate(d) {
+  if (!d) return '—';
+  try {
+    const dt = new Date(d);
+    return dt.toLocaleDateString('ru-RU') + ' ' +
+      dt.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  } catch { return d; }
+}
+
+async function openHistory(item) {
+  historyTarget.value = item;
+  historyDialog.value = true;
+  historyLoading.value = true;
+  historyPayments.value = [];
+  try {
+    const { data } = await api.get(`/admin/payment-registry/${item.id}/payments`);
+    historyPayments.value = data.items || [];
+    if (Array.isArray(data.statuses) && data.statuses.length) {
+      historyStatuses.value = data.statuses;
+    }
+  } catch (e) {
+    showError(e.response?.data?.message || 'Не удалось загрузить историю');
+  }
+  historyLoading.value = false;
+}
+
+async function changePaymentStatus(payment, newStatus) {
+  try {
+    await api.patch(`/admin/payment-registry/payments/${payment.id}`, { status: newStatus });
+    showSuccess('Статус обновлён');
+    // Перезагружаем список и реестр (баланс/итоги пересчитываются на бэке).
+    if (historyTarget.value) await openHistory(historyTarget.value);
+    await load();
+  } catch (e) {
+    showError(e.response?.data?.message || 'Не удалось сменить статус');
+  }
+}
+
+function deletePaymentConfirm(payment) {
+  deleteTarget.value = payment;
+  deleteDialog.value = true;
+}
+
+async function doDeletePayment() {
+  if (!deleteTarget.value) return;
+  deleting.value = true;
+  try {
+    await api.delete(`/admin/payment-registry/payments/${deleteTarget.value.id}`);
+    showSuccess('Платёж удалён');
+    deleteDialog.value = false;
+    if (historyTarget.value) await openHistory(historyTarget.value);
+    await load();
+  } catch (e) {
+    showError(e.response?.data?.message || 'Не удалось удалить платёж');
+  }
+  deleting.value = false;
+}
 
 const monthOptions = Array.from({ length: 12 }, (_, i) => ({
   title: new Date(2000, i, 1).toLocaleDateString('ru-RU', { month: 'long' }),
