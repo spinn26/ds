@@ -106,20 +106,29 @@ class CalculateImportCommissionsJob implements ShouldQueue
             }
         }
 
-        $existingErrors = DB::table('transaction_import_log')->where('id', $this->importLogId)->value('errors');
-        $existingErrors = $existingErrors ? (json_decode($existingErrors, true) ?? []) : [];
-        $calcSummary = ["Расчёт комиссий: {$success} из {$total}"];
-        $combined = array_merge($calcSummary, array_slice($errorDetails, 0, 50), $existingErrors);
-
         $finalStatus = $errors === 0 ? 'done' : ($success > 0 ? 'partial' : 'error');
-        $this->updateImportLog([
+        $logUpdate = [
             'calc_status' => $finalStatus,
             'calc_total' => $total,
             'calc_success' => $success,
             'calc_errors' => $errors,
             'calc_done_at' => now(),
-            'errors' => json_encode($combined, JSON_UNESCAPED_UNICODE),
-        ]);
+        ];
+
+        // В `errors` дописываем ТОЛЬКО реально упавшие транзакции.
+        // Сводка «Расчёт комиссий: X из Y» больше не пишется туда — она
+        // есть в новых колонках calc_*, а иконка «Ошибки» в UI должна
+        // подсвечиваться лишь когда есть что-то реально требующее
+        // внимания (валидация импорта, FK violation, упавшие расчёты).
+        if (! empty($errorDetails)) {
+            $existingErrors = DB::table('transaction_import_log')
+                ->where('id', $this->importLogId)->value('errors');
+            $existingErrors = $existingErrors ? (json_decode($existingErrors, true) ?? []) : [];
+            $combined = array_merge(array_slice($errorDetails, 0, 50), $existingErrors);
+            $logUpdate['errors'] = json_encode($combined, JSON_UNESCAPED_UNICODE);
+        }
+
+        $this->updateImportLog($logUpdate);
 
         $this->putTracker([
             'status' => 'done', 'total' => $total, 'processed' => $total,

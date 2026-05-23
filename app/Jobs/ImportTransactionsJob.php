@@ -76,6 +76,14 @@ class ImportTransactionsJob implements ShouldQueue
                 'success' => 0, 'errors' => 0,
             ]);
 
+            // Сразу пишем total_rows в лог — чтобы оператор в истории видел
+            // сколько строк в источнике, ещё ДО завершения import'а (на
+            // случай если упадём на валидации).
+            DB::table('transaction_import_log')->where('id', $this->importLogId)->update([
+                'total_rows' => $total,
+                'updated_at' => now(),
+            ]);
+
             // === STEP 2: validation (parse + match contract) ===
             // Курсы валют — раз, не на каждой строке.
             $currencyRate = 1.0;
@@ -279,6 +287,7 @@ class ImportTransactionsJob implements ShouldQueue
             // в истории импортов, когда удобно. Импорт = только загрузка.
             $update = [
                 'status' => 'success',
+                'total_rows' => $total,
                 'success_count' => $successCount,
                 'error_count' => 0,
                 'created_ids' => json_encode($createdIds),
