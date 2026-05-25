@@ -13,6 +13,7 @@ import '@mdi/font/css/materialdesignicons.css';
 import 'vuetify/styles';
 import VueTelInput from 'vue-tel-input';
 import 'vue-tel-input/vue-tel-input.css';
+import './styles/ds-tokens.css';
 import './styles/global.css';
 import router from './router';
 import App from './App.vue';
@@ -39,56 +40,72 @@ const vuetify = createVuetify({
         fallback: 'en',
         messages: { ru: vuetifyRu, en: vuetifyEn },
     },
+    // Палитра — DS Consulting Design System (см. desing/README.md).
+    // MD3 color roles. brand/brand-ink — legacy-алиасы для старого кода,
+    // оставлены чтобы не ломать ссылки на rgb(var(--v-theme-brand)).
     theme: {
         defaultTheme: savedTheme,
         themes: {
             light: {
                 colors: {
                     primary: '#2E7D32',
-                    secondary: '#475569',
+                    secondary: '#6EE87A',
+                    tertiary: '#4361A8',
+                    success: '#2E7D32',
+                    warning: '#ED6C02',
+                    error: '#C62828',
+                    info: '#0277BD',
+                    background: '#F8F9F8',
+                    surface: '#FFFFFF',
+                    'on-surface': '#1A1F1B',
+                    'on-surface-variant': '#4A524C',
+                    'surface-variant': '#E9EBE9',
+                    outline: '#BDC4BE',
+                    'outline-variant': '#DDE2DE',
+                    // legacy-алиасы
                     brand: '#6EE87A',
                     'brand-ink': '#0A2B10',
-                    // Material-3-ish elevated look: white cards on a softer
-                    // grey page bg so the card edges actually read as cards.
-                    background: '#EEF1F5',
-                    surface: '#FFFFFF',
-                    'surface-variant': '#E4E7EC',
-                    'on-surface': '#141719',
-                    'on-background': '#0B0E12',
-                    info: '#5C9CE6',
-                    success: '#5CB85C',
-                    warning: '#F0AD4E',
-                    error: '#E25D5D',
                 },
             },
             dark: {
                 dark: true,
                 colors: {
-                    primary: '#2E7D32',
-                    secondary: '#94A3B8',
+                    primary: '#6EE87A',
+                    secondary: '#A4E0AC',
+                    tertiary: '#B3C5FF',
+                    success: '#A4E0AC',
+                    warning: '#FFB77A',
+                    error: '#FFB4AB',
+                    info: '#93CCFF',
+                    background: '#0F1311',
+                    surface: '#161A17',
+                    'on-surface': '#E2E4E2',
+                    'on-surface-variant': '#C2C8C3',
+                    'surface-variant': '#24292A',
+                    outline: '#3D4540',
+                    'outline-variant': '#2A312C',
+                    // legacy-алиасы
                     brand: '#6EE87A',
                     'brand-ink': '#0A2B10',
-                    background: '#0F1419',
-                    surface: '#1A1F2E',
-                    'surface-variant': '#232838',
-                    info: '#42A5F5',
-                    success: '#2E7D32',
-                    warning: '#FFA726',
-                    error: '#EF5350',
                 },
             },
         },
     },
+    // Defaults — округления md/lg (12px вместо 24px у текущего xl).
+    // Density: comfortable (40px) вместо compact (32px) для всех инпутов —
+    // соответствует --ds-h-control в дизайн-системе. На v-data-table остаётся
+    // compact, т.к. таблицы плотные по природе.
     defaults: {
-        VCard: { elevation: 0, rounded: 'xl', border: true },
-        VBtn: { rounded: 'xl' },
-        VTextField: { variant: 'outlined', density: 'compact', rounded: 'lg' },
-        VSelect: { variant: 'outlined', density: 'compact', rounded: 'lg' },
-        VTextarea: { variant: 'outlined', density: 'compact', rounded: 'lg' },
-        VAutocomplete: { variant: 'outlined', density: 'compact', rounded: 'lg' },
-        VCombobox: { variant: 'outlined', density: 'compact', rounded: 'lg' },
-        VFileInput: { variant: 'outlined', density: 'compact', rounded: 'lg' },
-        VChip: { size: 'small', rounded: 'lg' },
+        VCard: { elevation: 0, rounded: 'lg', border: true },
+        VBtn: { rounded: 'md', class: 'text-none' },
+        VTextField: { variant: 'outlined', density: 'comfortable', rounded: 'md' },
+        VSelect: { variant: 'outlined', density: 'comfortable', rounded: 'md' },
+        VTextarea: { variant: 'outlined', density: 'comfortable', rounded: 'md' },
+        VAutocomplete: { variant: 'outlined', density: 'comfortable', rounded: 'md' },
+        VCombobox: { variant: 'outlined', density: 'comfortable', rounded: 'md' },
+        VFileInput: { variant: 'outlined', density: 'comfortable', rounded: 'md' },
+        VChip: { size: 'small', rounded: 'pill' },
+        VProgressLinear: { rounded: true, color: 'primary' },
         // Vuetify локаль 'ru' уже подключена выше, но v-data-table footer
         // в 3.12 берёт тексты из своих собственных пропов, минуя $vuetify.
         // Поэтому дублируем явно — иначе видно «Items per page: 25 of 1858».
@@ -108,8 +125,8 @@ const vuetify = createVuetify({
             noDataText: 'Нет данных',
             loadingText: 'Загрузка…',
         },
-        VDialog: { rounded: 'xl' },
-        VAlert: { rounded: 'lg', variant: 'tonal' },
+        VDialog: { rounded: 'lg' },
+        VAlert: { rounded: 'md', variant: 'tonal' },
         VNavigationDrawer: { rounded: 0 },
     },
 });
