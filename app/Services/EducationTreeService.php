@@ -4,6 +4,7 @@ namespace App\Services;
 
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Сборщик дерева курсов LMS с прогрессом партнёра.
@@ -40,6 +41,28 @@ class EducationTreeService
         $testStatuses = $userId ? $this->testStatusesByCourse($userId) : collect();
         $hasTest = $this->hasTestByCourse();
 
+        // Список уроков для каждого курса — нужен админ-конструктору, чтобы
+        // показывать уроки как вложенные узлы дерева. На партнёрской стороне
+        // эти данные дублируют /education/courses/{id}/full и просто не
+        // используются (партнёр получает уроки отдельным запросом).
+        $cols = ['id', 'course_id', 'title', 'sort_order'];
+        if (Schema::hasColumn('education_lessons', 'is_test')) {
+            $cols[] = 'is_test';
+        }
+        $lessonsByCourse = DB::table('education_lessons')
+            ->where('active', true)
+            ->orderBy('course_id')
+            ->orderBy('sort_order')
+            ->orderBy('id')
+            ->get($cols)
+            ->groupBy('course_id')
+            ->map(fn ($rows) => $rows->map(fn ($l) => [
+                'id' => $l->id,
+                'title' => $l->title,
+                'sortOrder' => (int) ($l->sort_order ?? 0),
+                'isTest' => (bool) ($l->is_test ?? false),
+            ])->values()->all());
+
         $byParent = [];
         foreach ($courses as $c) {
             $node = [
@@ -58,6 +81,7 @@ class EducationTreeService
                 'lessonViewed' => $viewedCounts[$c->id] ?? 0,
                 'hasTest' => (bool) ($hasTest[$c->id] ?? false),
                 'testPassed' => (bool) ($testStatuses[$c->id] ?? false),
+                'lessons' => $lessonsByCourse[$c->id] ?? [],
                 'children' => [],
             ];
             $byParent[$c->parent_id ?? 0][] = $node;

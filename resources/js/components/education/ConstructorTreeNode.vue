@@ -19,7 +19,7 @@
       @click="$emit('select', node)"
     >
       <v-icon
-        v-if="hasChildren"
+        v-if="hasAnyChildren"
         size="14"
         class="twirl"
         :class="{ open: expanded }"
@@ -71,14 +71,16 @@
       </v-menu>
     </div>
 
-    <div v-if="hasChildren && expanded">
+    <div v-if="hasAnyChildren && expanded">
       <ConstructorTreeNode
-        v-for="child in node.children"
+        v-for="child in (node.children || [])"
         :key="child.id"
         :node="child"
         :selected-id="selectedId"
+        :selected-lesson-id="selectedLessonId"
         :level="level + 1"
         @select="(n) => $emit('select', n)"
+        @select-lesson="(payload) => $emit('select-lesson', payload)"
         @add-child="(n) => $emit('add-child', n)"
         @add-lesson="(n) => $emit('add-lesson', n)"
         @move-up="(n) => $emit('move-up', n)"
@@ -86,6 +88,28 @@
         @delete="(n) => $emit('delete', n)"
         @drop-node="(payload) => $emit('drop-node', payload)"
       />
+
+      <!-- Уроки текущего курса (только если курс не container) -->
+      <div
+        v-for="lesson in (node.isContainer ? [] : (node.lessons || []))"
+        :key="`l-${lesson.id}`"
+        class="node-row lesson-row"
+        :class="{ selected: Number(selectedLessonId) === lesson.id }"
+        :style="{ paddingLeft: level * 14 + 'px' }"
+        @click="$emit('select-lesson', { lesson, courseId: node.id })"
+      >
+        <v-icon size="6" class="bullet">mdi-circle-small</v-icon>
+        <v-icon
+          size="14"
+          :color="lesson.isTest ? 'secondary' : 'grey'"
+          class="type-icon"
+        >
+          {{ lesson.isTest ? 'mdi-help-circle-outline' : 'mdi-text-box-outline' }}
+        </v-icon>
+        <span class="title-text lesson-title" :title="lesson.title">
+          {{ lesson.title }}
+        </span>
+      </div>
     </div>
   </div>
 </template>
@@ -96,15 +120,18 @@ import { ref, computed } from 'vue';
 const props = defineProps({
   node: { type: Object, required: true },
   selectedId: { type: [Number, String], default: null },
+  selectedLessonId: { type: [Number, String], default: null },
   level: { type: Number, default: 1 },
 });
 const emit = defineEmits([
-  'select', 'add-child', 'add-lesson', 'delete', 'move-up', 'move-down',
-  'drop-node',
+  'select', 'select-lesson', 'add-child', 'add-lesson',
+  'delete', 'move-up', 'move-down', 'drop-node',
 ]);
 
 const expanded = ref(props.level <= 2);
 const hasChildren = computed(() => (props.node.children?.length || 0) > 0);
+const hasLessons = computed(() => !props.node.isContainer && (props.node.lessons?.length || 0) > 0);
+const hasAnyChildren = computed(() => hasChildren.value || hasLessons.value);
 const isSelected = computed(() => Number(props.selectedId) === props.node.id);
 
 // Drag-and-drop позиция: куда «упадёт» при drop —
@@ -184,4 +211,16 @@ function onDrop(e) {
 }
 .actions-btn { opacity: 0.5; }
 .node-row:hover .actions-btn { opacity: 1; }
+
+.lesson-row {
+  font-size: 12.5px;
+  padding: 4px 6px 4px 4px;
+  color: rgba(var(--v-theme-on-surface), 0.78);
+}
+.lesson-title { font-weight: 400; }
+.lesson-row.selected {
+  background: rgba(46, 125, 50, 0.12);
+  color: rgb(var(--v-theme-primary));
+  font-weight: 600;
+}
 </style>

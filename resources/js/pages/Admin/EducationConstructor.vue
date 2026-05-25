@@ -30,9 +30,11 @@
             v-for="node in tree"
             :key="node.id"
             :node="node"
-            :selected-id="selectedId"
+            :selected-id="selectedType === 'course' ? selectedId : null"
+            :selected-lesson-id="selectedType === 'lesson' ? selectedId : null"
             :level="1"
             @select="selectNode"
+            @select-lesson="onTreeSelectLesson"
             @add-child="addChild"
             @add-lesson="addLesson"
             @delete="confirmDelete"
@@ -529,7 +531,7 @@ async function addLesson(parent, isTest = false) {
     showSuccess(isTest ? 'Урок-тест создан' : 'Урок создан');
     selectedId.value = parent.id;
     selectedType.value = 'course';
-    await loadCourseToEdit(parent.id);
+    await Promise.all([loadCourseToEdit(parent.id), loadTree()]);
     const lesson = courseLessons.value.find(l => l.id === data.id);
     if (lesson) selectLesson(lesson, parent.id);
   } catch (e) { showError('Не удалось создать урок'); }
@@ -538,7 +540,20 @@ async function addLesson(parent, isTest = false) {
 function selectLesson(lesson, courseId) {
   currentLesson.value = { ...lesson, body: Array.isArray(lesson.body) ? lesson.body : [] };
   currentLessonCourseId.value = courseId || (currentCourse.value?.id);
+  selectedId.value = lesson.id;
   selectedType.value = 'lesson';
+}
+
+// Клик по уроку в дереве: в payload только {id, title, isTest} —
+// тянем полные данные через loadCourseToEdit(courseId), потом
+// находим урок в courseLessons и открываем редактор.
+async function onTreeSelectLesson({ lesson, courseId }) {
+  if (!courseId || !lesson?.id) return;
+  if (currentCourse.value?.id !== courseId) {
+    await loadCourseToEdit(courseId);
+  }
+  const full = courseLessons.value.find(l => l.id === lesson.id);
+  if (full) selectLesson(full, courseId);
 }
 
 async function saveLesson(updated) {
@@ -563,6 +578,7 @@ async function saveLesson(updated) {
       },
     );
     showSuccess('Сохранено');
+    await loadTree();
   } catch (e) { showError(e.response?.data?.message || 'Ошибка'); }
   savingLesson.value = false;
 }
@@ -575,6 +591,7 @@ async function deleteLesson(lesson) {
     showSuccess('Удалено');
     if (currentLesson.value?.id === lesson.id) clearSelection();
     if (currentCourse.value) await loadCourseToEdit(currentCourse.value.id);
+    await loadTree();
   } catch (e) { showError('Не удалось удалить'); }
 }
 
