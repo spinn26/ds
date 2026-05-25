@@ -151,7 +151,19 @@ router.beforeEach(async (to) => {
     if (to.meta.guest && auth.user) return '/';
     // Send unauthorised users to an explicit 403 instead of bouncing them
     // to '/', which produces a silent "nothing happened" UX.
-    if (to.meta.admin && !auth.isAdmin) return '/forbidden';
+    // /admin/* доступен только админу. Для других staff (finance, calculations,
+    // backoffice, …) есть клоны в /manage/* — редирект туда, если такой
+    // путь существует и у пользователя есть права. Иначе — forbidden.
+    if (to.meta.admin && !auth.isAdmin) {
+        if (auth.isStaff && to.path.startsWith('/admin/')) {
+            const manageEquiv = to.path.replace(/^\/admin\//, '/manage/');
+            // Точечные алиасы: /admin/payment-registry → /manage/payments.
+            const aliases = { '/admin/payment-registry': '/manage/payments' };
+            const target = aliases[to.path] || manageEquiv;
+            return target;
+        }
+        return '/forbidden';
+    }
     if (to.meta.staff && !auth.isStaff) return '/forbidden';
 
     // Onboarding questionnaire: any non-staff user must fill it before the cabinet.
