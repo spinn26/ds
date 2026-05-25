@@ -83,11 +83,17 @@
               />
               <v-row dense>
                 <v-col cols="12" sm="6">
-                  <v-text-field
-                    v-model.number="currentCourse.product_id"
-                    label="ID продукта для разблокировки"
-                    variant="outlined" density="comfortable" type="number"
-                    hint="После сдачи теста откроется этот продукт"
+                  <v-autocomplete
+                    v-model="currentCourse.product_id"
+                    :items="productOptions"
+                    item-title="name"
+                    item-value="id"
+                    label="Продукт для разблокировки"
+                    variant="outlined" density="comfortable"
+                    clearable
+                    :loading="loadingProducts"
+                    prepend-inner-icon="mdi-package-variant"
+                    hint="После сдачи теста (100% правильных) откроется этот продукт"
                     persistent-hint
                   />
                 </v-col>
@@ -123,7 +129,7 @@
 
             <!-- Уроки курса (если не container) -->
             <div v-if="!currentCourse.is_container" class="lessons-section mt-6">
-              <div class="d-flex align-center mb-3">
+              <div class="d-flex align-center flex-wrap ga-2 mb-3">
                 <span class="text-subtitle-1 font-weight-bold">
                   Уроки в этом курсе ({{ courseLessons.length }})
                 </span>
@@ -132,6 +138,10 @@
                   prepend-icon="mdi-plus" @click="addLesson(currentCourse)">
                   Добавить урок
                 </v-btn>
+                <v-btn size="small" color="secondary" variant="tonal"
+                  prepend-icon="mdi-help-circle-outline" @click="addLesson(currentCourse, true)">
+                  Создать урок-тест
+                </v-btn>
               </div>
 
               <v-list v-if="courseLessons.length" density="compact">
@@ -139,8 +149,10 @@
                   v-for="l in courseLessons"
                   :key="l.id"
                   :title="l.title"
-                  :subtitle="`${blockCount(l)} блоков · sort ${l.sort_order || 0}`"
-                  prepend-icon="mdi-text-box-outline"
+                  :subtitle="l.is_test
+                    ? `Урок-тест · sort ${l.sort_order || 0}`
+                    : `${blockCount(l)} блоков · sort ${l.sort_order || 0}`"
+                  :prepend-icon="l.is_test ? 'mdi-help-circle-outline' : 'mdi-text-box-outline'"
                   @click="selectLesson(l)"
                 >
                   <template #append>
@@ -157,8 +169,7 @@
             </div>
 
             <!-- Тесты курса -->
-            <div v-if="!currentCourse.is_container && currentCourse.product_id"
-              class="tests-section mt-6">
+            <div v-if="!currentCourse.is_container" class="tests-section mt-6">
               <div class="d-flex align-center mb-3">
                 <span class="text-subtitle-1 font-weight-bold">
                   Тест ({{ courseTests.length }} вопросов)
@@ -169,6 +180,16 @@
                   Добавить вопрос
                 </v-btn>
               </div>
+
+              <v-alert
+                v-if="!currentCourse.product_id"
+                type="info" variant="tonal" density="compact" class="mb-3"
+                icon="mdi-information-outline"
+              >
+                Чтобы после сдачи теста автоматически открывался продукт,
+                выберите его в поле «Продукт для разблокировки» выше.
+                Можно добавлять вопросы и без продукта.
+              </v-alert>
 
               <v-list v-if="courseTests.length" density="compact">
                 <v-list-item
@@ -280,6 +301,18 @@ const { showSuccess, showError } = useSnackbar();
 
 const tree = ref([]);
 const loadingTree = ref(true);
+
+const productOptions = ref([]);
+const loadingProducts = ref(false);
+
+async function loadProducts() {
+  loadingProducts.value = true;
+  try {
+    const { data } = await api.get('/admin/products', { params: { per_page: 500 } });
+    productOptions.value = (data.data || data || []).map(p => ({ id: p.id, name: p.name }));
+  } catch (e) { /* тихо — поле останется пустым */ }
+  loadingProducts.value = false;
+}
 
 const selectedId = ref(null);
 const selectedType = ref(null);   // 'course' | 'lesson'
@@ -485,14 +518,15 @@ async function moveCourse(node, delta) {
   } catch (e) { showError('Не удалось переместить'); }
 }
 
-async function addLesson(parent) {
+async function addLesson(parent, isTest = false) {
   try {
     const { data } = await api.post(`/admin/education/courses/${parent.id}/lessons`, {
-      title: 'Новый урок',
+      title: isTest ? 'Тест по курсу' : 'Новый урок',
       sort_order: 0,
       active: true,
+      is_test: !!isTest,
     });
-    showSuccess('Урок создан');
+    showSuccess(isTest ? 'Урок-тест создан' : 'Урок создан');
     selectedId.value = parent.id;
     selectedType.value = 'course';
     await loadCourseToEdit(parent.id);
@@ -519,6 +553,7 @@ async function saveLesson(updated) {
         body: updated.body,
         sort_order: updated.sort_order || 0,
         active: true,
+        is_test: !!updated.is_test,
         // Drip + homework поля (миграция 2026_05_25_000020)
         drip_delay_hours: updated.drip_delay_hours || null,
         drip_open_at: updated.drip_open_at || null,
@@ -609,7 +644,10 @@ function clearSelection() {
   currentLesson.value = null;
 }
 
-onMounted(loadTree);
+onMounted(() => {
+  loadTree();
+  loadProducts();
+});
 </script>
 
 <style scoped>

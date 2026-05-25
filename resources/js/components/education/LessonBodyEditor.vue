@@ -1,8 +1,29 @@
 <template>
   <div>
-    <div class="text-subtitle-2 font-weight-bold text-uppercase letter-spacing-1 text-medium-emphasis mb-3">
-      Урок
+    <div class="d-flex align-center mb-3 ga-2">
+      <div class="text-subtitle-2 font-weight-bold text-uppercase letter-spacing-1 text-medium-emphasis">
+        {{ local.is_test ? 'Урок-тест' : 'Урок' }}
+      </div>
+      <v-spacer />
+      <v-switch
+        v-model="local.is_test"
+        label="Это урок-тест"
+        color="secondary" hide-details density="compact"
+        true-icon="mdi-help-circle"
+      />
     </div>
+
+    <v-alert
+      v-if="local.is_test"
+      type="info" variant="tonal" density="compact" class="mb-3"
+      icon="mdi-help-circle-outline"
+    >
+      <div class="font-weight-bold">Это урок-тест</div>
+      Партнёр увидит этот урок в списке как «Тест» — при открытии он перейдёт к
+      прохождению теста курса. Содержимое (блоки/видео/файлы) для такого
+      урока не используется. Вопросы редактируйте в секции «Тест» на странице курса.
+    </v-alert>
+
     <v-text-field
       v-model="local.title"
       label="Название урока *"
@@ -16,7 +37,7 @@
     />
 
     <!-- Drip-feed + стоп-урок + домашка (миграция 2026_05_25_000020) -->
-    <v-expansion-panels variant="accordion" class="mt-2">
+    <v-expansion-panels v-if="!local.is_test" variant="accordion" class="mt-2">
       <v-expansion-panel>
         <v-expansion-panel-title>
           <v-icon size="18" class="me-2">mdi-calendar-clock</v-icon>
@@ -69,17 +90,17 @@
       </v-expansion-panel>
     </v-expansion-panels>
 
-    <!-- Блоки конструктора -->
-    <div class="text-subtitle-1 font-weight-bold mt-4 mb-2">
+    <!-- Блоки конструктора (скрыты для урока-теста) -->
+    <div v-if="!local.is_test" class="text-subtitle-1 font-weight-bold mt-4 mb-2">
       Содержимое урока ({{ local.body.length }} блоков)
     </div>
 
-    <div v-if="!local.body.length" class="empty-blocks">
+    <div v-if="!local.is_test && !local.body.length" class="empty-blocks">
       Урок пустой. Добавьте блоки кнопками ниже.
     </div>
 
     <div
-      v-for="(block, idx) in local.body"
+      v-for="(block, idx) in (local.is_test ? [] : local.body)"
       :key="idx"
       class="block-card"
       :class="{
@@ -111,13 +132,11 @@
           @click="remove(idx)" />
       </div>
 
-      <!-- Текст -->
-      <v-textarea
+      <!-- Текст — rich-editor (жирный/курсив/заголовки/списки/ссылки/...) -->
+      <RichTextEditor
         v-if="block.type === 'text'"
         v-model="block.value"
-        label="Текст блока"
-        variant="outlined" density="comfortable"
-        rows="3" auto-grow hide-details
+        placeholder="Введите текст блока"
       />
 
       <!-- Видео -->
@@ -187,8 +206,8 @@
       @change="onFileSelected"
     />
 
-    <!-- Кнопки добавления -->
-    <div class="add-bar mt-3">
+    <!-- Кнопки добавления (скрыты для урока-теста) -->
+    <div v-if="!local.is_test" class="add-bar mt-3">
       <span class="text-caption text-medium-emphasis me-2">+ блок:</span>
       <v-btn
         v-for="t in blockTypes" :key="t.type"
@@ -218,6 +237,7 @@
 <script setup>
 import { ref, watch } from 'vue';
 import api from '../../api';
+import RichTextEditor from '../RichTextEditor.vue';
 
 const props = defineProps({
   lesson: { type: Object, required: true },
@@ -231,6 +251,7 @@ const local = ref({
   content: '',
   body: [],
   sort_order: 0,
+  is_test: false,
   drip_delay_hours: null,
   drip_open_at: '',
   is_stop_lesson: false,
@@ -245,6 +266,7 @@ watch(() => props.lesson, (l) => {
     content: l.content || '',
     body: Array.isArray(l.body) ? JSON.parse(JSON.stringify(l.body)) : [],
     sort_order: l.sort_order || 0,
+    is_test: !!l.is_test,
     drip_delay_hours: l.drip_delay_hours ?? null,
     drip_open_at: l.drip_open_at
       ? String(l.drip_open_at).slice(0, 16)   // ISO → datetime-local

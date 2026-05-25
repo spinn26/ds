@@ -397,6 +397,7 @@ class AdminEducationController extends Controller
                 'body' => isset($l->body) && $l->body
                     ? (is_string($l->body) ? json_decode($l->body, true) : $l->body)
                     : null,
+                'is_test' => (bool) ($l->is_test ?? false),
                 'sort_order' => $l->sort_order,
                 'active' => (bool) $l->active,
             ]);
@@ -484,6 +485,13 @@ class AdminEducationController extends Controller
                     ? json_encode(array_values($body), JSON_UNESCAPED_UNICODE)
                     : null;
             }
+        }
+
+        // is_test (миграция 2026_05_25_000030): урок-тест — отдельный тип
+        // урока без блоков, при открытии партнёром предлагает пройти тест
+        // курса. Конструктор скрывает блоки и подсказку для таких уроков.
+        if (Schema::hasColumn('education_lessons', 'is_test')) {
+            $payload['is_test'] = $request->boolean('is_test');
         }
 
         // Drip-feed (миграция 2026_05_25_000020): drip_delay_hours для

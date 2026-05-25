@@ -321,6 +321,7 @@ class EducationController extends Controller
                     'document_url' => $docs[0] ?? null,
                     'video_urls' => $videos,
                     'document_urls' => $docs,
+                    'is_test' => (bool) ($l->is_test ?? false),
                     'viewed' => isset($viewedSet[$l->id]),
                 ];
             })->values(),

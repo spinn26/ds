@@ -32,7 +32,10 @@ function toEmbed(url) {
     const host = u.hostname.replace(/^www\./, '');
     if (host === 'rutube.ru') {
       if (u.pathname.startsWith('/play/embed/')) return url;
-      const m = u.pathname.match(/\/video\/(?:private\/)?([a-f0-9]+)/i);
+      // Рутубовый id может быть любым alphanumeric (не только hex).
+      // Раньше регекс [a-f0-9]+ срабатывал для старых hash, но новые
+      // короткие id с буквами не попадали → fallback на «Открыть видео».
+      const m = u.pathname.match(/\/video\/(?:private\/)?([a-zA-Z0-9]+)/);
       if (m) {
         const p = u.searchParams.get('p');
         return `https://rutube.ru/play/embed/${m[1]}` + (p ? `?p=${encodeURIComponent(p)}` : '');
@@ -88,6 +91,16 @@ function renderBlock(b) {
   const label = b?.label || '';
 
   if (type === 'text') {
+    // Текст-блок пришёл из rich-editor (RichTextEditor.vue) — рендерим
+    // как HTML (innerHTML). Plain-text legacy-блоки (без тегов) тоже
+    // отобразятся корректно — браузер просто покажет строки.
+    const looksHtml = /<\/?[a-z][^>]*>/i.test(value || '');
+    if (looksHtml) {
+      return () => h('div', {
+        class: 'block block-text block-text-html',
+        innerHTML: value,
+      });
+    }
     return () => h('div', { class: 'block block-text' }, value);
   }
 
@@ -175,32 +188,55 @@ function renderBlock(b) {
 .block-renderer {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 28px;
 }
 
 .block { width: 100%; }
 .block-text {
-  font-size: 14.5px;
-  line-height: 1.65;
+  font-size: 16px;
+  line-height: 1.7;
   color: rgb(var(--v-theme-on-surface));
   white-space: pre-wrap;
   word-wrap: break-word;
 }
+/* HTML-контент из rich-editor */
+.block-text-html { white-space: normal; }
+.block-text-html :deep(p) { margin: 0 0 0.6em; }
+.block-text-html :deep(h1),
+.block-text-html :deep(h2),
+.block-text-html :deep(h3) {
+  margin: 0.8em 0 0.4em;
+  font-weight: 700;
+  line-height: 1.25;
+}
+.block-text-html :deep(h1) { font-size: 28px; }
+.block-text-html :deep(h2) { font-size: 22px; }
+.block-text-html :deep(h3) { font-size: 18px; }
+.block-text-html :deep(ul),
+.block-text-html :deep(ol) { padding-left: 24px; margin: 0.4em 0; }
+.block-text-html :deep(li) { margin: 0.2em 0; }
+.block-text-html :deep(a) {
+  color: rgb(var(--v-theme-primary));
+  text-decoration: underline;
+}
+.block-text-html :deep(b),
+.block-text-html :deep(strong) { font-weight: 700; }
 
 .block-caption {
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
   color: rgba(var(--v-theme-on-surface), 0.65);
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .video-frame {
   position: relative;
   width: 100%;
   aspect-ratio: 16 / 9;
-  border-radius: 10px;
+  border-radius: 14px;
   overflow: hidden;
   background: rgba(var(--v-theme-on-surface), 0.04);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.1);
 }
 .video-frame :deep(iframe) {
   position: absolute;

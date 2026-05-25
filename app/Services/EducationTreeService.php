@@ -123,6 +123,7 @@ class EducationTreeService
                     'documentUrls' => $l->document_urls ? (is_string($l->document_urls) ? json_decode($l->document_urls, true) : $l->document_urls) : [],
                     'viewed' => isset($viewedSet[$l->id]),
                     'isStopLesson' => (bool) ($l->is_stop_lesson ?? false),
+                    'isTest' => (bool) ($l->is_test ?? false),
                     'requiresHomework' => (bool) ($l->requires_homework ?? false),
                     'homeworkInstructions' => $l->homework_instructions ?? null,
                     'available' => $av['open'],

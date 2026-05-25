@@ -51,16 +51,33 @@
         </div>
 
         <div class="body-blocks">
+          <!-- Урок-тест: CTA на прохождение теста курса -->
+          <div v-if="lesson.isTest" class="test-lesson-card">
+            <v-icon size="64" color="primary" class="mb-3">mdi-help-circle-outline</v-icon>
+            <div class="text-h5 font-weight-bold mb-2">Тест по курсу</div>
+            <div class="text-body-1 text-medium-emphasis mb-4" style="max-width: 540px;">
+              Это итоговый тест. Ответьте правильно на все вопросы — и курс будет
+              считаться пройденным. После сдачи откроется доступ к продукту.
+            </div>
+            <v-btn
+              :to="`/education/courses/${route.params.id}/test`"
+              color="primary" size="large"
+              prepend-icon="mdi-play"
+            >
+              Пройти тест
+            </v-btn>
+          </div>
+
           <!-- Описание из legacy content -->
-          <div v-if="lesson.description" class="block block-text">
+          <div v-else-if="lesson.description" class="block block-text">
             {{ lesson.description }}
           </div>
 
           <!-- Новый формат body[] — единый рендерер -->
-          <LessonBlockRenderer v-if="blocks.length" :blocks="blocks" />
+          <LessonBlockRenderer v-if="!lesson.isTest && blocks.length" :blocks="blocks" />
 
           <!-- Legacy video_urls / document_urls (если body пуст) -->
-          <template v-else>
+          <template v-else-if="!lesson.isTest">
             <div v-if="videos.length" class="block">
               <div
                 v-for="(v, vi) in videos"
@@ -439,10 +456,10 @@ onMounted(load);
 .lesson-page { min-height: calc(100vh - 64px); }
 .lesson-layout {
   display: grid;
-  grid-template-columns: 240px 1fr;
+  grid-template-columns: 280px 1fr;
   min-height: calc(100vh - 110px);
 }
-@media (max-width: 960px) {
+@media (max-width: 1100px) {
   .lesson-layout { grid-template-columns: 1fr; }
   .lesson-tree { display: none; }
 }
@@ -466,18 +483,35 @@ onMounted(load);
   z-index: 2;
   background: rgb(var(--v-theme-background));
   border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
-  padding: 20px 36px 14px;
+  padding: 28px 56px 20px;
   display: flex;
   align-items: flex-start;
   gap: 16px;
 }
+.sticky-header h1 { font-size: 28px !important; line-height: 1.3; }
 
 .body-blocks {
-  padding: 24px 36px 40px;
-  max-width: 800px;
+  padding: 32px 56px 56px;
+  max-width: 1100px;
+  margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 22px;
+  gap: 28px;
+}
+@media (max-width: 700px) {
+  .sticky-header { padding: 20px 20px 14px; }
+  .body-blocks { padding: 20px 20px 40px; }
+}
+
+.test-lesson-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 56px 24px;
+  border: 1px dashed rgba(46, 125, 50, 0.35);
+  border-radius: 16px;
+  background: rgba(110, 232, 122, 0.06);
 }
 
 .block { width: 100%; }
