@@ -11,6 +11,162 @@ use Illuminate\Support\Facades\Schema;
 class EducationController extends Controller
 {
     /**
+     * GET /education/tree — рекурсивное дерево курсов с прогрессом
+     * текущего пользователя (per ТЗ Жосан 25.05.2026: Курс → Модуль →
+     * Подмодуль → Урок). Заменяет плоский /education/courses для нового
+     * UI; старый endpoint оставлен для обратной совместимости.
+     */
+    public function tree(Request $request, \App\Services\EducationTreeService $svc): JsonResponse
+    {
+        $tree = $svc->fullTree($request->user()->id);
+        return response()->json(['tree' => $tree]);
+    }
+
+    /**
+     * GET /education/courses/{id}/full — курс с полной структурой уроков
+     * (включая body-конструктор) + хлебные крошки. Используется страницей
+     * урока в новом UI.
+     */
+    public function courseFull(Request $request, int $id, \App\Services\EducationTreeService $svc): JsonResponse
+    {
+        $data = $svc->courseDetails($id, $request->user()->id);
+        if (! $data) return response()->json(['message' => 'Курс не найден'], 404);
+        return response()->json($data);
+    }
+
+    /**
+     * GET /education/search?q=… — общий поиск по курсам/урокам/тегам
+     * (per ТЗ Жосан §19, для MVP — только по названиям). Возвращает
+     * не более 30 результатов с типом (course/lesson/kb).
+     */
+    public function search(Request $request): JsonResponse
+    {
+        $q = trim((string) $request->query('q', ''));
+        if (mb_strlen($q) < 2) return response()->json(['items' => []]);
+        $like = '%' . mb_strtolower($q) . '%';
+
+        $courses = DB::table('education_courses')
+            ->whereNull('dateDeleted')
+            ->whereRaw('LOWER(title) LIKE ?', [$like])
+            ->limit(15)
+            ->get(['id', 'title', 'parent_id'])
+            ->map(fn ($c) => [
+                'type' => 'course', 'id' => $c->id, 'title' => $c->title,
+                'parent_id' => $c->parent_id,
+            ]);
+
+        $lessons = DB::table('education_lessons')
+            ->whereNull('dateDeleted')
+            ->whereRaw('LOWER(title) LIKE ?', [$like])
+            ->limit(15)
+            ->get(['id', 'title', 'course_id'])
+            ->map(fn ($l) => [
+                'type' => 'lesson', 'id' => $l->id, 'title' => $l->title,
+                'courseId' => $l->course_id,
+            ]);
+
+        $kb = Schema::hasTable('education_kb_articles')
+            ? DB::table('education_kb_articles')
+                ->whereNull('deleted_at')
+                ->where('published', true)
+                ->whereRaw('LOWER(title) LIKE ?', [$like])
+                ->limit(15)
+                ->get(['id', 'title', 'section_id'])
+                ->map(fn ($a) => [
+                    'type' => 'kb_article', 'id' => $a->id, 'title' => $a->title,
+                    'sectionId' => $a->section_id,
+                ])
+            : collect();
+
+        $items = $courses->concat($lessons)->concat($kb)->take(30)->values();
+        return response()->json(['items' => $items]);
+    }
+
+    /**
+     * GET /education/kb — дерево разделов и подразделов базы знаний.
+     * Сами материалы тянутся отдельно по разделу через kb/sections/{id}.
+     */
+    public function kbTree(): JsonResponse
+    {
+        if (! Schema::hasTable('education_kb_sections')) {
+            return response()->json(['sections' => []]);
+        }
+        $rows = DB::table('education_kb_sections')
+            ->whereNull('deleted_at')
+            ->orderBy('sort_order')
+            ->get();
+        $counts = Schema::hasTable('education_kb_articles')
+            ? DB::table('education_kb_articles')
+                ->whereNull('deleted_at')
+                ->where('published', true)
+                ->select('section_id', DB::raw('COUNT(*) as cnt'))
+                ->groupBy('section_id')
+                ->pluck('cnt', 'section_id')
+            : collect();
+
+        $byParent = [];
+        foreach ($rows as $r) {
+            $byParent[$r->parent_id ?? 0][] = [
+                'id' => $r->id, 'title' => $r->title, 'icon' => $r->icon,
+                'description' => $r->description, 'coverUrl' => $r->cover_url,
+                'slug' => $r->slug,
+                'articleCount' => (int) ($counts[$r->id] ?? 0),
+                'children' => [],
+            ];
+        }
+        $build = function (int $p) use (&$build, &$byParent) {
+            $out = $byParent[$p] ?? [];
+            foreach ($out as &$n) $n['children'] = $build($n['id']);
+            return $out;
+        };
+        return response()->json(['sections' => $build(0)]);
+    }
+
+    /**
+     * GET /education/kb/sections/{id} — список материалов в разделе.
+     */
+    public function kbSection(int $id): JsonResponse
+    {
+        if (! Schema::hasTable('education_kb_articles')) {
+            return response()->json(['articles' => []]);
+        }
+        $articles = DB::table('education_kb_articles')
+            ->where('section_id', $id)
+            ->whereNull('deleted_at')
+            ->where('published', true)
+            ->orderBy('sort_order')
+            ->get(['id', 'title', 'description', 'tags', 'sort_order'])
+            ->map(fn ($a) => [
+                'id' => $a->id, 'title' => $a->title, 'description' => $a->description,
+                'tags' => $a->tags ? (is_string($a->tags) ? json_decode($a->tags, true) : $a->tags) : [],
+            ]);
+        return response()->json(['articles' => $articles]);
+    }
+
+    /**
+     * GET /education/kb/articles/{id} — материал с полным body для просмотра.
+     */
+    public function kbArticle(int $id): JsonResponse
+    {
+        if (! Schema::hasTable('education_kb_articles')) abort(404);
+        $a = DB::table('education_kb_articles')
+            ->where('id', $id)
+            ->whereNull('deleted_at')
+            ->where('published', true)
+            ->first();
+        if (! $a) return response()->json(['message' => 'Материал не найден'], 404);
+
+        return response()->json([
+            'id' => $a->id,
+            'title' => $a->title,
+            'description' => $a->description,
+            'body' => $a->body ? (is_string($a->body) ? json_decode($a->body, true) : $a->body) : null,
+            'tags' => $a->tags ? (is_string($a->tags) ? json_decode($a->tags, true) : $a->tags) : [],
+            'sectionId' => $a->section_id,
+        ]);
+    }
+
+    /**
      * List of active courses with per-user progress.
      * A course is "completed" when every active lesson has a view record
      * and there is a course-completion entry from a passed test.

@@ -212,6 +212,14 @@ Route::prefix('v1')->group(function () {
         Route::get('/education/courses/{id}', [\App\Http\Controllers\Api\EducationController::class, 'show'])->whereNumber('id');
         Route::post('/education/courses/{id}/test', [\App\Http\Controllers\Api\EducationController::class, 'submitTest'])->whereNumber('id');
         Route::post('/education/lessons/{id}/view', [\App\Http\Controllers\Api\EducationController::class, 'markLessonViewed'])->whereNumber('id');
+        // LMS этап 1 (per ТЗ Жосан 25.05.2026): рекурсивное дерево
+        // курсов + конструктор-body + база знаний + поиск.
+        Route::get('/education/tree', [\App\Http\Controllers\Api\EducationController::class, 'tree']);
+        Route::get('/education/courses/{id}/full', [\App\Http\Controllers\Api\EducationController::class, 'courseFull'])->whereNumber('id');
+        Route::get('/education/search', [\App\Http\Controllers\Api\EducationController::class, 'search']);
+        Route::get('/education/kb', [\App\Http\Controllers\Api\EducationController::class, 'kbTree']);
+        Route::get('/education/kb/sections/{id}', [\App\Http\Controllers\Api\EducationController::class, 'kbSection'])->whereNumber('id');
+        Route::get('/education/kb/articles/{id}', [\App\Http\Controllers\Api\EducationController::class, 'kbArticle'])->whereNumber('id');
 
         // Admin — all routes require staff role
         Route::middleware('role:admin')->group(function () {
