@@ -370,3 +370,10 @@ onMounted(() => {
 });
 </script>
 
+<style scoped>
+/* DS-патч на Структуру: tabular-nums на счётчиках/балансах. */
+:deep(.text-h5), :deep(.text-h6), :deep(.text-subtitle-1) {
+  font-variant-numeric: tabular-nums;
+}
+</style>
+

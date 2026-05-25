@@ -500,6 +500,7 @@ onMounted(loadData);
    обёртку, чтобы корректно реагировать на light/dark темы. */
 .breakaway-card {
   border-left: 4px solid transparent !important;
+  border-radius: var(--ds-radius-lg, 12px) !important;
 }
 .breakaway-card--success {
   border-left-color: rgb(var(--v-theme-success)) !important;
@@ -509,5 +510,13 @@ onMounted(loadData);
 }
 .breakaway-card--error {
   border-left-color: rgb(var(--v-theme-error)) !important;
+}
+
+/* DS Finance Report: tabular-nums на суммах + DS-радиус карточек. */
+:deep(.text-h4), :deep(.text-h5), :deep(.text-h6), :deep(.text-subtitle-1) {
+  font-variant-numeric: tabular-nums;
+}
+:deep(.v-card) {
+  border-radius: var(--ds-radius-lg, 12px);
 }
 </style>

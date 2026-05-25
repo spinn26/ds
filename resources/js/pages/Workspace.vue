@@ -338,13 +338,19 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-/* Colored left accent bar on news cards — keeps the type signal without
-   drowning the text in a low-contrast tonal fill. */
+/* DS news-item: цветной accent + DS surface
+   (см. ds-patterns.jsx — паттерн alert/info-tile). */
 .news-item {
   border-left: 4px solid transparent;
+  border-radius: var(--ds-radius-md, 8px);
 }
 .news-warning { border-left-color: rgb(var(--v-theme-warning)); }
 .news-success { border-left-color: rgb(var(--v-theme-success)); }
 .news-info { border-left-color: rgb(var(--v-theme-info)); }
+
+/* tabular-nums на партнёрских KPI (см. desing/ds-layouts.jsx hero values) */
+:deep(.text-subtitle-1), :deep(.text-h4), :deep(.text-h6) {
+  font-variant-numeric: tabular-nums;
+}
 </style>
 

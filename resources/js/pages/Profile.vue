@@ -767,8 +767,16 @@ async function disable2fa() {
 
 <style scoped>
 .qr-img {
-  border-radius: 8px;
+  border-radius: var(--ds-radius-md, 8px);
   background: white;
   padding: 8px;
+}
+
+/* DS Profile: tabular-nums на балансах/статах + rounded-lg на карточках. */
+:deep(.text-h4), :deep(.text-h5), :deep(.text-h6), :deep(.text-subtitle-1) {
+  font-variant-numeric: tabular-nums;
+}
+:deep(.v-card) {
+  border-radius: var(--ds-radius-lg, 12px);
 }
 </style>

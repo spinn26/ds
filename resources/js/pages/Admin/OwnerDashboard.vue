@@ -190,3 +190,13 @@ async function load() {
 }
 onMounted(load);
 </script>
+
+<style scoped>
+/* DS Owner-dashboard: tabular-nums + чуть крупнее заголовки секций. */
+:deep(.text-h3), :deep(.text-h4) { font-variant-numeric: tabular-nums; }
+:deep(.v-card-title) {
+  font-size: 16px !important;
+  font-weight: 600 !important;
+  letter-spacing: -0.01em;
+}
+</style>

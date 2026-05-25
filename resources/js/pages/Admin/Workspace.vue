@@ -240,6 +240,16 @@ onMounted(load);
 </script>
 
 <style scoped>
-.tile { cursor: pointer; transition: transform 0.1s; }
-.tile:hover { transform: translateY(-1px); }
+/* DS-плитки на Рабочем столе: rounded-lg, hover-lift, tabular-nums */
+.tile {
+  cursor: pointer;
+  border-radius: var(--ds-radius-lg, 12px) !important;
+  transition: transform var(--ds-dur-fast, 120ms) var(--ds-ease-standard, ease),
+              box-shadow var(--ds-dur-fast, 120ms) var(--ds-ease-standard, ease);
+}
+.tile:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--ds-shadow-2, 0 2px 8px rgba(0,0,0,0.08));
+}
+:deep(.text-h6) { font-variant-numeric: tabular-nums; }
 </style>
