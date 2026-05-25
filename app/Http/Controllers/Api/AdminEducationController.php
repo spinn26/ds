@@ -219,25 +219,20 @@ class AdminEducationController extends Controller
         return response()->json(['data' => $courses, 'total' => $total]);
     }
 
-    /** Создать курс */
+    /** Создать курс / модуль / подмодуль (per ТЗ Жосан — рекурсивная иерархия) */
     public function storeCourse(Request $request): JsonResponse
     {
         $request->validate([
             'title' => 'required|string|max:255',
             'category_id' => 'nullable|integer|exists:education_course_categories,id',
+            'parent_id' => 'nullable|integer|exists:education_courses,id',
+            'is_container' => 'nullable|boolean',
         ]);
 
-        $attrs = [
-            'title' => $request->title,
-            'description' => $request->description,
-            'product_id' => $request->product_id,
+        $attrs = $this->coursePayload($request) + [
             'active' => $request->boolean('active', true),
-            'sort_order' => $request->input('sort_order', 0),
             'created_at' => now(),
         ];
-        if (Schema::hasColumn('education_courses', 'category_id')) {
-            $attrs['category_id'] = $request->input('category_id');
-        }
 
         $id = DB::table('education_courses')->insertGetId($attrs);
 
@@ -250,23 +245,102 @@ class AdminEducationController extends Controller
         $request->validate([
             'title' => 'required|string|max:255',
             'category_id' => 'nullable|integer|exists:education_course_categories,id',
+            'parent_id' => 'nullable|integer|exists:education_courses,id',
+            'is_container' => 'nullable|boolean',
         ]);
 
-        $attrs = [
-            'title' => $request->title,
-            'description' => $request->description,
-            'product_id' => $request->product_id,
+        // Защита от циклов: нельзя выставить parent_id равный своему id
+        // или потомку (иначе получим бесконечную рекурсию в tree).
+        if ($request->filled('parent_id')) {
+            $newParent = (int) $request->parent_id;
+            if ($newParent === $id || $this->isDescendantOf($newParent, $id)) {
+                return response()->json([
+                    'message' => 'Нельзя сделать узел потомком самого себя',
+                ], 422);
+            }
+        }
+
+        $attrs = $this->coursePayload($request) + [
             'active' => $request->boolean('active'),
-            'sort_order' => $request->input('sort_order', 0),
             'updated_at' => now(),
         ];
-        if (Schema::hasColumn('education_courses', 'category_id')) {
-            $attrs['category_id'] = $request->input('category_id');
-        }
 
         DB::table('education_courses')->where('id', $id)->update($attrs);
 
         return response()->json(['message' => 'Курс обновлён']);
+    }
+
+    /**
+     * POST /admin/education/courses/{id}/move
+     * Переместить узел в дерева: установить новый parent_id и sort_order
+     * среди siblings. Используется конструктором при drag-and-drop.
+     */
+    public function moveCourse(Request $request, int $id): JsonResponse
+    {
+        $data = $request->validate([
+            'parent_id' => 'nullable|integer|exists:education_courses,id',
+            'sort_order' => 'required|integer|min:0',
+        ]);
+
+        if (! empty($data['parent_id'])) {
+            $newParent = (int) $data['parent_id'];
+            if ($newParent === $id || $this->isDescendantOf($newParent, $id)) {
+                return response()->json([
+                    'message' => 'Нельзя переместить узел в свою же ветку',
+                ], 422);
+            }
+        }
+
+        DB::table('education_courses')->where('id', $id)->update([
+            'parent_id' => $data['parent_id'] ?? null,
+            'sort_order' => $data['sort_order'],
+            'updated_at' => now(),
+        ]);
+
+        return response()->json(['message' => 'Перемещено']);
+    }
+
+    /** Общий маппинг полей курса. */
+    private function coursePayload(Request $request): array
+    {
+        $payload = [
+            'title' => $request->title,
+            'description' => $request->description,
+            'product_id' => $request->product_id,
+            'sort_order' => $request->input('sort_order', 0),
+        ];
+        foreach (['category_id', 'parent_id', 'is_container', 'cover_url', 'slug'] as $field) {
+            if (! Schema::hasColumn('education_courses', $field)) continue;
+            if ($field === 'is_container') {
+                $payload[$field] = $request->boolean($field);
+            } else {
+                $payload[$field] = $request->input($field);
+            }
+        }
+        return $payload;
+    }
+
+    /** True если $candidateId — потомок $rootId (защита от циклов в move). */
+    private function isDescendantOf(int $candidateId, int $rootId): bool
+    {
+        $visited = [];
+        $stack = [$rootId];
+        while ($stack) {
+            $cur = array_pop($stack);
+            $children = DB::table('education_courses')
+                ->where('parent_id', $cur)
+                ->whereNull('dateDeleted')
+                ->pluck('id')
+                ->all();
+            foreach ($children as $cId) {
+                if ($cId === $candidateId) return true;
+                if (! in_array($cId, $visited, true)) {
+                    $visited[] = $cId;
+                    $stack[] = $cId;
+                }
+            }
+        }
+        return false;
     }
 
     /** Удалить курс */
@@ -320,6 +394,9 @@ class AdminEducationController extends Controller
                 'document_url' => $l->document_url,
                 'video_urls' => $this->urlArray($hasArrays ? ($l->video_urls ?? null) : null, $l->video_url ?? null),
                 'document_urls' => $this->urlArray($hasArrays ? ($l->document_urls ?? null) : null, $l->document_url ?? null),
+                'body' => isset($l->body) && $l->body
+                    ? (is_string($l->body) ? json_decode($l->body, true) : $l->body)
+                    : null,
                 'sort_order' => $l->sort_order,
                 'active' => (bool) $l->active,
             ]);
@@ -390,6 +467,23 @@ class AdminEducationController extends Controller
         if (Schema::hasColumn('education_lessons', 'video_urls')) {
             $payload['video_urls'] = $videoItems ? json_encode(array_values($videoItems), JSON_UNESCAPED_UNICODE) : null;
             $payload['document_urls'] = $documentItems ? json_encode(array_values($documentItems), JSON_UNESCAPED_UNICODE) : null;
+        }
+
+        // body — конструктор блоков урока (text/video/audio/image/file/link/...),
+        // массив объектов { type, value, label, order, opts }.
+        // Per ТЗ Жосан §6: «урок не должен быть жёстким шаблоном, нужен
+        // конструктор блоков». Старые video_urls/document_urls оставляем
+        // для legacy-уроков — рендерер на фронте поддерживает оба формата.
+        if (Schema::hasColumn('education_lessons', 'body')) {
+            $bodyInput = $request->input('body');
+            if ($bodyInput === null || $bodyInput === '') {
+                $payload['body'] = null;
+            } else {
+                $body = is_string($bodyInput) ? json_decode($bodyInput, true) : $bodyInput;
+                $payload['body'] = is_array($body) && $body
+                    ? json_encode(array_values($body), JSON_UNESCAPED_UNICODE)
+                    : null;
+            }
         }
         // content_type оставлено в схеме но больше не дёргаем — урок
         // содержит произвольный микс текста/видео/ссылок одновременно.
