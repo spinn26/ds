@@ -578,8 +578,15 @@ class ChatController extends Controller
         // Атомарно: insert сообщения + update счётчиков и статуса тикета.
         // Socket-emit ВЫНЕСЕН за пределы транзакции — иначе при rollback
         // клиенты получили бы сообщение, которого нет в БД.
+        // claimChange — пара (assignedTo, assignedName), если auto-claim
+        // сработал внутри транзакции; нужна снаружи для эмита
+        // chat:ticket-updated всем подключённым клиентам (иначе у других
+        // staff отдела тикет остаётся в локальном списке устаревшим).
+        $claimChange = null;
+        $statusChangedTo = null;
         $msgId = DB::transaction(function () use ($id, $user, $name, $isAgent, $request,
-            $attachmentPath, $attachmentName, $replyToId, $clientMessageId, $now, $ticket) {
+            $attachmentPath, $attachmentName, $replyToId, $clientMessageId, $now, $ticket,
+            &$claimChange, &$statusChangedTo) {
             $msgId = DB::table('chat_messages')->insertGetId([
                 'ticket_id' => $id,
                 'sender_id' => $user->id,
@@ -605,13 +612,16 @@ class ChatController extends Controller
             if ($isAgent && empty($ticket->assigned_to)) {
                 $update['assigned_to'] = $user->id;
                 $update['assigned_name'] = $name;
+                $claimChange = ['assigned_to' => $user->id, 'assigned_name' => $name];
                 if ($ticket->status === 'new') {
                     $update['status'] = 'open';
+                    $statusChangedTo = 'open';
                 }
             } elseif ($ticket->status === 'new' && $isAgent) {
                 // Tail-кейс: тикет уже кому-то назначен, но всё ещё в new
                 // (не должно случаться, но оставляем перевод в open для совместимости).
                 $update['status'] = 'open';
+                $statusChangedTo = 'open';
             }
             DB::table('chat_tickets')->where('id', $id)->update($update);
 
@@ -632,6 +642,30 @@ class ChatController extends Controller
             ]);
         } catch (\Exception $e) {
             Log::warning('chat socket emit failed: new-message', ['ticket_id' => $id, 'message_id' => $msgId, 'exception' => $e->getMessage()]);
+        }
+
+        // Если внутри транзакции произошёл auto-claim или смена статуса (new→open) —
+        // рассылаем chat:ticket-updated глобально, без targeting'а к комнате
+        // тикета. Это критично для модели claim & hide: остальные staff отдела
+        // должны увидеть, что тикет назначен, и убрать его из своего списка
+        // (см. обработчик в StaffChat.vue). Без этого их локальный chats.value
+        // остаётся со старым assigned_to=null и тикет «висит».
+        if ($claimChange || $statusChangedTo) {
+            $payload = ['ticketId' => $id];
+            if ($claimChange) {
+                $payload['assignedTo'] = $claimChange['assigned_to'];
+                $payload['assignedName'] = $claimChange['assigned_name'];
+            }
+            if ($statusChangedTo) {
+                $payload['status'] = $statusChangedTo;
+            }
+            try {
+                app(\App\Services\SocketService::class)->emit('chat:ticket-updated', null, $payload);
+            } catch (\Exception $e) {
+                Log::warning('chat socket emit failed: ticket-updated (auto-claim)', [
+                    'ticket_id' => $id, 'exception' => $e->getMessage(),
+                ]);
+            }
         }
 
         // Broadcast: «где-то поменялся unread» → каждый онлайн-клиент

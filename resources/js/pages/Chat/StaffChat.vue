@@ -2703,6 +2703,17 @@ async function connectSocket() {
         // из строки, если не был приглашён участником). Тянем заново.
         if (e.assignedTo !== undefined) loadParticipants();
       }
+      // Claim & hide: если ассайн изменился НЕ на меня — у меня мог пропасть
+      // (или появиться) этот тикет в списке. Перетягиваем chats с backend'а,
+      // он отфильтрует авторитетно по правилу «assigned_to IS NULL OR me OR
+      // created_by/recipient/participant». Случаи: (а) ticket назначили
+      // другому → у меня уходит из списка; (б) ticket освободили (null) →
+      // возвращается для всех staff отдела. Случай «назначили мне» — list
+      // уже корректен (e.ticketId был в моём списке как unassigned).
+      if (e.assignedTo !== undefined
+          && Number(e.assignedTo) !== Number(currentUserId)) {
+        loadChats();
+      }
     });
   } catch (e) {
     if (import.meta.env.DEV) console.warn('Chat socket unavailable, falling back to polling:', e?.message);
