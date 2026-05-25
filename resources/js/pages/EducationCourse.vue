@@ -67,8 +67,26 @@
               color="primary" height="10" rounded
             />
           </v-col>
-          <v-col cols="12" md="4">
-            <v-card v-if="nextLesson" class="cta-card pa-3" elevation="0">
+          <v-col v-if="totalProgress.percent === 100 && totalProgress.total > 0" cols="12" md="4">
+            <v-card class="cta-card pa-3" elevation="0" @click="openCertificate">
+              <div class="d-flex align-center ga-3">
+                <v-avatar size="36" color="success" rounded="lg">
+                  <v-icon size="18" color="white">mdi-certificate</v-icon>
+                </v-avatar>
+                <div class="flex-grow-1 min-w-0">
+                  <div class="text-caption text-uppercase text-success font-weight-bold letter-spacing-1">
+                    курс пройден
+                  </div>
+                  <div class="text-body-2 font-weight-bold mt-1 text-success">
+                    Получить сертификат
+                  </div>
+                </div>
+                <v-icon size="22" color="success">mdi-arrow-right</v-icon>
+              </div>
+            </v-card>
+          </v-col>
+          <v-col v-else-if="nextLesson" cols="12" md="4">
+            <v-card class="cta-card pa-3" elevation="0">
               <div class="d-flex align-center ga-3">
                 <v-avatar size="36" color="primary" rounded="lg">
                   <v-icon size="18" color="white">mdi-play</v-icon>
@@ -287,6 +305,25 @@ function goToCourse(id) {
 
 function openLesson(l) {
   router.push(`/education/courses/${route.params.id}/lessons/${l.id}`);
+}
+
+/**
+ * Сертификат — endpoint защищён auth:sanctum (Bearer-токен), поэтому
+ * прямой <a target=_blank> не сработает. Качаем через axios, открываем
+ * в новой вкладке через blob.
+ */
+async function openCertificate() {
+  try {
+    const resp = await api.get(`/education/courses/${route.params.id}/certificate`, {
+      responseType: 'blob',
+    });
+    const blob = new Blob([resp.data], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  } catch (e) {
+    alert(e.response?.data?.message || 'Сертификат недоступен');
+  }
 }
 
 async function load() {

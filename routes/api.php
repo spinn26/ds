@@ -212,6 +212,11 @@ Route::prefix('v1')->group(function () {
         Route::get('/education/courses/{id}', [\App\Http\Controllers\Api\EducationController::class, 'show'])->whereNumber('id');
         Route::post('/education/courses/{id}/test', [\App\Http\Controllers\Api\EducationController::class, 'submitTest'])->whereNumber('id');
         Route::post('/education/lessons/{id}/view', [\App\Http\Controllers\Api\EducationController::class, 'markLessonViewed'])->whereNumber('id');
+        // Домашние задания (партнёр)
+        Route::post('/education/lessons/{id}/homework', [\App\Http\Controllers\Api\HomeworkController::class, 'submit'])->whereNumber('id');
+        Route::get('/education/homework/my', [\App\Http\Controllers\Api\HomeworkController::class, 'my']);
+        // Сертификат курса (HTML с print-стилями → PDF через Ctrl+P)
+        Route::get('/education/courses/{id}/certificate', [\App\Http\Controllers\Api\CertificateController::class, 'show'])->whereNumber('id');
         // LMS этап 1 (per ТЗ Жосан 25.05.2026): рекурсивное дерево
         // курсов + конструктор-body + база знаний + поиск.
         Route::get('/education/tree', [\App\Http\Controllers\Api\EducationController::class, 'tree']);
@@ -519,6 +524,10 @@ Route::prefix('v1')->group(function () {
         Route::post('/admin/kb/articles', [\App\Http\Controllers\Api\AdminKnowledgeBaseController::class, 'storeArticle']);
         Route::put('/admin/kb/articles/{id}', [\App\Http\Controllers\Api\AdminKnowledgeBaseController::class, 'updateArticle'])->whereNumber('id');
         Route::delete('/admin/kb/articles/{id}', [\App\Http\Controllers\Api\AdminKnowledgeBaseController::class, 'destroyArticle'])->whereNumber('id');
+
+        // Курация домашних заданий (роль education + admin)
+        Route::get('/admin/kb/homework', [\App\Http\Controllers\Api\HomeworkController::class, 'queue']);
+        Route::post('/admin/kb/homework/{id}/review', [\App\Http\Controllers\Api\HomeworkController::class, 'review'])->whereNumber('id');
         Route::delete('/admin/education/courses/{id}', [\App\Http\Controllers\Api\AdminEducationController::class, 'destroyCourse']);
         Route::get('/admin/education/courses/{id}/lessons', [\App\Http\Controllers\Api\AdminEducationController::class, 'lessons'])->whereNumber('id');
         Route::post('/admin/education/courses/{id}/lessons', [\App\Http\Controllers\Api\AdminEducationController::class, 'storeLesson'])->whereNumber('id');

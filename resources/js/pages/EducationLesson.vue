@@ -32,11 +32,15 @@
             </div>
             <h1 class="text-h5 font-weight-bold mt-1">{{ lesson.title }}</h1>
           </div>
+          <v-chip v-if="!lesson.available" size="default" color="warning" variant="tonal" prepend-icon="mdi-lock-clock">
+            {{ lesson.unavailableReason || 'Закрыт' }}
+          </v-chip>
           <v-btn
-            v-if="!lesson.viewed"
+            v-else-if="!lesson.viewed"
             color="primary" size="large"
             :loading="marking"
             prepend-icon="mdi-check"
+            :disabled="lesson.requiresHomework && !homeworkApproved"
             @click="markViewed"
           >
             Урок изучен
@@ -94,6 +98,41 @@
             </div>
           </template>
 
+          <!-- Домашка (per ТЗ + правки) -->
+          <div v-if="lesson.requiresHomework" class="homework-card">
+            <div class="d-flex align-center mb-2">
+              <v-icon size="20" color="primary" class="me-2">mdi-clipboard-edit-outline</v-icon>
+              <span class="text-subtitle-1 font-weight-bold">Домашнее задание</span>
+              <v-spacer />
+              <v-chip v-if="homeworkStatusChip" size="small" :color="homeworkStatusChip.color" variant="tonal">
+                {{ homeworkStatusChip.label }}
+              </v-chip>
+            </div>
+            <div v-if="lesson.homeworkInstructions" class="text-body-2 text-medium-emphasis mb-3" style="white-space:pre-wrap">
+              {{ lesson.homeworkInstructions }}
+            </div>
+            <v-textarea
+              v-model="homeworkText"
+              label="Ваш ответ"
+              variant="outlined" density="comfortable"
+              :readonly="homeworkApproved"
+              rows="4" auto-grow
+            />
+            <div v-if="myHomework?.reviewerComment" class="reviewer-comment mt-2">
+              <v-icon size="16" color="primary" class="me-1">mdi-comment-text-outline</v-icon>
+              <span class="text-body-2">{{ myHomework.reviewerComment }}</span>
+            </div>
+            <v-btn
+              v-if="!homeworkApproved"
+              color="primary" class="mt-2"
+              :loading="submittingHw"
+              prepend-icon="mdi-send"
+              @click="submitHomework"
+            >
+              {{ myHomework ? 'Отправить ещё раз' : 'Отправить на проверку' }}
+            </v-btn>
+          </div>
+
           <!-- Навигация -->
           <div class="lesson-nav">
             <v-btn
@@ -148,6 +187,47 @@ const lesson = computed(() => {
   const lid = Number(route.params.lid);
   return courseDetail.value?.lessons?.find(l => l.id === lid) || null;
 });
+
+// === Домашние задания ===
+const myHomework = ref(null);
+const homeworkText = ref('');
+const submittingHw = ref(false);
+
+const homeworkApproved = computed(() => myHomework.value?.status === 'approved');
+const homeworkStatusChip = computed(() => {
+  const s = myHomework.value?.status;
+  if (s === 'approved') return { color: 'success', label: '✓ Принято куратором' };
+  if (s === 'rejected') return { color: 'error',   label: '✗ Отклонено — попробуйте ещё раз' };
+  if (s === 'pending')  return { color: 'warning', label: '⌛ На проверке' };
+  return null;
+});
+
+async function submitHomework() {
+  if (!lesson.value) return;
+  submittingHw.value = true;
+  try {
+    await api.post(`/education/lessons/${lesson.value.id}/homework`, {
+      answer_text: homeworkText.value,
+    });
+    await loadHomework();
+  } catch {}
+  submittingHw.value = false;
+}
+
+async function loadHomework() {
+  if (!lesson.value) return;
+  try {
+    const { data } = await api.get('/education/homework/my');
+    const item = (data.items || []).find(h => h.lessonId === lesson.value.id);
+    myHomework.value = item || null;
+    homeworkText.value = item?.answerText || '';
+  } catch {}
+}
+
+watch(lesson, (l) => {
+  if (l?.requiresHomework) loadHomework();
+  else { myHomework.value = null; homeworkText.value = ''; }
+}, { immediate: false });
 
 const blocks = computed(() => {
   const b = lesson.value?.body;
@@ -374,6 +454,20 @@ onMounted(load);
   justify-content: space-between;
   align-items: center;
   gap: 12px;
+}
+
+.homework-card {
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid rgba(46, 125, 50, 0.2);
+  background: rgba(46, 125, 50, 0.04);
+  border-radius: 12px;
+}
+.reviewer-comment {
+  padding: 10px 12px;
+  background: rgba(46, 125, 50, 0.08);
+  border-left: 3px solid rgb(var(--v-theme-primary));
+  border-radius: 6px;
 }
 
 .tabular-nums { font-variant-numeric: tabular-nums; }

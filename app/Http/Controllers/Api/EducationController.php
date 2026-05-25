@@ -373,6 +373,23 @@ class EducationController extends Controller
             return response()->json(['message' => 'Урок не найден'], 404);
         }
 
+        // Drip-feed: если урок ещё не открыт по расписанию — не даём
+        // его «изученным», иначе релейтив-таймер становится бесполезным.
+        $course = DB::table('education_courses')->where('id', $lesson->course_id)->first();
+        if ($course) {
+            $av = app(\App\Services\DripScheduleService::class)
+                ->lessonAvailability($lesson, (int) $userId, $course);
+            if (! $av['open']) {
+                return response()->json([
+                    'message' => $av['reason'] ?? 'Урок ещё не открыт',
+                ], 423);
+            }
+
+            // Регистрируем первый вход в курс — для anchor='first_login'.
+            app(\App\Services\DripScheduleService::class)
+                ->markCourseStarted((int) $userId, (int) $lesson->course_id);
+        }
+
         DB::table('education_lesson_views')->upsert(
             [[
                 'user_id' => $userId,

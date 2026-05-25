@@ -485,6 +485,20 @@ class AdminEducationController extends Controller
                     : null;
             }
         }
+
+        // Drip-feed (миграция 2026_05_25_000020): drip_delay_hours для
+        // relative-расписания, drip_open_at для fixed-даты. is_stop_lesson
+        // блокирует следующие уроки до прохождения этого.
+        foreach (['drip_delay_hours', 'drip_open_at', 'is_stop_lesson',
+            'requires_homework', 'homework_instructions'] as $field) {
+            if (! Schema::hasColumn('education_lessons', $field)) continue;
+            if (in_array($field, ['is_stop_lesson', 'requires_homework'], true)) {
+                $payload[$field] = $request->boolean($field);
+            } else {
+                $val = $request->input($field);
+                $payload[$field] = ($val === '' ? null : $val);
+            }
+        }
         // content_type оставлено в схеме но больше не дёргаем — урок
         // содержит произвольный микс текста/видео/ссылок одновременно.
 

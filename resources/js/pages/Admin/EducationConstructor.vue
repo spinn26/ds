@@ -519,6 +519,12 @@ async function saveLesson(updated) {
         body: updated.body,
         sort_order: updated.sort_order || 0,
         active: true,
+        // Drip + homework поля (миграция 2026_05_25_000020)
+        drip_delay_hours: updated.drip_delay_hours || null,
+        drip_open_at: updated.drip_open_at || null,
+        is_stop_lesson: !!updated.is_stop_lesson,
+        requires_homework: !!updated.requires_homework,
+        homework_instructions: updated.homework_instructions || null,
       },
     );
     showSuccess('Сохранено');

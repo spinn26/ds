@@ -72,6 +72,7 @@ const routes = [
             { path: 'manage/education', component: () => import('../pages/Admin/EducationConstructor.vue'), meta: { staff: true } },
             { path: 'manage/education-legacy', component: () => import('../pages/Admin/Education.vue'), meta: { staff: true } },
             { path: 'manage/kb', component: () => import('../pages/Admin/KbConstructor.vue'), meta: { staff: true } },
+            { path: 'manage/homework', component: () => import('../pages/Admin/HomeworkQueue.vue'), meta: { staff: true } },
             { path: 'manage/education/categories', component: () => import('../pages/Admin/EducationCategories.vue'), meta: { staff: true } },
             { path: 'manage/education/analytics', component: () => import('../pages/Admin/EducationAnalytics.vue'), meta: { staff: true } },
             { path: 'manage/partner-questionnaires', component: () => import('../pages/Admin/PartnerQuestionnaires.vue'), meta: { staff: true } },

@@ -97,6 +97,12 @@ class EducationTreeService
                 ->pluck('lesson_id')->all())
             : [];
 
+        // Drip-расписание: для каждого урока считаем доступность
+        // (учитываем drip_open_at / drip_delay_hours / стоп-уроки).
+        // Если миграция drip-полей не накатилась — сервис вернёт open=true
+        // для всего, что эквивалентно legacy-поведению.
+        $drip = app(\App\Services\DripScheduleService::class);
+
         return [
             'id' => $course->id,
             'title' => $course->title,
@@ -105,16 +111,25 @@ class EducationTreeService
             'isContainer' => (bool) $course->is_container,
             'coverUrl' => $course->cover_url,
             'productId' => $course->product_id,
-            'lessons' => $lessons->map(fn ($l) => [
-                'id' => $l->id,
-                'title' => $l->title,
-                'description' => $l->content,    // legacy short-desc
-                'body' => $l->body ? (is_string($l->body) ? json_decode($l->body, true) : $l->body) : null,
-                'sortOrder' => $l->sort_order,
-                'videoUrls' => $l->video_urls ? (is_string($l->video_urls) ? json_decode($l->video_urls, true) : $l->video_urls) : [],
-                'documentUrls' => $l->document_urls ? (is_string($l->document_urls) ? json_decode($l->document_urls, true) : $l->document_urls) : [],
-                'viewed' => isset($viewedSet[$l->id]),
-            ])->values(),
+            'lessons' => $lessons->map(function ($l) use ($viewedSet, $drip, $userId, $course) {
+                $av = $drip->lessonAvailability($l, $userId, $course);
+                return [
+                    'id' => $l->id,
+                    'title' => $l->title,
+                    'description' => $l->content,    // legacy short-desc
+                    'body' => $l->body ? (is_string($l->body) ? json_decode($l->body, true) : $l->body) : null,
+                    'sortOrder' => $l->sort_order,
+                    'videoUrls' => $l->video_urls ? (is_string($l->video_urls) ? json_decode($l->video_urls, true) : $l->video_urls) : [],
+                    'documentUrls' => $l->document_urls ? (is_string($l->document_urls) ? json_decode($l->document_urls, true) : $l->document_urls) : [],
+                    'viewed' => isset($viewedSet[$l->id]),
+                    'isStopLesson' => (bool) ($l->is_stop_lesson ?? false),
+                    'requiresHomework' => (bool) ($l->requires_homework ?? false),
+                    'homeworkInstructions' => $l->homework_instructions ?? null,
+                    'available' => $av['open'],
+                    'unavailableReason' => $av['reason'],
+                    'unlockAt' => $av['unlockAt']?->toIso8601String(),
+                ];
+            })->values(),
             'breadcrumbs' => $this->breadcrumbs($courseId),
         ];
     }
