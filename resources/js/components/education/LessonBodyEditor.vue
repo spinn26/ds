@@ -144,11 +144,22 @@
           variant="outlined" density="comfortable" hide-details
           class="mb-2"
         />
-        <v-text-field
-          v-model="block.value"
-          :label="urlLabelFor(block.type)"
-          variant="outlined" density="comfortable" hide-details
-        />
+        <div class="d-flex ga-2 align-center">
+          <v-text-field
+            v-model="block.value"
+            :label="urlLabelFor(block.type)"
+            variant="outlined" density="comfortable" hide-details
+            class="flex-grow-1"
+          />
+          <v-btn
+            v-if="block.type !== 'link'"
+            icon="mdi-upload"
+            size="small" variant="tonal" color="primary"
+            :loading="uploadingIdx === idx"
+            title="Загрузить файл"
+            @click="triggerUpload(idx, block.type)"
+          />
+        </div>
       </template>
 
       <!-- Внутренняя ссылка -->
@@ -166,6 +177,15 @@
         />
       </template>
     </div>
+
+    <!-- Скрытый input для загрузки -->
+    <input
+      ref="fileInputRef"
+      type="file"
+      style="display:none"
+      :accept="acceptFor(uploadTargetType)"
+      @change="onFileSelected"
+    />
 
     <!-- Кнопки добавления -->
     <div class="add-bar mt-3">
@@ -197,6 +217,7 @@
 
 <script setup>
 import { ref, watch } from 'vue';
+import api from '../../api';
 
 const props = defineProps({
   lesson: { type: Object, required: true },
@@ -269,6 +290,52 @@ function move(idx, delta) {
   [arr[idx], arr[newIdx]] = [arr[newIdx], arr[idx]];
 }
 function remove(idx) { local.value.body.splice(idx, 1); }
+
+// === Загрузка файлов (per ТЗ Жосан §8) ===
+const fileInputRef = ref(null);
+const uploadingIdx = ref(null);
+const uploadTargetIdx = ref(null);
+const uploadTargetType = ref(null);
+
+function acceptFor(type) {
+  if (type === 'image') return 'image/*';
+  if (type === 'audio') return 'audio/*';
+  if (type === 'video') return 'video/*';
+  return '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.txt,.csv';
+}
+
+function triggerUpload(idx, type) {
+  uploadTargetIdx.value = idx;
+  uploadTargetType.value = type;
+  // На next-tick откроется диалог выбора файла
+  fileInputRef.value?.click();
+}
+
+async function onFileSelected(e) {
+  const file = e.target?.files?.[0];
+  if (!file) return;
+  const idx = uploadTargetIdx.value;
+  if (idx == null) return;
+
+  uploadingIdx.value = idx;
+  try {
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('kind', 'lesson');
+    const { data } = await api.post('/education/upload', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    if (data?.url) {
+      local.value.body[idx].value = data.url;
+      if (!local.value.body[idx].label) local.value.body[idx].label = data.name || '';
+    }
+  } catch (err) {
+    alert(err.response?.data?.message || 'Не удалось загрузить файл');
+  }
+  uploadingIdx.value = null;
+  uploadTargetIdx.value = null;
+  e.target.value = '';   // сброс input
+}
 
 // === Drag-and-drop блоков (native HTML5, без vuedraggable) ===
 import { ref as _r } from 'vue';

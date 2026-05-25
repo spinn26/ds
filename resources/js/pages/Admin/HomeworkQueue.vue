@@ -38,6 +38,17 @@
           </div>
           <div class="text-subtitle-2 font-weight-bold">{{ hw.courseTitle }} → {{ hw.lessonTitle }}</div>
           <div class="hw-answer mt-3">{{ hw.answerText || '—' }}</div>
+          <div v-if="hw.attachments?.length" class="mt-2 d-flex flex-wrap ga-1">
+            <v-chip
+              v-for="(a, i) in hw.attachments"
+              :key="i"
+              size="x-small" variant="tonal" color="primary"
+              :href="a.url" target="_blank"
+              prepend-icon="mdi-paperclip"
+            >
+              {{ a.name || 'файл' }}
+            </v-chip>
+          </div>
           <div v-if="hw.reviewerComment" class="reviewer-comment mt-2">
             <v-icon size="14" class="me-1">mdi-comment-outline</v-icon>
             <span class="text-caption">{{ hw.reviewerComment }}</span>

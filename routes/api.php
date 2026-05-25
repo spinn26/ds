@@ -213,6 +213,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/education/courses/{id}/test', [\App\Http\Controllers\Api\EducationController::class, 'submitTest'])->whereNumber('id');
         Route::post('/education/lessons/{id}/view', [\App\Http\Controllers\Api\EducationController::class, 'markLessonViewed'])->whereNumber('id');
         // Домашние задания (партнёр)
+        Route::post('/education/upload', [\App\Http\Controllers\Api\EducationUploadController::class, 'upload'])->middleware('throttle:30,1');
         Route::post('/education/lessons/{id}/homework', [\App\Http\Controllers\Api\HomeworkController::class, 'submit'])->whereNumber('id');
         Route::get('/education/homework/my', [\App\Http\Controllers\Api\HomeworkController::class, 'my']);
         // Сертификат курса (HTML с print-стилями → PDF через Ctrl+P)

@@ -118,6 +118,36 @@
               :readonly="homeworkApproved"
               rows="4" auto-grow
             />
+            <!-- Вложения файлов -->
+            <div v-if="hwAttachments.length" class="mt-2 d-flex flex-wrap ga-2">
+              <v-chip
+                v-for="(a, i) in hwAttachments"
+                :key="i"
+                size="small" variant="tonal" color="primary"
+                :closable="!homeworkApproved"
+                :href="a.url" target="_blank"
+                prepend-icon="mdi-paperclip"
+                @click:close="hwAttachments.splice(i, 1)"
+              >
+                {{ a.name || 'файл' }}
+              </v-chip>
+            </div>
+            <input
+              ref="hwFileInputRef"
+              type="file"
+              style="display:none"
+              @change="onHwFileSelected"
+            />
+            <v-btn
+              v-if="!homeworkApproved"
+              variant="text" size="small"
+              prepend-icon="mdi-paperclip"
+              :loading="uploadingHwFile"
+              class="mt-2"
+              @click="hwFileInputRef?.click()"
+            >
+              Прикрепить файл
+            </v-btn>
             <div v-if="myHomework?.reviewerComment" class="reviewer-comment mt-2">
               <v-icon size="16" color="primary" class="me-1">mdi-comment-text-outline</v-icon>
               <span class="text-body-2">{{ myHomework.reviewerComment }}</span>
@@ -191,7 +221,31 @@ const lesson = computed(() => {
 // === Домашние задания ===
 const myHomework = ref(null);
 const homeworkText = ref('');
+const hwAttachments = ref([]);
 const submittingHw = ref(false);
+const hwFileInputRef = ref(null);
+const uploadingHwFile = ref(false);
+
+async function onHwFileSelected(e) {
+  const file = e.target?.files?.[0];
+  if (!file) return;
+  uploadingHwFile.value = true;
+  try {
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('kind', 'homework');
+    const { data } = await api.post('/education/upload', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    if (data?.url) {
+      hwAttachments.value.push({ name: data.name, url: data.url, size: data.size });
+    }
+  } catch (err) {
+    alert(err.response?.data?.message || 'Не удалось загрузить файл');
+  }
+  uploadingHwFile.value = false;
+  e.target.value = '';
+}
 
 const homeworkApproved = computed(() => myHomework.value?.status === 'approved');
 const homeworkStatusChip = computed(() => {
@@ -208,6 +262,7 @@ async function submitHomework() {
   try {
     await api.post(`/education/lessons/${lesson.value.id}/homework`, {
       answer_text: homeworkText.value,
+      attachments: hwAttachments.value,
     });
     await loadHomework();
   } catch {}
@@ -221,12 +276,17 @@ async function loadHomework() {
     const item = (data.items || []).find(h => h.lessonId === lesson.value.id);
     myHomework.value = item || null;
     homeworkText.value = item?.answerText || '';
+    hwAttachments.value = Array.isArray(item?.attachments) ? [...item.attachments] : [];
   } catch {}
 }
 
 watch(lesson, (l) => {
   if (l?.requiresHomework) loadHomework();
-  else { myHomework.value = null; homeworkText.value = ''; }
+  else {
+    myHomework.value = null;
+    homeworkText.value = '';
+    hwAttachments.value = [];
+  }
 }, { immediate: false });
 
 const blocks = computed(() => {
