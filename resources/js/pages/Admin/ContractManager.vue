@@ -182,6 +182,7 @@
           <div class="d-flex ga-2 mb-2">
             <v-autocomplete v-model="form.client" :items="clientOptions" item-title="personName" item-value="id"
               :loading="clientSearching" @update:search="searchClients"
+              @update:model-value="loadChainForClient"
               label="Клиент *" variant="outlined" density="comfortable" class="flex-grow-1"
               no-data-text="Начните вводить ФИО клиента" />
             <v-btn v-if="form.client" variant="outlined" color="secondary" :height="44"
@@ -230,14 +231,21 @@
           <v-textarea v-model="form.comment" label="Комментарий"
             variant="outlined" density="comfortable" rows="2" />
 
-          <!-- Блок «Цепочка партнёров» (только при редактировании) -->
-          <template v-if="editingId && chain.length">
-            <div class="text-subtitle-2 font-weight-bold mb-2 mt-3">Цепочка партнёров (read-only)</div>
+          <!-- Блок «Цепочка партнёров» — показываем и при создании
+               (после выбора клиента, см. loadChainForClient), и при
+               редактировании контракта (chain приходит с /admin/contracts/{id}). -->
+          <template v-if="chain.length">
+            <div class="text-subtitle-2 font-weight-bold mb-2 mt-3">
+              Цепочка партнёров <span v-if="!editingId" class="text-caption text-medium-emphasis">(куда попадёт контракт)</span>
+              <span v-else class="text-caption text-medium-emphasis">(read-only)</span>
+            </div>
             <v-list density="compact">
               <v-list-item v-for="(p, idx) in chain" :key="p.id"
                 :prepend-icon="idx === 0 ? 'mdi-account-circle' : 'mdi-account-arrow-up'"
                 :title="p.personName"
-                :subtitle="idx === 0 ? 'Прямой партнёр' : `Уровень ${idx}`" />
+                :subtitle="idx === 0
+                  ? ('Прямой партнёр' + (p.level ? ' · ' + p.level : ''))
+                  : `Уровень ${idx}` + (p.level ? ' · ' + p.level : '')" />
             </v-list>
           </template>
 
@@ -626,11 +634,29 @@ function searchClients(q) {
       clientOptions.value = (data?.data || []).map(c => ({
         id: c.id,
         personName: c.personName,
+        consultantId: c.consultantId,
         consultantName: c.consultantName,
       }));
     } catch {}
     clientSearching.value = false;
   }, 300);
+}
+
+// При выборе клиента в форме нового контракта — подгружаем цепочку
+// его прямого ФК вверх по структуре. Раньше блок «Цепочка партнёров»
+// показывался только при редактировании; теперь и при создании
+// оператор видит, в чьей ветке появится новый контракт.
+async function loadChainForClient(clientId) {
+  chain.value = [];
+  if (!clientId) return;
+  const c = clientOptions.value.find(x => x.id === clientId);
+  const consultantId = c?.consultantId;
+  if (!consultantId) return;
+  try {
+    const { data } = await api.get(`/admin/consultants/${consultantId}/chain`);
+    chain.value = data.chain || [];
+    loadPartnerRequisites();
+  } catch {}
 }
 
 async function saveContract() {
