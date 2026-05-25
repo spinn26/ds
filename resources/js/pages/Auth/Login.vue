@@ -223,7 +223,7 @@ function cancelVerify() {
   background:
     linear-gradient(135deg,
       rgb(var(--v-theme-primary)) 0%,
-      #6EE87A 100%);
+      rgb(var(--v-theme-secondary)) 100%);
 }
 .auth-page--mobile .auth-hero { display: none; }
 
