@@ -235,3 +235,33 @@
   --ds-z-snackbar: 400;
   --ds-z-tooltip: 500;
 }
+
+/* ───────────── Глобальные DS-правила для типографики ─────────────
+   Применяются ко всем страницам сразу — экономит per-file патчи.
+   font-variant-numeric: tabular-nums у крупных текст-классов выравнивает
+   цифры по разрядам (нужно для KPI/денег/счётчиков). На обычный
+   текст не влияет: фича работает только с цифрами. */
+.text-h3,
+.text-h4,
+.text-h5,
+.text-h6,
+.text-subtitle-1,
+.text-subtitle-2 {
+  font-variant-numeric: tabular-nums;
+}
+
+/* MD3 типографические утилиты — для контентных страниц, где нужны
+   ds-headline-s/title-l из desing/ds-primitives.jsx без полного
+   .ds-обвязки. */
+.ds-headline-l { font: var(--ds-type-headline-l); letter-spacing: -0.01em; }
+.ds-headline-m { font: var(--ds-type-headline-m); letter-spacing: -0.01em; }
+.ds-headline-s { font: var(--ds-type-headline-s); letter-spacing: -0.01em; }
+.ds-title-l    { font: var(--ds-type-title-l); }
+.ds-title-m    { font: var(--ds-type-title-m); }
+.ds-title-s    { font: var(--ds-type-title-s); }
+.ds-body-l     { font: var(--ds-type-body-l); }
+.ds-body-m     { font: var(--ds-type-body-m); }
+.ds-body-s     { font: var(--ds-type-body-s); }
+.ds-label-m    { font: var(--ds-type-label-m); letter-spacing: 0.4px; text-transform: uppercase; }
+.ds-mono       { font-family: var(--ds-font-mono); font-variant-numeric: tabular-nums; }
+.ds-muted      { color: var(--ds-on-surface-muted, rgba(var(--v-theme-on-surface), 0.55)); }
