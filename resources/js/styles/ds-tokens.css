@@ -265,3 +265,28 @@
 .ds-label-m    { font: var(--ds-type-label-m); letter-spacing: 0.4px; text-transform: uppercase; }
 .ds-mono       { font-family: var(--ds-font-mono); font-variant-numeric: tabular-nums; }
 .ds-muted      { color: var(--ds-on-surface-muted, rgba(var(--v-theme-on-surface), 0.55)); }
+
+/* ───────────── Vuetify v-data-table — DS-стиль глобально ─────────────
+   Касается ВСЕХ таблиц: и через DataTableWrapper, и raw v-data-table
+   на admin extras (Anomalies, Cohorts, Monitoring и т.д.).
+   Заголовки: 12px UPPERCASE letter-spacing 0.4 + muted-цвет.
+   Ячейки: tabular-nums по умолчанию. */
+.v-data-table .v-data-table__th,
+.v-data-table th {
+  font-weight: 600 !important;
+  font-size: 12px !important;
+  letter-spacing: 0.4px !important;
+  text-transform: uppercase;
+  color: var(--ds-on-surface-muted, rgba(0,0,0,0.55)) !important;
+}
+.v-data-table .v-data-table__td,
+.v-data-table td {
+  font-variant-numeric: tabular-nums;
+}
+
+/* v-card-title — чуть тоньше letter-spacing, DS sentiment.
+   Не меняем размер: разные секции используют title для разного
+   (диалоги, header'ы карточек), безопасно только tune'ить spacing. */
+.v-card-title {
+  letter-spacing: -0.01em;
+}
