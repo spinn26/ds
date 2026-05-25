@@ -390,3 +390,14 @@ onMounted(async () => {
   loading.value = false;
 });
 </script>
+
+<style scoped>
+/* DS spec: числа в KPI и таблицах — tabular-nums (ds-mono).
+   Заголовки чарт-карточек чуть крупнее по DS title-l. */
+:deep(.text-h3), :deep(.text-h4), :deep(.text-h5) {
+  font-variant-numeric: tabular-nums;
+}
+.stat-card {
+  border-radius: var(--ds-radius-lg, 12px) !important;
+}
+</style>
