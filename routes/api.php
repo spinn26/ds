@@ -240,6 +240,8 @@ Route::prefix('v1')->group(function () {
         Route::delete('/admin/partners/{id}', [\App\Http\Controllers\Api\AdminDataController::class, 'deletePartner'])->whereNumber('id');
         Route::get('/admin/partner-statuses', [\App\Http\Controllers\Api\AdminDataController::class, 'partnerStatuses']);
         Route::get('/admin/clients', [\App\Http\Controllers\Api\AdminDataController::class, 'clients']);
+        Route::get('/admin/clients/check-duplicates', [\App\Http\Controllers\Api\AdminDataController::class, 'checkClientDuplicates']);
+        Route::get('/admin/consultants/{id}/chain', [\App\Http\Controllers\Api\AdminDataController::class, 'consultantChain'])->whereNumber('id');
         Route::post('/admin/clients', [\App\Http\Controllers\Api\AdminDataController::class, 'storeClient']);
         Route::put('/admin/clients/{id}', [\App\Http\Controllers\Api\AdminDataController::class, 'updateClient'])->whereNumber('id');
         Route::delete('/admin/clients/{id}', [\App\Http\Controllers\Api\AdminDataController::class, 'deleteClient'])->whereNumber('id');

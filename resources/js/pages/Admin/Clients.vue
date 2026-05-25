@@ -145,25 +145,50 @@
             <v-row dense>
               <v-col cols="12" sm="4"><v-text-field v-model="addForm.lastName"
                 :rules="cyrillicRequiredRules" label="Фамилия *"
-                variant="outlined" density="comfortable" /></v-col>
+                variant="outlined" density="comfortable"
+                @update:model-value="checkDuplicatesDebounced" /></v-col>
               <v-col cols="12" sm="4"><v-text-field v-model="addForm.firstName"
                 :rules="cyrillicRequiredRules" label="Имя *"
-                variant="outlined" density="comfortable" /></v-col>
+                variant="outlined" density="comfortable"
+                @update:model-value="checkDuplicatesDebounced" /></v-col>
               <v-col cols="12" sm="4"><v-text-field v-model="addForm.patronymic"
                 :rules="cyrillicOptionalRules" label="Отчество"
                 variant="outlined" density="comfortable" /></v-col>
+              <v-col v-if="dupWarnings.length" cols="12">
+                <v-alert type="warning" variant="tonal" density="compact" icon="mdi-alert">
+                  <div class="font-weight-medium mb-1">
+                    Внимание: клиент с таким ФИО уже есть в базе ({{ dupWarnings.length }}). Проверьте на дубль.
+                  </div>
+                  <div v-for="d in dupWarnings" :key="d.id" class="text-caption d-block">
+                    <strong>{{ d.personName }}</strong> (ID {{ d.id }}) —
+                    {{ d.email || '—' }}, {{ d.phone || '—' }}<span v-if="d.consultantName">, наставник: {{ d.consultantName }}</span>
+                  </div>
+                </v-alert>
+              </v-col>
               <v-col cols="12" sm="6"><v-text-field v-model="addForm.email"
                 :rules="emailRules" label="Email" type="email"
                 variant="outlined" density="comfortable" /></v-col>
               <v-col cols="12" sm="6">
-                <!-- vue-tel-input: код страны + маска под выбранную.
-                     Глобальные дефолты в app.js. Поле опциональное —
-                     не валидируем @validate'ом, чтобы Save никогда не
-                     блокировался из-за телефона (заказчик 2026-05-13). -->
+                <!-- Жёсткая RU-маска: запрещаем выбор другой страны и
+                     вставку «сырых» номеров. Per request 2026-05-23
+                     «нельзя просто вставить скопированный номер»:
+                     valid-characters-only режет нецифровые при paste,
+                     :default-country='ru' + only-countries=['ru'] +
+                     disabled-fetching-country запрещают смену кода. -->
                 <label class="text-caption text-medium-emphasis d-block mb-1">
                   Телефон <span class="text-medium-emphasis">(необязательно)</span>
                 </label>
-                <vue-tel-input v-model="addForm.phone" />
+                <vue-tel-input
+                  v-model="addForm.phone"
+                  default-country="ru"
+                  :only-countries="['ru']"
+                  :disabled-fetching-country="true"
+                  :auto-default-country="false"
+                  valid-characters-only
+                  mode="international"
+                  :input-options="{ placeholder: '+7 (___) ___-__-__', maxlength: 18 }"
+                  :dropdown-options="{ disabled: true, showFlags: false, showDialCodeInList: false }"
+                />
               </v-col>
               <v-col cols="12" sm="6"><v-text-field v-model="addForm.birthDate"
                 label="Дата рождения" type="date"
@@ -175,12 +200,34 @@
                 :items="consultantOptions" item-title="personName" item-value="id"
                 :loading="searchingConsultants"
                 @update:search="searchConsultants"
+                @update:model-value="loadConsultantChain"
                 :rules="[v => !!v || 'Выберите наставника']"
                 label="Консультант *" placeholder="Начните вводить ФИО"
                 variant="outlined" density="comfortable"
                 hint="Партнёр-наставник" persistent-hint
                 no-data-text="Начните вводить ФИО"
                 :no-filter="true" hide-no-data clearable /></v-col>
+              <v-col v-if="consultantChain.length > 1" cols="12">
+                <v-card variant="tonal" color="info" class="pa-3">
+                  <div class="text-caption text-medium-emphasis mb-1">
+                    <v-icon size="14">mdi-account-tree</v-icon>
+                    Цепочка наставников (вверх по структуре)
+                  </div>
+                  <div class="d-flex align-center flex-wrap ga-1">
+                    <template v-for="(p, i) in consultantChain" :key="p.id">
+                      <v-chip size="x-small"
+                        :color="i === 0 ? 'primary' : undefined"
+                        :variant="i === 0 ? 'flat' : 'tonal'">
+                        {{ p.personName }}
+                        <span v-if="p.level" class="text-caption ml-1 opacity-70">· {{ p.level }}</span>
+                      </v-chip>
+                      <v-icon v-if="i < consultantChain.length - 1" size="14" color="medium-emphasis">
+                        mdi-arrow-right
+                      </v-icon>
+                    </template>
+                  </div>
+                </v-card>
+              </v-col>
               <v-col cols="12"><v-textarea v-model="addForm.comment"
                 label="Комментарий" variant="outlined" density="comfortable" rows="2" /></v-col>
             </v-row>
@@ -385,6 +432,38 @@ let addSearchTimer;
 const consultantOptions = ref([]);
 const searchingConsultants = ref(false);
 let consultantTimer;
+
+// Цепочка наставников выбранного консультанта (вверх по структуре).
+// Показывается под селектом «Консультант» в виде хлебных крошек.
+const consultantChain = ref([]);
+async function loadConsultantChain(id) {
+  if (!id) { consultantChain.value = []; return; }
+  try {
+    const { data } = await api.get(`/admin/consultants/${id}/chain`);
+    consultantChain.value = data.chain || [];
+  } catch { consultantChain.value = []; }
+}
+
+// Антидубль на шаге 2 — debounce-запрос по firstName/lastName.
+// Шаг 1 ищет по любому полю (фамилия/email/телефон); шаг 2
+// дополнительно подсвечивает тёзок по ФИО даже если оператор пропустил
+// первый шаг или поправил имя.
+const dupWarnings = ref([]);
+let dupCheckTimer;
+function checkDuplicatesDebounced() {
+  clearTimeout(dupCheckTimer);
+  const fn = (addForm.value.firstName || '').trim();
+  const ln = (addForm.value.lastName || '').trim();
+  if (fn.length < 2 || ln.length < 2) { dupWarnings.value = []; return; }
+  dupCheckTimer = setTimeout(async () => {
+    try {
+      const { data } = await api.get('/admin/clients/check-duplicates', {
+        params: { firstName: fn, lastName: ln, excludeId: editingId.value || undefined },
+      });
+      dupWarnings.value = data.duplicates || [];
+    } catch { dupWarnings.value = []; }
+  }, 400);
+}
 async function searchConsultants(q) {
   clearTimeout(consultantTimer);
   if (!q || q.length < 2) return;
@@ -414,6 +493,8 @@ function resetAddForm() {
     city: '', consultant: null, comment: '',
   };
   consultantOptions.value = [];
+  consultantChain.value = [];
+  dupWarnings.value = [];
 }
 
 function openAddClient() {
@@ -451,6 +532,11 @@ function openEditClient(item) {
   consultantOptions.value = item.consultantId
     ? [{ id: item.consultantId, personName: item.consultantName || `ID ${item.consultantId}` }]
     : [];
+  // При открытии существующего клиента — сразу подгружаем цепочку ФК.
+  consultantChain.value = [];
+  dupWarnings.value = [];
+  if (item.consultantId) loadConsultantChain(item.consultantId);
+  checkDuplicatesDebounced();
 }
 
 function searchAddCandidates(q) {

@@ -1148,6 +1148,93 @@ class AdminDataController extends Controller
     }
 
     /**
+     * GET /admin/clients/check-duplicates?firstName=X&lastName=Y
+     *
+     * Антидубль для шага 2 (полной формы) — оператор ввёл ФИО, нам надо
+     * показать ему всех тёзок с email/телефоном/наставником, даже если
+     * на шаге 1 он искал по фамилии, а сейчас поправил имя.
+     *
+     * Возвращает до 5 клиентов с совпадающими firstName+lastName.
+     */
+    public function checkClientDuplicates(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'firstName' => 'required|string|max:255',
+            'lastName' => 'required|string|max:255',
+            'excludeId' => 'nullable|integer',
+        ]);
+
+        $firstName = mb_strtolower(trim($data['firstName']));
+        $lastName = mb_strtolower(trim($data['lastName']));
+        if (mb_strlen($firstName) < 2 || mb_strlen($lastName) < 2) {
+            return response()->json(['duplicates' => []]);
+        }
+
+        $query = DB::table('client as c')
+            ->leftJoin('person as p', 'p.id', '=', 'c.person')
+            ->leftJoin('consultant as cn', 'cn.id', '=', 'c.consultant')
+            ->whereNull('c.dateDeleted')
+            ->whereRaw('LOWER(p."firstName") = ?', [$firstName])
+            ->whereRaw('LOWER(p."lastName") = ?', [$lastName])
+            ->select([
+                'c.id', 'c.personName', 'p.email', 'p.phone', 'p.city',
+                'p.birthDate', 'c.consultant as consultantId',
+                'cn.personName as consultantName',
+                'c.dateCreated',
+            ])
+            ->orderByDesc('c.dateCreated')
+            ->limit(5);
+
+        if (! empty($data['excludeId'])) {
+            $query->where('c.id', '!=', $data['excludeId']);
+        }
+
+        return response()->json(['duplicates' => $query->get()]);
+    }
+
+    /**
+     * GET /admin/consultants/{id}/chain
+     *
+     * Цепочка наставников выбранного консультанта вверх по структуре
+     * (inviter → inviter → ... до корня). Нужно для UI при создании
+     * клиента: чтобы сотрудник видел не только прямого ФК, но и всю
+     * ветку выше — кто за кем стоит. Защита от циклов — visited set,
+     * жёсткий лимит 20 уровней.
+     */
+    public function consultantChain(int $id): JsonResponse
+    {
+        $chain = [];
+        $visited = [];
+        $currentId = $id;
+        for ($i = 0; $i < 20; $i++) {
+            if (in_array($currentId, $visited, true)) break;
+            $visited[] = $currentId;
+
+            $row = DB::table('consultant')
+                ->where('id', $currentId)
+                ->select(['id', 'personName', 'inviter', 'status_and_lvl'])
+                ->first();
+            if (! $row) break;
+
+            $levelTitle = $row->status_and_lvl
+                ? DB::table('status_levels')->where('id', $row->status_and_lvl)->value('title')
+                : null;
+
+            $chain[] = [
+                'id' => $row->id,
+                'personName' => $row->personName,
+                'level' => $levelTitle,
+                'depth' => count($chain),
+            ];
+
+            if (! $row->inviter) break;
+            $currentId = (int) $row->inviter;
+        }
+
+        return response()->json(['chain' => $chain]);
+    }
+
+    /**
      * POST /admin/clients — создать клиента per spec ✅Клиенты §3.
      * Двухшаг (антидубль) делается на фронте, эндпоинт принимает уже
      * подтверждённую новую персону.
