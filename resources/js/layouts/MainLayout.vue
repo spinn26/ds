@@ -748,6 +748,7 @@ const menuItems = [
   // Обучение (LMS) — конструктор курсов и куратор обучения партнёров
   { group: 'Обучение', adminSection: 'education' },
   { label: 'Конструктор курсов', icon: 'mdi-school', path: '/manage/education', adminSection: 'education' },
+  { label: 'База знаний', icon: 'mdi-book-open-variant', path: '/manage/kb', adminSection: 'education' },
   { label: 'Категории курсов', icon: 'mdi-folder-multiple', path: '/manage/education/categories', adminSection: 'education-categories' },
   { label: 'Статистика обучения', icon: 'mdi-chart-line', path: '/manage/education/analytics', adminSection: 'education-analytics' },
   { label: 'Анкеты партнёров', icon: 'mdi-clipboard-account', path: '/manage/partner-questionnaires', adminSection: 'partner-questionnaires' },

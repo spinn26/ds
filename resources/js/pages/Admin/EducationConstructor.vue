@@ -38,6 +38,7 @@
             @delete="confirmDelete"
             @move-up="moveCourse(node, -1)"
             @move-down="moveCourse(node, 1)"
+            @drop-node="handleDrop"
           />
         </div>
       </aside>
@@ -403,6 +404,65 @@ async function createCourse(extra) {
     selectedType.value = 'course';
     await loadCourseToEdit(data.id);
   } catch (e) { showError(e.response?.data?.message || 'Ошибка'); }
+}
+
+/**
+ * Drag-and-drop: dragged-узел переносится к target:
+ *   position='before' → стать sibling'ом до target
+ *   position='after'  → sibling'ом после target
+ *   position='into'   → стать первым потомком target
+ *
+ * Защита: бэк уже не пускает перемещение в собственное поддерево
+ * (isDescendantOf). Здесь только определяем parent_id + sort_order.
+ */
+async function handleDrop({ draggedId, targetId, position }) {
+  const target = findInTree(tree.value, targetId);
+  if (!target) return;
+
+  let newParentId, siblings, insertIdx;
+  if (position === 'into') {
+    newParentId = targetId;
+    siblings = target.children || [];
+    insertIdx = 0;
+  } else {
+    newParentId = target.parent_id || null;
+    siblings = newParentId
+      ? findInTree(tree.value, newParentId)?.children || []
+      : tree.value;
+    const tIdx = siblings.findIndex(s => s.id === targetId);
+    insertIdx = position === 'before' ? tIdx : tIdx + 1;
+  }
+
+  try {
+    // Шаг 1: переместить dragged.
+    await api.post(`/admin/education/courses/${draggedId}/move`, {
+      parent_id: newParentId,
+      sort_order: insertIdx,
+    });
+    // Шаг 2: пере-нумеровать siblings (без dragged) — простой реиндекс
+    // с шагом 10, чтобы потом было куда вставлять без коллизий. Делаем
+    // последовательными запросами — drag-drop редкий, не критично по
+    // производительности.
+    const reindexList = siblings.filter(s => s.id !== draggedId);
+    reindexList.splice(insertIdx, 0, { id: draggedId });
+    for (let i = 0; i < reindexList.length; i++) {
+      const s = reindexList[i];
+      const desired = (i + 1) * 10;
+      if (s.id === draggedId) continue; // уже поставлен выше
+      await api.post(`/admin/education/courses/${s.id}/move`, {
+        parent_id: newParentId, sort_order: desired,
+      });
+    }
+    // dragged тоже выставим финально на свою позицию.
+    await api.post(`/admin/education/courses/${draggedId}/move`, {
+      parent_id: newParentId,
+      sort_order: (insertIdx + 1) * 10 - 5,
+    });
+    showSuccess('Перемещено');
+    await loadTree();
+  } catch (e) {
+    showError(e.response?.data?.message || 'Не удалось переместить');
+  }
 }
 
 async function moveCourse(node, delta) {

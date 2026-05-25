@@ -52,15 +52,8 @@
             {{ lesson.description }}
           </div>
 
-          <!-- Новый формат body[] -->
-          <template v-if="blocks.length">
-            <component
-              v-for="(b, i) in blocks"
-              :key="i"
-              :is="blockComponentFor(b.type)"
-              v-bind="b"
-            />
-          </template>
+          <!-- Новый формат body[] — единый рендерер -->
+          <LessonBlockRenderer v-if="blocks.length" :blocks="blocks" />
 
           <!-- Legacy video_urls / document_urls (если body пуст) -->
           <template v-else>
@@ -138,10 +131,11 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, h } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import api from '../api';
 import CourseTreeNode from '../components/education/CourseTreeNode.vue';
+import LessonBlockRenderer from '../components/education/LessonBlockRenderer.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -282,36 +276,6 @@ function docIcon(url) {
   if (u.match(/\.(pptx?|key)(\?|$)/)) return 'mdi-file-powerpoint-box';
   if (u.match(/\.(zip|rar|7z|tar|gz)(\?|$)/)) return 'mdi-folder-zip';
   return 'mdi-link';
-}
-
-// Маппинг blocks → компонент-рендер (минималистично через h()).
-function blockComponentFor(type) {
-  const map = {
-    text: { props: ['value'], render: (p) => h('div', { class: 'block block-text' }, p.value) },
-    image: { props: ['value', 'label'], render: (p) => h('figure', { class: 'block' }, [
-      h('img', { src: p.value, class: 'block-image' }),
-      p.label ? h('figcaption', { class: 'block-caption mt-1' }, p.label) : null,
-    ]) },
-    file: { props: ['value', 'label'], render: (p) => h('a', {
-      href: p.value, target: '_blank', class: 'block-file',
-    }, [
-      h('span', { class: 'mdi mdi-file-document mr-2' }),
-      h('span', null, p.label || 'Открыть файл'),
-    ]) },
-    link: { props: ['value', 'label'], render: (p) => h('a', {
-      href: p.value, target: '_blank', class: 'block-link',
-    }, p.label || p.value) },
-    video: { props: ['value', 'label'], render: (p) => {
-      const e = toEmbed(p.value);
-      return h('div', { class: 'block' }, [
-        p.label ? h('div', { class: 'block-caption mb-2' }, p.label) : null,
-        e ? h('div', { class: 'video-frame' }, h('iframe', {
-          src: e, frameborder: 0, allowfullscreen: true,
-        })) : h('a', { href: p.value, target: '_blank' }, 'Открыть видео'),
-      ]);
-    } },
-  };
-  return map[type] || map.text;
 }
 
 async function load() {

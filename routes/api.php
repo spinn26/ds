@@ -507,6 +507,18 @@ Route::prefix('v1')->group(function () {
         Route::post('/admin/education/courses', [\App\Http\Controllers\Api\AdminEducationController::class, 'storeCourse']);
         Route::put('/admin/education/courses/{id}', [\App\Http\Controllers\Api\AdminEducationController::class, 'updateCourse']);
         Route::post('/admin/education/courses/{id}/move', [\App\Http\Controllers\Api\AdminEducationController::class, 'moveCourse'])->whereNumber('id');
+
+        // Knowledge Base (admin CRUD для роли education)
+        Route::get('/admin/kb/tree', [\App\Http\Controllers\Api\AdminKnowledgeBaseController::class, 'tree']);
+        Route::post('/admin/kb/sections', [\App\Http\Controllers\Api\AdminKnowledgeBaseController::class, 'storeSection']);
+        Route::put('/admin/kb/sections/{id}', [\App\Http\Controllers\Api\AdminKnowledgeBaseController::class, 'updateSection'])->whereNumber('id');
+        Route::delete('/admin/kb/sections/{id}', [\App\Http\Controllers\Api\AdminKnowledgeBaseController::class, 'destroySection'])->whereNumber('id');
+        Route::post('/admin/kb/sections/{id}/move', [\App\Http\Controllers\Api\AdminKnowledgeBaseController::class, 'moveSection'])->whereNumber('id');
+        Route::get('/admin/kb/sections/{id}/articles', [\App\Http\Controllers\Api\AdminKnowledgeBaseController::class, 'articles'])->whereNumber('id');
+        Route::get('/admin/kb/articles/{id}', [\App\Http\Controllers\Api\AdminKnowledgeBaseController::class, 'showArticle'])->whereNumber('id');
+        Route::post('/admin/kb/articles', [\App\Http\Controllers\Api\AdminKnowledgeBaseController::class, 'storeArticle']);
+        Route::put('/admin/kb/articles/{id}', [\App\Http\Controllers\Api\AdminKnowledgeBaseController::class, 'updateArticle'])->whereNumber('id');
+        Route::delete('/admin/kb/articles/{id}', [\App\Http\Controllers\Api\AdminKnowledgeBaseController::class, 'destroyArticle'])->whereNumber('id');
         Route::delete('/admin/education/courses/{id}', [\App\Http\Controllers\Api\AdminEducationController::class, 'destroyCourse']);
         Route::get('/admin/education/courses/{id}/lessons', [\App\Http\Controllers\Api\AdminEducationController::class, 'lessons'])->whereNumber('id');
         Route::post('/admin/education/courses/{id}/lessons', [\App\Http\Controllers\Api\AdminEducationController::class, 'storeLesson'])->whereNumber('id');
