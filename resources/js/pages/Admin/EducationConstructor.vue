@@ -3,7 +3,7 @@
     <PageHeader title="Конструктор обучения" icon="mdi-school-outline">
       <template #actions>
         <v-btn color="primary" prepend-icon="mdi-plus" @click="addRoot">
-          Добавить курс
+          Добавить раздел
         </v-btn>
       </template>
     </PageHeader>
@@ -16,6 +16,14 @@
             Структура
           </span>
         </div>
+        <div class="px-3 pb-2">
+          <v-text-field
+            v-model="treeSearch"
+            placeholder="Поиск курсов и уроков"
+            prepend-inner-icon="mdi-magnify"
+            variant="outlined" density="compact" hide-details clearable
+          />
+        </div>
         <div v-if="loadingTree" class="d-flex justify-center pa-4">
           <v-progress-circular indeterminate size="20" />
         </div>
@@ -27,11 +35,12 @@
         />
         <div v-else class="tree-body">
           <ConstructorTreeNode
-            v-for="node in tree"
+            v-for="node in filteredTree"
             :key="node.id"
             :node="node"
             :selected-id="selectedId"
             :level="1"
+            :max-depth="2"
             @select="selectNode"
             @add-child="addChild"
             @add-lesson="addLesson"
@@ -60,7 +69,7 @@
           <template v-else-if="currentCourse">
             <v-form @submit.prevent="saveCourse">
               <div class="text-subtitle-2 font-weight-bold text-uppercase letter-spacing-1 text-medium-emphasis mb-3">
-                {{ currentCourse.parent_id ? 'Подкурс / модуль' : 'Курс верхнего уровня' }}
+                {{ currentCourse.parent_id ? 'Курс' : 'Раздел' }}
               </div>
 
               <v-text-field
@@ -83,12 +92,17 @@
               />
               <v-row dense>
                 <v-col cols="12" sm="6">
-                  <v-text-field
-                    v-model.number="currentCourse.product_id"
-                    label="ID продукта для разблокировки"
-                    variant="outlined" density="comfortable" type="number"
+                  <v-autocomplete
+                    v-model="currentCourse.product_id"
+                    :items="productOptions"
+                    item-title="name" item-value="id"
+                    label="Продукт для разблокировки"
+                    variant="outlined" density="comfortable"
                     hint="После сдачи теста откроется этот продукт"
-                    persistent-hint
+                    persistent-hint clearable
+                    prepend-inner-icon="mdi-package-variant-closed"
+                    :loading="productsLoading"
+                    no-data-text="Продукты не загружены"
                   />
                 </v-col>
                 <v-col cols="12" sm="6">
@@ -99,12 +113,10 @@
                   />
                 </v-col>
               </v-row>
-              <v-switch
-                v-model="currentCourse.is_container"
-                label="Это модуль/папка (без своих уроков, только подкурсы)"
-                color="primary" hide-details
-                class="mt-2"
-              />
+              <!-- is_container выставляется автоматически: раздел = true,
+                   курс внутри раздела = false. UI-переключатель скрыт —
+                   3 уровня заданы жёстко (Раздел → Курс → Блок). -->
+              <input type="hidden" :value="currentCourse.is_container" />
 
               <div class="d-flex ga-2 mt-4">
                 <v-btn color="primary" type="submit" :loading="savingCourse">
@@ -121,16 +133,16 @@
               </div>
             </v-form>
 
-            <!-- Уроки курса (если не container) -->
+            <!-- Блоки курса (только в курсах, не в разделах) -->
             <div v-if="!currentCourse.is_container" class="lessons-section mt-6">
               <div class="d-flex align-center mb-3">
                 <span class="text-subtitle-1 font-weight-bold">
-                  Уроки в этом курсе ({{ courseLessons.length }})
+                  Блоки в этом курсе ({{ courseLessons.length }})
                 </span>
                 <v-spacer />
                 <v-btn size="small" color="primary" variant="tonal"
                   prepend-icon="mdi-plus" @click="addLesson(currentCourse)">
-                  Добавить урок
+                  Добавить блок
                 </v-btn>
               </div>
 
@@ -139,7 +151,7 @@
                   v-for="l in courseLessons"
                   :key="l.id"
                   :title="l.title"
-                  :subtitle="`${blockCount(l)} блоков · sort ${l.sort_order || 0}`"
+                  :subtitle="`${blockCount(l)} элементов · позиция ${l.sort_order || 0}`"
                   prepend-icon="mdi-text-box-outline"
                   @click="selectLesson(l)"
                 >
@@ -152,7 +164,38 @@
                 </v-list-item>
               </v-list>
               <div v-else class="text-caption text-medium-emphasis pa-3 text-center">
-                В этом курсе пока нет уроков
+                В этом курсе пока нет блоков
+              </div>
+            </div>
+
+            <!-- В разделе показываем список курсов как карточки -->
+            <div v-else class="mt-6">
+              <div class="d-flex align-center mb-3">
+                <span class="text-subtitle-1 font-weight-bold">
+                  Курсы в этом разделе ({{ childCourses.length }})
+                </span>
+                <v-spacer />
+                <v-btn size="small" color="primary" variant="tonal"
+                  prepend-icon="mdi-plus" @click="addChild(currentCourse)">
+                  Добавить курс
+                </v-btn>
+              </div>
+              <v-list v-if="childCourses.length" density="compact">
+                <v-list-item
+                  v-for="c in childCourses"
+                  :key="c.id"
+                  :title="c.title"
+                  :subtitle="`${c.lessonCount || 0} блоков`"
+                  prepend-icon="mdi-book-open-variant"
+                  @click="goToCourse(c.id)"
+                >
+                  <template #append>
+                    <v-icon size="small">mdi-chevron-right</v-icon>
+                  </template>
+                </v-list-item>
+              </v-list>
+              <div v-else class="text-caption text-medium-emphasis pa-3 text-center">
+                В этом разделе пока нет курсов
               </div>
             </div>
 
@@ -280,6 +323,11 @@ const { showSuccess, showError } = useSnackbar();
 
 const tree = ref([]);
 const loadingTree = ref(true);
+const treeSearch = ref('');
+
+// Список продуктов для селекта «Продукт для разблокировки».
+const productOptions = ref([]);
+const productsLoading = ref(false);
 
 const selectedId = ref(null);
 const selectedType = ref(null);   // 'course' | 'lesson'
@@ -305,6 +353,53 @@ const hasChildrenWarning = ref(false);
 function blockCount(l) {
   if (Array.isArray(l.body)) return l.body.length;
   return 0;
+}
+
+/**
+ * Поиск по дереву: оставляем только ветки, где или сам узел, или
+ * любой потомок содержит query. Чтобы пользователь видел контекст
+ * (раздел → курс → блок), фильтруем рекурсивно — родители совпадений
+ * остаются.
+ */
+const filteredTree = computed(() => {
+  const q = treeSearch.value?.trim().toLowerCase();
+  if (!q) return tree.value;
+  const matches = (n) => (n.title || '').toLowerCase().includes(q);
+  const walk = (nodes) => {
+    const out = [];
+    for (const n of nodes || []) {
+      const kids = walk(n.children);
+      if (matches(n) || kids.length) {
+        out.push({ ...n, children: kids });
+      }
+    }
+    return out;
+  };
+  return walk(tree.value);
+});
+
+// Дочерние курсы выбранного раздела (для списка справа).
+const childCourses = computed(() => {
+  if (!currentCourse.value) return [];
+  const node = findInTree(tree.value, currentCourse.value.id);
+  return (node?.children || []).map(c => ({
+    id: c.id,
+    title: c.title,
+    lessonCount: c.lessonCount || 0,
+  }));
+});
+
+async function loadProducts() {
+  productsLoading.value = true;
+  try {
+    const { data } = await api.get('/admin/products', { params: { per_page: 500 } });
+    const rows = data?.data || data?.items || [];
+    productOptions.value = rows.map(p => ({
+      id: p.id,
+      name: p.name || p.title || `Продукт ${p.id}`,
+    }));
+  } catch {}
+  productsLoading.value = false;
 }
 
 async function loadTree() {
@@ -380,14 +475,29 @@ async function saveCourse() {
 }
 
 async function addRoot() {
-  await createCourse({ parent_id: null, title: 'Новый курс' });
+  // Корневой узел = «Раздел» (is_container=true, без своих блоков,
+  // только курсы внутри).
+  await createCourse({ parent_id: null, title: 'Новый раздел', is_container: true });
 }
 async function addChild(parent) {
+  // Жёсткий лимит 3 уровней (Раздел → Курс → Блок).
+  // На 1-м уровне (parent.parent_id IS NULL) можно создать курс.
+  // На 2-м уровне (курс) — кнопка «+ Подкурс» скрыта в UI, но если
+  // дёрнут — отказываем.
+  if (parent.parent_id) {
+    showError('Достигнут лимит 3 уровней (Раздел → Курс → Блок).');
+    return;
+  }
   await createCourse({
     parent_id: parent.id,
-    title: 'Новый модуль',
-    is_container: !!(parent.children?.length || parent.isContainer),
+    title: 'Новый курс',
+    is_container: false,   // курс — не контейнер, в нём блоки
   });
+}
+
+function goToCourse(id) {
+  const node = findInTree(tree.value, id);
+  if (node) selectNode(node);
 }
 async function createCourse(extra) {
   try {
@@ -609,7 +719,10 @@ function clearSelection() {
   currentLesson.value = null;
 }
 
-onMounted(loadTree);
+onMounted(() => {
+  loadTree();
+  loadProducts();
+});
 </script>
 
 <style scoped>
