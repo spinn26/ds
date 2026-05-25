@@ -123,9 +123,8 @@
           <v-btn v-if="canFull('payments')" icon="mdi-plus" size="x-small" variant="text" color="primary"
             :disabled="!canAddPayment(item)" :title="paymentBlockedReason(item) || 'Добавить платёж'"
             @click="openPayment(item)" />
-          <v-btn v-if="item.payed > 0 || (item.status && item.status !== 'В обработке')"
-            icon="mdi-history" size="x-small" variant="text" color="secondary"
-            title="История платежей"
+          <v-btn icon="mdi-history" size="x-small" variant="text" color="secondary"
+            title="История платежей (изменить статус / удалить)"
             @click="openHistory(item)" />
         </template>
       </v-data-table>
