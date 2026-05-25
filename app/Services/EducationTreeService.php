@@ -24,7 +24,7 @@ class EducationTreeService
     public function fullTree(?int $userId): array
     {
         $courses = DB::table('education_courses')
-            ->whereNull('dateDeleted')
+            ->where('active', true)
             ->select([
                 'id', 'title', 'description', 'parent_id', 'product_id',
                 'category_id', 'block', 'sort_order', 'is_container',
@@ -79,13 +79,13 @@ class EducationTreeService
     {
         $course = DB::table('education_courses')
             ->where('id', $courseId)
-            ->whereNull('dateDeleted')
+            ->where('active', true)
             ->first();
         if (! $course) return null;
 
         $lessons = DB::table('education_lessons')
             ->where('course_id', $courseId)
-            ->whereNull('dateDeleted')
+            ->where('active', true)
             ->orderBy('sort_order')
             ->orderBy('id')
             ->get();
@@ -157,7 +157,7 @@ class EducationTreeService
     private function lessonCountsByCourse(): Collection
     {
         return DB::table('education_lessons')
-            ->whereNull('dateDeleted')
+            ->where('active', true)
             ->select('course_id', DB::raw('COUNT(*) as cnt'))
             ->groupBy('course_id')
             ->pluck('cnt', 'course_id');

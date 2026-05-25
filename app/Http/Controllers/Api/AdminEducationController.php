@@ -329,7 +329,7 @@ class AdminEducationController extends Controller
             $cur = array_pop($stack);
             $children = DB::table('education_courses')
                 ->where('parent_id', $cur)
-                ->whereNull('dateDeleted')
+                ->where('active', true)
                 ->pluck('id')
                 ->all();
             foreach ($children as $cId) {

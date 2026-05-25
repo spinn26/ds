@@ -34,7 +34,7 @@ class CertificateController extends Controller
             ->first();
         $totalLessons = DB::table('education_lessons')
             ->where('course_id', $courseId)
-            ->whereNull('dateDeleted')
+            ->where('active', true)
             ->count();
         $viewedLessons = DB::table('education_lesson_views as v')
             ->join('education_lessons as l', 'l.id', '=', 'v.lesson_id')

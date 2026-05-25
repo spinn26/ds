@@ -46,7 +46,7 @@ class EducationController extends Controller
         $like = '%' . mb_strtolower($q) . '%';
 
         $courses = DB::table('education_courses')
-            ->whereNull('dateDeleted')
+            ->where('active', true)
             ->whereRaw('LOWER(title) LIKE ?', [$like])
             ->limit(15)
             ->get(['id', 'title', 'parent_id'])
@@ -56,7 +56,7 @@ class EducationController extends Controller
             ]);
 
         $lessons = DB::table('education_lessons')
-            ->whereNull('dateDeleted')
+            ->where('active', true)
             ->whereRaw('LOWER(title) LIKE ?', [$like])
             ->limit(15)
             ->get(['id', 'title', 'course_id'])
