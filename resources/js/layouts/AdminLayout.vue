@@ -129,7 +129,6 @@ const menuItems = [
   { to: '/admin/news', icon: 'mdi-newspaper', title: 'Новости' },
   { to: '/admin/roadmap', icon: 'mdi-map-marker-path', title: 'Роадмап' },
   { to: '/admin/products', icon: 'mdi-package-variant', title: 'Продукты' },
-  { to: '/admin/education', icon: 'mdi-school', title: 'Обучение и тесты' },
   { to: '/admin/contests', icon: 'mdi-trophy', title: 'Конкурсы и события' },
   {
     title: 'Справочники', icon: 'mdi-book-cog',
