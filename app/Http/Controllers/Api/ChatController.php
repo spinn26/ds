@@ -58,8 +58,17 @@ class ChatController extends Controller
                 if (in_array($modern, $allowed, true)) $expanded[] = $legacy;
             }
             $query->where(function ($q) use ($user, $expanded, $participantTicketIds) {
+                // Claim & hide: тикеты отдела видны staff ТОЛЬКО пока никто
+                // не взял их в работу (assigned_to IS NULL). Как только staff
+                // отправляет первое сообщение — sendMessage() выставляет
+                // assigned_to=он, и тикет исчезает из списков остальных
+                // сотрудников того же отдела. Свои назначенные / созданные /
+                // recipient / приглашённые продолжают быть видны через OR-ветки.
                 if (! empty($expanded)) {
-                    $q->whereIn('department', $expanded);
+                    $q->where(function ($q2) use ($expanded) {
+                        $q2->whereIn('department', $expanded)
+                           ->whereNull('assigned_to');
+                    });
                 }
                 $q->orWhere('created_by', $user->id)
                   ->orWhere('recipient_id', $user->id)
@@ -587,10 +596,22 @@ class ChatController extends Controller
 
             $update = ['messages_count' => DB::raw('messages_count + 1'),
                 'last_message_at' => $now, 'updated_at' => $now];
-            if ($ticket->status === 'new' && $isAgent) {
+            // Claim: первое сообщение staff в неназначенном тикете закрепляет
+            // его за этим сотрудником. После этого index() и Policy@view
+            // прячут тикет от остальных staff того же отдела — модель
+            // «взял в работу — исчез у других». Системные сообщения (смена
+            // статуса, оценка и пр.) тут не проходят: они пишутся прямой
+            // вставкой в chat_messages, минуя sendMessage().
+            if ($isAgent && empty($ticket->assigned_to)) {
+                $update['assigned_to'] = $user->id;
+                $update['assigned_name'] = $name;
+                if ($ticket->status === 'new') {
+                    $update['status'] = 'open';
+                }
+            } elseif ($ticket->status === 'new' && $isAgent) {
+                // Tail-кейс: тикет уже кому-то назначен, но всё ещё в new
+                // (не должно случаться, но оставляем перевод в open для совместимости).
                 $update['status'] = 'open';
-                $update['assigned_to'] = $ticket->assigned_to ?? $user->id;
-                $update['assigned_name'] = $ticket->assigned_name ?? $name;
             }
             DB::table('chat_tickets')->where('id', $id)->update($update);
 

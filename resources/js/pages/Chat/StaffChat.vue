@@ -428,6 +428,32 @@
                 {{ slaLabel }}
               </v-chip>
             </div>
+            <!-- Кто из staff имеет доступ к чату: assignee (звёздочка) + явно
+                 приглашённые через chat_ticket_participants. После claim &
+                 hide остальные сотрудники отдела чат НЕ видят, поэтому важно
+                 показать прямо в шапке, кто реально подключён к переписке.
+                 Клик по любому чипу/кнопке "+" — открывает диалог управления. -->
+            <div v-if="chatAccessRow.length" class="d-flex flex-wrap align-center ga-1 mt-2">
+              <span class="text-caption text-medium-emphasis mr-1">В работе:</span>
+              <v-chip v-for="p in chatAccessRow" :key="'access-' + p.userId"
+                size="x-small" variant="tonal"
+                :color="p.kind === 'assignee' ? 'primary' : undefined"
+                :title="p.kind === 'assignee' ? 'Назначен · ' + (p.roleLabel || '') : 'Приглашён · ' + (p.roleLabel || '')"
+                @click="openParticipantsDialog">
+                <template #prepend>
+                  <v-avatar size="18" :color="p.kind === 'assignee' ? 'primary' : 'grey-lighten-1'"
+                    class="text-caption font-weight-bold">
+                    {{ pInitials(p.name) }}
+                  </v-avatar>
+                </template>
+                {{ p.name }}
+                <v-icon v-if="p.kind === 'assignee'" end size="11">mdi-star</v-icon>
+              </v-chip>
+              <v-btn icon variant="text" size="x-small" title="Добавить участника"
+                @click="openParticipantsDialog">
+                <v-icon size="14">mdi-account-plus</v-icon>
+              </v-btn>
+            </div>
           </div>
           <div class="chat-header-actions d-flex align-center ga-1">
             <!-- Быстрая кнопка «Решён» — один клик, без меню статусов.
@@ -1321,6 +1347,40 @@ const addableStaff = computed(() => {
     Number(activeChat.value?.assigned_to) || 0,
   ]);
   return (staffList.value || []).filter(s => !taken.has(Number(s.id)));
+});
+
+// Аватарная строка «кто в работе» — рендерится в шапке чата. Состав:
+//  1) assignee (звёздочка, primary-цвет) — единственный по claim & hide,
+//     остальные staff отдела чат не видят;
+//  2) явно приглашённые через chat_ticket_participants — серый.
+// Дубли по userId режутся (если assigned_to случайно есть и в participants).
+const chatAccessRow = computed(() => {
+  const out = [];
+  const seen = new Set();
+  const assigneeId = Number(activeChat.value?.assigned_to) || 0;
+  if (assigneeId) {
+    out.push({
+      userId: assigneeId,
+      name: activeChat.value?.assigned_name || 'Сотрудник',
+      kind: 'assignee',
+      roleLabel: pShortRole(
+        (staffList.value || []).find(s => Number(s.id) === assigneeId)?.role
+      ),
+    });
+    seen.add(assigneeId);
+  }
+  for (const p of participants.value) {
+    const uid = Number(p.userId);
+    if (!uid || seen.has(uid)) continue;
+    out.push({
+      userId: uid,
+      name: p.name || 'Сотрудник',
+      kind: 'participant',
+      roleLabel: pShortRole(p.role),
+    });
+    seen.add(uid);
+  }
+  return out;
 });
 
 function pInitials(name) {
@@ -2638,6 +2698,10 @@ async function connectSocket() {
         if (e.assignedName !== undefined) activeChat.value.assigned_name = e.assignedName;
         if (e.subject !== undefined && !editingSubject.value) activeChat.value.subject = e.subject;
         if (e.pinnedAt !== undefined) activeChat.value.pinned_at = e.pinnedAt;
+        // Если поменялся assignee — состав «В работе» в шапке тоже может
+        // измениться (новый отображается со звёздочкой, старый — пропадает
+        // из строки, если не был приглашён участником). Тянем заново.
+        if (e.assignedTo !== undefined) loadParticipants();
       }
     });
   } catch (e) {

@@ -32,7 +32,13 @@ class ChatTicketPolicy
         if (! $user->isStaff()) return false;
 
         $roles = array_map('trim', explode(',', $user->role ?? ''));
-        return TicketService::staffCanSeeCategory($roles, $ticket->department);
+        if (! TicketService::staffCanSeeCategory($roles, $ticket->department)) return false;
+
+        // Claim & hide: после того как тикет взят в работу (assigned_to NOT NULL),
+        // прочим staff отдела доступ закрыт. Сам assignee видит тикет через
+        // более раннюю проверку (assigned_to === user->id). Зеркалит фильтр
+        // в ChatController::index() — чтобы прямой URL не обходил список.
+        return empty($ticket->assigned_to);
     }
 
     /** Status changes, assignment, notes — staff-only workflow. */
