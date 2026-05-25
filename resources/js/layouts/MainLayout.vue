@@ -859,30 +859,43 @@ const visibleMenu = computed(() => menuItems.filter((item) => {
   flex-direction: column;
 }
 
+/* DS nav items: rounded-md, mint-soft active state с primary-цветом
+   текста и иконки. См. desing/ds-primitives.jsx .ds-nav-item. */
 .menu-item {
-  transition: background-color 0.15s ease;
-  border-radius: 0 !important;
+  transition: background-color var(--ds-dur-fast, 120ms) ease,
+              color var(--ds-dur-fast, 120ms) ease;
+  border-radius: var(--ds-radius-md, 8px) !important;
+  margin: 2px 8px !important;
+  font-weight: 500;
 }
 
 .menu-item:hover {
-  background-color: rgba(var(--v-theme-primary), 0.06);
+  background-color: var(--ds-overlay, rgba(var(--v-theme-on-surface), 0.04));
 }
 
-/* Square-edge items in the sidebar — no Vuetify rounding */
-.sidebar-drawer :deep(.v-list-item),
-.sidebar-drawer :deep(.v-list),
-.sidebar-drawer :deep(.v-navigation-drawer__content),
-.sidebar-drawer :deep(.v-list-item__overlay),
-.sidebar-drawer :deep(.v-list-item__underlay),
-.sidebar-drawer :deep(.v-list-item::before),
-.sidebar-drawer :deep(.v-list-item::after) {
-  border-radius: 0 !important;
+.main-nav-list :deep(.v-list-item--active) {
+  background: var(--ds-primary-soft, rgba(var(--v-theme-primary), 0.10));
+  color: rgb(var(--v-theme-primary));
 }
+.main-nav-list :deep(.v-list-item--active .v-icon) {
+  color: rgb(var(--v-theme-primary));
+}
+
+/* Section headers: тонкие подписи UPPERCASE по DS spec
+   (см. desing/ds-primitives.jsx .ds-nav-section). */
+.main-nav-list :deep(.v-list-subheader.menu-group-header) {
+  min-height: 28px !important;
+  padding-top: 14px !important;
+  padding-bottom: 4px !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--ds-on-surface-muted, rgba(var(--v-theme-on-surface), 0.55));
+  opacity: 1;
+}
+
 .sidebar-drawer :deep(.v-navigation-drawer) {
-  border-radius: 0 !important;
-}
-.main-nav-list :deep(.v-list-item),
-.main-nav-list :deep(.v-list-item__overlay) {
   border-radius: 0 !important;
 }
 

@@ -174,21 +174,25 @@ const initials = computed(() =>
   box-shadow: 0 0 0 2px rgba(var(--v-theme-brand), 0.35);
 }
 
-/* Remove rounded corners from nav items — square-edge look */
-.admin-drawer :deep(.v-list-item),
-.admin-drawer :deep(.v-list),
-.admin-drawer :deep(.v-navigation-drawer__content),
-.admin-drawer :deep(.v-list-item__overlay),
-.admin-drawer :deep(.v-list-item__underlay),
-.admin-drawer :deep(.v-list-item::before),
-.admin-drawer :deep(.v-list-item::after) {
-  border-radius: 0 !important;
+/* DS nav items: rounded-md + mint-tint active state.
+   В тёмной теме --ds-primary-soft = rgba(110,232,122,0.10). */
+.admin-nav-list :deep(.v-list-item) {
+  border-radius: var(--ds-radius-md, 8px) !important;
+  margin: 2px 8px !important;
+  font-weight: 500;
 }
+.admin-nav-list :deep(.v-list-item:hover) {
+  background: var(--ds-overlay, rgba(255, 255, 255, 0.04));
+}
+.admin-nav-list :deep(.v-list-item--active) {
+  background: var(--ds-primary-soft, rgba(var(--v-theme-primary), 0.12));
+  color: rgb(var(--v-theme-primary));
+}
+.admin-nav-list :deep(.v-list-item--active .v-icon) {
+  color: rgb(var(--v-theme-primary));
+}
+
 .admin-drawer :deep(.v-navigation-drawer) {
-  border-radius: 0 !important;
-}
-.admin-nav-list :deep(.v-list-item),
-.admin-nav-list :deep(.v-list-item__overlay) {
   border-radius: 0 !important;
 }
 
