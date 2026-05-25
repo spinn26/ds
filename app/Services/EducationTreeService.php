@@ -168,7 +168,7 @@ class EducationTreeService
         return DB::table('education_lesson_views as v')
             ->join('education_lessons as l', 'l.id', '=', 'v.lesson_id')
             ->where('v.user_id', $userId)
-            ->whereNull('l.dateDeleted')
+            ->where('l.active', true)
             ->select('l.course_id', DB::raw('COUNT(DISTINCT v.lesson_id) as cnt'))
             ->groupBy('l.course_id')
             ->pluck('cnt', 'l.course_id');
