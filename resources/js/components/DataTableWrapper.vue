@@ -150,15 +150,42 @@ const selectedProxy = computed({
 </script>
 
 <style scoped>
-.dtw-card { overflow: hidden; }
-.dtw-toolbar { border-bottom: 1px solid rgba(var(--v-border-color), 0.15); }
-.dtw-title { font-size: 14px; font-weight: 700; }
+/* DS list-card: rounded-lg, тонкий outline. См. desing/ds-components.jsx
+   DSCard variant="elevated" + DS table header. */
+.dtw-card {
+  overflow: hidden;
+  border: 1px solid var(--ds-outline-variant, rgba(var(--v-border-color), 0.12));
+  border-radius: var(--ds-radius-lg, 12px) !important;
+}
+.dtw-toolbar {
+  border-bottom: 1px solid var(--ds-outline-variant, rgba(var(--v-border-color), 0.15));
+  min-height: 56px;
+}
+.dtw-title {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
 .dtw-search { max-width: 320px; min-width: 200px; }
-.dtw-filters { border-bottom: 1px solid rgba(var(--v-border-color), 0.1); }
+.dtw-filters {
+  border-bottom: 1px solid var(--ds-outline-soft, rgba(var(--v-border-color), 0.08));
+}
 .dtw-skeleton :deep(.v-skeleton-loader__table-thead) { padding: 12px 16px; }
 .dtw-skeleton :deep(.v-skeleton-loader__table-tbody) { padding: 0 16px; }
-.dtw-table :deep(.v-data-table__td) { font-variant-numeric: tabular-nums; }
-.dtw-table :deep(.v-data-table__tr:hover .v-data-table__td) { background: rgba(var(--v-theme-primary), 0.03); }
+.dtw-table :deep(.v-data-table__td) {
+  font-variant-numeric: tabular-nums;
+  border-bottom-color: var(--ds-outline-soft, rgba(var(--v-border-color), 0.08)) !important;
+}
+.dtw-table :deep(.v-data-table__th) {
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--ds-on-surface-muted, rgba(var(--v-theme-on-surface), 0.55)) !important;
+}
+.dtw-table :deep(.v-data-table__tr:hover .v-data-table__td) {
+  background: var(--ds-overlay, rgba(var(--v-theme-primary), 0.03));
+}
 .dtw-table :deep(.v-table__wrapper) { overflow-x: auto; }
 @media (max-width: 600px) {
   .dtw-toolbar { padding: 8px !important; }
