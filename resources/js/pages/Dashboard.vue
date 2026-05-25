@@ -24,27 +24,33 @@
         :color="data.statusInfo.daysRemaining <= 30 ? 'warning' : 'primary'" class="mt-2" />
     </v-alert>
 
-    <!-- Qualification + Commission card -->
-    <v-card class="mb-4 pa-4">
-      <div class="d-flex justify-space-between align-center mb-4 flex-wrap ga-2">
-        <div>
-          <div class="text-caption text-medium-emphasis text-uppercase" style="letter-spacing: 1px">
-            Текущая квалификация
+    <!-- Qualification hero — DS spec ds-layouts.jsx::PartnerWorkspace hero -->
+    <v-card class="mb-4 quals-hero">
+      <BrandWaves shape="sheet" :width="800" :height="220"
+        preserveAspectRatio="xMidYMid slice"
+        bg-color="transparent"
+        stroke-color="#6EE87A" :stroke-opacity="0.2"
+        class="quals-hero-bg" />
+      <div class="quals-hero-content pa-4">
+        <div class="d-flex justify-space-between align-center mb-4 flex-wrap ga-2">
+          <div>
+            <div class="text-caption text-uppercase quals-eyebrow">
+              Текущая квалификация
+            </div>
+            <div class="d-flex align-center ga-3 mt-1 flex-wrap">
+              <v-chip color="secondary" size="default" variant="flat" class="font-weight-bold">
+                {{ currentLevel?.level ?? '—' }} [{{ currentLevel?.title ?? 'Start' }}]
+              </v-chip>
+              <v-chip v-if="data.consultant.activityName" size="small"
+                :color="data.consultant.active ? 'success' : 'grey'" variant="tonal">
+                {{ data.consultant.activityName }}
+              </v-chip>
+            </div>
           </div>
-          <div class="d-flex align-center ga-3 mt-1 flex-wrap">
-            <v-chip color="secondary" size="default" variant="flat" class="font-weight-bold">
-              {{ currentLevel?.level ?? '—' }} [{{ currentLevel?.title ?? 'Start' }}]
-            </v-chip>
-            <v-chip v-if="data.consultant.activityName" size="small"
-              :color="data.consultant.active ? 'success' : 'grey'" variant="tonal">
-              {{ data.consultant.activityName }}
-            </v-chip>
-          </div>
+          <v-btn variant="outlined" color="secondary" prepend-icon="mdi-table" @click="showLevels = true">
+            Условия квалификаций
+          </v-btn>
         </div>
-        <v-btn variant="outlined" color="secondary" prepend-icon="mdi-table" @click="showLevels = true">
-          Условия квалификаций
-        </v-btn>
-      </div>
 
       <!-- НГП progress bar -->
       <div class="mb-3">
@@ -87,6 +93,7 @@
       </div>
       <div v-else class="mt-3">
         <v-chip color="amber" variant="tonal" prepend-icon="mdi-crown" size="small">Максимальная квалификация</v-chip>
+      </div>
       </div>
     </v-card>
 
@@ -312,6 +319,7 @@ import { ref, computed, onMounted } from 'vue';
 import api from '../api';
 import MonthPicker from '../components/MonthPicker.vue';
 import PageHeader from '../components/PageHeader.vue';
+import BrandWaves from '../components/BrandWaves.vue';
 import { fmt } from '../composables/useDesign';
 
 const loading = ref(true);
@@ -426,6 +434,36 @@ onMounted(async () => {
 }
 .breakaway-card--error {
   border-left-color: rgb(var(--v-theme-error)) !important;
+}
+
+/* DS Hero для блока «Текущая квалификация» — BrandWaves фон + контент
+   слоем выше. См. desing/ds-layouts.jsx::PartnerWorkspace hero. */
+.quals-hero {
+  position: relative;
+  overflow: hidden;
+}
+.quals-hero-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  opacity: 0.65;
+}
+.quals-hero-content {
+  position: relative;
+  z-index: 1;
+}
+.quals-eyebrow {
+  letter-spacing: 1.2px;
+  color: rgb(var(--v-theme-primary));
+  font-weight: 600;
+}
+
+/* DS tabular-nums на всех числовых значениях дашборда — выравнивание
+   цифр в KPI-карточках, как в DS spec ds-mono. */
+:deep(.text-h3), :deep(.text-h4) {
+  font-variant-numeric: tabular-nums;
 }
 </style>
 
