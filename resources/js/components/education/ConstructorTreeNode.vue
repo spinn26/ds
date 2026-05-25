@@ -31,10 +31,10 @@
 
       <v-icon
         size="16"
-        :color="iconColor"
+        :color="node.isContainer ? 'amber' : 'primary'"
         class="type-icon"
       >
-        {{ iconName }}
+        {{ node.isContainer ? 'mdi-folder-outline' : 'mdi-book-open-variant' }}
       </v-icon>
 
       <span class="title-text" :title="node.title">{{ node.title }}</span>
@@ -49,19 +49,13 @@
           />
         </template>
         <v-list density="compact">
-          <!-- Раздел (1 уровень) → можно создать курс внутри -->
-          <v-list-item v-if="canAddChild"
-            prepend-icon="mdi-book-plus-outline"
-            @click="$emit('add-child', node)">
-            <v-list-item-title>+ Курс</v-list-item-title>
+          <v-list-item prepend-icon="mdi-folder-plus" @click="$emit('add-child', node)">
+            <v-list-item-title>+ Подкурс / модуль</v-list-item-title>
           </v-list-item>
-          <!-- Курс (2 уровень) → можно создать блок -->
-          <v-list-item v-if="canAddLesson"
-            prepend-icon="mdi-text-box-plus-outline"
-            @click="$emit('add-lesson', node)">
-            <v-list-item-title>+ Блок</v-list-item-title>
+          <v-list-item prepend-icon="mdi-text-box-plus-outline" @click="$emit('add-lesson', node)">
+            <v-list-item-title>+ Урок</v-list-item-title>
           </v-list-item>
-          <v-divider v-if="canAddChild || canAddLesson" />
+          <v-divider />
           <v-list-item prepend-icon="mdi-arrow-up" @click="$emit('move-up', node)">
             <v-list-item-title>Вверх</v-list-item-title>
           </v-list-item>
@@ -84,7 +78,6 @@
         :node="child"
         :selected-id="selectedId"
         :level="level + 1"
-        :max-depth="maxDepth"
         @select="(n) => $emit('select', n)"
         @add-child="(n) => $emit('add-child', n)"
         @add-lesson="(n) => $emit('add-lesson', n)"
@@ -104,7 +97,6 @@ const props = defineProps({
   node: { type: Object, required: true },
   selectedId: { type: [Number, String], default: null },
   level: { type: Number, default: 1 },
-  maxDepth: { type: Number, default: 2 },   // 2 = Раздел(1) → Курс(2). Блоки = lessons, не узлы дерева
 });
 const emit = defineEmits([
   'select', 'add-child', 'add-lesson', 'delete', 'move-up', 'move-down',
@@ -114,18 +106,6 @@ const emit = defineEmits([
 const expanded = ref(props.level <= 2);
 const hasChildren = computed(() => (props.node.children?.length || 0) > 0);
 const isSelected = computed(() => Number(props.selectedId) === props.node.id);
-
-// Тип узла по уровню: 1 = Раздел (контейнер), 2 = Курс (с блоками).
-// Раздел — оранжевая папка, курс — синяя книга.
-const isSection = computed(() => props.level === 1 || props.node.isContainer);
-const iconName = computed(() => isSection.value ? 'mdi-folder-outline' : 'mdi-book-open-variant');
-const iconColor = computed(() => isSection.value ? 'amber-darken-2' : 'primary');
-
-// Что разрешено добавлять в это меню:
-// — На разделе можно создать только курс (+ Курс).
-// — На курсе — только блок (+ Блок). Подкурсы не разрешены (3 уровня).
-const canAddChild = computed(() => isSection.value && props.level < props.maxDepth);
-const canAddLesson = computed(() => !isSection.value);
 
 // Drag-and-drop позиция: куда «упадёт» при drop —
 //   'before' / 'after' (стать соседом, sibling) или 'into' (стать
@@ -157,11 +137,6 @@ function onDrop(e) {
   const pos = dropPos.value;
   dropPos.value = null;
   if (!draggedId || draggedId === props.node.id || !pos) return;
-  // Лимит вложенности (3 уровня = Раздел → Курс → Блок). Дроп «into»
-  // создаёт ребёнка → запрещаем если target уже на максимальной глубине.
-  if (pos === 'into' && props.level >= props.maxDepth) {
-    return;
-  }
   emit('drop-node', {
     draggedId, targetId: props.node.id, position: pos,
   });
