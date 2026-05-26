@@ -24,26 +24,34 @@
         :color="data.statusInfo.daysRemaining <= 30 ? 'warning' : 'primary'" class="mt-2" />
     </v-alert>
 
-    <!-- Qualification hero — без декоративного BrandWaves фона (убран
-         по запросу 2026-05-26: слишком много визуального шума). -->
-    <v-card class="ds-card mb-4 quals-hero" elevation="0">
-      <div class="quals-hero-content pa-4">
-        <div class="d-flex justify-space-between align-center mb-4 flex-wrap ga-2">
+    <!-- Hero квалификации — primary-tinted, выделяется среди остальных
+         блоков как самый важный. Большая «10 [Кофаундер]» цифра. -->
+    <v-card class="dashboard-hero mb-4" elevation="0">
+      <div class="quals-hero-content pa-5">
+        <div class="d-flex justify-space-between align-start mb-4 flex-wrap ga-3">
           <div>
             <div class="text-caption text-uppercase quals-eyebrow">
               Текущая квалификация
             </div>
-            <div class="d-flex align-center ga-3 mt-1 flex-wrap">
-              <v-chip color="secondary" size="default" variant="flat" class="font-weight-bold">
-                {{ currentLevel?.level ?? '—' }} [{{ currentLevel?.title ?? 'Start' }}]
-              </v-chip>
-              <v-chip v-if="data.consultant.activityName" size="small"
-                :color="data.consultant.active ? 'success' : 'grey'" variant="tonal">
-                {{ data.consultant.activityName }}
-              </v-chip>
+            <div class="hero-qual-row mt-2">
+              <div class="hero-qual-badge">
+                {{ currentLevel?.level ?? '—' }}
+              </div>
+              <div class="hero-qual-meta">
+                <div class="hero-qual-title">{{ currentLevel?.title ?? 'Start' }}</div>
+                <div class="d-flex align-center ga-2 mt-1">
+                  <v-chip v-if="data.consultant.activityName" size="x-small"
+                    :color="data.consultant.active ? 'success' : 'grey'" variant="tonal">
+                    {{ data.consultant.activityName }}
+                  </v-chip>
+                  <span class="text-caption text-medium-emphasis">
+                    Комиссия <strong>{{ currentLevel?.percent ?? 15 }}%</strong>
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
-          <v-btn variant="outlined" color="secondary" prepend-icon="mdi-table" @click="showLevels = true">
+          <v-btn variant="tonal" color="primary" prepend-icon="mdi-table" @click="showLevels = true">
             Условия квалификаций
           </v-btn>
         </div>
@@ -60,12 +68,8 @@
         <v-progress-linear :model-value="nqpProgress" height="10" rounded color="primary" />
       </div>
 
-      <!-- Per spec ✅Дашборд.md §2: «Логика разделения на закрытую/расчётную упразднена. -->
-      <!--                          Отображается только Текущая квалификация». -->
-      <div class="mb-3">
-        <span class="text-body-2 text-medium-emphasis">Комиссия</span>
-        <span class="text-body-2 font-weight-bold ml-2">{{ currentLevel?.percent ?? 15 }}%</span>
-      </div>
+      <!-- Per spec ✅Дашборд.md §2: «Логика разделения на закрытую/расчётную упразднена.
+           Отображается только Текущая квалификация». Комиссия переехала в hero-meta. -->
 
       <!-- ОП по ГП progress bar (per spec — отдельный ГП не показываем) -->
       <div v-if="data.mandatoryPlan" class="mb-3">
@@ -93,26 +97,29 @@
       </div>
     </v-card>
 
-    <!-- Volume cards -->
-    <v-row class="mb-4">
+    <!-- Volume cards — ЛП/ГП/НГП. Crupно цифра + sub trend. -->
+    <div class="section-eyebrow">Объёмы</div>
+    <v-row class="mb-5 dashboard-row">
       <v-col v-for="card in volumeCards" :key="card.title" cols="12" md="4">
-        <v-card class="ds-card pa-4 h-100" elevation="0">
-          <div class="d-flex justify-space-between">
-            <div>
-              <div class="text-body-2 text-medium-emphasis">{{ card.title }}</div>
-              <div class="text-h4 font-weight-bold my-1">{{ fmt(card.value) }}</div>
+        <v-card class="ds-card pa-5 h-100" elevation="0">
+          <div class="d-flex justify-space-between align-start">
+            <div class="flex-grow-1 min-w-0">
+              <div class="text-caption text-uppercase text-medium-emphasis font-weight-bold letter-spacing-1">
+                {{ card.title }}
+              </div>
+              <div class="text-h3 font-weight-bold my-2 tabular-nums">{{ fmt(card.value) }}</div>
               <div class="d-flex align-center ga-1">
-                <v-icon :color="card.changeType === 'up' ? 'success' : card.changeType === 'down' ? 'error' : 'grey'" size="16">
+                <v-icon :color="card.changeType === 'up' ? 'success' : card.changeType === 'down' ? 'error' : 'grey'" size="14">
                   {{ card.changeType === 'up' ? 'mdi-trending-up' : card.changeType === 'down' ? 'mdi-trending-down' : 'mdi-minus' }}
                 </v-icon>
                 <span class="text-caption" :class="card.changeType === 'up' ? 'text-success' : card.changeType === 'down' ? 'text-error' : 'text-medium-emphasis'">
-                  {{ card.change }} к прошлому месяцу
+                  {{ card.change }} к прошлому
                 </span>
               </div>
             </div>
-            <v-avatar :color="card.color" size="48" variant="tonal">
-              <v-icon>{{ card.icon }}</v-icon>
-            </v-avatar>
+            <div class="kpi-icon-orb" :style="{ background: `rgba(var(--v-theme-${card.color}), 0.12)` }">
+              <v-icon size="22" :color="card.color">{{ card.icon }}</v-icon>
+            </div>
           </div>
         </v-card>
       </v-col>
@@ -180,75 +187,77 @@
       </div>
     </v-card>
 
-    <!-- Показатели -->
-    <h6 class="text-h6 mb-3">Показатели</h6>
-    <v-row class="mb-4">
-      <v-col cols="12" sm="6" md="3">
-        <v-card class="ds-card pa-4 text-center" elevation="0">
-          <v-icon size="24" color="blue" class="mb-1">mdi-account-outline</v-icon>
-          <div class="text-caption text-medium-emphasis">Партнёры 1 линии</div>
-          <div class="text-h4 font-weight-bold">{{ data.team?.firstLineAll ?? 0 }}</div>
-        </v-card>
-      </v-col>
-      <v-col cols="12" sm="6" md="3">
-        <v-card class="ds-card pa-4 text-center" elevation="0">
-          <v-icon size="24" color="blue-darken-2" class="mb-1">mdi-account-group</v-icon>
-          <div class="text-caption text-medium-emphasis">Всего партнёров</div>
-          <div class="text-h4 font-weight-bold">{{ data.team?.totalPartners ?? 0 }}</div>
-        </v-card>
-      </v-col>
-      <v-col cols="12" sm="6" md="3">
-        <v-card class="ds-card pa-4 text-center" elevation="0">
-          <v-icon size="24" color="green" class="mb-1">mdi-account-check</v-icon>
-          <div class="text-caption text-medium-emphasis">Активных 1 линии</div>
-          <div class="text-h4 font-weight-bold">{{ data.team?.firstLineActive ?? 0 }}</div>
-        </v-card>
-      </v-col>
-      <v-col cols="12" sm="6" md="3">
-        <v-card class="ds-card pa-4 text-center" elevation="0">
-          <v-icon size="24" color="green-darken-2" class="mb-1">mdi-account-multiple-check</v-icon>
-          <div class="text-caption text-medium-emphasis">Всего активных</div>
-          <div class="text-h4 font-weight-bold">{{ data.team?.totalPartnersActive ?? 0 }}</div>
+    <!-- Команда — показатели партнёров: 1 линия / всего, активные. -->
+    <div class="section-eyebrow">Команда</div>
+    <v-row class="mb-5 dashboard-row">
+      <v-col v-for="kpi in teamKpis" :key="kpi.label" cols="12" sm="6" md="3">
+        <v-card class="ds-card pa-4" elevation="0">
+          <div class="d-flex align-center ga-3">
+            <div class="kpi-icon-orb" :style="{ background: `rgba(var(--v-theme-${kpi.color}), 0.12)` }">
+              <v-icon size="20" :color="kpi.color">{{ kpi.icon }}</v-icon>
+            </div>
+            <div class="min-w-0">
+              <div class="text-caption text-medium-emphasis">{{ kpi.label }}</div>
+              <div class="text-h5 font-weight-bold tabular-nums">{{ kpi.value }}</div>
+            </div>
+          </div>
         </v-card>
       </v-col>
     </v-row>
 
-    <!-- Клиенты -->
-    <v-row class="mb-4">
+    <!-- Клиенты — две большие интерактивные карточки. -->
+    <div class="section-eyebrow">Клиенты</div>
+    <v-row class="mb-5 dashboard-row">
       <v-col cols="12" sm="6">
-        <router-link to="/clients" style="text-decoration: none; color: inherit">
-          <v-card class="ds-card ds-card--hover pa-4 text-center" elevation="0">
-            <v-icon size="28" color="primary" class="mb-1">mdi-account-multiple</v-icon>
-            <div class="text-caption text-medium-emphasis">Клиенты команды</div>
-            <div class="text-h4 font-weight-bold text-primary">{{ data.team?.teamClients ?? 0 }}</div>
+        <router-link to="/clients" class="text-decoration-none">
+          <v-card class="ds-card ds-card--hover pa-5" elevation="0">
+            <div class="d-flex align-center ga-4">
+              <div class="kpi-icon-orb kpi-icon-orb--lg" style="background: rgba(var(--v-theme-primary), 0.12)">
+                <v-icon size="26" color="primary">mdi-account-multiple</v-icon>
+              </div>
+              <div class="flex-grow-1 min-w-0">
+                <div class="text-caption text-medium-emphasis">Клиенты команды</div>
+                <div class="text-h3 font-weight-bold text-primary tabular-nums">{{ data.team?.teamClients ?? 0 }}</div>
+              </div>
+              <v-icon size="22" color="primary">mdi-arrow-right</v-icon>
+            </div>
           </v-card>
         </router-link>
       </v-col>
       <v-col cols="12" sm="6">
-        <router-link to="/clients" style="text-decoration: none; color: inherit">
-          <v-card class="ds-card ds-card--hover pa-4 text-center" elevation="0">
-            <v-icon size="28" color="secondary" class="mb-1">mdi-account</v-icon>
-            <div class="text-caption text-medium-emphasis">Мои клиенты</div>
-            <div class="text-h4 font-weight-bold text-secondary">{{ data.team?.myClients ?? 0 }}</div>
+        <router-link to="/clients" class="text-decoration-none">
+          <v-card class="ds-card ds-card--hover pa-5" elevation="0">
+            <div class="d-flex align-center ga-4">
+              <div class="kpi-icon-orb kpi-icon-orb--lg" style="background: rgba(var(--v-theme-secondary), 0.12)">
+                <v-icon size="26" color="secondary">mdi-account</v-icon>
+              </div>
+              <div class="flex-grow-1 min-w-0">
+                <div class="text-caption text-medium-emphasis">Мои клиенты</div>
+                <div class="text-h3 font-weight-bold text-secondary tabular-nums">{{ data.team?.myClients ?? 0 }}</div>
+              </div>
+              <v-icon size="22" color="secondary">mdi-arrow-right</v-icon>
+            </div>
           </v-card>
         </router-link>
       </v-col>
     </v-row>
 
-    <!-- Партнёры по статусу -->
-    <h6 class="text-h6 mb-3">Партнёры по статусу</h6>
-    <v-row class="mb-4">
+    <!-- Партнёры по статусу — 4 кликабельные карточки с diff. -->
+    <div class="section-eyebrow">Партнёры по статусу</div>
+    <v-row class="mb-5 dashboard-row">
       <v-col v-for="card in partnerCards" :key="card.label" cols="12" sm="6" md="3">
-        <router-link to="/structure" style="text-decoration: none; color: inherit">
+        <router-link to="/structure" class="text-decoration-none">
           <v-card class="ds-card ds-card--hover pa-4 text-center" elevation="0">
-            <div class="text-body-2 text-medium-emphasis">{{ card.label }}</div>
-            <div class="text-h3 font-weight-bold" :class="`text-${card.color}`">{{ card.value }}</div>
+            <div class="text-caption text-uppercase text-medium-emphasis font-weight-bold letter-spacing-1">
+              {{ card.label }}
+            </div>
+            <div class="text-h3 font-weight-bold my-2 tabular-nums" :class="`text-${card.color}`">{{ card.value }}</div>
             <div v-if="card.diff != null" class="d-flex align-center justify-center ga-1 mt-1">
               <v-icon :color="card.diff >= 0 ? 'success' : 'error'" size="14">
                 {{ card.diff >= 0 ? 'mdi-trending-up' : 'mdi-trending-down' }}
               </v-icon>
               <span class="text-caption" :class="card.diff >= 0 ? 'text-success' : 'text-error'">
-                {{ card.diff >= 0 ? '+' : '' }}{{ card.diff }} к прошлому периоду
+                {{ card.diff >= 0 ? '+' : '' }}{{ card.diff }} к прошлому
               </span>
             </div>
           </v-card>
@@ -378,6 +387,17 @@ const volumeCards = computed(() => {
   ];
 });
 
+// KPI «Команда» — компактные карточки с orb-иконками и цифрой.
+const teamKpis = computed(() => {
+  const t = data.value.team || {};
+  return [
+    { label: 'Партнёры 1 линии',  value: t.firstLineAll ?? 0,         icon: 'mdi-account-outline',         color: 'info' },
+    { label: 'Всего партнёров',   value: t.totalPartners ?? 0,        icon: 'mdi-account-group',           color: 'primary' },
+    { label: 'Активных 1 линии',  value: t.firstLineActive ?? 0,      icon: 'mdi-account-check',           color: 'success' },
+    { label: 'Всего активных',    value: t.totalPartnersActive ?? 0,  icon: 'mdi-account-multiple-check',  color: 'success' },
+  ];
+});
+
 const partnerCards = computed(() => {
   const p = data.value.partners || {};
   const pp = data.value.prevPartners || {};
@@ -431,18 +451,88 @@ onMounted(async () => {
   border-left-color: rgb(var(--v-theme-error)) !important;
 }
 
-/* Блок «Текущая квалификация» — обычная Apple-soft карточка без
-   декоративного фона (см. .ds-card в ds-tokens.css). */
+/* === Hero «Текущая квалификация» — выделяется среди обычных карточек
+   primary-tinted gradient'ом. Это самый важный блок на странице. === */
+.dashboard-hero {
+  border-radius: 16px;
+  background: linear-gradient(135deg,
+    rgba(var(--v-theme-primary), 0.06) 0%,
+    rgba(var(--v-theme-primary), 0.02) 100%);
+  border: 1px solid rgba(var(--v-theme-primary), 0.15);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 8px 24px rgba(46, 125, 50, 0.06);
+}
 .quals-eyebrow {
-  letter-spacing: 1.2px;
+  letter-spacing: 1.4px;
   color: rgb(var(--v-theme-primary));
-  font-weight: 600;
+  font-weight: 700;
+  font-size: 11px;
+}
+.hero-qual-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+/* Большая числовая «10» с круглым фоном — фокусная точка hero'а. */
+.hero-qual-badge {
+  width: 64px; height: 64px;
+  border-radius: 50%;
+  background: rgb(var(--v-theme-primary));
+  color: rgb(var(--v-theme-on-primary));
+  display: flex; align-items: center; justify-content: center;
+  font-size: 26px; font-weight: 700;
+  letter-spacing: -0.5px;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 4px 12px rgba(46, 125, 50, 0.25);
+  flex-shrink: 0;
+}
+.hero-qual-title {
+  font-size: 22px; font-weight: 700; line-height: 1.2;
+  letter-spacing: -0.3px;
+  color: rgb(var(--v-theme-on-surface));
 }
 
-/* DS tabular-nums на всех числовых значениях дашборда — выравнивание
-   цифр в KPI-карточках, как в DS spec ds-mono. */
-:deep(.text-h3), :deep(.text-h4) {
+/* === Section eyebrow — мини-заголовок над KPI-рядами === */
+.section-eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: rgba(var(--v-theme-on-surface), 0.5);
+  margin-bottom: 10px;
+}
+
+/* === KPI icon orb — круглая «таблетка» с иконкой в primary-tint === */
+.kpi-icon-orb {
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.kpi-icon-orb--lg { width: 56px; height: 56px; }
+
+.text-decoration-none { text-decoration: none; color: inherit; }
+.min-w-0 { min-width: 0; }
+
+/* DS tabular-nums на всех числовых значениях дашборда. */
+:deep(.text-h3), :deep(.text-h4), :deep(.text-h5) {
   font-variant-numeric: tabular-nums;
+}
+
+/* === Stagger fade-up для рядов карточек: каждый ряд появляется
+   с задержкой, KPI внутри ряда уже анимируются через .ds-card. === */
+.dashboard-row > * {
+  animation: fadeUp 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+.dashboard-row > *:nth-child(1) { animation-delay: 60ms; }
+.dashboard-row > *:nth-child(2) { animation-delay: 120ms; }
+.dashboard-row > *:nth-child(3) { animation-delay: 180ms; }
+.dashboard-row > *:nth-child(4) { animation-delay: 240ms; }
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 </style>
 
