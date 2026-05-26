@@ -19,7 +19,7 @@
 
     <v-row v-else>
       <v-col v-for="contest in contests" :key="contest.id" cols="12" sm="6" md="4">
-        <v-card class="pa-4 d-flex flex-column contest-card" height="100%">
+        <v-card class="pa-4 d-flex flex-column contest-card ds-hover-lift" height="100%">
           <div class="d-flex justify-space-between align-center mb-2">
             <v-chip size="small" color="success">Активный</v-chip>
             <span v-if="contest.typeName" class="text-caption text-medium-emphasis">{{ contest.typeName }}</span>
@@ -40,10 +40,12 @@
       </v-col>
     </v-row>
 
-    <v-card v-if="!loading && !contests.length" class="pa-4 text-center">
-      <v-icon size="64" color="grey-lighten-1" class="mb-3">mdi-trophy-outline</v-icon>
-      <div class="text-h6 text-medium-emphasis mb-1">Конкурсов и событий пока нет</div>
-      <div class="text-body-2 text-medium-emphasis">Следите за обновлениями — скоро здесь появятся новые конкурсы и события</div>
+    <v-card v-if="!loading && !contests.length" variant="flat" class="contests-empty">
+      <EmptyState
+        icon="mdi-trophy-outline"
+        message="Конкурсов и событий пока нет"
+        hint="Следите за обновлениями — скоро здесь появятся новые конкурсы и события"
+      />
     </v-card>
   </div>
 </template>
@@ -52,6 +54,7 @@
 import { ref, onMounted } from 'vue';
 import api from '../api';
 import PageHeader from '../components/PageHeader.vue';
+import EmptyState from '../components/EmptyState.vue';
 import { fmtDate } from '../composables/useDesign';
 
 const loading = ref(true);
@@ -82,5 +85,11 @@ onMounted(loadData);
 <style scoped>
 .contest-card {
   border-left: 4px solid rgb(var(--v-theme-primary));
+  border-radius: var(--ds-radius-lg, 12px);
+}
+.contests-empty {
+  border-radius: var(--ds-radius-xl, 16px);
+  border: 1px solid var(--ds-outline-variant, rgba(0, 0, 0, 0.06));
+  background: rgb(var(--v-theme-surface));
 }
 </style>
