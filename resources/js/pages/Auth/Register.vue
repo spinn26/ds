@@ -38,7 +38,15 @@
           </v-alert>
           <v-alert v-else-if="refError" type="error" variant="tonal" density="compact" class="mb-3" prepend-icon="mdi-lock-alert">
             <div class="font-weight-medium mb-1">Регистрация закрыта</div>
-            <div class="text-caption">{{ refError }}</div>
+            <div class="text-caption mb-3">{{ refError }}</div>
+            <div class="text-caption mb-2">
+              Если у вас есть вопросы — обратитесь в техподдержку:
+            </div>
+            <v-btn size="small" color="primary" variant="tonal"
+              prepend-icon="mdi-send"
+              href="https://t.me/DS_Helpdesk" target="_blank" rel="noopener">
+              @DS_Helpdesk
+            </v-btn>
           </v-alert>
 
           <v-stepper v-if="mentor" v-model="step" flat>
@@ -111,7 +119,7 @@
                 <v-card color="amber-lighten-5" class="mb-4 pa-3" variant="flat">
                   <div class="text-subtitle-2 text-amber-darken-3 mb-1">Стартовый период</div>
                   <div class="text-body-2 mb-2">
-                    Стартовый период — время, в течение которого ваш аккаунт должен быть активирован. Для этого вам нужно сделать <strong>Личный объём не менее 500 баллов</strong> сумарно за 90 дней с дати регистрации.
+                    Стартовый период — время, в течение которого ваш аккаунт должен быть активирован. Для этого вам нужно сделать <strong>Личный объём не менее 500 баллов</strong> сумарно за 90 дней с дати регистрации, при этом баллы должны быть начислены именно в течение этого периода.
                   </div>
                   <div class="text-body-2">
                     Если объём 500 баллов не будет выполнен — <strong>Соглашение о партнёрстве автоматически аннулируется</strong> после даты окончания Стартового периода.

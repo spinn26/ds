@@ -214,7 +214,7 @@
       </v-btn>
     </v-bottom-navigation>
 
-    <!-- Per spec ✅Написать собственику: форма с чекбоксом «анонимно»,
+    <!-- Per spec ✅Написать ген.директору: форма с чекбоксом «анонимно»,
          сообщение уходит в Telegram-группу через POST /api/v1/founder-message. -->
     <v-dialog v-model="quickMsg.open" max-width="560" :persistent="quickMsg.sending">
       <v-card>
@@ -704,13 +704,23 @@ const menuItems = [
   // { label: 'Конкурсы и события', icon: 'mdi-trophy-outline', path: '/contests', partner: true },
 
   { group: 'Связь', partner: true },
-  { label: 'Обратная связь', icon: 'mdi-chat-outline', path: '/chat', partner: true },
-  // Открывает чат-диалог с предзаполненной категорией «Техподдержка».
-  // Партнёр сразу попадает в нужный отдел без ручного выбора темы.
-  { label: 'Тех. проблема', icon: 'mdi-bug', path: '/chat?new=support', partner: true },
-  { label: 'Написать собственику', icon: 'mdi-email-edit-outline', path: '', partner: true, action: () => openQuickMsg('Сообщение собственику', 'mdi-email-edit-outline') },
+  // Общий вход в раздел тикетов — посмотреть все свои переписки.
+  { label: 'Мои обращения', icon: 'mdi-chat-outline', path: '/chat', partner: true },
+  // Тех.поддержка вынесена в Telegram (общая команда DS Helpdesk). Решено на встрече 2026-05-26:
+  // до доработки маршрутизации тикетов на платформе техвопросы идут в TG,
+  // а на платформе остаются только профильные чаты (бэк-офис по контрактам
+  // + верификация реквизитов с Катей).
+  { label: 'Тех. поддержка', icon: 'mdi-lifebuoy', path: '', partner: true,
+    action: () => window.open('https://t.me/DS_Helpdesk', '_blank', 'noopener') },
+  // Поддержка по продукту = бэк-офис (контракты, клиенты, продукты).
+  { label: 'Поддержка по продукту', icon: 'mdi-package-variant', path: '/chat?new=backoffice', partner: true },
+  // Верификация реквизитов = категория «Начисления и выплаты» (Катя Богданова).
+  { label: 'Верификация реквизитов', icon: 'mdi-credit-card-check', path: '/chat?new=accruals', partner: true },
+  { label: 'Написать ген.директору', icon: 'mdi-email-edit-outline', path: '', partner: true,
+    action: () => openQuickMsg('Сообщение ген.директору', 'mdi-email-edit-outline') },
   // Per spec ✅Оставить кейс — внешняя ссылка, без диалога.
-  { label: 'Оставить кейс', icon: 'mdi-briefcase-plus-outline', path: '', partner: true, action: () => window.open('https://dsconsalting.academy/bankcases', '_blank', 'noopener') },
+  { label: 'Оставить кейс', icon: 'mdi-briefcase-plus-outline', path: '', partner: true,
+    action: () => window.open('https://dsconsalting.academy/bankcases', '_blank', 'noopener') },
 
   // ---- Staff sections (grouped per spec) ----
   // Инструменты
