@@ -87,7 +87,7 @@ onMounted(loadToken);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border-radius: 14px;
+  border-radius: var(--ds-radius-lg, 12px);
 }
 .insmart-iframe {
   width: 100%;

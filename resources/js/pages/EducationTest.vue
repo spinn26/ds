@@ -216,8 +216,8 @@ onMounted(load);
 .test-running { width: 100%; max-width: 640px; }
 
 .question-card {
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
-  border-radius: 14px;
+  border: 1px solid var(--ds-outline-variant, rgba(var(--v-theme-on-surface), 0.08));
+  border-radius: var(--ds-radius-lg, 12px);
   background: rgb(var(--v-theme-surface));
 }
 
@@ -227,17 +227,17 @@ onMounted(load);
   align-items: center;
   gap: 12px;
   padding: 14px 16px;
-  border: 1.5px solid rgba(var(--v-theme-on-surface), 0.12);
-  border-radius: 10px;
+  border: 1.5px solid var(--ds-outline, rgba(var(--v-theme-on-surface), 0.12));
+  border-radius: var(--ds-radius-md, 8px);
   background: rgb(var(--v-theme-surface));
   cursor: pointer;
   transition: border-color 0.15s ease, background 0.15s ease;
   user-select: none;
 }
-.answer-row:hover { border-color: rgba(46, 125, 50, 0.5); }
+.answer-row:hover { border-color: rgba(var(--v-theme-primary), 0.5); }
 .answer-row.selected {
   border-color: rgb(var(--v-theme-primary));
-  background: rgba(46, 125, 50, 0.08);
+  background: var(--ds-primary-soft, rgba(46, 125, 50, 0.08));
   font-weight: 600;
 }
 .answer-row input[type="radio"] { accent-color: rgb(var(--v-theme-primary)); }
@@ -254,7 +254,7 @@ onMounted(load);
   border: 1.5px solid transparent;
   transition: all 0.15s ease;
 }
-.dot.done { background: rgba(46, 125, 50, 0.12); color: rgb(var(--v-theme-primary)); }
+.dot.done { background: var(--ds-primary-soft, rgba(46, 125, 50, 0.12)); color: rgb(var(--v-theme-primary)); }
 .dot.current {
   background: rgb(var(--v-theme-primary)); color: white;
   border-color: rgb(var(--v-theme-primary));
@@ -263,13 +263,13 @@ onMounted(load);
 .state-card {
   width: 100%; max-width: 640px;
   padding: 32px 36px;
-  border-radius: 14px;
+  border-radius: var(--ds-radius-lg, 12px);
   text-align: center;
   display: flex; flex-direction: column; align-items: center;
 }
 .state-card.success {
-  background: rgba(46, 125, 50, 0.06);
-  border: 1.5px solid rgba(46, 125, 50, 0.2);
+  background: var(--ds-primary-tint, rgba(46, 125, 50, 0.06));
+  border: 1.5px solid rgba(var(--v-theme-primary), 0.2);
 }
 .state-card.danger {
   background: rgba(198, 40, 40, 0.06);
