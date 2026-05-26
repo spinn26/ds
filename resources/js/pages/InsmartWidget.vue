@@ -45,10 +45,11 @@ const loading = ref(true);
 const loadError = ref(null);
 
 // Канальные креды от InSmart — идентифицируют B2B-партнёра (DS Consulting)
-// в их b2c-frame. Не пользовательский токен; user-токен возвращается
-// callback'ом InssmartEventListener.auth ниже.
+// в их b2c-frame. INSMART_TOKEN — «ID приложения» в b2b-ЛК InSmart,
+// INSMART_SECRET — ключ к этому приложению. Не пользовательский токен;
+// идентификация конкретного партнёра — через callback ниже.
 const INSMART_TOKEN = '382f5151-a7e5-5ad6-b1fd-2841052a4aac';
-const INSMART_SECRET = '671fe00c-772a-5778-92cd-0be66ce326db';
+const INSMART_SECRET = '15fd9275-80c5-5dfc-a98d-dd0b9ed658c9';
 const INSMART_LOADER_SRC = 'https://widgets.inssmart.ru/widgets/b2c-frame.loader.js';
 const INSMART_ORIGIN = 'https://widgets.inssmart.ru';
 
