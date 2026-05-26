@@ -2258,9 +2258,22 @@ class ChatController extends Controller
             foreach (TicketService::CATEGORY_ALIASES as $legacy => $modern) {
                 if (in_array($modern, $allowed, true)) $expanded[] = $legacy;
             }
-            $query->where(function ($q) use ($userId, $expanded, $participantTicketIds) {
+            $isAdmin = in_array('admin', $roles, true);
+            $query->where(function ($q) use ($userId, $expanded, $participantTicketIds, $isAdmin) {
+                // Claim & hide: видим тикеты отдела только пока никто
+                // не взял их в работу. Раньше тут не было whereNull —
+                // отсюда баг «у меня бейдж 2, а в списке тикетов нет»:
+                // staff из того же отдела уже забрал тикет, в index()
+                // он спрятался, а в unreadCount продолжал считаться.
                 if (! empty($expanded)) {
-                    $q->whereIn('department', $expanded);
+                    $q->where(function ($q2) use ($expanded) {
+                        $q2->whereIn('department', $expanded)
+                           ->whereNull('assigned_to');
+                    });
+                }
+                // Admin-override: те же тикеты техподдержки, что и в index().
+                if ($isAdmin) {
+                    $q->orWhereIn('department', ['support', 'technical']);
                 }
                 $q->orWhere('created_by', $userId)
                   ->orWhere('recipient_id', $userId)
