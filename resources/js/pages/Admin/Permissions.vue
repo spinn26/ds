@@ -507,7 +507,7 @@ onMounted(load);
   color: rgba(var(--v-theme-on-surface), 0.55);
   background: rgba(var(--v-theme-on-surface), 0.06);
   padding: 1px 6px;
-  border-radius: 4px;
+  border-radius: var(--ds-radius-xs, 4px);
 }
 .td-group__desc {
   font-size: 11px;

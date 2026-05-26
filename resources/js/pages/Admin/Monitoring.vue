@@ -493,7 +493,7 @@ onUnmounted(() => {
   font-size: 12px;
   background: rgba(var(--v-theme-on-surface), 0.04);
   padding: 12px;
-  border-radius: 6px;
+  border-radius: var(--ds-radius-sm, 6px);
   max-height: 50vh;
   overflow: auto;
 }

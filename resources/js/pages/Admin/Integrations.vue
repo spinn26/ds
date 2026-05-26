@@ -460,8 +460,8 @@ onMounted(() => {
 <style scoped>
 .payload-block {
   background: rgba(var(--v-theme-on-surface), 0.04);
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.1);
-  border-radius: 6px;
+  border: 1px solid var(--ds-outline-variant, rgba(var(--v-theme-on-surface), 0.1));
+  border-radius: var(--ds-radius-sm, 6px);
   padding: 10px;
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-size: 12px;
