@@ -363,13 +363,13 @@ onMounted(load);
 .analytics-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
 .analytics-head h2 { display: flex; align-items: center; gap: 8px; font-size: 20px; font-weight: 700; margin: 0; }
 .period-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.period-chip { padding: 4px 12px; border-radius: 14px; border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); background: transparent; color: rgba(var(--v-theme-on-surface), 0.7); font-size: 12px; cursor: pointer; font-weight: 600; transition: all 0.15s; }
+.period-chip { padding: 4px 12px; border-radius: var(--ds-radius-lg, 12px); border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); background: transparent; color: rgba(var(--v-theme-on-surface), 0.7); font-size: 12px; cursor: pointer; font-weight: 600; transition: all 0.15s; }
 .period-chip.active { background: rgb(var(--v-theme-primary)); color: #fff; border-color: rgb(var(--v-theme-primary)); }
 
 .loading-state { display: flex; align-items: center; gap: 10px; padding: 40px; justify-content: center; color: rgba(var(--v-theme-on-surface), 0.5); }
 
 .cards-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 16px; }
-.stat-card { padding: 16px 18px; border-radius: 14px; background: rgb(var(--v-theme-surface)); border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); }
+.stat-card { padding: 16px 18px; border-radius: var(--ds-radius-lg, 12px); background: rgb(var(--v-theme-surface)); border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); }
 .stat-label { font-size: 11px; color: rgba(var(--v-theme-on-surface), 0.5); text-transform: uppercase; letter-spacing: 0.5px; }
 .stat-value { font-size: 28px; font-weight: 800; margin-top: 6px; color: rgba(var(--v-theme-on-surface), 0.9); }
 .stat-value.muted { color: rgba(var(--v-theme-on-surface), 0.4); }
@@ -379,13 +379,13 @@ onMounted(load);
 .stat-sub { font-size: 11px; color: rgba(var(--v-theme-on-surface), 0.45); margin-top: 2px; }
 
 .status-counters { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-bottom: 16px; }
-.status-cell { padding: 10px 14px; border-radius: 10px; background: rgb(var(--v-theme-surface)); border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); border-top-width: 3px; }
+.status-cell { padding: 10px 14px; border-radius: var(--ds-radius-md, 8px); background: rgb(var(--v-theme-surface)); border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); border-top-width: 3px; }
 .status-cell-label { font-size: 11px; color: rgba(var(--v-theme-on-surface), 0.6); display: flex; align-items: center; gap: 4px; }
 .status-cell-value { font-size: 22px; font-weight: 700; margin-top: 4px; }
 
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
 
-.panel { padding: 16px; border-radius: 14px; background: rgb(var(--v-theme-surface)); border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); margin-bottom: 16px; }
+.panel { padding: 16px; border-radius: var(--ds-radius-lg, 12px); background: rgb(var(--v-theme-surface)); border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); margin-bottom: 16px; }
 .panel-head { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; margin-bottom: 12px; color: rgba(var(--v-theme-on-surface), 0.7); }
 .panel-empty { padding: 32px; text-align: center; color: rgba(var(--v-theme-on-surface), 0.4); }
 
@@ -396,7 +396,7 @@ onMounted(load);
 .bar-fill { height: 100%; border-radius: 5px; transition: width 0.3s ease; }
 .bar-count { text-align: right; font-weight: 700; color: rgba(var(--v-theme-on-surface), 0.8); }
 
-.trend-chart { background: rgba(var(--v-theme-surface-variant), 0.2); padding: 10px; border-radius: 10px; }
+.trend-chart { background: rgba(var(--v-theme-surface-variant), 0.2); padding: 10px; border-radius: var(--ds-radius-md, 8px); }
 .trend-axis { display: flex; justify-content: space-between; padding: 4px 2px 0; font-size: 10px; color: rgba(var(--v-theme-on-surface), 0.5); }
 .trend-legend { display: flex; gap: 10px; margin-top: 6px; font-size: 11px; color: rgba(var(--v-theme-on-surface), 0.6); align-items: center; }
 .legend-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 2px; margin-left: 6px; }
