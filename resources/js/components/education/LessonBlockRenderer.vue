@@ -190,7 +190,14 @@ function renderBlock(b) {
 }
 </script>
 
-<style scoped>
+<style>
+/* ВНИМАНИЕ: стили не scoped. Это сознательно, потому что блоки урока
+   рендерятся через render-функции h() в <component :is="...">.
+   Vue scoped CSS добавляет data-v-XXX атрибут только к корню template,
+   а render-функции его не получают — scoped правила НЕ применяются
+   к .video-frame, .block-image, .block-text-html и т.п. Поэтому стили
+   тут глобальные с префиксом .block-* / .video-frame, чтобы не
+   конфликтовать с другими страницами. */
 .block-renderer {
   display: flex;
   flex-direction: column;
@@ -205,43 +212,41 @@ function renderBlock(b) {
   white-space: pre-wrap;
   word-wrap: break-word;
 }
-/* HTML-контент из rich-editor */
+/* HTML-контент из rich-editor. Стили без :deep() — секция тут не
+   scoped (см. комментарий вверху), правила работают напрямую. */
 .block-text-html { white-space: normal; max-width: 100%; overflow-wrap: break-word; }
-/* Принудительно ограничиваем картинки/видео внутри HTML-контента —
-   rich-editor может вставить <img> с натуральным размером 3000+px,
-   которая разъезжается на весь экран. */
-.block-text-html :deep(img) {
+.block-text-html img {
   max-width: 100%;
   height: auto;
   border-radius: 10px;
   display: block;
   margin: 8px 0;
 }
-.block-text-html :deep(iframe),
-.block-text-html :deep(video) {
+.block-text-html iframe,
+.block-text-html video {
   max-width: 100%;
   border-radius: 10px;
 }
-.block-text-html :deep(p) { margin: 0 0 0.6em; }
-.block-text-html :deep(h1),
-.block-text-html :deep(h2),
-.block-text-html :deep(h3) {
+.block-text-html p { margin: 0 0 0.6em; }
+.block-text-html h1,
+.block-text-html h2,
+.block-text-html h3 {
   margin: 0.8em 0 0.4em;
   font-weight: 700;
   line-height: 1.25;
 }
-.block-text-html :deep(h1) { font-size: 28px; }
-.block-text-html :deep(h2) { font-size: 22px; }
-.block-text-html :deep(h3) { font-size: 18px; }
-.block-text-html :deep(ul),
-.block-text-html :deep(ol) { padding-left: 24px; margin: 0.4em 0; }
-.block-text-html :deep(li) { margin: 0.2em 0; }
-.block-text-html :deep(a) {
+.block-text-html h1 { font-size: 28px; }
+.block-text-html h2 { font-size: 22px; }
+.block-text-html h3 { font-size: 18px; }
+.block-text-html ul,
+.block-text-html ol { padding-left: 24px; margin: 0.4em 0; }
+.block-text-html li { margin: 0.2em 0; }
+.block-text-html a {
   color: rgb(var(--v-theme-primary));
   text-decoration: underline;
 }
-.block-text-html :deep(b),
-.block-text-html :deep(strong) { font-weight: 700; }
+.block-text-html b,
+.block-text-html strong { font-weight: 700; }
 
 .block-caption {
   font-size: 13px;
@@ -260,7 +265,7 @@ function renderBlock(b) {
   background: rgba(var(--v-theme-on-surface), 0.04);
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.1);
 }
-.video-frame :deep(iframe) {
+.video-frame iframe {
   position: absolute;
   inset: 0;
   width: 100%;
