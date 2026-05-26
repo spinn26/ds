@@ -6,8 +6,8 @@
       <v-progress-circular indeterminate color="primary" />
     </div>
 
-    <div v-else-if="lesson" class="lesson-layout">
-      <aside class="lesson-tree">
+    <div v-else-if="lesson" class="lesson-layout" :class="{ 'no-sidebar': !hasSidebarContent }">
+      <aside v-if="hasSidebarContent" class="lesson-tree">
         <div class="px-3 pt-3 pb-2 text-caption text-uppercase font-weight-bold text-medium-emphasis letter-spacing-1">
           {{ kicker }}
         </div>
@@ -393,6 +393,15 @@ const hasTest = computed(() => {
   return c?.hasTest && !c?.testPassed;
 });
 
+// Показываем sidebar только если есть что отрисовать: либо подмодули
+// (rootCourse.children), либо уроки текущего курса. Иначе схлопываем
+// layout в одну колонку — чтобы не было 280px пустого места слева.
+const hasSidebarContent = computed(() => {
+  const hasModules = (rootCourse.value?.children || []).length > 0;
+  const hasLessons = (courseDetail.value?.lessons || []).length > 0;
+  return hasModules || hasLessons;
+});
+
 const crumbItems = computed(() => {
   const items = [{ title: 'Обучение', to: '/education', disabled: false }];
   (courseDetail.value?.breadcrumbs || []).forEach(b => {
@@ -499,9 +508,12 @@ onMounted(load);
 .lesson-page { min-height: calc(100vh - 64px); }
 .lesson-layout {
   display: grid;
-  grid-template-columns: 280px 1fr;
+  grid-template-columns: 260px 1fr;
   min-height: calc(100vh - 110px);
 }
+/* Если нет sidebar-контента (нет подмодулей и нет уроков курса) —
+   схлопываем в одну колонку, чтобы не оставлять 260px пустого слева. */
+.lesson-layout.no-sidebar { grid-template-columns: 1fr; }
 @media (max-width: 1100px) {
   .lesson-layout { grid-template-columns: 1fr; }
   .lesson-tree { display: none; }
@@ -556,7 +568,7 @@ onMounted(load);
   z-index: 2;
   background: rgb(var(--v-theme-background));
   border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
-  padding: 28px 56px 20px;
+  padding: 24px 32px 18px;
   display: flex;
   align-items: flex-start;
   gap: 16px;
@@ -564,16 +576,17 @@ onMounted(load);
 .sticky-header h1 { font-size: 28px !important; line-height: 1.3; }
 
 .body-blocks {
-  padding: 32px 56px 56px;
-  max-width: 1100px;
+  padding: 24px 32px 48px;
+  max-width: 1200px;
   margin: 0 auto;
+  width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  gap: 24px;
 }
 @media (max-width: 700px) {
-  .sticky-header { padding: 20px 20px 14px; }
-  .body-blocks { padding: 20px 20px 40px; }
+  .sticky-header { padding: 18px 16px 12px; }
+  .body-blocks { padding: 18px 16px 32px; }
 }
 
 .test-lesson-card {

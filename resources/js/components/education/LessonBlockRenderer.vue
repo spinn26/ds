@@ -112,6 +112,12 @@ function renderBlock(b) {
         ? h('div', { class: 'video-frame' }, [
             h('iframe', {
               src: embed,
+              // Inline-стили на iframe — embed-серверы (Rutube, YouTube)
+              // подмешивают свои width/height-атрибуты, scoped CSS не
+              // всегда их перекрывает; гарантируем растяжение на 100%.
+              style: 'position:absolute;inset:0;width:100%;height:100%;border:0;',
+              width: '100%',
+              height: '100%',
               frameborder: '0',
               allow: 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture',
               allowfullscreen: true,
