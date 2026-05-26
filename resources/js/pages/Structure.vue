@@ -2,7 +2,7 @@
   <div>
     <PageHeader title="Структура моей команды" icon="mdi-sitemap" />
 
-    <v-card class="mb-3 pa-3">
+    <v-card class="ds-card mb-3 pa-3" elevation="0">
       <div class="d-flex ga-2 flex-wrap align-center">
         <v-text-field v-model="filters.search" placeholder="ФИО партнёра..."
           rounded prepend-inner-icon="mdi-magnify" clearable hide-details style="max-width:240px" @update:model-value="debouncedLoad" />
@@ -51,7 +51,7 @@
       </v-expand-transition>
     </v-card>
 
-    <v-card :loading="loading">
+    <v-card :loading="loading" class="ds-card" elevation="0">
       <div style="overflow-x: auto">
       <v-table density="compact" hover>
         <thead>

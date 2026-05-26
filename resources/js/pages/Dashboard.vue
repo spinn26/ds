@@ -100,7 +100,7 @@
     <!-- Volume cards -->
     <v-row class="mb-4">
       <v-col v-for="card in volumeCards" :key="card.title" cols="12" md="4">
-        <v-card class="pa-4 h-100">
+        <v-card class="ds-card pa-4 h-100" elevation="0">
           <div class="d-flex justify-space-between">
             <div>
               <div class="text-body-2 text-medium-emphasis">{{ card.title }}</div>
@@ -188,28 +188,28 @@
     <h6 class="text-h6 mb-3">Показатели</h6>
     <v-row class="mb-4">
       <v-col cols="12" sm="6" md="3">
-        <v-card class="pa-4 text-center">
+        <v-card class="ds-card pa-4 text-center" elevation="0">
           <v-icon size="24" color="blue" class="mb-1">mdi-account-outline</v-icon>
           <div class="text-caption text-medium-emphasis">Партнёры 1 линии</div>
           <div class="text-h4 font-weight-bold">{{ data.team?.firstLineAll ?? 0 }}</div>
         </v-card>
       </v-col>
       <v-col cols="12" sm="6" md="3">
-        <v-card class="pa-4 text-center">
+        <v-card class="ds-card pa-4 text-center" elevation="0">
           <v-icon size="24" color="blue-darken-2" class="mb-1">mdi-account-group</v-icon>
           <div class="text-caption text-medium-emphasis">Всего партнёров</div>
           <div class="text-h4 font-weight-bold">{{ data.team?.totalPartners ?? 0 }}</div>
         </v-card>
       </v-col>
       <v-col cols="12" sm="6" md="3">
-        <v-card class="pa-4 text-center">
+        <v-card class="ds-card pa-4 text-center" elevation="0">
           <v-icon size="24" color="green" class="mb-1">mdi-account-check</v-icon>
           <div class="text-caption text-medium-emphasis">Активных 1 линии</div>
           <div class="text-h4 font-weight-bold">{{ data.team?.firstLineActive ?? 0 }}</div>
         </v-card>
       </v-col>
       <v-col cols="12" sm="6" md="3">
-        <v-card class="pa-4 text-center">
+        <v-card class="ds-card pa-4 text-center" elevation="0">
           <v-icon size="24" color="green-darken-2" class="mb-1">mdi-account-multiple-check</v-icon>
           <div class="text-caption text-medium-emphasis">Всего активных</div>
           <div class="text-h4 font-weight-bold">{{ data.team?.totalPartnersActive ?? 0 }}</div>
@@ -221,7 +221,7 @@
     <v-row class="mb-4">
       <v-col cols="12" sm="6">
         <router-link to="/clients" style="text-decoration: none; color: inherit">
-          <v-card class="pa-4 text-center" hover>
+          <v-card class="ds-card ds-card--hover pa-4 text-center" elevation="0">
             <v-icon size="28" color="primary" class="mb-1">mdi-account-multiple</v-icon>
             <div class="text-caption text-medium-emphasis">Клиенты команды</div>
             <div class="text-h4 font-weight-bold text-primary">{{ data.team?.teamClients ?? 0 }}</div>
@@ -230,7 +230,7 @@
       </v-col>
       <v-col cols="12" sm="6">
         <router-link to="/clients" style="text-decoration: none; color: inherit">
-          <v-card class="pa-4 text-center" hover>
+          <v-card class="ds-card ds-card--hover pa-4 text-center" elevation="0">
             <v-icon size="28" color="secondary" class="mb-1">mdi-account</v-icon>
             <div class="text-caption text-medium-emphasis">Мои клиенты</div>
             <div class="text-h4 font-weight-bold text-secondary">{{ data.team?.myClients ?? 0 }}</div>
@@ -244,7 +244,7 @@
     <v-row class="mb-4">
       <v-col v-for="card in partnerCards" :key="card.label" cols="12" sm="6" md="3">
         <router-link to="/structure" style="text-decoration: none; color: inherit">
-          <v-card class="pa-4 text-center" hover>
+          <v-card class="ds-card ds-card--hover pa-4 text-center" elevation="0">
             <div class="text-body-2 text-medium-emphasis">{{ card.label }}</div>
             <div class="text-h3 font-weight-bold" :class="`text-${card.color}`">{{ card.value }}</div>
             <div v-if="card.diff != null" class="d-flex align-center justify-center ga-1 mt-1">

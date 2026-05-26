@@ -418,3 +418,58 @@
 .ds-eyebrow--primary {
   color: rgb(var(--v-theme-primary));
 }
+
+/* ───────────── Apple Soft Card ─────────────
+   Универсальная карточка в духе iCloud / Linear: hairline-border,
+   тонкая тень покоя, легкое поднятие на hover. Применяется поверх
+   Vuetify v-card через class="ds-card" + (опционально) .ds-card--hover.
+
+   Используется на: Dashboard, Structure, Clients, Contracts, Education,
+   Products, Finance, Workspace, Admin — везде где есть KPI/listings.
+   Тоны теней и border'а адаптированы под обе темы через окружающие
+   --v-theme переменные.
+*/
+.ds-card {
+  background: rgb(var(--v-theme-surface));
+  border-radius: 16px;
+  border: 1px solid rgba(var(--v-border-color), 0.06);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  transition: box-shadow 0.22s ease, transform 0.22s ease, border-color 0.22s ease;
+}
+
+/* Variant: интерактивная карточка (router-link / clickable). Lift на
+   hover как в App Store. Cursor — для семантической ясности. */
+.ds-card--hover { cursor: pointer; }
+.ds-card--hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
+  border-color: rgba(var(--v-border-color), 0.1);
+}
+.ds-card--hover:active { transform: translateY(0); transition-duration: 0.08s; }
+
+/* KPI-row spacing — стандартный отступ между статистическими карточками
+   на dashboard'ах. Применять class="ds-kpi-row" к <v-row>. */
+.ds-kpi-row { gap: 16px !important; }
+
+/* Sticky page-header с Apple-blur — для длинных страниц со списками. */
+.ds-sticky-header {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  background: rgba(var(--v-theme-surface), 0.82);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 1px solid rgba(var(--v-border-color), 0.06);
+  margin: 0 -16px 16px;
+  padding: 12px 16px;
+}
+
+/* Inline-utility: убрать жёсткие алерты, мягкая info-плашка. */
+.ds-alert-soft {
+  background: rgba(var(--v-theme-primary), 0.06);
+  border: 1px solid rgba(var(--v-theme-primary), 0.12);
+  border-radius: 12px;
+  padding: 12px 14px;
+  color: rgb(var(--v-theme-on-surface));
+  font-size: 13px;
+}

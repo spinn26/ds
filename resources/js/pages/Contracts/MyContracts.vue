@@ -6,7 +6,7 @@
          датам (открытия/добавления), продукту, программе, сроку, сумме, статусу.
          Компактный layout: основные фильтры в одной строке, диапазоны
          (даты/сумма/срок) и редко используемые — за тогглом «Ещё». -->
-    <v-card class="mb-3 pa-3">
+    <v-card class="ds-card mb-3 pa-3" elevation="0">
       <!-- Primary filter row — most-used, always visible -->
       <div class="d-flex flex-wrap ga-2 align-center">
         <v-text-field v-model="filters.number" placeholder="№ контракта"
@@ -107,7 +107,9 @@
 
     <v-data-table-server :items="items" :items-length="total" :loading="loading"
       :headers="visibleHeaders" :items-per-page="perPage"
-      :items-per-page-options="[25, 50, 100, 200]" @update:options="onOptions">
+      :items-per-page-options="[25, 50, 100, 200]"
+      class="ds-card" style="overflow:hidden"
+      @update:options="onOptions">
       <template #item.ammount="{ item }">
         {{ fmt(item.ammount) }} {{ item.currencySymbol }}
       </template>

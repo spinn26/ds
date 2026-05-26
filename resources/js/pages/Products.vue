@@ -4,7 +4,7 @@
 
     <template v-if="accessChecked">
       <!-- Filters -->
-      <v-card class="mb-3 pa-3">
+      <v-card class="ds-card mb-3 pa-3" elevation="0">
         <div class="d-flex ga-2 flex-wrap align-center">
           <v-text-field v-model="search" placeholder="Поиск по названию..."
             prepend-inner-icon="mdi-magnify" hide-details style="max-width:300px" clearable />
@@ -19,7 +19,7 @@
       <!-- Product cards -->
       <v-row>
         <v-col v-for="product in filteredProducts" :key="product.id" cols="12" sm="6" md="4" lg="3">
-          <v-card class="pa-4 d-flex flex-column" height="100%" :class="!product.available ? 'locked-card' : ''">
+          <v-card class="ds-card ds-card--hover pa-4 d-flex flex-column" height="100%" elevation="0" :class="!product.available ? 'locked-card' : ''">
             <!-- Hero image / лого / плэйсхолдер.
                  Раньше hero-картинка рисовалась через CSS `background: url()`,
                  и при битом URL (нет симлинки `/storage/`, файл удалён, etc.)

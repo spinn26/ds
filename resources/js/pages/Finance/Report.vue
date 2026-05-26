@@ -25,7 +25,7 @@
          «ГП» переименован в «ОП по ГП». -->
     <v-row class="mb-4">
       <v-col cols="12" sm="6" md="4">
-        <v-card class="pa-4 h-100">
+        <v-card class="ds-card pa-4 h-100" elevation="0">
           <div class="text-body-2 text-medium-emphasis">Текущая квалификация</div>
           <div class="d-flex align-center ga-2 mt-1 flex-wrap">
             <v-chip size="small" color="primary" class="text-truncate">
@@ -44,19 +44,19 @@
         </v-card>
       </v-col>
       <v-col cols="12" sm="6" md="2">
-        <v-card class="pa-4 h-100">
+        <v-card class="ds-card pa-4 h-100" elevation="0">
           <div class="text-body-2 text-medium-emphasis">ЛП</div>
           <div class="text-h6 font-weight-bold text-success mt-1" style="white-space:nowrap">{{ fmt(summary.volumes?.lp) }}</div>
         </v-card>
       </v-col>
       <v-col cols="12" sm="6" md="3">
-        <v-card class="pa-4 h-100">
+        <v-card class="ds-card pa-4 h-100" elevation="0">
           <div class="text-body-2 text-medium-emphasis">ОП по ГП</div>
           <div class="text-h6 font-weight-bold text-info mt-1" style="white-space:nowrap">{{ fmt(summary.volumes?.gp) }}</div>
         </v-card>
       </v-col>
       <v-col cols="12" sm="6" md="3">
-        <v-card class="pa-4 h-100">
+        <v-card class="ds-card pa-4 h-100" elevation="0">
           <div class="text-body-2 text-medium-emphasis">НГП</div>
           <div class="text-h6 font-weight-bold text-warning mt-1" style="white-space:nowrap">{{ fmt(summary.volumes?.ngp) }}</div>
         </v-card>
@@ -66,7 +66,7 @@
     <!-- Row 2: Sales totals -->
     <v-row class="mb-4">
       <v-col cols="12" sm="6" md="3">
-        <v-card class="pa-4 h-100">
+        <v-card class="ds-card pa-4 h-100" elevation="0">
           <div class="d-flex align-center ga-1 mb-2">
             <v-icon size="18" color="green">mdi-account</v-icon>
             <span class="text-body-2 text-medium-emphasis">Личные продажи</span>
@@ -77,7 +77,7 @@
         </v-card>
       </v-col>
       <v-col cols="12" sm="6" md="3">
-        <v-card class="pa-4 h-100">
+        <v-card class="ds-card pa-4 h-100" elevation="0">
           <div class="d-flex align-center ga-1 mb-2">
             <v-icon size="18" color="blue">mdi-account-group</v-icon>
             <span class="text-body-2 text-medium-emphasis">Групповые продажи</span>
@@ -91,7 +91,7 @@
         </v-card>
       </v-col>
       <v-col cols="12" sm="6" md="3">
-        <v-card class="pa-4 h-100">
+        <v-card class="ds-card pa-4 h-100" elevation="0">
           <div class="d-flex align-center ga-1 mb-2">
             <v-icon size="18" color="orange">mdi-sigma</v-icon>
             <span class="text-body-2 text-medium-emphasis">Итого продажи</span>
@@ -106,7 +106,7 @@
         </v-card>
       </v-col>
       <v-col cols="12" sm="6" md="3">
-        <v-card class="pa-4 h-100">
+        <v-card class="ds-card pa-4 h-100" elevation="0">
           <div class="d-flex align-center ga-1 mb-2">
             <v-icon size="18" color="purple">mdi-calendar-check</v-icon>
             <span class="text-body-2 text-medium-emphasis">Итог за месяц</span>

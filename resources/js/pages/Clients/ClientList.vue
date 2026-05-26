@@ -5,7 +5,7 @@
     <!-- Компактный layout: основное в одной flex-строке, диапазон даты
          рождения — за тогглом «Ещё». density=compact + placeholder вместо
          label на полях type=date (на узких экранах label резал outlined-рамку). -->
-    <v-card class="mb-3 pa-3">
+    <v-card class="ds-card mb-3 pa-3" elevation="0">
       <div class="d-flex ga-2 flex-wrap align-center">
         <v-text-field v-model="filters.search" placeholder="Поиск по ФИО..."
           density="compact" variant="outlined" rounded
@@ -60,6 +60,7 @@
     <v-data-table-server :items="items" :items-length="total" :loading="loading"
       :headers="visibleHeaders" :items-per-page="perPage"
       :items-per-page-options="[25, 50, 100, 200]" :sort-by="sortBy"
+      class="ds-card" style="overflow:hidden"
       @update:options="onOptions">
       <template #item.birthDate="{ value }">
         {{ fmtDate(value) }}

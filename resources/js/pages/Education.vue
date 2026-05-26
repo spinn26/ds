@@ -20,7 +20,7 @@
     </div>
 
     <!-- «Продолжить» -->
-    <v-card v-if="continueCourse" class="continue-card pa-4 mb-4" elevation="0">
+    <v-card v-if="continueCourse" class="ds-card continue-card pa-4 mb-4" elevation="0">
       <div class="d-flex align-center ga-4">
         <v-avatar size="52" color="primary-soft" rounded="lg">
           <v-icon size="28" color="primary">mdi-play-circle</v-icon>
@@ -52,7 +52,7 @@
 
     <!-- База знаний — портал -->
     <v-card
-      class="kb-card pa-5 mb-6"
+      class="ds-card ds-card--hover kb-card pa-5 mb-6"
       elevation="0"
       :to="'/education/kb'"
     >
@@ -102,7 +102,7 @@
         cols="12" sm="6" md="4" lg="3"
       >
         <v-card
-          class="course-card pa-3 h-100 d-flex flex-column"
+          class="ds-card ds-card--hover course-card pa-3 h-100 d-flex flex-column"
           elevation="0"
           :to="courseLink(c)"
         >
