@@ -23,8 +23,8 @@
 
     <div v-if="filtered.length" class="list">
       <div v-for="tx in filtered" :key="tx.id" class="list-card" @click="open(tx)">
-        <div class="list-card-avatar" :style="{ background: 'rgba(46,125,50,0.10)' }">
-          <v-icon color="primary" size="20">mdi-swap-horizontal</v-icon>
+        <div class="list-card-avatar">
+          <v-icon color="primary" size="22">mdi-swap-horizontal</v-icon>
         </div>
         <div class="list-card-body">
           <div class="list-card-title">{{ tx.clientName }}</div>

@@ -28,8 +28,8 @@
 
     <div v-else class="list">
       <div v-for="tx in items" :key="tx.id" class="list-card">
-        <div class="list-card-avatar" style="background: rgba(251,140,0,0.10)">
-          <v-icon color="warning" size="20">mdi-swap-horizontal</v-icon>
+        <div class="list-card-avatar avatar-warning">
+          <v-icon color="warning" size="22">mdi-swap-horizontal</v-icon>
         </div>
         <div class="list-card-body">
           <div class="list-card-title">{{ tx.clientName || '—' }}</div>

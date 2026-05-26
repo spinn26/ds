@@ -50,7 +50,7 @@
               <span class="ml-1">{{ t.customer_name }}</span>
               <span v-if="t.assigned_to_name" class="ml-1">· {{ t.assigned_to_name }}</span>
             </div>
-            <v-chip v-if="t.unread > 0" size="x-small" color="error" variant="flat">{{ t.unread }}</v-chip>
+            <v-chip v-if="(t.unread ?? 0) > 0" size="x-small" color="error" variant="flat">{{ t.unread }}</v-chip>
           </div>
         </div>
       </div>

@@ -2,6 +2,9 @@
   <div>
     <PageHeader title="Продукты и программы" icon="mdi-package-variant-closed">
       <template #actions>
+        <v-btn variant="text" prepend-icon="mdi-eye" to="/manage/products-preview">
+          Просмотр как партнёр
+        </v-btn>
         <v-btn v-if="canEdit('products')" color="primary" prepend-icon="mdi-plus" @click="openCreateProduct">Добавить продукт</v-btn>
       </template>
     </PageHeader>

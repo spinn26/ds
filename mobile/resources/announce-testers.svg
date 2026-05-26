@@ -1,0 +1,284 @@
+<svg width="1280" height="720" viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%"  stop-color="#0A2B10"/>
+      <stop offset="55%" stop-color="#1F5524"/>
+      <stop offset="100%" stop-color="#2E7D32"/>
+    </linearGradient>
+
+    <radialGradient id="glow" cx="85%" cy="100%" r="75%">
+      <stop offset="0%"  stop-color="#6EE87A" stop-opacity="0.55"/>
+      <stop offset="60%" stop-color="#6EE87A" stop-opacity="0.10"/>
+      <stop offset="100%" stop-color="#6EE87A" stop-opacity="0"/>
+    </radialGradient>
+
+    <radialGradient id="glowTop" cx="10%" cy="0%" r="50%">
+      <stop offset="0%"  stop-color="#6EE87A" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#6EE87A" stop-opacity="0"/>
+    </radialGradient>
+
+    <linearGradient id="ctaGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%"  stop-color="#6EE87A"/>
+      <stop offset="100%" stop-color="#9CFFA8"/>
+    </linearGradient>
+
+    <linearGradient id="screenGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"  stop-color="#0F1A12"/>
+      <stop offset="100%" stop-color="#0A2B10"/>
+    </linearGradient>
+
+    <filter id="dropShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="24" stdDeviation="28" flood-color="#000" flood-opacity="0.5"/>
+    </filter>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000" flood-opacity="0.3"/>
+    </filter>
+    <filter id="textShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.4"/>
+    </filter>
+  </defs>
+
+  <!-- Фон -->
+  <rect width="1280" height="720" fill="url(#bgGrad)"/>
+  <rect width="1280" height="720" fill="url(#glow)"/>
+  <rect width="1280" height="720" fill="url(#glowTop)"/>
+
+  <!-- BrandWaves: волны фоном -->
+  <g fill="none" stroke="#6EE87A" stroke-width="2" stroke-linecap="round" opacity="0.20">
+    <path d="M -40 600 Q 100 540 240 600 T 520 600 T 800 600"/>
+    <path d="M -40 640 Q 100 580 240 640 T 520 640 T 800 640"/>
+    <path d="M -40 680 Q 100 620 240 680 T 520 680 T 800 680"/>
+  </g>
+  <g fill="none" stroke="#FFFFFF" stroke-width="1.5" stroke-linecap="round" opacity="0.07">
+    <path d="M -40 50 Q 140 -10 320 50 T 680 50 T 1040 50 T 1320 50"/>
+    <path d="M -40 90 Q 140 30 320 90 T 680 90 T 1040 90 T 1320 90"/>
+  </g>
+  <g fill="#6EE87A" opacity="0.45">
+    <circle cx="90"  cy="600" r="3"/>
+    <circle cx="230" cy="600" r="3"/>
+    <circle cx="370" cy="600" r="3"/>
+    <circle cx="510" cy="600" r="3"/>
+    <circle cx="90"  cy="640" r="3"/>
+    <circle cx="230" cy="640" r="3"/>
+    <circle cx="370" cy="640" r="3"/>
+  </g>
+
+  <!-- Шапка: DS лого -->
+  <g transform="translate(70, 70)">
+    <text font-family="Inter, 'SF Pro Display', system-ui, -apple-system, Arial, sans-serif"
+          font-size="40" font-weight="900" fill="#FFFFFF" letter-spacing="-1.5">DS</text>
+    <text x="70" y="-4" font-family="Inter, system-ui, Arial, sans-serif"
+          font-size="12" font-weight="500" fill="#6EE87A" letter-spacing="3">CONSULTING</text>
+    <text x="70" y="14" font-family="Inter, system-ui, Arial, sans-serif"
+          font-size="12" font-weight="500" fill="#FFFFFF" opacity="0.6" letter-spacing="3">PARTNER PLATFORM</text>
+  </g>
+
+  <!-- Шильдик "Нужны бета-тестировщики" -->
+  <g transform="translate(70, 140)" filter="url(#softShadow)">
+    <rect x="0" y="0" width="340" height="46" rx="23" fill="#6EE87A" opacity="0.20"/>
+    <rect x="0" y="0" width="340" height="46" rx="23" fill="none" stroke="#6EE87A" stroke-width="1.5" opacity="0.8"/>
+    <!-- Пульсирующая точка -->
+    <circle cx="24" cy="23" r="6" fill="#6EE87A"/>
+    <circle cx="24" cy="23" r="11" fill="none" stroke="#6EE87A" stroke-width="1.5" opacity="0.45"/>
+    <text x="46" y="30" font-family="Inter, 'SF Pro Display', system-ui, -apple-system, Arial, sans-serif"
+          font-size="15" font-weight="700" fill="#6EE87A" letter-spacing="1.5">НУЖНЫ БЕТА-ТЕСТИРОВЩИКИ</text>
+  </g>
+
+  <!-- Приветствие -->
+  <text x="70" y="232" font-family="Inter, 'SF Pro Display', system-ui, -apple-system, Arial, sans-serif"
+        font-size="22" font-weight="500" fill="#FFFFFF" opacity="0.85">
+    Уважаемые коллеги, всех приветствую!
+  </text>
+
+  <!-- Главный заголовок -->
+  <g font-family="Inter, 'SF Pro Display', system-ui, -apple-system, Arial, sans-serif" filter="url(#textShadow)">
+    <text x="70" y="298" font-size="54" font-weight="800" fill="#FFFFFF" letter-spacing="-2">Новая платформа —</text>
+    <text x="70" y="362" font-size="54" font-weight="800" fill="#6EE87A" letter-spacing="-2">на финишной прямой!</text>
+  </g>
+
+  <!-- Подзаголовок-описание -->
+  <g font-family="Inter, system-ui, Arial, sans-serif">
+    <text x="70" y="416" font-size="19" font-weight="400" fill="#FFFFFF" opacity="0.85">
+      Мы дорабатываем мобильное приложение для нашей компании
+    </text>
+    <text x="70" y="444" font-size="19" font-weight="400" fill="#FFFFFF" opacity="0.85">
+      и приглашаем коллег принять участие в тестировании.
+    </text>
+  </g>
+
+  <!-- Карточка "Что нужно" -->
+  <g transform="translate(70, 484)">
+    <rect x="0" y="0" width="640" height="120" rx="18"
+          fill="#FFFFFF" opacity="0.06"/>
+    <rect x="0" y="0" width="640" height="120" rx="18"
+          fill="none" stroke="#6EE87A" stroke-width="1" opacity="0.4"/>
+
+    <!-- Android иконка -->
+    <g transform="translate(28, 28)">
+      <rect x="0" y="0" width="64" height="64" rx="14" fill="#6EE87A"/>
+      <g transform="translate(14, 16)" fill="#0A2B10">
+        <circle cx="9"  cy="9" r="2"/>
+        <circle cx="27" cy="9" r="2"/>
+        <path d="M 5 12 L 5 26 L 31 26 L 31 12 Q 18 4 5 12 Z"/>
+        <rect x="2"  y="16" width="3" height="13" rx="1.2"/>
+        <rect x="31" y="16" width="3" height="13" rx="1.2"/>
+        <rect x="9"  y="26" width="3" height="9" rx="1.2"/>
+        <rect x="23" y="26" width="3" height="9" rx="1.2"/>
+        <!-- усики -->
+        <line x1="7"  y1="6" x2="11" y2="3" stroke="#0A2B10" stroke-width="1.2" stroke-linecap="round"/>
+        <line x1="29" y1="6" x2="25" y2="3" stroke="#0A2B10" stroke-width="1.2" stroke-linecap="round"/>
+      </g>
+    </g>
+
+    <!-- Текст карточки -->
+    <text x="120" y="48" font-family="Inter, system-ui, Arial, sans-serif"
+          font-size="22" font-weight="700" fill="#FFFFFF">
+      Ищем тестировщиков с Android-устройствами
+    </text>
+    <text x="120" y="80" font-family="Inter, system-ui, Arial, sans-serif"
+          font-size="16" font-weight="400" fill="#FFFFFF" opacity="0.75">
+      Помогите нам найти баги до релиза — установите приложение
+    </text>
+    <text x="120" y="102" font-family="Inter, system-ui, Arial, sans-serif"
+          font-size="16" font-weight="400" fill="#FFFFFF" opacity="0.75">
+      и попробуйте свои рабочие сценарии.
+    </text>
+  </g>
+
+  <!-- CTA-кнопка -->
+  <g transform="translate(70, 632)" filter="url(#softShadow)">
+    <rect x="0" y="0" width="300" height="56" rx="28" fill="url(#ctaGrad)"/>
+    <text x="150" y="35" text-anchor="middle"
+          font-family="Inter, system-ui, Arial, sans-serif"
+          font-size="16" font-weight="700" fill="#0A2B10" letter-spacing="1">ПРИСОЕДИНИТЬСЯ К ТЕСТУ</text>
+  </g>
+  <text x="392" y="668" font-family="Inter, system-ui, Arial, sans-serif"
+        font-size="14" font-weight="400" fill="#FFFFFF" opacity="0.6">
+    Напишите в чат — пришлём apk и инструкцию
+  </text>
+
+  <!-- ===== ПРАВАЯ ЧАСТЬ: телефон ===== -->
+
+  <!-- Декоративные кольца -->
+  <circle cx="1020" cy="380" r="240" fill="none" stroke="#6EE87A" stroke-width="2" opacity="0.20"/>
+  <circle cx="1020" cy="380" r="300" fill="none" stroke="#6EE87A" stroke-width="1" opacity="0.10"/>
+
+  <!-- Большой Android-силуэт в фоне -->
+  <g transform="translate(900, 90)" opacity="0.10" fill="#6EE87A">
+    <circle cx="20" cy="20" r="4"/>
+    <circle cx="60" cy="20" r="4"/>
+    <path d="M 10 25 L 10 65 L 70 65 L 70 25 Q 40 8 10 25 Z"/>
+  </g>
+
+  <!-- Корпус телефона -->
+  <g transform="translate(870, 130)" filter="url(#dropShadow)">
+    <rect x="0" y="0" width="300" height="560" rx="44" ry="44"
+          fill="#0A1A0E" stroke="#1F3A24" stroke-width="2"/>
+    <rect x="8" y="8" width="284" height="544" rx="38" ry="38" fill="#000000"/>
+    <rect x="14" y="14" width="272" height="532" rx="34" ry="34" fill="url(#screenGrad)"/>
+
+    <!-- Камера-вырез (по центру сверху) -->
+    <circle cx="150" cy="30" r="6" fill="#000"/>
+
+    <!-- Статус-бар -->
+    <text x="35" y="38" font-family="Inter, system-ui, Arial, sans-serif"
+          font-size="11" font-weight="600" fill="#FFFFFF">12:34</text>
+    <g transform="translate(238, 30)" fill="#FFFFFF">
+      <path d="M 0 5 L 4 1 L 8 5 L 4 9 Z" opacity="0.85"/>
+      <rect x="14" y="-1" width="18" height="9" rx="2" fill="none" stroke="#FFFFFF" stroke-width="1"/>
+      <rect x="16" y="1" width="12" height="5" rx="1"/>
+    </g>
+
+    <!-- Верхний бренд-блок -->
+    <g transform="translate(0, 64)">
+      <text x="150" y="20" text-anchor="middle"
+            font-family="Inter, system-ui, Arial, sans-serif"
+            font-size="11" font-weight="500" fill="#6EE87A" letter-spacing="2.5">DS PARTNER</text>
+      <text x="150" y="50" text-anchor="middle"
+            font-family="Inter, system-ui, Arial, sans-serif"
+            font-size="20" font-weight="700" fill="#FFFFFF">Бета-версия</text>
+      <text x="150" y="70" text-anchor="middle"
+            font-family="Inter, system-ui, Arial, sans-serif"
+            font-size="11" font-weight="400" fill="#FFFFFF" opacity="0.6">v0.9.0 · сборка для тестов</text>
+    </g>
+
+    <!-- Карточка статуса теста -->
+    <g transform="translate(28, 168)">
+      <rect x="0" y="0" width="244" height="110" rx="18"
+            fill="#6EE87A"/>
+      <text x="18" y="28" font-family="Inter, system-ui, Arial, sans-serif"
+            font-size="10" font-weight="600" fill="#0A2B10" opacity="0.7" letter-spacing="1.5">ТЕСТИРОВАНИЕ</text>
+      <text x="18" y="64" font-family="Inter, system-ui, Arial, sans-serif"
+            font-size="26" font-weight="800" fill="#0A2B10">Спасибо!</text>
+      <text x="18" y="88" font-family="Inter, system-ui, Arial, sans-serif"
+            font-size="11" font-weight="500" fill="#0A2B10" opacity="0.8">Ваш фидбек — наш приоритет</text>
+      <g fill="none" stroke="#0A2B10" stroke-width="1.2" opacity="0.15">
+        <path d="M 140 18 Q 170 10 200 18 T 240 18"/>
+        <path d="M 140 26 Q 170 18 200 26 T 240 26"/>
+      </g>
+      <text x="216" y="92" font-size="22" text-anchor="middle">🧪</text>
+    </g>
+
+    <!-- Список модулей для тестирования -->
+    <g transform="translate(28, 300)" font-family="Inter, system-ui, Arial, sans-serif">
+      <text y="0" font-size="11" font-weight="600" fill="#6EE87A" letter-spacing="1.5" opacity="0.85">ЧТО ТЕСТИРУЕМ</text>
+
+      <g transform="translate(0, 18)">
+        <rect x="0" y="0" width="244" height="42" rx="12" fill="#FFFFFF" opacity="0.06"/>
+        <rect x="10" y="9" width="24" height="24" rx="6" fill="#6EE87A" opacity="0.2"/>
+        <text x="22" y="27" text-anchor="middle" font-size="14">💬</text>
+        <text x="46" y="20" font-size="13" font-weight="600" fill="#FFFFFF">Чат</text>
+        <text x="46" y="34" font-size="10" font-weight="400" fill="#FFFFFF" opacity="0.55">Сообщения, файлы, поиск</text>
+      </g>
+
+      <g transform="translate(0, 70)">
+        <rect x="0" y="0" width="244" height="42" rx="12" fill="#FFFFFF" opacity="0.06"/>
+        <rect x="10" y="9" width="24" height="24" rx="6" fill="#6EE87A" opacity="0.2"/>
+        <text x="22" y="27" text-anchor="middle" font-size="14">📄</text>
+        <text x="46" y="20" font-size="13" font-weight="600" fill="#FFFFFF">Договоры</text>
+        <text x="46" y="34" font-size="10" font-weight="400" fill="#FFFFFF" opacity="0.55">Список, статусы, документы</text>
+      </g>
+
+      <g transform="translate(0, 122)">
+        <rect x="0" y="0" width="244" height="42" rx="12" fill="#FFFFFF" opacity="0.06"/>
+        <rect x="10" y="9" width="24" height="24" rx="6" fill="#6EE87A" opacity="0.2"/>
+        <text x="22" y="27" text-anchor="middle" font-size="14">🔔</text>
+        <text x="46" y="20" font-size="13" font-weight="600" fill="#FFFFFF">Push-уведомления</text>
+        <text x="46" y="34" font-size="10" font-weight="400" fill="#FFFFFF" opacity="0.55">Доставка, открытие, переходы</text>
+      </g>
+    </g>
+
+    <!-- Нижний таб-бар -->
+    <g transform="translate(14, 498)">
+      <rect x="0" y="0" width="272" height="48" rx="0" fill="#0A1A0E" opacity="0.9"/>
+      <line x1="0" y1="0" x2="272" y2="0" stroke="#6EE87A" stroke-width="0.5" opacity="0.2"/>
+      <g fill="#FFFFFF" opacity="0.4">
+        <circle cx="45"  cy="24" r="3"/>
+        <circle cx="113" cy="24" r="3"/>
+      </g>
+      <circle cx="181" cy="24" r="4" fill="#6EE87A"/>
+      <g fill="#FFFFFF" opacity="0.4">
+        <circle cx="249" cy="24" r="3"/>
+      </g>
+    </g>
+
+    <!-- Home indicator -->
+    <rect x="115" y="528" width="70" height="4" rx="2" fill="#FFFFFF" opacity="0.3"/>
+  </g>
+
+  <!-- Badge "BETA" -->
+  <g transform="translate(1140, 150)" filter="url(#softShadow)">
+    <circle cx="0" cy="0" r="40" fill="#6EE87A"/>
+    <text y="-2" text-anchor="middle" font-family="Inter, system-ui, Arial, sans-serif"
+          font-size="14" font-weight="800" fill="#0A2B10" letter-spacing="1">BETA</text>
+    <text y="14" text-anchor="middle" font-family="Inter, system-ui, Arial, sans-serif"
+          font-size="9" font-weight="600" fill="#0A2B10">v0.9</text>
+  </g>
+
+  <!-- Низ: подпись -->
+  <text x="640" y="704" text-anchor="middle"
+        font-family="Inter, system-ui, Arial, sans-serif"
+        font-size="11" font-weight="400" fill="#FFFFFF" opacity="0.35" letter-spacing="3">
+    DS CONSULTING · PARTNER PLATFORM · 2026
+  </text>
+</svg>

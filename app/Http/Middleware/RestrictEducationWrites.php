@@ -28,6 +28,7 @@ class RestrictEducationWrites
     private const ALLOWED_WRITE_PREFIXES = [
         'api/v1/admin/education/',
         'api/v1/admin/instructions',
+        'api/v1/admin/kb/',
     ];
 
     /** Роли, с которыми education ходит «как админ» — гард не активен. */

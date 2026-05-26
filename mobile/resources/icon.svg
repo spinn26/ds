@@ -1,0 +1,31 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0A2B10"/>
+      <stop offset="55%" stop-color="#2E7D32"/>
+      <stop offset="100%" stop-color="#6EE87A"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="20" stdDeviation="22" flood-color="#000" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+
+  <!-- Фон со скруглением 22% (стандарт для Android adaptive icons) -->
+  <rect width="1024" height="1024" rx="226" ry="226" fill="url(#bg)"/>
+
+  <!-- Декоративные «волны» из brand identity (BrandWaves), белые с opacity -->
+  <g fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round" opacity="0.10">
+    <path d="M 80 760 Q 200 700 320 760 T 560 760 T 800 760 T 1020 760"/>
+    <path d="M 80 820 Q 200 760 320 820 T 560 820 T 800 820 T 1020 820"/>
+    <path d="M 80 880 Q 200 820 320 880 T 560 880 T 800 880 T 1020 880"/>
+  </g>
+
+  <!-- Логотип DS — крупный, жирный, с лёгкой тенью -->
+  <g filter="url(#shadow)" font-family="Inter, 'SF Pro Display', system-ui, -apple-system, Arial, sans-serif" font-weight="900">
+    <text x="512" y="600" text-anchor="middle"
+      font-size="520" fill="#FFFFFF" letter-spacing="-30">DS</text>
+  </g>
+
+  <!-- Тонкий мятный акцент-подчёркивание под буквами -->
+  <rect x="320" y="660" width="384" height="14" rx="7" fill="#6EE87A" opacity="0.85"/>
+</svg>
