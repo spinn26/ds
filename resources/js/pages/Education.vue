@@ -107,6 +107,9 @@
           :to="courseLink(c)"
         >
           <div class="course-cover" :style="coverStyle(idx, c)">
+            <!-- Placeholder-брендинг: «DS» крупно по центру, только когда
+                 курс без своей обложки (coverUrl пустой и идёт градиент). -->
+            <div v-if="!c.coverUrl" class="course-cover-brand">DS</div>
             <div class="course-num">{{ String(idx + 1).padStart(2, '0') }}</div>
             <v-chip
               v-if="c.productId && !c.testPassed"
@@ -359,6 +362,18 @@ onMounted(loadTree);
   font-weight: 700; font-size: 18px;
   letter-spacing: 1px;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+/* DS-водяной знак на placeholder-обложке (когда нет coverUrl). */
+.course-cover-brand {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Inter', system-ui, sans-serif;
+  font-weight: 800; font-size: 56px;
+  letter-spacing: 6px;
+  color: rgba(255, 255, 255, 0.9);
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  pointer-events: none;
+  user-select: none;
 }
 .cover-chip {
   position: absolute; top: 10px; right: 10px;
