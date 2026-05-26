@@ -6,10 +6,17 @@
       <v-icon size="14">mdi-wifi-off</v-icon>
       Real-time соединение потеряно. Сообщения придут с задержкой ~15 сек.
     </div>
+    <!-- Splitpanes: 2 или 3 pane'а (sidebar + main [+ context]).
+         На mobile splitter скрыт media-query'ем, видна одна панель v-if'ом. -->
+    <Splitpanes
+      class="chat-splitpanes"
+      :class="{ 'kanban-active': viewMode === 'kanban' }"
+      @resize="onPaneResize">
+    <Pane :size="paneSizes[0]" :min-size="16" :max-size="44"
+      v-if="!mobile || (!activeChat && viewMode !== 'kanban')">
     <!-- Left: ticket list (hidden in Kanban mode on mobile / collapsed on desktop) -->
     <aside class="chat-sidebar"
-      :class="{ 'mobile-hidden': mobile && (activeChat || viewMode === 'kanban'), 'compact': viewMode === 'kanban' && !mobile }"
-      :style="!mobile && viewMode !== 'kanban' ? { width: sidebarWidth + 'px' } : null">
+      :class="{ 'mobile-hidden': mobile && (activeChat || viewMode === 'kanban'), 'compact': viewMode === 'kanban' && !mobile }">
       <div class="sidebar-head px-3 py-2">
         <div class="d-flex align-center ga-2">
           <div class="text-body-1 font-weight-bold flex-grow-1">Обращения</div>
@@ -182,22 +189,13 @@
         </div>
       </transition>
     </aside>
-
-    <!-- Drag-handle: тянуть мышкой влево/вправо чтобы изменить ширину
-         списка тикетов. На mobile и в kanban-режиме скрыт (там layout
-         другой — sidebar full-width или compact-rail). -->
-    <div v-if="!mobile && viewMode !== 'kanban'"
-      class="chat-resize-handle"
-      :class="{ active: sidebarResizing }"
-      title="Перетащите для изменения ширины · двойной клик — сбросить"
-      @mousedown="startResize"
-      @dblclick="sidebarWidth = 340">
-      <div class="chat-resize-handle__grip"></div>
-    </div>
+    </Pane>
 
     <!-- View toggle переехал в sidebar-head (см. .view-mode-toggle) — раньше
          плавающий .view-toggle перекрывал контекст-панель партнёра. -->
 
+    <!-- Center pane: kanban (v-if) или chat-main (v-else). Один Pane на оба. -->
+    <Pane :size="paneSizes[1]" v-if="!mobile || activeChat || viewMode === 'kanban'">
     <!-- Kanban mode container -->
     <div v-if="viewMode === 'kanban'" class="kanban-wrap">
       <!-- Kanban toolbar -->
@@ -937,7 +935,12 @@
         <div class="text-body-1 text-medium-emphasis mt-3">Выберите чат из списка</div>
       </div>
     </main>
+    </Pane>
 
+    <!-- Right pane: контекст-панель партнёра. Видна только в list-режиме
+         при выбранном тикете и включённом showContext. На mobile скрыта. -->
+    <Pane :size="paneSizes[2]" :min-size="16" :max-size="38"
+      v-if="!mobile && viewMode === 'list' && activeChat && showContext">
     <!-- Right: Partner context panel — единый блок (с/без partnerContext) -->
     <aside v-if="viewMode === 'list' && activeChat && showContext && !mobile" class="context-panel">
       <div class="context-head px-3 py-2 d-flex align-center ga-2">
@@ -1098,6 +1101,8 @@
         </template>
       </div>
     </aside>
+    </Pane>
+    </Splitpanes>
 
     <!-- Save to FAQ dialog -->
     <v-dialog v-model="saveFaqDialog.open" max-width="640" :persistent="saveFaqDialog.saving">
@@ -1265,7 +1270,8 @@ import { getActivityColorByName } from '../../composables/useDesign';
 import ImageLightbox from '../../components/ImageLightbox.vue';
 import { usePermissions } from '../../composables/usePermissions';
 import { linkify } from '../../composables/useLinkify';
-import { useResizablePanel } from '../../composables/useResizablePanel';
+import { Splitpanes, Pane } from 'splitpanes';
+import 'splitpanes/dist/splitpanes.css';
 
 // destructured-rename — в файле уже есть локальный function canEdit(msg).
 const { canFull: hasFullPermission } = usePermissions();
@@ -1284,15 +1290,26 @@ import {
 
 const { mobile } = useDisplay();
 
-// Drag-to-resize sidebar — у staff-чата дефолт чуть шире (340px),
-// потому что строки несут больше инфы (status + priority + customer/recipient).
-// Ключ хранения отдельный от партнёрского, у staff'а свой расклад.
-const { width: sidebarWidth, isResizing: sidebarResizing, startResize } = useResizablePanel({
-  storageKey: 'ds:chat-staff-sidebar-w',
-  defaultWidth: 340,
-  min: 280,
-  max: 620,
-});
+// Splitpanes размеры — массив процентов трёх pane'ов (sidebar / main /
+// context). Если context-pane скрыт, второй pane занимает всё. Сохраняем
+// в localStorage, чтобы у каждого оператора был свой layout.
+const PANE_STORAGE_KEY = 'ds:chat-staff-pane-sizes';
+const paneSizes = ref(
+  (() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem(PANE_STORAGE_KEY) || 'null');
+      if (Array.isArray(stored) && stored.length === 3) return stored;
+    } catch (_) { /* fallthrough */ }
+    return [24, 52, 24];
+  })()
+);
+function onPaneResize(panes) {
+  if (!Array.isArray(panes)) return;
+  const next = panes.map(p => Math.round((p?.size ?? 0) * 10) / 10);
+  // Если context-pane сейчас скрыт, паттерн [a, b] — оставляем 3-й 24% дефолтом.
+  paneSizes.value = next.length === 3 ? next : [next[0], next[1], paneSizes.value[2] ?? 24];
+  try { localStorage.setItem(PANE_STORAGE_KEY, JSON.stringify(paneSizes.value)); } catch (_) { /* quota */ }
+}
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
@@ -2851,87 +2868,117 @@ onUnmounted(() => {
 <style scoped>
 .chat-wrap { display: flex; height: 100%; min-height: 0; overflow: hidden; position: relative; }
 
-/* Resize-handle для sidebar — между списком тикетов и областью диалога/канбана.
-   Видимая полоса 2px по центру, hit-area 6px. Подсвечивается primary'ем
-   при hover/active. */
-.chat-resize-handle {
-  flex: 0 0 6px;
-  position: relative;
-  cursor: col-resize;
-  background: rgba(var(--v-border-color), 0.12);
-  transition: background 0.15s;
-  user-select: none;
-  z-index: 2;
+/* Splitpanes — drag-resizable layout (2 или 3 pane'а). Apple-style:
+   тонкие сепараторы, нежный hover, без жёстких рамок. */
+.chat-splitpanes { flex: 1; min-width: 0; }
+.chat-splitpanes :deep(.splitpanes__pane) {
+  background: rgb(var(--v-theme-surface));
+  transition: none;
+  overflow: hidden;
 }
-.chat-resize-handle::before {
+.chat-splitpanes :deep(.splitpanes__splitter) {
+  position: relative;
+  flex: 0 0 1px;
+  background: rgba(var(--v-border-color), 0.08);
+  cursor: col-resize;
+  transition: background 0.18s ease;
+}
+.chat-splitpanes :deep(.splitpanes__splitter)::before {
   content: '';
   position: absolute;
-  inset: 0 2px;
-  background: transparent;
-  transition: background 0.15s;
+  top: 0; bottom: 0;
+  left: -4px; right: -4px;
+  z-index: 1;
 }
-.chat-resize-handle:hover::before,
-.chat-resize-handle.active::before { background: rgba(var(--v-theme-primary), 0.5); }
-.chat-resize-handle__grip {
+.chat-splitpanes :deep(.splitpanes__splitter)::after {
+  content: '';
   position: absolute;
   top: 50%; left: 50%;
   transform: translate(-50%, -50%);
   width: 2px;
-  height: 28px;
+  height: 32px;
   border-radius: 1px;
-  background: rgba(var(--v-theme-on-surface), 0.18);
-  transition: background 0.15s, height 0.15s;
+  background: rgba(var(--v-theme-on-surface), 0.16);
+  opacity: 0;
+  transition: opacity 0.2s ease, background 0.18s ease, height 0.2s ease;
 }
-.chat-resize-handle:hover .chat-resize-handle__grip,
-.chat-resize-handle.active .chat-resize-handle__grip {
+.chat-splitpanes :deep(.splitpanes__splitter:hover),
+.chat-splitpanes :deep(.splitpanes__splitter.splitpanes__splitter--dragging) {
+  background: rgba(var(--v-theme-primary), 0.45);
+}
+.chat-splitpanes :deep(.splitpanes__splitter:hover)::after,
+.chat-splitpanes :deep(.splitpanes__splitter.splitpanes__splitter--dragging)::after {
+  opacity: 1;
   background: rgb(var(--v-theme-primary));
-  height: 40px;
 }
+.chat-splitpanes :deep(.splitpanes__splitter.splitpanes__splitter--dragging)::after { height: 48px; }
+/* В kanban-режиме скрываем splitter'ы между sidebar и kanban — у kanban
+   своя ширина (фиксированный compact-rail). */
+.chat-splitpanes.kanban-active :deep(.splitpanes__splitter) { pointer-events: none; opacity: 0.5; }
 /* Sidebar — Linear-style: 320px, тонкие dividers, компактная плотность */
-/* Sidebar — ширина управляется JS (useResizablePanel, default 340px).
-   Если sidebar.compact (kanban-режим) — фиксируем 260px ниже отдельным
-   правилом. */
+/* Sidebar — ширина управляется splitpanes-pane'ом снаружи. */
 .chat-sidebar {
-  flex-shrink: 0;
+  width: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
-  background: rgba(var(--v-theme-surface), 1);
+  background: rgb(var(--v-theme-surface));
   position: relative;
 }
 .sidebar-head {
+  position: sticky; top: 0; z-index: 3;
   display: flex; align-items: center;
-  background: linear-gradient(180deg,
-    rgba(var(--v-theme-primary), 0.04) 0%,
-    rgba(var(--v-theme-primary), 0) 100%);
-  border-bottom: 1px solid rgba(var(--v-border-color), 0.04);
+  background: rgba(var(--v-theme-surface), 0.82);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 1px solid rgba(var(--v-border-color), 0.06);
+  min-height: 44px;
 }
-.sidebar-list { flex: 1; overflow-y: auto; }
+.sidebar-list { flex: 1; overflow-y: auto; padding: 4px 6px 8px; }
+
+/* Apple-style thin scrollbar — tone-on-tone, ничего не отвлекает. */
+.sidebar-list,
+.chat-messages,
+.context-body { scrollbar-width: thin; scrollbar-color: rgba(var(--v-theme-on-surface), 0.18) transparent; }
+.sidebar-list::-webkit-scrollbar,
+.chat-messages::-webkit-scrollbar,
+.context-body::-webkit-scrollbar { width: 8px; height: 8px; }
+.sidebar-list::-webkit-scrollbar-thumb,
+.chat-messages::-webkit-scrollbar-thumb,
+.context-body::-webkit-scrollbar-thumb {
+  background: rgba(var(--v-theme-on-surface), 0.14);
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.sidebar-list::-webkit-scrollbar-thumb:hover,
+.chat-messages::-webkit-scrollbar-thumb:hover,
+.context-body::-webkit-scrollbar-thumb:hover { background: rgba(var(--v-theme-on-surface), 0.28); background-clip: padding-box; }
 
 /* Chat item — единый стиль: компактный, тонкие границы, плавный hover */
 .chat-item {
-  display: flex; align-items: flex-start; gap: 10px;
-  padding: 10px 12px; cursor: pointer; position: relative;
-  transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+  display: flex; align-items: flex-start; gap: 11px;
+  padding: 11px 12px; cursor: pointer; position: relative;
+  border-radius: 12px;
+  margin: 1px 0;
+  transition: background 0.2s ease, transform 0.18s ease;
 }
-.chat-item:not(:last-child)::after { content: ''; position: absolute; left: 12px; right: 12px; bottom: 0; border-bottom: 1px solid rgba(var(--v-border-color), 0.08); }
-.chat-item:hover { background: rgba(var(--v-theme-on-surface), 0.04); }
-.chat-item:active { transform: scale(0.995); }
-.chat-item.active {
-  background: linear-gradient(90deg,
-    rgba(var(--v-theme-primary), 0.12) 0%,
-    rgba(var(--v-theme-primary), 0.04) 100%);
-  box-shadow: inset 0 0 0 1px rgba(var(--v-theme-primary), 0.18);
-}
-.chat-item.active::before { content: ''; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; background: rgb(var(--v-theme-primary)); border-radius: 0 3px 3px 0; }
+.chat-item:hover { background: rgba(var(--v-theme-on-surface), 0.05); }
+.chat-item:active { transform: scale(0.985); }
+.chat-item.active { background: rgba(var(--v-theme-primary), 0.1); }
+.chat-item.active .chat-item-subject { color: rgb(var(--v-theme-primary)); font-weight: 600; }
 .chat-item.stale { background: rgba(var(--v-theme-error), 0.05); }
 .chat-item-avatar {
-  width: 34px; height: 34px; border-radius: 10px;
+  width: 38px; height: 38px;
+  border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0; margin-top: 1px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-  transition: transform 0.15s ease;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.06),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+  transition: transform 0.2s ease;
 }
-.chat-item:hover .chat-item-avatar { transform: scale(1.05); }
+.chat-item:hover .chat-item-avatar { transform: scale(1.04); }
 .priority-bar { position: absolute; top: 8px; bottom: 8px; left: 4px; width: 2px; border-radius: 1px; }
 .chat-item-body { flex: 1; min-width: 0; }
 .chat-item-top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; min-width: 0; }
@@ -2971,10 +3018,26 @@ onUnmounted(() => {
 .chat-item-pin.active { color: rgb(var(--v-theme-primary)); opacity: 1; }
 .kanban-qa-btn.active { color: rgb(var(--v-theme-primary)); background: rgba(var(--v-theme-primary), 0.12); }
 
-.chat-main { flex: 1; display: flex; flex-direction: column; min-width: 0; position: relative; }
+.chat-main {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  position: relative;
+  background: rgb(var(--v-theme-surface));
+}
 .chat-placeholder { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; }
 
-.chat-header { border-bottom: 1px solid rgba(var(--v-border-color), 0.12); display: flex; align-items: flex-start; gap: 8px; }
+/* Apple-style sticky header с blur. */
+.chat-header {
+  position: sticky; top: 0; z-index: 3;
+  background: rgba(var(--v-theme-surface), 0.82);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 1px solid rgba(var(--v-border-color), 0.06);
+  display: flex; align-items: flex-start; gap: 10px;
+}
 .chat-header-info { flex: 1; min-width: 0; }
 .chat-header-actions { flex-shrink: 0; }
 /* Карандаш переименования — variant=tonal даёт зелёный чип-фон, видно
@@ -3058,9 +3121,29 @@ onUnmounted(() => {
 .avatar-circle { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; color: #fff; letter-spacing: -0.3px; }
 .avatar-circle.partner { background: #f97316; }
 .avatar-circle.staff { background: rgb(var(--v-theme-primary)); }
-.msg-bubble { max-width: 65%; padding: 8px 12px; border-radius: 14px; position: relative; line-height: 1.4; }
-.msg-bubble.partner { background: rgba(var(--v-theme-on-surface), 0.06); border-bottom-left-radius: 4px; }
-.msg-bubble.mine { background: rgb(var(--v-theme-primary)); color: #fff; border-bottom-right-radius: 4px; }
+/* Apple iMessage-style bubble. */
+.msg-bubble {
+  max-width: 72%;
+  padding: 8px 14px 9px;
+  border-radius: 20px;
+  position: relative;
+  line-height: 1.42;
+  box-shadow: 0 1px 1.5px rgba(0, 0, 0, 0.04);
+  transition: box-shadow 0.2s ease;
+}
+.msg-bubble:hover { box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06); }
+.msg-bubble.partner {
+  background: rgba(var(--v-theme-on-surface), 0.055);
+  color: rgb(var(--v-theme-on-surface));
+  border-bottom-left-radius: 6px;
+}
+.msg-bubble.mine {
+  background: linear-gradient(135deg,
+    rgb(var(--v-theme-primary)) 0%,
+    color-mix(in srgb, rgb(var(--v-theme-primary)) 86%, black) 100%);
+  color: #fff;
+  border-bottom-right-radius: 6px;
+}
 .msg-sender { font-size: 11px; font-weight: 600; margin-bottom: 2px; color: #f97316; }
 .msg-bubble.mine .msg-sender { color: rgba(255,255,255,0.85); }
 .msg-text { font-size: 14px; line-height: 1.45; white-space: pre-line; word-break: break-word; }
@@ -3145,7 +3228,17 @@ onUnmounted(() => {
   border-bottom: 1px solid rgba(var(--v-theme-primary), 0.20);
 }
 .qr-add:hover { background: rgba(var(--v-theme-primary), 0.18); }
-.chat-input { display: flex; align-items: flex-end; gap: 8px; padding: 10px 16px; border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); position: relative; transition: background 0.15s; }
+/* Apple composer — blur + soft separator. */
+.chat-input {
+  display: flex; align-items: flex-end; gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid rgba(var(--v-border-color), 0.06);
+  background: rgba(var(--v-theme-surface), 0.82);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  position: relative;
+  transition: background 0.18s ease;
+}
 .chat-input.drag-over { background: rgba(var(--v-theme-primary), 0.08); }
 .input-btn { background: none; border: none; cursor: pointer; color: rgba(var(--v-theme-on-surface), 0.5); padding: 6px; border-radius: 8px; }
 .input-btn:hover { background: rgba(var(--v-theme-primary), 0.1); }
@@ -3233,7 +3326,12 @@ onUnmounted(() => {
 
 /* Partner context panel (right sidebar in list mode) */
 /* Right partner-context panel — Vuetify-first, остался лишь layout */
-.context-panel { width: 320px; flex-shrink: 0; border-left: 1px solid rgba(var(--v-border-color), 0.12); display: flex; flex-direction: column; background: rgba(var(--v-theme-surface), 1); overflow: hidden; }
+.context-panel {
+  width: 100%; height: 100%;
+  display: flex; flex-direction: column;
+  background: rgb(var(--v-theme-surface));
+  overflow: hidden;
+}
 .context-body { flex: 1; overflow-y: auto; }
 .ctx-link { color: rgba(var(--v-theme-on-surface), 0.7); text-decoration: none; }
 .ctx-link:hover { color: rgb(var(--v-theme-primary)); }
@@ -3245,8 +3343,10 @@ onUnmounted(() => {
 .chat-wrap.kanban-mode .context-panel { display: none; }
 
 @media (max-width: 959px) {
+  /* На mobile splitter скрыт — pane'ы переключаются v-if'ом по activeChat. */
+  .chat-splitpanes :deep(.splitpanes__splitter) { display: none; }
+  .chat-splitpanes :deep(.splitpanes__pane) { width: 100% !important; max-width: 100%; }
   .chat-sidebar { width: 100% !important; }
-  .chat-resize-handle { display: none; }
   .mobile-hidden { display: none !important; }
   .kanban-board { padding: 56px 8px 8px; }
   .kanban-column { min-width: 220px; }

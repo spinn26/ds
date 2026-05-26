@@ -5,9 +5,17 @@
       <v-icon size="14">mdi-wifi-off</v-icon>
       Соединение потеряно. Сообщения придут с задержкой ~15 сек.
     </div>
+
+    <!-- Desktop: splitpanes для drag-resize между sidebar и main.
+         Mobile: одна панель видна одновременно (по activeChat). -->
+    <Splitpanes
+      class="chat-splitpanes"
+      :horizontal="false"
+      :dbl-click-splitter="true"
+      @resize="onPaneResize">
+    <Pane :size="paneSize" :min-size="18" :max-size="50" class="splitpane-aside" v-if="!mobile || !activeChat">
     <!-- Left sidebar: dialog list — Linear-style минимализм, плотные отступы -->
-    <aside class="chat-sidebar" :class="{ 'mobile-hidden': mobile && activeChat }"
-      :style="!mobile ? { width: sidebarWidth + 'px' } : null">
+    <aside class="chat-sidebar" :class="{ 'mobile-hidden': mobile && activeChat }">
       <!-- Header: заголовок + primary CTA + overflow меню для второстепенного -->
       <div class="sidebar-head px-3 py-2">
         <div class="text-body-1 font-weight-bold">Обращения</div>
@@ -111,18 +119,10 @@
         </div>
       </div>
     </aside>
+    </Pane>
 
-    <!-- Drag-handle: тянуть мышкой влево/вправо чтобы изменить ширину
-         списка обращений. На mobile скрыт (там панель full-width). -->
-    <div v-if="!mobile" class="chat-resize-handle"
-      :class="{ active: sidebarResizing }"
-      title="Перетащите для изменения ширины"
-      @mousedown="startResize"
-      @dblclick="sidebarWidth = 320">
-      <div class="chat-resize-handle__grip"></div>
-    </div>
-
-    <!-- Center: chat area -->
+    <!-- Center: chat area — занимает оставшееся пространство в splitpanes -->
+    <Pane class="splitpane-main" v-if="!mobile || activeChat">
     <main class="chat-main" :class="{ 'mobile-hidden': mobile && !activeChat }">
       <template v-if="activeChat">
         <!-- Header -->
@@ -385,6 +385,8 @@
         </div>
       </div>
     </main>
+    </Pane>
+    </Splitpanes>
 
     <!-- Keyboard shortcuts modal -->
     <v-dialog v-model="showHotkeys" max-width="460">
@@ -442,22 +444,25 @@ import { useAuthStore } from '../../stores/auth';
 import { useSnackbar } from '../../composables/useSnackbar';
 import { getChatStatusColor, getChatCategoryColor } from '../../composables/chatPalette';
 import { linkify } from '../../composables/useLinkify';
-import { useResizablePanel } from '../../composables/useResizablePanel';
+import { Splitpanes, Pane } from 'splitpanes';
+import 'splitpanes/dist/splitpanes.css';
 import ImageLightbox from '../../components/ImageLightbox.vue';
 
 const { showError } = useSnackbar();
 
 const { mobile } = useDisplay();
 
-// Drag-to-resize sidebar (между списком тикетов и областью диалога).
-// Сохраняем ширину в localStorage, чтобы у каждого пользователя был
-// свой расклад между сессиями.
-const { width: sidebarWidth, isResizing: sidebarResizing, startResize } = useResizablePanel({
-  storageKey: 'ds:chat-partner-sidebar-w',
-  defaultWidth: 320,
-  min: 260,
-  max: 560,
-});
+// Drag-to-resize sidebar через splitpanes. Размер в процентах
+// (0..100), default 24% соответствует ~310px на 1280-экране.
+// Сохраняем в localStorage, чтобы у каждого был свой расклад между сессиями.
+const PANE_STORAGE_KEY = 'ds:chat-partner-pane-size';
+const paneSize = ref(Number(localStorage.getItem(PANE_STORAGE_KEY)) || 24);
+function onPaneResize(panes) {
+  // panes — массив [{ size }, { size }], нас интересует первый (sidebar).
+  const next = Math.round((panes?.[0]?.size ?? paneSize.value) * 10) / 10;
+  paneSize.value = next;
+  try { localStorage.setItem(PANE_STORAGE_KEY, String(next)); } catch (_) { /* quota */ }
+}
 const route = useRoute();
 const auth = useAuthStore();
 const currentUserId = auth.userId;
@@ -1291,86 +1296,109 @@ onUnmounted(() => {
 <style scoped>
 .chat-wrap { display: flex; height: 100%; min-height: 0; overflow: hidden; position: relative; }
 
-/* Sidebar — Linear-style: ширина управляется JS (useResizablePanel),
-   default 320px из composable. flex-shrink: 0 чтобы при flex-расчёте
-   sidebar не ужимался ниже выставленного значения. */
-.chat-sidebar {
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  background: rgba(var(--v-theme-surface), 1);
-  position: relative;
-  transition: box-shadow 0.2s;
+/* Splitpanes: занимает всё доступное пространство, ширину делит между
+   двумя pane'ами по их size (в %). Сам resizer стилизуем под Apple — */
+.chat-splitpanes { flex: 1; min-width: 0; }
+.chat-splitpanes :deep(.splitpanes__pane) {
+  background: rgb(var(--v-theme-surface));
+  transition: none;       /* отключаем дефолтную анимацию splitpanes — у нас свои */
+  overflow: hidden;
 }
-
-/* Resize-handle между sidebar и main. 6px hit-area, видимая полоса
-   2px по центру. На hover/active подсвечивается primary'ем. */
-.chat-resize-handle {
-  flex: 0 0 6px;
+.chat-splitpanes :deep(.splitpanes__splitter) {
   position: relative;
+  flex: 0 0 1px;
+  background: rgba(var(--v-border-color), 0.08);
   cursor: col-resize;
-  background: rgba(var(--v-border-color), 0.12);
-  transition: background 0.15s;
-  user-select: none;
-  z-index: 2;
+  transition: background 0.18s ease;
 }
-.chat-resize-handle::before {
+.chat-splitpanes :deep(.splitpanes__splitter)::before {
+  /* Расширенная hit-area: 9px по центру, чтобы попадать мышкой проще */
   content: '';
   position: absolute;
-  inset: 0 2px;
-  background: transparent;
-  transition: background 0.15s;
+  top: 0; bottom: 0;
+  left: -4px; right: -4px;
+  z-index: 1;
 }
-.chat-resize-handle:hover::before,
-.chat-resize-handle.active::before { background: rgba(var(--v-theme-primary), 0.5); }
-.chat-resize-handle__grip {
+.chat-splitpanes :deep(.splitpanes__splitter)::after {
+  /* Видимый «грипп» — Apple-style 2px полоса по центру */
+  content: '';
   position: absolute;
   top: 50%; left: 50%;
   transform: translate(-50%, -50%);
   width: 2px;
-  height: 28px;
+  height: 32px;
   border-radius: 1px;
-  background: rgba(var(--v-theme-on-surface), 0.18);
-  transition: background 0.15s, height 0.15s;
+  background: rgba(var(--v-theme-on-surface), 0.16);
+  opacity: 0;
+  transition: opacity 0.2s ease, background 0.18s ease, height 0.2s ease;
 }
-.chat-resize-handle:hover .chat-resize-handle__grip,
-.chat-resize-handle.active .chat-resize-handle__grip {
+.chat-splitpanes :deep(.splitpanes__splitter:hover),
+.chat-splitpanes :deep(.splitpanes__splitter.splitpanes__splitter--dragging) {
+  background: rgba(var(--v-theme-primary), 0.45);
+}
+.chat-splitpanes :deep(.splitpanes__splitter:hover)::after {
+  opacity: 1;
   background: rgb(var(--v-theme-primary));
-  height: 40px;
 }
-.sidebar-head {
-  display: flex; align-items: center; justify-content: space-between;
-  background: linear-gradient(180deg,
-    rgba(var(--v-theme-primary), 0.04) 0%,
-    rgba(var(--v-theme-primary), 0) 100%);
-  border-bottom: 1px solid rgba(var(--v-border-color), 0.04);
+.chat-splitpanes :deep(.splitpanes__splitter.splitpanes__splitter--dragging)::after {
+  opacity: 1;
+  background: rgb(var(--v-theme-primary));
+  height: 48px;
 }
-.sidebar-list { flex: 1; overflow-y: auto; }
 
-/* Chat item — Linear: компактный, тонкие границы, плавный hover */
+/* Sidebar — без фикс-ширины. Splitpane вокруг сам управляет шириной. */
+.chat-sidebar {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: rgb(var(--v-theme-surface));
+  position: relative;
+}
+/* Apple-style sticky header с backdrop-blur. Полоска снизу — 1 пиксель
+   на 6% контраста (не attention-grabbing). */
+.sidebar-head {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex; align-items: center; justify-content: space-between;
+  background: rgba(var(--v-theme-surface), 0.82);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 1px solid rgba(var(--v-border-color), 0.06);
+  min-height: 44px;
+}
+.sidebar-list { flex: 1; overflow-y: auto; padding: 4px 6px 8px; }
+
+/* Chat item — Apple iMessage feel: rounded selection, тонкие
+   сепараторы, плавный transform на hover, без border-left'а */
 .chat-item {
-  display: flex; align-items: flex-start; gap: 10px;
-  padding: 10px 12px; cursor: pointer; position: relative;
-  transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+  display: flex; align-items: flex-start; gap: 11px;
+  padding: 11px 12px; cursor: pointer; position: relative;
+  border-radius: 12px;
+  margin: 1px 0;
+  transition: background 0.2s ease, transform 0.18s ease;
 }
-.chat-item:not(:last-child)::after { content: ''; position: absolute; left: 12px; right: 12px; bottom: 0; border-bottom: 1px solid rgba(var(--v-border-color), 0.08); }
-.chat-item:hover { background: rgba(var(--v-theme-on-surface), 0.04); }
-.chat-item:active { transform: scale(0.995); }
+.chat-item:hover { background: rgba(var(--v-theme-on-surface), 0.05); }
+.chat-item:active { transform: scale(0.985); }
 .chat-item.active {
-  background: linear-gradient(90deg,
-    rgba(var(--v-theme-primary), 0.12) 0%,
-    rgba(var(--v-theme-primary), 0.04) 100%);
-  box-shadow: inset 0 0 0 1px rgba(var(--v-theme-primary), 0.18);
+  background: rgba(var(--v-theme-primary), 0.1);
 }
-.chat-item.active::before { content: ''; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; background: rgb(var(--v-theme-primary)); border-radius: 0 3px 3px 0; }
+.chat-item.active .chat-item-subject {
+  color: rgb(var(--v-theme-primary));
+  font-weight: 600;
+}
 .chat-item-avatar {
-  width: 34px; height: 34px; border-radius: 10px;
+  width: 38px; height: 38px;
+  border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0; margin-top: 1px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-  transition: transform 0.15s ease;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.06),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+  transition: transform 0.2s ease;
 }
-.chat-item:hover .chat-item-avatar { transform: scale(1.05); }
+.chat-item:hover .chat-item-avatar { transform: scale(1.04); }
 .chat-item-body { flex: 1; min-width: 0; }
 .chat-item-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; min-width: 0; }
 .chat-item-subject {
@@ -1411,12 +1439,47 @@ onUnmounted(() => {
 .chat-item:hover .chat-item-pin,
 .chat-item-pin.active { opacity: 1; }
 
-/* Main chat area */
-.chat-main { flex: 1; display: flex; flex-direction: column; min-width: 0; position: relative; }
+/* Main chat area — apple-feel: чуть светлее sidebar (mac UI приём),
+   полная высота, без border'а (splitpanes сам разделяет тонкой линией). */
+.chat-main {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  position: relative;
+  background: rgb(var(--v-theme-surface));
+}
 .chat-placeholder { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; }
 
-/* Header */
-.chat-header { border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); display: flex; align-items: flex-start; gap: 8px; }
+/* Apple-style sticky header с backdrop-blur — как у iMessage. */
+.chat-header {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: rgba(var(--v-theme-surface), 0.82);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 1px solid rgba(var(--v-border-color), 0.06);
+  display: flex; align-items: flex-start; gap: 10px;
+}
+
+/* Apple-style тонкий scrollbar — широкий и тусклый в покое, активный в hover. */
+.sidebar-list,
+.chat-messages { scrollbar-width: thin; scrollbar-color: rgba(var(--v-theme-on-surface), 0.18) transparent; }
+.sidebar-list::-webkit-scrollbar,
+.chat-messages::-webkit-scrollbar { width: 8px; height: 8px; }
+.sidebar-list::-webkit-scrollbar-thumb,
+.chat-messages::-webkit-scrollbar-thumb {
+  background: rgba(var(--v-theme-on-surface), 0.14);
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.sidebar-list::-webkit-scrollbar-thumb:hover,
+.chat-messages::-webkit-scrollbar-thumb:hover { background: rgba(var(--v-theme-on-surface), 0.28); background-clip: padding-box; }
+.sidebar-list::-webkit-scrollbar-track,
+.chat-messages::-webkit-scrollbar-track { background: transparent; }
 .chat-header-info { flex: 1; min-width: 0; }
 /* Карандаш переименования — variant=tonal даёт зелёный чип-фон, видно
    на любой теме. Без opacity-скрытия: пользователь должен сразу
@@ -1447,22 +1510,31 @@ onUnmounted(() => {
 .avatar-circle { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; color: #fff; letter-spacing: -0.3px; }
 .avatar-circle.agent { background: rgb(var(--v-theme-secondary)); }
 .avatar-circle.mine { background: rgb(var(--v-theme-primary)); }
+/* Apple iMessage-style bubble. tail-радиус мягкий (6px), большие
+   скругления (20px), мягкая тень покоя, плавный hover-эффект. */
 .msg-bubble {
-  max-width: 65%; padding: 9px 13px;
-  border-radius: 16px;
+  max-width: 72%;
+  padding: 8px 14px 9px;
+  border-radius: 20px;
   position: relative;
-  line-height: 1.4;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-  transition: box-shadow 0.18s ease;
+  line-height: 1.42;
+  box-shadow: 0 1px 1.5px rgba(0, 0, 0, 0.04);
+  transition: box-shadow 0.2s ease, transform 0.15s ease;
 }
-.msg-bubble:hover { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08); }
-.msg-bubble.agent { background: rgba(var(--v-theme-on-surface), 0.06); border-bottom-left-radius: 5px; }
+.msg-bubble:hover {
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
+}
+.msg-bubble.agent {
+  background: rgba(var(--v-theme-on-surface), 0.055);
+  color: rgb(var(--v-theme-on-surface));
+  border-bottom-left-radius: 6px;
+}
 .msg-bubble.mine {
   background: linear-gradient(135deg,
     rgb(var(--v-theme-primary)) 0%,
-    color-mix(in srgb, rgb(var(--v-theme-primary)) 88%, black) 100%);
+    color-mix(in srgb, rgb(var(--v-theme-primary)) 86%, black) 100%);
   color: #fff;
-  border-bottom-right-radius: 5px;
+  border-bottom-right-radius: 6px;
 }
 .msg-sender { font-size: 11px; font-weight: 600; margin-bottom: 2px; color: rgba(var(--v-theme-on-surface), 0.6); }
 .msg-bubble.mine .msg-sender { color: rgba(255,255,255,0.85); }
@@ -1550,8 +1622,17 @@ onUnmounted(() => {
 /* Jump to bottom — Vuetify v-btn, нужны лишь position+offset */
 .jump-to-bottom { position: absolute; right: 24px; bottom: 90px; z-index: 5; }
 
-/* Input — обёртки + drop-overlay + file-preview */
-.chat-input { display: flex; align-items: flex-end; gap: 8px; border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); position: relative; transition: background 0.15s; }
+/* Input — apple-feel composer с backdrop-blur и closed-bar тоже */
+.chat-input {
+  display: flex; align-items: flex-end; gap: 8px;
+  border-top: 1px solid rgba(var(--v-border-color), 0.06);
+  background: rgba(var(--v-theme-surface), 0.82);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  position: relative;
+  padding: 10px 14px;
+  transition: background 0.18s ease;
+}
 .chat-input.drag-over { background: rgba(var(--v-theme-primary), 0.08); }
 /* Закрытый чат: тонкая полоса вместо большого v-alert. По высоте
    совпадает с chat-input, чтобы layout не «прыгал» при смене статуса. */
@@ -1575,8 +1656,11 @@ onUnmounted(() => {
 
 /* Mobile */
 @media (max-width: 959px) {
+  /* На mobile только одна панель видна одновременно — splitpane вокруг
+     с v-if "одна из двух". Сам splitter скрываем. */
+  .chat-splitpanes :deep(.splitpanes__splitter) { display: none; }
+  .chat-splitpanes :deep(.splitpanes__pane) { width: 100% !important; max-width: 100%; }
   .chat-sidebar { width: 100% !important; }
-  .chat-resize-handle { display: none; }
   .mobile-hidden { display: none !important; }
   .jump-to-bottom { right: 16px; bottom: 80px; }
 }
