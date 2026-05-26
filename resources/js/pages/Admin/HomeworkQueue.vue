@@ -12,6 +12,26 @@
       </template>
     </PageHeader>
 
+    <!-- KPI strip — DS spec ds-missing-manager.jsx::MgrHomework -->
+    <div class="hw-kpi-row mb-4">
+      <div class="ds-kpi">
+        <div class="ds-kpi__label">В очереди</div>
+        <div class="ds-kpi__value" :style="{ color: kpis.pending > 0 ? 'rgb(var(--v-theme-warning))' : undefined }">{{ kpis.pending }}</div>
+      </div>
+      <div class="ds-kpi">
+        <div class="ds-kpi__label">Самая старая</div>
+        <div class="ds-kpi__value" style="font-size: 18px">{{ kpis.oldestWait || '—' }}</div>
+      </div>
+      <div class="ds-kpi">
+        <div class="ds-kpi__label">Одобрено</div>
+        <div class="ds-kpi__value" :style="{ color: 'rgb(var(--v-theme-success))' }">{{ kpis.approved }}</div>
+      </div>
+      <div class="ds-kpi">
+        <div class="ds-kpi__label">Отклонено</div>
+        <div class="ds-kpi__value">{{ kpis.rejected }}</div>
+      </div>
+    </div>
+
     <div v-if="loading" class="d-flex justify-center pa-6">
       <v-progress-circular indeterminate color="primary" />
     </div>
@@ -80,7 +100,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import api from '../../api';
 import PageHeader from '../../components/PageHeader.vue';
 import EmptyState from '../../components/EmptyState.vue';
@@ -92,6 +112,30 @@ const items = ref([]);
 const loading = ref(true);
 const reviewing = ref(null);
 const commentDraft = ref({});
+
+// KPI считаются клиентски по текущему срезу items (status filter влияет на
+// видимый список, но KPI остаются по pending). Если беку отдавать отдельные
+// counters — заменим на единый эндпоинт; пока показываем что есть.
+const kpis = computed(() => {
+  const arr = items.value || [];
+  const pending = arr.filter(h => h.status === 'pending');
+  const oldest = pending.reduce((min, h) => {
+    if (!h.createdAt) return min;
+    const t = new Date(h.createdAt).getTime();
+    return min === null || t < min ? t : min;
+  }, null);
+  let oldestWait = '';
+  if (oldest) {
+    const diffH = Math.floor((Date.now() - oldest) / 3600000);
+    oldestWait = diffH < 24 ? `${diffH}ч` : `${Math.floor(diffH / 24)}д`;
+  }
+  return {
+    pending: pending.length,
+    oldestWait,
+    approved: arr.filter(h => h.status === 'approved').length,
+    rejected: arr.filter(h => h.status === 'rejected').length,
+  };
+});
 
 async function load() {
   loading.value = true;
@@ -137,9 +181,18 @@ onMounted(load);
 </script>
 
 <style scoped>
+.hw-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+@media (max-width: 700px) {
+  .hw-kpi-row { grid-template-columns: repeat(2, 1fr); }
+}
+
 .hw-card {
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
-  border-radius: 12px;
+  border: 1px solid var(--ds-outline-variant, rgba(var(--v-theme-on-surface), 0.08));
+  border-radius: var(--ds-radius-lg, 12px);
   height: 100%;
 }
 .hw-answer {
