@@ -1524,18 +1524,21 @@ onUnmounted(() => {
 .msg-bubble:hover {
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
 }
+/* iMessage-стиль: фиксированные цвета bubbles одинаковы в обеих темах.
+   Не зависим от --v-theme-primary, потому что в dark-теме он меняется
+   на brand mint (светло-зелёный) и bubble становится слишком светлым. */
 .msg-bubble.agent {
-  background: rgba(var(--v-theme-on-surface), 0.055);
+  background: rgba(var(--v-theme-on-surface), 0.08);
   color: rgb(var(--v-theme-on-surface));
   border-bottom-left-radius: 6px;
 }
 .msg-bubble.mine {
-  background: rgb(var(--v-theme-primary));
-  color: rgb(var(--v-theme-on-primary));
+  background: #2E7D32;
+  color: #FFFFFF;
   border-bottom-right-radius: 6px;
 }
 .msg-sender { font-size: 11px; font-weight: 600; margin-bottom: 2px; color: rgba(var(--v-theme-on-surface), 0.6); }
-.msg-bubble.mine .msg-sender { color: rgba(255,255,255,0.85); }
+.msg-bubble.mine .msg-sender { color: rgba(255,255,255,0.9); }
 .msg-text { font-size: 14px; line-height: 1.45; white-space: pre-line; word-break: break-word; }
 .msg-text a { color: inherit; text-decoration: underline; word-break: break-all; }
 .msg-text a:hover { opacity: 0.8; }
