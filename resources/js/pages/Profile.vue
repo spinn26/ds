@@ -49,21 +49,36 @@
               prepend-icon="mdi-account-circle-outline"
               :title="isEmployee ? 'Информация о сотруднике' : 'Личные данные'"
               @click="tab = 'info'" />
+            <v-list-item v-if="!isEmployee" value="documents"
+              :active="tab === 'documents'"
+              prepend-icon="mdi-file-document-outline"
+              title="Документы"
+              @click="tab = 'documents'" />
             <v-list-item v-if="!isEmployee" value="requisites"
               :active="tab === 'requisites'"
               prepend-icon="mdi-credit-card-outline"
-              title="Документы и реквизиты"
+              title="Реквизиты"
               @click="tab = 'requisites'" />
-            <v-list-item v-if="!isEmployee && canInvite" value="referral"
-              :active="tab === 'referral'"
-              prepend-icon="mdi-link-variant"
-              title="Реферальные ссылки"
-              @click="tab = 'referral'" />
             <v-list-item value="security"
               :active="tab === 'security'"
               prepend-icon="mdi-shield-lock-outline"
               title="Безопасность"
               @click="tab = 'security'" />
+            <v-list-item value="notifications"
+              :active="tab === 'notifications'"
+              prepend-icon="mdi-bell-outline"
+              title="Уведомления"
+              @click="tab = 'notifications'" />
+            <v-list-item value="telegram"
+              :active="tab === 'telegram'"
+              prepend-icon="mdi-send"
+              title="Telegram-bot"
+              @click="tab = 'telegram'" />
+            <v-list-item v-if="!isEmployee && canInvite" value="referral"
+              :active="tab === 'referral'"
+              prepend-icon="mdi-link-variant"
+              title="Реферальные ссылки"
+              @click="tab = 'referral'" />
           </v-list>
         </v-card>
       </v-col>
@@ -159,13 +174,12 @@
         </v-card>
       </v-tabs-window-item>
 
-      <!-- Section 2: Requisites and documents for payments -->
-      <v-tabs-window-item value="requisites">
-        <!-- Documents -->
+      <!-- Section 2a: Documents (новый раздел по DS spec) -->
+      <v-tabs-window-item value="documents">
         <v-card class="pa-4 mb-4">
           <div class="d-flex align-center ga-2 mb-3">
             <v-icon color="primary">mdi-file-document-multiple</v-icon>
-            <div class="text-subtitle-1 font-weight-bold">Документы партнёра</div>
+            <div class="ds-title-l">Документы партнёра</div>
           </div>
           <v-row dense>
             <v-col v-for="slot in documentSlots" :key="slot.type" cols="12" sm="4">
@@ -201,12 +215,15 @@
           </v-row>
           <v-alert v-if="docMsg" :type="docMsgType" density="compact" class="mt-3" closable @click:close="docMsg = ''">{{ docMsg }}</v-alert>
         </v-card>
+      </v-tabs-window-item>
 
+      <!-- Section 2b: Requisites (только ИП + Bank — по DS spec отдельный раздел) -->
+      <v-tabs-window-item value="requisites">
         <!-- IP Requisites -->
         <v-card class="pa-4 mb-4">
           <div class="d-flex align-center ga-2 mb-3">
             <v-icon color="primary">mdi-domain</v-icon>
-            <div class="text-subtitle-1 font-weight-bold">Реквизиты ИП</div>
+            <div class="ds-title-l">Реквизиты ИП</div>
             <v-chip v-if="profile.requisites?.verificationStatus" size="small"
               :color="verificationColor(profile.requisites.verificationStatus)">
               {{ verificationLabel(profile.requisites.verificationStatus) }}
@@ -369,12 +386,33 @@
             </div>
           </template>
         </v-card>
+      </v-tabs-window-item>
 
+      <!-- Section: Notifications (по DS spec — отдельный раздел) -->
+      <v-tabs-window-item value="notifications">
+        <v-card class="pa-4">
+          <div class="d-flex align-center ga-2 mb-3">
+            <v-icon color="primary">mdi-bell-outline</v-icon>
+            <div class="ds-title-l">Уведомления</div>
+          </div>
+          <div class="text-body-2 text-medium-emphasis mb-3">
+            Настройки каналов уведомлений и звуковых сигналов.
+          </div>
+          <v-alert type="info" variant="tonal" density="compact" class="mb-3">
+            <v-icon class="mr-1">mdi-tools</v-icon>
+            Раздел в разработке. Звук уведомлений сейчас управляется из иконки колокольчика
+            в шапке (top-bar → Уведомления → переключатель «Звук уведомлений»).
+          </v-alert>
+        </v-card>
+      </v-tabs-window-item>
+
+      <!-- Section: Telegram-bot (по DS spec — отдельный раздел) -->
+      <v-tabs-window-item value="telegram">
         <!-- Telegram-уведомления через бота -->
         <v-card v-if="telegram.enabled" class="pa-4">
           <div class="d-flex align-center ga-2 mb-3">
             <v-icon color="primary">mdi-send</v-icon>
-            <div class="text-subtitle-1 font-weight-bold">Telegram-уведомления</div>
+            <div class="ds-title-l">Telegram-уведомления</div>
           </div>
           <template v-if="telegram.linked">
             <v-alert type="success" variant="tonal" density="compact" class="mb-3">
