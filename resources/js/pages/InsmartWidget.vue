@@ -55,32 +55,13 @@ const INSMART_ORIGIN = 'https://widgets.inssmart.ru';
 let loaderScript = null;
 
 onMounted(() => {
-  // 1) Регистрируем auth-callback ДО подгрузки лоадера: лоадер дергает
-  //    InssmartEventListener.auth(...) сразу при инициализации frame'а.
-  //    В InSmart'овском примере callback бьёт по yoursite.com/token —
-  //    у нас этот эндпоинт уже есть: GET /api/v1/insmart/widget-token
-  //    (см. InsmartController::widgetToken). Возвращает per-user token
-  //    + consultant_id текущего партнёра.
-  if (!window.InssmartEventListener) {
-    window.InssmartEventListener = {};
-  }
-  window.InssmartEventListener.auth = async () => {
-    try {
-      const { data } = await api.get('/insmart/widget-token');
-      return data;
-    } catch (e) {
-      console.error('[InSmart] auth callback failed:', e);
-      throw e;
-    }
-  };
-
-  // 2) Подгружаем лоадер. data-attributes управляют поведением виджета:
-  //    data-id        — id контейнера для монтирования frame'а
-  //    data-origin    — origin InSmart, используется в postMessage
-  //    data-product   — стартовый раздел внутри виджета («/» = home)
-  //    data-token     — канальный токен платформы
-  //    data-secret    — канальный секрет (валидируется только сервером InSmart)
-  //    data-auth=true — включает вызов InssmartEventListener.auth (выше)
+  // Подгружаем loader. data-attributes:
+  //   data-id        — id контейнера для монтирования frame'а
+  //   data-origin    — origin InSmart, используется в postMessage
+  //   data-product   — стартовый раздел внутри виджета («/» = home)
+  //   data-token     — канальный токен платформы
+  //   data-secret    — канальный секрет (валидируется только сервером InSmart)
+  //   data-auth=true — включает вызов InssmartEventListener.auth(cb)
   loaderScript = document.createElement('script');
   loaderScript.type = 'text/javascript';
   loaderScript.src = INSMART_LOADER_SRC;
@@ -90,7 +71,28 @@ onMounted(() => {
   loaderScript.setAttribute('data-token', INSMART_TOKEN);
   loaderScript.setAttribute('data-secret', INSMART_SECRET);
   loaderScript.setAttribute('data-auth', 'true');
-  loaderScript.onload = () => { loading.value = false; };
+  loaderScript.onload = () => {
+    // После загрузки лоадер выставил window.InssmartEventListener
+    // с методом auth(callback) — это РЕГИСТРАТОР, а не свойство. По
+    // примеру InSmart: InssmartEventListener.auth(asyncCallback).
+    // Callback бьёт по нашему /api/v1/insmart/widget-token (заменяет
+    // placeholder yoursite.com/token из их docs).
+    if (window.InssmartEventListener
+        && typeof window.InssmartEventListener.auth === 'function') {
+      window.InssmartEventListener.auth(async () => {
+        try {
+          const { data } = await api.get('/insmart/widget-token');
+          return data;
+        } catch (e) {
+          console.error('[InSmart] auth callback failed:', e);
+          throw e;
+        }
+      });
+    } else {
+      console.warn('[InSmart] InssmartEventListener.auth недоступен после onload');
+    }
+    loading.value = false;
+  };
   loaderScript.onerror = () => {
     loading.value = false;
     loadError.value = 'Не удалось загрузить скрипт InSmart. Проверьте интернет-соединение или обратитесь в поддержку.';
@@ -99,15 +101,13 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
-  // Снимаем лоадер и callback, чтобы при возврате на страницу не
-  // плодились дубли event-listener'ов InSmart'а.
+  // Снимаем тег <script> при уходе со страницы. window.InssmartEventListener
+  // не трогаем — это объект самого лоадера, на других страницах он не мешает,
+  // а удалять его свойства может сломать внутренние подписки лоадера.
   if (loaderScript && loaderScript.parentNode) {
     loaderScript.parentNode.removeChild(loaderScript);
   }
   loaderScript = null;
-  if (window.InssmartEventListener) {
-    delete window.InssmartEventListener.auth;
-  }
 });
 </script>
 
