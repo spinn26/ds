@@ -83,6 +83,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
+import { useRoute } from 'vue-router';
 import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
 import PageHeader from '../../components/PageHeader.vue';
@@ -90,10 +91,14 @@ import EmptyState from '../../components/EmptyState.vue';
 import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 import { fmtDate } from '../../composables/useDesign';
 
+const route = useRoute();
 const items = ref([]);
 const total = ref(0);
 const loading = ref(false);
-const filters = ref({ search: '', status: null, city: '', email: '', birth_date_from: '', birth_date_to: '' });
+// scope=team — клиенты команды (включая нижестоящих), scope=mine — только свои.
+// Передаётся в API как `scope`. Backend различает: scope=mine → только текущий
+// consultant; scope=team → текущий + downline.
+const filters = ref({ search: '', status: null, city: '', email: '', scope: '', birth_date_from: '', birth_date_to: '' });
 const page = ref(1);
 const perPage = ref(25);
 const sortBy = ref([]);
@@ -124,7 +129,7 @@ const advancedActiveCount = computed(() => {
 });
 
 function resetFilters() {
-  filters.value = { search: '', status: null, city: '', email: '', birth_date_from: '', birth_date_to: '' };
+  filters.value = { search: '', status: null, city: '', email: '', scope: '', birth_date_from: '', birth_date_to: '' };
   loadData();
 }
 
@@ -161,6 +166,7 @@ async function loadData() {
     if (filters.value.email) params.email = filters.value.email;
     if (filters.value.birth_date_from) params.birth_date_from = filters.value.birth_date_from;
     if (filters.value.birth_date_to) params.birth_date_to = filters.value.birth_date_to;
+    if (filters.value.scope) params.scope = filters.value.scope;
     if (sortBy.value.length) {
       params.sort_by = sortBy.value[0].key;
       params.sort_dir = sortBy.value[0].order || 'asc';
@@ -172,7 +178,12 @@ async function loadData() {
   loading.value = false;
 }
 
-onMounted(loadData);
+onMounted(() => {
+  // Применяем query-параметр scope=team|mine из URL (deep-link с дашборда).
+  const q = route.query.scope;
+  if (q === 'team' || q === 'mine') filters.value.scope = q;
+  loadData();
+});
 </script>
 
 <style scoped>

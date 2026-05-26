@@ -131,6 +131,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
+import { useRoute } from 'vue-router';
 import api from '../api';
 import { useDebounce } from '../composables/useDebounce';
 import PageHeader from '../components/PageHeader.vue';
@@ -193,6 +194,7 @@ function resetFilters() {
   filters.value = {
     search: '', last_name: '', first_name: '', patronymic: '',
     qualification: [], levels: [], status: [],
+    line: '',
     birth_date_from: '', birth_date_to: '',
     city: '',
     lp_min: '', lp_max: '', gp_min: '', gp_max: '', ngp_min: '', ngp_max: '',
@@ -213,6 +215,7 @@ const statusOptions = [
 const filters = ref({
   search: '', last_name: '', first_name: '', patronymic: '',
   qualification: [], levels: [], status: [],
+  line: '',
   birth_date_from: '', birth_date_to: '',
   city: '',
   lp_min: '', lp_max: '', gp_min: '', gp_max: '', ngp_min: '', ngp_max: '',
@@ -317,6 +320,9 @@ function filterParams() {
   if (filters.value.ngp_max) params.ngp_max = filters.value.ngp_max;
   if (filters.value.termination_from) params.termination_from = filters.value.termination_from;
   if (filters.value.termination_to) params.termination_to = filters.value.termination_to;
+  // Опциональный фильтр «только 1 линия» — приходит из дашборда query.
+  // Бэк, который его не знает, просто проигнорирует параметр.
+  if (filters.value.line) params.line = filters.value.line;
   return params;
 }
 
@@ -363,7 +369,24 @@ function onCitySearch(q) {
   }, 250);
 }
 
+// Применяем query из URL при заходе на страницу (deep-link с дашборда).
+// /structure?status=terminated → preselect filter «Терминирован».
+// /structure?line=1 → ограничение на 1 линию (UI пока не имеет тоггла,
+//   но передадим параметр в API чтобы бэк фильтровал).
+const route = useRoute();
+function applyQueryToFilters() {
+  const q = route.query;
+  if (q.status) {
+    const raw = String(q.status);
+    const valid = statusOptions.map(o => o.value);
+    const vals = raw.split(',').filter(v => valid.includes(v));
+    if (vals.length) filters.value.status = vals;
+  }
+  if (q.line) filters.value.line = String(q.line);
+}
+
 onMounted(() => {
+  applyQueryToFilters();
   loadData();
   loadFilterOptions();
   onCitySearch(''); // prefill with first 30 cities

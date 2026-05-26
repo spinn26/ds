@@ -44,7 +44,8 @@
         </v-card>
       </v-col>
       <v-col cols="12" sm="6" md="2">
-        <v-card class="ds-card pa-4 h-100" elevation="0">
+        <v-card id="metric-lp" class="ds-card pa-4 h-100" elevation="0"
+          :class="{ 'metric-highlight': highlightedMetric === 'lp' }">
           <div class="text-body-2 text-medium-emphasis">ЛП</div>
           <div class="text-h6 font-weight-bold text-success mt-1" style="white-space:nowrap">{{ fmt(summary.volumes?.lp) }}</div>
         </v-card>
@@ -56,7 +57,8 @@
         </v-card>
       </v-col>
       <v-col cols="12" sm="6" md="3">
-        <v-card class="ds-card pa-4 h-100" elevation="0">
+        <v-card id="metric-ngp" class="ds-card pa-4 h-100" elevation="0"
+          :class="{ 'metric-highlight': highlightedMetric === 'ngp' }">
           <div class="text-body-2 text-medium-emphasis">НГП</div>
           <div class="text-h6 font-weight-bold text-warning mt-1" style="white-space:nowrap">{{ fmt(summary.volumes?.ngp) }}</div>
         </v-card>
@@ -320,6 +322,22 @@ const route = useRoute();
 const loading = ref(true);
 const exporting = ref(false);
 
+// Подсветка KPI пришедшего по deep-link с дашборда (?metric=lp|ngp).
+// Скроллит к нужной карточке после загрузки и применяет
+// .metric-highlight класс на ~2.5с — мягкий pulse-ring.
+const highlightedMetric = ref(route.query.metric || '');
+function highlightMetricFromQuery() {
+  const m = route.query.metric;
+  if (!m) return;
+  setTimeout(() => {
+    const el = document.getElementById(`metric-${m}`);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, 250);
+  // Снимаем highlight через 2.5с — пользователь увидел подсветку, дальше
+  // она мешает читать.
+  setTimeout(() => { highlightedMetric.value = ''; }, 2800);
+}
+
 // Месяц по умолчанию — текущий, но если пришли с PaymentRegistry
 // (staff жмёт «Открыть отчёт начислений»), URL содержит ?year=YYYY&month=M
 // или ?month=YYYY-MM — берём оттуда. Без этого страница всегда грузила
@@ -491,7 +509,10 @@ async function loadData() {
   }
 }
 
-onMounted(loadData);
+onMounted(async () => {
+  await loadData();
+  highlightMetricFromQuery();
+});
 </script>
 
 <style scoped>
@@ -518,5 +539,17 @@ onMounted(loadData);
 }
 :deep(.v-card) {
   border-radius: var(--ds-radius-lg, 12px);
+}
+
+/* Подсветка карточки KPI при заходе по deep-link с дашборда
+   (?metric=lp|ngp). Двойная primary-ring пульсирует 2.5с. */
+.metric-highlight {
+  animation: metric-pulse 1.4s ease-in-out 2;
+  outline: 2px solid rgba(var(--v-theme-primary), 0.6);
+  outline-offset: 2px;
+}
+@keyframes metric-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(var(--v-theme-primary), 0.35); }
+  50%      { box-shadow: 0 0 0 10px rgba(var(--v-theme-primary), 0); }
 }
 </style>
