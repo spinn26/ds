@@ -6,6 +6,38 @@
       </template>
     </PageHeader>
 
+    <!-- ADMIN HERO + quick-links — только для admin-роли. Главная (Workspace.vue)
+         показывает обычный «Добрый вечер…» с задачами; здесь админу полезнее
+         иметь быстрый доступ к системным разделам, которые не светятся в
+         обычном меню (Сверка, Аномалии, Когорты, Группы и права). -->
+    <template v-if="isAdmin">
+      <v-card class="admin-hero mb-4 pa-4" elevation="0" variant="tonal" color="primary">
+        <div class="d-flex align-center ga-3 flex-wrap">
+          <v-avatar color="primary" size="56">
+            <v-icon size="32" color="white">mdi-shield-crown</v-icon>
+          </v-avatar>
+          <div class="flex-grow-1 min-w-0">
+            <div class="text-overline text-primary">Админ-режим</div>
+            <h2 class="text-h5 font-weight-bold">Управление платформой</h2>
+            <div class="text-body-2 text-medium-emphasis">
+              Системные разделы и сквозная аналитика
+            </div>
+          </div>
+        </div>
+      </v-card>
+
+      <v-row dense class="mb-4">
+        <v-col v-for="card in adminQuickLinks" :key="card.to" cols="6" sm="4" md="2">
+          <v-card class="admin-quick pa-3 h-100 d-flex flex-column" :to="card.to" hover
+            variant="outlined">
+            <v-icon :color="card.color" size="28" class="mb-2">{{ card.icon }}</v-icon>
+            <div class="text-body-2 font-weight-bold">{{ card.label }}</div>
+            <div class="text-caption text-medium-emphasis mt-1">{{ card.sub }}</div>
+          </v-card>
+        </v-col>
+      </v-row>
+    </template>
+
     <!-- Counters row -->
     <v-row dense class="mb-3">
       <v-col v-for="t in tiles" :key="t.key" cols="6" sm="4" md="2">
@@ -197,12 +229,26 @@ import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
 import { PageHeader, StatusChip, MoneyCell } from '../../components';
 import { fmt, fmtDate } from '../../composables/useDesign';
+import { useAuthStore } from '../../stores/auth';
 import TaskCard from './WorkspaceTaskCard.vue';
 
 const loading = ref(false);
 const data = ref({});
+const auth = useAuthStore();
 
 const sections = computed(() => data.value.staffTasks || {});
+
+// Admin-режим: разделы, доступные только admin-роли. Не дублирует пункты
+// глобального меню (там их и так нет), даёт быстрый прыжок из workspace.
+const isAdmin = computed(() => /(^|,)\s*admin\s*(,|$)/i.test(auth.user?.role || ''));
+const adminQuickLinks = [
+  { to: '/manage/owner-dashboard', icon: 'mdi-crown',             color: 'primary', label: 'Дашборд руководителя', sub: 'Сводка по платформе' },
+  { to: '/manage/reconciliation',  icon: 'mdi-scale-balance',     color: 'info',    label: 'Сверка балансов',       sub: 'Snapshot vs live' },
+  { to: '/manage/anomalies',       icon: 'mdi-alert-decagram',    color: 'warning', label: 'Аномалии',              sub: 'Подозрительные данные' },
+  { to: '/manage/cohorts',         icon: 'mdi-chart-line',        color: 'success', label: 'Когорты',               sub: 'Retention heat-map' },
+  { to: '/manage/permissions',     icon: 'mdi-shield-account',    color: 'secondary', label: 'Группы и права',      sub: 'Матрица доступа' },
+  { to: '/manage/system-status',   icon: 'mdi-monitor-dashboard', color: 'error',   label: 'Статус системы',        sub: 'Сервисы и интеграции' },
+];
 
 const tiles = computed(() => [
   { key: 'requisites', label: 'Реквизиты на проверке', value: sections.value.unverifiedRequisites ?? 0,
@@ -252,4 +298,25 @@ onMounted(load);
   box-shadow: var(--ds-shadow-2, 0 2px 8px rgba(0,0,0,0.08));
 }
 :deep(.text-h6) { font-variant-numeric: tabular-nums; }
+
+/* Admin hero — мягкий tonal-primary с decorative BrandWaves-вайбом */
+.admin-hero {
+  border-radius: var(--ds-radius-lg, 12px) !important;
+  border: 1px solid rgba(var(--v-theme-primary), 0.18);
+}
+.min-w-0 { min-width: 0; }
+
+/* Admin quick-links — outlined-плитки с hover-lift */
+.admin-quick {
+  cursor: pointer;
+  border-radius: var(--ds-radius-lg, 12px) !important;
+  transition: transform var(--ds-dur-fast, 120ms) var(--ds-ease-standard, ease),
+              box-shadow var(--ds-dur-fast, 120ms) var(--ds-ease-standard, ease),
+              border-color var(--ds-dur-fast, 120ms) var(--ds-ease-standard, ease);
+}
+.admin-quick:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--ds-shadow-2, 0 4px 12px rgba(0,0,0,0.10));
+  border-color: rgb(var(--v-theme-primary));
+}
 </style>
