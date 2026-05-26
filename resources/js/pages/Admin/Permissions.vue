@@ -527,11 +527,12 @@ onMounted(load);
   cursor: pointer;
   min-width: 76px;
   justify-content: center;
-  transition: transform 0.1s ease, box-shadow 0.15s ease;
+  transition: transform var(--ds-dur-fast, 120ms) var(--ds-ease-standard, ease),
+              box-shadow var(--ds-dur-medium, 200ms) var(--ds-ease-standard, ease);
 }
 .cell-chip:hover {
   transform: translateY(-1px);
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--ds-shadow-2, 0 4px 10px rgba(0, 0, 0, 0.08));
 }
 .cell-chip--empty {
   opacity: 0.55;
@@ -574,4 +575,10 @@ onMounted(load);
   text-align: center;
 }
 .th-actions { z-index: 4; }
+
+/* DS polish: dialog (Add / Edit group) title к ds-title-l. */
+:deep(.v-dialog .v-card-title) {
+  font: var(--ds-type-title-l) !important;
+  letter-spacing: -0.01em;
+}
 </style>

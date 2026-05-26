@@ -388,4 +388,10 @@ onMounted(loadData);
 .filter-range :deep(.v-field) {
   min-width: 100px;
 }
+
+/* DS polish: CRUD-dialog title к ds-title-l. */
+:deep(.v-dialog .v-card-title) {
+  font: var(--ds-type-title-l) !important;
+  letter-spacing: -0.01em;
+}
 </style>

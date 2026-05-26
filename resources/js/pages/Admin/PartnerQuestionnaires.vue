@@ -211,3 +211,11 @@ async function exportCsv() {
 
 onMounted(loadServer);
 </script>
+
+<style scoped>
+/* DS polish: questionnaire-view dialog title к ds-title-l. */
+:deep(.v-dialog .v-card-title) {
+  font: var(--ds-type-title-l) !important;
+  letter-spacing: -0.01em;
+}
+</style>
