@@ -305,13 +305,13 @@ onMounted(loadTree);
 .min-w-0 { min-width: 0; }
 
 .continue-card {
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  border: 1px solid var(--ds-outline-variant, rgba(var(--v-theme-on-surface), 0.08));
   border-left: 4px solid rgb(var(--v-theme-primary));
-  border-radius: 14px;
+  border-radius: var(--ds-radius-lg, 12px);
 }
 
 .kb-card {
-  border-radius: 14px;
+  border-radius: var(--ds-radius-lg, 12px);
   border: 1.5px dashed rgb(var(--v-theme-primary));
   background: linear-gradient(135deg,
     rgba(46, 125, 50, 0.06) 0%,
@@ -334,8 +334,8 @@ onMounted(loadTree);
 }
 
 .course-card {
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
-  border-radius: 12px;
+  border: 1px solid var(--ds-outline-variant, rgba(var(--v-theme-on-surface), 0.08));
+  border-radius: var(--ds-radius-lg, 12px);
   cursor: pointer;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
@@ -346,7 +346,7 @@ onMounted(loadTree);
 
 .course-cover {
   height: 110px;
-  border-radius: 10px;
+  border-radius: var(--ds-radius-md, 8px);
   position: relative;
   overflow: hidden;
 }

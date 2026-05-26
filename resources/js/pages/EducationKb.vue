@@ -113,8 +113,8 @@ onMounted(load);
 
 <style scoped>
 .section-card {
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
-  border-radius: 12px;
+  border: 1px solid var(--ds-outline-variant, rgba(var(--v-theme-on-surface), 0.08));
+  border-radius: var(--ds-radius-lg, 12px);
   cursor: pointer;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }

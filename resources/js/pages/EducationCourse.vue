@@ -357,7 +357,7 @@ onMounted(load);
 .min-w-0 { min-width: 0; }
 
 .hero {
-  border-radius: 14px;
+  border-radius: var(--ds-radius-lg, 12px);
   overflow: hidden;
   height: 180px;
   padding: 24px 28px;
@@ -378,14 +378,14 @@ onMounted(load);
 .hero-content { position: relative; z-index: 1; }
 
 .cta-card {
-  background: rgba(46, 125, 50, 0.08);
-  border: 1px solid rgba(46, 125, 50, 0.2);
-  border-radius: 12px;
+  background: var(--ds-primary-soft, rgba(46, 125, 50, 0.08));
+  border: 1px solid rgba(var(--v-theme-primary), 0.2);
+  border-radius: var(--ds-radius-lg, 12px);
 }
 
 .module-card {
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
-  border-radius: 12px;
+  border: 1px solid var(--ds-outline-variant, rgba(var(--v-theme-on-surface), 0.08));
+  border-radius: var(--ds-radius-lg, 12px);
   cursor: pointer;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }

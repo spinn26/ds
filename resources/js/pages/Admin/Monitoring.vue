@@ -35,36 +35,28 @@
     </v-row>
 
     <!-- COUNTERS -->
-    <v-row dense class="mt-1">
-      <v-col cols="6" sm="4" md="3">
-        <v-card class="pa-4 text-center">
-          <div class="text-caption text-medium-emphasis">Ошибки (24ч)</div>
-          <div class="text-h5 font-weight-bold" :class="(status.errors24h?.total || 0) > 0 ? 'text-error' : 'text-success'">
-            {{ status.errors24h?.total ?? 0 }}
-          </div>
-        </v-card>
-      </v-col>
-      <v-col cols="6" sm="4" md="3">
-        <v-card class="pa-4 text-center">
-          <div class="text-caption text-medium-emphasis">Очередь: ожидание</div>
-          <div class="text-h5 font-weight-bold">{{ status.services?.queue?.pending ?? 0 }}</div>
-        </v-card>
-      </v-col>
-      <v-col cols="6" sm="4" md="3">
-        <v-card class="pa-4 text-center">
-          <div class="text-caption text-medium-emphasis">Очередь: неудачи</div>
-          <div class="text-h5 font-weight-bold" :class="(status.services?.queue?.failed || 0) > 0 ? 'text-warning' : ''">
-            {{ status.services?.queue?.failed ?? 0 }}
-          </div>
-        </v-card>
-      </v-col>
-      <v-col cols="6" sm="4" md="3">
-        <v-card class="pa-4 text-center">
-          <div class="text-caption text-medium-emphasis">Активные сессии (15мин)</div>
-          <div class="text-h5 font-weight-bold">{{ status.activeSessions ?? 0 }}</div>
-        </v-card>
-      </v-col>
-    </v-row>
+    <div class="ds-kpi-row mt-1">
+      <div class="ds-kpi">
+        <div class="ds-kpi__label">Ошибки (24ч)</div>
+        <div class="ds-kpi__value" :class="(status.errors24h?.total || 0) > 0 ? 'text-error' : 'text-success'">
+          {{ status.errors24h?.total ?? 0 }}
+        </div>
+      </div>
+      <div class="ds-kpi">
+        <div class="ds-kpi__label">Очередь: ожидание</div>
+        <div class="ds-kpi__value">{{ status.services?.queue?.pending ?? 0 }}</div>
+      </div>
+      <div class="ds-kpi">
+        <div class="ds-kpi__label">Очередь: неудачи</div>
+        <div class="ds-kpi__value" :class="(status.services?.queue?.failed || 0) > 0 ? 'text-warning' : ''">
+          {{ status.services?.queue?.failed ?? 0 }}
+        </div>
+      </div>
+      <div class="ds-kpi">
+        <div class="ds-kpi__label">Активные сессии (15мин)</div>
+        <div class="ds-kpi__value">{{ status.activeSessions ?? 0 }}</div>
+      </div>
+    </div>
 
     <!-- ERROR FEED -->
     <v-card class="mt-4">
@@ -493,8 +485,11 @@ onUnmounted(() => {
   font-size: 12px;
   background: rgba(var(--v-theme-on-surface), 0.04);
   padding: 12px;
-  border-radius: 6px;
+  border-radius: var(--ds-radius-sm, 6px);
   max-height: 50vh;
   overflow: auto;
 }
+.ds-kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+@media (max-width: 960px) { .ds-kpi-row { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 700px) { .ds-kpi-row { grid-template-columns: repeat(2, 1fr); } }
 </style>

@@ -9,32 +9,24 @@
     </PageHeader>
 
     <!-- KPI -->
-    <v-row class="mb-3">
-      <v-col cols="6" md="3">
-        <v-card class="pa-4">
-          <div class="text-caption text-medium-emphasis">Открыто</div>
-          <div class="text-h4 font-weight-bold text-info">{{ kpi.open ?? 0 }}</div>
-        </v-card>
-      </v-col>
-      <v-col cols="6" md="3">
-        <v-card class="pa-4">
-          <div class="text-caption text-medium-emphasis">Активных инцидентов</div>
-          <div class="text-h4 font-weight-bold text-error">{{ kpi.incidentsActive ?? 0 }}</div>
-        </v-card>
-      </v-col>
-      <v-col cols="6" md="3">
-        <v-card class="pa-4">
-          <div class="text-caption text-medium-emphasis">Решено сегодня</div>
-          <div class="text-h4 font-weight-bold text-success">{{ kpi.resolvedToday ?? 0 }}</div>
-        </v-card>
-      </v-col>
-      <v-col cols="6" md="3">
-        <v-card class="pa-4">
-          <div class="text-caption text-medium-emphasis">Закрыто сегодня</div>
-          <div class="text-h4 font-weight-bold">{{ kpi.closedToday ?? 0 }}</div>
-        </v-card>
-      </v-col>
-    </v-row>
+    <div class="ds-kpi-row mb-3">
+      <div class="ds-kpi">
+        <div class="ds-kpi__label">Открыто</div>
+        <div class="ds-kpi__value text-info">{{ kpi.open ?? 0 }}</div>
+      </div>
+      <div class="ds-kpi">
+        <div class="ds-kpi__label">Активных инцидентов</div>
+        <div class="ds-kpi__value text-error">{{ kpi.incidentsActive ?? 0 }}</div>
+      </div>
+      <div class="ds-kpi">
+        <div class="ds-kpi__label">Решено сегодня</div>
+        <div class="ds-kpi__value text-success">{{ kpi.resolvedToday ?? 0 }}</div>
+      </div>
+      <div class="ds-kpi">
+        <div class="ds-kpi__label">Закрыто сегодня</div>
+        <div class="ds-kpi__value">{{ kpi.closedToday ?? 0 }}</div>
+      </div>
+    </div>
 
     <!-- Filter pills -->
     <v-card class="mb-3 pa-3">
@@ -260,3 +252,8 @@ async function resolveIncident(item) {
 
 onMounted(load);
 </script>
+
+<style scoped>
+.ds-kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+@media (max-width: 700px) { .ds-kpi-row { grid-template-columns: repeat(2, 1fr); } }
+</style>

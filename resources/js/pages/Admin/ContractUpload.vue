@@ -356,5 +356,5 @@ onMounted(() => {
   background: rgba(var(--v-theme-surface-variant), 0.4);
   font-size: 12px; text-transform: uppercase; letter-spacing: 0.4px;
 }
-.preview-row-invalid td { background: rgba(244, 67, 54, 0.06); }
+.preview-row-invalid td { background: rgba(var(--v-theme-error), 0.06); }
 </style>

@@ -615,8 +615,8 @@ onMounted(loadParticipants);
 <style scoped>
 .pool-results :deep(td) { vertical-align: middle; }
 .pool-total-row td {
-  background: rgba(76, 175, 80, 0.12) !important;
-  border-top: 2px solid rgba(76, 175, 80, 0.4) !important;
-  border-bottom: 2px solid rgba(76, 175, 80, 0.4) !important;
+  background: rgba(var(--v-theme-success), 0.12) !important;
+  border-top: 2px solid rgba(var(--v-theme-success), 0.4) !important;
+  border-bottom: 2px solid rgba(var(--v-theme-success), 0.4) !important;
 }
 </style>

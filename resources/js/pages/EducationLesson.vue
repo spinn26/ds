@@ -509,32 +509,32 @@ onMounted(load);
   align-items: center;
   text-align: center;
   padding: 56px 24px;
-  border: 1px dashed rgba(46, 125, 50, 0.35);
-  border-radius: 16px;
-  background: rgba(110, 232, 122, 0.06);
+  border: 1px dashed rgba(var(--v-theme-primary), 0.35);
+  border-radius: var(--ds-radius-xl, 16px);
+  background: var(--ds-primary-tint, rgba(110, 232, 122, 0.06));
 }
 
 .block { width: 100%; }
 .block-text { font-size: 14.5px; line-height: 1.6; color: rgb(var(--v-theme-on-surface)); white-space: pre-wrap; }
 .block-caption { font-size: 12px; font-weight: 600; color: rgba(var(--v-theme-on-surface), 0.55); }
-.block-image { width: 100%; border-radius: 10px; }
+.block-image { width: 100%; border-radius: var(--ds-radius-md, 8px); }
 .block-file, .block-link {
   display: inline-flex;
   align-items: center;
   padding: 10px 14px;
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
-  border-radius: 10px;
+  border: 1px solid var(--ds-outline-variant, rgba(var(--v-theme-on-surface), 0.12));
+  border-radius: var(--ds-radius-md, 8px);
   color: rgb(var(--v-theme-primary));
   text-decoration: none;
   font-weight: 500;
 }
-.block-file:hover, .block-link:hover { background: rgba(46, 125, 50, 0.06); }
+.block-file:hover, .block-link:hover { background: var(--ds-primary-tint, rgba(46, 125, 50, 0.06)); }
 
 .video-frame {
   position: relative;
   width: 100%;
   aspect-ratio: 16 / 9;
-  border-radius: 10px;
+  border-radius: var(--ds-radius-md, 8px);
   overflow: hidden;
   background: rgba(var(--v-theme-on-surface), 0.04);
 }
@@ -553,15 +553,15 @@ onMounted(load);
 .homework-card {
   margin-top: 18px;
   padding: 16px;
-  border: 1px solid rgba(46, 125, 50, 0.2);
-  background: rgba(46, 125, 50, 0.04);
-  border-radius: 12px;
+  border: 1px solid rgba(var(--v-theme-primary), 0.2);
+  background: var(--ds-primary-tint, rgba(46, 125, 50, 0.04));
+  border-radius: var(--ds-radius-lg, 12px);
 }
 .reviewer-comment {
   padding: 10px 12px;
-  background: rgba(46, 125, 50, 0.08);
+  background: var(--ds-primary-soft, rgba(46, 125, 50, 0.08));
   border-left: 3px solid rgb(var(--v-theme-primary));
-  border-radius: 6px;
+  border-radius: var(--ds-radius-sm, 6px);
 }
 
 .tabular-nums { font-variant-numeric: tabular-nums; }
