@@ -18,38 +18,84 @@
         <v-progress-circular indeterminate color="primary" />
       </div>
 
-      <!-- C — успех -->
-      <div v-else-if="result?.passed" class="state-card success">
-        <v-icon size="48" color="success">mdi-check-circle</v-icon>
-        <div class="state-title text-success">Тест сдан!</div>
-        <div class="state-body">
-          Правильно: <b>{{ result.score }} из {{ result.total }}</b>.
-          Доступ к продаже продукта <b>{{ courseTitle }}</b> открыт.
+      <!-- C — успех (certificate-style) -->
+      <div v-else-if="result?.passed" class="success-screen">
+        <div class="success-check-wrap">
+          <div class="success-check">
+            <v-icon size="60" color="success">mdi-check</v-icon>
+          </div>
+          <!-- Confetti при заходе на экран -->
+          <div class="confetti-burst">
+            <span v-for="n in 18" :key="n" class="confetti-piece" :style="confettiStyle(n)" />
+          </div>
         </div>
-        <div class="d-flex ga-2 mt-4">
-          <v-btn color="primary" size="large" :to="`/education/courses/${route.params.id}`">
-            К курсу
-          </v-btn>
-          <v-btn variant="outlined" :to="'/products'">
-            К продукту
-          </v-btn>
+        <h1 class="success-title">
+          {{ userFirstName ? `${userFirstName}, ` : '' }}тест по «{{ courseTitle }}» пройден
+        </h1>
+        <p class="success-sub">
+          Доступ к продаже продукта открыт. Условия комиссии — в разделе «Продукты».
+        </p>
+
+        <v-btn color="primary" size="x-large" class="success-cta" prepend-icon="mdi-check-circle"
+          :to="'/products'">
+          Перейти к продукту «{{ courseTitle }}»
+        </v-btn>
+
+        <div class="success-next">
+          <div class="success-next__title">Что дальше</div>
+          <div class="success-next__item">
+            <v-icon size="16" color="success" class="me-2">mdi-check</v-icon>
+            продукт уже доступен в каталоге
+          </div>
+          <div class="success-next__item">
+            <v-icon size="16" color="success" class="me-2">mdi-check</v-icon>
+            материалы остаются в Обучении — можно вернуться
+          </div>
+          <div class="success-next__item">
+            <v-icon size="16" color="success" class="me-2">mdi-check</v-icon>
+            записи деловых игр по продукту — в Базе знаний
+          </div>
+        </div>
+
+        <div class="success-actions">
+          <v-btn variant="text" prepend-icon="mdi-arrow-left" :to="'/education'">в Обучение</v-btn>
         </div>
       </div>
 
       <!-- B — провал -->
-      <div v-else-if="result && !result.passed" class="state-card danger">
-        <v-icon size="48" color="error">mdi-alert</v-icon>
-        <div class="state-title text-error">Тест не пройден</div>
-        <div class="state-body">
-          Правильно: <b>{{ result.score }} из {{ result.total }}</b>.
-          Для допуска нужно 100%. Попытки не ограничены — попробуйте ещё раз.
+      <div v-else-if="result && !result.passed" class="fail-screen">
+        <div class="fail-card">
+          <div class="fail-card__head">
+            <div class="fail-card__icon">
+              <v-icon size="24" color="error">mdi-alert</v-icon>
+            </div>
+            <div>
+              <div class="fail-card__title">Тест не пройден</div>
+              <div class="fail-card__body">
+                Правильно: <b>{{ result.score }} из {{ result.total }}</b>.
+                Для допуска нужно 100%. Попытки не ограничены — попробуйте ещё раз.
+                <template v-if="result.wrongIndexes?.length">
+                  Ошибки были в вопросах <b>{{ result.wrongIndexes.join(', ') }}</b> — стоит освежить материал.
+                </template>
+              </div>
+            </div>
+          </div>
         </div>
-        <div class="d-flex ga-2 mt-4">
-          <v-btn color="primary" size="large" @click="retry">
+
+        <div class="tip-card">
+          <v-icon size="22" color="warning" class="me-3">mdi-lightbulb-on-outline</v-icon>
+          <div>
+            <b>Рекомендуем вернуться через 15 минут</b> — статистика показывает +20%
+            к шансу при перерыве. Но можно повторить и сейчас.
+          </div>
+        </div>
+
+        <div class="d-flex align-center ga-3 mt-5">
+          <v-btn color="primary" size="large" prepend-icon="mdi-restart" @click="retry">
             Пройти ещё раз
           </v-btn>
-          <v-btn variant="outlined" :to="`/education/courses/${route.params.id}`">
-            Вернуться к курсу
+          <v-btn variant="text" :to="`/education/courses/${route.params.id}`">
+            или к материалам урока
           </v-btn>
         </div>
       </div>
@@ -149,9 +195,11 @@
 import { ref, computed, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import api from '../api';
+import { useAuthStore } from '../stores/auth';
 import EmptyState from '../components/EmptyState.vue';
 
 const route = useRoute();
+const auth = useAuthStore();
 const loading = ref(true);
 const submitting = ref(false);
 const tests = ref([]);
@@ -159,6 +207,29 @@ const courseTitle = ref('');
 const answers = ref({});
 const currentIdx = ref(0);
 const result = ref(null);
+
+const userFirstName = computed(() => auth.user?.firstName || '');
+
+// Detereministic «псевдо-рандом» по index — стабильно при re-render'ах.
+function confettiStyle(n) {
+  const seed = (n * 9301 + 49297) % 233280;
+  const r = seed / 233280;
+  const angle = r * 360;
+  const distance = 240 + ((seed * 7) % 280);
+  const tx = Math.cos(angle * Math.PI / 180) * distance;
+  const ty = Math.sin(angle * Math.PI / 180) * distance;
+  const colors = ['#6EE87A', '#2E7D32', '#A4E0AC', '#1B5E20', '#43a047', '#FFC107'];
+  const color = colors[n % colors.length];
+  const delay = (n % 6) * 40;
+  const rotate = (seed % 720) - 360;
+  return {
+    '--tx': `${tx}px`,
+    '--ty': `${ty}px`,
+    '--rot': `${rotate}deg`,
+    '--delay': `${delay}ms`,
+    background: color,
+  };
+}
 
 const currentQuestion = computed(() => tests.value[currentIdx.value] || { answers: [] });
 const progressPercent = computed(() =>
@@ -184,7 +255,18 @@ async function submit() {
     const { data } = await api.post(`/education/courses/${route.params.id}/test`, {
       answers: answers.value,
     });
-    result.value = data;
+    // Если бэк не вернул wrongIndexes — считаем сами по correct_answer.
+    // На fail-state это даёт партнёру конкретику «ошибся в Q2, Q5».
+    let wrongIndexes = data.wrongIndexes;
+    if (!Array.isArray(wrongIndexes) && !data.passed) {
+      wrongIndexes = [];
+      tests.value.forEach((q, i) => {
+        if (q.correct_answer != null && answers.value[q.id] !== q.correct_answer) {
+          wrongIndexes.push(i + 1);
+        }
+      });
+    }
+    result.value = { ...data, wrongIndexes };
   } catch {} finally { submitting.value = false; }
 }
 
@@ -260,23 +342,169 @@ onMounted(load);
   border-color: rgb(var(--v-theme-primary));
 }
 
-.state-card {
-  width: 100%; max-width: 640px;
-  padding: 32px 36px;
-  border-radius: var(--ds-radius-lg, 12px);
+/* === Success screen (certificate-style) === */
+.success-screen {
+  width: 100%;
+  max-width: 640px;
   text-align: center;
-  display: flex; flex-direction: column; align-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 24px;
 }
-.state-card.success {
-  background: var(--ds-primary-tint, rgba(46, 125, 50, 0.06));
-  border: 1.5px solid rgba(var(--v-theme-primary), 0.2);
+.success-check-wrap {
+  position: relative;
+  margin-bottom: 24px;
 }
-.state-card.danger {
-  background: rgba(198, 40, 40, 0.06);
-  border: 1.5px solid rgba(198, 40, 40, 0.2);
+.success-check {
+  width: 96px; height: 96px;
+  border-radius: 50%;
+  background: rgb(var(--v-theme-surface));
+  border: 4px solid rgba(var(--v-theme-success), 0.18);
+  display: flex; align-items: center; justify-content: center;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 12px 32px rgba(46, 125, 50, 0.18);
+  animation: checkPop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
-.state-title { font-size: 22px; font-weight: 700; margin-top: 12px; }
-.state-body { margin-top: 8px; font-size: 14px; color: rgba(var(--v-theme-on-surface), 0.75); line-height: 1.55; }
+@keyframes checkPop {
+  0%   { transform: scale(0.3); opacity: 0; }
+  60%  { transform: scale(1.1);  opacity: 1; }
+  100% { transform: scale(1); }
+}
+
+.success-title {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  line-height: 1.25;
+  margin: 0 0 12px;
+  animation: fadeUp 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  animation-delay: 200ms;
+}
+.success-sub {
+  margin: 0 0 24px;
+  font-size: 15px;
+  color: rgba(var(--v-theme-on-surface), 0.7);
+  line-height: 1.55;
+  max-width: 480px;
+  animation: fadeUp 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  animation-delay: 280ms;
+}
+.success-cta {
+  letter-spacing: -0.2px;
+  font-weight: 600;
+  animation: fadeUp 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  animation-delay: 360ms;
+}
+
+.success-next {
+  margin: 32px 0 8px;
+  padding: 18px 20px;
+  background: rgb(var(--v-theme-surface));
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  border-radius: 14px;
+  text-align: left;
+  width: 100%;
+  max-width: 420px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.04);
+  animation: fadeUp 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  animation-delay: 440ms;
+}
+.success-next__title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: rgba(var(--v-theme-on-surface), 0.55);
+  margin-bottom: 10px;
+}
+.success-next__item {
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+  line-height: 1.6;
+  color: rgb(var(--v-theme-on-surface));
+}
+.success-actions {
+  margin-top: 16px;
+  animation: fadeUp 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  animation-delay: 520ms;
+}
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Confetti */
+.confetti-burst {
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 0; height: 0;
+  pointer-events: none;
+}
+.confetti-piece {
+  position: absolute;
+  width: 10px; height: 10px;
+  border-radius: 2px;
+  opacity: 0;
+  animation: confetti-fly 1.4s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  animation-delay: var(--delay, 0ms);
+}
+@keyframes confetti-fly {
+  0%   { opacity: 1; transform: translate(0, 0) rotate(0deg) scale(0.8); }
+  35%  { opacity: 1; transform: translate(calc(var(--tx) * 0.55), calc(var(--ty) * 0.55)) rotate(calc(var(--rot) * 0.5)) scale(1); }
+  100% { opacity: 0; transform: translate(var(--tx), calc(var(--ty) + 120px)) rotate(var(--rot)) scale(0.5); }
+}
+
+/* === Fail screen === */
+.fail-screen {
+  width: 100%;
+  max-width: 640px;
+  padding-top: 24px;
+}
+.fail-card {
+  background: rgba(var(--v-theme-error), 0.06);
+  border: 1px solid rgba(var(--v-theme-error), 0.2);
+  border-radius: 14px;
+  padding: 18px 20px;
+  animation: fadeUp 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+.fail-card__head { display: flex; align-items: flex-start; gap: 14px; }
+.fail-card__icon {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: rgba(var(--v-theme-error), 0.12);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.fail-card__title {
+  font-size: 18px;
+  font-weight: 700;
+  color: rgb(var(--v-theme-error));
+  margin-bottom: 4px;
+}
+.fail-card__body {
+  font-size: 14px;
+  line-height: 1.55;
+  color: rgba(var(--v-theme-on-surface), 0.85);
+}
+
+.tip-card {
+  margin-top: 14px;
+  background: rgba(255, 193, 7, 0.08);
+  border: 1px solid rgba(255, 193, 7, 0.25);
+  border-radius: 12px;
+  padding: 14px 18px;
+  display: flex;
+  align-items: flex-start;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: rgba(var(--v-theme-on-surface), 0.85);
+  animation: fadeUp 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  animation-delay: 100ms;
+}
 
 .tabular-nums { font-variant-numeric: tabular-nums; }
 .letter-spacing-1 { letter-spacing: 1.2px; }
