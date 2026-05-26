@@ -206,7 +206,22 @@ function renderBlock(b) {
   word-wrap: break-word;
 }
 /* HTML-контент из rich-editor */
-.block-text-html { white-space: normal; }
+.block-text-html { white-space: normal; max-width: 100%; overflow-wrap: break-word; }
+/* Принудительно ограничиваем картинки/видео внутри HTML-контента —
+   rich-editor может вставить <img> с натуральным размером 3000+px,
+   которая разъезжается на весь экран. */
+.block-text-html :deep(img) {
+  max-width: 100%;
+  height: auto;
+  border-radius: 10px;
+  display: block;
+  margin: 8px 0;
+}
+.block-text-html :deep(iframe),
+.block-text-html :deep(video) {
+  max-width: 100%;
+  border-radius: 10px;
+}
 .block-text-html :deep(p) { margin: 0 0 0.6em; }
 .block-text-html :deep(h1),
 .block-text-html :deep(h2),
@@ -261,9 +276,12 @@ function renderBlock(b) {
 
 .block-image-wrap {
   margin: 0;
+  max-width: 760px;
 }
 .block-image {
   width: 100%;
+  max-width: 100%;
+  height: auto;
   border-radius: 10px;
   display: block;
 }

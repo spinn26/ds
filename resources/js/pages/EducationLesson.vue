@@ -583,7 +583,13 @@ onMounted(load);
   display: flex;
   flex-direction: column;
   gap: 24px;
+  /* Защита от диких inline-картинок/embed'ов из rich-editor, которые
+     могут иметь натуральный размер 3000+px и вылезать за контейнер. */
+  min-width: 0;
 }
+.body-blocks :deep(img),
+.body-blocks :deep(iframe),
+.body-blocks :deep(video) { max-width: 100%; }
 @media (max-width: 700px) {
   .sticky-header { padding: 18px 16px 12px; }
   .body-blocks { padding: 18px 16px 32px; }
