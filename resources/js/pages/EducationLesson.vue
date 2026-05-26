@@ -6,7 +6,6 @@
       <v-progress-circular indeterminate color="primary" />
     </div>
 
-    <transition name="lesson-fade" mode="out-in">
     <div v-else-if="lesson" :key="route.params.lid" class="lesson-layout" :class="{ 'no-sidebar': !hasSidebarContent }">
       <aside v-if="hasSidebarContent" class="lesson-tree">
         <div class="px-3 pt-3 pb-2 text-caption text-uppercase font-weight-bold text-medium-emphasis letter-spacing-1">
@@ -238,7 +237,6 @@
         </div>
       </section>
     </div>
-    </transition>
   </div>
 </template>
 
@@ -639,15 +637,9 @@ onMounted(load);
   100% { transform: scale(1); }
 }
 
-/* Переход между уроками (route.params.lid change) — slide-left fade. */
-.lesson-fade-enter-active,
-.lesson-fade-leave-active {
-  transition:
-    opacity 0.24s cubic-bezier(0.2, 0.8, 0.2, 1),
-    transform 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-.lesson-fade-enter-from { opacity: 0; transform: translateX(20px); }
-.lesson-fade-leave-to   { opacity: 0; transform: translateX(-12px); }
+/* Переход между уроками реализуется через :key="route.params.lid"
+   на корневом div.lesson-layout — Vue пересоздаёт DOM при смене
+   урока, и body-blocks > * stagger fadeUp срабатывает заново. */
 @media (max-width: 700px) {
   .sticky-header { padding: 18px 16px 12px; }
   .body-blocks { padding: 18px 16px 32px; }
