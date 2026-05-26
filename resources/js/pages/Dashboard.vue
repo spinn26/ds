@@ -97,31 +97,33 @@
       </div>
     </v-card>
 
-    <!-- Volume cards — ЛП/ГП/НГП. Crupно цифра + sub trend. -->
+    <!-- Volume cards — ЛП/ГП/НГП. Кликабельны → отчёт начислений с фильтром по периоду. -->
     <div class="section-eyebrow">Объёмы</div>
     <v-row class="mb-5 dashboard-row">
       <v-col v-for="card in volumeCards" :key="card.title" cols="12" md="4">
-        <v-card class="ds-card pa-5 h-100" elevation="0">
-          <div class="d-flex justify-space-between align-start">
-            <div class="flex-grow-1 min-w-0">
-              <div class="text-caption text-uppercase text-medium-emphasis font-weight-bold letter-spacing-1">
-                {{ card.title }}
+        <router-link :to="card.link" class="text-decoration-none">
+          <v-card class="ds-card ds-card--hover pa-5 h-100" elevation="0">
+            <div class="d-flex justify-space-between align-start">
+              <div class="flex-grow-1 min-w-0">
+                <div class="text-caption text-uppercase text-medium-emphasis font-weight-bold letter-spacing-1">
+                  {{ card.title }}
+                </div>
+                <div class="text-h3 font-weight-bold my-2 tabular-nums">{{ fmt(card.value) }}</div>
+                <div class="d-flex align-center ga-1">
+                  <v-icon :color="card.changeType === 'up' ? 'success' : card.changeType === 'down' ? 'error' : 'grey'" size="14">
+                    {{ card.changeType === 'up' ? 'mdi-trending-up' : card.changeType === 'down' ? 'mdi-trending-down' : 'mdi-minus' }}
+                  </v-icon>
+                  <span class="text-caption" :class="card.changeType === 'up' ? 'text-success' : card.changeType === 'down' ? 'text-error' : 'text-medium-emphasis'">
+                    {{ card.change }} к прошлому
+                  </span>
+                </div>
               </div>
-              <div class="text-h3 font-weight-bold my-2 tabular-nums">{{ fmt(card.value) }}</div>
-              <div class="d-flex align-center ga-1">
-                <v-icon :color="card.changeType === 'up' ? 'success' : card.changeType === 'down' ? 'error' : 'grey'" size="14">
-                  {{ card.changeType === 'up' ? 'mdi-trending-up' : card.changeType === 'down' ? 'mdi-trending-down' : 'mdi-minus' }}
-                </v-icon>
-                <span class="text-caption" :class="card.changeType === 'up' ? 'text-success' : card.changeType === 'down' ? 'text-error' : 'text-medium-emphasis'">
-                  {{ card.change }} к прошлому
-                </span>
+              <div class="kpi-icon-orb" :style="{ background: `rgba(var(--v-theme-${card.color}), 0.12)` }">
+                <v-icon size="22" :color="card.color">{{ card.icon }}</v-icon>
               </div>
             </div>
-            <div class="kpi-icon-orb" :style="{ background: `rgba(var(--v-theme-${card.color}), 0.12)` }">
-              <v-icon size="22" :color="card.color">{{ card.icon }}</v-icon>
-            </div>
-          </div>
-        </v-card>
+          </v-card>
+        </router-link>
       </v-col>
     </v-row>
 
@@ -187,29 +189,33 @@
       </div>
     </v-card>
 
-    <!-- Команда — показатели партнёров: 1 линия / всего, активные. -->
+    <!-- Команда — показатели партнёров: 1 линия / всего, активные.
+         Каждая карточка → /structure с предзаполненным фильтром. -->
     <div class="section-eyebrow">Команда</div>
     <v-row class="mb-5 dashboard-row">
       <v-col v-for="kpi in teamKpis" :key="kpi.label" cols="12" sm="6" md="3">
-        <v-card class="ds-card pa-4" elevation="0">
-          <div class="d-flex align-center ga-3">
-            <div class="kpi-icon-orb" :style="{ background: `rgba(var(--v-theme-${kpi.color}), 0.12)` }">
-              <v-icon size="20" :color="kpi.color">{{ kpi.icon }}</v-icon>
+        <router-link :to="kpi.link" class="text-decoration-none">
+          <v-card class="ds-card ds-card--hover pa-4" elevation="0">
+            <div class="d-flex align-center ga-3">
+              <div class="kpi-icon-orb" :style="{ background: `rgba(var(--v-theme-${kpi.color}), 0.12)` }">
+                <v-icon size="20" :color="kpi.color">{{ kpi.icon }}</v-icon>
+              </div>
+              <div class="min-w-0 flex-grow-1">
+                <div class="text-caption text-medium-emphasis">{{ kpi.label }}</div>
+                <div class="text-h5 font-weight-bold tabular-nums">{{ kpi.value }}</div>
+              </div>
             </div>
-            <div class="min-w-0">
-              <div class="text-caption text-medium-emphasis">{{ kpi.label }}</div>
-              <div class="text-h5 font-weight-bold tabular-nums">{{ kpi.value }}</div>
-            </div>
-          </div>
-        </v-card>
+          </v-card>
+        </router-link>
       </v-col>
     </v-row>
 
-    <!-- Клиенты — две большие интерактивные карточки. -->
+    <!-- Клиенты — две большие интерактивные карточки. Каждая → /clients
+         с предзаполненным scope (team / mine) в query. -->
     <div class="section-eyebrow">Клиенты</div>
     <v-row class="mb-5 dashboard-row">
       <v-col cols="12" sm="6">
-        <router-link to="/clients" class="text-decoration-none">
+        <router-link to="/clients?scope=team" class="text-decoration-none">
           <v-card class="ds-card ds-card--hover pa-5" elevation="0">
             <div class="d-flex align-center ga-4">
               <div class="kpi-icon-orb kpi-icon-orb--lg" style="background: rgba(var(--v-theme-primary), 0.12)">
@@ -225,7 +231,7 @@
         </router-link>
       </v-col>
       <v-col cols="12" sm="6">
-        <router-link to="/clients" class="text-decoration-none">
+        <router-link to="/clients?scope=mine" class="text-decoration-none">
           <v-card class="ds-card ds-card--hover pa-5" elevation="0">
             <div class="d-flex align-center ga-4">
               <div class="kpi-icon-orb kpi-icon-orb--lg" style="background: rgba(var(--v-theme-secondary), 0.12)">
@@ -242,11 +248,11 @@
       </v-col>
     </v-row>
 
-    <!-- Партнёры по статусу — 4 кликабельные карточки с diff. -->
+    <!-- Партнёры по статусу — каждая → /structure с фильтром по статусу. -->
     <div class="section-eyebrow">Партнёры по статусу</div>
     <v-row class="mb-5 dashboard-row">
       <v-col v-for="card in partnerCards" :key="card.label" cols="12" sm="6" md="3">
-        <router-link to="/structure" class="text-decoration-none">
+        <router-link :to="card.link" class="text-decoration-none">
           <v-card class="ds-card ds-card--hover pa-4 text-center" elevation="0">
             <div class="text-caption text-uppercase text-medium-emphasis font-weight-bold letter-spacing-1">
               {{ card.label }}
@@ -381,20 +387,29 @@ const volumeCards = computed(() => {
   const v = data.value.volumes;
   const lp = pct(v.personalVolume, v.prevPersonalVolume);
   const ngp = pct(v.groupVolumeCumulative, v.prevGroupVolumeCumulative);
+  // Каждая карточка кликабельна — открывает Финансовый отчёт за тот же
+  // период с подсветкой соответствующей метрики (frontend читает `metric`).
   return [
-    { title: 'Личные продажи (ЛП)', value: v.personalVolume, change: lp.value, changeType: lp.type, icon: 'mdi-bank', color: 'green' },
-    { title: 'НГП', value: v.groupVolumeCumulative, change: ngp.value, changeType: ngp.type, icon: 'mdi-trending-up', color: 'orange' },
+    { title: 'Личные продажи (ЛП)', value: v.personalVolume, change: lp.value, changeType: lp.type, icon: 'mdi-bank', color: 'green',
+      link: { path: '/finance/report', query: { month: period.value, metric: 'lp' } } },
+    { title: 'НГП', value: v.groupVolumeCumulative, change: ngp.value, changeType: ngp.type, icon: 'mdi-trending-up', color: 'orange',
+      link: { path: '/finance/report', query: { month: period.value, metric: 'ngp' } } },
   ];
 });
 
 // KPI «Команда» — компактные карточки с orb-иконками и цифрой.
+// Каждая → /structure с предзаполненным фильтром (line=1 / status=active).
 const teamKpis = computed(() => {
   const t = data.value.team || {};
   return [
-    { label: 'Партнёры 1 линии',  value: t.firstLineAll ?? 0,         icon: 'mdi-account-outline',         color: 'info' },
-    { label: 'Всего партнёров',   value: t.totalPartners ?? 0,        icon: 'mdi-account-group',           color: 'primary' },
-    { label: 'Активных 1 линии',  value: t.firstLineActive ?? 0,      icon: 'mdi-account-check',           color: 'success' },
-    { label: 'Всего активных',    value: t.totalPartnersActive ?? 0,  icon: 'mdi-account-multiple-check',  color: 'success' },
+    { label: 'Партнёры 1 линии',  value: t.firstLineAll ?? 0,         icon: 'mdi-account-outline',         color: 'info',
+      link: { path: '/structure', query: { line: '1' } } },
+    { label: 'Всего партнёров',   value: t.totalPartners ?? 0,        icon: 'mdi-account-group',           color: 'primary',
+      link: { path: '/structure' } },
+    { label: 'Активных 1 линии',  value: t.firstLineActive ?? 0,      icon: 'mdi-account-check',           color: 'success',
+      link: { path: '/structure', query: { line: '1', status: 'active' } } },
+    { label: 'Всего активных',    value: t.totalPartnersActive ?? 0,  icon: 'mdi-account-multiple-check',  color: 'success',
+      link: { path: '/structure', query: { status: 'active' } } },
   ];
 });
 
@@ -402,10 +417,14 @@ const partnerCards = computed(() => {
   const p = data.value.partners || {};
   const pp = data.value.prevPartners || {};
   return [
-    { label: 'Всего партнёров', value: p.total ?? 0, color: 'primary', diff: (p.total ?? 0) - (pp.total ?? 0) },
-    { label: 'Зарегистрировано', value: p.registered ?? 0, color: 'info', diff: (p.registered ?? 0) - (pp.registered ?? 0) },
-    { label: 'Активных', value: p.active ?? 0, color: 'success', diff: (p.active ?? 0) - (pp.active ?? 0) },
-    { label: 'Терминированных', value: p.terminated ?? 0, color: 'error', diff: (p.terminated ?? 0) - (pp.terminated ?? 0) },
+    { label: 'Всего партнёров', value: p.total ?? 0, color: 'primary', diff: (p.total ?? 0) - (pp.total ?? 0),
+      link: { path: '/structure' } },
+    { label: 'Зарегистрировано', value: p.registered ?? 0, color: 'info', diff: (p.registered ?? 0) - (pp.registered ?? 0),
+      link: { path: '/structure', query: { status: 'registered' } } },
+    { label: 'Активных', value: p.active ?? 0, color: 'success', diff: (p.active ?? 0) - (pp.active ?? 0),
+      link: { path: '/structure', query: { status: 'active' } } },
+    { label: 'Терминированных', value: p.terminated ?? 0, color: 'error', diff: (p.terminated ?? 0) - (pp.terminated ?? 0),
+      link: { path: '/structure', query: { status: 'terminated' } } },
   ];
 });
 
