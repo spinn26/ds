@@ -1,42 +1,80 @@
 <template>
   <div>
-    <PageHeader title="Профиль" icon="mdi-account" />
+    <PageHeader title="Профиль" icon="mdi-account">
+      <template #subtitle>личные данные · документы · безопасность</template>
+    </PageHeader>
 
-    <!-- Per spec ✅Профиль: для сотрудника финансовые блоки скрыты,
-         ФИО редактируемо, есть поле «Должность». -->
-    <v-tabs v-model="tab" color="primary" class="mb-4" grow>
-      <v-tab value="info">{{ isEmployee ? 'Информация о сотруднике' : 'Информация о партнере' }}</v-tab>
-      <v-tab v-if="!isEmployee" value="requisites">Реквизиты и документы для выплат</v-tab>
-      <v-tab v-if="!isEmployee && canInvite" value="referral">Реферальные ссылки</v-tab>
-      <v-tab value="security">Безопасность</v-tab>
-    </v-tabs>
+    <!-- DS-hero: общий для всех табов (ds-extra-partner.jsx::PartnerProfile).
+         Аватар (с upload), ФИО, email, чипы статуса, ID. -->
+    <v-card class="profile-hero pa-5 mb-4 d-flex align-center ga-4 flex-wrap">
+      <v-avatar color="primary" size="80" class="profile-hero__avatar">
+        <v-img v-if="profile.user?.avatar" :src="profile.user.avatar" cover />
+        <span v-else class="text-h4 text-white">{{ initials }}</span>
+      </v-avatar>
+      <div class="profile-hero__main flex-grow-1">
+        <div class="ds-headline-s">
+          {{ profile.user?.lastName }} {{ profile.user?.firstName }} {{ profile.user?.patronymic }}
+        </div>
+        <div class="ds-body-m ds-muted mt-1">
+          {{ profile.user?.email }}
+          <template v-if="profile.user?.participantCode"> · ID {{ profile.user.participantCode }}</template>
+        </div>
+        <div v-if="profile.statusInfo" class="d-flex align-center ga-2 mt-2 flex-wrap">
+          <v-chip size="small" :color="activityColor(profile.statusInfo.activityId)" variant="flat">
+            {{ profile.statusInfo.activityName }}
+          </v-chip>
+          <span v-if="profile.statusInfo.yearPeriodEnd" class="ds-body-s ds-muted">
+            до {{ fmtShortDate(profile.statusInfo.yearPeriodEnd) }}
+          </span>
+          <span v-if="profile.statusInfo.activationDeadline" class="ds-body-s ds-muted">
+            Активация до {{ fmtShortDate(profile.statusInfo.activationDeadline) }}
+          </span>
+        </div>
+      </div>
+      <v-btn variant="outlined" prepend-icon="mdi-camera" size="small"
+        :loading="avatarUploading"
+        @click="avatarInput?.click()">
+        Сменить фото
+      </v-btn>
+      <input ref="avatarInput" type="file" accept="image/*" hidden @change="onAvatarPick" />
+    </v-card>
+
+    <!-- Двухколоночный layout: 12/3 nav-sidebar + 12/9 content (DS spec). -->
+    <v-row no-gutters class="ga-md-4" style="row-gap: 16px">
+      <v-col cols="12" md="3">
+        <v-card class="profile-nav pa-2">
+          <v-list density="comfortable" nav class="profile-nav-list">
+            <v-list-item value="info"
+              :active="tab === 'info'"
+              prepend-icon="mdi-account-circle-outline"
+              :title="isEmployee ? 'Информация о сотруднике' : 'Личные данные'"
+              @click="tab = 'info'" />
+            <v-list-item v-if="!isEmployee" value="requisites"
+              :active="tab === 'requisites'"
+              prepend-icon="mdi-credit-card-outline"
+              title="Документы и реквизиты"
+              @click="tab = 'requisites'" />
+            <v-list-item v-if="!isEmployee && canInvite" value="referral"
+              :active="tab === 'referral'"
+              prepend-icon="mdi-link-variant"
+              title="Реферальные ссылки"
+              @click="tab = 'referral'" />
+            <v-list-item value="security"
+              :active="tab === 'security'"
+              prepend-icon="mdi-shield-lock-outline"
+              title="Безопасность"
+              @click="tab = 'security'" />
+          </v-list>
+        </v-card>
+      </v-col>
+
+      <v-col cols="12" md="9">
 
     <v-tabs-window v-model="tab">
       <!-- Section 1: Partner Info -->
       <v-tabs-window-item value="info">
         <v-card class="pa-4 mb-4">
-          <div class="d-flex align-center ga-4 mb-4">
-            <v-avatar color="primary" size="72">
-              <v-img v-if="profile.user?.avatar" :src="profile.user.avatar" />
-              <span v-else class="text-h5 text-white">{{ initials }}</span>
-            </v-avatar>
-            <div>
-              <div class="text-h6">{{ profile.user?.lastName }} {{ profile.user?.firstName }} {{ profile.user?.patronymic }}</div>
-              <div class="text-body-2 text-medium-emphasis">{{ profile.user?.email }}</div>
-              <div v-if="profile.statusInfo" class="d-flex align-center ga-2 mt-1">
-                <v-chip size="small" :color="activityColor(profile.statusInfo.activityId)">
-                  {{ profile.statusInfo.activityName }}
-                </v-chip>
-                <span v-if="profile.statusInfo.yearPeriodEnd" class="text-caption text-medium-emphasis">
-                  до {{ fmtShortDate(profile.statusInfo.yearPeriodEnd) }}
-                </span>
-                <span v-if="profile.statusInfo.activationDeadline" class="text-caption text-medium-emphasis">
-                  Активация до {{ fmtShortDate(profile.statusInfo.activationDeadline) }}
-                </span>
-              </div>
-            </div>
-          </div>
-
+          <div class="ds-title-l mb-3">Личные данные</div>
           <v-row dense>
             <v-col cols="12" sm="4">
               <v-text-field v-model="form.lastName" label="Фамилия"
@@ -390,6 +428,9 @@
       </v-tabs-window-item>
     </v-tabs-window>
 
+      </v-col>
+    </v-row>
+
     <v-progress-linear v-if="loading" indeterminate color="primary"
       style="position:fixed;top:0;left:0;right:0;z-index:2000" />
   </div>
@@ -411,6 +452,26 @@ const canInvite = computed(() => profile.value?.referral?.canInvite ?? false);
 const loading = ref(true);
 const tab = ref('info');
 const profile = ref({});
+const avatarInput = ref(null);
+const avatarUploading = ref(false);
+
+async function onAvatarPick(e) {
+  const file = e.target?.files?.[0];
+  if (!file) return;
+  avatarUploading.value = true;
+  try {
+    const fd = new FormData();
+    fd.append('avatar', file);
+    await api.post('/profile/avatar', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+    await loadProfile();
+    showSuccess?.('Фото обновлено');
+  } catch (err) {
+    showError?.(err?.response?.data?.message || 'Не удалось загрузить фото');
+  } finally {
+    avatarUploading.value = false;
+    if (avatarInput.value) avatarInput.value.value = '';
+  }
+}
 const saving = ref(false);
 const saveMsg = ref('');
 const saveMsgType = ref('success');
@@ -772,36 +833,60 @@ async function disable2fa() {
   padding: 8px;
 }
 
-/* DS Profile: tabular-nums на балансах/статах + rounded-lg на карточках. */
-:deep(.text-h4), :deep(.text-h5), :deep(.text-h6), :deep(.text-subtitle-1) {
-  font-variant-numeric: tabular-nums;
+/* DS Profile hero — аватар + ФИО + email + чипы + Сменить-фото справа.
+   Соответствует ds-extra-partner.jsx::PartnerProfile hero. */
+.profile-hero {
+  border-radius: var(--ds-radius-lg, 12px) !important;
+  border: 1px solid var(--ds-outline-variant, rgba(var(--v-theme-on-surface), 0.06));
 }
+.profile-hero__avatar {
+  box-shadow: 0 0 0 4px var(--ds-primary-soft, rgba(var(--v-theme-primary), 0.10));
+}
+.profile-hero__main {
+  min-width: 220px;
+}
+
+/* DS Profile nav — вертикальный список разделов слева (260px).
+   Соответствует ds-extra-partner.jsx::PartnerProfile sidebar. */
+.profile-nav {
+  border-radius: var(--ds-radius-lg, 12px);
+  border: 1px solid var(--ds-outline-variant, rgba(var(--v-theme-on-surface), 0.06));
+  position: sticky;
+  top: 80px;
+}
+.profile-nav-list :deep(.v-list-item) {
+  border-radius: var(--ds-radius-md, 8px) !important;
+  margin: 2px 4px;
+  min-height: 44px;
+}
+.profile-nav-list :deep(.v-list-item--active) {
+  background: var(--ds-primary-soft, rgba(var(--v-theme-primary), 0.10));
+  color: rgb(var(--v-theme-primary));
+}
+.profile-nav-list :deep(.v-list-item--active .v-icon) {
+  color: rgb(var(--v-theme-primary));
+}
+
+/* DS контент-карточки в табах — outline + radius */
 :deep(.v-card) {
   border-radius: var(--ds-radius-lg, 12px);
   border: 1px solid var(--ds-outline-variant, rgba(var(--v-theme-on-surface), 0.06));
 }
 
-/* Section-заголовки в карточках (text-subtitle-1 font-weight-bold) — DS title-l */
-:deep(.text-subtitle-1.font-weight-bold) {
+/* Section-заголовки в карточках */
+:deep(.text-subtitle-1.font-weight-bold),
+:deep(.ds-title-l) {
   font: var(--ds-type-title-l) !important;
   letter-spacing: -0.01em;
 }
 
-/* DS tabs: убираем тяжёлый underline у активного, делаем плотный indicator */
-:deep(.v-tabs) {
-  border-bottom: 1px solid var(--ds-outline-variant, rgba(var(--v-theme-on-surface), 0.08));
-}
-:deep(.v-tab) {
-  font-weight: 600;
-  letter-spacing: 0;
-  text-transform: none;
-}
-:deep(.v-tab--selected) {
-  color: rgb(var(--v-theme-primary));
+/* tabular-nums на цифровых полях */
+:deep(.text-h4), :deep(.text-h5), :deep(.text-h6), :deep(.text-subtitle-1) {
+  font-variant-numeric: tabular-nums;
 }
 
-/* Hero-блок профиля (аватар + ФИО + email + чипы статуса) — на primary-soft */
-:deep(.v-card .v-avatar.bg-primary) {
-  box-shadow: 0 0 0 4px var(--ds-primary-soft, rgba(var(--v-theme-primary), 0.10));
+/* На мобилке — sticky отключаем (нав становится сверху, не нужен sticky) */
+@media (max-width: 960px) {
+  .profile-nav { position: static; }
 }
 </style>
