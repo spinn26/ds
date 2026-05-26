@@ -273,3 +273,12 @@ onMounted(async () => {
   loadData();
 });
 </script>
+
+<style scoped>
+/* DS polish: dialog title к ds-title-l (одинаково с News / Roadmap CRUD).
+   Page-header h5 оставлен на text-h5 — он рендерится глобальным DS-правилом. */
+:deep(.v-dialog .v-card-title) {
+  font: var(--ds-type-title-l) !important;
+  letter-spacing: -0.01em;
+}
+</style>

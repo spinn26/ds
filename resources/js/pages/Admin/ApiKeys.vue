@@ -156,3 +156,12 @@ async function testTelegram() {
 
 onMounted(load);
 </script>
+
+<style scoped>
+/* DS polish: group-card titles (Google / Telegram / Bubble …) приведены
+   к ds-title-l. Логика и текст полей нетронуты. */
+:deep(.v-card-title .text-h6) {
+  font: var(--ds-type-title-l) !important;
+  letter-spacing: -0.01em;
+}
+</style>

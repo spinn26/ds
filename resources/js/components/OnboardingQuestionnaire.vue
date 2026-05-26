@@ -295,10 +295,13 @@ async function submit() {
 </script>
 
 <style scoped>
+/* DS polish: токенизация радиусов и тени, типографика q-label/q-num
+   приведена к ds-label-l / title-s. Сами цвета primary/error уже идут
+   через rgba(var(--v-theme-*)), оставлены как есть. */
 .onboarding-card {
-  border-radius: 20px;
+  border-radius: var(--ds-radius-xl, 16px);
   overflow: hidden;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+  box-shadow: var(--ds-shadow-4, 0 20px 60px rgba(0, 0, 0, 0.25));
 }
 
 .onboarding-hero {
@@ -320,8 +323,7 @@ async function submit() {
 
 .q-label {
   display: block;
-  font-size: 14px;
-  font-weight: 600;
+  font: var(--ds-type-title-s);
   color: rgb(var(--v-theme-on-surface));
   margin-bottom: 8px;
 }
@@ -336,5 +338,11 @@ async function submit() {
 .req {
   color: rgb(var(--v-theme-error));
   margin-left: 2px;
+}
+
+/* DS polish: заголовок hero — на ds-title-l ритм. */
+:deep(.onboarding-hero .text-h6) {
+  font: var(--ds-type-title-l) !important;
+  letter-spacing: -0.01em;
 }
 </style>
