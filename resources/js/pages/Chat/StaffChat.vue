@@ -43,6 +43,17 @@
             </template>
           </v-btn>
         </div>
+        <!-- Тех-поддержка платформы: staff (не админ) сообщает о баге /
+             вопросе по системе. Тикет уходит с department=support — backend
+             делает его инцидентом и показывает ролям admin + support. -->
+        <div v-if="!isAdminRole" class="mt-2">
+          <v-btn block size="small" variant="tonal" color="primary"
+            prepend-icon="mdi-lifebuoy"
+            title="Сообщить о проблеме платформы — тикет уйдёт администратору"
+            @click="openTechSupport">
+            В техподдержку
+          </v-btn>
+        </div>
       </div>
 
       <!-- Search -->
@@ -1221,6 +1232,47 @@
       </v-card>
     </v-dialog>
 
+    <!-- Тикет в техподдержку — staff пишет о проблеме платформы. Department
+         зашит в 'support': backend сразу делает инцидент (см. ChatController
+         store() при $isSupport) и направляет в админскую категорию. -->
+    <v-dialog v-model="showTechSupport" max-width="560">
+      <v-card>
+        <v-card-title class="d-flex align-center ga-2">
+          <v-icon color="primary">mdi-lifebuoy</v-icon>
+          Тикет в техподдержку
+          <v-spacer />
+          <v-btn icon="mdi-close" size="small" variant="text"
+            @click="showTechSupport = false" />
+        </v-card-title>
+        <v-divider />
+        <v-card-text class="pt-4">
+          <div class="text-caption text-medium-emphasis mb-3">
+            Опишите проблему — тикет создастся как инцидент и уйдёт администраторам платформы.
+          </div>
+          <v-text-field v-model="techSupportForm.subject"
+            label="Тема" variant="outlined" density="comfortable"
+            maxlength="255" counter
+            class="mb-2" autofocus />
+          <v-textarea v-model="techSupportForm.message"
+            label="Описание проблемы" variant="outlined" density="comfortable"
+            rows="5" auto-grow
+            maxlength="10000" counter />
+          <div v-if="techSupportError" class="text-caption text-error mt-2">
+            {{ techSupportError }}
+          </div>
+        </v-card-text>
+        <v-divider />
+        <v-card-actions class="pa-3">
+          <v-spacer />
+          <v-btn variant="text" @click="showTechSupport = false">Отмена</v-btn>
+          <v-btn color="primary" :loading="creatingTechSupport"
+            :disabled="!techSupportForm.subject.trim() || !techSupportForm.message.trim()"
+            prepend-icon="mdi-send"
+            @click="createTechSupport">Отправить</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- Редактирование/создание шаблона быстрых ответов -->
     <v-dialog v-model="qrDialog" max-width="560">
       <v-card>
@@ -1315,6 +1367,47 @@ const router = useRouter();
 const auth = useAuthStore();
 const currentUserId = auth.userId;
 const currentUserName = computed(() => `${auth.user?.lastName || ''} ${auth.user?.firstName || ''}`.trim() || 'Staff');
+
+// Кнопку «В техподдержку» скрываем у самих админов: они и так получат
+// эти тикеты в общем списке (category=support видна ролям admin+support
+// по TicketService::CATEGORIES) — писать самому себе бессмысленно.
+const isAdminRole = computed(() => (auth.user?.role || '').toLowerCase().includes('admin'));
+const showTechSupport = ref(false);
+const creatingTechSupport = ref(false);
+const techSupportError = ref('');
+const techSupportForm = ref({ subject: '', message: '' });
+
+function openTechSupport() {
+  techSupportForm.value = { subject: '', message: '' };
+  techSupportError.value = '';
+  showTechSupport.value = true;
+}
+
+async function createTechSupport() {
+  const subject = techSupportForm.value.subject.trim();
+  const message = techSupportForm.value.message.trim();
+  if (!subject || !message) {
+    techSupportError.value = 'Заполните тему и описание';
+    return;
+  }
+  creatingTechSupport.value = true;
+  techSupportError.value = '';
+  try {
+    await api.post('/chat/tickets', {
+      subject,
+      message,
+      department: 'support',
+      priority: 'medium',
+    });
+    showTechSupport.value = false;
+    showSuccess('Тикет отправлен в техподдержку');
+    await loadChats();
+  } catch (e) {
+    techSupportError.value = e.response?.data?.message || 'Не удалось отправить';
+  } finally {
+    creatingTechSupport.value = false;
+  }
+}
 
 const chats = ref([]);
 const loading = ref(false);

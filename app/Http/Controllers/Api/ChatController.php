@@ -57,7 +57,8 @@ class ChatController extends Controller
             foreach (TicketService::CATEGORY_ALIASES as $legacy => $modern) {
                 if (in_array($modern, $allowed, true)) $expanded[] = $legacy;
             }
-            $query->where(function ($q) use ($user, $expanded, $participantTicketIds) {
+            $isAdmin = in_array('admin', $roles, true);
+            $query->where(function ($q) use ($user, $expanded, $participantTicketIds, $isAdmin) {
                 // Claim & hide: тикеты отдела видны staff ТОЛЬКО пока никто
                 // не взял их в работу (assigned_to IS NULL). Как только staff
                 // отправляет первое сообщение — sendMessage() выставляет
@@ -69,6 +70,14 @@ class ChatController extends Controller
                         $q2->whereIn('department', $expanded)
                            ->whereNull('assigned_to');
                     });
+                }
+                // Admin-override: админы видят ВСЕ тикеты техподдержки
+                // независимо от claim & hide — для контроля работы support-
+                // команды. По запросу 2026-05-26: «админ видит все чаты тех
+                // поддержки». Legacy-ключ technical добавлен для тикетов,
+                // созданных до унификации категорий.
+                if ($isAdmin) {
+                    $q->orWhereIn('department', ['support', 'technical']);
                 }
                 $q->orWhere('created_by', $user->id)
                   ->orWhere('recipient_id', $user->id)

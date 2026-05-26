@@ -34,6 +34,14 @@ class ChatTicketPolicy
         $roles = array_map('trim', explode(',', $user->role ?? ''));
         if (! TicketService::staffCanSeeCategory($roles, $ticket->department)) return false;
 
+        // Admin-override: админ видит ВСЕ тикеты техподдержки (даже после
+        // claim другим оператором). Зеркалит OR-ветку в ChatController::index().
+        // По запросу 2026-05-26: «админ видит все чаты тех поддержки».
+        if (in_array('admin', $roles, true)
+            && TicketService::normalizeCategory($ticket->department) === 'support') {
+            return true;
+        }
+
         // Claim & hide: после того как тикет взят в работу (assigned_to NOT NULL),
         // прочим staff отдела доступ закрыт. Сам assignee видит тикет через
         // более раннюю проверку (assigned_to === user->id). Зеркалит фильтр
