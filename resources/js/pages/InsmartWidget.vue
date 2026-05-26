@@ -15,69 +15,100 @@
     </v-card>
 
     <v-card class="insmart-frame" elevation="2">
-      <div v-if="loading" class="insmart-loader">
-        <v-progress-circular indeterminate color="primary" size="48" />
-        <div class="mt-3 text-body-2 text-medium-emphasis">Загружаем виджет InSmart…</div>
-      </div>
+      <!-- Контейнер для виджета InSmart. data-id ниже у <script> должен
+           точно совпадать с id этого элемента — лоадер ищет узел по id
+           и монтирует frame внутрь него. -->
+      <div id="inssmart-b2c" class="insmart-mount"></div>
 
-      <v-alert v-else-if="error" type="warning" variant="tonal" class="ma-4">
+      <v-overlay v-if="loading" contained persistent
+        class="d-flex align-center justify-center">
+        <div class="d-flex flex-column align-center">
+          <v-progress-circular indeterminate color="primary" size="48" />
+          <div class="mt-3 text-body-2 text-medium-emphasis">Загружаем виджет InSmart…</div>
+        </div>
+      </v-overlay>
+
+      <v-alert v-if="loadError" type="warning" variant="tonal" class="ma-4">
         <div class="font-weight-medium mb-1">Виджет временно недоступен</div>
-        <div class="text-body-2">{{ error }}</div>
-        <v-btn class="mt-3" variant="tonal" size="small" color="warning"
-          prepend-icon="mdi-refresh" @click="loadToken">Повторить</v-btn>
-      </v-alert>
-
-      <iframe v-else-if="iframeUrl" :src="iframeUrl" class="insmart-iframe"
-        allow="payment; clipboard-read; clipboard-write" />
-
-      <v-alert v-else type="info" variant="tonal" class="ma-4">
-        Виджет InSmart не настроен в данном окружении. Свяжитесь с поддержкой
-        для подключения интеграции.
+        <div class="text-body-2">{{ loadError }}</div>
       </v-alert>
     </v-card>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import api from '../api';
 import PageHeader from '../components/PageHeader.vue';
 
 const loading = ref(true);
-const error = ref(null);
-const token = ref(null);
-const widgetUrl = ref(null);
-const consultantId = ref(null);
+const loadError = ref(null);
 
-// Insmart отдаёт либо готовый widgetUrl, либо только token — тогда
-// собираем URL по шаблону, указанному в их доке: ?token=...&client=...
-const iframeUrl = computed(() => {
-  if (widgetUrl.value) return widgetUrl.value;
-  if (token.value && consultantId.value) {
-    return `https://widget.inssmart.ru/?token=${encodeURIComponent(token.value)}`
-      + `&clientId=${encodeURIComponent(consultantId.value)}`;
+// Канальные креды от InSmart — идентифицируют B2B-партнёра (DS Consulting)
+// в их b2c-frame. Не пользовательский токен; user-токен возвращается
+// callback'ом InssmartEventListener.auth ниже.
+const INSMART_TOKEN = '382f5151-a7e5-5ad6-b1fd-2841052a4aac';
+const INSMART_SECRET = '671fe00c-772a-5778-92cd-0be66ce326db';
+const INSMART_LOADER_SRC = 'https://widgets.inssmart.ru/widgets/b2c-frame.loader.js';
+const INSMART_ORIGIN = 'https://widgets.inssmart.ru';
+
+let loaderScript = null;
+
+onMounted(() => {
+  // 1) Регистрируем auth-callback ДО подгрузки лоадера: лоадер дергает
+  //    InssmartEventListener.auth(...) сразу при инициализации frame'а.
+  //    В InSmart'овском примере callback бьёт по yoursite.com/token —
+  //    у нас этот эндпоинт уже есть: GET /api/v1/insmart/widget-token
+  //    (см. InsmartController::widgetToken). Возвращает per-user token
+  //    + consultant_id текущего партнёра.
+  if (!window.InssmartEventListener) {
+    window.InssmartEventListener = {};
   }
-  return null;
+  window.InssmartEventListener.auth = async () => {
+    try {
+      const { data } = await api.get('/insmart/widget-token');
+      return data;
+    } catch (e) {
+      console.error('[InSmart] auth callback failed:', e);
+      throw e;
+    }
+  };
+
+  // 2) Подгружаем лоадер. data-attributes управляют поведением виджета:
+  //    data-id        — id контейнера для монтирования frame'а
+  //    data-origin    — origin InSmart, используется в postMessage
+  //    data-product   — стартовый раздел внутри виджета («/» = home)
+  //    data-token     — канальный токен платформы
+  //    data-secret    — канальный секрет (валидируется только сервером InSmart)
+  //    data-auth=true — включает вызов InssmartEventListener.auth (выше)
+  loaderScript = document.createElement('script');
+  loaderScript.type = 'text/javascript';
+  loaderScript.src = INSMART_LOADER_SRC;
+  loaderScript.setAttribute('data-id', 'inssmart-b2c');
+  loaderScript.setAttribute('data-origin', INSMART_ORIGIN);
+  loaderScript.setAttribute('data-product', '/');
+  loaderScript.setAttribute('data-token', INSMART_TOKEN);
+  loaderScript.setAttribute('data-secret', INSMART_SECRET);
+  loaderScript.setAttribute('data-auth', 'true');
+  loaderScript.onload = () => { loading.value = false; };
+  loaderScript.onerror = () => {
+    loading.value = false;
+    loadError.value = 'Не удалось загрузить скрипт InSmart. Проверьте интернет-соединение или обратитесь в поддержку.';
+  };
+  document.head.appendChild(loaderScript);
 });
 
-async function loadToken() {
-  loading.value = true;
-  error.value = null;
-  try {
-    const { data } = await api.get('/insmart/widget-token');
-    token.value = data.token || null;
-    widgetUrl.value = data.widget_url || null;
-    consultantId.value = data.consultant_id || null;
-    if (!token.value && !widgetUrl.value && data.message) {
-      error.value = data.message;
-    }
-  } catch (e) {
-    error.value = e.response?.data?.message || 'Не удалось получить токен InSmart';
+onUnmounted(() => {
+  // Снимаем лоадер и callback, чтобы при возврате на страницу не
+  // плодились дубли event-listener'ов InSmart'а.
+  if (loaderScript && loaderScript.parentNode) {
+    loaderScript.parentNode.removeChild(loaderScript);
   }
-  loading.value = false;
-}
-
-onMounted(loadToken);
+  loaderScript = null;
+  if (window.InssmartEventListener) {
+    delete window.InssmartEventListener.auth;
+  }
+});
 </script>
 
 <style scoped>
@@ -89,18 +120,8 @@ onMounted(loadToken);
   overflow: hidden;
   border-radius: var(--ds-radius-lg, 12px);
 }
-.insmart-iframe {
+.insmart-mount {
   width: 100%;
-  height: 80vh;
-  border: 0;
-  display: block;
-}
-.insmart-loader {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 64px 16px;
+  min-height: 70vh;
 }
 </style>
