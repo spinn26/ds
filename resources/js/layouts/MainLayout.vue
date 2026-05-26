@@ -873,12 +873,18 @@ const visibleMenu = computed(() => menuItems.filter((item) => {
   background-color: var(--ds-overlay, rgba(var(--v-theme-on-surface), 0.04));
 }
 
+/* Active item — macOS-style: subtle mint fill + читаемый on-surface
+   текст. Без зелёного шрифта (низкий контраст на mint fone). */
 .main-nav-list :deep(.v-list-item--active) {
-  background: var(--ds-primary-soft, rgba(var(--v-theme-primary), 0.10));
-  color: rgb(var(--v-theme-primary));
+  background: rgba(var(--v-theme-primary), 0.1);
+  color: rgb(var(--v-theme-on-surface));
+  font-weight: 600;
 }
 .main-nav-list :deep(.v-list-item--active .v-icon) {
   color: rgb(var(--v-theme-primary));
+}
+.main-nav-list :deep(.v-list-item--active .v-list-item-title) {
+  font-weight: 600 !important;
 }
 
 /* Section headers: тонкие подписи UPPERCASE по DS spec

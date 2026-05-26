@@ -3138,9 +3138,7 @@ onUnmounted(() => {
   border-bottom-left-radius: 6px;
 }
 .msg-bubble.mine {
-  background: linear-gradient(135deg,
-    rgb(var(--v-theme-primary)) 0%,
-    color-mix(in srgb, rgb(var(--v-theme-primary)) 86%, black) 100%);
+  background: rgb(var(--v-theme-primary));
   color: rgb(var(--v-theme-on-primary));
   border-bottom-right-radius: 6px;
 }
