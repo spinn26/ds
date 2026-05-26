@@ -220,10 +220,10 @@ function cancelVerify() {
   flex-direction: column;
   justify-content: space-between;
   color: #fff;
-  background:
-    linear-gradient(135deg,
-      rgb(var(--v-theme-primary)) 0%,
-      rgb(var(--v-theme-secondary)) 100%);
+  /* Фиксированный тёмно-зелёный градиент в обеих темах. В dark-теме
+     --v-theme-primary становится brand mint (#6EE87A) — на нём белый
+     текст hero не читается. Поэтому используем DS spec hex напрямую. */
+  background: linear-gradient(135deg, #1B5E20 0%, #2E7D32 100%);
 }
 .auth-page--mobile .auth-hero { display: none; }
 
