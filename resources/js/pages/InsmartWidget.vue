@@ -123,17 +123,21 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+/* Контейнер не задаёт min-height — высоту контролирует сам iframe.
+   InSmart-loader выставляет iframe minHeight: 436px и динамически
+   меняет height через addListener("resize", ...) по postMessage'ам
+   изнутри виджета. Если мы зафиксируем 70vh — при empty state'е
+   снизу остаётся пустая чёрная полоса (фон страницы темнее белого
+   iframe'а). Без min-height контейнер «сжимается» под контент. */
 .insmart-frame {
   position: relative;
-  min-height: 70vh;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
   border-radius: var(--ds-radius-lg, 12px);
+  overflow: hidden;
 }
 .insmart-mount {
   width: 100%;
-  min-height: 70vh;
 }
 /* iframe InSmart'а лежит в .insmart-mount (loader его туда вставляет) */
 .insmart-mount :deep(iframe) {
