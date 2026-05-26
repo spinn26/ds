@@ -107,7 +107,6 @@ export const cabinetPermissions = {
     'owner-dashboard':          VIEW,
     reconciliation:             VIEW,
     anomalies:                  VIEW,
-    funnel:                     VIEW,
     cohorts:                    VIEW,
     instructions:               VIEW,
   },
