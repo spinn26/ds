@@ -78,7 +78,11 @@ onMounted(() => {
       window.InssmartEventListener.auth(async () => {
         try {
           const { data } = await api.get('/insmart/widget-token');
-          return data;
+          // Loader делает postMessage("onload", { token: t }) где t —
+          // ровно то, что вернул наш callback. Виджет внутри iframe ждёт
+          // `token` как JWT-СТРОКУ. Поэтому отдаём data.token, а не весь
+          // объект {token, consultant_id} — иначе во вложенности.
+          return data?.token ?? null;
         } catch (e) {
           console.error('[InSmart] auth callback failed:', e);
           throw e;
