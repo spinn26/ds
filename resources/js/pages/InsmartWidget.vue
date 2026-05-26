@@ -71,27 +71,13 @@ onMounted(() => {
   loaderScript.setAttribute('data-product', '/');
   loaderScript.setAttribute('data-token', INSMART_TOKEN);
   loaderScript.setAttribute('data-secret', INSMART_SECRET);
-  loaderScript.setAttribute('data-auth', 'true');
+  // Temporary: data-auth=false — guest-режим без user-JWT callback'а.
+  // Channel auth по data-token + data-secret прошёл (config от InSmart
+  // приходит), но при data-auth=true виджет ожидал валидный user-JWT,
+  // а наш /insmart/widget-token возвращает null (нет INSMART_API_KEY).
+  // В guest-режиме партнёр заполняет ФИО/телефон сам внутри виджета.
+  loaderScript.setAttribute('data-auth', 'false');
   loaderScript.onload = () => {
-    // После загрузки лоадер выставил window.InssmartEventListener
-    // с методом auth(callback) — это РЕГИСТРАТОР, а не свойство. По
-    // примеру InSmart: InssmartEventListener.auth(asyncCallback).
-    // Callback бьёт по нашему /api/v1/insmart/widget-token (заменяет
-    // placeholder yoursite.com/token из их docs).
-    if (window.InssmartEventListener
-        && typeof window.InssmartEventListener.auth === 'function') {
-      window.InssmartEventListener.auth(async () => {
-        try {
-          const { data } = await api.get('/insmart/widget-token');
-          return data;
-        } catch (e) {
-          console.error('[InSmart] auth callback failed:', e);
-          throw e;
-        }
-      });
-    } else {
-      console.warn('[InSmart] InssmartEventListener.auth недоступен после onload');
-    }
     loading.value = false;
   };
   loaderScript.onerror = () => {
