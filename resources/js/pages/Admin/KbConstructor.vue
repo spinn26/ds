@@ -2,6 +2,9 @@
   <div class="kb-constructor-page">
     <PageHeader title="База знаний — конструктор" icon="mdi-book-open-variant">
       <template #actions>
+        <v-btn variant="text" prepend-icon="mdi-eye" href="/education/kb" target="_blank">
+          Просмотр как партнёр
+        </v-btn>
         <v-btn color="primary" prepend-icon="mdi-plus" @click="addRootSection">
           Раздел
         </v-btn>

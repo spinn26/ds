@@ -140,6 +140,9 @@ class EducationTreeService
                 return [
                     'id' => $l->id,
                     'title' => $l->title,
+                    // `content` нужен admin-конструктору (LessonBodyEditor читает
+                    // именно это поле); `description` оставлен для partner-страниц.
+                    'content' => $l->content,
                     'description' => $l->content,    // legacy short-desc
                     'body' => $l->body ? (is_string($l->body) ? json_decode($l->body, true) : $l->body) : null,
                     'sortOrder' => $l->sort_order,

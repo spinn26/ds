@@ -41,6 +41,8 @@ return [
         ['key' => 'education',               'label' => 'Конструктор курсов'],
         ['key' => 'education-categories',    'label' => 'Категории курсов'],
         ['key' => 'education-analytics',     'label' => 'Статистика обучения'],
+        ['key' => 'kb',                      'label' => 'База знаний'],
+        ['key' => 'workspace',               'label' => 'Рабочий стол staff'],
         ['key' => 'partner-questionnaires',  'label' => 'Анкеты партнёров'],
         ['key' => 'communication',           'label' => 'Чат / Тикеты'],
         ['key' => 'support-desk',            'label' => 'Тех. поддержка (desk)'],

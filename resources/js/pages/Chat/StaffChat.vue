@@ -7,7 +7,9 @@
       Real-time соединение потеряно. Сообщения придут с задержкой ~15 сек.
     </div>
     <!-- Left: ticket list (hidden in Kanban mode on mobile / collapsed on desktop) -->
-    <aside class="chat-sidebar" :class="{ 'mobile-hidden': mobile && (activeChat || viewMode === 'kanban'), 'compact': viewMode === 'kanban' && !mobile }">
+    <aside class="chat-sidebar"
+      :class="{ 'mobile-hidden': mobile && (activeChat || viewMode === 'kanban'), 'compact': viewMode === 'kanban' && !mobile }"
+      :style="!mobile && viewMode !== 'kanban' ? { width: sidebarWidth + 'px' } : null">
       <div class="sidebar-head px-3 py-2">
         <div class="d-flex align-center ga-2">
           <div class="text-body-1 font-weight-bold flex-grow-1">Обращения</div>
@@ -180,6 +182,18 @@
         </div>
       </transition>
     </aside>
+
+    <!-- Drag-handle: тянуть мышкой влево/вправо чтобы изменить ширину
+         списка тикетов. На mobile и в kanban-режиме скрыт (там layout
+         другой — sidebar full-width или compact-rail). -->
+    <div v-if="!mobile && viewMode !== 'kanban'"
+      class="chat-resize-handle"
+      :class="{ active: sidebarResizing }"
+      title="Перетащите для изменения ширины · двойной клик — сбросить"
+      @mousedown="startResize"
+      @dblclick="sidebarWidth = 340">
+      <div class="chat-resize-handle__grip"></div>
+    </div>
 
     <!-- View toggle переехал в sidebar-head (см. .view-mode-toggle) — раньше
          плавающий .view-toggle перекрывал контекст-панель партнёра. -->
@@ -1251,6 +1265,7 @@ import { getActivityColorByName } from '../../composables/useDesign';
 import ImageLightbox from '../../components/ImageLightbox.vue';
 import { usePermissions } from '../../composables/usePermissions';
 import { linkify } from '../../composables/useLinkify';
+import { useResizablePanel } from '../../composables/useResizablePanel';
 
 // destructured-rename — в файле уже есть локальный function canEdit(msg).
 const { canFull: hasFullPermission } = usePermissions();
@@ -1268,6 +1283,16 @@ import {
 } from '../../composables/chatPalette';
 
 const { mobile } = useDisplay();
+
+// Drag-to-resize sidebar — у staff-чата дефолт чуть шире (340px),
+// потому что строки несут больше инфы (status + priority + customer/recipient).
+// Ключ хранения отдельный от партнёрского, у staff'а свой расклад.
+const { width: sidebarWidth, isResizing: sidebarResizing, startResize } = useResizablePanel({
+  storageKey: 'ds:chat-staff-sidebar-w',
+  defaultWidth: 340,
+  min: 280,
+  max: 620,
+});
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
@@ -2825,23 +2850,102 @@ onUnmounted(() => {
 
 <style scoped>
 .chat-wrap { display: flex; height: 100%; min-height: 0; overflow: hidden; position: relative; }
+
+/* Resize-handle для sidebar — между списком тикетов и областью диалога/канбана.
+   Видимая полоса 2px по центру, hit-area 6px. Подсвечивается primary'ем
+   при hover/active. */
+.chat-resize-handle {
+  flex: 0 0 6px;
+  position: relative;
+  cursor: col-resize;
+  background: rgba(var(--v-border-color), 0.12);
+  transition: background 0.15s;
+  user-select: none;
+  z-index: 2;
+}
+.chat-resize-handle::before {
+  content: '';
+  position: absolute;
+  inset: 0 2px;
+  background: transparent;
+  transition: background 0.15s;
+}
+.chat-resize-handle:hover::before,
+.chat-resize-handle.active::before { background: rgba(var(--v-theme-primary), 0.5); }
+.chat-resize-handle__grip {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 2px;
+  height: 28px;
+  border-radius: 1px;
+  background: rgba(var(--v-theme-on-surface), 0.18);
+  transition: background 0.15s, height 0.15s;
+}
+.chat-resize-handle:hover .chat-resize-handle__grip,
+.chat-resize-handle.active .chat-resize-handle__grip {
+  background: rgb(var(--v-theme-primary));
+  height: 40px;
+}
 /* Sidebar — Linear-style: 320px, тонкие dividers, компактная плотность */
-.chat-sidebar { width: 320px; flex-shrink: 0; border-right: 1px solid rgba(var(--v-border-color), 0.12); display: flex; flex-direction: column; background: rgba(var(--v-theme-surface), 1); }
-.sidebar-head { display: flex; align-items: center; }
+/* Sidebar — ширина управляется JS (useResizablePanel, default 340px).
+   Если sidebar.compact (kanban-режим) — фиксируем 260px ниже отдельным
+   правилом. */
+.chat-sidebar {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: rgba(var(--v-theme-surface), 1);
+  position: relative;
+}
+.sidebar-head {
+  display: flex; align-items: center;
+  background: linear-gradient(180deg,
+    rgba(var(--v-theme-primary), 0.04) 0%,
+    rgba(var(--v-theme-primary), 0) 100%);
+  border-bottom: 1px solid rgba(var(--v-border-color), 0.04);
+}
 .sidebar-list { flex: 1; overflow-y: auto; }
 
 /* Chat item — единый стиль: компактный, тонкие границы, плавный hover */
-.chat-item { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; cursor: pointer; transition: background 0.1s; position: relative; }
+.chat-item {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 12px; cursor: pointer; position: relative;
+  transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+}
 .chat-item:not(:last-child)::after { content: ''; position: absolute; left: 12px; right: 12px; bottom: 0; border-bottom: 1px solid rgba(var(--v-border-color), 0.08); }
 .chat-item:hover { background: rgba(var(--v-theme-on-surface), 0.04); }
-.chat-item.active { background: rgba(var(--v-theme-primary), 0.08); }
-.chat-item.active::before { content: ''; position: absolute; left: 0; top: 8px; bottom: 8px; width: 2px; background: rgb(var(--v-theme-primary)); border-radius: 0 2px 2px 0; }
+.chat-item:active { transform: scale(0.995); }
+.chat-item.active {
+  background: linear-gradient(90deg,
+    rgba(var(--v-theme-primary), 0.12) 0%,
+    rgba(var(--v-theme-primary), 0.04) 100%);
+  box-shadow: inset 0 0 0 1px rgba(var(--v-theme-primary), 0.18);
+}
+.chat-item.active::before { content: ''; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; background: rgb(var(--v-theme-primary)); border-radius: 0 3px 3px 0; }
 .chat-item.stale { background: rgba(var(--v-theme-error), 0.05); }
-.chat-item-avatar { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
+.chat-item-avatar {
+  width: 34px; height: 34px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; margin-top: 1px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  transition: transform 0.15s ease;
+}
+.chat-item:hover .chat-item-avatar { transform: scale(1.05); }
 .priority-bar { position: absolute; top: 8px; bottom: 8px; left: 4px; width: 2px; border-radius: 1px; }
 .chat-item-body { flex: 1; min-width: 0; }
-.chat-item-top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
-.chat-item-subject { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3; }
+.chat-item-top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; min-width: 0; }
+.chat-item-subject {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+}
 .chat-item-time { font-size: 11px; color: rgba(var(--v-theme-on-surface), 0.45); flex-shrink: 0; font-variant-numeric: tabular-nums; }
 .chat-item-time.stale { color: rgb(var(--v-theme-error)); font-weight: 600; }
 /* Одна строка, обрезаем многоточием — иначе при двух ФИО + чипе статуса
@@ -3071,7 +3175,7 @@ onUnmounted(() => {
 .view-mode-toggle :deep(.v-btn) { min-width: 32px; padding: 0 8px; }
 
 /* Sidebar compact variant in Kanban mode — list acts like quick filter preview */
-.chat-sidebar.compact { width: 260px; }
+.chat-sidebar.compact { width: 260px !important; }
 .chat-sidebar.compact .chat-item-bottom .chat-item-status-chip { display: none; }
 
 /* ================== KANBAN ================== */
@@ -3141,7 +3245,8 @@ onUnmounted(() => {
 .chat-wrap.kanban-mode .context-panel { display: none; }
 
 @media (max-width: 959px) {
-  .chat-sidebar { width: 100%; }
+  .chat-sidebar { width: 100% !important; }
+  .chat-resize-handle { display: none; }
   .mobile-hidden { display: none !important; }
   .kanban-board { padding: 56px 8px 8px; }
   .kanban-column { min-width: 220px; }

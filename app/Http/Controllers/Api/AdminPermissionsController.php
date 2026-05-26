@@ -161,45 +161,22 @@ class AdminPermissionsController extends Controller
 
     /**
      * Список всех известных «секций» — фронт использует их как названия
-     * колонок в матрице. Захардкожен на бэке, чтобы UI не нужно было
-     * парсить JS-файл с menuItems. Если меню расширяется — править
-     * этот метод (TODO: вынести в общий config + читать из БД).
+     * колонок в матрице. Источник истины — config/permissions.php; при
+     * добавлении новой страницы достаточно дописать её туда.
      */
     private function knownSections(): array
     {
-        return [
-            ['key' => 'calculator',              'label' => 'Калькулятор объёмов'],
-            ['key' => 'structure',               'label' => 'Структура'],
-            ['key' => 'partners',                'label' => 'Партнёры'],
-            ['key' => 'statuses',                'label' => 'Статусы партнёров'],
-            ['key' => 'clients',                 'label' => 'Клиенты'],
-            ['key' => 'contracts',               'label' => 'Менеджер контрактов'],
-            ['key' => 'upload',                  'label' => 'Загрузка контрактов'],
-            ['key' => 'acceptance',              'label' => 'Акцепт документов'],
-            ['key' => 'requisites',              'label' => 'Реквизиты'],
-            ['key' => 'transfers',               'label' => 'Перестановки'],
-            ['key' => 'import',                  'label' => 'Импорт транзакций'],
-            ['key' => 'transactions',            'label' => 'Транзакции (Manual)'],
-            ['key' => 'commissions',             'label' => 'Комиссии'],
-            ['key' => 'pool',                    'label' => 'Пул'],
-            ['key' => 'qualifications',          'label' => 'Квалификации'],
-            ['key' => 'charges',                 'label' => 'Прочие начисления'],
-            ['key' => 'payments',                'label' => 'Реестр выплат'],
-            ['key' => 'currencies',              'label' => 'Валюты и НДС'],
-            ['key' => 'products',                'label' => 'Продукты / Инструкции'],
-            ['key' => 'education',               'label' => 'Конструктор курсов'],
-            ['key' => 'education-analytics',     'label' => 'Статистика обучения'],
-            ['key' => 'partner-questionnaires',  'label' => 'Анкеты партнёров'],
-            ['key' => 'communication',           'label' => 'Чат / Тикеты'],
-            ['key' => 'support-desk',            'label' => 'Тех. поддержка (desk)'],
-            ['key' => 'chat-analytics',          'label' => 'Аналитика чата'],
-            ['key' => 'reports',                 'label' => 'Отчёты'],
-            ['key' => 'owner-dashboard',         'label' => 'Дашборд руководителя'],
-            ['key' => 'reconciliation',          'label' => 'Реконсиляция'],
-            ['key' => 'anomalies',               'label' => 'Аномалии'],
-            ['key' => 'funnel',                  'label' => 'Воронка партнёров'],
-            ['key' => 'cohorts',                 'label' => 'Когорты'],
-        ];
+        $sections = (array) config('permissions.sections', []);
+
+        // Backwards compatibility: если конфиг пустой по какой-то причине,
+        // возвращаем минимальный набор, чтобы матрица не отдала 500.
+        if (! $sections) {
+            return [
+                ['key' => 'communication', 'label' => 'Чат / Тикеты'],
+                ['key' => 'permissions',   'label' => 'Группы и права'],
+            ];
+        }
+        return $sections;
     }
 
     /**

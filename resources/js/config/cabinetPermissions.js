@@ -43,6 +43,7 @@ export const cabinetPermissions = {
   // ===== БЭК-офис (Миняйлова, Джабиева, Сагина, Горемыкина, Бартенева) =====
   // Спека ✅Кабинет-сотрудника-БЭК-офиса.md
   backoffice: {
+    workspace:                  VIEW,   // личный staff-дашборд
     calculator:                 FULL,   // полный режим расчётов
     structure:                  VIEW,
     contracts:                  EDIT,   // спека: ручное добавление + редактирование, без удаления
@@ -67,6 +68,7 @@ export const cabinetPermissions = {
   // ===== Техподдержка (Левенко, Саблина, Каприеловы) =====
   // Спека ✅Кабинет-Техподдержки.md
   support: {
+    workspace:                  VIEW,   // личный staff-дашборд
     partners:                   VIEW,   // Read-Only
     structure:                  VIEW,
     statuses:                   VIEW,
@@ -85,6 +87,7 @@ export const cabinetPermissions = {
   // Спека ✅Кабинет-Руководителя.md — полностью Read-Only (по запросу
   // 2026-05-14: убрать возможность менять и вносить данные у этой роли).
   head: {
+    workspace:                  VIEW,   // личный staff-дашборд
     calculator:                 VIEW,
     structure:                  VIEW,
     contests:                   VIEW,
@@ -112,6 +115,7 @@ export const cabinetPermissions = {
   // ===== Фин. менеджер (Спирькова, Петряшина) =====
   // Спека ✅Кабинет-фин.менеджера-по-выплатам.md
   finance: {
+    workspace:                  VIEW,   // личный staff-дашборд
     calculator:                 FULL,   // спека §1: полный доступ к пользовательскому функционалу расчёта
     payments:                   FULL,   // Реестр выплат — основной раздел
     charges:                    FULL,   // Прочие начисления
@@ -121,6 +125,7 @@ export const cabinetPermissions = {
   // ===== Руководитель по расчётам — Богданова Е. =====
   // Спека ✅Кабинет-Руководителя-по-расчетам-(Богданова-Е.).md
   calculations: {
+    workspace:                  VIEW,   // личный staff-дашборд
     calculator:                 FULL,
     structure:                  VIEW,
     import:                     FULL,   // Импорт транзакций
@@ -152,6 +157,7 @@ export const cabinetPermissions = {
   // ведёт корпоративную базу знаний (раздел «Инструкции»), поэтому
   // там полный CRUD; на бизнес-разделы — VIEW для контекста.
   corrections: {
+    workspace:                  VIEW,   // личный staff-дашборд
     calculator:                 VIEW,
     clients:                    VIEW,
     contracts:                  VIEW,
@@ -162,10 +168,12 @@ export const cabinetPermissions = {
   // ===== Сотрудник отдела обучения (Жосан, Вдовина, Проваторова) =====
   // Спека ✅Сотрудник-отдела-обучения.md
   education: {
+    workspace:                  VIEW,   // личный staff-дашборд
     education:                  FULL,   // конструктор LMS
     'education-categories':     FULL,   // категории курсов
     'education-analytics':      FULL,   // статистика обучения
     'partner-questionnaires':   FULL,   // работа с анкетами
+    kb:                         FULL,   // конструктор базы знаний (KbConstructor)
     partners:                   VIEW,
     products:                   VIEW,
     contests:                   VIEW,   // спека §5: read-only-просмотр конкурсов

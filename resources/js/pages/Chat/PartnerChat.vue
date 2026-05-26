@@ -6,7 +6,8 @@
       Соединение потеряно. Сообщения придут с задержкой ~15 сек.
     </div>
     <!-- Left sidebar: dialog list — Linear-style минимализм, плотные отступы -->
-    <aside class="chat-sidebar" :class="{ 'mobile-hidden': mobile && activeChat }">
+    <aside class="chat-sidebar" :class="{ 'mobile-hidden': mobile && activeChat }"
+      :style="!mobile ? { width: sidebarWidth + 'px' } : null">
       <!-- Header: заголовок + primary CTA + overflow меню для второстепенного -->
       <div class="sidebar-head px-3 py-2">
         <div class="text-body-1 font-weight-bold">Обращения</div>
@@ -110,6 +111,16 @@
         </div>
       </div>
     </aside>
+
+    <!-- Drag-handle: тянуть мышкой влево/вправо чтобы изменить ширину
+         списка обращений. На mobile скрыт (там панель full-width). -->
+    <div v-if="!mobile" class="chat-resize-handle"
+      :class="{ active: sidebarResizing }"
+      title="Перетащите для изменения ширины"
+      @mousedown="startResize"
+      @dblclick="sidebarWidth = 320">
+      <div class="chat-resize-handle__grip"></div>
+    </div>
 
     <!-- Center: chat area -->
     <main class="chat-main" :class="{ 'mobile-hidden': mobile && !activeChat }">
@@ -431,11 +442,22 @@ import { useAuthStore } from '../../stores/auth';
 import { useSnackbar } from '../../composables/useSnackbar';
 import { getChatStatusColor, getChatCategoryColor } from '../../composables/chatPalette';
 import { linkify } from '../../composables/useLinkify';
+import { useResizablePanel } from '../../composables/useResizablePanel';
 import ImageLightbox from '../../components/ImageLightbox.vue';
 
 const { showError } = useSnackbar();
 
 const { mobile } = useDisplay();
+
+// Drag-to-resize sidebar (между списком тикетов и областью диалога).
+// Сохраняем ширину в localStorage, чтобы у каждого пользователя был
+// свой расклад между сессиями.
+const { width: sidebarWidth, isResizing: sidebarResizing, startResize } = useResizablePanel({
+  storageKey: 'ds:chat-partner-sidebar-w',
+  defaultWidth: 320,
+  min: 260,
+  max: 560,
+});
 const route = useRoute();
 const auth = useAuthStore();
 const currentUserId = auth.userId;
@@ -1269,21 +1291,99 @@ onUnmounted(() => {
 <style scoped>
 .chat-wrap { display: flex; height: 100%; min-height: 0; overflow: hidden; position: relative; }
 
-/* Sidebar — Linear-style: 320px, минимум хрома, тонкие dividers */
-.chat-sidebar { width: 320px; flex-shrink: 0; border-right: 1px solid rgba(var(--v-border-color), 0.12); display: flex; flex-direction: column; background: rgba(var(--v-theme-surface), 1); }
-.sidebar-head { display: flex; align-items: center; justify-content: space-between; }
+/* Sidebar — Linear-style: ширина управляется JS (useResizablePanel),
+   default 320px из composable. flex-shrink: 0 чтобы при flex-расчёте
+   sidebar не ужимался ниже выставленного значения. */
+.chat-sidebar {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: rgba(var(--v-theme-surface), 1);
+  position: relative;
+  transition: box-shadow 0.2s;
+}
+
+/* Resize-handle между sidebar и main. 6px hit-area, видимая полоса
+   2px по центру. На hover/active подсвечивается primary'ем. */
+.chat-resize-handle {
+  flex: 0 0 6px;
+  position: relative;
+  cursor: col-resize;
+  background: rgba(var(--v-border-color), 0.12);
+  transition: background 0.15s;
+  user-select: none;
+  z-index: 2;
+}
+.chat-resize-handle::before {
+  content: '';
+  position: absolute;
+  inset: 0 2px;
+  background: transparent;
+  transition: background 0.15s;
+}
+.chat-resize-handle:hover::before,
+.chat-resize-handle.active::before { background: rgba(var(--v-theme-primary), 0.5); }
+.chat-resize-handle__grip {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 2px;
+  height: 28px;
+  border-radius: 1px;
+  background: rgba(var(--v-theme-on-surface), 0.18);
+  transition: background 0.15s, height 0.15s;
+}
+.chat-resize-handle:hover .chat-resize-handle__grip,
+.chat-resize-handle.active .chat-resize-handle__grip {
+  background: rgb(var(--v-theme-primary));
+  height: 40px;
+}
+.sidebar-head {
+  display: flex; align-items: center; justify-content: space-between;
+  background: linear-gradient(180deg,
+    rgba(var(--v-theme-primary), 0.04) 0%,
+    rgba(var(--v-theme-primary), 0) 100%);
+  border-bottom: 1px solid rgba(var(--v-border-color), 0.04);
+}
 .sidebar-list { flex: 1; overflow-y: auto; }
 
 /* Chat item — Linear: компактный, тонкие границы, плавный hover */
-.chat-item { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; cursor: pointer; transition: background 0.1s; position: relative; }
+.chat-item {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 12px; cursor: pointer; position: relative;
+  transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+}
 .chat-item:not(:last-child)::after { content: ''; position: absolute; left: 12px; right: 12px; bottom: 0; border-bottom: 1px solid rgba(var(--v-border-color), 0.08); }
 .chat-item:hover { background: rgba(var(--v-theme-on-surface), 0.04); }
-.chat-item.active { background: rgba(var(--v-theme-primary), 0.08); }
-.chat-item.active::before { content: ''; position: absolute; left: 0; top: 8px; bottom: 8px; width: 2px; background: rgb(var(--v-theme-primary)); border-radius: 0 2px 2px 0; }
-.chat-item-avatar { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
+.chat-item:active { transform: scale(0.995); }
+.chat-item.active {
+  background: linear-gradient(90deg,
+    rgba(var(--v-theme-primary), 0.12) 0%,
+    rgba(var(--v-theme-primary), 0.04) 100%);
+  box-shadow: inset 0 0 0 1px rgba(var(--v-theme-primary), 0.18);
+}
+.chat-item.active::before { content: ''; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; background: rgb(var(--v-theme-primary)); border-radius: 0 3px 3px 0; }
+.chat-item-avatar {
+  width: 34px; height: 34px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; margin-top: 1px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  transition: transform 0.15s ease;
+}
+.chat-item:hover .chat-item-avatar { transform: scale(1.05); }
 .chat-item-body { flex: 1; min-width: 0; }
-.chat-item-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-.chat-item-subject { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3; }
+.chat-item-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; min-width: 0; }
+.chat-item-subject {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+}
 .chat-item-time { font-size: 11px; color: rgba(var(--v-theme-on-surface), 0.45); flex-shrink: 0; font-variant-numeric: tabular-nums; }
 .chat-item-bottom { display: flex; gap: 6px; margin-top: 4px; align-items: center; }
 .chat-item-cat { color: rgba(var(--v-theme-on-surface), 0.55); }
@@ -1293,7 +1393,19 @@ onUnmounted(() => {
 .chat-item.has-unread .chat-item-subject { font-weight: 600; color: rgb(var(--v-theme-on-surface)); }
 .chat-item.has-unread .chat-item-preview { color: rgba(var(--v-theme-on-surface), 0.85); }
 .conn-banner { position: absolute; top: 0; left: 0; right: 0; z-index: 100; padding: 6px 12px; background: rgba(var(--v-theme-warning), 0.15); color: rgb(var(--v-theme-warning)); font-size: 12px; display: flex; align-items: center; gap: 6px; }
-.unread-badge { position: absolute; right: 12px; top: 12px; background: rgb(var(--v-theme-primary)); color: #fff; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 10px; min-width: 18px; text-align: center; line-height: 1.4; }
+.unread-badge {
+  position: absolute; right: 12px; top: 12px;
+  background: rgb(var(--v-theme-primary)); color: #fff;
+  font-size: 10px; font-weight: 700;
+  padding: 1px 6px; border-radius: 10px;
+  min-width: 18px; text-align: center; line-height: 1.4;
+  box-shadow: 0 2px 6px rgba(var(--v-theme-primary), 0.4);
+  animation: unread-pulse 2.4s ease-in-out infinite;
+}
+@keyframes unread-pulse {
+  0%, 100% { box-shadow: 0 2px 6px rgba(var(--v-theme-primary), 0.4); }
+  50% { box-shadow: 0 2px 12px rgba(var(--v-theme-primary), 0.7); }
+}
 .chat-item.pinned { background: rgba(var(--v-theme-primary), 0.03); }
 .chat-item-pin { position: absolute; right: 8px; bottom: 8px; opacity: 0; transition: opacity 0.15s; }
 .chat-item:hover .chat-item-pin,
@@ -1335,9 +1447,23 @@ onUnmounted(() => {
 .avatar-circle { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; color: #fff; letter-spacing: -0.3px; }
 .avatar-circle.agent { background: rgb(var(--v-theme-secondary)); }
 .avatar-circle.mine { background: rgb(var(--v-theme-primary)); }
-.msg-bubble { max-width: 65%; padding: 8px 12px; border-radius: 14px; position: relative; line-height: 1.4; }
-.msg-bubble.agent { background: rgba(var(--v-theme-on-surface), 0.06); border-bottom-left-radius: 4px; }
-.msg-bubble.mine { background: rgb(var(--v-theme-primary)); color: #fff; border-bottom-right-radius: 4px; }
+.msg-bubble {
+  max-width: 65%; padding: 9px 13px;
+  border-radius: 16px;
+  position: relative;
+  line-height: 1.4;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  transition: box-shadow 0.18s ease;
+}
+.msg-bubble:hover { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08); }
+.msg-bubble.agent { background: rgba(var(--v-theme-on-surface), 0.06); border-bottom-left-radius: 5px; }
+.msg-bubble.mine {
+  background: linear-gradient(135deg,
+    rgb(var(--v-theme-primary)) 0%,
+    color-mix(in srgb, rgb(var(--v-theme-primary)) 88%, black) 100%);
+  color: #fff;
+  border-bottom-right-radius: 5px;
+}
 .msg-sender { font-size: 11px; font-weight: 600; margin-bottom: 2px; color: rgba(var(--v-theme-on-surface), 0.6); }
 .msg-bubble.mine .msg-sender { color: rgba(255,255,255,0.85); }
 .msg-text { font-size: 14px; line-height: 1.45; white-space: pre-line; word-break: break-word; }
@@ -1449,7 +1575,8 @@ onUnmounted(() => {
 
 /* Mobile */
 @media (max-width: 959px) {
-  .chat-sidebar { width: 100%; }
+  .chat-sidebar { width: 100% !important; }
+  .chat-resize-handle { display: none; }
   .mobile-hidden { display: none !important; }
   .jump-to-bottom { right: 16px; bottom: 80px; }
 }

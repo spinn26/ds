@@ -2,6 +2,9 @@
   <div class="constructor-page">
     <PageHeader title="Конструктор обучения" icon="mdi-school-outline">
       <template #actions>
+        <v-btn variant="text" prepend-icon="mdi-eye" href="/education" target="_blank">
+          Просмотр как партнёр
+        </v-btn>
         <v-btn color="primary" prepend-icon="mdi-plus" @click="addRoot">
           Добавить курс
         </v-btn>

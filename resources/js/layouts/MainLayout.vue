@@ -748,7 +748,7 @@ const menuItems = [
   // Обучение (LMS) — конструктор курсов и куратор обучения партнёров
   { group: 'Обучение', adminSection: 'education' },
   { label: 'Конструктор курсов', icon: 'mdi-school', path: '/manage/education', adminSection: 'education' },
-  { label: 'База знаний', icon: 'mdi-book-open-variant', path: '/manage/kb', adminSection: 'education' },
+  { label: 'База знаний', icon: 'mdi-book-open-variant', path: '/manage/kb', adminSection: 'kb' },
   { label: 'Проверка домашек', icon: 'mdi-clipboard-edit-outline', path: '/manage/homework', adminSection: 'education' },
   { label: 'Категории курсов', icon: 'mdi-folder-multiple', path: '/manage/education/categories', adminSection: 'education-categories' },
   { label: 'Статистика обучения', icon: 'mdi-chart-line', path: '/manage/education/analytics', adminSection: 'education-analytics' },
@@ -761,7 +761,7 @@ const menuItems = [
   { label: 'Аналитика чата', icon: 'mdi-chart-box-outline', path: '/manage/chat/analytics', adminSection: 'chat-analytics' },
   { label: 'Отчёты', icon: 'mdi-file-chart', path: '/manage/reports', adminSection: 'reports' },
   { label: 'Справочники для расчёта', icon: 'mdi-currency-usd', path: '/manage/currencies', adminSection: 'currencies' },
-  { label: 'Инструкции', icon: 'mdi-book-edit-outline', path: '/manage/instructions', adminSection: 'products' },
+  { label: 'Инструкции', icon: 'mdi-book-edit-outline', path: '/manage/instructions', adminSection: 'instructions' },
 
   // Помощь — общая группа для чатов, тех-обращений и статуса системы.
   { group: 'Помощь', adminSection: 'communication' },
