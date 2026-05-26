@@ -6,18 +6,19 @@ use App\Http\Controllers\Controller;
 use App\Models\Consultant;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 
 /**
- * Партнёрский endpoint для отрисовки виджета InSmart.
+ * Endpoint для b2c-frame loader'а InSmart.
  *
- * GET /api/v1/insmart/widget-token — получает у Insmart временный
- * токен на текущего консультанта (per spec ✅Инсмарт.md / Интеграция
- * Инсмарт.md). Дальше фронт подставляет токен в iframe виджета.
+ * Виджет подгружается на /insmart-widget. Loader дёргает наш callback
+ * (window.InssmartEventListener.auth(cb)) → cb идёт сюда → мы возвращаем
+ * подписанный HS256 JWT с user-info партнёра, ключом подписи служит
+ * «Закрытый ключ» приложения из b2b-кабинета InSmart (services.insmart.secret).
  *
- * Если INSMART_API_KEY/URL не настроены — отдаём заглушку, чтобы
- * страница не падала в dev-окружении без реальных кредов.
+ * Виджет InSmart проверяет подпись JWT на своей стороне (у него есть
+ * тот же закрытый ключ привязанный к app_id), извлекает user-data,
+ * авторизует партнёра «бесшовно» — без формы регистрации в их системе.
  */
 class InsmartController extends Controller
 {
@@ -29,51 +30,64 @@ class InsmartController extends Controller
             return response()->json(['message' => 'Партнёр не найден'], 404);
         }
 
-        $base = rtrim((string) config('services.insmart.api_base_url'), '/');
-        $apiKey = (string) config('services.insmart.api_key');
+        $appId = (string) config('services.insmart.app_id');
+        $secret = (string) config('services.insmart.secret');
 
-        if (! $base || ! $apiKey) {
+        if (! $appId || ! $secret) {
             return response()->json([
-                'token' => null,
-                'widget_url' => null,
-                'consultant_id' => (int) $consultant->id,
-                'message' => 'Insmart API не настроен (INSMART_API_KEY / INSMART_API_BASE_URL).',
-            ], 200);
+                'message' => 'InSmart не настроен: INSMART_APP_ID / INSMART_SECRET.',
+            ], 503);
         }
 
-        try {
-            $response = Http::timeout(10)
-                ->withHeaders([
-                    'Authorization' => 'Bearer ' . $apiKey,
-                    'Accept' => 'application/json',
-                ])
-                ->post($base . '/widget/clients/token', [
-                    'clientId' => (string) $consultant->id,
-                    'fio' => $consultant->personName,
-                    'email' => $user->email,
-                    'phone' => $consultant->phoneNumber ?? null,
-                ]);
+        // Берём актуальную запись WebUser — за время сессии могла обновиться
+        // (например, партнёр добавил телефон в профиле).
+        $webUser = DB::table('WebUser')->where('id', $user->id)->first();
 
-            if (! $response->successful()) {
-                Log::warning('Insmart widget token: bad response', [
-                    'status' => $response->status(),
-                    'body' => $response->body(),
-                ]);
-                return response()->json([
-                    'message' => 'Insmart вернул ошибку: ' . $response->status(),
-                ], 502);
-            }
+        $now = time();
+        $payload = [
+            // Стандартные JWT-клеймы.
+            'iss' => $appId,
+            'sub' => (string) $consultant->id,
+            'iat' => $now,
+            'exp' => $now + 3600, // 1 час; виджет дёргает callback при необходимости.
+            // User-data — формат основан на типичных полях b2c-виджетов
+            // (id + ФИО + контакты). Если их виджет ждёт другие имена/структуру —
+            // правим по фидбэку 400-ответа.
+            'id' => (string) $consultant->id,
+            'clientId' => (string) $consultant->id,
+            'firstName' => $webUser->firstName ?? null,
+            'lastName' => $webUser->lastName ?? null,
+            'middleName' => $webUser->patronymic ?? null,
+            'email' => $webUser->email ?? null,
+            'phone' => $webUser->phone ?? null,
+            'birthDate' => $webUser->birthDate ?? null,
+            'gender' => $webUser->gender ?? null,
+        ];
 
-            $data = $response->json();
-            return response()->json([
-                'token' => $data['token'] ?? null,
-                'widget_url' => $data['widgetUrl'] ?? $data['widget_url'] ?? null,
-                'expires_at' => $data['expiresAt'] ?? null,
-                'consultant_id' => (int) $consultant->id,
-            ]);
-        } catch (\Throwable $e) {
-            Log::error('Insmart widget token: exception', ['error' => $e->getMessage()]);
-            return response()->json(['message' => 'Не удалось получить токен Insmart'], 502);
-        }
+        $jwt = self::signJwtHs256($payload, $secret);
+
+        return response()->json([
+            'token' => $jwt,
+            'consultant_id' => (int) $consultant->id,
+        ]);
+    }
+
+    /**
+     * HS256 JWT-подпись. Без зависимостей — короче и проще, чем тянуть
+     * firebase/php-jwt ради одной функции.
+     */
+    private static function signJwtHs256(array $payload, string $secret): string
+    {
+        $header = ['alg' => 'HS256', 'typ' => 'JWT'];
+        $headerB64 = self::base64UrlEncode(json_encode($header, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+        $payloadB64 = self::base64UrlEncode(json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+        $sig = hash_hmac('sha256', $headerB64 . '.' . $payloadB64, $secret, true);
+        $sigB64 = self::base64UrlEncode($sig);
+        return $headerB64 . '.' . $payloadB64 . '.' . $sigB64;
+    }
+
+    private static function base64UrlEncode(string $data): string
+    {
+        return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
     }
 }

@@ -45,11 +45,17 @@ return [
     ],
 
     // Insmart integration (per spec ✅Инсмарт.md).
-    // webhook_secret — shared secret для проверки X-Insmart-Secret.
+    //   webhook_secret — для проверки X-Insmart-Secret в webhook'ах.
+    //   api_base_url / api_key — старый flow (получение токена через их API).
+    //   app_id / secret — b2c-frame loader (ID приложения + закрытый ключ
+    //     из b2b-кабинета InSmart). secret используется для HS256 JWT-signing
+    //     в InsmartController::widgetToken, JWT уходит в виджет как user-auth.
     'insmart' => [
         'webhook_secret' => env('INSMART_WEBHOOK_SECRET'),
         'api_base_url' => env('INSMART_API_BASE_URL', 'https://api.insmart.ru/v1'),
         'api_key' => env('INSMART_API_KEY'),
+        'app_id' => env('INSMART_APP_ID'),
+        'secret' => env('INSMART_SECRET'),
     ],
 
     // Внутренний host для socket-server, используется HealthController.

@@ -39,6 +39,7 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue';
+import api from '../api';
 import PageHeader from '../components/PageHeader.vue';
 
 const loading = ref(true);
@@ -46,7 +47,10 @@ const loadError = ref(null);
 const mountRef = ref(null);
 
 // Канальные креды от InSmart — идентифицируют DS Consulting как B2B-партнёра.
-// INSMART_TOKEN = «ID приложения» в b2b-ЛК InSmart, INSMART_SECRET = ключ к нему.
+// INSMART_TOKEN = «ID приложения». INSMART_SECRET = «Закрытый ключ» — loader
+// требует его в data-secret и шлёт как query-param iframe'у для channel-auth.
+// Тот же ключ дублируется в .env на бэке (INSMART_SECRET) для HS256 JWT-подписи
+// user-данных в InsmartController::widgetToken.
 const INSMART_TOKEN = '382f5151-a7e5-5ad6-b1fd-2841052a4aac';
 const INSMART_SECRET = '15fd9275-80c5-5dfc-a98d-dd0b9ed658c9';
 const INSMART_LOADER_SRC = 'https://widgets.inssmart.ru/widgets/b2c-frame.loader.js';
@@ -55,11 +59,6 @@ const INSMART_ORIGIN = 'https://widgets.inssmart.ru';
 let loaderScript = null;
 
 onMounted(() => {
-  // Loader checks `data-auth` как строку. Любое значение (даже "false")
-  // truthy → loader идёт в ветку n().then(...), где n — callback, который
-  // регистрируется через InssmartEventListener.auth(cb). Если cb нет —
-  // «n is not a function». Чтобы guest-режим работал — атрибут НЕ
-  // выставляем вообще, тогда s=null, !s истинно, простая ветка без n().
   loaderScript = document.createElement('script');
   loaderScript.type = 'text/javascript';
   loaderScript.src = INSMART_LOADER_SRC;
@@ -68,8 +67,28 @@ onMounted(() => {
   loaderScript.setAttribute('data-product', '/');
   loaderScript.setAttribute('data-token', INSMART_TOKEN);
   loaderScript.setAttribute('data-secret', INSMART_SECRET);
-  // data-auth НЕ выставляем сейчас — guest-режим (см. коммент выше).
-  loaderScript.onload = () => { loading.value = false; };
+  loaderScript.setAttribute('data-auth', 'true');
+  loaderScript.onload = () => {
+    // Регистрируем callback ПОСЛЕ загрузки loader'а: до onload у него
+    // нет window.InssmartEventListener. Loader.auth(cb) сохраняет cb
+    // во внутреннюю переменную `n` и дёргает её перед каждой загрузкой
+    // iframe'а — мы отдаём подписанный HS256 JWT с user-info партнёра.
+    if (window.InssmartEventListener
+        && typeof window.InssmartEventListener.auth === 'function') {
+      window.InssmartEventListener.auth(async () => {
+        try {
+          const { data } = await api.get('/insmart/widget-token');
+          return data;
+        } catch (e) {
+          console.error('[InSmart] auth callback failed:', e);
+          throw e;
+        }
+      });
+    } else {
+      console.warn('[InSmart] InssmartEventListener.auth недоступен после onload');
+    }
+    loading.value = false;
+  };
   loaderScript.onerror = () => {
     loading.value = false;
     loadError.value = 'Не удалось загрузить скрипт InSmart.';
