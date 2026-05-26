@@ -21,10 +21,10 @@
         <v-card class="pa-6 register-card" elevation="16" rounded="xl">
           <div class="text-center mb-4">
             <div class="text-h3 font-weight-black text-primary">DS</div>
-            <div class="text-caption text-medium-emphasis" style="letter-spacing: 4px">КОНСАЛТИНГ ПЛАТФОРМА</div>
+            <div class="ds-eyebrow ds-eyebrow--primary">КОНСАЛТИНГ ПЛАТФОРМА</div>
           </div>
 
-          <div class="text-h5 text-center mb-4">Регистрация</div>
+          <div class="ds-headline-s text-center mb-4">Регистрация</div>
 
           <!-- Реф-код: баннер пригласившего или ошибка -->
           <v-alert v-if="refChecking" type="info" variant="tonal" density="compact" class="mb-3">
@@ -374,6 +374,7 @@ async function handleRegister() {
   backdrop-filter: blur(16px);
   background: rgba(var(--v-theme-surface), 0.95) !important;
   border: 1px solid rgba(var(--v-theme-brand), 0.3);
+  border-radius: var(--ds-radius-xl, 16px) !important;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
 }
 @media (prefers-reduced-motion: reduce) {
