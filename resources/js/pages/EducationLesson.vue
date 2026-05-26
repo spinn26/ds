@@ -1,12 +1,18 @@
 <template>
   <div class="lesson-page">
+    <!-- Scroll progress bar: тонкая полоса сверху страницы,
+         показывающая, как далеко проскроллен контент урока. Visual
+         proxy для «сколько я уже изучил». -->
+    <div class="scroll-progress" :style="{ transform: `scaleX(${scrollProgress})` }" />
+
     <v-breadcrumbs :items="crumbItems" density="compact" class="px-6 py-2" />
 
     <div v-if="loading" class="d-flex justify-center pa-6">
       <v-progress-circular indeterminate color="primary" />
     </div>
 
-    <div v-else-if="lesson" :key="route.params.lid" class="lesson-layout" :class="{ 'no-sidebar': !hasSidebarContent }">
+    <transition v-else name="lesson-fade" mode="out-in">
+    <div v-if="lesson" :key="route.params.lid" class="lesson-layout" :class="{ 'no-sidebar': !hasSidebarContent }">
       <aside v-if="hasSidebarContent" class="lesson-tree">
         <div class="px-3 pt-3 pb-2 text-caption text-uppercase font-weight-bold text-medium-emphasis letter-spacing-1">
           {{ kicker }}
@@ -236,16 +242,64 @@
           </div>
         </div>
       </section>
+
+      <!-- Confetti при «Урок изучен»: 14 квадратиков вылетают
+           из chip с разной скоростью и углом. Pure CSS, без deps. -->
+      <div v-if="confettiShown" class="confetti-burst">
+        <span v-for="n in 14" :key="n" class="confetti-piece" :style="confettiStyle(n)" />
+      </div>
     </div>
+    </transition>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import api from '../api';
 import CourseTreeNode from '../components/education/CourseTreeNode.vue';
 import LessonBlockRenderer from '../components/education/LessonBlockRenderer.vue';
+
+// === Scroll progress ===
+// 0..1 — позиция scroll'а страницы. Используется в scaleX progress-bar
+// сверху страницы. RAF-throttled (через `passive: true` достаточно).
+const scrollProgress = ref(0);
+function onScroll() {
+  const h = document.documentElement;
+  const scrolled = h.scrollTop;
+  const max = h.scrollHeight - h.clientHeight;
+  scrollProgress.value = max > 0 ? Math.min(1, scrolled / max) : 0;
+}
+
+// === Confetti ===
+// Запускается при успешном markViewed. Скрывается через 1.4s
+// (длина анимации с самым большим delay).
+const confettiShown = ref(false);
+function fireConfetti() {
+  confettiShown.value = true;
+  setTimeout(() => { confettiShown.value = false; }, 1500);
+}
+function confettiStyle(n) {
+  // Псевдо-рандом по индексу — стабильный, чтобы не было мерцания
+  // на re-render'ах. Углы 360°, скорости 600-900px, цвета DS.
+  const seed = (n * 9301 + 49297) % 233280;
+  const r = seed / 233280;
+  const angle = r * 360;
+  const distance = 280 + ((seed * 7) % 240);
+  const tx = Math.cos(angle * Math.PI / 180) * distance;
+  const ty = Math.sin(angle * Math.PI / 180) * distance;
+  const colors = ['#6EE87A', '#2E7D32', '#A4E0AC', '#1B5E20', '#43a047'];
+  const color = colors[n % colors.length];
+  const delay = (n % 5) * 30;
+  const rotate = (seed % 720) - 360;
+  return {
+    '--tx': `${tx}px`,
+    '--ty': `${ty}px`,
+    '--rot': `${rotate}deg`,
+    '--delay': `${delay}ms`,
+    background: color,
+  };
+}
 
 const route = useRoute();
 const router = useRouter();
@@ -444,6 +498,7 @@ async function markViewed() {
     // Обновляем lessons в courseDetail чтобы в sidebar тоже отрисовался ✓.
     const item = courseDetail.value?.lessons?.find(l => l.id === lesson.value.id);
     if (item) item.viewed = true;
+    fireConfetti();
   } finally { marking.value = false; }
 }
 
@@ -501,11 +556,71 @@ async function load() {
 }
 
 watch(() => `${route.params.id}/${route.params.lid}`, () => load());
-onMounted(load);
+
+onMounted(() => {
+  load();
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+});
+onBeforeUnmount(() => {
+  window.removeEventListener('scroll', onScroll);
+});
 </script>
 
 <style scoped>
-.lesson-page { min-height: calc(100vh - 64px); }
+.lesson-page { min-height: calc(100vh - 64px); position: relative; }
+
+/* Scroll progress bar — фиксированный сверху, scaleX по scrollProgress.
+   Transform-only анимация = GPU-friendly, 60fps. */
+.scroll-progress {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: linear-gradient(90deg,
+    rgb(var(--v-theme-primary)) 0%,
+    color-mix(in srgb, rgb(var(--v-theme-primary)) 60%, white) 100%);
+  transform-origin: left center;
+  transform: scaleX(0);
+  z-index: 100;
+  pointer-events: none;
+  transition: transform 0.12s linear;
+}
+
+/* Lesson-fade transition между уроками: slide-left + fade.
+   mode=out-in → старый улетает влево, новый въезжает справа. */
+.lesson-fade-enter-active,
+.lesson-fade-leave-active {
+  transition:
+    opacity 0.26s cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 0.34s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.lesson-fade-enter-from { opacity: 0; transform: translateX(24px); }
+.lesson-fade-leave-to   { opacity: 0; transform: translateX(-14px); }
+
+/* Confetti: 14 квадратиков «вылетают» из центра sticky-header
+   (где chip «Изучено»). Анимация с overshoot и затуханием. */
+.confetti-burst {
+  position: absolute;
+  top: 60px;
+  right: 80px;
+  width: 0; height: 0;
+  pointer-events: none;
+  z-index: 50;
+}
+.confetti-piece {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  opacity: 0;
+  animation: confetti-fly 1.1s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  animation-delay: var(--delay, 0ms);
+}
+@keyframes confetti-fly {
+  0%   { opacity: 1; transform: translate(0, 0) rotate(0deg) scale(0.8); }
+  40%  { opacity: 1; transform: translate(calc(var(--tx) * 0.6), calc(var(--ty) * 0.6)) rotate(calc(var(--rot) * 0.5)) scale(1); }
+  100% { opacity: 0; transform: translate(var(--tx), calc(var(--ty) + 80px)) rotate(var(--rot)) scale(0.6); }
+}
 .lesson-layout {
   display: grid;
   grid-template-columns: 260px 1fr;
