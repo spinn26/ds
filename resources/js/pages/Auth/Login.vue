@@ -89,26 +89,6 @@
           >
             Войти в кабинет
           </v-btn>
-
-          <div class="form-divider">
-            <span>или</span>
-          </div>
-
-          <v-btn
-            variant="outlined"
-            size="large"
-            block
-            prepend-icon="mdi-send"
-            class="form-cta-secondary"
-            disabled
-          >
-            Войти через Telegram
-          </v-btn>
-
-          <p class="form-aux">
-            Ещё не партнёр?
-            <router-link to="/register">Подать заявку</router-link>
-          </p>
         </v-form>
 
         <!-- Шаг 2: 2FA TOTP -->
