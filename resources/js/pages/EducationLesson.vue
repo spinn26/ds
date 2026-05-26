@@ -12,15 +12,37 @@
           {{ kicker }}
         </div>
         <v-divider />
-        <div class="pa-2">
+
+        <!-- Подкурсы (если есть) — навигация по дереву внутри курса. -->
+        <div v-if="(rootCourse?.children || []).length" class="pa-2">
           <CourseTreeNode
-            v-for="node in rootCourse?.children || []"
+            v-for="node in rootCourse.children"
             :key="node.id"
             :node="node"
             :current-id="String(route.params.id)"
             :level="1"
             @navigate="goToCourse"
           />
+        </div>
+
+        <!-- Уроки текущего курса — основной список для навигации между
+             уроками. На каждом: статус (изучено/в процессе), название,
+             индикатор «вы здесь». -->
+        <div v-if="courseDetail?.lessons?.length" class="pa-2 lesson-list">
+          <div
+            v-for="(l, i) in courseDetail.lessons"
+            :key="l.id"
+            class="lesson-row"
+            :class="{ 'is-current': l.id === Number(route.params.lid) }"
+            @click="goToLesson(l.id)"
+          >
+            <v-icon size="16" :color="l.viewed ? 'success' : (l.id === Number(route.params.lid) ? 'primary' : 'grey-lighten-1')">
+              {{ l.viewed ? 'mdi-check-circle' : (l.id === Number(route.params.lid) ? 'mdi-circle-slice-4' : 'mdi-circle-outline') }}
+            </v-icon>
+            <span class="lesson-row-idx text-caption">{{ i + 1 }}.</span>
+            <span class="lesson-row-title">{{ l.title }}</span>
+            <v-icon v-if="l.isTest" size="13" color="primary" class="ms-auto">mdi-help-circle</v-icon>
+          </div>
         </div>
       </aside>
 
@@ -196,7 +218,8 @@
             <v-btn
               v-if="nextLesson"
               color="primary"
-              @click="navTo(nextLesson)"
+              :loading="marking"
+              @click="navTo(nextLesson, { markCurrent: true })"
             >
               Следующий
               <v-icon end>mdi-arrow-right</v-icon>
@@ -204,8 +227,9 @@
             <v-btn
               v-else-if="hasTest"
               color="primary"
-              :to="`/education/courses/${route.params.id}/test`"
+              :loading="marking"
               prepend-icon="mdi-clipboard-check"
+              @click="goToTest"
             >
               К тесту
             </v-btn>
@@ -378,12 +402,28 @@ const crumbItems = computed(() => {
   return items;
 });
 
-function navTo(l) {
+async function navTo(l, opts = { markCurrent: false }) {
   if (!l) return;
+  // При навигации «Следующий» — заодно помечаем текущий урок изученным
+  // (если он доступен и ещё не отмечен). Поведение по запросу 2026-05-26:
+  // переход вперёд = «прочитал, иду дальше».
+  if (opts.markCurrent && lesson.value && lesson.value.available && !lesson.value.viewed) {
+    try { await markViewed(); } catch (_) { /* не блокируем переход */ }
+  }
   router.push(`/education/courses/${route.params.id}/lessons/${l.id}`);
 }
 function goToCourse(id) {
   router.push(`/education/courses/${id}`);
+}
+function goToLesson(lid) {
+  if (Number(lid) === Number(route.params.lid)) return;
+  router.push(`/education/courses/${route.params.id}/lessons/${lid}`);
+}
+async function goToTest() {
+  if (lesson.value && lesson.value.available && !lesson.value.viewed) {
+    try { await markViewed(); } catch (_) { /* не блокируем переход */ }
+  }
+  router.push(`/education/courses/${route.params.id}/test`);
 }
 
 async function markViewed() {
@@ -392,6 +432,9 @@ async function markViewed() {
   try {
     await api.post(`/education/lessons/${lesson.value.id}/view`);
     lesson.value.viewed = true;
+    // Обновляем lessons в courseDetail чтобы в sidebar тоже отрисовался ✓.
+    const item = courseDetail.value?.lessons?.find(l => l.id === lesson.value.id);
+    if (item) item.viewed = true;
   } finally { marking.value = false; }
 }
 
@@ -470,6 +513,36 @@ onMounted(load);
   top: 64px;
   max-height: calc(100vh - 110px);
   overflow-y: auto;
+}
+.lesson-list { display: flex; flex-direction: column; gap: 2px; }
+.lesson-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1.35;
+  transition: background 0.15s ease;
+}
+.lesson-row:hover { background: rgba(var(--v-theme-on-surface), 0.05); }
+.lesson-row.is-current {
+  background: rgba(var(--v-theme-primary), 0.1);
+  color: rgb(var(--v-theme-primary));
+  font-weight: 600;
+}
+.lesson-row-idx {
+  color: rgba(var(--v-theme-on-surface), 0.45);
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+.lesson-row-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .lesson-content {
   padding: 0;
