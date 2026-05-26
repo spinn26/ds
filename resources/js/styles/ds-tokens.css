@@ -431,21 +431,33 @@
 */
 .ds-card {
   background: rgb(var(--v-theme-surface));
-  border-radius: 16px;
-  border: 1px solid rgba(var(--v-border-color), 0.06);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-  transition: box-shadow 0.22s ease, transform 0.22s ease, border-color 0.22s ease;
+  border-radius: 14px;
+  border: 1px solid rgba(var(--v-border-color), 0.08);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 4px 12px rgba(0, 0, 0, 0.04);
+  transition: box-shadow 0.24s cubic-bezier(0.2, 0.8, 0.2, 1),
+              transform 0.24s cubic-bezier(0.2, 0.8, 0.2, 1),
+              border-color 0.24s ease;
 }
 
 /* Variant: интерактивная карточка (router-link / clickable). Lift на
-   hover как в App Store. Cursor — для семантической ясности. */
+   hover как в App Store / Notion. Cursor — для семантической ясности. */
 .ds-card--hover { cursor: pointer; }
 .ds-card--hover:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
-  border-color: rgba(var(--v-border-color), 0.1);
+  transform: translateY(-3px);
+  box-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.04),
+    0 12px 28px rgba(0, 0, 0, 0.08);
+  border-color: rgba(var(--v-theme-primary), 0.18);
 }
-.ds-card--hover:active { transform: translateY(0); transition-duration: 0.08s; }
+.ds-card--hover:active {
+  transform: translateY(-1px);
+  transition-duration: 0.08s;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 6px 16px rgba(0, 0, 0, 0.06);
+}
 
 /* KPI-row spacing — стандартный отступ между статистическими карточками
    на dashboard'ах. Применять class="ds-kpi-row" к <v-row>. */
