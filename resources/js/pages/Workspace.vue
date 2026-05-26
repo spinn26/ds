@@ -3,71 +3,68 @@
     <!-- Статус системы вынесен в шапку (SystemStatusChip в MainLayout)
          — он там виден на всех страницах с мигающим индикатором. -->
 
-    <!-- Welcome header -->
-    <div class="d-flex justify-space-between align-center mb-4 flex-wrap ga-2">
-      <div>
-        <h4 :class="mobile ? 'text-h6' : 'text-h4'" class="font-weight-bold d-flex align-center ga-2">
-          <v-icon size="32" color="primary">mdi-hand-wave</v-icon>
-          {{ greeting }}, {{ auth.user?.firstName }}!
-        </h4>
-        <div class="text-body-1 text-medium-emphasis">Рабочий стол DS Consulting</div>
+    <!-- DS hero — приветствие + текущая дата на полупрозрачном BrandWaves фоне.
+         Соответствует ds-layouts.jsx::PartnerWorkspace hero. -->
+    <v-card class="ds-hero mb-4" elevation="0">
+      <BrandWaves shape="sheet" :width="1200" :height="180"
+        preserveAspectRatio="xMidYMid slice"
+        bg-color="transparent" stroke-color="#6EE87A" :stroke-opacity="0.2"
+        class="ds-hero__bg" />
+      <div class="ds-hero__content d-flex justify-space-between align-center flex-wrap ga-3">
+        <div>
+          <div class="ds-eyebrow ds-eyebrow--primary">{{ greetingEyebrow }}</div>
+          <h1 class="ds-headline-l hero-title mt-1 d-flex align-center ga-2">
+            <v-icon size="32" color="primary">mdi-hand-wave</v-icon>
+            {{ greeting }}, {{ auth.user?.firstName }}!
+          </h1>
+          <div class="ds-body-l ds-muted mt-1">Рабочий стол DS Consulting</div>
+        </div>
+        <div class="ds-body-s ds-muted">
+          {{ new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) }}
+        </div>
       </div>
-      <div class="text-body-2 text-medium-emphasis">
-        {{ new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) }}
-      </div>
-    </div>
+    </v-card>
 
     <v-row>
       <!-- Left column -->
       <v-col cols="12" md="8">
-        <!-- Partner stats (consultants only) -->
-        <v-card v-if="data.partnerStats" class="mb-4 pa-4">
-          <div class="text-subtitle-1 font-weight-bold mb-3">
-            <v-icon class="mr-1" size="20">mdi-chart-line</v-icon> Мои показатели
+        <!-- Partner stats (consultants only) — DS-сетка KPI-плиток.
+             Соответствует ds-screens-auth-partner.jsx::PartnerDashboard KPI grid. -->
+        <div v-if="data.partnerStats" class="mb-4">
+          <div class="text-subtitle-1 font-weight-bold mb-3 d-flex align-center ga-2">
+            <v-icon size="20" color="primary">mdi-chart-line</v-icon> Мои показатели
           </div>
-          <v-row dense>
-            <v-col cols="6" sm="4" md="2">
-              <div class="text-center">
-                <div class="text-caption text-medium-emphasis">ЛП</div>
-                <div class="text-subtitle-1 font-weight-bold text-success" style="white-space:nowrap">{{ fmt(data.partnerStats.personalVolume) }}</div>
+          <div class="stats-kpi-row">
+            <div class="ds-kpi">
+              <div class="ds-kpi__label">ЛП</div>
+              <div class="ds-kpi__value text-success">{{ fmt(data.partnerStats.personalVolume) }}</div>
+            </div>
+            <div class="ds-kpi">
+              <div class="ds-kpi__label">ГП</div>
+              <div class="ds-kpi__value text-info">{{ fmt(data.partnerStats.groupVolume) }}</div>
+            </div>
+            <div class="ds-kpi">
+              <div class="ds-kpi__label">НГП</div>
+              <div class="ds-kpi__value text-warning">{{ fmt(data.partnerStats.groupVolumeCumulative) }}</div>
+            </div>
+            <div class="ds-kpi">
+              <div class="ds-kpi__label">Квалификация</div>
+              <div class="ds-kpi__value qual-name">{{ data.partnerStats.qualification }}</div>
+              <div v-if="data.partnerStats.levelsDontMatch" class="ds-kpi__delta ds-kpi__delta--down">
+                Расчёт: {{ data.partnerStats.calcQualification }} ({{ data.partnerStats.calcPercent }}%)
               </div>
-            </v-col>
-            <v-col cols="6" sm="4" md="2">
-              <div class="text-center">
-                <div class="text-caption text-medium-emphasis">ГП</div>
-                <div class="text-subtitle-1 font-weight-bold text-info" style="white-space:nowrap">{{ fmt(data.partnerStats.groupVolume) }}</div>
-              </div>
-            </v-col>
-            <v-col cols="6" sm="4" md="2">
-              <div class="text-center">
-                <div class="text-caption text-medium-emphasis">НГП</div>
-                <div class="text-subtitle-1 font-weight-bold text-warning" style="white-space:nowrap">{{ fmt(data.partnerStats.groupVolumeCumulative) }}</div>
-              </div>
-            </v-col>
-            <v-col cols="6" sm="4" md="3">
-              <div class="text-center">
-                <div class="text-caption text-medium-emphasis">Квалификация</div>
-                <div class="text-body-2 font-weight-bold" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ data.partnerStats.qualification }}</div>
-                <div v-if="data.partnerStats.levelsDontMatch" class="text-caption text-warning" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
-                  Расчёт: {{ data.partnerStats.calcQualification }} ({{ data.partnerStats.calcPercent }}%)
-                </div>
-                <div v-else class="text-caption text-medium-emphasis">{{ data.partnerStats.percent }}%</div>
-              </div>
-            </v-col>
-            <v-col cols="6" sm="4" md="1">
-              <div class="text-center">
-                <div class="text-caption text-medium-emphasis">Клиенты</div>
-                <div class="text-subtitle-1 font-weight-bold">{{ data.partnerStats.clientCount }}</div>
-              </div>
-            </v-col>
-            <v-col cols="6" sm="4" md="2">
-              <div class="text-center">
-                <div class="text-caption text-medium-emphasis">Команда</div>
-                <div class="text-subtitle-1 font-weight-bold">{{ data.partnerStats.teamCount }}</div>
-              </div>
-            </v-col>
-          </v-row>
-        </v-card>
+              <div v-else class="ds-kpi__delta ds-kpi__delta--flat">{{ data.partnerStats.percent }}%</div>
+            </div>
+            <div class="ds-kpi">
+              <div class="ds-kpi__label">Клиенты</div>
+              <div class="ds-kpi__value">{{ data.partnerStats.clientCount }}</div>
+            </div>
+            <div class="ds-kpi">
+              <div class="ds-kpi__label">Команда</div>
+              <div class="ds-kpi__value">{{ data.partnerStats.teamCount }}</div>
+            </div>
+          </div>
+        </div>
 
         <!-- Network Leader self-badge: partner is the root of the network -->
         <v-card v-if="data.isNetworkLeader" class="pa-4 mb-4" variant="tonal" color="secondary">
@@ -301,6 +298,7 @@ import MyTasksWidget from '../components/MyTasksWidget.vue';
 import MyNoteWidget from '../components/MyNoteWidget.vue';
 import MyDayWidget from '../components/MyDayWidget.vue';
 import WhosOnlineWidget from '../components/WhosOnlineWidget.vue';
+import BrandWaves from '../components/BrandWaves.vue';
 
 const { mobile } = useDisplay();
 import { fmt, fmtDate } from '../composables/useDesign';
@@ -322,6 +320,14 @@ const greeting = computed(() => {
   return 'Добрый вечер';
 });
 
+const greetingEyebrow = computed(() => {
+  const h = new Date().getHours();
+  if (h < 6) return 'НОЧНАЯ СМЕНА';
+  if (h < 12) return 'УТРО · РАБОЧИЙ ДЕНЬ';
+  if (h < 18) return 'ДЕНЬ · В РАБОТЕ';
+  return 'ВЕЧЕР · ЗАКРЫВАЕМ ДЕНЬ';
+});
+
 function copyText(text) { navigator.clipboard.writeText(text); }
 function openTelegram(nick) {
   const clean = nick.replace('@', '');
@@ -338,6 +344,38 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+/* DS hero — приветствие на полупрозрачном BrandWaves фоне.
+   Соответствует ds-layouts.jsx::PartnerWorkspace hero. */
+.ds-hero {
+  border: 1px solid var(--ds-outline-variant, rgba(0, 0, 0, 0.06));
+}
+.hero-title {
+  font: var(--ds-type-headline-l);
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+/* KPI-сетка «Мои показатели» — 6 плиток через .ds-kpi (см. ds-tokens.css).
+   На десктопе — 6 колонок, на планшете — 3, на мобилке — 2. */
+.stats-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 12px;
+}
+@media (max-width: 1100px) {
+  .stats-kpi-row { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 600px) {
+  .stats-kpi-row { grid-template-columns: repeat(2, 1fr); }
+}
+.qual-name {
+  font-size: 14px !important;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* DS news-item: цветной accent + DS surface
    (см. ds-patterns.jsx — паттерн alert/info-tile). */
 .news-item {
@@ -348,7 +386,7 @@ onMounted(async () => {
 .news-success { border-left-color: rgb(var(--v-theme-success)); }
 .news-info { border-left-color: rgb(var(--v-theme-info)); }
 
-/* tabular-nums на партнёрских KPI (см. desing/ds-layouts.jsx hero values) */
+/* tabular-nums на партнёрских KPI */
 :deep(.text-subtitle-1), :deep(.text-h4), :deep(.text-h6) {
   font-variant-numeric: tabular-nums;
 }
