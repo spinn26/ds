@@ -1996,9 +1996,13 @@ const priorityFilterPills = [{ label: 'Все', value: '', color: '#888' }, ...p
 const catColor = getChatCategoryColor;
 function catIcon(c) {
   return ({
-    support: 'mdi-headset', backoffice: 'mdi-briefcase',
-    accruals: 'mdi-cash', billing: 'mdi-cash', accounting: 'mdi-cash',
-    legal: 'mdi-scale-balance', general: 'mdi-help-circle',
+    backoffice: 'mdi-package-variant',
+    accruals: 'mdi-credit-card-check',
+    general: 'mdi-help-circle',
+    // Legacy ключи — для старых тикетов в БД.
+    support: 'mdi-headset', billing: 'mdi-credit-card-check',
+    accounting: 'mdi-credit-card-check',
+    legal: 'mdi-scale-balance',
     owner: 'mdi-shield-crown',
     technical: 'mdi-headset', sales: 'mdi-handshake',
   })[c] || 'mdi-chat';

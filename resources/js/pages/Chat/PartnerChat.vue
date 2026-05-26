@@ -20,7 +20,7 @@
       <div class="sidebar-head px-3 py-2">
         <div class="text-body-1 font-weight-bold">Обращения</div>
         <div class="d-flex align-center ga-1">
-          <v-btn color="primary" size="x-small" prepend-icon="mdi-plus" @click="showNew = true">
+          <v-btn color="primary" size="x-small" prepend-icon="mdi-plus" @click="openNewChat">
             Новый
           </v-btn>
           <v-menu location="bottom end">
@@ -109,7 +109,7 @@
           <div class="text-body-2 text-medium-emphasis mt-2 mb-3">
             {{ chats.length ? 'Ничего не найдено' : 'Нет обращений' }}
           </div>
-          <v-btn v-if="!chats.length" color="primary" size="x-small" prepend-icon="mdi-plus" @click="showNew = true">
+          <v-btn v-if="!chats.length" color="primary" size="x-small" prepend-icon="mdi-plus" @click="openNewChat">
             Создать первое
           </v-btn>
           <v-btn v-else-if="searchQuery || statusFilter !== 'all' || categoryFilter !== 'all'"
@@ -418,7 +418,13 @@
       <v-card>
         <v-card-title>Новое обращение</v-card-title>
         <v-card-text>
-          <v-select v-model="newForm.category" :items="categories" item-title="label" item-value="value" label="Категория вопроса" class="mb-3" />
+          <v-select v-model="newForm.category" :items="categories"
+            item-title="label" item-value="value"
+            label="Категория вопроса"
+            :disabled="newCategoryLocked"
+            :hint="newCategoryLocked ? 'Категория зафиксирована — обращение пойдёт в эту команду' : ''"
+            :persistent-hint="newCategoryLocked"
+            class="mb-3" />
           <v-text-field v-model="newForm.subject" label="Тема" class="mb-3" />
           <v-textarea v-model="newForm.message" label="Ваш вопрос" rows="4" auto-grow />
           <v-alert v-if="newErr" type="error" density="compact" class="mt-2">{{ newErr }}</v-alert>
@@ -661,10 +667,8 @@ const statusFilters = [
 ];
 const categoryFilters = [
   { label: 'Все', value: 'all' },
-  { label: 'Техподдержка', value: 'support' },
-  { label: 'Бэк-офис', value: 'backoffice' },
-  { label: 'Начисления и выплаты', value: 'accruals' },
-  { label: 'Юридический', value: 'legal' },
+  { label: 'Поддержка по продукту', value: 'backoffice' },
+  { label: 'Верификация реквизитов', value: 'accruals' },
   { label: 'Общий', value: 'general' },
 ];
 function resetFilters() {
@@ -685,13 +689,16 @@ const visibleChats = computed(() => {
 const showNew = ref(false);
 const creating = ref(false);
 const newErr = ref('');
-const newForm = ref({ category: 'support', subject: '', message: '' });
+const newForm = ref({ category: 'general', subject: '', message: '' });
+// Когда форма открыта через кнопку из меню (?new=backoffice|accruals) —
+// категория зафиксирована и недоступна для смены. Решение встречи 2026-05-26:
+// техподдержка ушла в @DS_Helpdesk, на платформе только 2 профильных
+// канала + «общий» для прочих обращений.
+const newCategoryLocked = ref(false);
 
 const categories = [
-  { label: 'Техподдержка', value: 'support' },
-  { label: 'Бэк-офис / Документы', value: 'backoffice' },
-  { label: 'Начисления и выплаты', value: 'billing' },
-  { label: 'Юридический вопрос', value: 'legal' },
+  { label: 'Поддержка по продукту', value: 'backoffice' },
+  { label: 'Верификация реквизитов', value: 'accruals' },
   { label: 'Общий вопрос', value: 'general' },
 ];
 
@@ -702,17 +709,25 @@ const catColor = getChatCategoryColor;
 // рендерил legacy-тикеты, созданные до унификации категорий.
 function catIcon(c) {
   return ({
-    support: 'mdi-headset', backoffice: 'mdi-briefcase',
-    accruals: 'mdi-cash', billing: 'mdi-cash', accounting: 'mdi-cash',
-    legal: 'mdi-scale-balance', general: 'mdi-help-circle',
+    backoffice: 'mdi-package-variant',
+    accruals: 'mdi-credit-card-check',
+    general: 'mdi-help-circle',
+    // Legacy-ключи для старых тикетов в БД, чтобы UI не падал.
+    support: 'mdi-headset',
+    billing: 'mdi-credit-card-check', accounting: 'mdi-credit-card-check',
+    legal: 'mdi-scale-balance',
     owner: 'mdi-shield-crown',
   })[c] || 'mdi-chat';
 }
 function catLabel(c) {
   return ({
-    support: 'Техподдержка', backoffice: 'Бэк-офис',
-    accruals: 'Начисления', billing: 'Начисления', accounting: 'Начисления',
-    legal: 'Юридический', general: 'Общий', owner: 'Собственнику',
+    backoffice: 'Поддержка по продукту',
+    accruals: 'Верификация реквизитов',
+    general: 'Общий вопрос',
+    // Legacy-ключи (показываются на старых тикетах в списке).
+    support: 'Техподдержка',
+    billing: 'Верификация реквизитов', accounting: 'Верификация реквизитов',
+    legal: 'Юридический', owner: 'Собственнику',
   })[c] || c;
 }
 const statusClr = getChatStatusColor;
@@ -1084,7 +1099,8 @@ async function createChat() {
   try {
     const { data } = await api.post('/chat/tickets', { ...newForm.value, department: newForm.value.category });
     showNew.value = false;
-    newForm.value = { category: 'support', subject: '', message: '' };
+    newForm.value = { category: 'general', subject: '', message: '' };
+    newCategoryLocked.value = false;
     await loadChats();
     if (data.ticket) openChat(data.ticket);
   } catch (e) { newErr.value = e.response?.data?.message || 'Ошибка'; }
@@ -1107,29 +1123,44 @@ function onVisibilityChange() {
   }
 }
 
+function openNewChat() {
+  // Ручное «Новое обращение» (кнопка в шапке сайдбара) — категория
+  // выбирается пользователем, поле не залочено.
+  newForm.value = { category: 'general', subject: '', message: '' };
+  newCategoryLocked.value = false;
+  showNew.value = true;
+}
+
 function openFounder() {
   newForm.value = { category: 'general', subject: 'Сообщение основателю', message: '' };
+  newCategoryLocked.value = false;
   showNew.value = true;
 }
 
 function openCase() {
   newForm.value = { category: 'general', subject: 'Кейс', message: '' };
+  newCategoryLocked.value = false;
   showNew.value = true;
 }
 
 function checkQuery() {
   if (route.query.to === 'founder') {
     newForm.value = { category: 'general', subject: 'Сообщение основателю', message: '' };
+    newCategoryLocked.value = false;
     showNew.value = true;
   } else if (route.query.type === 'case') {
     newForm.value = { category: 'general', subject: 'Кейс', message: '' };
+    newCategoryLocked.value = false;
     showNew.value = true;
   } else if (route.query.new) {
-    // Меню «Тех. проблема» (?new=support) и т.п. — открыть форму с
-    // предзаполненной категорией. Если ключ не известен — fallback support.
+    // Меню «Поддержка по продукту» / «Верификация реквизитов» открывает
+    // форму с зафиксированной категорией — её нельзя сменить (по решению
+    // 2026-05-26: каждый канал = отдельная команда на платформе).
     const knownCategories = categories.map(c => c.value);
-    const cat = knownCategories.includes(String(route.query.new)) ? String(route.query.new) : 'support';
+    const raw = String(route.query.new);
+    const cat = knownCategories.includes(raw) ? raw : 'general';
     newForm.value = { category: cat, subject: '', message: '' };
+    newCategoryLocked.value = cat !== 'general';
     showNew.value = true;
   }
 }

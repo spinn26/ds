@@ -24,13 +24,9 @@
         :color="data.statusInfo.daysRemaining <= 30 ? 'warning' : 'primary'" class="mt-2" />
     </v-alert>
 
-    <!-- Qualification hero — DS spec ds-layouts.jsx::PartnerWorkspace hero -->
-    <v-card class="mb-4 quals-hero">
-      <BrandWaves shape="sheet" :width="800" :height="220"
-        preserveAspectRatio="xMidYMid slice"
-        bg-color="transparent"
-        stroke-color="#6EE87A" :stroke-opacity="0.2"
-        class="quals-hero-bg" />
+    <!-- Qualification hero — без декоративного BrandWaves фона (убран
+         по запросу 2026-05-26: слишком много визуального шума). -->
+    <v-card class="ds-card mb-4 quals-hero" elevation="0">
       <div class="quals-hero-content pa-4">
         <div class="d-flex justify-space-between align-center mb-4 flex-wrap ga-2">
           <div>
@@ -319,7 +315,6 @@ import { ref, computed, onMounted } from 'vue';
 import api from '../api';
 import MonthPicker from '../components/MonthPicker.vue';
 import PageHeader from '../components/PageHeader.vue';
-import BrandWaves from '../components/BrandWaves.vue';
 import { fmt } from '../composables/useDesign';
 
 const loading = ref(true);
@@ -436,24 +431,8 @@ onMounted(async () => {
   border-left-color: rgb(var(--v-theme-error)) !important;
 }
 
-/* DS Hero для блока «Текущая квалификация» — BrandWaves фон + контент
-   слоем выше. См. desing/ds-layouts.jsx::PartnerWorkspace hero. */
-.quals-hero {
-  position: relative;
-  overflow: hidden;
-}
-.quals-hero-bg {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  opacity: 0.65;
-}
-.quals-hero-content {
-  position: relative;
-  z-index: 1;
-}
+/* Блок «Текущая квалификация» — обычная Apple-soft карточка без
+   декоративного фона (см. .ds-card в ds-tokens.css). */
 .quals-eyebrow {
   letter-spacing: 1.2px;
   color: rgb(var(--v-theme-primary));
