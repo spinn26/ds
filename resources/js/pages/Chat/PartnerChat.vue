@@ -109,10 +109,7 @@
           <div class="text-body-2 text-medium-emphasis mt-2 mb-3">
             {{ chats.length ? 'Ничего не найдено' : 'Нет обращений' }}
           </div>
-          <v-btn v-if="!chats.length" color="primary" size="x-small" prepend-icon="mdi-plus" @click="openNewChat">
-            Создать первое
-          </v-btn>
-          <v-btn v-else-if="searchQuery || statusFilter !== 'all' || categoryFilter !== 'all'"
+          <v-btn v-if="chats.length && (searchQuery || statusFilter !== 'all' || categoryFilter !== 'all')"
             variant="text" size="x-small" prepend-icon="mdi-filter-off-outline" @click="resetFilters">
             Сбросить
           </v-btn>
@@ -669,7 +666,6 @@ const categoryFilters = [
   { label: 'Все', value: 'all' },
   { label: 'Поддержка по продукту', value: 'backoffice' },
   { label: 'Верификация реквизитов', value: 'accruals' },
-  { label: 'Общий', value: 'general' },
 ];
 function resetFilters() {
   searchQuery.value = '';
@@ -689,17 +685,17 @@ const visibleChats = computed(() => {
 const showNew = ref(false);
 const creating = ref(false);
 const newErr = ref('');
-const newForm = ref({ category: 'general', subject: '', message: '' });
+const newForm = ref({ category: 'backoffice', subject: '', message: '' });
 // Когда форма открыта через кнопку из меню (?new=backoffice|accruals) —
 // категория зафиксирована и недоступна для смены. Решение встречи 2026-05-26:
 // техподдержка ушла в @DS_Helpdesk, на платформе только 2 профильных
-// канала + «общий» для прочих обращений.
+// канала. «Общий вопрос» убран по запросу — пользователь обязан выбрать
+// конкретную команду (бэк-офис или верификация).
 const newCategoryLocked = ref(false);
 
 const categories = [
   { label: 'Поддержка по продукту', value: 'backoffice' },
   { label: 'Верификация реквизитов', value: 'accruals' },
-  { label: 'Общий вопрос', value: 'general' },
 ];
 
 function isMine(msg) { return String(msg.senderId) === String(currentUserId); }
@@ -1099,7 +1095,7 @@ async function createChat() {
   try {
     const { data } = await api.post('/chat/tickets', { ...newForm.value, department: newForm.value.category });
     showNew.value = false;
-    newForm.value = { category: 'general', subject: '', message: '' };
+    newForm.value = { category: 'backoffice', subject: '', message: '' };
     newCategoryLocked.value = false;
     await loadChats();
     if (data.ticket) openChat(data.ticket);
@@ -1158,9 +1154,11 @@ function checkQuery() {
     // 2026-05-26: каждый канал = отдельная команда на платформе).
     const knownCategories = categories.map(c => c.value);
     const raw = String(route.query.new);
-    const cat = knownCategories.includes(raw) ? raw : 'general';
+    // Если ключ из query совпадает с известным — fix категорию.
+    // Иначе fallback на первую категорию из списка (не залочена).
+    const cat = knownCategories.includes(raw) ? raw : categories[0].value;
     newForm.value = { category: cat, subject: '', message: '' };
-    newCategoryLocked.value = cat !== 'general';
+    newCategoryLocked.value = knownCategories.includes(raw);
     showNew.value = true;
   }
 }
