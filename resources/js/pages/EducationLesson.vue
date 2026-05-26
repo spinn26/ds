@@ -6,7 +6,8 @@
       <v-progress-circular indeterminate color="primary" />
     </div>
 
-    <div v-else-if="lesson" class="lesson-layout" :class="{ 'no-sidebar': !hasSidebarContent }">
+    <transition name="lesson-fade" mode="out-in">
+    <div v-else-if="lesson" :key="route.params.lid" class="lesson-layout" :class="{ 'no-sidebar': !hasSidebarContent }">
       <aside v-if="hasSidebarContent" class="lesson-tree">
         <div class="px-3 pt-3 pb-2 text-caption text-uppercase font-weight-bold text-medium-emphasis letter-spacing-1">
           {{ kicker }}
@@ -237,6 +238,7 @@
         </div>
       </section>
     </div>
+    </transition>
   </div>
 </template>
 
@@ -536,9 +538,16 @@ onMounted(load);
   cursor: pointer;
   font-size: 13px;
   line-height: 1.35;
-  transition: background 0.15s ease;
+  transition:
+    background 0.2s cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1),
+    color 0.2s ease;
 }
-.lesson-row:hover { background: rgba(var(--v-theme-on-surface), 0.05); }
+.lesson-row:hover {
+  background: rgba(var(--v-theme-on-surface), 0.05);
+  transform: translateX(2px);
+}
+.lesson-row:active { transform: translateX(2px) scale(0.985); transition-duration: 0.08s; }
 .lesson-row.is-current {
   background: rgba(var(--v-theme-primary), 0.1);
   color: rgb(var(--v-theme-primary));
@@ -566,14 +575,27 @@ onMounted(load);
   position: sticky;
   top: 0;
   z-index: 2;
-  background: rgb(var(--v-theme-background));
-  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  background: rgba(var(--v-theme-background), 0.82);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.06);
   padding: 24px 32px 18px;
   display: flex;
   align-items: flex-start;
   gap: 16px;
+  transition: padding 0.25s cubic-bezier(0.2, 0.8, 0.2, 1),
+              border-color 0.2s ease;
 }
-.sticky-header h1 { font-size: 28px !important; line-height: 1.3; }
+.sticky-header h1 {
+  font-size: 28px !important;
+  line-height: 1.3;
+  letter-spacing: -0.3px;
+  animation: fadeUp 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+.sticky-header .text-caption {
+  animation: fadeUp 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  animation-delay: 30ms;
+}
 
 .body-blocks {
   padding: 24px 32px 48px;
@@ -583,13 +605,49 @@ onMounted(load);
   display: flex;
   flex-direction: column;
   gap: 24px;
-  /* Защита от диких inline-картинок/embed'ов из rich-editor, которые
-     могут иметь натуральный размер 3000+px и вылезать за контейнер. */
   min-width: 0;
 }
 .body-blocks :deep(img),
 .body-blocks :deep(iframe),
 .body-blocks :deep(video) { max-width: 100%; }
+
+/* Stagger fade-up: каждый прямой потомок body-blocks появляется
+   с 50ms задержкой друг за другом. Apple-feel spring easing. */
+.body-blocks > * {
+  animation: fadeUp 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+.body-blocks > *:nth-child(1) { animation-delay: 80ms; }
+.body-blocks > *:nth-child(2) { animation-delay: 140ms; }
+.body-blocks > *:nth-child(3) { animation-delay: 200ms; }
+.body-blocks > *:nth-child(4) { animation-delay: 260ms; }
+.body-blocks > *:nth-child(5) { animation-delay: 320ms; }
+.body-blocks > *:nth-child(6) { animation-delay: 380ms; }
+.body-blocks > *:nth-child(n+7) { animation-delay: 420ms; }
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* «Изучено» chip — pop с галочкой, рисующейся stroke-анимацией. */
+.sticky-header :deep(.v-chip[color="success"]) {
+  animation: chipPop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes chipPop {
+  0%   { transform: scale(0.4); opacity: 0; }
+  60%  { transform: scale(1.08); opacity: 1; }
+  100% { transform: scale(1); }
+}
+
+/* Переход между уроками (route.params.lid change) — slide-left fade. */
+.lesson-fade-enter-active,
+.lesson-fade-leave-active {
+  transition:
+    opacity 0.24s cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.lesson-fade-enter-from { opacity: 0; transform: translateX(20px); }
+.lesson-fade-leave-to   { opacity: 0; transform: translateX(-12px); }
 @media (max-width: 700px) {
   .sticky-header { padding: 18px 16px 12px; }
   .body-blocks { padding: 18px 16px 32px; }
