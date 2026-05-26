@@ -6,7 +6,7 @@
     <v-row class="mb-3" dense>
       <v-col v-for="s in summary" :key="s.id" cols="6" sm="3">
         <v-card
-          class="pa-3 d-flex align-center ga-3 summary-tile"
+          class="pa-3 d-flex align-center ga-3 summary-tile ds-hover-lift"
           :class="{ 'summary-tile--active': activityFilter === s.id }"
           :color="getActivityColor(s.id)" variant="tonal"
           @click="filterByActivity(s.id)"

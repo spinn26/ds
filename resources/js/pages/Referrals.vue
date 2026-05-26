@@ -1,6 +1,25 @@
 <template>
   <div>
-    <h5 class="text-h5 font-weight-bold mb-4">Реферальные ссылки</h5>
-    <v-card class="pa-6 text-center text-medium-emphasis">Раздел в разработке</v-card>
+    <PageHeader title="Реферальные ссылки" icon="mdi-link-variant" />
+    <v-card variant="flat" class="ds-empty-card">
+      <EmptyState
+        icon="mdi-link-variant"
+        message="Раздел в разработке"
+        hint="Реферальные ссылки будут доступны в разделе «Профиль»"
+      />
+    </v-card>
   </div>
 </template>
+
+<script setup>
+import PageHeader from '../components/PageHeader.vue';
+import EmptyState from '../components/EmptyState.vue';
+</script>
+
+<style scoped>
+.ds-empty-card {
+  border-radius: var(--ds-radius-xl, 16px);
+  border: 1px solid var(--ds-outline-variant, rgba(0, 0, 0, 0.06));
+  background: rgb(var(--v-theme-surface));
+}
+</style>

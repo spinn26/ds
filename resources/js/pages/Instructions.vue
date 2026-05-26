@@ -39,8 +39,12 @@
             </v-list-item>
           </v-list>
         </v-card>
-        <v-card v-else class="pa-4 text-center text-medium-emphasis">
-          Выберите категорию слева
+        <v-card v-else variant="flat" class="instructions-empty">
+          <EmptyState
+            icon="mdi-folder-text-outline"
+            message="Выберите категорию слева"
+            hint="После выбора здесь появится список доступных инструкций"
+          />
         </v-card>
       </v-col>
     </v-row>
@@ -87,6 +91,7 @@ import { ref, computed, onMounted } from 'vue';
 import api from '../api';
 import { useDebounce } from '../composables/useDebounce';
 import PageHeader from '../components/PageHeader.vue';
+import EmptyState from '../components/EmptyState.vue';
 
 const search = ref('');
 const categories = ref({});
@@ -196,4 +201,9 @@ onMounted(loadList);
 .instruction-body :deep(h3) { margin-top: 18px; margin-bottom: 8px; }
 .instruction-body :deep(p) { margin-bottom: 8px; }
 .instruction-body :deep(ul) { margin-bottom: 12px; padding-left: 24px; }
+.instructions-empty {
+  border-radius: var(--ds-radius-xl, 16px);
+  border: 1px solid var(--ds-outline-variant, rgba(0, 0, 0, 0.06));
+  background: rgb(var(--v-theme-surface));
+}
 </style>
