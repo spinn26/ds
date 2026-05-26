@@ -727,3 +727,13 @@ onMounted(() => {
   refreshPreview();
 });
 </script>
+
+<style scoped>
+/* DS polish: section sub-titles inside CRUD-tabs (Кому / Шаблоны / Ящики)
+   приведены к ds-title-l из desing/ds-primitives.jsx — единый ритм
+   с Profile.vue / ManageProfile.vue. Сами тексты и логика не тронуты. */
+:deep(.text-subtitle-1.font-weight-bold) {
+  font: var(--ds-type-title-l) !important;
+  letter-spacing: -0.01em;
+}
+</style>
