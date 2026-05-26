@@ -42,6 +42,9 @@ import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import api from '@/api';
 import PageHeader from '@/components/PageHeader.vue';
+import { useNotificationsStore } from '@/stores/notifications';
+
+const notificationsStore = useNotificationsStore();
 
 interface Notif {
   id: number;
@@ -109,20 +112,18 @@ async function load() {
 
 async function open(n: Notif) {
   if (!n.read) {
-    try {
-      await api.post(`/notifications/${n.id}/read`);
-      n.read = true;
-    } catch {}
+    n.read = true;
+    await notificationsStore.markRead(n.id);
   }
   if (n.link) router.push(n.link);
 }
 
 async function markAll() {
   marking.value = true;
-  try {
-    await api.post('/notifications/read-all');
-    items.value = items.value.map((n) => ({ ...n, read: true }));
-  } catch {}
+  // Сразу красим список как прочитанный и сбрасываем счётчик в шапке —
+  // store сам дёрнет /notifications/read-all и откатит при ошибке.
+  items.value = items.value.map((n) => ({ ...n, read: true }));
+  await notificationsStore.markAllRead();
   marking.value = false;
 }
 

@@ -40,6 +40,9 @@ const routes: RouteRecordRaw[] = [
       { path: 'requisites', name: 'requisites', component: () => import('@/views/Requisites.vue') },
       { path: 'documents', name: 'documents', component: () => import('@/views/Documents.vue') },
       { path: 'settings', name: 'settings', component: () => import('@/views/Settings.vue') },
+      { path: 'security', name: 'security', component: () => import('@/views/Security.vue') },
+      { path: 'password', name: 'password', component: () => import('@/views/ChangePassword.vue') },
+      { path: 'audit', name: 'audit', component: () => import('@/views/AuditLog.vue') },
     ],
   },
   {

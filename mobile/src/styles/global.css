@@ -1,13 +1,38 @@
-/* Mobile-first reset + safe-area defaults */
+/* ============================================================
+   DS Partner Mobile — global styles
+   Цель — воздушный, лёгкий iOS/Material-вдохновлённый дизайн:
+   крупные радиусы, тонкие тени, много white-space, мягкие фоны.
+   ============================================================ */
+
 * { -webkit-tap-highlight-color: transparent; }
+
+:root {
+  --ds-radius-sm: 12px;
+  --ds-radius-md: 16px;
+  --ds-radius-lg: 20px;
+  --ds-radius-xl: 24px;
+
+  --ds-shadow-sm: 0 1px 3px rgba(15, 23, 19, 0.04), 0 1px 2px rgba(15, 23, 19, 0.03);
+  --ds-shadow-md: 0 4px 12px rgba(15, 23, 19, 0.05), 0 2px 4px rgba(15, 23, 19, 0.03);
+  --ds-shadow-lg: 0 12px 28px rgba(15, 23, 19, 0.06), 0 4px 8px rgba(15, 23, 19, 0.04);
+
+  --ds-surface: #ffffff;
+  --ds-surface-soft: #f5f9f6;
+  --ds-bg: #fafcfb;
+
+  --ds-border: rgba(15, 23, 19, 0.06);
+  --ds-text-soft: rgba(15, 23, 19, 0.55);
+  --ds-text-muted: rgba(15, 23, 19, 0.40);
+}
 
 html, body, #app {
   margin: 0; padding: 0; height: 100%;
-  background: #fafafa;
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  background: var(--ds-bg);
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  color: #0F1713;
 }
 
 body {
@@ -15,27 +40,26 @@ body {
   touch-action: manipulation;
 }
 
-a { color: inherit; }
+a { color: inherit; text-decoration: none; }
 
-/* Vuetify density tuning под мобильный экран — минимум touch-target 44px */
-.v-btn--size-large { min-height: 48px !important; }
-.v-text-field .v-field { border-radius: 12px !important; }
+/* Кнопки/инпуты крупнее под палец */
+.v-btn--size-large { min-height: 52px !important; letter-spacing: -0.2px !important; }
+.v-text-field .v-field { border-radius: var(--ds-radius-sm) !important; }
 
-/* === Общие классы для список-страниц === */
-
-/* Поиск-бар сверху страницы */
+/* ============================================================
+   Поиск + фильтры
+   ============================================================ */
 .search-bar {
   display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
+  gap: 10px;
+  margin-bottom: 14px;
 }
 .search-bar .v-text-field { flex: 1; }
 
-/* Лента фильтр-чипов (горизонтальный скролл) */
 .chip-row {
   display: flex;
-  gap: 6px;
-  margin-bottom: 12px;
+  gap: 8px;
+  margin-bottom: 14px;
   overflow-x: auto;
   padding-bottom: 4px;
   scrollbar-width: none;
@@ -43,129 +67,141 @@ a { color: inherit; }
 .chip-row::-webkit-scrollbar { display: none; }
 .chip-row .v-chip { flex-shrink: 0; }
 
-/* Карточка элемента списка */
+/* ============================================================
+   Карточка элемента списка
+   ============================================================ */
 .list-card {
-  background: #fff;
-  border-radius: 14px;
-  padding: 12px 14px;
-  margin-bottom: 8px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  background: var(--ds-surface);
+  border-radius: var(--ds-radius-md);
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  box-shadow: var(--ds-shadow-sm);
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   cursor: pointer;
-  transition: transform 0.1s;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  border: 1px solid transparent;
 }
-.list-card:active { transform: scale(0.99); }
+.list-card:hover { box-shadow: var(--ds-shadow-md); }
+.list-card:active {
+  transform: scale(0.985);
+  box-shadow: var(--ds-shadow-sm);
+}
 
 .list-card-avatar {
-  width: 40px; height: 40px;
-  border-radius: 10px;
+  width: 42px; height: 42px;
+  border-radius: var(--ds-radius-sm);
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
 }
-.list-card-body {
-  flex: 1;
-  min-width: 0;
-}
+.list-card-body { flex: 1; min-width: 0; }
 .list-card-title {
-  font-size: 14px; font-weight: 600;
-  color: #1b1b1b;
+  font-size: 14.5px; font-weight: 600;
+  color: #0F1713;
+  letter-spacing: -0.2px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .list-card-sub {
   font-size: 12px;
-  color: rgba(0, 0, 0, 0.55);
-  margin-top: 2px;
+  color: var(--ds-text-soft);
+  margin-top: 3px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.list-card-aside {
-  text-align: right;
-  flex-shrink: 0;
-}
+.list-card-aside { text-align: right; flex-shrink: 0; }
 .list-card-amount {
-  font-size: 14px; font-weight: 700;
-  color: #1b1b1b;
+  font-size: 14.5px; font-weight: 700;
+  color: #0F1713;
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.3px;
 }
 .list-card-meta {
   font-size: 11px;
-  color: rgba(0, 0, 0, 0.45);
-  margin-top: 2px;
+  color: var(--ds-text-muted);
+  margin-top: 3px;
 }
 
-/* Пустое состояние */
+/* ============================================================
+   Пустое состояние
+   ============================================================ */
 .empty-state {
-  padding: 60px 24px;
+  padding: 80px 24px;
   text-align: center;
 }
 .empty-state .v-icon {
-  color: rgba(0, 0, 0, 0.2);
-  margin-bottom: 12px;
+  color: rgba(15, 23, 19, 0.18);
+  margin-bottom: 14px;
 }
 .empty-state-text {
   font-size: 14px;
-  color: rgba(0, 0, 0, 0.5);
+  color: var(--ds-text-soft);
 }
 
-/* Floating Action Button */
+/* ============================================================
+   Floating Action Button
+   ============================================================ */
 .fab {
   position: fixed;
-  bottom: calc(80px + env(safe-area-inset-bottom));
-  right: 16px;
+  bottom: calc(82px + env(safe-area-inset-bottom));
+  right: 18px;
   z-index: 9;
+  box-shadow: 0 8px 20px rgba(46, 125, 50, 0.35), 0 2px 6px rgba(46, 125, 50, 0.2);
 }
 
-/* Карточка-секция (используется на детальных экранах) */
+/* ============================================================
+   Detail / Section карточки
+   ============================================================ */
 .detail-card {
-  background: #fff;
-  border-radius: 14px;
-  padding: 14px;
-  margin-bottom: 10px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  background: var(--ds-surface);
+  border-radius: var(--ds-radius-md);
+  padding: 18px;
+  margin-bottom: 12px;
+  box-shadow: var(--ds-shadow-sm);
 }
 .detail-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 0;
-  font-size: 13px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+  padding: 10px 0;
+  font-size: 13.5px;
+  border-bottom: 1px solid var(--ds-border);
 }
 .detail-row:last-child { border-bottom: 0; }
-.detail-row-key {
-  color: rgba(0, 0, 0, 0.55);
-}
+.detail-row-key { color: var(--ds-text-soft); }
 .detail-row-val {
-  color: #1b1b1b;
+  color: #0F1713;
   font-weight: 500;
   text-align: right;
 }
 
-/* Меню-секция (cells со стрелкой) */
+/* ============================================================
+   Меню-секция (cells со стрелкой)
+   ============================================================ */
 .menu-cell {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
-  background: #fff;
+  gap: 14px;
+  padding: 14px 18px;
+  background: var(--ds-surface);
   cursor: pointer;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+  border-bottom: 1px solid var(--ds-border);
+  transition: background 0.15s;
 }
-.menu-cell:active { background: rgba(0, 0, 0, 0.02); }
+.menu-cell:active { background: rgba(15, 23, 19, 0.025); }
 .menu-cell:last-child { border-bottom: 0; }
 .menu-cell-title {
   flex: 1;
-  font-size: 14px;
-  color: #1b1b1b;
+  font-size: 14.5px;
+  font-weight: 500;
+  color: #0F1713;
+  letter-spacing: -0.1px;
 }
-.menu-cell-arrow {
-  color: rgba(0, 0, 0, 0.3);
-}
+.menu-cell-arrow { color: rgba(15, 23, 19, 0.25); }
+
 .menu-group {
-  background: #fff;
-  border-radius: 14px;
+  background: var(--ds-surface);
+  border-radius: var(--ds-radius-md);
   overflow: hidden;
-  margin-bottom: 12px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  margin-bottom: 14px;
+  box-shadow: var(--ds-shadow-sm);
 }

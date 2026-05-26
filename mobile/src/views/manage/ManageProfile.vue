@@ -13,11 +13,6 @@
     </v-card>
 
     <div class="menu-group mt-3">
-      <div class="menu-cell" @click="$router.push('/app/home')">
-        <v-icon color="success">mdi-swap-horizontal-bold</v-icon>
-        <div class="menu-cell-title">Кабинет партнёра</div>
-        <v-chip size="x-small" color="success" variant="tonal">переключить</v-chip>
-      </div>
       <div class="menu-cell" @click="$router.push('/manage/reports')">
         <v-icon>mdi-file-chart-outline</v-icon>
         <div class="menu-cell-title">Мои отчёты</div>
@@ -31,17 +26,17 @@
     </div>
 
     <div class="menu-group">
-      <div class="menu-cell">
+      <div class="menu-cell" @click="$router.push('/app/security')">
         <v-icon>mdi-shield-lock-outline</v-icon>
         <div class="menu-cell-title">Безопасность и 2FA</div>
         <v-icon class="menu-cell-arrow">mdi-chevron-right</v-icon>
       </div>
-      <div class="menu-cell">
+      <div class="menu-cell" @click="$router.push('/app/password')">
         <v-icon>mdi-key-variant</v-icon>
         <div class="menu-cell-title">Сменить пароль</div>
         <v-icon class="menu-cell-arrow">mdi-chevron-right</v-icon>
       </div>
-      <div class="menu-cell">
+      <div class="menu-cell" @click="$router.push('/app/audit')">
         <v-icon>mdi-history</v-icon>
         <div class="menu-cell-title">Журнал действий</div>
         <v-icon class="menu-cell-arrow">mdi-chevron-right</v-icon>

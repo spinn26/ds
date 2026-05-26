@@ -11,7 +11,11 @@
       <div class="d-flex align-center ga-1">
         <v-btn icon size="small" variant="text" @click="router.push('/manage/support')" title="Тех. поддержка">
           <v-icon>mdi-lifebuoy</v-icon>
-          <span v-if="incidents > 0" class="badge">{{ incidents }}</span>
+          <span v-if="incidents > 0" class="badge badge--error">{{ incidents }}</span>
+        </v-btn>
+        <v-btn icon size="small" variant="text" @click="router.push('/app/notifications')" title="Уведомления">
+          <v-icon :class="{ 'bell-pulse': unreadCount > 0 }">{{ unreadCount > 0 ? 'mdi-bell' : 'mdi-bell-outline' }}</v-icon>
+          <span v-if="unreadCount > 0" class="badge">{{ unreadCount }}</span>
         </v-btn>
         <v-btn icon size="small" variant="text" @click="router.push('/manage/profile')">
           <v-avatar size="32" color="warning">
@@ -43,10 +47,14 @@
 import { computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
+import { useNotificationsStore } from '@/stores/notifications';
+import { storeToRefs } from 'pinia';
 
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
+const notifications = useNotificationsStore();
+const { unread: unreadCount } = storeToRefs(notifications);
 
 const tabs = [
   { path: '/manage/dashboard', label: 'Дашборд', icon: 'mdi-view-dashboard-outline' },

@@ -6,8 +6,10 @@
         <div class="shell-name">{{ userName }}</div>
       </div>
       <div class="d-flex align-center ga-1">
-        <v-btn icon="mdi-bell-outline" size="small" variant="text" @click="router.push('/app/notifications')">
-          <v-icon>mdi-bell-outline</v-icon>
+        <v-btn icon size="small" variant="text" @click="router.push('/app/notifications')" title="Уведомления">
+          <v-icon :class="{ 'bell-pulse': unreadCount > 0 }">
+            {{ unreadCount > 0 ? 'mdi-bell' : 'mdi-bell-outline' }}
+          </v-icon>
           <span v-if="unreadCount > 0" class="badge">{{ unreadCount }}</span>
         </v-btn>
         <v-btn icon size="small" variant="text" @click="router.push('/app/profile')">
@@ -40,10 +42,14 @@
 import { computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
+import { useNotificationsStore } from '@/stores/notifications';
+import { storeToRefs } from 'pinia';
 
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
+const notifications = useNotificationsStore();
+const { unread: unreadCount } = storeToRefs(notifications);
 
 const tabs = [
   { path: '/app/home', label: 'Главная', icon: 'mdi-home-variant' },
@@ -74,7 +80,6 @@ const greeting = computed(() => {
   return 'Добрый вечер';
 });
 
-const unreadCount = 3; // моковая цифра; заменим на реальный счётчик уведомлений
 </script>
 
 <style scoped>
@@ -144,15 +149,39 @@ const unreadCount = 3; // моковая цифра; заменим на реа�
   text-decoration: none;
   font-size: 10px;
   font-weight: 500;
-  color: rgba(var(--v-theme-on-surface), 0.5);
+  color: rgba(var(--v-theme-on-surface), 0.55);
   transition: color 0.15s ease;
+  position: relative;
 }
+.tab :deep(.v-icon) { transition: transform 0.15s ease; }
 .tab.active {
   color: rgb(var(--v-theme-primary));
+  font-weight: 700;
 }
-.tab:active {
-  transform: scale(0.95);
+.tab.active :deep(.v-icon) {
+  /* Активная иконка чуть крупнее и с тонкой «pill»-подложкой */
+  transform: scale(1.08);
 }
+.tab.active::before {
+  content: '';
+  position: absolute;
+  top: 8px;
+  width: 36px; height: 28px;
+  border-radius: 14px;
+  background: rgba(var(--v-theme-primary), 0.12);
+  z-index: -1;
+}
+.tab:active { transform: scale(0.95); }
+
+/* Pulsing-анимация колокольчика при unread > 0 */
+.bell-pulse { animation: bell-shake 1.2s ease-in-out infinite; transform-origin: 50% 4px; }
+@keyframes bell-shake {
+  0%, 50%, 100% { transform: rotate(0deg); }
+  10%, 30% { transform: rotate(-12deg); }
+  20%, 40% { transform: rotate(12deg); }
+}
+
+.badge--error { background: rgb(var(--v-theme-error)) !important; }
 
 .fade-enter-active,
 .fade-leave-active {

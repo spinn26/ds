@@ -16,6 +16,7 @@ dist-ssr/
 # Build artifacts
 .cache/
 .parcel-cache/
+*.tsbuildinfo
 
 # Capacitor native projects: добавляются позже при `npx cap add android/ios`.
 # Сами папки коммитим (там есть конфиги signing/permissions),
@@ -28,6 +29,11 @@ android/build/
 android/app/build/
 android/local.properties
 android/.idea/
+
+# Signing — секреты, NEVER коммить
+android/app/keystore.properties
+android/app/*.keystore
+android/app/*.jks
 
 # OS
 .DS_Store

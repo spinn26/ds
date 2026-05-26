@@ -1,0 +1,10 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <!-- Foreground для adaptive Android icons: только логотип без фона.
+       Android применит свой круг/squircle-маскинг поверх. Иконка должна
+       быть в центре с safe-area 66% (≈ 672px), чтобы не обрезалась. -->
+  <g font-family="Inter, 'SF Pro Display', system-ui, -apple-system, Arial, sans-serif" font-weight="900">
+    <text x="512" y="600" text-anchor="middle"
+      font-size="480" fill="#FFFFFF" letter-spacing="-28">DS</text>
+  </g>
+  <rect x="340" y="650" width="344" height="12" rx="6" fill="#6EE87A"/>
+</svg>

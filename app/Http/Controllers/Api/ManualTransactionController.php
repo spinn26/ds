@@ -253,6 +253,39 @@ class ManualTransactionController extends Controller
         return response()->json(['ok' => true]);
     }
 
+    /**
+     * Дубль черновика — для случая нескольких одинаковых взносов по одному
+     * контракту (напр. два 10 000 RUB на одну дату). Копируем заполненные
+     * поля, сбрасываем previewCalc и commission-флаги — пусть оператор
+     * пересчитает заново после правки.
+     */
+    public function duplicateDraft(Request $request, int $id): JsonResponse
+    {
+        $src = DB::table('transaction_draft')->where('id', $id)->first();
+        if (! $src) return response()->json(['message' => 'Не найден'], 404);
+
+        $newId = DB::table('transaction_draft')->insertGetId([
+            'contract' => $src->contract,
+            'consultant' => $src->consultant,
+            'currency' => $src->currency,
+            'currencyRate' => $src->currencyRate,
+            'amount' => $src->amount,
+            'date' => $src->date,
+            'comment' => $src->comment,
+            'parameter' => $src->parameter,
+            'yearKV' => $src->yearKV,
+            'dsCommissionPercentage' => $src->dsCommissionPercentage,
+            // Намеренно НЕ копируем: previewCalc (требует пересчёта),
+            // customCommission / dsCommissionAbsolute / commissionOverride
+            // (флаги вводятся осознанно для каждой строки).
+            'createdBy' => $request->user()->id,
+            'createdAt' => now(),
+            'updatedAt' => now(),
+        ]);
+
+        return response()->json(['id' => $newId]);
+    }
+
     public function clearDrafts(): JsonResponse
     {
         DB::table('transaction_draft')->delete();

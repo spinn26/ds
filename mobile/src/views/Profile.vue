@@ -12,14 +12,6 @@
       </v-chip>
     </v-card>
 
-    <div v-if="auth.isStaff" class="menu-group mt-3">
-      <div class="menu-cell" @click="$router.push('/manage/dashboard')">
-        <v-icon color="warning">mdi-shield-account-outline</v-icon>
-        <div class="menu-cell-title">Кабинет администратора</div>
-        <v-chip size="x-small" color="warning" variant="tonal">staff</v-chip>
-      </div>
-    </div>
-
     <div class="menu-group mt-3">
       <div class="menu-cell" @click="$router.push('/app/qualifications')">
         <v-icon color="primary">mdi-chart-line</v-icon>
@@ -62,9 +54,19 @@
         <div class="menu-cell-title">Настройки</div>
         <v-icon class="menu-cell-arrow">mdi-chevron-right</v-icon>
       </div>
-      <div class="menu-cell">
+      <div class="menu-cell" @click="$router.push('/app/security')">
         <v-icon>mdi-shield-lock-outline</v-icon>
-        <div class="menu-cell-title">Безопасность и биометрия</div>
+        <div class="menu-cell-title">Безопасность и 2FA</div>
+        <v-icon class="menu-cell-arrow">mdi-chevron-right</v-icon>
+      </div>
+      <div class="menu-cell" @click="$router.push('/app/password')">
+        <v-icon>mdi-key-variant</v-icon>
+        <div class="menu-cell-title">Сменить пароль</div>
+        <v-icon class="menu-cell-arrow">mdi-chevron-right</v-icon>
+      </div>
+      <div class="menu-cell" @click="$router.push('/app/audit')">
+        <v-icon>mdi-history</v-icon>
+        <div class="menu-cell-title">Журнал действий</div>
         <v-icon class="menu-cell-arrow">mdi-chevron-right</v-icon>
       </div>
       <div class="menu-cell">

@@ -24,8 +24,8 @@
 
     <div v-else class="list">
       <div v-for="c in items" :key="c.id" class="list-card">
-        <div class="list-card-avatar" style="background: rgba(251,140,0,0.10)">
-          <v-icon color="warning" size="20">mdi-file-document-outline</v-icon>
+        <div class="list-card-avatar avatar-warning">
+          <v-icon color="warning" size="22">mdi-file-document-outline</v-icon>
         </div>
         <div class="list-card-body">
           <div class="list-card-title">{{ c.number || `#${c.id}` }}</div>

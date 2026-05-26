@@ -19,12 +19,22 @@ app.use(vuetify);
 
 // Восстанавливаем сохранённую сессию до router.beforeEach, чтобы при
 // перезагрузке (F5) сразу попадать на нужный кабинет, а не на /login.
-useAuthStore()
-  .restore()
-  .finally(() => {
-    app.use(router);
-    app.mount('#app');
-  });
+// После mount фоном тянем свежие данные пользователя (без блокировки UI).
+const auth = useAuthStore();
+auth.restore().finally(async () => {
+  app.use(router);
+  app.mount('#app');
+  if (auth.isAuthenticated) {
+    auth.refreshMe();
+    // Регистрация push — только на native, на вебе no-op.
+    import('./api/push').then((m) => m.setupPushNotifications()).catch(() => {});
+    // Счётчик непрочитанных в шапке: первый запрос + polling.
+    const { useNotificationsStore } = await import('./stores/notifications');
+    const notif = useNotificationsStore();
+    notif.refresh();
+    notif.startPolling();
+  }
+});
 
 // Native-инициализация: только когда реально запущены в native shell.
 if (Capacitor.isNativePlatform()) {

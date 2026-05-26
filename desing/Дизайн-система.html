@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>DS Consulting · Дизайн-система</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+
+<link rel="stylesheet" href="ds-tokens.css" />
+
+<style>
+  html, body { margin: 0; padding: 0; background: #f0eee9; height: 100%; overflow: hidden; font-family: 'Inter', system-ui, sans-serif; }
+  body { display: flex; flex-direction: column; }
+  #root { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+
+  /* Intro */
+  .intro {
+    padding: 16px 28px;
+    background: #FFFFFF;
+    border-bottom: 1px solid #E6E8E6;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 22px;
+    flex-wrap: wrap;
+  }
+  .intro .left { display: flex; align-items: center; gap: 14px; }
+  .intro .mark {
+    width: 38px; height: 38px; border-radius: 10px;
+    background: #2E7D32; position: relative;
+  }
+  .intro .mark::after {
+    content: ''; position: absolute; inset: 6px 6px 6px 18px;
+    background: #6EE87A; border-radius: 0 5px 5px 0;
+  }
+  .intro h1 {
+    font-size: 19px; font-weight: 700; margin: 0;
+    letter-spacing: -0.3px; color: #1A1F1B;
+  }
+  .intro .sub { font-size: 12px; color: #4A524C; margin-top: 2px; }
+  .intro .eyebrow {
+    font-size: 10px; font-weight: 700; letter-spacing: 1.5px;
+    text-transform: uppercase; color: #2E7D32; margin-bottom: 2px;
+  }
+  .intro .meta {
+    display: flex; gap: 18px; margin-left: auto;
+    font-size: 11.5px; color: #4A524C;
+  }
+  .intro .meta .item b { display: block; color: #1A1F1B; font-weight: 700; font-size: 14px; }
+  .intro .meta .item .lbl {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: #8A8F8B; font-weight: 600; margin-bottom: 2px;
+  }
+  .intro .pal { display: flex; gap: 4px; margin-top: 4px; }
+  .intro .pal span { width: 16px; height: 16px; border-radius: 4px; border: 1px solid rgba(0,0,0,0.06); }
+
+  .canvas-host { flex: 1; min-height: 0; display: flex; }
+  .canvas-host > * { flex: 1; min-height: 0; }
+</style>
+</head>
+<body>
+
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="ds-primitives.jsx"></script>
+<script type="text/babel" src="ds-foundations.jsx"></script>
+<script type="text/babel" src="ds-components.jsx"></script>
+<script type="text/babel" src="ds-patterns.jsx"></script>
+<script type="text/babel" src="ds-layouts.jsx"></script>
+<script type="text/babel" src="ds-screens-auth-partner.jsx"></script>
+<script type="text/babel" src="ds-screens-manager-admin.jsx"></script>
+<script type="text/babel" src="ds-extra-partner.jsx"></script>
+<script type="text/babel" src="ds-extra-manager.jsx"></script>
+<script type="text/babel" src="ds-extra-admin.jsx"></script>
+<script type="text/babel" src="ds-missing-partner.jsx"></script>
+<script type="text/babel" src="ds-missing-manager.jsx"></script>
+
+<script type="text/babel">
+
+function Intro() {
+  return (
+    <div className="intro">
+      <div className="left">
+        <div className="mark"></div>
+        <div>
+          <div className="eyebrow">★ design system · v1 · foundation</div>
+          <h1>DS Consulting · дизайн-система</h1>
+          <div className="sub">Vue 3 + Vuetify 3 · MD3 color roles · light + dark · desktop / tablet / mobile</div>
+        </div>
+      </div>
+
+      <div className="meta">
+        <div className="item">
+          <div className="lbl">токены</div>
+          <b>MD3 roles</b>
+        </div>
+        <div className="item">
+          <div className="lbl">темы</div>
+          <b>light · dark</b>
+        </div>
+        <div className="item">
+          <div className="lbl">стек</div>
+          <b>Vue 3 · Vuetify 3</b>
+        </div>
+        <div className="item">
+          <div className="lbl">палитра light</div>
+          <div className="pal">
+            <span style={{ background: '#2E7D32' }}></span>
+            <span style={{ background: '#6EE87A' }}></span>
+            <span style={{ background: '#E8F1E9' }}></span>
+            <span style={{ background: '#F8F9F8' }}></span>
+            <span style={{ background: '#1A1F1B' }}></span>
+          </div>
+        </div>
+        <div className="item">
+          <div className="lbl">палитра dark</div>
+          <div className="pal">
+            <span style={{ background: '#6EE87A' }}></span>
+            <span style={{ background: '#1B5E20' }}></span>
+            <span style={{ background: '#26282D' }}></span>
+            <span style={{ background: '#0F1311' }}></span>
+            <span style={{ background: '#E2E4E2' }}></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function App() {
+  return (
+    <React.Fragment>
+      <Intro />
+      <div className="canvas-host">
+        <DesignCanvas>
+
+          <DCSection id="foundations" title="① Foundations" subtitle="палитра · типографика · spacing · радиусы · тени · motion · бренд · иконография">
+            <DCArtboard id="f-colors-l" label="01 · Палитра · light" width={1080} height={780}>
+              <DSF_Colors theme="light" />
+            </DCArtboard>
+            <DCArtboard id="f-colors-d" label="02 · Палитра · dark" width={1080} height={780}>
+              <DSF_Colors theme="dark" />
+            </DCArtboard>
+
+            <DCArtboard id="f-type-l" label="03 · Типографика · light" width={1080} height={1240}>
+              <DSF_Type theme="light" />
+            </DCArtboard>
+            <DCArtboard id="f-type-d" label="04 · Типографика · dark" width={1080} height={1240}>
+              <DSF_Type theme="dark" />
+            </DCArtboard>
+
+            <DCArtboard id="f-tokens-l" label="05 · Spacing · радиусы · тени · motion" width={1080} height={780}>
+              <DSF_Tokens theme="light" />
+            </DCArtboard>
+
+            <DCArtboard id="f-brand-l" label="06 · Бренд · BrandWaves" width={1080} height={760}>
+              <DSF_Brand theme="light" />
+            </DCArtboard>
+
+            <DCArtboard id="f-icons" label="07 · Иконография · MDI" width={1080} height={780}>
+              <DSF_Icons theme="light" />
+            </DCArtboard>
+          </DCSection>
+
+          <DCSection id="components" title="② Каталог компонентов" subtitle="кнопки, формы, feedback, карточки, таблицы — все компоненты в обеих темах">
+            <DCArtboard id="c-btn-l" label="08 · Кнопки и чипы · light" width={960} height={900}>
+              <DSC_Buttons theme="light" />
+            </DCArtboard>
+            <DCArtboard id="c-btn-d" label="09 · Кнопки и чипы · dark" width={960} height={900}>
+              <DSC_Buttons theme="dark" />
+            </DCArtboard>
+
+            <DCArtboard id="c-in-l" label="10 · Поля и формы · light" width={1080} height={900}>
+              <DSC_Inputs theme="light" />
+            </DCArtboard>
+            <DCArtboard id="c-in-d" label="11 · Поля и формы · dark" width={1080} height={900}>
+              <DSC_Inputs theme="dark" />
+            </DCArtboard>
+
+            <DCArtboard id="c-fb-l" label="12 · Feedback / навигация · light" width={1080} height={900}>
+              <DSC_Feedback theme="light" />
+            </DCArtboard>
+
+            <DCArtboard id="c-cd-l" label="13 · Карточки и диалоги · light" width={1080} height={900}>
+              <DSC_Cards theme="light" />
+            </DCArtboard>
+
+            <DCArtboard id="c-tb-l" label="14 · Таблицы · light" width={1180} height={680}>
+              <DSC_Table theme="light" />
+            </DCArtboard>
+            <DCArtboard id="c-tb-d" label="15 · Таблицы · dark" width={1180} height={680}>
+              <DSC_Table theme="dark" />
+            </DCArtboard>
+          </DCSection>
+
+          <DCSection id="patterns" title="③ Состояния и навигация" subtitle="loading / empty / error / success / permission · sidebar + appbar">
+            <DCArtboard id="p-states-l" label="16 · Состояния · light" width={1180} height={920}>
+              <DSP_States theme="light" />
+            </DCArtboard>
+            <DCArtboard id="p-states-d" label="17 · Состояния · dark" width={1180} height={920}>
+              <DSP_States theme="dark" />
+            </DCArtboard>
+
+            <DCArtboard id="p-nav-l" label="18 · Навигация · sidebar + appbar" width={1080} height={780}>
+              <DSP_Nav theme="light" />
+            </DCArtboard>
+          </DCSection>
+
+          <DCSection id="layouts" title="④ Применение · layouts" subtitle="MainLayout (партнёр) light/dark · AdminLayout (тёмный) · tablet · mobile">
+            <DCArtboard id="l-p-l" label="19 · Партнёр · Главная · light · desktop" width={1280} height={820}>
+              <PartnerWorkspace theme="light" />
+            </DCArtboard>
+            <DCArtboard id="l-p-d" label="20 · Партнёр · Главная · dark · desktop" width={1280} height={820}>
+              <PartnerWorkspace theme="dark" />
+            </DCArtboard>
+
+            <DCArtboard id="l-a" label="21 · Админ · Owner-дашборд · dark" width={1440} height={900}>
+              <AdminDashboard />
+            </DCArtboard>
+
+            <DCArtboard id="l-tab" label="22 · Партнёр · tablet · свёрнутый сайдбар" width={900} height={760}>
+              <PartnerTablet theme="light" />
+            </DCArtboard>
+
+            <DCArtboard id="l-m-l" label="23 · Партнёр · mobile · light" width={390} height={780}>
+              <PartnerMobile theme="light" />
+            </DCArtboard>
+            <DCArtboard id="l-m-d" label="24 · Партнёр · mobile · dark" width={390} height={780}>
+              <PartnerMobile theme="dark" />
+            </DCArtboard>
+          </DCSection>
+
+          <DCSection id="auth" title="⑤ Авторизация" subtitle="первое впечатление · split-screen с BrandWaves">
+            <DCArtboard id="auth-login" label="25 · Login · split-screen hero · light" width={1280} height={820}>
+              <AuthLogin theme="light" />
+            </DCArtboard>
+          </DCSection>
+
+          <DCSection id="partner" title="⑥ Партнёрский кабинет · ключевые экраны" subtitle="дашборд · клиенты · контракты · продукты">
+            <DCArtboard id="p-dash" label="26 · Дашборд партнёра · KPI · графики · команда" width={1280} height={1000}>
+              <PartnerDashboard theme="light" />
+            </DCArtboard>
+            <DCArtboard id="p-cli" label="27 · Клиенты · таблица + фильтры" width={1280} height={820}>
+              <PartnerClients theme="light" />
+            </DCArtboard>
+            <DCArtboard id="p-con" label="28 · Контракты · мои + команды + продуктовые фильтры" width={1280} height={900}>
+              <PartnerContracts theme="light" />
+            </DCArtboard>
+            <DCArtboard id="p-prod" label="29 · Продукты · каталог" width={1280} height={1000}>
+              <PartnerProducts theme="light" />
+            </DCArtboard>
+          </DCSection>
+
+          <DCSection id="manager" title="⑦ Менеджер · бэк-офис" subtitle="Workspace с Kanban-доской задач">
+            <DCArtboard id="m-ws" label="30 · Workspace · Kanban + метрики SLA" width={1440} height={900}>
+              <ManagerWorkspace theme="light" />
+            </DCArtboard>
+          </DCSection>
+
+          <DCSection id="admin" title="⑧ Админ-панель" subtitle="переработанный Home — замена существующего экрана">
+            <DCArtboard id="a-home" label="31 · Админ · Home · переработка скриншота" width={1440} height={1100}>
+              <AdminHomeRedesign />
+            </DCArtboard>
+          </DCSection>
+
+          <DCSection id="partner-extra" title="⑨ Партнёр · остальные экраны" subtitle="структура · финансы · конкурсы · чат · профиль · справка · рефералы">
+            <DCArtboard id="px-struct" label="32 · Структура · дерево команды" width={1280} height={820}>
+              <PartnerStructure theme="light" />
+            </DCArtboard>
+            <DCArtboard id="px-finrep" label="33 · Финансы · отчёт · snapshot vs live" width={1280} height={820}>
+              <PartnerFinanceReport theme="light" />
+            </DCArtboard>
+            <DCArtboard id="px-calc" label="34 · Финансы · калькулятор комиссии" width={1280} height={820}>
+              <PartnerCalculator theme="light" />
+            </DCArtboard>
+            <DCArtboard id="px-cont" label="35 · Конкурсы · hero + лидерборд" width={1280} height={900}>
+              <PartnerContests theme="light" />
+            </DCArtboard>
+            <DCArtboard id="px-chat" label="36 · Чат · 3 колонки (тикеты / диалог / контекст)" width={1440} height={820}>
+              <PartnerChat theme="light" />
+            </DCArtboard>
+            <DCArtboard id="px-prof" label="37 · Профиль · личные данные" width={1280} height={820}>
+              <PartnerProfile theme="light" />
+            </DCArtboard>
+            <DCArtboard id="px-help" label="38 · Справка · help-center" width={1280} height={820}>
+              <PartnerHelp theme="light" />
+            </DCArtboard>
+            <DCArtboard id="px-ref" label="39 · Рефералы · ссылка + статы + приведённые" width={1280} height={1000}>
+              <PartnerReferrals theme="light" />
+            </DCArtboard>
+          </DCSection>
+
+          <DCSection id="manager-all" title="⑩ Менеджер · бэк-офис · полный набор" subtitle="периоды (list + wizard) · контракты · upload · партнёры · приёмка · транзакции · реестры">
+            <DCArtboard id="m-per" label="40 · Периоды · список" width={1280} height={620}>
+              <MgrPeriods />
+            </DCArtboard>
+            <DCArtboard id="m-perw" label="41 · Периоды · wizard закрытия" width={1280} height={900}>
+              <MgrPeriodWizard />
+            </DCArtboard>
+            <DCArtboard id="m-con" label="42 · Менеджер контрактов · фильтры + таблица" width={1280} height={780}>
+              <MgrContracts />
+            </DCArtboard>
+            <DCArtboard id="m-upl" label="43 · Загрузка контрактов · dropzone + история" width={1280} height={900}>
+              <MgrContractUpload />
+            </DCArtboard>
+            <DCArtboard id="m-pr" label="44 · Партнёры · сеть" width={1280} height={780}>
+              <MgrPartners />
+            </DCArtboard>
+            <DCArtboard id="m-st" label="45 · Статусы партнёров · ручная смена" width={1280} height={580}>
+              <MgrStatuses />
+            </DCArtboard>
+            <DCArtboard id="m-acc" label="46 · Приёмка контрактов · карточки" width={1280} height={820}>
+              <MgrAcceptance />
+            </DCArtboard>
+            <DCArtboard id="m-req" label="47 · Реквизиты партнёров" width={1280} height={580}>
+              <MgrRequisites />
+            </DCArtboard>
+            <DCArtboard id="m-trx" label="48 · Транзакции · сводка + лента" width={1280} height={820}>
+              <MgrTransactions />
+            </DCArtboard>
+            <DCArtboard id="m-imp" label="49 · Импорт транзакций · preview + коллизии" width={1280} height={1100}>
+              <MgrImport />
+            </DCArtboard>
+            <DCArtboard id="m-com" label="50 · Комиссии · табличный расчёт" width={1280} height={600}>
+              <MgrCommissions />
+            </DCArtboard>
+            <DCArtboard id="m-pool" label="51 · Бассейн (leader pool)" width={1280} height={580}>
+              <MgrPool />
+            </DCArtboard>
+            <DCArtboard id="m-qual" label="52 · Квалификации · требования" width={1280} height={520}>
+              <MgrQualifications />
+            </DCArtboard>
+            <DCArtboard id="m-chrg" label="53 · Прочие начисления (бонусы / штрафы)" width={1280} height={520}>
+              <MgrCharges />
+            </DCArtboard>
+            <DCArtboard id="m-pay" label="54 · Реестр выплат · черновик апреля" width={1280} height={780}>
+              <MgrPayments />
+            </DCArtboard>
+            <DCArtboard id="m-sup" label="55 · Поддержка · supervisor-инструмент" width={1280} height={680}>
+              <MgrSupport />
+            </DCArtboard>
+            <DCArtboard id="m-qst" label="56 · Анкеты партнёров · заявки на регистрацию" width={1280} height={820}>
+              <MgrQuestionnaires />
+            </DCArtboard>
+          </DCSection>
+
+          <DCSection id="partner-missing" title="⑫ Партнёр · недостающие экраны" subtitle="регистрация · обучение · обращения · ошибки · статус · InSmart">
+            <DCArtboard id="x-reg" label="75 · Регистрация · реферальная ссылка" width={1280} height={820}>
+              <AuthRegister theme="light" />
+            </DCArtboard>
+            <DCArtboard id="x-edu" label="76 · Обучение · home + KB-промо" width={1280} height={1000}>
+              <PartnerEducation theme="light" />
+            </DCArtboard>
+            <DCArtboard id="x-edu-c" label="77 · Курс · дерево + модули" width={1280} height={900}>
+              <PartnerEducationCourse theme="light" />
+            </DCArtboard>
+            <DCArtboard id="x-edu-l" label="78 · Урок · видео + блоки + домашка" width={1280} height={900}>
+              <PartnerEducationLesson theme="light" />
+            </DCArtboard>
+            <DCArtboard id="x-edu-t" label="79 · Тест · допуск к продукту" width={1280} height={820}>
+              <PartnerEducationTest theme="light" />
+            </DCArtboard>
+            <DCArtboard id="x-edu-kb" label="80 · База знаний · разделы" width={1280} height={780}>
+              <PartnerEducationKb theme="light" />
+            </DCArtboard>
+            <DCArtboard id="x-comm" label="81 · Обращения (legacy)" width={1280} height={820}>
+              <PartnerCommunication theme="light" />
+            </DCArtboard>
+            <DCArtboard id="x-term" label="82 · Терминирован · доступ ограничен" width={1280} height={780}>
+              <PartnerTerminated theme="light" />
+            </DCArtboard>
+            <DCArtboard id="x-err" label="83 · Forbidden · NotFound" width={1280} height={560}>
+              <PartnerErrorPages theme="light" />
+            </DCArtboard>
+            <DCArtboard id="x-sys" label="84 · Статус системы · публичный" width={1280} height={900}>
+              <PartnerSystemStatus theme="light" />
+            </DCArtboard>
+            <DCArtboard id="x-ins" label="85 · InSmart · виджет страхования" width={1280} height={820}>
+              <PartnerInsmart theme="light" />
+            </DCArtboard>
+          </DCSection>
+
+          <DCSection id="manager-missing" title="⑬ Менеджер · недостающие экраны" subtitle="права доступа · карточка периода · перестановки · обучение · база знаний · домашки · чат-канбан · аналитика чата · отчёты">
+            <DCArtboard id="mx-perm" label="86 · Группы и права · матрица доступа" width={1280} height={620}>
+              <MgrPermissions />
+            </DCArtboard>
+            <DCArtboard id="mx-perc" label="87 · Карточка периода · runners + журнал" width={1280} height={1000}>
+              <MgrPeriodCard />
+            </DCArtboard>
+            <DCArtboard id="mx-trf" label="88 · Перестановки наставников · история" width={1280} height={680}>
+              <MgrTransfers />
+            </DCArtboard>
+            <DCArtboard id="mx-edu" label="89 · Конструктор обучения · дерево + урок" width={1440} height={900}>
+              <MgrEducationConstructor />
+            </DCArtboard>
+            <DCArtboard id="mx-kb" label="90 · Конструктор базы знаний · разделы + статьи" width={1440} height={900}>
+              <MgrKbConstructor />
+            </DCArtboard>
+            <DCArtboard id="mx-hw" label="91 · Домашние задания · очередь модератора" width={1440} height={780}>
+              <MgrHomework />
+            </DCArtboard>
+            <DCArtboard id="mx-ea" label="92 · Статистика обучения · по курсам + лидеры" width={1280} height={760}>
+              <MgrEducationAnalytics />
+            </DCArtboard>
+            <DCArtboard id="mx-ca" label="93 · Аналитика чата · KPI + динамика + категории" width={1440} height={1100}>
+              <MgrChatAnalytics />
+            </DCArtboard>
+            <DCArtboard id="mx-sc" label="94 · Тикеты staff · канбан-режим" width={1440} height={900}>
+              <MgrStaffChatKanban />
+            </DCArtboard>
+            <DCArtboard id="mx-rep" label="95 · Отчёты · каталог + on-demand" width={1280} height={900}>
+              <MgrReports />
+            </DCArtboard>
+          </DCSection>
+
+          <DCSection id="admin-all" title="⑪ Админ-панель · полный набор" subtitle="дашборды · пользователи · аналитика · контент · справочники · мониторинг">
+            <DCArtboard id="a-usr" label="57 · Пользователи · роли + 2FA" width={1280} height={780}>
+              <AdminUsers />
+            </DCArtboard>
+            <DCArtboard id="a-rec" label="58 · Сверка балансов · snapshot vs live" width={1280} height={780}>
+              <AdminReconciliation />
+            </DCArtboard>
+            <DCArtboard id="a-anm" label="59 · Аномалии · приоритеты" width={1280} height={780}>
+              <AdminAnomalies />
+            </DCArtboard>
+            <DCArtboard id="a-cal" label="60 · Календарь операций" width={1280} height={780}>
+              <AdminCalendar />
+            </DCArtboard>
+            <DCArtboard id="a-coh" label="61 · Когорты · retention heat-map" width={1440} height={780}>
+              <AdminCohorts />
+            </DCArtboard>
+            <DCArtboard id="a-blk" label="62 · Массовые операции" width={1280} height={780}>
+              <AdminBulkOps />
+            </DCArtboard>
+            <DCArtboard id="a-trg" label="63 · Триггеры уведомлений" width={1280} height={580}>
+              <AdminTriggers />
+            </DCArtboard>
+            <DCArtboard id="a-mail" label="64 · Почтовые рассылки" width={1280} height={620}>
+              <AdminMail />
+            </DCArtboard>
+            <DCArtboard id="a-int" label="65 · Интеграции · 8 сервисов" width={1280} height={820}>
+              <AdminIntegrations />
+            </DCArtboard>
+            <DCArtboard id="a-api" label="66 · API-ключи · скоупы + ротация" width={1280} height={580}>
+              <AdminApiKeys />
+            </DCArtboard>
+            <DCArtboard id="a-set" label="67 · Настройки системы" width={1280} height={780}>
+              <AdminSettings />
+            </DCArtboard>
+            <DCArtboard id="a-ref" label="68 · Справочники · 12 каталогов" width={1280} height={620}>
+              <AdminReferences />
+            </DCArtboard>
+            <DCArtboard id="a-news" label="69 · Новости" width={1280} height={580}>
+              <AdminNews />
+            </DCArtboard>
+            <DCArtboard id="a-road" label="70 · Роадмап · 3 колонки" width={1280} height={780}>
+              <AdminRoadmap />
+            </DCArtboard>
+            <DCArtboard id="a-prd" label="71 · Продукты · CRUD" width={1280} height={520}>
+              <AdminProducts />
+            </DCArtboard>
+            <DCArtboard id="a-cnt" label="72 · Конкурсы · CRUD" width={1280} height={520}>
+              <AdminContests />
+            </DCArtboard>
+            <DCArtboard id="a-mon" label="73 · Мониторинг · KPI + сервисы" width={1280} height={780}>
+              <AdminMonitoring />
+            </DCArtboard>
+            <DCArtboard id="a-st" label="74 · Статус системы · публичный status-page" width={1280} height={900}>
+              <AdminStatus />
+            </DCArtboard>
+          </DCSection>
+
+        </DesignCanvas>
+      </div>
+    </React.Fragment>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+
+</body>
+</html>

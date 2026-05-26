@@ -46,7 +46,7 @@
           </div>
           <div class="ticket-foot">
             <div class="ticket-preview">{{ t.last_message_preview || '—' }}</div>
-            <v-chip v-if="t.unread > 0" size="x-small" color="error" variant="flat">
+            <v-chip v-if="(t.unread ?? 0) > 0" size="x-small" color="error" variant="flat">
               {{ t.unread }}
             </v-chip>
           </div>

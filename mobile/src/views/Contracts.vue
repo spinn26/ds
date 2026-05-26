@@ -32,8 +32,8 @@
 
     <div v-else class="list">
       <div v-for="c in filtered" :key="c.id" class="list-card">
-        <div class="list-card-avatar" style="background: rgba(46,125,50,0.10)">
-          <v-icon color="primary" size="20">mdi-file-document-outline</v-icon>
+        <div class="list-card-avatar">
+          <v-icon color="primary" size="22">mdi-file-document-outline</v-icon>
         </div>
         <div class="list-card-body">
           <div class="list-card-title">{{ c.number || `Контракт #${c.id}` }}</div>

@@ -48,6 +48,32 @@ export const useAuthStore = defineStore('auth', () => {
     ]);
   }
 
+  // Подтянуть свежий профиль с бэка (вызываем после restore, чтобы
+  // показывать актуальные имя/роль/статус, а не закэшированные).
+  async function refreshMe() {
+    if (!token.value) return;
+    try {
+      // Используем динамический импорт, чтобы избежать циклической
+      // зависимости с api (которое читает auth-store).
+      const api = (await import('@/api')).default;
+      const { data } = await api.get('/auth/me');
+      const u = data?.user || data;
+      if (u && u.id) {
+        const merged: User = {
+          id: u.id,
+          firstName: u.firstName,
+          lastName: u.lastName,
+          email: u.email,
+          role: u.role,
+        };
+        user.value = merged;
+        await Preferences.set({ key: USER_KEY, value: JSON.stringify(merged) });
+      }
+    } catch {
+      // 401 уже обработан в interceptor'е — нам делать нечего.
+    }
+  }
+
   async function logout() {
     token.value = null;
     user.value = null;
@@ -55,7 +81,12 @@ export const useAuthStore = defineStore('auth', () => {
       Preferences.remove({ key: TOKEN_KEY }),
       Preferences.remove({ key: USER_KEY }),
     ]);
+    // Сбрасываем побочные сторы, чтобы при логауте бейджи/polling не висели.
+    try {
+      const { useNotificationsStore } = await import('@/stores/notifications');
+      useNotificationsStore().reset();
+    } catch {}
   }
 
-  return { token, user, ready, isAuthenticated, isStaff, restore, setSession, logout };
+  return { token, user, ready, isAuthenticated, isStaff, restore, setSession, refreshMe, logout };
 });

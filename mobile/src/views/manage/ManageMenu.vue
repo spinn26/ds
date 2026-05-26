@@ -65,7 +65,6 @@ const groups = [
     label: 'Аккаунт',
     items: [
       { label: 'Профиль', icon: 'mdi-account-circle-outline', color: 'primary', to: '/manage/profile' },
-      { label: 'Перейти в кабинет партнёра', icon: 'mdi-swap-horizontal-bold', color: 'success', to: '/app/home' },
     ],
   },
 ];
