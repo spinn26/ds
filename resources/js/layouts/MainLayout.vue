@@ -58,6 +58,32 @@
     <v-app-bar flat border="b" class="topbar">
       <v-app-bar-nav-icon v-if="mobile" @click="drawer = !drawer" />
 
+      <!-- Статус активности партнёра — слева в topbar. Только для
+           consultant'ов и только на desktop (на mobile места нет). -->
+      <v-chip v-if="!mobile && isConsultant && statusInfo?.activityName"
+        size="small" variant="tonal" :color="statusColor"
+        class="ml-2 status-topbar-chip"
+        :title="statusInfo?.daysRemaining != null
+          ? 'Смена статуса ' + (statusInfo.daysRemaining > 0
+              ? 'через ' + statusInfo.daysRemaining + ' дн.'
+              : 'просрочена')
+          : ''">
+        <v-icon start size="14">mdi-shield-check</v-icon>
+        <span class="font-weight-medium">{{ statusInfo.activityName }}</span>
+        <template v-if="statusInfo.yearPeriodEnd">
+          <span class="mx-1 text-medium-emphasis">·</span>
+          <span class="text-medium-emphasis">до {{ fmtShortDate(statusInfo.yearPeriodEnd) }}</span>
+        </template>
+        <template v-if="statusInfo?.daysRemaining != null && statusInfo.daysRemaining <= 90">
+          <span class="mx-1 text-medium-emphasis">·</span>
+          <v-icon size="13" class="me-1"
+            :color="statusInfo.daysRemaining <= 30 ? 'error' : 'warning'">mdi-timer-outline</v-icon>
+          <span :class="statusInfo.daysRemaining <= 30 ? 'text-error' : 'text-warning'">
+            {{ statusInfo.daysRemaining }} дн.
+          </span>
+        </template>
+      </v-chip>
+
       <v-spacer />
 
       <!-- Статус системы — мигающий кружок + лейбл; на всех страницах
@@ -847,6 +873,12 @@ const visibleMenu = computed(() => menuItems.filter((item) => {
 .topbar {
   backdrop-filter: blur(12px);
   background: rgba(var(--v-theme-surface), 0.85) !important;
+}
+
+/* Topbar status-chip — фон полупрозрачный, чтобы blur topbar'а
+   просвечивал через чип (apple-style). */
+.status-topbar-chip {
+  background: rgba(var(--v-theme-on-surface), 0.04) !important;
 }
 
 .content-main {
