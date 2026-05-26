@@ -15,10 +15,11 @@
     </v-card>
 
     <v-card class="insmart-frame" elevation="2">
-      <!-- Контейнер для виджета InSmart. data-id ниже у <script> должен
-           точно совпадать с id этого элемента — лоадер ищет узел по id
-           и монтирует frame внутрь него. -->
-      <div id="inssmart-b2c" class="insmart-mount"></div>
+      <!-- Контейнер для виджета. Загрузчик InSmart внутри своей логики
+           делает t.parentNode.insertBefore(iframe, t) — то есть iframe
+           появляется РЯДОМ с тегом <script>. Поэтому скрипт надо
+           аппендить именно в этот div, а не в <head>. -->
+      <div ref="mountRef" class="insmart-mount"></div>
 
       <v-overlay v-if="loading" contained persistent
         class="d-flex align-center justify-center">
@@ -38,16 +39,14 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue';
-import api from '../api';
 import PageHeader from '../components/PageHeader.vue';
 
 const loading = ref(true);
 const loadError = ref(null);
+const mountRef = ref(null);
 
-// Канальные креды от InSmart — идентифицируют B2B-партнёра (DS Consulting)
-// в их b2c-frame. INSMART_TOKEN — «ID приложения» в b2b-ЛК InSmart,
-// INSMART_SECRET — ключ к этому приложению. Не пользовательский токен;
-// идентификация конкретного партнёра — через callback ниже.
+// Канальные креды от InSmart — идентифицируют DS Consulting как B2B-партнёра.
+// INSMART_TOKEN = «ID приложения» в b2b-ЛК InSmart, INSMART_SECRET = ключ к нему.
 const INSMART_TOKEN = '382f5151-a7e5-5ad6-b1fd-2841052a4aac';
 const INSMART_SECRET = '15fd9275-80c5-5dfc-a98d-dd0b9ed658c9';
 const INSMART_LOADER_SRC = 'https://widgets.inssmart.ru/widgets/b2c-frame.loader.js';
@@ -56,13 +55,11 @@ const INSMART_ORIGIN = 'https://widgets.inssmart.ru';
 let loaderScript = null;
 
 onMounted(() => {
-  // Подгружаем loader. data-attributes:
-  //   data-id        — id контейнера для монтирования frame'а
-  //   data-origin    — origin InSmart, используется в postMessage
-  //   data-product   — стартовый раздел внутри виджета («/» = home)
-  //   data-token     — канальный токен платформы
-  //   data-secret    — канальный секрет (валидируется только сервером InSmart)
-  //   data-auth=true — включает вызов InssmartEventListener.auth(cb)
+  // Loader checks `data-auth` как строку. Любое значение (даже "false")
+  // truthy → loader идёт в ветку n().then(...), где n — callback, который
+  // регистрируется через InssmartEventListener.auth(cb). Если cb нет —
+  // «n is not a function». Чтобы guest-режим работал — атрибут НЕ
+  // выставляем вообще, тогда s=null, !s истинно, простая ветка без n().
   loaderScript = document.createElement('script');
   loaderScript.type = 'text/javascript';
   loaderScript.src = INSMART_LOADER_SRC;
@@ -71,30 +68,35 @@ onMounted(() => {
   loaderScript.setAttribute('data-product', '/');
   loaderScript.setAttribute('data-token', INSMART_TOKEN);
   loaderScript.setAttribute('data-secret', INSMART_SECRET);
-  // Temporary: data-auth=false — guest-режим без user-JWT callback'а.
-  // Channel auth по data-token + data-secret прошёл (config от InSmart
-  // приходит), но при data-auth=true виджет ожидал валидный user-JWT,
-  // а наш /insmart/widget-token возвращает null (нет INSMART_API_KEY).
-  // В guest-режиме партнёр заполняет ФИО/телефон сам внутри виджета.
-  loaderScript.setAttribute('data-auth', 'false');
-  loaderScript.onload = () => {
-    loading.value = false;
-  };
+  // data-auth НЕ выставляем сейчас — guest-режим (см. коммент выше).
+  loaderScript.onload = () => { loading.value = false; };
   loaderScript.onerror = () => {
     loading.value = false;
-    loadError.value = 'Не удалось загрузить скрипт InSmart. Проверьте интернет-соединение или обратитесь в поддержку.';
+    loadError.value = 'Не удалось загрузить скрипт InSmart.';
   };
-  document.head.appendChild(loaderScript);
+
+  // Loader ВСТАВЛЯЕТ iframe рядом со своим тегом <script> через
+  // t.parentNode.insertBefore(iframe, t). Поэтому скрипт нужно
+  // воткнуть именно внутрь видимого контейнера, а не в <head>.
+  if (mountRef.value) {
+    mountRef.value.appendChild(loaderScript);
+  } else {
+    document.body.appendChild(loaderScript);
+  }
 });
 
 onUnmounted(() => {
-  // Снимаем тег <script> при уходе со страницы. window.InssmartEventListener
-  // не трогаем — это объект самого лоадера, на других страницах он не мешает,
-  // а удалять его свойства может сломать внутренние подписки лоадера.
+  // Чистим как скрипт, так и созданный им iframe — он живёт рядом со
+  // скриптом, в том же контейнере, и не уйдёт автоматом при размонтировании
+  // Vue-компонента (Vue знает только о своих узлах).
   if (loaderScript && loaderScript.parentNode) {
     loaderScript.parentNode.removeChild(loaderScript);
   }
   loaderScript = null;
+  const iframe = document.getElementById('inssmart-b2c-frame');
+  if (iframe && iframe.parentNode) {
+    iframe.parentNode.removeChild(iframe);
+  }
 });
 </script>
 
@@ -110,5 +112,10 @@ onUnmounted(() => {
 .insmart-mount {
   width: 100%;
   min-height: 70vh;
+}
+/* iframe InSmart'а лежит в .insmart-mount (loader его туда вставляет) */
+.insmart-mount :deep(iframe) {
+  width: 100%;
+  display: block;
 }
 </style>
