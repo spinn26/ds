@@ -1,44 +1,80 @@
 <template>
-  <v-container class="fill-height" fluid>
-    <v-row justify="center" align="center">
-      <v-col cols="12" sm="8" md="6">
-        <v-card class="pa-8 text-center" elevation="8" rounded="xl">
-          <v-icon size="80" color="error" class="mb-4">mdi-account-lock</v-icon>
+  <!-- DS spec ds-missing-partner.jsx::PartnerTerminated:
+       центрированная карточка max-width 560, 88px lock-кружок в
+       error-container фоне, два списка "Что это значит" / "Для
+       восстановления", две кнопки внизу (filled + outlined). -->
+  <div class="terminated-page">
+    <v-card class="terminated-card pa-9 text-center">
+      <div class="t-icon">
+        <v-icon size="42" color="error">mdi-lock</v-icon>
+      </div>
 
-          <h4 class="text-h4 font-weight-bold text-error mb-2">Доступ ограничен</h4>
+      <h2 class="ds-headline-m text-error mt-4">Доступ ограничен</h2>
+      <div class="ds-body-l ds-muted mt-2">
+        Ваш аккаунт находится в статусе «Терминирован». Доступ к разделам платформы временно закрыт.
+      </div>
 
-          <p class="text-body-1 text-medium-emphasis mb-6">
-            Ваш аккаунт находится в статусе <strong>«Терминирован»</strong>.<br>
-            Доступ к разделам платформы временно закрыт.
-          </p>
+      <v-divider class="my-6" />
 
-          <v-divider class="mb-4" />
+      <div class="t-lists d-flex flex-column ga-5 text-left">
+        <div>
+          <div class="ds-title-s mb-2">Что это значит:</div>
+          <ul class="t-bullets">
+            <li>Условия активационного периода не выполнены</li>
+            <li>Накопленные баллы обнулены, клиенты и контракты переданы вышестоящему партнёру</li>
+            <li>Повторная регистрация возможна не более 3 раз</li>
+          </ul>
+        </div>
+        <div>
+          <div class="ds-title-s mb-2">Для восстановления доступа:</div>
+          <ul class="t-bullets">
+            <li>Свяжитесь с техподдержкой через раздел «Обратная связь»</li>
+            <li>Обсудите план активации с наставником</li>
+          </ul>
+        </div>
+      </div>
 
-          <div class="text-left mb-4">
-            <div class="text-subtitle-2 font-weight-bold mb-2">Что это значит:</div>
-            <ul class="text-body-2 text-medium-emphasis">
-              <li>Условия активации или годового периода не были выполнены</li>
-              <li>Баллы обнулены, клиенты и контракты переданы вышестоящему партнёру</li>
-              <li>Вы можете пройти повторную регистрацию (не более 3 раз)</li>
-            </ul>
-          </div>
-
-          <div class="text-left mb-6">
-            <div class="text-subtitle-2 font-weight-bold mb-2">Для восстановления доступа:</div>
-            <ul class="text-body-2 text-medium-emphasis">
-              <li>Свяжитесь с техподдержкой через раздел Коммуникация</li>
-              <li>Или обратитесь к вашему наставнику</li>
-            </ul>
-          </div>
-
-          <v-btn to="/communication" color="primary" size="large" prepend-icon="mdi-chat" class="mr-2">
-            Обратная связь
-          </v-btn>
-          <v-btn to="/profile" variant="outlined" size="large" prepend-icon="mdi-account">
-            Профиль
-          </v-btn>
-        </v-card>
-      </v-col>
-    </v-row>
-  </v-container>
+      <div class="d-flex justify-center ga-2 mt-6">
+        <v-btn to="/communication" color="primary" variant="flat" size="large" prepend-icon="mdi-chat">
+          Обратная связь
+        </v-btn>
+        <v-btn to="/profile" variant="outlined" size="large" prepend-icon="mdi-account">
+          Профиль
+        </v-btn>
+      </div>
+    </v-card>
+  </div>
 </template>
+
+<style scoped>
+.terminated-page {
+  display: grid;
+  place-items: center;
+  min-height: 70vh;
+  padding: 28px;
+}
+.terminated-card {
+  max-width: 560px;
+  width: 100%;
+  border-radius: var(--ds-radius-lg, 12px) !important;
+}
+.t-icon {
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  background: var(--ds-error-container, rgb(var(--v-theme-error-container), 0.15));
+  display: grid;
+  place-items: center;
+  margin: 0 auto;
+}
+.t-bullets {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--ds-on-surface-variant, rgba(var(--v-theme-on-surface), 0.65));
+  font-size: 14px;
+  line-height: 1.65;
+}
+.t-bullets li {
+  margin-bottom: 2px;
+}
+</style>
