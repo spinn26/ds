@@ -1,476 +1,562 @@
 <template>
-  <div>
-    <PageHeader title="Профиль" icon="mdi-account">
-      <template #subtitle>личные данные · документы · безопасность</template>
+  <div class="profile-page">
+    <PageHeader title="Профиль" icon="mdi-account-circle-outline">
+      <template #subtitle>
+        {{ isEmployee ? 'личные данные · безопасность · уведомления' : 'личные данные · документы · реквизиты · безопасность' }}
+      </template>
     </PageHeader>
 
-    <!-- DS-hero: общий для всех табов (ds-extra-partner.jsx::PartnerProfile).
-         Аватар (с upload), ФИО, email, чипы статуса, ID. -->
-    <v-card class="profile-hero pa-5 mb-4 d-flex align-center ga-4 flex-wrap">
-      <v-avatar color="primary" size="80" class="profile-hero__avatar">
-        <v-img v-if="profile.user?.avatar" :src="profile.user.avatar" cover />
-        <span v-else class="text-h4 text-white">{{ initials }}</span>
-      </v-avatar>
-      <div class="profile-hero__main flex-grow-1">
-        <div class="ds-headline-s">
+    <!-- ────────────────────  HERO  ──────────────────── -->
+    <v-card class="profile-hero mb-4" elevation="0">
+      <div class="profile-hero__avatar-wrap">
+        <v-avatar :size="72" color="primary" class="profile-hero__avatar">
+          <v-img v-if="profile.user?.avatar" :src="profile.user.avatar" cover />
+          <span v-else class="profile-hero__initials">{{ initials || '?' }}</span>
+        </v-avatar>
+      </div>
+      <div class="profile-hero__main">
+        <div class="profile-hero__name">
           {{ profile.user?.lastName }} {{ profile.user?.firstName }} {{ profile.user?.patronymic }}
         </div>
-        <div class="ds-body-m ds-muted mt-1">
-          {{ profile.user?.email }}
-          <template v-if="profile.user?.participantCode"> · ID {{ profile.user.participantCode }}</template>
+        <div class="profile-hero__sub">
+          <span>{{ profile.user?.email }}</span>
+          <template v-if="!isEmployee && profile.user?.participantCode">
+            <span class="profile-hero__dot">·</span>
+            <span>ID {{ profile.user.participantCode }}</span>
+          </template>
+          <template v-if="isEmployee && roleLabel">
+            <span class="profile-hero__dot">·</span>
+            <span>{{ roleLabel }}</span>
+          </template>
         </div>
-        <div v-if="profile.statusInfo" class="d-flex align-center ga-2 mt-2 flex-wrap">
-          <v-chip size="small" :color="activityColor(profile.statusInfo.activityId)" variant="flat">
-            {{ profile.statusInfo.activityName }}
+        <div v-if="heroChips.length" class="profile-hero__chips">
+          <v-chip v-for="(c, i) in heroChips" :key="i"
+            :color="c.color" :variant="c.variant || 'tonal'" size="small">
+            {{ c.text }}
           </v-chip>
-          <span v-if="profile.statusInfo.yearPeriodEnd" class="ds-body-s ds-muted">
-            до {{ fmtShortDate(profile.statusInfo.yearPeriodEnd) }}
-          </span>
-          <span v-if="profile.statusInfo.activationDeadline" class="ds-body-s ds-muted">
-            Активация до {{ fmtShortDate(profile.statusInfo.activationDeadline) }}
-          </span>
         </div>
       </div>
-      <v-btn variant="outlined" prepend-icon="mdi-camera" size="small"
-        :loading="avatarUploading"
-        @click="avatarInput?.click()">
-        Сменить фото
-      </v-btn>
-      <input ref="avatarInput" type="file" accept="image/*" hidden @change="onAvatarPick" />
+      <div class="profile-hero__actions">
+        <v-btn variant="outlined" size="small" prepend-icon="mdi-camera"
+          :loading="avatarUploading"
+          @click="avatarInput?.click()">
+          Сменить фото
+        </v-btn>
+        <input ref="avatarInput" type="file" accept="image/*" hidden @change="onAvatarPick" />
+      </div>
     </v-card>
 
-    <!-- Двухколоночный layout: 12/3 nav-sidebar + 12/9 content (DS spec). -->
-    <v-row no-gutters class="ga-md-4" style="row-gap: 16px">
-      <v-col cols="12" md="3">
-        <v-card class="profile-nav pa-2">
-          <v-list density="comfortable" nav class="profile-nav-list">
-            <v-list-item value="info"
-              :active="tab === 'info'"
-              prepend-icon="mdi-account-circle-outline"
-              :title="isEmployee ? 'Информация о сотруднике' : 'Личные данные'"
-              @click="tab = 'info'" />
-            <v-list-item v-if="!isEmployee" value="documents"
-              :active="tab === 'documents'"
-              prepend-icon="mdi-file-document-outline"
-              title="Документы"
-              @click="tab = 'documents'" />
-            <v-list-item v-if="!isEmployee" value="requisites"
-              :active="tab === 'requisites'"
-              prepend-icon="mdi-credit-card-outline"
-              title="Реквизиты"
-              @click="tab = 'requisites'" />
-            <v-list-item value="security"
-              :active="tab === 'security'"
-              prepend-icon="mdi-shield-lock-outline"
-              title="Безопасность"
-              @click="tab = 'security'" />
-            <v-list-item value="notifications"
-              :active="tab === 'notifications'"
-              prepend-icon="mdi-bell-outline"
-              title="Уведомления"
-              @click="tab = 'notifications'" />
-            <v-list-item value="telegram"
-              :active="tab === 'telegram'"
-              prepend-icon="mdi-send"
-              title="Telegram-bot"
-              @click="tab = 'telegram'" />
-            <v-list-item v-if="!isEmployee && canInvite" value="referral"
-              :active="tab === 'referral'"
-              prepend-icon="mdi-link-variant"
-              title="Реферальные ссылки"
-              @click="tab = 'referral'" />
-          </v-list>
-        </v-card>
-      </v-col>
+    <!-- ────────────────  NAV + CONTENT  ──────────────── -->
+    <div class="profile-layout">
+      <!-- LEFT NAV -->
+      <aside class="profile-nav">
+        <button v-for="item in navItems" :key="item.value"
+          class="profile-nav__item"
+          :class="{ 'profile-nav__item--active': tab === item.value }"
+          @click="tab = item.value">
+          <v-icon size="20" class="profile-nav__icon">{{ item.icon }}</v-icon>
+          <span>{{ item.title }}</span>
+        </button>
+      </aside>
 
-      <v-col cols="12" md="9">
+      <!-- CONTENT -->
+      <section class="profile-content">
 
-    <v-tabs-window v-model="tab">
-      <!-- Section 1: Partner Info -->
-      <v-tabs-window-item value="info">
-        <v-card class="pa-4 mb-4">
-          <div class="ds-title-l mb-3">Личные данные</div>
-          <v-row dense>
-            <v-col cols="12" sm="4">
-              <v-text-field v-model="form.lastName" label="Фамилия"
-                :disabled="!isEmployee"
-                :prepend-inner-icon="!isEmployee ? 'mdi-lock' : undefined"
-                :hint="!isEmployee ? 'Изменение возможно только через техподдержку' : undefined"
-                persistent-hint />
-            </v-col>
-            <v-col cols="12" sm="4">
-              <v-text-field v-model="form.firstName" label="Имя"
-                :disabled="!isEmployee"
-                :prepend-inner-icon="!isEmployee ? 'mdi-lock' : undefined"
-                :hint="!isEmployee ? 'Изменение возможно только через техподдержку' : undefined"
-                persistent-hint />
-            </v-col>
-            <v-col cols="12" sm="4">
-              <v-text-field v-model="form.patronymic" label="Отчество"
-                :disabled="!isEmployee"
-                :prepend-inner-icon="!isEmployee ? 'mdi-lock' : undefined"
-                :hint="!isEmployee ? 'Изменение возможно только через техподдержку' : undefined"
-                persistent-hint />
-            </v-col>
-            <v-col v-if="isEmployee" cols="12" sm="4">
-              <v-text-field v-model="form.position" label="Должность"
-                prepend-inner-icon="mdi-briefcase" />
-            </v-col>
-            <v-col cols="12" sm="4">
-              <v-text-field v-model="form.birthDate" label="Дата рождения" type="date" />
-            </v-col>
-            <v-col cols="12" sm="4">
-              <v-select v-model="form.gender" label="Пол" :items="genderOptions" clearable />
-            </v-col>
-            <v-col cols="12" sm="4">
-              <v-autocomplete v-model="form.country" :items="countryOptions" label="Страна" clearable />
-            </v-col>
-            <v-col cols="12" sm="4">
-              <v-combobox v-model="form.city" :items="cityOptions" label="Город" clearable />
-            </v-col>
-            <v-col cols="12" sm="4">
-              <v-text-field v-model="form.email" label="Email" type="email" prepend-inner-icon="mdi-email" />
-            </v-col>
-            <v-col cols="12" sm="4">
-              <v-text-field v-model="form.phone" label="Телефон" prepend-inner-icon="mdi-phone" />
-            </v-col>
-            <v-col cols="12" sm="4">
-              <v-text-field v-model="form.telegram" label="Telegram" prepend-inner-icon="mdi-send" />
-            </v-col>
-          </v-row>
-          <v-btn color="primary" :loading="saving" @click="saveProfile" class="mt-2" prepend-icon="mdi-content-save">Сохранить</v-btn>
-          <v-alert v-if="saveMsg" :type="saveMsgType" density="compact" class="mt-3" closable @click:close="saveMsg = ''">{{ saveMsg }}</v-alert>
-        </v-card>
-
-        <!-- Signed Documents — только для партнёров per spec ✅Профиль §1 Блок 2 -->
-        <v-card v-if="!isEmployee && profile.signedDocuments?.length" class="pa-4 mb-4">
-          <div class="text-subtitle-1 font-weight-bold mb-2">Подписанные документы</div>
-          <v-list density="compact">
-            <v-list-item v-for="doc in profile.signedDocuments" :key="doc.id"
-              :href="doc.url || undefined" :target="doc.url ? '_blank' : undefined"
-              prepend-icon="mdi-file-check">
-              <v-list-item-title>{{ doc.name }}</v-list-item-title>
-              <v-list-item-subtitle>Подписано: {{ doc.signedAt }}</v-list-item-subtitle>
-            </v-list-item>
-          </v-list>
-        </v-card>
-
-        <!-- Password Change -->
-        <v-card class="pa-4">
-          <div class="text-subtitle-1 font-weight-bold mb-2">Смена пароля</div>
-          <v-row dense>
-            <v-col cols="12" sm="4">
-              <v-text-field v-model="pwd.current_password" label="Текущий пароль" type="password" prepend-inner-icon="mdi-lock" />
-            </v-col>
-            <v-col cols="12" sm="4">
-              <v-text-field v-model="pwd.password" label="Новый пароль" type="password" prepend-inner-icon="mdi-lock-reset" />
-            </v-col>
-            <v-col cols="12" sm="4">
-              <v-text-field v-model="pwd.password_confirmation" label="Подтверждение" type="password" prepend-inner-icon="mdi-lock-check" />
-            </v-col>
-          </v-row>
-          <v-btn color="primary" :loading="savingPwd" @click="changePassword" class="mt-2" prepend-icon="mdi-key">Сменить пароль</v-btn>
-          <v-alert v-if="pwdMsg" :type="pwdMsgType" density="compact" class="mt-3" closable @click:close="pwdMsg = ''">{{ pwdMsg }}</v-alert>
-        </v-card>
-      </v-tabs-window-item>
-
-      <!-- Section 2a: Documents (новый раздел по DS spec) -->
-      <v-tabs-window-item value="documents">
-        <v-card class="pa-4 mb-4">
-          <div class="d-flex align-center ga-2 mb-3">
-            <v-icon color="primary">mdi-file-document-multiple</v-icon>
-            <div class="ds-title-l">Документы партнёра</div>
-          </div>
-          <v-row dense>
-            <v-col v-for="slot in documentSlots" :key="slot.type" cols="12" sm="4">
-              <v-card variant="outlined" class="pa-3">
-                <div class="d-flex align-center ga-2 mb-2">
-                  <span class="text-body-2 font-weight-medium">{{ slot.label }}</span>
-                  <v-icon v-if="isDocUploaded(slot.type)" color="success" size="20">mdi-check-circle</v-icon>
-                </div>
-                <v-file-input
-                  v-model="docFiles[slot.type]"
-                  accept="image/*,.pdf"
-                  density="compact"
-                  variant="outlined"
-                  :label="isDocUploaded(slot.type) ? 'Загружено' : 'Выберите файл'"
-                  prepend-icon=""
-                  prepend-inner-icon="mdi-paperclip"
-                  hide-details
-                />
-                <v-btn
-                  color="primary"
-                  size="small"
-                  variant="tonal"
-                  class="mt-2"
-                  :loading="docUploading[slot.type]"
-                  :disabled="!docFiles[slot.type]"
-                  prepend-icon="mdi-upload"
-                  @click="uploadDocument(slot.type)"
-                >
-                  Загрузить
-                </v-btn>
-              </v-card>
-            </v-col>
-          </v-row>
-          <v-alert v-if="docMsg" :type="docMsgType" density="compact" class="mt-3" closable @click:close="docMsg = ''">{{ docMsg }}</v-alert>
-        </v-card>
-      </v-tabs-window-item>
-
-      <!-- Section 2b: Requisites (только ИП + Bank — по DS spec отдельный раздел) -->
-      <v-tabs-window-item value="requisites">
-        <!-- IP Requisites -->
-        <v-card class="pa-4 mb-4">
-          <div class="d-flex align-center ga-2 mb-3">
-            <v-icon color="primary">mdi-domain</v-icon>
-            <div class="ds-title-l">Реквизиты ИП</div>
-            <v-chip v-if="profile.requisites?.verificationStatus" size="small"
-              :color="verificationColor(profile.requisites.verificationStatus)">
-              {{ verificationLabel(profile.requisites.verificationStatus) }}
-            </v-chip>
-          </div>
-          <v-alert v-if="profile.requisites?.verificationStatus === 'verified'" type="warning" density="compact" class="mb-3" variant="tonal">
-            <v-icon class="mr-1">mdi-alert</v-icon>
-            Изменение реквизитов сбросит статус верификации
-          </v-alert>
-          <v-row dense>
-            <v-col cols="12" sm="6">
-              <v-text-field v-model="reqForm.individualEntrepreneur" label="Наименование ИП" />
-            </v-col>
-            <v-col cols="12" sm="3">
-              <v-text-field v-model="reqForm.inn" label="ИНН" />
-            </v-col>
-            <v-col cols="12" sm="3">
-              <v-text-field v-model="reqForm.ogrn" label="ОГРН/ОГРНИП" />
-            </v-col>
-            <v-col cols="12">
-              <v-text-field v-model="reqForm.address" label="Юридический адрес" />
-            </v-col>
-            <v-col cols="12">
-              <v-checkbox v-model="addressSameAsRegistration" label="Адрес регистрации совпадает с фактическим" density="compact" hide-details />
-            </v-col>
-            <v-col v-if="!addressSameAsRegistration" cols="12">
-              <v-text-field v-model="reqForm.actualAddress" label="Фактический адрес" />
-            </v-col>
-            <v-col cols="12" sm="6">
-              <v-text-field v-model="reqForm.email" label="Email для документов" type="email" />
-            </v-col>
-            <v-col cols="12" sm="6">
-              <v-text-field v-model="reqForm.phone" label="Телефон ИП" />
-            </v-col>
-          </v-row>
-          <v-btn color="primary" :loading="savingReq" @click="saveRequisites" class="mt-2" prepend-icon="mdi-content-save">
-            Сохранить реквизиты
-          </v-btn>
-          <v-alert v-if="reqMsg" :type="reqMsgType" density="compact" class="mt-3" closable @click:close="reqMsg = ''">{{ reqMsg }}</v-alert>
-        </v-card>
-
-        <!-- Bank Requisites -->
-        <v-card class="pa-4">
-          <div class="d-flex align-center ga-2 mb-3">
-            <v-icon color="primary">mdi-bank</v-icon>
-            <div class="text-subtitle-1 font-weight-bold">Банковские реквизиты</div>
-            <v-chip v-if="profile.bankRequisites?.verificationStatus" size="small"
-              :color="verificationColor(profile.bankRequisites.verificationStatus)">
-              {{ verificationLabel(profile.bankRequisites.verificationStatus) }}
-            </v-chip>
-          </div>
-          <v-alert v-if="profile.bankRequisites?.verificationStatus === 'verified'" type="warning" density="compact" class="mb-3" variant="tonal">
-            <v-icon class="mr-1">mdi-alert</v-icon>
-            Изменение банковских реквизитов сбросит статус верификации
-          </v-alert>
-          <v-row dense>
-            <v-col cols="12" sm="6">
-              <v-text-field v-model="bankForm.bankName" label="Наименование банка" />
-            </v-col>
-            <v-col cols="12" sm="6">
-              <v-text-field v-model="bankForm.bankBik" label="БИК" />
-            </v-col>
-            <v-col cols="12" sm="6">
-              <v-text-field v-model="bankForm.accountNumber" label="Расчётный счёт" />
-            </v-col>
-            <v-col cols="12" sm="6">
-              <v-text-field v-model="bankForm.correspondentAccount" label="Корр. счёт" />
-            </v-col>
-            <v-col cols="12">
-              <v-text-field v-model="bankForm.beneficiaryName" label="Наименование получателя" />
-            </v-col>
-          </v-row>
-          <v-btn color="primary" :loading="savingBank" @click="saveBankRequisites" class="mt-2" prepend-icon="mdi-content-save">
-            Сохранить банковские реквизиты
-          </v-btn>
-          <v-alert v-if="bankMsg" :type="bankMsgType" density="compact" class="mt-3" closable @click:close="bankMsg = ''">{{ bankMsg }}</v-alert>
-        </v-card>
-      </v-tabs-window-item>
-
-      <!-- Section 3: Referral Links -->
-      <v-tabs-window-item value="referral">
-        <v-card class="pa-4">
-          <template v-if="profile.referral?.canInvite">
-            <div class="d-flex align-center ga-2 mb-3">
-              <v-icon color="primary">mdi-link-variant</v-icon>
-              <div class="text-subtitle-1 font-weight-bold">Ваша реферальная ссылка</div>
+        <!-- ════════════════  ЛИЧНЫЕ ДАННЫЕ  ════════════════ -->
+        <div v-show="tab === 'info'">
+          <v-card class="ds-card mb-3">
+            <div class="ds-card__head">
+              <div class="ds-title-l">{{ isEmployee ? 'Информация о сотруднике' : 'Личные данные' }}</div>
             </div>
-            <v-row dense>
-              <v-col cols="12" sm="6">
-                <v-text-field :model-value="profile.referral.referralCode" label="Реферальный код" readonly>
-                  <template #append-inner>
-                    <v-btn icon="mdi-content-copy" size="small" variant="text" @click="copyToClipboard(profile.referral.referralCode)" />
-                  </template>
-                </v-text-field>
-              </v-col>
-              <v-col cols="12">
-                <v-text-field :model-value="profile.referral.referralLink" label="Ссылка для приглашения" readonly>
-                  <template #append-inner>
-                    <v-btn icon="mdi-content-copy" size="small" variant="text" @click="copyToClipboard(profile.referral.referralLink)" />
-                  </template>
-                </v-text-field>
-              </v-col>
-            </v-row>
-            <v-alert v-if="copied" type="success" density="compact" class="mt-2">Скопировано в буфер обмена</v-alert>
-          </template>
-          <v-alert v-else type="info" variant="tonal">
-            <v-icon class="mr-1">mdi-information</v-icon>
-            Реферальные ссылки доступны только для партнёров со статусом "Активен".
-          </v-alert>
-        </v-card>
-      </v-tabs-window-item>
+            <div class="ds-card__body">
+              <v-row dense>
+                <v-col cols="12" sm="6" md="4">
+                  <v-text-field v-model="form.lastName" label="Фамилия"
+                    :disabled="!isEmployee"
+                    :hint="!isEmployee ? 'Изменение через техподдержку' : null"
+                    persistent-hint />
+                </v-col>
+                <v-col cols="12" sm="6" md="4">
+                  <v-text-field v-model="form.firstName" label="Имя"
+                    :disabled="!isEmployee"
+                    :hint="!isEmployee ? 'Изменение через техподдержку' : null"
+                    persistent-hint />
+                </v-col>
+                <v-col cols="12" sm="6" md="4">
+                  <v-text-field v-model="form.patronymic" label="Отчество"
+                    :disabled="!isEmployee"
+                    :hint="!isEmployee ? 'Изменение через техподдержку' : null"
+                    persistent-hint />
+                </v-col>
+                <v-col v-if="isEmployee" cols="12" sm="6" md="4">
+                  <v-text-field v-model="form.position" label="Должность"
+                    prepend-inner-icon="mdi-briefcase-outline" />
+                </v-col>
+                <v-col cols="12" sm="6" md="4">
+                  <v-text-field v-model="form.birthDate" label="Дата рождения" type="date"
+                    prepend-inner-icon="mdi-cake-variant-outline" />
+                </v-col>
+                <v-col cols="12" sm="6" md="4">
+                  <v-select v-model="form.gender" :items="genderOptions" label="Пол"
+                    prepend-inner-icon="mdi-human-male-female" />
+                </v-col>
+                <v-col cols="12" sm="6" md="4">
+                  <v-autocomplete v-model="form.country" :items="countryOptions" label="Страна"
+                    prepend-inner-icon="mdi-flag-outline" />
+                </v-col>
+                <v-col cols="12" sm="6" md="4">
+                  <v-combobox v-model="form.city" :items="cityOptions" label="Город"
+                    prepend-inner-icon="mdi-city-variant-outline" />
+                </v-col>
+                <v-col cols="12" sm="6" md="4">
+                  <v-text-field v-model="form.email" label="Email" type="email"
+                    prepend-inner-icon="mdi-email-outline" />
+                </v-col>
+                <v-col cols="12" sm="6" md="4">
+                  <v-text-field v-model="form.phone" label="Телефон"
+                    prepend-inner-icon="mdi-phone-outline" />
+                </v-col>
+                <v-col cols="12" sm="6" md="4">
+                  <v-text-field v-model="form.telegram" label="Telegram"
+                    prepend-inner-icon="mdi-send" placeholder="@username" />
+                </v-col>
+              </v-row>
 
-      <!-- Section 4: Security (2FA + смена пароля) -->
-      <v-tabs-window-item value="security">
-        <v-card class="pa-4 mb-4">
-          <div class="d-flex align-center ga-2 mb-3">
-            <v-icon color="primary">mdi-shield-key</v-icon>
-            <div class="text-subtitle-1 font-weight-bold">Двухфакторная аутентификация</div>
-          </div>
-
-          <template v-if="twoFa.enabled">
-            <v-alert type="success" variant="tonal" density="compact" class="mb-3">
-              <v-icon class="mr-1">mdi-check-circle</v-icon>
-              2FA включён{{ twoFa.confirmedAt ? ' с ' + fmtDate(twoFa.confirmedAt) : '' }}.
-              При входе будем спрашивать код из приложения.
-            </v-alert>
-            <v-text-field v-model="disablePassword" label="Текущий пароль для отключения"
-              type="password" variant="outlined" density="compact" class="mb-2" />
-            <v-btn color="error" variant="tonal" prepend-icon="mdi-shield-off"
-              :loading="twoFaBusy" @click="disable2fa">Отключить 2FA</v-btn>
-          </template>
-
-          <template v-else-if="!twoFaSetup.uri">
-            <div class="text-body-2 text-medium-emphasis mb-3">
-              Защитите аккаунт одноразовыми кодами из Google Authenticator,
-              Authy или 1Password. Без 2FA доступ к аккаунту только по паролю.
+              <v-alert v-if="saveMsg" :type="saveMsgType" density="compact" class="mt-3" closable @click:close="saveMsg = ''">
+                {{ saveMsg }}
+              </v-alert>
             </div>
-            <v-btn color="primary" prepend-icon="mdi-shield-plus" :loading="twoFaBusy"
-              @click="start2fa">Включить 2FA</v-btn>
-          </template>
-
-          <template v-else>
-            <div class="text-body-2 mb-3">
-              1. Откройте Google Authenticator (или совместимое приложение).<br/>
-              2. Отсканируйте QR-код ниже либо введите секрет вручную.<br/>
-              3. Введите 6-значный код из приложения для подтверждения.
+            <div class="ds-card__actions">
+              <v-btn variant="text" @click="loadProfile">Отменить</v-btn>
+              <v-btn color="primary" :loading="saving" prepend-icon="mdi-content-save" @click="saveProfile">
+                Сохранить
+              </v-btn>
             </div>
-            <div class="d-flex ga-4 align-start flex-wrap">
-              <img :src="qrCodeUrl" alt="QR-код 2FA" width="180" height="180" class="qr-img" />
-              <div class="flex-grow-1 min-w-0">
-                <div class="text-caption text-medium-emphasis mb-1">Секрет (если нет камеры)</div>
-                <v-text-field :model-value="twoFaSetup.secret" readonly variant="outlined"
-                  density="compact" prepend-inner-icon="mdi-key" class="mb-2"
-                  @click="copyToClipboard(twoFaSetup.secret)" />
-                <v-text-field v-model="totpConfirm" label="Код из приложения"
-                  variant="outlined" density="compact" maxlength="6" inputmode="numeric" />
-                <v-btn block color="primary" :loading="twoFaBusy" class="mt-2"
-                  @click="confirm2fa">Подтвердить и включить</v-btn>
+          </v-card>
+
+          <!-- Подписанные документы (только partner, если есть) -->
+          <v-card v-if="!isEmployee && profile.signedDocuments?.length" class="ds-card">
+            <div class="ds-card__head">
+              <div class="ds-title-l d-flex align-center ga-2">
+                <v-icon color="primary">mdi-file-document-multiple-outline</v-icon>
+                Подписанные документы
               </div>
             </div>
-          </template>
-        </v-card>
-      </v-tabs-window-item>
-
-      <!-- Section: Notifications (по DS spec — отдельный раздел) -->
-      <v-tabs-window-item value="notifications">
-        <v-card class="pa-4">
-          <div class="d-flex align-center ga-2 mb-3">
-            <v-icon color="primary">mdi-bell-outline</v-icon>
-            <div class="ds-title-l">Уведомления</div>
-          </div>
-          <div class="text-body-2 text-medium-emphasis mb-3">
-            Настройки каналов уведомлений и звуковых сигналов.
-          </div>
-          <v-alert type="info" variant="tonal" density="compact" class="mb-3">
-            <v-icon class="mr-1">mdi-tools</v-icon>
-            Раздел в разработке. Звук уведомлений сейчас управляется из иконки колокольчика
-            в шапке (top-bar → Уведомления → переключатель «Звук уведомлений»).
-          </v-alert>
-        </v-card>
-      </v-tabs-window-item>
-
-      <!-- Section: Telegram-bot (по DS spec — отдельный раздел) -->
-      <v-tabs-window-item value="telegram">
-        <!-- Telegram-уведомления через бота -->
-        <v-card v-if="telegram.enabled" class="pa-4">
-          <div class="d-flex align-center ga-2 mb-3">
-            <v-icon color="primary">mdi-send</v-icon>
-            <div class="ds-title-l">Telegram-уведомления</div>
-          </div>
-          <template v-if="telegram.linked">
-            <v-alert type="success" variant="tonal" density="compact" class="mb-3">
-              <v-icon class="mr-1">mdi-check-circle</v-icon>
-              Аккаунт привязан к Telegram. Сюда будут приходить критические уведомления.
-            </v-alert>
-            <v-btn variant="tonal" prepend-icon="mdi-send-check"
-              :loading="telegramBusy" @click="sendTestTelegram" class="me-2">
-              Отправить тест
-            </v-btn>
-            <v-btn variant="tonal" color="error" prepend-icon="mdi-link-off"
-              :loading="telegramBusy" @click="unlinkTelegram">
-              Отвязать
-            </v-btn>
-          </template>
-
-          <template v-else-if="!tgLink">
-            <div class="text-body-2 text-medium-emphasis mb-3">
-              Привязка через бота
-              <a v-if="telegram.bot_username"
-                :href="`https://t.me/${telegram.bot_username}`" target="_blank">
-                @{{ telegram.bot_username }}
-              </a>:
-              жмёте кнопку → открывается Telegram с уже введённой командой
-              <code>/start</code>. Просто подтвердите — аккаунт привяжется автоматически.
+            <div class="ds-card__body">
+              <v-list density="comfortable">
+                <v-list-item v-for="d in profile.signedDocuments" :key="d.id"
+                  :href="d.url" target="_blank"
+                  prepend-icon="mdi-file-check-outline"
+                  :title="d.title"
+                  :subtitle="d.signedAt ? `подписано ${fmtShortDate(d.signedAt)}` : null" />
+              </v-list>
             </div>
-            <v-btn color="primary" prepend-icon="mdi-send" :loading="telegramBusy"
-              @click="startTelegramLink">Привязать через бота</v-btn>
-          </template>
+          </v-card>
+        </div>
 
-          <template v-else>
-            <v-alert type="info" variant="tonal" density="compact" class="mb-3">
-              <div class="font-weight-medium mb-1">Откройте бота в Telegram и нажмите Start.</div>
-              <div class="text-caption">Ссылка действует 15 минут. После старта вернитесь сюда — статус обновится сам.</div>
-            </v-alert>
-            <div class="d-flex ga-2 flex-wrap">
-              <v-btn color="primary" prepend-icon="mdi-open-in-new"
-                :href="tgLink" target="_blank" rel="noopener">
-                Открыть в Telegram
+        <!-- ════════════════  ДОКУМЕНТЫ  ════════════════ -->
+        <div v-show="tab === 'documents' && !isEmployee">
+          <v-card class="ds-card">
+            <div class="ds-card__head">
+              <div class="ds-title-l d-flex align-center ga-2">
+                <v-icon color="primary">mdi-file-document-multiple-outline</v-icon>
+                Документы партнёра
+              </div>
+            </div>
+            <div class="ds-card__body">
+              <v-row dense>
+                <v-col v-for="slot in documentSlots" :key="slot.type" cols="12" md="4">
+                  <v-card variant="outlined" class="doc-slot pa-3">
+                    <div class="d-flex align-center ga-2 mb-2">
+                      <span class="ds-title-s">{{ slot.label }}</span>
+                      <v-spacer />
+                      <v-icon v-if="isDocUploaded(slot.type)" color="success" size="18">mdi-check-circle</v-icon>
+                    </div>
+                    <v-file-input
+                      v-model="docFiles[slot.type]"
+                      accept="image/*,.pdf"
+                      density="compact"
+                      variant="outlined"
+                      :label="isDocUploaded(slot.type) ? 'Заменить файл' : 'Выберите файл'"
+                      prepend-icon=""
+                      prepend-inner-icon="mdi-paperclip"
+                      hide-details
+                      class="mb-2" />
+                    <v-btn block size="small" color="primary"
+                      :disabled="!docFiles[slot.type]"
+                      :loading="docUploading[slot.type]"
+                      prepend-icon="mdi-upload"
+                      @click="uploadDocument(slot.type)">
+                      Загрузить
+                    </v-btn>
+                  </v-card>
+                </v-col>
+              </v-row>
+              <v-alert v-if="docMsg" :type="docMsgType" density="compact" class="mt-3" closable @click:close="docMsg = ''">
+                {{ docMsg }}
+              </v-alert>
+            </div>
+          </v-card>
+        </div>
+
+        <!-- ════════════════  РЕКВИЗИТЫ  ════════════════ -->
+        <div v-show="tab === 'requisites' && !isEmployee">
+          <!-- ИП -->
+          <v-card class="ds-card mb-3">
+            <div class="ds-card__head">
+              <div class="ds-title-l d-flex align-center ga-2">
+                <v-icon color="primary">mdi-domain</v-icon>
+                Реквизиты ИП
+                <v-chip v-if="profile.requisites?.verificationStatus" size="small"
+                  :color="verificationColor(profile.requisites.verificationStatus)" variant="tonal">
+                  {{ verificationLabel(profile.requisites.verificationStatus) }}
+                </v-chip>
+              </div>
+            </div>
+            <div class="ds-card__body">
+              <v-alert v-if="profile.requisites?.verificationStatus === 'verified'"
+                type="warning" variant="tonal" density="compact" class="mb-3"
+                icon="mdi-alert-outline">
+                Изменение реквизитов сбросит статус верификации.
+              </v-alert>
+              <v-row dense>
+                <v-col cols="12" md="6">
+                  <v-text-field v-model="reqForm.individualEntrepreneur" label="Наименование ИП" />
+                </v-col>
+                <v-col cols="12" sm="6" md="3">
+                  <v-text-field v-model="reqForm.inn" label="ИНН" />
+                </v-col>
+                <v-col cols="12" sm="6" md="3">
+                  <v-text-field v-model="reqForm.ogrn" label="ОГРН/ОГРНИП" />
+                </v-col>
+                <v-col cols="12">
+                  <v-text-field v-model="reqForm.address" label="Юридический адрес" />
+                </v-col>
+                <v-col cols="12">
+                  <v-checkbox v-model="addressSameAsRegistration"
+                    label="Адрес регистрации совпадает с фактическим"
+                    density="compact" hide-details />
+                </v-col>
+                <v-col v-if="!addressSameAsRegistration" cols="12">
+                  <v-text-field v-model="reqForm.actualAddress" label="Фактический адрес" />
+                </v-col>
+                <v-col cols="12" md="6">
+                  <v-text-field v-model="reqForm.email" label="Email для документов" type="email" />
+                </v-col>
+                <v-col cols="12" md="6">
+                  <v-text-field v-model="reqForm.phone" label="Телефон ИП" />
+                </v-col>
+              </v-row>
+              <v-alert v-if="reqMsg" :type="reqMsgType" density="compact" class="mt-3" closable @click:close="reqMsg = ''">
+                {{ reqMsg }}
+              </v-alert>
+            </div>
+            <div class="ds-card__actions">
+              <v-btn color="primary" :loading="savingReq" prepend-icon="mdi-content-save" @click="saveRequisites">
+                Сохранить
               </v-btn>
-              <v-btn variant="text" prepend-icon="mdi-refresh"
-                :loading="telegramBusy" @click="checkTelegramLink">Проверить статус</v-btn>
-              <v-btn variant="text" color="grey" @click="tgLink = null; tgToken = null;">Отменить</v-btn>
             </div>
-            <div v-if="tgPolling" class="text-caption text-medium-emphasis mt-2">
-              <v-progress-circular indeterminate size="14" width="2" class="me-1" />
-              Ожидаем подтверждения в Telegram…
-            </div>
-          </template>
-        </v-card>
-      </v-tabs-window-item>
-    </v-tabs-window>
+          </v-card>
 
-      </v-col>
-    </v-row>
+          <!-- Банк -->
+          <v-card class="ds-card">
+            <div class="ds-card__head">
+              <div class="ds-title-l d-flex align-center ga-2">
+                <v-icon color="primary">mdi-bank-outline</v-icon>
+                Банковские реквизиты
+                <v-chip v-if="profile.bankRequisites?.verificationStatus" size="small"
+                  :color="verificationColor(profile.bankRequisites.verificationStatus)" variant="tonal">
+                  {{ verificationLabel(profile.bankRequisites.verificationStatus) }}
+                </v-chip>
+              </div>
+            </div>
+            <div class="ds-card__body">
+              <v-alert v-if="profile.bankRequisites?.verificationStatus === 'verified'"
+                type="warning" variant="tonal" density="compact" class="mb-3"
+                icon="mdi-alert-outline">
+                Изменение банковских реквизитов сбросит статус верификации.
+              </v-alert>
+              <v-row dense>
+                <v-col cols="12" md="6">
+                  <v-text-field v-model="bankForm.bankName" label="Наименование банка" />
+                </v-col>
+                <v-col cols="12" md="6">
+                  <v-text-field v-model="bankForm.bankBik" label="БИК" />
+                </v-col>
+                <v-col cols="12" md="6">
+                  <v-text-field v-model="bankForm.accountNumber" label="Расчётный счёт" />
+                </v-col>
+                <v-col cols="12" md="6">
+                  <v-text-field v-model="bankForm.correspondentAccount" label="Корр. счёт" />
+                </v-col>
+                <v-col cols="12">
+                  <v-text-field v-model="bankForm.beneficiaryName" label="Наименование получателя" />
+                </v-col>
+              </v-row>
+              <v-alert v-if="bankMsg" :type="bankMsgType" density="compact" class="mt-3" closable @click:close="bankMsg = ''">
+                {{ bankMsg }}
+              </v-alert>
+            </div>
+            <div class="ds-card__actions">
+              <v-btn color="primary" :loading="savingBank" prepend-icon="mdi-content-save" @click="saveBankRequisites">
+                Сохранить
+              </v-btn>
+            </div>
+          </v-card>
+        </div>
+
+        <!-- ════════════════  БЕЗОПАСНОСТЬ  ════════════════ -->
+        <div v-show="tab === 'security'">
+          <!-- 2FA -->
+          <v-card class="ds-card mb-3">
+            <div class="ds-card__head">
+              <div class="ds-title-l d-flex align-center ga-2">
+                <v-icon color="primary">mdi-shield-key-outline</v-icon>
+                Двухфакторная аутентификация
+                <v-chip v-if="twoFa.enabled" size="small" color="success" variant="tonal" prepend-icon="mdi-check">
+                  Включено
+                </v-chip>
+              </div>
+            </div>
+            <div class="ds-card__body">
+              <template v-if="twoFa.enabled">
+                <v-alert type="success" variant="tonal" density="compact" class="mb-3">
+                  2FA включён{{ twoFa.confirmedAt ? ' с ' + fmtShortDate(twoFa.confirmedAt) : '' }}.
+                  При входе будем спрашивать код из приложения.
+                </v-alert>
+                <v-text-field v-model="disablePassword" label="Текущий пароль для отключения"
+                  type="password" prepend-inner-icon="mdi-lock-outline" class="mb-2" />
+                <v-btn color="error" variant="tonal" :loading="twoFaBusy"
+                  prepend-icon="mdi-shield-off-outline" @click="disable2fa">
+                  Отключить 2FA
+                </v-btn>
+              </template>
+
+              <template v-else>
+                <div v-if="!twoFaSetup.uri" class="ds-body-m ds-muted mb-3">
+                  Защитите аккаунт одноразовыми кодами из Google Authenticator или 1Password.
+                  Если потеряете доступ к коду — пишите в техподдержку.
+                </div>
+                <v-btn v-if="!twoFaSetup.uri" color="primary" :loading="twoFaBusy"
+                  prepend-icon="mdi-shield-plus-outline" @click="start2fa">
+                  Включить 2FA
+                </v-btn>
+
+                <div v-else class="twofa-setup">
+                  <ol class="twofa-steps">
+                    <li>Установите Google Authenticator / 1Password / Microsoft Authenticator.</li>
+                    <li>Отсканируйте QR-код в приложении.</li>
+                    <li>Введите 6-значный код из приложения ниже.</li>
+                  </ol>
+                  <div class="twofa-grid">
+                    <div class="twofa-qr">
+                      <img :src="qrCodeUrl" alt="QR-код для 2FA" class="qr-img" />
+                    </div>
+                    <div class="twofa-side">
+                      <v-text-field :model-value="twoFaSetup.secret" label="Секрет (если не сканируется)"
+                        readonly variant="outlined" density="compact"
+                        prepend-inner-icon="mdi-key-variant" hide-details>
+                        <template #append-inner>
+                          <v-btn icon="mdi-content-copy" size="x-small" variant="text"
+                            @click="copyToClipboard(twoFaSetup.secret)" />
+                        </template>
+                      </v-text-field>
+                      <v-text-field v-model="totpConfirm" label="6-значный код"
+                        maxlength="6" inputmode="numeric"
+                        prepend-inner-icon="mdi-shield-key-outline"
+                        class="mt-2" />
+                      <v-btn block color="primary" :loading="twoFaBusy"
+                        prepend-icon="mdi-check" @click="confirm2fa">
+                        Подтвердить и включить
+                      </v-btn>
+                    </div>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </v-card>
+
+          <!-- Смена пароля -->
+          <v-card class="ds-card">
+            <div class="ds-card__head">
+              <div class="ds-title-l d-flex align-center ga-2">
+                <v-icon color="primary">mdi-key-variant</v-icon>
+                Смена пароля
+              </div>
+            </div>
+            <div class="ds-card__body">
+              <v-row dense>
+                <v-col cols="12" md="4">
+                  <v-text-field v-model="pwd.current_password" label="Текущий пароль"
+                    type="password" prepend-inner-icon="mdi-lock-outline" />
+                </v-col>
+                <v-col cols="12" md="4">
+                  <v-text-field v-model="pwd.password" label="Новый пароль"
+                    type="password" prepend-inner-icon="mdi-lock-plus-outline" />
+                </v-col>
+                <v-col cols="12" md="4">
+                  <v-text-field v-model="pwd.password_confirmation" label="Подтверждение"
+                    type="password" prepend-inner-icon="mdi-lock-check-outline" />
+                </v-col>
+              </v-row>
+              <v-alert v-if="pwdMsg" :type="pwdMsgType" density="compact" class="mt-3" closable @click:close="pwdMsg = ''">
+                {{ pwdMsg }}
+              </v-alert>
+            </div>
+            <div class="ds-card__actions">
+              <v-btn color="primary" :loading="savingPwd" prepend-icon="mdi-key" @click="changePassword">
+                Сменить пароль
+              </v-btn>
+            </div>
+          </v-card>
+        </div>
+
+        <!-- ════════════════  УВЕДОМЛЕНИЯ  ════════════════ -->
+        <div v-show="tab === 'notifications'">
+          <v-card class="ds-card">
+            <div class="ds-card__head">
+              <div class="ds-title-l d-flex align-center ga-2">
+                <v-icon color="primary">mdi-bell-outline</v-icon>
+                Уведомления
+              </div>
+            </div>
+            <div class="ds-card__body">
+              <div class="ds-body-m ds-muted mb-4">
+                Настройки каналов уведомлений и звуковых сигналов.
+              </div>
+              <v-alert type="info" variant="tonal" density="compact" icon="mdi-tools">
+                Раздел в разработке. Звук уведомлений сейчас управляется из иконки колокольчика
+                в шапке (вверху страницы → меню «Уведомления» → переключатель «Звук»).
+              </v-alert>
+            </div>
+          </v-card>
+        </div>
+
+        <!-- ════════════════  TELEGRAM-BOT  ════════════════ -->
+        <div v-show="tab === 'telegram'">
+          <v-card class="ds-card">
+            <div class="ds-card__head">
+              <div class="ds-title-l d-flex align-center ga-2">
+                <v-icon color="primary">mdi-send</v-icon>
+                Telegram-bot
+                <v-chip v-if="telegram.linked" size="small" color="success" variant="tonal" prepend-icon="mdi-check">
+                  Подключён
+                </v-chip>
+              </div>
+            </div>
+            <div class="ds-card__body">
+              <template v-if="!telegram.enabled">
+                <v-alert type="info" variant="tonal" density="compact" icon="mdi-information-outline">
+                  Интеграция с Telegram отключена администратором.
+                </v-alert>
+              </template>
+
+              <template v-else-if="telegram.linked">
+                <v-alert type="success" variant="tonal" density="compact" class="mb-3"
+                  icon="mdi-check-circle">
+                  Аккаунт привязан к Telegram. Сюда будут приходить уведомления.
+                </v-alert>
+                <div class="d-flex ga-2 flex-wrap">
+                  <v-btn variant="tonal" prepend-icon="mdi-send-check-outline"
+                    :loading="telegramBusy" @click="sendTestTelegram">
+                    Отправить тест
+                  </v-btn>
+                  <v-btn variant="tonal" color="error" prepend-icon="mdi-link-off"
+                    :loading="telegramBusy" @click="unlinkTelegram">
+                    Отвязать
+                  </v-btn>
+                </div>
+              </template>
+
+              <template v-else-if="!tgLink">
+                <div class="ds-body-m mb-3">
+                  Привязка через бота
+                  <a v-if="telegram.bot_username"
+                    :href="`https://t.me/${telegram.bot_username}`" target="_blank"
+                    class="tg-bot-link">
+                    @{{ telegram.bot_username }}
+                  </a>:
+                  жмёте кнопку → открывается Telegram с уже введённой командой
+                  <code class="tg-code">/start</code>. Просто подтвердите — аккаунт привяжется автоматически.
+                </div>
+                <v-btn color="primary" prepend-icon="mdi-send" :loading="telegramBusy"
+                  @click="startTelegramLink">Привязать через бота</v-btn>
+              </template>
+
+              <template v-else>
+                <v-alert type="info" variant="tonal" density="compact" class="mb-3">
+                  <div class="font-weight-medium mb-1">Откройте бота в Telegram и нажмите Start.</div>
+                  <div class="text-caption">Ссылка действует 15 минут. После старта вернитесь сюда — статус обновится сам.</div>
+                </v-alert>
+                <div class="d-flex ga-2 flex-wrap mb-2">
+                  <v-btn color="primary" prepend-icon="mdi-open-in-new"
+                    :href="tgLink" target="_blank" rel="noopener">
+                    Открыть в Telegram
+                  </v-btn>
+                  <v-btn variant="text" prepend-icon="mdi-refresh"
+                    :loading="telegramBusy" @click="checkTelegramLink">Проверить статус</v-btn>
+                  <v-btn variant="text" color="grey" @click="tgLink = null; tgToken = null;">Отменить</v-btn>
+                </div>
+                <div v-if="tgPolling" class="ds-body-s ds-muted d-flex align-center ga-2">
+                  <v-progress-circular indeterminate size="14" width="2" />
+                  Ожидаем подтверждения в Telegram…
+                </div>
+              </template>
+            </div>
+          </v-card>
+        </div>
+
+        <!-- ════════════════  РЕФЕРАЛЬНЫЕ ССЫЛКИ  ════════════════ -->
+        <div v-show="tab === 'referral' && !isEmployee">
+          <v-card class="ds-card">
+            <div class="ds-card__head">
+              <div class="ds-title-l d-flex align-center ga-2">
+                <v-icon color="primary">mdi-link-variant</v-icon>
+                Реферальная ссылка
+              </div>
+            </div>
+            <div class="ds-card__body">
+              <template v-if="canInvite && profile.referral?.referralCode">
+                <v-row dense>
+                  <v-col cols="12" md="6">
+                    <v-text-field :model-value="profile.referral.referralCode" label="Реферальный код"
+                      readonly prepend-inner-icon="mdi-tag-outline">
+                      <template #append-inner>
+                        <v-btn icon="mdi-content-copy" size="x-small" variant="text"
+                          @click="copyToClipboard(profile.referral.referralCode)" />
+                      </template>
+                    </v-text-field>
+                  </v-col>
+                  <v-col cols="12" md="6">
+                    <v-text-field :model-value="profile.referral.referralLink" label="Ссылка для приглашения"
+                      readonly prepend-inner-icon="mdi-link">
+                      <template #append-inner>
+                        <v-btn icon="mdi-content-copy" size="x-small" variant="text"
+                          @click="copyToClipboard(profile.referral.referralLink)" />
+                      </template>
+                    </v-text-field>
+                  </v-col>
+                </v-row>
+                <v-alert v-if="copied" type="success" variant="tonal" density="compact" class="mt-3">
+                  Скопировано в буфер обмена
+                </v-alert>
+                <v-alert type="info" variant="tonal" density="compact" class="mt-3"
+                  icon="mdi-gift-outline">
+                  Отправьте друзьям-консультантам — они получат welcome-бонус при первой продаже.
+                </v-alert>
+              </template>
+              <v-alert v-else type="info" variant="tonal" density="compact" icon="mdi-information-outline">
+                Реферальные ссылки доступны только для партнёров со статусом «Активен».
+              </v-alert>
+            </div>
+          </v-card>
+        </div>
+
+      </section>
+    </div>
 
     <v-progress-linear v-if="loading" indeterminate color="primary"
-      style="position:fixed;top:0;left:0;right:0;z-index:2000" />
+      style="position: fixed; top: 0; left: 0; right: 0; z-index: 2000; height: 3px" />
   </div>
 </template>
 
@@ -510,6 +596,7 @@ async function onAvatarPick(e) {
     if (avatarInput.value) avatarInput.value.value = '';
   }
 }
+
 const saving = ref(false);
 const saveMsg = ref('');
 const saveMsgType = ref('success');
@@ -579,7 +666,7 @@ const cityOptions = ref([]);
 function activityColor(id) {
   if (id === 1) return 'success';   // Активен
   if (id === 4) return 'info';      // Зарегистрирован
-  if (id === 3) return 'error';     // Терминирован — per spec ✅Статусы партнеров §2 col.2
+  if (id === 3) return 'error';     // Терминирован
   if (id === 5) return 'error';     // Исключен
   return 'grey';
 }
@@ -608,6 +695,87 @@ const bankForm = ref({ bankName: '', bankBik: '', accountNumber: '', corresponde
 const initials = computed(() => {
   const u = profile.value.user;
   return `${u?.firstName?.[0] || ''}${u?.lastName?.[0] || ''}`.toUpperCase();
+});
+
+// Лейбл роли для staff — берём первую из comma-separated списка ролей и
+// переводим на русский. Список синхронизирован с TicketService::CATEGORIES
+// и AdminLayout sidebar.
+const ROLE_LABELS = {
+  admin: 'Администратор',
+  backoffice: 'Бэк-офис',
+  support: 'Техподдержка',
+  finance: 'Финансовый менеджер',
+  head: 'Руководитель',
+  calculations: 'Расчёты',
+  corrections: 'Корректировки',
+  education: 'Куратор обучения',
+};
+const roleLabel = computed(() => {
+  const role = auth.user?.role || '';
+  const first = role.split(',').map(r => r.trim()).find(r => ROLE_LABELS[r]);
+  return first ? ROLE_LABELS[first] : (isEmployee.value ? 'Сотрудник' : '');
+});
+
+// Чипы статуса для hero — для partner показываем activity-status + дата
+// окончания периода + активационный дедлайн. Для staff — пусто (роль уже
+// в подзаголовке).
+const heroChips = computed(() => {
+  if (isEmployee.value) {
+    const chips = [];
+    if (profile.value.user?.dateRegister) {
+      chips.push({
+        text: `с ${fmtShortDate(profile.value.user.dateRegister)}`,
+        color: 'default',
+        variant: 'tonal',
+      });
+    }
+    return chips;
+  }
+  const si = profile.value.statusInfo;
+  if (!si) return [];
+  const out = [];
+  if (si.activityName) {
+    out.push({
+      text: si.activityName,
+      color: activityColor(si.activityId),
+      variant: 'flat',
+    });
+  }
+  if (si.yearPeriodEnd) {
+    out.push({
+      text: `до ${fmtShortDate(si.yearPeriodEnd)}`,
+      color: 'default',
+      variant: 'tonal',
+    });
+  }
+  if (si.activationDeadline) {
+    out.push({
+      text: `Активация до ${fmtShortDate(si.activationDeadline)}`,
+      color: 'warning',
+      variant: 'tonal',
+    });
+  }
+  return out;
+});
+
+// Меню разделов профиля. Состав зависит от роли — partner получает
+// Документы/Реквизиты/Реферальные сверх базового набора.
+const navItems = computed(() => {
+  const items = [
+    { value: 'info', icon: 'mdi-account-circle-outline',
+      title: isEmployee.value ? 'Информация о сотруднике' : 'Личные данные' },
+  ];
+  if (!isEmployee.value) {
+    items.push({ value: 'documents', icon: 'mdi-file-document-outline', title: 'Документы' });
+    items.push({ value: 'requisites', icon: 'mdi-credit-card-outline', title: 'Реквизиты' });
+  }
+  items.push({ value: 'security', icon: 'mdi-shield-lock-outline', title: 'Безопасность' });
+  items.push({ value: 'notifications', icon: 'mdi-bell-outline', title: 'Уведомления' });
+  items.push({ value: 'telegram', icon: 'mdi-send', title: 'Telegram-bot' });
+  if (!isEmployee.value && canInvite.value) {
+    items.push({ value: 'referral', icon: 'mdi-link-variant', title: 'Реферальные ссылки' });
+  }
+  return items;
 });
 
 function verificationColor(status) {
@@ -736,10 +904,10 @@ onMounted(() => {
   loadTelegram();
 });
 
-// === Telegram (привязка через бота) ===
+// === Telegram ===
 const telegram = ref({ enabled: false, linked: false, chat_id: null, bot_username: null });
 const telegramBusy = ref(false);
-const tgLink = ref(null);        // deeplink t.me/<bot>?start=<token>
+const tgLink = ref(null);
 const tgToken = ref(null);
 const tgPolling = ref(false);
 let tgPollTimer = null;
@@ -757,11 +925,9 @@ async function startTelegramLink() {
     const { data } = await api.post('/telegram/start-link');
     tgToken.value = data.token;
     tgLink.value = data.deeplink;
-    // Запускаем polling — раз в 3 сек проверяем, привязался ли уже.
     tgPolling.value = true;
     if (tgPollTimer) clearInterval(tgPollTimer);
     tgPollTimer = setInterval(checkTelegramLink, 3000);
-    // Авто-стоп через 15 минут (TTL токена).
     setTimeout(() => { if (tgPollTimer) { clearInterval(tgPollTimer); tgPollTimer = null; tgPolling.value = false; } }, 15 * 60 * 1000);
   } catch (e) { showError(e.response?.data?.message || 'Ошибка'); }
   telegramBusy.value = false;
@@ -818,9 +984,6 @@ const totpConfirm = ref('');
 const disablePassword = ref('');
 const twoFaBusy = ref(false);
 
-// QR-код через goqr.me (public API, без аутентификации). Альтернатива —
-// генерировать локально через qrcode.js, но это +bundle-вес ради
-// одной фичи в профиле.
 const qrCodeUrl = computed(() => twoFaSetup.value.uri
   ? `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(twoFaSetup.value.uri)}`
   : '');
@@ -865,66 +1028,246 @@ async function disable2fa() {
 </script>
 
 <style scoped>
-.qr-img {
-  border-radius: var(--ds-radius-md, 8px);
-  background: white;
-  padding: 8px;
+/* ──────────────────────  ВЁРСТКА ПРОФИЛЯ  ────────────────────── */
+.profile-page {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
-/* DS Profile hero — аватар + ФИО + email + чипы + Сменить-фото справа.
-   Соответствует ds-extra-partner.jsx::PartnerProfile hero. */
+/* HERO ─ карточка-приветствие сверху */
 .profile-hero {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 20px 24px !important;
+  border: 1px solid var(--ds-outline-variant, rgba(var(--v-theme-on-surface), 0.08));
   border-radius: var(--ds-radius-lg, 12px) !important;
-  border: 1px solid var(--ds-outline-variant, rgba(var(--v-theme-on-surface), 0.06));
+  background: rgb(var(--v-theme-surface));
+}
+.profile-hero__avatar-wrap {
+  flex-shrink: 0;
 }
 .profile-hero__avatar {
   box-shadow: 0 0 0 4px var(--ds-primary-soft, rgba(var(--v-theme-primary), 0.10));
 }
+.profile-hero__initials {
+  font: 600 22px var(--ds-font-sans);
+  color: rgb(var(--v-theme-on-primary));
+  letter-spacing: 0.5px;
+}
 .profile-hero__main {
-  min-width: 220px;
+  flex: 1;
+  min-width: 0;
+}
+.profile-hero__name {
+  font: var(--ds-type-headline-s);
+  letter-spacing: -0.01em;
+  color: rgb(var(--v-theme-on-surface));
+}
+.profile-hero__sub {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+  font: var(--ds-type-body-m);
+  color: var(--ds-on-surface-muted, rgba(var(--v-theme-on-surface), 0.6));
+}
+.profile-hero__dot {
+  opacity: 0.5;
+}
+.profile-hero__chips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+.profile-hero__actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
 }
 
-/* DS Profile nav — вертикальный список разделов слева (260px).
-   Соответствует ds-extra-partner.jsx::PartnerProfile sidebar. */
+/* ── двухколоночный layout ── */
+.profile-layout {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+/* NAV ─ боковое меню разделов */
 .profile-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  border: 1px solid var(--ds-outline-variant, rgba(var(--v-theme-on-surface), 0.08));
   border-radius: var(--ds-radius-lg, 12px);
-  border: 1px solid var(--ds-outline-variant, rgba(var(--v-theme-on-surface), 0.06));
+  background: rgb(var(--v-theme-surface));
   position: sticky;
   top: 80px;
 }
-.profile-nav-list :deep(.v-list-item) {
-  border-radius: var(--ds-radius-md, 8px) !important;
-  margin: 2px 4px;
-  min-height: 44px;
+.profile-nav__item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: var(--ds-radius-md, 8px);
+  background: transparent;
+  border: none;
+  color: rgb(var(--v-theme-on-surface));
+  cursor: pointer;
+  font: var(--ds-type-body-m);
+  font-weight: 500;
+  text-align: left;
+  transition: background var(--ds-dur-fast, 120ms) var(--ds-ease-standard, ease),
+              color var(--ds-dur-fast, 120ms) var(--ds-ease-standard, ease);
 }
-.profile-nav-list :deep(.v-list-item--active) {
-  background: var(--ds-primary-soft, rgba(var(--v-theme-primary), 0.10));
+.profile-nav__item:hover {
+  background: var(--ds-overlay, rgba(var(--v-theme-on-surface), 0.04));
+}
+.profile-nav__item--active {
+  background: var(--ds-primary-soft, rgba(var(--v-theme-primary), 0.12));
   color: rgb(var(--v-theme-primary));
 }
-.profile-nav-list :deep(.v-list-item--active .v-icon) {
+.profile-nav__item--active .profile-nav__icon {
   color: rgb(var(--v-theme-primary));
 }
-
-/* DS контент-карточки в табах — outline + radius */
-:deep(.v-card) {
-  border-radius: var(--ds-radius-lg, 12px);
-  border: 1px solid var(--ds-outline-variant, rgba(var(--v-theme-on-surface), 0.06));
+.profile-nav__icon {
+  flex-shrink: 0;
+  color: var(--ds-on-surface-muted, rgba(var(--v-theme-on-surface), 0.55));
 }
 
-/* Section-заголовки в карточках */
-:deep(.text-subtitle-1.font-weight-bold),
-:deep(.ds-title-l) {
-  font: var(--ds-type-title-l) !important;
+/* CONTENT ─ карточки разделов */
+.profile-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+/* DS-карточка с тонким outline вместо тяжёлой elevation */
+.ds-card {
+  border-radius: var(--ds-radius-lg, 12px) !important;
+  border: 1px solid var(--ds-outline-variant, rgba(var(--v-theme-on-surface), 0.08)) !important;
+  background: rgb(var(--v-theme-surface)) !important;
+  overflow: hidden;
+}
+.ds-card__head {
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--ds-outline-soft, rgba(var(--v-theme-on-surface), 0.04));
+}
+.ds-card__body {
+  padding: 16px 20px 20px;
+}
+.ds-card__actions {
+  padding: 12px 20px 16px;
+  border-top: 1px solid var(--ds-outline-soft, rgba(var(--v-theme-on-surface), 0.04));
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* ── ds-title-l — общий для всех section-заголовков ── */
+.ds-title-l {
+  font: var(--ds-type-title-l);
   letter-spacing: -0.01em;
+  color: rgb(var(--v-theme-on-surface));
+}
+.ds-title-s { font: var(--ds-type-title-s); }
+.ds-body-m { font: var(--ds-type-body-m); }
+.ds-body-s { font: var(--ds-type-body-s); }
+.ds-muted { color: var(--ds-on-surface-muted, rgba(var(--v-theme-on-surface), 0.55)); }
+
+/* ── doc-slot ── */
+.doc-slot {
+  border-radius: var(--ds-radius-md, 8px) !important;
+  border: 1px solid var(--ds-outline-variant, rgba(var(--v-theme-on-surface), 0.08)) !important;
+  background: var(--ds-surface-container-low, transparent) !important;
 }
 
-/* tabular-nums на цифровых полях */
-:deep(.text-h4), :deep(.text-h5), :deep(.text-h6), :deep(.text-subtitle-1) {
-  font-variant-numeric: tabular-nums;
+/* ── 2FA setup ── */
+.twofa-steps {
+  margin: 0 0 16px;
+  padding-left: 20px;
+  color: rgb(var(--v-theme-on-surface));
+  line-height: 1.7;
+}
+.twofa-grid {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 18px;
+  align-items: flex-start;
+}
+.twofa-qr {
+  padding: 10px;
+  background: #fff;
+  border-radius: var(--ds-radius-md, 8px);
+  border: 1px solid var(--ds-outline-variant, rgba(0, 0, 0, 0.08));
+  width: 200px;
+  height: 200px;
+  display: grid;
+  place-items: center;
+}
+.qr-img {
+  width: 180px;
+  height: 180px;
+  display: block;
 }
 
-/* На мобилке — sticky отключаем (нав становится сверху, не нужен sticky) */
+/* ── telegram-bot ── */
+.tg-bot-link {
+  color: rgb(var(--v-theme-primary));
+  font-weight: 600;
+  text-decoration: none;
+}
+.tg-bot-link:hover { text-decoration: underline; }
+.tg-code {
+  font-family: var(--ds-font-mono);
+  font-size: 12px;
+  background: var(--ds-overlay, rgba(var(--v-theme-on-surface), 0.06));
+  padding: 1px 5px;
+  border-radius: var(--ds-radius-xs, 4px);
+}
+
+/* ── РЕСПОНСИВ ── */
 @media (max-width: 960px) {
-  .profile-nav { position: static; }
+  .profile-layout {
+    grid-template-columns: 1fr;
+  }
+  .profile-nav {
+    position: static;
+    flex-direction: row;
+    flex-wrap: wrap;
+    overflow-x: auto;
+  }
+  .profile-nav__item {
+    flex: 1 1 auto;
+    min-width: 140px;
+  }
+  .profile-hero {
+    flex-wrap: wrap;
+    gap: 14px;
+  }
+  .twofa-grid {
+    grid-template-columns: 1fr;
+  }
+  .twofa-qr {
+    margin: 0 auto;
+  }
+}
+@media (max-width: 600px) {
+  .profile-hero {
+    padding: 16px !important;
+  }
+  .profile-hero__actions {
+    width: 100%;
+  }
+  .profile-hero__actions .v-btn {
+    width: 100%;
+  }
 }
 </style>
