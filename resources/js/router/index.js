@@ -41,7 +41,10 @@ const routes = [
             { path: 'profile', component: () => import('../pages/Profile.vue') },
 
             // Staff management pages (inside main layout, staff-only)
-            { path: 'manage/workspace', component: () => import('../pages/Admin/Workspace.vue'), meta: { staff: true } },
+            // Единый Рабочий стол: и «Главная» (/), и пункт меню «Рабочий стол»
+            // (/manage/workspace) рендерят один и тот же Workspace.vue.
+            // Компонент сам подсказывает блоки под роль (admin / staff / consultant).
+            { path: 'manage/workspace', component: () => import('../pages/Workspace.vue'), meta: { staff: true } },
             { path: 'manage/periods', component: () => import('../pages/Admin/Periods.vue'), meta: { staff: true } },
             { path: 'manage/periods/:ym', component: () => import('../pages/Admin/PeriodCard.vue'), meta: { staff: true } },
             { path: 'manage/contracts', component: () => import('../pages/Admin/ContractManager.vue'), meta: { staff: true } },
