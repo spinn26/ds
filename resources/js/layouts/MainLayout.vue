@@ -754,8 +754,9 @@ const menuItems = [
   { label: 'Калькулятор объёмов', icon: 'mdi-calculator', path: '/finance/calculator', adminSection: 'calculator' },
   { label: 'Структура', icon: 'mdi-sitemap', path: '/structure', adminSection: 'structure' },
 
-  // Staff workspace (staff-only)
-  { label: 'Рабочий стол', icon: 'mdi-view-dashboard-variant', path: '/manage/workspace', adminSection: 'workspace', staffOnly: true },
+  // «Рабочий стол» убран из меню 2026-05-26: /manage/workspace теперь
+  // ведёт на тот же Workspace.vue, что и «Главная» (/). Дублирование
+  // пункта путало админов. Сам роут оставлен на случай старых букмарков.
 
   // Данные
   { group: 'Данные', adminSection: 'partners' },
