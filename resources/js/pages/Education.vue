@@ -345,17 +345,20 @@ onMounted(loadTree);
 }
 
 .course-cover {
-  height: 110px;
-  border-radius: var(--ds-radius-md, 8px);
+  height: 150px;
+  border-radius: var(--ds-radius-md, 10px);
   position: relative;
   overflow: hidden;
 }
+/* Номер курса — крупная mono-метка в левом нижнем углу обложки.
+   Аналог DS-design «01..N» с pin-down к bottom-left. */
 .course-num {
-  position: absolute; top: 12px; left: 14px;
-  color: rgba(255, 255, 255, 0.92);
+  position: absolute; bottom: 12px; left: 16px;
+  color: rgba(255, 255, 255, 0.95);
   font-family: 'JetBrains Mono', monospace;
-  font-weight: 700; font-size: 13px;
+  font-weight: 700; font-size: 18px;
   letter-spacing: 1px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 .cover-chip {
   position: absolute; top: 10px; right: 10px;
@@ -363,10 +366,10 @@ onMounted(loadTree);
 }
 
 .course-title {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
   line-height: 1.3;
-  min-height: 36px;
+  min-height: 40px;
   color: rgb(var(--v-theme-on-surface));
 }
 </style>

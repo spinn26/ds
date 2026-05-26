@@ -128,10 +128,8 @@
                     <v-icon start size="14">mdi-circle-slice-4</v-icon>
                     в процессе
                   </v-chip>
-                  <v-chip
-                    v-else
-                    size="x-small" variant="tonal"
-                  >открыт</v-chip>
+                  <!-- Дефолтное «открыт» состояние не показываем — лишний шум.
+                       Locked-модули (см. ниже) получают chip «закрыт». -->
                 </div>
                 <div class="text-subtitle-2 font-weight-bold">{{ m.title }}</div>
                 <div class="text-caption text-medium-emphasis mt-1">
@@ -357,14 +355,17 @@ onMounted(load);
 .min-w-0 { min-width: 0; }
 
 .hero {
-  border-radius: var(--ds-radius-lg, 12px);
+  border-radius: var(--ds-radius-lg, 14px);
   overflow: hidden;
-  height: 180px;
-  padding: 24px 28px;
+  min-height: 220px;
+  padding: 32px 36px;
   position: relative;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 4px 12px rgba(0, 0, 0, 0.04);
 }
 .hero-overlay {
   position: absolute; inset: 0;
