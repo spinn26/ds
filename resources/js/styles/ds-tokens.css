@@ -290,3 +290,131 @@
 .v-card-title {
   letter-spacing: -0.01em;
 }
+
+/* ───────────── DS pattern-классы (artboards 75-95) ─────────────
+   Готовые классы для повторяющихся паттернов из desing/.
+   Подключай их в template'ах без переразвёртки секций. */
+
+/* KPI-плитка из ds-layouts.jsx::PartnerWorkspace / ds-missing-manager.
+   Использование: <div class="ds-kpi"> <div class="ds-kpi__label">…</div>
+   <div class="ds-kpi__value">…</div> <div class="ds-kpi__delta up">…</div> </div> */
+.ds-kpi {
+  padding: 14px 16px;
+  border-radius: var(--ds-radius-lg, 12px);
+  border: 1px solid var(--ds-outline-variant, rgba(0, 0, 0, 0.06));
+  background: var(--ds-surface, rgb(var(--v-theme-surface)));
+}
+.ds-kpi__label {
+  font: var(--ds-type-label-m);
+  color: var(--ds-on-surface-muted, rgba(0, 0, 0, 0.55));
+}
+.ds-kpi__value {
+  font: var(--ds-type-headline-s);
+  font-variant-numeric: tabular-nums;
+  margin-top: 4px;
+  letter-spacing: -0.01em;
+}
+.ds-kpi__delta {
+  font: var(--ds-type-body-s);
+  margin-top: 2px;
+}
+.ds-kpi__delta--up   { color: var(--ds-success, rgb(var(--v-theme-success))); }
+.ds-kpi__delta--down { color: var(--ds-error,   rgb(var(--v-theme-error))); }
+.ds-kpi__delta--flat { color: var(--ds-on-surface-muted, rgba(0, 0, 0, 0.55)); }
+
+/* Hover-lift для карточек — поднимает карточку при наведении.
+   Применять на v-card / .ds-card если карточка кликабельная. */
+.ds-hover-lift {
+  transition:
+    transform var(--ds-dur-fast, 120ms) var(--ds-ease-standard, ease),
+    box-shadow var(--ds-dur-fast, 120ms) var(--ds-ease-standard, ease);
+  cursor: pointer;
+}
+.ds-hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--ds-shadow-2, 0 4px 12px rgba(0, 0, 0, 0.08));
+}
+
+/* Status-dot — мигающий кружок состояния (success/warning/error/info).
+   Использование: <span class="ds-dot ds-dot--success" /> */
+.ds-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.ds-dot--success { background: var(--ds-success, rgb(var(--v-theme-success))); }
+.ds-dot--warning { background: var(--ds-warning, rgb(var(--v-theme-warning))); }
+.ds-dot--error   { background: var(--ds-error,   rgb(var(--v-theme-error))); }
+.ds-dot--info    { background: var(--ds-info,    rgb(var(--v-theme-info))); }
+.ds-dot--neutral { background: var(--ds-on-surface-muted, rgba(0, 0, 0, 0.35)); }
+.ds-dot--blink {
+  animation: ds-blink 1.6s var(--ds-ease-standard, ease) infinite;
+}
+@keyframes ds-blink {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.45; }
+}
+
+/* Hero-card с BrandWaves фоном — используется на Dashboard / Workspace.
+   Применяет relative + overflow:hidden, фон BrandWaves через дочерний
+   элемент с .ds-hero__bg. Контент — .ds-hero__content. */
+.ds-hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--ds-radius-lg, 12px);
+}
+.ds-hero__bg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.5;
+}
+.ds-hero__content {
+  position: relative;
+  z-index: 1;
+  padding: 22px 26px;
+}
+.ds-hero__eyebrow {
+  font: var(--ds-type-label-m);
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: rgb(var(--v-theme-primary));
+}
+
+/* Report-card / Settings-card паттерн — иконка-тайл слева + контент справа.
+   См. ds-missing-manager.jsx::MgrReports. */
+.ds-rep-card {
+  display: flex;
+  gap: 14px;
+  padding: 18px;
+  border-radius: var(--ds-radius-lg, 12px);
+  border: 1px solid var(--ds-outline-variant, rgba(0, 0, 0, 0.06));
+  background: var(--ds-surface, rgb(var(--v-theme-surface)));
+}
+.ds-rep-card__icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: var(--ds-primary-soft, rgba(var(--v-theme-primary), 0.10));
+  color: rgb(var(--v-theme-primary));
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.ds-rep-card__body {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Section eyebrow — мелкая UPPERCASE-подпись над заголовком секции. */
+.ds-eyebrow {
+  font: var(--ds-type-label-m);
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--ds-on-surface-muted, rgba(0, 0, 0, 0.55));
+}
+.ds-eyebrow--primary {
+  color: rgb(var(--v-theme-primary));
+}
