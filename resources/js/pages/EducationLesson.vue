@@ -619,10 +619,12 @@ onMounted(load);
 .video-frame {
   position: relative;
   width: 100%;
+  max-width: 760px;
   aspect-ratio: 16 / 9;
-  border-radius: var(--ds-radius-md, 8px);
+  border-radius: 12px;
   overflow: hidden;
   background: rgba(var(--v-theme-on-surface), 0.04);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.1);
 }
 .video-frame iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
 

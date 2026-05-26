@@ -238,6 +238,7 @@ function renderBlock(b) {
 .video-frame {
   position: relative;
   width: 100%;
+  max-width: 760px;
   aspect-ratio: 16 / 9;
   border-radius: 14px;
   overflow: hidden;
