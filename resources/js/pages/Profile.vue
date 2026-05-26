@@ -778,5 +778,30 @@ async function disable2fa() {
 }
 :deep(.v-card) {
   border-radius: var(--ds-radius-lg, 12px);
+  border: 1px solid var(--ds-outline-variant, rgba(var(--v-theme-on-surface), 0.06));
+}
+
+/* Section-заголовки в карточках (text-subtitle-1 font-weight-bold) — DS title-l */
+:deep(.text-subtitle-1.font-weight-bold) {
+  font: var(--ds-type-title-l) !important;
+  letter-spacing: -0.01em;
+}
+
+/* DS tabs: убираем тяжёлый underline у активного, делаем плотный indicator */
+:deep(.v-tabs) {
+  border-bottom: 1px solid var(--ds-outline-variant, rgba(var(--v-theme-on-surface), 0.08));
+}
+:deep(.v-tab) {
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+:deep(.v-tab--selected) {
+  color: rgb(var(--v-theme-primary));
+}
+
+/* Hero-блок профиля (аватар + ФИО + email + чипы статуса) — на primary-soft */
+:deep(.v-card .v-avatar.bg-primary) {
+  box-shadow: 0 0 0 4px var(--ds-primary-soft, rgba(var(--v-theme-primary), 0.10));
 }
 </style>
