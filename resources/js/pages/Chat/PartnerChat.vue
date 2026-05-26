@@ -16,25 +16,14 @@
     <Pane :size="paneSize" :min-size="18" :max-size="50" class="splitpane-aside" v-if="!mobile || !activeChat">
     <!-- Left sidebar: dialog list — Linear-style минимализм, плотные отступы -->
     <aside class="chat-sidebar" :class="{ 'mobile-hidden': mobile && activeChat }">
-      <!-- Header: заголовок + primary CTA + overflow меню для второстепенного -->
+      <!-- Header: только заголовок. Кнопки «Новый» / меню («Написать
+           основателю», «Оставить кейс») убраны — партнёр создаёт
+           обращение через пункты левого сайдбара «Поддержка по продукту»
+           / «Верификация реквизитов» (фиксированные каналы по решению
+           2026-05-26). Функции openNewChat/openFounder/openCase оставлены —
+           checkQuery() их использует при deep-link'ах ?to=founder etc. -->
       <div class="sidebar-head px-3 py-2">
         <div class="text-body-1 font-weight-bold">Обращения</div>
-        <div class="d-flex align-center ga-1">
-          <v-btn color="primary" size="x-small" prepend-icon="mdi-plus" @click="openNewChat">
-            Новый
-          </v-btn>
-          <v-menu location="bottom end">
-            <template #activator="{ props: tip }">
-              <v-btn v-bind="tip" icon variant="text" size="x-small" title="Ещё">
-                <v-icon size="18">mdi-dots-horizontal</v-icon>
-              </v-btn>
-            </template>
-            <v-list density="compact" min-width="220">
-              <v-list-item prepend-icon="mdi-email-edit" title="Написать основателю" @click="openFounder" />
-              <v-list-item prepend-icon="mdi-briefcase-plus" title="Оставить кейс" @click="openCase" />
-            </v-list>
-          </v-menu>
-        </div>
       </div>
 
       <!-- Search -->
