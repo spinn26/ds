@@ -149,10 +149,19 @@ class EducationTreeService
                     'videoUrls' => $l->video_urls ? (is_string($l->video_urls) ? json_decode($l->video_urls, true) : $l->video_urls) : [],
                     'documentUrls' => $l->document_urls ? (is_string($l->document_urls) ? json_decode($l->document_urls, true) : $l->document_urls) : [],
                     'viewed' => isset($viewedSet[$l->id]),
+                    // Дублируем флаги в обоих стилях (camelCase + snake_case).
+                    // Партнёр-просмотр (EducationLesson.vue) и tree-node читают camel,
+                    // admin-конструктор (LessonBodyEditor.vue + EducationConstructor.vue)
+                    // читает snake. Без обоих ключей admin-сторона при reopen урока
+                    // получает undefined → тогглеры «отжимаются». Решение 2026-05-26.
                     'isStopLesson' => (bool) ($l->is_stop_lesson ?? false),
+                    'is_stop_lesson' => (bool) ($l->is_stop_lesson ?? false),
                     'isTest' => (bool) ($l->is_test ?? false),
+                    'is_test' => (bool) ($l->is_test ?? false),
                     'requiresHomework' => (bool) ($l->requires_homework ?? false),
+                    'requires_homework' => (bool) ($l->requires_homework ?? false),
                     'homeworkInstructions' => $l->homework_instructions ?? null,
+                    'homework_instructions' => $l->homework_instructions ?? null,
                     'available' => $av['open'],
                     'unavailableReason' => $av['reason'],
                     'unlockAt' => $av['unlockAt']?->toIso8601String(),
