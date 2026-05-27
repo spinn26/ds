@@ -50,8 +50,10 @@ class RegisterRequest extends FormRequest
                     }
                 },
             ],
+            // Step 1: согласие на обработку ПД + Политику (один чекбокс).
+            // Оферта принимается отдельно в кабинете после верификации
+            // реквизитов — поэтому consentTerms здесь больше нет.
             'consentPersonalData' => ['accepted'],
-            'consentTerms' => ['accepted'],
         ];
     }
 

@@ -134,8 +134,12 @@
             </div>
           </v-card>
 
-          <!-- Подписанные документы (только partner, если есть) -->
-          <v-card v-if="!isEmployee && profile.signedDocuments?.length" class="ds-card">
+          <!-- Подписанные документы (только partner). Бэкенд возвращает
+               массив всех правовых документов (Согласие, Политика, Оферта,
+               Стандарты, Фото) с per-документной датой акцепта. Показываем
+               только те, что подписаны — Stand. + Фото без акцепта просто
+               не отображаем, чтобы не загромождать. -->
+          <v-card v-if="!isEmployee && signedDocsList.length" class="ds-card">
             <div class="ds-card__head">
               <div class="ds-title-l d-flex align-center ga-2">
                 <v-icon color="primary">mdi-file-document-multiple-outline</v-icon>
@@ -144,11 +148,15 @@
             </div>
             <div class="ds-card__body">
               <v-list density="comfortable">
-                <v-list-item v-for="d in profile.signedDocuments" :key="d.id"
-                  :href="d.url" target="_blank"
+                <v-list-item v-for="d in signedDocsList" :key="d.id"
+                  :href="d.url" target="_blank" rel="noopener"
                   prepend-icon="mdi-file-check-outline"
                   :title="d.title"
-                  :subtitle="d.signedAt ? `подписано ${fmtShortDate(d.signedAt)}` : null" />
+                  :subtitle="d.signedAt ? `подписано ${fmtShortDate(d.signedAt)}` : 'ссылка'">
+                  <template #append>
+                    <v-icon size="16" color="medium-emphasis">mdi-open-in-new</v-icon>
+                  </template>
+                </v-list-item>
               </v-list>
             </div>
           </v-card>
@@ -201,6 +209,17 @@
 
         <!-- ════════════════  РЕКВИЗИТЫ  ════════════════ -->
         <div v-show="tab === 'requisites' && !isEmployee">
+          <!-- Общее правило для вкладки: только ИП на УСН, удалить нельзя. -->
+          <v-alert type="info" variant="tonal" density="compact" class="mb-3" prepend-icon="mdi-information-outline">
+            <div class="text-body-2 mb-1">
+              Партнёром ДС может быть только <strong>ИП на УСН</strong>. Иное юр.&nbsp;лицо —
+              <a href="https://t.me/DS_Helpdesk" target="_blank" rel="noopener" class="text-primary">@DS_Helpdesk</a>.
+            </div>
+            <div class="text-caption text-medium-emphasis">
+              Реквизиты редактируются, но не удаляются. Сброс — только через техподдержку.
+            </div>
+          </v-alert>
+
           <!-- ИП -->
           <v-card class="ds-card mb-3">
             <div class="ds-card__head">
@@ -218,6 +237,18 @@
                 type="warning" variant="tonal" density="compact" class="mb-3"
                 icon="mdi-alert-outline">
                 Изменение реквизитов сбросит статус верификации.
+              </v-alert>
+              <v-alert v-else-if="profile.requisites?.verificationStatus === 'rejected'"
+                type="error" variant="tonal" density="compact" class="mb-3"
+                icon="mdi-close-octagon-outline">
+                Реквизиты отклонены финменеджером. Исправьте данные и сохраните повторно.
+              </v-alert>
+              <v-alert v-else-if="profile.requisites?.verificationStatus"
+                type="warning" variant="tonal" density="compact" class="mb-3"
+                icon="mdi-clock-outline">
+                <strong>Ожидайте проверки документов.</strong>
+                Финменеджер вручную проверяет соответствие УСН.
+                До верификации подписание документов и продажа продуктов недоступны.
               </v-alert>
               <v-row dense>
                 <v-col cols="12" md="6">
@@ -275,6 +306,16 @@
                 type="warning" variant="tonal" density="compact" class="mb-3"
                 icon="mdi-alert-outline">
                 Изменение банковских реквизитов сбросит статус верификации.
+              </v-alert>
+              <v-alert v-else-if="profile.bankRequisites?.verificationStatus === 'rejected'"
+                type="error" variant="tonal" density="compact" class="mb-3"
+                icon="mdi-close-octagon-outline">
+                Банковские реквизиты отклонены финменеджером. Исправьте и сохраните повторно.
+              </v-alert>
+              <v-alert v-else-if="profile.bankRequisites?.verificationStatus"
+                type="warning" variant="tonal" density="compact" class="mb-3"
+                icon="mdi-clock-outline">
+                Банковские реквизиты на ручной проверке. Ожидайте верификации финменеджером.
               </v-alert>
               <v-row dense>
                 <v-col cols="12" md="6">
@@ -572,6 +613,11 @@ const { showError, showSuccess } = useSnackbar();
 const auth = useAuthStore();
 const isEmployee = computed(() => auth.isStaff && !auth.isConsultant);
 const canInvite = computed(() => profile.value?.referral?.canInvite ?? false);
+// Только подписанные документы — Стандарты/Фото без акцепта в профиле
+// не светим.
+const signedDocsList = computed(() =>
+  (profile.value?.signedDocuments || []).filter(d => d.signedAt)
+);
 
 const loading = ref(true);
 const tab = ref('info');

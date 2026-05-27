@@ -54,11 +54,28 @@
               <v-stepper-item :value="1" title="Ввод данных" />
               <v-divider />
               <v-stepper-item :value="2" title="Проверка" />
+              <v-divider />
+              <v-stepper-item :value="3" title="Готово" />
             </v-stepper-header>
 
             <v-stepper-window class="mt-4">
               <!-- Step 1 -->
               <v-stepper-window-item :value="1">
+                <!-- Пояснение про юр. форму: партнёр должен быть ИП на УСН.
+                     Иное юр. лицо — через техподдержку (решение от 2026-05-27,
+                     до автоматизации проверки УСН верификация ручная). -->
+                <v-alert type="info" variant="tonal" density="compact" class="mb-3" prepend-icon="mdi-information-outline">
+                  <div class="text-body-2 mb-2">
+                    Если у вас другое юридическое лицо, отличное от <strong>ИП на УСН</strong>,
+                    обратитесь в техническую поддержку.
+                  </div>
+                  <v-btn size="small" color="primary" variant="tonal"
+                    prepend-icon="mdi-send"
+                    href="https://t.me/DS_Helpdesk" target="_blank" rel="noopener">
+                    @DS_Helpdesk
+                  </v-btn>
+                </v-alert>
+
                 <v-alert v-if="error" type="error" class="mb-3" density="compact">{{ error }}</v-alert>
                 <v-form v-model="formValid" @submit.prevent="nextStep">
                   <v-row dense>
@@ -91,8 +108,21 @@
                     <v-col cols="12"><v-text-field v-model="form.password" :rules="passwordRules" label="Пароль *" :type="showPw ? 'text' : 'password'" prepend-inner-icon="mdi-lock" :append-inner-icon="showPw ? 'mdi-eye-off' : 'mdi-eye'" @click:append-inner="showPw = !showPw" /></v-col>
                     <v-col cols="12"><v-text-field v-model="form.password_confirmation" :rules="passwordConfirmRules" label="Подтверждение пароля *" type="password" prepend-inner-icon="mdi-lock" /></v-col>
                     <v-col cols="12">
-                      <v-checkbox v-model="form.consentPersonalData" :rules="[v => !!v || 'Необходимо согласие']" label="Согласен на обработку персональных данных *" density="compact" />
-                      <v-checkbox v-model="form.consentTerms" :rules="[v => !!v || 'Необходимо согласие']" label="Согласен с правилами использования платформы *" density="compact" />
+                      <v-checkbox v-model="form.consentPersonalData"
+                        :rules="[v => !!v || 'Необходимо согласие']"
+                        density="compact" hide-details="auto">
+                        <template #label>
+                          <span class="text-body-2">
+                            Даю
+                            <a :href="LEGAL_LINKS.consent" target="_blank" rel="noopener"
+                              class="text-primary text-decoration-underline" @click.stop>согласие на обработку персональных данных</a>
+                            согласно
+                            <a :href="LEGAL_LINKS.privacyPolicy" target="_blank" rel="noopener"
+                              class="text-primary text-decoration-underline" @click.stop>Политике обработки персональных данных</a>
+                            <span class="text-error">*</span>
+                          </span>
+                        </template>
+                      </v-checkbox>
                     </v-col>
                   </v-row>
                   <v-btn block color="primary" size="large" type="submit"
@@ -135,6 +165,40 @@
                   </v-btn>
                 </div>
               </v-stepper-window-item>
+
+              <!-- Step 3: что делать дальше после успешной регистрации. -->
+              <v-stepper-window-item :value="3">
+                <div class="text-center mb-4">
+                  <v-avatar color="success" size="64" class="mb-3">
+                    <v-icon size="36">mdi-check</v-icon>
+                  </v-avatar>
+                  <div class="text-h6 font-weight-bold mb-1">Регистрация завершена</div>
+                  <div class="text-body-2 text-medium-emphasis">
+                    Вы уже сделали первый шаг — зарегистрировались и заполнили анкету.
+                  </div>
+                </div>
+
+                <v-card variant="tonal" color="primary" class="mb-3 pa-4">
+                  <div class="text-subtitle-2 mb-2 d-flex align-center">
+                    <v-icon start>mdi-school-outline</v-icon>
+                    Следующий шаг — Вводное обучение
+                  </div>
+                  <div class="text-body-2 mb-2">
+                    Чтобы стать полноправным партнёром ДС и получить доступ к нашей продуктовой линейке, вам необходимо пройти <strong>Вводное обучение для партнёров ДС</strong>.
+                  </div>
+                  <div class="text-body-2">
+                    Обучение поможет разобраться в логике работы компании, понять основные правила, изучить продуктовую линейку, познакомиться с системой поддержки и подготовиться к дальнейшей работе внутри ДС.
+                  </div>
+                </v-card>
+
+                <v-alert type="warning" variant="tonal" density="compact" class="mb-4" prepend-icon="mdi-alert">
+                  <strong>ВАЖНО!</strong> Для работы с продуктами вам необходимо оформить ИП на УСН.
+                </v-alert>
+
+                <v-btn block color="primary" size="large" @click="goToCabinet" prepend-icon="mdi-arrow-right">
+                  Перейти в кабинет
+                </v-btn>
+              </v-stepper-window-item>
             </v-stepper-window>
           </v-stepper>
 
@@ -169,10 +233,18 @@ const step = ref(1);
 const showPw = ref(false);
 const error = ref('');
 const loading = ref(false);
+// Ссылки на актуальные версии правовых документов. При смене —
+// также обновить в database/migrations/..._refresh_legal_document_links.php
+// и в backend (PartnerAcceptanceService → DOC_*).
+const LEGAL_LINKS = {
+  consent: 'https://docs.google.com/document/d/1qY9srYpwzcnSSZaddPEZnc5OTps_KwwA/edit?usp=drivesdk',
+  privacyPolicy: 'https://docs.google.com/document/d/13RQ8dBpRXHBbPPyb0Axp6D3JDgCsJPP4/edit?usp=drivesdk',
+};
+
 const form = ref({
   firstName: '', lastName: '', patronymic: '', email: '', phone: '',
   telegram: '', birthDate: '', city: '', password: '', password_confirmation: '',
-  consentPersonalData: false, consentTerms: false, refCode: '',
+  consentPersonalData: false, refCode: '',
 });
 
 const formValid = ref(false);
@@ -273,8 +345,8 @@ async function nextStep() {
   if (form.value.password !== form.value.password_confirmation) {
     error.value = 'Пароли не совпадают'; return;
   }
-  if (!form.value.consentPersonalData || !form.value.consentTerms) {
-    error.value = 'Необходимо дать согласие'; return;
+  if (!form.value.consentPersonalData) {
+    error.value = 'Необходимо дать согласие на обработку персональных данных'; return;
   }
   loading.value = true;
   try {
@@ -293,12 +365,18 @@ async function handleRegister() {
   loading.value = true;
   try {
     await auth.register(form.value);
-    router.push('/');
+    // Не редиректим сразу — показываем шаг 3 с подсказкой про Вводное
+    // обучение и оформление ИП. Пользователь уже залогинен через auth.register.
+    step.value = 3;
   } catch (e) {
     error.value = e.response?.data?.message || 'Ошибка регистрации';
   } finally {
     loading.value = false;
   }
+}
+
+function goToCabinet() {
+  router.push('/');
 }
 </script>
 

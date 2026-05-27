@@ -281,24 +281,6 @@ class ProductController extends Controller
     }
 
     /**
-     * Партнёр принимает обязательные документы перед покупкой продукта.
-     * Проставляется consultant.acceptance = true; с этого момента
-     * checkAccess() возвращает documentsAccepted = true.
-     */
-    public function acceptDocuments(Request $request): JsonResponse
-    {
-        $consultant = Consultant::where('webUser', $request->user()->id)->first();
-        if (! $consultant) {
-            return response()->json(['message' => 'Консультант не найден'], 404);
-        }
-
-        $consultant->acceptance = true;
-        $consultant->save();
-
-        return response()->json(['message' => 'Документы приняты', 'documentsAccepted' => true]);
-    }
-
-    /**
      * Партнёрская проверка ИНН через DaData (для формы блокирующего
      * окна в /products). В отличие от admin-варианта не требует
      * существующего requisite — идёт по введённому ИНН + сверяет ФИО
@@ -385,20 +367,24 @@ class ProductController extends Controller
             )
             : ['match' => false];
 
-        // Auto-verify ТОЛЬКО если: тип = ИП (12 цифр) И ФИО совпало.
-        // ООО (10 цифр) всегда уходит на ручную проверку — нужен
-        // отдельный регламент сверки бенефициара.
-        $autoVerify = $isIndividual && ! empty($fioCheck['match']);
+        // Решение от 2026-05-27: auto-verify ПОЛНОСТЬЮ отключён.
+        // DaData возвращает только статус «ИП» (тип записи в ЕГРИП), но
+        // НЕ режим налогообложения (УСН/ОСН/Патент/НПД) — он хранится в
+        // другом реестре ФНС, к которому у нас нет интеграции. Партнёр
+        // обязан быть ИП на УСН, поэтому пока проверка УСН недоступна —
+        // ВСЕ реквизиты уходят на ручную верификацию финменеджеру.
+        $autoVerify = false;
 
-        $manualReason = null;
         if (! $isIndividual) {
             $manualReason = 'ИНН юр. лица (ООО) — требуется ручная проверка бенефициара.';
         } elseif (! ($fioCheck['match'] ?? false)) {
             $manualReason = sprintf(
-                'ФИО из ЕГРИП («%s») не совпадает с профилем («%s»).',
+                'ФИО из ЕГРИП («%s») не совпадает с профилем («%s»). Требуется ручная проверка.',
                 $fioCheck['actual'] ?? '—',
                 $fioCheck['expected'] ?? '—',
             );
+        } else {
+            $manualReason = 'Подтверждение режима УСН возможно только вручную (нет API ФНС по налоговому режиму).';
         }
 
         $requisite = \Illuminate\Support\Facades\DB::transaction(function () use ($consultant, $innClean, $data, $autoVerify, $fns) {
@@ -474,10 +460,11 @@ class ProductController extends Controller
         }
 
         return response()->json([
-            'message' => $autoVerify
-                ? 'Реквизиты автоматически верифицированы по данным ФНС.'
-                : 'Реквизиты сохранены. ' . $manualReason . ' Ожидают проверки финменеджером.',
-            'verified' => $autoVerify,
+            // Auto-verify отключён — единый ответ для всех кейсов.
+            'message' => 'Реквизиты сохранены. Ожидайте проверки документов финменеджером.',
+            'verified' => false,
+            'pending' => true,
+            'manualReason' => $manualReason,
             'requisiteId' => $requisite->id,
             'fns' => [
                 'name' => $fns['name'] ?? null,

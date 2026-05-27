@@ -12,6 +12,7 @@ use App\Http\Resources\UserResource;
 use App\Models\Client;
 use App\Models\Consultant;
 use App\Models\User;
+use App\Services\PartnerAcceptanceService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -151,7 +152,7 @@ class AuthController extends Controller
     /**
      * Full 2-step registration.
      */
-    public function register(RegisterRequest $request): JsonResponse
+    public function register(RegisterRequest $request, PartnerAcceptanceService $acceptance): JsonResponse
     {
         $user = DB::transaction(function () use ($request) {
             $user = User::create([
@@ -201,8 +202,16 @@ class AuthController extends Controller
             $user->consultant_id = $consultant->id;
             $user->saveQuietly();
 
-            return $user;
+            return [$user, $consultant];
         });
+
+        [$user, $consultant] = $user;
+
+        // Step 1 of registration: the partner ticked the consent for
+        // personal-data processing + privacy policy. Log it explicitly
+        // per-document so it surfaces in the admin acceptance ledger and
+        // in the partner's profile.
+        $acceptance->recordRegistrationConsents($consultant, $request);
 
         $token = $user->createToken('spa')->plainTextToken;
 

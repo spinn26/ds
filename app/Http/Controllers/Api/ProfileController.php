@@ -16,8 +16,8 @@ use App\Support\LegacyId;
 use App\Models\AgreementDocument;
 use App\Models\BankRequisite;
 use App\Models\Consultant;
-use App\Models\LogAcceptance;
 use App\Models\Requisite;
+use App\Services\PartnerAcceptanceService;
 use App\Services\PartnerStatusService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -56,6 +56,8 @@ class ProfileController extends Controller
             ? BankRequisite::where('requisites', $requisite->id)->active()->first()
             : null;
 
+        $acceptance = $this->getAcceptanceStatus($consultant, $requisite);
+
         $referralInfo = $consultant ? $this->getReferralInfo($consultant) : null;
 
         return response()->json([
@@ -90,6 +92,7 @@ class ProfileController extends Controller
             ] : null,
             'statusInfo' => $statusInfo,
             'signedDocuments' => $signedDocuments,
+            'acceptance' => $acceptance,
             'requisites' => $requisite ? RequisiteResource::make($requisite) : null,
             'bankRequisites' => $bankReq ? BankRequisiteResource::make($bankReq) : null,
             'referral' => $referralInfo,
@@ -335,6 +338,43 @@ class ProfileController extends Controller
     }
 
     /**
+     * Партнёр принимает Оферту (+ Стандарты как приложение).
+     *
+     * Доступно после ручной верификации реквизитов ИП финменеджером.
+     * Записывает per-document акцепт в partnerAcceptance/logAcceptance
+     * и проставляет consultant.acceptance=true (legacy-флаг, по нему
+     * checkAccess() возвращает documentsAccepted=true).
+     */
+    public function acceptOffer(Request $request, PartnerAcceptanceService $acceptance): JsonResponse
+    {
+        $consultant = Consultant::where('webUser', $request->user()->id)->first();
+        if (! $consultant) {
+            return response()->json(['message' => 'Консультант не найден'], 404);
+        }
+
+        $requisite = Requisite::where('consultant', $consultant->id)->active()->first();
+        $verified = ((int) $consultant->statusRequisites) === 3
+            || ($requisite && (bool) $requisite->verified);
+
+        if (! $verified) {
+            return response()->json([
+                'message' => 'Подписание Оферты доступно после верификации реквизитов ИП финменеджером.',
+                'requisitesVerified' => false,
+            ], 422);
+        }
+
+        $acceptance->recordOfferAcceptance($consultant, $request);
+
+        $consultant->acceptance = true;
+        $consultant->save();
+
+        return response()->json([
+            'message' => 'Оферта принята',
+            'documentsAccepted' => true,
+        ]);
+    }
+
+    /**
      * City suggestions for the profile form (plain list of Russian names).
      */
     public function cities(Request $request): JsonResponse
@@ -353,28 +393,60 @@ class ProfileController extends Controller
 
     // --- Private helpers ---
 
+    /**
+     * Returns a flat list of agreement documents annotated with the
+     * partner's latest acceptance timestamp per document. Profile.vue
+     * iterates this array directly.
+     *
+     * @return array<int, array{id:int,title:string,url:?string,signedAt:?string}>
+     */
     private function getSignedDocuments(?Consultant $consultant): array
     {
+        $documents = AgreementDocument::orderBy('number')->get();
+
+        $latestPerDoc = $consultant
+            ? DB::table('partnerAcceptance')
+                ->where('consultant', $consultant->id)
+                ->where('accepted', true)
+                ->selectRaw('"documentType" as document_id, MAX("dateAccepted") as last_date')
+                ->groupBy('documentType')
+                ->pluck('last_date', 'document_id')
+            : collect();
+
+        return $documents->map(function ($d) use ($latestPerDoc) {
+            $signedAt = $latestPerDoc[$d->id] ?? null;
+            return [
+                'id' => $d->id,
+                'title' => $d->name,
+                'url' => $d->link,
+                'signedAt' => $signedAt ? (string) $signedAt : null,
+            ];
+        })->values()->all();
+    }
+
+    /**
+     * Compact acceptance status for the cabinet's blocking dialog.
+     * `needsOfferSignature` lights up once requisites are verified but
+     * the partner has not yet ticked the Оферта.
+     */
+    private function getAcceptanceStatus(?Consultant $consultant, ?Requisite $requisite): array
+    {
         if (! $consultant) {
-            return ['accepted' => false, 'acceptedAt' => null, 'documents' => []];
+            return [
+                'requisitesVerified' => false,
+                'offerAccepted' => false,
+                'needsOfferSignature' => false,
+            ];
         }
 
-        $acceptance = LogAcceptance::where('consultant', $consultant->id)
-            ->orderByDesc('dateAccepted')
-            ->first();
-
-        $documents = AgreementDocument::orderBy('number')->get()
-            ->map(fn ($d) => [
-                'id' => $d->id,
-                'name' => $d->name,
-                'link' => $d->link,
-            ])
-            ->toArray();
+        $verified = ((int) $consultant->statusRequisites) === 3
+            || ($requisite && (bool) $requisite->verified);
+        $offerAccepted = (bool) $consultant->acceptance;
 
         return [
-            'accepted' => (bool) $consultant->acceptance,
-            'acceptedAt' => $acceptance?->dateAccepted?->toIso8601String(),
-            'documents' => $documents,
+            'requisitesVerified' => $verified,
+            'offerAccepted' => $offerAccepted,
+            'needsOfferSignature' => $verified && ! $offerAccepted,
         ];
     }
 

@@ -146,32 +146,39 @@
             title="Закрыть и вернуться позже" @click="reqDialog = false" />
         </v-card-title>
         <v-card-text>
+          <v-alert type="warning" variant="tonal" density="compact" class="mb-3" prepend-icon="mdi-alert">
+            <strong>Только ИП на УСН.</strong> Иное юр. лицо —
+            <a href="https://t.me/DS_Helpdesk" target="_blank" rel="noopener" class="text-primary">@DS_Helpdesk</a>.
+          </v-alert>
           <p class="text-body-2 mb-3">
-            Чтобы открыть раздел «Продукты», необходимо заполнить данные
-            вашего ИП и банковские реквизиты. Заполните ИНН — остальные данные
-            подтянутся из реестров автоматически. Можно закрыть окно и
-            вернуться позже — продукты будут заблокированы до заполнения.
+            Заполните ИНН — остальные данные ИП подтянутся из ЕГРИП
+            автоматически. После сохранения реквизиты уйдут на
+            <strong>ручную проверку</strong> финменеджеру; до верификации
+            подписание документов и продажа продуктов недоступны.
           </p>
           <v-text-field
             v-model="inn"
             label="ИНН ИП"
-            placeholder="10 или 12 цифр"
+            placeholder="12 цифр"
             variant="outlined" density="comfortable"
             :loading="innLookup"
             @blur="lookupInn"
             @keyup.enter="lookupInn"
           />
-          <v-alert v-if="innResult" :type="innMatch ? 'success' : 'warning'"
+          <v-alert v-if="innResult" :type="innResult.found ? 'info' : 'warning'"
             variant="tonal" density="compact" class="mb-3">
             <div class="font-weight-medium">{{ innResult.name || 'Не найдено' }}</div>
             <div v-if="innResult.fioCheck" class="text-caption">
               <template v-if="innMatch">
-                ✓ ФИО совпадает с профилем — будет авто-верификация
+                ✓ ФИО совпадает с профилем.
               </template>
               <template v-else>
                 ⚠ ФИО в ИП: {{ innResult.fioCheck.actual }} · В профиле: {{ innResult.fioCheck.expected }}.
-                Будет создан тикет финменеджеру на ручную проверку.
               </template>
+            </div>
+            <div class="text-caption mt-1">
+              Реквизиты будут отправлены на ручную проверку финменеджеру —
+              автоматическое подтверждение режима УСН недоступно.
             </div>
           </v-alert>
           <v-text-field v-model="bankName" label="Банк" variant="outlined" density="comfortable" class="mb-2" />
@@ -189,43 +196,39 @@
       </v-card>
     </v-dialog>
 
-    <!-- Blocking dialog #2: Documents — показывается после реквизитов,
-         если документы не акцептованы. Все галки обязательны. -->
-    <v-dialog v-model="acceptDialog" max-width="560" persistent>
+    <!-- Pending-плашка: реквизиты заполнены, но Катя ещё не верифицировала.
+         Показываем вместо диалога подписания — акцепт доступен только
+         после ручной верификации (решение от 2026-05-27). -->
+    <v-dialog v-model="pendingDialog" max-width="520" persistent>
       <v-card>
         <v-card-title class="d-flex align-center ga-2">
-          <v-icon color="warning">mdi-file-check</v-icon>
-          <span>Шаг 2: Акцепт документов</span>
+          <v-icon color="warning">mdi-clock-outline</v-icon>
+          <span>Ожидайте проверки документов</span>
           <v-spacer />
           <v-btn icon="mdi-close" size="small" variant="text"
-            title="Закрыть и вернуться позже" @click="acceptDialog = false" />
+            title="Закрыть и вернуться позже" @click="pendingDialog = false" />
         </v-card-title>
         <v-card-text>
-          <p class="text-body-2 mb-3">
-            Перед началом работы с продуктами необходимо ознакомиться с
-            документами и принять условия. Можно закрыть окно и вернуться
-            позже — продукты будут заблокированы до акцепта.
+          <v-alert type="info" variant="tonal" density="compact" class="mb-3">
+            Ваши реквизиты получены и переданы финансовому менеджеру.
+          </v-alert>
+          <p class="text-body-2 mb-2">
+            Сейчас идёт <strong>ручная проверка</strong> данных ИП и режима УСН.
+            После верификации откроются: подписание документов, продажа продуктов
+            и финансовые операции.
           </p>
-          <v-checkbox v-for="d in requiredDocs" :key="d.key"
-            v-model="acceptedDocs[d.key]" density="compact" hide-details>
-            <template #label>
-              <span>{{ d.title }}</span>
-              <a v-if="d.url" :href="d.url" target="_blank" class="text-primary ms-2">
-                <v-icon size="14">mdi-open-in-new</v-icon> открыть
-              </a>
-            </template>
-          </v-checkbox>
+          <p class="text-caption text-medium-emphasis mb-0">
+            Если проверка затягивается — напишите в техподдержку
+            <a href="https://t.me/DS_Helpdesk" target="_blank" rel="noopener" class="text-primary">@DS_Helpdesk</a>.
+          </p>
         </v-card-text>
         <v-card-actions class="pa-3">
           <v-spacer />
-          <v-btn color="primary" :loading="accepting"
-            :disabled="!allDocsAccepted"
-            @click="acceptDocuments" prepend-icon="mdi-check">
-            Принять документы
-          </v-btn>
+          <v-btn variant="text" @click="pendingDialog = false">Понятно</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
+
 
     <!-- Программы продукта — открывается при клике «Открыть продукт»,
          если у продукта есть привязанные программы. -->
@@ -307,8 +310,7 @@ const currencyOptions = ref([]);
 const access = ref({ testsPassed: false, requisitesVerified: false, requisitesSubmitted: false, documentsAccepted: false });
 const accessChecked = ref(false);
 const reqDialog = ref(false);
-const acceptDialog = ref(false);
-const accepting = ref(false);
+const pendingDialog = ref(false);
 
 // Requisites form state
 const inn = ref('');
@@ -324,31 +326,10 @@ const canSaveReq = computed(() =>
   bankName.value.trim() && bankBik.value.trim() && accountNumber.value.trim()
 );
 
-// Document acceptance — список тянем из таблицы agreementDocument
-// (per spec ✅Продукты §1.3 «Список документов»). Если backend не вернёт —
-// fallback на минимальный набор, чтобы блокирующее окно не оставалось пустым.
-const FALLBACK_DOCS = [
-  { key: 'agency', title: 'Агентский договор', url: null },
-  { key: 'privacy', title: 'Согласие на обработку персональных данных', url: null },
-  { key: 'offer',   title: 'Публичная оферта', url: null },
-];
-const requiredDocs = ref(FALLBACK_DOCS);
-const acceptedDocs = ref(Object.fromEntries(FALLBACK_DOCS.map(d => [d.key, false])));
-const allDocsAccepted = computed(() => requiredDocs.value.every(d => acceptedDocs.value[d.key]));
-
-async function loadAgreementDocs() {
-  try {
-    const { data } = await api.get('/profile/agreement-documents');
-    if (Array.isArray(data) && data.length) {
-      requiredDocs.value = data.map(d => ({
-        key: 'doc_' + d.id,
-        title: d.name,
-        url: d.link || d.url || null,
-      }));
-      acceptedDocs.value = Object.fromEntries(requiredDocs.value.map(d => [d.key, false]));
-    }
-  } catch {}
-}
+// Акцепт Оферты вынесен в глобальную модалку OfferAcceptanceDialog
+// (MainLayout). Она показывается persistent, пока offerAccepted=false
+// у партнёра с verified-реквизитами — продукты при этом физически
+// недоступны (UI закрыт оверлеем).
 
 const filteredProducts = computed(() => {
   let list = products.value;
@@ -369,11 +350,14 @@ const programsDialog = ref(false);
 const selectedProduct = ref(null);
 
 function openProduct(product) {
-  // Блок-диалог реквизитов открываем только если партнёр НЕ заполнял
-  // их ни разу. Если запись есть (даже verified=false, ждёт проверки
-  // финменеджера) — не блокируем, просто показываем плашку статуса.
+  // Воронка доступа (решение от 2026-05-27):
+  //   1) реквизиты не заполнены ни разу → блок-диалог с формой ИНН/банка
+  //   2) реквизиты заполнены, но не верифицированы Катей → pending-плашка
+  //   3) верифицированы, но Оферта не принята → её показывает глобальная
+  //      OfferAcceptanceDialog из MainLayout (persistent поверх UI).
   if (!access.value.requisitesSubmitted) { reqDialog.value = true; return; }
-  if (!access.value.documentsAccepted)  { acceptDialog.value = true; return; }
+  if (!access.value.requisitesVerified)  { pendingDialog.value = true; return; }
+  if (!access.value.documentsAccepted)   { return; }
   // Internal route (openProductUrl начинается с «/») — открываем
   // во SPA через router.push. Используется, например, для InSmart-виджета.
   if (product.url && /^\/(?!\/)/.test(product.url)) {
@@ -390,15 +374,17 @@ function openProduct(product) {
   if (product.url) window.open(product.url, '_blank');
 }
 
-/** Blocking gate: открыть соответствующее окно сразу после загрузки.
- * Реквизиты гейтим по "submitted" (хоть раз заполнял), а не по
- * "verified" — иначе при verified=false (ФИО не совпало с ИНН, ждёт
- * ручную проверку) партнёр снова и снова видит блок-диалог. */
+/** Blocking gate (2026-05-27):
+ *  - submitted=false → форма реквизитов (reqDialog)
+ *  - submitted=true, verified=false → pending-плашка (Катя проверяет)
+ *  - verified=true, accepted=false → блокирующая модалка Оферты живёт
+ *    в MainLayout (OfferAcceptanceDialog), здесь ничего не делаем.
+ *  Иначе — доступ открыт. */
 function gateIfNeeded() {
   if (!access.value.requisitesSubmitted) {
     reqDialog.value = true;
-  } else if (!access.value.documentsAccepted) {
-    acceptDialog.value = true;
+  } else if (!access.value.requisitesVerified) {
+    pendingDialog.value = true;
   }
 }
 
@@ -434,24 +420,17 @@ async function saveRequisites() {
     access.value.requisitesVerified = data?.verified === true;
     reqDialog.value = false;
     if (data?.message) showSuccess(data.message);
-    // Сразу переходим к следующему шагу
-    if (!access.value.documentsAccepted) acceptDialog.value = true;
+    // Auto-verify отключён (2026-05-27) — после сохранения всегда
+    // ведём в pending-плашку. Когда финменеджер верифицирует реквизиты,
+    // глобальная OfferAcceptanceDialog (MainLayout) попросит подписать
+    // Оферту.
+    if (!access.value.requisitesVerified) {
+      pendingDialog.value = true;
+    }
   } catch (e) {
     showError(e.response?.data?.message || 'Не удалось сохранить реквизиты');
   }
   savingReq.value = false;
-}
-
-async function acceptDocuments() {
-  accepting.value = true;
-  try {
-    await api.post('/products/accept-documents', {
-      documents: Object.keys(acceptedDocs.value).filter(k => acceptedDocs.value[k]),
-    });
-    access.value.documentsAccepted = true;
-    acceptDialog.value = false;
-  } catch {}
-  accepting.value = false;
 }
 
 async function loadProducts() {
@@ -480,7 +459,7 @@ async function loadProducts() {
   loading.value = false;
 }
 
-onMounted(() => { loadProducts(); loadAgreementDocs(); });
+onMounted(() => { loadProducts(); });
 </script>
 
 <style scoped>

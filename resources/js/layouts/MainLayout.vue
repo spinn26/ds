@@ -216,6 +216,31 @@
     <!-- Content -->
     <v-main class="content-main" :class="{ 'content-main--full-bleed': isFullBleedRoute }">
       <v-container fluid :class="isFullBleedRoute ? 'pa-0' : 'pa-4 pa-md-6'">
+        <!-- Глобальный баннер: реквизиты на ручной проверке.
+             Скрываем на /profile и /education — там партнёр и так знает.
+             Скрываем на чате (full-bleed) — не ломаем layout. -->
+        <v-alert
+          v-if="showRequisitesPendingBanner"
+          type="warning" variant="tonal" density="compact"
+          class="mb-3"
+          icon="mdi-clock-outline"
+          closable
+        >
+          <div class="text-body-2">
+            <strong>Ожидайте проверки документов.</strong>
+            Финменеджер вручную проверяет ваши реквизиты ИП (УСН).
+            Подписание документов, продажа продуктов и финансовые операции
+            будут доступны после верификации.
+          </div>
+          <div class="text-caption mt-1">
+            <router-link to="/profile?tab=requisites" class="text-primary">
+              Открыть реквизиты
+            </router-link>
+            · Затягивается?
+            <a href="https://t.me/DS_Helpdesk" target="_blank" rel="noopener" class="text-primary">@DS_Helpdesk</a>
+          </div>
+        </v-alert>
+
         <router-view />
       </v-container>
     </v-main>
@@ -226,6 +251,10 @@
     <!-- Глобальный snackbar (per useSnackbar()). Все .showError/.showSuccess
          из любого компонента отрисуются здесь. -->
     <GlobalSnackbar />
+
+    <!-- Блокирующий акцепт Оферты. Появляется только когда финменеджер
+         верифицировал реквизиты ИП, а Оферта ещё не подписана. -->
+    <OfferAcceptanceDialog :open="showOfferDialog" @accepted="onOfferAccepted" />
 
     <!-- Mobile bottom navigation -->
     <v-bottom-navigation v-if="mobile" :model-value="activeBottomNav" grow class="mobile-bottom-nav">
@@ -298,6 +327,7 @@ import { useSnackbar } from '../composables/useSnackbar';
 import OnboardingQuestionnaire from '../components/OnboardingQuestionnaire.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import GlobalSnackbar from '../components/GlobalSnackbar.vue';
+import OfferAcceptanceDialog from '../components/OfferAcceptanceDialog.vue';
 import GlobalSearch from '../components/GlobalSearch.vue';
 import SystemStatusChip from '../components/SystemStatusChip.vue';
 import ChatLauncher from '../components/ChatLauncher.vue';
@@ -335,6 +365,36 @@ const drawer = ref(true);
 const isFullBleedRoute = computed(() => {
   return route.path === '/chat' || route.path === '/manage/chat';
 });
+
+// Баннер ручной проверки реквизитов. Показываем партнёру (не staff),
+// у которого статус verificationStatus = 'pending'. Скрыт на /profile,
+// /education* и full-bleed чате, чтобы не дублировать локальные плашки
+// и не ломать layout.
+const showRequisitesPendingBanner = computed(() => {
+  if (auth.isStaff) return false;
+  if (auth.user?.requisitesVerificationStatus !== 'pending') return false;
+  if (isFullBleedRoute.value) return false;
+  const path = route.path || '';
+  if (path.startsWith('/profile')) return false;
+  if (path.startsWith('/education')) return false;
+  return true;
+});
+
+// Блокирующий акцепт Оферты: реквизиты верифицированы, но партнёр ещё
+// не подписал Оферту. До акцепта недоступны продажи и финансовые
+// операции (consultant.acceptance = false ⇒ checkAccess блокирует
+// продукты). Скрыто для staff.
+const showOfferDialog = computed(() => {
+  if (auth.isStaff) return false;
+  if (auth.user?.requisitesVerificationStatus !== 'verified') return false;
+  return auth.user?.offerAccepted === false;
+});
+
+async function onOfferAccepted() {
+  // Перечитываем профиль, чтобы offerAccepted переключился в true и
+  // модалка закрылась. fetchUser обновляет auth.user из /auth/me.
+  try { await auth.fetchUser(); } catch {}
+}
 
 // Rail (minimalist) sidebar — persists across sessions
 const rail = ref(localStorage.getItem('main-nav-rail') === '1');
