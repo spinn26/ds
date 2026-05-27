@@ -98,8 +98,12 @@ class SyncProductsCatalogWhitelist extends Command
             $existing = $dbProductsByKey->get($nkey);
             if ($existing) {
                 $changes = [];
-                if ($cat !== null && $cat !== '' && $existing->type !== $cat) {
-                    $changes['type'] = $cat;
+                // Категория из whitelist всегда применяется, в т.ч. NULL.
+                // Правило пользователя: «если категория пуста в листе —
+                // значит и на платформе не выбрана категория».
+                $newType = ($cat === '' ? null : $cat);
+                if ($existing->type !== $newType) {
+                    $changes['type'] = $newType;
                 }
                 if ((bool) $existing->active !== $act) {
                     $changes['active'] = $act;
