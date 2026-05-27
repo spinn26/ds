@@ -1,7 +1,7 @@
 {
   "_meta": {
     "source": "Google Sheet 1tZDROF9cDsK3zZnBe_A0EeeT-UgkrgnZH-NByrUnZ4s, лист ПРОДУКТЫ (gid=531018859)",
-    "snapshot": "2026-05-27 v3 (category from column P)",
+    "snapshot": "2026-05-27 v4 (full names, no truncation)",
     "marker_rules": {
       "": "ACTIVE",
       "в базу знаний и доп продукты": "ACTIVE",
@@ -317,7 +317,7 @@
       ]
     },
     {
-      "name": "Hansard Worldwide Personal Portfoli",
+      "name": "Hansard Worldwide Personal Portfolio",
       "category": null,
       "active": false,
       "programs": [
@@ -337,7 +337,7 @@
       "active": false,
       "programs": [
         {
-          "name": "GEO/GEM & artioty Group Exchan",
+          "name": "GEO/GEM & artioty Group Exchange Annual Plan",
           "active": false
         },
         {
@@ -372,11 +372,11 @@
     {
       "name": "Investor Trust Assurance SPX",
       "category": "Страховая оболочка",
-      "active": true,
+      "active": false,
       "programs": [
         {
           "name": "SPX-X",
-          "active": true
+          "active": false
         }
       ]
     },
@@ -549,7 +549,7 @@
         },
         {
           "name": "COI",
-          "active": true
+          "active": false
         },
         {
           "name": "COI-SP",
@@ -565,35 +565,35 @@
         },
         {
           "name": "EGP/EGP+",
-          "active": true
+          "active": false
         },
         {
           "name": "EIP",
-          "active": true
+          "active": false
         },
         {
           "name": "EUVIP",
-          "active": true
+          "active": false
         },
         {
           "name": "FFP",
-          "active": true
+          "active": false
         },
         {
           "name": "FIP",
-          "active": true
+          "active": false
         },
         {
           "name": "G5S",
-          "active": true
+          "active": false
         },
         {
           "name": "GEIP",
-          "active": true
+          "active": false
         },
         {
           "name": "KIP",
-          "active": true
+          "active": false
         },
         {
           "name": "PSO",
@@ -682,15 +682,15 @@
     {
       "name": "Unilife",
       "category": null,
-      "active": true,
+      "active": false,
       "programs": [
         {
           "name": "Global protector",
-          "active": true
+          "active": false
         },
         {
           "name": "UNILIFE",
-          "active": true
+          "active": false
         }
       ]
     },
@@ -848,7 +848,7 @@
           "active": true
         },
         {
-          "name": "ПИФ БКС Российские Еврооблигац",
+          "name": "ПИФ БКС Российские Еврооблигации",
           "active": true
         },
         {
@@ -940,7 +940,7 @@
           "active": false
         },
         {
-          "name": "Второе гражданство Финион Арме",
+          "name": "Второе гражданство Финион Армения",
           "active": false
         }
       ]
@@ -997,11 +997,11 @@
           "active": true
         },
         {
-          "name": "Здоровая Жизнь - единовременна",
+          "name": "Здоровая Жизнь - единовременная оплата",
           "active": true
         },
         {
-          "name": "Здоровая Жизнь - регулярное по",
+          "name": "Здоровая Жизнь - регулярное пополнение",
           "active": true
         },
         {
@@ -1017,11 +1017,11 @@
           "active": true
         },
         {
-          "name": "Мой капитал (рубли) - единораз",
+          "name": "Мой капитал (рубли) - единоразовая оплата",
           "active": true
         },
         {
-          "name": "Мой капитал в долларах США 5 л",
+          "name": "Мой капитал в долларах США 5 лет",
           "active": true
         },
         {
@@ -1068,7 +1068,7 @@
           "active": true
         },
         {
-          "name": "Freedom Finance Global Портфел",
+          "name": "Freedom Finance Global Портфель",
           "active": true
         },
         {
@@ -1091,7 +1091,7 @@
       "active": true,
       "programs": [
         {
-          "name": "Инвестиционное консультировани",
+          "name": "Инвестиционное консультирование",
           "active": true
         }
       ]
@@ -1128,7 +1128,7 @@
           "active": false
         },
         {
-          "name": "Специалист по финансовому конс",
+          "name": "Специалист по финансовому консультированию",
           "active": false
         }
       ]
@@ -1275,7 +1275,7 @@
           "active": true
         },
         {
-          "name": "Решающее приемущество (Best do",
+          "name": "Решающее приемущество (Best doctors)",
           "active": true
         },
         {
@@ -1298,7 +1298,7 @@
           "active": true
         },
         {
-          "name": "Гармония жизни дополнительные",
+          "name": "Гармония жизни дополнительные опции",
           "active": true
         }
       ]
@@ -1345,7 +1345,7 @@
           "active": true
         },
         {
-          "name": "На всю жизнь дополнительные оп",
+          "name": "На всю жизнь дополнительные опции",
           "active": true
         },
         {
