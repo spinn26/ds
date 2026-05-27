@@ -1,0 +1,3189 @@
+{
+  "_meta": {
+    "source": "Google Sheet 1tZDROF9cDsK3zZnBe_A0EeeT-UgkrgnZH-NByrUnZ4s, лист ПРОДУКТЫ (gid=531018859)",
+    "snapshot": "2026-05-27",
+    "marker_rules": {
+      "": "ACTIVE",
+      "в базу знаний и доп продукты": "ACTIVE",
+      "в базу знаний доп продукт": "ACTIVE",
+      "толко в БЗ и доп продукт": "ACTIVE",
+      "продукт оставлем, обучение только в базе знаний, никак не пиарим": "HIDDEN",
+      "договор оставить но не пиарить обучения нет и в базе нет": "HIDDEN",
+      "в договоре оставляем, обучение и в базу знаний не берем, только под запрос": "HIDDEN",
+      "в договоре оставлеям не добавляем": "HIDDEN",
+      "не добавлем на платформу": "SKIP",
+      "комментарий": "SKIP"
+    },
+    "rule_orphans": "Продукты/программы, которых нет в whitelist, деактивируются (active=false), не удаляются.",
+    "rule_no_category": "Пустая категория в листе → type=NULL в products_catalog (по правилу «нет категории — не ставим»)."
+  },
+  "products": [
+    {
+      "name": "ЗПИФ",
+      "category": null,
+      "active": true,
+      "programs": [
+        {
+          "name": "Акцент-4",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "Кэпитал Борд"
+          ],
+          "tariff_rows": 1
+        }
+      ]
+    },
+    {
+      "name": "Инвестиционное консультирование",
+      "category": null,
+      "active": true,
+      "programs": [
+        {
+          "name": "Инвестиционное консультирование",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "Кэпитал Борд"
+          ],
+          "tariff_rows": 1
+        }
+      ]
+    },
+    {
+      "name": "Парус",
+      "category": null,
+      "active": true,
+      "programs": [
+        {
+          "name": "Парус",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "Кэпитал Борд"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Парус-МАКС",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "Кэпитал Борд"
+          ],
+          "tariff_rows": 1
+        }
+      ]
+    },
+    {
+      "name": "РАНКС",
+      "category": null,
+      "active": true,
+      "programs": [
+        {
+          "name": "РФ Буфер ликвидности",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "РАНКС"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "РФ КОНЦЕНТРИРОВАННЫЙ",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "РАНКС"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "РФ ОБЛИГАЦИИ",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "РАНКС"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "РФ СТАНДАРТ",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "РАНКС"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "США  СТАНДАРТ",
+          "active": true,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "РАНКС"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "США  ФОНДЫ",
+          "active": true,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "РАНКС"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "США RAM",
+          "active": true,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "РАНКС"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "США Буфер ликвидности",
+          "active": true,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "РАНКС"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "США Дивидендный поток",
+          "active": true,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "РАНКС"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "США КОНЦЕНТРИРОВАННЫЙ",
+          "active": true,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "РАНКС"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "США ЦИКЛЫ БИТКОИНА",
+          "active": true,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "РАНКС"
+          ],
+          "tariff_rows": 2
+        }
+      ]
+    },
+    {
+      "name": "БРОКЕР+",
+      "category": "Брокерский счет",
+      "active": true,
+      "programs": [
+        {
+          "name": "Агрессивный",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "БРОКЕР+"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "ИПИФ АТОН-ОФЗ",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "БРОКЕР+"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "ИФ АТОН Фонд Петр Столыпин",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "БРОКЕР+"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Консервативный",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "БРОКЕР+"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "ПИФ АТОН Фонд Еврооблигаций",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "БРОКЕР+"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "ПИФ АТОН Фонд Эшелон 2.0",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "БРОКЕР+"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "ПИФ БКС Российские Акции",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "БРОКЕР+"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "ПИФ БКС Российские Еврооблигации",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "БРОКЕР+"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "ПИФ БКС Российские облигации",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "БРОКЕР+"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Умеренный",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "БРОКЕР+"
+          ],
+          "tariff_rows": 1
+        }
+      ]
+    },
+    {
+      "name": "ИИ ДС",
+      "category": "Брокерский счет",
+      "active": true,
+      "programs": [
+        {
+          "name": "FF Армения Портфель",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "RG.HT"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "FF Казахстан Портфель",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "RG.HT"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "Freedom Finance Global Портфель",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "RG.HT"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "Freedom Global ETF",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "RG.HT"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "ТВ",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "RG.HT"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "Тинькофф портфель",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "RG.HT"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "Финам портфель",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "RG.HT"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "Фридом Финанс Портфель",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "RG.HT"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "Цифра. Рынок РФ",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "RG.HT"
+          ],
+          "tariff_rows": 2
+        }
+      ]
+    },
+    {
+      "name": "Axevil",
+      "category": "Внебирживые инвестиции",
+      "active": true,
+      "programs": [
+        {
+          "name": "Axevil",
+          "active": true,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "Axevil"
+          ],
+          "tariff_rows": 2
+        }
+      ]
+    },
+    {
+      "name": "LWM Estate",
+      "category": "Дополнительные продукты",
+      "active": true,
+      "programs": [
+        {
+          "name": "НЕДВИЖИМОСТЬ",
+          "active": true,
+          "currencies": [],
+          "providers": [
+            "LWM Estate"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Недвижимость под гражданство",
+          "active": true,
+          "currencies": [],
+          "providers": [
+            "LWM Estate"
+          ],
+          "tariff_rows": 1
+        }
+      ]
+    },
+    {
+      "name": "ВНЖ",
+      "category": "Дополнительные продукты",
+      "active": true,
+      "programs": [
+        {
+          "name": "ВНЖ Армения",
+          "active": true,
+          "currencies": [],
+          "providers": [
+            "ИП Скрипниченко С.П."
+          ],
+          "tariff_rows": 1
+        }
+      ]
+    },
+    {
+      "name": "Второе гражданство",
+      "category": "Дополнительные продукты",
+      "active": true,
+      "programs": [
+        {
+          "name": "Гражданство Вануату",
+          "active": true,
+          "currencies": [],
+          "providers": [
+            "RIFTRUST"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Гражданство Гренада",
+          "active": true,
+          "currencies": [],
+          "providers": [
+            "RIFTRUST"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Гражданство Доминика",
+          "active": true,
+          "currencies": [],
+          "providers": [
+            "RIFTRUST"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Гражданство Португалии",
+          "active": true,
+          "currencies": [],
+          "providers": [
+            "RIFTRUST"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Гражданство Сент Китс и Невис",
+          "active": true,
+          "currencies": [],
+          "providers": [
+            "RIFTRUST"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Гражданство Сент-Люсия",
+          "active": true,
+          "currencies": [],
+          "providers": [
+            "RIFTRUST"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Гражданство Черногория",
+          "active": true,
+          "currencies": [],
+          "providers": [
+            "RIFTRUST"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Резидентство Мальта",
+          "active": true,
+          "currencies": [],
+          "providers": [
+            "RIFTRUST"
+          ],
+          "tariff_rows": 1
+        }
+      ]
+    },
+    {
+      "name": "Второе гражданство Финион",
+      "category": "Дополнительные продукты",
+      "active": true,
+      "programs": [
+        {
+          "name": "Второе гражданство Финион",
+          "active": true,
+          "currencies": [],
+          "providers": [
+            "Финион"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Второе гражданство Финион Армения",
+          "active": true,
+          "currencies": [],
+          "providers": [
+            "Финион"
+          ],
+          "tariff_rows": 1
+        }
+      ]
+    },
+    {
+      "name": "Недвижимость EDELUX",
+      "category": "Дополнительные продукты",
+      "active": true,
+      "programs": [
+        {
+          "name": "ИНВЕСТИЦИОННАЯ НЕДВИЖИМОСТЬ",
+          "active": true,
+          "currencies": [],
+          "providers": [
+            "ИП Головина Ю.Д."
+          ],
+          "tariff_rows": 1
+        }
+      ]
+    },
+    {
+      "name": "Недвижимость Шефер",
+      "category": "Дополнительные продукты",
+      "active": true,
+      "programs": [
+        {
+          "name": "НЕДВИЖИМОСТЬ",
+          "active": true,
+          "currencies": [],
+          "providers": [
+            "ИП Шефер"
+          ],
+          "tariff_rows": 1
+        }
+      ]
+    },
+    {
+      "name": "Открытие юридического лица",
+      "category": "Дополнительные продукты",
+      "active": true,
+      "programs": [
+        {
+          "name": "Открытие юридического лица",
+          "active": true,
+          "currencies": [],
+          "providers": [
+            "RIFTRUST"
+          ],
+          "tariff_rows": 1
+        }
+      ]
+    },
+    {
+      "name": "Hansard Capital Builder",
+      "category": "Единовременные взносы + страховая оболочка",
+      "active": true,
+      "programs": [
+        {
+          "name": "Hansard_CB",
+          "active": true,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "Anderida"
+          ],
+          "tariff_rows": 1
+        }
+      ]
+    },
+    {
+      "name": "Hansard Worldwide Personal Portfolio",
+      "category": "Единовременные взносы + страховая оболочка",
+      "active": true,
+      "programs": [
+        {
+          "name": "WPP_Z5",
+          "active": true,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "Anderida"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "WPP_Z8",
+          "active": true,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "Anderida"
+          ],
+          "tariff_rows": 1
+        }
+      ]
+    },
+    {
+      "name": "International Assurance Limited",
+      "category": "Единовременные взносы + страховая оболочка",
+      "active": true,
+      "programs": [
+        {
+          "name": "Linked Investment Plan (LIP)",
+          "active": true,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "Anderida"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Whole of Life (WOL)",
+          "active": true,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "Anderida"
+          ],
+          "tariff_rows": 1
+        }
+      ]
+    },
+    {
+      "name": "Investors Trust Access Portfolio",
+      "category": "Единовременные взносы + страховая оболочка",
+      "active": true,
+      "programs": [
+        {
+          "name": "ACS5000",
+          "active": true,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "ITA"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "ACS8000",
+          "active": true,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "ITA"
+          ],
+          "tariff_rows": 1
+        }
+      ]
+    },
+    {
+      "name": "Investors Trust Fixed Income",
+      "category": "Единовременные взносы + страховая оболочка",
+      "active": true,
+      "programs": [
+        {
+          "name": "FIFR03",
+          "active": true,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "ITA"
+          ],
+          "tariff_rows": 1
+        }
+      ]
+    },
+    {
+      "name": "Investors Trust Platinum PLUS",
+      "category": "Единовременные взносы + страховая оболочка",
+      "active": true,
+      "programs": [
+        {
+          "name": "PLATP",
+          "active": true,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "ITA"
+          ],
+          "tariff_rows": 1
+        }
+      ]
+    },
+    {
+      "name": "Investors Trust Platinum Select",
+      "category": "Единовременные взносы + страховая оболочка",
+      "active": true,
+      "programs": [
+        {
+          "name": "PLATS",
+          "active": true,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "ITA"
+          ],
+          "tariff_rows": 1
+        }
+      ]
+    },
+    {
+      "name": "MF",
+      "category": "Единовременные взносы + страховая оболочка",
+      "active": true,
+      "programs": [
+        {
+          "name": "Hansard_CB",
+          "active": true,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "Anderida"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Linked Investment Plan (LIP)",
+          "active": true,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "Anderida"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "WPP_Z5",
+          "active": true,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "Anderida"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "WPP_Z8",
+          "active": true,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "Anderida"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Whole of Life (WOL)",
+          "active": true,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "Anderida"
+          ],
+          "tariff_rows": 1
+        }
+      ]
+    },
+    {
+      "name": "Medlife",
+      "category": "Единовременные взносы + страховая оболочка",
+      "active": true,
+      "programs": [
+        {
+          "name": "APS-SP/APS-SP+",
+          "active": true,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "1/SI SAVE INVEST LTD."
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "COI-SP",
+          "active": true,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "1/SI SAVE INVEST LTD."
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "EEVIP",
+          "active": true,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "1/SI SAVE INVEST LTD."
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "EGP-SP/EGP-SP+",
+          "active": true,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "1/SI SAVE INVEST LTD."
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "PSO",
+          "active": true,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "1/SI SAVE INVEST LTD."
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Е11",
+          "active": true,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "1/SI SAVE INVEST LTD."
+          ],
+          "tariff_rows": 1
+        }
+      ]
+    },
+    {
+      "name": "ЗПИФ",
+      "category": "ЗПИФ",
+      "active": true,
+      "programs": [
+        {
+          "name": "Акцент-5",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "Кэпитал Борд"
+          ],
+          "tariff_rows": 1
+        }
+      ]
+    },
+    {
+      "name": "Образовательные продукты",
+      "category": "Образовательные Продукты",
+      "active": true,
+      "programs": [
+        {
+          "name": "PROРост",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "DS"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Специалист по финансовому консультированию",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "DS"
+          ],
+          "tariff_rows": 1
+        }
+      ]
+    },
+    {
+      "name": "Hansard",
+      "category": "Регулярные взносы + страховая оболочка",
+      "active": true,
+      "programs": [
+        {
+          "name": "Vantage Platinum II",
+          "active": true,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "Anderida"
+          ],
+          "tariff_rows": 1
+        }
+      ]
+    },
+    {
+      "name": "Investor Trust Assurance SPX",
+      "category": "Регулярные взносы + страховая оболочка",
+      "active": false,
+      "programs": [
+        {
+          "name": "SPX-X",
+          "active": false,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "ITA"
+          ],
+          "tariff_rows": 15
+        }
+      ]
+    },
+    {
+      "name": "Investor Trust Evolution",
+      "category": "Регулярные взносы + страховая оболочка",
+      "active": true,
+      "programs": [
+        {
+          "name": "EVO",
+          "active": true,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "ITA"
+          ],
+          "tariff_rows": 25
+        }
+      ]
+    },
+    {
+      "name": "Investor Trust MSCI Index",
+      "category": "Регулярные взносы + страховая оболочка",
+      "active": true,
+      "programs": [
+        {
+          "name": "MSCI-X",
+          "active": true,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "ITA"
+          ],
+          "tariff_rows": 15
+        }
+      ]
+    },
+    {
+      "name": "Medlife",
+      "category": "Регулярные взносы + страховая оболочка",
+      "active": true,
+      "programs": [
+        {
+          "name": "APS/APS+",
+          "active": true,
+          "currencies": [
+            "USD/EUR"
+          ],
+          "providers": [
+            "1/SI SAVE INVEST LTD."
+          ],
+          "tariff_rows": 5
+        },
+        {
+          "name": "COI",
+          "active": false,
+          "currencies": [
+            "USD/EUR"
+          ],
+          "providers": [
+            "1/SI SAVE INVEST LTD."
+          ],
+          "tariff_rows": 55
+        },
+        {
+          "name": "EGP/EGP+",
+          "active": false,
+          "currencies": [
+            "USD/EUR"
+          ],
+          "providers": [
+            "1/SI SAVE INVEST LTD."
+          ],
+          "tariff_rows": 5
+        },
+        {
+          "name": "EIP",
+          "active": false,
+          "currencies": [
+            "USD/EUR"
+          ],
+          "providers": [
+            "1/SI SAVE INVEST LTD."
+          ],
+          "tariff_rows": 30
+        },
+        {
+          "name": "EUVIP",
+          "active": false,
+          "currencies": [
+            "USD/EUR"
+          ],
+          "providers": [
+            "1/SI SAVE INVEST LTD."
+          ],
+          "tariff_rows": 30
+        },
+        {
+          "name": "FFP",
+          "active": false,
+          "currencies": [
+            "USD/EUR"
+          ],
+          "providers": [
+            "1/SI SAVE INVEST LTD."
+          ],
+          "tariff_rows": 30
+        },
+        {
+          "name": "FIP",
+          "active": false,
+          "currencies": [
+            "USD/EUR"
+          ],
+          "providers": [
+            "1/SI SAVE INVEST LTD."
+          ],
+          "tariff_rows": 30
+        },
+        {
+          "name": "G5S",
+          "active": false,
+          "currencies": [
+            "USD/EUR"
+          ],
+          "providers": [
+            "1/SI SAVE INVEST LTD."
+          ],
+          "tariff_rows": 30
+        },
+        {
+          "name": "GEIP",
+          "active": false,
+          "currencies": [
+            "USD/EUR"
+          ],
+          "providers": [
+            "1/SI SAVE INVEST LTD."
+          ],
+          "tariff_rows": 30
+        },
+        {
+          "name": "KIP",
+          "active": false,
+          "currencies": [
+            "USD/EUR"
+          ],
+          "providers": [
+            "1/SI SAVE INVEST LTD."
+          ],
+          "tariff_rows": 30
+        }
+      ]
+    },
+    {
+      "name": "Freedom Finance Life",
+      "category": "Страховые продукты",
+      "active": true,
+      "programs": [
+        {
+          "name": "FREEDOM  CAPITAL USD 10",
+          "active": true,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "FREEDOM  CAPITAL USD 3",
+          "active": true,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "FREEDOM  CAPITAL USD 4",
+          "active": true,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "FREEDOM  CAPITAL USD 5",
+          "active": true,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "FREEDOM  CAPITAL USD 6",
+          "active": true,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "FREEDOM  CAPITAL USD 7",
+          "active": true,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "FREEDOM  CAPITAL USD 8",
+          "active": true,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "FREEDOM  CAPITAL USD 9",
+          "active": true,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "FREEDOM CAPITAL EUR 3",
+          "active": true,
+          "currencies": [
+            "EUR"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "FREEDOM CAPITAL EUR 4",
+          "active": true,
+          "currencies": [
+            "EUR"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "FREEDOM CAPITAL EUR 5",
+          "active": true,
+          "currencies": [
+            "EUR"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "FREEDOM FUTURE 10",
+          "active": true,
+          "currencies": [
+            "KZT"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "FREEDOM FUTURE 11",
+          "active": true,
+          "currencies": [
+            "KZT"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "FREEDOM FUTURE 12",
+          "active": true,
+          "currencies": [
+            "KZT"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "FREEDOM FUTURE 13",
+          "active": true,
+          "currencies": [
+            "KZT"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "FREEDOM FUTURE 14",
+          "active": true,
+          "currencies": [
+            "KZT"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "FREEDOM FUTURE 15 и более",
+          "active": true,
+          "currencies": [
+            "KZT"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "FREEDOM FUTURE 5",
+          "active": true,
+          "currencies": [
+            "KZT"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "FREEDOM FUTURE 6",
+          "active": true,
+          "currencies": [
+            "KZT"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "FREEDOM FUTURE 7",
+          "active": true,
+          "currencies": [
+            "KZT"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "FREEDOM FUTURE 8",
+          "active": true,
+          "currencies": [
+            "KZT"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "FREEDOM FUTURE 9",
+          "active": true,
+          "currencies": [
+            "KZT"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "FREEDOM HEALTH",
+          "active": true,
+          "currencies": [
+            "KZT"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "FREEDOM KIDS 10",
+          "active": true,
+          "currencies": [
+            "KZT"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "FREEDOM KIDS 11",
+          "active": true,
+          "currencies": [
+            "KZT"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "FREEDOM KIDS 12",
+          "active": true,
+          "currencies": [
+            "KZT"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "FREEDOM KIDS 13",
+          "active": true,
+          "currencies": [
+            "KZT"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "FREEDOM KIDS 14",
+          "active": true,
+          "currencies": [
+            "KZT"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "FREEDOM KIDS 15 и более",
+          "active": true,
+          "currencies": [
+            "KZT"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "FREEDOM KIDS 5",
+          "active": true,
+          "currencies": [
+            "KZT"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "FREEDOM KIDS 6",
+          "active": true,
+          "currencies": [
+            "KZT"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "FREEDOM KIDS 7",
+          "active": true,
+          "currencies": [
+            "KZT"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "FREEDOM KIDS 8",
+          "active": true,
+          "currencies": [
+            "KZT"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "FREEDOM KIDS 9",
+          "active": true,
+          "currencies": [
+            "KZT"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "FREEDOM LIFE 10",
+          "active": true,
+          "currencies": [
+            "KZT"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "FREEDOM LIFE 11",
+          "active": true,
+          "currencies": [
+            "KZT"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "FREEDOM LIFE 12",
+          "active": true,
+          "currencies": [
+            "KZT"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "FREEDOM LIFE 13",
+          "active": true,
+          "currencies": [
+            "KZT"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "FREEDOM LIFE 14",
+          "active": true,
+          "currencies": [
+            "KZT"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "FREEDOM LIFE 15 и более",
+          "active": true,
+          "currencies": [
+            "KZT"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "FREEDOM LIFE 5",
+          "active": true,
+          "currencies": [
+            "KZT"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "FREEDOM LIFE 6",
+          "active": true,
+          "currencies": [
+            "KZT"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "FREEDOM LIFE 7",
+          "active": true,
+          "currencies": [
+            "KZT"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "FREEDOM LIFE 8",
+          "active": true,
+          "currencies": [
+            "KZT"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "FREEDOM LIFE 9",
+          "active": true,
+          "currencies": [
+            "KZT"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "FREEDOM MONEY 10",
+          "active": true,
+          "currencies": [
+            "KZT"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "FREEDOM MONEY 11",
+          "active": true,
+          "currencies": [
+            "KZT"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "FREEDOM MONEY 12",
+          "active": true,
+          "currencies": [
+            "KZT"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "FREEDOM MONEY 13",
+          "active": true,
+          "currencies": [
+            "KZT"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "FREEDOM MONEY 14",
+          "active": true,
+          "currencies": [
+            "KZT"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "FREEDOM MONEY 15 и более",
+          "active": true,
+          "currencies": [
+            "KZT"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "FREEDOM MONEY 5",
+          "active": true,
+          "currencies": [
+            "KZT"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "FREEDOM MONEY 6",
+          "active": true,
+          "currencies": [
+            "KZT"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "FREEDOM MONEY 7",
+          "active": true,
+          "currencies": [
+            "KZT"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "FREEDOM MONEY 8",
+          "active": true,
+          "currencies": [
+            "KZT"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "FREEDOM MONEY 9",
+          "active": true,
+          "currencies": [
+            "KZT"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "FREEDON EDUCATION 10",
+          "active": true,
+          "currencies": [
+            "KZT"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "FREEDON EDUCATION 5",
+          "active": true,
+          "currencies": [
+            "KZT"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "FREEDON EDUCATION 6",
+          "active": true,
+          "currencies": [
+            "KZT"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "FREEDON EDUCATION 7",
+          "active": true,
+          "currencies": [
+            "KZT"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "FREEDON EDUCATION 8",
+          "active": true,
+          "currencies": [
+            "KZT"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "FREEDON EDUCATION 9",
+          "active": true,
+          "currencies": [
+            "KZT"
+          ],
+          "providers": [
+            "Freedom Finance Life"
+          ],
+          "tariff_rows": 1
+        }
+      ]
+    },
+    {
+      "name": "IMG",
+      "category": "Страховые продукты",
+      "active": false,
+      "programs": [
+        {
+          "name": "GEO/GEM & artioty Group Exchange Annual Plan",
+          "active": false,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "LPG"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "Global series",
+          "active": false,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "LPG"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "Partiot series",
+          "active": false,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "LPG"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "Travel insurance series",
+          "active": false,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "LPG"
+          ],
+          "tariff_rows": 2
+        }
+      ]
+    },
+    {
+      "name": "Manhattan Trust",
+      "category": "Страховые продукты",
+      "active": false,
+      "programs": [
+        {
+          "name": "FIA",
+          "active": false,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "LPG"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Term Life",
+          "active": false,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "LPG"
+          ],
+          "tariff_rows": 40
+        },
+        {
+          "name": "Universal life UL",
+          "active": false,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "LPG"
+          ],
+          "tariff_rows": 10
+        },
+        {
+          "name": "Universal life UL/access",
+          "active": false,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "LPG"
+          ],
+          "tariff_rows": 6
+        }
+      ]
+    },
+    {
+      "name": "Manulife",
+      "category": "Страховые продукты",
+      "active": false,
+      "programs": [
+        {
+          "name": "MGG",
+          "active": false,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "LPG"
+          ],
+          "tariff_rows": 3
+        },
+        {
+          "name": "MGIUL  единоразовая",
+          "active": false,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "LPG"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "MGIUL регулярная",
+          "active": false,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "LPG"
+          ],
+          "tariff_rows": 1
+        }
+      ]
+    },
+    {
+      "name": "PPF",
+      "category": "Страховые продукты",
+      "active": true,
+      "programs": [
+        {
+          "name": "Виталити",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 20
+        },
+        {
+          "name": "Виталити единовременные",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Гардия",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 20
+        },
+        {
+          "name": "Гардия единовременные",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Глория",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Гранде",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Звездочки",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 20
+        },
+        {
+          "name": "Оптим",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 20
+        },
+        {
+          "name": "Оптим единовременные",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Перспектива",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Премиум",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 20
+        },
+        {
+          "name": "Премиум FX",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Премиум единовременные",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Солнышко",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 20
+        }
+      ]
+    },
+    {
+      "name": "Passport Card",
+      "category": "Страховые продукты",
+      "active": false,
+      "programs": [
+        {
+          "name": "Passport Card",
+          "active": false,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "LPG"
+          ],
+          "tariff_rows": 2
+        }
+      ]
+    },
+    {
+      "name": "Unilife",
+      "category": "Страховые продукты",
+      "active": false,
+      "programs": [
+        {
+          "name": "Global protector",
+          "active": false,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "LPG"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "UNILIFE",
+          "active": false,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "LPG"
+          ],
+          "tariff_rows": 11
+        }
+      ]
+    },
+    {
+      "name": "VUMIGROUP",
+      "category": "Страховые продукты",
+      "active": false,
+      "programs": [
+        {
+          "name": "ABSOLUTE VIP CHOICE",
+          "active": false,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "LPG"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "PROTECT VIP",
+          "active": false,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "LPG"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "SPECIAL VIP CHOICE",
+          "active": false,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "LPG"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "UNIVERSAL VIP CHOICE",
+          "active": false,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "LPG"
+          ],
+          "tariff_rows": 2
+        }
+      ]
+    },
+    {
+      "name": "Альфа",
+      "category": "Страховые продукты",
+      "active": true,
+      "programs": [
+        {
+          "name": "ВИП",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        }
+      ]
+    },
+    {
+      "name": "Альянс",
+      "category": "Страховые продукты",
+      "active": true,
+      "programs": [
+        {
+          "name": "Азбука защиты",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Альянс клуб",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Золотая пора",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Крепкое здоровье",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Онкобарьер",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Подарок ребенку",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Почетный возраст",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Риск контроль д/взрослых",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Риск контроль д/детей",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Стиль жизни",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        }
+      ]
+    },
+    {
+      "name": "БКС Страхование Жизни",
+      "category": "Страховые продукты",
+      "active": true,
+      "programs": [
+        {
+          "name": "Гарант ГГА 4 года",
+          "active": false,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Динамика ГГА 3 года",
+          "active": false,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Динамика ГГА 5 года",
+          "active": false,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Лидер ГГА 3 года",
+          "active": false,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Лидер ГГА 5 лет",
+          "active": false,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Максимум ГГА 5 лет",
+          "active": false,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Премьер ГГА",
+          "active": false,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Эволюция ГГА 10 лет",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        }
+      ]
+    },
+    {
+      "name": "ВСК - Линия жизни",
+      "category": "Страховые продукты",
+      "active": false,
+      "programs": [
+        {
+          "name": "Здоровое детство",
+          "active": false,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 5
+        },
+        {
+          "name": "Линия Защиты",
+          "active": false,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 5
+        },
+        {
+          "name": "Разумный выбор",
+          "active": false,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 5
+        }
+      ]
+    },
+    {
+      "name": "Зетта",
+      "category": "Страховые продукты",
+      "active": true,
+      "programs": [
+        {
+          "name": "Азбука защиты",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 65
+        },
+        {
+          "name": "Азбука защиты доп. риск",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 6
+        },
+        {
+          "name": "Бумеранг",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Восточный экспресс",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Защита +",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Здоровая Жизнь - единовременная оплата",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Здоровая Жизнь - регулярное пополнение",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Золотая Пора",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 27
+        },
+        {
+          "name": "Золотая Пора доп. риски",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Мой капитал (рубли)",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 22
+        },
+        {
+          "name": "Мой капитал (рубли) - единоразовая оплата",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 13
+        },
+        {
+          "name": "Мой капитал в долларах США 5 лет",
+          "active": true,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Онкобарьер",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Подарок Ребенку",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 27
+        },
+        {
+          "name": "Подарок Ребенку доп. риски",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Почетный возраст",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Риск-контроль",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 2
+        },
+        {
+          "name": "Стиль Жизни",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 27
+        },
+        {
+          "name": "Стиль Жизни доп. риски",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        }
+      ]
+    },
+    {
+      "name": "Ренессанс",
+      "category": "Страховые продукты",
+      "active": true,
+      "programs": [
+        {
+          "name": "Будущее(гармония жизни)",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Валютный запас",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Вирус нет",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Дети",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Защита",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Медицина без границ",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Надежный старт",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Наследие",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Платинум Life",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Поликлиника онлайн",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Решающее приемущество (Best doctors)",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Семья",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Ценный актив",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        }
+      ]
+    },
+    {
+      "name": "Ренессанс жизнь",
+      "category": "Страховые продукты",
+      "active": true,
+      "programs": [
+        {
+          "name": "Гармония жизни",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 20
+        },
+        {
+          "name": "Гармония жизни дополнительные опции",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        }
+      ]
+    },
+    {
+      "name": "Совкомбанк",
+      "category": "Страховые продукты",
+      "active": true,
+      "programs": [
+        {
+          "name": "Гармония",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Жизнь+",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 90
+        },
+        {
+          "name": "Жизнь+ дополнительные опции",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 5
+        },
+        {
+          "name": "Классика+",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 100
+        },
+        {
+          "name": "Классика+ дополнительные опции",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 5
+        },
+        {
+          "name": "Курс жизни",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Материнство",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "НСЖ с кешбэком",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 5
+        },
+        {
+          "name": "На всю жизнь",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 20
+        },
+        {
+          "name": "На всю жизнь дополнительные опции",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Спутник Детства+",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 5
+        },
+        {
+          "name": "Спутник Жизни+",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Юниор+",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 100
+        },
+        {
+          "name": "Юниор+ дополнительные опции",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ГГА"
+          ],
+          "tariff_rows": 5
+        }
+      ]
+    },
+    {
+      "name": "Залоговые Решения",
+      "category": "Услуги",
+      "active": true,
+      "programs": [
+        {
+          "name": "Привлечение заемщика",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "ИП Фрунзе В.Л."
+          ],
+          "tariff_rows": 2
+        }
+      ]
+    },
+    {
+      "name": "Открытие счета, карт",
+      "category": "Услуги",
+      "active": true,
+      "programs": [
+        {
+          "name": "Anderida",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "Anderida"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Regolith",
+          "active": true,
+          "currencies": [
+            "USD"
+          ],
+          "providers": [
+            "Regolith"
+          ],
+          "tariff_rows": 1
+        },
+        {
+          "name": "Финион",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "Финион"
+          ],
+          "tariff_rows": 1
+        }
+      ]
+    },
+    {
+      "name": "ФНС",
+      "category": "Услуги",
+      "active": true,
+      "programs": [
+        {
+          "name": "Налоговое консультирование",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "UPSIDE LUB"
+          ],
+          "tariff_rows": 1
+        }
+      ]
+    },
+    {
+      "name": "ФНС Амосова",
+      "category": "Услуги",
+      "active": true,
+      "programs": [
+        {
+          "name": "Амосова консультирование",
+          "active": true,
+          "currencies": [
+            "RUB"
+          ],
+          "providers": [
+            "Амосова"
+          ],
+          "tariff_rows": 1
+        }
+      ]
+    }
+  ]
+}
