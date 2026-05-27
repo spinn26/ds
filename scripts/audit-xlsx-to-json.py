@@ -103,6 +103,9 @@ def main(in_path: Path, out_path: Path) -> int:
         # the «Тарифы для продуктов Инсмарт» reference link row
         if program.startswith("http"):
             continue
+        # row 1 is the title row "ТИП | ПРОДУКТ | ПРОГРАММА | ..." — skip
+        if typ == "ТИП" and product == "ПРОДУКТ" and program == "ПРОГРАММА":
+            continue
 
         # Row-level dominant non-gray non-skip color = audit decision for this rate line
         row_colors: Counter[str] = Counter()
