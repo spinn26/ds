@@ -21,9 +21,11 @@
             label="Продукт" clearable @update:model-value="resetFrom('product')" />
         </v-col>
 
-        <!-- 4. Программа — если есть программы для продукта -->
-        <v-col cols="12" sm="6" md="4" v-if="form.product && filteredPrograms.length">
-          <v-select v-model="form.program" :items="filteredPrograms" item-title="name" item-value="id"
+        <!-- 4. Программа — если есть программы для продукта.
+             Программа = уникальное имя; срок и год выплаты вынесены в
+             отдельные селекторы ниже. См. consolidatedPrograms. -->
+        <v-col cols="12" sm="6" md="4" v-if="form.product && consolidatedPrograms.length">
+          <v-select v-model="form.programName" :items="consolidatedPrograms" item-title="name" item-value="name"
             label="Программа" clearable @update:model-value="resetFrom('program')" />
         </v-col>
 
@@ -135,7 +137,7 @@ const matrix = reactive({
 });
 
 const form = reactive({
-  qualification: null, product: null, program: null,
+  qualification: null, product: null, programName: null,
   calcProperty: null, termContract: null, kvPayoutYear: null,
   amount: null, currency: null,
 });
@@ -154,87 +156,128 @@ const allowedCurrencies = computed(() =>
 // активные продукты из matrix.products.
 const filteredProducts = computed(() => matrix.products);
 
-const filteredPrograms = computed(() => {
+// Все строки program для выбранного продукта (вариации с одинаковым name
+// сюда тоже попадают — будем схлопывать на уровне consolidatedPrograms).
+const productPrograms = computed(() => {
   if (!form.product) return [];
   return matrix.programs.filter(p => p.productId == form.product);
+});
+
+// Per spec: одна программа = одно имя. Срок контракта и год выплаты КВ —
+// это свойства, не отдельные программы (см. «Жизнь+», «EVO», «Совкомбанк»).
+// Группируем по name, сохраняя список вариантов, чтобы по выбранному
+// сроку/году подобрать конкретный program.id для бэкенда.
+const consolidatedPrograms = computed(() => {
+  const groups = new Map();
+  for (const p of productPrograms.value) {
+    if (!groups.has(p.name)) {
+      groups.set(p.name, { name: p.name, variants: [] });
+    }
+    groups.get(p.name).variants.push(p);
+  }
+  return Array.from(groups.values());
+});
+
+// Варианты (program-rows) выбранной по имени программы.
+const programVariants = computed(() => {
+  if (!form.programName) return [];
+  const group = consolidatedPrograms.value.find(g => g.name === form.programName);
+  return group ? group.variants : [];
 });
 
 // Per spec ✅Калькулятор объёмов §2: «Свойство / Срок / Год выплаты КВ» —
 // опциональные поля, выводятся ТОЛЬКО если применимы к выбранной программе.
 // Список «применимых» приходит с бэкенда как program.availableProperties[]
-// и program.availableTerms[] (distinct из таблицы dsCommission).
-// Если массив пуст — поле в UI скрывается полностью.
-
-const selectedProgram = computed(() =>
-  form.program ? matrix.programs.find(p => p.id == form.program) : null
-);
+// и program.availableTerms[] (distinct из таблицы dsCommission). После
+// схлопывания дубликатов берём union этих списков по всем вариантам.
 
 const selectedProduct = computed(() =>
   form.product ? matrix.products.find(p => p.id == form.product) : null
 );
 
 const filteredProperties = computed(() => {
-  // Гейт по config-флагу продукта: если has_property=false — поле скрыто,
-  // даже если в dsCommission остались legacy-варианты.
   if (selectedProduct.value && selectedProduct.value.hasProperty === false) return [];
-  const prog = selectedProgram.value;
-  if (!prog) return [];
-  // Если у программы есть фиксированное свойство — показываем только его.
-  if (prog.calcPropertyId) {
-    return matrix.properties.filter(p => p.id == prog.calcPropertyId);
+  if (!programVariants.value.length) return [];
+  const ids = new Set();
+  for (const v of programVariants.value) {
+    if (v.calcPropertyId) ids.add(Number(v.calcPropertyId));
+    for (const pid of (v.availableProperties || [])) ids.add(Number(pid));
   }
-  // Иначе — варианты из dsCommission. Если пусто — поле скрыто.
-  const ids = prog.availableProperties || [];
-  if (!ids.length) return [];
-  return matrix.properties.filter(p => ids.includes(Number(p.id)));
+  if (!ids.size) return [];
+  return matrix.properties.filter(p => ids.has(Number(p.id)));
 });
 
 const filteredTerms = computed(() => {
   if (selectedProduct.value && selectedProduct.value.hasTerm === false) return [];
-  const prog = selectedProgram.value;
-  if (!prog) return [];
+  if (!programVariants.value.length) return [];
   const labelize = (t) => ({ ...t, label: t.term + (t.term > 4 ? ' лет' : t.term > 1 ? ' года' : ' год') });
-  if (prog.termContractId) {
-    return matrix.terms.filter(t => t.id == prog.termContractId).map(labelize);
+  const ids = new Set();
+  for (const v of programVariants.value) {
+    if (v.termContractId) ids.add(Number(v.termContractId));
+    for (const tid of (v.availableTerms || [])) ids.add(Number(tid));
   }
-  const ids = prog.availableTerms || [];
-  if (!ids.length) return [];
-  return matrix.terms.filter(t => ids.includes(Number(t.id))).map(labelize);
+  if (!ids.size) return [];
+  return matrix.terms.filter(t => ids.has(Number(t.id))).map(labelize);
+});
+
+// Подобрать program.id из вариантов по (termContract, kvPayoutYear) —
+// бэкенду нужен конкретный id; UI работает с именем.
+const resolvedProgramId = computed(() => {
+  if (!programVariants.value.length) return null;
+  const scored = programVariants.value.map(v => {
+    let score = 0;
+    let viable = true;
+    if (form.termContract) {
+      const hasTerm = v.termContractId == form.termContract
+        || (v.availableTerms || []).includes(Number(form.termContract));
+      if (hasTerm) score += 2;
+      else if (v.termContractId || (v.availableTerms || []).length) viable = false;
+    }
+    if (form.kvPayoutYear) {
+      if (Number(v.kvPayoutYear || 0) >= Number(form.kvPayoutYear)) score += 1;
+    }
+    return { id: v.id, score, viable };
+  });
+  const pool = scored.filter(x => x.viable);
+  const list = pool.length ? pool : scored;
+  list.sort((a, b) => b.score - a.score);
+  return list[0]?.id ?? programVariants.value[0].id;
 });
 
 // Show remaining fields if program selected OR no programs exist for product
 const showRemainingFields = computed(() => {
   if (!form.product) return false;
-  // If no programs for this product — show fields immediately
-  if (filteredPrograms.value.length === 0) return true;
-  // If program selected — show fields
-  return !!form.program;
+  if (consolidatedPrograms.value.length === 0) return true;
+  return !!form.programName;
 });
 
 const canCalculate = computed(() => {
-  const needsProgram = filteredPrograms.value.length > 0;
+  const needsProgram = consolidatedPrograms.value.length > 0;
   const needsProperty = filteredProperties.value.length > 0;
-  return form.qualification && form.product && (!needsProgram || form.program) && (!needsProperty || form.calcProperty) && form.amount > 0 && form.currency;
+  return form.qualification && form.product && (!needsProgram || form.programName) && (!needsProperty || form.calcProperty) && form.amount > 0 && form.currency;
 });
 
 // Reset downstream fields
 function resetFrom(field) {
-  const order = ['product', 'program', 'calcProperty', 'termContract', 'amount'];
+  // 'program' в order означает поле выбора программы (теперь programName).
+  const order = ['product', 'program', 'calcProperty', 'termContract', 'kvPayoutYear', 'amount'];
+  const map = { program: 'programName' };
   const idx = order.indexOf(field);
   for (let i = idx + 1; i < order.length; i++) {
-    form[order[i]] = null;
+    const key = map[order[i]] || order[i];
+    form[key] = null;
   }
   result.value = null;
 
   // Auto-select if only one option available
   if (field === 'product' && form.product) {
-    const progs = filteredPrograms.value;
+    const progs = consolidatedPrograms.value;
     if (progs.length === 1) {
-      form.program = progs[0].id;
+      form.programName = progs[0].name;
       resetFrom('program');
     }
   }
-  if (field === 'program' && form.program) {
+  if (field === 'program' && form.programName) {
     const props = filteredProperties.value;
     if (props.length === 1) form.calcProperty = props[0].id;
     const terms = filteredTerms.value;
@@ -245,9 +288,10 @@ function resetFrom(field) {
 function resetForm() {
   form.qualification = null;
   form.product = null;
-  form.program = null;
+  form.programName = null;
   form.calcProperty = null;
   form.termContract = null;
+  form.kvPayoutYear = null;
   form.amount = null;
   form.currency = null;
   result.value = null;
@@ -260,7 +304,9 @@ async function calculate() {
   try {
     const { data } = await api.post('/calculator/calculate', {
       qualification: form.qualification,
-      program: form.program,
+      // UI выбирает программу по имени; бэкенду нужен конкретный id —
+      // подбираем его из вариантов по выбранным сроку/году.
+      program: resolvedProgramId.value,
       calcProperty: form.calcProperty,
       amount: form.amount,
       currency: form.currency,
@@ -313,8 +359,10 @@ const kvYearOptions = computed(() => {
   // year-of-payout, разовые услуги) скрывают поле даже если в legacy
   // program.kvPayoutYear осталось ненулевое значение.
   if (selectedProduct.value && selectedProduct.value.hasYearKv === false) return [];
-  const program = matrix.programs?.find(p => p.id === form.program);
-  const max = Number(program?.kvPayoutYear ?? 0);
+  let max = 0;
+  for (const v of programVariants.value) {
+    max = Math.max(max, Number(v.kvPayoutYear || 0));
+  }
   if (!max || max < 1) return [];
   return Array.from({ length: max }, (_, i) => i + 1);
 });
