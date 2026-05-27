@@ -50,3 +50,9 @@ backups/
 
 # Lock-файлы для скриптов
 .claude/scheduled_tasks.lock
+
+# Local-only Claude Code settings (per-machine permissions etc.)
+.claude/settings.local.json
+
+# Local sandbox for ad-hoc XLSX experiments
+.tmp_xlsx/
