@@ -12,7 +12,7 @@
       class="chat-splitpanes"
       :class="{ 'kanban-active': viewMode === 'kanban' }"
       @resized="onPaneResize">
-    <Pane :size="paneSizes[0]" :min-size="16" :max-size="44"
+    <Pane :size="effectivePaneSizes[0]" :min-size="16" :max-size="44"
       v-if="!mobile || (!activeChat && viewMode !== 'kanban')">
     <!-- Left: ticket list (hidden in Kanban mode on mobile / collapsed on desktop) -->
     <aside class="chat-sidebar"
@@ -206,7 +206,7 @@
          плавающий .view-toggle перекрывал контекст-панель партнёра. -->
 
     <!-- Center pane: kanban (v-if) или chat-main (v-else). Один Pane на оба. -->
-    <Pane :size="paneSizes[1]" v-if="!mobile || activeChat || viewMode === 'kanban'">
+    <Pane :size="effectivePaneSizes[1]" v-if="!mobile || activeChat || viewMode === 'kanban'">
     <!-- Kanban mode container -->
     <div v-if="viewMode === 'kanban'" class="kanban-wrap">
       <!-- Kanban toolbar -->
@@ -950,7 +950,7 @@
 
     <!-- Right pane: контекст-панель партнёра. Видна только в list-режиме
          при выбранном тикете и включённом showContext. На mobile скрыта. -->
-    <Pane :size="paneSizes[2]" :min-size="16" :max-size="38"
+    <Pane :size="effectivePaneSizes[2]" :min-size="16" :max-size="38"
       v-if="!mobile && viewMode === 'list' && activeChat && showContext">
     <!-- Right: Partner context panel — единый блок (с/без partnerContext) -->
     <aside v-if="viewMode === 'list' && activeChat && showContext && !mobile" class="context-panel">
@@ -1366,6 +1366,11 @@ function onPaneResize(panes) {
   paneSizes.value = next.length === 3 ? next : [next[0], next[1], paneSizes.value[2] ?? 24];
   try { localStorage.setItem(PANE_STORAGE_KEY, JSON.stringify(paneSizes.value)); } catch (_) { /* quota */ }
 }
+
+// Когда в текущем режиме рендерятся не все 3 панели, сумма их сохранённых
+// размеров < 100% — splitpanes не нормализует автоматически и оставляет
+// пустоту. Поэтому подаём в :size нормализованные значения с учётом того,
+// какие панели видны прямо сейчас.
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
@@ -1825,6 +1830,24 @@ function sortChats(a, b) {
 // View mode (list / kanban)
 const viewMode = ref(localStorage.getItem('staff-chat-view') || 'list');
 watch(viewMode, v => localStorage.setItem('staff-chat-view', v));
+
+// Нормализованные размеры панелей под текущий набор видимых pane'ов.
+// Splitpanes ожидает сумму всех :size = 100%, иначе оставляет пустое
+// пространство. У нас 3 опциональных pane'а — пересчитываем proportionally.
+const effectivePaneSizes = computed(() => {
+  const sidebarVisible = !mobile.value || (!activeChat.value && viewMode.value !== 'kanban');
+  const mainVisible = !mobile.value || activeChat.value || viewMode.value === 'kanban';
+  const contextVisible = !mobile.value && viewMode.value === 'list' && !!activeChat.value && showContext.value;
+
+  const [s0, s1, s2] = paneSizes.value;
+  let a = sidebarVisible ? s0 : 0;
+  let b = mainVisible ? s1 : 0;
+  let c = contextVisible ? s2 : 0;
+  const sum = a + b + c;
+  if (sum <= 0) return [s0, s1, s2];
+  const k = 100 / sum;
+  return [a * k, b * k, c * k];
+});
 const draggingId = ref(null);
 const dragOverCol = ref(null); // { col, lane } or col value for backward-compat
 const kanbanColumns = [
