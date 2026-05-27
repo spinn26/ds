@@ -195,16 +195,21 @@ const selectedProduct = computed(() =>
   form.product ? matrix.products.find(p => p.id == form.product) : null
 );
 
+// availableProperties/availableTerms приходят из products_catalog как
+// массив строк (свойство) или чисел (срок) — это сам id в matrix.properties /
+// matrix.terms (item-value совпадает с item-title). Number()-конверсии,
+// которые требовались для legacy-id, теперь не нужны и ломают строковый
+// match («Number('upfront') = NaN»).
 const filteredProperties = computed(() => {
   if (selectedProduct.value && selectedProduct.value.hasProperty === false) return [];
   if (!programVariants.value.length) return [];
   const ids = new Set();
   for (const v of programVariants.value) {
-    if (v.calcPropertyId) ids.add(Number(v.calcPropertyId));
-    for (const pid of (v.availableProperties || [])) ids.add(Number(pid));
+    if (v.calcPropertyId != null) ids.add(v.calcPropertyId);
+    for (const pid of (v.availableProperties || [])) ids.add(pid);
   }
   if (!ids.size) return [];
-  return matrix.properties.filter(p => ids.has(Number(p.id)));
+  return matrix.properties.filter(p => ids.has(p.id));
 });
 
 const filteredTerms = computed(() => {
@@ -213,7 +218,7 @@ const filteredTerms = computed(() => {
   const labelize = (t) => ({ ...t, label: t.term + (t.term > 4 ? ' лет' : t.term > 1 ? ' года' : ' год') });
   const ids = new Set();
   for (const v of programVariants.value) {
-    if (v.termContractId) ids.add(Number(v.termContractId));
+    if (v.termContractId != null) ids.add(Number(v.termContractId));
     for (const tid of (v.availableTerms || [])) ids.add(Number(tid));
   }
   if (!ids.size) return [];
