@@ -123,24 +123,93 @@ class EducationController extends Controller
     }
 
     /**
-     * GET /education/kb/sections/{id} — список материалов в разделе.
+     * GET /education/kb/sections/{id} — раздел: материалы + подразделы +
+     * хлебные крошки. Подразделы добавлены потому, что без них партнёр,
+     * провалившись в раздел с детьми, упирается в пустой список.
      */
     public function kbSection(int $id): JsonResponse
     {
-        if (! Schema::hasTable('education_kb_articles')) {
-            return response()->json(['articles' => []]);
+        if (! Schema::hasTable('education_kb_sections')) {
+            return response()->json(['section' => null, 'subsections' => [], 'articles' => [], 'breadcrumbs' => []]);
         }
-        $articles = DB::table('education_kb_articles')
-            ->where('section_id', $id)
+
+        $section = DB::table('education_kb_sections')
+            ->where('id', $id)
             ->whereNull('deleted_at')
-            ->where('published', true)
+            ->first();
+        if (! $section) {
+            return response()->json(['message' => 'Раздел не найден'], 404);
+        }
+
+        $childSections = DB::table('education_kb_sections')
+            ->where('parent_id', $id)
+            ->whereNull('deleted_at')
             ->orderBy('sort_order')
-            ->get(['id', 'title', 'description', 'tags', 'sort_order'])
-            ->map(fn ($a) => [
-                'id' => $a->id, 'title' => $a->title, 'description' => $a->description,
-                'tags' => $a->tags ? (is_string($a->tags) ? json_decode($a->tags, true) : $a->tags) : [],
-            ]);
-        return response()->json(['articles' => $articles]);
+            ->get();
+
+        $articleCounts = Schema::hasTable('education_kb_articles')
+            ? DB::table('education_kb_articles')
+                ->whereNull('deleted_at')
+                ->where('published', true)
+                ->select('section_id', DB::raw('COUNT(*) as cnt'))
+                ->groupBy('section_id')
+                ->pluck('cnt', 'section_id')
+            : collect();
+
+        $subChildCounts = DB::table('education_kb_sections')
+            ->whereNull('deleted_at')
+            ->whereIn('parent_id', $childSections->pluck('id'))
+            ->select('parent_id', DB::raw('COUNT(*) as cnt'))
+            ->groupBy('parent_id')
+            ->pluck('cnt', 'parent_id');
+
+        $subsections = $childSections->map(fn ($s) => [
+            'id' => $s->id,
+            'title' => $s->title,
+            'icon' => $s->icon,
+            'description' => $s->description,
+            'coverUrl' => $s->cover_url,
+            'slug' => $s->slug,
+            'articleCount' => (int) ($articleCounts[$s->id] ?? 0),
+            'childCount' => (int) ($subChildCounts[$s->id] ?? 0),
+        ])->values();
+
+        $articles = Schema::hasTable('education_kb_articles')
+            ? DB::table('education_kb_articles')
+                ->where('section_id', $id)
+                ->whereNull('deleted_at')
+                ->where('published', true)
+                ->orderBy('sort_order')
+                ->get(['id', 'title', 'description', 'tags', 'sort_order'])
+                ->map(fn ($a) => [
+                    'id' => $a->id, 'title' => $a->title, 'description' => $a->description,
+                    'tags' => $a->tags ? (is_string($a->tags) ? json_decode($a->tags, true) : $a->tags) : [],
+                ])
+            : collect();
+
+        $breadcrumbs = [];
+        $cursor = $section;
+        $guard = 0;
+        while ($cursor && $guard++ < 16) {
+            array_unshift($breadcrumbs, ['id' => $cursor->id, 'title' => $cursor->title]);
+            if (! $cursor->parent_id) break;
+            $cursor = DB::table('education_kb_sections')
+                ->where('id', $cursor->parent_id)
+                ->whereNull('deleted_at')
+                ->first();
+        }
+
+        return response()->json([
+            'section' => [
+                'id' => $section->id,
+                'title' => $section->title,
+                'description' => $section->description,
+                'icon' => $section->icon,
+            ],
+            'subsections' => $subsections,
+            'articles' => $articles,
+            'breadcrumbs' => $breadcrumbs,
+        ]);
     }
 
     /**
