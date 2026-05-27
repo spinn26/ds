@@ -167,9 +167,13 @@
               <v-img :src="editProduct.heroImage" height="140" class="rounded border" />
             </v-col>
             <v-col cols="12" md="6">
-              <v-select v-model="editProduct.productType" :items="productTypeItems"
-                item-title="name" item-value="id" label="Тип / категория"
-                clearable hint="Определяет категорию продукта" persistent-hint
+              <!-- Категория из products_catalog.type (строка, не legacy id).
+                   references endpoint отдаёт distinct по type c полем name=type,
+                   поэтому item-value="name" — это и есть строка, уезжающая
+                   в editProduct.type → updateProduct в бэке. -->
+              <v-select v-model="editProduct.type" :items="productTypeItems"
+                item-title="name" item-value="name" label="Тип / категория"
+                clearable hint="Определяет категорию продукта. Очистить = убрать категорию." persistent-hint
                 prepend-inner-icon="mdi-shape" />
             </v-col>
             <v-col cols="12" md="6">
@@ -601,7 +605,7 @@ async function togglePublish(product) {
 function openCreateProduct() {
   editProduct.value = {
     name: '', description: '', imageUrl: '', heroImage: '',
-    productType: null, educationCourseId: null,
+    type: null, productType: null, educationCourseId: null,
     educationUrl: '', instructionUrl: '', openProductUrl: '',
     active: true, noComission: false, visibleToResident: true, visibleToCalculator: true,
     hasProperty: false, hasTerm: false, hasYearKv: false,

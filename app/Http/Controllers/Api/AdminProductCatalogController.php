@@ -291,6 +291,10 @@ class AdminProductCatalogController extends Controller
         return [
             'id'                   => (int) $r->id,
             'name'                 => $r->name,
+            // `type` — реальная категория из products_catalog (строка).
+            // Эту строку шлёт фронт обратно в updateProduct. `typeName` оставлен
+            // как алиас для legacy-чтений (например, в карточке витрины).
+            'type'                 => $r->type,
             'typeName'             => $r->type,
             'productType'          => null,
             'description'          => null,
