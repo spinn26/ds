@@ -79,6 +79,9 @@ const routes = [
             { path: 'manage/education/categories', component: () => import('../pages/Admin/EducationCategories.vue'), meta: { staff: true } },
             { path: 'manage/education/analytics', component: () => import('../pages/Admin/EducationAnalytics.vue'), meta: { staff: true } },
             { path: 'manage/partner-questionnaires', component: () => import('../pages/Admin/PartnerQuestionnaires.vue'), meta: { staff: true } },
+            // VPN-инструкция для сотрудников. Намеренно НЕ в меню — доступ
+            // только по прямой ссылке /manage/vpn (staff-only).
+            { path: 'manage/vpn', component: () => import('../pages/Manage/VpnSetup.vue'), meta: { staff: true } },
 
             // Head (руководитель) — аналитика/дашборды клонируются в /manage/*
             // чтобы не открывать доступ в /admin/. Переиспользуют те же компоненты.
