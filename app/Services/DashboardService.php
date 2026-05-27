@@ -187,6 +187,15 @@ class DashboardService
         // Status info (countdown, deadlines)
         $statusInfo = $this->statusService->getStatusInfo($consultant);
 
+        // Прогресс активационного/годового периода берём из надёжного
+        // периодного ЛП (тот же $personalVolume, что в карточке «Личные
+        // продажи»), а не из сырой колонки consultant.personalVolume —
+        // она денормализована и может содержать устаревшее/несопоставимое
+        // значение (на проде встречались суммы в млн, при пороге 500).
+        if (isset($statusInfo['currentPoints'])) {
+            $statusInfo['currentPoints'] = round((float) $personalVolume, 2);
+        }
+
         // Mandatory GP plan fulfillment (ОП по ГП) — from Expert onwards
         $mandatoryPlan = null;
         if ($statusLevel && ($statusLevel->mandatoryGP ?? 0) > 0) {
