@@ -4,8 +4,6 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Api\Concerns\PaginatesRequests;
 use App\Http\Controllers\Controller;
-use App\Models\ProductCatalog;
-use App\Models\ProgramCatalog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -115,7 +113,7 @@ class AdminProductCatalogController extends Controller
             ])
             ->first();
 
-        abort_unless($r, 404);
+        abort_unless((bool) $r, 404);
         return response()->json(self::productListRow($r));
     }
 
@@ -265,7 +263,7 @@ class AdminProductCatalogController extends Controller
     private function showSingleProgram(int $id): JsonResponse
     {
         $r = DB::table('programs_catalog')->where('id', $id)->first();
-        abort_unless($r, 404);
+        abort_unless((bool) $r, 404);
         return response()->json(self::programRow($r));
     }
 
@@ -295,8 +293,12 @@ class AdminProductCatalogController extends Controller
             'openProductUrl'       => null,
             'noComission'          => false,
             'active'               => $active,
+            // Per operator rule: a product (umbrella) is itself not coloured —
+            // it stays available as long as `active=true`, even when all of
+            // its programs got tagged red.  The red filter lives only on the
+            // program level.
             'visibleToResident'    => $active,
-            'visibleToCalculator'  => $active && ($r->programs_active ?? 0) > 0,
+            'visibleToCalculator'  => $active,
             'hasProperty'          => false,
             'hasTerm'              => $hasTerm,
             'hasYearKv'            => $hasYearKv,
