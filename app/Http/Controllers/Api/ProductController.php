@@ -179,6 +179,16 @@ class ProductController extends Controller
             ];
         });
 
+        // Audit-driven catalog products (products_catalog + programs_catalog).
+        // They sit alongside legacy products without disturbing them — every
+        // catalog product gets its id shifted by CATALOG_ID_OFFSET so it can
+        // never collide with a legacy product.id.  Most rich fields stay
+        // null because the audit catalog doesn't carry images/descriptions
+        // yet — that's fine, the partner cards still render.
+        $catalogProducts = $this->mapCatalogProducts($request, $hasAccess);
+
+        $allProducts = $products->concat($catalogProducts);
+
         // Categories from productCategory table
         $categories = DB::table('productCategory')
             ->orderBy('productCategoryName')
@@ -186,10 +196,88 @@ class ProductController extends Controller
             ->map(fn ($c) => ['id' => $c->id, 'name' => $c->productCategoryName]);
 
         return response()->json([
-            'products' => $products,
+            'products' => $allProducts,
             'categories' => $categories,
             'accessCheck' => $accessCheck,
         ]);
+    }
+
+    /**
+     * Offset added to products_catalog.id when surfacing through this
+     * partner endpoint. Keeps the namespace clean of any collision with
+     * legacy product.id values (max ~94 today, room to spare).
+     */
+    private const CATALOG_ID_OFFSET = 1_000_000;
+
+    /**
+     * Build partner-shaped product cards from products_catalog / programs_catalog.
+     * No legacy table joins — just the audit-driven catalog.
+     */
+    private function mapCatalogProducts(Request $request, bool $hasAccess)
+    {
+        $q = DB::table('products_catalog as p')
+            ->leftJoin('programs_catalog as g', 'g.product_id', '=', 'p.id')
+            ->where('p.active', true)
+            ->groupBy('p.id', 'p.name', 'p.type', 'p.created_at')
+            ->select([
+                'p.id', 'p.name', 'p.type', 'p.created_at',
+                DB::raw('COUNT(g.id) AS programs_count'),
+                DB::raw('COUNT(g.id) FILTER (WHERE g.active=true) AS programs_active'),
+            ]);
+
+        if ($search = trim((string) $request->input('search', ''))) {
+            $q->where('p.name', 'ilike', "%{$search}%");
+        }
+
+        $products = $q->orderBy('p.name')->get();
+        if ($products->isEmpty()) {
+            return collect();
+        }
+
+        $programs = DB::table('programs_catalog')
+            ->whereIn('product_id', $products->pluck('id'))
+            ->where('active', true)
+            ->orderBy('name')
+            ->get(['id', 'product_id', 'name', 'vendor', 'currency', 'category', 'has_red'])
+            ->groupBy('product_id');
+
+        return $products->map(function ($p) use ($programs, $hasAccess) {
+            $progList = ($programs[$p->id] ?? collect())->map(fn ($pr) => [
+                'id'             => self::CATALOG_ID_OFFSET + (int) $pr->id,
+                'name'           => $pr->name,
+                'formLink'       => null,
+                'providerName'   => $pr->vendor,
+                'categoryName'   => $pr->category,
+                'currencySymbol' => $pr->currency,
+            ])->values();
+
+            // Distinct currencies pulled directly from the catalog rows
+            // (string-typed; no FK into currency table).
+            $currencies = $progList->pluck('currencySymbol')->filter()->unique()->values()
+                ->map(fn ($s) => ['id' => null, 'nameRu' => $s, 'nameEn' => $s, 'symbol' => $s]);
+
+            return [
+                'id'              => self::CATALOG_ID_OFFSET + (int) $p->id,
+                'name'            => $p->name,
+                'description'     => null,
+                'typeName'        => $p->type,
+                'active'          => true,
+                'accessible'      => $hasAccess,
+                'available'       => $hasAccess,
+                'url'             => null,
+                'imageUrl'        => null,
+                'heroImage'       => null,
+                'publishStatus'   => 'published',
+                'educationUrl'    => null,
+                'instructionUrl'  => null,
+                'testPassed'      => false,
+                'category'        => $p->type ? ['id' => null, 'name' => $p->type] : null,
+                'currencies'      => $currencies,
+                'programs'        => $progList,
+                'requiredCourses' => collect(),
+                'source'          => 'catalog',
+            ];
+        });
     }
 
     /**
