@@ -234,17 +234,56 @@
                 persistent-hint />
             </v-col>
           </v-row>
+
+          <!-- Inline-список программ продукта. Видим только когда продукт
+               уже сохранён (нужен id для GET /programs). Использует те же
+               стейты programsByProduct/programsLoading, что и expanded-row
+               в основной таблице — открытие диалога догружает их через
+               loadPrograms() в openEditProduct(). -->
+          <template v-if="editProduct.id">
+            <v-divider class="my-3" />
+            <div class="d-flex justify-space-between align-center mb-2">
+              <span class="text-subtitle-2 font-weight-bold">Программы продукта</span>
+              <v-btn v-if="canEdit('products')"
+                size="small" variant="tonal" color="primary" prepend-icon="mdi-plus"
+                @click="openCreateProgram(editProduct)">
+                Добавить программу
+              </v-btn>
+            </div>
+            <v-data-table
+              :headers="programHeaders"
+              :items="programsByProduct[editProduct.id] || []"
+              :loading="programsLoading[editProduct.id]"
+              density="compact"
+              hover
+              no-data-text="Нет программ"
+              :items-per-page="-1"
+              hide-default-footer
+            >
+              <template #item.active="{ item: prog }">
+                <StatusChip
+                  :color="prog.active ? 'success' : 'grey'"
+                  :text="prog.active ? 'Активна' : 'Неактивна'"
+                  size="x-small"
+                />
+              </template>
+              <template #item.visibleToCalculator="{ item: prog }">
+                <v-icon :color="prog.visibleToCalculator ? 'success' : 'grey'" size="small">
+                  {{ prog.visibleToCalculator ? 'mdi-calculator' : 'mdi-calculator-variant' }}
+                </v-icon>
+              </template>
+              <template #item.actions="{ item: prog }">
+                <v-btn icon="mdi-pencil" size="x-small" variant="text"
+                  @click="openEditProgram(editProduct, prog)" />
+                <v-btn v-if="canFull('products')" icon="mdi-delete" size="x-small" variant="text"
+                  color="error" @click="confirmDeleteProgram(editProduct, prog)" />
+              </template>
+            </v-data-table>
+          </template>
+
           <v-alert v-if="productError" type="error" density="compact" class="mt-2">{{ productError }}</v-alert>
         </v-card-text>
         <v-card-actions>
-          <!-- Добавить программу прямо из формы продукта. Открывает
-               существующий program-dialog. Доступно только при canEdit
-               и для уже сохранённого продукта (иначе нет product.id). -->
-          <v-btn v-if="editProduct.id && canEdit('products')"
-            size="small" variant="tonal" color="primary" prepend-icon="mdi-plus"
-            @click="openCreateProgram(editProduct)">
-            Добавить программу
-          </v-btn>
           <v-spacer />
           <v-btn @click="productDialog = false">Отмена</v-btn>
           <v-btn color="primary" @click="saveProduct" :loading="saving">Сохранить</v-btn>
@@ -576,6 +615,12 @@ function openEditProduct(product) {
   editProduct.value = { ...product };
   productError.value = '';
   productDialog.value = true;
+  // Программы показываем inline внутри диалога — догружаем сразу при
+  // открытии, если ещё не были загружены через expanded-row. После
+  // save/delete программы делаем повторную загрузку в saveProgram/deleteProgram.
+  if (product.id && programsByProduct[product.id] === undefined) {
+    loadPrograms(product.id);
+  }
 }
 
 async function saveProduct() {

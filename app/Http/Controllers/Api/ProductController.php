@@ -218,9 +218,9 @@ class ProductController extends Controller
         $q = DB::table('products_catalog as p')
             ->leftJoin('programs_catalog as g', 'g.product_id', '=', 'p.id')
             ->where('p.active', true)
-            ->groupBy('p.id', 'p.name', 'p.type', 'p.created_at')
+            ->groupBy('p.id', 'p.name', 'p.type', 'p.open_product_url', 'p.created_at')
             ->select([
-                'p.id', 'p.name', 'p.type', 'p.created_at',
+                'p.id', 'p.name', 'p.type', 'p.open_product_url', 'p.created_at',
                 DB::raw('COUNT(g.id) AS programs_count'),
                 DB::raw('COUNT(g.id) FILTER (WHERE g.active=true) AS programs_active'),
             ]);
@@ -238,14 +238,14 @@ class ProductController extends Controller
             ->whereIn('product_id', $products->pluck('id'))
             ->where('active', true)
             ->orderBy('name')
-            ->get(['id', 'product_id', 'name', 'vendor', 'currency', 'category', 'has_red'])
+            ->get(['id', 'product_id', 'name', 'vendor', 'currency', 'category', 'has_red', 'form_link'])
             ->groupBy('product_id');
 
         return $products->map(function ($p) use ($programs, $hasAccess) {
             $progList = ($programs[$p->id] ?? collect())->map(fn ($pr) => [
                 'id'             => self::CATALOG_ID_OFFSET + (int) $pr->id,
                 'name'           => $pr->name,
-                'formLink'       => null,
+                'formLink'       => $pr->form_link ?? null,
                 'providerName'   => $pr->vendor,
                 'categoryName'   => $pr->category,
                 'currencySymbol' => $pr->currency,
@@ -264,7 +264,7 @@ class ProductController extends Controller
                 'active'          => true,
                 'accessible'      => $hasAccess,
                 'available'       => $hasAccess,
-                'url'             => null,
+                'url'             => $p->open_product_url ?? null,
                 'imageUrl'        => null,
                 'heroImage'       => null,
                 'publishStatus'   => 'published',

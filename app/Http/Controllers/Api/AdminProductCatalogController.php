@@ -45,11 +45,12 @@ class AdminProductCatalogController extends Controller
     {
         $q = DB::table('products_catalog as p')
             ->leftJoin('programs_catalog as g', 'g.product_id', '=', 'p.id')
-            ->groupBy('p.id', 'p.name', 'p.type', 'p.active', 'p.created_at')
+            ->groupBy('p.id', 'p.name', 'p.type', 'p.open_product_url', 'p.active', 'p.created_at')
             ->select([
                 'p.id',
                 'p.name',
                 'p.type',
+                'p.open_product_url',
                 'p.active',
                 'p.created_at',
                 DB::raw('COUNT(g.id) AS programs_count'),
@@ -103,10 +104,10 @@ class AdminProductCatalogController extends Controller
     {
         $r = DB::table('products_catalog as p')
             ->leftJoin('programs_catalog as g', 'g.product_id', '=', 'p.id')
-            ->groupBy('p.id', 'p.name', 'p.type', 'p.active', 'p.created_at')
+            ->groupBy('p.id', 'p.name', 'p.type', 'p.open_product_url', 'p.active', 'p.created_at')
             ->where('p.id', $id)
             ->select([
-                'p.id', 'p.name', 'p.type', 'p.active', 'p.created_at',
+                'p.id', 'p.name', 'p.type', 'p.open_product_url', 'p.active', 'p.created_at',
                 DB::raw('COUNT(g.id) AS programs_count'),
                 DB::raw('COUNT(g.id) FILTER (WHERE g.active=true)  AS programs_active'),
                 DB::raw('COUNT(g.id) FILTER (WHERE g.has_red=true) AS programs_red'),
@@ -146,18 +147,20 @@ class AdminProductCatalogController extends Controller
     public function storeProduct(Request $request): JsonResponse
     {
         $payload = $request->validate([
-            'name'   => 'required|string|max:255',
-            'type'   => 'nullable|string|max:255',
-            'active' => 'nullable|boolean',
+            'name'           => 'required|string|max:255',
+            'type'           => 'nullable|string|max:255',
+            'active'         => 'nullable|boolean',
+            'openProductUrl' => 'nullable|string|max:1000',
         ]);
 
         $id = DB::table('products_catalog')->insertGetId([
-            'name'           => $payload['name'],
-            'type'           => $payload['type'] ?? null,
-            'active'         => $payload['active'] ?? true,
-            'imported_from'  => 'admin-ui',
-            'created_at'     => now(),
-            'updated_at'     => now(),
+            'name'             => $payload['name'],
+            'type'             => $payload['type'] ?? null,
+            'open_product_url' => $payload['openProductUrl'] ?? null,
+            'active'           => $payload['active'] ?? true,
+            'imported_from'    => 'admin-ui',
+            'created_at'       => now(),
+            'updated_at'       => now(),
         ]);
 
         return $this->showProduct($id);
@@ -167,18 +170,24 @@ class AdminProductCatalogController extends Controller
     public function updateProduct(int $id, Request $request): JsonResponse
     {
         $payload = $request->validate([
-            'name'   => 'sometimes|string|max:255',
-            'type'   => 'nullable|string|max:255',
-            'active' => 'nullable|boolean',
+            'name'           => 'sometimes|string|max:255',
+            'type'           => 'nullable|string|max:255',
+            'active'         => 'nullable|boolean',
+            'openProductUrl' => 'nullable|string|max:1000',
             // every other field the existing form posts (description, imageUrl,
             // hasProperty, …) is silently dropped — the audit-driven catalog
             // doesn't store those.
         ]);
 
-        DB::table('products_catalog')->where('id', $id)->update(array_merge(
-            array_filter($payload, fn ($v) => $v !== null),
-            ['updated_at' => now()]
-        ));
+        // openProductUrl → snake-case column. `null` is a valid value (clear
+        // the link), so we keep nulls and drop only keys that weren't sent.
+        $update = ['updated_at' => now()];
+        if ($request->has('name'))           $update['name']             = $payload['name'];
+        if ($request->has('type'))           $update['type']             = $payload['type'];
+        if ($request->has('active'))         $update['active']           = $payload['active'];
+        if ($request->has('openProductUrl')) $update['open_product_url'] = $payload['openProductUrl'];
+
+        DB::table('products_catalog')->where('id', $id)->update($update);
 
         return $this->showProduct($id);
     }
@@ -290,7 +299,7 @@ class AdminProductCatalogController extends Controller
             'educationCourseId'    => null,
             'educationUrl'         => null,
             'instructionUrl'       => null,
-            'openProductUrl'       => null,
+            'openProductUrl'       => $r->open_product_url ?? null,
             'noComission'          => false,
             'active'               => $active,
             // Per operator rule: a product (umbrella) is itself not coloured —
@@ -336,7 +345,7 @@ class AdminProductCatalogController extends Controller
             'vendorName'           => $r->category,
             'currencyName'         => $r->currency,
             'currency'             => null,
-            'formLink'             => null,
+            'formLink'             => $r->form_link ?? null,
             'term'                 => $term,
             'termsSummary'         => $r->terms_summary,
             'yearsSummary'         => $r->years_summary,
@@ -369,6 +378,7 @@ class AdminProductCatalogController extends Controller
             'currency'          => 'nullable',
             'term'              => 'nullable|integer',
             'active'            => 'nullable|boolean',
+            'formLink'          => 'nullable|string|max:1000',
         ]);
 
         $out = [
@@ -382,6 +392,11 @@ class AdminProductCatalogController extends Controller
         }
         if (isset($data['term'])) {
             $out['terms_summary'] = (string) $data['term'];
+        }
+        // formLink: keep null distinct from "not sent" via has() so operators
+        // can clear the field by sending null explicitly.
+        if ($request->has('formLink')) {
+            $out['form_link'] = $data['formLink'];
         }
         return $out;
     }
