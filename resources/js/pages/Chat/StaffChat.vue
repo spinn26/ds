@@ -1377,12 +1377,14 @@ const paneWidths = ref(
 function persistPaneWidths() {
   try { localStorage.setItem(PANE_STORAGE_KEY, JSON.stringify(paneWidths.value)); } catch (_) { /* quota */ }
 }
-function onPaneResize(panes) {
+function onPaneResize(payload) {
+  // Splitpanes 4.x шлёт @resized как объект { event, index, panes: [...] }.
+  // До этого мы ожидали массив сразу и поэтому early-return'или — никаких
+  // сохранений на drag-end не происходило вообще.
+  const panes = Array.isArray(payload) ? payload : payload?.panes;
   if (!Array.isArray(panes) || !panes.length) return;
-  // Splitpanes @resized отдаёт размеры в % от ВИДИМЫХ pane'ов (всегда
-  // нормализованы к 100). Поскольку в любом режиме видна max sidebar + main
-  // (+ context), а sidebar — всегда первый, его новый %% можно записать
-  // напрямую.
+  // Размеры от splitpanes — в % от ВИДИМЫХ pane'ов (всегда сумма = 100).
+  // Sidebar — всегда первый, его новый %% можно писать напрямую.
   const first = Number(panes[0]?.size);
   if (Number.isFinite(first) && first > 0) {
     paneWidths.value.sidebar = Math.round(first * 10) / 10;
