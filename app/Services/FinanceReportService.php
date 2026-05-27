@@ -58,6 +58,18 @@ class FinanceReportService
             ->orderByDesc('date')
             ->get();
 
+        // Dedupe: в commission встречаются дубликаты по тройке
+        // (transaction, consultant, chainOrder) — старые версии пересчёта
+        // не помечались deletedAt при перерасчёте. Оставляем только
+        // самую свежую (max id) строку для каждой пары (transaction,
+        // chainOrder) данного consultant'а. Без этого партнёр видит
+        // удвоенные ЛП/ГП в расчётном листе.
+        $allCommissions = $allCommissions
+            ->sortByDesc('id')
+            ->unique(fn ($r) => ($r->transaction ?? 'null') . '-' . ($r->chainOrder ?? 0))
+            ->sortByDesc('date')
+            ->values();
+
         // Personal sales: chainOrder = 1 (direct sale by this consultant)
         $personalCommissions = $allCommissions->where('chainOrder', 1)->whereNotNull('transaction');
         // Group sales: chainOrder > 1 (sales by downstream partners)

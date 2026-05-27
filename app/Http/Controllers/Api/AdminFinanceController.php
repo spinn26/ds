@@ -498,12 +498,18 @@ class AdminFinanceController extends Controller
      */
     public function commissionChain(int $transactionId): JsonResponse
     {
+        // ORDER BY chainOrder ASC + id DESC — в комбинации с unique() ниже
+        // оставит самую свежую строку (max id) для каждой пары (consultant,
+        // chainOrder). В commission встречаются дубли после повторного
+        // пересчёта (старые версии не помечались deletedAt), без dedupe
+        // в Цепочке выплат строки задваиваются — баг от 2026-05-26.
         $rows = DB::table('commission as cm')
             ->leftJoin('consultant as c', 'c.id', '=', 'cm.consultant')
             ->leftJoin('status_levels as sl', 'sl.id', '=', 'cm.calculationLevel')
             ->where('cm.transaction', $transactionId)
             ->whereNull('cm.deletedAt')
             ->orderBy('cm.chainOrder')
+            ->orderByDesc('cm.id')
             ->select([
                 'cm.id', 'cm.consultant', 'c.personName as consultantName',
                 'cm.chainOrder', 'cm.percent',
@@ -511,7 +517,9 @@ class AdminFinanceController extends Controller
                 'cm.groupBonus', 'cm.amountRUB',
                 'sl.title as levelTitle', 'sl.level as levelNum',
             ])
-            ->get();
+            ->get()
+            ->unique(fn ($r) => $r->consultant . '-' . ($r->chainOrder ?? 0))
+            ->values();
 
         $tx = DB::table('transaction')->where('id', $transactionId)
             ->first(['netRevenueRUB', 'amountRUB', 'profitRUB']);
