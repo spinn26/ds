@@ -11,7 +11,7 @@
     <Splitpanes
       class="chat-splitpanes"
       :class="{ 'kanban-active': viewMode === 'kanban' }"
-      @resize="onPaneResize">
+      @resized="onPaneResize">
     <Pane :size="paneSizes[0]" :min-size="16" :max-size="44"
       v-if="!mobile || (!activeChat && viewMode !== 'kanban')">
     <!-- Left: ticket list (hidden in Kanban mode on mobile / collapsed on desktop) -->
@@ -1344,7 +1344,11 @@ const { mobile } = useDisplay();
 
 // Splitpanes размеры — массив процентов трёх pane'ов (sidebar / main /
 // context). Если context-pane скрыт, второй pane занимает всё. Сохраняем
-// в localStorage, чтобы у каждого оператора был свой layout.
+// в localStorage, чтобы у каждого оператора был свой layout. Используем
+// событие @resized (drag-end), а не @resize — последнее срабатывает и при
+// пере-монтировании панелей (открытие чата, переключение list↔kanban),
+// что затирало сохранённое значение дефолтными нормализованными
+// процентами от splitpanes.
 const PANE_STORAGE_KEY = 'ds:chat-staff-pane-sizes';
 const paneSizes = ref(
   (() => {
@@ -3009,9 +3013,9 @@ onUnmounted(() => {
   background: rgb(var(--v-theme-primary));
 }
 .chat-splitpanes :deep(.splitpanes__splitter.splitpanes__splitter--dragging)::after { height: 48px; }
-/* В kanban-режиме скрываем splitter'ы между sidebar и kanban — у kanban
-   своя ширина (фиксированный compact-rail). */
-.chat-splitpanes.kanban-active :deep(.splitpanes__splitter) { pointer-events: none; opacity: 0.5; }
+/* В kanban-режиме splitter остаётся активным — оператор может тянуть
+   ширину sidebar, и она сохраняется (общая с list-режимом, см.
+   paneSizes/PANE_STORAGE_KEY). */
 /* Sidebar — Linear-style: 320px, тонкие dividers, компактная плотность */
 /* Sidebar — ширина управляется splitpanes-pane'ом снаружи. */
 .chat-sidebar {
@@ -3365,8 +3369,9 @@ onUnmounted(() => {
 /* Компактный inline-переключатель в sidebar-head. */
 .view-mode-toggle :deep(.v-btn) { min-width: 32px; padding: 0 8px; }
 
-/* Sidebar compact variant in Kanban mode — list acts like quick filter preview */
-.chat-sidebar.compact { width: 260px !important; }
+/* Sidebar compact variant in Kanban mode — ширина наследуется от
+   splitpanes (общий paneSizes с list-режимом). Только визуальные правки:
+   скрываем status-chip, чтобы строка списка была плотнее. */
 .chat-sidebar.compact .chat-item-bottom .chat-item-status-chip { display: none; }
 
 /* ================== KANBAN ================== */
