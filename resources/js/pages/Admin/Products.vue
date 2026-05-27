@@ -482,7 +482,7 @@ async function uploadImage(kind) {
     const fd = new FormData();
     fd.append('file', file);
     fd.append('kind', kind);
-    const { data } = await api.post(`/admin/products/${editProduct.value.id}/image`, fd, {
+    const { data } = await api.post(`/admin/products-catalog/${editProduct.value.id}/image`, fd, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
     if (kind === 'image') editProduct.value.imageUrl = data.url;
@@ -519,7 +519,7 @@ async function loadProducts() {
     const params = { page: page.value, per_page: perPage.value };
     if (filters.value.search) params.search = filters.value.search;
     if (filters.value.active) params.active = filters.value.active;
-    const { data } = await api.get('/admin/products', { params });
+    const { data } = await api.get('/admin/products-catalog', { params });
     products.value = data.data || data;
     total.value = data.total || products.value.length;
   } catch {}
@@ -541,7 +541,7 @@ function onExpandedChange(newExpanded) {
 async function loadPrograms(productId) {
   programsLoading[productId] = true;
   try {
-    const { data } = await api.get(`/admin/products/${productId}/programs`);
+    const { data } = await api.get(`/admin/products-catalog/${productId}/programs`);
     programsByProduct[productId] = data.data || data;
   } catch {}
   programsLoading[productId] = false;
@@ -553,7 +553,7 @@ const publishingId = ref(null);
 async function togglePublish(product) {
   publishingId.value = product.id;
   try {
-    const { data } = await api.post(`/admin/products/${product.id}/toggle-publish`);
+    const { data } = await api.post(`/admin/products-catalog/${product.id}/toggle-publish`);
     product.publishStatus = data.publishStatus;
   } catch {}
   publishingId.value = null;
@@ -587,9 +587,9 @@ async function saveProduct() {
   productError.value = '';
   try {
     if (editProduct.value.id) {
-      await api.put(`/admin/products/${editProduct.value.id}`, editProduct.value);
+      await api.put(`/admin/products-catalog/${editProduct.value.id}`, editProduct.value);
     } else {
-      await api.post('/admin/products', editProduct.value);
+      await api.post('/admin/products-catalog', editProduct.value);
     }
     productDialog.value = false;
     loadProducts();
@@ -607,7 +607,7 @@ function confirmDeleteProduct(product) {
 async function deleteProduct() {
   saving.value = true;
   try {
-    await api.delete(`/admin/products/${deleteProductTarget.value.id}`);
+    await api.delete(`/admin/products-catalog/${deleteProductTarget.value.id}`);
     deleteProductDialog.value = false;
     loadProducts();
   } catch {}
@@ -639,9 +639,9 @@ async function saveProgram() {
   const productId = editProgramProductId.value;
   try {
     if (editProgram.value.id) {
-      await api.put(`/admin/products/${productId}/programs/${editProgram.value.id}`, editProgram.value);
+      await api.put(`/admin/products-catalog/${productId}/programs/${editProgram.value.id}`, editProgram.value);
     } else {
-      await api.post(`/admin/products/${productId}/programs`, editProgram.value);
+      await api.post(`/admin/products-catalog/${productId}/programs`, editProgram.value);
     }
     programDialog.value = false;
     loadPrograms(productId);
@@ -662,7 +662,7 @@ async function deleteProgram() {
   saving.value = true;
   const productId = deleteProgramProductId.value;
   try {
-    await api.delete(`/admin/products/${productId}/programs/${deleteProgramTarget.value.id}`);
+    await api.delete(`/admin/products-catalog/${productId}/programs/${deleteProgramTarget.value.id}`);
     deleteProgramDialog.value = false;
     loadPrograms(productId);
     loadProducts();
@@ -675,7 +675,7 @@ const productTypeItems = ref([]);
 const courseItems = ref([]);
 async function loadProductReferences() {
   try {
-    const { data } = await api.get('/admin/products/references');
+    const { data } = await api.get('/admin/products-catalog/references');
     productTypeItems.value = data.types || [];
     courseItems.value = data.courses || [];
   } catch {}

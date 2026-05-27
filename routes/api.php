@@ -492,6 +492,26 @@ Route::prefix('v1')->group(function () {
         Route::put('/admin/products/{id}/programs/{programId}', [\App\Http\Controllers\Api\AdminProductController::class, 'updateProgram']);
         Route::delete('/admin/products/{id}/programs/{programId}', [\App\Http\Controllers\Api\AdminProductController::class, 'destroyProgram']);
 
+        // Audit-driven catalog (products_catalog + programs_catalog) — drop-in
+        // replacement for the legacy /admin/products endpoints used by
+        // resources/js/pages/Admin/Products.vue. Same response shape (camelCase
+        // keys, programCount, publishStatus, …) so the page needs no template
+        // changes.
+        Route::get('/admin/products-catalog/types',          [\App\Http\Controllers\Api\AdminProductCatalogController::class, 'types']);
+        Route::get('/admin/products-catalog/references',     [\App\Http\Controllers\Api\AdminProductCatalogController::class, 'references']);
+        Route::get('/admin/products-catalog',                [\App\Http\Controllers\Api\AdminProductCatalogController::class, 'indexProducts']);
+        Route::post('/admin/products-catalog',               [\App\Http\Controllers\Api\AdminProductCatalogController::class, 'storeProduct']);
+        Route::get('/admin/products-catalog/{id}',           [\App\Http\Controllers\Api\AdminProductCatalogController::class, 'showProduct'])->whereNumber('id');
+        Route::put('/admin/products-catalog/{id}',           [\App\Http\Controllers\Api\AdminProductCatalogController::class, 'updateProduct'])->whereNumber('id');
+        Route::delete('/admin/products-catalog/{id}',        [\App\Http\Controllers\Api\AdminProductCatalogController::class, 'destroyProduct'])->whereNumber('id');
+        Route::post('/admin/products-catalog/{id}/toggle-publish', [\App\Http\Controllers\Api\AdminProductCatalogController::class, 'togglePublish'])->whereNumber('id');
+        Route::post('/admin/products-catalog/{id}/image',    [\App\Http\Controllers\Api\AdminProductCatalogController::class, 'uploadImage'])->whereNumber('id');
+        Route::get('/admin/products-catalog/{id}/programs',  [\App\Http\Controllers\Api\AdminProductCatalogController::class, 'programs'])->whereNumber('id');
+        Route::post('/admin/products-catalog/{id}/programs', [\App\Http\Controllers\Api\AdminProductCatalogController::class, 'storeProgram'])->whereNumber('id');
+        Route::put('/admin/products-catalog/{id}/programs/{programId}',    [\App\Http\Controllers\Api\AdminProductCatalogController::class, 'updateProgram'])->whereNumber('id')->whereNumber('programId');
+        Route::delete('/admin/products-catalog/{id}/programs/{programId}', [\App\Http\Controllers\Api\AdminProductCatalogController::class, 'destroyProgram'])->whereNumber('id')->whereNumber('programId');
+        Route::get('/admin/programs-catalog/{id}',           [\App\Http\Controllers\Api\AdminProductCatalogController::class, 'showProgram'])->whereNumber('id');
+
         // Admin Education CRUD
         Route::get('/admin/instructions', [\App\Http\Controllers\Api\InstructionController::class, 'adminList']);
         Route::post('/admin/instructions', [\App\Http\Controllers\Api\InstructionController::class, 'adminStore']);
