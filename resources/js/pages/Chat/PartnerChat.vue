@@ -653,6 +653,7 @@ const statusFilters = [
 ];
 const categoryFilters = [
   { label: 'Все', value: 'all' },
+  { label: 'Тех. проблема', value: 'support' },
   { label: 'Поддержка по продукту', value: 'backoffice' },
   { label: 'Верификация реквизитов', value: 'accruals' },
 ];
@@ -683,6 +684,10 @@ const newForm = ref({ category: 'backoffice', subject: '', message: '' });
 const newCategoryLocked = ref(false);
 
 const categories = [
+  // 'support' = «Тех. проблема». Бэк (ChatController::store) на этом
+  // department создаёт инцидент с номером INC-… и статусом 'open',
+  // а не обычный тикет — отсюда раздельная подпись здесь.
+  { label: 'Тех. проблема', value: 'support' },
   { label: 'Поддержка по продукту', value: 'backoffice' },
   { label: 'Верификация реквизитов', value: 'accruals' },
 ];
