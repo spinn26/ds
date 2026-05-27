@@ -1342,39 +1342,60 @@ import {
 
 const { mobile } = useDisplay();
 
-// Splitpanes размеры — массив процентов трёх pane'ов (sidebar / main /
-// context). Если context-pane скрыт, второй pane занимает всё. Сохраняем
-// в localStorage, чтобы у каждого оператора был свой layout. Используем
-// событие @resized (drag-end), а не @resize — последнее срабатывает и при
-// пере-монтировании панелей (открытие чата, переключение list↔kanban),
-// что затирало сохранённое значение дефолтными нормализованными
-// процентами от splitpanes.
-const PANE_STORAGE_KEY = 'ds:chat-staff-pane-sizes';
-const paneSizes = ref(
-  (() => {
-    try {
-      const stored = JSON.parse(localStorage.getItem(PANE_STORAGE_KEY) || 'null');
-      if (Array.isArray(stored) && stored.length === 3) return stored;
-    } catch (_) { /* fallthrough */ }
-    return [24, 52, 24];
-  })()
-);
-function onPaneResize(panes) {
-  if (!Array.isArray(panes)) return;
-  const next = panes.map(p => Math.round((p?.size ?? 0) * 10) / 10);
-  // Если context-pane сейчас скрыт, паттерн [a, b] — оставляем 3-й 24% дефолтом.
-  paneSizes.value = next.length === 3 ? next : [next[0], next[1], paneSizes.value[2] ?? 24];
-  try { localStorage.setItem(PANE_STORAGE_KEY, JSON.stringify(paneSizes.value)); } catch (_) { /* quota */ }
-}
-
-// Когда в текущем режиме рендерятся не все 3 панели, сумма их сохранённых
-// размеров < 100% — splitpanes не нормализует автоматически и оставляет
-// пустоту. Поэтому подаём в :size нормализованные значения с учётом того,
-// какие панели видны прямо сейчас.
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
 const currentUserId = auth.userId;
+
+// Хранилище ширин панелей. Модель — два независимых значения в % от общей
+// ширины контейнера чата: sidebar и context. Main всегда занимает остаток.
+// Это устраняет проблему «3-panes vs 2-panes»: в kanban-режиме мы не видим
+// context, но sidebar остаётся в тех же % от всей ширины — нормализация
+// больше не нужна. Используем @resized (drag-end), а не @resize.
+//
+// Per-user: ключ namespace'ится по userId, чтобы у каждого оператора был
+// свой layout даже если они шарят браузер.
+const PANE_STORAGE_KEY = `ds:chat-staff-widths:${currentUserId || 'anon'}`;
+const LEGACY_PANE_KEY = 'ds:chat-staff-pane-sizes';
+const paneWidths = ref(
+  (() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem(PANE_STORAGE_KEY) || 'null');
+      if (stored && typeof stored.sidebar === 'number' && typeof stored.context === 'number') {
+        return { sidebar: stored.sidebar, context: stored.context };
+      }
+      // Миграция из старого формата [a, b, c] (per-browser) — берём 0-й и
+      // 2-й элементы как sidebar/context.
+      const legacy = JSON.parse(localStorage.getItem(LEGACY_PANE_KEY) || 'null');
+      if (Array.isArray(legacy) && legacy.length === 3) {
+        return { sidebar: legacy[0], context: legacy[2] };
+      }
+    } catch (_) { /* fallthrough */ }
+    return { sidebar: 24, context: 24 };
+  })()
+);
+function persistPaneWidths() {
+  try { localStorage.setItem(PANE_STORAGE_KEY, JSON.stringify(paneWidths.value)); } catch (_) { /* quota */ }
+}
+function onPaneResize(panes) {
+  if (!Array.isArray(panes) || !panes.length) return;
+  // Splitpanes @resized отдаёт размеры в % от ВИДИМЫХ pane'ов (всегда
+  // нормализованы к 100). Поскольку в любом режиме видна max sidebar + main
+  // (+ context), а sidebar — всегда первый, его новый %% можно записать
+  // напрямую.
+  const first = Number(panes[0]?.size);
+  if (Number.isFinite(first) && first > 0) {
+    paneWidths.value.sidebar = Math.round(first * 10) / 10;
+  }
+  // Если виден context (3 pane'а), он последний — пишем его %.
+  if (panes.length === 3) {
+    const last = Number(panes[2]?.size);
+    if (Number.isFinite(last) && last > 0) {
+      paneWidths.value.context = Math.round(last * 10) / 10;
+    }
+  }
+  persistPaneWidths();
+}
 const currentUserName = computed(() => `${auth.user?.lastName || ''} ${auth.user?.firstName || ''}`.trim() || 'Staff');
 
 // Кнопку «В техподдержку» скрываем у самих админов: они и так получат
@@ -1831,22 +1852,18 @@ function sortChats(a, b) {
 const viewMode = ref(localStorage.getItem('staff-chat-view') || 'list');
 watch(viewMode, v => localStorage.setItem('staff-chat-view', v));
 
-// Нормализованные размеры панелей под текущий набор видимых pane'ов.
-// Splitpanes ожидает сумму всех :size = 100%, иначе оставляет пустое
-// пространство. У нас 3 опциональных pane'а — пересчитываем proportionally.
+// Размеры pane'ов под текущий набор видимых панелей. main всегда добирает
+// остаток до 100% — пользовательский sidebar (и опционально context)
+// сохраняют свою ширину независимо от того, открыта ли context-панель.
 const effectivePaneSizes = computed(() => {
   const sidebarVisible = !mobile.value || (!activeChat.value && viewMode.value !== 'kanban');
   const mainVisible = !mobile.value || activeChat.value || viewMode.value === 'kanban';
   const contextVisible = !mobile.value && viewMode.value === 'list' && !!activeChat.value && showContext.value;
 
-  const [s0, s1, s2] = paneSizes.value;
-  let a = sidebarVisible ? s0 : 0;
-  let b = mainVisible ? s1 : 0;
-  let c = contextVisible ? s2 : 0;
-  const sum = a + b + c;
-  if (sum <= 0) return [s0, s1, s2];
-  const k = 100 / sum;
-  return [a * k, b * k, c * k];
+  const sidebar = sidebarVisible ? paneWidths.value.sidebar : 0;
+  const context = contextVisible ? paneWidths.value.context : 0;
+  const main = mainVisible ? Math.max(20, 100 - sidebar - context) : 0;
+  return [sidebar, main, context];
 });
 const draggingId = ref(null);
 const dragOverCol = ref(null); // { col, lane } or col value for backward-compat
