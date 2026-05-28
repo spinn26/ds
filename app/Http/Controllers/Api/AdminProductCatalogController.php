@@ -382,6 +382,15 @@ class AdminProductCatalogController extends Controller
         }
 
         $active = (bool) $r->active;
+        // visible_to_resident / visible_to_calculator — новые колонки
+        // (migration 2026_05_28_000020). На старых средах их может не
+        // быть → дефолт = $active, чтобы не ломать обратную совместимость.
+        $visibleToResident = property_exists($r, 'visible_to_resident')
+            ? (bool) $r->visible_to_resident
+            : $active;
+        $visibleToCalculator = property_exists($r, 'visible_to_calculator')
+            ? (bool) $r->visible_to_calculator
+            : ($active && ! (bool) $r->has_red);
         return [
             'id'                   => (int) $r->id,
             'name'                 => $r->name,
@@ -403,8 +412,8 @@ class AdminProductCatalogController extends Controller
             'kvPayoutYear'         => null,
             'calcComment'          => $r->comment_snippets,
             'active'               => $active,
-            'visibleToResident'    => $active,
-            'visibleToCalculator'  => $active && ! (bool) $r->has_red,
+            'visibleToResident'    => $visibleToResident,
+            'visibleToCalculator'  => $visibleToCalculator,
             'hasRed'               => (bool) $r->has_red,
             'dominantColor'        => $r->dominant_color,
             'rateLines'            => (int) $r->rate_lines,
@@ -416,14 +425,16 @@ class AdminProductCatalogController extends Controller
     private static function extractProgramPayload(Request $request): array
     {
         $data = $request->validate([
-            'name'              => 'required|string|max:255',
-            'providerName'      => 'nullable|string|max:255',
-            'vendorName'        => 'nullable|string|max:255',
-            'currencyName'      => 'nullable|string|max:32',
-            'currency'          => 'nullable',
-            'term'              => 'nullable|integer',
-            'active'            => 'nullable|boolean',
-            'formLink'          => 'nullable|string|max:1000',
+            'name'                => 'required|string|max:255',
+            'providerName'        => 'nullable|string|max:255',
+            'vendorName'          => 'nullable|string|max:255',
+            'currencyName'        => 'nullable|string|max:32',
+            'currency'            => 'nullable',
+            'term'                => 'nullable|integer',
+            'active'              => 'nullable|boolean',
+            'visibleToResident'   => 'nullable|boolean',
+            'visibleToCalculator' => 'nullable|boolean',
+            'formLink'            => 'nullable|string|max:1000',
         ]);
 
         $out = [
@@ -437,6 +448,14 @@ class AdminProductCatalogController extends Controller
         }
         if (isset($data['term'])) {
             $out['terms_summary'] = (string) $data['term'];
+        }
+        // Видимость (migration 2026_05_28_000020). По has() отличаем «не
+        // прислали» от «прислали false» — иначе чекбокс «снять» не работал бы.
+        if ($request->has('visibleToResident')) {
+            $out['visible_to_resident'] = (bool) ($data['visibleToResident'] ?? true);
+        }
+        if ($request->has('visibleToCalculator')) {
+            $out['visible_to_calculator'] = (bool) ($data['visibleToCalculator'] ?? true);
         }
         // formLink: keep null distinct from "not sent" via has() so operators
         // can clear the field by sending null explicitly.

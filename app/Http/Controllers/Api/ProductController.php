@@ -85,10 +85,19 @@ class ProductController extends Controller
                 ->groupBy('product')
             : collect();
 
-        $catalogProgs = DB::table('programs_catalog')
+        // Программы для витрины — приоритет programs_catalog (там админ
+        // правит, в т.ч. formLink и visible_to_resident). Фильтр по
+        // visible_to_resident учитывает только переключатель «Виден
+        // партнёру», не общую активность — visible_to_calculator не
+        // влияет на витрину.
+        $catalogProgsQuery = DB::table('programs_catalog')
             ->whereIn('product_id', $productRows->pluck('id'))
             ->where('active', true)
-            ->orderBy('name')
+            ->orderBy('name');
+        if (Schema::hasColumn('programs_catalog', 'visible_to_resident')) {
+            $catalogProgsQuery->where('visible_to_resident', true);
+        }
+        $catalogProgs = $catalogProgsQuery
             ->get(['id', 'product_id', 'name', 'form_link', 'vendor', 'category', 'currency'])
             ->groupBy('product_id');
 
@@ -115,8 +124,24 @@ class ProductController extends Controller
                 $available = $consultant && (bool) $consultant->acceptance;
             }
 
-            // Программы: legacy ↔ catalog. Структура ответа одинаковая.
-            if ($legacyId && isset($legacyPrograms[$legacyId])) {
+            // Программы: приоритет programs_catalog (там админ правит,
+            // включая formLink и visible_to_resident — см. AdminProductCatalogController).
+            // Legacy `program` остаётся fallback'ом только для тех
+            // продуктов, у которых в каталоге программ ещё нет вовсе
+            // (например, импорт не покрыл).
+            $catProgs = $catalogProgs[$p->id] ?? collect();
+            if ($catProgs->isNotEmpty()) {
+                $programs = $catProgs->map(fn ($pr) => [
+                    'id' => self::CATALOG_ID_OFFSET + (int) $pr->id,
+                    'name' => $pr->name,
+                    'formLink' => $pr->form_link ?? null,
+                    'providerName' => $pr->vendor,
+                    'categoryName' => $pr->category,
+                    'currencySymbol' => $pr->currency,
+                ])->values();
+                $currencies = $catProgs->pluck('currency')->filter()->unique()->values()
+                    ->map(fn ($s) => ['id' => null, 'nameRu' => $s, 'nameEn' => $s, 'symbol' => $s]);
+            } elseif ($legacyId && isset($legacyPrograms[$legacyId])) {
                 $programs = $legacyPrograms[$legacyId]->map(function ($pr) use ($currencyMap) {
                     $cur = $pr->currency ? ($currencyMap[$pr->currency] ?? null) : null;
                     return [
@@ -135,17 +160,8 @@ class ProductController extends Controller
                         return $c ? ['id' => $c->id, 'nameRu' => $c->nameRu, 'nameEn' => $c->nameEn, 'symbol' => $c->symbol] : null;
                     })->filter()->values();
             } else {
-                $catProgs = $catalogProgs[$p->id] ?? collect();
-                $programs = $catProgs->map(fn ($pr) => [
-                    'id' => self::CATALOG_ID_OFFSET + (int) $pr->id,
-                    'name' => $pr->name,
-                    'formLink' => $pr->form_link ?? null,
-                    'providerName' => $pr->vendor,
-                    'categoryName' => $pr->category,
-                    'currencySymbol' => $pr->currency,
-                ])->values();
-                $currencies = $catProgs->pluck('currency')->filter()->unique()->values()
-                    ->map(fn ($s) => ['id' => null, 'nameRu' => $s, 'nameEn' => $s, 'symbol' => $s]);
+                $programs = collect();
+                $currencies = collect();
             }
 
             // ID для фронта: предпочитаем legacy.product_id (там сидят FK
