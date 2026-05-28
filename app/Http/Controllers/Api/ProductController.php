@@ -187,6 +187,18 @@ class ProductController extends Controller
         // yet — that's fine, the partner cards still render.
         $catalogProducts = $this->mapCatalogProducts($request, $hasAccess);
 
+        // Дедуп по нормализованному имени: если такой продукт уже есть в
+        // legacy `product` (с картинкой/категорией/описанием) — catalog-stub
+        // скрываем, чтобы партнёр не видел дубль. Catalog-only продукты
+        // (например, новые позиции аудита) остаются.
+        $legacyNames = $products->pluck('name')
+            ->map(fn ($n) => mb_strtolower(trim((string) $n)))
+            ->filter()
+            ->flip();
+        $catalogProducts = $catalogProducts->reject(fn ($p) =>
+            isset($legacyNames[mb_strtolower(trim((string) $p['name']))])
+        )->values();
+
         $allProducts = $products->concat($catalogProducts);
 
         // Categories from productCategory table
