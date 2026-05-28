@@ -362,6 +362,10 @@ class ManualTransactionController extends Controller
 
                     $date = \Carbon\Carbon::parse($draft->date);
 
+                    // draft.parameter — это commissionCalcProperty.id, выбранный
+                    // в дропдауне «Свойство». Без проброса в транзакцию колонка
+                    // «Свойство» в /manage/commissions показывала «—», и партнёр
+                    // в расчётном листе тоже терял МФ/Апфронт-метку.
                     $txId = DB::table('transaction')->insertGetId([
                         'contract' => $draft->contract,
                         'amount' => $amount,
@@ -377,6 +381,9 @@ class ManualTransactionController extends Controller
                         'dateCreated' => now(),
                         'changedAt' => now(),
                         'comment' => $draft->comment ?: 'Ручной ввод #' . $request->user()->id,
+                        'commissionCalcProperty' => $draft->parameter !== null && $draft->parameter !== ''
+                            ? (int) $draft->parameter : null,
+                        'score' => $draft->yearKV !== null ? (int) $draft->yearKV : null,
                         'dsCommissionPercentage' => $draft->dsCommissionPercentage,
                         'dsCommissionAbsolute' => $draft->dsCommissionAbsolute,
                         'customCommission' => $draft->customCommission ?: false,

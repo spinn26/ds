@@ -203,6 +203,20 @@ class ImportTransactionsJob implements ShouldQueue
                     if (is_numeric($s)) $dsPercent = (float) $s;
                 }
 
+                // property → commissionCalcProperty.id. Принимаем:
+                //   - числовой id (профиль уже резолвил, напр. IB MF → 9)
+                //   - строку-название («МФ»/«Апфронт»/«5 год») — резолвим
+                //     через commissionCalcProperty.title (case-insensitive).
+                $propertyRaw = $row['property'] ?? $row['свойство'] ?? null;
+                $propertyId = null;
+                if ($propertyRaw !== null && $propertyRaw !== '') {
+                    if (is_numeric($propertyRaw)) {
+                        $propertyId = (int) $propertyRaw;
+                    } else {
+                        $propertyId = $this->resolvePropertyId((string) $propertyRaw);
+                    }
+                }
+
                 $prepared[] = [
                     'line' => $lineNo,
                     'contract_id' => $contract->id,
@@ -211,7 +225,7 @@ class ImportTransactionsJob implements ShouldQueue
                     'amountUsd' => $amountUsd,
                     'date' => $date,
                     'ds_percent' => $dsPercent,
-                    'property' => $row['property'] ?? $row['свойство'] ?? null,
+                    'property' => $propertyId,
                 ];
 
                 // Tracker — каждые 200 строк (вместо 50: меньше cache-overhead).
@@ -379,14 +393,33 @@ class ImportTransactionsJob implements ShouldQueue
                     ? SheetProfiles::resolveCurrencyId($profile['currency'], 67)
                     : ($this->currencyId ?? 67);
 
+                // commissionCalcProperty: дефолт из профиля (например, IB MF → 9,
+                // IB UP → 10), плюс fallback на колонку «Свойство» / «property»
+                // в самом листе для профилей, где свойство per-row.
+                $profileProperty = isset($profile['commissionCalcProperty'])
+                    ? (int) $profile['commissionCalcProperty'] : null;
+                $propertyHeaderIdx = null;
+                foreach ($headers as $i => $h) {
+                    $hLower = mb_strtolower(trim((string) $h));
+                    if ($hLower === 'свойство' || $hLower === 'property') {
+                        $propertyHeaderIdx = $i;
+                        break;
+                    }
+                }
+
                 $rows = [];
                 foreach ($rawRows as $row) {
                     $a = SheetProfiles::alignRow($row, $headers, $profile);
+                    $rowProperty = $profileProperty;
+                    if ($propertyHeaderIdx !== null && ! empty($row[$propertyHeaderIdx])) {
+                        $rowProperty = $row[$propertyHeaderIdx];
+                    }
                     $rows[] = [
                         'contract_number' => (string) ($a['contract_number'] ?? ''),
                         'amount' => $a['amount'] ?? ($a['commission'] ?? 0),
                         'date' => $a['date'] ?? null,
                         'ds_percent' => $a['commission_pct'] ?? null,
+                        'property' => $rowProperty,
                     ];
                 }
                 return [$rows, (int) $counterpartyId, (int) $currencyId, $profile];
@@ -605,5 +638,34 @@ class ImportTransactionsJob implements ShouldQueue
     private function putTracker(array $state): void
     {
         Cache::put("import:tracker:{$this->tracker}", $state, 1800);
+    }
+
+    /**
+     * Кэшируем lookup commissionCalcProperty.title → id на время импорта.
+     * Размер справочника ~30 строк, читаем целиком при первом обращении —
+     * иначе на 1267 строк × ILIKE-запрос даём ненужную нагрузку.
+     */
+    private ?array $propertyTitleMap = null;
+    private function resolvePropertyId(string $title): ?int
+    {
+        if ($this->propertyTitleMap === null) {
+            $this->propertyTitleMap = [];
+            foreach (DB::table('commissionCalcProperty')->get(['id', 'title']) as $p) {
+                $this->propertyTitleMap[mb_strtolower(trim((string) $p->title))] = (int) $p->id;
+            }
+        }
+        $key = mb_strtolower(trim($title));
+        if (isset($this->propertyTitleMap[$key])) return $this->propertyTitleMap[$key];
+
+        // Лёгкие алиасы: «MF», «UP» — английские варианты МФ/Апфронт.
+        $aliases = [
+            'mf' => 'мф',
+            'up' => 'апфронт',
+            'upfront' => 'апфронт',
+        ];
+        if (isset($aliases[$key], $this->propertyTitleMap[$aliases[$key]])) {
+            return $this->propertyTitleMap[$aliases[$key]];
+        }
+        return null;
     }
 }

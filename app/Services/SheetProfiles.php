@@ -51,6 +51,9 @@ class SheetProfiles
                 'commission'      => 'Всего комиссии',
             ],
             'currency' => 'USD',
+            // commissionCalcProperty=9 («МФ») — лист содержит только MF-комиссии,
+            // профиль сам задаёт свойство, чтобы не возиться с per-row маппингом.
+            'commissionCalcProperty' => 9,
         ],
         'IB UP' => [
             'counterpartyName' => 'Interactive Brokers',
@@ -62,6 +65,8 @@ class SheetProfiles
                 'commission'      => 'Сумма вознаграждения',
             ],
             'currency' => 'USD',
+            // commissionCalcProperty=10 («Апфронт») — апфронт-комиссия по IB.
+            'commissionCalcProperty' => 10,
         ],
         'InvestorsTrust' => [
             'counterpartyName' => 'Investor Trust',

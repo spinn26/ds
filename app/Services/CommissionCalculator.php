@@ -168,7 +168,17 @@ class CommissionCalculator
 
     private function calculateInTransaction(int $transactionId): array
     {
-        $tx = DB::table('transaction')->where('id', $transactionId)->whereNull('deletedAt')->first();
+        // Сериализуем параллельные расчёты по этой транзакции через row-lock
+        // на parent-строке. Без него две одновременные джобы (например, две
+        // ручных «Рассчитать» в истории импортов) делают SOFT-DELETE по
+        // своему MVCC-снэпшоту, не видят чужие свежие INSERT'ы и каждая
+        // INSERT'ит полную цепочку — в БД остаются 2× дубли (на проде
+        // обнаружено 341 такая группа, 2026-05-28).
+        $tx = DB::table('transaction')
+            ->where('id', $transactionId)
+            ->whereNull('deletedAt')
+            ->lockForUpdate()
+            ->first();
         if (! $tx) return ['error' => 'Транзакция не найдена или удалена'];
 
         // Удаляем ранее посчитанные commission по этой транзакции — иначе
