@@ -13,6 +13,10 @@
 
 export const chatStatusColors = {
   new: '#60a5fa',
+  // assigned — переназначение чата другому специалисту. Отдельный шаг
+  // между «new» (никто не взял) и «open» (взят в работу): нужен, чтобы
+  // переданный чат не растворялся среди прочих «В работе» у адресата.
+  assigned: '#a78bfa',
   open: '#fbbf24',
   pending: '#f97316',
   resolved: '#34d399',
@@ -21,6 +25,7 @@ export const chatStatusColors = {
 
 export const chatStatusLabels = {
   new: 'Новый',
+  assigned: 'Назначен',
   open: 'В работе',
   pending: 'Ожидание',
   resolved: 'Решён',

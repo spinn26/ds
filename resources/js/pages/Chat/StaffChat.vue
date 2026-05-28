@@ -137,6 +137,13 @@
             <div class="chat-item-bottom">
               <span class="customer">{{ t.customer_name }}</span>
               <span v-if="t.recipient_name" class="recipient"> → {{ t.recipient_name }}</span>
+              <!-- «Новый для вас» — тикеты, в которые меня добавили через
+                   chat_ticket_participants и я ни разу не открывал. Чтобы
+                   адресат не пропустил приглашение, помимо bell-нотификации. -->
+              <span v-if="t.is_new_for_me" class="chat-item-status-chip"
+                style="background: #a78bfa22; color: #a78bfa; font-weight: 600">
+                Новый для вас
+              </span>
               <span class="chat-item-status-chip" :style="{ background: statusClr(t.status) + '22', color: statusClr(t.status) }">{{ statusTxt(t.status) }}</span>
             </div>
           </div>
@@ -1871,6 +1878,7 @@ const draggingId = ref(null);
 const dragOverCol = ref(null); // { col, lane } or col value for backward-compat
 const kanbanColumns = [
   { value: 'new', label: 'Новые', color: chatStatusColors.new, icon: 'mdi-circle-outline' },
+  { value: 'assigned', label: 'Назначены', color: chatStatusColors.assigned, icon: 'mdi-account-arrow-right' },
   { value: 'open', label: 'В работе', color: chatStatusColors.open, icon: 'mdi-progress-clock' },
   { value: 'pending', label: 'Ожидание', color: chatStatusColors.pending, icon: 'mdi-pause-circle' },
   { value: 'resolved', label: 'Решён', color: chatStatusColors.resolved, icon: 'mdi-check-circle' },
@@ -2124,6 +2132,7 @@ const priorities = [
 ];
 const statuses = [
   { label: 'Новый', value: 'new', color: chatStatusColors.new, icon: 'mdi-circle-outline' },
+  { label: 'Назначен', value: 'assigned', color: chatStatusColors.assigned, icon: 'mdi-account-arrow-right' },
   { label: 'В работе', value: 'open', color: chatStatusColors.open, icon: 'mdi-progress-clock' },
   { label: 'Ожидание', value: 'pending', color: chatStatusColors.pending, icon: 'mdi-pause-circle' },
   { label: 'Решён', value: 'resolved', color: chatStatusColors.resolved, icon: 'mdi-check-circle' },
@@ -2147,8 +2156,8 @@ function catIcon(c) {
   })[c] || 'mdi-chat';
 }
 const statusClr = getChatStatusColor;
-function statusTxt(s) { return { new: 'Новый', open: 'В работе', pending: 'Ожидание', resolved: 'Решён', closed: 'Закрыт' }[s] || s; }
-function statusIcon(s) { return { new: 'mdi-circle-outline', open: 'mdi-progress-clock', pending: 'mdi-pause-circle', resolved: 'mdi-check-circle', closed: 'mdi-lock' }[s] || 'mdi-circle'; }
+function statusTxt(s) { return { new: 'Новый', assigned: 'Назначен', open: 'В работе', pending: 'Ожидание', resolved: 'Решён', closed: 'Закрыт' }[s] || s; }
+function statusIcon(s) { return { new: 'mdi-circle-outline', assigned: 'mdi-account-arrow-right', open: 'mdi-progress-clock', pending: 'mdi-pause-circle', resolved: 'mdi-check-circle', closed: 'mdi-lock' }[s] || 'mdi-circle'; }
 const prioClr = getChatPriorityColor;
 function prioLabel(p) { return priorities.find(x => x.value === p)?.label || p; }
 function initials(name) {

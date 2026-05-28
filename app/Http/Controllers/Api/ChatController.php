@@ -185,6 +185,24 @@ class ChatController extends Controller
         $ticketIds = $tickets->pluck('id')->filter();
         $unreadMap = collect();
         $lastMsgMap = collect();
+        // is_new_for_me: тикеты, где юзер ДОБАВЛЕН через
+        // chat_ticket_participants И ни разу не открывал чат
+        // (нет записи в chat_read_status). UI вешает явный бейдж
+        // «Новый для вас» — иначе только bell-уведомление, которое
+        // легко пропустить (попросила Алла 2026-05-28).
+        $newForMeSet = collect();
+        if ($ticketIds->isNotEmpty() && ! empty($participantTicketIds)) {
+            $invitedHere = $ticketIds->intersect($participantTicketIds);
+            if ($invitedHere->isNotEmpty()) {
+                $readSomeIds = DB::table('chat_read_status')
+                    ->where('user_id', $user->id)
+                    ->whereIn('ticket_id', $invitedHere)
+                    ->whereNotNull('last_read_at')
+                    ->pluck('ticket_id')
+                    ->all();
+                $newForMeSet = $invitedHere->diff($readSomeIds);
+            }
+        }
 
         if ($ticketIds->isNotEmpty()) {
             $unreadMap = DB::table('chat_messages as cm')
@@ -220,8 +238,9 @@ class ChatController extends Controller
             }
         }
 
-        $data = $tickets->map(function ($t) use ($unreadMap, $lastMsgMap, $user) {
+        $data = $tickets->map(function ($t) use ($unreadMap, $lastMsgMap, $user, $newForMeSet) {
             $t->unread = $unreadMap[$t->id] ?? 0;
+            $t->is_new_for_me = $newForMeSet->contains($t->id);
             $lm = $lastMsgMap[$t->id] ?? null;
             if ($lm) {
                 $preview = $lm->content
@@ -631,6 +650,13 @@ class ChatController extends Controller
                 // (не должно случаться, но оставляем перевод в open для совместимости).
                 $update['status'] = 'open';
                 $statusChangedTo = 'open';
+            } elseif ($ticket->status === 'assigned' && $isAgent
+                && (int) $ticket->assigned_to === (int) $user->id) {
+                // Auto-claim переданного чата: назначенный сотрудник
+                // ответил → статус «Назначен» → «В работе». Это конец
+                // workflow reassign (см. assign()).
+                $update['status'] = 'open';
+                $statusChangedTo = 'open';
             }
             DB::table('chat_tickets')->where('id', $id)->update($update);
 
@@ -1004,7 +1030,7 @@ class ChatController extends Controller
         }
 
         $request->validate([
-            'status' => 'required|in:new,open,pending,resolved,closed',
+            'status' => 'required|in:new,assigned,open,pending,resolved,closed',
             'priority' => 'nullable|in:critical,high,medium,low',
             'tags' => 'nullable|array',
             'tags.*' => 'string|max:64',
@@ -1215,21 +1241,33 @@ class ChatController extends Controller
         $assignee = DB::table('WebUser')->where('id', $request->user_id)->first();
         $assigneeName = $assignee ? trim(($assignee->lastName ?? '') . ' ' . ($assignee->firstName ?? '')) : '—';
 
+        // Reassign vs первичное назначение per spec 2026-05-28:
+        //   - первичное (assigned_to=null → X) ИЛИ self-claim (X → X) — статус 'open'
+        //     (логика claim&hide: сотрудник сам берёт чат в работу)
+        //   - reassign на ДРУГОГО (X → Y, X≠Y) — статус 'assigned', чтобы у нового
+        //     адресата чат подсветился отдельной колонкой и он не пропустил передачу.
+        //     Назначенный переводит в 'open' автоматически при первом своём ответе
+        //     (см. sendMessage auto-claim).
+        $prevAssignedTo = $existing->assigned_to ? (int) $existing->assigned_to : null;
+        $newAssignedTo = (int) $request->user_id;
+        $isReassign = $prevAssignedTo !== null && $prevAssignedTo !== $newAssignedTo;
+        $newStatus = $isReassign ? 'assigned' : 'open';
+
         DB::table('chat_tickets')->where('id', $id)->update([
             'assigned_to' => $request->user_id,
             'assigned_name' => $assigneeName,
-            'status' => 'open',
+            'status' => $newStatus,
             'updated_at' => now(),
         ]);
 
-        // Audit log: assignment + (если был) переход статуса в open.
-        if ((int) ($existing->assigned_to ?? 0) !== (int) $request->user_id) {
+        // Audit log: assignment + (если был) переход статуса.
+        if ($prevAssignedTo !== $newAssignedTo) {
             $this->logTicketChange($id, 'assigned_to',
                 $existing->assigned_name ?? (string) ($existing->assigned_to ?? ''),
                 $assigneeName, $request->user());
         }
-        if ($existing->status !== 'open') {
-            $this->logTicketChange($id, 'status', $existing->status, 'open', $request->user());
+        if ($existing->status !== $newStatus) {
+            $this->logTicketChange($id, 'status', $existing->status, $newStatus, $request->user());
         }
 
         DB::table('chat_messages')->insert([
@@ -1248,10 +1286,34 @@ class ChatController extends Controller
                 'ticketId' => $id,
                 'assignedTo' => $request->user_id,
                 'assignedName' => $assigneeName,
-                'status' => 'open',
+                'status' => $newStatus,
             ]);
         } catch (\Exception $e) {
             Log::warning('chat socket emit failed: ticket-updated (assign)', ['ticket_id' => $id, 'exception' => $e->getMessage()]);
+        }
+
+        // Уведомление назначенному при reassign — чтобы новый адресат
+        // увидел передачу мгновенно (bell + toast), а не только когда
+        // случайно зайдёт в Kanban-колонку «Назначен». Self-assign не
+        // нотифицируем — сам себе назначил, и так знает.
+        if ($isReassign && $newAssignedTo !== (int) $request->user()->id) {
+            try {
+                $ticket = DB::table('chat_tickets')->where('id', $id)
+                    ->first(['subject', 'customer_name']);
+                $actor = $this->userName($request) ?: 'Сотрудник';
+                $subject = $ticket->subject ?: ('Тикет #' . $id);
+                $contextHint = $ticket->customer_name
+                    ? ' · клиент: ' . $ticket->customer_name : '';
+                NotificationController::create(
+                    $newAssignedTo,
+                    'chat',
+                    $actor . ' назначил(а) вам чат',
+                    $subject . $contextHint,
+                    '/manage/chat?open=' . $id,
+                );
+            } catch (\Throwable $e) {
+                Log::debug('assign notify failed: ' . $e->getMessage());
+            }
         }
 
         return response()->json(['message' => 'Назначен']);
@@ -2450,13 +2512,21 @@ class ChatController extends Controller
             ]);
         });
 
-        // Уведомить добавленного сотрудника.
+        // Уведомить добавленного: title — КТО добавил, message — про что чат
+        // (тема + клиент/контекст), чтобы адресат сразу понимал контекст без
+        // необходимости открыть link. Раньше был просто «Вас добавили в чат»
+        // — невнятно: 2026-05-28 Алла попросила более явное оповещение.
+        $actor = trim(($request->user()->lastName ?? '') . ' ' . ($request->user()->firstName ?? '')) ?: 'Сотрудник';
+        $subject = $ticket->subject ?: ('Тикет #' . $id);
+        $contextHint = $ticket->customer_name
+            ? ' · клиент: ' . $ticket->customer_name
+            : '';
         try {
             NotificationController::create(
                 $newUserId,
                 'chat',
-                'Вас добавили в чат',
-                'Тема: ' . ($ticket->subject ?: 'Тикет #' . $id),
+                $actor . ' добавил(а) вас в чат',
+                $subject . $contextHint,
                 '/manage/chat?open=' . $id,
             );
         } catch (\Throwable $e) {
