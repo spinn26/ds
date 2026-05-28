@@ -1,9 +1,51 @@
 /**
- * Client-side XLSX export using SheetJS.
- * Lazy-loads the library only when needed.
+ * Client-side XLSX export через ExcelJS.
+ * Lazy-loads библиотеку только при вызове (она ~400 KB gzip).
+ *
+ * Раньше использовался SheetJS (`xlsx`), но он ушёл с npm-реестра и не
+ * получает security-фиксы (CVE-2023-30533 prototype pollution и
+ * CVE-2024-22363 ReDoS — оба «No fix available» в npm-версии). Эти
+ * уязвимости в `read`/`parse`-сценариях нашего проекта не эксплуатимы,
+ * но `npm audit` всё равно горел — поэтому мигрировали на exceljs.
  */
+
+/**
+ * Запись workbook в файл — ExcelJS в браузере отдаёт ArrayBuffer,
+ * сам download делаем через временный <a href=blob>. File-saver не
+ * подключаем — лишняя 4КБ зависимость ради двух вызовов.
+ */
+async function downloadWorkbook(workbook, filename) {
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  // Освобождаем blob в следующем тике — Safari иногда отменяет
+  // скачивание, если URL revoked сразу после click().
+  setTimeout(() => URL.revokeObjectURL(url), 100);
+}
+
+/** Авто-ширина колонок: max(длина заголовка, max длина значения)+2, cap 50. */
+function autoSizeColumns(worksheet, headers, rows) {
+  worksheet.columns = headers.map((h, i) => {
+    const maxLen = Math.max(
+      String(h).length,
+      ...rows.map(r => String(r[i] ?? '').length),
+    );
+    return { width: Math.min(maxLen + 2, 50) };
+  });
+}
+
 export async function exportToXlsx(data, columns, filename = 'export') {
-  const XLSX = await import('xlsx');
+  const ExcelJS = (await import('exceljs')).default;
+  const workbook = new ExcelJS.Workbook();
+  const ws = workbook.addWorksheet('Data');
 
   const headers = columns.map(c => c.title);
   const keys = columns.map(c => c.key);
@@ -14,23 +56,17 @@ export async function exportToXlsx(data, columns, filename = 'export') {
       if (val === null || val === undefined) return '';
       if (typeof val === 'boolean') return val ? 'Да' : 'Нет';
       return val;
-    })
+    }),
   );
 
-  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  ws.addRow(headers);
+  rows.forEach(r => ws.addRow(r));
+  autoSizeColumns(ws, headers, rows);
 
-  // Auto-size columns
-  ws['!cols'] = headers.map((h, i) => {
-    const maxLen = Math.max(
-      h.length,
-      ...rows.map(r => String(r[i] || '').length)
-    );
-    return { wch: Math.min(maxLen + 2, 50) };
-  });
-
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Data');
-  XLSX.writeFile(wb, `${filename}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  await downloadWorkbook(
+    workbook,
+    `${filename}_${new Date().toISOString().slice(0, 10)}.xlsx`,
+  );
 }
 
 /**
@@ -39,8 +75,8 @@ export async function exportToXlsx(data, columns, filename = 'export') {
  * Прочие начисления и выплаты, Выплаты.
  */
 export async function exportFinanceReport(reportData, month) {
-  const XLSX = await import('xlsx');
-  const wb = XLSX.utils.book_new();
+  const ExcelJS = (await import('exceljs')).default;
+  const workbook = new ExcelJS.Workbook();
 
   const s = reportData.summary || {};
   const t = reportData.tables || {};
@@ -82,9 +118,9 @@ export async function exportFinanceReport(reportData, month) {
     ['Остаток на начало месяца, ₽', s.monthEnd?.balanceStart ?? 0],
     ['Итого к выплате, ₽', s.monthEnd?.totalPayable ?? 0],
   ];
-  const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows);
-  wsSummary['!cols'] = [{ wch: 36 }, { wch: 22 }];
-  XLSX.utils.book_append_sheet(wb, wsSummary, 'Сводная');
+  const wsSummary = workbook.addWorksheet('Сводная');
+  summaryRows.forEach(r => wsSummary.addRow(r));
+  wsSummary.columns = [{ width: 36 }, { width: 22 }];
 
   // Sheet 2: Личные продажи.
   // «Параметр» исторически был одной колонкой — теперь у разных продуктов
@@ -103,9 +139,10 @@ export async function exportFinanceReport(reportData, month) {
     dash(r.propertyTitle), dash(r.contractTerm), dash(r.yearKV),
     r.personalVolume ?? 0, r.bonus ?? 0, r.bonusRub ?? 0, r.comment ?? '',
   ]);
-  const wsPersonal = XLSX.utils.aoa_to_sheet([personalHeaders, ...personalRows]);
-  wsPersonal['!cols'] = personalHeaders.map((h, i) => ({ wch: Math.min(40, Math.max(h.length + 2, ...personalRows.map(r => String(r[i] ?? '').length + 2), 12)) }));
-  XLSX.utils.book_append_sheet(wb, wsPersonal, 'Личные продажи');
+  const wsPersonal = workbook.addWorksheet('Личные продажи');
+  wsPersonal.addRow(personalHeaders);
+  personalRows.forEach(r => wsPersonal.addRow(r));
+  autoSizeColumns(wsPersonal, personalHeaders, personalRows);
 
   // Sheet 3: Групповые продажи
   const groupHeaders = [
@@ -119,27 +156,30 @@ export async function exportFinanceReport(reportData, month) {
     dash(r.propertyTitle), dash(r.contractTerm), dash(r.yearKV),
     r.personalVolume ?? 0, r.bonus ?? 0, r.bonusRub ?? 0, r.comment ?? '',
   ]);
-  const wsGroup = XLSX.utils.aoa_to_sheet([groupHeaders, ...groupRows]);
-  wsGroup['!cols'] = groupHeaders.map((h, i) => ({ wch: Math.min(40, Math.max(h.length + 2, ...groupRows.map(r => String(r[i] ?? '').length + 2), 12)) }));
-  XLSX.utils.book_append_sheet(wb, wsGroup, 'Групповые продажи');
+  const wsGroup = workbook.addWorksheet('Групповые продажи');
+  wsGroup.addRow(groupHeaders);
+  groupRows.forEach(r => wsGroup.addRow(r));
+  autoSizeColumns(wsGroup, groupHeaders, groupRows);
 
   // Sheet 4: Прочие начисления и выплаты
   const otherHeaders = ['Дата', 'Сумма оплаты', 'Баллы', 'Комментарий'];
   const otherRows = (t.otherAccruals || []).map(r => [
     r.date, r.amountRUB ?? 0, r.amount ?? 0, r.comment ?? '',
   ]);
-  const wsOther = XLSX.utils.aoa_to_sheet([otherHeaders, ...otherRows]);
-  wsOther['!cols'] = [{ wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 60 }];
-  XLSX.utils.book_append_sheet(wb, wsOther, 'Прочие начисления');
+  const wsOther = workbook.addWorksheet('Прочие начисления');
+  wsOther.addRow(otherHeaders);
+  otherRows.forEach(r => wsOther.addRow(r));
+  wsOther.columns = [{ width: 14 }, { width: 16 }, { width: 14 }, { width: 60 }];
 
   // Sheet 5: Выплаты
   const paymentHeaders = ['Дата', 'Сумма оплаты', 'Комментарий'];
   const paymentRows = (t.payments || []).map(r => [
     r.date, r.amount ?? 0, r.comment ?? '',
   ]);
-  const wsPay = XLSX.utils.aoa_to_sheet([paymentHeaders, ...paymentRows]);
-  wsPay['!cols'] = [{ wch: 14 }, { wch: 16 }, { wch: 60 }];
-  XLSX.utils.book_append_sheet(wb, wsPay, 'Выплаты');
+  const wsPay = workbook.addWorksheet('Выплаты');
+  wsPay.addRow(paymentHeaders);
+  paymentRows.forEach(r => wsPay.addRow(r));
+  wsPay.columns = [{ width: 14 }, { width: 16 }, { width: 60 }];
 
-  XLSX.writeFile(wb, `report_${month}.xlsx`);
+  await downloadWorkbook(workbook, `report_${month}.xlsx`);
 }
