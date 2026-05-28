@@ -1,6 +1,18 @@
 <template>
   <div>
-    <PageHeader title="Транзакции" icon="mdi-swap-horizontal" />
+    <PageHeader title="Транзакции" icon="mdi-swap-horizontal">
+      <template #actions>
+        <!-- Перерасчёт штрафов §5 (Отрыв + ОП) за текущий месяц.
+             Видна только admin + calculations (reports-access FULL) —
+             эта же ролёвая гарда стоит на /admin/finalize/apply. -->
+        <v-btn v-if="canManagePeriod" size="small" color="error" variant="flat"
+          prepend-icon="mdi-calculator-variant"
+          :loading="recalcing"
+          @click="recalcCurrentPeriod">
+          Пересчитать текущий период
+        </v-btn>
+      </template>
+    </PageHeader>
 
     <v-tabs v-model="tab" color="primary" class="mb-3" density="compact">
       <v-tab value="manual" prepend-icon="mdi-cash-plus">Ручной ввод</v-tab>
@@ -102,6 +114,26 @@
               storage-key="manual-tx-drafts-cols"
               :always-visible="['select', 'icon', 'actions']" />
           </v-card-title>
+
+          <!-- Чёткое предупреждение: черновики — это «корзина», они не
+               участвуют ни в одном расчёте до нажатия «Зафиксировать».
+               Без этой плашки финменеджеры теряли черновики и не понимали,
+               почему ЛП/ГП/пул не двигаются. -->
+          <v-card-text v-if="drafts.length" class="pt-0 pb-2">
+            <v-alert
+              type="warning"
+              variant="tonal"
+              density="compact"
+              icon="mdi-alert-circle-outline"
+              border="start"
+            >
+              <div class="text-body-2">
+                <strong>Эти {{ drafts.length }} {{ drafts.length === 1 ? 'черновик ждёт' : 'черновика(ов) ждут' }} фиксации.</strong>
+                Пока черновик не зафиксирован, он <strong>не участвует</strong> в расчёте ЛП, ГП, НГП, квалификаций и пула.
+                После проверки сумм нажмите кнопку <strong>«Зафиксировать транзакции»</strong> внизу секции.
+              </div>
+            </v-alert>
+          </v-card-text>
 
           <v-card-text v-if="!drafts.length" class="text-center text-medium-emphasis py-4">
             Выберите контракты сверху и нажмите «Добавить в черновики»
@@ -522,6 +554,12 @@
             <v-btn icon="mdi-pencil" size="x-small" variant="text" color="primary"
               :title="item.periodFrozen ? 'Период закрыт — нельзя править' : 'Редактировать транзакцию'"
               :disabled="item.periodFrozen" @click="openEditTx(item)" />
+            <v-btn v-if="canFull('reports-access')" icon="mdi-trash-can-outline" size="x-small"
+              variant="text" color="error"
+              :title="item.periodFrozen ? 'Период закрыт — нельзя удалить' : 'Удалить транзакцию (с пересчётом цепочки)'"
+              :disabled="item.periodFrozen || deletingTxId === item.id"
+              :loading="deletingTxId === item.id"
+              @click="confirmDeleteTx(item)" />
           </template>
         </DataTableWrapper>
       </v-window-item>
@@ -584,6 +622,60 @@ import { fmt2, fmtDate } from '../../composables/useDesign';
 import { usePermissions } from '../../composables/usePermissions';
 
 const { canFull } = usePermissions();
+
+// Перерасчёт штрафов §5 — только admin + calculations (scope reports-access).
+// Та же гарда стоит и в backend AdminFinalizeController, кнопка просто
+// скрывает её у тех, кто всё равно получит 403.
+const canManagePeriod = computed(() => canFull('reports-access'));
+const recalcing = ref(false);
+
+async function recalcCurrentPeriod() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1;
+  const monthLabel = now.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
+
+  recalcing.value = true;
+  let preview = null;
+  try {
+    const { data } = await api.post('/admin/finalize/preview', { year, month });
+    preview = data;
+  } catch (e) {
+    recalcing.value = false;
+    notify(e.response?.data?.message || 'Не удалось получить превью', 'error');
+    return;
+  }
+
+  if (preview?.frozen) {
+    recalcing.value = false;
+    notify(`Период ${monthLabel} закрыт — пересчёт недоступен`, 'error');
+    return;
+  }
+
+  const ok = await confirmDialog.ask({
+    title: `Пересчитать штрафы за ${monthLabel}?`,
+    message:
+      `Будет затронуто ${preview?.affected ?? 0} комиссий ` +
+      `у ${preview?.processed ?? 0} партнёров. ` +
+      `Расчёт включает Отрыв (×0.5) и ОП (×0.8) по §5. ` +
+      `Изменения будут записаны в комиссии.`,
+    confirmText: 'Пересчитать',
+    confirmColor: 'error',
+  });
+
+  if (!ok) {
+    recalcing.value = false;
+    return;
+  }
+
+  try {
+    const { data } = await api.post('/admin/finalize/apply', { year, month });
+    notify(data?.message || `Пересчёт за ${monthLabel} выполнен`, 'success');
+  } catch (e) {
+    notify(e.response?.data?.message || 'Не удалось применить пересчёт', 'error');
+  }
+  recalcing.value = false;
+}
 
 const tab = ref('manual');
 const snack = ref({ open: false, color: 'success', text: '', action: null });
@@ -977,7 +1069,7 @@ const logHeaders = [
   { title: 'Без НДС RUB', key: 'netRevenueRUB', align: 'end', width: 130 },
   { title: 'Без НДС USD', key: 'netRevenueUSD', align: 'end', width: 130 },
   { title: '', key: 'chat', sortable: false, width: 50 },
-  { title: '', key: 'edit', sortable: false, width: 50 },
+  { title: '', key: 'edit', sortable: false, width: 90 },
 ];
 
 const logColumnVisible = ref({});
@@ -1040,6 +1132,37 @@ async function saveTx() {
     notify(e.response?.data?.message || 'Ошибка сохранения', 'error');
   }
   savingTx.value = false;
+}
+
+// Удаление одной зафиксированной транзакции через DELETE /admin/transactions/{id}.
+// Доступно только admin / calculations (reports-access). Бэк сам блокирует
+// закрытый период (422). Каскадно soft-delete'ит commission всей цепочки
+// наставников и пересчитывает consultantBalance — поэтому в confirm-диалоге
+// явно предупреждаем, что цифры партнёров-наставников изменятся.
+const deletingTxId = ref(null);
+
+async function confirmDeleteTx(item) {
+  if (item.periodFrozen) return;
+  const ok = await confirmDialog.ask({
+    title: `Удалить транзакцию #${item.id}?`,
+    message:
+      `Сумма ${item.amount ?? '—'} ${item.currencySymbol || ''} от ${item.date ?? '—'}. ` +
+      `Партнёр: ${item.consultantName || '—'}.\n\n` +
+      `Будут отменены все комиссии по этой транзакции у партнёра и всех его наставников. ` +
+      `Балансы пересчитаются автоматически. Действие обратимо только восстановлением вручную в БД.`,
+    confirmText: 'Удалить',
+    confirmColor: 'error',
+  });
+  if (!ok) return;
+  deletingTxId.value = item.id;
+  try {
+    const { data } = await api.delete(`/admin/transactions/${item.id}`);
+    notify(data?.message || `Транзакция #${item.id} удалена`, 'success');
+    await loadLog();
+  } catch (e) {
+    notify(e.response?.data?.message || 'Не удалось удалить транзакцию', 'error');
+  }
+  deletingTxId.value = null;
 }
 
 const logActiveFilters = computed(() => {
