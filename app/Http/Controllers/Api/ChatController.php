@@ -2653,13 +2653,17 @@ class ChatController extends Controller
         ]);
     }
 
-    /** Закрыть инцидент. Сам тикет может оставаться в любом статусе. */
+    /**
+     * Закрыть инцидент. Только админ — решение от 2026-05-28: support/head
+     * могут вести тикет, но закрывает финально только администратор,
+     * чтобы исключить ситуации, когда инцидент закрывается раньше времени.
+     */
     public function resolveIncident(Request $request, int $id): JsonResponse
     {
         $user = $request->user();
         $roles = array_map('trim', explode(',', $user->role ?? ''));
-        if (! array_intersect($roles, ['admin', 'support', 'head'])) {
-            return response()->json(['message' => 'Только для техподдержки/админа'], 403);
+        if (! in_array('admin', $roles, true)) {
+            return response()->json(['message' => 'Закрытие инцидента доступно только администратору'], 403);
         }
 
         $ticket = DB::table('chat_tickets')->where('id', $id)->first();
@@ -2679,24 +2683,23 @@ class ChatController extends Controller
         ]);
 
         // Полноценное сообщение от агента в ленте тикета (бабл, не
-        // системная плашка) — чтобы клиент получил его как обычный
-        // ответ оператора + push-уведомление от socket-эмита.
-        // Исполнитель: assigned_to через WebUser, иначе — резолвер.
-        $resolverName = trim(($user->lastName ?? '') . ' ' . ($user->firstName ?? ''));
-        $assigneeName = null;
+        // системная плашка). Автор бабла = исполнитель (assigned_to,
+        // обычно сотрудник техподдержки), а НЕ админ, который кликнул
+        // «Закрыть». Так в чате видно, кто реально вёл инцидент.
+        // Если assigned_to не задан — fallback на админа-резолвера.
+        $resolver = $user;
+        $assignedUser = null;
         if (! empty($ticket->assigned_to)) {
-            $assignee = DB::table('WebUser')->where('id', $ticket->assigned_to)->first();
-            if ($assignee) {
-                $assigneeName = trim(($assignee->lastName ?? '') . ' ' . ($assignee->firstName ?? ''));
-            }
+            $assignedUser = DB::table('WebUser')->where('id', $ticket->assigned_to)->first();
         }
-        $executor = $assigneeName ?: $resolverName;
-        $messageContent = "✅ Инцидент {$ticket->incident_no} решён.\nИсполнитель: {$executor}";
+        $senderUser = $assignedUser ?: $resolver;
+        $senderName = trim(($senderUser->lastName ?? '') . ' ' . ($senderUser->firstName ?? ''));
+        $messageContent = "✅ Инцидент {$ticket->incident_no} решён.\nИсполнитель: {$senderName}";
 
         $newMsgId = DB::table('chat_messages')->insertGetId([
             'ticket_id' => $id,
-            'sender_id' => $user->id,
-            'sender_name' => $resolverName,
+            'sender_id' => $senderUser->id,
+            'sender_name' => $senderName,
             'content' => $messageContent,
             'is_agent' => true,
             'is_system' => false,

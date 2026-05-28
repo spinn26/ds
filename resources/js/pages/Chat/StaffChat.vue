@@ -487,9 +487,12 @@
           </div>
           <div class="chat-header-actions d-flex align-center ga-1">
             <!-- Быстрая кнопка «Решён» — один клик, без меню статусов.
-                 Скрыта если тикет уже resolved/closed — там нечего закрывать. -->
+                 Скрыта если тикет уже resolved/closed — там нечего закрывать.
+                 Для тикетов-инцидентов закрытие доступно только админу
+                 (решение 2026-05-28) — кнопку прячем у support/head. -->
             <v-btn
-              v-if="!['resolved', 'closed'].includes(activeChat.status)"
+              v-if="!['resolved', 'closed'].includes(activeChat.status)
+                && (!activeChat.is_incident || auth.isAdmin)"
               size="small" variant="tonal" color="success"
               prepend-icon="mdi-check-bold"
               title="Пометить тикет как решённый"
@@ -1851,9 +1854,17 @@ async function deleteChat() {
   }
 }
 function sortChats(a, b) {
+  // 1) Закреплённые в начало.
   const pa = a.pinned_at ? 1 : 0;
   const pb = b.pinned_at ? 1 : 0;
   if (pa !== pb) return pb - pa;
+  // 2) Непрочитанные — выше прочитанных (внутри одной pinned-группы).
+  //    Раньше сортировка была только по last_message_at, поэтому свежий
+  //    «прочитанный» оттеснял непрочитанные вниз — оператор пропускал.
+  const ua = (a.unread || 0) > 0 ? 1 : 0;
+  const ub = (b.unread || 0) > 0 ? 1 : 0;
+  if (ua !== ub) return ub - ua;
+  // 3) В рамках своей группы — по свежести последнего сообщения.
   return new Date(b.last_message_at || 0) - new Date(a.last_message_at || 0);
 }
 
@@ -2404,7 +2415,10 @@ async function loadChats() {
     if (filter.value.priority) params.priority = filter.value.priority;
     if (filter.value.search) params.search = filter.value.search;
     const { data } = await api.get('/chat/tickets', { params });
-    chats.value = data.data || [];
+    // sortChats: pinned → непрочитанные → по дате. Бэкенд отдаёт
+    // отсортированное по last_message_at, но «непрочитанные вверх»
+    // — клиентское правило (unread считается per-user).
+    chats.value = (data.data || []).slice().sort(sortChats);
   } catch {}
   loading.value = false;
 }

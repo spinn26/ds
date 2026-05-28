@@ -88,7 +88,7 @@
           <v-btn v-else-if="canFull('support-desk') && !item.incidentResolvedAt"
             icon="mdi-alert-decagram-outline" size="x-small" variant="text" color="warning"
             title="Изменить приоритет" @click="openIncidentDialog(item)" />
-          <v-btn v-if="canFull('support-desk') && item.isIncident && !item.incidentResolvedAt"
+          <v-btn v-if="canResolveIncident && item.isIncident && !item.incidentResolvedAt"
             icon="mdi-check-decagram" size="x-small" variant="text" color="success"
             title="Закрыть инцидент" @click="resolveIncident(item)" />
         </template>
@@ -129,14 +129,19 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue';
+import { ref, reactive, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import api from '../../api';
 import PageHeader from '../../components/PageHeader.vue';
 import { fmtDateTime } from '../../composables/useDesign';
 import { usePermissions } from '../../composables/usePermissions';
+import { useAuthStore } from '../../stores/auth';
 
 const { canFull } = usePermissions();
+const auth = useAuthStore();
+// Закрытие инцидента — только admin (решение от 2026-05-28). support/head
+// могут вести тикет, но финально закрывают только администраторы.
+const canResolveIncident = computed(() => auth.isAdmin);
 
 const router = useRouter();
 

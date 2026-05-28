@@ -633,9 +633,16 @@ async function togglePin(ticket, e) {
   }
 }
 function sortChats(a, b) {
+  // 1) Закреплённые в начало.
   const pa = a.pinned_at ? 1 : 0;
   const pb = b.pinned_at ? 1 : 0;
   if (pa !== pb) return pb - pa;
+  // 2) Непрочитанные — выше прочитанных. Чтобы новые ответы оператора
+  //    не терялись среди свежих закрытых тикетов.
+  const ua = (a.unread || 0) > 0 ? 1 : 0;
+  const ub = (b.unread || 0) > 0 ? 1 : 0;
+  if (ua !== ub) return ub - ua;
+  // 3) В рамках своей группы — по свежести.
   return new Date(b.last_message_at || 0) - new Date(a.last_message_at || 0);
 }
 
@@ -906,7 +913,11 @@ watch(chats, updateTitle, { deep: true });
 
 async function loadChats() {
   loading.value = true;
-  try { const { data } = await api.get('/chat/tickets'); chats.value = data.data || []; } catch {}
+  try {
+    const { data } = await api.get('/chat/tickets');
+    // Сортировка на клиенте: pinned → непрочитанные → по дате.
+    chats.value = (data.data || []).slice().sort(sortChats);
+  } catch {}
   loading.value = false;
 }
 
