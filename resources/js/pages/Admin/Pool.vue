@@ -8,6 +8,7 @@
         <v-btn v-if="canManagePeriod" size="small" color="error" variant="flat"
           prepend-icon="mdi-calculator-variant"
           :loading="recalcing"
+          :disabled="recalcing"
           @click="recalcCurrentPeriod">
           Пересчитать текущий период
         </v-btn>
@@ -231,55 +232,60 @@ const { canFull } = usePermissions();
 const canManagePeriod = computed(() => canFull('reports-access'));
 const recalcing = ref(false);
 
+function recalcErrorMessage(e, fallback) {
+  if (e?.response?.status === 429) {
+    return 'Перерасчёт уже запускался недавно. Подождите минуту.';
+  }
+  return e?.response?.data?.message || fallback;
+}
+
 async function recalcCurrentPeriod() {
-  const now = new Date();
-  const year = now.getFullYear();
-  const monthNum = now.getMonth() + 1;
-  const monthLabel = now.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
-
+  if (recalcing.value) return;
   recalcing.value = true;
-  let preview = null;
   try {
-    const { data } = await api.post('/admin/finalize/preview', { year, month: monthNum });
-    preview = data;
-  } catch (e) {
+    const now = new Date();
+    const year = now.getFullYear();
+    const monthNum = now.getMonth() + 1;
+    const monthLabel = now.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
+
+    let preview = null;
+    try {
+      const { data } = await api.post('/admin/finalize/preview', { year, month: monthNum });
+      preview = data;
+    } catch (e) {
+      notify(recalcErrorMessage(e, 'Не удалось получить превью'), 'error');
+      return;
+    }
+
+    if (preview?.frozen) {
+      notify(`Период ${monthLabel} закрыт — пересчёт недоступен`, 'error');
+      return;
+    }
+
+    const ok = await confirm.ask({
+      title: `Пересчитать штрафы за ${monthLabel}?`,
+      message:
+        `Будет затронуто ${preview?.affected ?? 0} комиссий ` +
+        `у ${preview?.processed ?? 0} партнёров. ` +
+        `Расчёт включает Отрыв (×0.5) и ОП (×0.8) по §5. ` +
+        `Изменения будут записаны в комиссии.`,
+      confirmText: 'Пересчитать',
+      confirmColor: 'error',
+    });
+    if (!ok) return;
+
+    try {
+      const { data } = await api.post('/admin/finalize/apply', { year, month: monthNum });
+      notify(data?.message || `Пересчёт за ${monthLabel} выполнен`, 'success');
+      // Перезагружаем участников пула, чтобы изменения ОП отразились
+      // в списке («ОП не выполнен» → «ОП выполнен»).
+      await loadParticipants();
+    } catch (e) {
+      notify(recalcErrorMessage(e, 'Не удалось применить пересчёт'), 'error');
+    }
+  } finally {
     recalcing.value = false;
-    notify(e.response?.data?.message || 'Не удалось получить превью', 'error');
-    return;
   }
-
-  if (preview?.frozen) {
-    recalcing.value = false;
-    notify(`Период ${monthLabel} закрыт — пересчёт недоступен`, 'error');
-    return;
-  }
-
-  const ok = await confirm.ask({
-    title: `Пересчитать штрафы за ${monthLabel}?`,
-    message:
-      `Будет затронуто ${preview?.affected ?? 0} комиссий ` +
-      `у ${preview?.processed ?? 0} партнёров. ` +
-      `Расчёт включает Отрыв (×0.5) и ОП (×0.8) по §5. ` +
-      `Изменения будут записаны в комиссии.`,
-    confirmText: 'Пересчитать',
-    confirmColor: 'error',
-  });
-
-  if (!ok) {
-    recalcing.value = false;
-    return;
-  }
-
-  try {
-    const { data } = await api.post('/admin/finalize/apply', { year, month: monthNum });
-    notify(data?.message || `Пересчёт за ${monthLabel} выполнен`, 'success');
-    // Перезагружаем участников пула, чтобы изменения ОП отразились
-    // в списке («ОП не выполнен» → «ОП выполнен»).
-    await loadParticipants();
-  } catch (e) {
-    notify(e.response?.data?.message || 'Не удалось применить пересчёт', 'error');
-  }
-  recalcing.value = false;
 }
 
 const month = ref(new Date().toISOString().slice(0, 7));

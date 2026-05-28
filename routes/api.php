@@ -396,7 +396,10 @@ Route::prefix('v1')->group(function () {
 
         // Admin — Monthly finalisation (detachment / OP penalties on commissions)
         Route::post('/admin/finalize/preview', [\App\Http\Controllers\Api\AdminFinalizeController::class, 'preview']);
-        Route::post('/admin/finalize/apply', [\App\Http\Controllers\Api\AdminFinalizeController::class, 'apply'])->middleware('throttle:5,1');
+        // throttle 30/мин — admin/calculations часто перезапускают расчёт
+        // после ручных правок (Транзакции / Пул / Карточка периода).
+        // 5/мин ловило ложные 429 при обычной работе финдиректора.
+        Route::post('/admin/finalize/apply', [\App\Http\Controllers\Api\AdminFinalizeController::class, 'apply'])->middleware('throttle:30,1');
 
         // Admin — Pool (leader pool calc with manual «Участвует» moderation)
         Route::get('/admin/pool/participants', [\App\Http\Controllers\Api\AdminPoolController::class, 'participants']);
