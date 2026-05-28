@@ -126,36 +126,106 @@ class AdminFinanceController extends Controller
                 SUM(t."commissionsAmountRUB") AS commissions_rub,
                 SUM(t."commissionsAmountUSD") AS commissions_usd,
                 SUM(t."netRevenueRUB") AS net_rub,
-                SUM(t."netRevenueUSD") AS net_usd
+                SUM(t."netRevenueUSD") AS net_usd,
+                SUM(t."profitRUB") AS profit_rub
             ')
             ->first();
 
-        $this->applySorting($query, $request, [
-            'date' => 't.date',
-            'contractNumber' => 'c.number',
-            'contractOpenDate' => 'c."openDate"',
-            'clientName' => 'c."clientName"',
-            'consultantName' => 'co."personName"',
-            'amount' => 't.amount',
-            'amountRUB' => 't."amountRUB"',
-            'commissionsAmountRUB' => 't."commissionsAmountRUB"',
-            'netRevenueRUB' => 't."netRevenueRUB"',
-            'dsCommissionPercentage' => 't."dsCommissionPercentage"',
-            'yearKV' => 't.score',
-        ], 't.date', 'desc');
+        // Базовый SELECT — фиксируем заранее, чтобы потом можно было
+        // addSelect() для commission-полей при сортировке по ним.
+        $query->select([
+            't.*',
+            'c.number as contractNumber',
+            'c.clientName as clientName',
+            'c.consultantName as consultantName',
+            'c.openDate as contractOpenDate',
+            'c.term as contractTerm',
+            'c.product as productId',
+            'c.program as programId',
+        ]);
+
+        // Сортировка по полям, которых нет в таблице transaction
+        // (ЛП/ГП/Баллы/Комиссия/Удержание ДС лежат в commission). Чтобы
+        // СУБД могла ORDER BY, добавляем коррелированные подзапросы в
+        // SELECT — только если сортировка реально по этим колонкам, иначе
+        // не платим за лишние подзапросы.
+        $commissionSortMap = [
+            'partnerPV' => 'partner_pv',
+            'partnerGV' => 'partner_gv',
+            'partnerBonus' => 'partner_bonus',
+            // dsWithholdingRUB на UI — дубль колонки «Комиссия», sort по
+            // тому же выражению.
+            'partnerCommissionRUB' => 'partner_commission',
+            'dsWithholdingRUB' => 'partner_commission',
+        ];
+        $requestedSort = $request->input('sort_by');
+
+        if (isset($commissionSortMap[$requestedSort])) {
+            // Один подзапрос для PV/GV/Bonus (одна и та же строка
+            // chainOrder=1 с дедупом по max id), один — для Σ комиссий
+            // по всей цепочке с дедупом по (consultant, chainOrder).
+            // Дедуп идентичен тому, что в commissionChain() и батч-загрузке
+            // ниже — суммы строго совпадают.
+            $query->addSelect([
+                DB::raw('(SELECT cm."personalVolume"
+                          FROM commission cm
+                          WHERE cm.transaction = t.id
+                            AND cm."chainOrder" = 1
+                            AND cm."deletedAt" IS NULL
+                          ORDER BY cm.id DESC
+                          LIMIT 1) AS partner_pv'),
+                DB::raw('(SELECT cm."groupVolume"
+                          FROM commission cm
+                          WHERE cm.transaction = t.id
+                            AND cm."chainOrder" = 1
+                            AND cm."deletedAt" IS NULL
+                          ORDER BY cm.id DESC
+                          LIMIT 1) AS partner_gv'),
+                DB::raw('(SELECT cm."groupBonus"
+                          FROM commission cm
+                          WHERE cm.transaction = t.id
+                            AND cm."chainOrder" = 1
+                            AND cm."deletedAt" IS NULL
+                          ORDER BY cm.id DESC
+                          LIMIT 1) AS partner_bonus'),
+                DB::raw('(SELECT COALESCE(SUM(d."amountRUB"), 0)
+                          FROM (
+                              SELECT DISTINCT ON (cm.consultant, cm."chainOrder")
+                                     cm."amountRUB"
+                              FROM commission cm
+                              WHERE cm.transaction = t.id
+                                AND cm."deletedAt" IS NULL
+                              ORDER BY cm.consultant, cm."chainOrder", cm.id DESC
+                          ) d) AS partner_commission'),
+            ]);
+
+            $dir = strtolower((string) $request->input('sort_dir', 'desc'));
+            $dir = $dir === 'asc' ? 'asc' : 'desc';
+            // NULLS LAST — у транзакций без цепочки partner_* = NULL,
+            // их естественно класть в конец независимо от направления.
+            $query->orderByRaw("{$commissionSortMap[$requestedSort]} {$dir} NULLS LAST")
+                  ->orderBy('t.id', 'desc'); // tie-breaker
+        } else {
+            $this->applySorting($query, $request, [
+                'date' => 't.date',
+                'contractNumber' => 'c.number',
+                'contractOpenDate' => 'c."openDate"',
+                'clientName' => 'c."clientName"',
+                'consultantName' => 'co."personName"',
+                'amount' => 't.amount',
+                'amountRUB' => 't."amountRUB"',
+                'commissionsAmountRUB' => 't."commissionsAmountRUB"',
+                'netRevenueRUB' => 't."netRevenueRUB"',
+                'dsCommissionPercentage' => 't."dsCommissionPercentage"',
+                'yearKV' => 't.score',
+                'profitRUB' => 't."profitRUB"',
+            ], 't.date', 'desc');
+        }
+
         $rows = $query
             ->offset($this->paginationOffset($request))
             ->limit($this->paginationPerPage($request))
-            ->get([
-                't.*',
-                'c.number as contractNumber',
-                'c.clientName as clientName',
-                'c.consultantName as consultantName',
-                'c.openDate as contractOpenDate',
-                'c.term as contractTerm',
-                'c.product as productId',
-                'c.program as programId',
-            ]);
+            ->get();
 
         $currencyIds = $rows->pluck('currency')->filter()->unique();
         $currencies = $currencyIds->isNotEmpty()
@@ -185,6 +255,44 @@ class AdminFinanceController extends Controller
                 ->keyBy('id')
             : collect();
 
+        // Commission-цепочка батчем по transaction. Нужно для колонок:
+        //  - Комиссия (сумма commission.amountRUB по всей цепочке)
+        //  - ЛП / ГП / Баллы (по строке прямого партнёра chainOrder=1)
+        // Дедуп: после повторных пересчётов в commission остаются дубли
+        // (старые версии без deletedAt). Берём DISTINCT ON по
+        // (transaction, consultant, chainOrder) — самую свежую (max id).
+        // Это та же логика, что в commissionChain() выше.
+        $txIds = $rows->pluck('id')->all();
+        $commissionByTx = collect();
+        $partnerRowByTx = collect();
+        if (! empty($txIds)) {
+            $placeholders = implode(',', array_fill(0, count($txIds), '?'));
+            $deduped = DB::select("
+                SELECT DISTINCT ON (cm.transaction, cm.consultant, cm.\"chainOrder\")
+                    cm.transaction       AS transaction,
+                    cm.\"chainOrder\"     AS \"chainOrder\",
+                    cm.\"amountRUB\"      AS \"amountRUB\",
+                    cm.\"personalVolume\" AS \"personalVolume\",
+                    cm.\"groupVolume\"    AS \"groupVolume\",
+                    cm.\"groupBonus\"     AS \"groupBonus\"
+                FROM commission cm
+                WHERE cm.transaction IN ($placeholders)
+                  AND cm.\"deletedAt\" IS NULL
+                ORDER BY cm.transaction, cm.consultant, cm.\"chainOrder\", cm.id DESC
+            ", $txIds);
+
+            foreach ($deduped as $r) {
+                $txId = (int) $r->transaction;
+                $commissionByTx->put(
+                    $txId,
+                    ($commissionByTx->get($txId, 0.0)) + (float) ($r->amountRUB ?? 0)
+                );
+                if ((int) $r->chainOrder === 1) {
+                    $partnerRowByTx->put($txId, $r);
+                }
+            }
+        }
+
         // Заморозка периодов — для индикатора цвета
         $periods = $rows->map(fn ($t) => [(int) $t->dateYear, (int) substr((string) $t->dateMonth, -2)])
             ->unique(fn ($p) => $p[0] . '-' . $p[1]);
@@ -195,12 +303,14 @@ class AdminFinanceController extends Controller
             }
         }
 
-        $data = $rows->map(function ($t) use ($currencies, $properties, $frozenSet, $productFlags, $programMeta) {
+        $data = $rows->map(function ($t) use ($currencies, $properties, $frozenSet, $productFlags, $programMeta, $commissionByTx, $partnerRowByTx) {
             $month = (int) substr((string) $t->dateMonth, -2);
             $year = (int) $t->dateYear;
             $isFrozen = $frozenSet->get("$year-$month", false);
             $flags = $t->productId ? ($productFlags[$t->productId] ?? null) : null;
             $prog = $t->programId ? ($programMeta[$t->programId] ?? null) : null;
+            $partnerRow = $partnerRowByTx->get((int) $t->id);
+            $totalCommission = (float) $commissionByTx->get((int) $t->id, 0);
             return [
                 'id' => $t->id,
                 'periodFrozen' => $isFrozen,
@@ -238,6 +348,21 @@ class AdminFinanceController extends Controller
                 'netRevenueRUB' => round((float) ($t->netRevenueRUB ?? 0), 2),
                 'netRevenueUSD' => round((float) ($t->netRevenueUSD ?? 0), 2),
                 'currencySymbol' => $t->currency ? ($currencies[$t->currency] ?? null) : null,
+                // Поля из commission-цепочки.
+                // partnerCommissionRUB — это «Комиссия» = Σ amountRUB по
+                // всей цепочке выплат за транзакцию (то, что мы реально
+                // выплачиваем партнёрам по этой сделке).
+                // partnerPV/GV/Bonus — показатели прямого партнёра
+                // (chainOrder=1). Если цепочки нет — все нули.
+                'partnerCommissionRUB' => round($totalCommission, 2),
+                'partnerPV' => $partnerRow ? round((float) ($partnerRow->personalVolume ?? 0), 2) : null,
+                'partnerGV' => $partnerRow ? round((float) ($partnerRow->groupVolume ?? 0), 2) : null,
+                'partnerBonus' => $partnerRow ? round((float) ($partnerRow->groupBonus ?? 0), 2) : null,
+                'profitRUB' => round((float) ($t->profitRUB ?? 0), 2),
+                // Удержание ДС на старой платформе = той же сумме «Комиссия»
+                // (отдельного поля «удержания» в БД нет). Возвращаем дублем,
+                // чтобы фронт мог показать колонку без отдельного расчёта.
+                'dsWithholdingRUB' => round($totalCommission, 2),
             ];
         });
 
@@ -250,6 +375,19 @@ class AdminFinanceController extends Controller
                 'commissionsAmountUSD' => round((float) ($aggregates->commissions_usd ?? 0), 2),
                 'netRevenueRUB' => round((float) ($aggregates->net_rub ?? 0), 2),
                 'netRevenueUSD' => round((float) ($aggregates->net_usd ?? 0), 2),
+                'profitRUB' => round((float) ($aggregates->profit_rub ?? 0), 2),
+                // «Комиссия» итогом = netRevenueRUB − profitRUB. Это
+                // математически эквивалентно Σ commission.amountRUB при
+                // корректно пересчитанном profitRUB и сильно дешевле, чем
+                // повторный JOIN на commission для всего фильтра.
+                'partnerCommissionRUB' => round(
+                    (float) ($aggregates->net_rub ?? 0) - (float) ($aggregates->profit_rub ?? 0),
+                    2
+                ),
+                'dsWithholdingRUB' => round(
+                    (float) ($aggregates->net_rub ?? 0) - (float) ($aggregates->profit_rub ?? 0),
+                    2
+                ),
             ],
         ]);
     }

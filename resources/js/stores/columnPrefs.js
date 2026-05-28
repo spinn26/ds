@@ -2,41 +2,61 @@ import { defineStore } from 'pinia';
 import { useAuthStore } from './auth';
 
 /**
- * Per-user column visibility preferences.
+ * Per-user column preferences: видимость + порядок.
  *
  * Раньше ColumnVisibilityMenu сохранял состояние в `cols:${storageKey}`
  * без namespace по пользователю — на общей машине настройки одного
  * партнёра подменяли настройки другого. Здесь добавлен per-user
- * namespace и единая точка чтения/записи: `cols:${userId|guest}:${key}`.
+ * namespace: `cols:${userId|guest}:${key}`.
  *
- * Не реактивный store состояния — просто getter/setter, который пишет
- * в localStorage. Реактивность даёт сам ColumnVisibilityMenu через
- * v-model:visible, а здесь только persistence-слой.
+ * Формат payload: `{ visible: { key: bool }, order: [key1, key2, ...] }`.
+ * Старый формат (просто `{ key: bool }`) распознаётся и нормализуется
+ * при чтении — поле order=null, visible=стар. payload.
+ *
+ * Не реактивный store состояния — getter/setter поверх localStorage.
+ * Реактивность даёт сам ColumnVisibilityMenu через v-model:visible /
+ * v-model:order, здесь только persistence-слой.
  */
 export const useColumnPrefsStore = defineStore('columnPrefs', {
     actions: {
-        /**
-         * Возвращает namespace-ключ. Без авторизации — guest, чтобы не
-         * терять настройки до логина.
-         */
         scopedKey(storageKey) {
             const auth = useAuthStore();
             const userId = auth.user?.id || 'guest';
             return `cols:${userId}:${storageKey}`;
         },
 
+        /**
+         * Возвращает { visible, order } или null если нет записи.
+         * Если в storage сохранён старый формат (плоский {key: bool}) —
+         * оборачиваем в новый, чтобы потребители не имели двух веток.
+         */
         load(storageKey) {
             try {
                 const raw = localStorage.getItem(this.scopedKey(storageKey));
-                return raw ? JSON.parse(raw) : null;
+                if (!raw) return null;
+                const parsed = JSON.parse(raw);
+                if (parsed && typeof parsed === 'object'
+                    && (Object.prototype.hasOwnProperty.call(parsed, 'visible')
+                        || Object.prototype.hasOwnProperty.call(parsed, 'order'))) {
+                    return {
+                        visible: parsed.visible || {},
+                        order: Array.isArray(parsed.order) ? parsed.order : null,
+                    };
+                }
+                // legacy: плоский объект видимости.
+                return { visible: parsed || {}, order: null };
             } catch {
                 return null;
             }
         },
 
-        save(storageKey, state) {
+        save(storageKey, payload) {
             try {
-                localStorage.setItem(this.scopedKey(storageKey), JSON.stringify(state));
+                const normalized = {
+                    visible: payload?.visible || {},
+                    order: Array.isArray(payload?.order) ? payload.order : null,
+                };
+                localStorage.setItem(this.scopedKey(storageKey), JSON.stringify(normalized));
             } catch {}
         },
 

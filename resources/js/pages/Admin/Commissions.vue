@@ -2,7 +2,10 @@
   <div>
     <PageHeader title="Комиссии" icon="mdi-receipt" :count="total">
       <template #actions>
-        <ColumnVisibilityMenu :headers="headers" v-model:visible="columnVisible" storage-key="commissions-cols" />
+        <ColumnVisibilityMenu :headers="headers"
+          v-model:visible="columnVisible"
+          v-model:order="columnOrder"
+          storage-key="commissions-cols" />
       </template>
     </PageHeader>
 
@@ -85,26 +88,6 @@
       </v-expand-transition>
     </v-card>
 
-    <!-- Сводка сверху таблицы — суммы по основным денежным колонкам
-         за все строки текущего фильтра (не только видимая страница). -->
-    <v-card v-if="aggregates && total > 0" variant="tonal" color="primary" class="mb-2 pa-3">
-      <div class="d-flex flex-wrap ga-4 text-body-2">
-        <span><strong>Записей:</strong> {{ total }}</span>
-        <span v-if="aggregates.amountRUB != null">
-          <strong>Сумма ₽:</strong> {{ fmt(aggregates.amountRUB) }}
-        </span>
-        <span v-if="aggregates.commissionsAmountRUB != null">
-          <strong>Комиссия ₽:</strong> {{ fmt(aggregates.commissionsAmountRUB) }}
-        </span>
-        <span v-if="aggregates.netRevenueRUB != null">
-          <strong>Выручка ДС ₽:</strong> {{ fmt(aggregates.netRevenueRUB) }}
-        </span>
-        <span v-if="aggregates.commissionsAmountUSD != null">
-          <strong>Комиссия $:</strong> {{ fmt(aggregates.commissionsAmountUSD) }}
-        </span>
-      </div>
-    </v-card>
-
     <!-- Обёртка с горизонтальным скроллом — у Комиссий 12+ колонок,
          цифры вроде «156,19 ₽» рвались по символам из-за глобального
          overflow-wrap: anywhere в global.css. Теперь если таблица не
@@ -117,6 +100,58 @@
       hover class="commissions-table"
       @click:row="onRowClick"
       @update:options="onOptions">
+
+      <!-- Итоговая строка над заголовками: те же колонки, что в шапке,
+           но вместо заголовков показываем суммы по всему фильтру.
+           Отдельная карточка сверху не давала выравнивания с колонками —
+           глазами сверять сложно, поэтому переехало внутрь thead. -->
+      <template #thead="{ columns }">
+        <tr v-if="aggregates && total > 0" class="commissions-totals">
+          <th v-for="col in columns" :key="`tot-${col.key || col.title}`"
+              :class="['text-' + (col.align || 'start'), 'commissions-totals__cell']">
+            <template v-if="col.key === 'contractNumber'">
+              <span class="text-caption text-medium-emphasis">Итого:</span>
+              <strong class="ms-1">{{ total }}</strong>
+            </template>
+            <template v-else-if="col.key === 'amountRUB'">
+              <strong>{{ fmt(aggregates.amountRUB) }} ₽</strong>
+            </template>
+            <template v-else-if="col.key === 'commissionsAmountRUB'">
+              <strong>{{ fmt(aggregates.commissionsAmountRUB) }} ₽</strong>
+            </template>
+            <template v-else-if="col.key === 'commissionsAmountUSD'">
+              <strong>{{ fmt(aggregates.commissionsAmountUSD) }} $</strong>
+            </template>
+            <template v-else-if="col.key === 'netRevenueRUB'">
+              <strong>{{ fmt(aggregates.netRevenueRUB) }} ₽</strong>
+            </template>
+            <template v-else-if="col.key === 'netRevenueUSD'">
+              <strong>{{ fmt(aggregates.netRevenueUSD) }} $</strong>
+            </template>
+            <template v-else-if="col.key === 'partnerCommissionRUB'">
+              <strong>{{ fmt(aggregates.partnerCommissionRUB) }} ₽</strong>
+            </template>
+            <template v-else-if="col.key === 'dsWithholdingRUB'">
+              <strong>{{ fmt(aggregates.dsWithholdingRUB) }} ₽</strong>
+            </template>
+            <template v-else-if="col.key === 'profitRUB'">
+              <strong>{{ fmt(aggregates.profitRUB) }} ₽</strong>
+            </template>
+            <template v-else>&nbsp;</template>
+          </th>
+        </tr>
+        <tr>
+          <th v-for="col in columns" :key="col.key || col.title"
+              :class="['text-' + (col.align || 'start'), { sortable: col.sortable !== false && col.key }]"
+              :style="col.width ? `width: ${col.width}px; min-width: ${col.width}px` : ''"
+              @click="col.sortable !== false && col.key ? onHeaderClick(col.key) : null">
+            <span>{{ col.title }}</span>
+            <v-icon v-if="sortBy === col.key" size="14" class="ms-1">
+              {{ sortDir === 'asc' ? 'mdi-arrow-up' : 'mdi-arrow-down' }}
+            </v-icon>
+          </th>
+        </tr>
+      </template>
 
       <!-- Индикатор периода -->
       <template #item.period="{ item }">
@@ -167,6 +202,30 @@
       </template>
       <template #item.netRevenueUSD="{ value }">
         <span class="text-no-wrap">{{ fmt(value) }} $</span>
+      </template>
+
+      <template #item.partnerPV="{ value }">
+        <span v-if="value != null" class="text-no-wrap">{{ fmt(value) }}</span>
+        <span v-else class="text-medium-emphasis">—</span>
+      </template>
+      <template #item.partnerGV="{ value }">
+        <span v-if="value != null" class="text-no-wrap">{{ fmt(value) }}</span>
+        <span v-else class="text-medium-emphasis">—</span>
+      </template>
+      <template #item.partnerBonus="{ value }">
+        <span v-if="value != null" class="text-no-wrap">{{ fmt(value) }}</span>
+        <span v-else class="text-medium-emphasis">—</span>
+      </template>
+      <template #item.partnerCommissionRUB="{ value }">
+        <span class="text-no-wrap font-weight-medium">{{ fmt(value) }} ₽</span>
+      </template>
+      <template #item.dsWithholdingRUB="{ value }">
+        <span class="text-no-wrap">{{ fmt(value) }} ₽</span>
+      </template>
+      <template #item.profitRUB="{ value }">
+        <span class="text-no-wrap" :class="value >= 0 ? 'text-success' : 'text-error'">
+          {{ fmt(value) }} ₽
+        </span>
       </template>
 
       <!-- Аккордеон: цепочка выплат -->
@@ -269,6 +328,8 @@ const filters = ref({
   hideZero: true,
 });
 
+// Базовые headers в дефолтном порядке. Пользовательский порядок
+// применяется поверх через columnOrder (ColumnVisibilityMenu + DnD).
 const headers = [
   { title: '', key: 'period', width: 30, sortable: false },
   { title: '№ контракта', key: 'contractNumber', width: 130 },
@@ -285,11 +346,17 @@ const headers = [
   { title: 'Год КВ', key: 'yearKV', width: 80, align: 'end' },
   { title: 'Транзакция', key: 'amount', align: 'end', width: 130 },
   { title: 'В РУБ', key: 'amountRUB', align: 'end', width: 130 },
-  { title: '% DS', key: 'dsCommissionPercentage', align: 'end', width: 80 },
+  { title: '% ДС', key: 'dsCommissionPercentage', align: 'end', width: 80 },
   { title: 'Доход DS RUB', key: 'commissionsAmountRUB', align: 'end', width: 140 },
   { title: 'Доход DS USD', key: 'commissionsAmountUSD', align: 'end', width: 140 },
   { title: 'Без НДС RUB', key: 'netRevenueRUB', align: 'end', width: 130 },
   { title: 'Без НДС USD', key: 'netRevenueUSD', align: 'end', width: 130 },
+  { title: 'ЛП', key: 'partnerPV', align: 'end', width: 90 },
+  { title: 'ГП', key: 'partnerGV', align: 'end', width: 90 },
+  { title: 'Баллы', key: 'partnerBonus', align: 'end', width: 90 },
+  { title: 'Комиссия', key: 'partnerCommissionRUB', align: 'end', width: 130 },
+  { title: 'Удержание ДС', key: 'dsWithholdingRUB', align: 'end', width: 140 },
+  { title: 'Прибыль', key: 'profitRUB', align: 'end', width: 130 },
   { title: '', key: 'data-table-expand', sortable: false, width: 50 },
 ];
 
@@ -300,8 +367,38 @@ const columnVisible = ref({
   yearKV: false,
   netRevenueUSD: false,
   commissionsAmountUSD: false,
+  dsWithholdingRUB: false, // дубль «Комиссии» — по умолчанию скрыт
 });
-const visibleHeaders = computed(() => headers.filter(h => columnVisible.value[h.key] !== false));
+
+// Пользовательский порядок колонок. Изначально пустой → используем
+// дефолтный из headers. ColumnVisibilityMenu сохранит в localStorage
+// per-user через columnPrefs store.
+const columnOrder = ref([]);
+
+const visibleHeaders = computed(() => {
+  const byKey = new Map(headers.map(h => [h.key, h]));
+  const seen = new Set();
+  const ordered = [];
+  // 1) period — всегда первая (служебный индикатор слева).
+  if (byKey.has('period')) { ordered.push(byKey.get('period')); seen.add('period'); }
+  // 2) пользовательский порядок (если задан) для остальных, кроме
+  //    expand-toggle (всегда в конец).
+  for (const key of columnOrder.value) {
+    if (key === 'period' || key === 'data-table-expand') continue;
+    if (byKey.has(key) && !seen.has(key)) {
+      ordered.push(byKey.get(key));
+      seen.add(key);
+    }
+  }
+  // 3) хвост — то что не попало в order (новые колонки), в исходном порядке.
+  for (const h of headers) {
+    if (h.key === 'data-table-expand') continue;
+    if (!seen.has(h.key)) { ordered.push(h); seen.add(h.key); }
+  }
+  // 4) expand-toggle всегда последняя.
+  if (byKey.has('data-table-expand')) ordered.push(byKey.get('data-table-expand'));
+  return ordered.filter(h => columnVisible.value[h.key] !== false);
+});
 
 const advancedOpen = ref(false);
 
@@ -343,13 +440,21 @@ const { debounced: debouncedLoad } = useDebounce(loadData, 400);
 function onOptions(opts) {
   page.value = opts.page;
   if (opts.itemsPerPage) perPage.value = opts.itemsPerPage;
-  if (Array.isArray(opts.sortBy) && opts.sortBy.length) {
-    sortBy.value = opts.sortBy[0].key;
-    sortDir.value = opts.sortBy[0].order || 'desc';
+  // sortBy от v-data-table-server здесь не используем — мы полностью
+  // переопределили #thead (для totals-строки сверху), поэтому
+  // сортировка идёт через onHeaderClick. Иначе клик по заголовку
+  // не доходит до Vuetify-обработчика.
+  loadData();
+}
+
+function onHeaderClick(key) {
+  if (sortBy.value === key) {
+    sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc';
   } else {
-    sortBy.value = '';
+    sortBy.value = key;
     sortDir.value = 'desc';
   }
+  page.value = 1;
   loadData();
 }
 
@@ -452,5 +557,25 @@ onMounted(() => {
 .commissions-table :deep(th) {
   overflow-wrap: normal !important;
   word-break: normal !important;
+}
+/* Итоги встроены в thead — выделяем фоном и зеленой каймой снизу,
+   чтобы сразу читались как «sum-row» а не как обычный заголовок. */
+.commissions-table :deep(tr.commissions-totals) {
+  background: rgba(var(--v-theme-primary), 0.08);
+}
+.commissions-table :deep(tr.commissions-totals th) {
+  font-weight: 500;
+  border-bottom: 1px solid rgba(var(--v-theme-primary), 0.3);
+  padding-top: 6px;
+  padding-bottom: 6px;
+  white-space: nowrap;
+}
+/* Заголовки кликабельны, если sortable — добавляем cursor и подсветку. */
+.commissions-table :deep(thead th.sortable) {
+  cursor: pointer;
+  user-select: none;
+}
+.commissions-table :deep(thead th.sortable:hover) {
+  background: rgba(var(--v-theme-on-surface), 0.04);
 }
 </style>
