@@ -165,12 +165,14 @@
           <v-list v-else density="compact" class="login-history-list pa-0">
             <template v-for="(row, idx) in loginHistoryItems" :key="row.id">
               <v-list-item class="py-3">
-                <!-- Флаг страны (большая emoji-плашка слева). -->
+                <!-- Флаг страны: SVG из flagcdn.com (бесплатный CDN, без
+                     auth). Emoji-вариант на Windows не работает (нет
+                     glyph'ов флагов в системном шрифте) — поэтому
+                     рендерим через <img>. -->
                 <template #prepend>
                   <div class="login-history-flag" :title="row.country || 'Регион неизвестен'">
-                    <span v-if="row.countryCode" class="flag-emoji">
-                      {{ flagEmoji(row.countryCode) }}
-                    </span>
+                    <img v-if="row.countryCode" :src="flagUrl(row.countryCode)"
+                      :alt="row.countryCode" class="flag-img" loading="lazy" />
                     <v-icon v-else color="grey">mdi-earth-off</v-icon>
                   </div>
                 </template>
@@ -376,17 +378,14 @@ function fmtDateTime(d) {
   });
 }
 
-// ISO-2 country code → emoji flag через regional indicator symbols
-// (U+1F1E6 + letter offset). 'RU' → 🇷🇺, 'US' → 🇺🇸. Шрифт ОС сам
-// заменяет пару символов на флаг (на Windows нет emoji-флагов в
-// системном шрифте — показываются буквы XX, но смысл сохраняется).
-function flagEmoji(code) {
+// ISO-2 country code → URL SVG-флага в flagcdn.com (бесплатный CDN,
+// `https://flagcdn.com/{w}/{code}.png`). w80 = 80px ширина, чётко на
+// retina, и тянется как тонкая PNG-картинка вместо emoji. Раньше
+// был flagEmoji() через regional indicator symbols — на Windows
+// без emoji-шрифта показывались просто буквы «UA».
+function flagUrl(code) {
   if (!code || code.length !== 2) return '';
-  const upper = code.toUpperCase();
-  return String.fromCodePoint(
-    127397 + upper.charCodeAt(0),
-    127397 + upper.charCodeAt(1),
-  );
+  return `https://flagcdn.com/w80/${code.toLowerCase()}.png`;
 }
 
 // Разбираем UA на (browser, os) с MDI-иконками. Полный UA в tooltip
@@ -433,12 +432,14 @@ onMounted(load);
   justify-content: center;
   margin-right: 12px;
 }
-.flag-emoji {
-  /* Apple Color Emoji / Segoe UI Emoji дают корректный рендер на macOS/Win11.
-     На старых Windows флаги показываются как ISO-буквы — это норм fallback. */
-  font-size: 28px;
-  line-height: 1;
-  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+.flag-img {
+  /* SVG/PNG-флаг из flagcdn.com. 36×24 — естественные пропорции 3:2,
+     лёгкая рамка чтобы белые флаги (например 🇯🇵) не сливались с фоном. */
+  width: 36px;
+  height: 24px;
+  object-fit: cover;
+  border-radius: 3px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12);
 }
 .login-history-device code {
   font-size: 12px;
