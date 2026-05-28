@@ -241,7 +241,14 @@ class AdminUserController extends Controller
 
         $geoMap = $geo->resolveMany($rows->pluck('ip')->filter()->unique()->all());
 
-        $data = $rows->map(function ($r) use ($geoMap) {
+        // Для countryCode нужно достать из кэша явно — resolveMany() даёт
+        // country/region/city/isp без кода. Идём за iso-2 одним select'ом
+        // на уникальных IP (≤50 строк, быстрее чем менять интерфейс сервиса).
+        $countryCodes = DB::table('ip_geo_cache')
+            ->whereIn('ip', $rows->pluck('ip')->filter()->unique()->all())
+            ->pluck('country_code', 'ip');
+
+        $data = $rows->map(function ($r) use ($geoMap, $countryCodes) {
             $g = $r->ip ? ($geoMap[$r->ip] ?? null) : null;
             return [
                 'id' => $r->id,
@@ -250,6 +257,7 @@ class AdminUserController extends Controller
                 'userAgent' => $r->user_agent,
                 'createdAt' => $r->created_at,
                 'country' => $g['country'] ?? null,
+                'countryCode' => $r->ip ? ($countryCodes[$r->ip] ?? null) : null,
                 'region' => $g['region'] ?? null,
                 'city' => $g['city'] ?? null,
                 'isp' => $g['isp'] ?? null,
