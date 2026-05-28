@@ -40,6 +40,13 @@ class SheetProfiles
                 'contract_number' => 'CRMIDклиента',
             ],
             'currency' => 'RUB',
+            // commissionCalcProperty=9 («МФ») — лист «робоэдвайзер»
+            // импортируется как Тинькофф портфель / Робоэдвайзер с
+            // дефолтным свойством МФ. Раньше property терялась → 1003
+            // майских транзакции пришли с NULL (фикс 33fab7d4 закрыл
+            // IB MF/IB UP, но не этот лист). Бэкфилл существующих —
+            // artisan finance:backfill-tinkoff-property.
+            'commissionCalcProperty' => 9,
         ],
         'IB MF' => [
             'counterpartyName' => 'Interactive Brokers',
