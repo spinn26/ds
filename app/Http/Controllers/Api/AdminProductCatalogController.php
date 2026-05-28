@@ -45,7 +45,8 @@ class AdminProductCatalogController extends Controller
     {
         $q = DB::table('products_catalog as p')
             ->leftJoin('programs_catalog as g', 'g.product_id', '=', 'p.id')
-            ->groupBy('p.id', 'p.name', 'p.type', 'p.open_product_url', 'p.active', 'p.created_at')
+            ->groupBy('p.id', 'p.name', 'p.type', 'p.open_product_url', 'p.active', 'p.created_at',
+                'p.image_url', 'p.hero_image', 'p.description', 'p.legacy_product_id')
             ->select([
                 'p.id',
                 'p.name',
@@ -53,6 +54,10 @@ class AdminProductCatalogController extends Controller
                 'p.open_product_url',
                 'p.active',
                 'p.created_at',
+                'p.image_url',
+                'p.hero_image',
+                'p.description',
+                'p.legacy_product_id',
                 DB::raw('COUNT(g.id) AS programs_count'),
                 DB::raw('COUNT(g.id) FILTER (WHERE g.active=true)  AS programs_active'),
                 DB::raw('COUNT(g.id) FILTER (WHERE g.has_red=true) AS programs_red'),
@@ -104,10 +109,12 @@ class AdminProductCatalogController extends Controller
     {
         $r = DB::table('products_catalog as p')
             ->leftJoin('programs_catalog as g', 'g.product_id', '=', 'p.id')
-            ->groupBy('p.id', 'p.name', 'p.type', 'p.open_product_url', 'p.active', 'p.created_at')
+            ->groupBy('p.id', 'p.name', 'p.type', 'p.open_product_url', 'p.active', 'p.created_at',
+                'p.image_url', 'p.hero_image', 'p.description', 'p.legacy_product_id')
             ->where('p.id', $id)
             ->select([
                 'p.id', 'p.name', 'p.type', 'p.open_product_url', 'p.active', 'p.created_at',
+                'p.image_url', 'p.hero_image', 'p.description', 'p.legacy_product_id',
                 DB::raw('COUNT(g.id) AS programs_count'),
                 DB::raw('COUNT(g.id) FILTER (WHERE g.active=true)  AS programs_active'),
                 DB::raw('COUNT(g.id) FILTER (WHERE g.has_red=true) AS programs_red'),
@@ -151,12 +158,18 @@ class AdminProductCatalogController extends Controller
             'type'           => 'nullable|string|max:255',
             'active'         => 'nullable|boolean',
             'openProductUrl' => 'nullable|string|max:1000',
+            'description'    => 'nullable|string|max:4000',
+            'imageUrl'       => 'nullable|string|max:1000',
+            'heroImage'      => 'nullable|string|max:1000',
         ]);
 
         $id = DB::table('products_catalog')->insertGetId([
             'name'             => $payload['name'],
             'type'             => $payload['type'] ?? null,
             'open_product_url' => $payload['openProductUrl'] ?? null,
+            'description'      => $payload['description'] ?? null,
+            'image_url'        => $payload['imageUrl'] ?? null,
+            'hero_image'       => $payload['heroImage'] ?? null,
             'active'           => $payload['active'] ?? true,
             'imported_from'    => 'admin-ui',
             'created_at'       => now(),
@@ -174,18 +187,23 @@ class AdminProductCatalogController extends Controller
             'type'           => 'nullable|string|max:255',
             'active'         => 'nullable|boolean',
             'openProductUrl' => 'nullable|string|max:1000',
-            // every other field the existing form posts (description, imageUrl,
-            // hasProperty, …) is silently dropped — the audit-driven catalog
-            // doesn't store those.
+            'description'    => 'nullable|string|max:4000',
+            'imageUrl'       => 'nullable|string|max:1000',
+            'heroImage'      => 'nullable|string|max:1000',
+            // Остальные поля формы (productType, educationCourseId, ...) пока
+            // не маппятся на catalog-схему и тихо игнорируются.
         ]);
 
-        // openProductUrl → snake-case column. `null` is a valid value (clear
-        // the link), so we keep nulls and drop only keys that weren't sent.
+        // null — валидное значение (очистить поле), поэтому через has()
+        // отличаем «не прислали» от «прислали null».
         $update = ['updated_at' => now()];
         if ($request->has('name'))           $update['name']             = $payload['name'];
         if ($request->has('type'))           $update['type']             = $payload['type'];
         if ($request->has('active'))         $update['active']           = $payload['active'];
         if ($request->has('openProductUrl')) $update['open_product_url'] = $payload['openProductUrl'];
+        if ($request->has('description'))    $update['description']      = $payload['description'];
+        if ($request->has('imageUrl'))       $update['image_url']        = $payload['imageUrl'];
+        if ($request->has('heroImage'))      $update['hero_image']       = $payload['heroImage'];
 
         DB::table('products_catalog')->where('id', $id)->update($update);
 
@@ -215,17 +233,37 @@ class AdminProductCatalogController extends Controller
         return response()->json(['publishStatus' => $next ? 'published' : 'draft']);
     }
 
-    /** POST /admin/products-catalog/{id}/image — accepted but stored only as a URL stub. */
+    /**
+     * POST /admin/products-catalog/{id}/image
+     *
+     * Сохраняет логотип (kind=image) или баннер (kind=hero) в
+     * storage/app/public/products/, записывает URL в соответствующую
+     * колонку products_catalog. Шаблон скопирован из AdminProductController.
+     * Требует `php artisan storage:link` для /storage/* отдачи.
+     */
     public function uploadImage(int $id, Request $request): JsonResponse
     {
-        // products_catalog has no image column today.  We accept the upload
-        // so the page doesn't error, but the file is dropped on the floor.
-        $kind = $request->input('kind', 'image');
-        return response()->json([
-            'url'  => null,
-            'kind' => $kind,
-            'note' => 'image storage disabled in audit catalog',
+        $request->validate([
+            'file' => 'required|file|image|max:4096',
+            'kind' => 'required|in:image,hero',
         ]);
+
+        $row = DB::table('products_catalog')->where('id', $id)->first();
+        abort_unless((bool) $row, 404);
+
+        $file = $request->file('file');
+        $ext = strtolower($file->getClientOriginalExtension() ?: $file->extension());
+        $name = sprintf('%d-%s-%s.%s', $id, $request->kind, substr(md5(uniqid('', true)), 0, 8), $ext);
+        $path = $file->storeAs('products', $name, 'public');
+        $url = '/storage/' . $path;
+
+        $column = $request->kind === 'image' ? 'image_url' : 'hero_image';
+        DB::table('products_catalog')->where('id', $id)->update([
+            $column => $url,
+            'updated_at' => now(),
+        ]);
+
+        return response()->json(['url' => $url, 'kind' => $request->kind]);
     }
 
     /** POST /admin/products-catalog/{id}/programs */
@@ -297,9 +335,12 @@ class AdminProductCatalogController extends Controller
             'type'                 => $r->type,
             'typeName'             => $r->type,
             'productType'          => null,
-            'description'          => null,
-            'imageUrl'             => null,
-            'heroImage'            => null,
+            // Поля из расширения каталога (migration 2026_05_28_000010):
+            // description / image_url / hero_image / legacy_product_id.
+            'description'          => $r->description ?? null,
+            'imageUrl'             => $r->image_url ?? null,
+            'heroImage'            => $r->hero_image ?? null,
+            'legacyProductId'      => $r->legacy_product_id ?? null,
             'educationCourseId'    => null,
             'educationUrl'         => null,
             'instructionUrl'       => null,

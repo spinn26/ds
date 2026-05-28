@@ -18,157 +18,156 @@ class ProductController extends Controller
         $consultant = Consultant::where('webUser', $user->id)->first();
 
         $accessCheck = $this->checkAccess($consultant);
+        $hasAccess = $accessCheck['hasAccess'] ?? false;
 
-        $query = DB::table('product')->where('active', true);
+        // Единый источник партнёрской витрины — products_catalog. Legacy
+        // `product` остаётся как FK-anchor для contract/dsCommission/etc.,
+        // но в UI не светится. Связь с legacy для каждого catalog-продукта
+        // — через products_catalog.legacy_product_id (заполняется миграцией
+        // 2026_05_28_000010_merge_legacy_into_products_catalog).
+        if (! Schema::hasTable('products_catalog')) {
+            return response()->json(['products' => [], 'categories' => [], 'accessCheck' => $accessCheck]);
+        }
 
-        // Партнёр видит только published; staff-preview проходит через
-        // этот же endpoint но с ?includeDrafts=1 (роут защищён ролью).
-        if (! $request->boolean('includeDrafts') || ! $user->hasAnyRole(['admin', 'backoffice', 'head'])) {
-            if (Schema::hasColumn('product', 'publish_status')) {
-                $query->where('publish_status', 'published');
-            }
+        $query = DB::table('products_catalog')->where('active', true);
+
+        // Staff-preview через ?includeDrafts=1: показываем и active=false
+        // (на legacy это были drafts).
+        $includeDrafts = $request->boolean('includeDrafts')
+            && $user->hasAnyRole(['admin', 'backoffice', 'head']);
+        if ($includeDrafts) {
+            $query = DB::table('products_catalog');
         }
 
         if ($request->filled('search')) {
             $query->where('name', 'ilike', '%' . $request->search . '%');
         }
 
-        // Preload productType → productCategory mapping
-        $typeToCategory = DB::table('productType')
-            ->whereNotNull('productTypeCategory')
-            ->pluck('productTypeCategory', 'id');
-
-        $allCategories = DB::table('productCategory')
-            ->get()
-            ->keyBy('id');
-
-        $hasAccess = $this->checkAccess($consultant)['hasAccess'] ?? false;
-
-        // Партнёрская витрина: убираем продукты-архив (priority IS NULL)
-        // — у них visibleToResident=false выставлен, но дополнительно
-        // фильтруем по priority на случай ручных правок в админке.
-        // Сортировка ASC: priority 1 → 2 → 3, имя по алфавиту внутри.
-        if (Schema::hasColumn('product', 'priority')) {
-            $query->whereNotNull('priority');
-            $productRows = $query
-                ->orderByRaw('COALESCE(priority, 99) ASC')
-                ->orderBy('name')
-                ->get();
-        } else {
-            $productRows = $query->orderBy('name')->get();
+        $productRows = $query->orderBy('name')->get();
+        if ($productRows->isEmpty()) {
+            return response()->json(['products' => [], 'categories' => [], 'accessCheck' => $accessCheck]);
         }
 
-        // Gate products by education-course completion:
-        // if a product has an active linked course, it's only "available" when
-        // the user has a completion record for EVERY such course.
-        // Products with no linked course fall back to the legacy gate ($hasAccess).
-        $coursesByProduct = collect();
-        $completedCourseIds = [];
-        if (Schema::hasTable('education_courses') && $productRows->isNotEmpty()) {
-            $coursesByProduct = DB::table('education_courses')
+        // Legacy IDs тех catalog-строк, что слинкованы с legacy `product` —
+        // по ним резолвим программы, education_courses и testPassed.
+        $legacyIds = $productRows->pluck('legacy_product_id')->filter()->values();
+
+        // Education courses → legacy product.id (FK пока на legacy).
+        $coursesByLegacy = collect();
+        $completedSet = [];
+        if (Schema::hasTable('education_courses') && $legacyIds->isNotEmpty()) {
+            $coursesByLegacy = DB::table('education_courses')
                 ->where('active', true)
                 ->whereNotNull('product_id')
-                ->whereIn('product_id', $productRows->pluck('id'))
+                ->whereIn('product_id', $legacyIds)
                 ->get()
                 ->groupBy('product_id');
 
-            if (Schema::hasTable('education_course_completions') && $coursesByProduct->isNotEmpty()) {
+            if (Schema::hasTable('education_course_completions') && $coursesByLegacy->isNotEmpty()) {
                 $completedCourseIds = DB::table('education_course_completions')
                     ->where('user_id', $user->id)
-                    ->whereIn('course_id', $coursesByProduct->flatten(1)->pluck('id'))
+                    ->whereIn('course_id', $coursesByLegacy->flatten(1)->pluck('id'))
                     ->pluck('course_id')
                     ->all();
+                $completedSet = array_flip($completedCourseIds);
             }
         }
-        $completedSet = array_flip($completedCourseIds);
 
-        // Currencies per-product: продукт сам не хранит валюту, валюты
-        // находятся в привязанных программах. Собираем distinct по product_id.
-        $productCurrencies = DB::table('program')
-            ->whereIn('product', $productRows->pluck('id'))
-            ->whereNotNull('currency')
-            ->orderBy('product')
-            ->get(['product', 'currency'])
-            ->groupBy('product');
+        // Программы / валюты для legacy-слинкованных: тянем из legacy `program`
+        // (FK = product.id). Для catalog-only — из programs_catalog.
+        $legacyPrograms = $legacyIds->isNotEmpty()
+            ? DB::table('program')
+                ->whereIn('product', $legacyIds)
+                ->whereNull('dateDeleted')
+                ->where('active', true)
+                ->orderBy('name')
+                ->get(['id', 'product', 'name', 'formLink', 'providerName', 'categoryName', 'currency'])
+                ->groupBy('product')
+            : collect();
 
-        // Programs per-product: для модалки «Программы продукта» на витрине.
-        // Только активные и не удалённые, в порядке имени.
-        $productPrograms = DB::table('program')
-            ->whereIn('product', $productRows->pluck('id'))
-            ->whereNull('dateDeleted')
+        $catalogProgs = DB::table('programs_catalog')
+            ->whereIn('product_id', $productRows->pluck('id'))
             ->where('active', true)
             ->orderBy('name')
-            ->get(['id', 'product', 'name', 'formLink', 'providerName', 'categoryName', 'currency'])
-            ->groupBy('product');
+            ->get(['id', 'product_id', 'name', 'form_link', 'vendor', 'category', 'currency'])
+            ->groupBy('product_id');
 
         $currencyMap = DB::table('currency')
             ->get(['id', 'nameRu', 'nameEn', 'symbol'])
             ->keyBy('id');
 
-        $products = $productRows->map(function ($p) use ($consultant, $typeToCategory, $allCategories, $hasAccess, $coursesByProduct, $completedSet, $productCurrencies, $currencyMap, $productPrograms) {
-            $testPassed = $consultant
-                ? $this->isTestPassedForProduct($consultant, $p->id)
+        $products = $productRows->map(function ($p) use ($consultant, $hasAccess, $coursesByLegacy, $completedSet, $legacyPrograms, $catalogProgs, $currencyMap) {
+            $legacyId = $p->legacy_product_id ? (int) $p->legacy_product_id : null;
+
+            $testPassed = ($consultant && $legacyId)
+                ? $this->isTestPassedForProduct($consultant, $legacyId)
                 : false;
 
-            // Resolve category via productType
-            $categoryId = $p->productType ? ($typeToCategory[$p->productType] ?? null) : null;
-            $cat = $categoryId ? ($allCategories[$categoryId] ?? null) : null;
-
-            $linkedCourses = $coursesByProduct[$p->id] ?? collect();
+            $linkedCourses = $legacyId ? ($coursesByLegacy[$legacyId] ?? collect()) : collect();
             if ($linkedCourses->isNotEmpty()) {
-                $allPassed = $linkedCourses->every(fn ($c) => isset($completedSet[$c->id]));
-                $available = $allPassed;
+                $available = $linkedCourses->every(fn ($c) => isset($completedSet[$c->id]));
             } else {
                 $available = $hasAccess;
             }
 
-            // InSmart — исключение по спеке: доступен сразу после акцепта
-            // документов, обучение не требуется. Если акцепт есть → available.
+            // InSmart — доступен сразу после акцепта документов, без обучения.
             if (mb_stripos((string) $p->name, 'insmart') !== false) {
                 $available = $consultant && (bool) $consultant->acceptance;
             }
 
-            // Currencies attached to this product (distinct by program)
-            $currencyIds = ($productCurrencies[$p->id] ?? collect())->pluck('currency')->unique()->values();
-            $currencies = $currencyIds->map(function ($cid) use ($currencyMap) {
-                $c = $currencyMap[$cid] ?? null;
-                if (! $c) return null;
-                return ['id' => $c->id, 'nameRu' => $c->nameRu, 'nameEn' => $c->nameEn, 'symbol' => $c->symbol];
-            })->filter()->values();
-
-            // Programs списком — фронт показывает их в модалке при клике
-            // «Открыть продукт». Если массив пуст — fallback на product.url.
-            $programs = ($productPrograms[$p->id] ?? collect())->map(function ($pr) use ($currencyMap) {
-                $cur = $pr->currency ? ($currencyMap[$pr->currency] ?? null) : null;
-                return [
-                    'id' => $pr->id,
+            // Программы: legacy ↔ catalog. Структура ответа одинаковая.
+            if ($legacyId && isset($legacyPrograms[$legacyId])) {
+                $programs = $legacyPrograms[$legacyId]->map(function ($pr) use ($currencyMap) {
+                    $cur = $pr->currency ? ($currencyMap[$pr->currency] ?? null) : null;
+                    return [
+                        'id' => $pr->id,
+                        'name' => $pr->name,
+                        'formLink' => $pr->formLink ?? null,
+                        'providerName' => $pr->providerName ?? null,
+                        'categoryName' => $pr->categoryName ?? null,
+                        'currencySymbol' => $cur->symbol ?? null,
+                    ];
+                })->values();
+                $currencies = $legacyPrograms[$legacyId]
+                    ->pluck('currency')->filter()->unique()->values()
+                    ->map(function ($cid) use ($currencyMap) {
+                        $c = $currencyMap[$cid] ?? null;
+                        return $c ? ['id' => $c->id, 'nameRu' => $c->nameRu, 'nameEn' => $c->nameEn, 'symbol' => $c->symbol] : null;
+                    })->filter()->values();
+            } else {
+                $catProgs = $catalogProgs[$p->id] ?? collect();
+                $programs = $catProgs->map(fn ($pr) => [
+                    'id' => self::CATALOG_ID_OFFSET + (int) $pr->id,
                     'name' => $pr->name,
-                    'formLink' => $pr->formLink ?? null,
-                    'providerName' => $pr->providerName ?? null,
-                    'categoryName' => $pr->categoryName ?? null,
-                    'currencySymbol' => $cur->symbol ?? null,
-                ];
-            })->values();
+                    'formLink' => $pr->form_link ?? null,
+                    'providerName' => $pr->vendor,
+                    'categoryName' => $pr->category,
+                    'currencySymbol' => $pr->currency,
+                ])->values();
+                $currencies = $catProgs->pluck('currency')->filter()->unique()->values()
+                    ->map(fn ($s) => ['id' => null, 'nameRu' => $s, 'nameEn' => $s, 'symbol' => $s]);
+            }
+
+            // ID для фронта: предпочитаем legacy.product_id (там сидят FK
+            // soldProducts / education_courses), для catalog-only — оффсет.
+            $apiId = $legacyId ?? (self::CATALOG_ID_OFFSET + (int) $p->id);
 
             return [
-                'id' => $p->id,
+                'id' => $apiId,
                 'name' => $p->name,
                 'description' => $p->description ?? null,
-                'typeName' => $p->typeName ?? null,
+                'typeName' => $p->type ?? null,
                 'active' => (bool) $p->active,
                 'accessible' => $available,
                 'available' => $available,
-                'url' => $p->openProductUrl ?? null,
-                'imageUrl' => $p->imageUrl ?? null,
+                'url' => $p->open_product_url ?? null,
+                'imageUrl' => $p->image_url ?? null,
                 'heroImage' => $p->hero_image ?? null,
-                'publishStatus' => $p->publish_status ?? 'published',
-                'educationUrl' => $p->educationUrl ?? null,
-                'instructionUrl' => $p->instructionUrl ?? null,
+                'publishStatus' => $p->active ? 'published' : 'draft',
+                'educationUrl' => null,
+                'instructionUrl' => null,
                 'testPassed' => $testPassed,
-                'category' => $cat ? [
-                    'id' => $cat->id,
-                    'name' => $cat->productCategoryName,
-                ] : null,
+                'category' => $p->type ? ['id' => null, 'name' => $p->type] : null,
                 'currencies' => $currencies,
                 'programs' => $programs,
                 'requiredCourses' => $linkedCourses->map(fn ($c) => [
@@ -179,118 +178,29 @@ class ProductController extends Controller
             ];
         });
 
-        // Audit-driven catalog products (products_catalog + programs_catalog).
-        // They sit alongside legacy products without disturbing them — every
-        // catalog product gets its id shifted by CATALOG_ID_OFFSET so it can
-        // never collide with a legacy product.id.  Most rich fields stay
-        // null because the audit catalog doesn't carry images/descriptions
-        // yet — that's fine, the partner cards still render.
-        $catalogProducts = $this->mapCatalogProducts($request, $hasAccess);
-
-        // Дедуп по нормализованному имени: если такой продукт уже есть в
-        // legacy `product` (с картинкой/категорией/описанием) — catalog-stub
-        // скрываем, чтобы партнёр не видел дубль. Catalog-only продукты
-        // (например, новые позиции аудита) остаются.
-        $legacyNames = $products->pluck('name')
-            ->map(fn ($n) => mb_strtolower(trim((string) $n)))
-            ->filter()
-            ->flip();
-        $catalogProducts = $catalogProducts->reject(fn ($p) =>
-            isset($legacyNames[mb_strtolower(trim((string) $p['name']))])
-        )->values();
-
-        $allProducts = $products->concat($catalogProducts);
-
-        // Categories from productCategory table
-        $categories = DB::table('productCategory')
-            ->orderBy('productCategoryName')
-            ->get()
-            ->map(fn ($c) => ['id' => $c->id, 'name' => $c->productCategoryName]);
+        // Categories list для фильтра витрины — реальные значения catalog.type.
+        $categories = DB::table('products_catalog')
+            ->whereNotNull('type')
+            ->where('type', '!=', '')
+            ->groupBy('type')
+            ->orderBy('type')
+            ->pluck('type')
+            ->map(fn ($t, $i) => ['id' => $i + 1, 'name' => $t])
+            ->values();
 
         return response()->json([
-            'products' => $allProducts,
+            'products' => $products,
             'categories' => $categories,
             'accessCheck' => $accessCheck,
         ]);
     }
 
     /**
-     * Offset added to products_catalog.id when surfacing through this
-     * partner endpoint. Keeps the namespace clean of any collision with
-     * legacy product.id values (max ~94 today, room to spare).
+     * Offset added to products_catalog.id when the catalog row is not
+     * linked to a legacy product. Keeps the namespace clean — legacy ids
+     * stay <100k, catalog-only ids start at CATALOG_ID_OFFSET.
      */
     private const CATALOG_ID_OFFSET = 1_000_000;
-
-    /**
-     * Build partner-shaped product cards from products_catalog / programs_catalog.
-     * No legacy table joins — just the audit-driven catalog.
-     */
-    private function mapCatalogProducts(Request $request, bool $hasAccess)
-    {
-        $q = DB::table('products_catalog as p')
-            ->leftJoin('programs_catalog as g', 'g.product_id', '=', 'p.id')
-            ->where('p.active', true)
-            ->groupBy('p.id', 'p.name', 'p.type', 'p.open_product_url', 'p.created_at')
-            ->select([
-                'p.id', 'p.name', 'p.type', 'p.open_product_url', 'p.created_at',
-                DB::raw('COUNT(g.id) AS programs_count'),
-                DB::raw('COUNT(g.id) FILTER (WHERE g.active=true) AS programs_active'),
-            ]);
-
-        if ($search = trim((string) $request->input('search', ''))) {
-            $q->where('p.name', 'ilike', "%{$search}%");
-        }
-
-        $products = $q->orderBy('p.name')->get();
-        if ($products->isEmpty()) {
-            return collect();
-        }
-
-        $programs = DB::table('programs_catalog')
-            ->whereIn('product_id', $products->pluck('id'))
-            ->where('active', true)
-            ->orderBy('name')
-            ->get(['id', 'product_id', 'name', 'vendor', 'currency', 'category', 'has_red', 'form_link'])
-            ->groupBy('product_id');
-
-        return $products->map(function ($p) use ($programs, $hasAccess) {
-            $progList = ($programs[$p->id] ?? collect())->map(fn ($pr) => [
-                'id'             => self::CATALOG_ID_OFFSET + (int) $pr->id,
-                'name'           => $pr->name,
-                'formLink'       => $pr->form_link ?? null,
-                'providerName'   => $pr->vendor,
-                'categoryName'   => $pr->category,
-                'currencySymbol' => $pr->currency,
-            ])->values();
-
-            // Distinct currencies pulled directly from the catalog rows
-            // (string-typed; no FK into currency table).
-            $currencies = $progList->pluck('currencySymbol')->filter()->unique()->values()
-                ->map(fn ($s) => ['id' => null, 'nameRu' => $s, 'nameEn' => $s, 'symbol' => $s]);
-
-            return [
-                'id'              => self::CATALOG_ID_OFFSET + (int) $p->id,
-                'name'            => $p->name,
-                'description'     => null,
-                'typeName'        => $p->type,
-                'active'          => true,
-                'accessible'      => $hasAccess,
-                'available'       => $hasAccess,
-                'url'             => $p->open_product_url ?? null,
-                'imageUrl'        => null,
-                'heroImage'       => null,
-                'publishStatus'   => 'published',
-                'educationUrl'    => null,
-                'instructionUrl'  => null,
-                'testPassed'      => false,
-                'category'        => $p->type ? ['id' => null, 'name' => $p->type] : null,
-                'currencies'      => $currencies,
-                'programs'        => $progList,
-                'requiredCourses' => collect(),
-                'source'          => 'catalog',
-            ];
-        });
-    }
 
     /**
      * Партнёрская проверка ИНН через DaData (для формы блокирующего
