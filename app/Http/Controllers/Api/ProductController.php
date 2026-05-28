@@ -48,6 +48,27 @@ class ProductController extends Controller
             return response()->json(['products' => [], 'categories' => [], 'accessCheck' => $accessCheck]);
         }
 
+        // Map: catalog.type → стабильный id. Используем для фильтра
+        // «Категория» в витрине: партнёрская Products.vue фильтрует
+        // categoryOptions через usedIds.filter(Boolean), а без id у
+        // product.category селект «Категория» оставался пустым
+        // («Отсутствуют данные»). Список категорий формируется один
+        // раз — на основе ВСЕХ активных типов в каталоге, а не только
+        // отфильтрованных search'ем, чтобы фильтр был стабильным.
+        $allTypes = DB::table('products_catalog')
+            ->where('active', true)
+            ->whereNotNull('type')
+            ->where('type', '!=', '')
+            ->distinct()
+            ->orderBy('type')
+            ->pluck('type');
+        $typeToId = [];
+        $i = 0;
+        foreach ($allTypes as $t) {
+            $i++;
+            $typeToId[$t] = $i;
+        }
+
         // Legacy IDs тех catalog-строк, что слинкованы с legacy `product` —
         // по ним резолвим программы, education_courses и testPassed.
         $legacyIds = $productRows->pluck('legacy_product_id')->filter()->values();
@@ -105,7 +126,7 @@ class ProductController extends Controller
             ->get(['id', 'nameRu', 'nameEn', 'symbol'])
             ->keyBy('id');
 
-        $products = $productRows->map(function ($p) use ($consultant, $hasAccess, $coursesByLegacy, $completedSet, $legacyPrograms, $catalogProgs, $currencyMap) {
+        $products = $productRows->map(function ($p) use ($consultant, $hasAccess, $coursesByLegacy, $completedSet, $legacyPrograms, $catalogProgs, $currencyMap, $typeToId) {
             $legacyId = $p->legacy_product_id ? (int) $p->legacy_product_id : null;
 
             $testPassed = ($consultant && $legacyId)
@@ -183,7 +204,7 @@ class ProductController extends Controller
                 'educationUrl' => null,
                 'instructionUrl' => null,
                 'testPassed' => $testPassed,
-                'category' => $p->type ? ['id' => null, 'name' => $p->type] : null,
+                'category' => $p->type ? ['id' => $typeToId[$p->type] ?? null, 'name' => $p->type] : null,
                 'currencies' => $currencies,
                 'programs' => $programs,
                 'requiredCourses' => $linkedCourses->map(fn ($c) => [
@@ -194,14 +215,12 @@ class ProductController extends Controller
             ];
         });
 
-        // Categories list для фильтра витрины — реальные значения catalog.type.
-        $categories = DB::table('products_catalog')
-            ->whereNotNull('type')
-            ->where('type', '!=', '')
-            ->groupBy('type')
-            ->orderBy('type')
-            ->pluck('type')
-            ->map(fn ($t, $i) => ['id' => $i + 1, 'name' => $t])
+        // Categories list для фильтра витрины — используем тот же $typeToId,
+        // что и в product.category, чтобы id-ы совпадали и фильтр
+        // «Категория» реально работал (раньше у product.category.id=null,
+        // а у categories[].id=1..N — селект показывал «Отсутствуют данные»).
+        $categories = collect($typeToId)
+            ->map(fn ($id, $name) => ['id' => $id, 'name' => $name])
             ->values();
 
         return response()->json([
