@@ -462,9 +462,17 @@ class FinanceReportService
                 // показатель уровня квалификации, его пересчитывает финализ.
                 'volumes' => (function () use ($qLogCurrent, $consultant, $month, $personalSalesPoints, $groupSalesPoints) {
                     $isCurrentMonth = $month === now()->format('Y-m');
+                    // Per spec ✅Бизнес-логика §1:
+                    //   ГП = личные объёмы партнёра + объёмы всей нижестоящей структуры
+                    //       (ЛП + downline). «ОП по ГП» из ✅Отчет начислений §виджет —
+                    //       это именно ГП. Раньше тут лежал только groupSalesPoints
+                    //       (chainOrder>1), из-за чего у партнёров с большими личными
+                    //       продажами и слабой группой ОП ошибочно «не выполнен»:
+                    //       они выполняют план своими продажами, но виджет/проверка
+                    //       это не учитывали.
                     return [
                         'lp' => round((float) $personalSalesPoints, 2),
-                        'gp' => round((float) $groupSalesPoints, 2),
+                        'gp' => round((float) ($personalSalesPoints + $groupSalesPoints), 2),
                         'ngp' => round((float) ($qLogCurrent->groupVolumeCumulative
                             ?? ($isCurrentMonth ? $consultant->groupVolumeCumulative : 0)), 2),
                     ];

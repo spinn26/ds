@@ -117,7 +117,21 @@ class MonthlyFinalisationRunner
                 $branchRows[$rootId][] = $r;
             }
 
-            $totalGroupVolume = array_sum($branchVolumes);
+            // Per spec ✅Бизнес-логика §1: ГП = ЛП + downline. ОП проверяется
+            // против ГП, значит в totalGroupVolume надо включать ЛП самого
+            // партнёра (chainOrder=1). Per-branch detachment остаётся
+            // только по downline (у себя нет «ветки»), а totalGroupVolume
+            // ниже идёт в opMultiplier.
+            $personalVolume = (float) DB::table('commission')
+                ->where('consultant', $consultantId)
+                ->where('chainOrder', 1)
+                ->where('dateMonth', $monthStr)
+                ->where('dateYear', $yearStr)
+                ->where('type', 'transaction')
+                ->whereNull('deletedAt')
+                ->sum('personalVolume');
+
+            $totalGroupVolume = $personalVolume + array_sum($branchVolumes);
             $otrifApplied = false;
             $opApplied = false;
 

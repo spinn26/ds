@@ -139,7 +139,19 @@ class MonthlyPenaltyRunner
             ->whereNull('deletedAt')
             ->get();
 
-        if ($commissions->isEmpty()) {
+        // Личные продажи (chainOrder=1) тянем отдельно — они НЕ участвуют
+        // в детачменте per-branch (у себя нет «ветки»), но ОБЯЗАНЫ
+        // прибавиться к totalGroupVolume для проверки ОП. Per spec ✅Бизнес-
+        // логика §1: ГП = ЛП + downline.
+        $personalVolume = (float) DB::table('commission')
+            ->where('consultant', $consultant->id)
+            ->where('chainOrder', 1)
+            ->where('dateYear', $dateYear)
+            ->where('dateMonth', $dateMonth)
+            ->whereNull('deletedAt')
+            ->sum('personalVolume');
+
+        if ($commissions->isEmpty() && $personalVolume <= 0) {
             return $this->emptyResult($consultant);
         }
 
@@ -171,11 +183,13 @@ class MonthlyPenaltyRunner
             ? $this->finaliser->detachmentMultipliers($branchVolumes)
             : array_fill_keys(array_keys($branchVolumes), 1.0);
 
-        // OP: only when mandatoryGP > 0. Totals include unassigned rows —
-        // the OP cap is about total monthly group volume, regardless of
-        // whether branches are cleanly resolvable.
+        // OP: only when mandatoryGP > 0. Per spec ✅Бизнес-логика §1:
+        // ГП = ЛП + объёмы downline. ОП = минимальный ГП. Поэтому в
+        // totalGroupVolume включаем и personalVolume самого партнёра
+        // (chainOrder=1), и downline (chainOrder>=2). Unassigned-строки
+        // (битый branch) тоже добавляем — они часть месячного ГП.
         $mandatoryGp = (float) ($consultant->mandatoryGP ?? 0);
-        $totalGroupVolume = array_sum($branchVolumes);
+        $totalGroupVolume = $personalVolume + array_sum($branchVolumes);
         foreach ($unassigned as $u) $totalGroupVolume += (float) $u->groupVolume;
         $opMult = $mandatoryGp > 0
             ? $this->finaliser->opMultiplier($totalGroupVolume, $mandatoryGp)
