@@ -155,6 +155,7 @@ class ManualTransactionController extends Controller
                 'c.number as contractNumber',
                 'c.clientName',
                 'c.consultantName',
+                'c.term as contractTerm',
                 'c.product as productId',
                 'c.productName',
                 'c.program as programId',
@@ -163,6 +164,13 @@ class ManualTransactionController extends Controller
                 'pr.vendorName as providerName',
                 'cur.symbol as currencySymbol',
                 'cur.nameRu as currencyName',
+                // Флаги продукта обязательно тянем здесь же — иначе
+                // serializeDraft дефолтит productHasProperty=true и фронт
+                // показывает дропдаун «Свойство» даже для продуктов
+                // вроде «Эволюция», у которых has_property=false.
+                'p.has_property as productHasProperty',
+                'p.has_term as productHasTerm',
+                'p.has_year_kv as productHasYearKv',
             ]);
 
         $productIds = $rows->pluck('productId')->filter()->unique()->all();
