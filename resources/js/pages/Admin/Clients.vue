@@ -354,6 +354,7 @@ async function loadStatusLevels() {
 }
 
 const headers = [
+  { title: 'ID', key: 'id', width: 80 },
   { title: 'ФИО', key: 'personName' },
   { title: 'Email', key: 'email' },
   { title: 'Телефон', key: 'phone' },
