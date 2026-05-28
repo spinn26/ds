@@ -143,11 +143,27 @@
                 <!-- Простой v-list вместо v-data-table — у data-table'ы Vuetify
                      иногда срезает rows до items-per-page-options дефолта
                      (10), даже если items-per-page=9999 (баг видели на 12
-                     вопросах). v-list гарантированно отрисует все. -->
-                <v-list v-else density="compact" class="pa-0">
+                     вопросах). v-list гарантированно отрисует все.
+                     Список draggable — порядок сохраняется через
+                     POST /admin/education/courses/{id}/tests/reorder. -->
+                <v-list v-else density="compact" class="pa-0 tests-list">
                   <v-list-item v-for="(test, i) in (testsByCourse[item.id] || [])"
-                    :key="test.id" class="border-b">
+                    :key="test.id"
+                    :class="['border-b test-row', {
+                      'test-row--drag': dragTestId === test.id,
+                      'test-row--saving': reorderingCourseId === item.id,
+                    }]"
+                    :draggable="canEdit('education')"
+                    @dragstart="onTestDragStart($event, item.id, test.id)"
+                    @dragover.prevent="onTestDragOver($event, item.id)"
+                    @drop.prevent="onTestDrop(item.id, test.id)"
+                    @dragend="onTestDragEnd">
                     <template #prepend>
+                      <v-icon v-if="canEdit('education')" size="16"
+                        class="me-1 test-drag-handle"
+                        title="Перетащите, чтобы изменить порядок">
+                        mdi-drag-vertical
+                      </v-icon>
                       <span class="text-medium-emphasis me-2" style="min-width: 24px">{{ i + 1 }}.</span>
                     </template>
                     <v-list-item-title class="text-body-2">{{ test.question }}</v-list-item-title>
@@ -156,6 +172,14 @@
                       Правильный: №{{ (test.correct_answer ?? 0) + 1 }}
                     </v-list-item-subtitle>
                     <template #append>
+                      <v-btn v-if="canEdit('education')" icon="mdi-arrow-up" size="x-small" variant="text"
+                        :disabled="i === 0 || reorderingCourseId === item.id"
+                        title="Выше"
+                        @click.stop="moveTest(item.id, i, -1)" />
+                      <v-btn v-if="canEdit('education')" icon="mdi-arrow-down" size="x-small" variant="text"
+                        :disabled="i === (testsByCourse[item.id] || []).length - 1 || reorderingCourseId === item.id"
+                        title="Ниже"
+                        @click.stop="moveTest(item.id, i, 1)" />
                       <v-btn icon="mdi-pencil" size="x-small" variant="text"
                         @click="openEditTest(item, test)" />
                       <v-btn v-if="canFull('education')" icon="mdi-delete"
@@ -396,8 +420,10 @@ import { useDebounce } from '../../composables/useDebounce';
 import PageHeader from '../../components/PageHeader.vue';
 import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 import { usePermissions } from '../../composables/usePermissions';
+import { useSnackbar } from '../../composables/useSnackbar';
 
 const { canEdit, canFull } = usePermissions();
+const { showSuccess, showError } = useSnackbar();
 
 const loading = ref(false);
 const saving = ref(false);
@@ -554,6 +580,68 @@ async function loadTests(courseId) {
     testsByCourse[courseId] = data.data || data;
   } catch {}
   testsLoading[courseId] = false;
+}
+
+// --- Reorder тест-вопросов через DnD/стрелки. ---
+// Optimistic UI: сразу подменяем массив, шлём reorder, при ошибке —
+// rollback и снэк. Поддерживает несколько одновременно открытых курсов
+// (dragTestId хранит id перетаскиваемого, source-курс известен из
+// dragSourceCourseId — drop за пределы своего курса игнорируем).
+const dragTestId = ref(null);
+const dragSourceCourseId = ref(null);
+const reorderingCourseId = ref(null);
+
+function onTestDragStart(ev, courseId, testId) {
+  if (!canEdit('education')) return;
+  dragTestId.value = testId;
+  dragSourceCourseId.value = courseId;
+  try { ev.dataTransfer?.setData('text/plain', String(testId)); } catch {}
+  if (ev.dataTransfer) ev.dataTransfer.effectAllowed = 'move';
+}
+function onTestDragOver(ev, courseId) {
+  if (!dragTestId.value || dragSourceCourseId.value !== courseId) return;
+  if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'move';
+}
+function onTestDrop(courseId, targetTestId) {
+  if (!dragTestId.value || dragSourceCourseId.value !== courseId) return;
+  if (dragTestId.value === targetTestId) return;
+  const list = [...(testsByCourse[courseId] || [])];
+  const from = list.findIndex(t => t.id === dragTestId.value);
+  const to = list.findIndex(t => t.id === targetTestId);
+  if (from < 0 || to < 0) return;
+  list.splice(to, 0, list.splice(from, 1)[0]);
+  applyTestReorder(courseId, list);
+  dragTestId.value = null;
+  dragSourceCourseId.value = null;
+}
+function onTestDragEnd() {
+  dragTestId.value = null;
+  dragSourceCourseId.value = null;
+}
+
+function moveTest(courseId, idx, delta) {
+  const cur = testsByCourse[courseId] || [];
+  const newIdx = idx + delta;
+  if (newIdx < 0 || newIdx >= cur.length) return;
+  const list = [...cur];
+  [list[idx], list[newIdx]] = [list[newIdx], list[idx]];
+  applyTestReorder(courseId, list);
+}
+
+async function applyTestReorder(courseId, newList) {
+  const previous = testsByCourse[courseId];
+  testsByCourse[courseId] = newList;
+  reorderingCourseId.value = courseId;
+  try {
+    await api.post(`/admin/education/courses/${courseId}/tests/reorder`, {
+      ids: newList.map(t => t.id),
+    });
+    showSuccess('Порядок сохранён');
+  } catch (e) {
+    testsByCourse[courseId] = previous;
+    showError(e.response?.data?.message || 'Не удалось сохранить порядок');
+  }
+  reorderingCourseId.value = null;
 }
 
 // Course CRUD
@@ -813,5 +901,23 @@ onMounted(() => {
 }
 .v-theme--dark .answer-correct {
   background: rgba(var(--v-theme-success), 0.18);
+}
+
+/* DnD-перетаскивание вопросов теста. */
+.tests-list .test-row[draggable="true"] {
+  cursor: grab;
+}
+.tests-list .test-row[draggable="true"]:active {
+  cursor: grabbing;
+}
+.tests-list .test-row--drag {
+  opacity: 0.4;
+}
+.tests-list .test-row--saving {
+  pointer-events: none;
+  opacity: 0.7;
+}
+.tests-list .test-drag-handle {
+  opacity: 0.45;
 }
 </style>

@@ -556,6 +556,7 @@ Route::prefix('v1')->group(function () {
         Route::delete('/admin/education/courses/{id}/lessons/{lessonId}', [\App\Http\Controllers\Api\AdminEducationController::class, 'destroyLesson'])->whereNumber('id')->whereNumber('lessonId');
         Route::get('/admin/education/courses/{id}/tests', [\App\Http\Controllers\Api\AdminEducationController::class, 'tests'])->whereNumber('id');
         Route::post('/admin/education/courses/{id}/tests', [\App\Http\Controllers\Api\AdminEducationController::class, 'storeTest'])->whereNumber('id');
+        Route::post('/admin/education/courses/{id}/tests/reorder', [\App\Http\Controllers\Api\AdminEducationController::class, 'reorderTests'])->whereNumber('id');
         Route::put('/admin/education/courses/{id}/tests/{testId}', [\App\Http\Controllers\Api\AdminEducationController::class, 'updateTest'])->whereNumber('id')->whereNumber('testId');
         Route::delete('/admin/education/courses/{id}/tests/{testId}', [\App\Http\Controllers\Api\AdminEducationController::class, 'destroyTest'])->whereNumber('id')->whereNumber('testId');
         }); // end role:staff

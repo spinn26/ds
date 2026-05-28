@@ -626,27 +626,76 @@ class AdminEducationController extends Controller
             'correct_answer' => 'required|integer',
         ]);
 
+        // Если sort_order не прислан явно — ставим в конец списка (max+10).
+        // Раньше фронт всегда слал 0, и все вопросы оказывались с
+        // одинаковым sort_order — Postgres возвращал их в неопределённом
+        // порядке. Это и был баг «вопросы идут не по порядку».
+        $sortOrder = $request->input('sort_order');
+        if ($sortOrder === null) {
+            $maxOrder = (int) DB::table('education_tests')
+                ->where('course_id', $courseId)
+                ->max('sort_order');
+            $sortOrder = $maxOrder + 10;
+        }
+
         $id = DB::table('education_tests')->insertGetId([
             'course_id' => $courseId,
             'question' => $request->question,
             'answers' => json_encode($request->answers),
             'correct_answer' => $request->correct_answer,
-            'sort_order' => $request->input('sort_order', 0),
+            'sort_order' => $sortOrder,
             'created_at' => now(),
         ]);
 
         return response()->json(['message' => 'Вопрос создан', 'id' => $id], 201);
     }
 
+    /**
+     * POST /admin/education/courses/{id}/tests/reorder
+     * Принимает { ids: [id1, id2, ...] } — массив id вопросов в нужном
+     * порядке. Присваивает каждому sort_order = idx*10 (шаг 10 даёт
+     * запас для ручных вставок без коллизий, тот же приём что в
+     * курс-DnD выше). Транзакция гарантирует атомарность.
+     */
+    public function reorderTests(Request $request, int $courseId): JsonResponse
+    {
+        $request->validate([
+            'ids' => 'required|array',
+            'ids.*' => 'integer',
+        ]);
+        $ids = $request->input('ids', []);
+
+        DB::transaction(function () use ($courseId, $ids) {
+            foreach ($ids as $idx => $testId) {
+                DB::table('education_tests')
+                    ->where('id', $testId)
+                    ->where('course_id', $courseId) // защита от cross-course
+                    ->update([
+                        'sort_order' => ($idx + 1) * 10,
+                        'updated_at' => now(),
+                    ]);
+            }
+        });
+
+        return response()->json(['message' => 'Порядок обновлён']);
+    }
+
     public function updateTest(Request $request, int $courseId, int $testId): JsonResponse
     {
-        DB::table('education_tests')->where('id', $testId)->update([
+        // sort_order трогаем только если он пришёл явно. Иначе при
+        // редактировании текста вопроса мы бы перетирали порядок,
+        // выставленный reorder-эндпоинтом или DnD.
+        $payload = [
             'question' => $request->question,
             'answers' => json_encode($request->answers),
             'correct_answer' => $request->correct_answer,
-            'sort_order' => $request->input('sort_order', 0),
             'updated_at' => now(),
-        ]);
+        ];
+        if ($request->has('sort_order')) {
+            $payload['sort_order'] = (int) $request->input('sort_order');
+        }
+
+        DB::table('education_tests')->where('id', $testId)->update($payload);
 
         return response()->json(['message' => 'Вопрос обновлён']);
     }

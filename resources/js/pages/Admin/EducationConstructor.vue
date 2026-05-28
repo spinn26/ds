@@ -196,16 +196,34 @@
                 Можно добавлять вопросы и без продукта.
               </v-alert>
 
-              <v-list v-if="courseTests.length" density="compact">
+              <v-list v-if="courseTests.length" density="compact" class="tests-list">
                 <v-list-item
                   v-for="(t, i) in courseTests"
                   :key="t.id"
+                  :class="['test-row', { 'test-row--drag': dragTestId === t.id, 'test-row--saving': reorderingTests }]"
                   :title="`${i + 1}. ${t.question}`"
                   :subtitle="`${t.answers?.length || 0} вариантов, правильный: ${t.correct_answer + 1}`"
-                  prepend-icon="mdi-help-circle-outline"
+                  draggable="true"
                   @click="editTest(t)"
+                  @dragstart="onTestDragStart($event, t.id)"
+                  @dragover.prevent="onTestDragOver($event, t.id)"
+                  @drop.prevent="onTestDrop(t.id)"
+                  @dragend="onTestDragEnd"
                 >
+                  <template #prepend>
+                    <v-icon size="16" class="me-1 test-drag-handle"
+                      title="Перетащите, чтобы изменить порядок">mdi-drag-vertical</v-icon>
+                    <v-icon>mdi-help-circle-outline</v-icon>
+                  </template>
                   <template #append>
+                    <v-btn icon="mdi-arrow-up" size="x-small" variant="text"
+                      :disabled="i === 0 || reorderingTests"
+                      title="Выше"
+                      @click.stop="moveTest(i, -1)" />
+                    <v-btn icon="mdi-arrow-down" size="x-small" variant="text"
+                      :disabled="i === courseTests.length - 1 || reorderingTests"
+                      title="Ниже"
+                      @click.stop="moveTest(i, 1)" />
                     <v-btn icon="mdi-delete-outline" size="small" variant="text" color="error"
                       @click.stop="deleteTest(t)" />
                   </template>
@@ -618,6 +636,62 @@ async function performDelete() {
   deleting.value = false;
 }
 
+// --- Reorder тест-вопросов ---
+// sort_order реально сохраняется на бэке (POST .../tests/reorder), но
+// чтобы UI был отзывчивым — сначала переставляем локально, потом шлём.
+// Если запрос упал — перезагружаем тесты с сервера, чтобы не оставить
+// рассинхрон.
+const dragTestId = ref(null);
+const reorderingTests = ref(false);
+
+function onTestDragStart(ev, id) {
+  dragTestId.value = id;
+  try { ev.dataTransfer?.setData('text/plain', String(id)); } catch {}
+  if (ev.dataTransfer) ev.dataTransfer.effectAllowed = 'move';
+}
+function onTestDragOver(ev) {
+  if (!dragTestId.value) return;
+  if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'move';
+}
+function onTestDrop(targetId) {
+  if (!dragTestId.value || dragTestId.value === targetId) return;
+  const list = [...courseTests.value];
+  const from = list.findIndex(t => t.id === dragTestId.value);
+  const to = list.findIndex(t => t.id === targetId);
+  if (from < 0 || to < 0) return;
+  list.splice(to, 0, list.splice(from, 1)[0]);
+  applyTestReorder(list);
+  dragTestId.value = null;
+}
+function onTestDragEnd() { dragTestId.value = null; }
+
+function moveTest(idx, delta) {
+  const newIdx = idx + delta;
+  if (newIdx < 0 || newIdx >= courseTests.value.length) return;
+  const list = [...courseTests.value];
+  [list[idx], list[newIdx]] = [list[newIdx], list[idx]];
+  applyTestReorder(list);
+}
+
+async function applyTestReorder(newList) {
+  if (!currentCourse.value) return;
+  // optimistic UI — сразу применяем порядок локально.
+  const previous = courseTests.value;
+  courseTests.value = newList;
+  reorderingTests.value = true;
+  try {
+    await api.post(
+      `/admin/education/courses/${currentCourse.value.id}/tests/reorder`,
+      { ids: newList.map(t => t.id) },
+    );
+    showSuccess('Порядок сохранён');
+  } catch (e) {
+    courseTests.value = previous; // rollback при ошибке
+    showError(e.response?.data?.message || 'Не удалось сохранить порядок');
+  }
+  reorderingTests.value = false;
+}
+
 function addTest() {
   editingTest.value = {
     id: null, question: '', answers: ['', '', '', ''], correct_answer: 0,
@@ -636,11 +710,12 @@ async function saveTest() {
       ? `/admin/education/courses/${currentCourse.value.id}/tests/${editingTest.value.id}`
       : `/admin/education/courses/${currentCourse.value.id}/tests`;
     const method = editingTest.value.id ? 'put' : 'post';
+    // Не передаём sort_order: для существующего — чтобы не перетирать
+    // порядок, выставленный DnD; для нового — бэк сам поставит max+10.
     await api[method](url, {
       question: editingTest.value.question,
       answers: editingTest.value.answers,
       correct_answer: editingTest.value.correct_answer,
-      sort_order: 0,
     });
     showSuccess('Сохранено');
     testDialog.value = false;
@@ -700,4 +775,22 @@ onMounted(() => {
 .editor-content { max-width: 800px; }
 
 .letter-spacing-1 { letter-spacing: 1.2px; }
+
+/* Список вопросов теста — DnD-перетаскивание. */
+.tests-list .test-row {
+  cursor: grab;
+}
+.tests-list .test-row:active {
+  cursor: grabbing;
+}
+.tests-list .test-row--drag {
+  opacity: 0.4;
+}
+.tests-list .test-row--saving {
+  pointer-events: none;
+  opacity: 0.7;
+}
+.tests-list .test-drag-handle {
+  opacity: 0.45;
+}
 </style>
