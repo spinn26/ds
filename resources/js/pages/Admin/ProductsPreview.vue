@@ -30,10 +30,46 @@
     <v-row>
       <v-col v-for="product in filteredProducts" :key="product.id" cols="12" sm="6" md="4" lg="3">
         <v-card class="pa-4 d-flex flex-column" height="100%">
-          <div class="rounded d-flex align-center justify-center mb-3" style="height:140px; background: linear-gradient(135deg, #1a1f2e 0%, #2d3748 100%)">
-            <div class="text-center">
-              <v-icon size="48" color="primary" class="mb-2">mdi-package-variant</v-icon>
-              <div class="text-caption text-white">DS Consulting</div>
+          <!-- Hero: heroImage → imageUrl (логотип) → DS-плейсхолдер.
+               Та же логика, что на партнёрской витрине Products.vue —
+               раньше тут был захардкожен placeholder, из-за чего preview
+               как ФК показывал «DS Consulting» поверх всех продуктов
+               вне зависимости от загруженных картинок. -->
+          <div class="rounded mb-3 product-hero"
+            :style="!product.heroImage && !product.imageUrl
+              ? 'background: linear-gradient(135deg, #1a1f2e 0%, #2d3748 100%);' : ''">
+            <v-img v-if="product.heroImage" :src="product.heroImage"
+              cover height="140" class="rounded">
+              <template #error>
+                <div class="hero-fallback">
+                  <v-img v-if="product.imageUrl" :src="product.imageUrl" height="80" contain>
+                    <template #error>
+                      <div class="hero-placeholder">
+                        <v-icon size="48" color="primary" class="mb-2">mdi-package-variant</v-icon>
+                        <div class="text-caption text-white">DS Consulting</div>
+                      </div>
+                    </template>
+                  </v-img>
+                  <div v-else class="hero-placeholder">
+                    <v-icon size="48" color="primary" class="mb-2">mdi-package-variant</v-icon>
+                    <div class="text-caption text-white">DS Consulting</div>
+                  </div>
+                </div>
+              </template>
+            </v-img>
+            <div v-else class="hero-fallback">
+              <v-img v-if="product.imageUrl" :src="product.imageUrl" height="80" contain>
+                <template #error>
+                  <div class="hero-placeholder">
+                    <v-icon size="48" color="primary" class="mb-2">mdi-package-variant</v-icon>
+                    <div class="text-caption text-white">DS Consulting</div>
+                  </div>
+                </template>
+              </v-img>
+              <div v-else class="hero-placeholder">
+                <v-icon size="48" color="primary" class="mb-2">mdi-package-variant</v-icon>
+                <div class="text-caption text-white">DS Consulting</div>
+              </div>
             </div>
           </div>
           <div class="d-flex justify-space-between align-center mb-2">
@@ -125,3 +161,28 @@ async function load() {
 
 onMounted(load);
 </script>
+
+<style scoped>
+/* Те же стили hero-блока, что в resources/js/pages/Products.vue —
+   чтобы preview как ФК выглядел один-в-один с реальной витриной. */
+.product-hero {
+  height: 140px;
+  overflow: hidden;
+  position: relative;
+  border-radius: var(--ds-radius-md, 8px);
+}
+.hero-fallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #1a1f2e 0%, #2d3748 100%);
+}
+.hero-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+</style>
