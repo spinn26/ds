@@ -1079,15 +1079,24 @@ class AdminFinanceController extends Controller
             abort(404, 'Файл отсутствует на диске');
         }
 
+        // Расширение и Content-Type определяем по реальному файлу в архиве —
+        // новые отчёты идут как XLSX, исторические CSV скачиваются как CSV
+        // без потери совместимости.
+        $ext = strtolower(pathinfo($row->file_path, PATHINFO_EXTENSION)) ?: 'xlsx';
+        $contentType = $ext === 'xlsx'
+            ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            : 'text/csv; charset=utf-8';
+
         $filename = sprintf(
-            'report-%s-%s-%s.csv',
+            'report-%s-%s-%s.%s',
             preg_replace('/[^A-Za-z0-9_.-]/', '_', (string) $row->type),
             substr((string) $row->date_from, 0, 10),
             substr((string) $row->date_to, 0, 10),
+            $ext,
         );
 
         return response()->download($absPath, $filename, [
-            'Content-Type' => 'text/csv; charset=utf-8',
+            'Content-Type' => $contentType,
         ]);
     }
 

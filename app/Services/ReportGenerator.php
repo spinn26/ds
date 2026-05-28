@@ -12,8 +12,9 @@ use Illuminate\Support\Facades\Storage;
  *
  * Это тонкий orchestrator: получает type, делегирует конкретному
  * App\Services\Reports\* классу через ReportTypeRegistry, рендерит
- * CSV и пишет в storage/reports/{id}.csv. Архив + статусы — в
- * report_archive.
+ * стилизованный XLSX (бренд-зелёная шапка, frozen panes, авто-фильтр)
+ * через XlsxExportService и пишет в storage/reports/{id}.xlsx.
+ * Архив + статусы — в report_archive.
  *
  * Sync-путь оставлен для тестов и dev. В проде используется async
  * через {@see \App\Jobs\GenerateReportJob}: контроллер зовёт
@@ -21,7 +22,10 @@ use Illuminate\Support\Facades\Storage;
  */
 class ReportGenerator
 {
-    public function __construct(private readonly ReportTypeRegistry $registry) {}
+    public function __construct(
+        private readonly ReportTypeRegistry $registry,
+        private readonly XlsxExportService $xlsx,
+    ) {}
 
     /** Резервируем запись в архиве, статус «generating». */
     public function reserveArchive(string $type, string $dateFrom, string $dateTo, array $filters = [], ?int $userId = null): int
@@ -39,7 +43,7 @@ class ReportGenerator
     }
 
     /**
-     * Сгенерировать CSV для уже зарезервированной записи.
+     * Сгенерировать XLSX для уже зарезервированной записи.
      * Вызывается из GenerateReportJob.
      */
     public function generateAsArchived(int $id): void
@@ -53,9 +57,12 @@ class ReportGenerator
         $filters = json_decode($row->filters ?: '{}', true);
         $rows = $type->rows($row->date_from, $row->date_to, $filters);
         $headers = $type->headers();
-        $path = "reports/{$id}.csv";
-        $csv = $this->toCsv($headers, $rows);
-        Storage::disk('local')->put($path, $csv);
+
+        $path = "reports/{$id}.xlsx";
+        $absPath = Storage::disk('local')->path($path);
+        // Лист в Excel ограничен 31 символом — режем тип отчёта.
+        $sheetTitle = mb_substr((string) $row->type, 0, 31);
+        $this->xlsx->save($absPath, $sheetTitle, $headers, $rows);
 
         DB::table('report_archive')->where('id', $id)->update([
             'status' => 'ready',
@@ -85,23 +92,5 @@ class ReportGenerator
     public function headersFor(string $type): array
     {
         return $this->registry->get($type)?->headers() ?? [];
-    }
-
-    private function toCsv(array $headers, array $rows): string
-    {
-        $out = "\xEF\xBB\xBF"; // UTF-8 BOM для Excel
-        $out .= $this->csvLine($headers);
-        foreach ($rows as $r) $out .= $this->csvLine($r);
-        return $out;
-    }
-
-    private function csvLine(array $vals): string
-    {
-        return implode(',', array_map(function ($v) {
-            if ($v === null) return '""';
-            $s = (string) $v;
-            $s = str_replace('"', '""', $s);
-            return '"' . $s . '"';
-        }, $vals)) . "\n";
     }
 }

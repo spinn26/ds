@@ -46,16 +46,4 @@ class ReportGeneratorTest extends TestCase
         $gen = $this->app->make(ReportGenerator::class);
         $this->assertSame([], $gen->headersFor('unknown_type'));
     }
-
-    #[Test]
-    public function csv_output_starts_with_utf8_bom(): void
-    {
-        $gen = $this->app->make(ReportGenerator::class);
-        $reflection = new \ReflectionClass($gen);
-        $method = $reflection->getMethod('toCsv');
-        $method->setAccessible(true);
-
-        $csv = $method->invoke($gen, ['Foo', 'Bar'], [['a', 'b']]);
-        $this->assertStringStartsWith("\xEF\xBB\xBF", $csv, 'CSV должен начинаться с UTF-8 BOM для Excel');
-    }
 }

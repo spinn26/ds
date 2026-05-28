@@ -203,7 +203,11 @@ async function downloadReport(item) {
     const resp = await api.get(`/admin/reports/${item.id}/download`, {
       responseType: 'blob',
     });
-    const filename = `report-${item.type}-${item.dateFrom}-${item.dateTo}.csv`;
+    // Имя файла и расширение берём из Content-Disposition сервера —
+    // новые отчёты идут XLSX, старые архивные CSV сохраняют расширение.
+    // Если хедер не пришёл, fallback на xlsx + дату.
+    const filename = parseFilenameFromCD(resp.headers?.['content-disposition'])
+      || `report-${item.type}-${item.dateFrom}-${item.dateTo}.xlsx`;
     const url = URL.createObjectURL(resp.data);
     const a = document.createElement('a');
     a.href = url;
@@ -215,6 +219,21 @@ async function downloadReport(item) {
   } catch (e) {
     notify(e.response?.data?.message || 'Не удалось скачать отчёт', 'error');
   }
+}
+
+/**
+ * Парсим имя файла из Content-Disposition: пытаемся сначала RFC 5987
+ * (filename*=UTF-8''...), потом простой filename="...". URL-декодируем.
+ */
+function parseFilenameFromCD(cd) {
+  if (!cd) return null;
+  const star = /filename\*=(?:UTF-8'')?([^;]+)/i.exec(cd);
+  if (star) {
+    try { return decodeURIComponent(star[1].trim().replace(/^"|"$/g, '')); }
+    catch { /* fallthrough */ }
+  }
+  const plain = /filename="?([^";]+)"?/i.exec(cd);
+  return plain ? plain[1].trim() : null;
 }
 
 onMounted(loadArchive);

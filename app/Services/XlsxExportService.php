@@ -43,6 +43,29 @@ class XlsxExportService
      */
     public function stream(string $filename, string $title, array $headers, iterable $rows, array $opts = []): StreamedResponse
     {
+        $spreadsheet = $this->build($title, $headers, $rows, $opts);
+        return $this->streamResponse($spreadsheet, $filename);
+    }
+
+    /**
+     * То же что stream(), но пишет XLSX на диск (для async-генерации
+     * отчётов: ReportGenerator кладёт файл в storage/app/reports/{id}.xlsx,
+     * затем downloadReport отдаёт его как файл).
+     */
+    public function save(string $absolutePath, string $title, array $headers, iterable $rows, array $opts = []): void
+    {
+        $dir = dirname($absolutePath);
+        if (! is_dir($dir)) {
+            @mkdir($dir, 0755, true);
+        }
+        $spreadsheet = $this->build($title, $headers, $rows, $opts);
+        $writer = new XlsxWriter($spreadsheet);
+        $writer->save($absolutePath);
+    }
+
+    /** Собрать Spreadsheet (общая часть stream/save). */
+    private function build(string $title, array $headers, iterable $rows, array $opts): Spreadsheet
+    {
         $spreadsheet = new Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
         $sheet->setTitle(mb_substr($title, 0, 31));
@@ -57,7 +80,7 @@ class XlsxExportService
         $this->applyColumnFormats($sheet, $opts, $rowCount);
         $this->finalizeSheet($sheet, count($headers), $rowCount);
 
-        return $this->streamResponse($spreadsheet, $filename);
+        return $spreadsheet;
     }
 
     private function writeHeaders(Worksheet $sheet, array $headers): void
