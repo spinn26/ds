@@ -2351,6 +2351,22 @@ class ChatController extends Controller
             return response()->json(['count' => 0, 'tickets' => 0]);
         }
 
+        // Resolved/closed-тикеты НЕ висят в активном счётчике sidebar:
+        // если кто-то пишет в закрытый тикет, у адресата остаётся
+        // bell-нотификация, но счётчик «Чат / Тикеты» в меню должен
+        // отражать только активную работу. Иначе зависающие unread в
+        // archived-тикетах (пример 2026-05-28: тикет 42 у Лейлы,
+        // status='resolved', сообщение от 14.05 без её read-marker)
+        // никогда не сбрасывается — список их не показывает.
+        $activeTicketIds = DB::table('chat_tickets')
+            ->whereIn('id', $ticketIds)
+            ->whereNotIn('status', ['resolved', 'closed'])
+            ->pluck('id');
+
+        if ($activeTicketIds->isEmpty()) {
+            return response()->json(['count' => 0, 'tickets' => 0]);
+        }
+
         // Один JOIN-запрос: непрочитанные = сообщения от других и системные
         // отброшены, плюс created_at > last_read_at (либо нет read-маркера).
         $row = DB::table('chat_messages as cm')
@@ -2358,7 +2374,7 @@ class ChatController extends Controller
                 $j->on('rs.ticket_id', '=', 'cm.ticket_id')
                   ->where('rs.user_id', '=', $userId);
             })
-            ->whereIn('cm.ticket_id', $ticketIds)
+            ->whereIn('cm.ticket_id', $activeTicketIds)
             ->where('cm.sender_id', '!=', $userId)
             ->where('cm.is_system', false)
             ->where(function ($q) {
