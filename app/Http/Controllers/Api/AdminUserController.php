@@ -202,4 +202,66 @@ class AdminUserController extends Controller
 
         return response()->json(['message' => 'Удалён']);
     }
+
+    /**
+     * История входов пользователя: audit_log (action='login') + гео-резолв
+     * по IP через IpGeoService (кэш в `ip_geo_cache`).
+     *
+     * Возвращает максимум 50 последних входов. Записываются в audit_log
+     * автоматически из AuthController::login и login_2fa_challenge,
+     * поэтому требований к миграции данных нет — история начинает
+     * накапливаться с момента, когда соответствующий Audit::log() вызов
+     * уже стоит в коде.
+     */
+    public function loginHistory(int $id, \App\Services\IpGeoService $geo): JsonResponse
+    {
+        $user = User::find($id);
+        if (! $user) {
+            return response()->json(['message' => 'Пользователь не найден'], 404);
+        }
+
+        $rows = DB::table('audit_log')
+            ->where('entity', 'WebUser')
+            ->where(function ($q) use ($id) {
+                // user_id = id (когда сам пользователь логинится — Audit::log
+                // подставляет request user_id), либо entity_id (на случай
+                // если кто-то логировал событие про этого юзера извне).
+                $q->where('user_id', $id)->orWhere('entity_id', (string) $id);
+            })
+            ->whereIn('action', ['login', 'login_2fa_challenge'])
+            ->orderByDesc('created_at')
+            ->limit(50)
+            ->get(['id', 'action', 'ip', 'user_agent', 'created_at', 'payload']);
+
+        if ($rows->isEmpty()) {
+            return response()->json(['data' => [], 'user' => [
+                'id' => $user->id, 'firstName' => $user->firstName, 'lastName' => $user->lastName,
+            ]]);
+        }
+
+        $geoMap = $geo->resolveMany($rows->pluck('ip')->filter()->unique()->all());
+
+        $data = $rows->map(function ($r) use ($geoMap) {
+            $g = $r->ip ? ($geoMap[$r->ip] ?? null) : null;
+            return [
+                'id' => $r->id,
+                'action' => $r->action,
+                'ip' => $r->ip,
+                'userAgent' => $r->user_agent,
+                'createdAt' => $r->created_at,
+                'country' => $g['country'] ?? null,
+                'region' => $g['region'] ?? null,
+                'city' => $g['city'] ?? null,
+                'isp' => $g['isp'] ?? null,
+            ];
+        });
+
+        return response()->json([
+            'data' => $data,
+            'user' => [
+                'id' => $user->id, 'firstName' => $user->firstName,
+                'lastName' => $user->lastName, 'email' => $user->email,
+            ],
+        ]);
+    }
 }

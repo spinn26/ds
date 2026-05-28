@@ -240,6 +240,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/admin/users', [AdminUserController::class, 'store']);
         Route::put('/admin/users/{id}', [AdminUserController::class, 'update']);
         Route::delete('/admin/users/{id}', [AdminUserController::class, 'destroy']);
+        Route::get('/admin/users/{id}/login-history', [AdminUserController::class, 'loginHistory'])->whereNumber('id');
 
         Route::get('/admin/partners', [\App\Http\Controllers\Api\AdminDataController::class, 'partners']);
         Route::get('/admin/partners/lookup', [\App\Http\Controllers\Api\AdminDataController::class, 'partnerLookup']);

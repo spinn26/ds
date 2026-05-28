@@ -56,6 +56,8 @@
       </template>
       <template #item.actions="{ item }">
         <ActionsCell @edit="openEdit(item)" @delete="confirmDelete(item)">
+          <v-btn icon="mdi-history" size="x-small" variant="text" color="secondary"
+            title="История входа" @click.stop="openLoginHistory(item)" />
           <v-btn icon="mdi-login" size="x-small" variant="text" color="secondary"
             title="Войти как" @click.stop="impersonate(item)" />
         </ActionsCell>
@@ -133,6 +135,63 @@
     >
       {{ deleteTarget?.lastName }} {{ deleteTarget?.firstName }} ({{ deleteTarget?.email }})
     </DialogShell>
+
+    <!-- История входов. Резолв страны/региона/города по IP — ip-api.com
+         с локальным кэшем `ip_geo_cache`, ttl 30 дней. -->
+    <v-dialog v-model="loginHistoryDialog" max-width="900" scrollable>
+      <v-card>
+        <v-card-title class="d-flex align-center ga-2">
+          <v-icon color="primary">mdi-history</v-icon>
+          История входа
+          <span v-if="loginHistoryUser" class="text-body-2 text-medium-emphasis">
+            · {{ loginHistoryUser.lastName }} {{ loginHistoryUser.firstName }}
+          </span>
+          <v-spacer />
+          <v-btn icon="mdi-close" variant="text" size="small" @click="loginHistoryDialog = false" />
+        </v-card-title>
+        <v-divider />
+        <v-card-text class="pa-0" style="max-height: 70vh; overflow-y: auto;">
+          <div v-if="loginHistoryLoading" class="d-flex align-center justify-center pa-6">
+            <v-progress-circular indeterminate size="32" />
+          </div>
+          <EmptyState v-else-if="!loginHistoryItems.length"
+            message="Записей о входах не найдено" icon="mdi-history" class="pa-6" />
+          <v-table v-else density="compact">
+            <thead>
+              <tr>
+                <th>Дата / время</th>
+                <th>IP</th>
+                <th>Регион</th>
+                <th>Провайдер</th>
+                <th>Браузер</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in loginHistoryItems" :key="row.id">
+                <td class="text-no-wrap">
+                  <div>{{ fmtDateTime(row.createdAt) }}</div>
+                  <v-chip v-if="row.action === 'login_2fa_challenge'"
+                    size="x-small" color="warning" variant="tonal" class="mt-1">
+                    2FA challenge
+                  </v-chip>
+                </td>
+                <td class="text-no-wrap"><code>{{ row.ip || '—' }}</code></td>
+                <td>
+                  <div v-if="row.country">{{ row.country }}</div>
+                  <div v-if="row.region || row.city" class="text-caption text-medium-emphasis">
+                    {{ [row.region, row.city].filter(Boolean).join(', ') }}
+                  </div>
+                  <span v-if="!row.country" class="text-medium-emphasis">—</span>
+                </td>
+                <td class="text-caption">{{ row.isp || '—' }}</td>
+                <td class="text-caption text-medium-emphasis"
+                  :title="row.userAgent">{{ shortUA(row.userAgent) }}</td>
+              </tr>
+            </tbody>
+          </v-table>
+        </v-card-text>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
@@ -143,7 +202,7 @@ import { useAuthStore } from '../../stores/auth';
 import api from '../../api';
 import {
   PageHeader, FilterBar, DataTableWrapper, StatusChip, BooleanCell, ActionsCell,
-  DialogShell, FormErrors, ColumnVisibilityMenu,
+  DialogShell, FormErrors, ColumnVisibilityMenu, EmptyState,
 } from '../../components';
 import { useCrud } from '../../composables/useCrud';
 import { ref, computed } from 'vue';
@@ -250,6 +309,47 @@ async function impersonate(user) {
     auth.user = data.user;
     router.push('/');
   } catch {}
+}
+
+// === История входа ===
+const loginHistoryDialog = ref(false);
+const loginHistoryLoading = ref(false);
+const loginHistoryItems = ref([]);
+const loginHistoryUser = ref(null);
+
+async function openLoginHistory(user) {
+  loginHistoryUser.value = user;
+  loginHistoryDialog.value = true;
+  loginHistoryLoading.value = true;
+  loginHistoryItems.value = [];
+  try {
+    const { data } = await api.get(`/admin/users/${user.id}/login-history`);
+    loginHistoryItems.value = data.data || [];
+  } catch {} finally {
+    loginHistoryLoading.value = false;
+  }
+}
+
+function fmtDateTime(d) {
+  if (!d) return '';
+  const dt = new Date(d);
+  if (isNaN(dt)) return d;
+  return dt.toLocaleString('ru-RU', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  });
+}
+
+// Из user-agent оставляем «Chrome/Firefox/Safari + ОС» — полный UA в title.
+function shortUA(ua) {
+  if (!ua) return '—';
+  const s = String(ua);
+  const browser = s.match(/(Edg|OPR|Chrome|Firefox|Safari)\/[\d.]+/i)?.[0]
+    || s.match(/MSIE [\d.]+|Trident/i)?.[0]
+    || 'Браузер';
+  const os = s.match(/Windows NT [\d.]+|Mac OS X [\d_]+|Android [\d.]+|iPhone OS [\d_]+|Linux/i)?.[0]
+    || '';
+  return [browser.replace(/\//, ' '), os].filter(Boolean).join(' · ');
 }
 
 onMounted(load);
