@@ -2683,17 +2683,14 @@ class ChatController extends Controller
         ]);
 
         // Полноценное сообщение от агента в ленте тикета (бабл, не
-        // системная плашка). Автор бабла = исполнитель (assigned_to,
-        // обычно сотрудник техподдержки), а НЕ админ, который кликнул
-        // «Закрыть». Так в чате видно, кто реально вёл инцидент.
-        // Если assigned_to не задан — fallback на админа-резолвера.
-        $resolver = $user;
-        $assignedUser = null;
-        if (! empty($ticket->assigned_to)) {
-            $assignedUser = DB::table('WebUser')->where('id', $ticket->assigned_to)->first();
-        }
-        $senderUser = $assignedUser ?: $resolver;
-        $senderName = trim(($senderUser->lastName ?? '') . ' ' . ($senderUser->firstName ?? ''));
+        // системная плашка). Автор бабла = админ, кликнувший «Закрыть»
+        // (тот, кто реально решил инцидент). Раньше брали assigned_to —
+        // но из-за auto-claim в нём оказывался первый ответивший
+        // сотрудник (часто support-оператор, не решавший задачу), а не
+        // фактический резолвер. По запросу 2026-05-28: показываем того,
+        // кто закрывает.
+        $senderUser = $user;
+        $senderName = trim(($senderUser->lastName ?? '') . ' ' . ($senderUser->firstName ?? '')) ?: 'Администратор';
         $messageContent = "✅ Инцидент {$ticket->incident_no} решён.\nИсполнитель: {$senderName}";
 
         $newMsgId = DB::table('chat_messages')->insertGetId([
@@ -2713,8 +2710,8 @@ class ChatController extends Controller
             app(\App\Services\SocketService::class)->emit('chat:new-message', "ticket:{$id}", [
                 'id' => $newMsgId,
                 'ticketId' => $id,
-                'senderId' => $user->id,
-                'senderName' => $resolverName,
+                'senderId' => $senderUser->id,
+                'senderName' => $senderName,
                 'content' => $messageContent,
                 'isAgent' => true,
                 'createdAt' => $now->toIso8601String(),
