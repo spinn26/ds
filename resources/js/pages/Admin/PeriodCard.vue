@@ -23,9 +23,9 @@
           Закрыт {{ fmtDate(closure.closedAt) }}{{ closure.note ? ` · ${closure.note}` : '' }}
         </span>
         <v-spacer />
-        <v-btn v-if="!closure?.isFrozen" size="small" color="warning" variant="tonal"
+        <v-btn v-if="canManagePeriod && !closure?.isFrozen" size="small" color="warning" variant="tonal"
           prepend-icon="mdi-lock" @click="openCloseDialog">Закрыть период</v-btn>
-        <v-btn v-else size="small" color="info" variant="tonal"
+        <v-btn v-else-if="canManagePeriod && closure?.isFrozen" size="small" color="info" variant="tonal"
           prepend-icon="mdi-lock-open" @click="reopenPeriod">Переоткрыть</v-btn>
       </div>
     </v-alert>
@@ -39,16 +39,17 @@
             <v-icon class="me-2" color="error">mdi-alert-decagram</v-icon>
             Штрафы (§5): отрыв + ОП
             <v-spacer />
-            <v-btn size="small" variant="tonal" color="info" prepend-icon="mdi-eye"
-              :loading="loadingPenalties" @click="loadPenalties">Preview</v-btn>
-            <v-btn size="small" color="error" variant="flat" prepend-icon="mdi-check"
-              :disabled="!penalties || closure?.isFrozen" :loading="applyingPenalties"
-              @click="applyPenalties" class="ms-2">Применить</v-btn>
+            <v-btn v-if="canManagePeriod" size="small" color="error" variant="flat"
+              prepend-icon="mdi-calculator-variant"
+              :disabled="closure?.isFrozen"
+              :loading="loadingPenalties || applyingPenalties"
+              @click="recalcPenalties">Пересчитать штрафы</v-btn>
           </v-card-title>
           <v-divider />
           <v-card-text class="pa-3">
             <div v-if="!penalties" class="text-medium-emphasis">
-              Нажмите «Preview», чтобы увидеть изменения до записи.
+              Нажмите «Пересчитать штрафы», чтобы запустить расчёт §5 за период.
+              Перед записью покажем, сколько комиссий будет затронуто.
             </div>
             <v-row v-else dense>
               <v-col cols="6" sm="3">
@@ -170,9 +171,17 @@ import api from '../../api';
 import { PageHeader, DialogShell, MoneyCell, ColumnVisibilityMenu } from '../../components';
 import { fmtDate } from '../../composables/useDesign';
 import { useSnackbar } from '../../composables/useSnackbar';
+import { useConfirm } from '../../composables/useConfirm';
+import { usePermissions } from '../../composables/usePermissions';
 
 const route = useRoute();
 const { showSuccess, showError } = useSnackbar();
+const confirm = useConfirm();
+const { canFull } = usePermissions();
+
+// reports-access = публикация / закрытие периода / принудительный пересчёт
+// (cabinetPermissions.js). По спеке = admin + calculations (Богданова).
+const canManagePeriod = computed(() => canFull('reports-access'));
 
 const ym = computed(() => route.params.ym || ''); // YYYY-MM
 const year = computed(() => parseInt(ym.value.slice(0, 4), 10));
@@ -230,6 +239,25 @@ async function applyPenalties() {
     penalties.value = data.result || penalties.value;
   } catch (e) { showError(e.response?.data?.message || 'Не удалось применить штрафы'); }
   applyingPenalties.value = false;
+}
+
+// Одна кнопка для Богдановой: считаем preview под капотом, показываем
+// диалог с цифрами, на «Да» — пишем. Без шага «нажми Preview, потом Применить».
+async function recalcPenalties() {
+  await loadPenalties();
+  if (!penalties.value) return;
+  const ok = await confirm.ask({
+    title: `Пересчитать штрафы за ${periodLabel.value}?`,
+    message:
+      `Будет затронуто ${penalties.value.affected ?? 0} комиссий ` +
+      `у ${penalties.value.processed ?? 0} партнёров ` +
+      `(отрыв ×0.5 — ${penalties.value.detachmentAffected ?? 0}, ` +
+      `ОП ×0.8 — ${penalties.value.opAffected ?? 0}). ` +
+      `Изменения будут записаны в комиссии.`,
+    confirmText: 'Пересчитать',
+    confirmColor: 'error',
+  });
+  if (ok) await applyPenalties();
 }
 
 async function loadPool() {

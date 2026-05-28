@@ -836,6 +836,10 @@ const menuItems = [
   { label: 'Комиссии', icon: 'mdi-receipt', path: '/manage/commissions', adminSection: 'commissions' },
   { label: 'Пул', icon: 'mdi-cash-multiple', path: '/manage/pool', adminSection: 'pool' },
   { label: 'Квалификации', icon: 'mdi-chart-bar', path: '/manage/qualifications', adminSection: 'qualifications' },
+  // Периоды — закрытие месяца, перерасчёт штрафов (§5).
+  // adminSection='reports-access' = scope из cabinetPermissions, выдан
+  // только admin (sentinel '*') и calculations (Богданова Е.).
+  { label: 'Периоды', icon: 'mdi-calendar-range', path: '/manage/periods', adminSection: 'reports-access' },
 
   // Выплаты
   { group: 'Выплаты', adminSection: 'charges' },
