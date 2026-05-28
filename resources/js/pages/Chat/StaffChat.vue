@@ -3454,8 +3454,14 @@ onUnmounted(() => {
 .toolbar-chip.active { background: rgb(var(--v-theme-primary)); color: #fff; border-color: rgb(var(--v-theme-primary)); }
 .bulk-toggle { margin-left: auto; }
 
-.kanban-board { flex: 1; display: flex; gap: 12px; padding: 12px 16px; overflow-x: auto; align-items: flex-start; }
-.kanban-column { flex: 1; min-width: 260px; max-width: 320px; display: flex; flex-direction: column; background: rgba(var(--v-theme-surface), 0.9); border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); border-top: 3px solid var(--col-color); border-radius: 12px; overflow: hidden; transition: all 0.15s; }
+/* align-items: stretch (по умолчанию) — колонки растягиваются на всю
+   высоту доски, чтобы overflow-y:auto на .kanban-col-body внутри них
+   реально срабатывал. Раньше было flex-start → колонка с 23 карточками
+   («Решён») вытягивалась за пределы экрана и нижние карточки приходилось
+   скроллить страницей. min-height:0 обязателен для flex-child со
+   скроллом — без него Chromium игнорирует max-height родителя. */
+.kanban-board { flex: 1; display: flex; gap: 12px; padding: 12px 16px; overflow-x: auto; min-height: 0; }
+.kanban-column { flex: 1; min-width: 260px; max-width: 320px; min-height: 0; display: flex; flex-direction: column; background: rgba(var(--v-theme-surface), 0.9); border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); border-top: 3px solid var(--col-color); border-radius: 12px; overflow: hidden; transition: all 0.15s; }
 .kanban-column.drop-target { background: rgba(var(--v-theme-primary), 0.08); border-color: rgb(var(--v-theme-primary)); border-top-color: rgb(var(--v-theme-primary)); box-shadow: 0 0 0 2px rgba(var(--v-theme-primary), 0.3); }
 .kanban-col-head { display: flex; align-items: center; gap: 6px; padding: 10px 14px; border-bottom: 1px solid rgba(var(--v-border-color), 0.3); background: rgba(var(--v-theme-surface-variant), 0.3); }
 .kanban-col-title { flex: 1; font-size: 13px; font-weight: 700; color: rgba(var(--v-theme-on-surface), 0.8); }
