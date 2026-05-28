@@ -175,6 +175,9 @@
       <template #item.programName="{ value }">
         <span class="text-no-wrap">{{ value || '—' }}</span>
       </template>
+      <template #item.consultantName="{ value }">
+        <span class="text-no-wrap">{{ value || '—' }}</span>
+      </template>
       <template #item.date="{ value }">{{ fmtDate(value) }}</template>
       <template #item.comment="{ value }">{{ value || '—' }}</template>
       <template #item.propertyTitle="{ value }">{{ value || '—' }}</template>
