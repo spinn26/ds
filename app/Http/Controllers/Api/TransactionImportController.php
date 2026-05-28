@@ -705,6 +705,93 @@ class TransactionImportController extends Controller
         return response()->json(['message' => 'Транзакция обновлена', 'id' => $id]);
     }
 
+    /**
+     * DELETE /admin/transactions/{id}
+     *
+     * Удаление зафиксированной транзакции в открытом периоде. Soft-delete
+     * самой транзакции и всех её commission по цепочке наставников,
+     * затем пересчёт consultantBalance для затронутых (consultant, dateMonth)
+     * пар, чтобы snapshot не «висел» на старых суммах. Видимо в админ-UI
+     * только admin / calculations (reports-access scope).
+     *
+     * Frozen period → 422. Нет транзакции → 404. Нет права → 403.
+     */
+    public function destroy(
+        int $id,
+        Request $request,
+        \App\Services\PeriodFreezeService $freeze,
+        \App\Services\CommissionCalculator $calculator
+    ): JsonResponse {
+        $user = $request->user();
+        $roles = array_map('trim', explode(',', $user->role ?? ''));
+        if (! array_intersect($roles, ['admin', 'calculations'])) {
+            return response()->json([
+                'message' => 'Удаление зафиксированных транзакций доступно только администратору и руководителю по расчётам',
+            ], 403);
+        }
+
+        $tx = DB::table('transaction')->where('id', $id)->whereNull('deletedAt')->first();
+        if (! $tx) {
+            return response()->json(['message' => 'Транзакция не найдена'], 404);
+        }
+
+        $period = $freeze->resolvePeriod(date: $tx->date);
+        if ($period && $freeze->isFrozen($period[0], $period[1])) {
+            return response()->json([
+                'message' => sprintf('Период %02d.%d закрыт — транзакцию нельзя удалить.',
+                    $period[1], $period[0]),
+            ], 422);
+        }
+
+        // Снимаем уникальные (consultant, dateMonth, dateYear) ДО soft-delete,
+        // иначе rebuildBalance не увидит ничего и старый snapshot останется.
+        $affected = DB::table('commission')
+            ->where('transaction', $id)
+            ->whereNull('deletedAt')
+            ->select('consultant', 'dateMonth', 'dateYear')
+            ->distinct()
+            ->get();
+
+        $deletedCommissions = DB::transaction(function () use ($id) {
+            $n = DB::table('commission')
+                ->where('transaction', $id)
+                ->whereNull('deletedAt')
+                ->update(['deletedAt' => now()]);
+            DB::table('transaction')
+                ->where('id', $id)
+                ->update(['deletedAt' => now(), 'dateChanged' => now()]);
+            return $n;
+        });
+
+        $rebuilt = 0;
+        foreach ($affected as $p) {
+            if (! $p->consultant || ! $p->dateMonth) continue;
+            try {
+                $calculator->rebuildBalanceFor(
+                    (int) $p->consultant,
+                    (string) $p->dateMonth,
+                    (string) ($p->dateYear ?? substr($p->dateMonth, 0, 4)),
+                );
+                $rebuilt++;
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('rebuildBalance after delete failed', [
+                    'tx' => $id, 'consultant' => $p->consultant, 'month' => $p->dateMonth,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        return response()->json([
+            'message' => sprintf(
+                'Транзакция #%d удалена: %d комиссий, пересчитано %d балансов',
+                $id, $deletedCommissions, $rebuilt,
+            ),
+            'id' => $id,
+            'deletedCommissions' => $deletedCommissions,
+            'rebuiltBalances' => $rebuilt,
+        ]);
+    }
+
     private function ensureImportLogTable(): void
     {
         if (! Schema::hasTable('transaction_import_log')) {

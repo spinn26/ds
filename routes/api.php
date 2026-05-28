@@ -350,6 +350,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/admin/transaction-import/{id}/errors.csv', [\App\Http\Controllers\Api\TransactionImportController::class, 'errorsCsv'])->whereNumber('id');
         Route::post('/admin/transactions/{id}/calculate', [\App\Http\Controllers\Api\TransactionImportController::class, 'calculateSingle']);
         Route::put('/admin/transactions/{id}', [\App\Http\Controllers\Api\TransactionImportController::class, 'update'])->whereNumber('id');
+        Route::delete('/admin/transactions/{id}', [\App\Http\Controllers\Api\TransactionImportController::class, 'destroy'])->whereNumber('id');
 
         // Admin — Manual transaction entry (✅Транзакции.md)
         Route::get('/admin/manual-tx/contracts', [\App\Http\Controllers\Api\ManualTransactionController::class, 'searchContracts']);

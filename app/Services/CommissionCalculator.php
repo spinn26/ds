@@ -106,6 +106,18 @@ class CommissionCalculator
         }
     }
 
+    /**
+     * Публичная обёртка для пересчёта consultantBalance вручную.
+     * Используется при удалении транзакции: после soft-delete commission
+     * метод rebuildBalancesForTransaction() не сработает (commission уже
+     * отмечены deletedAt), поэтому контроллер сам собирает пары
+     * (consultant, dateMonth) ДО удаления и явно вызывает этот метод.
+     */
+    public function rebuildBalanceFor(int $consultantId, string $dateMonth, ?string $dateYear = null): void
+    {
+        $this->rebuildBalance($consultantId, $dateMonth, $dateYear ?? substr($dateMonth, 0, 4));
+    }
+
     private function rebuildBalance(int $consultantId, string $dateMonth, string $dateYear): void
     {
         $sums = DB::table('commission')
