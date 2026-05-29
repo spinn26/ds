@@ -26,6 +26,11 @@ Route::prefix('v1')->group(function () {
     Route::middleware('throttle:5,1')->group(function () {
         Route::post('/auth/login', [AuthController::class, 'login']);
         Route::post('/auth/register', [AuthController::class, 'register']);
+        // Восстановление пароля: ссылка на email + сброс по токену.
+        // Password broker внутри сам троттлит повторные отправки
+        // (60с между письмами на один email).
+        Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword']);
+        Route::post('/auth/reset-password', [AuthController::class, 'resetPassword']);
     });
     Route::middleware('throttle:10,1')->group(function () {
         Route::post('/auth/check-duplicates', [AuthController::class, 'checkDuplicates']);

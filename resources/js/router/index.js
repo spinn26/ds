@@ -5,6 +5,8 @@ const routes = [
     // === Guest ===
     { path: '/login', component: () => import('../pages/Auth/Login.vue'), meta: { guest: true } },
     { path: '/register', component: () => import('../pages/Auth/Register.vue'), meta: { guest: true } },
+    { path: '/forgot-password', component: () => import('../pages/Auth/ForgotPassword.vue'), meta: { guest: true } },
+    { path: '/reset-password', component: () => import('../pages/Auth/ResetPassword.vue'), meta: { guest: true } },
 
     // === Partner SPA + Admin management pages ===
     {
@@ -145,7 +147,10 @@ const routes = [
             { path: 'triggers', component: () => import('../pages/Admin/Triggers.vue') },
             { path: 'integrations', component: () => import('../pages/Admin/Integrations.vue') },
             { path: 'settings', component: () => import('../pages/Admin/Settings.vue') },
-            { path: 'api-keys', component: () => import('../pages/Admin/ApiKeys.vue') },
+            // API-ключи и токены перенесены во вкладку «API ключи»
+            // раздела Интеграции (единая точка настройки внешних
+            // сервисов). Старый путь редиректит для бэкап-ссылок.
+            { path: 'api-keys', redirect: '/admin/integrations?tab=api-keys' },
         ],
     },
 

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Services\ApiSettingsService;
 use App\Services\IntegrationLogger;
 use App\Services\InsmartIntegrationService;
+use App\Services\MailSettingsService;
 use App\Services\TelegramNotifier;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
@@ -76,7 +77,18 @@ class AdminIntegrationsController extends Controller
     public function __construct(
         private readonly IntegrationLogger $logger,
         private readonly ApiSettingsService $settings,
+        private readonly MailSettingsService $mailSettings,
     ) {}
+
+    /**
+     * Список SMTP-полей, которые мы показываем/принимаем для сервиса
+     * 'smtp'. Перекрывает self::SERVICES['smtp']['settings'] (пустой),
+     * т.к. SMTP лежит в mail_settings, а не в api_settings.
+     */
+    private const SMTP_FIELDS = [
+        'host', 'port', 'username', 'password',
+        'encryption', 'from_address', 'from_name',
+    ];
 
     /**
      * GET /admin/integrations
@@ -269,6 +281,21 @@ class AdminIntegrationsController extends Controller
     public function config(string $service): JsonResponse
     {
         $meta = self::SERVICES[$service] ?? abort(404);
+
+        // SMTP — special case: значения в mail_settings (default-ящик).
+        if ($service === 'smtp') {
+            $row = $this->mailSettings->default();
+            $values = [];
+            foreach (self::SMTP_FIELDS as $key) {
+                $val = $row->{$key} ?? null;
+                $values[$key] = [
+                    'value' => $this->maskSecret($key, $val !== null ? (string) $val : null),
+                    'has_value' => $val !== null && $val !== '',
+                ];
+            }
+            return response()->json(['service' => $service, 'settings' => $values]);
+        }
+
         $values = [];
         foreach ($meta['settings'] as $key) {
             $val = $this->settings->get($key);
@@ -287,6 +314,38 @@ class AdminIntegrationsController extends Controller
         $data = $request->validate([
             'settings' => ['required', 'array'],
         ])['settings'];
+
+        // SMTP → mail_settings.default. Если ящика ещё нет — создаём.
+        // password оставляем прежним, если фронт прислал маскированный
+        // («•••»). from_name дефолт «DS Consulting».
+        if ($service === 'smtp') {
+            $current = $this->mailSettings->default();
+            $payload = [
+                'name' => $current->name ?? 'DS Consulting',
+                'host' => $data['host'] ?? $current->host ?? null,
+                'port' => (int) ($data['port'] ?? $current->port ?? 587),
+                'username' => $data['username'] ?? $current->username ?? null,
+                'encryption' => $data['encryption'] ?? $current->encryption ?? null,
+                'from_address' => $data['from_address'] ?? $current->from_address ?? null,
+                'from_name' => $data['from_name'] ?? $current->from_name ?? 'DS Consulting',
+            ];
+            // password: пустую строку трактуем как «оставить как было».
+            // Любая строка без «•» = новый пароль.
+            $pwIn = $data['password'] ?? null;
+            if ($pwIn !== null && $pwIn !== '' && ! str_contains($pwIn, '•')) {
+                $payload['password'] = $pwIn;
+            } else {
+                $payload['password'] = $current->password ?? null;
+            }
+
+            $this->mailSettings->save($current?->id, $payload);
+
+            $this->logger->record($service, 'outbound', 'update_config', 'success',
+                'SMTP-ящик обновлён', null, ['updated_keys' => array_keys($data)],
+                actorId: $request->user()?->id);
+
+            return response()->json(['message' => 'Сохранено']);
+        }
 
         foreach ($data as $key => $value) {
             if (! in_array($key, $meta['settings'], true)) continue;

@@ -13,10 +13,13 @@ use App\Models\Client;
 use App\Models\Consultant;
 use App\Models\User;
 use App\Services\PartnerAcceptanceService;
+use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Str;
 
 class AuthController extends Controller
 {
@@ -219,6 +222,76 @@ class AuthController extends Controller
             'token' => $token,
             'user' => UserResource::make($user),
         ], 201);
+    }
+
+    /**
+     * Запрос ссылки на сброс пароля. По email — если он есть в WebUser,
+     * шлём письмо с одноразовым токеном через Password broker. Если
+     * email не найден — отвечаем тем же сообщением, чтобы не давать
+     * enumerate users.
+     *
+     * Throttle 5/мин на роуте + Password broker внутри тоже имеет
+     * throttling (по умолчанию 60с между отправками на один email).
+     */
+    public function forgotPassword(Request $request): JsonResponse
+    {
+        $request->validate(['email' => 'required|email']);
+
+        $status = Password::sendResetLink(['email' => $request->input('email')]);
+
+        // Всегда 200 + один и тот же текст, чтобы не палить наличие email.
+        // Реальная ошибка пишется в log (Password broker сам логирует
+        // sender exceptions).
+        return response()->json([
+            'message' => 'Если такой email зарегистрирован, ссылка для сброса отправлена. Проверьте почту.',
+            'status' => $status,  // полезно для отладки; не утекает enumerate (одинаковый текст выше)
+        ]);
+    }
+
+    /**
+     * Сброс пароля по токену из письма. Минимальные требования к новому
+     * паролю: 8 символов + буква + цифра (как в register).
+     */
+    public function resetPassword(Request $request): JsonResponse
+    {
+        $request->validate([
+            'token' => 'required|string',
+            'email' => 'required|email',
+            'password' => ['required', 'confirmed', 'min:8',
+                'regex:/[A-Za-zА-Яа-я]/', 'regex:/\d/'],
+        ]);
+
+        $status = Password::reset(
+            $request->only('email', 'password', 'password_confirmation', 'token'),
+            function (User $user, string $password) {
+                $user->password = Hash::make($password);
+                $user->setRememberToken(Str::random(60));
+                $user->saveQuietly();
+
+                // Инвалидируем все Sanctum-токены пользователя — после
+                // сброса пароля старые сессии должны прекратиться.
+                $user->tokens()->delete();
+
+                event(new PasswordReset($user));
+
+                \App\Support\Audit::log('password_reset', 'WebUser', $user->id, [
+                    'email' => $user->email,
+                ]);
+            }
+        );
+
+        if ($status === Password::PASSWORD_RESET) {
+            return response()->json(['message' => 'Пароль изменён. Войдите с новым паролем.']);
+        }
+
+        return response()->json([
+            'message' => match ($status) {
+                Password::INVALID_TOKEN => 'Ссылка недействительна или истекла. Запросите новую.',
+                Password::INVALID_USER => 'Пользователь не найден.',
+                default => 'Не удалось сбросить пароль. Попробуйте позже.',
+            },
+            'status' => $status,
+        ], 422);
     }
 
     /**

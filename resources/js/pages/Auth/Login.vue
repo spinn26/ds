@@ -89,6 +89,9 @@
           >
             Войти в кабинет
           </v-btn>
+          <p class="form-aux mt-3">
+            <router-link to="/forgot-password">Забыли пароль?</router-link>
+          </p>
         </v-form>
 
         <!-- Шаг 2: 2FA TOTP -->

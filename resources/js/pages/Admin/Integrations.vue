@@ -12,6 +12,7 @@
       <v-tab value="services" prepend-icon="mdi-server">Сервисы</v-tab>
       <v-tab value="events" prepend-icon="mdi-history">Журнал событий</v-tab>
       <v-tab value="config" prepend-icon="mdi-cog">Настройки</v-tab>
+      <v-tab value="api-keys" prepend-icon="mdi-key-variant">API ключи и токены</v-tab>
     </v-tabs>
 
     <v-window v-model="tab">
@@ -131,6 +132,11 @@
         </v-card>
       </v-window-item>
 
+      <!-- ───── API ключи и токены ───── -->
+      <v-window-item value="api-keys">
+        <ApiKeysPanel />
+      </v-window-item>
+
       <!-- ───── Настройки ───── -->
       <v-window-item value="config">
         <v-row dense>
@@ -237,9 +243,14 @@ import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
 import PageHeader from '../../components/PageHeader.vue';
 import EmptyState from '../../components/EmptyState.vue';
+import ApiKeysPanel from '../../components/ApiKeysPanel.vue';
 import { useDebounce } from '../../composables/useDebounce';
+import { useRoute } from 'vue-router';
 
-const tab = ref('services');
+const route = useRoute();
+// Поддерживаем ?tab=api-keys для редиректа из /admin/api-keys.
+const tab = ref(['services', 'events', 'config', 'api-keys'].includes(route.query.tab)
+  ? route.query.tab : 'services');
 
 // ───── Сервисы ─────
 const services = ref([]);
@@ -372,7 +383,7 @@ const SECRET_HINTS = {
   insmart: 'Webhook secret и API key — для проверки подписи входящих и исходящих вызовов.',
   google_sheets: 'API key (Google Cloud Console → Credentials) + ID нужных таблиц.',
   telegram: 'Token бота от @BotFather + chat_id (group/channel) для алертов.',
-  smtp: 'Хранится отдельно в /admin/mail — там можно отправить тест и редактировать шаблоны.',
+  smtp: 'SMTP-ящик для писем восстановления пароля и системных оповещений. Шаблоны рассылок — в /admin/mail.',
   socket_io: 'Адрес сервера и emit-secret задаются через .env (SOCKET_HOST, SOCKET_API_PORT, SOCKET_EMIT_SECRET).',
 };
 function configHint(key) {
@@ -389,10 +400,6 @@ function settingLabel(key) {
 }
 
 async function openConfig(s) {
-  if (s.key === 'smtp') {
-    notify('SMTP настраивается в разделе Mail / Шаблоны', 'info');
-    return;
-  }
   if (s.key === 'socket_io') {
     notify('Socket.IO — параметры в .env (SOCKET_HOST, SOCKET_API_PORT)', 'info');
     return;

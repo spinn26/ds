@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Notifications\ResetPasswordNotification;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -14,6 +15,16 @@ use Spatie\Activitylog\LogOptions;
 class User extends Authenticatable
 {
     use HasApiTokens, HasFactory, Notifiable, LogsActivity;
+
+    /**
+     * Переопределяем штатное `Notifications\Auth\ResetPassword` —
+     * нам нужна ссылка на SPA (`/reset-password?token=…`), а не на
+     * web-роут `/password/reset/{token}`, которого в проекте нет.
+     */
+    public function sendPasswordResetNotification($token): void
+    {
+        $this->notify(new ResetPasswordNotification($token));
+    }
 
     public function getActivitylogOptions(): LogOptions
     {
