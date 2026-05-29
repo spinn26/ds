@@ -316,21 +316,26 @@ class AdminIntegrationsController extends Controller
         ])['settings'];
 
         // SMTP → mail_settings.default. Если ящика ещё нет — создаём.
-        // password оставляем прежним, если фронт прислал маскированный
-        // («•••»). from_name дефолт «DS Consulting».
+        // ВАЖНО: пустую строку «» от фронта трактуем как «поле не
+        // редактировали, оставить как было». Иначе сохранение формы с
+        // не заполненным from_address/encryption затирает уже введённые
+        // значения, и applyRuntimeConfig (требует host+from_address)
+        // молча перестаёт работать → письма не уходят без явной ошибки.
         if ($service === 'smtp') {
             $current = $this->mailSettings->default();
+            $keep = static fn (?string $key, $fallback) =>
+                ($key !== null && $key !== '') ? $key : $fallback;
+
             $payload = [
                 'name' => $current->name ?? 'DS Consulting',
-                'host' => $data['host'] ?? $current->host ?? null,
-                'port' => (int) ($data['port'] ?? $current->port ?? 587),
-                'username' => $data['username'] ?? $current->username ?? null,
-                'encryption' => $data['encryption'] ?? $current->encryption ?? null,
-                'from_address' => $data['from_address'] ?? $current->from_address ?? null,
-                'from_name' => $data['from_name'] ?? $current->from_name ?? 'DS Consulting',
+                'host' => $keep($data['host'] ?? null, $current->host ?? null),
+                'port' => (int) ($keep($data['port'] ?? null, $current->port ?? 587)),
+                'username' => $keep($data['username'] ?? null, $current->username ?? null),
+                'encryption' => $keep($data['encryption'] ?? null, $current->encryption ?? null),
+                'from_address' => $keep($data['from_address'] ?? null, $current->from_address ?? null),
+                'from_name' => $keep($data['from_name'] ?? null, $current->from_name ?? 'DS Consulting'),
             ];
-            // password: пустую строку трактуем как «оставить как было».
-            // Любая строка без «•» = новый пароль.
+            // password: пустую строку или маску «•••» = «оставить как было».
             $pwIn = $data['password'] ?? null;
             if ($pwIn !== null && $pwIn !== '' && ! str_contains($pwIn, '•')) {
                 $payload['password'] = $pwIn;
