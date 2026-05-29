@@ -23,7 +23,10 @@ use Illuminate\Support\Facades\DB;
  */
 class ProductsAudit20260529 extends Command
 {
-    protected $signature = 'products:audit-20260529 {path : Путь к JSON-выгрузке Google Sheets} {--apply : Реально применить изменения}';
+    protected $signature = 'products:audit-20260529
+        {path : Путь к JSON-выгрузке Google Sheets}
+        {--apply : Реально скрыть red-программы}
+        {--create-missing : Создать в catalog те программы, которых там нет (active в листе)}';
     protected $description = 'Diff/apply нового списка продуктов из Google Sheets';
 
     public function handle(): int
@@ -184,32 +187,119 @@ class ProductsAudit20260529 extends Command
             }
         }
 
-        if (! $apply) {
+        $createMissing = (bool) $this->option('create-missing');
+
+        if (! $apply && ! $createMissing) {
             $this->line('');
-            $this->info('Dry-run. Используй --apply для реальных изменений.');
+            $this->info('Dry-run. Используй --apply для скрытия red-программ, --create-missing для импорта новых.');
             $this->info('Для подробного списка добавь -v.');
             return self::SUCCESS;
         }
 
-        $this->line('');
-        $this->warn('=== APPLY ===');
-        $hidden = 0;
-        DB::transaction(function () use ($toHide, $toShow, &$hidden) {
-            foreach ($toHide as $t) {
-                DB::table('programs_catalog')->where('id', $t['catalog']->id)->update([
-                    'visible_to_resident' => false,
-                    'visible_to_calculator' => false,
-                    'updated_at' => now(),
-                ]);
-                $hidden++;
-            }
-            // К показу — НЕ применяем автоматически (это может вернуть в
-            // витрину старые программы, которые скрыли по другим причинам,
-            // не связанным с майским аудитом). Только логируем.
-        });
-        $this->info("Скрыто программ: {$hidden}");
-        $this->info("К показу — НЕ применяем автоматом (только лог).");
+        if ($apply) {
+            $this->line('');
+            $this->warn('=== APPLY (hide red) ===');
+            $hidden = 0;
+            DB::transaction(function () use ($toHide, &$hidden) {
+                foreach ($toHide as $t) {
+                    DB::table('programs_catalog')->where('id', $t['catalog']->id)->update([
+                        'visible_to_resident' => false,
+                        'visible_to_calculator' => false,
+                        'updated_at' => now(),
+                    ]);
+                    $hidden++;
+                }
+            });
+            $this->info("Скрыто программ: {$hidden}");
+            $this->info("К показу — НЕ применяем автоматом (только лог).");
+        }
+
+        if ($createMissing) {
+            $this->line('');
+            $this->warn('=== CREATE MISSING ===');
+            [$prodCreated, $progCreated] = $this->createMissing($missingInCatalog);
+            $this->info("Создано продуктов: {$prodCreated}");
+            $this->info("Создано программ: {$progCreated}");
+        }
+
         return self::SUCCESS;
+    }
+
+    /**
+     * Создать в products_catalog/programs_catalog те (product, program)
+     * пары, которых там нет. legacy_product_id остаётся NULL (продукты
+     * пристыкуются к legacy `product` позже, когда придёт первый контракт
+     * или вручную). visible_to_resident/calculator = true.
+     *
+     * @param  list<array<string,mixed>>  $missing
+     * @return array{0:int,1:int}  [createdProducts, createdPrograms]
+     */
+    private function createMissing(array $missing): array
+    {
+        if (! $missing) return [0, 0];
+
+        // Группируем по продукту, чтобы один INSERT в products_catalog
+        // на много программ.
+        $byProduct = [];
+        foreach ($missing as $m) {
+            $byProduct[$m['product']][] = $m;
+        }
+
+        $prodCreated = 0;
+        $progCreated = 0;
+        $importedFrom = 'sheet-2026-05-29';
+
+        DB::transaction(function () use ($byProduct, &$prodCreated, &$progCreated, $importedFrom) {
+            foreach ($byProduct as $productName => $programs) {
+                // Если продукт уже есть в products_catalog по имени — используем.
+                $productId = DB::table('products_catalog')
+                    ->whereRaw('LOWER(name) = ?', [mb_strtolower(trim($productName))])
+                    ->value('id');
+
+                if (! $productId) {
+                    $productId = DB::table('products_catalog')->insertGetId([
+                        'name' => $productName,
+                        'type' => $programs[0]['category'] ?? null,
+                        'active' => true,
+                        'visible_to_resident' => true,
+                        'visible_to_calculator' => true,
+                        'imported_from' => $importedFrom,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                    $prodCreated++;
+                }
+
+                foreach ($programs as $g) {
+                    // Идемпотентность: если такая программа уже есть у
+                    // этого продукта — пропускаем (на случай повторного
+                    // запуска или race conditions).
+                    $exists = DB::table('programs_catalog')
+                        ->where('product_id', $productId)
+                        ->whereRaw('LOWER(name) = ?', [mb_strtolower(trim($g['program']))])
+                        ->exists();
+                    if ($exists) continue;
+
+                    DB::table('programs_catalog')->insert([
+                        'product_id' => $productId,
+                        'name' => $g['program'] ?: '—',
+                        'vendor' => $g['supplier'] ?? null,
+                        'category' => $g['category'] ?? null,
+                        'active' => true,
+                        'visible_to_resident' => true,
+                        'visible_to_calculator' => true,
+                        'has_red' => false,
+                        'rate_lines' => (int) ($g['total_count'] ?? 1),
+                        'imported_from' => $importedFrom,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                    $progCreated++;
+                }
+            }
+        });
+
+        return [$prodCreated, $progCreated];
     }
 
     /**
