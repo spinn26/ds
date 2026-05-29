@@ -178,30 +178,68 @@ class ProductsAudit20260529 extends Command
 
         if ($updateTariffs) {
             $this->line('');
-            $this->warn('=== UPDATE TARIFFS ===');
+            $this->warn('=== UPDATE TARIFFS + SYNC VISIBILITY ===');
             $n = 0;
-            DB::transaction(function () use ($toUpdateTariffs, &$n) {
+            $reactProds = 0;
+            $reactProgs = 0;
+            $reactivatedProductIds = [];
+            DB::transaction(function () use ($toUpdateTariffs, &$n, &$reactProgs, &$reactProds, &$reactivatedProductIds) {
                 foreach ($toUpdateTariffs as $t) {
                     $lines = $t['sheet']['lines'] ?? [];
-                    // rate_lines + terms_summary + years_summary — для удобства
-                    // показа в списке. tariffs — детальный jsonb.
                     $terms = array_values(array_unique(array_filter(array_map(fn ($l) => $l['term'] ?? null, $lines))));
                     $years = array_values(array_unique(array_filter(array_map(fn ($l) => $l['year_kv'] ?? null, $lines))));
+                    $isActive = $t['sheet']['active']; // true если хотя бы одна строка не-red
 
-                    DB::table('programs_catalog')->where('id', $t['catalog']->id)->update([
+                    $update = [
                         'tariffs' => json_encode($lines, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE),
                         'rate_lines' => count($lines),
                         'terms_summary' => $terms ? mb_substr(implode(', ', $terms), 0, 250) : null,
                         'years_summary' => $years ? mb_substr(implode(', ', $years), 0, 250) : null,
                         'vendor' => $t['sheet']['supplier'] ?? null,
                         'category' => $t['sheet']['category'] ?? null,
-                        'has_red' => $t['sheet']['red_count'] === $t['sheet']['total_count'],
+                        'has_red' => ! $isActive,
                         'updated_at' => now(),
-                    ]);
+                    ];
+                    // Sync visibility с листом:
+                    //  - active в листе → active+visible в catalog
+                    //  - red → active=true остаётся, но visible=false
+                    if ($isActive) {
+                        $update['active'] = true;
+                        $update['visible_to_resident'] = true;
+                        $update['visible_to_calculator'] = true;
+                        if (! $t['catalog']->pg_active || ! $t['catalog']->visible_to_resident) {
+                            $reactProgs++;
+                        }
+                    } else {
+                        $update['visible_to_resident'] = false;
+                        $update['visible_to_calculator'] = false;
+                    }
+
+                    DB::table('programs_catalog')->where('id', $t['catalog']->id)->update($update);
                     $n++;
+
+                    // Если у программы active=true в листе — продукт тоже должен
+                    // быть active. Запоминаем product_id для batch-реактивации.
+                    if ($isActive && ! $t['catalog']->product_active) {
+                        $reactivatedProductIds[(int) $t['catalog']->product_id] = true;
+                    }
+                }
+
+                if ($reactivatedProductIds) {
+                    DB::table('products_catalog')
+                        ->whereIn('id', array_keys($reactivatedProductIds))
+                        ->update([
+                            'active' => true,
+                            'visible_to_resident' => true,
+                            'visible_to_calculator' => true,
+                            'updated_at' => now(),
+                        ]);
+                    $reactProds = count($reactivatedProductIds);
                 }
             });
             $this->info("Обновлено tariffs у программ: {$n}");
+            $this->info("Реактивировано программ (active+visible): {$reactProgs}");
+            $this->info("Реактивировано продуктов (active+visible): {$reactProds}");
         }
 
         if ($createMissing) {
