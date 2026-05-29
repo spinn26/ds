@@ -133,7 +133,7 @@ import { ref, reactive, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import api from '../../api';
 import PageHeader from '../../components/PageHeader.vue';
-import { fmtDateTime } from '../../composables/useDesign';
+import { fmtDateTime, getStatusColor, statusLabels, getPriorityColor } from '../../composables/useDesign';
 import { usePermissions } from '../../composables/usePermissions';
 import { useAuthStore } from '../../stores/auth';
 
@@ -170,17 +170,18 @@ const severityOptions = [
   { label: 'Low', value: 'low' },
 ];
 
-function severityColor(s) {
-  return ({ critical: 'error', high: 'warning', medium: 'info', low: 'success' })[s] || 'default';
-}
+// severity = priority в терминах инцидентов; цвета совпадают с
+// priorityColors из useDesign. Лейблы оставлены ENG-капитализированными
+// (Critical/High/Medium/Low) per design — priorityLabels из useDesign
+// возвращает русские «Критический/...», что в админ-сетке инцидентов
+// не подходит.
+const severityColor = getPriorityColor;
 function severityLabel(s) {
   return ({ critical: 'Critical', high: 'High', medium: 'Medium', low: 'Low' })[s] || s;
 }
-function statusColor(s) {
-  return ({ new: 'info', open: 'info', in_progress: 'warning', pending: 'warning', resolved: 'success', closed: 'grey' })[s] || 'default';
-}
+const statusColor = getStatusColor;
 function statusLabel(s) {
-  return ({ new: 'Новый', open: 'Открыт', in_progress: 'В работе', pending: 'Ожидание', resolved: 'Решён', closed: 'Закрыт' })[s] || s;
+  return statusLabels[s] || s;
 }
 
 const headers = [

@@ -54,11 +54,26 @@ class MonthlyFinalisationRunner
             ->filter()
             ->all();
 
+        // Pre-fetch ЛП всех кандидатов одним запросом, чтобы не делать
+        // sum(personalVolume) в цикле (N+1 на ~1k партнёров при финализе).
+        $personalVolumes = DB::table('commission')
+            ->whereIn('consultant', $consultantIds)
+            ->where('chainOrder', 1)
+            ->where('dateMonth', $monthStr)
+            ->where('dateYear', $yearStr)
+            ->where('type', 'transaction')
+            ->whereNull('deletedAt')
+            ->selectRaw('consultant, SUM("personalVolume") AS pv')
+            ->groupBy('consultant')
+            ->pluck('pv', 'consultant')
+            ->map(fn ($v) => (float) $v)
+            ->toArray();
+
         $stats = ['total' => count($consultantIds), 'otrifApplied' => 0, 'opApplied' => 0, 'errors' => []];
 
         foreach ($consultantIds as $consultantId) {
             try {
-                $r = $this->applyForConsultant((int) $consultantId, $year, $month);
+                $r = $this->applyForConsultant((int) $consultantId, $year, $month, (float) ($personalVolumes[$consultantId] ?? 0));
                 if ($r['otrifApplied']) $stats['otrifApplied']++;
                 if ($r['opApplied']) $stats['opApplied']++;
             } catch (\Throwable $e) {
@@ -73,7 +88,7 @@ class MonthlyFinalisationRunner
         return $stats;
     }
 
-    private function applyForConsultant(int $consultantId, int $year, int $month): array
+    private function applyForConsultant(int $consultantId, int $year, int $month, float $personalVolume = 0.0): array
     {
         // commission.dateMonth хранится в формате 'Y-m' (см. TransactionImportController:284),
         // dateYear — отдельно как 'Y'.
@@ -90,7 +105,7 @@ class MonthlyFinalisationRunner
             return ['otrifApplied' => false, 'opApplied' => false];
         }
 
-        return DB::transaction(function () use ($consultantId, $yearStr, $monthStr, $otrif, $mandatoryGP) {
+        return DB::transaction(function () use ($consultantId, $yearStr, $monthStr, $otrif, $mandatoryGP, $personalVolume) {
             $this->resetWithholdings($consultantId, $yearStr, $monthStr);
 
             $rows = DB::table('commission')
@@ -117,20 +132,10 @@ class MonthlyFinalisationRunner
                 $branchRows[$rootId][] = $r;
             }
 
-            // Per spec ✅Бизнес-логика §1: ГП = ЛП + downline. ОП проверяется
-            // против ГП, значит в totalGroupVolume надо включать ЛП самого
-            // партнёра (chainOrder=1). Per-branch detachment остаётся
-            // только по downline (у себя нет «ветки»), а totalGroupVolume
-            // ниже идёт в opMultiplier.
-            $personalVolume = (float) DB::table('commission')
-                ->where('consultant', $consultantId)
-                ->where('chainOrder', 1)
-                ->where('dateMonth', $monthStr)
-                ->where('dateYear', $yearStr)
-                ->where('type', 'transaction')
-                ->whereNull('deletedAt')
-                ->sum('personalVolume');
-
+            // $personalVolume пробрасывается из applyForMonth (pre-fetched).
+            // Per spec ✅Бизнес-логика §1: ГП = ЛП + downline. Per-branch
+            // detachment остаётся только по downline (у себя нет «ветки»),
+            // ЛП попадает в totalGroupVolume для opMultiplier.
             $totalGroupVolume = $personalVolume + array_sum($branchVolumes);
             $otrifApplied = false;
             $opApplied = false;

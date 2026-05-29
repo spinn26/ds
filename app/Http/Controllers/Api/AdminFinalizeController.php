@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Services\MonthlyPenaltyRunner;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use App\Http\Controllers\Api\NotificationController;
 
 /**
@@ -35,7 +36,28 @@ class AdminFinalizeController extends Controller
             return $denied;
         }
         $data = $this->validatedPeriod($request);
-        $result = $this->runner->run($data['year'], $data['month'], applyWrite: true);
+
+        // Блокировка против гонки: ночной cron (`finalize:apply` в 04:00) и
+        // UI-кнопка (Транзакции/Пул/КарточкаПериода) могут попасть в один
+        // период одновременно. Runner идемпотентный, но при одновременном
+        // запуске оба перепишут withheld* по одной строке → race на
+        // groupBonusRubBeforeGapReduction. Lock-key включает год-месяц,
+        // разные периоды друг друга не блокируют.
+        $lockKey = sprintf('finalize:apply:%d-%02d', $data['year'], $data['month']);
+        $lock = Cache::lock($lockKey, 300); // 5 минут на расчёт
+
+        if (! $lock->get()) {
+            return response()->json([
+                'message' => 'Перерасчёт за этот месяц уже выполняется. Подождите минуту.',
+            ], 423); // Locked
+        }
+
+        try {
+            $result = $this->runner->run($data['year'], $data['month'], applyWrite: true);
+        } finally {
+            $lock->release();
+        }
+
         if ($result['frozen'] ?? false) {
             return response()->json($result, 422);
         }

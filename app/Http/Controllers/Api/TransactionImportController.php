@@ -752,7 +752,13 @@ class TransactionImportController extends Controller
             ->distinct()
             ->get();
 
-        $deletedCommissions = DB::transaction(function () use ($id) {
+        // Soft-delete commission/transaction И пересчёт consultantBalance —
+        // в одной транзакции. Если PHP упадёт между шагами (timeout/OOM),
+        // снапшоты не разойдутся с фактическими commission. Раньше
+        // rebuildBalanceFor вызывался ПОСЛЕ commit'а, что давало окно
+        // несогласованности на проде.
+        $rebuilt = 0;
+        $deletedCommissions = DB::transaction(function () use ($id, $affected, $calculator, &$rebuilt) {
             $n = DB::table('commission')
                 ->where('transaction', $id)
                 ->whereNull('deletedAt')
@@ -760,35 +766,61 @@ class TransactionImportController extends Controller
             DB::table('transaction')
                 ->where('id', $id)
                 ->update(['deletedAt' => now(), 'dateChanged' => now()]);
-            return $n;
-        });
 
-        $rebuilt = 0;
-        foreach ($affected as $p) {
-            if (! $p->consultant || ! $p->dateMonth) continue;
-            try {
+            foreach ($affected as $p) {
+                if (! $p->consultant || ! $p->dateMonth) continue;
                 $calculator->rebuildBalanceFor(
                     (int) $p->consultant,
                     (string) $p->dateMonth,
                     (string) ($p->dateYear ?? substr($p->dateMonth, 0, 4)),
                 );
                 $rebuilt++;
-            } catch (\Throwable $e) {
-                \Illuminate\Support\Facades\Log::warning('rebuildBalance after delete failed', [
-                    'tx' => $id, 'consultant' => $p->consultant, 'month' => $p->dateMonth,
-                    'error' => $e->getMessage(),
-                ]);
             }
+            return $n;
+        });
+
+        // Был ли пул за месяц транзакции уже применён? PoolRunner::persist()
+        // пишет в "poolLog" строки с date = первое число месяца. Если запись
+        // существует — выплаты партнёрам уже посчитаны старой суммой
+        // commission, нужно явно перезапустить пул через карточку периода.
+        $poolWasApplied = false;
+        $poolPeriod = null;
+        if ($period) {
+            [$pyear, $pmonth] = $period;
+            $from = sprintf('%04d-%02d-01', $pyear, $pmonth);
+            $to = date('Y-m-t', strtotime($from));
+            $poolWasApplied = DB::table('poolLog')
+                ->whereBetween('date', [$from, $to])
+                ->exists();
+            $poolPeriod = sprintf('%04d-%02d', $pyear, $pmonth);
+        }
+
+        \App\Support\Audit::log('delete', 'transaction', $id, [
+            'amount' => $tx->amount ?? null,
+            'currency' => $tx->currency ?? null,
+            'date' => $tx->date ?? null,
+            'dateMonth' => $tx->dateMonth ?? null,
+            'deletedCommissions' => $deletedCommissions,
+            'rebuiltBalances' => $rebuilt,
+            'poolWasApplied' => $poolWasApplied,
+            'consultants' => $affected->pluck('consultant')->filter()->values()->all(),
+        ]);
+
+        $message = sprintf(
+            'Транзакция #%d удалена: %d комиссий, пересчитано %d балансов',
+            $id, $deletedCommissions, $rebuilt,
+        );
+        if ($poolWasApplied) {
+            $message .= '. Пул за этот месяц уже был применён — нужно пересчитать его вручную.';
         }
 
         return response()->json([
-            'message' => sprintf(
-                'Транзакция #%d удалена: %d комиссий, пересчитано %d балансов',
-                $id, $deletedCommissions, $rebuilt,
-            ),
+            'message' => $message,
             'id' => $id,
             'deletedCommissions' => $deletedCommissions,
             'rebuiltBalances' => $rebuilt,
+            'poolWasApplied' => $poolWasApplied,
+            'poolPeriod' => $poolPeriod,
         ]);
     }
 

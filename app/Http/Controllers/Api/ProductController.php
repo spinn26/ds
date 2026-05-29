@@ -31,8 +31,17 @@ class ProductController extends Controller
 
         $query = DB::table('products_catalog')->where('active', true);
 
+        // Фильтр зонтика-видимости (migration 2026_05_28_000030). Оператор
+        // может одним кликом скрыть всю продуктовую линейку с витрины,
+        // не отключая каждую программу. Schema-guard на случай локальных
+        // сред без миграции.
+        if (Schema::hasColumn('products_catalog', 'visible_to_resident')) {
+            $query->where('visible_to_resident', true);
+        }
+
         // Staff-preview через ?includeDrafts=1: показываем и active=false
-        // (на legacy это были drafts).
+        // (на legacy это были drafts) и игнорируем visible_to_resident —
+        // staff'у в preview нужно видеть ВСЁ, чтобы проверить.
         $includeDrafts = $request->boolean('includeDrafts')
             && $user->hasAnyRole(['admin', 'backoffice', 'head']);
         if ($includeDrafts) {

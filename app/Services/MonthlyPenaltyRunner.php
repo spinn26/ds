@@ -86,6 +86,21 @@ class MonthlyPenaltyRunner
         $dateYear = (string) $year;
         $monthEnd = Carbon::create($year, $month, 1)->endOfMonth();
 
+        // Pre-fetch ЛП партнёров одним запросом — иначе processConsultant
+        // делает sum(personalVolume) для каждого из ~1030 партнёров,
+        // что даёт ~1030 round-trip-ов на каждом ночном прогоне.
+        $personalVolumes = DB::table('commission')
+            ->where('chainOrder', 1)
+            ->where('dateYear', $dateYear)
+            ->where('dateMonth', $dateMonth)
+            ->whereNull('deletedAt')
+            ->whereIn('consultant', $candidates->pluck('id'))
+            ->selectRaw('consultant, SUM("personalVolume") AS pv')
+            ->groupBy('consultant')
+            ->pluck('pv', 'consultant')
+            ->map(fn ($v) => (float) $v)
+            ->toArray();
+
         $stats = [];
         $affectedTotal = 0;
 
@@ -99,6 +114,7 @@ class MonthlyPenaltyRunner
                 monthEnd: $monthEnd,
                 inviters: $inviterMap,
                 applyWrite: $applyWrite,
+                personalVolume: (float) ($personalVolumes[$cons->id] ?? 0),
             );
             if ($result['affectedCommissions'] > 0) {
                 $stats[] = $result;
@@ -129,6 +145,7 @@ class MonthlyPenaltyRunner
         Carbon $monthEnd,
         array $inviters,
         bool $applyWrite,
+        float $personalVolume = 0.0,
     ): array {
         // Group commissions for this mentor in the target month.
         $commissions = DB::table('commission')
@@ -139,17 +156,10 @@ class MonthlyPenaltyRunner
             ->whereNull('deletedAt')
             ->get();
 
-        // Личные продажи (chainOrder=1) тянем отдельно — они НЕ участвуют
-        // в детачменте per-branch (у себя нет «ветки»), но ОБЯЗАНЫ
-        // прибавиться к totalGroupVolume для проверки ОП. Per spec ✅Бизнес-
-        // логика §1: ГП = ЛП + downline.
-        $personalVolume = (float) DB::table('commission')
-            ->where('consultant', $consultant->id)
-            ->where('chainOrder', 1)
-            ->where('dateYear', $dateYear)
-            ->where('dateMonth', $dateMonth)
-            ->whereNull('deletedAt')
-            ->sum('personalVolume');
+        // $personalVolume пробрасывается из run() — pre-fetched одним
+        // запросом для всех кандидатов. Per spec ✅Бизнес-логика §1:
+        // ГП = ЛП + downline. ЛП не участвует в per-branch отрыве
+        // (у себя нет «ветки»), но обязан попасть в totalGroupVolume.
 
         if ($commissions->isEmpty() && $personalVolume <= 0) {
             return $this->emptyResult($consultant);

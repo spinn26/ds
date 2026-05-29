@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Services\MonthlyPenaltyRunner;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * Применить Отрыв + недобор ОП к commission-строкам месяца.
@@ -45,7 +46,22 @@ class FinalizeMonthPenalties extends Command
             $month,
         ));
 
-        $result = $runner->run($year, $month, applyWrite: ! $dryRun);
+        // Lock против гонки с UI-кнопкой (см. AdminFinalizeController::apply).
+        // Тот же ключ — если HTTP-вызов уже идёт, cron подождёт и пропустит.
+        // Для --dry-run лок не нужен (без записи нечему конфликтовать).
+        $lockKey = sprintf('finalize:apply:%d-%02d', $year, $month);
+        $lock = $dryRun ? null : Cache::lock($lockKey, 300);
+
+        if ($lock && ! $lock->get()) {
+            $this->warn("Период {$year}-{$month} уже пересчитывается (lock={$lockKey}). Пропускаю.");
+            return self::SUCCESS;
+        }
+
+        try {
+            $result = $runner->run($year, $month, applyWrite: ! $dryRun);
+        } finally {
+            $lock?->release();
+        }
 
         if ($result['frozen'] ?? false) {
             $this->warn("Период {$month}.{$year} закрыт — финализация пропущена.");
