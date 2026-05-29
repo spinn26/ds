@@ -60,3 +60,15 @@ Schedule::call(function () {
             ->delete();
     }
 })->monthlyOn(1, '03:45')->name('mail-log:prune');
+
+// === Spatie Health checks ===
+// Каждую минуту запускаем `health:check` чтобы все проверки записали
+// результат в history-таблицу. На основе этого работают:
+//   - GET /admin/health (HTML-дашборд) — берёт последний снимок;
+//   - QueueCheck: пишет ping-job в queue, fail если worker не дёргает;
+//   - ScheduleCheck: подтверждает что scheduler сам жив (heartbeat).
+Schedule::command('health:check')->everyMinute();
+// Health::queue heartbeat — отдельная команда, ставит ping job в очередь.
+Schedule::command('health:queue-check-heartbeat')->everyMinute();
+// Health::schedule heartbeat — фиксирует «scheduler сейчас работает».
+Schedule::command('health:schedule-check-heartbeat')->everyMinute();
