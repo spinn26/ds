@@ -1567,8 +1567,8 @@ onUnmounted(() => {
   border-bottom-left-radius: 6px;
 }
 .msg-bubble.mine {
-  background: #2E7D32;
-  color: #FFFFFF;
+  background: rgb(var(--v-theme-primary));
+  color: rgb(var(--v-theme-on-primary));
   border-bottom-right-radius: 6px;
 }
 .msg-sender { font-size: 11px; font-weight: 600; margin-bottom: 2px; color: rgba(var(--v-theme-on-surface), 0.6); }

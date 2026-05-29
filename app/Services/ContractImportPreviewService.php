@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 /**
@@ -75,12 +76,23 @@ class ContractImportPreviewService
         }
         // personPlatform — справочный, проверяется в validate.
 
-        // 2. Product: по name ilike
+        // 2. Product: по name ilike. Сначала в legacy `product` (там
+        // живут FK contract/dsCommission/etc.), потом fallback в
+        // `products_catalog.legacy_product_id` (новые продукты, которые
+        // ещё не имеют legacy-копии).
         if (! empty($row['product']) && ! is_numeric($row['product'])) {
+            $name = trim($row['product']);
             $found = DB::table('product')
-                ->where('name', 'ilike', '%' . trim($row['product']) . '%')
+                ->where('name', 'ilike', '%' . $name . '%')
                 ->where('active', true)
                 ->value('id');
+            if (! $found && Schema::hasTable('products_catalog')) {
+                $found = DB::table('products_catalog')
+                    ->where('name', 'ilike', '%' . $name . '%')
+                    ->where('active', true)
+                    ->whereNotNull('legacy_product_id')
+                    ->value('legacy_product_id');
+            }
             if ($found) $row['product'] = (int) $found;
         }
 
@@ -271,20 +283,34 @@ class ContractImportPreviewService
             }
         }
 
+        // ВАЖНО: к этому моменту normaliseRow ДОЛЖЕН был резолвить
+        // строковое имя → id. Если осталась строка (не numeric) —
+        // значит резолв не нашёл совпадения, и передавать её в
+        // ->where('id', ...) нельзя: PG падает 22P02 invalid input
+        // syntax for type integer. Возвращаем понятную ошибку строки
+        // вместо exception, валящего весь импорт.
         if (empty($row['client'])) {
             $errors[] = ['field' => 'client', 'message' => 'Клиент обязателен'];
+        } elseif (! is_numeric($row['client'])) {
+            $errors[] = ['field' => 'client', 'message' => "Клиент «{$row['client']}» не найден в БД"];
         } elseif (! DB::table('client')->where('id', $row['client'])->exists()) {
             $errors[] = ['field' => 'client', 'message' => 'Некорректный ID клиента'];
         }
 
         if (empty($row['product'])) {
             $errors[] = ['field' => 'product', 'message' => 'Продукт обязателен'];
+        } elseif (! is_numeric($row['product'])) {
+            $errors[] = ['field' => 'product', 'message' => "Продукт «{$row['product']}» не найден в каталоге"];
         } elseif (! DB::table('product')->where('id', $row['product'])->exists()) {
             $errors[] = ['field' => 'product', 'message' => 'Продукт не найден в базе'];
         }
 
-        if (! empty($row['program']) && ! DB::table('program')->where('id', $row['program'])->exists()) {
-            $errors[] = ['field' => 'program', 'message' => 'Программа не найдена'];
+        if (! empty($row['program'])) {
+            if (! is_numeric($row['program'])) {
+                $errors[] = ['field' => 'program', 'message' => "Программа «{$row['program']}» не найдена"];
+            } elseif (! DB::table('program')->where('id', $row['program'])->exists()) {
+                $errors[] = ['field' => 'program', 'message' => 'Программа не найдена'];
+            }
         }
 
         $amount = $row['ammount'] ?? $row['amount'] ?? null;

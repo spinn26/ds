@@ -140,8 +140,7 @@
               <!-- «Новый для вас» — тикеты, в которые меня добавили через
                    chat_ticket_participants и я ни разу не открывал. Чтобы
                    адресат не пропустил приглашение, помимо bell-нотификации. -->
-              <span v-if="t.is_new_for_me" class="chat-item-status-chip"
-                style="background: #a78bfa22; color: #a78bfa; font-weight: 600">
+              <span v-if="t.is_new_for_me" class="chat-item-status-chip chip-new-for-me">
                 Новый для вас
               </span>
               <span class="chat-item-status-chip" :style="{ background: statusClr(t.status) + '22', color: statusClr(t.status) }">{{ statusTxt(t.status) }}</span>
@@ -2150,7 +2149,9 @@ const statuses = [
   { label: 'Закрыт', value: 'closed', color: chatStatusColors.closed, icon: 'mdi-lock' },
 ];
 const statusFilterPills = [{ label: 'Все', value: '' }, ...statuses.map(s => ({ label: s.label, value: s.value }))];
-const priorityFilterPills = [{ label: 'Все', value: '', color: '#888' }, ...priorities];
+// «Все» — без color (Vuetify-default grey-token). Раньше был хардкод #888,
+// который ломал тёмную тему.
+const priorityFilterPills = [{ label: 'Все', value: '', color: 'grey' }, ...priorities];
 
 const catColor = getChatCategoryColor;
 function catIcon(c) {
@@ -3168,6 +3169,13 @@ onUnmounted(() => {
 .chat-item-bottom .customer,
 .chat-item-bottom .recipient { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .chat-item-bottom .chat-item-status-chip { flex-shrink: 0; }
+/* «Новый для вас»: акцентируем через theme.primary (раньше был
+   inline-хардкод #a78bfa, не реагировал на тёмную тему). */
+.chip-new-for-me {
+  background: rgba(var(--v-theme-primary), 0.15);
+  color: rgb(var(--v-theme-primary));
+  font-weight: 600;
+}
 .chat-item-preview { display: flex; gap: 4px; margin-top: 2px; font-size: 12px; color: rgba(var(--v-theme-on-surface), 0.6); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; line-height: 1.3; }
 .chat-item-preview-prefix { color: rgba(var(--v-theme-on-surface), 0.4); flex-shrink: 0; }
 .chat-item-preview-text { overflow: hidden; text-overflow: ellipsis; }
@@ -3307,8 +3315,8 @@ onUnmounted(() => {
   border-bottom-left-radius: 6px;
 }
 .msg-bubble.mine {
-  background: #2E7D32;
-  color: #FFFFFF;
+  background: rgb(var(--v-theme-primary));
+  color: rgb(var(--v-theme-on-primary));
   border-bottom-right-radius: 6px;
 }
 .msg-sender { font-size: 11px; font-weight: 600; margin-bottom: 2px; color: #f97316; }
