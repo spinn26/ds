@@ -231,6 +231,7 @@ class ProductsAudit20260529 extends Command
         $out = [];
         foreach ($rowsData as $i => $row) {
             if ($i === 0) continue; // header
+            if ($i === 1) continue; // 2-я строка — нумерация колонок (3,4,5,6,…)
             $cells = $row['values'] ?? [];
             $get = function (int $idx) use ($cells) {
                 $v = $cells[$idx]['formattedValue'] ?? null;
