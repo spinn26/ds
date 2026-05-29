@@ -68,7 +68,7 @@
         <template #item.publishStatus="{ item }">
           <v-chip size="x-small"
             :color="item.publishStatus === 'published' ? 'success' : 'warning'"
-            :variant="item.publishStatus === 'published' ? 'flat' : 'outlined'">
+            variant="tonal">
             {{ item.publishStatus === 'published' ? 'Опубликован' : 'Черновик' }}
           </v-chip>
         </template>
