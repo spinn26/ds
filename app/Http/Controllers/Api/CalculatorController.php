@@ -34,13 +34,20 @@ class CalculatorController extends Controller
     public function productMatrix(): JsonResponse
     {
         $payload = Cache::remember('calculator:product-matrix:v2', now()->addMinutes(10), function () {
+            // Видим программу в калькуляторе только если ОБА уровня
+            // (продукт-зонтик + программа) имеют visible_to_calculator=true.
+            // Колонки добавлены миграциями 2026_05_28_000020 (programs) и
+            // 2026_05_28_000030 (products) — defaults true, поэтому на старых
+            // средах фильтр пропускает всё как раньше.
             $products = DB::table('products_catalog')
                 ->where('active', true)
+                ->where('visible_to_calculator', true)
                 ->orderBy('name')
                 ->get(['id', 'name', 'type']);
 
             $programs = DB::table('programs_catalog')
                 ->where('active', true)
+                ->where('visible_to_calculator', true)
                 ->whereIn('product_id', $products->pluck('id'))
                 ->orderBy('name')
                 ->get(['id', 'product_id', 'name', 'currency', 'tariffs']);

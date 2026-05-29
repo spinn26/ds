@@ -46,7 +46,8 @@ class AdminProductCatalogController extends Controller
         $q = DB::table('products_catalog as p')
             ->leftJoin('programs_catalog as g', 'g.product_id', '=', 'p.id')
             ->groupBy('p.id', 'p.name', 'p.type', 'p.open_product_url', 'p.active', 'p.created_at',
-                'p.image_url', 'p.hero_image', 'p.description', 'p.legacy_product_id')
+                'p.image_url', 'p.hero_image', 'p.description', 'p.legacy_product_id',
+                'p.visible_to_resident', 'p.visible_to_calculator')
             ->select([
                 'p.id',
                 'p.name',
@@ -58,6 +59,8 @@ class AdminProductCatalogController extends Controller
                 'p.hero_image',
                 'p.description',
                 'p.legacy_product_id',
+                'p.visible_to_resident',
+                'p.visible_to_calculator',
                 DB::raw('COUNT(g.id) AS programs_count'),
                 DB::raw('COUNT(g.id) FILTER (WHERE g.active=true)  AS programs_active'),
                 DB::raw('COUNT(g.id) FILTER (WHERE g.has_red=true) AS programs_red'),
@@ -110,11 +113,13 @@ class AdminProductCatalogController extends Controller
         $r = DB::table('products_catalog as p')
             ->leftJoin('programs_catalog as g', 'g.product_id', '=', 'p.id')
             ->groupBy('p.id', 'p.name', 'p.type', 'p.open_product_url', 'p.active', 'p.created_at',
-                'p.image_url', 'p.hero_image', 'p.description', 'p.legacy_product_id')
+                'p.image_url', 'p.hero_image', 'p.description', 'p.legacy_product_id',
+                'p.visible_to_resident', 'p.visible_to_calculator')
             ->where('p.id', $id)
             ->select([
                 'p.id', 'p.name', 'p.type', 'p.open_product_url', 'p.active', 'p.created_at',
                 'p.image_url', 'p.hero_image', 'p.description', 'p.legacy_product_id',
+                'p.visible_to_resident', 'p.visible_to_calculator',
                 DB::raw('COUNT(g.id) AS programs_count'),
                 DB::raw('COUNT(g.id) FILTER (WHERE g.active=true)  AS programs_active'),
                 DB::raw('COUNT(g.id) FILTER (WHERE g.has_red=true) AS programs_red'),
@@ -183,13 +188,18 @@ class AdminProductCatalogController extends Controller
     public function updateProduct(int $id, Request $request): JsonResponse
     {
         $payload = $request->validate([
-            'name'           => 'sometimes|string|max:255',
-            'type'           => 'nullable|string|max:255',
-            'active'         => 'nullable|boolean',
-            'openProductUrl' => 'nullable|string|max:1000',
-            'description'    => 'nullable|string|max:4000',
-            'imageUrl'       => 'nullable|string|max:1000',
-            'heroImage'      => 'nullable|string|max:1000',
+            'name'                => 'sometimes|string|max:255',
+            'type'                => 'nullable|string|max:255',
+            'active'              => 'nullable|boolean',
+            'openProductUrl'      => 'nullable|string|max:1000',
+            'description'         => 'nullable|string|max:4000',
+            'imageUrl'            => 'nullable|string|max:1000',
+            'heroImage'           => 'nullable|string|max:1000',
+            // Видимость продукта-зонтика (migration 2026_05_28_000030).
+            // visible_to_calculator=false убирает продукт и ВСЕ его программы
+            // из калькулятора без необходимости снимать active.
+            'visibleToResident'   => 'nullable|boolean',
+            'visibleToCalculator' => 'nullable|boolean',
             // Остальные поля формы (productType, educationCourseId, ...) пока
             // не маппятся на catalog-схему и тихо игнорируются.
         ]);
@@ -197,15 +207,21 @@ class AdminProductCatalogController extends Controller
         // null — валидное значение (очистить поле), поэтому через has()
         // отличаем «не прислали» от «прислали null».
         $update = ['updated_at' => now()];
-        if ($request->has('name'))           $update['name']             = $payload['name'];
-        if ($request->has('type'))           $update['type']             = $payload['type'];
-        if ($request->has('active'))         $update['active']           = $payload['active'];
-        if ($request->has('openProductUrl')) $update['open_product_url'] = $payload['openProductUrl'];
-        if ($request->has('description'))    $update['description']      = $payload['description'];
-        if ($request->has('imageUrl'))       $update['image_url']        = $payload['imageUrl'];
-        if ($request->has('heroImage'))      $update['hero_image']       = $payload['heroImage'];
+        if ($request->has('name'))                $update['name']                  = $payload['name'];
+        if ($request->has('type'))                $update['type']                  = $payload['type'];
+        if ($request->has('active'))              $update['active']                = $payload['active'];
+        if ($request->has('openProductUrl'))      $update['open_product_url']      = $payload['openProductUrl'];
+        if ($request->has('description'))         $update['description']           = $payload['description'];
+        if ($request->has('imageUrl'))            $update['image_url']             = $payload['imageUrl'];
+        if ($request->has('heroImage'))           $update['hero_image']            = $payload['heroImage'];
+        if ($request->has('visibleToResident'))   $update['visible_to_resident']   = (bool) ($payload['visibleToResident'] ?? true);
+        if ($request->has('visibleToCalculator')) $update['visible_to_calculator'] = (bool) ($payload['visibleToCalculator'] ?? true);
 
         DB::table('products_catalog')->where('id', $id)->update($update);
+
+        // Калькулятор кэширует матрицу продуктов на 10 минут — без инвалидации
+        // снятая галка появится в дропдауне только через эти 10 минут.
+        \Illuminate\Support\Facades\Cache::forget('calculator:product-matrix:v2');
 
         return $this->showProduct($id);
     }
@@ -288,6 +304,7 @@ class AdminProductCatalogController extends Controller
             ->where('id', $programId)
             ->where('product_id', $productId)
             ->update($payload);
+        \Illuminate\Support\Facades\Cache::forget('calculator:product-matrix:v2');
         return $this->showSingleProgram($programId);
     }
 
@@ -351,8 +368,16 @@ class AdminProductCatalogController extends Controller
             // it stays available as long as `active=true`, even when all of
             // its programs got tagged red.  The red filter lives only on the
             // program level.
-            'visibleToResident'    => $active,
-            'visibleToCalculator'  => $active,
+            //
+            // visible_to_resident / visible_to_calculator — отдельные тоглы
+            // (migration 2026_05_28_000030). На старых средах их может не
+            // быть в SELECT → fallback на $active.
+            'visibleToResident'    => property_exists($r, 'visible_to_resident')
+                ? (bool) $r->visible_to_resident
+                : $active,
+            'visibleToCalculator'  => property_exists($r, 'visible_to_calculator')
+                ? (bool) $r->visible_to_calculator
+                : $active,
             'hasProperty'          => false,
             'hasTerm'              => $hasTerm,
             'hasYearKv'            => $hasYearKv,
