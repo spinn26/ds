@@ -63,7 +63,47 @@ class MailTracker
             $h->addTextHeader(self::HEADER_BROADCAST_ID, (string) $ctx['broadcast_id']);
         }
 
+        // Заранее проставляем Message-ID с правильным доменом из From.
+        // По умолчанию Symfony Mime генерит «xxx@example.com» (если
+        // hostname не сконфигурен) — Gmail/Mail.ru за такой mismatch
+        // между Message-ID domain и From domain снижают spam score.
+        // Делаем это до отправки, до листенера — Symfony уважает уже
+        // установленный пользовательский Message-ID и не перегенерит его.
+        $this->ensureMessageId($email);
+
         return $tid;
+    }
+
+    public function ensureMessageId(Email $email): void
+    {
+        $h = $email->getHeaders();
+        $current = $h->has('Message-ID') ? $h->get('Message-ID')->getBodyAsString() : '';
+        if ($current !== '' && ! str_contains($current, '@example.com')) {
+            return;
+        }
+
+        $domain = $this->fromDomain($email);
+        if (! $domain) return;
+
+        $newMid = bin2hex(random_bytes(16)) . '@' . $domain;
+        if ($h->has('Message-ID')) {
+            $h->remove('Message-ID');
+        }
+        $h->addIdHeader('Message-ID', $newMid);
+    }
+
+    private function fromDomain(Email $email): ?string
+    {
+        foreach ($email->getFrom() as $addr) {
+            $a = $addr->getAddress();
+            $pos = strrpos($a, '@');
+            if ($pos !== false) return substr($a, $pos + 1);
+        }
+        // Fallback на config('mail.from.address') если From пуст
+        // (бывает у Mail::raw до того как mailer.send добавит default-from).
+        $fromCfg = (string) config('mail.from.address', '');
+        $pos = strrpos($fromCfg, '@');
+        return $pos !== false ? substr($fromCfg, $pos + 1) : null;
     }
 
     /**
@@ -115,16 +155,13 @@ class MailTracker
 
         // 2) Tracking pixel. Вставляем прямо перед </body>; если </body>
         //    нет — в конец документа.
-        $pixel = sprintf(
-            '<img src="%s/mt/o/%s.gif" width="1" height="1" alt="" '
-            . 'style="display:block;width:1px;height:1px;border:0;outline:none;" />',
-            $base,
-            $trackingId
-        );
+        $pixel = '<img src="' . $base . '/mt/o/' . $trackingId . '.gif"'
+            . ' width="1" height="1" alt=""'
+            . ' style="display:block;width:1px;height:1px;border:0;outline:none;" />';
 
         if (stripos($html, '</body>') !== false) {
-            return preg_replace('~</body>~i', $pixel . '</body>', $html, 1);
+            return preg_replace('~</body>~i', "{$pixel}</body>", $html, 1);
         }
-        return $html . $pixel;
+        return "{$html}{$pixel}";
     }
 }
