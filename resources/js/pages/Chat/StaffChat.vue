@@ -3319,6 +3319,13 @@ onUnmounted(() => {
   color: rgb(var(--v-theme-on-primary));
   border-bottom-right-radius: 6px;
 }
+/* Тёмная тема: ярко-зелёный primary бьёт по глазам на чёрном фоне.
+   Приглушаем — Telegram/iMessage стайл: полупрозрачный тёмно-зелёный
+   фон + почти-белый текст. */
+:global(.v-theme--dark) .msg-bubble.mine {
+  background: rgba(46, 125, 50, 0.42);
+  color: rgba(255, 255, 255, 0.94);
+}
 .msg-sender { font-size: 11px; font-weight: 600; margin-bottom: 2px; color: #f97316; }
 .msg-bubble.mine .msg-sender { color: rgba(255,255,255,0.9); }
 .msg-text { font-size: 14px; line-height: 1.45; white-space: pre-line; word-break: break-word; }

@@ -1544,6 +1544,8 @@ onUnmounted(() => {
 .avatar-circle { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; color: #fff; letter-spacing: -0.3px; }
 .avatar-circle.agent { background: rgb(var(--v-theme-secondary)); }
 .avatar-circle.mine { background: rgb(var(--v-theme-primary)); }
+/* В тёмной теме яркий primary бьёт по глазам — приглушаем. */
+:global(.v-theme--dark) .avatar-circle.mine { background: rgba(46, 125, 50, 0.65); }
 /* Apple iMessage-style bubble. tail-радиус мягкий (6px), большие
    скругления (20px), мягкая тень покоя, плавный hover-эффект. */
 .msg-bubble {
@@ -1570,6 +1572,12 @@ onUnmounted(() => {
   background: rgb(var(--v-theme-primary));
   color: rgb(var(--v-theme-on-primary));
   border-bottom-right-radius: 6px;
+}
+/* Тёмная тема: ярко-зелёный primary бьёт по глазам на чёрном фоне.
+   Приглушаем — Telegram/iMessage стайл. */
+:global(.v-theme--dark) .msg-bubble.mine {
+  background: rgba(46, 125, 50, 0.42);
+  color: rgba(255, 255, 255, 0.94);
 }
 .msg-sender { font-size: 11px; font-weight: 600; margin-bottom: 2px; color: rgba(var(--v-theme-on-surface), 0.6); }
 .msg-bubble.mine .msg-sender { color: rgba(255,255,255,0.9); }

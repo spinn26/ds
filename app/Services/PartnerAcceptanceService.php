@@ -81,10 +81,18 @@ class PartnerAcceptanceService
                 'source' => 'platform',
             ]);
 
+            // LegacyId::next() возвращает MAX(id) + 1. Внутри ОДНОЙ
+            // транзакции до commit'а MAX не меняется, поэтому повторный
+            // вызов в том же цикле вернул бы тот же id → 23505 dup-key
+            // (прод-баг 2026-05-29 на registr'е: оба row'a получили
+            // id=3500 для (Согласие+Политика)). Берём базу один раз и
+            // локально инкрементим — параллельные транзакции защищены
+            // advisory_xact_lock внутри LegacyId::next.
+            $baseId = LegacyId::next('partnerAcceptance');
             $rows = [];
-            foreach ($documentIds as $docId) {
+            foreach (array_values($documentIds) as $i => $docId) {
                 $rows[] = [
-                    'id' => LegacyId::next('partnerAcceptance'),
+                    'id' => $baseId + $i,
                     'logAccepted' => $logId,
                     'WebUser' => $consultant->webUser,
                     'documentType' => $docId,
