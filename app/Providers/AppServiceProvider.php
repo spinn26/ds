@@ -3,8 +3,12 @@
 namespace App\Providers;
 
 use App\Auth\LegacyUserProvider;
+use App\Listeners\RecordMailLog;
+use Illuminate\Mail\Events\MessageSending;
+use Illuminate\Mail\Events\MessageSent;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -19,6 +23,14 @@ class AppServiceProvider extends ServiceProvider
         Auth::provider('legacy', function ($app, array $config) {
             return new LegacyUserProvider($app['hash'], $config['model']);
         });
+
+        // Mail deliverability logging: каждое уходящее письмо проходит
+        // через MessageSending (вставляем pending-запись в mail_log) и
+        // MessageSent (обновляем sent_at + message_id + smtp_response).
+        // Failure ловится в catch-блоках вызывающего кода и пишется через
+        // RecordMailLog::recordFailure().
+        Event::listen(MessageSending::class, [RecordMailLog::class, 'handleSending']);
+        Event::listen(MessageSent::class, [RecordMailLog::class, 'handleSent']);
 
         // PostgreSQL statement_timeout: тяжёлый запрос будет прерван через
         // 30с вместо того чтобы держать соединение до nginx-таймаута.

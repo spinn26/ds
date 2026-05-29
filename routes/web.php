@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\MailTrackController;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
@@ -27,7 +28,18 @@ Route::get('/roadmap', function () {
     return view('roadmap');
 })->name('public.roadmap');
 
+// Mail tracking pixel + click-wrapper для исходящих писем (Уровень 3
+// журнала отправки). См. MailTrackController. Пути короткие и без
+// `/api/v1/` — чтобы tracking-URL в письме выглядел компактно и не
+// требовал Sanctum-токена.
+Route::get('/mt/o/{tid}.gif', [MailTrackController::class, 'open'])
+    ->where('tid', '[0-9a-fA-F-]{36}')
+    ->name('mail.track.open');
+Route::get('/mt/c/{tid}', [MailTrackController::class, 'click'])
+    ->where('tid', '[0-9a-fA-F-]{36}')
+    ->name('mail.track.click');
+
 // All non-API / non-storage routes serve the Vue SPA.
 Route::get('/{any?}', function () {
     return view('app');
-})->where('any', '^(?!api|sanctum|storage|roadmap).*$');
+})->where('any', '^(?!api|sanctum|storage|roadmap|mt).*$');

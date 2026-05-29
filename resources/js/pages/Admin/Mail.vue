@@ -78,7 +78,7 @@
               <v-progress-linear v-if="broadcastId" :model-value="progressPercent"
                 height="10" rounded color="primary" class="mt-3">
                 <template #default>
-                  <strong>{{ progress.sent + progress.failed }} / {{ broadcastTotal }}</strong>
+                  <strong>{{ progressDone }} / {{ broadcastTotal }}</strong>
                 </template>
               </v-progress-linear>
 
@@ -161,15 +161,43 @@
 
         <!-- LOG TAB -->
         <v-tabs-window-item value="log" class="pa-5">
+          <!-- Сводка по статусам — chip'ы кликабельны, фильтруют таблицу. -->
           <div class="d-flex align-center ga-2 mb-3 flex-wrap">
-            <v-text-field v-model="logFilter.search" placeholder="Поиск по email или теме…"
+            <v-chip-group v-model="logFilter.deliveryStatus" mandatory selected-class="text-primary"
+              @update:model-value="loadLog">
+              <v-chip filter value="">Все <span class="ml-1 text-medium-emphasis">·&nbsp;{{ summaryTotal }}</span></v-chip>
+              <v-chip filter value="pending" color="grey">
+                <v-icon start size="14">mdi-clock-outline</v-icon>
+                В очереди <span class="ml-1">·&nbsp;{{ summary.pending || 0 }}</span>
+              </v-chip>
+              <v-chip filter value="sent" color="success">
+                <v-icon start size="14">mdi-email-check-outline</v-icon>
+                Отправлено <span class="ml-1">·&nbsp;{{ summary.sent || 0 }}</span>
+              </v-chip>
+              <v-chip filter value="delivered" color="info">
+                <v-icon start size="14">mdi-email-open-outline</v-icon>
+                Открыто <span class="ml-1">·&nbsp;{{ summary.delivered || 0 }}</span>
+              </v-chip>
+              <v-chip filter value="failed" color="error">
+                <v-icon start size="14">mdi-alert-circle-outline</v-icon>
+                Не отправлено <span class="ml-1">·&nbsp;{{ summary.failed || 0 }}</span>
+              </v-chip>
+              <v-chip filter value="bounced" color="warning">
+                <v-icon start size="14">mdi-keyboard-return</v-icon>
+                Отклонено <span class="ml-1">·&nbsp;{{ summary.bounced || 0 }}</span>
+              </v-chip>
+            </v-chip-group>
+          </div>
+
+          <div class="d-flex align-center ga-2 mb-3 flex-wrap">
+            <v-text-field v-model="logFilter.search" placeholder="Поиск по email / теме / Message-ID…"
               variant="outlined" density="compact" hide-details
               prepend-inner-icon="mdi-magnify"
-              style="max-width: 320px; flex: 1 1 240px"
+              style="max-width: 360px; flex: 1 1 240px"
               @update:model-value="debouncedLoadLog" />
-            <v-select v-model="logFilter.status" :items="logStatusOptions" placeholder="Статус"
+            <v-select v-model="logFilter.mailType" :items="mailTypeOptions" placeholder="Тип письма"
               clearable hide-details density="compact" variant="outlined"
-              style="max-width: 180px; flex: 1 1 140px"
+              style="max-width: 200px; flex: 1 1 140px"
               @update:model-value="loadLog" />
             <v-spacer />
             <ColumnVisibilityMenu
@@ -178,17 +206,109 @@
               storage-key="mail-log-cols" />
             <v-btn variant="text" size="small" prepend-icon="mdi-refresh" @click="loadLog">Обновить</v-btn>
           </div>
+
           <v-data-table :items="log" :headers="visibleLogHeaders" :loading="loadingLog"
-            density="compact" hover no-data-text="Журнал пуст" :items-per-page="50">
-            <template #item.status="{ value }">
-              <v-chip size="x-small" :color="value === 'sent' ? 'success' : 'error'">
-                {{ value === 'sent' ? 'Отправлено' : 'Ошибка' }}
-              </v-chip>
+            density="compact" hover no-data-text="Журнал пуст" :items-per-page="50"
+            show-expand v-model:expanded="logExpanded">
+            <template #item.delivery_status="{ item }">
+              <v-tooltip :text="deliveryStatusTooltip(item)" location="top">
+                <template #activator="{ props }">
+                  <v-chip v-bind="props" size="x-small" :color="deliveryStatusColor(item)" variant="flat">
+                    <v-icon start size="12">{{ deliveryStatusIcon(item) }}</v-icon>
+                    {{ deliveryStatusLabel(item) }}
+                  </v-chip>
+                </template>
+              </v-tooltip>
             </template>
-            <template #item.created_at="{ value }">{{ fmtDateTime(value) }}</template>
-            <template #item.error="{ value }">
-              <span v-if="value" class="text-caption text-error">{{ value }}</span>
-              <span v-else>—</span>
+            <template #item.mail_type="{ value }">
+              <span class="text-caption">{{ mailTypeLabel(value) }}</span>
+            </template>
+            <template #item.from_address="{ value }">
+              <span class="text-caption">{{ value || '—' }}</span>
+            </template>
+            <template #item.recipient_email="{ item }">
+              <div class="font-weight-medium">{{ item.recipient_email }}</div>
+              <div v-if="item.from_address" class="text-caption text-medium-emphasis">
+                от {{ item.from_address }}
+              </div>
+            </template>
+            <template #item.subject="{ item }">
+              {{ item.subject }}
+              <div v-if="item.broadcast_id" class="text-caption text-medium-emphasis">
+                <v-icon size="11">mdi-bullhorn-outline</v-icon>
+                рассылка {{ item.broadcast_id.substring(0, 8) }}
+              </div>
+            </template>
+            <template #item.opens="{ item }">
+              <span v-if="item.opens_count > 0" class="text-info">
+                <v-icon size="14">mdi-eye-outline</v-icon> {{ item.opens_count }}
+              </span>
+              <span v-else class="text-medium-emphasis">—</span>
+            </template>
+            <template #item.clicks="{ item }">
+              <span v-if="item.clicks_count > 0" class="text-primary">
+                <v-icon size="14">mdi-cursor-default-click-outline</v-icon> {{ item.clicks_count }}
+              </span>
+              <span v-else class="text-medium-emphasis">—</span>
+            </template>
+            <template #item.attempts="{ value }">
+              <span :class="value > 1 ? 'text-warning' : ''">{{ value || 0 }}</span>
+            </template>
+            <template #item.created_at="{ value }">
+              <span class="text-caption">{{ fmtDateTime(value) }}</span>
+            </template>
+
+            <!-- Развёрнутая строка — все детали диагностики. -->
+            <template #expanded-row="{ columns, item }">
+              <tr>
+                <td :colspan="columns.length" class="pa-4" style="background:rgba(var(--v-theme-surface-variant), 0.4);">
+                  <v-row dense>
+                    <v-col cols="12" md="6">
+                      <div v-if="item.message_id">
+                        <div class="text-caption text-medium-emphasis">Message-ID</div>
+                        <div class="text-body-2 font-mono">{{ item.message_id }}</div>
+                      </div>
+                      <div v-if="item.tracking_id" class="mt-2">
+                        <div class="text-caption text-medium-emphasis">Tracking ID</div>
+                        <div class="text-body-2 font-mono">{{ item.tracking_id }}</div>
+                      </div>
+                      <div v-if="item.sent_at" class="mt-2">
+                        <div class="text-caption text-medium-emphasis">Отправлено в SMTP</div>
+                        <div class="text-body-2">{{ fmtDateTime(item.sent_at) }}</div>
+                      </div>
+                      <div v-if="item.opened_at" class="mt-2">
+                        <div class="text-caption text-medium-emphasis">Первое открытие</div>
+                        <div class="text-body-2">{{ fmtDateTime(item.opened_at) }} ({{ item.opens_count }} раз)</div>
+                      </div>
+                      <div v-if="item.clicked_at" class="mt-2">
+                        <div class="text-caption text-medium-emphasis">Первый клик</div>
+                        <div class="text-body-2">{{ fmtDateTime(item.clicked_at) }} ({{ item.clicks_count }} раз)</div>
+                        <div v-if="item.last_click_url" class="text-caption mt-1" style="word-break: break-all;">
+                          → <a :href="item.last_click_url" target="_blank" rel="noopener">{{ item.last_click_url }}</a>
+                        </div>
+                      </div>
+                    </v-col>
+                    <v-col cols="12" md="6">
+                      <div v-if="item.error">
+                        <div class="text-caption text-error font-weight-bold">Ошибка отправки</div>
+                        <div class="text-body-2 font-mono" style="white-space: pre-wrap; word-break: break-word;">{{ item.error }}</div>
+                      </div>
+                      <div v-if="item.smtp_response" class="mt-2">
+                        <div class="text-caption text-medium-emphasis">Ответ SMTP-сервера</div>
+                        <div class="text-body-2 font-mono" style="white-space: pre-wrap; word-break: break-word;">{{ item.smtp_response }}</div>
+                      </div>
+                      <div v-if="item.bounced_at" class="mt-2">
+                        <div class="text-caption text-warning font-weight-bold">Возврат от провайдера получателя</div>
+                        <div class="text-body-2">{{ fmtDateTime(item.bounced_at) }}<span v-if="item.bounce_code"> · код {{ item.bounce_code }}</span></div>
+                        <div v-if="item.bounce_reason" class="text-body-2 font-mono mt-1" style="white-space: pre-wrap; word-break: break-word;">{{ item.bounce_reason }}</div>
+                      </div>
+                      <div v-if="!item.error && !item.smtp_response && !item.bounce_reason" class="text-caption text-medium-emphasis">
+                        Дополнительной диагностики нет — письмо ушло чисто.
+                      </div>
+                    </v-col>
+                  </v-row>
+                </td>
+              </tr>
             </template>
           </v-data-table>
         </v-tabs-window-item>
@@ -556,33 +676,102 @@ async function doSend() {
 
 // ========== LOG ==========
 const log = ref([]);
+const summary = ref({});
 const loadingLog = ref(false);
-const logFilter = ref({ search: '', status: null });
-const logStatusOptions = [
-  { title: 'Отправлено', value: 'sent' },
-  { title: 'Ошибка', value: 'failed' },
-];
-const logHeaders = [
-  { title: 'Дата', key: 'created_at', width: 160 },
-  { title: 'Кому', key: 'recipient_email' },
-  { title: 'Тема', key: 'subject' },
-  { title: 'Статус', key: 'status', width: 120 },
-  { title: 'Ошибка', key: 'error' },
+const logExpanded = ref([]);
+// deliveryStatus = '' → все; иначе один из pending/sent/delivered/failed/bounced.
+const logFilter = ref({ search: '', deliveryStatus: '', mailType: null });
+
+const mailTypeOptions = [
+  { title: 'Сброс пароля', value: 'password_reset' },
+  { title: 'Рассылка', value: 'broadcast' },
+  { title: 'Тест SMTP', value: 'smtp_test' },
+  { title: 'Уведомление', value: 'notification' },
 ];
 
-const logColumnVisible = ref({});
+const logHeaders = [
+  { title: 'Статус', key: 'delivery_status', width: 130 },
+  { title: 'Дата', key: 'created_at', width: 150 },
+  { title: 'Тип', key: 'mail_type', width: 110 },
+  { title: 'Кому', key: 'recipient_email' },
+  { title: 'Тема', key: 'subject' },
+  { title: '👁', key: 'opens', width: 60, sortable: false },
+  { title: '🖱', key: 'clicks', width: 60, sortable: false },
+  { title: 'Попыток', key: 'attempts', width: 90 },
+  { title: '', key: 'data-table-expand', width: 40, sortable: false },
+];
+
+const logColumnVisible = ref({
+  // По умолчанию скрытые — компактный вид; включаются в ColumnVisibilityMenu.
+  mail_type: true,
+  opens: true,
+  clicks: true,
+  attempts: false,
+});
 const visibleLogHeaders = computed(() =>
   logHeaders.filter(h => logColumnVisible.value[h.key] !== false)
 );
+
+const summaryTotal = computed(() =>
+  Object.values(summary.value).reduce((a, b) => a + (Number(b) || 0), 0)
+);
+
+function deliveryStatusColor(item) {
+  const st = item.delivery_status || item.status;
+  return ({
+    pending: 'grey', sent: 'success', delivered: 'info',
+    failed: 'error', bounced: 'warning',
+  })[st] || 'grey';
+}
+function deliveryStatusIcon(item) {
+  const st = item.delivery_status || item.status;
+  return ({
+    pending: 'mdi-clock-outline',
+    sent: 'mdi-email-check-outline',
+    delivered: 'mdi-email-open-outline',
+    failed: 'mdi-alert-circle-outline',
+    bounced: 'mdi-keyboard-return',
+  })[st] || 'mdi-help-circle-outline';
+}
+function deliveryStatusLabel(item) {
+  const st = item.delivery_status || item.status;
+  return ({
+    pending: 'В очереди',
+    sent: 'Отправлено',
+    delivered: 'Открыто',
+    failed: 'Ошибка',
+    bounced: 'Возврат',
+  })[st] || st || '—';
+}
+function deliveryStatusTooltip(item) {
+  const st = item.delivery_status || item.status;
+  return ({
+    pending: 'Письмо построено, ждёт подтверждения от SMTP-сервера',
+    sent: 'SMTP-сервер Yandex принял письмо для доставки',
+    delivered: 'Получатель открыл письмо (зафиксировано tracking pixel)',
+    failed: 'Письмо не ушло — SMTP-ошибка',
+    bounced: 'Провайдер получателя отверг письмо (NDR)',
+  })[st] || '';
+}
+function mailTypeLabel(v) {
+  return ({
+    password_reset: 'Сброс пароля',
+    broadcast: 'Рассылка',
+    smtp_test: 'Тест SMTP',
+    notification: 'Уведомление',
+  })[v] || v || '—';
+}
 
 async function loadLog() {
   loadingLog.value = true;
   try {
     const params = {};
     if (logFilter.value.search) params.search = logFilter.value.search;
-    if (logFilter.value.status) params.status = logFilter.value.status;
+    if (logFilter.value.deliveryStatus) params.delivery_status = logFilter.value.deliveryStatus;
+    if (logFilter.value.mailType) params.mail_type = logFilter.value.mailType;
     const { data } = await api.get('/admin/mail/log', { params });
     log.value = data.data || [];
+    summary.value = data.summary || {};
   } catch {}
   loadingLog.value = false;
 }
@@ -691,24 +880,36 @@ function insertTokenIntoTemplate(key) {
 // ========== PROGRESS ==========
 const broadcastId = ref(null);
 const broadcastTotal = ref(0);
-const progress = ref({ sent: 0, failed: 0 });
+const progress = ref({ sent: 0, failed: 0, bounced: 0, pending: 0 });
 let progressTimer = null;
+
+const progressDone = computed(() =>
+  (progress.value.sent || 0) + (progress.value.failed || 0) + (progress.value.bounced || 0)
+);
 
 const progressPercent = computed(() => {
   if (!broadcastTotal.value) return 0;
-  return Math.round(((progress.value.sent + progress.value.failed) / broadcastTotal.value) * 100);
+  return Math.round((progressDone.value / broadcastTotal.value) * 100);
 });
 
 async function pollProgress() {
   if (!broadcastId.value) return;
   try {
     const { data } = await api.get(`/admin/mail/broadcast/${broadcastId.value}/progress`);
-    progress.value = { sent: data.sent || 0, failed: data.failed || 0 };
-    if (progress.value.sent + progress.value.failed >= broadcastTotal.value) {
+    progress.value = {
+      sent: data.sent || 0,
+      failed: data.failed || 0,
+      bounced: data.bounced || 0,
+      pending: data.pending || 0,
+    };
+    if (progressDone.value >= broadcastTotal.value && progress.value.pending === 0) {
       clearInterval(progressTimer);
       progressTimer = null;
-      composeMsg.value = `Рассылка завершена. Отправлено: ${progress.value.sent}, ошибки: ${progress.value.failed}`;
-      composeMsgType.value = progress.value.failed > 0 ? 'warning' : 'success';
+      const parts = [`отправлено: ${progress.value.sent}`];
+      if (progress.value.failed) parts.push(`ошибки: ${progress.value.failed}`);
+      if (progress.value.bounced) parts.push(`возвраты: ${progress.value.bounced}`);
+      composeMsg.value = `Рассылка завершена. ${parts.join(', ')}.`;
+      composeMsgType.value = (progress.value.failed + progress.value.bounced) > 0 ? 'warning' : 'success';
     }
   } catch {}
 }

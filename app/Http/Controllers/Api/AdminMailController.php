@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Api\Concerns\PaginatesRequests;
 use App\Http\Controllers\Controller;
 use App\Jobs\SendBroadcastEmail;
+use App\Listeners\RecordMailLog;
 use App\Services\MailSettingsService;
 use App\Services\MailTemplateRenderer;
+use App\Services\MailTracker;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -150,7 +152,7 @@ class AdminMailController extends Controller
     /**
      * Send a test email to a specified address using the stored SMTP config.
      */
-    public function test(Request $request): JsonResponse
+    public function test(Request $request, MailTracker $tracker): JsonResponse
     {
         $data = $request->validate([
             'to' => ['required', 'email'],
@@ -164,15 +166,35 @@ class AdminMailController extends Controller
             ], 422);
         }
 
+        $subject = 'DS Consulting — проверка SMTP';
+        $tid = (string) Str::uuid();
+        $senderId = (int) ($request->user()?->id ?? 0) ?: null;
+
         try {
-            Mail::raw("Тестовое сообщение от DS Consulting.\nОтправлено: " . now()->toIso8601String(),
-                fn ($msg) => $msg->to($data['to'])->subject('DS Consulting — проверка SMTP')
+            Mail::raw(
+                "Тестовое сообщение от DS Consulting.\nОтправлено: " . now()->toIso8601String(),
+                function ($msg) use ($data, $subject, $tid, $tracker, $senderId) {
+                    $msg->to($data['to'])->subject($subject);
+                    $tracker->headers($msg->getSymfonyMessage(), [
+                        'tracking_id' => $tid,
+                        'mail_type' => 'smtp_test',
+                        'sender_id' => $senderId,
+                    ]);
+                }
             );
-            $this->logEntry($request, $data['to'], null, 'DS Consulting — проверка SMTP', 'Test', 'sent', null);
 
             return response()->json(['message' => 'Тестовое письмо отправлено']);
         } catch (\Throwable $e) {
-            $this->logEntry($request, $data['to'], null, 'DS Consulting — проверка SMTP', 'Test', 'failed', $e->getMessage());
+            RecordMailLog::recordFailure(
+                recipientEmail: $data['to'],
+                trackingId: $tid,
+                subject: $subject,
+                userId: null,
+                senderId: $senderId,
+                broadcastId: null,
+                mailType: 'smtp_test',
+                error: $e->getMessage(),
+            );
             Log::error('Mail test failed', ['error' => $e->getMessage()]);
 
             return response()->json(['message' => 'Ошибка отправки: ' . $e->getMessage()], 500);
@@ -237,17 +259,27 @@ class AdminMailController extends Controller
      */
     public function broadcastProgress(string $broadcastId): JsonResponse
     {
+        // delivery_status — расширенный жизненный цикл (pending/sent/
+        // delivered/failed/bounced). 'pending' = в очереди или ждёт SMTP
+        // handshake; 'delivered' = sent + получатель открыл (зачитан
+        // tracking pixel'ом). Для UI прогресса считаем delivered как
+        // подвид sent.
         $counts = DB::table('mail_log')
             ->where('broadcast_id', $broadcastId)
-            ->selectRaw('status, COUNT(*) as cnt')
-            ->groupBy('status')
-            ->pluck('cnt', 'status')
+            ->selectRaw('COALESCE(delivery_status, status) as st, COUNT(*) as cnt')
+            ->groupBy('st')
+            ->pluck('cnt', 'st')
             ->toArray();
+
+        $sent = (int) ($counts['sent'] ?? 0) + (int) ($counts['delivered'] ?? 0);
 
         return response()->json([
             'broadcast_id' => $broadcastId,
-            'sent' => (int) ($counts['sent'] ?? 0),
+            'sent' => $sent,
+            'delivered' => (int) ($counts['delivered'] ?? 0),
+            'pending' => (int) ($counts['pending'] ?? 0),
             'failed' => (int) ($counts['failed'] ?? 0),
+            'bounced' => (int) ($counts['bounced'] ?? 0),
         ]);
     }
 
@@ -314,24 +346,57 @@ class AdminMailController extends Controller
     {
         $query = DB::table('mail_log');
 
+        // Старый фильтр `status` оставлен ради backward-compat с UI,
+        // который ещё может слать sent/failed. Новый `delivery_status`
+        // расширенный (pending/sent/delivered/failed/bounced).
         if ($request->filled('status')) {
-            $query->where('status', $request->input('status'));
+            $st = $request->input('status');
+            $query->where(function ($q) use ($st) {
+                $q->where('delivery_status', $st)->orWhere('status', $st);
+            });
+        }
+        if ($request->filled('delivery_status')) {
+            $query->where('delivery_status', $request->input('delivery_status'));
+        }
+        if ($request->filled('mail_type')) {
+            $query->where('mail_type', $request->input('mail_type'));
         }
         if ($request->filled('search')) {
             $s = '%' . $request->input('search') . '%';
             $query->where(function ($q) use ($s) {
                 $q->where('recipient_email', 'ilike', $s)
-                  ->orWhere('subject', 'ilike', $s);
+                  ->orWhere('subject', 'ilike', $s)
+                  ->orWhere('message_id', 'ilike', $s);
             });
         }
+
+        // Сводка по статусам — для chip-фильтров в UI.
+        $summary = DB::table('mail_log')
+            ->selectRaw('COALESCE(delivery_status, status) as st, COUNT(*) as cnt')
+            ->groupBy('st')
+            ->pluck('cnt', 'st')
+            ->toArray();
 
         $total = $query->count();
         $rows = $query->orderByDesc('id')
             ->offset($this->paginationOffset($request))
             ->limit($this->paginationPerPage($request))
-            ->get();
+            ->get([
+                'id', 'tracking_id', 'recipient_email', 'recipient_user_id',
+                'sender_id', 'from_address', 'mailer', 'subject', 'mail_type',
+                'status', 'delivery_status', 'error', 'smtp_response',
+                'message_id', 'attempts',
+                'bounce_reason', 'bounce_code', 'bounced_at',
+                'sent_at', 'opened_at', 'opens_count', 'clicked_at',
+                'clicks_count', 'last_click_url',
+                'broadcast_id', 'created_at',
+            ]);
 
-        return response()->json(['data' => $rows, 'total' => $total]);
+        return response()->json([
+            'data' => $rows,
+            'total' => $total,
+            'summary' => $summary,
+        ]);
     }
 
     /**
@@ -369,19 +434,4 @@ class AdminMailController extends Controller
         return $q->get();
     }
 
-    private function logEntry(Request $request, string $email, ?int $userId, string $subject, string $body, string $status, ?string $error): void
-    {
-        DB::table('mail_log')->insert([
-            'sender_id' => $request->user()?->id,
-            'recipient_email' => $email,
-            'recipient_user_id' => $userId,
-            'subject' => $subject,
-            'body' => mb_substr($body, 0, 65000),
-            'status' => $status,
-            'error' => $error ? mb_substr($error, 0, 2000) : null,
-            'sent_at' => $status === 'sent' ? now() : null,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
-    }
 }

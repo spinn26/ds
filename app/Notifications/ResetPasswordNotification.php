@@ -2,11 +2,10 @@
 
 namespace App\Notifications;
 
+use App\Services\MailTracker;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 
 /**
  * Кастомное уведомление о сбросе пароля. Подставляет ссылку на
@@ -14,8 +13,9 @@ use Illuminate\Support\Facades\Log;
  * Laravel `/password/reset/{token}` (которого у SPA нет).
  *
  * Базовый URL берётся из config('app.frontend_url') → fallback
- * config('app.url'). Email-шаблон — стандартный MailMessage (не
- * нужен отдельный blade).
+ * config('app.url'). Запись в mail_log делает RecordMailLog listener
+ * на событиях MessageSending/MessageSent — здесь только проставляем
+ * mail_type и user_id служебными X-DS-* заголовками.
  */
 class ResetPasswordNotification extends Notification
 {
@@ -31,6 +31,7 @@ class ResetPasswordNotification extends Notification
     public function toMail(mixed $notifiable): MailMessage
     {
         $recipient = $notifiable->getEmailForPasswordReset();
+        $userId = (int) $notifiable->getKey();
         $baseUrl = rtrim(config('app.frontend_url') ?: config('app.url') ?: 'http://localhost', '/');
         $url = "{$baseUrl}/reset-password?token={$this->token}&email=" . urlencode($recipient);
         $logoUrl = "{$baseUrl}/email/ds-logo.png";
@@ -39,26 +40,6 @@ class ResetPasswordNotification extends Notification
         // в минутах). Дефолт Laravel 60 мин.
         $expireMinutes = (int) config('auth.passwords.users.expire', 60);
         $subject = 'Восстановление пароля — DS Consulting';
-
-        // Логируем отправку в mail_log (та же таблица, что показывается
-        // в /admin/mail → «Журнал»). Идемпотентность не нужна — Password
-        // broker сам тротлит повторные отправки.
-        try {
-            DB::table('mail_log')->insert([
-                'recipient_email' => $recipient,
-                'recipient_user_id' => $notifiable->getKey(),
-                'subject' => $subject,
-                'body' => "Reset link: {$url}",
-                'status' => 'sent',
-                'sent_at' => now(),
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
-        } catch (\Throwable $e) {
-            Log::warning('mail_log insert failed (password reset)', [
-                'recipient' => $recipient, 'error' => $e->getMessage(),
-            ]);
-        }
 
         // Кастомный HTML-шаблон resources/views/emails/reset-password.blade.php
         // (бренд DS: тёмно-зелёный header, логотип, кнопка primary). Plain
@@ -74,6 +55,12 @@ class ResetPasswordNotification extends Notification
                     'logoUrl' => $logoUrl,
                     'expireMinutes' => $expireMinutes,
                 ]
-            );
+            )
+            ->withSymfonyMessage(function ($email) use ($userId) {
+                app(MailTracker::class)->headers($email, [
+                    'mail_type' => 'password_reset',
+                    'user_id' => $userId,
+                ]);
+            });
     }
 }
