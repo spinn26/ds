@@ -249,14 +249,31 @@ class ProductsAudit20260529 extends Command
         $progCreated = 0;
         $importedFrom = 'sheet-2026-05-29';
 
-        DB::transaction(function () use ($byProduct, &$prodCreated, &$progCreated, $importedFrom) {
+        $prodReactivated = 0;
+        $progReactivated = 0;
+
+        DB::transaction(function () use ($byProduct, &$prodCreated, &$progCreated, &$prodReactivated, &$progReactivated, $importedFrom) {
             foreach ($byProduct as $productName => $programs) {
                 // Если продукт уже есть в products_catalog по имени — используем.
-                $productId = DB::table('products_catalog')
+                // Берём ЛЮБОЙ статус (active или нет): майский аудит мог
+                // заархивировать продукт, а новая таблица возвращает его в строй.
+                $existing = DB::table('products_catalog')
                     ->whereRaw('LOWER(name) = ?', [mb_strtolower(trim($productName))])
-                    ->value('id');
+                    ->first(['id', 'active', 'visible_to_resident', 'visible_to_calculator']);
 
-                if (! $productId) {
+                if ($existing) {
+                    $productId = $existing->id;
+                    // Если archived — реактивируем (раз продукт снова в листе active).
+                    if (! $existing->active || ! $existing->visible_to_resident || ! $existing->visible_to_calculator) {
+                        DB::table('products_catalog')->where('id', $productId)->update([
+                            'active' => true,
+                            'visible_to_resident' => true,
+                            'visible_to_calculator' => true,
+                            'updated_at' => now(),
+                        ]);
+                        $prodReactivated++;
+                    }
+                } else {
                     $productId = DB::table('products_catalog')->insertGetId([
                         'name' => $productName,
                         'type' => $programs[0]['category'] ?? null,
@@ -271,14 +288,26 @@ class ProductsAudit20260529 extends Command
                 }
 
                 foreach ($programs as $g) {
-                    // Идемпотентность: если такая программа уже есть у
-                    // этого продукта — пропускаем (на случай повторного
-                    // запуска или race conditions).
-                    $exists = DB::table('programs_catalog')
+                    // Идемпотентность: если такая программа уже есть —
+                    // либо реактивируем (если выключена), либо пропускаем.
+                    $existingPg = DB::table('programs_catalog')
                         ->where('product_id', $productId)
                         ->whereRaw('LOWER(name) = ?', [mb_strtolower(trim($g['program']))])
-                        ->exists();
-                    if ($exists) continue;
+                        ->first(['id', 'active', 'visible_to_resident', 'visible_to_calculator']);
+
+                    if ($existingPg) {
+                        if (! $existingPg->active || ! $existingPg->visible_to_resident || ! $existingPg->visible_to_calculator) {
+                            DB::table('programs_catalog')->where('id', $existingPg->id)->update([
+                                'active' => true,
+                                'visible_to_resident' => true,
+                                'visible_to_calculator' => true,
+                                'has_red' => false,
+                                'updated_at' => now(),
+                            ]);
+                            $progReactivated++;
+                        }
+                        continue;
+                    }
 
                     DB::table('programs_catalog')->insert([
                         'product_id' => $productId,
@@ -299,6 +328,8 @@ class ProductsAudit20260529 extends Command
             }
         });
 
+        $this->info("Реактивировано продуктов: {$prodReactivated}");
+        $this->info("Реактивировано программ: {$progReactivated}");
         return [$prodCreated, $progCreated];
     }
 
