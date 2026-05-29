@@ -206,24 +206,22 @@ class ProductsAudit20260529 extends Command
 
         if ($createMissing) {
             $this->line('');
-            $this->warn('=== CREATE MISSING ===');
-            $this->warn('Не реактивируем archived продукты. Создаём ТОЛЬКО для уже-active продуктов.');
-            [$pNew, $prNew, $skipped] = $this->createMissing($missingInCatalog);
+            $this->warn('=== CREATE MISSING + REACTIVATE ===');
+            [$pNew, $prNew, $pReact] = $this->createMissing($missingInCatalog);
             $this->info("Создано продуктов: {$pNew}");
+            $this->info("Реактивировано продуктов: {$pReact}");
             $this->info("Создано программ: {$prNew}");
-            $this->info("Пропущено (archived product): {$skipped}");
         }
 
         return self::SUCCESS;
     }
 
     /**
-     * Создание новых (product, program) пар.
-     * Реактивацию archived НЕ делаем — это политическое решение и должно
-     * быть ручным в админ-UI.
+     * Создание новых (product, program) пар + реактивация archived
+     * продуктов которые снова есть в листе как active.
      *
      * @param  list<array<string,mixed>>  $missing
-     * @return array{0:int,1:int,2:int} [createdProducts, createdPrograms, skippedArchived]
+     * @return array{0:int,1:int,2:int} [createdProducts, createdPrograms, reactivatedProducts]
      */
     private function createMissing(array $missing): array
     {
@@ -236,22 +234,27 @@ class ProductsAudit20260529 extends Command
 
         $prodCreated = 0;
         $progCreated = 0;
-        $skipped = 0;
+        $prodReactivated = 0;
         $importedFrom = 'sheet-2026-05-29';
 
-        DB::transaction(function () use ($byProduct, &$prodCreated, &$progCreated, &$skipped, $importedFrom) {
+        DB::transaction(function () use ($byProduct, &$prodCreated, &$progCreated, &$prodReactivated, $importedFrom) {
             foreach ($byProduct as $productName => $programs) {
                 $existing = DB::table('products_catalog')
                     ->whereRaw('LOWER(name) = ?', [mb_strtolower(trim($productName))])
-                    ->first(['id', 'active']);
+                    ->first(['id', 'active', 'visible_to_resident', 'visible_to_calculator']);
 
                 if ($existing) {
-                    if (! $existing->active) {
-                        // НЕ реактивируем — пропускаем все его программы.
-                        $skipped += count($programs);
-                        continue;
-                    }
                     $productId = $existing->id;
+                    // Если archived — реактивируем (раз в листе active).
+                    if (! $existing->active || ! $existing->visible_to_resident || ! $existing->visible_to_calculator) {
+                        DB::table('products_catalog')->where('id', $productId)->update([
+                            'active' => true,
+                            'visible_to_resident' => true,
+                            'visible_to_calculator' => true,
+                            'updated_at' => now(),
+                        ]);
+                        $prodReactivated++;
+                    }
                 } else {
                     $productId = DB::table('products_catalog')->insertGetId([
                         'name' => $productName,
@@ -267,13 +270,28 @@ class ProductsAudit20260529 extends Command
                 }
 
                 foreach ($programs as $g) {
-                    $exists = DB::table('programs_catalog')
+                    $existingPg = DB::table('programs_catalog')
                         ->where('product_id', $productId)
                         ->whereRaw('LOWER(name) = ?', [mb_strtolower(trim($g['program']))])
-                        ->exists();
-                    if ($exists) continue;
+                        ->first(['id', 'active', 'visible_to_resident', 'visible_to_calculator']);
 
                     $lines = $g['lines'] ?? [];
+                    if ($existingPg) {
+                        // Реактивируем + tariffs пишем (если не red).
+                        DB::table('programs_catalog')->where('id', $existingPg->id)->update([
+                            'active' => true,
+                            'visible_to_resident' => true,
+                            'visible_to_calculator' => true,
+                            'has_red' => false,
+                            'vendor' => $g['supplier'] ?? null,
+                            'category' => $g['category'] ?? null,
+                            'tariffs' => json_encode($lines, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE),
+                            'rate_lines' => count($lines),
+                            'updated_at' => now(),
+                        ]);
+                        continue;
+                    }
+
                     DB::table('programs_catalog')->insert([
                         'product_id' => $productId,
                         'name' => $g['program'] ?: '—',
@@ -293,8 +311,9 @@ class ProductsAudit20260529 extends Command
                 }
             }
         });
+        $this->info("Реактивировано продуктов: {$prodReactivated}");
 
-        return [$prodCreated, $progCreated, $skipped];
+        return [$prodCreated, $progCreated, $prodReactivated];
     }
 
     /**
