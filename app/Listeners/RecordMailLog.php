@@ -285,20 +285,29 @@ class RecordMailLog
 
     private function messageIdFromSent(?SentMessage $sent, Email $email): ?string
     {
-        // Illuminate\Mail\SentMessage проксирует getMessageId() и getDebug()
-        // через __call() к Symfony\Component\Mailer\SentMessage —
-        // method_exists() в этом случае возвращает false, поэтому проверку
-        // делать НЕЛЬЗЯ. Прямой вызов в try/catch.
+        // ПРИОРИТЕТ — headers email: это тот Message-ID, который реально
+        // ушёл получателю и который видит spam-фильтр. Symfony's
+        // SentMessage::getMessageId() возвращает transport-level token
+        // (например Yandex SMTP отвечает «250 Ok: queued as ABC» — и
+        // Symfony положит туда «queued» или «ABC»). Это не то что
+        // получатель видит в Message-ID заголовке письма.
+        $h = $email->getHeaders();
+        if ($h->has('Message-ID')) {
+            $mid = trim($h->get('Message-ID')->getBodyAsString(), " \t<>");
+            if ($mid !== '') return mb_substr($mid, 0, 250);
+        }
+        // Fallback на SentMessage. Illuminate\Mail\SentMessage проксирует
+        // getMessageId() через __call() к Symfony — method_exists() здесь
+        // возвращает false, проверку делать нельзя. Прямой вызов.
         if ($sent !== null) {
             try {
                 $mid = (string) $sent->getMessageId();
-                if ($mid !== '') return mb_substr($mid, 0, 250);
+                if ($mid !== '' && $mid !== 'queued') return mb_substr($mid, 0, 250);
             } catch (\Throwable) {
-                // fallback в headers
+                // ignore
             }
         }
-        $h = $email->getHeaders();
-        return $h->has('Message-ID') ? mb_substr($h->get('Message-ID')->getBodyAsString(), 0, 250) : null;
+        return null;
     }
 
     private function debugFromSent(?SentMessage $sent): ?string
