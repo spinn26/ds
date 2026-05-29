@@ -49,8 +49,16 @@ class ProductsAudit20260529 extends Command
         $byProgram = [];
         foreach ($rows as $r) {
             $p = trim((string) ($r['product'] ?? ''));
-            $pr = trim((string) ($r['program'] ?? ''));
+            $prRaw = trim((string) ($r['program'] ?? ''));
             if ($p === '') continue;
+            // Нормализация имени программы: «Срок/Год = параметр, не отдельная программа»
+            // (memory project_products_audit_2026_05). Срок из имени переезжает в tariff.term.
+            // Примеры: "FREEDOM FUTURE 5" → "FREEDOM FUTURE" + term=5
+            //          "EVO 25" → "EVO" + term=25
+            //          "FREEDOM FUTURE 15 и более" → "FREEDOM FUTURE" + term="15+"
+            //          "Universal life UL 1 год" → "Universal life UL" + term=1
+            [$pr, $termFromName] = $this->normalizeProgramName($prRaw);
+
             $key = mb_strtolower("{$p}||{$pr}");
             if (! isset($byProgram[$key])) {
                 $byProgram[$key] = [
@@ -71,11 +79,14 @@ class ProductsAudit20260529 extends Command
                 'points' => $r['points'] ?? null,
                 'price' => $r['price'] ?? null,
                 'currency' => $r['currency'] ?? null,
-                'term' => $r['term'] ?? null,
+                // term: предпочитаем явное значение из колонки K; fallback —
+                // из имени программы (FUTURE 5 → 5).
+                'term' => $r['term'] ?: $termFromName,
                 'year_kv' => $r['year_kv'] ?? null,
                 'formula' => $r['formula'] ?? null,
                 'comment' => $r['comment'] ?? null,
                 'is_red' => (bool) ($r['is_red'] ?? false),
+                'original_program' => $prRaw !== $pr ? $prRaw : null,
             ];
         }
 
@@ -416,5 +427,41 @@ class ProductsAudit20260529 extends Command
             ];
         }
         return $out;
+    }
+
+    /**
+     * «FREEDOM FUTURE 5» → ['FREEDOM FUTURE', '5']
+     * «FREEDOM FUTURE 15 и более» → ['FREEDOM FUTURE', '15+']
+     * «EVO 25» → ['EVO', '25']
+     * «Universal life UL 1 год» → ['Universal life UL', '1']
+     * «WPP_Z8» → ['WPP_Z8', null] (Z8/Z5 — это код фонда, не срок)
+     * «MGIUL единоразовая» → ['MGIUL единоразовая', null] (нет числа)
+     * «FREEDOM HEALTH» → ['FREEDOM HEALTH', null] (нет хвоста)
+     *
+     * Идея: ищем регексом окончание " {N}" или " {N} и более" или
+     * " {N} год", где N — натуральное число в диапазоне 1..50.
+     * Если такого нет — возвращаем имя как есть.
+     *
+     * @return array{0:string,1:?string}  [база, срок-из-имени]
+     */
+    private function normalizeProgramName(string $name): array
+    {
+        $name = trim($name);
+        // " 15 и более" / "15 и более"
+        if (preg_match('/^(.+?)\s+(\d{1,2})\s+и\s+более$/iu', $name, $m)) {
+            return [trim($m[1]), $m[2] . '+'];
+        }
+        // " 1 год" / " 2 года" / " 5 лет"
+        if (preg_match('/^(.+?)\s+(\d{1,2})\s+(?:год|года|лет)$/iu', $name, $m)) {
+            return [trim($m[1]), $m[2]];
+        }
+        // " 5" в конце (но не «WPP_Z5» — там нет пробела перед цифрой)
+        if (preg_match('/^(.+?)\s+(\d{1,2})$/u', $name, $m)) {
+            $term = (int) $m[2];
+            if ($term >= 1 && $term <= 50) {
+                return [trim($m[1]), $m[2]];
+            }
+        }
+        return [$name, null];
     }
 }
