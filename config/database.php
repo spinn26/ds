@@ -20,6 +20,14 @@ return [
     'default' => env('DB_CONNECTION', 'sqlite'),
 
     /*
+     * PostgreSQL statement_timeout (мс): максимум на одиночный запрос
+     * в HTTP-контексте. CLI (artisan, queue) — без лимита, см.
+     * AppServiceProvider::boot(). Читается через config(), чтобы
+     * работать после `php artisan config:cache`.
+     */
+    'statement_timeout_ms' => (int) env('DB_STATEMENT_TIMEOUT_MS', 30_000),
+
+    /*
     |--------------------------------------------------------------------------
     | Database Connections
     |--------------------------------------------------------------------------

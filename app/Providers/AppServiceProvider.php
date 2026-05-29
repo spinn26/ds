@@ -65,7 +65,7 @@ class AppServiceProvider extends ServiceProvider
         // CLI-контекст (artisan, queue worker) — без лимита: миграции,
         // pool:recalc, импорт могут идти минутами.
         if (config('database.default') === 'pgsql' && ! app()->runningInConsole()) {
-            $timeout = (int) env('DB_STATEMENT_TIMEOUT_MS', 30_000);
+            $timeout = (int) config('database.statement_timeout_ms', 30_000);
             try {
                 DB::statement("SET statement_timeout = {$timeout}");
             } catch (\Throwable $e) {
