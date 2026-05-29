@@ -31,6 +31,7 @@ class MonthlyPenaltyRunner
     public function __construct(
         private readonly MonthlyFinaliser $finaliser,
         private readonly PeriodFreezeService $periodFreeze,
+        private readonly CommissionCalculator $calculator,
     ) {}
 
     /**
@@ -104,6 +105,12 @@ class MonthlyPenaltyRunner
         $stats = [];
         $affectedTotal = 0;
 
+        // ID партнёров, у которых реально применили штраф — после цикла
+        // пересчитаем им consultantBalance, иначе snapshot останется
+        // со старыми (до-штрафа) суммами amountRUB, и Реестр выплат
+        // покажет неправильные «к выплате».
+        $affectedConsultantIds = [];
+
         foreach ($candidates as $cons) {
             $result = $this->processConsultant(
                 consultant: $cons,
@@ -119,6 +126,29 @@ class MonthlyPenaltyRunner
             if ($result['affectedCommissions'] > 0) {
                 $stats[] = $result;
                 $affectedTotal += $result['affectedCommissions'];
+                if ($applyWrite) {
+                    $affectedConsultantIds[] = (int) $cons->id;
+                }
+            }
+        }
+
+        // Пересчёт consultantBalance для затронутых партнёров —
+        // commission.amountRUB снижены штрафами, но snapshot в
+        // consultantBalance.accruedTransactional остаётся старым,
+        // если его не пересчитать. Иначе Реестр выплат покажет
+        // «к выплате» БЕЗ учёта штрафов до следующего ручного rebuild'а.
+        // Делаем после всех processConsultant — батчем по уникальным id.
+        if ($applyWrite && $affectedConsultantIds) {
+            foreach (array_unique($affectedConsultantIds) as $cid) {
+                try {
+                    $this->calculator->rebuildBalanceFor($cid, $dateMonth, $dateYear);
+                } catch (\Throwable $e) {
+                    \Log::warning('rebuildBalance after penalty failed', [
+                        'consultant' => $cid,
+                        'month' => $dateMonth,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
             }
         }
 

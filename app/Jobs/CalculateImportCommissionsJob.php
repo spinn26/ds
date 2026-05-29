@@ -40,10 +40,26 @@ class CalculateImportCommissionsJob implements ShouldQueue
 
     public function handle(CommissionCalculator $calculator): void
     {
-        $txIds = DB::table('transaction')
-            ->where('comment', 'Импорт #' . $this->importLogId)
-            ->pluck('id')
-            ->all();
+        // Источник — transaction_import_log.created_ids (JSON массив id'ов,
+        // которые реально вставил Job). Раньше брали из comment='Импорт #N',
+        // но это давало coupling-баг: если оператор вручную создал
+        // транзакцию с таким же комментом — попадала в расчёт. created_ids
+        // фиксируется атомарно в bulk INSERT (ImportTransactionsJob:307).
+        $log = DB::table('transaction_import_log')->find($this->importLogId);
+        $createdIds = is_string($log?->created_ids ?? null)
+            ? (json_decode($log->created_ids, true) ?: [])
+            : ((array) ($log->created_ids ?? []));
+        $txIds = array_values(array_filter(array_map('intval', $createdIds)));
+
+        // Fallback на comment — для legacy-логов до миграции 2026_04_21
+        // (когда created_ids ещё не было). Если этих логов на проде нет,
+        // ветка не сработает.
+        if (! $txIds) {
+            $txIds = DB::table('transaction')
+                ->where('comment', 'Импорт #' . $this->importLogId)
+                ->pluck('id')
+                ->all();
+        }
 
         $total = count($txIds);
         $this->putTracker([

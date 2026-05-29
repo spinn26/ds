@@ -144,12 +144,24 @@ class ImportTransactionsJob implements ShouldQueue
                 $contract = $contractMap->get($contractNumber);
                 $matchedByIlike = false;
                 if (! $contract) {
-                    // 2) Fallback ilike — редкий путь, делаем per-row.
-                    $contract = DB::table('contract')
+                    // 2) Fallback ilike: ТОЛЬКО при уникальном совпадении.
+                    // Раньше брался первый попавшийся, и «1001» матчил
+                    // «10010», «100123» — оператор получал warning и
+                    // деньги уходили в чужой контракт. Теперь >1 совпадения
+                    // = ошибка с перечислением кандидатов.
+                    $candidates = DB::table('contract')
                         ->where('number', 'ilike', '%' . $contractNumber . '%')
                         ->whereNull('deletedAt')
-                        ->first(['id', 'number', 'clientName']);
-                    $matchedByIlike = (bool) $contract;
+                        ->limit(5)
+                        ->get(['id', 'number', 'clientName']);
+                    if ($candidates->count() === 1) {
+                        $contract = $candidates->first();
+                        $matchedByIlike = true;
+                    } elseif ($candidates->count() > 1) {
+                        $list = $candidates->pluck('number')->join(', ');
+                        $errors[] = "Строка {$lineNo}: контракт «{$contractNumber}» — несколько совпадений ({$list}). Уточните номер для точного совпадения.";
+                        continue;
+                    }
                 }
                 if (! $contract) {
                     $errors[] = "Строка {$lineNo}: контракт «{$contractNumber}» не найден в БД (ни по точному, ни по частичному совпадению)";
