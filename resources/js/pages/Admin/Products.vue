@@ -87,7 +87,7 @@
         <!-- Expanded row: Programs -->
         <template #expanded-row="{ columns, item }">
           <tr>
-            <td :colspan="columns.length" class="pa-4 bg-grey-lighten-5">
+            <td :colspan="columns.length" class="pa-4 expanded-programs-cell">
               <div class="d-flex justify-space-between align-center mb-2">
                 <span class="text-subtitle-2 font-weight-bold">Программы продукта «{{ item.name }}»</span>
                 <v-btn v-if="canEdit('products')" size="small" color="primary" prepend-icon="mdi-plus" variant="tonal"
@@ -736,3 +736,17 @@ onMounted(() => {
   loadProductReferences();
 });
 </script>
+
+<style scoped>
+/* Расширенная строка с программами продукта — использует theme-токены
+   вместо хардкода bg-grey-lighten-5 (он остаётся светло-серым в тёмной
+   теме и ломает контраст). Surface-variant даёт лёгкий контраст с
+   основным фоном и в светлой, и в тёмной теме. */
+.expanded-programs-cell {
+  background: rgba(var(--v-theme-on-surface), 0.04);
+}
+.expanded-programs-cell :deep(.v-data-table) {
+  background: transparent;
+}
+</style>
+
