@@ -48,6 +48,23 @@ class RecordMailLog
                 $meta['tracking_id'] = $tid;
             }
 
+            // Перебиваем Message-ID на правильный домен (=domain отправителя).
+            // По умолчанию Symfony Mime генерит «xxx@example.com» когда
+            // hostname не задан — Gmail/Mail.ru за это занижают spam-score.
+            // Корректный Message-ID должен содержать domain из From.
+            $fromDomain = $this->extractFromDomain($email);
+            if ($fromDomain) {
+                $h = $email->getHeaders();
+                $current = $h->has('Message-ID') ? $h->get('Message-ID')->getBodyAsString() : '';
+                if ($current === '' || str_contains($current, '@example.com')) {
+                    $newMid = bin2hex(random_bytes(16)) . '@' . $fromDomain;
+                    if ($h->has('Message-ID')) {
+                        $h->remove('Message-ID');
+                    }
+                    $h->addIdHeader('Message-ID', $newMid);
+                }
+            }
+
             $to = $this->primaryRecipient($email);
             if ($to === null) {
                 // Письмо без получателей — Symfony отвалится сам, но мы
@@ -237,6 +254,14 @@ class RecordMailLog
         return null;
     }
 
+    private function extractFromDomain(Email $email): ?string
+    {
+        $addr = $this->fromAddress($email);
+        if (! $addr) return null;
+        $pos = strrpos($addr, '@');
+        return $pos !== false ? substr($addr, $pos + 1) : null;
+    }
+
     private function detectMailer(Email $email): string
     {
         // Symfony Mailer не привязан к Laravel mailer-имени напрямую.
@@ -260,12 +285,17 @@ class RecordMailLog
 
     private function messageIdFromSent(?SentMessage $sent, Email $email): ?string
     {
-        // Symfony возвращает message-id в SentMessage::getMessageId() — это
-        // ID присвоенный отправителем (может отличаться от того, что
-        // получатель видит в заголовке Message-ID после relay).
-        if ($sent && method_exists($sent, 'getMessageId')) {
-            $mid = (string) $sent->getMessageId();
-            if ($mid !== '') return mb_substr($mid, 0, 250);
+        // Illuminate\Mail\SentMessage проксирует getMessageId() и getDebug()
+        // через __call() к Symfony\Component\Mailer\SentMessage —
+        // method_exists() в этом случае возвращает false, поэтому проверку
+        // делать НЕЛЬЗЯ. Прямой вызов в try/catch.
+        if ($sent !== null) {
+            try {
+                $mid = (string) $sent->getMessageId();
+                if ($mid !== '') return mb_substr($mid, 0, 250);
+            } catch (\Throwable) {
+                // fallback в headers
+            }
         }
         $h = $email->getHeaders();
         return $h->has('Message-ID') ? mb_substr($h->get('Message-ID')->getBodyAsString(), 0, 250) : null;
@@ -273,10 +303,12 @@ class RecordMailLog
 
     private function debugFromSent(?SentMessage $sent): ?string
     {
-        if ($sent && method_exists($sent, 'getDebug')) {
+        if ($sent === null) return null;
+        try {
             $d = (string) $sent->getDebug();
             return $d !== '' ? $d : null;
+        } catch (\Throwable) {
+            return null;
         }
-        return null;
     }
 }
