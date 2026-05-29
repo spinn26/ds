@@ -53,11 +53,7 @@ class ProductsAudit20260529 extends Command
             if ($p === '') continue;
             // Нормализация имени программы: «Срок/Год = параметр, не отдельная программа»
             // (memory project_products_audit_2026_05). Срок из имени переезжает в tariff.term.
-            // Примеры: "FREEDOM FUTURE 5" → "FREEDOM FUTURE" + term=5
-            //          "EVO 25" → "EVO" + term=25
-            //          "FREEDOM FUTURE 15 и более" → "FREEDOM FUTURE" + term="15+"
-            //          "Universal life UL 1 год" → "Universal life UL" + term=1
-            [$pr, $termFromName] = $this->normalizeProgramName($prRaw);
+            [$pr, $termFromName] = $this->normalizeProgramName($prRaw, $p);
 
             $key = mb_strtolower("{$p}||{$pr}");
             if (! isset($byProgram[$key])) {
@@ -430,32 +426,48 @@ class ProductsAudit20260529 extends Command
     }
 
     /**
+     * Whitelist продуктов где «число в конце программы = срок контракта».
+     * Для остальных продуктов число может быть кодом тарифа (Fixed Income 03)
+     * или капиталом (Access Portfolio 5000) — нормализация даст false positives.
+     *
+     * Имена сравниваются case-insensitive.
+     */
+    private const NORMALIZE_PRODUCTS = [
+        'freedom finance life',
+        'бкс страхование жизни',
+        'manhattan trust',
+    ];
+
+    /**
      * «FREEDOM FUTURE 5» → ['FREEDOM FUTURE', '5']
      * «FREEDOM FUTURE 15 и более» → ['FREEDOM FUTURE', '15+']
-     * «EVO 25» → ['EVO', '25']
-     * «Universal life UL 1 год» → ['Universal life UL', '1']
-     * «WPP_Z8» → ['WPP_Z8', null] (Z8/Z5 — это код фонда, не срок)
-     * «MGIUL единоразовая» → ['MGIUL единоразовая', null] (нет числа)
-     * «FREEDOM HEALTH» → ['FREEDOM HEALTH', null] (нет хвоста)
-     *
-     * Идея: ищем регексом окончание " {N}" или " {N} и более" или
-     * " {N} год", где N — натуральное число в диапазоне 1..50.
-     * Если такого нет — возвращаем имя как есть.
+     * «Эволюция ГГА 10 лет» → ['Эволюция ГГА', '10']
+     * «Fixed Income 03» (Investors Trust) → не трогаем (нет в whitelist)
+     * «Access Portfolio 5000» → не трогаем (5000 > 50 в любом случае)
+     * «WPP_Z8» → ['WPP_Z8', null] (нет пробела перед цифрой)
+     * «FREEDOM HEALTH» → ['FREEDOM HEALTH', null] (нет хвоста-числа)
      *
      * @return array{0:string,1:?string}  [база, срок-из-имени]
      */
-    private function normalizeProgramName(string $name): array
+    private function normalizeProgramName(string $name, string $product = ''): array
     {
         $name = trim($name);
-        // " 15 и более" / "15 и более"
+        $productLc = mb_strtolower(trim($product));
+        // Применяем нормализацию только для whitelisted продуктов —
+        // иначе риск false positives на кодах типа «Fixed Income 03».
+        if (! in_array($productLc, self::NORMALIZE_PRODUCTS, true)) {
+            return [$name, null];
+        }
+
+        // " 15 и более" — хвост «и более» к большому сроку.
         if (preg_match('/^(.+?)\s+(\d{1,2})\s+и\s+более$/iu', $name, $m)) {
             return [trim($m[1]), $m[2] . '+'];
         }
-        // " 1 год" / " 2 года" / " 5 лет"
+        // " 1 год" / " 2 года" / " 5 лет" — явный суффикс срока.
         if (preg_match('/^(.+?)\s+(\d{1,2})\s+(?:год|года|лет)$/iu', $name, $m)) {
             return [trim($m[1]), $m[2]];
         }
-        // " 5" в конце (но не «WPP_Z5» — там нет пробела перед цифрой)
+        // " 5" в конце — голое число, тоже трактуем как срок (FREEDOM FUTURE 5).
         if (preg_match('/^(.+?)\s+(\d{1,2})$/u', $name, $m)) {
             $term = (int) $m[2];
             if ($term >= 1 && $term <= 50) {
