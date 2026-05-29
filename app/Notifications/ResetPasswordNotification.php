@@ -33,6 +33,7 @@ class ResetPasswordNotification extends Notification
         $recipient = $notifiable->getEmailForPasswordReset();
         $baseUrl = rtrim(config('app.frontend_url') ?: config('app.url') ?: 'http://localhost', '/');
         $url = "{$baseUrl}/reset-password?token={$this->token}&email=" . urlencode($recipient);
+        $logoUrl = "{$baseUrl}/email/ds-logo.png";
 
         // Срок жизни токена — из config/auth.php (passwords.users.expire,
         // в минутах). Дефолт Laravel 60 мин.
@@ -40,11 +41,8 @@ class ResetPasswordNotification extends Notification
         $subject = 'Восстановление пароля — DS Consulting';
 
         // Логируем отправку в mail_log (та же таблица, что показывается
-        // в /admin/mail → «Журнал»). Если SMTP-send упадёт после этого,
-        // exception всплывёт вверх, и в логе останется запись status=sent —
-        // что само по себе сигнал «ушло, но не дошло» при разборе кейса.
-        // Идемпотентность не нужна (Password broker сам не дублирует
-        // отправки в пределах throttle-окна).
+        // в /admin/mail → «Журнал»). Идемпотентность не нужна — Password
+        // broker сам тротлит повторные отправки.
         try {
             DB::table('mail_log')->insert([
                 'recipient_email' => $recipient,
@@ -62,13 +60,20 @@ class ResetPasswordNotification extends Notification
             ]);
         }
 
+        // Кастомный HTML-шаблон resources/views/emails/reset-password.blade.php
+        // (бренд DS: тёмно-зелёный header, логотип, кнопка primary). Plain
+        // text-версия отдельно — двусоставное письмо снижает spam-score
+        // (Gmail/Yandex прямо рекомендуют multipart/alternative).
         return (new MailMessage)
             ->subject($subject)
-            ->greeting('Здравствуйте!')
-            ->line('Вы запросили сброс пароля для своего аккаунта на платформе DS Consulting.')
-            ->action('Установить новый пароль', $url)
-            ->line("Ссылка действительна {$expireMinutes} минут.")
-            ->line('Если вы не запрашивали сброс — проигнорируйте это письмо, пароль останется прежним.')
-            ->salutation('С уважением, команда DS Consulting');
+            ->view(
+                ['emails.reset-password', 'emails.reset-password-text'],
+                [
+                    'subject' => $subject,
+                    'url' => $url,
+                    'logoUrl' => $logoUrl,
+                    'expireMinutes' => $expireMinutes,
+                ]
+            );
     }
 }
