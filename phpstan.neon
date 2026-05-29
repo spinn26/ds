@@ -1,0 +1,32 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+    - phpstan-baseline.neon
+
+parameters:
+    paths:
+        - app/
+        - routes/
+    level: 5
+    tmpDir: storage/framework/cache/phpstan
+    reportUnmatchedIgnoredErrors: false
+    ignoreErrors:
+        # Eloquent magic — нормально для Laravel-моделей и QueryBuilder->first()
+        - identifier: property.notFound
+          path: app/Http/Controllers/*
+        - identifier: property.notFound
+          path: app/Services/*
+        - identifier: property.notFound
+          path: app/Jobs/*
+        - identifier: property.notFound
+          path: app/Console/*
+        - identifier: property.notFound
+          path: app/Notifications/*
+        - identifier: property.notFound
+          path: app/Models/*
+        # Те же — для метод, который addы Eloquent через scope/relation
+        - identifier: method.notFound
+          path: app/Http/Controllers/*
+        - identifier: method.notFound
+          path: app/Services/*
+        - identifier: method.notFound
+          path: app/Models/*
