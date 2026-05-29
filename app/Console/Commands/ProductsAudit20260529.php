@@ -128,7 +128,7 @@ class ProductsAudit20260529 extends Command
         // Программы: какие из текущих programs_catalog помечены red?
         // Сверка идёт по паре (продукт.name, программа.name) — оба ilike.
         $programsCatalog = DB::table('programs_catalog as pg')
-            ->join('products_catalog as pc', 'pc.id', '=', 'pg.product_catalog_id')
+            ->join('products_catalog as pc', 'pc.id', '=', 'pg.product_id')
             ->where('pg.active', true)
             ->orderBy('pc.name')->orderBy('pg.name')
             ->get([
@@ -249,18 +249,23 @@ class ProductsAudit20260529 extends Command
             $points = $get(12);
             if (! $product && ! $program && ! $price && ! $points) continue;
 
-            // Red-detection: смотрим backgroundColor колонки D (Продукт) или E.
-            // Светло-красный/розовый из Google: r~0.96, g~0.78, b~0.78 (#f4cccc).
-            // Считаем red если r > 0.85 AND r > g+0.1 AND r > b+0.1.
-            $bg = $cells[3]['effectiveFormat']['backgroundColor']
-                ?? $cells[4]['effectiveFormat']['backgroundColor']
-                ?? null;
+            // Red-detection: красят колонку 8 (% DS) — это индикатор
+            // «тариф / линия программы деактивирован». Проверка по эмпирике
+            // из выгрузки: реально красят I (zero-index 8). Если ВСЕ
+            // строки одной программы красные → программа целиком
+            // деактивирована (агрегируется ниже).
+            // Светло-красный/розовый из Google: r~0.96, g~0.8, b~0.8.
             $isRed = false;
-            if (is_array($bg)) {
+            foreach ([8, 3, 4] as $colIdx) {
+                $bg = $cells[$colIdx]['effectiveFormat']['backgroundColor'] ?? null;
+                if (! is_array($bg)) continue;
                 $r = (float) ($bg['red'] ?? 1);
                 $g = (float) ($bg['green'] ?? 1);
                 $b = (float) ($bg['blue'] ?? 1);
-                $isRed = ($r > 0.85 && $r > $g + 0.08 && $r > $b + 0.08);
+                if ($r > 0.85 && $r > $g + 0.08 && $r > $b + 0.08) {
+                    $isRed = true;
+                    break;
+                }
             }
 
             $out[] = [
