@@ -570,22 +570,14 @@ class ReimportDirectualHistorical extends Command
                 'createdAt'                          => $this->toTs($r['@dateCreated'] ?? null),
             ];
             if (count($insert) >= 500) {
-                try { DB::table('commission')->insert($insert); }
-                catch (\Throwable $e) {
-                    $this->warn('  insert chunk failed (commission): ' . substr($e->getMessage(), 0, 150));
-                    $skipped += count($insert);
-                    $nextId -= count($insert);
-                }
+                $ok = DB::table('commission')->insertOrIgnore($insert);
+                if ($ok < count($insert)) $skipped += (count($insert) - $ok);
                 $insert = [];
             }
         }
         if ($insert) {
-            try { DB::table('commission')->insert($insert); }
-            catch (\Throwable $e) {
-                $this->warn('  insert chunk failed (commission): ' . substr($e->getMessage(), 0, 150));
-                $skipped += count($insert);
-                $nextId -= count($insert);
-            }
+            $ok = DB::table('commission')->insertOrIgnore($insert);
+            if ($ok < count($insert)) $skipped += (count($insert) - $ok);
         }
         return [$nextId - $maxId - 1, $skipped];
     }
