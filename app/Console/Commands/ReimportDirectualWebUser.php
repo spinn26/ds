@@ -50,12 +50,11 @@ class ReimportDirectualWebUser extends Command
             // integer id для большинства записей (сдвиг нумерации), это бы
             // привело к массовому смешению связей. Обновляем только non-FK
             // поля (личные данные, статусы, суммы, даты).
-            // consultant.status (FK на consultantStatus.id) и .activity (enum-int) —
-            // могут отличаться между Directual и prod, пропускаем. Также
-            // status в prod часто перерасчитывается через partners:check-statuses.
+            // consultant.status/activity (FK), qualificationLog (integer в prod, в
+            // Directual массив id) — пропускаем. Status в prod динамически
+            // пересчитывается через partners:check-statuses.
             'consultant' => $this->processSimple($path, $apply, 'consultant', 'participantCode',
-                ['personName', 'inviterName',
-                 'personalVolume', 'groupVolume', 'qualificationLog',
+                ['personName', 'inviterName', 'personalVolume', 'groupVolume',
                  'dateActivity', 'dateDeactivity', 'dateDeterministic', 'dateDeterministicPlan']),
             'client'     => $this->processSimple($path, $apply, 'client', 'idDs',
                 ['personName', 'consultantName', 'active',
