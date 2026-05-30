@@ -108,9 +108,9 @@ class ReimportDirectualHistorical extends Command
         $this->line("  commission: inserted {$ins}, skipped {$skip}");
 
         $this->info('Обновляем sequences...');
-        $this->fixSequence('transaction', 'transaction_id_seq');
-        $this->fixSequence('commission', 'commission_id_seq');
-        $this->fixSequenceDsCommission();
+        try { $this->fixSequence('transaction', 'transaction_id_seq'); } catch (\Throwable) {}
+        try { $this->fixSequence('commission', 'commission_id_seq'); } catch (\Throwable) {}
+        // dsCommission_id_seq может не существовать (LegacyId pattern) — игнорируем.
 
         $this->info('');
         $this->info('=== DONE ===');
@@ -545,7 +545,7 @@ class ReimportDirectualHistorical extends Command
                 'absolute'                           => $this->toFloat($r['absolute'] ?? null),
                 'personalVolume'                     => $this->toFloat($r['personalVolume'] ?? null),
                 'groupVolume'                        => $this->toFloat($r['groupVolume'] ?? null),
-                'createdAt'                          => $r['@dateCreated'] ?? null,
+                'createdAt'                          => ($r['@dateCreated'] ?? '') ?: null,
             ];
             if (count($insert) >= 500) {
                 try { DB::table('commission')->insert($insert); }
