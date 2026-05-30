@@ -152,36 +152,128 @@ class ReimportDirectualWebUser extends Command
     }
 
     /**
-     * UPSERT person по email; fallback на (phone + lastName).
+     * UPSERT person по email; fallback ключ — phone+lastName для записей без email.
      */
-    private function processPerson(string $path, bool $apply): int  /* @phpstan-ignore parameter.unused */
+    private function processPerson(string $path, bool $apply): int
     {
         $rows = $this->parseCsv($path);
         $this->info("CSV прочитано: " . count($rows) . " строк");
-        $this->warn('person: реализация на отдельном шаге — сейчас только dry-run по emails.');
 
-        $byEmail = [];
+        // CSV: group by primary key (email или phone+lastName)
+        $csvByEmail = [];
+        $csvByPhoneName = [];
+        $noKey = 0;
         foreach ($rows as $r) {
-            $e = mb_strtolower(trim((string) ($r['email'] ?? '')));
-            if ($e !== '') $byEmail[$e] = $r;
+            $email = mb_strtolower(trim((string) ($r['email'] ?? '')));
+            if ($email !== '') {
+                $prev = $csvByEmail[$email] ?? null;
+                if ($prev === null || $this->moreRecent($r, $prev)) {
+                    $csvByEmail[$email] = $r;
+                }
+                continue;
+            }
+            $phone = preg_replace('/[^0-9]/', '', (string) ($r['phone'] ?? ''));
+            $lname = mb_strtolower(trim((string) ($r['lastName'] ?? '')));
+            if ($phone !== '' && $lname !== '') {
+                $k = "{$phone}|{$lname}";
+                $prev = $csvByPhoneName[$k] ?? null;
+                if ($prev === null || $this->moreRecent($r, $prev)) {
+                    $csvByPhoneName[$k] = $r;
+                }
+                continue;
+            }
+            $noKey++;
         }
-        $this->info("CSV person с email: " . count($byEmail));
+        $this->info("CSV person с email: " . count($csvByEmail) . ", по phone+name: " . count($csvByPhoneName) . ", без ключа: " . $noKey);
 
+        // PROD: same maps
         $prodByEmail = [];
-        DB::table('person')->whereNotNull('email')->where('email', '!=', '')
-            ->each(function ($row) use (&$prodByEmail) {
-                $email = mb_strtolower(trim((string) $row->email));
+        $prodByPhoneName = [];
+        DB::table('person')->orderBy('id')->each(function ($row) use (&$prodByEmail, &$prodByPhoneName) {
+            $email = mb_strtolower(trim((string) ($row->email ?? '')));
+            if ($email !== '') {
                 if (! isset($prodByEmail[$email])) $prodByEmail[$email] = $row;
-            });
-        $this->info("PROD person с email: " . count($prodByEmail));
+                return;
+            }
+            $phone = preg_replace('/[^0-9]/', '', (string) ($row->phone ?? ''));
+            $lname = mb_strtolower(trim((string) ($row->lastName ?? '')));
+            if ($phone !== '' && $lname !== '') {
+                $k = "{$phone}|{$lname}";
+                if (! isset($prodByPhoneName[$k])) $prodByPhoneName[$k] = $row;
+            }
+        });
+        $this->info("PROD person с email: " . count($prodByEmail) . ", по phone+name: " . count($prodByPhoneName));
 
-        $matched = count(array_intersect_key($byEmail, $prodByEmail));
-        $newOnes = count($byEmail) - $matched;
-        $this->info("Matched by email: {$matched}");
-        $this->info("New (only in CSV): {$newOnes}");
-        $this->info("PROD-only: " . (count($prodByEmail) - $matched));
-        $this->warn('Apply для person НЕ реализован — слишком много полей и сложные FK. Сделаем после approval.');
+        $toUpdate = [];
+        $toInsert = [];
+        // Сначала по email — это сильный ключ.
+        foreach ($csvByEmail as $email => $csvRow) {
+            $prod = $prodByEmail[$email] ?? null;
+            if ($prod) {
+                $diff = $this->diffPerson($prod, $csvRow);
+                if ($diff) $toUpdate[(int) $prod->id] = $diff;
+            } else {
+                $toInsert[] = $csvRow;
+            }
+        }
+        // Затем по phone+lastName для записей которые без email.
+        foreach ($csvByPhoneName as $k => $csvRow) {
+            $prod = $prodByPhoneName[$k] ?? null;
+            if ($prod) {
+                $diff = $this->diffPerson($prod, $csvRow);
+                if ($diff) $toUpdate[(int) $prod->id] = $diff;
+            } else {
+                $toInsert[] = $csvRow;
+            }
+        }
+
+        $this->line('');
+        $this->info('=== СВОДКА (person) ===');
+        $this->line("К UPDATE: " . count($toUpdate));
+        $this->line("К INSERT (отложено): " . count($toInsert));
+        $this->line("Без ключа в CSV (пропущено): " . $noKey);
+        $this->line("PROD-only: " . (count($prodByEmail) + count($prodByPhoneName) - count($toUpdate)));
+
+        if (! $apply) {
+            $this->line('');
+            $this->info('Dry-run. --apply для commit.');
+            return self::SUCCESS;
+        }
+
+        $this->line('');
+        $this->warn('=== APPLY person UPDATE ===');
+        DB::transaction(function () use ($toUpdate) {
+            foreach ($toUpdate as $id => $diff) {
+                $diff['dateChanged'] = now()->toIso8601String();
+                DB::table('person')->where('id', $id)->update($diff);
+            }
+        });
+        $this->info("UPDATE: " . count($toUpdate));
+        $this->warn("INSERT отложен: " . count($toInsert));
         return self::SUCCESS;
+    }
+
+    private function diffPerson(object $prod, array $csv): array
+    {
+        // person.text-only schema → city/taxResidency можно безопасно
+        // обновлять (нет FK). Не трогаем: id, email (matching key),
+        // password, role, isAuthorization, isBlocked, status.
+        $writable = [
+            'lastName', 'firstName', 'patronymic', 'phone', 'nicTG',
+            'birthDate', 'gender', 'taxResidency', 'city', 'comment',
+            'agreement', 'boughtProRost',
+        ];
+        $diff = [];
+        foreach ($writable as $col) {
+            $csvVal = $csv[$col] ?? null;
+            $csvVal = $csvVal === '' ? null : $csvVal;
+            $prodVal = $prod->{$col} ?? null;
+            $prodVal = $prodVal === '' ? null : $prodVal;
+            if ($csvVal !== null && (string) $csvVal !== (string) $prodVal) {
+                $diff[$col] = $csvVal;
+            }
+        }
+        return $diff;
     }
 
     /**
