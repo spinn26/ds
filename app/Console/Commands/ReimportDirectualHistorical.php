@@ -278,48 +278,49 @@ class ReimportDirectualHistorical extends Command
      */
     private function importTransaction(string $path, array $maps): int
     {
-        $cols = ['id', 'client', 'consultant', 'contract', 'product', 'currency',
-                 'date', 'dateYear', 'dateMonth', 'amount', 'amountRub',
-                 'comment', 'dsCommissionPercentage', 'commissionCalcProperty',
-                 'vat', 'noComission', 'dateCreated', 'dateChanged', 'userChanged'];
+        // prod-схема transaction содержит ТОЛЬКО основные поля; client/
+        // consultant/product денормализуются через contract на этапе
+        // расчёта commission. В CSV из этого набора только: id, contract,
+        // comment, amount, dsCommissionPercentage, vat, date, dateMonth,
+        // dateYear, currency, commissionCalcProperty.
+        $cols = Schema::getColumnListing('transaction');
+        $writable = ['id', 'contract', 'comment', 'amount', 'dsCommissionPercentage',
+                     'vat', 'date', 'dateMonth', 'dateYear', 'currency',
+                     'commissionCalcProperty'];
+        $cols = array_values(array_intersect($writable, $cols));
+
         return $this->copyChunked($path, 'transaction', $cols, function ($r) use ($maps) {
-            $client = (int) ($r['client'] ?? 0);
-            $consultant = (int) ($r['consultant'] ?? 0);
             $contract = (int) ($r['contract'] ?? 0);
-            $product = (int) ($r['product'] ?? 0);
             $out = [
                 'id'                       => (int) $r['id'],
-                'client'                   => $maps['client'][$client] ?? null,
-                'consultant'               => $maps['consultant'][$consultant] ?? null,
                 'contract'                 => $maps['contract'][$contract] ?? null,
-                'product'                  => $maps['product'][$product] ?? null,
                 'currency'                 => $this->toIntOrNull($r['currency'] ?? null),
                 'date'                     => $r['date'] ?: null,
                 'dateYear'                 => $r['dateYear'] ?: null,
                 'dateMonth'                => $r['dateMonth'] ?: null,
                 'amount'                   => $this->toFloat($r['amount'] ?? null),
-                'amountRub'                => $this->toFloat($r['amountRub'] ?? null),
                 'comment'                  => $r['comment'] ?: null,
                 'dsCommissionPercentage'   => $this->toFloat($r['dsCommissionPercentage'] ?? null),
                 'commissionCalcProperty'   => $this->toIntOrNull($r['commissionCalcProperty'] ?? null),
                 'vat'                      => $this->toIntOrNull($r['vat'] ?? null),
-                'noComission'              => $this->toIntOrNull($r['noComission'] ?? null),
-                'dateCreated'              => $r['dateCreated'] ?: null,
-                'dateChanged'              => $r['dateChanged'] ?: null,
-                'userChanged'              => $this->toIntOrNull($r['userChanged'] ?? null),
             ];
-            // Пропускаем строки с unresolved client/contract (нет FK target).
-            if (! $out['client'] || ! $out['contract']) return null;
+            // Пропускаем строки с unresolved contract (FK violation).
+            if (! $out['contract']) return null;
             return $out;
         });
     }
 
     private function importCommission(string $path, array $maps): int
     {
+        // prod commission columns + типы (см. \d commission):
+        //   reduction boolean, qualificationLog integer (FK), createdAt timestamp
+        //   (НЕ dateCreated). user_field integer (CSV: user — но это reserved word)
         $cols = ['id', 'transaction', 'consultant', 'consultantsChain', 'chainOrder',
-                 'amount', 'currency', 'dateMonth', 'dateYear', 'calculationLevel',
+                 'amount', 'amountRUB', 'amountUSD', 'currency', 'dateMonth', 'dateYear',
+                 'date', 'type', 'calculationLevel',
                  'commissionFromOtherConsultant', 'qualificationLog', 'reduction',
-                 'comment', 'dateCreated'];
+                 'comment', 'percent', 'absolute', 'personalVolume', 'groupVolume',
+                 'createdAt'];
         return $this->copyChunked($path, 'commission', $cols, function ($r) use ($maps) {
             $cons = (int) ($r['consultant'] ?? 0);
             $consChain = (int) ($r['consultantsChain'] ?? 0);
@@ -331,15 +332,23 @@ class ReimportDirectualHistorical extends Command
                 'consultantsChain'                   => $maps['consultant'][$consChain] ?? null,
                 'chainOrder'                         => $this->toIntOrNull($r['chainOrder'] ?? null),
                 'amount'                             => $this->toFloat($r['amount'] ?? null),
+                'amountRUB'                          => $this->toFloat($r['amountRUB'] ?? null),
+                'amountUSD'                          => $this->toFloat($r['amountUSD'] ?? null),
                 'currency'                           => $this->toIntOrNull($r['currency'] ?? null),
                 'dateMonth'                          => $r['dateMonth'] ?: null,
                 'dateYear'                           => $r['dateYear'] ?: null,
+                'date'                               => $r['date'] ?: null,
+                'type'                               => $r['type'] ?: null,
                 'calculationLevel'                   => $this->toIntOrNull($r['calculationLevel'] ?? null),
-                'commissionFromOtherConsultant'      => $maps['consultant'][$fromOther] ?? null,
-                'qualificationLog'                   => $this->toIntOrNull($r['qualificationLog'] ?? null),
-                'reduction'                          => $this->toIntOrNull($r['reduction'] ?? null),
+                'commissionFromOtherConsultant'     => $maps['consultant'][$fromOther] ?? null,
+                'qualificationLog'                   => null,  // FK на qualificationLog; пропустим (пересчёт после)
+                'reduction'                          => $this->toBool($r['reduction'] ?? null),
                 'comment'                            => $r['comment'] ?: null,
-                'dateCreated'                        => $r['dateCreated'] ?: null,
+                'percent'                            => $this->toFloat($r['percent'] ?? null),
+                'absolute'                           => $this->toFloat($r['absolute'] ?? null),
+                'personalVolume'                     => $this->toFloat($r['personalVolume'] ?? null),
+                'groupVolume'                        => $this->toFloat($r['groupVolume'] ?? null),
+                'createdAt'                          => $r['@dateCreated'] ?? ($r['createdAt'] ?? null) ?: null,
             ];
             if (! $out['transaction'] || ! $out['consultant']) return null;
             return $out;
@@ -348,11 +357,13 @@ class ReimportDirectualHistorical extends Command
 
     private function importDsCommission(string $path, array $maps): int
     {
-        $cols = ['id', 'product', 'program', 'percent', 'fixedAmount', 'currency',
-                 'commissionCalcProperty', 'minLevel', 'maxLevel', 'dateCreated'];
-        // Дополнительно — для совместимости со схемой проверим какие колонки реально есть
-        $realCols = Schema::getColumnListing('dsCommission');
-        $cols = array_values(array_intersect($cols, $realCols));
+        // Реальные колонки prod-таблицы dsCommission (см. \d "dsCommission"):
+        // id, product, program, productName, programName, comission (sic!
+        // опечатка в Directual), commissionAbsolute, commissionCalcProperty,
+        // date, dateFinish, active, termContract, dateDeleted.
+        $cols = ['id', 'product', 'program', 'productName', 'programName',
+                 'comission', 'commissionAbsolute', 'commissionCalcProperty',
+                 'date', 'dateFinish', 'active', 'termContract', 'dateDeleted'];
 
         return $this->copyChunked($path, '"dsCommission"', $cols, function ($r) use ($maps) {
             $prod = (int) ($r['product'] ?? 0);
@@ -361,17 +372,27 @@ class ReimportDirectualHistorical extends Command
                 'id'                     => (int) $r['id'],
                 'product'                => $maps['product'][$prod] ?? null,
                 'program'                => $maps['program'][$prog] ?? null,
-                'percent'                => $this->toFloat($r['percent'] ?? null),
-                'fixedAmount'            => $this->toFloat($r['fixedAmount'] ?? null),
-                'currency'               => $this->toIntOrNull($r['currency'] ?? null),
+                'productName'            => $r['productName'] ?: null,
+                'programName'            => $r['programName'] ?: null,
+                'comission'              => $this->toFloat($r['comission'] ?? null),
+                'commissionAbsolute'     => $this->toFloat($r['commissionAbsolute'] ?? null),
                 'commissionCalcProperty' => $this->toIntOrNull($r['commissionCalcProperty'] ?? null),
-                'minLevel'               => $this->toIntOrNull($r['minLevel'] ?? null),
-                'maxLevel'               => $this->toIntOrNull($r['maxLevel'] ?? null),
-                'dateCreated'            => $r['dateCreated'] ?: null,
+                'date'                   => $r['date'] ?: null,
+                'dateFinish'             => $r['dateFinish'] ?: null,
+                'active'                 => $this->toBool($r['active'] ?? null),
+                'termContract'           => $this->toIntOrNull($r['termContract'] ?? null),
+                'dateDeleted'            => $r['dateDeleted'] ?: null,
             ];
             if (! $out['product']) return null;
             return $out;
         });
+    }
+
+    private function toBool(mixed $v): ?bool
+    {
+        if ($v === null || $v === '') return null;
+        $s = strtolower((string) $v);
+        return in_array($s, ['true', 't', '1', 'yes'], true);
     }
 
     /**
