@@ -45,16 +45,20 @@ class ReimportDirectualWebUser extends Command
         return match ($table) {
             'webuser'    => $this->processWebUser($path, $apply),
             'person'     => $this->processPerson($path, $apply),
+            // ВНИМАНИЕ: FK-колонки (inviter, webUser, consultant, person, client,
+            // product, program) НЕ обновляем — Directual integer id ≠ prod
+            // integer id для большинства записей (сдвиг нумерации), это бы
+            // привело к массовому смешению связей. Обновляем только non-FK
+            // поля (личные данные, статусы, суммы, даты).
             'consultant' => $this->processSimple($path, $apply, 'consultant', 'participantCode',
-                ['personName', 'status', 'activity', 'inviter', 'inviterName', 'webUser',
+                ['personName', 'status', 'activity', 'inviterName',
                  'personalVolume', 'groupVolume', 'qualificationLog', 'dateActivity',
                  'dateDeactivity', 'dateDeterministic', 'dateDeterministicPlan']),
             'client'     => $this->processSimple($path, $apply, 'client', 'idDs',
-                ['personName', 'consultantName', 'consultant', 'person', 'active',
+                ['personName', 'consultantName', 'active',
                  'dateChanged', 'comment', 'lastActivityDate', 'source']),
             'contract'   => $this->processSimple($path, $apply, 'contract', 'number',
-                ['client', 'consultant', 'product', 'program', 'ammount', 'currency',
-                 'openDate', 'closeDate', 'status', 'comment']),
+                ['ammount', 'currency', 'openDate', 'closeDate', 'status', 'comment']),
             default      => $this->bail("Неизвестная таблица: {$table}. Допустимо: webuser, person, consultant, client, contract."),
         };
     }
