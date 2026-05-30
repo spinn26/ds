@@ -107,6 +107,13 @@ class ReimportDirectualHistorical extends Command
         [$ins, $skip] = $this->upsertCommission($files['commission'], $maps);
         $this->line("  commission: inserted {$ins}, skipped {$skip}");
 
+        $qpath = base_path((string) $this->option('csv-dir')) . '/qualificationLog.csv';
+        if (is_file($qpath)) {
+            $this->info('UPSERT qualificationLog…');
+            [$ins, $skip] = $this->upsertQualificationLog($qpath, $maps);
+            $this->line("  qualificationLog: inserted {$ins}, skipped {$skip}");
+        }
+
         $this->info('Обновляем sequences...');
         try { $this->fixSequence('transaction', 'transaction_id_seq'); } catch (\Throwable) {}
         try { $this->fixSequence('commission', 'commission_id_seq'); } catch (\Throwable) {}
@@ -585,6 +592,74 @@ class ReimportDirectualHistorical extends Command
     private function cmKey(int $tx, int $cons, int $chainOrder, string $type = ''): string
     {
         return "{$tx}|{$cons}|{$chainOrder}|{$type}";
+    }
+
+    /**
+     * qualificationLog UPSERT по composite-key (consultant_resolved, date,
+     * levelNew). Только INSERT недостающих.
+     */
+    private function upsertQualificationLog(string $path, array $maps): array
+    {
+        $prodKeys = [];
+        DB::table('qualificationLog')->whereNull('dateDeleted')->orderBy('id')
+            ->each(function ($row) use (&$prodKeys) {
+                $k = $this->qlKey((int) $row->consultant, $row->date, (int) ($row->levelNew ?? 0));
+                $prodKeys[$k] = true;
+            });
+
+        $insert = [];
+        $skipped = 0;
+        $maxId = (int) DB::table('qualificationLog')->max('id');
+        $nextId = $maxId + 1;
+        foreach ($this->csvIter($path) as $r) {
+            $consCsv = (int) ($r['consultant'] ?? 0);
+            $cons = $maps['consultant'][$consCsv] ?? null;
+            if (! $cons) { $skipped++; continue; }
+            $date = $this->toTs($r['date'] ?? null);
+            $levelNew = (int) ($r['levelNew'] ?? 0);
+            $k = $this->qlKey((int) $cons, $date, $levelNew);
+            if (isset($prodKeys[$k])) { $skipped++; continue; }
+
+            $insert[] = [
+                'id'                         => $nextId++,
+                'consultant'                 => $cons,
+                'consultantPersonName'       => $r['consultantPersonName'] ?: null,
+                'comment'                    => $r['comment'] ?: null,
+                'personalVolume'             => $this->toFloat($r['personalVolume'] ?? null),
+                'groupVolume'                => $this->toFloat($r['groupVolume'] ?? null),
+                'groupVolumeCumulative'      => $this->toFloat($r['groupVolumeCumulative'] ?? null),
+                'gap'                        => $this->toBool($r['gap'] ?? null),
+                'gapValuePercentage'         => $this->toFloat($r['gapValuePercentage'] ?? null),
+                'branchWithGapGroupVolume'   => $this->toFloat($r['branchWithGapGroupVolume'] ?? null),
+                'firstLineBranchesJSON'      => $r['firstLineBranchesJSON'] ?: null,
+                'calculationLevel'           => $this->toIntOrNull($r['calculationLevel'] ?? null),
+                'levelPrevious'              => $this->toIntOrNull($r['levelPrevious'] ?? null),
+                'levelNew'                   => $levelNew ?: null,
+                'result'                     => $r['result'] ?: null,
+                'levelsDontMatch'            => $this->toBool($r['levelsDontMatch'] ?? null),
+                'date'                       => $date,
+                'savingDate'                 => $this->toTs($r['savingDate'] ?? null),
+                'dateDeleted'                => $this->toTs($r['dateDeleted'] ?? null),
+                'commissionsToReduceAmount'  => $this->toIntOrNull($r['commissionsToReduceAmount'] ?? null),
+                'commissionsToReduceCounter' => $this->toIntOrNull($r['commissionsToReduceCounter'] ?? null),
+            ];
+            if (count($insert) >= 500) {
+                $ok = DB::table('qualificationLog')->insertOrIgnore($insert);
+                if ($ok < count($insert)) $skipped += (count($insert) - $ok);
+                $insert = [];
+            }
+        }
+        if ($insert) {
+            $ok = DB::table('qualificationLog')->insertOrIgnore($insert);
+            if ($ok < count($insert)) $skipped += (count($insert) - $ok);
+        }
+        return [$nextId - $maxId - 1, $skipped];
+    }
+
+    private function qlKey(int $cons, ?string $date, int $levelNew): string
+    {
+        $d = $date ? substr($date, 0, 10) : '';
+        return "{$cons}|{$d}|{$levelNew}";
     }
 
     /**
