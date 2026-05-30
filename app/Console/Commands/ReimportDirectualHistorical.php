@@ -265,123 +265,6 @@ class ReimportDirectualHistorical extends Command
         return $stats;
     }
 
-    /**
-     * Bulk INSERT через chunked DB::table()->insert. Реальная INSERT-команда
-     * имеет лимит ~65k параметров; chunk-size 500 строк × 30 колонок = 15k
-     * параметров — безопасно.
-     */
-    private function importTransaction(string $path, array $maps): int
-    {
-        // prod-схема transaction содержит ТОЛЬКО основные поля; client/
-        // consultant/product денормализуются через contract на этапе
-        // расчёта commission. В CSV из этого набора только: id, contract,
-        // comment, amount, dsCommissionPercentage, vat, date, dateMonth,
-        // dateYear, currency, commissionCalcProperty.
-        $cols = Schema::getColumnListing('transaction');
-        $writable = ['id', 'contract', 'comment', 'amount', 'dsCommissionPercentage',
-                     'vat', 'date', 'dateMonth', 'dateYear', 'currency',
-                     'commissionCalcProperty'];
-        $cols = array_values(array_intersect($writable, $cols));
-
-        return $this->copyChunked($path, 'transaction', $cols, function ($r) use ($maps) {
-            $contract = (int) ($r['contract'] ?? 0);
-            $out = [
-                'id'                       => (int) $r['id'],
-                'contract'                 => $maps['contract'][$contract] ?? null,
-                'currency'                 => $this->toIntOrNull($r['currency'] ?? null),
-                'date'                     => $r['date'] ?: null,
-                'dateYear'                 => $r['dateYear'] ?: null,
-                'dateMonth'                => $r['dateMonth'] ?: null,
-                'amount'                   => $this->toFloat($r['amount'] ?? null),
-                'comment'                  => $r['comment'] ?: null,
-                'dsCommissionPercentage'   => $this->toFloat($r['dsCommissionPercentage'] ?? null),
-                'commissionCalcProperty'   => $this->toIntOrNull($r['commissionCalcProperty'] ?? null),
-                'vat'                      => $this->toIntOrNull($r['vat'] ?? null),
-            ];
-            // Пропускаем строки с unresolved contract (FK violation).
-            if (! $out['contract']) return null;
-            return $out;
-        });
-    }
-
-    private function importCommission(string $path, array $maps): int
-    {
-        // prod commission columns + типы (см. \d commission):
-        //   reduction boolean, qualificationLog integer (FK), createdAt timestamp
-        //   (НЕ dateCreated). user_field integer (CSV: user — но это reserved word)
-        $cols = ['id', 'transaction', 'consultant', 'consultantsChain', 'chainOrder',
-                 'amount', 'amountRUB', 'amountUSD', 'currency', 'dateMonth', 'dateYear',
-                 'date', 'type', 'calculationLevel',
-                 'commissionFromOtherConsultant', 'qualificationLog', 'reduction',
-                 'comment', 'percent', 'absolute', 'personalVolume', 'groupVolume',
-                 'createdAt'];
-        return $this->copyChunked($path, 'commission', $cols, function ($r) use ($maps) {
-            $cons = (int) ($r['consultant'] ?? 0);
-            $consChain = (int) ($r['consultantsChain'] ?? 0);
-            $fromOther = (int) ($r['commissionFromOtherConsultant'] ?? 0);
-            $out = [
-                'id'                                 => (int) $r['id'],
-                'transaction'                        => (int) ($r['transaction'] ?? 0) ?: null,
-                'consultant'                         => $maps['consultant'][$cons] ?? null,
-                'consultantsChain'                   => $maps['consultant'][$consChain] ?? null,
-                'chainOrder'                         => $this->toIntOrNull($r['chainOrder'] ?? null),
-                'amount'                             => $this->toFloat($r['amount'] ?? null),
-                'amountRUB'                          => $this->toFloat($r['amountRUB'] ?? null),
-                'amountUSD'                          => $this->toFloat($r['amountUSD'] ?? null),
-                'currency'                           => $this->toIntOrNull($r['currency'] ?? null),
-                'dateMonth'                          => $r['dateMonth'] ?: null,
-                'dateYear'                           => $r['dateYear'] ?: null,
-                'date'                               => $r['date'] ?: null,
-                'type'                               => $r['type'] ?: null,
-                'calculationLevel'                   => $this->toIntOrNull($r['calculationLevel'] ?? null),
-                'commissionFromOtherConsultant'     => $maps['consultant'][$fromOther] ?? null,
-                'qualificationLog'                   => null,  // FK на qualificationLog; пропустим (пересчёт после)
-                'reduction'                          => $this->toBool($r['reduction'] ?? null),
-                'comment'                            => $r['comment'] ?: null,
-                'percent'                            => $this->toFloat($r['percent'] ?? null),
-                'absolute'                           => $this->toFloat($r['absolute'] ?? null),
-                'personalVolume'                     => $this->toFloat($r['personalVolume'] ?? null),
-                'groupVolume'                        => $this->toFloat($r['groupVolume'] ?? null),
-                'createdAt'                          => $r['@dateCreated'] ?? ($r['createdAt'] ?? null) ?: null,
-            ];
-            if (! $out['transaction'] || ! $out['consultant']) return null;
-            return $out;
-        });
-    }
-
-    private function importDsCommission(string $path, array $maps): int
-    {
-        // Реальные колонки prod-таблицы dsCommission (см. \d "dsCommission"):
-        // id, product, program, productName, programName, comission (sic!
-        // опечатка в Directual), commissionAbsolute, commissionCalcProperty,
-        // date, dateFinish, active, termContract, dateDeleted.
-        $cols = ['id', 'product', 'program', 'productName', 'programName',
-                 'comission', 'commissionAbsolute', 'commissionCalcProperty',
-                 'date', 'dateFinish', 'active', 'termContract', 'dateDeleted'];
-
-        return $this->copyChunked($path, '"dsCommission"', $cols, function ($r) use ($maps) {
-            $prod = (int) ($r['product'] ?? 0);
-            $prog = (int) ($r['program'] ?? 0);
-            $out = [
-                'id'                     => (int) $r['id'],
-                'product'                => $maps['product'][$prod] ?? null,
-                'program'                => $maps['program'][$prog] ?? null,
-                'productName'            => $r['productName'] ?: null,
-                'programName'            => $r['programName'] ?: null,
-                'comission'              => $this->toFloat($r['comission'] ?? null),
-                'commissionAbsolute'     => $this->toFloat($r['commissionAbsolute'] ?? null),
-                'commissionCalcProperty' => $this->toIntOrNull($r['commissionCalcProperty'] ?? null),
-                'date'                   => $r['date'] ?: null,
-                'dateFinish'             => $r['dateFinish'] ?: null,
-                'active'                 => $this->toBool($r['active'] ?? null),
-                'termContract'           => $this->toIntOrNull($r['termContract'] ?? null),
-                'dateDeleted'            => $r['dateDeleted'] ?: null,
-            ];
-            if (! $out['product']) return null;
-            return $out;
-        });
-    }
-
     private function toBool(mixed $v): ?bool
     {
         if ($v === null || $v === '') return null;
@@ -701,11 +584,6 @@ class ReimportDirectualHistorical extends Command
     private function fixSequence(string $table, string $seq): void
     {
         DB::statement("SELECT setval('{$seq}', COALESCE((SELECT MAX(id) FROM \"{$table}\"), 1))");
-    }
-
-    private function fixSequenceDsCommission(): void
-    {
-        DB::statement("SELECT setval('\"dsCommission_id_seq\"', COALESCE((SELECT MAX(id) FROM \"dsCommission\"), 1))");
     }
 
     private function toFloat(mixed $v): ?float

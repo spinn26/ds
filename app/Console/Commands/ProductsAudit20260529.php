@@ -192,7 +192,7 @@ class ProductsAudit20260529 extends Command
             $reactivatedProductIds = [];
             DB::transaction(function () use ($toUpdateTariffs, &$n, &$reactProgs, &$reactProds, &$reactivatedProductIds) {
                 foreach ($toUpdateTariffs as $t) {
-                    $lines = $t['sheet']['lines'] ?? [];
+                    $lines = $t['sheet']['lines'];
                     $terms = array_values(array_unique(array_filter(array_map(fn ($l) => $l['term'] ?? null, $lines))));
                     $years = array_values(array_unique(array_filter(array_map(fn ($l) => $l['year_kv'] ?? null, $lines))));
                     $isActive = $t['sheet']['active']; // true если хотя бы одна строка не-red
