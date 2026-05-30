@@ -25,9 +25,10 @@ use Illuminate\Support\Facades\DB;
 class ReimportDirectualWebUser extends Command
 {
     protected $signature = 'db:reimport-directual
-        {table : webuser | person}
+        {table : webuser | person | consultant | client | contract | product | program}
         {path : Путь к CSV-файлу из Directual}
-        {--apply : Реально применить изменения (без флага — dry-run)}';
+        {--apply : Реально применить UPDATE (без флага — dry-run)}
+        {--insert-new : Также INSERT отложенных новых записей из CSV (id берётся из next sequence, НЕ из CSV — чтобы избежать конфликта)}';
 
     protected $description = 'UPSERT WebUser/person из Directual-выгрузки по email-матчингу';
 
@@ -162,17 +163,33 @@ class ReimportDirectualWebUser extends Command
             return self::SUCCESS;
         }
 
+        $insertNew = (bool) $this->option('insert-new');
         $this->line('');
         $this->warn('=== APPLY ===');
-        $this->warn('Применяем ТОЛЬКО UPDATE. INSERT новых отложен — нужно отдельное подтверждение, т.к. CSV id может конфликтовать с prod id.');
-        DB::transaction(function () use ($toUpdate) {
+        $insertedCount = 0;
+        DB::transaction(function () use ($toUpdate, $toInsert, $insertNew, &$insertedCount) {
             foreach ($toUpdate as $id => $diff) {
                 $diff['dateChanged'] = now();
                 DB::table('WebUser')->where('id', $id)->update($diff);
             }
+            if ($insertNew) {
+                foreach ($toInsert as $row) {
+                    // Новый id — из next sequence (NOT из CSV, чтобы избежать
+                    // конфликта с уже-существующими prod id).
+                    $newId = \App\Support\LegacyId::next('WebUser');
+                    unset($row['id']);
+                    $row['id'] = $newId;
+                    DB::table('WebUser')->insert($row);
+                    $insertedCount++;
+                }
+            }
         });
         $this->info("UPDATE: " . count($toUpdate));
-        $this->warn("INSERT отложено: " . count($toInsert) . " новых юзеров (нужно ручное review)");
+        if ($insertNew) {
+            $this->info("INSERT: {$insertedCount}");
+        } else {
+            $this->warn("INSERT отложено: " . count($toInsert) . " (--insert-new для применения)");
+        }
         return self::SUCCESS;
     }
 
@@ -265,16 +282,43 @@ class ReimportDirectualWebUser extends Command
             return self::SUCCESS;
         }
 
+        $insertNew = (bool) $this->option('insert-new');
         $this->line('');
-        $this->warn('=== APPLY person UPDATE ===');
-        DB::transaction(function () use ($toUpdate) {
+        $this->warn('=== APPLY person ===');
+        $insertedCount = 0;
+        DB::transaction(function () use ($toUpdate, $toInsert, $insertNew, &$insertedCount) {
             foreach ($toUpdate as $id => $diff) {
                 $diff['dateChanged'] = now()->toIso8601String();
                 DB::table('person')->where('id', $id)->update($diff);
             }
+            if ($insertNew) {
+                foreach ($toInsert as $row) {
+                    $newId = \App\Support\LegacyId::next('person');
+                    unset($row['id']);
+                    // Берём только колонки которые реально есть в prod схеме
+                    $cols = \Illuminate\Support\Facades\Schema::getColumnListing('person');
+                    $clean = ['id' => $newId];
+                    foreach ($cols as $c) {
+                        if ($c === 'id') continue;
+                        if (array_key_exists($c, $row)) {
+                            $v = $row[$c];
+                            $clean[$c] = ($v === '' ? null : $v);
+                        }
+                    }
+                    try {
+                        DB::table('person')->insert($clean);
+                        $insertedCount++;
+                    } catch (\Throwable $e) {
+                        if ($insertedCount === 0) {
+                            $this->warn("  insert failed: " . substr($e->getMessage(), 0, 200));
+                        }
+                    }
+                }
+            }
         });
         $this->info("UPDATE: " . count($toUpdate));
-        $this->warn("INSERT отложен: " . count($toInsert));
+        if ($insertNew) $this->info("INSERT: {$insertedCount}");
+        else $this->warn("INSERT отложен: " . count($toInsert));
         return self::SUCCESS;
     }
 
@@ -335,10 +379,12 @@ class ReimportDirectualWebUser extends Command
             return self::SUCCESS;
         }
 
+        $insertNew = (bool) $this->option('insert-new');
         $this->line('');
-        $this->warn("=== APPLY {$table} UPDATE ===");
+        $this->warn("=== APPLY {$table} ===");
         $errors = 0;
-        DB::transaction(function () use ($toUpdate, $table, &$errors) {
+        $insertedCount = 0;
+        DB::transaction(function () use ($toUpdate, $toInsert, $table, $writableFields, $insertNew, &$errors, &$insertedCount) {
             foreach ($toUpdate as $id => $diff) {
                 try {
                     if (\Illuminate\Support\Facades\Schema::hasColumn($table, 'dateChanged')) {
@@ -355,9 +401,34 @@ class ReimportDirectualWebUser extends Command
             if ($errors > 0) {
                 throw new \RuntimeException("FK/constraint violations: {$errors}. Rollback.");
             }
+            if ($insertNew) {
+                $cols = \Illuminate\Support\Facades\Schema::getColumnListing($table);
+                foreach ($toInsert as $row) {
+                    $newId = \App\Support\LegacyId::next($table);
+                    $clean = ['id' => $newId];
+                    foreach ($writableFields as $c) {
+                        if (in_array($c, $cols, true) && array_key_exists($c, $row)) {
+                            $v = $row[$c];
+                            $clean[$c] = ($v === '' ? null : $v);
+                        }
+                    }
+                    if (in_array('dateCreated', $cols, true)) {
+                        $clean['dateCreated'] = $row['dateCreated'] ?? now()->toIso8601String();
+                    }
+                    try {
+                        DB::table($table)->insert($clean);
+                        $insertedCount++;
+                    } catch (\Throwable $e) {
+                        if ($insertedCount === 0) {
+                            $this->warn("  insert failed: " . substr($e->getMessage(), 0, 200));
+                        }
+                    }
+                }
+            }
         });
         $this->info("UPDATE: " . count($toUpdate));
-        $this->warn("INSERT отложен: " . count($toInsert));
+        if ($insertNew) $this->info("INSERT: {$insertedCount}");
+        else $this->warn("INSERT отложен: " . count($toInsert));
         return self::SUCCESS;
     }
 
