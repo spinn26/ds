@@ -43,9 +43,19 @@ class ReimportDirectualWebUser extends Command
         }
 
         return match ($table) {
-            'webuser' => $this->processWebUser($path, $apply),
-            'person'  => $this->processPerson($path, $apply),
-            default   => $this->bail("Неизвестная таблица: {$table}. Допустимо: webuser, person."),
+            'webuser'    => $this->processWebUser($path, $apply),
+            'person'     => $this->processPerson($path, $apply),
+            'consultant' => $this->processSimple($path, $apply, 'consultant', 'participantCode',
+                ['personName', 'status', 'activity', 'inviter', 'inviterName', 'webUser',
+                 'personalVolume', 'groupVolume', 'qualificationLog', 'dateActivity',
+                 'dateDeactivity', 'dateDeterministic', 'dateDeterministicPlan']),
+            'client'     => $this->processSimple($path, $apply, 'client', 'idDs',
+                ['personName', 'consultantName', 'consultant', 'person', 'active',
+                 'dateChanged', 'comment', 'lastActivityDate', 'source']),
+            'contract'   => $this->processSimple($path, $apply, 'contract', 'number',
+                ['client', 'consultant', 'product', 'program', 'ammount', 'currency',
+                 'openDate', 'closeDate', 'status', 'comment']),
+            default      => $this->bail("Неизвестная таблица: {$table}. Допустимо: webuser, person, consultant, client, contract."),
         };
     }
 
@@ -251,6 +261,108 @@ class ReimportDirectualWebUser extends Command
         $this->info("UPDATE: " . count($toUpdate));
         $this->warn("INSERT отложен: " . count($toInsert));
         return self::SUCCESS;
+    }
+
+    /**
+     * Универсальный UPSERT для таблиц с natural unique key
+     * (consultant.participantCode, client.idDs, contract.number).
+     *
+     * @param  list<string>  $writableFields  поля для UPDATE (id/key исключены)
+     */
+    private function processSimple(string $path, bool $apply, string $table, string $keyCol, array $writableFields): int
+    {
+        $rows = $this->parseCsv($path);
+        $this->info("CSV прочитано: " . count($rows) . " строк (таблица {$table}, ключ {$keyCol})");
+
+        // CSV: group by key (для дублей — самая свежая по dateChanged)
+        $csvByKey = [];
+        $noKey = 0;
+        foreach ($rows as $r) {
+            $k = trim((string) ($r[$keyCol] ?? ''));
+            if ($k === '') { $noKey++; continue; }
+            $prev = $csvByKey[$k] ?? null;
+            if ($prev === null || $this->moreRecent($r, $prev)) {
+                $csvByKey[$k] = $r;
+            }
+        }
+        $this->info("CSV с ключом '{$keyCol}': " . count($csvByKey) . ", без ключа: {$noKey}");
+
+        // PROD: group by key
+        $prodByKey = [];
+        DB::table($table)->orderBy('id')->each(function ($row) use (&$prodByKey, $keyCol) {
+            $k = trim((string) ($row->{$keyCol} ?? ''));
+            if ($k !== '' && ! isset($prodByKey[$k])) $prodByKey[$k] = $row;
+        });
+        $this->info("PROD {$table} с ключом '{$keyCol}': " . count($prodByKey));
+
+        $toUpdate = [];
+        $toInsert = [];
+        foreach ($csvByKey as $k => $csvRow) {
+            $prod = $prodByKey[$k] ?? null;
+            if ($prod) {
+                $diff = $this->genericDiff($prod, $csvRow, $writableFields);
+                if ($diff) $toUpdate[(int) $prod->id] = $diff;
+            } else {
+                $toInsert[] = $csvRow;
+            }
+        }
+
+        $this->line('');
+        $this->info("=== СВОДКА ({$table}) ===");
+        $this->line("К UPDATE: " . count($toUpdate));
+        $this->line("К INSERT (отложено): " . count($toInsert));
+        $this->line("Без ключа в CSV: {$noKey}");
+        $this->line("PROD-only: " . max(0, count($prodByKey) - count($toUpdate)));
+
+        if (! $apply) {
+            $this->line('');
+            $this->info('Dry-run. --apply для commit.');
+            return self::SUCCESS;
+        }
+
+        $this->line('');
+        $this->warn("=== APPLY {$table} UPDATE ===");
+        $errors = 0;
+        DB::transaction(function () use ($toUpdate, $table, &$errors) {
+            foreach ($toUpdate as $id => $diff) {
+                try {
+                    if (\Illuminate\Support\Facades\Schema::hasColumn($table, 'dateChanged')) {
+                        $diff['dateChanged'] = now()->toIso8601String();
+                    }
+                    DB::table($table)->where('id', $id)->update($diff);
+                } catch (\Throwable $e) {
+                    $errors++;
+                    if ($errors <= 3) {
+                        $this->warn("  id={$id}: " . substr($e->getMessage(), 0, 200));
+                    }
+                }
+            }
+            if ($errors > 0) {
+                throw new \RuntimeException("FK/constraint violations: {$errors}. Rollback.");
+            }
+        });
+        $this->info("UPDATE: " . count($toUpdate));
+        $this->warn("INSERT отложен: " . count($toInsert));
+        return self::SUCCESS;
+    }
+
+    /**
+     * Diff prod-row vs csv-row по списку writable полей.
+     * Игнорирует поля которых нет в csv или равных текущим.
+     */
+    private function genericDiff(object $prod, array $csv, array $writable): array
+    {
+        $diff = [];
+        foreach ($writable as $col) {
+            $csvVal = $csv[$col] ?? null;
+            $csvVal = $csvVal === '' ? null : $csvVal;
+            $prodVal = $prod->{$col} ?? null;
+            $prodVal = $prodVal === '' ? null : $prodVal;
+            if ($csvVal !== null && (string) $csvVal !== (string) $prodVal) {
+                $diff[$col] = $csvVal;
+            }
+        }
+        return $diff;
     }
 
     private function diffPerson(object $prod, array $csv): array
