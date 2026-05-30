@@ -226,9 +226,14 @@ class ReimportDirectualWebUser extends Command
      */
     private function diffWebUser(object $prod, array $csv): array
     {
+        // НЕ обновляем city/taxResidency — это FK на city/taxResidency
+        // таблицы, в Directual может быть id которого нет в prod (например
+        // Сочи=342 в Directual, в нашей city.id отсутствует) → 23503 FK
+        // violation. Если эти таблицы надо синхронизировать — отдельно,
+        // отдельной командой по справочникам.
         $writable = [
             'lastName', 'firstName', 'patronymic', 'phone', 'nicTG',
-            'birthDate', 'gender', 'taxResidency', 'city', 'comment',
+            'birthDate', 'gender', 'comment',
         ];
         $diff = [];
         foreach ($writable as $col) {
