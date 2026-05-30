@@ -383,6 +383,23 @@ class ReimportDirectualHistorical extends Command
     }
 
     /**
+     * Конвертирует timestamp поле из CSV в формат пригодный для PostgreSQL.
+     *  - '' / null → null
+     *  - unix-ms (>1e12) → ISO 8601
+     *  - ISO-строка → как есть
+     */
+    private function toTs(mixed $v): ?string
+    {
+        if ($v === null || $v === '') return null;
+        $s = (string) $v;
+        if (ctype_digit($s) && strlen($s) >= 10) {
+            $secs = (int) (strlen($s) >= 13 ? substr($s, 0, 10) : $s);
+            return date('Y-m-d H:i:s', $secs);
+        }
+        return $s;
+    }
+
+    /**
      * dsCommission UPSERT по composite-key (product, program, date, termContract).
      * Только INSERT недостающих — UPDATE не делаем (тарифы DS меняются ред-
      * ко, и existing записи в prod уже актуальные).
@@ -420,11 +437,11 @@ class ReimportDirectualHistorical extends Command
                 'comission'              => $this->toFloat($r['comission'] ?? null),
                 'commissionAbsolute'     => $this->toFloat($r['commissionAbsolute'] ?? null),
                 'commissionCalcProperty' => $this->toIntOrNull($r['commissionCalcProperty'] ?? null),
-                'date'                   => $date,
-                'dateFinish'             => $r['dateFinish'] ?: null,
+                'date'                   => $this->toTs($date),
+                'dateFinish'             => $this->toTs($r['dateFinish'] ?? null),
                 'active'                 => $this->toBool($r['active'] ?? null),
                 'termContract'           => $term ?: null,
-                'dateDeleted'            => $r['dateDeleted'] ?: null,
+                'dateDeleted'            => $this->toTs($r['dateDeleted'] ?? null),
             ];
             if (count($insert) >= 500) {
                 DB::table('dsCommission')->insert($insert);
@@ -470,7 +487,7 @@ class ReimportDirectualHistorical extends Command
                 'id'                       => $nextId++,
                 'contract'                 => $contract,
                 'currency'                 => $currency,
-                'date'                     => $date,
+                'date'                     => $this->toTs($date),
                 'dateYear'                 => $r['dateYear'] ?: null,
                 'dateMonth'                => $r['dateMonth'] ?: null,
                 'amount'                   => $amount,
@@ -490,7 +507,7 @@ class ReimportDirectualHistorical extends Command
 
     private function txKey(int $contract, ?string $date, ?float $amount, int $currency): string
     {
-        $d = $date ? substr($date, 0, 10) : '';
+        $d = $date ? substr($this->toTs($date) ?? '', 0, 10) : '';
         $a = $amount !== null ? number_format($amount, 2, '.', '') : '';
         return "{$contract}|{$d}|{$a}|{$currency}";
     }
@@ -534,7 +551,7 @@ class ReimportDirectualHistorical extends Command
                 'currency'                           => $this->toIntOrNull($r['currency'] ?? null),
                 'dateMonth'                          => $r['dateMonth'] ?: null,
                 'dateYear'                           => $r['dateYear'] ?: null,
-                'date'                               => $r['date'] ?: null,
+                'date'                               => $this->toTs($r['date'] ?? null),
                 'type'                               => $r['type'] ?: null,
                 'calculationLevel'                   => $this->toIntOrNull($r['calculationLevel'] ?? null),
                 'commissionFromOtherConsultant'     => $maps['consultant'][$fromOther] ?? null,
@@ -545,7 +562,7 @@ class ReimportDirectualHistorical extends Command
                 'absolute'                           => $this->toFloat($r['absolute'] ?? null),
                 'personalVolume'                     => $this->toFloat($r['personalVolume'] ?? null),
                 'groupVolume'                        => $this->toFloat($r['groupVolume'] ?? null),
-                'createdAt'                          => ($r['@dateCreated'] ?? '') ?: null,
+                'createdAt'                          => $this->toTs($r['@dateCreated'] ?? null),
             ];
             if (count($insert) >= 500) {
                 try { DB::table('commission')->insert($insert); }
