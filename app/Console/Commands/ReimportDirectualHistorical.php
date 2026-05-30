@@ -90,40 +90,27 @@ class ReimportDirectualHistorical extends Command
         }
 
         $this->info('');
-        $this->warn('=== APPLY: TRUNCATE CASCADE + COPY ===');
-        $this->warn('Снос consultantBalance, calculationConsultantPoints, calculationContestTrigger,');
-        $this->warn('documentlogs, partnerMonthlyPaymentsReportTrigger, qualificationLog, nocomission,');
-        $this->warn('massTransactionRecalculationTrigger, importTransactionLog, transactionRecalculation,');
-        $this->warn('exportLogTransactions, reportGenerator, getInsmartOrderWebHookData,');
-        $this->warn('getCourseOrderWebHookData, getcourseExportTransactionsData,');
-        $this->warn('getcourseTransactionExportDataFromGoogleSpread, changeContractDsCommisionTrigger,');
-        $this->warn('investorsTrust, volumeCalculator + обнуление contract.dsCommission/program.dsCommission/');
-        $this->warn('consultant.commissionLast/transactionProrostId/transactionSpfkId');
+        $this->warn('=== APPLY: composite-key UPSERT ===');
+        $this->warn('БЕЗОПАСНО — не TRUNCATE. Просто доливаем недостающие из CSV.');
 
-        DB::transaction(function () use ($files, $maps) {
-            $this->info('TRUNCATE...');
-            // Отключаем statement_timeout — TRUNCATE 22 таблиц + COPY 552k commission
-            // может занять >30 секунд.
-            DB::statement("SET LOCAL statement_timeout = '600s'");
-            DB::statement('TRUNCATE TABLE transaction, commission, "dsCommission" CASCADE');
+        DB::statement("SET statement_timeout = '600s'");
 
-            $this->info('Reimport dsCommission...');
-            $n = $this->importDsCommission($files['dsCommission'], $maps);
-            $this->line("  dsCommission: {$n}");
+        $this->info('UPSERT dsCommission…');
+        [$ins, $skip] = $this->upsertDsCommission($files['dsCommission'], $maps);
+        $this->line("  dsCommission: inserted {$ins}, skipped {$skip}");
 
-            $this->info('Reimport transaction...');
-            $n = $this->importTransaction($files['transaction'], $maps);
-            $this->line("  transaction: {$n}");
+        $this->info('UPSERT transaction…');
+        [$ins, $skip] = $this->upsertTransaction($files['transaction'], $maps);
+        $this->line("  transaction: inserted {$ins}, skipped {$skip}");
 
-            $this->info('Reimport commission...');
-            $n = $this->importCommission($files['commission'], $maps);
-            $this->line("  commission: {$n}");
+        $this->info('UPSERT commission…');
+        [$ins, $skip] = $this->upsertCommission($files['commission'], $maps);
+        $this->line("  commission: inserted {$ins}, skipped {$skip}");
 
-            $this->info('Обновляем sequences...');
-            $this->fixSequence('transaction', 'transaction_id_seq');
-            $this->fixSequence('commission', 'commission_id_seq');
-            $this->fixSequenceDsCommission();
-        });
+        $this->info('Обновляем sequences...');
+        $this->fixSequence('transaction', 'transaction_id_seq');
+        $this->fixSequence('commission', 'commission_id_seq');
+        $this->fixSequenceDsCommission();
 
         $this->info('');
         $this->info('=== DONE ===');
@@ -393,6 +380,197 @@ class ReimportDirectualHistorical extends Command
         if ($v === null || $v === '') return null;
         $s = strtolower((string) $v);
         return in_array($s, ['true', 't', '1', 'yes'], true);
+    }
+
+    /**
+     * dsCommission UPSERT по composite-key (product, program, date, termContract).
+     * Только INSERT недостающих — UPDATE не делаем (тарифы DS меняются ред-
+     * ко, и existing записи в prod уже актуальные).
+     *
+     * @return array{0:int,1:int}  [inserted, skipped]
+     */
+    private function upsertDsCommission(string $path, array $maps): array
+    {
+        // 1. Prod index by composite-key
+        $prodKeys = [];
+        DB::table('dsCommission')->orderBy('id')->each(function ($row) use (&$prodKeys) {
+            $k = $this->dsKey((int) $row->product, (int) $row->program, $row->date, (int) ($row->termContract ?? 0));
+            $prodKeys[$k] = true;
+        });
+
+        // 2. Iterate CSV, insert missing
+        $insert = [];
+        $skipped = 0;
+        $maxId = (int) DB::table('dsCommission')->max('id');
+        $nextId = $maxId + 1;
+        foreach ($this->csvIter($path) as $r) {
+            $prod = $maps['product'][(int) ($r['product'] ?? 0)] ?? null;
+            $prog = $maps['program'][(int) ($r['program'] ?? 0)] ?? null;
+            $date = $r['date'] ?: null;
+            $term = (int) ($r['termContract'] ?? 0);
+            if (! $prod) { $skipped++; continue; }
+            $k = $this->dsKey((int) $prod, (int) ($prog ?? 0), $date, $term);
+            if (isset($prodKeys[$k])) { $skipped++; continue; }
+            $insert[] = [
+                'id'                     => $nextId++,
+                'product'                => $prod,
+                'program'                => $prog,
+                'productName'            => $r['productName'] ?: null,
+                'programName'            => $r['programName'] ?: null,
+                'comission'              => $this->toFloat($r['comission'] ?? null),
+                'commissionAbsolute'     => $this->toFloat($r['commissionAbsolute'] ?? null),
+                'commissionCalcProperty' => $this->toIntOrNull($r['commissionCalcProperty'] ?? null),
+                'date'                   => $date,
+                'dateFinish'             => $r['dateFinish'] ?: null,
+                'active'                 => $this->toBool($r['active'] ?? null),
+                'termContract'           => $term ?: null,
+                'dateDeleted'            => $r['dateDeleted'] ?: null,
+            ];
+            if (count($insert) >= 500) {
+                DB::table('dsCommission')->insert($insert);
+                $insert = [];
+            }
+        }
+        if ($insert) DB::table('dsCommission')->insert($insert);
+        return [$nextId - $maxId - 1, $skipped];
+    }
+
+    private function dsKey(int $product, int $program, ?string $date, int $term): string
+    {
+        $date = $date ? substr($date, 0, 10) : '';
+        return "{$product}|{$program}|{$date}|{$term}";
+    }
+
+    /**
+     * transaction UPSERT по composite-key (contract, date, amount, currency).
+     * Только INSERT недостающих.
+     */
+    private function upsertTransaction(string $path, array $maps): array
+    {
+        $prodKeys = [];
+        DB::table('transaction')->orderBy('id')->each(function ($row) use (&$prodKeys) {
+            $k = $this->txKey((int) $row->contract, $row->date, $row->amount, (int) $row->currency);
+            $prodKeys[$k] = true;
+        });
+
+        $insert = [];
+        $skipped = 0;
+        $maxId = (int) DB::table('transaction')->max('id');
+        $nextId = $maxId + 1;
+        foreach ($this->csvIter($path) as $r) {
+            $contractCsv = (int) ($r['contract'] ?? 0);
+            $contract = $maps['contract'][$contractCsv] ?? null;
+            if (! $contract) { $skipped++; continue; }
+            $date = $r['date'] ?: null;
+            $amount = $this->toFloat($r['amount'] ?? null);
+            $currency = $this->toIntOrNull($r['currency'] ?? null);
+            $k = $this->txKey($contract, $date, $amount, (int) ($currency ?? 0));
+            if (isset($prodKeys[$k])) { $skipped++; continue; }
+            $insert[] = [
+                'id'                       => $nextId++,
+                'contract'                 => $contract,
+                'currency'                 => $currency,
+                'date'                     => $date,
+                'dateYear'                 => $r['dateYear'] ?: null,
+                'dateMonth'                => $r['dateMonth'] ?: null,
+                'amount'                   => $amount,
+                'comment'                  => $r['comment'] ?: null,
+                'dsCommissionPercentage'   => $this->toFloat($r['dsCommissionPercentage'] ?? null),
+                'commissionCalcProperty'   => $this->toIntOrNull($r['commissionCalcProperty'] ?? null),
+                'vat'                      => $this->toIntOrNull($r['vat'] ?? null),
+            ];
+            if (count($insert) >= 500) {
+                DB::table('transaction')->insert($insert);
+                $insert = [];
+            }
+        }
+        if ($insert) DB::table('transaction')->insert($insert);
+        return [$nextId - $maxId - 1, $skipped];
+    }
+
+    private function txKey(int $contract, ?string $date, ?float $amount, int $currency): string
+    {
+        $d = $date ? substr($date, 0, 10) : '';
+        $a = $amount !== null ? number_format($amount, 2, '.', '') : '';
+        return "{$contract}|{$d}|{$a}|{$currency}";
+    }
+
+    /**
+     * commission UPSERT по composite-key (transaction, consultant, chainOrder).
+     * Memory note: 552k prod commission в памяти ~ 70 MB как ассоц-ключи.
+     */
+    private function upsertCommission(string $path, array $maps): array
+    {
+        $prodKeys = [];
+        DB::table('commission')->orderBy('id')->each(function ($row) use (&$prodKeys) {
+            $k = $this->cmKey((int) $row->transaction, (int) $row->consultant, (int) ($row->chainOrder ?? 0));
+            $prodKeys[$k] = true;
+        });
+
+        $insert = [];
+        $skipped = 0;
+        $maxId = (int) DB::table('commission')->max('id');
+        $nextId = $maxId + 1;
+        foreach ($this->csvIter($path) as $r) {
+            $txCsv = (int) ($r['transaction'] ?? 0);
+            $consCsv = (int) ($r['consultant'] ?? 0);
+            $consChain = (int) ($r['consultantsChain'] ?? 0);
+            $fromOther = (int) ($r['commissionFromOtherConsultant'] ?? 0);
+            $cons = $maps['consultant'][$consCsv] ?? null;
+            if (! $cons || $txCsv === 0) { $skipped++; continue; }
+            // transaction id mapping: используем CSV id если такой есть в prod;
+            // если нет — пропускаем (commission orphan, нет смысла вставлять).
+            $k = $this->cmKey($txCsv, $cons, (int) ($r['chainOrder'] ?? 0));
+            if (isset($prodKeys[$k])) { $skipped++; continue; }
+            $insert[] = [
+                'id'                                 => $nextId++,
+                'transaction'                        => $txCsv,
+                'consultant'                         => $cons,
+                'consultantsChain'                   => $maps['consultant'][$consChain] ?? null,
+                'chainOrder'                         => $this->toIntOrNull($r['chainOrder'] ?? null),
+                'amount'                             => $this->toFloat($r['amount'] ?? null),
+                'amountRUB'                          => $this->toFloat($r['amountRUB'] ?? null),
+                'amountUSD'                          => $this->toFloat($r['amountUSD'] ?? null),
+                'currency'                           => $this->toIntOrNull($r['currency'] ?? null),
+                'dateMonth'                          => $r['dateMonth'] ?: null,
+                'dateYear'                           => $r['dateYear'] ?: null,
+                'date'                               => $r['date'] ?: null,
+                'type'                               => $r['type'] ?: null,
+                'calculationLevel'                   => $this->toIntOrNull($r['calculationLevel'] ?? null),
+                'commissionFromOtherConsultant'     => $maps['consultant'][$fromOther] ?? null,
+                'qualificationLog'                   => null,
+                'reduction'                          => $this->toBool($r['reduction'] ?? null),
+                'comment'                            => $r['comment'] ?: null,
+                'percent'                            => $this->toFloat($r['percent'] ?? null),
+                'absolute'                           => $this->toFloat($r['absolute'] ?? null),
+                'personalVolume'                     => $this->toFloat($r['personalVolume'] ?? null),
+                'groupVolume'                        => $this->toFloat($r['groupVolume'] ?? null),
+                'createdAt'                          => $r['@dateCreated'] ?? null,
+            ];
+            if (count($insert) >= 500) {
+                try { DB::table('commission')->insert($insert); }
+                catch (\Throwable $e) {
+                    $this->warn('  insert chunk failed (commission): ' . substr($e->getMessage(), 0, 150));
+                    $skipped += count($insert);
+                    $nextId -= count($insert);
+                }
+                $insert = [];
+            }
+        }
+        if ($insert) {
+            try { DB::table('commission')->insert($insert); }
+            catch (\Throwable $e) {
+                $this->warn('  insert chunk failed (commission): ' . substr($e->getMessage(), 0, 150));
+                $skipped += count($insert);
+                $nextId -= count($insert);
+            }
+        }
+        return [$nextId - $maxId - 1, $skipped];
+    }
+
+    private function cmKey(int $tx, int $cons, int $chainOrder): string
+    {
+        return "{$tx}|{$cons}|{$chainOrder}";
     }
 
     /**
