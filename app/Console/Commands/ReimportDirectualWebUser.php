@@ -61,6 +61,15 @@ class ReimportDirectualWebUser extends Command
                  'dateChanged', 'comment', 'lastActivityDate', 'source']),
             'contract'   => $this->processSimple($path, $apply, 'contract', 'number',
                 ['ammount', 'currency', 'openDate', 'closeDate', 'status', 'comment']),
+            // product/program — natural key = name. Не трогаем FK
+            // (motivationGroup, productType, productTags, ambassador,
+            // vendor, productName). Active/visibility/имя — апдейтим.
+            'product'    => $this->processSimple($path, $apply, 'product', 'name',
+                ['typeName', 'tagList', 'active', 'noComission',
+                 'formLink', 'imageUrl', 'educationUrl', 'instructionUrl', 'openProductUrl']),
+            'program'    => $this->processSimple($path, $apply, 'program', 'name',
+                ['providerName', 'categoryName', 'vendorName', 'productTypeName',
+                 'productName', 'currencyName', 'term']),
             default      => $this->bail("Неизвестная таблица: {$table}. Допустимо: webuser, person, consultant, client, contract."),
         };
     }
