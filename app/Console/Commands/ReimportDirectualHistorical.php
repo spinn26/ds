@@ -545,42 +545,6 @@ class ReimportDirectualHistorical extends Command
         return "{$cons}|{$d}|{$levelNew}";
     }
 
-    /**
-     * Универсальный chunk-COPY с резолвером.
-     *
-     * @param  callable(array): ?array  $resolver  превращает CSV-row в DB-row или null чтобы пропустить
-     */
-    private function copyChunked(string $path, string $table, array $cols, callable $resolver): int
-    {
-        $chunk = [];
-        $size = 500;
-        $total = 0;
-        $skipped = 0;
-
-        foreach ($this->csvIter($path) as $r) {
-            $row = $resolver($r);
-            if ($row === null) { $skipped++; continue; }
-            // Берём только нужные колонки
-            $clean = [];
-            foreach ($cols as $c) $clean[$c] = $row[$c] ?? null;
-            $chunk[] = $clean;
-
-            if (count($chunk) >= $size) {
-                DB::table(trim($table, '"'))->insert($chunk);
-                $total += count($chunk);
-                $chunk = [];
-            }
-        }
-        if ($chunk) {
-            DB::table(trim($table, '"'))->insert($chunk);
-            $total += count($chunk);
-        }
-        if ($skipped) {
-            $this->warn("  {$table}: skipped {$skipped} (unresolved FK)");
-        }
-        return $total;
-    }
-
     private function fixSequence(string $table, string $seq): void
     {
         DB::statement("SELECT setval('{$seq}', COALESCE((SELECT MAX(id) FROM \"{$table}\"), 1))");
