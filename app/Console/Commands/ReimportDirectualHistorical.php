@@ -519,8 +519,13 @@ class ReimportDirectualHistorical extends Command
     private function upsertCommission(string $path, array $maps): array
     {
         $prodKeys = [];
-        DB::table('commission')->orderBy('id')->each(function ($row) use (&$prodKeys) {
-            $k = $this->cmKey((int) $row->transaction, (int) $row->consultant, (int) ($row->chainOrder ?? 0));
+        DB::table('commission')->whereNull('deletedAt')->orderBy('id')->each(function ($row) use (&$prodKeys) {
+            $k = $this->cmKey(
+                (int) $row->transaction,
+                (int) $row->consultant,
+                (int) ($row->chainOrder ?? 0),
+                (string) ($row->type ?? '')
+            );
             $prodKeys[$k] = true;
         });
 
@@ -537,7 +542,7 @@ class ReimportDirectualHistorical extends Command
             if (! $cons || $txCsv === 0) { $skipped++; continue; }
             // transaction id mapping: используем CSV id если такой есть в prod;
             // если нет — пропускаем (commission orphan, нет смысла вставлять).
-            $k = $this->cmKey($txCsv, $cons, (int) ($r['chainOrder'] ?? 0));
+            $k = $this->cmKey($txCsv, $cons, (int) ($r['chainOrder'] ?? 0), (string) ($r['type'] ?? ''));
             if (isset($prodKeys[$k])) { $skipped++; continue; }
             $insert[] = [
                 'id'                                 => $nextId++,
@@ -585,9 +590,9 @@ class ReimportDirectualHistorical extends Command
         return [$nextId - $maxId - 1, $skipped];
     }
 
-    private function cmKey(int $tx, int $cons, int $chainOrder): string
+    private function cmKey(int $tx, int $cons, int $chainOrder, string $type = ''): string
     {
-        return "{$tx}|{$cons}|{$chainOrder}";
+        return "{$tx}|{$cons}|{$chainOrder}|{$type}";
     }
 
     /**
