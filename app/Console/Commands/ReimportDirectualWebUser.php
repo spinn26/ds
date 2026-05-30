@@ -541,26 +541,32 @@ class ReimportDirectualWebUser extends Command
     /**
      * Поля для INSERT нового WebUser. id НЕ передаём — пусть БД выдаст
      * через LegacyId или sequence.
+     *
+     * НЕ передаём integer-FK (city/taxResidency) — в CSV они либо пусты
+     * (пустая строка → 22P02 для integer-колонки), либо ссылаются на
+     * id который у нас может отсутствовать (23503 FK).
      */
     private function mapInsertWebUser(array $csv): array
     {
-        return [
-            // id выдаст BД через LegacyId helper в коде; здесь мы только
-            // готовим payload и оставляем id из CSV для подсказки
-            'id'           => (int) $csv['id'], // ВРЕМЕННО: тот же id как в CSV
-            'email'        => mb_strtolower(trim((string) $csv['email'])),
-            'lastName'     => $csv['lastName'] ?? null,
-            'firstName'    => $csv['firstName'] ?? null,
-            'patronymic'   => $csv['patronymic'] ?? null,
-            'phone'        => $csv['phone'] ?? null,
-            'nicTG'        => $csv['nicTG'] ?? null,
+        $email = mb_strtolower(trim((string) ($csv['email'] ?? '')));
+        $out = [
+            'email'        => $email,
+            'lastName'     => $csv['lastName'] ?: null,
+            'firstName'    => $csv['firstName'] ?: null,
+            'patronymic'   => $csv['patronymic'] ?: null,
+            'phone'        => $csv['phone'] ?: null,
+            'nicTG'        => $csv['nicTG'] ?: null,
             'birthDate'    => $csv['birthDate'] ?: null,
-            'gender'       => $csv['gender'] ?? null,
-            'taxResidency' => $csv['taxResidency'] ?? null,
-            'city'         => $csv['city'] ?? null,
-            'role'         => $csv['role'] ?? 'registered',
-            'password'     => $csv['password'] ?: null, // MD5 из Directual; auto-bcrypt при логине
-            'dateCreated'  => $csv['dateCreated'] ?? now()->toIso8601String(),
+            'gender'       => $csv['gender'] ?: null,
+            'role'         => $csv['role'] ?: 'registered',
+            'password'     => $csv['password'] ?: null,
+            'dateCreated'  => $csv['dateCreated'] ?: now()->toIso8601String(),
         ];
+        // Преобразуем пустые строки в null повсеместно — Postgres integer/
+        // timestamp колонки не принимают ''.
+        foreach ($out as $k => $v) {
+            if ($v === '') $out[$k] = null;
+        }
+        return $out;
     }
 }
