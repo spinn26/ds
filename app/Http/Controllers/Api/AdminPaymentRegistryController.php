@@ -272,7 +272,7 @@ class AdminPaymentRegistryController extends Controller
             ->orderByDesc('p.id')
             ->get([
                 'p.id', 'p.amount', 'p.paymentDate', 'p.status', 'p.comment',
-                DB::raw('TRIM(CONCAT(u."firstName", \' \', u."lastName")) as createdBy'),
+                DB::raw('TRIM(CONCAT(u."firstName", \' \', u."lastName")) as "createdBy"'),
             ]);
 
         $statuses = DB::table('consultantPaymentStatus')->pluck('title', 'id');

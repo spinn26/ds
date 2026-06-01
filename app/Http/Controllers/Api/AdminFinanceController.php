@@ -39,7 +39,7 @@ class AdminFinanceController extends Controller
                 $w->where('c.consultantName', 'ilike', $term)
                   ->orWhere('c.number', 'ilike', $term)
                   ->orWhere('c.clientName', 'ilike', $term)
-                  ->orWhere('t.id::text', 'ilike', $term);
+                  ->orWhereRaw('t.id::text ilike ?', [$term]);
             });
         }
         // Дополнительные раздельные фильтры per spec ✅Комиссии §1.1
