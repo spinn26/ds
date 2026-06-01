@@ -404,7 +404,11 @@ class AdminFinanceController extends Controller
             $query->where('dateMonth', $request->month);
         }
         if ($request->filled('search')) {
-            $query->where('consultantPersonName', 'ilike', '%' . $request->search . '%');
+            // commission has no name column — match consultants by personName.
+            $query->whereIn('consultant', function ($sub) use ($request) {
+                $sub->select('id')->from('consultant')
+                    ->where('personName', 'ilike', '%' . $request->search . '%');
+            });
         }
         // hide_zero=1 — скрываем строки уплайн-наставников с margin=0
         // (та же квалификация, что у нижестоящего → 0 ₽). Per user feedback —
