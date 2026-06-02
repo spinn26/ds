@@ -77,6 +77,55 @@
       </div>
     </v-card>
 
+    <!-- DEVICES -->
+    <v-card class="mt-4 pa-4">
+      <div class="d-flex align-center ga-2 mb-3">
+        <v-icon size="20">mdi-devices</v-icon>
+        <div class="text-subtitle-1 font-weight-bold">Устройства (сегодня)</div>
+        <v-spacer />
+        <span class="text-caption text-medium-emphasis">уникальных: {{ deviceTotal }}</span>
+      </div>
+      <div v-if="deviceTotal > 0">
+        <div class="device-bar mb-3">
+          <div class="device-seg device-desktop" :style="{ width: devicePct('desktop') + '%' }"></div>
+          <div class="device-seg device-mobile" :style="{ width: devicePct('mobile') + '%' }"></div>
+          <div class="device-seg device-unknown" :style="{ width: devicePct('unknown') + '%' }"></div>
+        </div>
+        <v-row dense>
+          <v-col cols="6" sm="4">
+            <div class="d-flex align-center ga-2">
+              <v-icon color="info" size="26">mdi-monitor</v-icon>
+              <div>
+                <div class="text-h6 font-weight-bold">{{ devices.desktop ?? 0 }}</div>
+                <div class="text-caption text-medium-emphasis">ПК · {{ devicePct('desktop') }}%</div>
+              </div>
+            </div>
+          </v-col>
+          <v-col cols="6" sm="4">
+            <div class="d-flex align-center ga-2">
+              <v-icon color="success" size="26">mdi-cellphone</v-icon>
+              <div>
+                <div class="text-h6 font-weight-bold">{{ devices.mobile ?? 0 }}</div>
+                <div class="text-caption text-medium-emphasis">Мобильные · {{ devicePct('mobile') }}%</div>
+              </div>
+            </div>
+          </v-col>
+          <v-col v-if="devices.unknown" cols="6" sm="4">
+            <div class="d-flex align-center ga-2">
+              <v-icon color="grey" size="26">mdi-help-circle-outline</v-icon>
+              <div>
+                <div class="text-h6 font-weight-bold">{{ devices.unknown ?? 0 }}</div>
+                <div class="text-caption text-medium-emphasis">Неизвестно · {{ devicePct('unknown') }}%</div>
+              </div>
+            </div>
+          </v-col>
+        </v-row>
+      </div>
+      <div v-else class="text-caption text-medium-emphasis py-4 text-center">
+        Сегодня входов ещё не было.
+      </div>
+    </v-card>
+
     <!-- SERVER LOAD -->
     <v-card class="mt-4 pa-4">
       <div class="d-flex align-center ga-2 mb-3">
@@ -220,6 +269,15 @@ const maxHourly = computed(() =>
   Math.max(0, ...((data.value.hourly || []).map(b => b.count)))
 );
 
+const devices = computed(() => data.value.devices || { desktop: 0, mobile: 0, unknown: 0 });
+const deviceTotal = computed(() =>
+  (devices.value.desktop || 0) + (devices.value.mobile || 0) + (devices.value.unknown || 0)
+);
+function devicePct(key) {
+  if (deviceTotal.value <= 0) return 0;
+  return Math.round(((devices.value[key] || 0) / deviceTotal.value) * 100);
+}
+
 function barHeight(count) {
   if (maxHourly.value <= 0) return '2px';
   return Math.max(2, Math.round((count / maxHourly.value) * 100)) + '%';
@@ -310,5 +368,25 @@ onUnmounted(() => {
 }
 .metric-block {
   padding: 8px 0;
+}
+.device-bar {
+  display: flex;
+  height: 14px;
+  border-radius: 7px;
+  overflow: hidden;
+  background: rgba(var(--v-theme-on-surface), 0.08);
+}
+.device-seg {
+  height: 100%;
+  transition: width 0.3s ease;
+}
+.device-desktop {
+  background: rgb(var(--v-theme-info));
+}
+.device-mobile {
+  background: rgb(var(--v-theme-success));
+}
+.device-unknown {
+  background: rgba(var(--v-theme-on-surface), 0.25);
 }
 </style>

@@ -130,6 +130,8 @@ class AdminMonitoringController extends Controller
 
             'hourly' => $this->loginsHourly($todayStart),
             'recentLogins' => $this->recentLogins(),
+            // ПК vs мобильные — по уникальным пользователям, зашедшим сегодня.
+            'devices' => $this->devicesBreakdown($todayStart),
             'server' => $this->serverLoad(),
         ]);
     }
@@ -563,6 +565,42 @@ class AdminMonitoringController extends Controller
         } catch (\Throwable) {
             return [];
         }
+    }
+
+    /**
+     * Разбивка ПК / мобильные по уникальным пользователям с момента $since.
+     * Берём последний вход каждого пользователя и классифицируем его
+     * user_agent. iPad в desktop-режиме может попасть в «ПК» — приемлемо.
+     */
+    private function devicesBreakdown(Carbon $since): array
+    {
+        $out = ['desktop' => 0, 'mobile' => 0, 'unknown' => 0];
+        if (! Schema::hasTable('audit_log')) return $out;
+        try {
+            $rows = DB::table('audit_log')
+                ->where('action', 'login')
+                ->where('created_at', '>=', $since)
+                ->whereNotNull('entity_id')
+                ->orderByDesc('created_at')
+                ->get(['entity_id', 'user_agent']);
+
+            $seen = [];
+            foreach ($rows as $r) {
+                if (isset($seen[$r->entity_id])) continue;
+                $seen[$r->entity_id] = true;
+
+                $ua = (string) $r->user_agent;
+                if ($ua === '') {
+                    $out['unknown']++;
+                } elseif (preg_match('/Mobile|Android|iPhone|iPad|iPod|Windows Phone|Opera Mini|IEMobile/i', $ua)) {
+                    $out['mobile']++;
+                } else {
+                    $out['desktop']++;
+                }
+            }
+        } catch (\Throwable) {
+        }
+        return $out;
     }
 
     /** Нагрузка на сервер — Linux прод даёт полные метрики, Windows — частичные. */
