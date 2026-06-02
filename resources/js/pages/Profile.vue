@@ -733,7 +733,15 @@ const genderOptions = [
   { title: 'Женский', value: 'female' },
 ];
 
-const countryOptions = ['Россия', 'Казахстан', 'Беларусь', 'Узбекистан', 'Кыргызстан', 'Таджикистан', 'Армения', 'Грузия', 'Азербайджан', 'Молдова', 'Украина', 'Турция', 'ОАЭ', 'Германия', 'Израиль', 'США', 'Другая'];
+// Страны грузим из справочника (таблица `country`), а не хардкодим — см.
+// GET /profile/countries. Минимальный фоллбэк на случай сбоя запроса.
+const countryOptions = ref(['Россия', 'Казахстан', 'Беларусь', 'Украина']);
+async function loadCountries() {
+  try {
+    const { data } = await api.get('/profile/countries');
+    if (Array.isArray(data) && data.length) countryOptions.value = data;
+  } catch { /* оставляем фоллбэк */ }
+}
 const cityItems = ref([]);
 const cityLoading = ref(false);
 let cityTimer = null;
@@ -1020,6 +1028,7 @@ function copyToClipboard(text) {
 
 onMounted(() => {
   loadProfile();
+  loadCountries();
   loadDocuments();
   load2faStatus();
   loadTelegram();

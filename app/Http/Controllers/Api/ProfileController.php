@@ -415,6 +415,33 @@ class ProfileController extends Controller
         return response()->json($items);
     }
 
+    /**
+     * Справочник стран для выпадашки профиля. Источник — таблица `country`
+     * (чистая, 251 страна), а НЕ хардкод на фронте. Популярные (СНГ + частые)
+     * выносятся наверх в фиксированном порядке, остальные — по алфавиту.
+     * Возвращает плоский массив названий (countryNameRu) — тот же контракт,
+     * что ждёт v-autocomplete и маппинг countryNameRu→id в update().
+     */
+    public function countries(): JsonResponse
+    {
+        $all = DB::table('country')
+            ->whereNotNull('countryNameRu')
+            ->where('countryNameRu', '!=', '')
+            ->orderBy('countryNameRu')
+            ->pluck('countryNameRu')
+            ->all();
+
+        // Названия должны совпадать с countryNameRu в таблице (напр. «Киргизия»,
+        // не «Кыргызстан»). Отсутствующие просто пропускаются через in_array.
+        $priority = ['Россия', 'Казахстан', 'Беларусь', 'Узбекистан', 'Киргизия',
+            'Таджикистан', 'Армения', 'Грузия', 'Азербайджан', 'Молдавия', 'Украина'];
+
+        $top = array_values(array_filter($priority, fn ($n) => in_array($n, $all, true)));
+        $rest = array_values(array_filter($all, fn ($n) => ! in_array($n, $top, true)));
+
+        return response()->json(array_merge($top, $rest));
+    }
+
     // --- Private helpers ---
 
     /**

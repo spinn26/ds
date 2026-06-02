@@ -180,6 +180,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/profile/agreement-documents', [ProfileController::class, 'agreementDocuments']);
         Route::post('/profile/accept-offer', [ProfileController::class, 'acceptOffer']);
         Route::get('/profile/cities', [ProfileController::class, 'cities']);
+        Route::get('/profile/countries', [ProfileController::class, 'countries']);
 
         Route::get('/structure', [StructureController::class, 'index']);
         Route::get('/structure/{consultantId}/children', [StructureController::class, 'children']);
