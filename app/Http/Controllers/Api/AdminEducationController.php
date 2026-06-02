@@ -406,7 +406,10 @@ class AdminEducationController extends Controller
                 $q->where('c.visible_to_resident', true);
             }
 
-            $rows = $q->orderBy('p.name')->distinct()->get(['p.id', 'p.name']);
+            // Label = каталожное имя (как на странице «Продукты» / витрине),
+            // value = legacy product.id (его хранит pivot education_course_product).
+            // Иначе оператор видит legacy-имя (напр. «PPF» вместо «Everia Life»).
+            $rows = $q->orderBy('c.name')->distinct()->get(['p.id as id', 'c.name as name']);
 
             return response()->json(['data' => $rows]);
         }
@@ -458,13 +461,13 @@ class AdminEducationController extends Controller
             $q->where('c.visible_to_resident', true);
         }
 
-        $rows = $q->orderBy('p.name')
+        $rows = $q->orderBy('c.name')
             ->orderBy('g.name')
             ->get([
                 'g.id as id',
                 'g.name as name',
                 'c.legacy_product_id as product_id',
-                'p.name as product_name',
+                'c.name as product_name',   // каталожное имя продукта (как в витрине)
             ]);
 
         return response()->json(['data' => $rows]);
