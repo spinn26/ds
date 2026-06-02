@@ -337,6 +337,24 @@ class AdminEducationController extends Controller
      */
     public function productOptions(): JsonResponse
     {
+        // «Активный продукт» = products_catalog.active=true — это источник правды
+        // оператора на странице «Продукты». Pivot курс↔продукт хранит legacy
+        // product_id, поэтому отдаём legacy id (+ name) только тех продуктов,
+        // чья каталог-карточка активна. Иначе Оля видела бы продукты, которые
+        // деактивированы в каталоге (legacy product.active с ним не синхронен).
+        if (Schema::hasTable('products_catalog')) {
+            $rows = DB::table('products_catalog as c')
+                ->join('product as p', 'p.id', '=', 'c.legacy_product_id')
+                ->where('c.active', true)
+                ->whereNotNull('c.legacy_product_id')
+                ->orderBy('p.name')
+                ->distinct()
+                ->get(['p.id', 'p.name']);
+
+            return response()->json(['data' => $rows]);
+        }
+
+        // Фоллбэк на средах без каталога — прежняя логика по legacy product.active.
         $query = DB::table('product')
             ->where('active', true)
             ->orderBy('name');

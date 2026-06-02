@@ -580,10 +580,6 @@
                 <v-alert v-if="copied" type="success" variant="tonal" density="compact" class="mt-3">
                   Скопировано в буфер обмена
                 </v-alert>
-                <v-alert type="info" variant="tonal" density="compact" class="mt-3"
-                  icon="mdi-gift-outline">
-                  Отправьте друзьям-консультантам — они получат welcome-бонус при первой продаже.
-                </v-alert>
               </template>
               <v-alert v-else type="info" variant="tonal" density="compact" icon="mdi-information-outline">
                 Реферальные ссылки доступны только для партнёров со статусом «Активен».
