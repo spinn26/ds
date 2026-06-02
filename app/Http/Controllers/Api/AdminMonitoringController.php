@@ -10,6 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
 
 class AdminMonitoringController extends Controller
@@ -550,21 +551,72 @@ class AdminMonitoringController extends Controller
 
             if ($joinWebUser) {
                 $query->leftJoin('WebUser as w', 'w.id', '=', DB::raw("NULLIF(a.entity_id, '')::int"))
-                    ->select('a.user_email', 'a.user_role', 'a.ip', 'a.created_at', 'w.email as wu_email', 'w.role as wu_role');
+                    ->select('a.user_email', 'a.user_role', 'a.ip', 'a.created_at',
+                        'w.email as wu_email', 'w.role as wu_role',
+                        'w.firstName as wu_first', 'w.lastName as wu_last', 'w.patronymic as wu_patronymic');
             } else {
                 $query->select('a.user_email', 'a.user_role', 'a.ip', 'a.created_at');
             }
 
             return $query->get()
-                ->map(fn ($r) => [
-                    'email' => ($r->wu_email ?? null) ?: $r->user_email,
-                    'role' => ($r->wu_role ?? null) ?: $r->user_role,
-                    'ip' => $r->ip,
-                    'at' => $r->created_at,
-                ])->all();
+                ->map(function ($r) {
+                    $country = $this->resolveCountry($r->ip);
+
+                    return [
+                        'name' => $this->fullName($r->wu_last ?? null, $r->wu_first ?? null, $r->wu_patronymic ?? null),
+                        'email' => ($r->wu_email ?? null) ?: $r->user_email,
+                        'role' => ($r->wu_role ?? null) ?: $r->user_role,
+                        'ip' => $r->ip,
+                        'country' => $country['code'],
+                        'countryName' => $country['name'],
+                        'at' => $r->created_at,
+                    ];
+                })->all();
         } catch (\Throwable) {
             return [];
         }
+    }
+
+    /** ФИО из частей; пустые части пропускаются, пустой результат → null. */
+    private function fullName(?string $last, ?string $first, ?string $patronymic): ?string
+    {
+        $name = trim(implode(' ', array_filter([
+            trim((string) $last),
+            trim((string) $first),
+            trim((string) $patronymic),
+        ], 'strlen')));
+
+        return $name !== '' ? $name : null;
+    }
+
+    /**
+     * IP → страна (ISO2 + название). Кешируется по IP на 30 дней, т.к.
+     * гео практически не меняется. Приватные/локальные IP и ошибки → null.
+     * Источник: бесплатный ip-api.com (без ключа, лимит 45 req/min — кеш
+     * гасит частые авто-рефреши). Внешний сбой не должен валить страницу.
+     */
+    private function resolveCountry(?string $ip): array
+    {
+        $empty = ['code' => null, 'name' => null];
+        if (! $ip || filter_var($ip, FILTER_VALIDATE_IP) === false) return $empty;
+
+        // Приватные/зарезервированные адреса гео не имеют.
+        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false) {
+            return $empty;
+        }
+
+        return Cache::remember("geoip:$ip", now()->addDays(30), function () use ($ip, $empty) {
+            try {
+                $resp = Http::timeout(2)->retry(1, 200)
+                    ->get("http://ip-api.com/json/{$ip}", ['fields' => 'status,countryCode,country']);
+                $json = $resp->json();
+                if (($json['status'] ?? null) === 'success' && ! empty($json['countryCode'])) {
+                    return ['code' => $json['countryCode'], 'name' => $json['country'] ?? null];
+                }
+            } catch (\Throwable) {
+            }
+            return $empty;
+        });
     }
 
     /**

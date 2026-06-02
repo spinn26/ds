@@ -225,14 +225,23 @@
       <v-divider />
       <v-data-table :items="data.recentLogins || []" :headers="loginHeaders" :loading="loading"
         density="compact" hover no-data-text="Входов пока нет" :items-per-page="15">
+        <template #item.name="{ item }">
+          <div class="d-flex flex-column py-1">
+            <span class="text-body-2 font-weight-medium">{{ item.name || item.email || '—' }}</span>
+            <span v-if="item.name && item.email" class="text-caption text-medium-emphasis">{{ item.email }}</span>
+          </div>
+        </template>
         <template #item.role="{ value }">
           <v-chip size="x-small" variant="tonal">{{ value || '—' }}</v-chip>
         </template>
         <template #item.at="{ value }">
           <span class="text-caption">{{ fmtDateTime(value) }}</span>
         </template>
-        <template #item.ip="{ value }">
-          <span class="text-caption">{{ value || '—' }}</span>
+        <template #item.ip="{ item }">
+          <span class="text-caption d-inline-flex align-center ga-1">
+            <span v-if="item.country" :title="item.countryName || item.country" class="flag-emoji">{{ countryFlag(item.country) }}</span>
+            <span>{{ item.ip || '—' }}</span>
+          </span>
         </template>
       </v-data-table>
     </v-card>
@@ -254,11 +263,19 @@ let timer = null;
 const server = computed(() => data.value.server || {});
 
 const loginHeaders = [
-  { title: 'Email', key: 'email' },
+  { title: 'ФИО', key: 'name' },
   { title: 'Роль', key: 'role', width: 130 },
-  { title: 'IP', key: 'ip', width: 150 },
+  { title: 'IP', key: 'ip', width: 200 },
   { title: 'Когда', key: 'at', width: 180 },
 ];
+
+/** ISO2 country code → flag emoji (regional indicator symbols). */
+function countryFlag(code) {
+  if (!code || code.length !== 2) return '';
+  const cc = code.toUpperCase();
+  if (!/^[A-Z]{2}$/.test(cc)) return '';
+  return String.fromCodePoint(...[...cc].map(c => 0x1f1e6 + c.charCodeAt(0) - 65));
+}
 
 const lastUpdatedLabel = computed(() => {
   if (!lastUpdated.value) return '—';
@@ -388,5 +405,9 @@ onUnmounted(() => {
 }
 .device-unknown {
   background: rgba(var(--v-theme-on-surface), 0.25);
+}
+.flag-emoji {
+  font-size: 14px;
+  line-height: 1;
 }
 </style>
