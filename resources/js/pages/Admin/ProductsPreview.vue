@@ -148,7 +148,9 @@ const filteredProducts = computed(() => {
 async function load() {
   loading.value = true;
   try {
-    const { data } = await api.get('/products');
+    // includeDrafts=1 — staff-режим предпросмотра: показываем ВСЕ продукты
+    // (включая скрытые) и все плашки активными (бэкенд форсит available=true).
+    const { data } = await api.get('/products', { params: { includeDrafts: 1 } });
     products.value = data.products || data.data || [];
     if (data.categories) categoryOptions.value = data.categories.map(c => ({ title: c.name, value: c.id }));
     // Каталог-валюты приходят строками-кодами (id=null, nameRu=symbol="USD").

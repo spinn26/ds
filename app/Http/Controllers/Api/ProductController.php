@@ -135,7 +135,7 @@ class ProductController extends Controller
             ->get(['id', 'nameRu', 'nameEn', 'symbol'])
             ->keyBy('id');
 
-        $products = $productRows->map(function ($p) use ($consultant, $hasAccess, $coursesByLegacy, $completedSet, $legacyPrograms, $catalogProgs, $currencyMap, $typeToId) {
+        $products = $productRows->map(function ($p) use ($consultant, $hasAccess, $includeDrafts, $coursesByLegacy, $completedSet, $legacyPrograms, $catalogProgs, $currencyMap, $typeToId) {
             $legacyId = $p->legacy_product_id ? (int) $p->legacy_product_id : null;
 
             $testPassed = ($consultant && $legacyId)
@@ -150,7 +150,12 @@ class ProductController extends Controller
             // Клиент (status=1) — ещё не партнёр, для него гейт по курсам жив.
             $isPartnerStatus = $consultant && in_array((int) ($consultant->status ?? 0), [2, 3], true);
             $exempt = $consultant && ((bool) ($consultant->education_exempt ?? false) || $isPartnerStatus);
-            if ($linkedCourses->isNotEmpty() && ! $exempt) {
+            if ($exempt) {
+                // Текущие партнёры (education_exempt / статус ФК-Резидент):
+                // витрина открыта ВСЯ — без курсов и без проверки активности,
+                // продукт можно открыть сразу.
+                $available = true;
+            } elseif ($linkedCourses->isNotEmpty()) {
                 $available = $linkedCourses->every(fn ($c) => isset($completedSet[$c->id]));
             } else {
                 $available = $hasAccess;
@@ -159,6 +164,12 @@ class ProductController extends Controller
             // InSmart — доступен сразу после акцепта документов, без обучения.
             if (mb_stripos((string) $p->name, 'insmart') !== false) {
                 $available = $consultant && (bool) $consultant->acceptance;
+            }
+
+            // Staff-preview (?includeDrafts) — витрина «как у партнёра», но ВСЁ
+            // открыто: реквизиты/документы/курсы/активность игнорируются (QA).
+            if ($includeDrafts) {
+                $available = true;
             }
 
             // Программы: приоритет programs_catalog (там админ правит,
