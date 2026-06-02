@@ -243,7 +243,7 @@
 
         <!-- Глобальный баннер: профиль активного ФК не заполнен полностью.
              Не закрываемый — напоминание держится, пока партнёр не заполнит
-             личные данные + реквизиты ИП + банк. -->
+             личные данные. Реквизиты ИП/банк в это требование НЕ входят. -->
         <v-alert
           v-if="showProfileIncompleteBanner"
           type="warning" variant="tonal" density="compact"
@@ -251,9 +251,8 @@
           icon="mdi-account-alert-outline"
         >
           <div class="text-body-2">
-            <strong>Заполните профиль полностью.</strong>
-            Для активных партнёров обязательны личные данные и реквизиты
-            (ИП + банк).
+            <strong>Заполните профиль.</strong>
+            Для активных партнёров обязательны личные данные.
             <template v-if="profileMissingLabels">
               Не хватает: {{ profileMissingLabels }}.
             </template>
@@ -421,10 +420,10 @@ async function onOfferAccepted() {
 
 // Принудительное заполнение профиля для активных ФК (2026-06-02). Бэк в
 // /auth/me отдаёт profileComplete=false + profileMissing[] для активного
-// партнёра с незаполненными личными данными / реквизитами ИП / банком.
-// При входе кидаем на /profile (см. onMounted), а баннер держим как
-// напоминание на всех страницах, пока профиль не заполнен. Скрыт для staff
-// и на full-bleed чате.
+// партнёра с незаполненными личными данными (реквизиты ИП/банк в гейт НЕ
+// входят). При входе кидаем на /profile (см. onMounted), а баннер держим
+// как напоминание на всех страницах, пока профиль не заполнен. Скрыт для
+// staff и на full-bleed чате.
 const showProfileIncompleteBanner = computed(() => {
   if (auth.isStaff) return false;
   if (auth.user?.profileComplete !== false) return false;
@@ -434,13 +433,9 @@ const showProfileIncompleteBanner = computed(() => {
 const profileMissingLabels = computed(() =>
   (auth.user?.profileMissing || []).map(m => m.label).join(', ')
 );
-// Если не хватает реквизитов/банка — ведём сразу на вкладку «Реквизиты».
-const profileFixLink = computed(() => {
-  const missing = auth.user?.profileMissing || [];
-  return missing.some(m => m.section === 'requisites' || m.section === 'bank')
-    ? '/profile?tab=requisites'
-    : '/profile';
-});
+// Гейт требует только личные данные — ведём на страницу профиля (вкладка
+// личных данных открыта по умолчанию).
+const profileFixLink = '/profile';
 
 // Rail (minimalist) sidebar — persists across sessions
 const rail = ref(localStorage.getItem('main-nav-rail') === '1');
@@ -547,7 +542,7 @@ onMounted(async () => {
     // /profile при входе. Дальше навигация свободна — баннер остаётся.
     if (!isStaff.value && auth.user?.profileComplete === false
         && !route.path.startsWith('/profile')) {
-      router.replace(profileFixLink.value);
+      router.replace(profileFixLink);
     }
   } catch {}
   loadNotifications();

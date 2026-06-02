@@ -23,8 +23,8 @@
       icon="mdi-account-alert-outline"
     >
       <div class="text-body-2">
-        <strong>Заполните профиль полностью.</strong>
-        Обязательны личные данные и реквизиты (ИП + банк).
+        <strong>Заполните профиль.</strong>
+        Обязательны личные данные.
         <template v-if="profileMissingLabels"> Не хватает: {{ profileMissingLabels }}.</template>
       </div>
     </v-alert>

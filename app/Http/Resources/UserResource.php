@@ -34,8 +34,9 @@ class UserResource extends JsonResource
             }
         }
 
-        // Полнота профиля активного ФК (личные данные + реквизиты ИП + банк).
-        // Для staff/registered/terminated сервис вернёт complete=true.
+        // Полнота профиля активного ФК (только личные данные; реквизиты
+        // ИП/банк в гейт не входят). Для staff/registered/terminated
+        // сервис вернёт complete=true.
         $completeness = app(ProfileCompletenessService::class)
             ->evaluate($this->resource, $consultant);
 
