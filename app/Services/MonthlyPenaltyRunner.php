@@ -292,27 +292,52 @@ class MonthlyPenaltyRunner
         foreach ($unassigned as $c) $applyToRow($c, 1.0);
 
         $gapBranchKey = array_search(0.5, $detachMults, true);
-        if ($applyWrite && ($gapBranchKey !== false || $opMult < 1.0)) {
-            DB::table('qualificationLog')->insert([
-                'consultant' => $consultant->id,
-                'date' => $monthEnd,
-                'savingDate' => now(),
-                'gap' => $gapBranchKey !== false,
-                'gapValuePercentage' => $gapBranchKey !== false
-                    ? round($branchVolumes[$gapBranchKey] / max($totalGroupVolume, 0.0001) * 100, 2)
-                    : null,
-                'gapValue' => $gapBranchKey !== false ? $branchVolumes[$gapBranchKey] : null,
-                'branchWithGap' => $gapBranchKey !== false ? $gapBranchKey : null,
-                'result' => $this->buildResultLabel($opMult, $gapBranchKey),
-                'calculationLevel' => $consultant->status_and_lvl,
-                'nominalLevel' => $consultant->status_and_lvl,
-                'groupVolume' => $totalGroupVolume,
-                'consultantPersonName' => $consultant->personName,
-                'commissionsToReduceCounter' => $affected,
-                'commissionsToReduceAmount' => (int) round($withheldTotal),
-                'createdAt' => now(),
-                'changedAt' => now(),
-            ]);
+        if ($applyWrite) {
+            // Идемпотентность: повторный прогон финализа за тот же месяц не
+            // должен плодить дубли penalty-строк. Penalty-строка живёт на
+            // конце месяца (monthEnd 23:59:59), а штатные снапшоты — на начале
+            // месяца, поэтому удаление по date=monthEnd безопасно. Это также
+            // самовосстанавливает старые дубли при следующем прогоне.
+            DB::table('qualificationLog')
+                ->where('consultant', $consultant->id)
+                ->where('date', $monthEnd)
+                ->delete();
+
+            if ($gapBranchKey !== false || $opMult < 1.0) {
+                // Перенос накопительного ГП: penalty-строка не добавляет объём,
+                // поэтому cumulative = последний НЕ-NULL до monthEnd. Без этого
+                // строка оставалась с NULL groupVolumeCumulative и, будучи самой
+                // свежей, ломала НГП на дашборде (фолбэк на stale-поле).
+                $carryCumulative = DB::table('qualificationLog')
+                    ->where('consultant', $consultant->id)
+                    ->whereNull('dateDeleted')
+                    ->whereNotNull('groupVolumeCumulative')
+                    ->where('date', '<', $monthEnd)
+                    ->orderByDesc('date')
+                    ->value('groupVolumeCumulative');
+
+                DB::table('qualificationLog')->insert([
+                    'consultant' => $consultant->id,
+                    'date' => $monthEnd,
+                    'savingDate' => now(),
+                    'gap' => $gapBranchKey !== false,
+                    'gapValuePercentage' => $gapBranchKey !== false
+                        ? round($branchVolumes[$gapBranchKey] / max($totalGroupVolume, 0.0001) * 100, 2)
+                        : null,
+                    'gapValue' => $gapBranchKey !== false ? $branchVolumes[$gapBranchKey] : null,
+                    'branchWithGap' => $gapBranchKey !== false ? $gapBranchKey : null,
+                    'result' => $this->buildResultLabel($opMult, $gapBranchKey),
+                    'calculationLevel' => $consultant->status_and_lvl,
+                    'nominalLevel' => $consultant->status_and_lvl,
+                    'groupVolume' => $totalGroupVolume,
+                    'groupVolumeCumulative' => $carryCumulative,
+                    'consultantPersonName' => $consultant->personName,
+                    'commissionsToReduceCounter' => $affected,
+                    'commissionsToReduceAmount' => (int) round($withheldTotal),
+                    'createdAt' => now(),
+                    'changedAt' => now(),
+                ]);
+            }
         }
 
         return [

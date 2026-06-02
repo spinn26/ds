@@ -154,12 +154,26 @@ class DashboardService
 
         $personalVolume = max($snapshotPersonal, $livePersonal);
         $groupVolume = max($snapshotGroup, $liveGroup);
-        $groupVolumeCumulative = $currentQLog->groupVolumeCumulative ?? $consultant->groupVolumeCumulative ?? 0;
+
+        // НГП (накопительный) = последний НЕ-NULL groupVolumeCumulative с
+        // date <= конец периода. Carry-forward делает дашборд согласованным с
+        // отчётом и невосприимчивым к строкам финализа Отрыв/ОП
+        // (MonthlyPenaltyRunner вставляет строку monthEnd с NULL cumulative,
+        // которая иначе перебивает реальный снапшот как самая свежая).
+        $cumulativeAsOf = fn ($asOf) => (float) (DB::table('qualificationLog')
+            ->where('consultant', $consultant->id)
+            ->whereNull('dateDeleted')
+            ->whereNotNull('groupVolumeCumulative')
+            ->where('date', '<=', $asOf)
+            ->orderByDesc('date')
+            ->value('groupVolumeCumulative') ?? $consultant->groupVolumeCumulative ?? 0);
+
+        $groupVolumeCumulative = $cumulativeAsOf($periodEnd);
 
         // Previous period values for comparison
         $prevPersonalVolume = $prevQLog->personalVolume ?? 0;
         $prevGroupVolume = $prevQLog->groupVolume ?? 0;
-        $prevGroupVolumeCumulative = $prevQLog->groupVolumeCumulative ?? 0;
+        $prevGroupVolumeCumulative = $cumulativeAsOf($prevPeriodEnd);
 
         // Partner counts by activity status
         $partnerCounts = $this->consultantService->getPartnerCountsByStatus($consultant->id, $teamConsultantIds);
