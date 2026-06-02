@@ -227,7 +227,12 @@
               <span class="text-caption">{{ value || '—' }}</span>
             </template>
             <template #item.recipient_email="{ item }">
-              <div class="font-weight-medium">{{ item.recipient_email }}</div>
+              <div class="font-weight-medium">
+                {{ item.recipient_name || item.recipient_email }}
+              </div>
+              <div v-if="item.recipient_name" class="text-caption text-medium-emphasis">
+                {{ item.recipient_email }}
+              </div>
               <div v-if="item.from_address" class="text-caption text-medium-emphasis">
                 от {{ item.from_address }}
               </div>

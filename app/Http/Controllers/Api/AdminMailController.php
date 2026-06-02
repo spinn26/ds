@@ -392,6 +392,8 @@ class AdminMailController extends Controller
                 'broadcast_id', 'created_at',
             ]);
 
+        $this->attachRecipientNames($rows);
+
         return response()->json([
             'data' => $rows,
             'total' => $total,
@@ -413,6 +415,65 @@ class AdminMailController extends Controller
         $count = $this->buildAudience($data['audience'], $data['ids'] ?? [])->count();
 
         return response()->json(['count' => $count]);
+    }
+
+    /**
+     * Обогащает строки журнала ФИО получателя из WebUser. По email-адресу
+     * понять, кто запросил письмо (например сброс пароля), тяжело — поэтому
+     * резолвим имя: сначала по recipient_user_id, для строк без него —
+     * фоллбэком по самому email (lower-case match). Batch keyBy без N+1.
+     */
+    private function attachRecipientNames($rows): void
+    {
+        if ($rows->isEmpty()) {
+            return;
+        }
+
+        $userIds = $rows->pluck('recipient_user_id')->filter()->unique()->values();
+        $emails = $rows->filter(fn ($r) => empty($r->recipient_user_id) && ! empty($r->recipient_email))
+            ->pluck('recipient_email')
+            ->map(fn ($e) => mb_strtolower(trim($e)))
+            ->filter()
+            ->unique()
+            ->values();
+
+        $cols = ['id', 'firstName', 'lastName', 'patronymic', 'email'];
+
+        $byId = $userIds->isNotEmpty()
+            ? DB::table('WebUser')->whereIn('id', $userIds->all())->get($cols)->keyBy('id')
+            : collect();
+
+        $byEmail = $emails->isNotEmpty()
+            ? DB::table('WebUser')
+                ->whereIn(DB::raw('lower(email)'), $emails->all())
+                ->orderBy('id')
+                ->get($cols)
+                ->keyBy(fn ($u) => mb_strtolower(trim((string) $u->email)))
+            : collect();
+
+        $fio = function ($u): ?string {
+            if (! $u) {
+                return null;
+            }
+            $name = trim(implode(' ', array_filter([
+                $u->lastName ?? null,
+                $u->firstName ?? null,
+                $u->patronymic ?? null,
+            ])));
+
+            return $name !== '' ? $name : null;
+        };
+
+        $rows->transform(function ($r) use ($byId, $byEmail, $fio) {
+            $u = ! empty($r->recipient_user_id) ? ($byId[$r->recipient_user_id] ?? null) : null;
+            if (! $u && ! empty($r->recipient_email)) {
+                $u = $byEmail[mb_strtolower(trim((string) $r->recipient_email))] ?? null;
+            }
+            $r->recipient_name = $fio($u);
+            $r->recipient_user_id = $r->recipient_user_id ?: ($u->id ?? null);
+
+            return $r;
+        });
     }
 
     private function buildAudience(string $audience, array $ids)
