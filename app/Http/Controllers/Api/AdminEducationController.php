@@ -190,10 +190,24 @@ class AdminEducationController extends Controller
             ->groupBy('course_id')
             ->pluck('cnt', 'course_id');
 
-        $productIds = $rows->pluck('product_id')->filter()->unique();
+        // Products: many-to-many via education_course_product (pivot). Keep the
+        // legacy product_id/productName for backward-compat (partner storefront
+        // + product-side reverse binding still read the single product_id).
+        $pivotRows = DB::table('education_course_product')
+            ->whereIn('course_id', $courseIds)
+            ->get(['course_id', 'product_id']);
+        $productIds = $pivotRows->pluck('product_id')
+            ->merge($rows->pluck('product_id'))
+            ->filter()->unique();
         $productNames = $productIds->isNotEmpty()
             ? DB::table('product')->whereIn('id', $productIds)->pluck('name', 'id')
             : collect();
+        $productsByCourse = $pivotRows->groupBy('course_id')->map(
+            fn ($g) => $g->map(fn ($r) => [
+                'id' => $r->product_id,
+                'name' => $productNames[$r->product_id] ?? null,
+            ])->values()
+        );
 
         // category_id появилась в миграции 2026_05_21_000020 — проверяем
         // через hasColumn, чтобы старая БД без миграции не отдавала 500.
@@ -208,6 +222,8 @@ class AdminEducationController extends Controller
             'description' => $c->description,
             'product_id' => $c->product_id,
             'productName' => $c->product_id ? ($productNames[$c->product_id] ?? null) : null,
+            'products' => ($productsByCourse[$c->id] ?? collect())->all(),
+            'product_ids' => ($productsByCourse[$c->id] ?? collect())->pluck('id')->all(),
             'category_id' => $hasCategory ? ($c->category_id ?? null) : null,
             'categoryName' => $hasCategory && $c->category_id ? ($categoryNames[$c->category_id] ?? null) : null,
             'active' => (bool) $c->active,
@@ -235,6 +251,10 @@ class AdminEducationController extends Controller
         ];
 
         $id = DB::table('education_courses')->insertGetId($attrs);
+
+        if ($request->has('product_ids')) {
+            $this->syncCourseProducts($id, $request->input('product_ids'));
+        }
 
         return response()->json(['message' => 'Курс создан', 'id' => $id], 201);
     }
@@ -267,7 +287,69 @@ class AdminEducationController extends Controller
 
         DB::table('education_courses')->where('id', $id)->update($attrs);
 
+        if ($request->has('product_ids')) {
+            $this->syncCourseProducts($id, $request->input('product_ids'));
+        }
+
         return response()->json(['message' => 'Курс обновлён']);
+    }
+
+    /** Нормализовать вход product_ids[] в уникальный список положительных int. */
+    private function normalizeProductIds($raw): array
+    {
+        return collect(is_array($raw) ? $raw : [])
+            ->map(fn ($v) => (int) $v)
+            ->filter(fn ($v) => $v > 0)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Пересобрать связи курс↔продукты в pivot education_course_product.
+     * Полная замена набора (delete-missing + insert-new) под выбор курса.
+     */
+    private function syncCourseProducts(int $courseId, $raw): void
+    {
+        $ids = $this->normalizeProductIds($raw);
+
+        DB::transaction(function () use ($courseId, $ids) {
+            DB::table('education_course_product')
+                ->where('course_id', $courseId)
+                ->when(! empty($ids), fn ($q) => $q->whereNotIn('product_id', $ids))
+                ->delete();
+
+            foreach ($ids as $pid) {
+                DB::table('education_course_product')->insertOrIgnore([
+                    'course_id' => $courseId,
+                    'product_id' => $pid,
+                    'created_at' => now(),
+                ]);
+            }
+        });
+    }
+
+    /**
+     * GET /admin/education/product-options
+     * Полный список активных продуктов (id + name) для мультивыбора в форме
+     * курса. Отдельный endpoint вместо /admin/products?per_page=100, который
+     * режется maxPerPage=100 и терял часть активных продуктов.
+     */
+    public function productOptions(): JsonResponse
+    {
+        $query = DB::table('product')
+            ->where('active', true)
+            ->orderBy('name');
+
+        // Только опубликованные. publish_status может отсутствовать/быть NULL
+        // на старых строках — трактуем NULL как «published» (легаси-дефолт).
+        if (Schema::hasColumn('product', 'publish_status')) {
+            $query->where(function ($q) {
+                $q->where('publish_status', 'published')->orWhereNull('publish_status');
+            });
+        }
+
+        return response()->json(['data' => $query->get(['id', 'name'])]);
     }
 
     /**
@@ -303,10 +385,17 @@ class AdminEducationController extends Controller
     /** Общий маппинг полей курса. */
     private function coursePayload(Request $request): array
     {
+        // product_ids[] is the new multi-product binding. Keep the legacy
+        // scalar product_id in sync (= first selected) so the partner
+        // storefront and product-side reverse binding keep working.
+        $primaryProductId = $request->has('product_ids')
+            ? ($this->normalizeProductIds($request->input('product_ids'))[0] ?? null)
+            : $request->product_id;
+
         $payload = [
             'title' => $request->title,
             'description' => $request->description,
-            'product_id' => $request->product_id,
+            'product_id' => $primaryProductId,
             'sort_order' => $request->input('sort_order', 0),
         ];
         foreach (['category_id', 'parent_id', 'is_container', 'cover_url', 'slug'] as $field) {
@@ -850,6 +939,22 @@ class AdminEducationController extends Controller
                 created_at TIMESTAMP,
                 updated_at TIMESTAMP
             )');
+        }
+
+        if (! Schema::hasTable('education_course_product')) {
+            DB::statement('CREATE TABLE education_course_product (
+                id BIGSERIAL PRIMARY KEY,
+                course_id BIGINT NOT NULL REFERENCES education_courses(id) ON DELETE CASCADE,
+                product_id BIGINT NOT NULL,
+                created_at TIMESTAMP,
+                UNIQUE (course_id, product_id)
+            )');
+            DB::statement('CREATE INDEX education_course_product_product_idx ON education_course_product (product_id)');
+            // Backfill from the legacy 1:1 product_id so existing links survive.
+            DB::statement('INSERT INTO education_course_product (course_id, product_id, created_at)
+                SELECT id, product_id, now() FROM education_courses
+                WHERE product_id IS NOT NULL
+                ON CONFLICT (course_id, product_id) DO NOTHING');
         }
     }
 }

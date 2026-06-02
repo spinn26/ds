@@ -539,6 +539,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/admin/education/categories', [\App\Http\Controllers\Api\AdminEducationController::class, 'storeCategory']);
         Route::put('/admin/education/categories/{id}', [\App\Http\Controllers\Api\AdminEducationController::class, 'updateCategory'])->whereNumber('id');
         Route::delete('/admin/education/categories/{id}', [\App\Http\Controllers\Api\AdminEducationController::class, 'destroyCategory'])->whereNumber('id');
+        Route::get('/admin/education/product-options', [\App\Http\Controllers\Api\AdminEducationController::class, 'productOptions']);
         Route::get('/admin/education/courses', [\App\Http\Controllers\Api\AdminEducationController::class, 'courses']);
         Route::post('/admin/education/courses', [\App\Http\Controllers\Api\AdminEducationController::class, 'storeCourse']);
         Route::put('/admin/education/courses/{id}', [\App\Http\Controllers\Api\AdminEducationController::class, 'updateCourse']);

@@ -89,16 +89,17 @@
               <v-row dense>
                 <v-col cols="12" sm="6">
                   <v-autocomplete
-                    v-model="currentCourse.product_id"
+                    v-model="currentCourse.product_ids"
                     :items="productOptions"
                     item-title="name"
                     item-value="id"
-                    label="Продукт для разблокировки"
+                    label="Продукты для разблокировки"
                     variant="outlined" density="comfortable"
+                    multiple chips closable-chips
                     clearable
                     :loading="loadingProducts"
                     prepend-inner-icon="mdi-package-variant"
-                    hint="После сдачи теста (100% правильных) откроется этот продукт"
+                    hint="После сдачи теста (100% правильных) откроются эти продукты. Можно выбрать несколько."
                     persistent-hint
                   />
                 </v-col>
@@ -187,12 +188,12 @@
               </div>
 
               <v-alert
-                v-if="!currentCourse.product_id"
+                v-if="!(currentCourse.product_ids && currentCourse.product_ids.length)"
                 type="info" variant="tonal" density="compact" class="mb-3"
                 icon="mdi-information-outline"
               >
-                Чтобы после сдачи теста автоматически открывался продукт,
-                выберите его в поле «Продукт для разблокировки» выше.
+                Чтобы после сдачи теста автоматически открывались продукты,
+                выберите их в поле «Продукты для разблокировки» выше.
                 Можно добавлять вопросы и без продукта.
               </v-alert>
 
@@ -331,7 +332,8 @@ const loadingProducts = ref(false);
 async function loadProducts() {
   loadingProducts.value = true;
   try {
-    const { data } = await api.get('/admin/products', { params: { per_page: 500 } });
+    // Только активные + опубликованные продукты, полный список без 100-cap.
+    const { data } = await api.get('/admin/education/product-options');
     productOptions.value = (data.data || data || []).map(p => ({ id: p.id, name: p.name }));
   } catch (e) { /* тихо — поле останется пустым */ }
   loadingProducts.value = false;
@@ -394,13 +396,16 @@ async function loadCourseToEdit(id) {
     const { data } = await api.get(`/education/courses/${id}/full`);
     currentCourse.value = {
       id: data.id, title: data.title, description: data.description,
-      parent_id: data.parent_id, product_id: data.productId,
+      parent_id: data.parent_id,
+      product_ids: Array.isArray(data.productIds) && data.productIds.length
+        ? data.productIds
+        : (data.productId ? [data.productId] : []),
       cover_url: data.coverUrl, is_container: data.isContainer,
       sort_order: findInTree(tree.value, id)?.sortOrder || 0,
     };
     courseLessons.value = data.lessons || [];
     // Тесты
-    if (currentCourse.value.product_id) {
+    if (currentCourse.value.product_ids.length) {
       const { data: t } = await api.get(`/admin/education/courses/${id}/tests`);
       courseTests.value = (t || []).map(x => ({
         id: x.id, question: x.question,
@@ -422,7 +427,7 @@ async function saveCourse() {
     await api.put(`/admin/education/courses/${currentCourse.value.id}`, {
       title: currentCourse.value.title,
       description: currentCourse.value.description,
-      product_id: currentCourse.value.product_id || null,
+      product_ids: currentCourse.value.product_ids || [],
       cover_url: currentCourse.value.cover_url || null,
       parent_id: currentCourse.value.parent_id || null,
       is_container: currentCourse.value.is_container,

@@ -47,6 +47,13 @@
           <v-chip v-if="value" size="x-small" variant="tonal" color="primary">{{ value }}</v-chip>
           <span v-else class="text-medium-emphasis">—</span>
         </template>
+        <template #item.productName="{ item }">
+          <template v-if="(item.products || []).length">
+            <v-chip v-for="p in item.products" :key="p.id" size="x-small" variant="tonal"
+              color="success" class="me-1 mb-1">{{ p.name }}</v-chip>
+          </template>
+          <span v-else class="text-medium-emphasis">—</span>
+        </template>
         <template #item.active="{ item }">
           <v-chip :color="item.active ? 'success' : 'grey'" size="x-small">
             {{ item.active ? 'Активен' : 'Неактивен' }}
@@ -208,8 +215,9 @@
               <v-textarea v-model="editCourse.description" label="Описание" rows="3" auto-grow />
             </v-col>
             <v-col cols="12" sm="6">
-              <v-select v-model="editCourse.product_id" label="Продукт" :items="productOptions"
-                item-title="name" item-value="id" clearable />
+              <v-autocomplete v-model="editCourse.product_ids" label="Продукты" :items="productOptions"
+                item-title="name" item-value="id" multiple chips closable-chips clearable
+                hint="Можно выбрать несколько активных продуктов" persistent-hint />
             </v-col>
             <v-col cols="12" sm="6">
               <v-select v-model="editCourse.category_id" label="Категория"
@@ -522,7 +530,8 @@ async function loadCourses() {
 
 async function loadProductOptions() {
   try {
-    const { data } = await api.get('/admin/products', { params: { active: 'true', per_page: 100 } });
+    // Активные + опубликованные продукты, полный список (без 100-cap).
+    const { data } = await api.get('/admin/education/product-options');
     productOptions.value = data.data || data;
   } catch {}
 }
@@ -646,7 +655,7 @@ async function applyTestReorder(courseId, newList) {
 
 // Course CRUD
 function openCreateCourse() {
-  editCourse.value = { title: '', description: '', product_id: null, category_id: null, active: true, sort_order: 0 };
+  editCourse.value = { title: '', description: '', product_ids: [], category_id: null, active: true, sort_order: 0 };
   courseError.value = '';
   courseDialog.value = true;
 }

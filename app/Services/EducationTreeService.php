@@ -127,6 +127,17 @@ class EducationTreeService
         // для всего, что эквивалентно legacy-поведению.
         $drip = app(\App\Services\DripScheduleService::class);
 
+        // Продукты для разблокировки: many-to-many через education_course_product.
+        // productId оставлен для бэкуорд-совместимости (= первый/«основной»).
+        $productIds = \Illuminate\Support\Facades\Schema::hasTable('education_course_product')
+            ? DB::table('education_course_product')
+                ->where('course_id', $courseId)
+                ->orderBy('id')
+                ->pluck('product_id')
+                ->map(fn ($v) => (int) $v)
+                ->all()
+            : array_filter([$course->product_id]);
+
         return [
             'id' => $course->id,
             'title' => $course->title,
@@ -135,6 +146,7 @@ class EducationTreeService
             'isContainer' => (bool) $course->is_container,
             'coverUrl' => $course->cover_url,
             'productId' => $course->product_id,
+            'productIds' => $productIds,
             'lessons' => $lessons->map(function ($l) use ($viewedSet, $drip, $userId, $course) {
                 $av = $drip->lessonAvailability($l, $userId, $course);
                 return [

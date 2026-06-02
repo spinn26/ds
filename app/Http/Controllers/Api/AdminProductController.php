@@ -158,6 +158,20 @@ class AdminProductController extends Controller
         if ($courseId) {
             DB::table('education_courses')->where('id', (int) $courseId)->update(['product_id' => $productId]);
         }
+
+        // Зеркалим в pivot education_course_product, чтобы конструктор курсов
+        // видел привязку, сделанную со стороны продукта (связь 1:1 на стороне
+        // продукта: один продукт → один курс).
+        if (Schema::hasTable('education_course_product')) {
+            DB::table('education_course_product')->where('product_id', $productId)->delete();
+            if ($courseId) {
+                DB::table('education_course_product')->insertOrIgnore([
+                    'course_id' => (int) $courseId,
+                    'product_id' => $productId,
+                    'created_at' => now(),
+                ]);
+            }
+        }
     }
 
     /** Обновить продукт */
