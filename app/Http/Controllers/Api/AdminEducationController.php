@@ -394,13 +394,19 @@ class AdminEducationController extends Controller
         // чья каталог-карточка активна. Иначе Оля видела бы продукты, которые
         // деактивированы в каталоге (legacy product.active с ним не синхронен).
         if (Schema::hasTable('products_catalog')) {
-            $rows = DB::table('products_catalog as c')
+            $q = DB::table('products_catalog as c')
                 ->join('product as p', 'p.id', '=', 'c.legacy_product_id')
                 ->where('c.active', true)
-                ->whereNotNull('c.legacy_product_id')
-                ->orderBy('p.name')
-                ->distinct()
-                ->get(['p.id', 'p.name']);
+                ->whereNotNull('c.legacy_product_id');
+
+            // Только витрина: тот же критерий, что у партнёрского /products
+            // (ProductController) — продукт-зонтик с visible_to_resident=true.
+            // Иначе оператор видит скрытые с витрины продукты.
+            if (Schema::hasColumn('products_catalog', 'visible_to_resident')) {
+                $q->where('c.visible_to_resident', true);
+            }
+
+            $rows = $q->orderBy('p.name')->distinct()->get(['p.id', 'p.name']);
 
             return response()->json(['data' => $rows]);
         }
@@ -435,13 +441,24 @@ class AdminEducationController extends Controller
             return response()->json(['data' => []]);
         }
 
-        $rows = DB::table('programs_catalog as g')
+        $q = DB::table('programs_catalog as g')
             ->join('products_catalog as c', 'c.id', '=', 'g.product_id')
             ->join('product as p', 'p.id', '=', 'c.legacy_product_id')
             ->where('g.active', true)
             ->where('c.active', true)
-            ->whereNotNull('c.legacy_product_id')
-            ->orderBy('p.name')
+            ->whereNotNull('c.legacy_product_id');
+
+        // Только витрина: программа видна, лишь если ОБА уровня (продукт И
+        // программа) имеют visible_to_resident=true — тот же критерий, что у
+        // партнёрского /products (ProductController).
+        if (Schema::hasColumn('programs_catalog', 'visible_to_resident')) {
+            $q->where('g.visible_to_resident', true);
+        }
+        if (Schema::hasColumn('products_catalog', 'visible_to_resident')) {
+            $q->where('c.visible_to_resident', true);
+        }
+
+        $rows = $q->orderBy('p.name')
             ->orderBy('g.name')
             ->get([
                 'g.id as id',
