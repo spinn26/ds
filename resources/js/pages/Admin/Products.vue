@@ -323,12 +323,15 @@
                 hint="URL для кнопки «Открыть» в модалке «Программы продукта» на витрине партнёра"
                 persistent-hint />
             </v-col>
-            <v-col cols="6">
-              <v-text-field v-model="editProgram.term" label="Срок контракта, лет" type="number" />
-            </v-col>
-            <v-col cols="6">
-              <v-select v-model="editProgram.currency" label="Валюта"
-                :items="currencyOptions" item-title="label" item-value="id" />
+            <v-col cols="12">
+              <!-- Срок/Год КВ/Валюта теперь живут ПОСТРОЧНО в тарифах ниже
+                   (у свойств может быть разная валюта). Здесь — только сводка
+                   read-only, чтобы не плодить конфликтующий дубль. -->
+              <div class="text-caption text-medium-emphasis d-flex flex-wrap ga-3">
+                <span>Сроки: <b>{{ tariffSummary.terms || '—' }}</b></span>
+                <span>Годы КВ: <b>{{ tariffSummary.years || '—' }}</b></span>
+                <span>Валюты: <b>{{ tariffSummary.currencies || '—' }}</b></span>
+              </div>
             </v-col>
           </v-row>
 
@@ -714,6 +717,18 @@ function tariffsToRows(tariffs) {
 // Коды валют тарифа — подсказки для combobox (значение пишется строкой как в
 // данных: «USD»). Combobox оставляет и комбинированные значения вроде «USD/EUR».
 const tariffCurrencyOptions = ['RUB', 'USD', 'EUR', 'KZT', 'GBP'];
+
+// Сводка по тарифам (read-only) — выводится вместо прежних program-level полей
+// «Срок»/«Валюта», которые конфликтовали с построчными значениями.
+const tariffSummary = computed(() => {
+  const rows = Array.isArray(editProgram.value.tariffs) ? editProgram.value.tariffs : [];
+  const uniq = (key) => [...new Set(rows.map(r => String(r[key] ?? '').trim()).filter(Boolean))];
+  return {
+    terms: uniq('term').join(', '),
+    years: uniq('year_kv').join(', '),
+    currencies: uniq('currency').join(', '),
+  };
+});
 
 function addTariff() {
   if (!Array.isArray(editProgram.value.tariffs)) editProgram.value.tariffs = [];

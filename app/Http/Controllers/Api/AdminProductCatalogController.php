@@ -506,16 +506,21 @@ class AdminProductCatalogController extends Controller
             $tariffs = self::normalizeTariffs($data['tariffs'] ?? []);
             $out['tariffs'] = json_encode($tariffs, JSON_UNESCAPED_UNICODE);
             // Денормализованные сводки, на которые опираются список и калькулятор.
+            // Срок/Год КВ/Валюта программы — производные от построчных тарифов
+            // (отдельных program-level полей в форме больше нет).
             $terms = [];
             $years = [];
+            $currencies = [];
             $anyRed = false;
             foreach ($tariffs as $t) {
-                if ($t['term'] !== null)    $terms[(string) $t['term']] = true;
-                if ($t['year_kv'] !== null) $years[(string) $t['year_kv']] = true;
-                if ($t['is_red'])           $anyRed = true;
+                if ($t['term'] !== null)     $terms[(string) $t['term']] = true;
+                if ($t['year_kv'] !== null)  $years[(string) $t['year_kv']] = true;
+                if ($t['currency'] !== null) $currencies[(string) $t['currency']] = true;
+                if ($t['is_red'])            $anyRed = true;
             }
             $out['terms_summary'] = $terms ? implode(',', array_keys($terms)) : null;
             $out['years_summary'] = $years ? implode(',', array_keys($years)) : null;
+            $out['currency']      = $currencies ? implode(' / ', array_keys($currencies)) : null;
             $out['rate_lines']    = count($tariffs);
             $out['has_red']       = $anyRed;
         }
