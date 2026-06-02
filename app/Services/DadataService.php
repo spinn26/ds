@@ -98,6 +98,70 @@ class DadataService
     }
 
     /**
+     * Подсказки городов/населённых пунктов по строке ввода (DaData address
+     * suggest, ограниченный уровнем city..settlement). Возвращает массив
+     * объектов [{ title, value, region, country }] для автокомплита.
+     */
+    public function suggestCity(string $query, int $count = 10): array
+    {
+        $apiKey = $this->settings->get('dadata.api_key');
+        $query = trim($query);
+        if (! $apiKey || mb_strlen($query) < 2) {
+            return [];
+        }
+
+        try {
+            $response = Http::timeout(6)
+                ->withHeaders([
+                    'Authorization' => 'Token ' . $apiKey,
+                    'Accept' => 'application/json',
+                ])
+                ->post('https://suggestions.dadata.ru/suggestions/api/4_1/rs/suggest/address', [
+                    'query' => $query,
+                    'count' => $count,
+                    'from_bound' => ['value' => 'city'],
+                    'to_bound' => ['value' => 'settlement'],
+                ]);
+
+            if (! $response->ok()) {
+                Log::warning('dadata: suggestCity non-200', ['status' => $response->status()]);
+                return [];
+            }
+
+            $seen = [];
+            $out = [];
+            foreach ($response->json('suggestions') ?? [] as $s) {
+                $d = $s['data'] ?? [];
+                $city = $d['city'] ?? $d['settlement'] ?? null;
+                if (! $city) {
+                    continue;
+                }
+                $region = $d['region_with_type'] ?? $d['region'] ?? null;
+                // Лейбл с регионом для дизамбигуации одноимённых городов.
+                $label = ($region && mb_stripos($region, (string) $city) === false)
+                    ? "{$city}, {$region}"
+                    : $city;
+                $key = mb_strtolower($city . '|' . ($region ?? ''));
+                if (isset($seen[$key])) {
+                    continue;
+                }
+                $seen[$key] = true;
+                $out[] = [
+                    'title'   => $label,
+                    'value'   => $city,
+                    'region'  => $region,
+                    'country' => $d['country'] ?? null,
+                ];
+            }
+
+            return $out;
+        } catch (\Throwable $e) {
+            Log::warning('dadata: suggestCity network error', ['error' => $e->getMessage()]);
+            return [];
+        }
+    }
+
+    /**
      * Сравнить ФИО из DaData c ФИО партнёра. Возвращает структуру:
      *   [match, expected, actual, firstMatch, lastMatch, patronymicMatch]
      */

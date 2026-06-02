@@ -10,7 +10,7 @@
     <v-card class="profile-hero mb-4" elevation="0">
       <div class="profile-hero__avatar-wrap">
         <v-avatar :size="72" color="primary" class="profile-hero__avatar">
-          <v-img v-if="profile.user?.avatar" :src="profile.user.avatar" cover />
+          <v-img v-if="profile.user?.avatarUrl" :src="profile.user.avatarUrl" cover />
           <span v-else class="profile-hero__initials">{{ initials || '?' }}</span>
         </v-avatar>
       </div>
@@ -105,8 +105,14 @@
                     prepend-inner-icon="mdi-flag-outline" />
                 </v-col>
                 <v-col cols="12" sm="6" md="4">
-                  <v-combobox v-model="form.city" :items="cityOptions" label="Город"
-                    prepend-inner-icon="mdi-city-variant-outline" />
+                  <!-- Подсказки городов из DaData (серверный поиск), не из
+                       таблицы `city`. Свободный ввод запрещён (autocomplete) —
+                       чтобы в справочник больше не попадал мусор. -->
+                  <v-autocomplete v-model="form.city" :items="cityItems" :loading="cityLoading"
+                    @update:search="onCitySearch" no-filter clearable
+                    item-title="title" item-value="value"
+                    label="Город" prepend-inner-icon="mdi-city-variant-outline"
+                    no-data-text="Введите минимум 2 символа" @update:model-value="onCityPicked" />
                 </v-col>
                 <v-col cols="12" sm="6" md="4">
                   <v-text-field v-model="form.email" label="Email" type="email"
@@ -729,7 +735,9 @@ const genderOptions = [
 ];
 
 const countryOptions = ['Россия', 'Казахстан', 'Беларусь', 'Узбекистан', 'Кыргызстан', 'Таджикистан', 'Армения', 'Грузия', 'Азербайджан', 'Молдова', 'Украина', 'Турция', 'ОАЭ', 'Германия', 'Израиль', 'США', 'Другая'];
-const cityOptions = ref([]);
+const cityItems = ref([]);
+const cityLoading = ref(false);
+let cityTimer = null;
 
 function activityColor(id) {
   if (id === 1) return 'success';   // Активен
@@ -746,13 +754,36 @@ function fmtShortDate(d) {
   return date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
-async function loadCities() {
-  try {
-    const { data } = await api.get('/profile/cities');
-    cityOptions.value = Array.isArray(data) ? data : [];
-  } catch {
-    cityOptions.value = ['Москва', 'Санкт-Петербург', 'Краснодар', 'Казань', 'Новосибирск', 'Екатеринбург', 'Нижний Новгород', 'Ростов-на-Дону', 'Самара', 'Уфа', 'Красноярск', 'Воронеж', 'Пермь', 'Волгоград'];
+// Серверный поиск городов через DaData (debounce 300мс, мин. 2 символа).
+function onCitySearch(q) {
+  q = String(q || '').trim();
+  if (cityTimer) clearTimeout(cityTimer);
+  if (q.length < 2) return;
+  cityTimer = setTimeout(async () => {
+    cityLoading.value = true;
+    try {
+      const { data } = await api.get('/profile/cities', { params: { q } });
+      cityItems.value = Array.isArray(data) ? data : [];
+    } catch {
+      cityItems.value = [];
+    }
+    cityLoading.value = false;
+  }, 300);
+}
+
+// При выборе города — если страна ещё не указана, подставим из DaData.
+function onCityPicked(value) {
+  if (!value) return;
+  const picked = cityItems.value.find(c => c.value === value);
+  if (picked?.country && !form.value.country) {
+    form.value.country = picked.country;
   }
+}
+
+// Город из профиля — строка; чтобы autocomplete её показал, кладём как
+// единственный начальный item (без запроса к DaData).
+function seedCurrentCity(name) {
+  cityItems.value = name ? [{ title: name, value: name }] : [];
 }
 
 const form = ref({ firstName: '', lastName: '', patronymic: '', position: '', phone: '', telegram: '', gender: '', birthDate: '', email: '', country: '', city: '' });
@@ -871,6 +902,7 @@ async function loadProfile() {
       birthDate: u.birthDate ? u.birthDate.split('T')[0] : '',
       email: u.email || '', country: u.country || '', city: u.city || '',
     };
+    seedCurrentCity(form.value.city);
     const r = data.requisites || {};
     reqForm.value = {
       individualEntrepreneur: r.individualEntrepreneur || '', inn: r.inn || '',
@@ -990,7 +1022,6 @@ function copyToClipboard(text) {
 onMounted(() => {
   loadProfile();
   loadDocuments();
-  loadCities();
   load2faStatus();
   loadTelegram();
 });

@@ -402,18 +402,32 @@ class ProfileController extends Controller
     /**
      * City suggestions for the profile form (plain list of Russian names).
      */
+    /**
+     * Подсказки городов. Источник — DaData (внешний сервис), НЕ таблица `city`
+     * (она засорена мусором: «-», email и т.п., т.к. раньше любое свободно
+     * введённое значение писалось туда новой строкой). Возвращает массив
+     * [{ title, value, region, country }].
+     */
     public function cities(Request $request): JsonResponse
     {
         $q = trim((string) $request->input('q', ''));
+        $dadata = app(\App\Services\DadataService::class);
 
-        $query = DB::table('city')->whereNotNull('cityNameRu');
-        if ($q !== '') {
-            $query->where('cityNameRu', 'ILIKE', $q . '%');
+        if ($dadata->isConfigured()) {
+            return response()->json($dadata->suggestCity($q));
         }
 
-        $cities = $query->orderBy('cityNameRu')->limit(200)->pluck('cityNameRu')->values();
+        // Фоллбэк, если DaData не настроена: статический список крупных
+        // городов (тоже НЕ из таблицы `city`), с фильтром по вводу.
+        $common = ['Москва', 'Санкт-Петербург', 'Новосибирск', 'Екатеринбург', 'Казань',
+            'Нижний Новгород', 'Краснодар', 'Самара', 'Ростов-на-Дону', 'Уфа',
+            'Красноярск', 'Воронеж', 'Пермь', 'Волгоград'];
+        $items = array_map(fn ($c) => ['title' => $c, 'value' => $c, 'region' => null, 'country' => 'Россия'], $common);
+        if ($q !== '') {
+            $items = array_values(array_filter($items, fn ($i) => mb_stripos($i['value'], $q) === 0));
+        }
 
-        return response()->json($cities);
+        return response()->json($items);
     }
 
     // --- Private helpers ---
