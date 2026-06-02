@@ -143,11 +143,13 @@ class ProductController extends Controller
                 : false;
 
             $linkedCourses = $legacyId ? ($coursesByLegacy[$legacyId] ?? collect()) : collect();
-            // education_exempt — текущие (на момент миграции 2026_06_02)
-            // партнёры grandfathered: продукты открыты без прохождения курсов.
-            // Новые партнёры (флаг по умолчанию false) обязаны пройти все
-            // привязанные курсы, чтобы продукт открылся.
-            $exempt = $consultant && (bool) ($consultant->education_exempt ?? false);
+            // Партнёр в статусе ФК (2) / Резидент (3) НЕ проходит курсы —
+            // витрина открыта по активности. Это покрывает и текущих, и тех,
+            // кто станет партнёром позже. education_exempt оставлен как
+            // grandfather-флаг (например, для не-партнёрских кейсов).
+            // Клиент (status=1) — ещё не партнёр, для него гейт по курсам жив.
+            $isPartnerStatus = $consultant && in_array((int) ($consultant->status ?? 0), [2, 3], true);
+            $exempt = $consultant && ((bool) ($consultant->education_exempt ?? false) || $isPartnerStatus);
             if ($linkedCourses->isNotEmpty() && ! $exempt) {
                 $available = $linkedCourses->every(fn ($c) => isset($completedSet[$c->id]));
             } else {
