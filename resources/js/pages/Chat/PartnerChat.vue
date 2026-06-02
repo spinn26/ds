@@ -660,7 +660,9 @@ const statusFilters = [
 ];
 const categoryFilters = [
   { label: 'Все', value: 'all' },
-  { label: 'Тех. проблема', value: 'support' },
+  // «Тех. проблема» (support) убрана у консультантов — техвопросы идут в
+  // Telegram @DS_Helpdesk (решение 2026-05-26). Legacy support-тикеты, если
+  // есть, остаются видны в фильтре «Все».
   { label: 'Поддержка по продукту', value: 'backoffice' },
   { label: 'Верификация реквизитов', value: 'accruals' },
 ];
@@ -691,10 +693,10 @@ const newForm = ref({ category: 'backoffice', subject: '', message: '' });
 const newCategoryLocked = ref(false);
 
 const categories = [
-  // 'support' = «Тех. проблема». Бэк (ChatController::store) на этом
-  // department создаёт инцидент с номером INC-… и статусом 'open',
-  // а не обычный тикет — отсюда раздельная подпись здесь.
-  { label: 'Тех. проблема', value: 'support' },
+  // «Тех. проблема» (support) убрана у консультантов: технические вопросы
+  // идут в Telegram @DS_Helpdesk (решение 2026-05-26), на платформе у
+  // консультанта остаются только профильные каналы. Deep-link ?new=support
+  // gracefully падает в первую категорию (backoffice), см. checkQuery.
   { label: 'Поддержка по продукту', value: 'backoffice' },
   { label: 'Верификация реквизитов', value: 'accruals' },
 ];

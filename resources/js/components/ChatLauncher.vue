@@ -125,7 +125,10 @@ function goFull() {
 }
 function goNew() {
   open.value = false;
-  router.push('/chat?new=support');
+  // «Тех. проблема» (support) убрана у консультантов — техвопросы идут в
+  // Telegram @DS_Helpdesk (решение 2026-05-26). Дефолтный новый тикет —
+  // «Поддержка по продукту» (backoffice).
+  router.push('/chat?new=backoffice');
 }
 
 const STATUS_LABELS = { new: 'Новый', open: 'Открыт', in_progress: 'В работе',
