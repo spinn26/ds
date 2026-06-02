@@ -363,12 +363,11 @@ class ProfileController extends Controller
     }
 
     /**
-     * Партнёр принимает Оферту (+ Стандарты как приложение).
+     * Партнёр принимает ВСЕ документы обязательного флоу одним окном при входе.
      *
-     * Доступно после ручной верификации реквизитов ИП финменеджером.
-     * Записывает per-document акцепт в partnerAcceptance/logAcceptance
-     * и проставляет consultant.acceptance=true (legacy-флаг, по нему
-     * checkAccess() возвращает documentsAccepted=true).
+     * Решение 2026-06-02: единое блокирующее окно акцепта при входе, БЕЗ гейта
+     * на верификацию реквизитов. Подписываются все in_acceptance_flow документы
+     * (дедуп уже подписанных) + consultant.acceptance=true.
      */
     public function acceptOffer(Request $request, PartnerAcceptanceService $acceptance): JsonResponse
     {
@@ -377,24 +376,10 @@ class ProfileController extends Controller
             return response()->json(['message' => 'Консультант не найден'], 404);
         }
 
-        $requisite = Requisite::where('consultant', $consultant->id)->active()->first();
-        $verified = ((int) $consultant->statusRequisites) === 3
-            || ($requisite && (bool) $requisite->verified);
-
-        if (! $verified) {
-            return response()->json([
-                'message' => 'Подписание Оферты доступно после верификации реквизитов ИП финменеджером.',
-                'requisitesVerified' => false,
-            ], 422);
-        }
-
-        $acceptance->recordOfferAcceptance($consultant, $request);
-
-        $consultant->acceptance = true;
-        $consultant->save();
+        $acceptance->acceptAllFlowDocuments($consultant, $request);
 
         return response()->json([
-            'message' => 'Оферта принята',
+            'message' => 'Документы приняты',
             'documentsAccepted' => true,
         ]);
     }

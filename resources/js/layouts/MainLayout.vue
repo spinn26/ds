@@ -380,13 +380,12 @@ const showRequisitesPendingBanner = computed(() => {
   return true;
 });
 
-// Блокирующий акцепт Оферты: реквизиты верифицированы, но партнёр ещё
-// не подписал Оферту. До акцепта недоступны продажи и финансовые
-// операции (consultant.acceptance = false ⇒ checkAccess блокирует
-// продукты). Скрыто для staff.
+// Единое блокирующее окно акцепта документов при входе (2026-06-02). Больше
+// НЕ завязано на верификацию реквизитов — показывается любому партнёру/
+// консультанту, у кого acceptance=false (offerAccepted), пока он не примет
+// все документы. Скрыто для staff.
 const showOfferDialog = computed(() => {
   if (auth.isStaff) return false;
-  if (auth.user?.requisitesVerificationStatus !== 'verified') return false;
   return auth.user?.offerAccepted === false;
 });
 

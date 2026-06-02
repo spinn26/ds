@@ -1,39 +1,43 @@
 <template>
-  <v-dialog :model-value="open" max-width="560" persistent>
+  <v-dialog :model-value="open" max-width="600" persistent scrollable>
     <v-card>
       <v-card-title class="d-flex align-center ga-2">
         <v-icon color="primary">mdi-file-sign</v-icon>
         <span>Акцепт документов</span>
       </v-card-title>
-      <v-card-text>
+      <v-card-text style="max-height: 70vh">
         <p class="text-body-2 mb-3">
-          Ваши реквизиты ИП верифицированы. Для начала работы примите условия
-          Оферты и приложений к ней.
+          Для начала работы на платформе ознакомьтесь и примите перечисленные
+          документы. Нажимая «Принять», вы подтверждаете заключение договора в
+          электронной форме и соглашаетесь на использование простой электронной
+          подписи (ПЭП).
         </p>
-        <v-checkbox v-model="accepted" density="compact" hide-details="auto">
-          <template #label>
-            <span class="text-body-2">
-              Принимаю условия
-              <a :href="OFFER_LINK" target="_blank" rel="noopener"
-                class="text-primary text-decoration-underline" @click.stop>Оферты и всех приложений к ней</a>
-              <span class="text-error">*</span>
-            </span>
-          </template>
-        </v-checkbox>
-        <p class="text-caption text-medium-emphasis mt-3">
-          Нажимая кнопку «Продолжить» я подтверждаю заключение договора в
-          электронной форме и соглашаюсь на использование простой электронной
-          подписи.
-        </p>
+
+        <v-list density="compact" class="mb-2 py-0">
+          <v-list-item v-for="d in documents" :key="d.id" class="px-0">
+            <template #prepend>
+              <v-icon size="small" color="primary" class="me-2">mdi-file-document-outline</v-icon>
+            </template>
+            <v-list-item-title class="text-body-2" style="white-space: normal;">
+              <a v-if="d.link" :href="d.link" target="_blank" rel="noopener"
+                class="text-primary text-decoration-underline">{{ d.name }}</a>
+              <span v-else>{{ d.name }}</span>
+            </v-list-item-title>
+          </v-list-item>
+        </v-list>
+
+        <v-checkbox v-model="accepted" density="compact" hide-details="auto"
+          label="Я ознакомлен(а) и принимаю все перечисленные документы" />
+
         <v-alert v-if="error" type="error" density="compact" class="mt-2">
           {{ error }}
         </v-alert>
       </v-card-text>
       <v-card-actions class="pa-3">
         <v-spacer />
-        <v-btn color="primary" :disabled="!accepted" :loading="submitting"
-          @click="submit" prepend-icon="mdi-arrow-right">
-          Продолжить
+        <v-btn color="primary" :disabled="!accepted || !documents.length" :loading="submitting"
+          @click="submit" prepend-icon="mdi-check">
+          Принять
         </v-btn>
       </v-card-actions>
     </v-card>
@@ -41,7 +45,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import api from '../api';
 
 const props = defineProps({
@@ -49,13 +53,24 @@ const props = defineProps({
 });
 const emit = defineEmits(['accepted']);
 
-// Ссылка на Оферту. При смене также обновить в backend (миграция
-// 2026_05_27_000060_refresh_legal_document_links + PartnerAcceptanceService).
-const OFFER_LINK = 'https://docs.google.com/document/d/13xayyrQ9xiQmjlj3mdWyEXS3eTFVFWBd/edit?usp=sharing';
-
+const documents = ref([]);
 const accepted = ref(false);
 const submitting = ref(false);
 const error = ref('');
+
+async function loadDocuments() {
+  try {
+    const { data } = await api.get('/profile/agreement-documents');
+    documents.value = Array.isArray(data) ? data : [];
+  } catch {
+    documents.value = [];
+  }
+}
+
+// Грузим список документов, когда окно открывается.
+watch(() => props.open, (isOpen) => {
+  if (isOpen && !documents.value.length) loadDocuments();
+}, { immediate: true });
 
 async function submit() {
   error.value = '';

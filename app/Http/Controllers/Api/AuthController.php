@@ -210,11 +210,11 @@ class AuthController extends Controller
 
         [$user, $consultant] = $user;
 
-        // 2026-06: документы предподписаны при регистрации. Логируем акцепт
-        // ВСЕХ документов обязательного флоу (Согласие, Политика, Оферта, ПЭП)
-        // и выставляем acceptance=true — отдельный шаг подписания Оферты в
-        // кабинете больше не требуется.
-        $acceptance->acceptAllFlowDocuments($consultant, $request);
+        // Шаг регистрации: фиксируем согласие на обработку ПД + Политику
+        // (галка в форме). Остальные документы (Оферта, ПЭП) партнёр примет
+        // в едином блокирующем окне акцепта при первом входе — acceptance
+        // остаётся false до тех пор.
+        $acceptance->recordRegistrationConsents($consultant, $request);
 
         $token = $user->createToken('spa')->plainTextToken;
 

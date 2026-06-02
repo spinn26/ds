@@ -66,8 +66,15 @@ class PartnerAcceptanceService
     public function acceptAllFlowDocuments(Consultant $consultant, Request $request): void
     {
         $flowDocIds = AgreementDocument::inFlow()->pluck('id')->map(fn ($id) => (int) $id)->all();
-        if ($flowDocIds) {
-            $this->record($consultant, $flowDocIds, $request);
+        // Не дублируем уже подписанные документы (напр. Согласие/Политика с
+        // шага регистрации) — пишем только недостающие.
+        $already = DB::table('partnerAcceptance')
+            ->where('consultant', $consultant->id)
+            ->where('accepted', true)
+            ->pluck('documentType')->map(fn ($x) => (int) $x)->all();
+        $missing = array_values(array_diff($flowDocIds, $already));
+        if ($missing) {
+            $this->record($consultant, $missing, $request);
         }
         if (! $consultant->acceptance) {
             $consultant->acceptance = true;
