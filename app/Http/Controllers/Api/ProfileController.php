@@ -388,16 +388,27 @@ class ProfileController extends Controller
      * City suggestions for the profile form (plain list of Russian names).
      */
     /**
-     * Подсказки городов. Источник — DaData (внешний сервис), НЕ таблица `city`
+     * Подсказки городов. Источник — внешний сервис, НЕ таблица `city`
      * (она засорена мусором: «-», email и т.п., т.к. раньше любое свободно
-     * введённое значение писалось туда новой строкой). Возвращает массив
-     * [{ title, value, region, country }].
+     * введённое значение писалось туда новой строкой).
+     *
+     * Приоритет источников:
+     *   1. Google Places (New) — города ВСЕГО МИРА на русском, если задан ключ
+     *      `google.places.api_key`.
+     *   2. DaData — фолбэк, только РФ.
+     *   3. Статический список крупных городов РФ — если ничего не настроено.
+     * Возвращает массив [{ title, value, region, country }].
      */
     public function cities(Request $request): JsonResponse
     {
         $q = trim((string) $request->input('q', ''));
-        $dadata = app(\App\Services\DadataService::class);
 
+        $geo = app(\App\Services\GeoService::class);
+        if ($geo->isConfigured()) {
+            return response()->json($geo->suggestCity($q));
+        }
+
+        $dadata = app(\App\Services\DadataService::class);
         if ($dadata->isConfigured()) {
             return response()->json($dadata->suggestCity($q));
         }

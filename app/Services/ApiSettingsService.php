@@ -25,6 +25,7 @@ class ApiSettingsService
         'google.sheets.contracts_id'   => ['group' => 'google', 'label' => 'ID таблицы «Импорт контрактов»', 'hint' => 'Используется как дефолт в /manage/contracts/upload', 'secret' => false, 'envFallback' => null],
         'google.sheets.transactions_id' => ['group' => 'google', 'label' => 'ID таблицы «Импорт транзакций»', 'hint' => 'Используется как дефолт в /manage/transactions/import', 'secret' => false, 'envFallback' => null],
         'google.sheets.reference_id'   => ['group' => 'google', 'label' => 'ID таблицы «Справочники»', 'hint' => 'Необязательно — для общих справочников', 'secret' => false, 'envFallback' => null],
+        'google.places.api_key'        => ['group' => 'google', 'label' => 'Google Places API Key', 'hint' => 'Ключ GCP с включённым Places API (New) + биллингом. Используется для подсказок городов мира в профиле (POST places:autocomplete, languageCode=ru). Может быть тем же проектом, что и Sheets, но с активированным Places API.', 'secret' => true, 'envFallback' => 'GOOGLE_PLACES_API_KEY'],
 
         // Telegram
         'telegram.bot.token'           => ['group' => 'telegram', 'label' => 'Telegram Bot Token', 'hint' => 'Выдаётся @BotFather после создания бота', 'secret' => true, 'envFallback' => 'TELEGRAM_BOT_TOKEN'],
