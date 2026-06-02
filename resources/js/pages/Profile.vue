@@ -6,6 +6,29 @@
       </template>
     </PageHeader>
 
+    <!-- Статус заполнения профиля (только для активного ФК, к кому
+         относится требование). Заполнено — зелёное «всё ок»; нет —
+         жёлтое со списком недостающих полей. -->
+    <v-alert
+      v-if="auth.user?.profileRequired && auth.user?.profileComplete"
+      type="success" variant="tonal" density="compact" class="mb-4"
+      icon="mdi-check-circle-outline"
+    >
+      <span class="font-weight-medium">Профиль заполнен полностью.</span>
+      Все обязательные данные на месте — всё в порядке.
+    </v-alert>
+    <v-alert
+      v-else-if="auth.user?.profileRequired && auth.user?.profileComplete === false"
+      type="warning" variant="tonal" density="compact" class="mb-4"
+      icon="mdi-account-alert-outline"
+    >
+      <div class="text-body-2">
+        <strong>Заполните профиль полностью.</strong>
+        Обязательны личные данные и реквизиты (ИП + банк).
+        <template v-if="profileMissingLabels"> Не хватает: {{ profileMissingLabels }}.</template>
+      </div>
+    </v-alert>
+
     <!-- ────────────────────  HERO  ──────────────────── -->
     <v-card class="profile-hero mb-4" elevation="0">
       <div class="profile-hero__avatar-wrap">
@@ -627,15 +650,22 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
+import { useRoute } from 'vue-router';
 import api from '../api';
 import PageHeader from '../components/PageHeader.vue';
 import { useAuthStore } from '../stores/auth';
 import { useSnackbar } from '../composables/useSnackbar';
 
+const route = useRoute();
+
 const { showError, showSuccess } = useSnackbar();
 
 const auth = useAuthStore();
 const isEmployee = computed(() => auth.isStaff && !auth.isConsultant);
+// Подписи недостающих полей профиля (для жёлтой плашки активного ФК).
+const profileMissingLabels = computed(() =>
+  (auth.user?.profileMissing || []).map(m => m.label).join(', ')
+);
 const canInvite = computed(() => profile.value?.referral?.canInvite ?? false);
 // Все документы обязательного флоу акцепта (бэкенд уже фильтрует по
 // in_acceptance_flow). Показываем со ссылкой и статусом подписания.
@@ -946,6 +976,8 @@ async function saveProfile() {
     await api.put('/profile', payload);
     saveMsg.value = 'Данные сохранены';
     saveMsgType.value = 'success';
+    // Обновляем auth.user, чтобы баннер «заполните профиль» пересчитался.
+    auth.fetchUser();
   } catch (e) {
     saveMsg.value = e.response?.data?.message || 'Ошибка сохранения';
     saveMsgType.value = 'error';
@@ -998,6 +1030,7 @@ async function saveRequisites() {
     reqMsg.value = 'Реквизиты сохранены';
     reqMsgType.value = 'success';
     loadProfile();
+    auth.fetchUser();
   } catch (e) {
     reqMsg.value = e.response?.data?.message || 'Ошибка сохранения';
     reqMsgType.value = 'error';
@@ -1013,6 +1046,7 @@ async function saveBankRequisites() {
     bankMsg.value = 'Банковские реквизиты сохранены';
     bankMsgType.value = 'success';
     loadProfile();
+    auth.fetchUser();
   } catch (e) {
     bankMsg.value = e.response?.data?.message || 'Ошибка сохранения';
     bankMsgType.value = 'error';
@@ -1027,6 +1061,11 @@ function copyToClipboard(text) {
 }
 
 onMounted(() => {
+  // Deep-link на конкретную вкладку (?tab=requisites из баннеров кабинета).
+  const validTabs = ['info', 'documents', 'requisites', 'security', 'notifications', 'telegram', 'referral'];
+  if (route.query.tab && validTabs.includes(route.query.tab)) {
+    tab.value = route.query.tab;
+  }
   loadProfile();
   loadCountries();
   loadDocuments();

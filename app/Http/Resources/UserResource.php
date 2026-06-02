@@ -4,6 +4,7 @@ namespace App\Http\Resources;
 
 use App\Models\Consultant;
 use App\Models\Requisite;
+use App\Services\ProfileCompletenessService;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -33,6 +34,11 @@ class UserResource extends JsonResource
             }
         }
 
+        // Полнота профиля активного ФК (личные данные + реквизиты ИП + банк).
+        // Для staff/registered/terminated сервис вернёт complete=true.
+        $completeness = app(ProfileCompletenessService::class)
+            ->evaluate($this->resource, $consultant);
+
         return [
             'id' => $this->id,
             'email' => $this->email,
@@ -49,6 +55,14 @@ class UserResource extends JsonResource
             // Партнёр уже подписал Оферту? Используется фронтом для показа
             // блокирующей модалки акцепта после верификации реквизитов.
             'offerAccepted' => (bool) ($consultant?->acceptance ?? false),
+            // Применим ли к пользователю гейт «заполни профиль» (только
+            // активный ФК). Нужен фронту, чтобы показывать «всё ок» только
+            // тем, к кому требование относится.
+            'profileRequired' => $completeness['applicable'],
+            // Профиль активного ФК заполнен полностью? false → фронт при
+            // входе ведёт на /profile и держит баннер до заполнения.
+            'profileComplete' => $completeness['complete'],
+            'profileMissing' => $completeness['missing'],
         ];
     }
 }

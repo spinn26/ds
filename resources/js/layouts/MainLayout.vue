@@ -241,6 +241,30 @@
           </div>
         </v-alert>
 
+        <!-- Глобальный баннер: профиль активного ФК не заполнен полностью.
+             Не закрываемый — напоминание держится, пока партнёр не заполнит
+             личные данные + реквизиты ИП + банк. -->
+        <v-alert
+          v-if="showProfileIncompleteBanner"
+          type="warning" variant="tonal" density="compact"
+          class="mb-3"
+          icon="mdi-account-alert-outline"
+        >
+          <div class="text-body-2">
+            <strong>Заполните профиль полностью.</strong>
+            Для активных партнёров обязательны личные данные и реквизиты
+            (ИП + банк).
+            <template v-if="profileMissingLabels">
+              Не хватает: {{ profileMissingLabels }}.
+            </template>
+          </div>
+          <div class="text-caption mt-1">
+            <router-link :to="profileFixLink" class="text-primary">
+              Заполнить профиль
+            </router-link>
+          </div>
+        </v-alert>
+
         <router-view />
       </v-container>
     </v-main>
@@ -395,6 +419,29 @@ async function onOfferAccepted() {
   try { await auth.fetchUser(); } catch {}
 }
 
+// Принудительное заполнение профиля для активных ФК (2026-06-02). Бэк в
+// /auth/me отдаёт profileComplete=false + profileMissing[] для активного
+// партнёра с незаполненными личными данными / реквизитами ИП / банком.
+// При входе кидаем на /profile (см. onMounted), а баннер держим как
+// напоминание на всех страницах, пока профиль не заполнен. Скрыт для staff
+// и на full-bleed чате.
+const showProfileIncompleteBanner = computed(() => {
+  if (auth.isStaff) return false;
+  if (auth.user?.profileComplete !== false) return false;
+  if (isFullBleedRoute.value) return false;
+  return true;
+});
+const profileMissingLabels = computed(() =>
+  (auth.user?.profileMissing || []).map(m => m.label).join(', ')
+);
+// Если не хватает реквизитов/банка — ведём сразу на вкладку «Реквизиты».
+const profileFixLink = computed(() => {
+  const missing = auth.user?.profileMissing || [];
+  return missing.some(m => m.section === 'requisites' || m.section === 'bank')
+    ? '/profile?tab=requisites'
+    : '/profile';
+});
+
 // Rail (minimalist) sidebar — persists across sessions
 const rail = ref(localStorage.getItem('main-nav-rail') === '1');
 function toggleRail() {
@@ -495,6 +542,12 @@ onMounted(async () => {
     // This covers both 'registered' (right after sign-up) and 'consultant' roles.
     if (!isStaff.value && auth.user && auth.user.questionnaireCompleted === false) {
       showQuestionnaire.value = true;
+    }
+    // Принудительно отправляем активного ФК с незаполненным профилем на
+    // /profile при входе. Дальше навигация свободна — баннер остаётся.
+    if (!isStaff.value && auth.user?.profileComplete === false
+        && !route.path.startsWith('/profile')) {
+      router.replace(profileFixLink.value);
     }
   } catch {}
   loadNotifications();
