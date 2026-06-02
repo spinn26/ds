@@ -694,7 +694,6 @@ const addressSameAsRegistration = ref(true);
 const documentSlots = [
   { label: 'Паспорт (разворот с фото)', type: 'passportPage1' },
   { label: 'Паспорт (регистрация)', type: 'passportPage2' },
-  { label: 'Заявление на получение выплат', type: 'applicationForPayment' },
 ];
 
 function isDocUploaded(type) {

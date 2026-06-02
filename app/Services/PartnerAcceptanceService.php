@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\AgreementDocument;
 use App\Models\Consultant;
 use App\Support\LegacyId;
 use Illuminate\Http\Request;
@@ -52,6 +53,26 @@ class PartnerAcceptanceService
             self::DOC_OFFER,
             self::DOC_PEP,
         ], $request);
+    }
+
+    /**
+     * Авто-подписание ВСЕХ документов обязательного флоу (Согласие, Политика,
+     * Оферта, ПЭП) + выставление consultant.acceptance=true.
+     *
+     * Решение 2026-06-02: партнёр больше не проходит ручной шаг акцепта —
+     * документы считаются подписанными при регистрации. Используется в
+     * AuthController::register и при backfill текущих партнёров.
+     */
+    public function acceptAllFlowDocuments(Consultant $consultant, Request $request): void
+    {
+        $flowDocIds = AgreementDocument::inFlow()->pluck('id')->map(fn ($id) => (int) $id)->all();
+        if ($flowDocIds) {
+            $this->record($consultant, $flowDocIds, $request);
+        }
+        if (! $consultant->acceptance) {
+            $consultant->acceptance = true;
+            $consultant->save();
+        }
     }
 
     /**

@@ -210,11 +210,11 @@ class AuthController extends Controller
 
         [$user, $consultant] = $user;
 
-        // Step 1 of registration: the partner ticked the consent for
-        // personal-data processing + privacy policy. Log it explicitly
-        // per-document so it surfaces in the admin acceptance ledger and
-        // in the partner's profile.
-        $acceptance->recordRegistrationConsents($consultant, $request);
+        // 2026-06: документы предподписаны при регистрации. Логируем акцепт
+        // ВСЕХ документов обязательного флоу (Согласие, Политика, Оферта, ПЭП)
+        // и выставляем acceptance=true — отдельный шаг подписания Оферты в
+        // кабинете больше не требуется.
+        $acceptance->acceptAllFlowDocuments($consultant, $request);
 
         $token = $user->createToken('spa')->plainTextToken;
 
