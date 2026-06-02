@@ -156,6 +156,7 @@ const menuItems = [
   { to: '/admin/triggers', icon: 'mdi-robot', title: 'Триггеры уведомлений' },
   { to: '/admin/integrations', icon: 'mdi-cloud-sync', title: 'Интеграции' },
   { to: '/admin/settings', icon: 'mdi-cog', title: 'Настройки системы' },
+  { to: '/admin/activity', icon: 'mdi-account-multiple-check', title: 'Активность' },
   { to: '/admin/monitoring', icon: 'mdi-pulse', title: 'Мониторинг' },
 ];
 

@@ -134,6 +134,7 @@ const routes = [
             { path: 'references/:catalog', component: () => import('../pages/Admin/ReferenceDetail.vue') },
             { path: 'mail', component: () => import('../pages/Admin/Mail.vue') },
             { path: 'monitoring', component: () => import('../pages/Admin/Monitoring.vue') },
+            { path: 'activity', component: () => import('../pages/Admin/Activity.vue') },
 
             // New admin sections — owner dashboard + analytics + ops tools
             { path: 'owner-dashboard', component: () => import('../pages/Admin/OwnerDashboard.vue') },

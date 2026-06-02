@@ -28,7 +28,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/auth/register', [AuthController::class, 'register']);
         // Восстановление пароля: ссылка на email + сброс по токену.
         // Password broker внутри сам троттлит повторные отправки
-        // (60с между письмами на один email).
+        // (300с / 5 мин между письмами на один email — config/auth.php).
         Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword']);
         Route::post('/auth/reset-password', [AuthController::class, 'resetPassword']);
     });
@@ -373,6 +373,7 @@ Route::prefix('v1')->group(function () {
 
         // Admin Monitoring (site status, error feed, queue control)
         Route::get('/admin/monitoring/status', [\App\Http\Controllers\Api\AdminMonitoringController::class, 'status']);
+        Route::get('/admin/monitoring/activity', [\App\Http\Controllers\Api\AdminMonitoringController::class, 'activity']);
         Route::get('/admin/monitoring/errors', [\App\Http\Controllers\Api\AdminMonitoringController::class, 'errors']);
         Route::get('/admin/monitoring/log/errors', [\App\Http\Controllers\Api\AdminMonitoringController::class, 'logErrors']);
         Route::get('/admin/monitoring/log/download', [\App\Http\Controllers\Api\AdminMonitoringController::class, 'downloadLog']);

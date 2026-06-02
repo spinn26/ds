@@ -103,6 +103,38 @@ class AdminMonitoringController extends Controller
     }
 
     /**
+     * GET /admin/monitoring/activity
+     *
+     * Активность пользователей + нагрузка на сервер. Источники:
+     *   - онлайн: personal_access_tokens.last_used_at (distinct tokenable)
+     *   - заходы: audit_log где action='login'
+     *   - сервер: /proc (Linux прод) + sys_getloadavg + disk_*; на Windows
+     *     (локальная разработка) недоступные метрики отдаются как null.
+     */
+    public function activity(): JsonResponse
+    {
+        $now = Carbon::now();
+        $todayStart = $now->copy()->startOfDay();
+
+        return response()->json([
+            'generatedAt' => now()->toIso8601String(),
+
+            // Онлайн = уникальные пользователи с активным токеном за последние N минут.
+            'online' => $this->distinctActiveUsers($now->copy()->subMinutes(5)),
+            'online15' => $this->distinctActiveUsers($now->copy()->subMinutes(15)),
+
+            // Заходы = записи login в audit_log.
+            'loginsToday' => $this->safeCountWhere('audit_log', fn ($q) => $q->where('action', 'login')->where('created_at', '>=', $todayStart)),
+            'uniqueLoginsToday' => $this->distinctLoginUsers($todayStart),
+            'logins24h' => $this->safeCountWhere('audit_log', fn ($q) => $q->where('action', 'login')->where('created_at', '>=', $now->copy()->subDay())),
+
+            'hourly' => $this->loginsHourly($todayStart),
+            'recentLogins' => $this->recentLogins(),
+            'server' => $this->serverLoad(),
+        ]);
+    }
+
+    /**
      * Unified error feed from multiple sources.
      * Query params:
      *   source: failed_jobs | mail | system | n8n | all (default all)
@@ -444,5 +476,190 @@ class AdminMonitoringController extends Controller
         if ($bytes >= 1024 ** 2) return round($bytes / 1024 ** 2, 1) . ' MB';
         if ($bytes >= 1024) return round($bytes / 1024, 1) . ' KB';
         return $bytes . ' B';
+    }
+
+    // ============ activity helpers ============
+
+    /** Уникальные пользователи с токеном, использованным с момента $since. */
+    private function distinctActiveUsers(Carbon $since): int
+    {
+        if (! Schema::hasTable('personal_access_tokens')) return 0;
+        try {
+            return DB::table('personal_access_tokens')
+                ->where('last_used_at', '>=', $since)
+                ->distinct()
+                ->count('tokenable_id');
+        } catch (\Throwable) {
+            return 0;
+        }
+    }
+
+    /** Уникальные пользователи, залогинившиеся с момента $since. */
+    private function distinctLoginUsers(Carbon $since): int
+    {
+        if (! Schema::hasTable('audit_log')) return 0;
+        try {
+            // На логине request()->user() ещё null, поэтому id пишется в
+            // entity_id, а не в user_id — считаем уникальных по entity_id.
+            return DB::table('audit_log')
+                ->where('action', 'login')
+                ->where('created_at', '>=', $since)
+                ->distinct()
+                ->count('entity_id');
+        } catch (\Throwable) {
+            return 0;
+        }
+    }
+
+    /** Заходы по часам за сегодня — массив [0..23] для спарклайна. */
+    private function loginsHourly(Carbon $start): array
+    {
+        $out = [];
+        for ($h = 0; $h < 24; $h++) $out[$h] = ['hour' => $h, 'count' => 0];
+
+        if (! Schema::hasTable('audit_log')) return array_values($out);
+        try {
+            $rows = DB::table('audit_log')
+                ->where('action', 'login')
+                ->where('created_at', '>=', $start)
+                ->selectRaw('EXTRACT(HOUR FROM created_at)::int AS h, COUNT(*) AS c')
+                ->groupBy('h')
+                ->pluck('c', 'h');
+            foreach ($rows as $h => $c) {
+                if (isset($out[(int) $h])) $out[(int) $h]['count'] = (int) $c;
+            }
+        } catch (\Throwable) {
+        }
+        return array_values($out);
+    }
+
+    /** Последние входы для ленты. */
+    private function recentLogins(int $limit = 15): array
+    {
+        if (! Schema::hasTable('audit_log')) return [];
+        try {
+            // user_email/user_role в login-строках пустые (request не
+            // аутентифицирован) — берём из WebUser по entity_id, с фолбэком.
+            $joinWebUser = Schema::hasTable('WebUser');
+            $query = DB::table('audit_log as a')
+                ->where('a.action', 'login')
+                ->orderByDesc('a.created_at')
+                ->limit($limit);
+
+            if ($joinWebUser) {
+                $query->leftJoin('WebUser as w', 'w.id', '=', DB::raw("NULLIF(a.entity_id, '')::int"))
+                    ->select('a.user_email', 'a.user_role', 'a.ip', 'a.created_at', 'w.email as wu_email', 'w.role as wu_role');
+            } else {
+                $query->select('a.user_email', 'a.user_role', 'a.ip', 'a.created_at');
+            }
+
+            return $query->get()
+                ->map(fn ($r) => [
+                    'email' => ($r->wu_email ?? null) ?: $r->user_email,
+                    'role' => ($r->wu_role ?? null) ?: $r->user_role,
+                    'ip' => $r->ip,
+                    'at' => $r->created_at,
+                ])->all();
+        } catch (\Throwable) {
+            return [];
+        }
+    }
+
+    /** Нагрузка на сервер — Linux прод даёт полные метрики, Windows — частичные. */
+    private function serverLoad(): array
+    {
+        $cores = $this->cpuCores();
+        $load = function_exists('sys_getloadavg') ? @sys_getloadavg() : null;
+        $loadPercent = (is_array($load) && $cores > 0)
+            ? (int) min(100, round($load[0] / $cores * 100))
+            : null;
+
+        return [
+            'platform' => PHP_OS_FAMILY,
+            'cores' => $cores,
+            'load' => is_array($load) ? [
+                '1m' => round($load[0], 2),
+                '5m' => round($load[1], 2),
+                '15m' => round($load[2], 2),
+            ] : null,
+            'loadPercent' => $loadPercent,
+            'memory' => $this->systemMemory(),
+            'disk' => $this->diskUsage(),
+            'uptime' => $this->systemUptime(),
+            'php' => [
+                'version' => PHP_VERSION,
+                'memoryUsageMb' => round(memory_get_usage(true) / 1024 / 1024, 2),
+                'peakMb' => round(memory_get_peak_usage(true) / 1024 / 1024, 2),
+            ],
+        ];
+    }
+
+    private function cpuCores(): int
+    {
+        if (is_file('/proc/cpuinfo')) {
+            $n = @substr_count((string) @file_get_contents('/proc/cpuinfo'), 'processor');
+            if ($n > 0) return $n;
+        }
+        return 1;
+    }
+
+    /** RAM из /proc/meminfo (Linux). null на других платформах. */
+    private function systemMemory(): ?array
+    {
+        if (! is_file('/proc/meminfo')) return null;
+        $data = @file_get_contents('/proc/meminfo');
+        if (! $data) return null;
+
+        preg_match('/MemTotal:\s+(\d+)/', $data, $t);
+        preg_match('/MemAvailable:\s+(\d+)/', $data, $a);
+        if (empty($t[1])) return null;
+
+        $totalKb = (int) $t[1];
+        $availKb = isset($a[1]) ? (int) $a[1] : 0;
+        $usedKb = max(0, $totalKb - $availKb);
+
+        return [
+            'totalMb' => (int) round($totalKb / 1024),
+            'usedMb' => (int) round($usedKb / 1024),
+            'availableMb' => (int) round($availKb / 1024),
+            'usedPercent' => $totalKb > 0 ? (int) round($usedKb / $totalKb * 100) : 0,
+        ];
+    }
+
+    private function diskUsage(): ?array
+    {
+        $root = PHP_OS_FAMILY === 'Windows' ? 'C:' : '/';
+        try {
+            $free = @disk_free_space($root);
+            $total = @disk_total_space($root);
+            if (! $total) return null;
+            $used = $total - $free;
+            return [
+                'totalGb' => round($total / 1024 ** 3, 1),
+                'usedGb' => round($used / 1024 ** 3, 1),
+                'freeGb' => round($free / 1024 ** 3, 1),
+                'usedPercent' => (int) round($used / $total * 100),
+            ];
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    private function systemUptime(): ?string
+    {
+        if (! is_file('/proc/uptime')) return null;
+        $data = @file_get_contents('/proc/uptime');
+        if (! $data) return null;
+
+        $sec = (int) floatval(strtok($data, ' '));
+        $d = intdiv($sec, 86400);
+        $h = intdiv($sec % 86400, 3600);
+        $m = intdiv($sec % 3600, 60);
+
+        $parts = [];
+        if ($d) $parts[] = "{$d}д";
+        if ($h) $parts[] = "{$h}ч";
+        $parts[] = "{$m}м";
+        return implode(' ', $parts);
     }
 }
