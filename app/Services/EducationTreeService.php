@@ -138,6 +138,18 @@ class EducationTreeService
                 ->all()
             : array_filter([$course->product_id]);
 
+        // Программы для разблокировки: many-to-many через education_course_program.
+        // Пусто = «все программы привязанных продуктов» (см. миграцию). program_id
+        // = programs_catalog.id.
+        $programIds = \Illuminate\Support\Facades\Schema::hasTable('education_course_program')
+            ? DB::table('education_course_program')
+                ->where('course_id', $courseId)
+                ->orderBy('id')
+                ->pluck('program_id')
+                ->map(fn ($v) => (int) $v)
+                ->all()
+            : [];
+
         return [
             'id' => $course->id,
             'title' => $course->title,
@@ -147,6 +159,7 @@ class EducationTreeService
             'coverUrl' => $course->cover_url,
             'productId' => $course->product_id,
             'productIds' => $productIds,
+            'programIds' => $programIds,
             'lessons' => $lessons->map(function ($l) use ($viewedSet, $drip, $userId, $course) {
                 $av = $drip->lessonAvailability($l, $userId, $course);
                 return [

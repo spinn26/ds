@@ -219,6 +219,21 @@
                 item-title="name" item-value="id" multiple chips closable-chips clearable
                 hint="Можно выбрать несколько активных продуктов" persistent-hint />
             </v-col>
+            <v-col v-if="editCourse.product_ids && editCourse.product_ids.length" cols="12">
+              <!-- Зависимый блок: программы выбранных продуктов. Пусто = курс
+                   открыт по всем программам продукта; выбор сужает до них. -->
+              <v-autocomplete v-model="editCourse.program_ids" label="Программы для разблокировки (необязательно)"
+                :items="availablePrograms" item-title="name" item-value="id" multiple chips closable-chips clearable
+                hint="Не выбрано — открыт по всем программам выбранных продуктов. Выберите конкретные, чтобы ограничить."
+                persistent-hint>
+                <template #item="{ props, item }">
+                  <v-list-subheader v-if="item.raw.firstOfGroup" class="text-caption font-weight-bold">
+                    {{ item.raw.product_name }}
+                  </v-list-subheader>
+                  <v-list-item v-bind="props" :title="item.raw.name" />
+                </template>
+              </v-autocomplete>
+            </v-col>
             <v-col cols="12" sm="6">
               <v-select v-model="editCourse.category_id" label="Категория"
                 :items="categoryOptions" item-title="name" item-value="id" clearable
@@ -422,7 +437,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue';
+import { ref, reactive, computed, watch, onMounted } from 'vue';
 import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
 import PageHeader from '../../components/PageHeader.vue';
@@ -442,6 +457,7 @@ const perPage = ref(25);
 const expanded = ref([]);
 const activeTab = reactive({});
 const productOptions = ref([]);
+const programOptions = ref([]);
 const categoryOptions = ref([]);
 
 const filters = ref({ search: '' });
@@ -485,6 +501,31 @@ const testColumnVisible = ref({});
 const courseDialog = ref(false);
 const courseError = ref('');
 const editCourse = ref({});
+
+// Программы выбранных продуктов (зависимый блок), с флагом первого в группе
+// для подзаголовков. Backend сортирует по продукту, затем по имени программы.
+const availablePrograms = computed(() => {
+  const sel = (editCourse.value?.product_ids || []).map(Number);
+  if (!sel.length) return [];
+  let lastPid = null;
+  return programOptions.value
+    .filter(p => sel.includes(p.product_id))
+    .map((p) => {
+      const firstOfGroup = p.product_id !== lastPid;
+      lastPid = p.product_id;
+      return { ...p, firstOfGroup };
+    });
+});
+
+// Снятие продукта → убрать его программы из выбора (гард: пока не загружены —
+// не трогаем, иначе при открытии курса затрём program_ids строки).
+watch(() => editCourse.value?.product_ids, () => {
+  if (!editCourse.value || !programOptions.value.length) return;
+  const allowed = new Set(availablePrograms.value.map(p => p.id));
+  const cur = editCourse.value.program_ids || [];
+  const pruned = cur.filter(id => allowed.has(id));
+  if (pruned.length !== cur.length) editCourse.value.program_ids = pruned;
+}, { deep: true });
 
 // Lesson dialog
 const lessonDialog = ref(false);
@@ -533,6 +574,15 @@ async function loadProductOptions() {
     // Активные + опубликованные продукты, полный список (без 100-cap).
     const { data } = await api.get('/admin/education/product-options');
     productOptions.value = data.data || data;
+  } catch {}
+}
+
+async function loadProgramOptions() {
+  try {
+    const { data } = await api.get('/admin/education/program-options');
+    programOptions.value = (data.data || data || []).map(p => ({
+      id: p.id, name: p.name, product_id: Number(p.product_id), product_name: p.product_name,
+    }));
   } catch {}
 }
 
@@ -655,7 +705,7 @@ async function applyTestReorder(courseId, newList) {
 
 // Course CRUD
 function openCreateCourse() {
-  editCourse.value = { title: '', description: '', product_ids: [], category_id: null, active: true, sort_order: 0 };
+  editCourse.value = { title: '', description: '', product_ids: [], program_ids: [], category_id: null, active: true, sort_order: 0 };
   courseError.value = '';
   courseDialog.value = true;
 }
@@ -882,6 +932,7 @@ async function deleteTest() {
 onMounted(() => {
   loadCourses();
   loadProductOptions();
+  loadProgramOptions();
   loadCategoryOptions();
 });
 </script>

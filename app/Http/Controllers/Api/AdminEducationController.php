@@ -209,6 +209,23 @@ class AdminEducationController extends Controller
             ])->values()
         );
 
+        // Programs: many-to-many via education_course_program (pivot at the
+        // program granularity). program_id references programs_catalog(id).
+        $programPivot = Schema::hasTable('education_course_program')
+            ? DB::table('education_course_program')
+                ->whereIn('course_id', $courseIds)
+                ->get(['course_id', 'program_id'])
+            : collect();
+        $programNames = $programPivot->isNotEmpty() && Schema::hasTable('programs_catalog')
+            ? DB::table('programs_catalog')->whereIn('id', $programPivot->pluck('program_id')->unique())->pluck('name', 'id')
+            : collect();
+        $programsByCourse = $programPivot->groupBy('course_id')->map(
+            fn ($g) => $g->map(fn ($r) => [
+                'id' => $r->program_id,
+                'name' => $programNames[$r->program_id] ?? null,
+            ])->values()
+        );
+
         // category_id появилась в миграции 2026_05_21_000020 — проверяем
         // через hasColumn, чтобы старая БД без миграции не отдавала 500.
         $hasCategory = Schema::hasColumn('education_courses', 'category_id');
@@ -224,6 +241,8 @@ class AdminEducationController extends Controller
             'productName' => $c->product_id ? ($productNames[$c->product_id] ?? null) : null,
             'products' => ($productsByCourse[$c->id] ?? collect())->all(),
             'product_ids' => ($productsByCourse[$c->id] ?? collect())->pluck('id')->all(),
+            'programs' => ($programsByCourse[$c->id] ?? collect())->all(),
+            'program_ids' => ($programsByCourse[$c->id] ?? collect())->pluck('id')->all(),
             'category_id' => $hasCategory ? ($c->category_id ?? null) : null,
             'categoryName' => $hasCategory && $c->category_id ? ($categoryNames[$c->category_id] ?? null) : null,
             'active' => (bool) $c->active,
@@ -254,6 +273,9 @@ class AdminEducationController extends Controller
 
         if ($request->has('product_ids')) {
             $this->syncCourseProducts($id, $request->input('product_ids'));
+        }
+        if ($request->has('program_ids')) {
+            $this->syncCoursePrograms($id, $request->input('program_ids'));
         }
 
         return response()->json(['message' => 'Курс создан', 'id' => $id], 201);
@@ -290,6 +312,9 @@ class AdminEducationController extends Controller
         if ($request->has('product_ids')) {
             $this->syncCourseProducts($id, $request->input('product_ids'));
         }
+        if ($request->has('program_ids')) {
+            $this->syncCoursePrograms($id, $request->input('program_ids'));
+        }
 
         return response()->json(['message' => 'Курс обновлён']);
     }
@@ -323,6 +348,32 @@ class AdminEducationController extends Controller
                 DB::table('education_course_product')->insertOrIgnore([
                     'course_id' => $courseId,
                     'product_id' => $pid,
+                    'created_at' => now(),
+                ]);
+            }
+        });
+    }
+
+    /**
+     * Пересобрать связи курс↔программы в pivot education_course_program.
+     * Полная замена набора (delete-missing + insert-new). program_id —
+     * это programs_catalog.id. Семантика: пусто = «все программы привязанных
+     * продуктов», заполнено = «только эти программы».
+     */
+    private function syncCoursePrograms(int $courseId, $raw): void
+    {
+        $ids = $this->normalizeProductIds($raw); // generic: уникальные положительные int
+
+        DB::transaction(function () use ($courseId, $ids) {
+            DB::table('education_course_program')
+                ->where('course_id', $courseId)
+                ->when(! empty($ids), fn ($q) => $q->whereNotIn('program_id', $ids))
+                ->delete();
+
+            foreach ($ids as $pid) {
+                DB::table('education_course_program')->insertOrIgnore([
+                    'course_id' => $courseId,
+                    'program_id' => $pid,
                     'created_at' => now(),
                 ]);
             }
@@ -368,6 +419,38 @@ class AdminEducationController extends Controller
         }
 
         return response()->json(['data' => $query->get(['id', 'name'])]);
+    }
+
+    /**
+     * GET /admin/education/program-options
+     * Активные программы активных каталог-продуктов для зависимого мультивыбора
+     * в форме курса. Возвращаем legacy product_id (= products_catalog.legacy_
+     * product_id) — тот же id-space, что хранит education_course_product — чтобы
+     * фронт мог фильтровать программы по уже выбранным продуктам и группировать
+     * по продукту-зонтику. program id = programs_catalog.id (хранится в pivot).
+     */
+    public function programOptions(): JsonResponse
+    {
+        if (! Schema::hasTable('programs_catalog')) {
+            return response()->json(['data' => []]);
+        }
+
+        $rows = DB::table('programs_catalog as g')
+            ->join('products_catalog as c', 'c.id', '=', 'g.product_id')
+            ->join('product as p', 'p.id', '=', 'c.legacy_product_id')
+            ->where('g.active', true)
+            ->where('c.active', true)
+            ->whereNotNull('c.legacy_product_id')
+            ->orderBy('p.name')
+            ->orderBy('g.name')
+            ->get([
+                'g.id as id',
+                'g.name as name',
+                'c.legacy_product_id as product_id',
+                'p.name as product_name',
+            ]);
+
+        return response()->json(['data' => $rows]);
     }
 
     /**
@@ -973,6 +1056,17 @@ class AdminEducationController extends Controller
                 SELECT id, product_id, now() FROM education_courses
                 WHERE product_id IS NOT NULL
                 ON CONFLICT (course_id, product_id) DO NOTHING');
+        }
+
+        if (! Schema::hasTable('education_course_program')) {
+            DB::statement('CREATE TABLE education_course_program (
+                id BIGSERIAL PRIMARY KEY,
+                course_id BIGINT NOT NULL REFERENCES education_courses(id) ON DELETE CASCADE,
+                program_id BIGINT NOT NULL,
+                created_at TIMESTAMP,
+                UNIQUE (course_id, program_id)
+            )');
+            DB::statement('CREATE INDEX education_course_program_program_idx ON education_course_program (program_id)');
         }
     }
 }

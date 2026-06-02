@@ -369,12 +369,27 @@ class EducationController extends Controller
             ->where('course_id', $id)
             ->first();
 
+        // Привязки для разблокировки (many-to-many). product_ids — целые
+        // продукты, program_ids — конкретные программы (пусто = все программы
+        // привязанных продуктов). Гейт пока не enforce, но фронт/витрина читают
+        // полный набор. product_id (scalar) оставлен для бэкуорд-совместимости.
+        $productIds = Schema::hasTable('education_course_product')
+            ? DB::table('education_course_product')->where('course_id', $id)->orderBy('id')
+                ->pluck('product_id')->map(fn ($v) => (int) $v)->all()
+            : array_values(array_filter([$course->product_id]));
+        $programIds = Schema::hasTable('education_course_program')
+            ? DB::table('education_course_program')->where('course_id', $id)->orderBy('id')
+                ->pluck('program_id')->map(fn ($v) => (int) $v)->all()
+            : [];
+
         return response()->json([
             'course' => [
                 'id' => $course->id,
                 'title' => $course->title,
                 'description' => $course->description,
                 'product_id' => $course->product_id,
+                'product_ids' => $productIds,
+                'program_ids' => $programIds,
             ],
             'lessons' => $lessons->map(function ($l) use ($viewedSet) {
                 $hasArrays = Schema::hasColumn('education_lessons', 'video_urls');

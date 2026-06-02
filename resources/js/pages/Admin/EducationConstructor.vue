@@ -111,6 +111,29 @@
                   />
                 </v-col>
               </v-row>
+              <!-- Зависимый блок: программы выбранных продуктов. Пусто = курс
+                   открывается по всем программам продукта; выбор сужает до них. -->
+              <v-autocomplete
+                v-if="currentCourse.product_ids && currentCourse.product_ids.length"
+                v-model="currentCourse.program_ids"
+                :items="availablePrograms"
+                item-title="name"
+                item-value="id"
+                label="Программы для разблокировки (необязательно)"
+                variant="outlined" density="comfortable"
+                multiple chips closable-chips clearable
+                :loading="loadingPrograms"
+                prepend-inner-icon="mdi-tune-variant"
+                hint="Не выбрано — курс открывается по всем программам выбранных продуктов. Выберите конкретные, чтобы ограничить."
+                persistent-hint
+              >
+                <template #item="{ props, item }">
+                  <v-list-subheader v-if="item.raw.firstOfGroup" class="text-caption font-weight-bold">
+                    {{ item.raw.product_name }}
+                  </v-list-subheader>
+                  <v-list-item v-bind="props" :title="item.raw.name" />
+                </template>
+              </v-autocomplete>
               <v-switch
                 v-model="currentCourse.is_container"
                 label="Это модуль/папка (без своих уроков, только подкурсы)"
@@ -313,7 +336,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
 import api from '../../api';
 import PageHeader from '../../components/PageHeader.vue';
 import EmptyState from '../../components/EmptyState.vue';
@@ -328,6 +351,8 @@ const loadingTree = ref(true);
 
 const productOptions = ref([]);
 const loadingProducts = ref(false);
+const programOptions = ref([]);
+const loadingPrograms = ref(false);
 
 async function loadProducts() {
   loadingProducts.value = true;
@@ -338,6 +363,42 @@ async function loadProducts() {
   } catch (e) { /* тихо — поле останется пустым */ }
   loadingProducts.value = false;
 }
+
+async function loadPrograms() {
+  loadingPrograms.value = true;
+  try {
+    const { data } = await api.get('/admin/education/program-options');
+    programOptions.value = (data.data || data || []).map(p => ({
+      id: p.id, name: p.name, product_id: Number(p.product_id), product_name: p.product_name,
+    }));
+  } catch (e) { /* тихо — поле останется пустым */ }
+  loadingPrograms.value = false;
+}
+
+// Программы только выбранных продуктов, с флагом первого элемента группы для
+// подзаголовков (backend уже сортирует по продукту, затем по имени программы).
+const availablePrograms = computed(() => {
+  const sel = (currentCourse.value?.product_ids || []).map(Number);
+  if (!sel.length) return [];
+  let lastPid = null;
+  return programOptions.value
+    .filter(p => sel.includes(p.product_id))
+    .map((p) => {
+      const firstOfGroup = p.product_id !== lastPid;
+      lastPid = p.product_id;
+      return { ...p, firstOfGroup };
+    });
+});
+
+// Снятие продукта → убираем его программы из выбора. Гард: не трогаем, пока
+// список программ ещё не загружен (иначе при открытии курса затрём program_ids).
+watch(() => currentCourse.value?.product_ids, () => {
+  if (!currentCourse.value || !programOptions.value.length) return;
+  const allowed = new Set(availablePrograms.value.map(p => p.id));
+  const cur = currentCourse.value.program_ids || [];
+  const pruned = cur.filter(id => allowed.has(id));
+  if (pruned.length !== cur.length) currentCourse.value.program_ids = pruned;
+}, { deep: true });
 
 const selectedId = ref(null);
 const selectedType = ref(null);   // 'course' | 'lesson'
@@ -400,6 +461,7 @@ async function loadCourseToEdit(id) {
       product_ids: Array.isArray(data.productIds) && data.productIds.length
         ? data.productIds
         : (data.productId ? [data.productId] : []),
+      program_ids: Array.isArray(data.programIds) ? data.programIds : [],
       cover_url: data.coverUrl, is_container: data.isContainer,
       sort_order: findInTree(tree.value, id)?.sortOrder || 0,
     };
@@ -428,6 +490,7 @@ async function saveCourse() {
       title: currentCourse.value.title,
       description: currentCourse.value.description,
       product_ids: currentCourse.value.product_ids || [],
+      program_ids: currentCourse.value.program_ids || [],
       cover_url: currentCourse.value.cover_url || null,
       parent_id: currentCourse.value.parent_id || null,
       is_container: currentCourse.value.is_container,
@@ -747,6 +810,7 @@ function clearSelection() {
 onMounted(() => {
   loadTree();
   loadProducts();
+  loadPrograms();
 });
 </script>
 
