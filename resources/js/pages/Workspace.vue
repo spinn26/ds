@@ -244,7 +244,7 @@
         </v-alert>
         <v-row v-if="!data.isNetworkLeader && (data.mentor || data.networkLeader)" class="mb-4">
           <v-col v-if="data.mentor" cols="12" :md="data.networkLeader ? 6 : 12">
-            <v-card class="pa-4 h-100" variant="tonal" color="primary">
+            <v-card class="pa-4 h-100 role-card role-card--mentor" variant="flat">
               <div class="d-flex align-center ga-3">
                 <v-avatar color="primary" size="48">
                   <v-icon color="white">mdi-account-star</v-icon>
@@ -252,42 +252,42 @@
                 <div>
                   <div class="text-caption text-medium-emphasis">Наставник</div>
                   <div class="text-subtitle-1 font-weight-bold">{{ data.mentor.personName }}</div>
-                  <div class="text-caption">{{ data.mentor.qualification }}</div>
+                  <div class="text-caption text-medium-emphasis">{{ data.mentor.qualification }}</div>
                 </div>
               </div>
-              <div class="d-flex ga-3 mt-3 flex-wrap">
-                <v-chip v-if="data.mentor.phone" size="small" variant="outlined" prepend-icon="mdi-phone" @click="copyText(data.mentor.phone)">
+              <div class="d-flex ga-2 mt-3 flex-wrap">
+                <v-chip v-if="data.mentor.phone" size="small" variant="tonal" color="primary" prepend-icon="mdi-phone" @click="copyText(data.mentor.phone)">
                   {{ data.mentor.phone }}
                 </v-chip>
-                <v-chip v-if="data.mentor.email" size="small" variant="outlined" prepend-icon="mdi-email" @click="copyText(data.mentor.email)">
+                <v-chip v-if="data.mentor.email" size="small" variant="tonal" color="primary" prepend-icon="mdi-email" @click="copyText(data.mentor.email)">
                   {{ data.mentor.email }}
                 </v-chip>
-                <v-chip v-if="data.mentor.telegram" size="small" variant="outlined" prepend-icon="mdi-send" @click="openTelegram(data.mentor.telegram)">
+                <v-chip v-if="data.mentor.telegram" size="small" variant="tonal" color="primary" prepend-icon="mdi-send" @click="openTelegram(data.mentor.telegram)">
                   {{ data.mentor.telegram }}
                 </v-chip>
               </div>
             </v-card>
           </v-col>
           <v-col v-if="data.networkLeader" cols="12" :md="data.mentor ? 6 : 12">
-            <v-card class="pa-4 h-100" variant="tonal" color="secondary">
+            <v-card class="pa-4 h-100 role-card role-card--leader" variant="flat">
               <div class="d-flex align-center ga-3">
-                <v-avatar color="secondary" size="48">
+                <v-avatar color="primary" size="48">
                   <v-icon color="white">mdi-crown</v-icon>
                 </v-avatar>
                 <div>
                   <div class="text-caption text-medium-emphasis">Лидер сети</div>
                   <div class="text-subtitle-1 font-weight-bold">{{ data.networkLeader.personName }}</div>
-                  <div class="text-caption">{{ data.networkLeader.qualification }}</div>
+                  <div class="text-caption text-medium-emphasis">{{ data.networkLeader.qualification }}</div>
                 </div>
               </div>
-              <div class="d-flex ga-3 mt-3 flex-wrap">
-                <v-chip v-if="data.networkLeader.phone" size="small" variant="outlined" prepend-icon="mdi-phone" @click="copyText(data.networkLeader.phone)">
+              <div class="d-flex ga-2 mt-3 flex-wrap">
+                <v-chip v-if="data.networkLeader.phone" size="small" variant="tonal" color="primary" prepend-icon="mdi-phone" @click="copyText(data.networkLeader.phone)">
                   {{ data.networkLeader.phone }}
                 </v-chip>
-                <v-chip v-if="data.networkLeader.email" size="small" variant="outlined" prepend-icon="mdi-email" @click="copyText(data.networkLeader.email)">
+                <v-chip v-if="data.networkLeader.email" size="small" variant="tonal" color="primary" prepend-icon="mdi-email" @click="copyText(data.networkLeader.email)">
                   {{ data.networkLeader.email }}
                 </v-chip>
-                <v-chip v-if="data.networkLeader.telegram" size="small" variant="outlined" prepend-icon="mdi-send" @click="openTelegram(data.networkLeader.telegram)">
+                <v-chip v-if="data.networkLeader.telegram" size="small" variant="tonal" color="primary" prepend-icon="mdi-send" @click="openTelegram(data.networkLeader.telegram)">
                   {{ data.networkLeader.telegram }}
                 </v-chip>
               </div>
@@ -549,6 +549,15 @@ onMounted(async () => {
    Соответствует ds-layouts.jsx::PartnerWorkspace hero. */
 .ds-hero {
   border: 1px solid var(--ds-outline-variant, rgba(0, 0, 0, 0.06));
+}
+
+/* Карточки «Наставник» / «Лидер сети» — нейтральная surface-поверхность
+   (читаемый текст в обеих темах) с тонкой рамкой и цветным левым акцентом.
+   Раньше были variant="tonal" color=primary/secondary: в тёмной теме давали
+   мутный мятный текст/чипы на мятном фоне, в светлой — ярко-мятный блок. */
+.role-card {
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+  border-left: 4px solid rgb(var(--v-theme-primary));
 }
 .hero-title {
   font: var(--ds-type-headline-l);
