@@ -295,16 +295,16 @@
       </v-card>
     </v-dialog>
 
-    <!-- Program Dialog — на мобиле во весь экран, на десктопе широкий фрейм. -->
-    <v-dialog v-model="programDialog" :max-width="mobile ? undefined : 1100"
-      :fullscreen="mobile" persistent scrollable>
+    <!-- Program Dialog — на телефоне во весь экран, на ПК широкий фрейм. -->
+    <v-dialog v-model="programDialog" :max-width="xs ? undefined : 1200"
+      :fullscreen="xs" persistent scrollable>
       <v-card>
         <v-card-title class="d-flex align-center">
           <span>{{ editProgram.id ? 'Редактировать' : 'Добавить' }} программу</span>
           <v-spacer />
-          <v-btn v-if="mobile" icon="mdi-close" variant="text" size="small" @click="programDialog = false" />
+          <v-btn v-if="xs" icon="mdi-close" variant="text" size="small" @click="programDialog = false" />
         </v-card-title>
-        <v-card-text :style="mobile ? {} : { maxHeight: '78vh' }">
+        <v-card-text :style="xs ? {} : { maxHeight: '80vh' }">
           <v-row dense>
             <v-col cols="12">
               <v-text-field v-model="editProgram.name" label="Название *" :rules="[v => !!v || 'Обязательное поле']" />
@@ -362,9 +362,9 @@
             строка по старым контрактам, в калькуляторе не показывается.
           </div>
           <template v-if="editProgram.tariffs && editProgram.tariffs.length">
-            <!-- Десктоп: таблица. Обёрнута в скролл-контейнер, чтобы на узких
+            <!-- ПК (≥960): таблица. Обёрнута в скролл-контейнер, чтобы на узких
                  окнах колонки не сжимались, а скроллились по горизонтали. -->
-            <div v-if="!mobile" class="tariff-scroll mb-2">
+            <div v-if="!smAndDown" class="tariff-scroll mb-2">
               <v-table density="compact" class="tariff-table">
                 <thead>
                   <tr>
@@ -409,8 +409,8 @@
               </v-table>
             </div>
 
-            <!-- Мобайл: каждая строка тарифа — карточка со столбиком полей,
-                 ничего не обрезается. -->
+            <!-- Узкие экраны (<960): каждая строка тарифа — карточка со
+                 столбиком полей, ничего не обрезается. -->
             <div v-else>
               <v-card v-for="(row, i) in editProgram.tariffs" :key="i" variant="outlined" class="mb-3 pa-3">
                 <div class="d-flex align-center mb-1">
@@ -519,8 +519,12 @@ import { usePermissions } from '../../composables/usePermissions';
 
 const auth = useAuthStore();
 const { canEdit, canFull } = usePermissions();
-// Адаптив: на мобиле диалог программы во весь экран + тарифы карточками.
-const { mobile } = useDisplay();
+// Адаптив диалога программы по ширине экрана (не по vuetify `mobile`, у которого
+// порог lg=1280 — он считал «мобилой» обычные ПК <1280):
+//   xs (<600, телефон)      → диалог во весь экран;
+//   smAndDown (<960)        → тарифы карточками (узкие окна/планшеты/телефон);
+//   md и выше (≥960, ПК)    → широкая таблица с горизонтальным скроллом.
+const { xs, smAndDown } = useDisplay();
 
 const loading = ref(false);
 const saving = ref(false);
