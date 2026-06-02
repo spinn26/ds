@@ -129,10 +129,16 @@ class AdminMonitoringController extends Controller
             'uniqueLoginsToday' => $this->distinctLoginUsers($todayStart),
             'logins24h' => $this->safeCountWhere('audit_log', fn ($q) => $q->where('action', 'login')->where('created_at', '>=', $now->copy()->subDay())),
 
+            // Новые регистрации (WebUser) с начала суток.
+            'newRegistrationsToday' => $this->newRegistrationsToday($todayStart),
+
             'hourly' => $this->loginsHourly($todayStart),
             'recentLogins' => $this->recentLogins(),
             // ПК vs мобильные — по уникальным пользователям, зашедшим сегодня.
             'devices' => $this->devicesBreakdown($todayStart),
+            // Входы сегодня в разрезе ролей и стран.
+            'loginsByRole' => $this->loginsByRole($todayStart),
+            'geography' => $this->geographyBreakdown($todayStart),
             'server' => $this->serverLoad(),
         ]);
     }
@@ -617,6 +623,79 @@ class AdminMonitoringController extends Controller
             }
             return $empty;
         });
+    }
+
+    /** Новые регистрации (WebUser.dateCreated — varchar) с момента $since. */
+    private function newRegistrationsToday(Carbon $since): int
+    {
+        if (! Schema::hasTable('WebUser')) return 0;
+        try {
+            return DB::table('WebUser')
+                ->whereRaw('"dateCreated" ~ \'^[0-9]{4}-[0-9]{2}-[0-9]{2}\'')
+                ->whereRaw('"dateCreated"::timestamp >= ?', [$since])
+                ->count();
+        } catch (\Throwable) {
+            return 0;
+        }
+    }
+
+    /** Входы за период в разрезе ролей (роль из WebUser по entity_id). */
+    private function loginsByRole(Carbon $since): array
+    {
+        if (! Schema::hasTable('audit_log') || ! Schema::hasTable('WebUser')) return [];
+        try {
+            return DB::table('audit_log as a')
+                ->leftJoin('WebUser as w', 'w.id', '=', DB::raw("NULLIF(a.entity_id, '')::int"))
+                ->where('a.action', 'login')
+                ->where('a.created_at', '>=', $since)
+                ->selectRaw('w.role as role, COUNT(*) as c')
+                ->groupBy('w.role')
+                ->orderByDesc('c')
+                ->get()
+                ->map(fn ($r) => ['role' => $r->role ?: null, 'count' => (int) $r->c])
+                ->all();
+        } catch (\Throwable) {
+            return [];
+        }
+    }
+
+    /**
+     * География входов за период — агрегация по странам через resolveCountry.
+     * Резолвим уникальные IP (кеш по IP), затем суммируем заходы по стране.
+     */
+    private function geographyBreakdown(Carbon $since, int $limit = 8): array
+    {
+        if (! Schema::hasTable('audit_log')) return [];
+        try {
+            $rows = DB::table('audit_log')
+                ->where('action', 'login')
+                ->where('created_at', '>=', $since)
+                ->whereNotNull('ip')
+                ->selectRaw('ip, COUNT(*) as c')
+                ->groupBy('ip')
+                ->get();
+
+            $byCountry = [];
+            foreach ($rows as $r) {
+                $geo = $this->resolveCountry($r->ip);
+                $code = $geo['code'] ?? 'XX';
+                if (! isset($byCountry[$code])) {
+                    $byCountry[$code] = [
+                        'code' => $geo['code'],
+                        'name' => $geo['name'] ?? 'Неизвестно',
+                        'count' => 0,
+                    ];
+                }
+                $byCountry[$code]['count'] += (int) $r->c;
+            }
+
+            $out = array_values($byCountry);
+            usort($out, fn ($a, $b) => $b['count'] <=> $a['count']);
+
+            return array_slice($out, 0, $limit);
+        } catch (\Throwable) {
+            return [];
+        }
     }
 
     /**

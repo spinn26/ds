@@ -63,6 +63,65 @@
       </v-col>
     </v-row>
 
+    <!-- REGISTRATIONS / ROLES / GEOGRAPHY -->
+    <v-row dense class="mt-1">
+      <v-col cols="12" md="3">
+        <v-card class="pa-4 h-100 kpi-card">
+          <div class="d-flex align-center ga-2 mb-1">
+            <v-icon color="success" size="22">mdi-account-plus</v-icon>
+            <div class="text-subtitle-2 font-weight-bold">Новые регистрации</div>
+          </div>
+          <div class="kpi-num">{{ data.newRegistrationsToday ?? 0 }}</div>
+          <div class="text-caption text-medium-emphasis">аккаунтов создано сегодня</div>
+        </v-card>
+      </v-col>
+
+      <v-col cols="12" md="4">
+        <v-card class="pa-4 h-100">
+          <div class="d-flex align-center ga-2 mb-3">
+            <v-icon size="20">mdi-account-group</v-icon>
+            <div class="text-subtitle-1 font-weight-bold">Входы по ролям (сегодня)</div>
+          </div>
+          <div v-if="roleStats.length">
+            <div v-for="r in roleStats" :key="r.role || 'none'" class="stat-row">
+              <div class="stat-label">{{ roleLabel(r.role) }}</div>
+              <div class="stat-track">
+                <div class="stat-fill" :style="{ width: Math.round((r.count / roleMax) * 100) + '%' }"></div>
+              </div>
+              <div class="stat-count">{{ r.count }}</div>
+            </div>
+          </div>
+          <div v-else class="text-caption text-medium-emphasis py-4 text-center">
+            Сегодня входов ещё не было.
+          </div>
+        </v-card>
+      </v-col>
+
+      <v-col cols="12" md="5">
+        <v-card class="pa-4 h-100">
+          <div class="d-flex align-center ga-2 mb-3">
+            <v-icon size="20">mdi-earth</v-icon>
+            <div class="text-subtitle-1 font-weight-bold">География входов (сегодня)</div>
+          </div>
+          <div v-if="geoStats.length">
+            <div v-for="g in geoStats" :key="g.code || 'xx'" class="stat-row">
+              <div class="stat-label d-flex align-center ga-2">
+                <img v-if="g.code" :src="flagUrl(g.code)" :alt="g.code" class="flag-img" width="20" height="15" loading="lazy">
+                <span class="text-truncate">{{ g.name }}</span>
+              </div>
+              <div class="stat-track">
+                <div class="stat-fill" :style="{ width: Math.round((g.count / geoMax) * 100) + '%' }"></div>
+              </div>
+              <div class="stat-count">{{ g.count }}</div>
+            </div>
+          </div>
+          <div v-else class="text-caption text-medium-emphasis py-4 text-center">
+            Сегодня входов ещё не было.
+          </div>
+        </v-card>
+      </v-col>
+    </v-row>
+
     <!-- LOGINS BY HOUR -->
     <v-card class="mt-4 pa-4">
       <div class="text-subtitle-1 font-weight-bold mb-3">Входы по часам (сегодня)</div>
@@ -239,7 +298,8 @@
         </template>
         <template #item.ip="{ item }">
           <span class="text-caption d-inline-flex align-center ga-1">
-            <span v-if="item.country" :title="item.countryName || item.country" class="flag-emoji">{{ countryFlag(item.country) }}</span>
+            <img v-if="item.country" :src="flagUrl(item.country)" :alt="item.country"
+              :title="item.countryName || item.country" class="flag-img" width="20" height="15" loading="lazy">
             <span>{{ item.ip || '—' }}</span>
           </span>
         </template>
@@ -269,12 +329,24 @@ const loginHeaders = [
   { title: 'Когда', key: 'at', width: 180 },
 ];
 
-/** ISO2 country code → flag emoji (regional indicator symbols). */
-function countryFlag(code) {
-  if (!code || code.length !== 2) return '';
-  const cc = code.toUpperCase();
-  if (!/^[A-Z]{2}$/.test(cc)) return '';
-  return String.fromCodePoint(...[...cc].map(c => 0x1f1e6 + c.charCodeAt(0) - 65));
+/** ISO2 country code → flag image URL (flagcdn — real flags, render on Windows). */
+function flagUrl(code) {
+  if (!code || !/^[A-Za-z]{2}$/.test(code)) return '';
+  return `https://flagcdn.com/w20/${code.toLowerCase()}.png`;
+}
+
+const roleStats = computed(() => data.value.loginsByRole || []);
+const roleMax = computed(() => Math.max(1, ...roleStats.value.map(r => r.count)));
+const geoStats = computed(() => data.value.geography || []);
+const geoMax = computed(() => Math.max(1, ...geoStats.value.map(g => g.count)));
+
+const roleLabels = {
+  admin: 'Администратор', backoffice: 'Бэк-офис', consultant: 'Партнёр',
+  client: 'Клиент', leader: 'Лидер', manager: 'Менеджер',
+};
+function roleLabel(role) {
+  if (!role) return 'не определена';
+  return role.split(',').map(r => roleLabels[r.trim()] || r.trim()).join(', ');
 }
 
 const lastUpdatedLabel = computed(() => {
@@ -406,8 +478,45 @@ onUnmounted(() => {
 .device-unknown {
   background: rgba(var(--v-theme-on-surface), 0.25);
 }
-.flag-emoji {
-  font-size: 14px;
-  line-height: 1;
+.flag-img {
+  border-radius: 2px;
+  flex: 0 0 auto;
+  object-fit: cover;
+  box-shadow: 0 0 0 1px rgba(var(--v-theme-on-surface), 0.12);
+}
+.stat-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.stat-label {
+  flex: 0 0 38%;
+  min-width: 0;
+  font-size: 0.8125rem;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.stat-track {
+  flex: 1 1 auto;
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(var(--v-theme-on-surface), 0.08);
+  overflow: hidden;
+}
+.stat-fill {
+  height: 100%;
+  background: rgb(var(--v-theme-primary));
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+.stat-count {
+  flex: 0 0 auto;
+  min-width: 28px;
+  text-align: right;
+  font-weight: 600;
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
 }
 </style>
