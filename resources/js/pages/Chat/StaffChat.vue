@@ -3322,7 +3322,7 @@ onUnmounted(() => {
 /* Тёмная тема: ярко-зелёный primary бьёт по глазам на чёрном фоне.
    Приглушаем — Telegram/iMessage стайл: полупрозрачный тёмно-зелёный
    фон + почти-белый текст. */
-:global(.v-theme--dark) .msg-bubble.mine {
+.v-theme--dark .msg-bubble.mine {
   background: rgba(46, 125, 50, 0.42);
   color: rgba(255, 255, 255, 0.94);
 }
