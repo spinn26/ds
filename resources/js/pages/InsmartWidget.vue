@@ -3,6 +3,19 @@
     <PageHeader title="InSmart" icon="mdi-shield-car"
       :subtitle="'Подбор и оформление страховых продуктов'" />
 
+    <v-alert type="error" variant="tonal" class="mb-3" icon="mdi-alert-circle-outline">
+      <div class="text-body-2">
+        При открытии полиса клиенту (не себе) необходимо вводить
+        <strong>данные клиента (ФИО, email, телефон)</strong>, а не свои.
+        При вводе своих данных вместо данных клиента,
+        <strong>комиссия за продажу продукта не будет начислена</strong>.
+      </div>
+      <a :href="TARIFFS_URL" target="_blank" rel="noopener"
+        class="text-body-2 d-inline-block mt-1">
+        Ознакомиться с тарифами по продуктам Инсмарт можно по этой ссылке.
+      </a>
+    </v-alert>
+
     <v-card class="mb-3 pa-3 d-flex align-center ga-3 flex-wrap">
       <v-icon color="primary" size="20">mdi-information-outline</v-icon>
       <div class="text-body-2 flex-grow-1">
@@ -55,6 +68,9 @@ const INSMART_TOKEN = '382f5151-a7e5-5ad6-b1fd-2841052a4aac';
 const INSMART_SECRET = '15fd9275-80c5-5dfc-a98d-dd0b9ed658c9';
 const INSMART_LOADER_SRC = 'https://widgets.inssmart.ru/widgets/b2c-frame.loader.js';
 const INSMART_ORIGIN = 'https://widgets.inssmart.ru';
+
+// URL Google-таблицы с тарифами по продуктам Инсмарт.
+const TARIFFS_URL = 'https://docs.google.com/spreadsheets/d/1Eiye43BvZ4ZKOkTZTpS1edAoU0dclIxPS-sEfT7vGo4/edit?gid=0#gid=0';
 
 let loaderScript = null;
 
