@@ -51,7 +51,15 @@ jobs:
 
             echo "::group::Frontend build"
             npm ci --no-audit --no-fund
-            npm run build
+            # Собираем в staging-каталог, потом атомарно подменяем. Иначе
+            # `vite build` в начале очищает public/build → manifest.json
+            # отсутствует всё время сборки (десятки секунд), и каждый живой
+            # запрос падает в 500 "Vite manifest not found".
+            rm -rf public/build_new public/build_old
+            npm run build -- --outDir public/build_new --emptyOutDir
+            if [ -d public/build ]; then mv public/build public/build_old; fi
+            mv public/build_new public/build
+            rm -rf public/build_old
             echo "::endgroup::"
 
             echo "::group::DB migrations"
@@ -59,11 +67,11 @@ jobs:
             echo "::endgroup::"
 
             echo "::group::Cache rebuild"
-            # clear → optimize кэширует фрэш-конфиг/маршруты в bootstrap/cache,
-            # это и быстрее, и закрывает риск устаревшего route:cache.
-            php artisan config:clear
-            php artisan route:clear
-            php artisan view:clear
+            # `optimize` сам перекэширует config/route/view/event: каждая
+            # под-команда внутри делает clear+rebuild своего файла с минимальным
+            # окном. Явные *:clear убраны — они удаляли routes-v7.php на всё
+            # время config:cache (несколько секунд), и параллельные запросы
+            # ловили "require(routes-v7.php): Failed to open stream".
             php artisan optimize
             echo "::endgroup::"
 
