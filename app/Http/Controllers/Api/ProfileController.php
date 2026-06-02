@@ -246,6 +246,31 @@ class ProfileController extends Controller
             return response()->json(['message' => 'Консультант не найден'], 404);
         }
 
+        // DaData-проверка ИНН — та же, что в попапе ввода реквизитов на витрине
+        // продуктов (ProductController::setupRequisites): ИНН должен быть найден
+        // в ЕГРИП/ЕГРЮЛ и быть действующим. Мягко к настройке: если DaData не
+        // сконфигурирована — не блокируем ввод (всё равно идёт ручная проверка).
+        $innClean = preg_replace('/\D/', '', (string) $request->input('inn'));
+        if (strlen($innClean) !== 10 && strlen($innClean) !== 12) {
+            return response()->json([
+                'message' => 'ИНН должен быть 10 цифр (для ООО) или 12 цифр (для ИП).',
+            ], 422);
+        }
+        $dadata = app(\App\Services\DadataService::class);
+        if ($dadata->isConfigured()) {
+            $fns = $dadata->findByInn($innClean);
+            if (empty($fns['found'])) {
+                return response()->json([
+                    'message' => $fns['error'] ?? 'Не удалось найти ИНН в ЕГРИП/ЕГРЮЛ.',
+                ], 422);
+            }
+            if (($fns['status'] ?? null) === 'LIQUIDATED') {
+                return response()->json([
+                    'message' => 'По данным ФНС, этот ИНН ликвидирован. Используйте действующий ИНН.',
+                ], 422);
+            }
+        }
+
         $requisite = Requisite::where('consultant', $consultant->id)
             ->active()
             ->first();

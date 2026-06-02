@@ -249,14 +249,37 @@
                 Финменеджер вручную проверяет соответствие УСН.
                 До верификации подписание документов и продажа продуктов недоступны.
               </v-alert>
+              <!-- Текст и логика как в попапе ввода реквизитов на витрине
+                   продуктов (Products.vue): ИНН проверяется через DaData
+                   (ЕГРИП/ЕГРЮЛ), остальные данные ИП подтягиваются автоматически. -->
+              <p class="text-body-2 mb-3">
+                Заполните ИНН — наименование, ОГРНИП и адрес подтянутся из ЕГРИП
+                автоматически. После сохранения реквизиты уйдут на
+                <strong>ручную проверку</strong> финменеджеру; до верификации
+                подписание документов и продажа продуктов недоступны.
+              </p>
               <v-row dense>
-                <v-col cols="12" md="6">
+                <v-col cols="12" sm="6" md="4">
+                  <v-text-field v-model="reqForm.inn" label="ИНН ИП" placeholder="12 цифр"
+                    :loading="reqInnLookup" @blur="lookupReqInn" @keyup.enter="lookupReqInn" />
+                </v-col>
+                <v-col cols="12" md="8">
                   <v-text-field v-model="reqForm.individualEntrepreneur" label="Наименование ИП" />
                 </v-col>
-                <v-col cols="12" sm="6" md="3">
-                  <v-text-field v-model="reqForm.inn" label="ИНН" />
+                <v-col cols="12" v-if="reqInnResult">
+                  <v-alert :type="reqInnResult.found ? 'info' : 'warning'" variant="tonal" density="compact">
+                    <div class="font-weight-medium">{{ reqInnResult.name || reqInnResult.error || 'Не найдено' }}</div>
+                    <div v-if="reqInnResult.fioCheck" class="text-caption">
+                      <template v-if="reqInnMatch">✓ ФИО совпадает с профилем.</template>
+                      <template v-else>⚠ ФИО в ИП: {{ reqInnResult.fioCheck.actual }} · В профиле: {{ reqInnResult.fioCheck.expected }}.</template>
+                    </div>
+                    <div v-if="reqInnResult.found" class="text-caption mt-1">
+                      Реквизиты будут отправлены на ручную проверку финменеджеру —
+                      автоматическое подтверждение режима УСН недоступно.
+                    </div>
+                  </v-alert>
                 </v-col>
-                <v-col cols="12" sm="6" md="3">
+                <v-col cols="12" sm="6" md="6">
                   <v-text-field v-model="reqForm.ogrn" label="ОГРН/ОГРНИП" />
                 </v-col>
                 <v-col cols="12">
@@ -647,6 +670,10 @@ const pwdMsgType = ref('success');
 const savingReq = ref(false);
 const reqMsg = ref('');
 const reqMsgType = ref('success');
+// DaData-проверка ИНН (как в попапе Products.vue).
+const reqInnLookup = ref(false);
+const reqInnResult = ref(null);
+const reqInnMatch = computed(() => reqInnResult.value?.fioCheck?.match ?? null);
 const savingBank = ref(false);
 const bankMsg = ref('');
 const bankMsgType = ref('success');
@@ -730,7 +757,7 @@ async function loadCities() {
 
 const form = ref({ firstName: '', lastName: '', patronymic: '', position: '', phone: '', telegram: '', gender: '', birthDate: '', email: '', country: '', city: '' });
 const pwd = ref({ current_password: '', password: '', password_confirmation: '' });
-const reqForm = ref({ individualEntrepreneur: '', inn: '', ogrn: '', address: '', email: '', phone: '' });
+const reqForm = ref({ individualEntrepreneur: '', inn: '', ogrn: '', address: '', registrationDate: '', email: '', phone: '' });
 const bankForm = ref({ bankName: '', bankBik: '', accountNumber: '', correspondentAccount: '', beneficiaryName: '' });
 
 const initials = computed(() => {
@@ -848,6 +875,7 @@ async function loadProfile() {
     reqForm.value = {
       individualEntrepreneur: r.individualEntrepreneur || '', inn: r.inn || '',
       ogrn: r.ogrn || '', address: r.address || '', actualAddress: r.actualAddress || '',
+      registrationDate: r.registrationDate || '',
       email: r.email || '', phone: r.phone || '',
     };
     addressSameAsRegistration.value = !r.actualAddress;
@@ -899,6 +927,28 @@ async function changePassword() {
     pwdMsgType.value = 'error';
   }
   savingPwd.value = false;
+}
+
+// Проверка ИНН через DaData (ЕГРИП/ЕГРЮЛ) + автозаполнение полей ИП.
+// Тот же эндпоинт, что и попап на витрине продуктов (/requisites/check-inn).
+async function lookupReqInn() {
+  const clean = String(reqForm.value.inn || '').replace(/\D/g, '');
+  if (clean.length !== 10 && clean.length !== 12) return;
+  reqInnLookup.value = true;
+  try {
+    const { data } = await api.post('/requisites/check-inn', { inn: clean });
+    reqInnResult.value = data;
+    if (data.found) {
+      // Данные ИП подтягиваются из ЕГРИП (наименование/ОГРНИП/адрес/дата).
+      if (data.name) reqForm.value.individualEntrepreneur = data.name;
+      if (data.ogrn) reqForm.value.ogrn = data.ogrn;
+      if (data.address) reqForm.value.address = data.address;
+      if (data.registrationDate) reqForm.value.registrationDate = data.registrationDate;
+    }
+  } catch (e) {
+    reqInnResult.value = { found: false, error: e.response?.data?.message || 'Не удалось проверить ИНН' };
+  }
+  reqInnLookup.value = false;
 }
 
 async function saveRequisites() {
