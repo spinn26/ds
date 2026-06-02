@@ -162,10 +162,21 @@ class WorkspaceController extends Controller
 
         $levelsDontMatch = $nominalLevel && $calcLevel && $nominalLevel->id !== $calcLevel->id;
 
+        // НГП = последний НЕ-NULL groupVolumeCumulative. Самый свежий qLog может
+        // быть penalty-строкой финализа Отрыв/ОП с NULL cumulative — она не
+        // должна ронять НГП на stale-поле consultant.groupVolumeCumulative.
+        $cumulative = DB::table('qualificationLog')
+            ->where('consultant', $consultant->id)
+            ->whereNull('dateDeleted')
+            ->whereNotNull('groupVolumeCumulative')
+            ->orderByDesc('date')
+            ->value('groupVolumeCumulative')
+            ?? $consultant->groupVolumeCumulative ?? 0;
+
         return [
             'personalVolume' => round((float) ($qLog->personalVolume ?? $consultant->personalVolume ?? 0), 2),
             'groupVolume' => round((float) ($qLog->groupVolume ?? $consultant->groupVolume ?? 0), 2),
-            'groupVolumeCumulative' => round((float) ($qLog->groupVolumeCumulative ?? $consultant->groupVolumeCumulative ?? 0), 2),
+            'groupVolumeCumulative' => round((float) $cumulative, 2),
             'qualification' => $nominalLevel ? "{$nominalLevel->level} [{$nominalLevel->title}]" : '—',
             'percent' => $calcLevel ? $calcLevel->percent : 0,
             'calcQualification' => $levelsDontMatch ? "{$calcLevel->level} [{$calcLevel->title}]" : null,

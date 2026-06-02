@@ -35,6 +35,20 @@ class ConsultantService
             ? DB::table('qualificationLog')->whereIn('id', $qLogLatestIds)->get()->keyBy('consultant')
             : collect();
 
+        // НГП (накопительный) — последний НЕ-NULL groupVolumeCumulative.
+        // Самая свежая строка может быть penalty-строкой финализа Отрыв/ОП с
+        // NULL cumulative; она не должна ронять НГП на stale consultant-поле.
+        $cumulativeLatestIds = DB::table('qualificationLog')
+            ->whereIn('consultant', $ids)
+            ->whereNull('dateDeleted')
+            ->whereNotNull('groupVolumeCumulative')
+            ->selectRaw('MAX(id) as id')
+            ->groupBy('consultant')
+            ->pluck('id');
+        $cumulativeByConsultant = $cumulativeLatestIds->isNotEmpty()
+            ? DB::table('qualificationLog')->whereIn('id', $cumulativeLatestIds)->pluck('groupVolumeCumulative', 'consultant')
+            : collect();
+
         // Batch count active clients per consultant
         $clientCounts = DB::table('client')
             ->whereIn('consultant', $ids)
@@ -118,7 +132,7 @@ class ConsultantService
         // Index status_levels by level number for qualificationLog fallback
         $statusLevelsByLevel = $statusLevels->keyBy('level');
 
-        return $consultants->map(function ($c) use ($statusLevels, $statusLevelsByLevel, $qLogs, $clientCounts, $contractCounts, $subCounts, $activityNames, $persons, $cities, $webUsers, $cumulativeLpByConsultant) {
+        return $consultants->map(function ($c) use ($statusLevels, $statusLevelsByLevel, $qLogs, $cumulativeByConsultant, $clientCounts, $contractCounts, $subCounts, $activityNames, $persons, $cities, $webUsers, $cumulativeLpByConsultant) {
             $statusLevel = $c->status_and_lvl ? ($statusLevels[$c->status_and_lvl] ?? null) : null;
             $qLog = $qLogs[$c->id] ?? null;
 
@@ -167,7 +181,7 @@ class ConsultantService
                 'level' => $c->structureLevel,
                 'personalVolume' => round((float) ($qLog->personalVolume ?? $c->personalVolume ?? 0), 2),
                 'groupVolume' => round((float) ($qLog->groupVolume ?? $c->groupVolume ?? 0), 2),
-                'groupVolumeCumulative' => round((float) ($qLog->groupVolumeCumulative ?? $c->groupVolumeCumulative ?? 0), 2),
+                'groupVolumeCumulative' => round((float) ($cumulativeByConsultant[$c->id] ?? $c->groupVolumeCumulative ?? 0), 2),
                 'personalVolumeSinceActivation' => round((float) ($cumulativeLpByConsultant[$c->id] ?? 0), 2),
                 'clientCount' => $clientCount,
                 'contractCount' => $contractCount,
