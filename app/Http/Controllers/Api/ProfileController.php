@@ -393,23 +393,26 @@ class ProfileController extends Controller
      * введённое значение писалось туда новой строкой).
      *
      * Приоритет источников:
-     *   1. Google Places (New) — города ВСЕГО МИРА на русском, если задан ключ
-     *      `google.places.api_key`.
-     *   2. DaData — фолбэк, только РФ.
-     *   3. Статический список крупных городов РФ — если ничего не настроено.
+     *   1. GeoService — города ВСЕГО МИРА: Google Places (если задан ключ),
+     *      иначе Photon/OSM (без ключа). Основной источник.
+     *   2. DaData — сетевой фолбэк (только РФ), если мировой источник вернул
+     *      пусто (например, недоступен).
+     *   3. Статический список крупных городов РФ — крайний фолбэк.
      * Возвращает массив [{ title, value, region, country }].
      */
     public function cities(Request $request): JsonResponse
     {
         $q = trim((string) $request->input('q', ''));
 
-        $geo = app(\App\Services\GeoService::class);
-        if ($geo->isConfigured()) {
-            return response()->json($geo->suggestCity($q));
+        // Мировой источник (Google → Photon). Photon доступен всегда, так что
+        // это основной путь; пустой ответ означает сбой/короткий запрос.
+        $items = app(\App\Services\GeoService::class)->suggestCity($q);
+        if (! empty($items)) {
+            return response()->json($items);
         }
 
         $dadata = app(\App\Services\DadataService::class);
-        if ($dadata->isConfigured()) {
+        if ($q !== '' && $dadata->isConfigured()) {
             return response()->json($dadata->suggestCity($q));
         }
 
