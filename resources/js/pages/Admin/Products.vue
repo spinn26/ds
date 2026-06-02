@@ -310,9 +310,12 @@
                 hint="DS / Axevil / БКС / Insmart …" persistent-hint />
             </v-col>
             <v-col cols="6">
-              <!-- Per spec ✅Продукты §2 — поле «Свойство продукта». -->
-              <v-text-field v-model="editProgram.vendorName" label="Свойство продукта"
-                hint="Например: «МФ», «Standard», «Apfront»" persistent-hint />
+              <!-- Колонка programs_catalog.category — категория для фильтра
+                   витрины партнёра (НЕ «свойство продукта»; свойство задаётся
+                   построчно в редакторе тарифов ниже). -->
+              <v-text-field v-model="editProgram.vendorName" label="Категория"
+                hint="Фильтр витрины: Страховые / Страховая оболочка / Портфельное управление / IPO / Недвижимость"
+                persistent-hint />
             </v-col>
             <v-col cols="12">
               <v-text-field v-model="editProgram.formLink" label="Ссылка на форму"
@@ -330,42 +333,68 @@
           </v-row>
 
           <v-divider class="my-3" />
-          <div class="text-subtitle-2 font-weight-bold mb-2">Параметры расчёта</div>
-          <v-row dense>
-            <v-col cols="6">
-              <v-text-field v-model.number="editProgram.dsPercent" label="% DS" type="number"
-                hint="Комиссия платформы от суммы сделки" persistent-hint />
-            </v-col>
-            <v-col cols="6">
-              <v-text-field v-model.number="editProgram.fixedCost" label="Фикс. стоимость"
-                type="number" hint="Для продуктов с фикс-ценой (образовательные)" persistent-hint />
-            </v-col>
-            <v-col cols="12">
-              <v-select v-model="editProgram.pointsMethod" label="Методика расчёта баллов"
-                :items="pointsMethodOptions" item-title="title" item-value="value" clearable
-                hint="Как считать ЛП от сделки по этой программе" persistent-hint />
-            </v-col>
-            <v-col cols="12">
-              <v-text-field v-model="editProgram.pointsFormula" label="Формула (текст)"
-                placeholder="Стоимость продукта / 100"
-                hint="Подсказка для сотрудника — что делает расчёт. На вычисления не влияет."
-                persistent-hint />
-            </v-col>
-            <v-col cols="4">
-              <v-text-field v-model.number="editProgram.pointsMin" label="Баллы от" type="number" />
-            </v-col>
-            <v-col cols="4">
-              <v-text-field v-model.number="editProgram.pointsMax" label="Баллы до" type="number" />
-            </v-col>
-            <v-col cols="4">
-              <v-text-field v-model.number="editProgram.kvPayoutYear" label="Год выплаты КВ"
-                type="number" hint="Для регулярных взносов" persistent-hint />
-            </v-col>
-            <v-col cols="12">
-              <v-textarea v-model="editProgram.calcComment" label="Комментарий к расчёту"
-                rows="2" auto-grow hint="Какие нюансы учитывать при ручном расчёте" persistent-hint />
-            </v-col>
-          </v-row>
+          <div class="d-flex align-center flex-wrap ga-2 mb-1">
+            <div class="text-subtitle-2 font-weight-bold">Тарифы (источник для калькулятора)</div>
+            <v-spacer />
+            <!-- Быстрое заполнение по годам выплаты КВ: создаёт строки на
+                 годы 1…N (шаблон Свойство/Срок берётся из последней строки),
+                 остаётся проставить % у каждого года. -->
+            <v-text-field v-model.number="yearGenTo" type="number" min="1" max="40"
+              density="compact" hide-details variant="outlined" style="max-width:120px"
+              placeholder="до года" prepend-inner-icon="mdi-calendar-range" />
+            <v-btn size="small" variant="text" prepend-icon="mdi-table-row-plus-after"
+              :disabled="!yearGenTo || yearGenTo < 1" @click="generateYearRows">Годы 1…N</v-btn>
+            <v-btn size="small" variant="tonal" color="primary" prepend-icon="mdi-plus"
+              @click="addTariff">Строка</v-btn>
+          </div>
+          <div class="text-caption text-medium-emphasis mb-2">
+            Одна программа — много строк: разный «Год КВ» (или «Свойство») со
+            своим %ДС в одной программе, отдельные программы создавать не нужно.
+            Калькулятор сам подбирает строку по Свойству / Сроку / Году КВ. «Искл.» —
+            строка по старым контрактам, в калькуляторе не показывается.
+          </div>
+          <v-table v-if="editProgram.tariffs && editProgram.tariffs.length" density="compact" class="mb-2 tariff-table">
+            <thead>
+              <tr>
+                <th style="min-width:130px">Свойство</th>
+                <th style="width:74px">Срок</th>
+                <th style="width:74px">Год КВ</th>
+                <th style="width:96px">% ДС</th>
+                <th style="min-width:200px">Формула / комментарий</th>
+                <th style="width:56px" class="text-center">Искл.</th>
+                <th style="width:40px"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(row, i) in editProgram.tariffs" :key="i">
+                <td><v-text-field v-model="row.property" density="compact" variant="plain" hide-details
+                  placeholder="MF / SF / upfront" /></td>
+                <td><v-text-field v-model="row.term" density="compact" variant="plain" hide-details
+                  placeholder="25" /></td>
+                <td><v-text-field v-model="row.year_kv" density="compact" variant="plain" hide-details
+                  placeholder="1" /></td>
+                <td><v-text-field v-model="row.ds_pct" density="compact" variant="plain" hide-details
+                  placeholder="72,5" suffix="%" /></td>
+                <td>
+                  <v-text-field v-model="row.formula" density="compact" variant="plain" hide-details
+                    placeholder="формула (необяз.)" />
+                  <v-text-field v-model="row.comment" density="compact" variant="plain" hide-details
+                    placeholder="комментарий (необяз.)" />
+                </td>
+                <td class="text-center">
+                  <v-checkbox v-model="row.is_red" density="compact" hide-details
+                    class="d-inline-flex justify-center" />
+                </td>
+                <td>
+                  <v-btn icon="mdi-delete-outline" size="x-small" variant="text" color="error"
+                    @click="removeTariff(i)" />
+                </td>
+              </tr>
+            </tbody>
+          </v-table>
+          <div v-else class="text-caption text-medium-emphasis mb-2">
+            Тарифов нет — нажмите «Строка», чтобы добавить вариант свойства/%ДС.
+          </div>
 
           <v-divider class="my-3" />
           <v-row dense>
@@ -478,15 +507,6 @@ const programHeaders = [
   { title: 'Валюта', key: 'currencyName', width: 100 },
   { title: 'Калькулятор', key: 'visibleToCalculator', width: 110 },
   { title: 'Действия', key: 'actions', sortable: false, width: 100 },
-];
-
-// Методики расчёта баллов — синхронизировано с backend
-// CalculatorController::computePoints / CommissionCalculator::computePointsForProgram.
-const pointsMethodOptions = [
-  { value: 'amount_times_ds', title: 'Сумма × %ДС / 10000 (страховые/инвест)' },
-  { value: 'cost_div_100',    title: 'Стоимость продукта / 100 (образовательные)' },
-  { value: 'amount_div_100',  title: 'Сумма контракта / 100 (оборот)' },
-  { value: 'fixed',           title: 'Фиксировано (из "Баллы от")' },
 ];
 
 // Селектор валют — только рабочие 4 (RUB/USD/EUR/GBP). Управляется
@@ -664,16 +684,78 @@ async function deleteProduct() {
 }
 
 // Program CRUD
+
+// Канонический тариф из БД → строка редактора. Год берём из year_kv (новый
+// формат) или year (legacy). %ДС очищаем от «%», запятую → точку, чтобы поле
+// с suffix="%" не задваивало знак; legacy-доля (ds_percent 0..1) переводится
+// в проценты.
+function tariffsToRows(tariffs) {
+  const strip = (v) => {
+    if (v === null || v === undefined || v === '') return '';
+    return String(v).replace('%', '').replace(',', '.').trim();
+  };
+  return (Array.isArray(tariffs) ? tariffs : []).map((t) => ({
+    property: t.property ?? '',
+    term: t.term ?? '',
+    year_kv: t.year_kv ?? t.year ?? '',
+    ds_pct: t.ds_pct != null && t.ds_pct !== ''
+      ? strip(t.ds_pct)
+      : (t.ds_percent != null && t.ds_percent !== '' ? String(Number(t.ds_percent) * 100) : ''),
+    formula: t.formula ?? '',
+    comment: t.comment ?? '',
+    currency: t.currency ?? '',
+    is_red: !!t.is_red,
+  }));
+}
+
+function addTariff() {
+  if (!Array.isArray(editProgram.value.tariffs)) editProgram.value.tariffs = [];
+  editProgram.value.tariffs.push({
+    property: '', term: '', year_kv: '', ds_pct: '', formula: '', comment: '', currency: '', is_red: false,
+  });
+}
+
+function removeTariff(i) {
+  editProgram.value.tariffs.splice(i, 1);
+}
+
+// «Год КВ от 1 до N с разным %»: одна программа, N тарифных строк. Генерируем
+// строки на годы 1…N (Свойство/Срок наследуем от последней строки как шаблон),
+// пропуская уже существующие годы — оператор затем проставляет % в каждой.
+const yearGenTo = ref(null);
+function generateYearRows() {
+  const n = Number(yearGenTo.value);
+  if (!Number.isFinite(n) || n < 1) return;
+  if (!Array.isArray(editProgram.value.tariffs)) editProgram.value.tariffs = [];
+  const rows = editProgram.value.tariffs;
+  const tpl = rows.length ? rows[rows.length - 1] : {};
+  const existingYears = new Set(rows.map((r) => String(r.year_kv ?? '').trim()).filter(Boolean));
+  for (let y = 1; y <= Math.min(n, 40); y++) {
+    if (existingYears.has(String(y))) continue;
+    rows.push({
+      property: tpl.property ?? '',
+      term: tpl.term ?? '',
+      year_kv: String(y),
+      ds_pct: '',
+      formula: '',
+      comment: '',
+      currency: tpl.currency ?? '',
+      is_red: false,
+    });
+  }
+  yearGenTo.value = null;
+}
+
 function openCreateProgram(product) {
   editProgramProductId.value = product.id;
-  editProgram.value = { name: '', term: '', currency: null, active: true, visibleToResident: true, visibleToCalculator: true };
+  editProgram.value = { name: '', term: '', currency: null, active: true, visibleToResident: true, visibleToCalculator: true, tariffs: [] };
   programError.value = '';
   programDialog.value = true;
 }
 
 function openEditProgram(product, program) {
   editProgramProductId.value = product.id;
-  editProgram.value = { ...program };
+  editProgram.value = { ...program, tariffs: tariffsToRows(program.tariffs) };
   programError.value = '';
   programDialog.value = true;
 }

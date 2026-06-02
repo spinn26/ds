@@ -292,6 +292,7 @@ class AdminProductCatalogController extends Controller
             'created_at'     => now(),
             'updated_at'     => now(),
         ]));
+        \Illuminate\Support\Facades\Cache::forget('calculator:product-matrix:v2');
         return $this->showSingleProgram($newId);
     }
 
@@ -462,6 +463,16 @@ class AdminProductCatalogController extends Controller
             'visibleToResident'   => 'nullable|boolean',
             'visibleToCalculator' => 'nullable|boolean',
             'formLink'            => 'nullable|string|max:1000',
+            // Тарифные строки — источник «Свойств»/%ДС для калькулятора.
+            'tariffs'             => 'nullable|array',
+            'tariffs.*.property'  => 'nullable|string|max:255',
+            'tariffs.*.term'      => 'nullable',
+            'tariffs.*.year_kv'   => 'nullable',
+            'tariffs.*.ds_pct'    => 'nullable',
+            'tariffs.*.formula'   => 'nullable|string|max:1000',
+            'tariffs.*.comment'   => 'nullable|string|max:1000',
+            'tariffs.*.currency'  => 'nullable|string|max:32',
+            'tariffs.*.is_red'    => 'nullable|boolean',
         ]);
 
         $out = [
@@ -488,6 +499,68 @@ class AdminProductCatalogController extends Controller
         // can clear the field by sending null explicitly.
         if ($request->has('formLink')) {
             $out['form_link'] = $data['formLink'];
+        }
+        // Тарифы — источник «Свойств»/%ДС для калькулятора. Пишем только если
+        // прислали ключ (через has()), чтобы частичный апдейт их не затирал.
+        if ($request->has('tariffs')) {
+            $tariffs = self::normalizeTariffs($data['tariffs'] ?? []);
+            $out['tariffs'] = json_encode($tariffs, JSON_UNESCAPED_UNICODE);
+            // Денормализованные сводки, на которые опираются список и калькулятор.
+            $terms = [];
+            $years = [];
+            $anyRed = false;
+            foreach ($tariffs as $t) {
+                if ($t['term'] !== null)    $terms[(string) $t['term']] = true;
+                if ($t['year_kv'] !== null) $years[(string) $t['year_kv']] = true;
+                if ($t['is_red'])           $anyRed = true;
+            }
+            $out['terms_summary'] = $terms ? implode(',', array_keys($terms)) : null;
+            $out['years_summary'] = $years ? implode(',', array_keys($years)) : null;
+            $out['rate_lines']    = count($tariffs);
+            $out['has_red']       = $anyRed;
+        }
+        return $out;
+    }
+
+    /**
+     * Нормализует входящие строки тарифа в канонический JSONB-формат
+     * (ключи как в audit-каталоге: property/term/year_kv/ds_pct/formula/
+     * comment/currency/is_red). Полностью пустые строки отбрасываются.
+     */
+    private static function normalizeTariffs($raw): array
+    {
+        if (! is_array($raw)) {
+            return [];
+        }
+        $out = [];
+        foreach ($raw as $row) {
+            if (! is_array($row)) continue;
+            $property = trim((string) ($row['property'] ?? ''));
+            $term     = isset($row['term'])    && $row['term']    !== '' ? (string) $row['term']    : null;
+            $yearKv   = isset($row['year_kv']) && $row['year_kv'] !== '' ? (string) $row['year_kv'] : null;
+            $dsPct    = $row['ds_pct'] ?? null;
+            $formula  = trim((string) ($row['formula'] ?? ''));
+            $comment  = trim((string) ($row['comment'] ?? ''));
+            $currency = trim((string) ($row['currency'] ?? ''));
+
+            // Пропускаем полностью пустую строку.
+            if ($property === '' && $term === null && $yearKv === null
+                && ($dsPct === null || $dsPct === '') && $formula === '' && $comment === '') {
+                continue;
+            }
+
+            $out[] = [
+                'property' => $property !== '' ? $property : null,
+                'term'     => $term,
+                'year_kv'  => $yearKv,
+                // Храним %ДС как строку ("72.5") — калькулятор парсит и её, и
+                // legacy-формат "72,50%".
+                'ds_pct'   => ($dsPct === null || $dsPct === '') ? null : (string) $dsPct,
+                'formula'  => $formula !== '' ? $formula : null,
+                'comment'  => $comment !== '' ? $comment : null,
+                'currency' => $currency !== '' ? $currency : null,
+                'is_red'   => (bool) ($row['is_red'] ?? false),
+            ];
         }
         return $out;
     }

@@ -63,7 +63,9 @@ class CalculatorController extends Controller
                 foreach ($tariffs as $t) {
                     $p = self::normProperty($t['property'] ?? null);
                     $tm = self::normTerm($t['term'] ?? null);
-                    $yr = self::normYear($t['year'] ?? null);
+                    // Новый audit-формат хранит год выплаты КВ в `year_kv`,
+                    // старый — в `year`. Читаем оба (см. tariffDsPercent ниже).
+                    $yr = self::normYear($t['year_kv'] ?? $t['year'] ?? null);
                     if ($p !== null)  { $availProps[$p] = true;  $globalProperties[$p] = true; }
                     if ($tm !== null) { $availTerms[$tm] = true; $globalTerms[$tm] = true; }
                     if ($yr !== null && $yr > $maxYear) $maxYear = $yr;
@@ -102,7 +104,11 @@ class CalculatorController extends Controller
             // Глобальный справочник свойств/сроков — для UI v-select.
             // item-value = id; item-title = title. Здесь id и title — одна и та же
             // строка/число, потому что новый каталог хранит их «как есть».
-            $properties = collect(array_keys($globalProperties))->sort()->values()
+            // Дедуп по регистру: «mf» и «MF» — одно свойство. Оставляем
+            // первое встреченное написание как отображаемое.
+            $properties = collect(array_keys($globalProperties))
+                ->unique(fn ($p) => mb_strtolower($p))
+                ->sort()->values()
                 ->map(fn ($p) => ['id' => $p, 'title' => $p]);
             $terms      = collect(array_keys($globalTerms))->sort()->values()
                 ->map(fn ($t) => ['id' => $t, 'term' => $t]);
@@ -180,8 +186,9 @@ class CalculatorController extends Controller
         foreach ($tariffs as $t) {
             $tp = self::normProperty($t['property'] ?? null);
             $tt = self::normTerm($t['term'] ?? null);
-            $ty = self::normYear($t['year'] ?? null);
-            if ($property !== null && $tp !== $property) continue;
+            $ty = self::normYear($t['year_kv'] ?? $t['year'] ?? null);
+            // Свойство сравниваем без учёта регистра («MF» == «mf»).
+            if ($property !== null && mb_strtolower((string) $tp) !== mb_strtolower($property)) continue;
             if ($term     !== null && $tt !== $term)     continue;
             if ($year     !== null && $ty !== $year)     continue;
             $tariff = $t;
@@ -196,11 +203,11 @@ class CalculatorController extends Controller
             return response()->json(['error' => 'У программы нет ни одного тарифа'], 422);
         }
 
-        // ds_percent в JSONB лежит как доля (0..1, например 0.0625 = 6.25%).
-        // Переводим в проценты, чтобы дальше пользоваться той же формулой,
-        // что и legacy-калькулятор использовал для dsCommission.comission.
-        $dsPercent = (float) str_replace(',', '.', (string) ($tariff['ds_percent'] ?? '0'));
-        $dsCommissionPercent = $dsPercent * 100.0;
+        // %ДС хранится в двух форматах: новый audit-каталог — `ds_pct`
+        // как строка-процент ("72,50%"), старый — `ds_percent` как доля
+        // (0..1, напр. 0.0625 = 6.25%). tariffDsPercent() приводит оба
+        // к процентам, чтобы дальше работала единая формула.
+        $dsCommissionPercent = self::tariffDsPercent($tariff);
 
         // Курс валюты — берём свежий из currencyRate (67 = RUB → 1.0).
         $currencyRate = 1.0;
@@ -244,7 +251,7 @@ class CalculatorController extends Controller
                 'property'     => $property,
                 'term'         => $term,
                 'year'         => $year,
-                'ds_percent'   => $tariff['ds_percent'] ?? null,
+                'ds_percent'   => $tariff['ds_pct'] ?? $tariff['ds_percent'] ?? null,
                 'formula'      => $tariff['formula'] ?? null,
             ];
             $row = [
@@ -358,6 +365,23 @@ class CalculatorController extends Controller
             return is_array($decoded) ? $decoded : [];
         }
         return [];
+    }
+
+    /**
+     * %ДС из тарифа в процентах (не в долях).
+     *  - `ds_pct` — строка-процент ("72,50%", "6.00%", "72,5") → как есть в %.
+     *  - `ds_percent` — доля (0.725) → умножаем на 100.
+     */
+    private static function tariffDsPercent(array $tariff): float
+    {
+        $pct = $tariff['ds_pct'] ?? null;
+        if ($pct !== null && $pct !== '') {
+            $s = str_replace(['%', ' '], '', (string) $pct);
+            $s = str_replace(',', '.', $s);
+            return is_numeric($s) ? (float) $s : 0.0;
+        }
+        $frac = (float) str_replace(',', '.', (string) ($tariff['ds_percent'] ?? '0'));
+        return $frac * 100.0;
     }
 
     private static function normProperty($v): ?string
