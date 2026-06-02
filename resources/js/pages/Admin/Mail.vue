@@ -267,6 +267,23 @@
             <template #expanded-row="{ columns, item }">
               <tr>
                 <td :colspan="columns.length" class="pa-4" style="background:rgba(var(--v-theme-surface-variant), 0.4);">
+                  <!-- Понятное резюме статуса: чтобы не читать сырой SMTP-лог,
+                       сразу видно — ошибок отправки нет или была проблема. -->
+                  <v-alert
+                    v-if="!item.error && !item.bounced_at && (item.delivery_status === 'sent' || item.delivery_status === 'delivered')"
+                    type="success" variant="tonal" density="compact" class="mb-3"
+                    icon="mdi-check-circle-outline">
+                    <span class="font-weight-medium">Ошибок отправки нет.</span>
+                    Письмо принято SMTP-сервером и поставлено в очередь на доставку получателю.
+                    <template v-if="item.opens_count > 0"> Получатель открыл письмо.</template>
+                  </v-alert>
+                  <v-alert
+                    v-else-if="item.error || item.bounced_at"
+                    type="error" variant="tonal" density="compact" class="mb-3"
+                    icon="mdi-alert-circle-outline">
+                    <span class="font-weight-medium">При отправке возникла проблема.</span>
+                    Подробности — в блоке диагностики ниже.
+                  </v-alert>
                   <v-row dense>
                     <v-col cols="12" md="6">
                       <div v-if="item.message_id">
@@ -300,6 +317,9 @@
                       </div>
                       <div v-if="item.smtp_response" class="mt-2">
                         <div class="text-caption text-medium-emphasis">Ответ SMTP-сервера</div>
+                        <div v-if="!item.error" class="text-caption text-success mb-1">
+                          Финальный ответ «queued» = сервер получателя принял письмо без ошибок.
+                        </div>
                         <div class="text-body-2 font-mono" style="white-space: pre-wrap; word-break: break-word;">{{ item.smtp_response }}</div>
                       </div>
                       <div v-if="item.bounced_at" class="mt-2">
