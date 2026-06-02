@@ -360,6 +360,7 @@
                 <th style="width:74px">Срок</th>
                 <th style="width:74px">Год КВ</th>
                 <th style="width:96px">% ДС</th>
+                <th style="width:96px">Валюта</th>
                 <th style="min-width:200px">Формула / комментарий</th>
                 <th style="width:56px" class="text-center">Искл.</th>
                 <th style="width:40px"></th>
@@ -375,6 +376,8 @@
                   placeholder="1" /></td>
                 <td><v-text-field v-model="row.ds_pct" density="compact" variant="plain" hide-details
                   placeholder="72,5" suffix="%" /></td>
+                <td><v-combobox v-model="row.currency" :items="tariffCurrencyOptions" density="compact"
+                  variant="plain" hide-details placeholder="USD" /></td>
                 <td>
                   <v-text-field v-model="row.formula" density="compact" variant="plain" hide-details
                     placeholder="формула (необяз.)" />
@@ -707,6 +710,10 @@ function tariffsToRows(tariffs) {
     is_red: !!t.is_red,
   }));
 }
+
+// Коды валют тарифа — подсказки для combobox (значение пишется строкой как в
+// данных: «USD»). Combobox оставляет и комбинированные значения вроде «USD/EUR».
+const tariffCurrencyOptions = ['RUB', 'USD', 'EUR', 'KZT', 'GBP'];
 
 function addTariff() {
   if (!Array.isArray(editProgram.value.tariffs)) editProgram.value.tariffs = [];
