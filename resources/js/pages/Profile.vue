@@ -134,26 +134,25 @@
             </div>
           </v-card>
 
-          <!-- Подписанные документы (только partner). Бэкенд возвращает
-               массив всех правовых документов (Согласие, Политика, Оферта,
-               Стандарты, Фото) с per-документной датой акцепта. Показываем
-               только те, что подписаны — Stand. + Фото без акцепта просто
-               не отображаем, чтобы не загромождать. -->
-          <v-card v-if="!isEmployee && signedDocsList.length" class="ds-card">
+          <!-- Документы партнёра (только partner). Бэкенд возвращает
+               документы обязательного флоу акцепта (Согласие, Политика,
+               Оферта, ПЭП) с per-документной датой акцепта. Показываем все —
+               со ссылкой и отметкой «подписано / не подписано». -->
+          <v-card v-if="!isEmployee && docsList.length" class="ds-card">
             <div class="ds-card__head">
               <div class="ds-title-l d-flex align-center ga-2">
                 <v-icon color="primary">mdi-file-document-multiple-outline</v-icon>
-                Подписанные документы
+                Документы
               </div>
             </div>
             <div class="ds-card__body">
               <v-list density="comfortable">
-                <v-list-item v-for="d in signedDocsList" :key="d.id"
-                  :href="d.url" target="_blank" rel="noopener"
-                  prepend-icon="mdi-file-check-outline"
+                <v-list-item v-for="d in docsList" :key="d.id"
+                  :href="d.url || undefined" :target="d.url ? '_blank' : undefined" rel="noopener"
+                  :prepend-icon="d.signedAt ? 'mdi-file-check-outline' : 'mdi-file-document-outline'"
                   :title="d.title"
-                  :subtitle="d.signedAt ? `подписано ${fmtShortDate(d.signedAt)}` : 'ссылка'">
-                  <template #append>
+                  :subtitle="d.signedAt ? `подписано ${fmtShortDate(d.signedAt)}` : 'не подписано'">
+                  <template v-if="d.url" #append>
                     <v-icon size="16" color="medium-emphasis">mdi-open-in-new</v-icon>
                   </template>
                 </v-list-item>
@@ -613,10 +612,10 @@ const { showError, showSuccess } = useSnackbar();
 const auth = useAuthStore();
 const isEmployee = computed(() => auth.isStaff && !auth.isConsultant);
 const canInvite = computed(() => profile.value?.referral?.canInvite ?? false);
-// Только подписанные документы — Стандарты/Фото без акцепта в профиле
-// не светим.
-const signedDocsList = computed(() =>
-  (profile.value?.signedDocuments || []).filter(d => d.signedAt)
+// Все документы обязательного флоу акцепта (бэкенд уже фильтрует по
+// in_acceptance_flow). Показываем со ссылкой и статусом подписания.
+const docsList = computed(() =>
+  profile.value?.signedDocuments || []
 );
 
 const loading = ref(true);

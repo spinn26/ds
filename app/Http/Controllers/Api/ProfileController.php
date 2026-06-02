@@ -332,7 +332,7 @@ class ProfileController extends Controller
      */
     public function agreementDocuments(): JsonResponse
     {
-        $docs = AgreementDocument::orderBy('number')->get();
+        $docs = AgreementDocument::inFlow()->orderBy('number')->get();
 
         return response()->json(AgreementDocumentResource::collection($docs));
     }
@@ -402,7 +402,7 @@ class ProfileController extends Controller
      */
     private function getSignedDocuments(?Consultant $consultant): array
     {
-        $documents = AgreementDocument::orderBy('number')->get();
+        $documents = AgreementDocument::inFlow()->orderBy('number')->get();
 
         $latestPerDoc = $consultant
             ? DB::table('partnerAcceptance')

@@ -43,6 +43,7 @@ class Consultant extends Model
         return [
             'active' => 'boolean',
             'acceptance' => 'boolean',
+            'education_exempt' => 'boolean',
             'isStudent' => 'boolean',
             'fieldForReport' => 'boolean',
             'activity' => PartnerActivity::class,

@@ -15,6 +15,7 @@ use App\Services\PartnerStatusService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class AdminDataController extends Controller
 {
@@ -1883,11 +1884,14 @@ class AdminDataController extends Controller
      */
     public function acceptance(Request $request): JsonResponse
     {
-        // Все документы (5 системных) — нужны и для фильтра, и для отрисовки.
-        $allDocs = DB::table('agreementPartnersDocuments')
-            ->orderBy('number')
-            ->get(['id', 'name', 'link', 'number']);
-        $totalDocs = $allDocs->count() ?: 5;
+        // Документы обязательного флоу акцепта (Согласие, Политика, Оферта,
+        // ПЭП) — Стандарты/Фото исключены через in_acceptance_flow с 2026-06-02.
+        $docsQuery = DB::table('agreementPartnersDocuments')->orderBy('number');
+        if (Schema::hasColumn('agreementPartnersDocuments', 'in_acceptance_flow')) {
+            $docsQuery->where('in_acceptance_flow', true);
+        }
+        $allDocs = $docsQuery->get(['id', 'name', 'link', 'number']);
+        $totalDocs = $allDocs->count() ?: 4;
 
         $query = DB::table('consultant')->whereNull('dateDeleted');
 

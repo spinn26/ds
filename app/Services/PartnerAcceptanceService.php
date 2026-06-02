@@ -25,7 +25,8 @@ class PartnerAcceptanceService
     public const DOC_OFFER = 1;          // Публичная оферта
     public const DOC_PRIVACY_POLICY = 2; // Политика обработки ПД
     public const DOC_PD_CONSENT = 3;     // Согласие на обработку ПД
-    public const DOC_STANDARDS = 4;      // Стандарты и правила (приложение к оферте)
+    public const DOC_STANDARDS = 4;      // Стандарты и правила (вне обязательного флоу с 2026-06-02)
+    public const DOC_PEP = 6;            // Подтверждение договора в эл. форме + ПЭП
 
     /**
      * Step 1 of registration: partner has ticked the consent checkbox
@@ -40,14 +41,16 @@ class PartnerAcceptanceService
     }
 
     /**
-     * Cabinet step (after IP requisites are verified): partner has
-     * accepted the Оферта and its annexes (Стандарты).
+     * Cabinet step (after IP requisites are verified): partner accepts the
+     * Оферта and confirms conclusion of the contract in electronic form via
+     * a simple electronic signature (ПЭП). Both are logged per-document so
+     * they surface in the admin ledger and the partner's profile.
      */
     public function recordOfferAcceptance(Consultant $consultant, Request $request): void
     {
         $this->record($consultant, [
             self::DOC_OFFER,
-            self::DOC_STANDARDS,
+            self::DOC_PEP,
         ], $request);
     }
 

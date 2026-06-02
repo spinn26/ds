@@ -143,7 +143,12 @@ class ProductController extends Controller
                 : false;
 
             $linkedCourses = $legacyId ? ($coursesByLegacy[$legacyId] ?? collect()) : collect();
-            if ($linkedCourses->isNotEmpty()) {
+            // education_exempt — текущие (на момент миграции 2026_06_02)
+            // партнёры grandfathered: продукты открыты без прохождения курсов.
+            // Новые партнёры (флаг по умолчанию false) обязаны пройти все
+            // привязанные курсы, чтобы продукт открылся.
+            $exempt = $consultant && (bool) ($consultant->education_exempt ?? false);
+            if ($linkedCourses->isNotEmpty() && ! $exempt) {
                 $available = $linkedCourses->every(fn ($c) => isset($completedSet[$c->id]));
             } else {
                 $available = $hasAccess;

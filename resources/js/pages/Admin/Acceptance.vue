@@ -66,7 +66,8 @@
               <tbody>
                 <tr v-for="d in item.documents" :key="'d-' + item.id + '-' + d.id">
                   <td>
-                    <a :href="d.link" target="_blank" class="text-decoration-none">{{ d.name }}</a>
+                    <a v-if="d.link" :href="d.link" target="_blank" class="text-decoration-none">{{ d.name }}</a>
+                    <span v-else>{{ d.name }}</span>
                   </td>
                   <td class="text-center">
                     <v-icon :color="d.accepted ? 'success' : 'grey'" size="22">
