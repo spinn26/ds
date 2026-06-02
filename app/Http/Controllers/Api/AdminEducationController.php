@@ -190,24 +190,28 @@ class AdminEducationController extends Controller
             ->groupBy('course_id')
             ->pluck('cnt', 'course_id');
 
-        // Products: many-to-many via education_course_product (pivot). Keep the
-        // legacy product_id/productName for backward-compat (partner storefront
-        // + product-side reverse binding still read the single product_id).
+        // Products (multi): pivot education_course_product хранит catalog id
+        // (миграция 2026_06_02_000030) → имена из products_catalog.
         $pivotRows = DB::table('education_course_product')
             ->whereIn('course_id', $courseIds)
             ->get(['course_id', 'product_id']);
-        $productIds = $pivotRows->pluck('product_id')
-            ->merge($rows->pluck('product_id'))
-            ->filter()->unique();
-        $productNames = $productIds->isNotEmpty()
-            ? DB::table('product')->whereIn('id', $productIds)->pluck('name', 'id')
+        $catalogProductIds = $pivotRows->pluck('product_id')->filter()->unique();
+        $catalogNames = $catalogProductIds->isNotEmpty() && Schema::hasTable('products_catalog')
+            ? DB::table('products_catalog')->whereIn('id', $catalogProductIds)->pluck('name', 'id')
             : collect();
         $productsByCourse = $pivotRows->groupBy('course_id')->map(
             fn ($g) => $g->map(fn ($r) => [
                 'id' => $r->product_id,
-                'name' => $productNames[$r->product_id] ?? null,
+                'name' => $catalogNames[$r->product_id] ?? null,
             ])->values()
         );
+
+        // Scalar education_courses.product_id остаётся LEGACY id (витрина +
+        // обратная привязка) → его имя берём из legacy `product`.
+        $legacyScalarIds = $rows->pluck('product_id')->filter()->unique();
+        $legacyNames = $legacyScalarIds->isNotEmpty()
+            ? DB::table('product')->whereIn('id', $legacyScalarIds)->pluck('name', 'id')
+            : collect();
 
         // Programs: many-to-many via education_course_program (pivot at the
         // program granularity). program_id references programs_catalog(id).
@@ -238,7 +242,7 @@ class AdminEducationController extends Controller
             'title' => $c->title,
             'description' => $c->description,
             'product_id' => $c->product_id,
-            'productName' => $c->product_id ? ($productNames[$c->product_id] ?? null) : null,
+            'productName' => $c->product_id ? ($legacyNames[$c->product_id] ?? null) : null,
             'products' => ($productsByCourse[$c->id] ?? collect())->all(),
             'product_ids' => ($productsByCourse[$c->id] ?? collect())->pluck('id')->all(),
             'programs' => ($programsByCourse[$c->id] ?? collect())->all(),
@@ -394,22 +398,19 @@ class AdminEducationController extends Controller
         // чья каталог-карточка активна. Иначе Оля видела бы продукты, которые
         // деактивированы в каталоге (legacy product.active с ним не синхронен).
         if (Schema::hasTable('products_catalog')) {
-            $q = DB::table('products_catalog as c')
-                ->join('product as p', 'p.id', '=', 'c.legacy_product_id')
-                ->where('c.active', true)
-                ->whereNotNull('c.legacy_product_id');
+            // value = products_catalog.id (его хранит pivot после миграции
+            // 2026_06_02_000030), label = каталожное имя. Берём ВСЕ активные
+            // витринные продукты — включая каталог-нативные без legacy-анкера
+            // (напр. Investors Trust / БРОКЕР+), которых раньше не было в списке.
+            $q = DB::table('products_catalog as c')->where('c.active', true);
 
             // Только витрина: тот же критерий, что у партнёрского /products
-            // (ProductController) — продукт-зонтик с visible_to_resident=true.
-            // Иначе оператор видит скрытые с витрины продукты.
+            // (ProductController) — visible_to_resident=true.
             if (Schema::hasColumn('products_catalog', 'visible_to_resident')) {
                 $q->where('c.visible_to_resident', true);
             }
 
-            // Label = каталожное имя (как на странице «Продукты» / витрине),
-            // value = legacy product.id (его хранит pivot education_course_product).
-            // Иначе оператор видит legacy-имя (напр. «PPF» вместо «Everia Life»).
-            $rows = $q->orderBy('c.name')->distinct()->get(['p.id as id', 'c.name as name']);
+            $rows = $q->orderBy('c.name')->get(['c.id as id', 'c.name as name']);
 
             return response()->json(['data' => $rows]);
         }
@@ -446,10 +447,8 @@ class AdminEducationController extends Controller
 
         $q = DB::table('programs_catalog as g')
             ->join('products_catalog as c', 'c.id', '=', 'g.product_id')
-            ->join('product as p', 'p.id', '=', 'c.legacy_product_id')
             ->where('g.active', true)
-            ->where('c.active', true)
-            ->whereNotNull('c.legacy_product_id');
+            ->where('c.active', true);
 
         // Только витрина: программа видна, лишь если ОБА уровня (продукт И
         // программа) имеют visible_to_resident=true — тот же критерий, что у
@@ -461,13 +460,16 @@ class AdminEducationController extends Controller
             $q->where('c.visible_to_resident', true);
         }
 
+        // product_id = products_catalog.id — тот же id-space, что хранит pivot
+        // education_course_product и отдаёт productOptions, чтобы фронт мог
+        // фильтровать программы по выбранным продуктам.
         $rows = $q->orderBy('c.name')
             ->orderBy('g.name')
             ->get([
                 'g.id as id',
                 'g.name as name',
-                'c.legacy_product_id as product_id',
-                'c.name as product_name',   // каталожное имя продукта (как в витрине)
+                'c.id as product_id',
+                'c.name as product_name',
             ]);
 
         return response()->json(['data' => $rows]);
@@ -506,12 +508,17 @@ class AdminEducationController extends Controller
     /** Общий маппинг полей курса. */
     private function coursePayload(Request $request): array
     {
-        // product_ids[] is the new multi-product binding. Keep the legacy
-        // scalar product_id in sync (= first selected) so the partner
-        // storefront and product-side reverse binding keep working.
-        $primaryProductId = $request->has('product_ids')
-            ? ($this->normalizeProductIds($request->input('product_ids'))[0] ?? null)
-            : $request->product_id;
+        // product_ids[] теперь catalog id. Legacy scalar product_id оставляем
+        // для витрины + обратной привязки: маппим первый выбранный catalog →
+        // его legacy_product_id (null для каталог-нативных без анкера — витрина
+        // их по scalar и не показывала).
+        $primaryProductId = $request->product_id;
+        if ($request->has('product_ids')) {
+            $firstCatalogId = $this->normalizeProductIds($request->input('product_ids'))[0] ?? null;
+            $primaryProductId = $firstCatalogId
+                ? (DB::table('products_catalog')->where('id', $firstCatalogId)->value('legacy_product_id') ?: null)
+                : null;
+        }
 
         $payload = [
             'title' => $request->title,
@@ -1071,11 +1078,9 @@ class AdminEducationController extends Controller
                 UNIQUE (course_id, product_id)
             )');
             DB::statement('CREATE INDEX education_course_product_product_idx ON education_course_product (product_id)');
-            // Backfill from the legacy 1:1 product_id so existing links survive.
-            DB::statement('INSERT INTO education_course_product (course_id, product_id, created_at)
-                SELECT id, product_id, now() FROM education_courses
-                WHERE product_id IS NOT NULL
-                ON CONFLICT (course_id, product_id) DO NOTHING');
+            // NB: без backfill из education_courses.product_id — тот scalar
+            // остаётся legacy id, а pivot теперь хранит products_catalog.id
+            // (разные id-spaces). На свежих средах pivot наполняется через UI.
         }
 
         if (! Schema::hasTable('education_course_program')) {
