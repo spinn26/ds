@@ -141,7 +141,7 @@ const filteredProducts = computed(() => {
     list = list.filter(p => p.name?.toLowerCase().includes(q));
   }
   if (category.value) list = list.filter(p => String(p.category?.id) === String(category.value));
-  if (currency.value) list = list.filter(p => (p.currencies || []).some(c => c.id === currency.value));
+  if (currency.value) list = list.filter(p => (p.currencies || []).some(c => (c.symbol || c.nameRu) === currency.value));
   return list;
 });
 
@@ -151,10 +151,14 @@ async function load() {
     const { data } = await api.get('/products');
     products.value = data.products || data.data || [];
     if (data.categories) categoryOptions.value = data.categories.map(c => ({ title: c.name, value: c.id }));
+    // Каталог-валюты приходят строками-кодами (id=null, nameRu=symbol="USD").
+    // Дедупим и фильтруем по коду, иначе дедуп по null-id схлопывал список в
+    // одну валюту, а лейбл получался дублем «USD (USD)».
     const seen = new Set();
     currencyOptions.value = products.value.flatMap(p => p.currencies || [])
-      .filter(c => { if (seen.has(c.id)) return false; seen.add(c.id); return true; })
-      .map(c => ({ id: c.id, label: c.symbol ? `${c.nameRu} (${c.symbol})` : c.nameRu }));
+      .map(c => c.symbol || c.nameRu)
+      .filter(code => code && !seen.has(code) && seen.add(code))
+      .map(code => ({ id: code, label: code }));
   } catch {}
   loading.value = false;
 }

@@ -341,7 +341,7 @@ const filteredProducts = computed(() => {
     list = list.filter(p => String(p.category?.id) === String(category.value));
   }
   if (currency.value) {
-    list = list.filter(p => (p.currencies || []).some(c => c.id === currency.value));
+    list = list.filter(p => (p.currencies || []).some(c => (c.symbol || c.nameRu) === currency.value));
   }
   return list;
 });
@@ -445,12 +445,16 @@ async function loadProducts() {
       else if (data.access) access.value = data.access;
       if (data.categories) allCategories.value = data.categories.map(c => ({ title: c.name, value: c.id }));
     }
-    // Валюты — пересечение из всех продуктов (dedupe by id)
+    // Валюты — уникальные коды из всех продуктов. Каталог-валюты приходят
+    // строками (id=null, nameRu=symbol="USD"), поэтому дедупим/фильтруем по
+    // коду, а не по null-id (он схлопывал список в одну валюту), и не дублируем
+    // лейбл «USD (USD)».
     const seen = new Set();
     currencyOptions.value = products.value
       .flatMap(p => p.currencies || [])
-      .filter(c => { if (seen.has(c.id)) return false; seen.add(c.id); return true; })
-      .map(c => ({ id: c.id, label: c.symbol ? `${c.nameRu} (${c.symbol})` : c.nameRu }));
+      .map(c => c.symbol || c.nameRu)
+      .filter(code => code && !seen.has(code) && seen.add(code))
+      .map(code => ({ id: code, label: code }));
 
     accessChecked.value = true;
     // После загрузки и определения access — запускаем gate
