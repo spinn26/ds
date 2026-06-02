@@ -117,8 +117,9 @@
           <input v-if="bulkMode" type="checkbox" class="chat-item-cb"
             :checked="selectedIds.has(t.id)"
             @click.stop="toggleCardSelect(t, $event)" />
-          <div class="chat-item-avatar" :style="{ background: catColor(t.category || t.department) }">
-            <v-icon size="18" color="white">{{ catIcon(t.category || t.department) }}</v-icon>
+          <div class="chat-item-avatar" :style="{ background: t.customer_avatar ? 'transparent' : catColor(t.category || t.department) }">
+            <v-img v-if="t.customer_avatar" :src="t.customer_avatar" cover class="chat-item-avatar-img" />
+            <span v-else class="chat-item-avatar-initials">{{ initials(t.customer_name) }}</span>
           </div>
           <div v-if="t.priority && t.priority !== 'medium'" class="priority-bar" :style="{ background: prioClr(t.priority) }"></div>
           <div class="chat-item-body">
@@ -292,8 +293,9 @@
                       :model-value="selectedIds.has(t.id)"
                       density="compact" hide-details
                       @click.stop="toggleCardSelect(t, $event)" />
-                    <div class="kanban-card-avatar" :style="{ background: catColor(t.category || t.department) }">
-                      <v-icon size="12" color="white">{{ catIcon(t.category || t.department) }}</v-icon>
+                    <div class="kanban-card-avatar" :style="{ background: t.customer_avatar ? 'transparent' : catColor(t.category || t.department) }">
+                      <v-img v-if="t.customer_avatar" :src="t.customer_avatar" cover class="kanban-card-avatar-img" />
+                      <span v-else class="kanban-card-avatar-initials">{{ initials(t.customer_name) }}</span>
                     </div>
                     <v-icon v-if="t.pinned_at" size="12" color="primary" title="Закреплён">mdi-pin</v-icon>
                     <div class="kanban-card-subject text-body-2 font-weight-medium text-truncate flex-grow-1">{{ t.subject }}</div>
@@ -3146,6 +3148,9 @@ onUnmounted(() => {
   transition: transform 0.2s ease;
 }
 .chat-item:hover .chat-item-avatar { transform: scale(1.04); }
+.chat-item-avatar { overflow: hidden; }
+.chat-item-avatar-img { width: 100%; height: 100%; }
+.chat-item-avatar-initials { color: #fff; font-size: 13px; font-weight: 700; letter-spacing: -0.3px; }
 .priority-bar { position: absolute; top: 8px; bottom: 8px; left: 4px; width: 2px; border-radius: 1px; }
 .chat-item-body { flex: 1; min-width: 0; }
 .chat-item-top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; min-width: 0; }
@@ -3499,7 +3504,9 @@ onUnmounted(() => {
 .kanban-card.stale { background: rgba(var(--v-theme-error), 0.04); }
 .kanban-card.bulk-mode { cursor: pointer; }
 .kanban-card.selected { border-color: rgb(var(--v-theme-primary)) !important; background: rgba(var(--v-theme-primary), 0.08); box-shadow: 0 0 0 2px rgba(var(--v-theme-primary), 0.3); }
-.kanban-card-avatar { width: 22px; height: 22px; border-radius: 6px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.kanban-card-avatar { width: 22px; height: 22px; border-radius: 6px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; overflow: hidden; }
+.kanban-card-avatar-img { width: 100%; height: 100%; }
+.kanban-card-avatar-initials { color: #fff; font-size: 10px; font-weight: 700; letter-spacing: -0.3px; }
 .kanban-card-subject { line-height: 1.3; }
 
 /* Quick actions on card hover */

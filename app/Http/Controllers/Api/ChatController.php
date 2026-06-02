@@ -238,9 +238,25 @@ class ChatController extends Controller
             }
         }
 
-        $data = $tickets->map(function ($t) use ($unreadMap, $lastMsgMap, $user, $newForMeSet) {
+        // Аватар автора запроса (created_by → WebUser.avatar) для карточки
+        // тикета: показываем лицо партнёра, а не общую иконку категории.
+        // customer_name остаётся для инициалов-фоллбэка.
+        $avatarMap = collect();
+        $createdByIds = $tickets->pluck('created_by')->filter()->unique();
+        if ($createdByIds->isNotEmpty()) {
+            $avatarMap = DB::table('WebUser')
+                ->whereIn('id', $createdByIds)
+                ->whereNotNull('avatar')
+                ->where('avatar', '<>', '')
+                ->pluck('avatar', 'id');
+        }
+
+        $data = $tickets->map(function ($t) use ($unreadMap, $lastMsgMap, $user, $newForMeSet, $avatarMap) {
             $t->unread = $unreadMap[$t->id] ?? 0;
             $t->is_new_for_me = $newForMeSet->contains($t->id);
+            $t->customer_avatar = (! empty($t->created_by) && isset($avatarMap[$t->created_by]))
+                ? '/storage/' . $avatarMap[$t->created_by]
+                : null;
             $lm = $lastMsgMap[$t->id] ?? null;
             if ($lm) {
                 $preview = $lm->content
