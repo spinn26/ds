@@ -27,6 +27,11 @@ class RequisiteResource extends JsonResource
             'phone' => $this->phone,
             'verified' => $this->verified,
             'statusName' => $statusName,
+            // Статус для UI профиля (чип/алерты на карточке реквизитов).
+            // verified=true → подтверждено; иначе «на проверке». Отдельный
+            // 'rejected' не выводим: updateRequisites ставит status=2 на любое
+            // сохранение, поэтому по нему нельзя отличить отказ от ожидания.
+            'verificationStatus' => $this->verified ? 'verified' : 'pending',
         ];
     }
 }

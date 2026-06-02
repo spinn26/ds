@@ -19,6 +19,8 @@ class BankRequisiteResource extends JsonResource
             'correspondentAccount' => $this->correspondentAccount,
             'beneficiaryName' => $this->beneficiaryName,
             'verified' => $this->verified,
+            // См. RequisiteResource: verified → подтверждено, иначе «на проверке».
+            'verificationStatus' => $this->verified ? 'verified' : 'pending',
         ];
     }
 }
