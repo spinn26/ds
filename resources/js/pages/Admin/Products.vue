@@ -295,21 +295,26 @@
       </v-card>
     </v-dialog>
 
-    <!-- Program Dialog -->
-    <v-dialog v-model="programDialog" max-width="720" persistent scrollable>
+    <!-- Program Dialog — на мобиле во весь экран, на десктопе широкий фрейм. -->
+    <v-dialog v-model="programDialog" :max-width="mobile ? undefined : 1100"
+      :fullscreen="mobile" persistent scrollable>
       <v-card>
-        <v-card-title>{{ editProgram.id ? 'Редактировать' : 'Добавить' }} программу</v-card-title>
-        <v-card-text style="max-height: 72vh">
+        <v-card-title class="d-flex align-center">
+          <span>{{ editProgram.id ? 'Редактировать' : 'Добавить' }} программу</span>
+          <v-spacer />
+          <v-btn v-if="mobile" icon="mdi-close" variant="text" size="small" @click="programDialog = false" />
+        </v-card-title>
+        <v-card-text :style="mobile ? {} : { maxHeight: '78vh' }">
           <v-row dense>
             <v-col cols="12">
               <v-text-field v-model="editProgram.name" label="Название *" :rules="[v => !!v || 'Обязательное поле']" />
             </v-col>
-            <v-col cols="6">
+            <v-col cols="12" sm="6">
               <!-- Per spec ✅Продукты §2 — поле «Поставщик». -->
               <v-text-field v-model="editProgram.providerName" label="Поставщик"
                 hint="DS / Axevil / БКС / Insmart …" persistent-hint />
             </v-col>
-            <v-col cols="6">
+            <v-col cols="12" sm="6">
               <!-- Колонка programs_catalog.category — категория для фильтра
                    витрины партнёра (НЕ «свойство продукта»; свойство задаётся
                    построчно в редакторе тарифов ниже). -->
@@ -356,62 +361,109 @@
             Калькулятор сам подбирает строку по Свойству / Сроку / Году КВ. «Искл.» —
             строка по старым контрактам, в калькуляторе не показывается.
           </div>
-          <v-table v-if="editProgram.tariffs && editProgram.tariffs.length" density="compact" class="mb-2 tariff-table">
-            <thead>
-              <tr>
-                <th style="min-width:130px">Свойство</th>
-                <th style="width:74px">Срок</th>
-                <th style="width:74px">Год КВ</th>
-                <th style="width:96px">% ДС</th>
-                <th style="width:96px">Валюта</th>
-                <th style="min-width:200px">Формула / комментарий</th>
-                <th style="width:56px" class="text-center">Искл.</th>
-                <th style="width:40px"></th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(row, i) in editProgram.tariffs" :key="i">
-                <td><v-text-field v-model="row.property" density="compact" variant="plain" hide-details
-                  placeholder="MF / SF / upfront" /></td>
-                <td><v-text-field v-model="row.term" density="compact" variant="plain" hide-details
-                  placeholder="25" /></td>
-                <td><v-text-field v-model="row.year_kv" density="compact" variant="plain" hide-details
-                  placeholder="1" /></td>
-                <td><v-text-field v-model="row.ds_pct" density="compact" variant="plain" hide-details
-                  placeholder="72,5" suffix="%" /></td>
-                <td><v-combobox v-model="row.currency" :items="tariffCurrencyOptions" density="compact"
-                  variant="plain" hide-details placeholder="USD" /></td>
-                <td>
-                  <v-text-field v-model="row.formula" density="compact" variant="plain" hide-details
-                    placeholder="формула (необяз.)" />
-                  <v-text-field v-model="row.comment" density="compact" variant="plain" hide-details
-                    placeholder="комментарий (необяз.)" />
-                </td>
-                <td class="text-center">
-                  <v-checkbox v-model="row.is_red" density="compact" hide-details
-                    class="d-inline-flex justify-center" />
-                </td>
-                <td>
-                  <v-btn icon="mdi-delete-outline" size="x-small" variant="text" color="error"
+          <template v-if="editProgram.tariffs && editProgram.tariffs.length">
+            <!-- Десктоп: таблица. Обёрнута в скролл-контейнер, чтобы на узких
+                 окнах колонки не сжимались, а скроллились по горизонтали. -->
+            <div v-if="!mobile" class="tariff-scroll mb-2">
+              <v-table density="compact" class="tariff-table">
+                <thead>
+                  <tr>
+                    <th style="min-width:140px">Свойство</th>
+                    <th style="min-width:80px">Срок</th>
+                    <th style="min-width:80px">Год КВ</th>
+                    <th style="min-width:100px">% ДС</th>
+                    <th style="min-width:110px">Валюта</th>
+                    <th style="min-width:220px">Формула / комментарий</th>
+                    <th style="min-width:56px" class="text-center">Искл.</th>
+                    <th style="width:44px"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(row, i) in editProgram.tariffs" :key="i">
+                    <td><v-text-field v-model="row.property" density="compact" variant="plain" hide-details
+                      placeholder="MF / SF / upfront" /></td>
+                    <td><v-text-field v-model="row.term" density="compact" variant="plain" hide-details
+                      placeholder="25" /></td>
+                    <td><v-text-field v-model="row.year_kv" density="compact" variant="plain" hide-details
+                      placeholder="1" /></td>
+                    <td><v-text-field v-model="row.ds_pct" density="compact" variant="plain" hide-details
+                      placeholder="72,5" suffix="%" /></td>
+                    <td><v-combobox v-model="row.currency" :items="tariffCurrencyOptions" density="compact"
+                      variant="plain" hide-details placeholder="USD" /></td>
+                    <td>
+                      <v-text-field v-model="row.formula" density="compact" variant="plain" hide-details
+                        placeholder="формула (необяз.)" />
+                      <v-text-field v-model="row.comment" density="compact" variant="plain" hide-details
+                        placeholder="комментарий (необяз.)" />
+                    </td>
+                    <td class="text-center">
+                      <v-checkbox v-model="row.is_red" density="compact" hide-details
+                        class="d-inline-flex justify-center" />
+                    </td>
+                    <td>
+                      <v-btn icon="mdi-delete-outline" size="x-small" variant="text" color="error"
+                        @click="removeTariff(i)" />
+                    </td>
+                  </tr>
+                </tbody>
+              </v-table>
+            </div>
+
+            <!-- Мобайл: каждая строка тарифа — карточка со столбиком полей,
+                 ничего не обрезается. -->
+            <div v-else>
+              <v-card v-for="(row, i) in editProgram.tariffs" :key="i" variant="outlined" class="mb-3 pa-3">
+                <div class="d-flex align-center mb-1">
+                  <span class="text-caption font-weight-medium">Строка {{ i + 1 }}</span>
+                  <v-spacer />
+                  <v-checkbox v-model="row.is_red" label="Искл." density="compact" hide-details
+                    class="ma-0 flex-grow-0" />
+                  <v-btn icon="mdi-delete-outline" size="small" variant="text" color="error"
                     @click="removeTariff(i)" />
-                </td>
-              </tr>
-            </tbody>
-          </v-table>
+                </div>
+                <v-row dense>
+                  <v-col cols="12">
+                    <v-text-field v-model="row.property" label="Свойство" density="compact" hide-details
+                      placeholder="MF / SF / upfront" />
+                  </v-col>
+                  <v-col cols="4">
+                    <v-text-field v-model="row.term" label="Срок" density="compact" hide-details placeholder="25" />
+                  </v-col>
+                  <v-col cols="4">
+                    <v-text-field v-model="row.year_kv" label="Год КВ" density="compact" hide-details placeholder="1" />
+                  </v-col>
+                  <v-col cols="4">
+                    <v-text-field v-model="row.ds_pct" label="% ДС" suffix="%" density="compact" hide-details
+                      placeholder="72,5" />
+                  </v-col>
+                  <v-col cols="12">
+                    <v-combobox v-model="row.currency" :items="tariffCurrencyOptions" label="Валюта"
+                      density="compact" hide-details placeholder="USD" />
+                  </v-col>
+                  <v-col cols="12">
+                    <v-text-field v-model="row.formula" label="Формула (необяз.)" density="compact" hide-details />
+                  </v-col>
+                  <v-col cols="12">
+                    <v-text-field v-model="row.comment" label="Комментарий (необяз.)" density="compact" hide-details />
+                  </v-col>
+                </v-row>
+              </v-card>
+            </div>
+          </template>
           <div v-else class="text-caption text-medium-emphasis mb-2">
             Тарифов нет — нажмите «Строка», чтобы добавить вариант свойства/%ДС.
           </div>
 
           <v-divider class="my-3" />
           <v-row dense>
-            <v-col cols="4">
-              <v-checkbox v-model="editProgram.active" label="Активна" density="compact" />
+            <v-col cols="12" sm="4">
+              <v-checkbox v-model="editProgram.active" label="Активна" density="compact" hide-details />
             </v-col>
-            <v-col cols="4">
-              <v-checkbox v-model="editProgram.visibleToResident" label="Виден партнёру" density="compact" />
+            <v-col cols="12" sm="4">
+              <v-checkbox v-model="editProgram.visibleToResident" label="Виден партнёру" density="compact" hide-details />
             </v-col>
-            <v-col cols="4">
-              <v-checkbox v-model="editProgram.visibleToCalculator" label="В калькуляторе" density="compact" />
+            <v-col cols="12" sm="4">
+              <v-checkbox v-model="editProgram.visibleToCalculator" label="В калькуляторе" density="compact" hide-details />
             </v-col>
           </v-row>
           <v-alert v-if="programError" type="error" density="compact" class="mt-2">{{ programError }}</v-alert>
@@ -454,6 +506,7 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue';
+import { useDisplay } from 'vuetify';
 import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
 import PageHeader from '../../components/PageHeader.vue';
@@ -466,6 +519,8 @@ import { usePermissions } from '../../composables/usePermissions';
 
 const auth = useAuthStore();
 const { canEdit, canFull } = usePermissions();
+// Адаптив: на мобиле диалог программы во весь экран + тарифы карточками.
+const { mobile } = useDisplay();
 
 const loading = ref(false);
 const saving = ref(false);
@@ -851,6 +906,26 @@ onMounted(() => {
 }
 .expanded-programs-cell :deep(.v-data-table) {
   background: transparent;
+}
+
+/* Редактор тарифов: горизонтальный скролл на узких окнах, чтобы колонки-поля
+   не сжимались и не «съедались». Таблица держит минимальную ширину. */
+.tariff-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.tariff-scroll .tariff-table {
+  min-width: 760px;
+}
+/* Поля внутри ячеек — без лишних внутренних отступов, плотная сетка. */
+.tariff-table :deep(td) {
+  padding-inline: 6px;
+  vertical-align: middle;
+}
+.tariff-table :deep(.v-field__input) {
+  padding-top: 4px;
+  padding-bottom: 4px;
+  min-height: 32px;
 }
 </style>
 
