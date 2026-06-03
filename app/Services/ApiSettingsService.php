@@ -36,6 +36,9 @@ class ApiSettingsService
         'dadata.api_key'               => ['group' => 'dadata', 'label' => 'DaData API Key', 'hint' => 'Для проверки ИНН (dadata.ru/api/find-party). Free tier: 10k запросов/сутки.', 'secret' => true, 'envFallback' => 'DADATA_API_KEY'],
         'dadata.secret_key'            => ['group' => 'dadata', 'label' => 'DaData Secret (только для некоторых API)', 'hint' => 'Нужен для /clean/ эндпоинтов — для простого find-party не требуется', 'secret' => true, 'envFallback' => 'DADATA_SECRET_KEY'],
 
+        // Checko — проверка ИНН + НАЛОГОВЫЙ РЕЖИМ (в отличие от DaData free).
+        'checko.api_key'               => ['group' => 'checko', 'label' => 'Checko.ru API Key', 'hint' => 'Налоговый режим (УСН/ПСН/…) и реквизиты ИП/ЮЛ по ИНН — api.checko.ru/v2. Free: 100 запросов/сутки. Ключ в личном кабинете checko.ru после регистрации.', 'secret' => true, 'envFallback' => 'CHECKO_API_KEY'],
+
         // Другие интеграции — под резерв
         'bubble.api_token'             => ['group' => 'bubble', 'label' => 'Bubble API Token', 'hint' => 'Legacy интеграция, только для миграции', 'secret' => true, 'envFallback' => 'BUBBLE_API_TOKEN'],
         'getcourse.api_key'            => ['group' => 'getcourse', 'label' => 'GetCourse API Key', 'hint' => '', 'secret' => true, 'envFallback' => 'GETCOURSE_API_KEY'],

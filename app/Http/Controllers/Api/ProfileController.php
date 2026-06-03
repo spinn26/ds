@@ -20,6 +20,7 @@ use App\Models\Requisite;
 use App\Services\PartnerAcceptanceService;
 use App\Services\PartnerStatusService;
 use App\Services\DadataService;
+use App\Services\CheckoService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -334,10 +335,12 @@ class ProfileController extends Controller
             'webUser' => $user->id,
         ];
 
-        // Налоговый режим из ЕГРИП (DaData finance.tax_system) — пишем в профиль,
-        // если DaData его вернула (часто бывает пусто).
-        if (! empty($fns['taxSystemLabel'])) {
-            $data['tax_regime'] = $fns['taxSystemLabel'];
+        // Налоговый режим — приоритетно из Checko (бесплатно отдаёт УСН/ПСН/…),
+        // фоллбэк на DaData (на free-тарифе режим почти всегда пуст). Справочно,
+        // на верификацию не влияет.
+        $taxRegime = $this->resolveTaxRegime($innClean);
+        if ($taxRegime) {
+            $data['tax_regime'] = $taxRegime;
         }
 
         DB::transaction(function () use (&$requisite, $data, $consultant, $user) {
@@ -387,6 +390,38 @@ class ProfileController extends Controller
     }
 
     /**
+     * Налоговый режим по ИНН: приоритетно Checko (бесплатно отдаёт спецрежим),
+     * фоллбэк DaData (finance.tax_system, на free-тарифе обычно пуст). Возвращает
+     * человекочитаемую метку («УСН» / «УСН, ПСН») или null. Результаты кэшируем
+     * на час (общие ключи с остальными вызовами этих сервисов).
+     */
+    private function resolveTaxRegime(string $inn): ?string
+    {
+        $clean = preg_replace('/\D/', '', $inn);
+        if ($clean === '') {
+            return null;
+        }
+
+        $checko = app(CheckoService::class);
+        if ($checko->isConfigured()) {
+            $c = Cache::remember("checko:inn:{$clean}", 3600, fn () => $checko->findByInn($clean));
+            if (! empty($c['found']) && ! empty($c['taxSystemLabel'])) {
+                return $c['taxSystemLabel'];
+            }
+        }
+
+        $dadata = app(DadataService::class);
+        if ($dadata->isConfigured()) {
+            $fns = Cache::remember("dadata:inn:{$clean}", 3600, fn () => $dadata->findByInn($clean));
+            if (! empty($fns['found']) && ! empty($fns['taxSystemLabel'])) {
+                return $fns['taxSystemLabel'];
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Фиксируем реквизиты в статусе «на проверке».
      *
      * Авто-верификация по ЕГРИП ОТКЛЮЧЕНА (2026-06-03): даже при полном
@@ -398,15 +433,11 @@ class ProfileController extends Controller
      */
     private function setRequisitesPending(Consultant $consultant, Requisite $requisite, $user): void
     {
-        // Налоговый режим — если ещё не записан и DaData его отдала.
+        // Налоговый режим — если ещё не записан: Checko (приоритет) → DaData.
         if (empty($requisite->tax_regime) && $requisite->inn) {
-            $dadata = app(DadataService::class);
-            if ($dadata->isConfigured()) {
-                $cleanInn = preg_replace('/\D/', '', (string) $requisite->inn);
-                $fns = Cache::remember("dadata:inn:{$cleanInn}", 3600, fn () => $dadata->findByInn($cleanInn));
-                if (! empty($fns['found']) && ! empty($fns['taxSystemLabel'])) {
-                    $requisite->tax_regime = $fns['taxSystemLabel'];
-                }
+            $taxRegime = $this->resolveTaxRegime((string) $requisite->inn);
+            if ($taxRegime) {
+                $requisite->tax_regime = $taxRegime;
             }
         }
 
