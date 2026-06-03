@@ -18,7 +18,7 @@
       <v-col cols="12" md="2">
         <v-text-field v-model="filters.client_name" placeholder="ФИО клиента"
           density="comfortable" variant="outlined" hide-details clearable
-          @update:model-value="debouncedLoad" />
+          @update:model-value="onClientNameInput" />
       </v-col>
       <v-col cols="12" md="2">
         <v-text-field v-model="filters.consultant_name" placeholder="ФИО консультанта"
@@ -365,6 +365,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
 import PageHeader from '../../components/PageHeader.vue';
@@ -379,6 +380,7 @@ import { useAuthStore } from '../../stores/auth';
 import { usePermissions } from '../../composables/usePermissions';
 
 const auth = useAuthStore();
+const route = useRoute();
 const { canEdit } = usePermissions();
 // Read-only режим для всех view-ролей секции contracts (calculations,
 // support, head, corrections). Прячет «Новый контракт», «Удалить»,
@@ -737,7 +739,7 @@ function resetFilters() {
   search.value = '';
   statusFilter.value = null;
   filters.value = {
-    client_name: '', consultant_name: '',
+    client: null, client_name: '', consultant_name: '',
     number: '', comment: '', product: null, program: null,
     setup: null, supplier: null,
     created_from: '', created_to: '',
@@ -794,7 +796,23 @@ async function loadStatuses() {
   } catch {}
 }
 
+// Ручной ввод ФИО клиента сбрасывает точный фильтр по id (пришедший из
+// списка клиентов), чтобы поиск по имени не конфликтовал с прежним клиентом.
+function onClientNameInput() {
+  filters.value.client = null;
+  debouncedLoad();
+}
+
+// Deep-link из списка клиентов: /…/contracts?client=<id>&client_name=<ФИО>.
+// client (id) — точный фильтр, client_name — для отображения в поле.
+function applyQueryFilters() {
+  const q = route.query;
+  if (q.client) filters.value.client = String(q.client);
+  if (q.client_name) filters.value.client_name = String(q.client_name);
+}
+
 onMounted(() => {
+  applyQueryFilters();
   loadData();
   loadStatuses();
   ensureFormData();

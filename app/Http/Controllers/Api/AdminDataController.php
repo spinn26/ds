@@ -2003,6 +2003,12 @@ class AdminDataController extends Controller
                   ->orWhere('c.number', 'ilike', "%{$s}%");
             });
         }
+        // Точный фильтр по клиенту (id) — используется при переходе из списка
+        // клиентов по клику на счётчик контрактов. Надёжнее, чем по ФИО
+        // (нет коллизий тёзок). contract.client → client.id.
+        if ($request->filled('client')) {
+            $query->where('c.client', $request->client);
+        }
         if ($request->filled('client_name')) {
             $query->where('c.clientName', 'ilike', '%' . $request->client_name . '%');
         }

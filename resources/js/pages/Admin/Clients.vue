@@ -77,6 +77,16 @@
       <template #item.birthDate="{ value }">
         {{ fmtDate(value) }}
       </template>
+      <!-- Счётчик контрактов кликабелен → Менеджер контрактов, отфильтрованный
+           по этому клиенту. При 0 — просто «—», без ссылки. -->
+      <template #item.contractCount="{ item }">
+        <a v-if="item.contractCount" href="#" class="contract-count-link"
+          title="Открыть контракты клиента"
+          @click.prevent.stop="goToContracts(item)">
+          {{ item.contractCount }}
+        </a>
+        <span v-else class="text-medium-emphasis">—</span>
+      </template>
       <template #item.actions="{ item }">
         <v-btn v-if="canEdit('clients')" icon="mdi-pencil" size="x-small" variant="text" color="primary"
           title="Редактировать" @click.stop="openEditClient(item)" />
@@ -259,6 +269,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
 import PageHeader from '../../components/PageHeader.vue';
@@ -276,6 +287,17 @@ import { usePermissions } from '../../composables/usePermissions';
 import { cyrillicRequiredRules, cyrillicOptionalRules, emailRules } from '../../composables/useFormRules';
 
 const { canEdit, canFull } = usePermissions();
+
+const route = useRoute();
+const router = useRouter();
+
+// Переход в Менеджер контрактов, отфильтрованный по клиенту (точно по id).
+// Контекст сохраняем: из /admin/clients → /admin/contracts, иначе → /manage/contracts.
+function goToContracts(item) {
+  if (!item?.contractCount) return;
+  const base = route.path.startsWith('/admin/') ? '/admin/contracts' : '/manage/contracts';
+  router.push({ path: base, query: { client: item.id, client_name: item.personName || '' } });
+}
 
 const { showSuccess, showError } = useSnackbar();
 const deleteDialogOpen = ref(false);
@@ -602,5 +624,14 @@ onMounted(() => {
 }
 .filter-range :deep(.v-field) {
   min-width: 100px;
+}
+.contract-count-link {
+  color: rgb(var(--v-theme-primary));
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+.contract-count-link:hover {
+  text-decoration: underline;
 }
 </style>
