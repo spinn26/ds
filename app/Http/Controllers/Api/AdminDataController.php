@@ -1816,7 +1816,14 @@ class AdminDataController extends Controller
         // Партнёр обязан быть ИП на УСН. Если режим определён и НЕ УСН —
         // снимаем верификацию (как при расхождении ФИО) и метим красным.
         // Если режим не определён (null) — не трогаем, решает оператор.
-        $taxIsUsn = $taxRegime ? (mb_stripos($taxRegime, 'УСН') !== false) : null;
+        // ВАЖНО: проверяем УСН как ОТДЕЛЬНЫЙ токен — «АУСН» (автоматизированная
+        // УСН) НЕ подходит, хотя содержит подстроку «УСН». «УСН», «УСН (доходы)»,
+        // «УСН, ПСН» — подходят.
+        $taxIsUsn = null;
+        if ($taxRegime) {
+            $tokens = preg_split('/[^А-ЯЁ]+/u', mb_strtoupper($taxRegime)) ?: [];
+            $taxIsUsn = in_array('УСН', $tokens, true);
+        }
         $result['taxIsUsn'] = $taxIsUsn;
         if ($taxIsUsn === false) {
             DB::table('requisites')->where('id', $id)->update([

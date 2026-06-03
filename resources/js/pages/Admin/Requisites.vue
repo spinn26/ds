@@ -45,7 +45,7 @@
       :items-per-page-options="[25, 50, 100, 200]" @update:options="onOptions">
       <template #item.taxRegime="{ item }">
         <v-chip v-if="item.taxRegime" size="x-small" variant="tonal"
-          :color="/усн/i.test(item.taxRegime) ? 'success' : 'error'">
+          :color="isUsn(item.taxRegime) ? 'success' : 'error'">
           {{ item.taxRegime }}
         </v-chip>
         <span v-else class="text-medium-emphasis">—</span>
@@ -302,7 +302,7 @@
                   <td class="text-medium-emphasis">Режим налогообложения</td>
                   <td>
                     <v-chip v-if="innResult.taxRegime" size="x-small"
-                      :color="/усн/i.test(innResult.taxRegime) ? 'success' : 'error'" variant="tonal">
+                      :color="isUsn(innResult.taxRegime) ? 'success' : 'error'" variant="tonal">
                       {{ innResult.taxRegime }}
                     </v-chip>
                     <span v-else class="text-medium-emphasis">не определён (нет данных в Checko/DaData)</span>
@@ -604,10 +604,16 @@ function rowProps({ item }) {
   return item?.verificationStatus === 'rejected' ? { class: 'row-rejected' } : {};
 }
 
+// УСН как ОТДЕЛЬНЫЙ токен: «АУСН» (автоматизированная УСН) НЕ считается УСН,
+// хотя содержит подстроку «усн». «УСН», «УСН (доходы)», «УСН, ПСН» — да.
+function isUsn(v) {
+  return /(?:^|[^а-яё])усн/i.test(String(v || ''));
+}
+
 // Налоговый режим: красным, если режим определён и НЕ УСН (партнёр обязан
 // быть ИП на УСН). Пустой/неизвестный режим — без подсветки.
 function taxClass(v) {
-  return v && !/усн/i.test(v) ? 'text-error font-weight-bold' : '';
+  return v && !isUsn(v) ? 'text-error font-weight-bold' : '';
 }
 
 const { debounced: debouncedLoad } = useDebounce(loadData, 400);
