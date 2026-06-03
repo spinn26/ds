@@ -317,10 +317,23 @@ class WorkspaceController extends Controller
 
     private function countUnverifiedRequisites(): int
     {
-        return DB::table('requisites')
-            ->whereNull('deletedAt')
-            ->where(function ($q) { $q->where('verified', false)->orWhereNull('verified'); })
-            ->count();
+        // «На проверке» = первичный реквизит партнёра (дедуп как в списке
+        // /admin/requisites: приоритет verified, затем новейший) НЕ верифицирован
+        // И БЕЗ причины отказа. Отклонённые (rejection_reason) сюда НЕ входят —
+        // они ждут партнёра, а не финменеджера. Дедуп по consultant, иначе
+        // несколько строк одного ИП завышали счётчик.
+        $row = DB::selectOne(<<<'SQL'
+            SELECT count(*) AS c FROM (
+                SELECT DISTINCT ON (consultant) verified, rejection_reason
+                FROM requisites
+                WHERE "deletedAt" IS NULL
+                ORDER BY consultant, verified DESC, id DESC
+            ) p
+            WHERE p.verified IS NOT TRUE
+              AND (p.rejection_reason IS NULL OR p.rejection_reason = '')
+        SQL);
+
+        return (int) ($row->c ?? 0);
     }
 
     private function countUnreadMessages(): int
