@@ -30,8 +30,9 @@
       <div class="quals-hero-content pa-5">
         <div class="d-flex justify-space-between align-start mb-4 flex-wrap ga-3">
           <div>
-            <div class="text-caption text-uppercase quals-eyebrow">
-              Текущая квалификация
+            <div class="d-flex align-center ga-1 text-caption text-uppercase quals-eyebrow">
+              <span>Текущая квалификация</span>
+              <InfoHint :text="glossary.qualification" />
             </div>
             <div class="hero-qual-row mt-2">
               <div class="hero-qual-badge">
@@ -59,7 +60,9 @@
       <!-- НГП progress bar -->
       <div class="mb-3">
         <div class="d-flex justify-space-between align-center mb-1">
-          <span class="text-body-2 text-medium-emphasis">НГП</span>
+          <span class="d-flex align-center ga-1 text-body-2 text-medium-emphasis">
+            НГП <InfoHint :text="glossary.ngp" :size="14" />
+          </span>
           <span class="text-body-2 font-weight-medium">
             {{ fmt(data.volumes.groupVolumeCumulative) }}
             <template v-if="data.qualification.nextLevel"> / {{ fmt(data.qualification.nextLevel.groupVolumeCumulative) }}</template>
@@ -74,7 +77,9 @@
       <!-- ОП по ГП progress bar (per spec — отдельный ГП не показываем) -->
       <div v-if="data.mandatoryPlan" class="mb-3">
         <div class="d-flex justify-space-between align-center mb-1">
-          <span class="text-body-2 text-medium-emphasis">ОП по ГП</span>
+          <span class="d-flex align-center ga-1 text-body-2 text-medium-emphasis">
+            ОП по ГП <InfoHint :text="glossary.mandatoryGp" :size="14" />
+          </span>
           <span class="text-body-2 font-weight-medium">
             {{ fmt(data.mandatoryPlan.currentGP) }} / {{ fmt(data.mandatoryPlan.mandatoryGP) }}
           </span>
@@ -105,10 +110,14 @@
           <v-card class="ds-card ds-card--hover pa-5 h-100" elevation="0">
             <div class="d-flex justify-space-between align-start">
               <div class="flex-grow-1 min-w-0">
-                <div class="text-caption text-uppercase text-medium-emphasis font-weight-bold letter-spacing-1">
-                  {{ card.title }}
+                <div class="d-flex align-center ga-1 text-caption text-uppercase text-medium-emphasis font-weight-bold letter-spacing-1">
+                  <span>{{ card.title }}</span>
+                  <InfoHint v-if="card.hint" :text="card.hint" @click.prevent.stop />
                 </div>
-                <div class="text-h3 font-weight-bold my-2 tabular-nums">{{ fmt(card.value) }}</div>
+                <div class="text-h3 font-weight-bold mt-2 mb-1 tabular-nums">{{ fmt(card.value) }}</div>
+                <div v-if="card.subValue" class="text-body-2 font-weight-medium text-medium-emphasis mb-1 tabular-nums">
+                  {{ card.subValue }}
+                </div>
                 <div class="d-flex align-center ga-1">
                   <v-icon :color="card.changeType === 'up' ? 'success' : card.changeType === 'down' ? 'error' : 'grey'" size="14">
                     {{ card.changeType === 'up' ? 'mdi-trending-up' : card.changeType === 'down' ? 'mdi-trending-down' : 'mdi-minus' }}
@@ -148,6 +157,7 @@
            : data.breakaway.gpHeld ? 'Отрыв ≥ 70% — ветка не учитывается в ГП'
            : 'Отрыва нет' }}
         </v-chip>
+        <InfoHint :text="glossary.breakaway" />
       </div>
       <v-row>
         <v-col cols="6" md="3">
@@ -201,7 +211,10 @@
                 <v-icon size="20" :color="kpi.color">{{ kpi.icon }}</v-icon>
               </div>
               <div class="min-w-0 flex-grow-1">
-                <div class="text-caption text-medium-emphasis">{{ kpi.label }}</div>
+                <div class="d-flex align-center ga-1 text-caption text-medium-emphasis">
+                  <span>{{ kpi.label }}</span>
+                  <InfoHint v-if="kpi.hint" :text="kpi.hint" :size="13" @click.prevent.stop />
+                </div>
                 <div class="text-h5 font-weight-bold tabular-nums">{{ kpi.value }}</div>
               </div>
             </div>
@@ -330,7 +343,14 @@ import { ref, computed, onMounted } from 'vue';
 import api from '../api';
 import MonthPicker from '../components/MonthPicker.vue';
 import PageHeader from '../components/PageHeader.vue';
+import InfoHint from '../components/InfoHint.vue';
 import { fmt } from '../composables/useDesign';
+import { glossary } from '../composables/useGlossary';
+
+// Деньги для подписей: «1 234 ₽» (разряды по-русски, без копеек).
+function fmtMoney(v) {
+  return (Number(v) || 0).toLocaleString('ru-RU', { maximumFractionDigits: 0 }) + ' ₽';
+}
 
 const loading = ref(true);
 const period = ref(new Date().toISOString().slice(0, 7));
@@ -340,7 +360,7 @@ const levels = ref([]);
 const empty = {
   consultant: { id: 0, personName: '—', statusName: 'Партнёр', participantCode: null, active: false, ambassadorProducts: null, activityName: null },
   qualification: { nominalLevel: null, nextLevel: null },
-  volumes: { personalVolume: 0, groupVolume: 0, groupVolumeCumulative: 0, prevPersonalVolume: 0, prevGroupVolume: 0, prevGroupVolumeCumulative: 0 },
+  volumes: { personalVolume: 0, groupVolume: 0, groupVolumeCumulative: 0, prevPersonalVolume: 0, prevGroupVolume: 0, prevGroupVolumeCumulative: 0, firstLineVolume: 0, firstLineVolumeRub: 0, prevFirstLineVolume: 0 },
   team: { myClients: 0, teamClients: 0, firstLineAll: 0, firstLineActive: 0, totalPartners: 0, totalPartnersActive: 0, capitalUsd: 0 },
   statusInfo: null,
   partners: { total: 0, registered: 0, active: 0, terminated: 0 },
@@ -387,13 +407,21 @@ const volumeCards = computed(() => {
   const v = data.value.volumes;
   const lp = pct(v.personalVolume, v.prevPersonalVolume);
   const ngp = pct(v.groupVolumeCumulative, v.prevGroupVolumeCumulative);
+  const fl = pct(v.firstLineVolume, v.prevFirstLineVolume);
   // Каждая карточка кликабельна — открывает Финансовый отчёт за тот же
   // период с подсветкой соответствующей метрики (frontend читает `metric`).
   return [
     { title: 'Личные продажи (ЛП)', value: v.personalVolume, change: lp.value, changeType: lp.type, icon: 'mdi-bank', color: 'green',
+      hint: glossary.lp,
       link: { path: '/finance/report', query: { month: period.value, metric: 'lp' } } },
     { title: 'НГП', value: v.groupVolumeCumulative, change: ngp.value, changeType: ngp.type, icon: 'mdi-trending-up', color: 'orange',
+      hint: glossary.ngp,
       link: { path: '/finance/report', query: { month: period.value, metric: 'ngp' } } },
+    // Объём продаж первой линии: баллы (основное значение) + деньги (подпись).
+    { title: 'Объём 1 линии', value: v.firstLineVolume, subValue: fmtMoney(v.firstLineVolumeRub),
+      change: fl.value, changeType: fl.type, icon: 'mdi-account-arrow-right', color: 'blue',
+      hint: glossary.firstLineVolume,
+      link: { path: '/structure', query: { line: '1' } } },
   ];
 });
 
@@ -403,12 +431,16 @@ const teamKpis = computed(() => {
   const t = data.value.team || {};
   return [
     { label: 'Партнёры 1 линии',  value: t.firstLineAll ?? 0,         icon: 'mdi-account-outline',         color: 'info',
+      hint: glossary.firstLinePartners,
       link: { path: '/structure', query: { line: '1' } } },
     { label: 'Всего партнёров',   value: t.totalPartners ?? 0,        icon: 'mdi-account-group',           color: 'primary',
+      hint: glossary.totalPartners,
       link: { path: '/structure' } },
     { label: 'Активных 1 линии',  value: t.firstLineActive ?? 0,      icon: 'mdi-account-check',           color: 'success',
+      hint: glossary.activePartners,
       link: { path: '/structure', query: { line: '1', status: 'active' } } },
     { label: 'Всего активных',    value: t.totalPartnersActive ?? 0,  icon: 'mdi-account-multiple-check',  color: 'success',
+      hint: glossary.activePartners,
       link: { path: '/structure', query: { status: 'active' } } },
   ];
 });

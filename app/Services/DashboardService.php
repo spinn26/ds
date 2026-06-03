@@ -193,6 +193,25 @@ class DashboardService
             ->where('active', true)
             ->count();
 
+        // Объём продаж первой линии = сумма ЛП (personalVolume в баллах) всех
+        // партнёров, приглашённых лично (inviter = я), за период. Каскадные
+        // строки (chainOrder>=2) пишут personalVolume=0, поэтому SUM по
+        // commission.personalVolume = только личные продажи первой линии, без
+        // задвоения. Деньги — каноничный курс платформы 1 балл = 100 руб.
+        $firstLineIds = DB::table('consultant')
+            ->where('inviter', $consultant->id)
+            ->whereNull('dateDeleted')
+            ->pluck('id')
+            ->all();
+        $sumFirstLinePV = fn ($m) => empty($firstLineIds) ? 0.0 : (float) DB::table('commission')
+            ->whereIn('consultant', $firstLineIds)
+            ->where('dateMonth', $m)
+            ->whereNull('deletedAt')
+            ->sum('personalVolume');
+        $prevMonth = $prevPeriodStart->format('Y-m');
+        $firstLineVolume = round($sumFirstLinePV($month), 2);
+        $prevFirstLineVolume = round($sumFirstLinePV($prevMonth), 2);
+
         $totalConsultants = count($teamConsultantIds);
         $totalConsultantsActive = Consultant::whereIn('id', $teamConsultantIds)
             ->where('active', true)
@@ -341,6 +360,10 @@ class DashboardService
                 'prevPersonalVolume' => round((float) $prevPersonalVolume, 2),
                 'prevGroupVolume' => round((float) $prevGroupVolume, 2),
                 'prevGroupVolumeCumulative' => round((float) $prevGroupVolumeCumulative, 2),
+                // Объём продаж первой линии: баллы + деньги (1 балл = 100 ₽).
+                'firstLineVolume' => $firstLineVolume,
+                'firstLineVolumeRub' => round($firstLineVolume * 100, 2),
+                'prevFirstLineVolume' => $prevFirstLineVolume,
             ],
             'team' => [
                 'myClients' => $myClientsCount,
