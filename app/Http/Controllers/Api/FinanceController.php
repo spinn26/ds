@@ -8,6 +8,7 @@ use App\Services\FinanceReportService;
 use App\Services\PeriodVisibilityService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class FinanceController extends Controller
 {
@@ -46,6 +47,11 @@ class FinanceController extends Controller
 
         $month = $request->input('month', now()->format('Y-m'));
 
+        // Текущий накопленный остаток по комиссионным (running balance из
+        // леджера) — не зависит от выбранного месяца. Отдаём его в шапке
+        // отчёта, поэтому он нужен в т.ч. при locked-периоде.
+        $commissionBalance = $this->currentCommissionBalance($consultant);
+
         if (! $user->isStaff()) {
             [$year, $monthNum] = array_map('intval', explode('-', $month) + [0, 0]);
             if ($year && $monthNum && ! $this->visibility->isVisible($year, $monthNum)) {
@@ -53,11 +59,31 @@ class FinanceController extends Controller
                     'locked' => true,
                     'message' => 'Отчёт за этот период ещё не опубликован',
                     'period' => $month,
+                    'commissionBalance' => $commissionBalance,
                 ], 423);
             }
         }
 
-        return response()->json($this->financeReportService->getReportData($consultant, $month));
+        $data = $this->financeReportService->getReportData($consultant, $month);
+        $data['commissionBalance'] = $commissionBalance;
+
+        return response()->json($data);
+    }
+
+    /**
+     * Текущий остаток партнёра по комиссионным = поле `remaining` последней
+     * (по id) строки леджера consultantBalance. Это всё начисленное минус
+     * выплаченное на конец последнего финализированного месяца. Положительное
+     * — к выплате партнёру, отрицательное — переплата/долг партнёра.
+     */
+    private function currentCommissionBalance(Consultant $consultant): float
+    {
+        $remaining = DB::table('consultantBalance')
+            ->where('consultant', $consultant->id)
+            ->orderByDesc('id')
+            ->value('remaining');
+
+        return round((float) ($remaining ?? 0), 2);
     }
 
     /**
