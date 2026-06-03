@@ -120,6 +120,10 @@
               <tr><td class="text-medium-emphasis">Адрес</td><td>{{ selectedItem.address || '—' }}</td></tr>
               <tr><td class="text-medium-emphasis">Email</td><td>{{ selectedItem.email || '—' }}</td></tr>
               <tr><td class="text-medium-emphasis">Телефон</td><td>{{ selectedItem.phone || '—' }}</td></tr>
+              <!-- Режим налогообложения: сохранённый (requisites.tax_regime) или
+                   live из DaData после «Проверить ИНН» (innResult.taxSystemLabel). -->
+              <tr><td class="text-medium-emphasis">Режим налогообложения</td>
+                <td>{{ selectedItem.taxRegime || innResult?.taxSystemLabel || '—' }}</td></tr>
             </tbody>
           </v-table>
 

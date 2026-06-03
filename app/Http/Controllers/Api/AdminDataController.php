@@ -1591,6 +1591,7 @@ class AdminDataController extends Controller
                     'address' => $r->address,
                     'email' => $r->email,
                     'phone' => $r->phone,
+                    'taxRegime' => $r->tax_regime,
                     'bankName' => $bankReq?->bankName,
                     'bankBik' => $bankReq?->bankBik,
                     'accountNumber' => $bankReq?->accountNumber,
