@@ -472,9 +472,12 @@ Route::prefix('v1')->group(function () {
 
         // Admin — Period freeze (close/reopen reporting months)
         Route::get('/admin/periods', [\App\Http\Controllers\Api\AdminPeriodController::class, 'index']);
-        Route::post('/admin/periods/close', [\App\Http\Controllers\Api\AdminPeriodController::class, 'close'])->middleware('throttle:10,1');
-        Route::post('/admin/periods/reopen', [\App\Http\Controllers\Api\AdminPeriodController::class, 'reopen'])->middleware('throttle:10,1');
-        Route::post('/admin/periods/visibility', [\App\Http\Controllers\Api\AdminPeriodController::class, 'setVisibility'])->middleware('throttle:30,1');
+        // Admin-only (role + canFull('reports-access')). Троттл здесь — анти-
+        // runaway, не анти-пользователь: при работе с 24 периодами прежние
+        // лимиты (10/30 в минуту) ловили 429 у легитимного финменеджера.
+        Route::post('/admin/periods/close', [\App\Http\Controllers\Api\AdminPeriodController::class, 'close'])->middleware('throttle:60,1');
+        Route::post('/admin/periods/reopen', [\App\Http\Controllers\Api\AdminPeriodController::class, 'reopen'])->middleware('throttle:60,1');
+        Route::post('/admin/periods/visibility', [\App\Http\Controllers\Api\AdminPeriodController::class, 'setVisibility'])->middleware('throttle:120,1');
         Route::get('/admin/periods/{year}/{month}', [\App\Http\Controllers\Api\AdminPeriodController::class, 'check'])->whereNumber(['year', 'month']);
 
         // Admin References (generic CRUD for small reference tables)
