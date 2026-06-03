@@ -202,6 +202,18 @@
             border-color: var(--brand);
             color: var(--brand);
         }
+        /* Второй ряд — фильтр по тегам (категориям). Чуть мельче статус-кнопок
+           и плотнее прижат к ряду статусов. */
+        .filters.tags { margin-top: -20px; }
+        .filters.tags .filter-label {
+            width: 100%;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-mute);
+            margin-bottom: 2px;
+        }
+        .tag-btn { font-size: 13px; padding: 6px 13px; }
 
         /* === Timeline === */
         .timeline {
@@ -316,6 +328,12 @@
             background: transparent;
             border: 1px solid var(--border);
             color: var(--text-mute);
+            cursor: pointer;
+            transition: color 0.2s ease, border-color 0.2s ease;
+        }
+        .chip.category:hover {
+            color: var(--brand);
+            border-color: var(--border-strong);
         }
         .card .date { color: var(--text-mute); }
         .card .desc {
@@ -435,6 +453,10 @@
             </button>
         </div>
 
+        <!-- Второй ряд: фильтр по тегам (категориям). Кнопки строятся
+             динамически из загруженных записей. -->
+        <div class="filters tags" id="tagFilters" hidden></div>
+
         <section class="timeline" id="timeline">
             <div class="skeleton">
                 <div class="line medium"></div>
@@ -464,10 +486,12 @@
 
         const timeline = document.getElementById('timeline');
         const filtersEl = document.getElementById('filters');
+        const tagFiltersEl = document.getElementById('tagFilters');
         const statsEl = document.getElementById('stats');
 
         let allItems = [];
         let currentFilter = 'all';
+        let currentTag = 'all';
         let observer = null;
 
         function escapeHtml(s) {
@@ -495,10 +519,30 @@
             });
         }
 
+        // Строим ряд тег-кнопок из категорий загруженных записей.
+        function buildTagFilters(items) {
+            const cats = [...new Set(items.map(it => it.category).filter(Boolean))]
+                .sort((a, b) => a.localeCompare(b, 'ru'));
+            if (!cats.length) { tagFiltersEl.hidden = true; return; }
+            tagFiltersEl.innerHTML =
+                `<span class="filter-label">Темы</span>` +
+                `<button type="button" class="filter-btn tag-btn active" data-tag="all">Все темы</button>` +
+                cats.map(c =>
+                    `<button type="button" class="filter-btn tag-btn" data-tag="${escapeHtml(c)}">${escapeHtml(c)}</button>`
+                ).join('');
+            tagFiltersEl.hidden = false;
+        }
+
+        // Синхронизировать активную тег-кнопку с currentTag.
+        function syncTagButtons() {
+            tagFiltersEl.querySelectorAll('.tag-btn').forEach(b =>
+                b.classList.toggle('active', b.dataset.tag === currentTag));
+        }
+
         function render() {
-            const filtered = currentFilter === 'all'
-                ? allItems
-                : allItems.filter(it => it.status === currentFilter);
+            const filtered = allItems.filter(it =>
+                (currentFilter === 'all' || it.status === currentFilter) &&
+                (currentTag === 'all' || it.category === currentTag));
 
             if (!filtered.length) {
                 timeline.innerHTML = `
@@ -520,7 +564,7 @@
                     ? `<div class="desc">${escapeHtml(it.description)}</div>`
                     : '';
                 const category = it.category
-                    ? `<span class="chip category">${escapeHtml(it.category)}</span>`
+                    ? `<span class="chip category" data-cat="${escapeHtml(it.category)}" title="Фильтровать по теме «${escapeHtml(it.category)}»">${escapeHtml(it.category)}</span>`
                     : '';
                 const datePart = dateStr
                     ? `<span class="date">${escapeHtml(dateStr)}</span>`
@@ -570,6 +614,27 @@
             render();
         });
 
+        // Клик по тег-кнопке во втором ряду.
+        tagFiltersEl.addEventListener('click', (e) => {
+            const btn = e.target.closest('.tag-btn');
+            if (!btn) return;
+            currentTag = btn.dataset.tag;
+            syncTagButtons();
+            render();
+        });
+
+        // Клик по чипу-категории на карточке = выбрать эту тему в фильтре.
+        // timeline.innerHTML переписывается на каждый render, но сам элемент
+        // timeline не пересоздаётся — делегирование живёт.
+        timeline.addEventListener('click', (e) => {
+            const chip = e.target.closest('.chip.category');
+            if (!chip || !chip.dataset.cat) return;
+            currentTag = chip.dataset.cat;
+            syncTagButtons();
+            render();
+            window.scrollTo({ top: tagFiltersEl.offsetTop - 24, behavior: 'smooth' });
+        });
+
         fetch(API_URL, { headers: { 'Accept': 'application/json' } })
             .then(r => {
                 if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -578,6 +643,7 @@
             .then(data => {
                 allItems = Array.isArray(data.items) ? data.items : [];
                 renderStats(allItems);
+                buildTagFilters(allItems);
                 if (!allItems.length) {
                     timeline.innerHTML = `
                         <div class="empty-state">

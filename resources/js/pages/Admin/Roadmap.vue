@@ -27,8 +27,48 @@
       Видны только записи с галочкой «Опубликована».
     </v-alert>
 
+    <v-card class="mb-3 pa-3">
+      <div class="d-flex flex-wrap ga-2 align-center">
+        <v-select
+          v-model="filterCategory"
+          :items="categoryOptions"
+          placeholder="Тег (категория)"
+          prepend-inner-icon="mdi-tag-outline"
+          density="compact"
+          variant="outlined"
+          hide-details
+          clearable
+          style="max-width: 240px; flex: 1 1 200px"
+        />
+        <v-select
+          v-model="filterStatus"
+          :items="statusFilterOptions"
+          placeholder="Статус"
+          density="compact"
+          variant="outlined"
+          hide-details
+          clearable
+          style="max-width: 180px; flex: 1 1 140px"
+        />
+        <v-chip v-if="filterCategory || filterStatus" size="small" color="info" variant="tonal">
+          {{ filteredItems.length }} из {{ items.length }}
+        </v-chip>
+        <v-spacer />
+        <v-btn
+          v-if="filterCategory || filterStatus"
+          size="small"
+          variant="text"
+          color="secondary"
+          prepend-icon="mdi-filter-remove"
+          @click="filterCategory = null; filterStatus = null"
+        >
+          Сбросить
+        </v-btn>
+      </div>
+    </v-card>
+
     <v-card :loading="loading">
-      <v-data-table :items="items" :headers="headers" density="compact" hover>
+      <v-data-table :items="filteredItems" :headers="headers" density="compact" hover>
         <template #item.status="{ value }">
           <v-chip :color="statusColor(value)" size="x-small" variant="tonal" label>
             {{ statusLabel(value) }}
@@ -152,7 +192,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import {
   PageHeader, DialogShell, BooleanCell, ActionsCell, FormErrors, EmptyState,
 } from '../../components';
@@ -187,6 +227,22 @@ const statusOptions = [
   { title: 'В работе', value: 'in_progress' },
   { title: 'Выпущено', value: 'shipped' },
 ];
+const statusFilterOptions = statusOptions;
+
+// Фильтры таблицы (тег + статус). Категории собираем из самих записей.
+const filterCategory = ref(null);
+const filterStatus = ref(null);
+
+const categoryOptions = computed(() =>
+  [...new Set(items.value.map(i => i.category).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, 'ru'))
+);
+
+const filteredItems = computed(() =>
+  items.value.filter(i =>
+    (!filterCategory.value || i.category === filterCategory.value)
+    && (!filterStatus.value || i.status === filterStatus.value))
+);
 
 function statusLabel(s) {
   return ({ planned: 'В планах', in_progress: 'В работе', shipped: 'Выпущено' })[s] || s;
