@@ -302,6 +302,7 @@
                 <strong>ручную проверку</strong> финменеджеру; до верификации
                 подписание документов и продажа продуктов недоступны.
               </p>
+              <v-form :disabled="isRequisitesVerified">
               <v-row dense>
                 <v-col cols="12" sm="6" md="4">
                   <v-text-field v-model="reqForm.inn" label="ИНН ИП" placeholder="12 цифр"
@@ -343,13 +344,19 @@
                 <v-col cols="12" md="6">
                   <v-text-field v-model="reqForm.phone" label="Телефон ИП" />
                 </v-col>
+                <v-col v-if="profile.requisites?.taxRegime" cols="12" md="6">
+                  <v-text-field :model-value="profile.requisites.taxRegime" label="Режим налогообложения"
+                    readonly hint="По данным ЕГРИП" persistent-hint prepend-inner-icon="mdi-scale-balance" />
+                </v-col>
               </v-row>
+              </v-form>
               <v-alert v-if="reqMsg" :type="reqMsgType" density="compact" class="mt-3" closable @click:close="reqMsg = ''">
                 {{ reqMsg }}
               </v-alert>
             </div>
             <div class="ds-card__actions">
-              <v-btn color="primary" :loading="savingReq" prepend-icon="mdi-content-save" @click="saveRequisites">
+              <v-btn color="primary" :loading="savingReq" :disabled="isRequisitesVerified"
+                prepend-icon="mdi-content-save" @click="saveRequisites">
                 Сохранить
               </v-btn>
             </div>
@@ -383,6 +390,7 @@
                 icon="mdi-clock-outline">
                 Банковские реквизиты на ручной проверке. Ожидайте верификации финменеджером.
               </v-alert>
+              <v-form :disabled="isRequisitesVerified">
               <v-row dense>
                 <v-col cols="12" md="6">
                   <v-text-field v-model="bankForm.bankName" label="Наименование банка" />
@@ -400,12 +408,14 @@
                   <v-text-field v-model="bankForm.beneficiaryName" label="Наименование получателя" />
                 </v-col>
               </v-row>
+              </v-form>
               <v-alert v-if="bankMsg" :type="bankMsgType" density="compact" class="mt-3" closable @click:close="bankMsg = ''">
                 {{ bankMsg }}
               </v-alert>
             </div>
             <div class="ds-card__actions">
-              <v-btn color="primary" :loading="savingBank" prepend-icon="mdi-content-save" @click="saveBankRequisites">
+              <v-btn color="primary" :loading="savingBank" :disabled="isRequisitesVerified"
+                prepend-icon="mdi-content-save" @click="saveBankRequisites">
                 Сохранить
               </v-btn>
             </div>

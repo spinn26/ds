@@ -75,6 +75,8 @@ class DadataService
             $s = $suggestions[0];
             $data = $s['data'] ?? [];
 
+            $taxSystem = $data['finance']['tax_system'] ?? null;
+
             return [
                 'found'   => true,
                 'type'    => $data['type'] ?? null,
@@ -86,6 +88,10 @@ class DadataService
                 'kpp'     => $data['kpp'] ?? null,
                 'okved'   => $data['okved'] ?? null,
                 'address' => $data['address']['value'] ?? null,
+                // Налоговый режим из DaData (finance.tax_system). Часто null —
+                // отдаём и код, и человекочитаемый лейбл, пишем в профиль если есть.
+                'taxSystem'      => $taxSystem,
+                'taxSystemLabel' => self::taxSystemLabel($taxSystem),
                 'registrationDate' => isset($data['state']['registration_date'])
                     ? date('Y-m-d', (int) ($data['state']['registration_date'] / 1000))
                     : null,
@@ -182,6 +188,26 @@ class DadataService
             'lastMatch' => $lastMatch,
             'patronymicMatch' => $patMatch,
         ];
+    }
+
+    /**
+     * Код налогового режима DaData (finance.tax_system) → человекочитаемый
+     * лейбл. Неизвестный/пустой код возвращаем как есть (или null).
+     */
+    public static function taxSystemLabel(?string $code): ?string
+    {
+        if (! $code) return null;
+
+        return [
+            'USN'                => 'УСН',
+            'USN_INCOME'         => 'УСН (доходы)',
+            'USN_INCOME_OUTCOME' => 'УСН (доходы минус расходы)',
+            'ENVD'               => 'ЕНВД',
+            'ESHN'               => 'ЕСХН',
+            'PSN'                => 'Патент (ПСН)',
+            'ORN'                => 'ОСН',
+            'SRP'                => 'СРП',
+        ][$code] ?? $code;
     }
 
     /** ФИО для ИП — в data.fio или data.name.full. */

@@ -25,6 +25,7 @@ class RequisiteResource extends JsonResource
             'registrationDate' => $this->registrationDate?->toDateString(),
             'email' => $this->email,
             'phone' => $this->phone,
+            'taxRegime' => $this->tax_regime,
             'verified' => $this->verified,
             'statusName' => $statusName,
             // Статус для UI профиля (чип/алерты на карточке реквизитов).

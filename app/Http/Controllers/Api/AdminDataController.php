@@ -1584,6 +1584,18 @@ class AdminDataController extends Controller
                     'partnerName' => $r->consultant ? ($consultantNames[$r->consultant] ?? null) : null,
                     'individualEntrepreneur' => $r->individualEntrepreneur,
                     'inn' => $r->inn,
+                    // Полные поля ИП — диалог верификации читает их из строки
+                    // списка. Раньше не отдавались → ОГРН/Адрес/Email/Телефон и
+                    // банк показывались прочерками даже при заполненных данных.
+                    'ogrn' => $r->ogrn,
+                    'address' => $r->address,
+                    'email' => $r->email,
+                    'phone' => $r->phone,
+                    'bankName' => $bankReq?->bankName,
+                    'bankBik' => $bankReq?->bankBik,
+                    'accountNumber' => $bankReq?->accountNumber,
+                    'correspondentAccount' => $bankReq?->correspondentAccount,
+                    'beneficiaryName' => $bankReq?->beneficiaryName,
                     'verified' => (bool) $r->verified,
                     'verificationStatus' => $verificationStatus,
                     'hasBankRequisites' => $bankReq !== null,
@@ -1731,10 +1743,9 @@ class AdminDataController extends Controller
             fn () => app(\App\Services\DadataService::class)->findByInn($cleanInn),
         );
 
-        $autoVerified = false;
-        $autoRejected = false;
-
-        // Если нашли — сравниваем ФИО с профилем партнёра.
+        // «Проверить ИНН» только ПОКАЗЫВАЕТ данные ЕГРИП и отметку совпадения
+        // ФИО — без авто-верификации/авто-отклонения (2026-06-03). Решение
+        // принимает сотрудник вручную кнопками «Верифицировать»/«Отклонить».
         if (! empty($result['found']) && $req->consultant) {
             $webUserId = DB::table('consultant')->where('id', $req->consultant)->value('webUser');
             if ($webUserId) {
@@ -1749,61 +1760,14 @@ class AdminDataController extends Controller
                         $user->firstName,
                         $user->patronymic,
                     );
-
-                    $fioMatch = (bool) ($result['fioCheck']['match'] ?? false);
-                    $isActive = ($result['status'] ?? null) === 'ACTIVE';
-                    $alreadyVerified = (bool) ($req->verified ?? false);
-                    $alreadyRejected = (int) ($req->status ?? 0) === 2 && ! $alreadyVerified;
-
-                    if ($fioMatch && $isActive) {
-                        // ✓ ФИО совпадает + ИП действующий → авто-верификация.
-                        // Идемпотентно: если уже verified=true, флаг всё равно
-                        // возвращаем, чтобы UI показал зелёный баннер.
-                        if (! $alreadyVerified) {
-                            DB::table('requisites')->where('id', $id)->update([
-                                'verified' => true,
-                                'status' => 3,
-                                'dateChange' => now(),
-                            ]);
-                        }
-                        $autoVerified = true;
-                    } elseif (! $fioMatch) {
-                        // ✗ ФИО НЕ совпадает → авто-отклонение.
-                        // Спека «если есть расхождение то отклоняем».
-                        if (! $alreadyRejected) {
-                            DB::table('requisites')->where('id', $id)->update([
-                                'verified' => false,
-                                'status' => 2,
-                                'dateChange' => now(),
-                            ]);
-                            // Уведомление консультанту (per spec ✅Реквизиты §1.3
-                            // «Сценарий отказа»).
-                            $consultantUserId = DB::table('consultant')
-                                ->where('id', $req->consultant)
-                                ->value('webUser');
-                            if ($consultantUserId) {
-                                NotificationController::create(
-                                    (int) $consultantUserId,
-                                    'requisites',
-                                    'Реквизиты отклонены автоматически',
-                                    sprintf('ФИО в ИП не совпадает с профилем: «%s» ≠ «%s»',
-                                        $result['fioCheck']['actual'] ?? '—',
-                                        $result['fioCheck']['expected'] ?? '—'),
-                                    '/profile',
-                                );
-                            }
-                        }
-                        $autoRejected = true;
-                    }
-                    // Если ФИО match, но статус не ACTIVE (например LIQUIDATED) —
-                    // не верифицируем и не отклоняем автоматически: оператор
-                    // сам решит, что делать. UI покажет данные DaData.
                 }
             }
         }
 
-        $result['autoVerified'] = $autoVerified;
-        $result['autoRejected'] = $autoRejected;
+        // Флаги оставлены для совместимости с фронтом — всегда false,
+        // авто-верификация отключена.
+        $result['autoVerified'] = false;
+        $result['autoRejected'] = false;
         return response()->json($result);
     }
 

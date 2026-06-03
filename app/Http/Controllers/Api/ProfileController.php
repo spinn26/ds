@@ -271,6 +271,14 @@ class ProfileController extends Controller
             return response()->json(['message' => 'Консультант не найден'], 404);
         }
 
+        // После верификации реквизиты редактировать нельзя (2026-06-03).
+        $existing = Requisite::where('consultant', $consultant->id)->active()->first();
+        if ($existing && $existing->verified) {
+            return response()->json([
+                'message' => 'Реквизиты подтверждены и не могут быть изменены. Для изменения обратитесь в поддержку.',
+            ], 422);
+        }
+
         $innClean = preg_replace('/\D/', '', (string) $request->input('inn'));
         if (strlen($innClean) !== 10 && strlen($innClean) !== 12) {
             return response()->json([
@@ -317,8 +325,8 @@ class ProfileController extends Controller
             'registrationDate' => $fns['registrationDate'] ?? $request->input('registrationDate'),
             'email' => $request->input('email'),
             'phone' => $request->input('phone'),
-            // Стартовые значения для INSERT; applyDadataVerification ниже
-            // переопределит их в той же транзакции по результату сверки.
+            // Реквизиты ВСЕГДА уходят на ручную верификацию (авто-верификация
+            // отключена 2026-06-03). setRequisitesPending ниже фиксирует статус.
             'verified' => false,
             'status' => 2,
             'dateChange' => now(),
@@ -326,24 +334,27 @@ class ProfileController extends Controller
             'webUser' => $user->id,
         ];
 
-        $autoVerified = DB::transaction(function () use ($requisite, $data, $consultant, $user) {
+        // Налоговый режим из ЕГРИП (DaData finance.tax_system) — пишем в профиль,
+        // если DaData его вернула (часто бывает пусто).
+        if (! empty($fns['taxSystemLabel'])) {
+            $data['tax_regime'] = $fns['taxSystemLabel'];
+        }
+
+        DB::transaction(function () use (&$requisite, $data, $consultant, $user) {
             if ($requisite) {
                 $requisite->update($data);
             } else {
                 $requisite = Requisite::create($data);
             }
 
-            return $this->applyDadataVerification($consultant, $requisite, $user);
+            $this->setRequisitesPending($consultant, $requisite, $user);
         });
 
-        // Перечитываем запись свежей (applyDadataVerification сохраняла её внутри транзакции).
         $requisite = Requisite::where('consultant', $consultant->id)->active()->first();
 
         return response()->json([
-            'message' => $autoVerified
-                ? 'Реквизиты подтверждены автоматически — ФИО совпало с данными ЕГРИП.'
-                : 'Реквизиты сохранены. Ожидайте проверки документов финменеджером.',
-            'verified' => $autoVerified,
+            'message' => 'Реквизиты сохранены. Ожидайте проверки документов финменеджером.',
+            'verified' => false,
             'requisites' => RequisiteResource::make($requisite),
         ]);
     }
@@ -376,85 +387,44 @@ class ProfileController extends Controller
     }
 
     /**
-     * Пересчёт авто-верификации реквизитов по данным ЕГРИП (DaData).
+     * Фиксируем реквизиты в статусе «на проверке».
      *
-     * Верифицируем (verified=true / status=3 / consultant.statusRequisites=3)
-     * только когда выполнены ВСЕ условия:
-     *   — запись — действующий ИП (type INDIVIDUAL, status ACTIVE, 12 цифр);
-     *   — ФИО из ЕГРИП совпадает с профилем (DadataService::compareFio);
-     *   — заполнены банковские реквизиты (банк — второй шаг флоу).
-     * Иначе сбрасываем в «на проверке» (status=2, statusRequisites сброшен) —
-     * это же поведение, что у предупреждения «изменение реквизитов сбросит
-     * верификацию» на фронте.
-     *
-     * Получатель платежа на авто-верификации жёстко = владелец ИНН из ЕГРИП
-     * (анти-fraud, как в ProductController::setupRequisites).
+     * Авто-верификация по ЕГРИП ОТКЛЮЧЕНА (2026-06-03): даже при полном
+     * совпадении ФИО реквизиты всегда уходят на РУЧНУЮ верификацию
+     * финменеджеру. Здесь дополнительно подтягиваем налоговый режим из
+     * DaData (finance.tax_system) — справочно, на саму верификацию не влияет.
      *
      * Вызывается внутри DB::transaction вызывающим методом.
      */
-    private function applyDadataVerification(Consultant $consultant, Requisite $requisite, $user): bool
+    private function setRequisitesPending(Consultant $consultant, Requisite $requisite, $user): void
     {
-        $dadata = app(DadataService::class);
-        $bank = BankRequisite::where('requisites', $requisite->id)->active()->first();
-        $wasVerified = (bool) $requisite->verified;
-
-        $fns = null;
-        $autoVerify = false;
-        if ($dadata->isConfigured() && $requisite->inn) {
-            $cleanInn = preg_replace('/\D/', '', (string) $requisite->inn);
-            $fns = Cache::remember("dadata:inn:{$cleanInn}", 3600, fn () => $dadata->findByInn($cleanInn));
-
-            if (! empty($fns['found'])) {
-                $isIndividual = ($fns['type'] ?? null) === 'INDIVIDUAL';
-                $isActive = ($fns['status'] ?? null) === 'ACTIVE';
-                $fioCheck = $dadata->compareFio(
-                    $fns['fio'] ?? null,
-                    $user->lastName ?? null,
-                    $user->firstName ?? null,
-                    $user->patronymic ?? null,
-                );
-                // Верифицируем только при ПОЛНОСТЬЮ заполненных реквизитах —
-                // пустые ОГРН/Адрес/Email/Телефон ИП или банковские поля
-                // блокируют авто-верификацию (требование 2026-06-03).
-                $autoVerify = $isIndividual && $isActive
-                    && ($fioCheck['match'] ?? false)
-                    && $this->requisitesComplete($requisite, $bank);
+        // Налоговый режим — если ещё не записан и DaData его отдала.
+        if (empty($requisite->tax_regime) && $requisite->inn) {
+            $dadata = app(DadataService::class);
+            if ($dadata->isConfigured()) {
+                $cleanInn = preg_replace('/\D/', '', (string) $requisite->inn);
+                $fns = Cache::remember("dadata:inn:{$cleanInn}", 3600, fn () => $dadata->findByInn($cleanInn));
+                if (! empty($fns['found']) && ! empty($fns['taxSystemLabel'])) {
+                    $requisite->tax_regime = $fns['taxSystemLabel'];
+                }
             }
         }
 
-        $requisite->verified = $autoVerify;
-        $requisite->status = $autoVerify ? 3 : 2;
+        $requisite->verified = false;
+        $requisite->status = 2;
         $requisite->dateChange = now();
         $requisite->save();
 
+        $bank = BankRequisite::where('requisites', $requisite->id)->active()->first();
         if ($bank) {
-            $bank->verified = $autoVerify;
-            if ($autoVerify && $fns) {
-                $bank->beneficiaryName = $fns['name'] ?? $bank->beneficiaryName;
-                $bank->beneficiaryInn = $fns['inn'] ?? preg_replace('/\D/', '', (string) $requisite->inn);
-            }
+            $bank->verified = false;
             $bank->dateChange = now();
             $bank->save();
         }
 
-        // Гейт продуктов/выплат — consultant.statusRequisites===3. Держим его
-        // в синхроне: 3 на авто-верификации, иначе сбрасываем (2 = у консультанта).
-        $consultant->statusRequisites = $autoVerify ? 3 : 2;
+        // Гейт продуктов/выплат: до ручной верификации statusRequisites < 3.
+        $consultant->statusRequisites = 2;
         $consultant->save();
-
-        // Уведомляем только на переходе «не подтверждено → подтверждено»,
-        // чтобы повторные сейвы уже верифицированных реквизитов не спамили.
-        if ($autoVerify && ! $wasVerified) {
-            \App\Http\Controllers\Api\NotificationController::create(
-                (int) $user->id,
-                'requisites',
-                'Реквизиты подтверждены',
-                'Реквизиты прошли автоматическую проверку — ФИО совпало с данными ЕГРИП.',
-                '/profile',
-            );
-        }
-
-        return $autoVerify;
     }
 
     /**
@@ -477,6 +447,13 @@ class ProfileController extends Controller
             return response()->json(['message' => 'Сначала заполните реквизиты ИП'], 422);
         }
 
+        // После верификации реквизиты редактировать нельзя (2026-06-03).
+        if ($requisite->verified) {
+            return response()->json([
+                'message' => 'Реквизиты подтверждены и не могут быть изменены. Для изменения обратитесь в поддержку.',
+            ], 422);
+        }
+
         $bankReq = BankRequisite::where('requisites', $requisite->id)
             ->active()
             ->first();
@@ -494,26 +471,23 @@ class ProfileController extends Controller
             'WebUser' => $user->id,
         ];
 
-        $autoVerified = DB::transaction(function () use ($bankReq, $data, $consultant, $requisite, $user) {
+        DB::transaction(function () use ($bankReq, $data, $consultant, $requisite, $user) {
             if ($bankReq) {
                 $bankReq->update($data);
             } else {
                 BankRequisite::create($data);
             }
 
-            // Банк — второй шаг флоу: после его заполнения пересчитываем
-            // авто-верификацию (если ИП + ФИО уже совпали, реквизиты
-            // подтвердятся автоматически).
-            return $this->applyDadataVerification($consultant, $requisite, $user);
+            // Банк — второй шаг флоу. Авто-верификация отключена: фиксируем
+            // статус «на проверке», реквизиты уйдут на ручную верификацию.
+            $this->setRequisitesPending($consultant, $requisite, $user);
         });
 
         $bankReq = BankRequisite::where('requisites', $requisite->id)->active()->first();
 
         return response()->json([
-            'message' => $autoVerified
-                ? 'Банковские реквизиты сохранены, реквизиты подтверждены автоматически.'
-                : 'Банковские реквизиты сохранены. Ожидайте верификации.',
-            'verified' => $autoVerified,
+            'message' => 'Банковские реквизиты сохранены. Ожидайте проверки документов финменеджером.',
+            'verified' => false,
             'bankRequisites' => BankRequisiteResource::make($bankReq),
         ]);
     }
