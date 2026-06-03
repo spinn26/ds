@@ -1776,6 +1776,23 @@ class AdminDataController extends Controller
             }
         }
 
+        // Налоговый режим: после DaData сразу дёргаем Checko (он бесплатно
+        // отдаёт спецрежим в Налоги.ОсобРежим — УСН/ПСН/…, чего нет в free
+        // DaData). Фоллбэк — taxSystemLabel из DaData (обычно пуст). Кэш 1ч.
+        $taxRegime = $result['taxSystemLabel'] ?? null;
+        $checko = app(\App\Services\CheckoService::class);
+        if ($checko->isConfigured()) {
+            $checkoData = \Illuminate\Support\Facades\Cache::remember(
+                "checko:inn:{$cleanInn}",
+                3600,
+                fn () => $checko->findByInn($cleanInn),
+            );
+            if (! empty($checkoData['found']) && ! empty($checkoData['taxSystemLabel'])) {
+                $taxRegime = $checkoData['taxSystemLabel'];
+            }
+        }
+        $result['taxRegime'] = $taxRegime;
+
         // autoVerified всегда false (авто-верификация отключена); autoRejected
         // = true только при расхождении ФИО (верификация снята).
         $result['autoVerified'] = false;

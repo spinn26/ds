@@ -281,6 +281,17 @@
                 <tr v-if="innResult.address">
                   <td class="text-medium-emphasis">Адрес</td>
                   <td>{{ innResult.address }}</td></tr>
+                <!-- Режим налогообложения из Checko (после DaData). Всегда
+                     показываем строку: режим — ключевой признак ИП на УСН. -->
+                <tr>
+                  <td class="text-medium-emphasis">Режим налогообложения</td>
+                  <td>
+                    <v-chip v-if="innResult.taxRegime" size="x-small"
+                      :color="/усн/i.test(innResult.taxRegime) ? 'success' : 'warning'" variant="tonal">
+                      {{ innResult.taxRegime }}
+                    </v-chip>
+                    <span v-else class="text-medium-emphasis">не определён (нет данных в Checko/DaData)</span>
+                  </td></tr>
               </tbody>
             </v-table>
           </template>
