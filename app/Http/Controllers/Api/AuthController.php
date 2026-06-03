@@ -239,12 +239,25 @@ class AuthController extends Controller
 
         $status = Password::sendResetLink(['email' => $request->input('email')]);
 
-        // Всегда 200 + один и тот же текст, чтобы не палить наличие email.
-        // Реальная ошибка пишется в log (Password broker сам логирует
-        // sender exceptions).
+        // По требованию владельца (2026-06-03): если такого пользователя нет —
+        // явно сообщаем (раньше отдавали одинаковый текст ради анти-enumeration).
+        // Брокер сам проверяет наличие пользователя → INVALID_USER.
+        if ($status === Password::INVALID_USER) {
+            return response()->json([
+                'message' => 'Пользователь с такой почтой не найден.',
+            ], 404);
+        }
+
+        // Слишком частые запросы сброса — троттлинг брокера.
+        if ($status === Password::RESET_THROTTLED) {
+            return response()->json([
+                'message' => 'Ссылка уже была отправлена. Подождите немного перед повторной попыткой.',
+            ], 429);
+        }
+
         return response()->json([
-            'message' => 'Если такой email зарегистрирован, ссылка для сброса отправлена. Проверьте почту.',
-            'status' => $status,  // полезно для отладки; не утекает enumerate (одинаковый текст выше)
+            'message' => 'Ссылка для сброса пароля отправлена. Проверьте почту.',
+            'status' => $status,
         ]);
     }
 
