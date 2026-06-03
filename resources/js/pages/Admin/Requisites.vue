@@ -45,7 +45,7 @@
       :items-per-page-options="[25, 50, 100, 200]" @update:options="onOptions">
       <template #item.taxRegime="{ item }">
         <v-chip v-if="item.taxRegime" size="x-small" variant="tonal"
-          :color="/усн/i.test(item.taxRegime) ? 'success' : 'warning'">
+          :color="/усн/i.test(item.taxRegime) ? 'success' : 'error'">
           {{ item.taxRegime }}
         </v-chip>
         <span v-else class="text-medium-emphasis">—</span>
@@ -130,7 +130,9 @@
               <!-- Режим налогообложения: сохранённый (requisites.tax_regime) или
                    live из DaData после «Проверить ИНН» (innResult.taxSystemLabel). -->
               <tr><td class="text-medium-emphasis">Режим налогообложения</td>
-                <td>{{ selectedItem.taxRegime || innResult?.taxRegime || innResult?.taxSystemLabel || '—' }}</td></tr>
+                <td :class="taxClass(selectedItem.taxRegime || innResult?.taxRegime || innResult?.taxSystemLabel)">
+                  {{ selectedItem.taxRegime || innResult?.taxRegime || innResult?.taxSystemLabel || '—' }}
+                </td></tr>
             </tbody>
           </v-table>
 
@@ -244,10 +246,15 @@
             </v-alert>
             <v-alert v-else-if="innResult.autoRejected" type="error" variant="flat"
               density="comfortable" class="mb-3" icon="mdi-close-octagon">
-              <div class="font-weight-bold">Реквизиты автоматически отклонены</div>
+              <div class="font-weight-bold">Верификация снята автоматически</div>
               <div class="text-body-2">
-                ФИО в ИП не совпадает с профилем партнёра. Уведомление отправлено
-                консультанту, статус возвращён в «На проверке у консультанта».
+                <template v-if="innResult.autoRejectReason === 'tax'">
+                  Режим налогообложения — «{{ innResult.taxRegime }}», а не УСН.
+                  Партнёр обязан быть ИП на УСН — статус возвращён в «Отклонено».
+                </template>
+                <template v-else>
+                  ФИО в ИП не совпадает с профилем партнёра — статус возвращён в «Отклонено».
+                </template>
               </div>
             </v-alert>
 
@@ -294,7 +301,7 @@
                   <td class="text-medium-emphasis">Режим налогообложения</td>
                   <td>
                     <v-chip v-if="innResult.taxRegime" size="x-small"
-                      :color="/усн/i.test(innResult.taxRegime) ? 'success' : 'warning'" variant="tonal">
+                      :color="/усн/i.test(innResult.taxRegime) ? 'success' : 'error'" variant="tonal">
                       {{ innResult.taxRegime }}
                     </v-chip>
                     <span v-else class="text-medium-emphasis">не определён (нет данных в Checko/DaData)</span>
@@ -594,6 +601,12 @@ function verifyLabel(s) {
 // «Проверить ИНН» с расхождением ФИО — верификация снимается).
 function rowProps({ item }) {
   return item?.verificationStatus === 'rejected' ? { class: 'row-rejected' } : {};
+}
+
+// Налоговый режим: красным, если режим определён и НЕ УСН (партнёр обязан
+// быть ИП на УСН). Пустой/неизвестный режим — без подсветки.
+function taxClass(v) {
+  return v && !/усн/i.test(v) ? 'text-error font-weight-bold' : '';
 }
 
 const { debounced: debouncedLoad } = useDebounce(loadData, 400);

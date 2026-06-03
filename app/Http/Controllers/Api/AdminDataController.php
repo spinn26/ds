@@ -1749,6 +1749,7 @@ class AdminDataController extends Controller
         // верификацию (safety): verified=false, status=2 (rejected), и
         // помечаем строку красным в списке (2026-06-03).
         $autoRejected = false;
+        $rejectReason = null;
         if (! empty($result['found']) && $req->consultant) {
             $webUserId = DB::table('consultant')->where('id', $req->consultant)->value('webUser');
             if ($webUserId) {
@@ -1771,6 +1772,7 @@ class AdminDataController extends Controller
                             'dateChange' => now(),
                         ]);
                         $autoRejected = true;
+                        $rejectReason = 'fio';
                     }
                 }
             }
@@ -1799,10 +1801,26 @@ class AdminDataController extends Controller
             DB::table('requisites')->where('id', $id)->update(['tax_regime' => $taxRegime]);
         }
 
-        // autoVerified всегда false (авто-верификация отключена); autoRejected
-        // = true только при расхождении ФИО (верификация снята).
+        // Партнёр обязан быть ИП на УСН. Если режим определён и НЕ УСН —
+        // снимаем верификацию (как при расхождении ФИО) и метим красным.
+        // Если режим не определён (null) — не трогаем, решает оператор.
+        $taxIsUsn = $taxRegime ? (mb_stripos($taxRegime, 'УСН') !== false) : null;
+        $result['taxIsUsn'] = $taxIsUsn;
+        if ($taxIsUsn === false) {
+            DB::table('requisites')->where('id', $id)->update([
+                'verified' => false,
+                'status' => 2,
+                'dateChange' => now(),
+            ]);
+            $autoRejected = true;
+            $rejectReason = $rejectReason ?? 'tax';
+        }
+
+        // autoVerified всегда false (авто-верификация отключена). autoRejected
+        // = true при расхождении ФИО ИЛИ не-УСН режиме (верификация снята).
         $result['autoVerified'] = false;
         $result['autoRejected'] = $autoRejected;
+        $result['autoRejectReason'] = $rejectReason;
         return response()->json($result);
     }
 
