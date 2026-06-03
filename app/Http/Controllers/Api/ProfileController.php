@@ -337,6 +337,33 @@ class ProfileController extends Controller
     }
 
     /**
+     * Полнота реквизитов — обязательное условие верификации (2026-06-03).
+     * Должны быть заполнены ВСЕ поля карточки: наименование/ИНН/ОГРН/адрес/
+     * email/телефон ИП + банк/БИК/расчётный/корр.счёт. Получатель проставляем
+     * сами из ЕГРИП на верификации, поэтому в предусловие не входит.
+     */
+    private function requisitesComplete(Requisite $requisite, ?BankRequisite $bank): bool
+    {
+        $filled = fn ($v) => $v !== null && trim((string) $v) !== '';
+
+        $reqOk = $filled($requisite->individualEntrepreneur)
+            && $filled($requisite->inn)
+            && $filled($requisite->ogrn)
+            && $filled($requisite->address)
+            && $filled($requisite->email)
+            && $filled($requisite->phone);
+
+        if (! $reqOk || ! $bank) {
+            return false;
+        }
+
+        return $filled($bank->bankName)
+            && $filled($bank->bankBik)
+            && $filled($bank->accountNumber)
+            && $filled($bank->correspondentAccount);
+    }
+
+    /**
      * Пересчёт авто-верификации реквизитов по данным ЕГРИП (DaData).
      *
      * Верифицируем (verified=true / status=3 / consultant.statusRequisites=3)
@@ -374,9 +401,12 @@ class ProfileController extends Controller
                     $user->firstName ?? null,
                     $user->patronymic ?? null,
                 );
+                // Верифицируем только при ПОЛНОСТЬЮ заполненных реквизитах —
+                // пустые ОГРН/Адрес/Email/Телефон ИП или банковские поля
+                // блокируют авто-верификацию (требование 2026-06-03).
                 $autoVerify = $isIndividual && $isActive
                     && ($fioCheck['match'] ?? false)
-                    && $bank !== null;
+                    && $this->requisitesComplete($requisite, $bank);
             }
         }
 

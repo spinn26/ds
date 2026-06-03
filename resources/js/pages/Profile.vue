@@ -248,6 +248,21 @@
             </div>
           </v-alert>
 
+          <!-- Дисклеймер о полноте: верификация не пройдёт, пока не заполнены
+               ВСЕ обязательные поля (ИП + банк). 2026-06-03. -->
+          <v-alert v-if="!isRequisitesVerified && missingRequisiteFields.length"
+            type="warning" variant="tonal" density="compact" class="mb-3"
+            icon="mdi-alert-circle-outline">
+            <div class="text-body-2">
+              <strong>Заполните все реквизиты для верификации.</strong>
+              Пока не заполнены все поля ИП и банковские реквизиты, верификация
+              <strong>не пройдёт</strong>.
+            </div>
+            <div class="text-caption mt-1">
+              Не хватает: {{ missingRequisiteFields.join(', ') }}.
+            </div>
+          </v-alert>
+
           <!-- ИП -->
           <v-card class="ds-card mb-3">
             <div class="ds-card__head">
@@ -649,7 +664,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import api from '../api';
 import PageHeader from '../components/PageHeader.vue';
@@ -827,6 +842,31 @@ const form = ref({ firstName: '', lastName: '', patronymic: '', position: '', ph
 const pwd = ref({ current_password: '', password: '', password_confirmation: '' });
 const reqForm = ref({ individualEntrepreneur: '', inn: '', ogrn: '', address: '', registrationDate: '', email: '', phone: '' });
 const bankForm = ref({ bankName: '', bankBik: '', accountNumber: '', correspondentAccount: '', beneficiaryName: '' });
+
+// Обязательные для верификации поля (2026-06-03): без полного заполнения
+// верификация не пройдёт. Наименование/ИНН подтягиваются по ИНН, Получатель
+// проставляет бэкенд — их в список не включаем.
+const requiredRequisiteFields = [
+  { key: 'ogrn', label: 'ОГРН/ОГРНИП', form: 'req' },
+  { key: 'address', label: 'Юридический адрес', form: 'req' },
+  { key: 'email', label: 'Email для документов', form: 'req' },
+  { key: 'phone', label: 'Телефон ИП', form: 'req' },
+  { key: 'bankName', label: 'Наименование банка', form: 'bank' },
+  { key: 'bankBik', label: 'БИК', form: 'bank' },
+  { key: 'accountNumber', label: 'Расчётный счёт', form: 'bank' },
+  { key: 'correspondentAccount', label: 'Корр. счёт', form: 'bank' },
+];
+const missingRequisiteFields = computed(() =>
+  requiredRequisiteFields
+    .filter(f => {
+      const src = f.form === 'bank' ? bankForm.value : reqForm.value;
+      return !String(src?.[f.key] ?? '').trim();
+    })
+    .map(f => f.label)
+);
+const isRequisitesVerified = computed(() =>
+  profile.value?.requisites?.verificationStatus === 'verified'
+);
 
 const initials = computed(() => {
   const u = profile.value.user;
@@ -1060,12 +1100,16 @@ function copyToClipboard(text) {
   setTimeout(() => { copied.value = false; }, 2000);
 }
 
+// Deep-link на конкретную вкладку (?tab=requisites из баннеров кабинета).
+// Watcher (а не только onMounted) нужен, чтобы переключение срабатывало,
+// когда партнёр уже на /profile и кликает ссылку из баннера: путь тот же,
+// компонент не перемонтируется — реагируем на смену query.tab.
+const validTabs = ['info', 'documents', 'requisites', 'security', 'notifications', 'telegram', 'referral'];
+watch(() => route.query.tab, (t) => {
+  if (t && validTabs.includes(t)) tab.value = t;
+}, { immediate: true });
+
 onMounted(() => {
-  // Deep-link на конкретную вкладку (?tab=requisites из баннеров кабинета).
-  const validTabs = ['info', 'documents', 'requisites', 'security', 'notifications', 'telegram', 'referral'];
-  if (route.query.tab && validTabs.includes(route.query.tab)) {
-    tab.value = route.query.tab;
-  }
   loadProfile();
   loadCountries();
   loadDocuments();

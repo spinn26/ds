@@ -54,8 +54,8 @@ class BackfillRequisitesDadata extends Command
             ->orderBy('r.id')
             ->select([
                 'r.id', 'r.inn', 'r.individualEntrepreneur', 'r.ogrn', 'r.address',
-                'r.registrationDate', 'r.verified', 'r.status', 'r.consultant',
-                'c.statusRequisites', 'w.firstName', 'w.lastName', 'w.patronymic',
+                'r.registrationDate', 'r.email', 'r.phone', 'r.verified', 'r.status',
+                'r.consultant', 'c.statusRequisites', 'w.firstName', 'w.lastName', 'w.patronymic',
             ]);
 
         if ($limit > 0) {
@@ -83,6 +83,7 @@ class BackfillRequisitesDadata extends Command
 
         $filled = 0;
         $verified = 0;
+        $deverified = 0;
         $preview = [];
 
         foreach ($rows as $r) {
@@ -114,17 +115,40 @@ class BackfillRequisitesDadata extends Command
             $bank = DB::table('bankrequisites')
                 ->where('requisites', $r->id)
                 ->whereNull('deletedAt')
-                ->first(['id', 'verified', 'beneficiaryName', 'beneficiaryInn']);
+                ->first(['id', 'verified', 'beneficiaryName', 'beneficiaryInn',
+                    'bankName', 'bankBik', 'accountNumber', 'correspondentAccount']);
+
+            // Эффективные значения ПОСЛЕ дозаполнения (для проверки полноты).
+            $eff = fn ($field, $col) => array_key_exists($field, $reqUpdate)
+                ? $reqUpdate[$field]
+                : ($r->{$col} ?? null);
+            $filledVal = fn ($v) => $v !== null && trim((string) $v) !== '';
+
+            // Полнота — обязательное условие верификации (2026-06-03): все поля
+            // карточки ИП + банковские. Получатель проставляем сами на верификации.
+            $complete = $filledVal($eff('individualEntrepreneur', 'individualEntrepreneur'))
+                && $filledVal($r->inn)
+                && $filledVal($eff('ogrn', 'ogrn'))
+                && $filledVal($eff('address', 'address'))
+                && $filledVal($r->email)
+                && $filledVal($r->phone)
+                && $bank !== null
+                && $filledVal($bank->bankName)
+                && $filledVal($bank->bankBik)
+                && $filledVal($bank->accountNumber)
+                && $filledVal($bank->correspondentAccount);
 
             $isIndividual = ($fns['type'] ?? null) === 'INDIVIDUAL';
             $isActive = ($fns['status'] ?? null) === 'ACTIVE';
             $fioCheck = $dadata->compareFio($fns['fio'] ?? null, $r->lastName, $r->firstName, $r->patronymic);
-            $autoVerify = $isIndividual && $isActive && ($fioCheck['match'] ?? false) && $bank !== null;
+            $eligible = $isIndividual && $isActive && ($fioCheck['match'] ?? false) && $complete;
 
-            // Не верифицируем повторно уже verified=true; дозаполнение — отдельно.
-            $needsVerify = $autoVerify && ! (bool) $r->verified;
+            $wasVerified = (bool) $r->verified;
+            $needsVerify = $eligible && ! $wasVerified;
+            // Снимаем verified с тех, кто больше не проходит (неполные данные / ФИО).
+            $needsDeverify = ! $eligible && $wasVerified;
 
-            if (empty($reqUpdate) && ! $needsVerify) {
+            if (empty($reqUpdate) && ! $needsVerify && ! $needsDeverify) {
                 continue;
             }
 
@@ -134,14 +158,19 @@ class BackfillRequisitesDadata extends Command
             if ($needsVerify) {
                 $verified++;
             }
+            if ($needsDeverify) {
+                $deverified++;
+            }
 
-            if (count($preview) < 20) {
+            if (count($preview) < 30) {
+                $action = $needsVerify ? '✓ verify'
+                    : ($needsDeverify ? '✗ de-verify' : ($eligible ? '(already)' : '—'));
                 $preview[] = [
                     $r->id,
                     $cleanInn,
                     trim(($r->lastName ?? '').' '.($r->firstName ?? '')),
                     empty($reqUpdate) ? '—' : implode(',', array_keys($reqUpdate)),
-                    $needsVerify ? '✓ verify' : ($autoVerify ? '(already)' : '—'),
+                    $action,
                 ];
             }
 
@@ -155,18 +184,21 @@ class BackfillRequisitesDadata extends Command
                 $r->consultant, $r->statusRequisites, $bank ? ($bank->verified ? 1 : 0) : '',
             ]);
 
-            DB::transaction(function () use ($r, $reqUpdate, $autoVerify, $bank, $fns, $cleanInn) {
+            DB::transaction(function () use ($r, $reqUpdate, $eligible, $needsDeverify, $bank, $fns, $cleanInn) {
                 $set = $reqUpdate;
-                if ($autoVerify) {
+                if ($eligible) {
                     $set['verified'] = true;
                     $set['status'] = 3;
+                } elseif ($needsDeverify) {
+                    $set['verified'] = false;
+                    $set['status'] = 2;
                 }
                 if (! empty($set)) {
                     $set['dateChange'] = now();
                     DB::table('requisites')->where('id', $r->id)->update($set);
                 }
 
-                if ($autoVerify) {
+                if ($eligible) {
                     if ($bank) {
                         DB::table('bankrequisites')->where('id', $bank->id)->update([
                             'verified' => true,
@@ -178,18 +210,28 @@ class BackfillRequisitesDadata extends Command
                     DB::table('consultant')->where('id', $r->consultant)->update([
                         'statusRequisites' => 3,
                     ]);
+                } elseif ($needsDeverify) {
+                    if ($bank) {
+                        DB::table('bankrequisites')->where('id', $bank->id)->update([
+                            'verified' => false,
+                            'dateChange' => now(),
+                        ]);
+                    }
+                    DB::table('consultant')->where('id', $r->consultant)->update([
+                        'statusRequisites' => 2,
+                    ]);
                 }
             });
         }
 
         if ($preview) {
-            $this->table(['req', 'inn', 'fio', 'filled', 'verify'], $preview);
-            if ($rows->count() > 20) {
+            $this->table(['req', 'inn', 'fio', 'filled', 'action'], $preview);
+            if ($rows->count() > 30) {
                 $this->line('… (показаны первые '.count($preview).' изменений)');
             }
         }
 
-        $this->info("Дозаполнено полями: {$filled} · авто-верифицировано: {$verified}");
+        $this->info("Дозаполнено полями: {$filled} · авто-верифицировано: {$verified} · снято verified: {$deverified}");
 
         if (! $apply) {
             $this->warn('DRY-RUN — изменения не записаны. Повторите с --apply, чтобы применить.');
