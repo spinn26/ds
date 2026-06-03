@@ -1492,13 +1492,16 @@ class AdminDataController extends Controller
                     $query->where('verified', true);
                     break;
                 case 'rejected':
-                    // Отклонено = возврат на консультанта (status=2) и не верифицировано
-                    $query->where('verified', false)->where('status', 2);
+                    // Отклонено = есть причина отказа (rejection_reason) и не
+                    // верифицировано. NB: status=2 ставится на ЛЮБОЕ сохранение
+                    // (и «на проверке» тоже) — отличаем именно по причине отказа.
+                    $query->where('verified', false)
+                          ->whereNotNull('rejection_reason')->where('rejection_reason', '!=', '');
                     break;
                 case 'pending':
-                    // На проверке = не верифицировано и не возвращено
+                    // На проверке = не верифицировано и БЕЗ причины отказа.
                     $query->where('verified', false)->where(function ($q) {
-                        $q->whereNull('status')->orWhere('status', '!=', 2);
+                        $q->whereNull('rejection_reason')->orWhere('rejection_reason', '');
                     });
                     break;
             }
@@ -1569,10 +1572,12 @@ class AdminDataController extends Controller
                 $bankReq = $bankReqs[$r->id] ?? null;
 
                 // Резолвим verificationStatus для UI: verified / pending / rejected.
+                // «Отклонено» — только когда есть причина отказа (rejection_reason),
+                // т.к. status=2 ставится и при обычном сохранении («на проверке»).
                 $verificationStatus = 'pending';
                 if ($r->verified) {
                     $verificationStatus = 'verified';
-                } elseif ((int) ($r->status ?? 0) === 2) {
+                } elseif (filled($r->rejection_reason)) {
                     $verificationStatus = 'rejected';
                 }
 
@@ -1599,6 +1604,7 @@ class AdminDataController extends Controller
                     'beneficiaryName' => $bankReq?->beneficiaryName,
                     'verified' => (bool) $r->verified,
                     'verificationStatus' => $verificationStatus,
+                    'rejectionReason' => $r->rejection_reason,
                     'hasBankRequisites' => $bankReq !== null,
                     'bankVerified' => $bankReq?->verified ?? false,
                 ];

@@ -55,7 +55,8 @@
         <v-icon v-else color="grey" size="18">mdi-minus-circle-outline</v-icon>
       </template>
       <template #item.verificationStatus="{ item }">
-        <v-chip size="x-small" :color="verifyColor(item.verificationStatus)">
+        <v-chip size="x-small" :color="verifyColor(item.verificationStatus)"
+          :title="item.verificationStatus === 'rejected' && item.rejectionReason ? item.rejectionReason : undefined">
           {{ verifyLabel(item.verificationStatus) }}
         </v-chip>
       </template>
