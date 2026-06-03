@@ -460,15 +460,37 @@
           <v-card v-if="rateContext">
             <v-card-title>Изменить комиссию ДС в контракте {{ rateContext.contractNumber || '' }}</v-card-title>
             <v-card-text>
+              <!-- Контекст программы/срока, по которым отобраны тарифы. -->
+              <div class="text-caption text-medium-emphasis mb-2">
+                Программа: <strong>{{ rateContext.programName || '—' }}</strong>
+                <template v-if="rateContext.contractTerm != null">
+                  · срок контракта: <strong>{{ rateContext.contractTerm }}</strong>
+                </template>
+              </div>
+              <!-- Срок контракта не совпал ни с одним тарифом — фильтр по
+                   сроку снят, показаны все ставки программы. -->
+              <v-alert v-if="rateRelaxedTerm" type="warning" variant="tonal" density="compact" class="mb-2">
+                Для срока контракта ({{ rateContext.contractTerm }}) тарифов не найдено —
+                показаны все ставки программы. Проверьте срок контракта.
+              </v-alert>
+              <!-- На дату транзакции действующих тарифов нет — показаны все
+                   версии (включая исторические). Возможны дубли по году. -->
+              <v-alert v-else-if="rateRelaxedDate" type="warning" variant="tonal" density="compact" class="mb-2">
+                На дату транзакции действующих тарифов не найдено —
+                показаны все версии ставок (включая исторические).
+              </v-alert>
               <v-alert v-if="!productRates.length" type="info" variant="tonal" density="compact">
-                Для продукта нет настроенных тарифов в справочнике dsCommission.
+                Для программы контракта нет настроенных тарифов в справочнике dsCommission.
               </v-alert>
               <v-radio-group v-else v-model="rateChoice">
-                <v-radio v-for="r in productRates" :key="r.id" :value="r.comission">
+                <v-radio v-for="r in productRates" :key="r.id" :value="r.id">
                   <template #label>
                     <div>
                       <div class="font-weight-medium">{{ r.comission }}%</div>
-                      <div class="text-caption text-medium-emphasis">{{ r.programName || '—' }}</div>
+                      <div class="text-caption text-medium-emphasis">
+                        {{ r.propertyTitle || r.programName || '—' }}
+                        <template v-if="r.termContract"> · срок {{ r.termContract }} лет</template>
+                      </div>
                     </div>
                   </template>
                 </v-radio>
@@ -1023,23 +1045,43 @@ const cl = computed(() => ({
 
 const rateModal = ref(false);
 const rateContext = ref(null);
-const rateChoice = ref(null);
+const rateChoice = ref(null); // выбранная строка тарифа по id (не по %, т.к.
+                              // при снятом фильтре срока % могут повторяться).
+const rateRelaxedTerm = ref(false);
+const rateRelaxedDate = ref(false);
 
 async function openRateModal(d) {
   if (!d.productId) return;
   rateContext.value = d;
-  rateChoice.value = d.dsCommissionPercentage || null;
+  rateChoice.value = null;
+  productRates.value = [];
+  rateRelaxedTerm.value = false;
+  rateRelaxedDate.value = false;
   try {
-    const { data } = await api.get(`/admin/manual-tx/products/${d.productId}/rates`);
+    // Тарифы выпадают согласно программе, сроку и дате транзакции черновика
+    // (дата отсекает просроченные версии тарифа).
+    const params = {};
+    if (d.programId) params.program = d.programId;
+    if (d.contractTerm != null) params.term = d.contractTerm;
+    if (d.date) params.date = String(d.date).slice(0, 10);
+    const { data } = await api.get(`/admin/manual-tx/products/${d.productId}/rates`, { params });
     productRates.value = data.rates || [];
+    rateRelaxedTerm.value = !!data.relaxedTerm;
+    rateRelaxedDate.value = !!data.relaxedDate;
+    // Предвыбор текущей ставки черновика, если она присутствует в списке.
+    if (d.dsCommissionPercentage != null) {
+      const cur = productRates.value.find(r => Number(r.comission) === Number(d.dsCommissionPercentage));
+      if (cur) rateChoice.value = cur.id;
+    }
   } catch { productRates.value = []; }
   rateModal.value = true;
 }
 
 async function applyRate() {
-  if (!rateContext.value || !rateChoice.value) return;
+  const row = productRates.value.find(r => r.id === rateChoice.value);
+  if (!rateContext.value || !row) return;
   await doPatch(rateContext.value, {
-    dsCommissionPercentage: Number(rateChoice.value),
+    dsCommissionPercentage: Number(row.comission),
     commissionOverride: true,
   });
   rateModal.value = false;

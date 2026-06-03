@@ -321,16 +321,74 @@ class ManualTransactionController extends Controller
         ]);
     }
 
-    /** Доступные ставки %ДС для продукта (модалка «Изменить»). */
-    public function productRates(int $productId): JsonResponse
+    /**
+     * Доступные ставки %ДС для контракта (модалка «Изменить»).
+     *
+     * Per spec ✅Ручной ввод §2.2 + правка 2026-06-03: тарифы ИТА/Медлайф
+     * должны выпадать согласно программе И сроку контракта. Без этого по
+     * Medlife выпадало 1213 строк (17 программ), по ИТА EVO — 25 строк по
+     * всем срокам вперемешку (ставка «1 год» = 15.5% при сроке 5 vs 77.5%
+     * при сроке 25 — выбрать осмысленно нельзя). Ставка различается по
+     * program × termContract × commissionCalcProperty (год выплаты КВ),
+     * который выводим в подпись.
+     *
+     * program/term/date приходят query-параметрами из контракта/черновика.
+     * Фильтр по date снимает исторические версии тарифа: у Medlife одна и та
+     * же program+term+год хранится несколькими строками с разным окном
+     * [date, dateFinish) (напр. 25.08% до 2023-10-01 и 26.49% после) — без
+     * него оператору выпадает просроченная ставка.
+     *
+     * Прогрессивное ослабление, если самая узкая выборка пуста:
+     * program+term+date → снять date → снять term. Снятый фильтр помечаем
+     * (relaxedDate / relaxedTerm), чтобы UI предупредил оператора.
+     */
+    public function productRates(Request $request, int $productId): JsonResponse
     {
-        $rates = DB::table('dsCommission')
-            ->where('product', $productId)
-            ->where('active', true)
-            ->whereNull('dateDeleted')
-            ->orderByDesc('comission')
-            ->get(['id', 'comission', 'commissionAbsolute', 'programName', 'date', 'dateFinish']);
-        return response()->json(['rates' => $rates]);
+        $program = $request->filled('program') ? (int) $request->program : null;
+        $term = $request->filled('term') ? (int) $request->term : null;
+        $date = $request->filled('date') ? $request->date : null;
+
+        $select = [
+            'dc.id', 'dc.comission', 'dc.commissionAbsolute', 'dc.programName',
+            'dc.termContract', 'dc.date', 'dc.dateFinish', 'cp.title as propertyTitle',
+        ];
+
+        $build = function (bool $withTerm, bool $withDate) use ($productId, $program, $term, $date, $select) {
+            return DB::table('dsCommission as dc')
+                ->leftJoin('commissionCalcProperty as cp', 'cp.id', '=', 'dc.commissionCalcProperty')
+                ->where('dc.product', $productId)
+                ->where('dc.active', true)
+                ->whereNull('dc.dateDeleted')
+                ->when($program, fn ($q) => $q->where('dc.program', $program))
+                ->when($withTerm && $term !== null, fn ($q) => $q->where('dc.termContract', $term))
+                ->when($withDate && $date !== null, fn ($q) => $q
+                    ->where(fn ($w) => $w->whereNull('dc.date')->orWhere('dc.date', '<=', $date))
+                    ->where(fn ($w) => $w->whereNull('dc.dateFinish')->orWhere('dc.dateFinish', '>', $date)))
+                // Срок → год выплаты, новейший тариф первым (на случай, если
+                // дату не передали и осталось несколько версий года).
+                ->orderBy('dc.termContract')
+                ->orderBy('dc.commissionCalcProperty')
+                ->orderByDesc('dc.date')
+                ->get($select);
+        };
+
+        $relaxedDate = false;
+        $relaxedTerm = false;
+        $rates = $build(true, true);
+        if ($rates->isEmpty() && $date !== null) {
+            $relaxedDate = true;
+            $rates = $build(true, false);
+        }
+        if ($rates->isEmpty() && $term !== null) {
+            $relaxedTerm = true;
+            $rates = $build(false, false);
+        }
+
+        return response()->json([
+            'rates' => $rates,
+            'relaxedTerm' => $relaxedTerm,
+            'relaxedDate' => $relaxedDate,
+        ]);
     }
 
     /**
