@@ -42,7 +42,8 @@
       :items-length="total"
       empty-icon="mdi-account-search-outline"
       empty-message="Пользователи не найдены"
-      @update:options="onOptions"
+      @update:page="page = $event; load()"
+      @update:options="onTableOptions"
     >
       <template #item.role="{ item }">
         <StatusChip v-for="r in (item.role || '').split(',')" :key="r" size="x-small" class="mr-1"
@@ -300,7 +301,7 @@ const {
   items, loading, page, perPage, total, filters, activeFilterCount,
   editDialog, editForm, editErrors, editMessage, saving,
   deleteDialog, deleteTarget,
-  load, onOptions, resetFilters,
+  load, resetFilters,
   openCreate: _openCreate, openEdit: _openEdit, save, confirmDelete, remove,
 } = useCrud('admin/users', {
   filters: { search: '', role: null, blocked: null },
@@ -320,6 +321,18 @@ const {
     error: 'Ошибка',
   },
 });
+
+// Пагинацией страницы управляет @update:page (см. шаблон): у
+// v-data-table-server двусторонний v-model:page откатывал options.page
+// назад, поэтому page здесь НЕ трогаем — иначе сбросили бы выбранную
+// страницу обратно. Реагируем только на смену размера страницы.
+function onTableOptions(opts) {
+  if (opts?.itemsPerPage != null && opts.itemsPerPage !== perPage.value) {
+    perPage.value = opts.itemsPerPage;
+    page.value = 1;
+    load();
+  }
+}
 
 // Роли в БД — CSV-строка; в UI — массив. Прокси через computed.
 const editFormRoles = computed({

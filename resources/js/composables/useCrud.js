@@ -75,7 +75,11 @@ export function useCrud(resource, options = {}) {
     try {
       const params = {
         page: page.value,
+        // Бэкенд (trait PaginatesRequests) читает `per_page` (snake_case).
+        // Раньше слали только camelCase `perPage` → размер страницы
+        // игнорировался и всегда отдавалось 25. Шлём оба для совместимости.
         perPage: perPage.value,
+        per_page: perPage.value,
         ...buildFilterParams(),
       };
       if (sortBy.value.length) {
