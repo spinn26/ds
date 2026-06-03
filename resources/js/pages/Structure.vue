@@ -56,7 +56,6 @@
       <v-table density="compact" hover>
         <thead>
           <tr>
-            <th style="width:40px"></th>
             <th>Партнёр</th>
             <th class="text-center" style="width:70px">Уровень</th>
             <th>Квалификация</th>
@@ -73,14 +72,19 @@
         </thead>
         <tbody>
           <template v-for="row in flatRows" :key="row._uid">
-            <tr>
-              <td>
-                <v-btn v-if="row.hasChildren !== false" icon size="x-small" variant="text"
-                  :loading="row._loadingChildren" @click="toggleExpand(row)">
-                  <v-icon>{{ row._expanded ? 'mdi-chevron-down' : 'mdi-chevron-right' }}</v-icon>
-                </v-btn>
+            <tr :class="{ 'tree-root': row._depth === 0 }">
+              <td class="tree-cell">
+                <span class="tree-row-inner">
+                  <span v-for="(anc, i) in row._guides" :key="i" class="tree-rail" :class="{ 'tree-rail--line': !anc }"></span>
+                  <span v-if="row._depth > 0" class="tree-elbow" :class="row._isLast ? 'is-last' : 'is-mid'"></span>
+                  <v-btn v-if="row.hasChildren !== false" icon size="x-small" variant="text" class="tree-toggle"
+                    :loading="row._loadingChildren" @click="toggleExpand(row)">
+                    <v-icon size="18">{{ row._expanded ? 'mdi-chevron-down' : 'mdi-chevron-right' }}</v-icon>
+                  </v-btn>
+                  <span v-else class="tree-toggle"></span>
+                  <span class="tree-label">{{ row.personName }}</span>
+                </span>
               </td>
-              <td :style="{ paddingLeft: (row._depth * 20 + 8) + 'px', whiteSpace: 'nowrap' }">{{ row.personName }}</td>
               <td class="text-center">{{ row.level ?? '—' }}</td>
               <td style="white-space:nowrap">
                 <v-chip v-if="row.qualification" size="x-small" color="secondary">{{ row.qualification.level }} [{{ row.qualification.title }}]</v-chip>
@@ -117,7 +121,7 @@
             </tr>
           </template>
           <tr v-if="!flatRows.length && !loading">
-            <td colspan="13"><EmptyState /></td>
+            <td colspan="12"><EmptyState /></td>
           </tr>
         </tbody>
       </v-table>
@@ -234,15 +238,24 @@ function enrichRows(rows, depth = 0) {
   }));
 }
 
+// Плоский список с метаданными для дерева-коннекторов:
+//  _guides   — для каждого предка: true если он был последним ребёнком
+//              (вертикальную линию ниже не тянем), false — есть братья ниже.
+//  _isLast   — последний ли этот узел среди своих братьев (└ vs ├).
 const flatRows = computed(() => {
   const result = [];
-  function walk(rows) {
-    for (const r of rows) {
+  function walk(rows, ancestorsLast) {
+    rows.forEach((r, i) => {
+      const isLast = i === rows.length - 1;
+      r._guides = ancestorsLast;
+      r._isLast = isLast;
       result.push(r);
-      if (r._expanded && r._children.length) walk(r._children);
-    }
+      if (r._expanded && r._children.length) {
+        walk(r._children, [...ancestorsLast, isLast]);
+      }
+    });
   }
-  walk(items.value);
+  walk(items.value, []);
   return result;
 });
 
@@ -398,5 +411,64 @@ onMounted(() => {
 :deep(.text-h5), :deep(.text-h6), :deep(.text-subtitle-1) {
   font-variant-numeric: tabular-nums;
 }
+
+/* --- Дерево структуры: коннекторы наставник → команда --- */
+.tree-cell {
+  padding: 0 !important;
+  white-space: nowrap;
+}
+.tree-row-inner {
+  display: flex;
+  align-items: stretch;
+  min-height: 36px;
+  height: 100%;
+}
+/* Рельса предка: занимает один уровень отступа. */
+.tree-rail,
+.tree-elbow {
+  position: relative;
+  flex: 0 0 22px;
+  width: 22px;
+}
+/* Вертикальная линия предка, у которого ниже ещё есть братья. */
+.tree-rail--line::before {
+  content: '';
+  position: absolute;
+  left: 11px;
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid rgba(var(--v-theme-on-surface), 0.22);
+}
+/* Уголок к самому узлу: вертикаль (сверху) + горизонталь (к имени). */
+.tree-elbow::before {
+  content: '';
+  position: absolute;
+  left: 11px;
+  top: 0;
+  border-left: 1px solid rgba(var(--v-theme-on-surface), 0.22);
+}
+.tree-elbow.is-last::before { height: 50%; }          /* последний ребёнок: линия до середины */
+.tree-elbow.is-mid::before { bottom: 0; }             /* есть братья ниже: линия насквозь */
+.tree-elbow::after {
+  content: '';
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  width: 12px;
+  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.22);
+}
+.tree-toggle {
+  flex: 0 0 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.tree-label {
+  display: inline-flex;
+  align-items: center;
+  padding-right: 12px;
+}
+/* Корневые узлы — чуть жирнее для «явности» уровней. */
+.tree-root .tree-label { font-weight: 600; }
 </style>
 
