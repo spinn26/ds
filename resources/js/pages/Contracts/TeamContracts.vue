@@ -98,6 +98,9 @@
         </span>
         <span v-else class="text-medium-emphasis">—</span>
       </template>
+      <template #item._chat="{ item }">
+        <ContractBackofficeButton :contract-id="item.id" :contract-number="item.number" />
+      </template>
       <template #no-data><EmptyState /></template>
     </v-data-table-server>
   </div>
@@ -112,6 +115,7 @@ import PageHeader from '../../components/PageHeader.vue';
 import EmptyState from '../../components/EmptyState.vue';
 import StatusChip from '../../components/StatusChip.vue';
 import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
+import ContractBackofficeButton from '../../components/ContractBackofficeButton.vue';
 import { fmt, fmtDate, getContractStatusColor } from '../../composables/useDesign';
 
 const items = ref([]);
@@ -172,7 +176,11 @@ const headers = [
 ];
 
 const columnVisible = ref({});
-const visibleHeaders = computed(() => headers.filter(h => columnVisible.value[h.key] !== false));
+const visibleHeaders = computed(() => [
+  ...headers.filter(h => columnVisible.value[h.key] !== false),
+  // Колонка «Бэк-офис» — всегда видима, вне ColumnVisibilityMenu.
+  { title: '', key: '_chat', width: 56, sortable: false, cellProps: nowrap },
+]);
 
 const { debounced: debouncedLoad } = useDebounce(loadData, 400);
 

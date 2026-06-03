@@ -1164,7 +1164,18 @@ function checkQuery() {
     // Если ключ из query совпадает с известным — fix категорию.
     // Иначе fallback на первую категорию из списка (не залочена).
     const cat = knownCategories.includes(raw) ? raw : categories[0].value;
-    newForm.value = { category: cat, subject: '', message: '' };
+    // Контекст из строки контракта/клиента (ContractBackofficeButton):
+    // ctx_type/ctx_id уезжают в тикет, бэк обогащает первое сообщение
+    // деталями (ChatController::buildContextSummary). ctx_label → тема.
+    const ctxType = route.query.ctx_type ? String(route.query.ctx_type) : '';
+    const ctxId = route.query.ctx_id ? String(route.query.ctx_id) : '';
+    const ctxLabel = route.query.ctx_label ? String(route.query.ctx_label) : '';
+    newForm.value = {
+      category: cat,
+      subject: ctxType && ctxLabel ? `${ctxType} ${ctxLabel}` : '',
+      message: '',
+      ...(ctxType && ctxId ? { context_type: ctxType, context_id: ctxId } : {}),
+    };
     newCategoryLocked.value = knownCategories.includes(raw);
     showNew.value = true;
   }
