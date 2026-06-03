@@ -147,7 +147,9 @@ class FinanceReportService
             if (! $tx) return $empty;
             $contract = $tx->contract ? ($contracts[$tx->contract] ?? null) : null;
             if (! $contract) {
-                return array_merge($empty, ['amount' => $tx->amount ?? null]);
+                // «Сумма оплаты» — в рублях: для валютных сделок (напр. Axevil/USD)
+                // берём amountRUB, иначе колонка «₽» показывала бы сумму в валюте.
+                return array_merge($empty, ['amount' => ($tx->amountRUB ?: $tx->amount) ?? null]);
             }
             $flags = $contract->product ? ($productFlags[$contract->product] ?? null) : null;
             $hasProperty = $flags ? (bool) $flags->has_property : true;
@@ -161,7 +163,9 @@ class FinanceReportService
                 'clientName' => $contract->clientName ?? null,
                 'productName' => $contract->productName ?? null,
                 'programName' => $contract->programName ?? null,
-                'amount' => $tx->amount ?? null,
+                // «Сумма оплаты» в рублях (amountRUB) — для валютных сделок,
+                // чтобы колонка «₽» в отчёте не показывала сумму в валюте.
+                'amount' => ($tx->amountRUB ?: $tx->amount) ?? null,
                 // Гейтим по флагу продукта: если у продукта has_*=false —
                 // отдаём null. Это позволяет UI скрывать ячейку в строках,
                 // где параметр не релевантен этому конкретному продукту.
