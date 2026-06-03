@@ -43,6 +43,13 @@
       :items="items" :items-length="total" :loading="loading"
       :headers="visibleHeaders" :items-per-page="perPage" :row-props="rowProps"
       :items-per-page-options="[25, 50, 100, 200]" @update:options="onOptions">
+      <template #item.taxRegime="{ item }">
+        <v-chip v-if="item.taxRegime" size="x-small" variant="tonal"
+          :color="/усн/i.test(item.taxRegime) ? 'success' : 'warning'">
+          {{ item.taxRegime }}
+        </v-chip>
+        <span v-else class="text-medium-emphasis">—</span>
+      </template>
       <template #item.hasBankRequisites="{ item }">
         <v-icon v-if="item.hasBankRequisites" color="success" size="18">mdi-check-circle</v-icon>
         <v-icon v-else color="grey" size="18">mdi-minus-circle-outline</v-icon>
@@ -123,7 +130,7 @@
               <!-- Режим налогообложения: сохранённый (requisites.tax_regime) или
                    live из DaData после «Проверить ИНН» (innResult.taxSystemLabel). -->
               <tr><td class="text-medium-emphasis">Режим налогообложения</td>
-                <td>{{ selectedItem.taxRegime || innResult?.taxSystemLabel || '—' }}</td></tr>
+                <td>{{ selectedItem.taxRegime || innResult?.taxRegime || innResult?.taxSystemLabel || '—' }}</td></tr>
             </tbody>
           </v-table>
 
@@ -446,6 +453,11 @@ async function checkInn() {
   try {
     const { data } = await api.post(`/admin/requisites/${selectedItem.value.id}/check-inn`);
     innResult.value = data;
+    // Режим налогообложения сохранён бэкендом в реквизит — сразу отражаем
+    // в карточке (поле «Режим налогообложения»), без перезагрузки.
+    if (data.taxRegime) {
+      selectedItem.value.taxRegime = data.taxRegime;
+    }
     if (data.autoVerified) {
       selectedItem.value.verificationStatus = 'verified';
       loadData();
@@ -557,6 +569,7 @@ const headers = [
   { title: 'Партнёр', key: 'consultantName' },
   { title: 'ИП', key: 'individualEntrepreneur' },
   { title: 'ИНН', key: 'inn', width: 130 },
+  { title: 'Режим', key: 'taxRegime', width: 100 },
   { title: 'Банк реквизиты', key: 'hasBankRequisites', width: 120 },
   { title: 'Статус', key: 'verificationStatus', width: 130 },
   { title: 'Действия', key: 'actions', sortable: false, width: 100 },

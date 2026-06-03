@@ -1793,6 +1793,12 @@ class AdminDataController extends Controller
         }
         $result['taxRegime'] = $taxRegime;
 
+        // Сохраняем найденный режим в реквизит — чтобы он отображался в карточке
+        // и списке без повторного запроса к Checko.
+        if (! empty($taxRegime)) {
+            DB::table('requisites')->where('id', $id)->update(['tax_regime' => $taxRegime]);
+        }
+
         // autoVerified всегда false (авто-верификация отключена); autoRejected
         // = true только при расхождении ФИО (верификация снята).
         $result['autoVerified'] = false;
