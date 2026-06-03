@@ -41,7 +41,7 @@
 
     <v-data-table-server v-model="selected" show-select return-object item-value="id"
       :items="items" :items-length="total" :loading="loading"
-      :headers="visibleHeaders" :items-per-page="perPage"
+      :headers="visibleHeaders" :items-per-page="perPage" :row-props="rowProps"
       :items-per-page-options="[25, 50, 100, 200]" @update:options="onOptions">
       <template #item.hasBankRequisites="{ item }">
         <v-icon v-if="item.hasBankRequisites" color="success" size="18">mdi-check-circle</v-icon>
@@ -566,6 +566,12 @@ function verifyLabel(s) {
   return 'На проверке';
 }
 
+// Красим строку красным для отклонённых реквизитов (в т.ч. после
+// «Проверить ИНН» с расхождением ФИО — верификация снимается).
+function rowProps({ item }) {
+  return item?.verificationStatus === 'rejected' ? { class: 'row-rejected' } : {};
+}
+
 const { debounced: debouncedLoad } = useDebounce(loadData, 400);
 
 function onOptions(opts) {
@@ -620,6 +626,14 @@ onMounted(loadData);
 </script>
 
 <style scoped>
+/* Отклонённые реквизиты — красная подсветка строки (расхождение ФИО и т.п.).
+   Класс на <tr> внутри v-data-table-server → нужен полный :deep(). */
+:deep(tr.row-rejected td) {
+  background: rgba(var(--v-theme-error), 0.10) !important;
+}
+:deep(tr.row-rejected td:first-child) {
+  box-shadow: inset 3px 0 0 0 rgb(var(--v-theme-error));
+}
 .lightbox-card {
   background: rgba(20, 20, 20, 0.96) !important;
 }

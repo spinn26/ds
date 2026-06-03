@@ -1744,9 +1744,11 @@ class AdminDataController extends Controller
             fn () => app(\App\Services\DadataService::class)->findByInn($cleanInn),
         );
 
-        // «Проверить ИНН» только ПОКАЗЫВАЕТ данные ЕГРИП и отметку совпадения
-        // ФИО — без авто-верификации/авто-отклонения (2026-06-03). Решение
-        // принимает сотрудник вручную кнопками «Верифицировать»/«Отклонить».
+        // «Проверить ИНН»: на СОВПАДЕНИИ ФИО НЕ верифицируем автоматически —
+        // решает сотрудник вручную. Но на НЕсовпадении ФИО — снимаем
+        // верификацию (safety): verified=false, status=2 (rejected), и
+        // помечаем строку красным в списке (2026-06-03).
+        $autoRejected = false;
         if (! empty($result['found']) && $req->consultant) {
             $webUserId = DB::table('consultant')->where('id', $req->consultant)->value('webUser');
             if ($webUserId) {
@@ -1761,14 +1763,23 @@ class AdminDataController extends Controller
                         $user->firstName,
                         $user->patronymic,
                     );
+
+                    if (! ($result['fioCheck']['match'] ?? false)) {
+                        DB::table('requisites')->where('id', $id)->update([
+                            'verified' => false,
+                            'status' => 2,
+                            'dateChange' => now(),
+                        ]);
+                        $autoRejected = true;
+                    }
                 }
             }
         }
 
-        // Флаги оставлены для совместимости с фронтом — всегда false,
-        // авто-верификация отключена.
+        // autoVerified всегда false (авто-верификация отключена); autoRejected
+        // = true только при расхождении ФИО (верификация снята).
         $result['autoVerified'] = false;
-        $result['autoRejected'] = false;
+        $result['autoRejected'] = $autoRejected;
         return response()->json($result);
     }
 
