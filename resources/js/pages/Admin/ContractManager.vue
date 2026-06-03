@@ -805,14 +805,17 @@ function onClientNameInput() {
 
 // Deep-link из списка клиентов: /…/contracts?client=<id>&client_name=<ФИО>.
 // client (id) — точный фильтр, client_name — для отображения в поле.
-function applyQueryFilters() {
+// ВАЖНО: применяем СИНХРОННО в setup, до монтирования таблицы. Иначе
+// v-data-table-server успевает эмитнуть update:options → loadData с пустыми
+// фильтрами (mount дочернего раньше onMounted родителя), и ответ «без фильтра»
+// затирает отфильтрованный — фильтр виден в поле, но выдаётся весь список.
+(function applyQueryFilters() {
   const q = route.query;
   if (q.client) filters.value.client = String(q.client);
   if (q.client_name) filters.value.client_name = String(q.client_name);
-}
+})();
 
 onMounted(() => {
-  applyQueryFilters();
   loadData();
   loadStatuses();
   ensureFormData();
