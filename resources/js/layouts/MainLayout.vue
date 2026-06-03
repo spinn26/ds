@@ -84,6 +84,19 @@
         </template>
       </v-chip>
 
+      <!-- Баланс по комиссионным — в верхней строке рядом со статусом.
+           Зелёный — к выплате партнёру, красный — переплата/долг. Клик ведёт
+           в отчёт начислений. Только для consultant'ов на desktop. -->
+      <v-chip v-if="!mobile && isConsultant && statusInfo?.commissionBalance != null"
+        size="small" variant="tonal"
+        :color="statusInfo.commissionBalance >= 0 ? 'success' : 'error'"
+        class="ml-2 balance-topbar-chip" to="/finance/report"
+        title="Текущий баланс по комиссионным. Зелёный — к выплате, красный — переплата/долг.">
+        <v-icon start size="14">mdi-wallet-outline</v-icon>
+        <span class="text-medium-emphasis me-1">Баланс:</span>
+        <span class="font-weight-medium">{{ fmtMoney(statusInfo.commissionBalance) }}</span>
+      </v-chip>
+
       <v-spacer />
 
       <!-- Статус системы — мигающий кружок + лейбл; на всех страницах
@@ -375,6 +388,12 @@ function fmtShortDate(d) {
   return new Date(d).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
+// Деньги для topbar-чипа баланса: «1 234 ₽» (без копеек, разряды по-русски).
+function fmtMoney(v) {
+  const n = Number(v) || 0;
+  return n.toLocaleString('ru-RU', { maximumFractionDigits: 0 }) + ' ₽';
+}
+
 const auth = useAuthStore();
 const route = useRoute();
 const router = useRouter();
@@ -433,9 +452,16 @@ const showProfileIncompleteBanner = computed(() => {
 const profileMissingLabels = computed(() =>
   (auth.user?.profileMissing || []).map(m => m.label).join(', ')
 );
-// Гейт требует только личные данные — ведём на страницу профиля (вкладка
-// личных данных открыта по умолчанию).
-const profileFixLink = '/profile';
+// Deep-link на нужную вкладку профиля: ведём в первую секцию с пропусками
+// (личные данные приоритетнее реквизитов). Явный ?tab= обязателен — без него
+// клик из баннера, когда партнёр уже на /profile, не переключал бы вкладку.
+const profileFixLink = computed(() => {
+  const missing = auth.user?.profileMissing || [];
+  const tab = missing.length === 0 || missing.some(m => m.section === 'personal')
+    ? 'info'
+    : 'requisites';
+  return { path: '/profile', query: { tab } };
+});
 
 // Rail (minimalist) sidebar — persists across sessions
 const rail = ref(localStorage.getItem('main-nav-rail') === '1');
@@ -525,6 +551,7 @@ onMounted(async () => {
       referralCode: data.referral?.referralCode,
       referralLink: data.referral?.referralLink,
       canInvite: data.referral?.canInvite,
+      commissionBalance: data.commissionBalance,
     };
     // Prefill identity fields for the onboarding questionnaire
     const u = data.user || {};
@@ -542,7 +569,7 @@ onMounted(async () => {
     // /profile при входе. Дальше навигация свободна — баннер остаётся.
     if (!isStaff.value && auth.user?.profileComplete === false
         && !route.path.startsWith('/profile')) {
-      router.replace(profileFixLink);
+      router.replace(profileFixLink.value);
     }
   } catch {}
   loadNotifications();

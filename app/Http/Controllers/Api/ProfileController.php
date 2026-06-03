@@ -62,6 +62,17 @@ class ProfileController extends Controller
 
         $referralInfo = $consultant ? $this->getReferralInfo($consultant) : null;
 
+        // Текущий остаток по комиссионным для верхней строки кабинета —
+        // `remaining` последней (по id) строки леджера consultantBalance.
+        // Та же величина, что в шапке отчёта начислений (FinanceController).
+        // Положительное → к выплате партнёру, отрицательное → переплата/долг.
+        $commissionBalance = $consultant
+            ? round((float) (DB::table('consultantBalance')
+                ->where('consultant', $consultant->id)
+                ->orderByDesc('id')
+                ->value('remaining') ?? 0), 2)
+            : null;
+
         return response()->json([
             'user' => [
                 'id' => $user->id,
@@ -93,6 +104,7 @@ class ProfileController extends Controller
                 'inviterName' => $consultant->inviterName,
             ] : null,
             'statusInfo' => $statusInfo,
+            'commissionBalance' => $commissionBalance,
             'signedDocuments' => $signedDocuments,
             'acceptance' => $acceptance,
             'requisites' => $requisite ? RequisiteResource::make($requisite) : null,
