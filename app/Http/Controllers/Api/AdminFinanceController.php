@@ -569,11 +569,18 @@ class AdminFinanceController extends Controller
             $isCurrent = $l->date >= $start && $l->date <= $end;
             $bucket = $isCurrent ? 'current' : 'previous';
             $level = $resolveLevel($l->nominalLevel, $l->calculationLevel);
+            // НГП (cumulative) держим как последний НЕ-NULL (carry-forward):
+            // penalty-строка финализа Отрыв/ОП имеет date=конец месяца и NULL
+            // cumulative, и, будучи самой свежей в выборке, иначе занулила бы
+            // НГП на админ-странице финансов. Остальные поля берём из текущей
+            // строки (last-wins, как раньше). Sticky-логика order-independent.
+            $prevCum = $byConsultant[$l->consultant][$bucket]['groupVolumeCumulative'] ?? null;
+            $rowCum = $l->groupVolumeCumulative !== null ? (float) $l->groupVolumeCumulative : null;
             $byConsultant[$l->consultant][$bucket] = [
                 'id' => $l->id,
                 'personalVolume' => round((float) ($l->personalVolume ?? 0), 2),
                 'groupVolume' => round((float) ($l->groupVolume ?? 0), 2),
-                'groupVolumeCumulative' => round((float) ($l->groupVolumeCumulative ?? 0), 2),
+                'groupVolumeCumulative' => round((float) ($rowCum ?? $prevCum ?? 0), 2),
                 'levelId' => $level?->id,
                 'levelTitle' => $level?->title,
                 'levelNum' => $level?->level,

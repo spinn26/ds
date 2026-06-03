@@ -34,6 +34,21 @@ class FinanceReportService
             ->orderByDesc('date')
             ->first();
 
+        // НГП (накопительный) = последний НЕ-NULL groupVolumeCumulative с
+        // date <= конец периода. Per-period строка ($qLogCurrent) может
+        // оказаться penalty-строкой финализа Отрыв/ОП (MonthlyPenaltyRunner
+        // вставляет строку на конец месяца с NULL cumulative): взяв её
+        // напрямую, отчёт показывал НГП=0 за прошедший месяц. Carry-forward —
+        // тот же паттерн, что в DashboardService/Workspace.
+        $ngpCumulative = (float) (DB::table('qualificationLog')
+            ->where('consultant', $consultant->id)
+            ->whereNull('dateDeleted')
+            ->whereNotNull('groupVolumeCumulative')
+            ->where('date', '<=', $periodEnd)
+            ->orderByDesc('date')
+            ->value('groupVolumeCumulative')
+            ?? $consultant->groupVolumeCumulative ?? 0);
+
         // Commission level — «Единая квалификация» (spec ✅Квалификации.md §2):
         // one level per month. If Directual left divergent values, take the
         // higher one — it's what the partner actually earned by НГП.
@@ -271,7 +286,12 @@ class FinanceReportService
             $branchName = $branchId
                 ? DB::table('consultant')->where('id', $branchId)->value('personName')
                 : null;
-            $branchGv = (float) ($qLogCurrent->branchWithGapGroupVolume ?? 0);
+            // branchWithGapGroupVolume на penalty-строках финализа не
+            // заполняется (всегда NULL) — там ГП ветки лежит в gapValue
+            // (= объём ветки с отрывом). Фолбэк, чтобы карточка не
+            // показывала ГП ветки=0 при gapPercentage=99%.
+            $branchGv = (float) ($qLogCurrent->branchWithGapGroupVolume
+                ?? $qLogCurrent->gapValue ?? 0);
             $gapPct = (float) ($qLogCurrent->gapValuePercentage ?? 0);
             $gapVal = (float) ($qLogCurrent->gapValue ?? 0);
 
@@ -460,8 +480,7 @@ class FinanceReportService
                 //
                 // НГП оставляем из qualificationLog — это накопительный
                 // показатель уровня квалификации, его пересчитывает финализ.
-                'volumes' => (function () use ($qLogCurrent, $consultant, $month, $personalSalesPoints, $groupSalesPoints) {
-                    $isCurrentMonth = $month === now()->format('Y-m');
+                'volumes' => (function () use ($ngpCumulative, $personalSalesPoints, $groupSalesPoints) {
                     // Per spec ✅Бизнес-логика §1:
                     //   ГП = личные объёмы партнёра + объёмы всей нижестоящей структуры
                     //       (ЛП + downline). «ОП по ГП» из ✅Отчет начислений §виджет —
@@ -473,8 +492,7 @@ class FinanceReportService
                     return [
                         'lp' => round((float) $personalSalesPoints, 2),
                         'gp' => round((float) ($personalSalesPoints + $groupSalesPoints), 2),
-                        'ngp' => round((float) ($qLogCurrent->groupVolumeCumulative
-                            ?? ($isCurrentMonth ? $consultant->groupVolumeCumulative : 0)), 2),
+                        'ngp' => round($ngpCumulative, 2),
                     ];
                 })(),
                 'personalSales' => [
