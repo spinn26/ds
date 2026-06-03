@@ -485,7 +485,20 @@ const form = ref(blankForm());
 
 const filteredPrograms = computed(() => {
   if (!form.value.product) return [];
-  return programsByProduct.value[form.value.product] || [];
+  const all = programsByProduct.value[form.value.product] || [];
+  // Дедуп по имени: legacy `program` хранит одну программу («Азбука защиты»)
+  // десятками строк с разными term/vendor — у Зетты их 81. Имя одинаковое,
+  // а contract.programName сохраняется по name выбранного id (см.
+  // AdminDataController::storeContract), поэтому id-представители
+  // взаимозаменяемы. Оставляем по одному на имя; текущий выбор (режим
+  // редактирования) держим представителем, чтобы autocomplete не потерял value.
+  const seen = new Map();
+  for (const p of all) {
+    if (!seen.has(p.name) || p.id === form.value.program) {
+      seen.set(p.name, p);
+    }
+  }
+  return Array.from(seen.values());
 });
 
 const autoConsultant = computed(() => {
