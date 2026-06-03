@@ -320,6 +320,17 @@ class ProductController extends Controller
             return response()->json(['message' => 'Консультант не найден'], 404);
         }
 
+        // После верификации реквизиты редактировать нельзя (анти-fraud, как в
+        // ProfileController). Иначе verified-партнёр мог бы сменить банковские
+        // реквизиты через попап витрины в обход блокировки в профиле.
+        $verifiedExisting = \App\Models\Requisite::where('consultant', $consultant->id)
+            ->whereNull('deletedAt')->where('verified', true)->exists();
+        if ($verifiedExisting) {
+            return response()->json([
+                'message' => 'Реквизиты подтверждены и не могут быть изменены. Для изменения обратитесь в поддержку.',
+            ], 422);
+        }
+
         $innClean = preg_replace('/\D/', '', $data['inn']);
         if (strlen($innClean) !== 10 && strlen($innClean) !== 12) {
             return response()->json([
