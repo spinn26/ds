@@ -330,6 +330,9 @@ class ProfileController extends Controller
             // отключена 2026-06-03). setRequisitesPending ниже фиксирует статус.
             'verified' => false,
             'status' => 2,
+            // Пересохранение = партнёр исправляет → снимаем прежнюю причину
+            // отказа (плашка «отказано» погаснет, статус снова «на проверке»).
+            'rejection_reason' => null,
             'dateChange' => now(),
             'person' => $user->id,
             'webUser' => $user->id,

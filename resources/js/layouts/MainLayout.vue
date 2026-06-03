@@ -254,6 +254,28 @@
           </div>
         </v-alert>
 
+        <!-- Глобальный баннер: ОТКАЗ в верификации реквизитов. Красный,
+             не закрываемый, на всех страницах (кроме full-bleed чата). Причина:
+             текст финменеджера / ИП не на своё имя / режим не УСН. -->
+        <v-alert
+          v-if="showRequisitesRejectedBanner"
+          type="error" variant="tonal" density="compact"
+          class="mb-3"
+          icon="mdi-close-octagon-outline"
+        >
+          <div class="text-body-2">
+            <strong>Вам отказано в верификации реквизитов.</strong>
+            <template v-if="requisitesRejectionReason"> Причина: {{ requisitesRejectionReason }}</template>
+          </div>
+          <div class="text-caption mt-1">
+            <router-link to="/profile?tab=requisites" class="text-primary">
+              Исправить реквизиты
+            </router-link>
+            · Вопросы —
+            <a href="https://t.me/DS_Helpdesk" target="_blank" rel="noopener" class="text-primary">@DS_Helpdesk</a>
+          </div>
+        </v-alert>
+
         <!-- Глобальный баннер: профиль активного ФК не заполнен полностью.
              Не закрываемый — напоминание держится, пока партнёр не заполнит
              личные данные. Реквизиты ИП/банк в это требование НЕ входят. -->
@@ -419,6 +441,17 @@ const showRequisitesPendingBanner = computed(() => {
   const path = route.path || '';
   if (path.startsWith('/profile')) return false;
   if (path.startsWith('/education')) return false;
+  return true;
+});
+
+// Плашка ОТКАЗА в верификации — на всех страницах (кроме full-bleed чата,
+// чтобы не ломать layout). В отличие от pending показываем и на /profile —
+// клиент просил «на всех страницах».
+const requisitesRejectionReason = computed(() => auth.user?.requisitesRejectionReason || '');
+const showRequisitesRejectedBanner = computed(() => {
+  if (auth.isStaff) return false;
+  if (auth.user?.requisitesVerificationStatus !== 'rejected') return false;
+  if (isFullBleedRoute.value) return false;
   return true;
 });
 

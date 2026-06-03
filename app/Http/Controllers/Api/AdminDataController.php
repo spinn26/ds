@@ -1750,6 +1750,7 @@ class AdminDataController extends Controller
         // помечаем строку красным в списке (2026-06-03).
         $autoRejected = false;
         $rejectReason = null;
+        $rejectReasonText = null;
         if (! empty($result['found']) && $req->consultant) {
             $webUserId = DB::table('consultant')->where('id', $req->consultant)->value('webUser');
             if ($webUserId) {
@@ -1773,6 +1774,11 @@ class AdminDataController extends Controller
                         ]);
                         $autoRejected = true;
                         $rejectReason = 'fio';
+                        $rejectReasonText = sprintf(
+                            'ИП оформлено не на ваше имя. По ИНН в ЕГРИП: «%s», в вашем профиле: «%s». Партнёром ДС может быть только ИП, оформленное на ваше имя.',
+                            $result['fioCheck']['actual'] ?? '—',
+                            $result['fioCheck']['expected'] ?? '—',
+                        );
                     }
                 }
             }
@@ -1814,6 +1820,17 @@ class AdminDataController extends Controller
             ]);
             $autoRejected = true;
             $rejectReason = $rejectReason ?? 'tax';
+            // ФИО-причина приоритетнее (если уже выставлена — не перетираем).
+            $rejectReasonText = $rejectReasonText ?? sprintf(
+                'Режим налогообложения «%s» не подходит. Партнёром ДС может быть только ИП на УСН.',
+                $taxRegime,
+            );
+        }
+
+        // Сохраняем причину отказа — её увидит партнёр в плашке «отказано в
+        // верификации» на всех страницах (UserResource/RequisiteResource).
+        if ($autoRejected && $rejectReasonText) {
+            DB::table('requisites')->where('id', $id)->update(['rejection_reason' => $rejectReasonText]);
         }
 
         // autoVerified всегда false (авто-верификация отключена). autoRejected
@@ -1821,6 +1838,7 @@ class AdminDataController extends Controller
         $result['autoVerified'] = false;
         $result['autoRejected'] = $autoRejected;
         $result['autoRejectReason'] = $rejectReason;
+        $result['rejectionReason'] = $rejectReasonText;
         return response()->json($result);
     }
 
@@ -1839,6 +1857,7 @@ class AdminDataController extends Controller
         if ($request->action === 'verify') {
             $requisite->verified = true;
             $requisite->status = 3; // verified
+            $requisite->rejection_reason = null; // снимаем причину отказа
             $requisite->dateChange = now();
             $requisite->save();
 
@@ -1860,6 +1879,10 @@ class AdminDataController extends Controller
         // so we use 2 ("returned to consultant"), which is also what ProfileController sets on resubmit.
         $requisite->verified = false;
         $requisite->status = 2;
+        // Текст сотрудника = причина отказа для партнёрской плашки. Если пусто —
+        // дефолт. Partner увидит её на всех страницах + во вкладке реквизитов.
+        $requisite->rejection_reason = $request->input('comment')
+            ?: 'Реквизиты отклонены финменеджером. Проверьте данные и отправьте повторно.';
         $requisite->dateChange = now();
         $requisite->save();
 

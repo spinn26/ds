@@ -28,11 +28,14 @@ class RequisiteResource extends JsonResource
             'taxRegime' => $this->tax_regime,
             'verified' => $this->verified,
             'statusName' => $statusName,
+            'rejectionReason' => $this->rejection_reason,
             // Статус для UI профиля (чип/алерты на карточке реквизитов).
-            // verified=true → подтверждено; иначе «на проверке». Отдельный
-            // 'rejected' не выводим: updateRequisites ставит status=2 на любое
-            // сохранение, поэтому по нему нельзя отличить отказ от ожидания.
-            'verificationStatus' => $this->verified ? 'verified' : 'pending',
+            // verified → подтверждено; есть rejection_reason → отклонено
+            // (текст финменеджера / ФИО не на своё имя / режим не УСН);
+            // иначе — «на проверке».
+            'verificationStatus' => $this->verified
+                ? 'verified'
+                : (filled($this->rejection_reason) ? 'rejected' : 'pending'),
         ];
     }
 }

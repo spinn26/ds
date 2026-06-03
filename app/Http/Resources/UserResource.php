@@ -22,6 +22,7 @@ class UserResource extends JsonResource
         // блокирующих баннеров фронта (решение от 2026-05-27: до
         // подтверждения УСН финменеджером часть кабинета недоступна).
         $requisitesStatus = null;
+        $requisitesRejectionReason = null;
         if ($consultant) {
             $verifiedByConsultant = (int) $consultant->statusRequisites === 3;
             $requisite = Requisite::where('consultant', $consultant->id)
@@ -29,6 +30,11 @@ class UserResource extends JsonResource
                 ->first();
             if ($verifiedByConsultant || ($requisite && $requisite->verified)) {
                 $requisitesStatus = 'verified';
+            } elseif ($requisite && filled($requisite->rejection_reason)) {
+                // Отказано в верификации — причина (текст сотрудника / ФИО не на
+                // своё имя / режим не УСН). Фронт показывает плашку на всех страницах.
+                $requisitesStatus = 'rejected';
+                $requisitesRejectionReason = $requisite->rejection_reason;
             } elseif ($requisite) {
                 $requisitesStatus = 'pending';
             }
@@ -51,8 +57,10 @@ class UserResource extends JsonResource
             'activityStatus' => $activityValue,
             'avatarUrl' => $this->avatar ? '/storage/' . $this->avatar : null,
             'questionnaireCompleted' => (bool) $this->questionnaireCompletedAt,
-            // verified | pending | null (не заполнял)
+            // verified | rejected | pending | null (не заполнял)
             'requisitesVerificationStatus' => $requisitesStatus,
+            // Причина отказа в верификации (если статус rejected) — для плашки.
+            'requisitesRejectionReason' => $requisitesRejectionReason,
             // Партнёр уже подписал Оферту? Используется фронтом для показа
             // блокирующей модалки акцепта после верификации реквизитов.
             'offerAccepted' => (bool) ($consultant?->acceptance ?? false),

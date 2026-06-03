@@ -284,7 +284,11 @@
               <v-alert v-else-if="profile.requisites?.verificationStatus === 'rejected'"
                 type="error" variant="tonal" density="compact" class="mb-3"
                 icon="mdi-close-octagon-outline">
-                Реквизиты отклонены финменеджером. Исправьте данные и сохраните повторно.
+                <div class="font-weight-medium">Вам отказано в верификации реквизитов.</div>
+                <div v-if="profile.requisites?.rejectionReason" class="text-body-2 mt-1">
+                  Причина: {{ profile.requisites.rejectionReason }}
+                </div>
+                <div class="text-caption mt-1">Исправьте данные и сохраните повторно.</div>
               </v-alert>
               <v-alert v-else-if="profile.requisites?.verificationStatus"
                 type="warning" variant="tonal" density="compact" class="mb-3"
