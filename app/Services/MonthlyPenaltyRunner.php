@@ -112,7 +112,12 @@ class MonthlyPenaltyRunner
         $affectedConsultantIds = [];
 
         foreach ($candidates as $cons) {
-            $result = $this->processConsultant(
+            // Per-consultant atomarity: при applyWrite все записи одного
+            // партнёра (UPDATE commission + delete/insert qualificationLog)
+            // должны быть all-or-nothing, иначе сбой в середине оставляет
+            // ledger полу-оштрафованным с выставленным флагом reduction.
+            // В preview-режиме транзакция не нужна (записей нет).
+            $run = fn () => $this->processConsultant(
                 consultant: $cons,
                 year: $year,
                 month: $month,
@@ -123,6 +128,7 @@ class MonthlyPenaltyRunner
                 applyWrite: $applyWrite,
                 personalVolume: (float) ($personalVolumes[$cons->id] ?? 0),
             );
+            $result = $applyWrite ? DB::transaction($run) : $run();
             if ($result['affectedCommissions'] > 0) {
                 $stats[] = $result;
                 $affectedTotal += $result['affectedCommissions'];
@@ -235,13 +241,13 @@ class MonthlyPenaltyRunner
             ? $this->finaliser->opMultiplier($totalGroupVolume, $mandatoryGp)
             : 1.0;
 
-        $noDetach = !in_array(0.5, $detachMults, true);
-        if ($opMult >= 1.0 && $noDetach) {
-            return $this->emptyResult($consultant, extra: [
-                'branchVolumes' => $branchVolumes,
-                'totalGroupVolume' => $totalGroupVolume,
-            ]);
-        }
+        // ВАЖНО: даже когда штрафа нет (opMult=1, нет отрыва), мы НЕ выходим
+        // раньше — ниже всё равно пишем строку qualificationLog за месяц.
+        // Это месячный снапшот квалификации (groupVolume + уровень + ОП-итог),
+        // из которого «Расчёт пула» определяет, выполнил ли партнёр ОП.
+        // Раньше строка писалась только при штрафе → партнёр, ВЫПОЛНИВШИЙ ОП,
+        // не попадал в qualificationLog, и пул всегда показывал ему «ОП не
+        // выполнен» (жалоба по июню: Денис с ЛП 1млн не определился).
 
         // Apply per commission.
         $affected = 0;
@@ -303,11 +309,17 @@ class MonthlyPenaltyRunner
                 ->where('date', $monthEnd)
                 ->delete();
 
-            if ($gapBranchKey !== false || $opMult < 1.0) {
-                // Перенос накопительного ГП: penalty-строка не добавляет объём,
-                // поэтому cumulative = последний НЕ-NULL до monthEnd. Без этого
-                // строка оставалась с NULL groupVolumeCumulative и, будучи самой
-                // свежей, ломала НГП на дашборде (фолбэк на stale-поле).
+            // Пишем строку qualificationLog ВСЕГДА (не только при штрафе) — это
+            // месячный снапшот квалификации, по которому «Расчёт пула» видит
+            // выполнение ОП. Раньше писалось лишь при штрафе → партнёр,
+            // ВЫПОЛНИВШИЙ ОП, в qualificationLog не попадал, и пул показывал
+            // ему «ОП не выполнен».
+            //
+            // Перенос накопительного ГП: строка не добавляет объём, поэтому
+            // cumulative = последний НЕ-NULL до monthEnd (НГП не инфлейтим;
+            // см. project-ngp-cumulative-fix). Без этого свежая строка с NULL
+            // ломала бы НГП на дашборде.
+            {
                 $carryCumulative = DB::table('qualificationLog')
                     ->where('consultant', $consultant->id)
                     ->whereNull('dateDeleted')
