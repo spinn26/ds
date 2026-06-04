@@ -50,7 +50,7 @@ return [
         ['key' => 'reports',                 'label' => 'Отчёты'],
         ['key' => 'reports-access',          'label' => 'Доступность отчётов'],
         ['key' => 'instructions',            'label' => 'Инструкции / База знаний'],
-        ['key' => 'events',                  'label' => 'Конкурсы и события'],
+        ['key' => 'contests',                'label' => 'Конкурсы и события'],
         ['key' => 'permissions',             'label' => 'Группы и права'],
         ['key' => 'owner-dashboard',         'label' => 'Дашборд руководителя'],
         ['key' => 'reconciliation',          'label' => 'Реконсиляция'],
