@@ -562,7 +562,20 @@ class ChatController extends Controller
 
         $request->validate([
             'message' => 'nullable|string|max:10000',
-            'attachment' => 'nullable|file|mimes:pdf,doc,docx,xls,xlsx,jpg,jpeg,png,webp,gif|max:10240',
+            // Гейт по расширению имени + по содержимому. ВАЖНО: docx/xlsx —
+            // это zip-контейнеры, и libmagic сервера отдаёт их как
+            // application/zip (проверено finfo), поэтому прежнее mimes:docx
+            // ОТКЛОНЯЛО валидные .docx/.xlsx. Принимаем zip + OLE2 (legacy
+            // doc/xls) + явные office/image типы; extensions ограничивает имя.
+            'attachment' => [
+                'nullable', 'file', 'max:10240',
+                'extensions:pdf,doc,docx,xls,xlsx,jpg,jpeg,png,webp,gif',
+                'mimetypes:application/pdf,application/msword,application/vnd.ms-excel,'
+                    . 'application/vnd.openxmlformats-officedocument.wordprocessingml.document,'
+                    . 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,'
+                    . 'application/zip,application/x-ole-storage,application/CDFV2,'
+                    . 'image/jpeg,image/png,image/webp,image/gif',
+            ],
             'reply_to_id' => 'nullable|integer',
             // Идемпотентный клиент-id для дедупа в фронте (опционально).
             'client_message_id' => 'nullable|string|max:64',
