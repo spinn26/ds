@@ -4,6 +4,7 @@ namespace App\Services;
 
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use App\Enums\PartnerActivity;
 use App\Services\PeriodFreezeService;
 
 /**
@@ -298,27 +299,34 @@ class CommissionCalculator
         // возвращает int (insert id), не массив data — sum получался 0.
         $chainTotalRub = 0.0;
 
-        // 1. Комиссия прямого партнёра (chainOrder = 1)
-        $chainTotalRub += round($groupBonusRub, 2);
-        $commissions[] = $this->createCommission([
-            'transaction' => $transactionId,
-            'consultant' => $consultantId,
-            'chainOrder' => 1,
-            'type' => 'transaction',
-            'personalVolume' => round($personalVolume, 6),
-            'groupVolume' => round($personalVolume, 6),
-            'groupBonus' => round($groupBonus, 6),
-            'groupBonusRub' => round($groupBonusRub, 2),
-            'percent' => $qualPercent,
-            'amount' => round($amountNoVat * $dsComPercent / 100, 2),
-            'amountRUB' => round($groupBonusRub, 2),
-            'amountUSD' => 0,
-            'currency' => $tx->currency ?? 67,
-            'date' => $tx->date,
-            'dateMonth' => $tx->dateMonth,
-            'dateYear' => $tx->dateYear,
-            'calculationLevel' => $qualLevel?->id,
-        ]);
+        // 1. Комиссия прямого партнёра (chainOrder = 1).
+        // Терминированных (3) / исключённых (5) пропускаем: они не получают
+        // начислений ни прямым партнёром, ни наставником. ЛП/проценты выше
+        // уже посчитаны (нужны как база для каскада), но commission-строку не
+        // создаём и в chainTotalRub не добавляем — «доля» остаётся у компании
+        // (увеличивает netRevenue/profit). Проценты цепочки не меняются.
+        if (! $this->isInactiveForCommission($consultant->activity ?? null)) {
+            $chainTotalRub += round($groupBonusRub, 2);
+            $commissions[] = $this->createCommission([
+                'transaction' => $transactionId,
+                'consultant' => $consultantId,
+                'chainOrder' => 1,
+                'type' => 'transaction',
+                'personalVolume' => round($personalVolume, 6),
+                'groupVolume' => round($personalVolume, 6),
+                'groupBonus' => round($groupBonus, 6),
+                'groupBonusRub' => round($groupBonusRub, 2),
+                'percent' => $qualPercent,
+                'amount' => round($amountNoVat * $dsComPercent / 100, 2),
+                'amountRUB' => round($groupBonusRub, 2),
+                'amountUSD' => 0,
+                'currency' => $tx->currency ?? 67,
+                'date' => $tx->date,
+                'dateMonth' => $tx->dateMonth,
+                'dateYear' => $tx->dateYear,
+                'calculationLevel' => $qualLevel?->id,
+            ]);
+        }
 
         // 2. Каскад вверх по структуре (inviter цепочка)
         $currentConsultantId = $consultantId;
@@ -342,7 +350,11 @@ class CommissionCalculator
             // Маржинальная разница — разница процентов между наставником и нижестоящим
             $marginPercent = $inviterPercent - $prevPercent;
 
-            if ($marginPercent > 0) {
+            // Терминированного/исключённого наставника пропускаем — он не
+            // получает маржу. prevPercent ниже всё равно сдвигаем на его %:
+            // его «слой» поглощается компанией (без роллапа на следующего),
+            // следующий активный наставник получает свой обычный инкремент.
+            if ($marginPercent > 0 && ! $this->isInactiveForCommission($inviter->activity ?? null)) {
                 $inviterBonus = $personalVolume * $marginPercent / 100;
                 $inviterBonusRub = $inviterBonus * 100;
                 $chainTotalRub += round($inviterBonusRub, 2);
@@ -459,6 +471,20 @@ class CommissionCalculator
         }
 
         return $results;
+    }
+
+    /**
+     * Терминированный (3) / Исключённый (5) партнёр не получает комиссию —
+     * ни прямым, ни наставником в каскаде (правило «пропускать везде»).
+     * activity хранится в consultant.activity как int; null/неизвестное
+     * трактуем как активного (безопаснее начислить, чем ошибочно срезать).
+     */
+    private function isInactiveForCommission(int|string|null $activity): bool
+    {
+        return in_array((int) $activity, [
+            PartnerActivity::Terminated->value,
+            PartnerActivity::Excluded->value,
+        ], true);
     }
 
     /**
