@@ -53,7 +53,18 @@ class ManualTransactionController extends Controller
             $q->where('c.program', $request->program);
         }
         if ($request->filled('supplier')) {
-            $q->where('pr.providerName', 'ilike', '%' . $request->supplier . '%');
+            // Insmart-канал не лежит в providerName (там конечный страховщик) —
+            // для запроса «Insmart» дополнительно матчим по productName
+            // (продукты названы «… Inssmart», см. SupplierResolver).
+            $q->where(function ($w) use ($request) {
+                $sup = '%' . $request->supplier . '%';
+                $w->where('pr.providerName', 'ilike', $sup)
+                  ->orWhere('pr.vendorName', 'ilike', $sup);
+                if (preg_match('/ins+mart/i', (string) $request->supplier)) {
+                    $w->orWhere('c.productName', 'ilike', '%insmart%')
+                      ->orWhere('c.productName', 'ilike', '%inssmart%');
+                }
+            });
         }
         if ($request->filled('provider')) {
             $q->where('pr.vendorName', 'ilike', '%' . $request->provider . '%');
@@ -97,7 +108,9 @@ class ManualTransactionController extends Controller
             'productName' => $c->productName,
             'programId' => $c->program,
             'programName' => $c->programName,
-            'supplierName' => $c->joinedSupplier ?? null,
+            // Insmart-продукты показываем поставщиком «Insmart» (страховщик
+            // уходит в субпоставщика) — единообразно с отчётами (SupplierResolver).
+            'supplierName' => \App\Support\SupplierResolver::resolve($c->productName, $c->joinedSupplier ?? null),
             'providerName' => $c->joinedProvider ?? null,
             'amount' => round((float) ($c->ammount ?? 0), 2),
             'currencyId' => $c->currency,
@@ -303,12 +316,30 @@ class ManualTransactionController extends Controller
     /** Список уникальных поставщиков/провайдеров для фильтров. */
     public function suppliersAndProviders(): JsonResponse
     {
-        $suppliers = DB::table('program')
-            ->whereNotNull('providerName')
-            ->whereNull('dateDeleted')
+        // Insmart-продукты (названы «… Inssmart») сворачиваем в единого
+        // поставщика «Insmart» — их providerName хранит конечного страховщика
+        // (Армеец/БАСК/Верна…), а в UI поставщик должен быть «Insmart».
+        // См. SupplierResolver — та же логика, что в отчётах/комиссиях.
+        $supRows = DB::table('program as pr')
+            ->leftJoin('product as p', 'p.id', '=', 'pr.product')
+            ->whereNotNull('pr.providerName')
+            ->whereNull('pr.dateDeleted')
             ->distinct()
-            ->orderBy('providerName')
-            ->pluck('providerName');
+            ->get(['pr.providerName', 'p.name as productName']);
+        $suppliers = [];
+        $hasInsmart = false;
+        foreach ($supRows as $r) {
+            if (\App\Support\SupplierResolver::isInsmartProduct($r->productName)) {
+                $hasInsmart = true;
+            } elseif ($r->providerName !== null && $r->providerName !== '') {
+                $suppliers[$r->providerName] = true;
+            }
+        }
+        $suppliers = array_keys($suppliers);
+        sort($suppliers, SORT_NATURAL | SORT_FLAG_CASE);
+        if ($hasInsmart) array_unshift($suppliers, 'Insmart');
+        $suppliers = array_values($suppliers);
+
         $providers = DB::table('program')
             ->whereNotNull('vendorName')
             ->whereNull('dateDeleted')
@@ -763,7 +794,7 @@ class ManualTransactionController extends Controller
             'productName' => $r->productName ?? null,
             'programId' => $r->programId ?? null,
             'programName' => $r->programName ?? null,
-            'supplierName' => $r->supplierName ?? null,
+            'supplierName' => \App\Support\SupplierResolver::resolve($r->productName ?? null, $r->supplierName ?? null),
             'providerName' => $r->providerName ?? null,
             'amount' => $r->amount !== null ? (float) $r->amount : null,
             'currencyId' => $r->currency,
