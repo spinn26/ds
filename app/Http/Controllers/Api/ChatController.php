@@ -16,7 +16,7 @@ class ChatController extends Controller
 {
     // Kept here (not in User) because staffList() builds a SQL LIKE over
     // the comma-separated role column; the flat list is the shape it needs.
-    private static array $staffRoles = ['admin', 'backoffice', 'support', 'finance', 'head', 'calculations', 'corrections'];
+    private static array $staffRoles = ['admin', 'backoffice', 'support', 'finance', 'head', 'calculations', 'corrections', 'education'];
 
     private function userName(Request $request): string
     {
