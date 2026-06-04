@@ -909,8 +909,6 @@ const menuItems = [
   { label: 'Поддержка по продукту', icon: 'mdi-package-variant', path: '/chat?new=backoffice', partner: true },
   // Верификация реквизитов = категория «Начисления и выплаты» (Катя Богданова).
   { label: 'Верификация реквизитов', icon: 'mdi-credit-card-check', path: '/chat?new=accruals', partner: true },
-  // Прямое обращение в бэк-офис (та же категория, что «Поддержка по продукту»).
-  { label: 'Написать в БекОфис', icon: 'mdi-email-fast-outline', path: '/chat?new=backoffice', partner: true },
   { label: 'Написать ген.директору', icon: 'mdi-email-edit-outline', path: '', partner: true,
     action: () => openQuickMsg('Сообщение ген.директору', 'mdi-email-edit-outline') },
   // Per spec ✅Оставить кейс — внешняя ссылка, без диалога.
