@@ -39,6 +39,11 @@ class ApiSettingsService
         // Checko — проверка ИНН + НАЛОГОВЫЙ РЕЖИМ (в отличие от DaData free).
         'checko.api_key'               => ['group' => 'checko', 'label' => 'Checko.ru API Key', 'hint' => 'Налоговый режим (УСН/ПСН/…) и реквизиты ИП/ЮЛ по ИНН — api.checko.ru/v2. Free: 100 запросов/сутки. Ключ в личном кабинете checko.ru после регистрации.', 'secret' => true, 'envFallback' => 'CHECKO_API_KEY'],
 
+        // Insmart — приём оплат (входящий вебхук) + исходящие вызовы каталога.
+        'insmart.api_base_url'         => ['group' => 'insmart', 'label' => 'Insmart API base URL', 'hint' => 'База API Insmart, напр. https://api.inssmart.ru/v1', 'secret' => false, 'envFallback' => 'INSMART_API_BASE_URL'],
+        'insmart.api_key'              => ['group' => 'insmart', 'label' => 'Insmart API Key', 'hint' => 'Ключ b2b-кабинета Insmart для исходящих вызовов каталога', 'secret' => true, 'envFallback' => 'INSMART_API_KEY'],
+        'insmart.webhook_secret'       => ['group' => 'insmart', 'label' => 'Insmart Webhook Secret', 'hint' => 'Shared-secret входящего постбэка (передаётся в URL как ?secret=...)', 'secret' => true, 'envFallback' => 'INSMART_WEBHOOK_SECRET'],
+
         // Другие интеграции — под резерв
         'bubble.api_token'             => ['group' => 'bubble', 'label' => 'Bubble API Token', 'hint' => 'Legacy интеграция, только для миграции', 'secret' => true, 'envFallback' => 'BUBBLE_API_TOKEN'],
         'getcourse.api_key'            => ['group' => 'getcourse', 'label' => 'GetCourse API Key', 'hint' => '', 'secret' => true, 'envFallback' => 'GETCOURSE_API_KEY'],
@@ -89,6 +94,10 @@ class ApiSettingsService
             $setting->label  = $meta['label'];
             $setting->hint   = $meta['hint'] ?? null;
             $setting->secret = (bool) ($meta['secret'] ?? true);
+        } elseif (! $setting->exists) {
+            // Ключ вне CATALOG: колонка label — NOT NULL без default, поэтому
+            // для новой строки задаём fallback, иначе INSERT падает 23502.
+            $setting->label = $key;
         }
         $setting->value = $value;
         $setting->updated_by = $userId;
