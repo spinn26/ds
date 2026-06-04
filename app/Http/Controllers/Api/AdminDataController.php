@@ -2206,12 +2206,30 @@ class AdminDataController extends Controller
      */
     public function contractFormData(): JsonResponse
     {
-        $suppliers = DB::table('program')
-            ->whereNotNull('providerName')
-            ->whereNull('dateDeleted')
+        // Insmart-продукты (названы «… Inssmart») сворачиваем в единого
+        // поставщика «Insmart» — их providerName хранит конечного страховщика
+        // (Армеец/БАСК/Спасские ворота…), а в UI-фильтре поставщик должен быть
+        // «Insmart». Та же логика, что в ManualTransactionController::
+        // suppliersAndProviders (Транзакции/Комиссии) — см. SupplierResolver.
+        $supRows = DB::table('program as pr')
+            ->leftJoin('product as p', 'p.id', '=', 'pr.product')
+            ->whereNotNull('pr.providerName')
+            ->whereNull('pr.dateDeleted')
             ->distinct()
-            ->orderBy('providerName')
-            ->pluck('providerName');
+            ->get(['pr.providerName', 'p.name as productName']);
+        $supSet = [];
+        $hasInsmart = false;
+        foreach ($supRows as $r) {
+            if (\App\Support\SupplierResolver::isInsmartProduct($r->productName)) {
+                $hasInsmart = true;
+            } elseif ($r->providerName !== null && $r->providerName !== '') {
+                $supSet[$r->providerName] = true;
+            }
+        }
+        $suppliers = array_keys($supSet);
+        sort($suppliers, SORT_NATURAL | SORT_FLAG_CASE);
+        if ($hasInsmart) array_unshift($suppliers, 'Insmart');
+        $suppliers = array_values($suppliers);
 
         $programs = DB::table('program')
             ->whereNull('dateDeleted')
