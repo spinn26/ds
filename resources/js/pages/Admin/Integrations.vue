@@ -89,7 +89,7 @@
             <v-select v-model="evFilters.direction" :items="['inbound','outbound']" placeholder="Направление"
               clearable density="compact" variant="outlined" hide-details style="max-width:160px"
               @update:model-value="onEvFilterChange" />
-            <v-select v-model="evFilters.status" :items="['success','error','pending']" placeholder="Статус"
+            <v-select v-model="evFilters.status" :items="['success','error','pending','observed']" placeholder="Статус"
               clearable density="compact" variant="outlined" hide-details style="max-width:140px"
               @update:model-value="onEvFilterChange" />
             <v-spacer />
@@ -441,7 +441,7 @@ async function saveConfig() {
 
 // ───── Утилиты ─────
 function statusColor(s) {
-  return { success: 'success', error: 'error', pending: 'warning' }[s] || 'grey';
+  return { success: 'success', error: 'error', pending: 'warning', observed: 'info' }[s] || 'grey';
 }
 function formatDate(s) {
   if (!s) return '—';

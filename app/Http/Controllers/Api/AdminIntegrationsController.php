@@ -230,6 +230,12 @@ class AdminIntegrationsController extends Controller
         if (! $payload) {
             return response()->json(['message' => 'Нет сохранённого payload для replay'], 422);
         }
+        // Inbound-события Insmart логируются в конверте {method,url,headers,body,...}
+        // (см. InsmartWebhookController). Для replay нужно само тело — разворачиваем.
+        // Старые плоские записи (без конверта) идут как есть.
+        if (isset($payload['body']) && is_array($payload['body']) && array_key_exists('headers', $payload)) {
+            $payload = $payload['body'];
+        }
 
         $event = $this->logger->begin($row->service, 'inbound', "{$row->action}_replay",
             request()->ip(), request()->user()?->id, $row->external_id, $payload);
