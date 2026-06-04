@@ -186,10 +186,10 @@ class ManualTransactionController extends Controller
                 'p.has_year_kv as productHasYearKv',
             ]);
 
-        $productIds = $rows->pluck('productId')->filter()->unique()->all();
-        $paramsByProduct = $this->loadParametersForProducts($productIds);
+        $programIds = $rows->pluck('programId')->filter()->unique()->all();
+        $paramsByProgram = $this->loadParametersForPrograms($programIds);
 
-        $data = $rows->map(fn ($r) => $this->serializeDraft($r, $paramsByProduct));
+        $data = $rows->map(fn ($r) => $this->serializeDraft($r, $paramsByProgram));
 
         return response()->json(['data' => $data]);
     }
@@ -717,30 +717,34 @@ class ManualTransactionController extends Controller
     }
 
     /**
-     * Какие параметры (commissionCalcProperty) есть у продукта.
-     * Список параметров = distinct commissionCalcProperty всех активных
-     * dsCommission-строк, которые относятся к программам этого продукта.
-     * Если у продукта <=1 параметра — UI скроет дропдаун (выбор не нужен).
+     * Какие параметры «Свойство» (commissionCalcProperty) есть у ПРОГРАММЫ.
+     * Список = distinct commissionCalcProperty активных dsCommission-строк
+     * именно этой программы. Раньше скоуп был по продукту — и для программы
+     * «Эволюция ГГА 10 лет» выпадали свойства соседних программ того же
+     * продукта (3/4/5 год), хотя у неё самой только «Стандарт». Скоуп по
+     * программе делает «Свойство» соответствующим программе.
+     * Если у программы <=1 параметра — UI скроет дропдаун (выбор не нужен).
      */
-    private function loadParametersForProducts(array $productIds): array
+    private function loadParametersForPrograms(array $programIds): array
     {
-        if (! count($productIds)) return [];
+        $programIds = array_values(array_filter(array_map('intval', $programIds)));
+        if (! count($programIds)) return [];
 
         $rows = DB::table('dsCommission as dc')
             ->join('commissionCalcProperty as cp', 'cp.id', '=', 'dc.commissionCalcProperty')
             ->where('dc.active', true)
             ->whereNull('dc.dateDeleted')
-            ->whereIn('dc.product', $productIds)
-            ->select(['dc.product as productId', 'cp.id', 'cp.title'])
+            ->whereIn('dc.program', $programIds)
+            ->select(['dc.program as programId', 'cp.id', 'cp.title'])
             ->distinct()
             ->orderBy('cp.title')
             ->get();
 
-        $byProduct = [];
+        $byProgram = [];
         foreach ($rows as $r) {
-            $byProduct[$r->productId][] = ['id' => $r->id, 'title' => $r->title];
+            $byProgram[$r->programId][] = ['id' => $r->id, 'title' => $r->title];
         }
-        return $byProduct;
+        return $byProgram;
     }
 
     private function fetchCurrencyRate(int $currencyId): float
@@ -781,12 +785,12 @@ class ManualTransactionController extends Controller
             ]);
     }
 
-    private function serializeDraft(object $r, ?array $paramsByProduct = null): array
+    private function serializeDraft(object $r, ?array $paramsByProgram = null): array
     {
-        if ($paramsByProduct === null && $r->productId ?? null) {
-            $paramsByProduct = $this->loadParametersForProducts([(int) $r->productId]);
+        if ($paramsByProgram === null && ($r->programId ?? null)) {
+            $paramsByProgram = $this->loadParametersForPrograms([(int) $r->programId]);
         }
-        $params = $r->productId ? ($paramsByProduct[$r->productId] ?? []) : [];
+        $params = $r->programId ? ($paramsByProgram[$r->programId] ?? []) : [];
 
         return [
             'id' => $r->id,
