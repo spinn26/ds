@@ -311,7 +311,10 @@ async function addArticle() {
     const { data } = await api.post('/admin/kb/articles', {
       section_id: selectedSectionId.value,
       title: 'Новый материал',
-      published: false,
+      // По умолчанию опубликовано: иначе материал создаётся скрытым и
+      // партнёры его не видят (частая жалоба «добавил, но ничего не видно»).
+      // Черновик при необходимости выключается тумблером «Опубликовано».
+      published: true,
       sort_order: articles.value.length,
     });
     await loadArticles(selectedSectionId.value);
