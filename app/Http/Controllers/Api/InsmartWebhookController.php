@@ -44,10 +44,14 @@ class InsmartWebhookController extends Controller
         // Секреты в заголовках и query маскируются до отпечатка (len + хвост).
         $logContext = [
             'method' => $request->method(),
-            'url' => $request->fullUrl(),
+            // url БЕЗ query-строки — она может нести ?secret=...; кладём её
+            // отдельно в 'query' уже замаскированной (fullUrl() утёк бы секрет).
+            'url' => $request->url(),
             'query' => $this->maskSecrets($request->query()),
             'headers' => $this->maskHeaders($request->headers->all()),
-            'body' => $payload,
+            // body маскируем: $request->all() подмешивает в тело query-параметры
+            // (в т.ч. ?secret=...), иначе секрет утёк бы в лог открытым.
+            'body' => $this->maskSecrets($payload),
             // raw — на случай, если body не распарсился (битый JSON / иной
             // content-type): тогда $payload пуст, а сырое тело видно тут.
             'raw' => mb_substr((string) $request->getContent(), 0, 8000),
