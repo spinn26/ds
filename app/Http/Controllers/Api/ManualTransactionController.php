@@ -558,12 +558,14 @@ class ManualTransactionController extends Controller
             $dsPercent = (float) $programRow->dsPercent;
         }
         if ($dsPercent <= 0 && $contract->program) {
-            $dsCom = DB::table('dsCommission')
-                ->where('program', $contract->program)
-                ->where('active', true)
-                ->whereNull('dateDeleted')
-                ->first();
-            $dsPercent = (float) ($dsCom->comission ?? 0);
+            // Тот же резолвер, что в каскаде (program × term × год КВ × дата) —
+            // иначе превью показывало бы не ту ставку, чем фактический расчёт.
+            $dsPercent = (float) (\App\Services\CommissionCalculator::resolveLegacyDsCommission(
+                (int) $contract->program,
+                $contract->term ?? null,
+                $draft->parameter ?? null,
+                $draft->date ?? null,
+            ) ?? 0);
         }
         if ($dsPercent <= 0) $dsPercent = 100;
 
@@ -687,6 +689,10 @@ class ManualTransactionController extends Controller
             'cost_div_100' => ($fixed ?? $amountRub) / 100,
             'amount_div_100' => $amountRub / 100,
             'fixed' => (float) ($min ?? 0),
+            // Паритет с CommissionCalculator::computePointsForProgram — без этой
+            // ветки превью показывало ЛП по дефолтной формуле, а факт — по
+            // amount_x_dsPercent (напр. Axevil).
+            'amount_x_dsPercent' => $amountRub * $dsPercent / 10000,
             default => $amountNoVat * $dsPercent / 10000,
         };
     }

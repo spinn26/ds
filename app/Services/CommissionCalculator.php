@@ -249,21 +249,16 @@ class CommissionCalculator
             $dsComPercent = (float) $programRow->dsPercent;
         }
         if ($dsComPercent <= 0 && $contract->program) {
-            // Детерминированный выбор: если у программы несколько активных
-            // записей dsCommission (наблюдалось у Axevil/187: 3% и 30%),
-            // берём последнюю по id. Без orderBy ->first() возвращает
-            // случайную и платежи цепочке могут превысить доход DS
-            // (отрицательная прибыль).
-            $dsCom = DB::table('dsCommission')
-                ->where('program', $contract->program)
-                ->where('active', true)
-                ->where('date', '<=', now())
-                ->where('dateFinish', '>=', now())
-                ->whereNull('dateDeleted')
-                ->orderByDesc('date')
-                ->orderByDesc('id')
-                ->first();
-            $dsComPercent = (float) ($dsCom->comission ?? 0);
+            // Выбор тарифа по полному ключу program × term × год КВ × окно дат
+            // (см. resolveLegacyDsCommission). Раньше брали «последнюю по id»
+            // без term/года — для программ с несколькими тарифами на год выплаты
+            // (напр. 180: 0.5% год=9 vs 2% год=10) это могло дать не ту ставку.
+            $dsComPercent = (float) (self::resolveLegacyDsCommission(
+                (int) $contract->program,
+                $contract->term ?? null,
+                $tx->commissionCalcProperty ?? null,
+                $tx->date ?? null,
+            ) ?? 0);
         }
 
         if ($dsComPercent <= 0) {
@@ -519,6 +514,47 @@ class CommissionCalculator
             default:
                 return $amountNoVat * $dsComPercent / 10000;
         }
+    }
+
+    /**
+     * Resolve the legacy dsCommission %ДС for a program by the full tariff key
+     * (program × termContract × commissionCalcProperty(год КВ) × окно дат),
+     * with progressive relaxation when the narrowest match is empty:
+     *   term+год+date → год+date → term+date → date → none (последняя по id).
+     *
+     * Год КВ — самый сильный дискриминатор (напр. программа 180: 0.5% при
+     * год=9 vs 2% при год=10), поэтому держим его до отбрасывания term; окно
+     * дат снимаем в последнюю очередь. Используется и каскадом, и preview в
+     * ManualTransactionController — чтобы превью совпадало с фактом. Зеркалит
+     * выбор в productRates(). Возвращает null, если активной строки нет.
+     */
+    public static function resolveLegacyDsCommission(int $program, $term, $yearKv, ?string $date = null): ?float
+    {
+        $term = ($term === null || $term === '') ? null : (int) $term;
+        $yearKv = ($yearKv === null || $yearKv === '') ? null : (int) $yearKv;
+        $date = $date ?: now()->toDateString();
+
+        $build = function (bool $withTerm, bool $withYear, bool $withDate) use ($program, $term, $yearKv, $date) {
+            return DB::table('dsCommission')
+                ->where('program', $program)
+                ->where('active', true)
+                ->whereNull('dateDeleted')
+                ->when($withTerm && $term !== null, fn ($q) => $q->where('termContract', $term))
+                ->when($withYear && $yearKv !== null, fn ($q) => $q->where('commissionCalcProperty', $yearKv))
+                ->when($withDate, fn ($q) => $q
+                    ->where('date', '<=', $date)->where('dateFinish', '>=', $date))
+                ->orderByDesc('date')
+                ->orderByDesc('id')
+                ->first();
+        };
+
+        $row = $build(true, true, true)
+            ?: $build(false, true, true)
+            ?: $build(true, false, true)
+            ?: $build(false, false, true)
+            ?: $build(false, false, false);
+
+        return $row ? (float) ($row->comission ?? 0) : null;
     }
 
     /**
