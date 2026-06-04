@@ -13,10 +13,11 @@ class SocketService
 
     public function __construct()
     {
-        $host = env('SOCKET_HOST', '127.0.0.1');
-        $port = env('SOCKET_API_PORT', 3002);
+        // Read from config (not env()) so values survive config:cache on prod.
+        $host = config('services.socket.host', '127.0.0.1');
+        $port = config('services.socket.api_port', 3002);
         $this->apiUrl = "http://{$host}:{$port}";
-        $this->emitSecret = (string) env('SOCKET_EMIT_SECRET', '');
+        $this->emitSecret = (string) config('services.socket.emit_secret', '');
     }
 
     /**

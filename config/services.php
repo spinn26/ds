@@ -58,10 +58,16 @@ return [
         'secret' => env('INSMART_SECRET'),
     ],
 
-    // Внутренний host для socket-server, используется HealthController.
+    // Внутренний host для socket-server, используется HealthController + SocketService.
+    // emit_secret/api_port читаются здесь (а не через env() в SocketService),
+    // иначе при закэшированном конфиге (config:cache на проде) env() вне
+    // config-файлов возвращает пусто → Laravel шлёт эмиты без Authorization →
+    // socket-server отвечает 401 на все события.
     'socket' => [
         'host' => env('SOCKET_HOST', '127.0.0.1'),
         'port' => (int) env('SOCKET_HTTP_PORT', 3002),
+        'api_port' => (int) env('SOCKET_API_PORT', 3002),
+        'emit_secret' => env('SOCKET_EMIT_SECRET', ''),
     ],
 
     // Telegram-уведомления. Создать бота через @BotFather, получить токен,
