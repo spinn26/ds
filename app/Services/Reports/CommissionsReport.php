@@ -29,6 +29,7 @@ class CommissionsReport extends AbstractReportType
             ->orderByDesc('t.date')
             ->limit(50000)
             ->get([
+                't.id',
                 'c.number', 'pr.providerName', 'p.name as productName', 'pr.name as programName',
                 'c.clientName', 't.date', 't.amountRUB',
                 't.netRevenueRUB', 't.dsCommissionPercentage',
@@ -37,27 +38,19 @@ class CommissionsReport extends AbstractReportType
                 't.commissionAmountRubBeforeGapReduction', 't.profitRubBeforeGapReduction',
             ]);
 
+        // «Доход DS» = сохранённое commissionsAmountRUB (= странице), «Комиссия» =
+        // Σ комиссий цепочки по транзакции (= странице). Раньше «Доход DS» =
+        // netRevenue×1.05, «Комиссия» = commissionsAmountRUB — расходились со страницей.
+        $chain = $this->chainCommissionByTx($rows->pluck('id')->all());
+
         return $rows->map(fn ($r) => [
             $r->number, $r->providerName, $r->productName, $r->programName,
             $r->clientName, $r->date, $this->n($r->amountRUB),
-            $this->n($this->dsRevenueGross($r)), $this->n($r->netRevenueRUB),
+            $this->n($r->commissionsAmountRUB), $this->n($r->netRevenueRUB),
             $this->n($r->personalVolume), $r->partnerName,
-            $this->n($r->commissionsAmountRUB), $this->n($r->profitRUB),
+            $this->n($chain[$r->id] ?? 0), $this->n($r->profitRUB),
             $this->n($r->commissionAmountRubBeforeGapReduction),
             $this->n($r->profitRubBeforeGapReduction),
         ])->all();
-    }
-
-    /** Доход DS до вычета НДС: net × 1.05, либо amountRUB × dsCommission% / 100 как fallback. */
-    private function dsRevenueGross(object $r): float
-    {
-        if (! empty($r->netRevenueRUB)) {
-            return ((float) $r->netRevenueRUB) * 1.05;
-        }
-        $pct = (float) ($r->dsCommissionPercentage ?? 0);
-        if ($pct > 0 && ! empty($r->amountRUB)) {
-            return ((float) $r->amountRUB) * $pct / 100.0;
-        }
-        return 0.0;
     }
 }

@@ -37,36 +37,26 @@ class FinrezCommissionsReport extends AbstractReportType
                 'c.number', 'c.id as contractId', 't.date',
                 't.amount', 'cur.symbol as curSymbol', 't.amountRUB',
                 't.netRevenueRUB', 't.dsCommissionPercentage',
+                't.commissionsAmountRUB',
                 'cm.personalVolume',
                 DB::raw('COALESCE(cm."amountRUB", cm.amount, 0) as commissionRub'),
                 't.profitRUB',
             ]);
 
+        // «Доход DS RUB» = сохранённое commissionsAmountRUB транзакции (= странице),
+        // а не netRevenue×1.05. «Комиссия» здесь построчная (cm.amountRUB) — отчёт
+        // имеет грануляцию «одна строка на commission», это by-design.
         return $rows->map(function ($r) {
-            $dsRub = $this->dsRevenueGross($r);
             return [
                 $r->srcPartner, $r->recvPartner, $r->clientName,
                 $r->providerName, $r->productName, $r->programName,
                 $r->number, $r->contractId, $r->date,
                 $this->n($r->amount), $r->curSymbol, $this->n($r->amountRUB),
-                $this->n($dsRub),
+                $this->n($r->commissionsAmountRUB),
                 $this->n($r->netRevenueRUB),
                 $this->n($r->personalVolume),
                 $this->n($r->commissionRub), $this->n($r->profitRUB),
             ];
         })->all();
-    }
-
-    /** Доход DS до вычета НДС: net × 1.05, либо amountRUB × dsCommission% / 100 как fallback. */
-    private function dsRevenueGross(object $r): float
-    {
-        if (! empty($r->netRevenueRUB)) {
-            return ((float) $r->netRevenueRUB) * 1.05;
-        }
-        $pct = (float) ($r->dsCommissionPercentage ?? 0);
-        if ($pct > 0 && ! empty($r->amountRUB)) {
-            return ((float) $r->amountRUB) * $pct / 100.0;
-        }
-        return 0.0;
     }
 }

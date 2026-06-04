@@ -28,6 +28,7 @@ class FinrezTransactionsReport extends AbstractReportType
             ->orderByDesc('t.date')
             ->limit(50000)
             ->get([
+                't.id',
                 'c.number', 'pr.providerName', 'c.productName', 'c.programName',
                 'c.clientName', 't.date', 't.amountRUB', 't.netRevenueRUB',
                 't.dsCommissionPercentage',
@@ -36,26 +37,20 @@ class FinrezTransactionsReport extends AbstractReportType
                 'c.term', 'c.openDate',
             ]);
 
+        // «Доход DS» = сохранённое commissionsAmountRUB (как колонка «Доход DS RUB»
+        // на странице «Комиссии»), а «Комиссия» = Σ комиссий цепочки по транзакции
+        // (как одноимённая колонка страницы). Раньше «Доход DS» считался как
+        // netRevenue×1.05 (≠ странице), а «Комиссия» = commissionsAmountRUB (это
+        // доход DS, а не выплаты партнёрам) — обе колонки расходились со страницей.
+        $chain = $this->chainCommissionByTx($rows->pluck('id')->all());
+
         return $rows->map(fn ($r) => [
             $r->number, $r->providerName, $r->productName, $r->programName,
             $r->clientName, $r->date, $this->n($r->amountRUB),
-            $this->n($this->dsRevenueGross($r)), $this->n($r->netRevenueRUB),
-            $r->partner, $this->n($r->commissionsAmountRUB), $this->n($r->profitRUB),
+            $this->n($r->commissionsAmountRUB), $this->n($r->netRevenueRUB),
+            $r->partner, $this->n($chain[$r->id] ?? 0), $this->n($r->profitRUB),
             $this->n($r->amount), $r->curSymbol, $r->score,
             $r->paymentCount, $r->term, $r->openDate,
         ])->all();
-    }
-
-    /** Доход DS до вычета НДС: net × 1.05, либо amountRUB × dsCommission% / 100 как fallback. */
-    private function dsRevenueGross(object $r): float
-    {
-        if (! empty($r->netRevenueRUB)) {
-            return ((float) $r->netRevenueRUB) * 1.05;
-        }
-        $pct = (float) ($r->dsCommissionPercentage ?? 0);
-        if ($pct > 0 && ! empty($r->amountRUB)) {
-            return ((float) $r->amountRUB) * $pct / 100.0;
-        }
-        return 0.0;
     }
 }
