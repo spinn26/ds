@@ -79,6 +79,12 @@ class InsmartWebhookController extends Controller
         {
             $signature = (string) $request->header('X-Insmart-Signature', '');
             $sharedSecret = (string) $request->header('X-Insmart-Secret', '');
+            // Postback-форма Insmart не умеет слать кастомные заголовки — только
+            // URL (query) + JSON в теле. Поэтому принимаем shared-secret и из
+            // query ?secret=... как равноправный fallback (в логах он уже
+            // маскируется, см. maskSecrets). HMAC-заголовок остаётся
+            // предпочтительным, если интегратор сможет его слать.
+            $querySecret = (string) $request->query('secret', '');
 
             $authOk = false;
             if ($signature !== '') {
@@ -87,6 +93,8 @@ class InsmartWebhookController extends Controller
                 $authOk = hash_equals($expectedSig, $signature);
             } elseif ($sharedSecret !== '') {
                 $authOk = hash_equals((string) $expected, $sharedSecret);
+            } elseif ($querySecret !== '') {
+                $authOk = hash_equals((string) $expected, $querySecret);
             }
 
             if (! $authOk) {
