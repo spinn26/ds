@@ -534,7 +534,15 @@ class FinanceReportService
                         ])
                         ->sum('poolBonus');
 
-                    $balanceStart = $balance ? (float) ($balance->balance ?? 0) : 0.0;
+                    // Сальдо (входящий остаток) = remaining прошлого периода —
+                    // единообразно с реестром выплат и экспортным отчётом, а не
+                    // запаздывающий b.balance текущего месяца (per spec ✅Реестр выплат).
+                    $incoming = DB::table('consultantBalance')
+                        ->where('consultant', $consultant->id)
+                        ->where('dateMonth', '<', $month)
+                        ->orderByDesc('dateMonth')
+                        ->value('remaining');
+                    $balanceStart = (float) ($incoming ?? 0);
                     $payed = $balance ? (float) ($balance->payed ?? 0) : 0.0;
 
                     $accrued = max((float) ($balance->accruedTransactional ?? 0), $liveAccrued);

@@ -145,6 +145,20 @@ class AdminPaymentRegistryController extends Controller
             ->groupBy('consultant')
             ->pluck('pool', 'consultant');
 
+        // Сальдо (входящий остаток) = remaining последнего периода ДО выбранного
+        // месяца — per spec ✅Реестр выплат и единообразно с экспортным
+        // PaymentRegistryReport. Раньше брали b.balance текущего месяца, но
+        // ночной перенос remaining→balance запаздывает (напр. июнь: balance=0
+        // при remaining≈50k у прошлого месяца) → UI показывал Сальдо=0,
+        // расходясь с бухгалтерским экспорт-отчётом.
+        $incomingByCons = DB::table('consultantBalance as cb1')
+            ->whereRaw('cb1.id = (SELECT cb2.id FROM "consultantBalance" cb2
+                WHERE cb2.consultant = cb1.consultant
+                  AND cb2."dateMonth" < ?
+                ORDER BY cb2."dateMonth" DESC LIMIT 1)', [$dm])
+            ->select('cb1.consultant', 'cb1.remaining')
+            ->pluck('remaining', 'consultant');
+
         // Batch-load requisite verification for every partner in the result.
         $consultantIds = $rows->pluck('consultant')->filter()->unique()->values()->all();
         $verified = [];
@@ -160,7 +174,7 @@ class AdminPaymentRegistryController extends Controller
         // Activity name lookup for partner-status filter UI.
         $activityNames = DB::table('directory_of_activities')->pluck('name', 'id');
 
-        $items = $rows->map(function ($r) use ($verified, $activityNames, $extraByCons, $liveAccruedByCons, $livePoolByCons) {
+        $items = $rows->map(function ($r) use ($verified, $activityNames, $extraByCons, $liveAccruedByCons, $livePoolByCons, $incomingByCons) {
             // accrued = max(снимок, live SUM commission за месяц). Прирост от
             // ручной фиксации транзакции (commission уже есть, снимок ещё нет)
             // подхватывается тут же.
@@ -175,7 +189,9 @@ class AdminPaymentRegistryController extends Controller
             $extra = (float) ($extraByCons[$r->consultant] ?? 0);
             $other = (float) ($r->accruedNonTransactional ?? 0) + $extra;
             $accruedTotal = $accrued + $other + $pool;
-            $balance = (float) ($r->balance ?? 0);
+            // Сальдо = входящий остаток (remaining прошлого периода), а не
+            // запаздывающий b.balance текущего месяца — см. $incomingByCons.
+            $balance = (float) ($incomingByCons[$r->consultant] ?? 0);
             $totalPayable = $balance + $accruedTotal;
             $payed = (float) ($r->payed ?? 0);
             $remaining = $totalPayable - $payed;
