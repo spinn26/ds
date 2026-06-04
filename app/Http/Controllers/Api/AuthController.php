@@ -409,9 +409,10 @@ class AuthController extends Controller
         // Best-effort: ошибка не должна ронять logout.
         if ($bearer !== '') {
             try {
-                $host = env('SOCKET_HOST', '127.0.0.1');
-                $port = env('SOCKET_API_PORT', 3002);
-                $secret = (string) env('SOCKET_EMIT_SECRET', '');
+                // config() (not env()) so the secret survives config:cache on prod.
+                $host = config('services.socket.host', '127.0.0.1');
+                $port = config('services.socket.api_port', 3002);
+                $secret = (string) config('services.socket.emit_secret', '');
                 if ($secret !== '') {
                     \Illuminate\Support\Facades\Http::timeout(2)
                         ->withToken($secret)

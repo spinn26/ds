@@ -100,8 +100,8 @@ class PlatformHealthCheck extends Command
     private function checkSocketIo(): array
     {
         try {
-            $host = env('SOCKET_HOST', '127.0.0.1');
-            $port = env('SOCKET_API_PORT', 3002);
+            $host = config('services.socket.host', '127.0.0.1');
+            $port = config('services.socket.api_port', 3002);
             $resp = Http::timeout(3)->get("http://{$host}:{$port}/health");
             $data = $resp->json() ?? [];
             $connections = (int) ($data['connections'] ?? 0);

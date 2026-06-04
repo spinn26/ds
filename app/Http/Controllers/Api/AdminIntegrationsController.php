@@ -437,8 +437,8 @@ class AdminIntegrationsController extends Controller
 
     private function testSocket(): array
     {
-        $host = env('SOCKET_HOST', '127.0.0.1');
-        $port = env('SOCKET_API_PORT', 3002);
+        $host = config('services.socket.host', '127.0.0.1');
+        $port = config('services.socket.api_port', 3002);
         try {
             $res = Http::timeout(2)->get("http://{$host}:{$port}/health");
             $data = $res->json() ?? [];
