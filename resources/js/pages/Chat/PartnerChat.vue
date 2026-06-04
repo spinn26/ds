@@ -63,8 +63,8 @@
         <div v-for="t in visibleChats" :key="t.id" class="chat-item"
           :class="{ active: activeChat?.id === t.id, 'has-unread': t.unread > 0, pinned: t.pinned_at }"
           @click="openChat(t)">
-          <div class="chat-item-avatar" :style="{ background: catColor(t.category) }">
-            <v-icon size="16" color="white">{{ catIcon(t.category) }}</v-icon>
+          <div class="chat-item-avatar" :style="{ background: catColor(t.category || t.department) }">
+            <v-icon size="16" color="white">{{ catIcon(t.category || t.department) }}</v-icon>
           </div>
           <div class="chat-item-body">
             <div class="chat-item-top">
@@ -82,7 +82,7 @@
               <v-chip size="x-small" variant="tonal" :color="statusClr(t.status)" label density="comfortable">
                 {{ statusTxt(t.status) }}
               </v-chip>
-              <span class="chat-item-cat text-caption text-medium-emphasis">{{ catLabel(t.category) }}</span>
+              <span class="chat-item-cat text-caption text-medium-emphasis">{{ catLabel(t.category || t.department) }}</span>
             </div>
           </div>
           <v-btn class="chat-item-pin" :class="{ active: t.pinned_at }"
@@ -139,8 +139,8 @@
                 @click="startEditSubject" />
             </div>
             <div class="d-flex flex-wrap align-center ga-2 mt-1">
-              <v-chip size="x-small" :color="catColor(activeChat.category)" variant="tonal">
-                {{ catLabel(activeChat.category) }}
+              <v-chip size="x-small" :color="catColor(activeChat.category || activeChat.department)" variant="tonal">
+                {{ catLabel(activeChat.category || activeChat.department) }}
               </v-chip>
               <v-chip size="x-small" :color="statusClr(activeChat.status)" variant="tonal"
                 :prepend-icon="statusIcon(activeChat.status)">
@@ -674,7 +674,7 @@ function resetFilters() {
 const visibleChats = computed(() => {
   let list = chats.value;
   if (statusFilter.value !== 'all') list = list.filter(t => t.status === statusFilter.value);
-  if (categoryFilter.value !== 'all') list = list.filter(t => t.category === categoryFilter.value);
+  if (categoryFilter.value !== 'all') list = list.filter(t => (t.category || t.department) === categoryFilter.value);
   const q = searchQuery.value.trim().toLowerCase();
   if (q) list = list.filter(t => String(t.subject || '').toLowerCase().includes(q));
   return list;
