@@ -137,7 +137,13 @@ class PoolRunner
         // его пропускали из расчёта). Теперь резолвим level на каждого
         // консультанта через его последний qualificationLog в окне (start..end).
         $start = sprintf('%04d-%02d-01', $year, $month);
-        $end = date('Y-m-t', strtotime($start));
+        // ВАЖНО: верхняя граница — КОНЕЦ последнего дня месяца (23:59:59), а не
+        // полночь. Финализация (MonthlyPenaltyRunner) пишет qualificationLog на
+        // monthEnd = endOfMonth() = 'YYYY-MM-DD 23:59:59'. С границей-полночью
+        // ('YYYY-MM-DD') whereBetween(ql.date, [start,end]) ОТСЕКАЛ эти строки,
+        // и партнёр падал в extra-фолбэк «Не подтвердил квалификацию» даже
+        // выполнив ОП (баг июня: Денис L10, ЛП 1млн, opOk=0 при наличии строки).
+        $end = Carbon::create($year, $month, 1)->endOfMonth()->toDateTimeString();
 
         // Берём calc и nom отдельно: основная ветка распределения работает
         // по calculationLevel (фактический уровень после ОП-проверки),
