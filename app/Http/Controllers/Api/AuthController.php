@@ -248,17 +248,40 @@ class AuthController extends Controller
             ], 404);
         }
 
-        // Слишком частые запросы сброса — троттлинг брокера.
+        // Слишком частые запросы сброса — троттлинг брокера (раз в 5 минут
+        // на один email, см. config/auth.php). Отдаём остаток секунд, чтобы
+        // страница восстановления показала партнёру обратный отсчёт.
         if ($status === Password::RESET_THROTTLED) {
+            $retryAfter = $this->resetThrottleRetryAfter($request->input('email'));
             return response()->json([
-                'message' => 'Ссылка уже была отправлена. Подождите немного перед повторной попыткой.',
-            ], 429);
+                'message' => 'Письмо для сброса уже отправлено. Запросить новое можно раз в 5 минут.',
+                'retry_after' => $retryAfter,
+            ], 429)->header('Retry-After', (string) $retryAfter);
         }
 
         return response()->json([
             'message' => 'Ссылка для сброса пароля отправлена. Проверьте почту.',
             'status' => $status,
         ]);
+    }
+
+    /**
+     * Сколько секунд осталось до повторного запроса сброса для email.
+     * Брокер не отдаёт остаток, поэтому считаем сами по created_at последнего
+     * токена в password_reset_tokens и интервалу throttle из config/auth.php.
+     */
+    private function resetThrottleRetryAfter(string $email): int
+    {
+        $throttle = (int) config('auth.passwords.users.throttle', 300);
+        $table = config('auth.passwords.users.table', 'password_reset_tokens');
+
+        $createdAt = DB::table($table)->where('email', $email)->value('created_at');
+        if (! $createdAt) {
+            return $throttle;
+        }
+
+        $expiresAt = \Illuminate\Support\Carbon::parse($createdAt)->addSeconds($throttle);
+        return now()->lt($expiresAt) ? max(1, (int) now()->diffInSeconds($expiresAt)) : 1;
     }
 
     /**

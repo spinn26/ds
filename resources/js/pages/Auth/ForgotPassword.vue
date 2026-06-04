@@ -10,8 +10,11 @@
       одноразовую ссылку для установки нового пароля.
     </p>
 
-    <v-alert v-if="error" type="error" density="compact" variant="tonal" class="mb-4">
+    <v-alert v-if="error" :type="cooldown ? 'warning' : 'error'" density="compact" variant="tonal" class="mb-4">
       {{ error }}
+      <div v-if="cooldown" class="mt-1 font-weight-medium">
+        Повторить можно через {{ cooldownText }}
+      </div>
     </v-alert>
     <v-alert v-if="sent" type="success" density="compact" variant="tonal" class="mb-4">
       {{ sentMessage }}
@@ -30,9 +33,13 @@
         autofocus
         required
       />
-      <v-btn type="submit" color="primary" size="large" block :loading="loading" class="form-cta">
-        Отправить ссылку
+      <v-btn type="submit" color="primary" size="large" block
+        :loading="loading" :disabled="cooldown" class="form-cta">
+        {{ cooldown ? `Повторить через ${cooldownText}` : 'Отправить ссылку' }}
       </v-btn>
+      <p class="form-hint">
+        Повторный запрос письма для сброса — не чаще одного раза в 5 минут.
+      </p>
     </v-form>
 
     <p class="form-aux mt-4">
@@ -42,7 +49,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, computed, onUnmounted } from 'vue';
 import api from '../../api';
 import AuthShell from '../../components/AuthShell.vue';
 
@@ -52,7 +59,34 @@ const error = ref('');
 const sent = ref(false);
 const sentMessage = ref('');
 
+// Обратный отсчёт до повторного запроса (бэк троттлит сброс раз в 5 минут
+// на один email и отдаёт остаток в retry_after / заголовке Retry-After).
+const retryAfter = ref(0);
+let retryTimer = null;
+const cooldown = computed(() => retryAfter.value > 0);
+const cooldownText = computed(() => {
+  const m = Math.floor(retryAfter.value / 60);
+  const s = retryAfter.value % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+});
+
+function startCooldown(seconds) {
+  retryAfter.value = Math.max(1, Math.ceil(Number(seconds) || 0));
+  clearInterval(retryTimer);
+  retryTimer = setInterval(() => {
+    retryAfter.value -= 1;
+    if (retryAfter.value <= 0) {
+      clearInterval(retryTimer);
+      retryTimer = null;
+      error.value = '';
+    }
+  }, 1000);
+}
+
+onUnmounted(() => clearInterval(retryTimer));
+
 async function handleSubmit() {
+  if (cooldown.value) return;
   error.value = '';
   loading.value = true;
   try {
@@ -62,10 +96,15 @@ async function handleSubmit() {
       || 'Если такой email зарегистрирован, ссылка для сброса отправлена. Проверьте почту.';
   } catch (e) {
     if (e.response?.status === 429) {
-      const retry = e.response?.headers?.['retry-after'];
-      error.value = retry
-        ? `Слишком часто. Повторите через ${retry} сек.`
-        : 'Слишком много попыток. Подождите минуту и попробуйте снова.';
+      const secs = (e.response?.data?.retry_after
+        ?? Number(e.response?.headers?.['retry-after'])) || 300;
+      startCooldown(secs);
+      // Свой per-email message (с retry_after) показываем как есть; для
+      // IP-троттла (route throttle) приходит англ. "Too Many Attempts" —
+      // подменяем русским текстом.
+      error.value = e.response?.data?.retry_after
+        ? e.response.data.message
+        : 'Слишком частые запросы. Письмо для сброса можно запрашивать раз в 5 минут.';
     } else {
       error.value = e.response?.data?.message || 'Не удалось отправить ссылку. Попробуйте позже.';
     }
@@ -97,6 +136,12 @@ async function handleSubmit() {
 }
 .form-fields { display: flex; flex-direction: column; gap: 14px; }
 .form-cta { font-weight: 600; letter-spacing: 0.2px; }
+.form-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: rgba(var(--v-theme-on-surface), 0.55);
+}
 .form-aux {
   text-align: center; font-size: 13px;
   color: rgba(var(--v-theme-on-surface), 0.6);
