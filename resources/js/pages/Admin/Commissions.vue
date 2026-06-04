@@ -231,6 +231,18 @@
         </span>
       </template>
 
+      <!-- Удаление: каскадно снимает все комиссии транзакции у партнёра и
+           наставников + пересчитывает балансы (DELETE /admin/transactions/{id}).
+           @click.stop — иначе клик по строке развернёт аккордеон. -->
+      <template #item.actions="{ item }">
+        <v-btn v-if="canFull('reports-access')" icon="mdi-trash-can-outline" size="x-small"
+          variant="text" color="error"
+          :title="item.periodFrozen ? 'Период закрыт — нельзя удалить' : 'Удалить транзакцию со всеми комиссиями (пересчёт цепочки)'"
+          :disabled="item.periodFrozen || deletingTxId === item.id"
+          :loading="deletingTxId === item.id"
+          @click.stop="confirmDeleteTx(item)" />
+      </template>
+
       <!-- Аккордеон: цепочка выплат -->
       <template #expanded-row="{ columns, item }">
         <tr>
@@ -306,6 +318,13 @@ import PageHeader from '../../components/PageHeader.vue';
 import EmptyState from '../../components/EmptyState.vue';
 import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 import { fmt2 as fmt, fmtDate } from '../../composables/useDesign';
+import { useConfirm } from '../../composables/useConfirm';
+import { useSnackbar } from '../../composables/useSnackbar';
+import { usePermissions } from '../../composables/usePermissions';
+
+const confirmDialog = useConfirm();
+const { showSuccess, showError, showInfo } = useSnackbar();
+const { canFull } = usePermissions();
 
 const items = ref([]);
 const total = ref(0);
@@ -360,6 +379,7 @@ const headers = [
   { title: 'Комиссия', key: 'partnerCommissionRUB', align: 'end', width: 130 },
   { title: 'Удержание ДС', key: 'dsWithholdingRUB', align: 'end', width: 140 },
   { title: 'Прибыль', key: 'profitRUB', align: 'end', width: 130 },
+  { title: '', key: 'actions', sortable: false, width: 56 },
   { title: '', key: 'data-table-expand', sortable: false, width: 50 },
 ];
 
@@ -493,6 +513,47 @@ async function loadData() {
     aggregates.value = data.aggregates || null;
   } catch {}
   loading.value = false;
+}
+
+// Удаление одной зафиксированной транзакции (= снятие всех её комиссий).
+// Раздел «Комиссии» показывает транзакции с разбивкой по комиссиям, поэтому
+// «удалить комиссию» = удалить транзакцию: бэк (DELETE /admin/transactions/{id})
+// каскадно soft-delete'ит commission всей цепочки наставников, блокирует
+// закрытый период (422) и пересчитывает балансы. Доступно admin/calculations
+// (gate canFull('reports-access') — то же, что в разделе «Транзакции»).
+const deletingTxId = ref(null);
+
+async function confirmDeleteTx(item) {
+  if (item.periodFrozen) return;
+  const ok = await confirmDialog.ask({
+    title: `Удалить транзакцию #${item.id}?`,
+    message:
+      `Сумма ${item.amount ?? '—'} ${item.currencySymbol || ''} от ${item.date ?? '—'}. ` +
+      `Партнёр: ${item.consultantName || '—'}.\n\n` +
+      `Будут отменены все комиссии по этой транзакции у партнёра и всех его наставников. ` +
+      `Балансы пересчитаются автоматически. Действие обратимо только восстановлением вручную в БД.`,
+    confirmText: 'Удалить',
+    confirmColor: 'error',
+  });
+  if (!ok) return;
+  deletingTxId.value = item.id;
+  try {
+    const { data } = await api.delete(`/admin/transactions/${item.id}`);
+    // Если пул за месяц уже применён — выплаты у партнёров посчитаны по старой
+    // сумме commission, нужно перезапустить пул вручную через карточку периода.
+    if (data?.poolWasApplied && data?.poolPeriod) {
+      showInfo(
+        data.message || `Транзакция #${item.id} удалена. Пересчитайте пул за ${data.poolPeriod} вручную.`,
+        { label: 'Открыть период', to: `/manage/periods/${data.poolPeriod}` },
+      );
+    } else {
+      showSuccess(data?.message || `Транзакция #${item.id} удалена`);
+    }
+    await loadData();
+  } catch (e) {
+    showError(e.response?.data?.message || 'Не удалось удалить транзакцию');
+  }
+  deletingTxId.value = null;
 }
 
 // Лениво подгружаем цепочку при раскрытии строки.
