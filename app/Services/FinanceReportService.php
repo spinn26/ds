@@ -464,11 +464,12 @@ class FinanceReportService
                         ? DB::table('status_levels')->where('id', $qLogPrev->nominalLevel ?? $qLogPrev->calculationLevel)->value('title')
                         : null,
                 ] : null,
-                'qualificationCurrent' => $qLogCurrent ? [
-                    'level' => $qLogCurrent->nominalLevel ?? $qLogCurrent->calculationLevel,
-                    'title' => ($qLogCurrent->nominalLevel ?? $qLogCurrent->calculationLevel)
-                        ? DB::table('status_levels')->where('id', $qLogCurrent->nominalLevel ?? $qLogCurrent->calculationLevel)->value('title')
-                        : null,
+                // «Единая квалификация»: текущий уровень = commissionLevel
+                // (max(nominal,calc)), а не nominal??calc — иначе в одном ответе
+                // qualificationCurrent и commissionLevel расходились при calc>nominal.
+                'qualificationCurrent' => $commissionLevel ? [
+                    'level' => $commissionLevel->level,
+                    'title' => $commissionLevel->title,
                 ] : null,
                 'commissionLevel' => $commissionLevel ? [
                     'level' => $commissionLevel->level,

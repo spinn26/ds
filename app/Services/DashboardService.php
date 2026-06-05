@@ -65,22 +65,29 @@ class DashboardService
             ->where('clientsIndicators.indicator', 1)
             ->sum('clientsIndicators.valueUsd');
 
+        // Уровень квалификации — за ВЫБРАННЫЙ период (periodQLog), а не последний
+        // вообще (currentQLog). Иначе при просмотре прошлого месяца показывался
+        // текущий уровень, тогда как объёмы — за тот период (рассинхрон уровень↔объёмы).
+        // Для текущего месяца periodQLog = последняя строка → поведение не меняется;
+        // fallback на currentQLog, если за период строки ещё нет.
+        $levelQLog = $periodQLog ?: $currentQLog;
+
         // Batch-load all status_levels in one query (instead of 3 separate)
         $nominalStatusLevel = null;
         $calcStatusLevel = null;
         $nextLevel = null;
-        if ($currentQLog) {
+        if ($levelQLog) {
             $levelIds = array_filter([
-                $currentQLog->nominalLevel ?? null,
-                $currentQLog->calculationLevel ?? null,
+                $levelQLog->nominalLevel ?? null,
+                $levelQLog->calculationLevel ?? null,
             ]);
             $allLevels = DB::table('status_levels')->get()->keyBy('id');
 
-            if ($currentQLog->nominalLevel) {
-                $nominalStatusLevel = $allLevels[$currentQLog->nominalLevel] ?? null;
+            if ($levelQLog->nominalLevel) {
+                $nominalStatusLevel = $allLevels[$levelQLog->nominalLevel] ?? null;
             }
-            if ($currentQLog->calculationLevel) {
-                $calcStatusLevel = $allLevels[$currentQLog->calculationLevel] ?? null;
+            if ($levelQLog->calculationLevel) {
+                $calcStatusLevel = $allLevels[$levelQLog->calculationLevel] ?? null;
             }
 
             if (!$nominalStatusLevel && $calcStatusLevel) $nominalStatusLevel = $calcStatusLevel;
