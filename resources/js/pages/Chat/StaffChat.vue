@@ -1,5 +1,5 @@
 <template>
-  <div class="chat-wrap" :class="{ 'kanban-mode': viewMode === 'kanban' }">
+  <div class="chat-wrap">
     <!-- Connection-status banner: показываем только если socket упал, чтобы
          оператор не думал что чат «завис». Polling-fallback всё равно работает. -->
     <div v-if="!socketConnected" class="conn-banner">
@@ -10,28 +10,15 @@
          На mobile splitter скрыт media-query'ем, видна одна панель v-if'ом. -->
     <Splitpanes
       class="chat-splitpanes"
-      :class="{ 'kanban-active': viewMode === 'kanban' }"
       @resized="onPaneResize">
     <Pane :size="effectivePaneSizes[0]" :min-size="16" :max-size="44"
-      v-if="!mobile || (!activeChat && viewMode !== 'kanban')">
-    <!-- Left: ticket list (hidden in Kanban mode on mobile / collapsed on desktop) -->
+      v-if="!mobile || !activeChat">
+    <!-- Left: ticket list (hidden on mobile when a chat is open) -->
     <aside class="chat-sidebar"
-      :class="{ 'mobile-hidden': mobile && (activeChat || viewMode === 'kanban'), 'compact': viewMode === 'kanban' && !mobile }">
+      :class="{ 'mobile-hidden': mobile && activeChat }">
       <div class="sidebar-head px-3 py-2">
         <div class="d-flex align-center ga-2">
           <div class="text-body-1 font-weight-bold flex-grow-1">Обращения</div>
-          <!-- Переключатель Список / Доска: раньше висел плавающей панелью
-               у правого края экрана и перекрывал контекст-панель партнёра. -->
-          <v-btn-toggle v-model="viewMode" mandatory density="compact"
-            variant="outlined" color="primary" class="view-mode-toggle"
-            divided>
-            <v-btn value="list" size="x-small" title="Список" icon>
-              <v-icon size="16">mdi-format-list-bulleted</v-icon>
-            </v-btn>
-            <v-btn value="kanban" size="x-small" title="Канбан-доска" icon>
-              <v-icon size="16">mdi-view-column-outline</v-icon>
-            </v-btn>
-          </v-btn-toggle>
           <v-btn size="x-small" :variant="bulkMode ? 'flat' : 'text'"
             :color="bulkMode ? 'primary' : undefined"
             :icon="!bulkMode"
@@ -163,7 +150,7 @@
 
       <!-- Bulk action bar (list-mode). В Канбане свой — это для list-view. -->
       <transition name="bulk-slide">
-        <div v-if="bulkMode && anySelected && viewMode === 'list'" class="bulk-bar list-bulk-bar pa-2 d-flex flex-wrap align-center ga-2">
+        <div v-if="bulkMode && anySelected" class="bulk-bar list-bulk-bar pa-2 d-flex flex-wrap align-center ga-2">
           <div class="text-body-2">Выбрано: <strong>{{ selectedIds.size }}</strong></div>
           <v-menu>
             <template #activator="{ props }">
@@ -209,208 +196,11 @@
     </aside>
     </Pane>
 
-    <!-- View toggle переехал в sidebar-head (см. .view-mode-toggle) — раньше
-         плавающий .view-toggle перекрывал контекст-панель партнёра. -->
+    <!-- Center pane: chat-main. -->
+    <Pane :size="effectivePaneSizes[1]" v-if="!mobile || activeChat">
 
-    <!-- Center pane: kanban (v-if) или chat-main (v-else). Один Pane на оба. -->
-    <Pane :size="effectivePaneSizes[1]" v-if="!mobile || activeChat || viewMode === 'kanban'">
-    <!-- Kanban mode container -->
-    <div v-if="viewMode === 'kanban'" class="kanban-wrap">
-      <!-- Kanban toolbar -->
-      <div class="kanban-toolbar pa-2 d-flex flex-wrap align-center ga-3">
-        <v-checkbox v-model="myBoardOnly" hide-details density="compact"
-          prepend-icon="mdi-account-star" label="Только мои" />
-        <div class="d-flex align-center ga-1">
-          <span class="text-caption text-medium-emphasis">Сортировка:</span>
-          <v-chip size="small"
-            :color="kanbanSort === 'time' ? 'primary' : undefined"
-            :variant="kanbanSort === 'time' ? 'flat' : 'tonal'"
-            @click="kanbanSort = 'time'">Время</v-chip>
-          <v-chip size="small"
-            :color="kanbanSort === 'priority' ? 'primary' : undefined"
-            :variant="kanbanSort === 'priority' ? 'flat' : 'tonal'"
-            @click="kanbanSort = 'priority'">Приоритет</v-chip>
-          <v-chip size="small"
-            :color="kanbanSort === 'assignee' ? 'primary' : undefined"
-            :variant="kanbanSort === 'assignee' ? 'flat' : 'tonal'"
-            @click="kanbanSort = 'assignee'">Исполнитель</v-chip>
-        </div>
-        <div class="d-flex align-center ga-1">
-          <span class="text-caption text-medium-emphasis">Ряды:</span>
-          <v-chip size="small"
-            :color="swimlaneMode === 'none' ? 'primary' : undefined"
-            :variant="swimlaneMode === 'none' ? 'flat' : 'tonal'"
-            @click="swimlaneMode = 'none'">Нет</v-chip>
-          <v-chip size="small"
-            :color="swimlaneMode === 'priority' ? 'primary' : undefined"
-            :variant="swimlaneMode === 'priority' ? 'flat' : 'tonal'"
-            @click="swimlaneMode = 'priority'">По приоритету</v-chip>
-          <v-chip size="small"
-            :color="swimlaneMode === 'assignee' ? 'primary' : undefined"
-            :variant="swimlaneMode === 'assignee' ? 'flat' : 'tonal'"
-            @click="swimlaneMode = 'assignee'">По исполнителю</v-chip>
-        </div>
-        <v-btn size="x-small" :variant="bulkMode ? 'flat' : 'tonal'"
-          :color="bulkMode ? 'primary' : undefined"
-          :prepend-icon="bulkMode ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline'"
-          @click="toggleBulk">
-          Выбор
-        </v-btn>
-      </div>
-
-      <!-- Kanban board -->
-      <div class="kanban-board">
-        <div v-for="col in kanbanColumns" :key="col.value"
-          class="kanban-column"
-          :style="{ '--col-color': col.color }">
-          <div class="kanban-col-head">
-            <v-icon size="14" :color="col.color">{{ col.icon }}</v-icon>
-            <span class="kanban-col-title">{{ col.label }}</span>
-            <span class="kanban-col-count">{{ kanbanGrouped[col.value]?.length || 0 }}</span>
-          </div>
-          <div class="kanban-col-body">
-            <template v-for="lane in swimlanes" :key="col.value + '-' + lane.key">
-              <div v-if="swimlaneMode !== 'none'" class="swimlane-head" :style="lane.color ? { borderColor: lane.color, color: lane.color } : {}">
-                {{ lane.label }}
-                <span class="swimlane-count">{{ cardsInCell(col.value, lane.key).length }}</span>
-              </div>
-              <div class="swimlane-drop"
-                :class="{ 'drop-target': dragOverCol === cellKey(col.value, lane.key) }"
-                @dragover.prevent="dragOverCol = cellKey(col.value, lane.key)"
-                @dragleave="dragOverCol === cellKey(col.value, lane.key) && (dragOverCol = null)"
-                @drop.prevent="onKanbanDrop(col.value, lane.key)">
-                <v-card v-for="t in cardsInCell(col.value, lane.key)" :key="t.id"
-                  class="kanban-card"
-                  :class="{ 'is-dragging': draggingId === t.id, stale: isStale(t), selected: selectedIds.has(t.id), 'bulk-mode': bulkMode }"
-                  :style="t.priority && t.priority !== 'medium' ? { borderLeftColor: prioClr(t.priority), borderLeftWidth: '3px', borderLeftStyle: 'solid' } : {}"
-                  variant="outlined"
-                  :draggable="!bulkMode"
-                  @dragstart="onKanbanDragStart(t, $event)"
-                  @dragend="onKanbanDragEnd"
-                  @click="openFromKanban(t, $event)">
-                  <div class="kanban-card-head d-flex align-center ga-2 px-2 pt-2">
-                    <v-checkbox-btn v-if="bulkMode"
-                      :model-value="selectedIds.has(t.id)"
-                      density="compact" hide-details
-                      @click.stop="toggleCardSelect(t, $event)" />
-                    <div class="kanban-card-avatar" :style="{ background: t.customer_avatar ? 'transparent' : catColor(t.category || t.department) }">
-                      <v-img v-if="t.customer_avatar" :src="t.customer_avatar" cover class="kanban-card-avatar-img" />
-                      <span v-else class="kanban-card-avatar-initials">{{ initials(t.customer_name) }}</span>
-                    </div>
-                    <v-icon v-if="t.pinned_at" size="12" color="primary" title="Закреплён">mdi-pin</v-icon>
-                    <div class="kanban-card-subject text-body-2 font-weight-medium text-truncate flex-grow-1">{{ t.subject }}</div>
-                    <v-chip v-if="t.unread > 0" size="x-small" color="primary" variant="flat" label density="comfortable">
-                      {{ t.unread }}
-                    </v-chip>
-                  </div>
-                  <div class="text-caption text-medium-emphasis text-truncate px-2 mt-1">
-                    {{ t.customer_name }}
-                  </div>
-                  <div class="d-flex flex-wrap align-center ga-2 px-2 pt-1 text-caption text-medium-emphasis">
-                    <span :class="{ 'text-error font-weight-bold': isStale(t) }" class="d-flex align-center ga-1">
-                      <v-icon size="11">mdi-clock-outline</v-icon>
-                      <span class="ctx-num">{{ ago(t.last_message_at) }}</span>
-                    </span>
-                    <span v-if="t.assigned_name" class="d-flex align-center ga-1" :title="'Назначен: ' + t.assigned_name">
-                      <v-icon size="11">mdi-account</v-icon>
-                      {{ shortName(t.assigned_name) }}
-                    </span>
-                    <v-icon v-if="t.priority && t.priority !== 'medium'" size="11" :color="prioClr(t.priority)">
-                      mdi-flag
-                    </v-icon>
-                  </div>
-                  <div v-if="parseTags(t.tags).length" class="d-flex flex-wrap ga-1 px-2 pt-1 pb-2">
-                    <v-chip v-for="tag in parseTags(t.tags).slice(0, 3)" :key="tag"
-                      size="x-small" variant="tonal" label density="comfortable">
-                      #{{ tag }}
-                    </v-chip>
-                  </div>
-                  <div v-else class="pb-2" />
-                  <!-- Quick actions on hover -->
-                  <div v-if="!bulkMode" class="kanban-quick-actions">
-                    <v-btn icon variant="text" size="x-small"
-                      :color="t.pinned_at ? 'primary' : undefined"
-                      :title="t.pinned_at ? 'Открепить' : 'Закрепить'"
-                      @click="togglePin(t, $event)">
-                      <v-icon size="14">{{ t.pinned_at ? 'mdi-pin' : 'mdi-pin-outline' }}</v-icon>
-                    </v-btn>
-                    <v-btn v-if="String(t.assigned_to) !== String(currentUserId)"
-                      icon variant="text" size="x-small"
-                      title="Взять себе" @click="quickAssignToMe(t, $event)">
-                      <v-icon size="14">mdi-account-arrow-left</v-icon>
-                    </v-btn>
-                    <v-menu location="bottom end">
-                      <template #activator="{ props }">
-                        <v-btn v-bind="props" icon variant="text" size="x-small"
-                          title="Приоритет" @click.stop>
-                          <v-icon size="14">mdi-flag-variant</v-icon>
-                        </v-btn>
-                      </template>
-                      <v-list density="compact" min-width="160">
-                        <v-list-item v-for="p in priorities" :key="p.value" @click="quickSetPriority(t, p.value, $event)">
-                          <template #prepend><v-icon size="12" :color="p.color">mdi-circle</v-icon></template>
-                          <v-list-item-title class="text-caption">{{ p.label }}</v-list-item-title>
-                        </v-list-item>
-                      </v-list>
-                    </v-menu>
-                  </div>
-                </v-card>
-                <div v-if="!cardsInCell(col.value, lane.key).length" class="kanban-col-empty text-caption text-medium-emphasis text-center py-4">—</div>
-              </div>
-            </template>
-          </div>
-        </div>
-      </div>
-
-      <!-- Bulk action bar (kanban-mode) -->
-      <transition name="bulk-slide">
-        <div v-if="bulkMode && anySelected" class="bulk-bar pa-2 d-flex flex-wrap align-center ga-2">
-          <div class="text-body-2">Выбрано: <strong>{{ selectedIds.size }}</strong></div>
-          <v-menu>
-            <template #activator="{ props }">
-              <v-btn v-bind="props" size="small" variant="tonal" prepend-icon="mdi-arrow-right-bold">Статус</v-btn>
-            </template>
-            <v-list density="compact">
-              <v-list-item v-for="s in statuses" :key="s.value" @click="bulkSetStatus(s.value)">
-                <template #prepend><v-icon size="14" :color="s.color">{{ s.icon }}</v-icon></template>
-                <v-list-item-title class="text-body-2">{{ s.label }}</v-list-item-title>
-              </v-list-item>
-            </v-list>
-          </v-menu>
-          <v-menu>
-            <template #activator="{ props }">
-              <v-btn v-bind="props" size="small" variant="tonal" prepend-icon="mdi-flag">Приоритет</v-btn>
-            </template>
-            <v-list density="compact">
-              <v-list-item v-for="p in priorities" :key="p.value" @click="bulkSetPriority(p.value)">
-                <template #prepend><v-icon size="14" :color="p.color">mdi-circle</v-icon></template>
-                <v-list-item-title class="text-body-2">{{ p.label }}</v-list-item-title>
-              </v-list-item>
-            </v-list>
-          </v-menu>
-          <v-menu>
-            <template #activator="{ props }">
-              <v-btn v-bind="props" size="small" variant="tonal" prepend-icon="mdi-account-plus">Назначить</v-btn>
-            </template>
-            <v-list density="compact" style="max-height: 320px; overflow-y: auto">
-              <v-list-item @click="bulkAssign(currentUserId, currentUserName)">
-                <template #prepend><v-icon size="14">mdi-account-check</v-icon></template>
-                <v-list-item-title class="text-body-2 font-weight-bold">На себя</v-list-item-title>
-              </v-list-item>
-              <v-divider />
-              <v-list-item v-for="s in staffList" :key="s.id" @click="bulkAssign(s.id, s.name)">
-                <v-list-item-title class="text-body-2">{{ s.name }}</v-list-item-title>
-              </v-list-item>
-            </v-list>
-          </v-menu>
-          <v-btn size="small" variant="text" @click="selectedIds = new Set()">Сбросить</v-btn>
-          <v-btn size="small" variant="text" color="error" @click="bulkMode = false">Выйти</v-btn>
-        </div>
-      </transition>
-    </div>
-
-    <!-- Center: messages (list mode) -->
-    <main v-else class="chat-main" :class="{ 'mobile-hidden': mobile && !activeChat }">
+    <!-- Center: messages -->
+    <main class="chat-main" :class="{ 'mobile-hidden': mobile && !activeChat }">
       <template v-if="activeChat">
         <!-- Header with actions -->
         <div class="chat-header pa-3">
@@ -959,12 +749,12 @@
     </main>
     </Pane>
 
-    <!-- Right pane: контекст-панель партнёра. Видна только в list-режиме
-         при выбранном тикете и включённом showContext. На mobile скрыта. -->
+    <!-- Right pane: контекст-панель партнёра. Видна при выбранном тикете и
+         включённом showContext. На mobile скрыта. -->
     <Pane :size="effectivePaneSizes[2]" :min-size="16" :max-size="38"
-      v-if="!mobile && viewMode === 'list' && activeChat && showContext">
+      v-if="!mobile && activeChat && showContext">
     <!-- Right: Partner context panel — единый блок (с/без partnerContext) -->
-    <aside v-if="viewMode === 'list' && activeChat && showContext && !mobile" class="context-panel">
+    <aside v-if="activeChat && showContext && !mobile" class="context-panel">
       <div class="context-head px-3 py-2 d-flex align-center ga-2">
         <v-icon size="16" color="primary">mdi-card-account-details-outline</v-icon>
         <span class="text-body-2 font-weight-bold">Карточка партнёра</span>
@@ -1869,122 +1659,22 @@ function sortChats(a, b) {
   return new Date(b.last_message_at || 0) - new Date(a.last_message_at || 0);
 }
 
-// View mode (list / kanban)
-const viewMode = ref(localStorage.getItem('staff-chat-view') || 'list');
-watch(viewMode, v => localStorage.setItem('staff-chat-view', v));
-
 // Размеры pane'ов под текущий набор видимых панелей. main всегда добирает
 // остаток до 100% — пользовательский sidebar (и опционально context)
 // сохраняют свою ширину независимо от того, открыта ли context-панель.
 const effectivePaneSizes = computed(() => {
-  const sidebarVisible = !mobile.value || (!activeChat.value && viewMode.value !== 'kanban');
-  const mainVisible = !mobile.value || activeChat.value || viewMode.value === 'kanban';
-  const contextVisible = !mobile.value && viewMode.value === 'list' && !!activeChat.value && showContext.value;
+  const sidebarVisible = !mobile.value || !activeChat.value;
+  const mainVisible = !mobile.value || activeChat.value;
+  const contextVisible = !mobile.value && !!activeChat.value && showContext.value;
 
   const sidebar = sidebarVisible ? paneWidths.value.sidebar : 0;
   const context = contextVisible ? paneWidths.value.context : 0;
   const main = mainVisible ? Math.max(20, 100 - sidebar - context) : 0;
   return [sidebar, main, context];
 });
-const draggingId = ref(null);
-const dragOverCol = ref(null); // { col, lane } or col value for backward-compat
-const kanbanColumns = [
-  { value: 'new', label: 'Новые', color: chatStatusColors.new, icon: 'mdi-circle-outline' },
-  { value: 'assigned', label: 'Назначены', color: chatStatusColors.assigned, icon: 'mdi-account-arrow-right' },
-  { value: 'open', label: 'В работе', color: chatStatusColors.open, icon: 'mdi-progress-clock' },
-  { value: 'pending', label: 'Ожидание', color: chatStatusColors.pending, icon: 'mdi-pause-circle' },
-  { value: 'resolved', label: 'Решён', color: chatStatusColors.resolved, icon: 'mdi-check-circle' },
-  { value: 'closed', label: 'Закрыт', color: chatStatusColors.closed, icon: 'mdi-lock' },
-];
-
-// Kanban extensions
-const kanbanSort = ref(localStorage.getItem('kanban-sort') || 'time');
-watch(kanbanSort, v => localStorage.setItem('kanban-sort', v));
-const myBoardOnly = ref(localStorage.getItem('kanban-my-only') === '1');
-watch(myBoardOnly, v => localStorage.setItem('kanban-my-only', v ? '1' : '0'));
-const swimlaneMode = ref(localStorage.getItem('kanban-swimlane') || 'none');
-watch(swimlaneMode, v => localStorage.setItem('kanban-swimlane', v));
 const bulkMode = ref(false);
 const selectedIds = ref(new Set());
 watch(bulkMode, v => { if (!v) selectedIds.value = new Set(); });
-
-const PRIORITY_ORDER = { critical: 0, high: 1, medium: 2, low: 3, undefined: 4, null: 4 };
-
-function cardsMatchingFilters() {
-  let list = chats.value;
-  if (myBoardOnly.value) {
-    list = list.filter(t => String(t.assigned_to) === String(currentUserId));
-  }
-  return list;
-}
-
-function sortCards(cards) {
-  const sorted = [...cards];
-  switch (kanbanSort.value) {
-    case 'priority':
-      sorted.sort((a, b) => (PRIORITY_ORDER[a.priority] ?? 4) - (PRIORITY_ORDER[b.priority] ?? 4));
-      break;
-    case 'assignee':
-      sorted.sort((a, b) => (a.assigned_name || 'я').localeCompare(b.assigned_name || 'я', 'ru'));
-      break;
-    case 'time':
-    default:
-      sorted.sort((a, b) => new Date(b.last_message_at || 0) - new Date(a.last_message_at || 0));
-  }
-  return sorted;
-}
-
-const kanbanGrouped = computed(() => {
-  const groups = {};
-  for (const col of kanbanColumns) groups[col.value] = [];
-  for (const t of cardsMatchingFilters()) {
-    if (groups[t.status]) groups[t.status].push(t);
-  }
-  for (const k of Object.keys(groups)) groups[k] = sortCards(groups[k]);
-  return groups;
-});
-
-// Swimlanes: when enabled, split each column by lane key
-const swimlanes = computed(() => {
-  if (swimlaneMode.value === 'none') return [{ key: 'all', label: '', color: null }];
-
-  if (swimlaneMode.value === 'priority') {
-    return [
-      { key: 'critical', label: 'Критический', color: chatPriorityColors.critical },
-      { key: 'high', label: 'Высокий', color: chatPriorityColors.high },
-      { key: 'medium', label: 'Средний', color: chatPriorityColors.medium },
-      { key: 'low', label: 'Низкий', color: chatPriorityColors.low },
-    ];
-  }
-
-  // assignee: distinct assigned_name values across visible cards + Не назначено
-  const names = new Set();
-  for (const t of cardsMatchingFilters()) {
-    names.add(t.assigned_name || '__unassigned');
-  }
-  const sorted = [...names].sort((a, b) => {
-    if (a === '__unassigned') return 1;
-    if (b === '__unassigned') return -1;
-    return a.localeCompare(b, 'ru');
-  });
-  return sorted.map(n => ({
-    key: n,
-    label: n === '__unassigned' ? 'Не назначено' : n,
-    color: n === '__unassigned' ? chatStatusColors.closed : null,
-  }));
-});
-
-function laneKeyFor(ticket) {
-  if (swimlaneMode.value === 'priority') return ticket.priority || 'medium';
-  if (swimlaneMode.value === 'assignee') return ticket.assigned_name || '__unassigned';
-  return 'all';
-}
-
-function cardsInCell(colValue, laneKey) {
-  const colCards = kanbanGrouped.value[colValue] || [];
-  if (swimlaneMode.value === 'none') return colCards;
-  return colCards.filter(t => laneKeyFor(t) === laneKey);
-}
 
 function toggleBulk() {
   bulkMode.value = !bulkMode.value;
@@ -2003,7 +1693,7 @@ async function bulkSetStatus(status) {
   if (!ids.length) return;
   if (!await confirmDialog.ask({
     title: 'Сменить статус тикетов?',
-    message: `${ids.length} тикетов будут переведены в статус «${kanbanColumns.find(c => c.value === status)?.label}».`,
+    message: `${ids.length} тикетов будут переведены в статус «${statuses.find(c => c.value === status)?.label}».`,
     confirmText: 'Сменить', confirmColor: 'primary',
   })) return;
   for (const id of ids) {
@@ -2046,92 +1736,11 @@ async function bulkSetPriority(priority) {
   selectedIds.value = new Set();
 }
 
-async function quickAssignToMe(ticket, e) {
-  e?.stopPropagation();
-  try {
-    await api.post(`/chat/tickets/${ticket.id}/assign`, { user_id: currentUserId });
-    ticket.assigned_to = currentUserId;
-    ticket.assigned_name = currentUserName.value;
-  } catch {}
-}
-
-async function quickSetPriority(ticket, priority, e) {
-  e?.stopPropagation();
-  if (ticket.priority === priority) return;
-  const prev = ticket.priority;
-  ticket.priority = priority;
-  try { await api.post(`/chat/tickets/${ticket.id}/status`, { status: ticket.status, priority }); }
-  catch { ticket.priority = prev; }
-}
 function shortName(n) {
   if (!n) return '';
   const parts = String(n).trim().split(/\s+/);
   if (parts.length >= 2) return `${parts[0]} ${(parts[1][0] || '').toUpperCase()}.`;
   return parts[0];
-}
-
-function onKanbanDragStart(ticket, e) {
-  if (bulkMode.value) { e.preventDefault(); return; }
-  draggingId.value = ticket.id;
-  e.dataTransfer.effectAllowed = 'move';
-  e.dataTransfer.setData('text/plain', String(ticket.id));
-}
-function onKanbanDragEnd() {
-  draggingId.value = null;
-  dragOverCol.value = null;
-}
-function cellKey(colValue, laneKey) { return `${colValue}::${laneKey}`; }
-async function onKanbanDrop(targetStatus, laneKey) {
-  dragOverCol.value = null;
-  const id = draggingId.value;
-  draggingId.value = null;
-  if (!id) return;
-  const ticket = chats.value.find(t => t.id === id);
-  if (!ticket) return;
-
-  const patches = {};
-  // Column change: status
-  if (ticket.status !== targetStatus) patches.status = targetStatus;
-  // Swimlane change: apply the relevant attribute
-  if (swimlaneMode.value === 'priority' && laneKey && ticket.priority !== laneKey) {
-    patches.priority = laneKey;
-  } else if (swimlaneMode.value === 'assignee' && laneKey && laneKey !== '__unassigned'
-             && ticket.assigned_name !== laneKey) {
-    // Find staff id by display name
-    const staff = staffList.value.find(s => s.name === laneKey);
-    if (staff) patches.assigneeId = staff.id;
-  }
-
-  if (!Object.keys(patches).length) return;
-
-  // Optimistic update
-  const prev = { status: ticket.status, priority: ticket.priority, assigned_to: ticket.assigned_to, assigned_name: ticket.assigned_name };
-  if (patches.status) ticket.status = patches.status;
-  if (patches.priority) ticket.priority = patches.priority;
-  if (patches.assigneeId) {
-    const staff = staffList.value.find(s => s.id === patches.assigneeId);
-    if (staff) { ticket.assigned_to = staff.id; ticket.assigned_name = staff.name; }
-  }
-
-  try {
-    if (patches.status !== undefined || patches.priority !== undefined) {
-      await api.post(`/chat/tickets/${id}/status`, {
-        status: ticket.status,
-        priority: ticket.priority || 'medium',
-      });
-    }
-    if (patches.assigneeId !== undefined) {
-      await api.post(`/chat/tickets/${id}/assign`, { user_id: patches.assigneeId });
-    }
-  } catch {
-    Object.assign(ticket, prev);
-    showError('Не удалось обновить тикет');
-  }
-}
-function openFromKanban(t, e) {
-  if (bulkMode.value) { toggleCardSelect(t, e); return; }
-  viewMode.value = 'list';
-  openChat(t);
 }
 
 function isMine(msg) { return String(msg.senderId) === String(currentUserId); }
@@ -3195,7 +2804,6 @@ onUnmounted(() => {
 .chat-item-pin { position: absolute; right: 8px; bottom: 8px; background: none; border: none; padding: 2px; border-radius: 4px; cursor: pointer; color: rgba(var(--v-theme-on-surface), 0.3); opacity: 0; transition: opacity 0.15s, color 0.15s; }
 .chat-item:hover .chat-item-pin { opacity: 1; }
 .chat-item-pin.active { color: rgb(var(--v-theme-primary)); opacity: 1; }
-.kanban-qa-btn.active { color: rgb(var(--v-theme-primary)); background: rgba(var(--v-theme-primary), 0.12); }
 
 .chat-main {
   width: 100%;
@@ -3450,68 +3058,6 @@ onUnmounted(() => {
 .hotkey-row kbd { display: inline-block; padding: 2px 8px; border-radius: 6px; border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); background: rgba(var(--v-theme-surface-variant), 0.5); font-family: ui-monospace, monospace; font-size: 11px; font-weight: 600; min-width: 24px; text-align: center; }
 .hotkey-row span { flex: 1; color: rgba(var(--v-theme-on-surface), 0.8); }
 
-/* ================== VIEW TOGGLE ================== */
-/* Компактный inline-переключатель в sidebar-head. */
-.view-mode-toggle :deep(.v-btn) { min-width: 32px; padding: 0 8px; }
-
-/* Sidebar compact variant in Kanban mode — ширина наследуется от
-   splitpanes (общий paneSizes с list-режимом). Только визуальные правки:
-   скрываем status-chip, чтобы строка списка была плотнее. */
-.chat-sidebar.compact .chat-item-bottom .chat-item-status-chip { display: none; }
-
-/* ================== KANBAN ================== */
-.kanban-wrap { flex: 1; display: flex; flex-direction: column; min-width: 0; background: rgba(var(--v-theme-surface-variant), 0.2); }
-
-/* Toolbar */
-.kanban-toolbar { display: flex; align-items: center; gap: 12px; padding: 56px 16px 10px; flex-wrap: wrap; border-bottom: 1px solid rgba(var(--v-border-color), 0.25); }
-.toolbar-toggle { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 8px; font-size: 11px; font-weight: 600; color: rgba(var(--v-theme-on-surface), 0.7); cursor: pointer; user-select: none; }
-.toolbar-toggle input { cursor: pointer; }
-.toolbar-toggle:has(input:checked) { background: rgba(var(--v-theme-primary), 0.12); color: rgb(var(--v-theme-primary)); }
-.toolbar-group { display: inline-flex; align-items: center; gap: 4px; }
-.toolbar-label { font-size: 11px; color: rgba(var(--v-theme-on-surface), 0.5); margin-right: 4px; }
-.toolbar-chip { padding: 3px 9px; border-radius: 12px; border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); background: transparent; color: rgba(var(--v-theme-on-surface), 0.7); font-size: 11px; cursor: pointer; white-space: nowrap; transition: all 0.15s; display: inline-flex; align-items: center; gap: 4px; }
-.toolbar-chip:hover { background: rgba(var(--v-theme-primary), 0.06); }
-.toolbar-chip.active { background: rgb(var(--v-theme-primary)); color: #fff; border-color: rgb(var(--v-theme-primary)); }
-.bulk-toggle { margin-left: auto; }
-
-/* align-items: stretch (по умолчанию) — колонки растягиваются на всю
-   высоту доски, чтобы overflow-y:auto на .kanban-col-body внутри них
-   реально срабатывал. Раньше было flex-start → колонка с 23 карточками
-   («Решён») вытягивалась за пределы экрана и нижние карточки приходилось
-   скроллить страницей. min-height:0 обязателен для flex-child со
-   скроллом — без него Chromium игнорирует max-height родителя. */
-.kanban-board { flex: 1; display: flex; gap: 12px; padding: 12px 16px; overflow-x: auto; min-height: 0; }
-.kanban-column { flex: 1; min-width: 260px; max-width: 320px; min-height: 0; display: flex; flex-direction: column; background: rgba(var(--v-theme-surface), 0.9); border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); border-top: 3px solid var(--col-color); border-radius: 12px; overflow: hidden; transition: all 0.15s; }
-.kanban-column.drop-target { background: rgba(var(--v-theme-primary), 0.08); border-color: rgb(var(--v-theme-primary)); border-top-color: rgb(var(--v-theme-primary)); box-shadow: 0 0 0 2px rgba(var(--v-theme-primary), 0.3); }
-.kanban-col-head { display: flex; align-items: center; gap: 6px; padding: 10px 14px; border-bottom: 1px solid rgba(var(--v-border-color), 0.3); background: rgba(var(--v-theme-surface-variant), 0.3); }
-.kanban-col-title { flex: 1; font-size: 13px; font-weight: 700; color: rgba(var(--v-theme-on-surface), 0.8); }
-.kanban-col-count { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: rgba(var(--v-theme-on-surface), 0.08); color: rgba(var(--v-theme-on-surface), 0.6); font-weight: 600; }
-.kanban-col-body { flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
-.kanban-col-empty { text-align: center; padding: 20px 0; font-size: 11px; color: rgba(var(--v-theme-on-surface), 0.3); }
-
-/* Swimlanes */
-.swimlane-head { display: flex; align-items: center; gap: 6px; padding: 3px 8px; margin: 8px 0 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: rgba(var(--v-theme-on-surface), 0.5); border-left: 3px solid rgba(var(--v-theme-on-surface), 0.2); background: rgba(var(--v-theme-surface-variant), 0.3); border-radius: 0 4px 4px 0; }
-.swimlane-head:first-child { margin-top: 0; }
-.swimlane-count { margin-left: auto; padding: 1px 6px; border-radius: 8px; background: rgba(var(--v-theme-on-surface), 0.08); color: rgba(var(--v-theme-on-surface), 0.6); font-weight: 600; font-size: 9px; letter-spacing: 0; }
-.swimlane-drop { display: flex; flex-direction: column; gap: 6px; min-height: 30px; border-radius: 8px; transition: background 0.15s; padding: 2px; }
-.swimlane-drop.drop-target { background: rgba(var(--v-theme-primary), 0.1); outline: 2px dashed rgba(var(--v-theme-primary), 0.4); outline-offset: -2px; }
-
-/* Kanban card — Vuetify v-card variant="outlined" + лёгкий hover-эффект */
-.kanban-card { cursor: grab; transition: all 0.15s; user-select: none; position: relative; }
-.kanban-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); transform: translateY(-1px); }
-.kanban-card:hover .kanban-quick-actions { opacity: 1; pointer-events: auto; }
-.kanban-card.is-dragging { opacity: 0.4; cursor: grabbing; }
-.kanban-card.stale { background: rgba(var(--v-theme-error), 0.04); }
-.kanban-card.bulk-mode { cursor: pointer; }
-.kanban-card.selected { border-color: rgb(var(--v-theme-primary)) !important; background: rgba(var(--v-theme-primary), 0.08); box-shadow: 0 0 0 2px rgba(var(--v-theme-primary), 0.3); }
-.kanban-card-avatar { width: 22px; height: 22px; border-radius: 6px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; overflow: hidden; }
-.kanban-card-avatar-img { width: 100%; height: 100%; }
-.kanban-card-avatar-initials { color: #fff; font-size: 10px; font-weight: 700; letter-spacing: -0.3px; }
-.kanban-card-subject { line-height: 1.3; }
-
-/* Quick actions on card hover */
-.kanban-quick-actions { position: absolute; top: 4px; right: 4px; display: flex; gap: 1px; padding: 2px; border-radius: 6px; background: rgb(var(--v-theme-surface)); border: 1px solid rgba(var(--v-border-color), 0.2); box-shadow: 0 2px 6px rgba(0,0,0,0.08); opacity: 0; pointer-events: none; transition: opacity 0.15s; }
-
 /* Bulk action bar */
 /* Bulk bar (kanban + list) — Vuetify-first, остался лишь sticky-layout */
 .bulk-bar { position: sticky; bottom: 0; background: rgb(var(--v-theme-surface)); border-top: 1px solid rgba(var(--v-border-color), 0.12); box-shadow: 0 -4px 16px rgba(0,0,0,0.08); }
@@ -3534,18 +3080,11 @@ onUnmounted(() => {
 .ctx-num { font-variant-numeric: tabular-nums; }
 .ctx-list :deep(.v-list-item) { min-height: 32px; padding-inline: 0 !important; }
 
-/* Kanban mode: suppress chat-main, sidebar acts as filter strip */
-.chat-wrap.kanban-mode .chat-main { display: none; }
-.chat-wrap.kanban-mode .context-panel { display: none; }
-
 @media (max-width: 959px) {
   /* На mobile splitter скрыт — pane'ы переключаются v-if'ом по activeChat. */
   .chat-splitpanes :deep(.splitpanes__splitter) { display: none; }
   .chat-splitpanes :deep(.splitpanes__pane) { width: 100% !important; max-width: 100%; }
   .chat-sidebar { width: 100% !important; }
   .mobile-hidden { display: none !important; }
-  .kanban-board { padding: 56px 8px 8px; }
-  .kanban-column { min-width: 220px; }
-  .chat-sidebar.compact { display: none !important; }
 }
 </style>
