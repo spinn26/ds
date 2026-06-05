@@ -621,10 +621,12 @@ async function ensureFormData() {
   try {
     const [fd, products] = await Promise.all([
       api.get('/admin/contracts/form-data'),
-      api.get('/admin/products', { params: { per_page: 1000, active: true } }).catch(() => ({ data: { data: [] } })),
+      api.get('/admin/products-catalog', { params: { per_page: 1000, active: true } }).catch(() => ({ data: { data: [] } })),
     ]);
     formData.value = fd.data;
-    productOptions.value = (products.data?.data || []).map(p => ({ id: p.id, name: p.name }));
+    productOptions.value = (products.data?.data || [])
+      .filter(p => p.legacyProductId)
+      .map(p => ({ id: p.legacyProductId, name: p.name }));
     supplierOptions.value = fd.data.suppliers || [];
   } catch {}
 }
