@@ -404,6 +404,11 @@ class ProductController extends Controller
             $req->verified = $autoVerify;
             // status — FK на status_requisites: 1=backoffice, 2=consultant, 3=verified.
             $req->status = $autoVerify ? 3 : 1;
+            // dateChange — каноничная «дата поступления на проверку» (раньше
+            // этот путь её не писал → SLA-таймер не стартовал). Сбрасываем
+            // метку уведомления, чтобы новый цикл проверки взвёлся заново.
+            $req->dateChange = now();
+            $req->overdue_notified_at = null;
             $req->save();
 
             // Реальная таблица — bankrequisites (lowercase). Laravel

@@ -18,6 +18,14 @@ use Illuminate\Support\Facades\Schedule;
 Schedule::command('currencies:copy-monthly-rates')
     ->monthlyOn(1, '00:00');
 
+// Реквизиты на ручной верификации дольше 1 рабочего дня → уведомление
+// финменеджеру (Богданова). Идемпотентно (overdue_notified_at), поэтому
+// частый прогон безопасен; шлём только в рабочие часы будней.
+Schedule::command('requisites:notify-overdue')
+    ->weekdays()
+    ->hourly()
+    ->between('9:00', '19:00');
+
 // Health-check платформы (БД/Cache/Socket.IO) — каждые 5 минут.
 // Алерт в Telegram шлётся только при переходе up↔down, чтобы не спамить.
 Schedule::command('platform:health-check')

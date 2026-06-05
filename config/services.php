@@ -82,4 +82,13 @@ return [
         'webhook_secret' => env('TELEGRAM_WEBHOOK_SECRET'),
     ],
 
+    // Реквизиты партнёров: SLA ручной верификации.
+    //   overdue_notify_email — кому слать уведомление, если реквизиты висят
+    //     «на проверке» дольше 1 рабочего дня (команда requisites:notify-overdue).
+    //     По умолчанию — финменеджер Е. Богданова. Резолвится в WebUser по email,
+    //     поэтому смена ответственного не требует правки кода.
+    'requisites' => [
+        'overdue_notify_email' => env('REQUISITES_OVERDUE_NOTIFY_EMAIL', 'ekaterina.bogdanova@ds-finance.ru'),
+    ],
+
 ];

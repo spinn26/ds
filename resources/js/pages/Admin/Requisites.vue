@@ -54,6 +54,20 @@
         <v-icon v-if="item.hasBankRequisites" color="success" size="18">mdi-check-circle</v-icon>
         <v-icon v-else color="grey" size="18">mdi-minus-circle-outline</v-icon>
       </template>
+      <template #item.submittedAt="{ item }">
+        <template v-if="item.submittedAt">
+          <div class="d-flex flex-column ga-1">
+            <span :class="item.overdue ? 'text-error font-weight-medium' : ''" style="font-variant-numeric: tabular-nums">
+              {{ fmtDateTime(item.submittedAt) }}
+            </span>
+            <v-chip v-if="item.overdue" size="x-small" color="error" variant="flat" style="width:fit-content"
+              title="На ручной верификации дольше 1 рабочего дня">
+              <v-icon start size="12">mdi-clock-alert-outline</v-icon> &gt; 1 раб. дня
+            </v-chip>
+          </div>
+        </template>
+        <span v-else class="text-medium-emphasis">—</span>
+      </template>
       <template #item.verificationStatus="{ item }">
         <v-chip size="x-small" :color="verifyColor(item.verificationStatus)"
           :title="item.verificationStatus === 'rejected' && item.rejectionReason ? item.rejectionReason : undefined">
@@ -447,6 +461,14 @@ function fmtDate(d) {
   if (!d) return '—';
   try { return new Date(d).toLocaleDateString('ru-RU'); } catch { return d; }
 }
+function fmtDateTime(d) {
+  if (!d) return '—';
+  try {
+    return new Date(d).toLocaleString('ru-RU', {
+      day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+    });
+  } catch { return d; }
+}
 
 function docFilename(doc) {
   const base = (doc.path || doc.url || '').split('/').pop() || doc.type;
@@ -579,6 +601,7 @@ const headers = [
   { title: 'ИНН', key: 'inn', width: 130 },
   { title: 'Режим', key: 'taxRegime', width: 100 },
   { title: 'Банк реквизиты', key: 'hasBankRequisites', width: 120 },
+  { title: 'Поступило', key: 'submittedAt', width: 160 },
   { title: 'Статус', key: 'verificationStatus', width: 130 },
   { title: 'Действия', key: 'actions', sortable: false, width: 100 },
 ];
@@ -601,7 +624,10 @@ function verifyLabel(s) {
 // Красим строку красным для отклонённых реквизитов (в т.ч. после
 // «Проверить ИНН» с расхождением ФИО — верификация снимается).
 function rowProps({ item }) {
-  return item?.verificationStatus === 'rejected' ? { class: 'row-rejected' } : {};
+  if (item?.verificationStatus === 'rejected') return { class: 'row-rejected' };
+  // Просрочка ручной верификации (>1 раб. дня, ещё на проверке) — жёлтая подсветка.
+  if (item?.overdue) return { class: 'row-overdue' };
+  return {};
 }
 
 // УСН как ОТДЕЛЬНЫЙ токен: «АУСН» (автоматизированная УСН) НЕ считается УСН,
@@ -677,6 +703,13 @@ onMounted(loadData);
 }
 :deep(tr.row-rejected td:first-child) {
   box-shadow: inset 3px 0 0 0 rgb(var(--v-theme-error));
+}
+/* Просроченная ручная верификация (>1 раб. дня) — жёлтая подсветка строки. */
+:deep(tr.row-overdue td) {
+  background: rgba(var(--v-theme-warning), 0.10) !important;
+}
+:deep(tr.row-overdue td:first-child) {
+  box-shadow: inset 3px 0 0 0 rgb(var(--v-theme-warning));
 }
 .lightbox-card {
   background: rgba(20, 20, 20, 0.96) !important;

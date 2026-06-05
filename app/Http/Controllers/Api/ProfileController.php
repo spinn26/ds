@@ -447,6 +447,8 @@ class ProfileController extends Controller
         $requisite->verified = false;
         $requisite->status = 2;
         $requisite->dateChange = now();
+        // Новый цикл проверки → перевзводим SLA-таймер (см. RequisiteSla).
+        $requisite->overdue_notified_at = null;
         $requisite->save();
 
         $bank = BankRequisite::where('requisites', $requisite->id)->active()->first();

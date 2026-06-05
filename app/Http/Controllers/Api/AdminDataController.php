@@ -1560,6 +1560,8 @@ class AdminDataController extends Controller
             'inn' => 'inn',
             'verified' => 'verified',
             'createdAt' => '"createdAt"',
+            // Дата поступления на проверку = последнее изменение реквизита.
+            'submittedAt' => '"dateChange"',
         ], 'id', 'desc');
         $rows = $query2
             ->offset($this->paginationOffset($request))
@@ -1591,6 +1593,14 @@ class AdminDataController extends Controller
                     $verificationStatus = 'rejected';
                 }
 
+                // Дата поступления на проверку = последняя отправка реквизитов
+                // (dateChange); для старых записей без dateChange — createdAt.
+                $submittedAt = $r->dateChange
+                    ?: ($r->createdAt ? \Illuminate\Support\Carbon::parse($r->createdAt) : null);
+                // Просрочка считается только пока реквизиты «на проверке».
+                $overdue = $verificationStatus === 'pending'
+                    && \App\Support\RequisiteSla::isOverdue($submittedAt);
+
                 return [
                     'id' => $r->id,
                     'consultant' => $r->consultant,
@@ -1617,6 +1627,8 @@ class AdminDataController extends Controller
                     'rejectionReason' => $r->rejection_reason,
                     'hasBankRequisites' => $bankReq !== null,
                     'bankVerified' => $bankReq?->verified ?? false,
+                    'submittedAt' => $submittedAt?->toIso8601String(),
+                    'overdue' => $overdue,
                 ];
             });
 
