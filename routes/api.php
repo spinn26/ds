@@ -314,7 +314,7 @@ Route::prefix('v1')->group(function () {
         Route::delete('/admin/permissions/groups/{id}',  [\App\Http\Controllers\Api\AdminPermissionsController::class, 'destroy'])->whereNumber('id');
 
         Route::get('/admin/transactions', [\App\Http\Controllers\Api\AdminFinanceController::class, 'transactions']);
-        Route::post('/admin/finalize-month', [\App\Http\Controllers\Api\AdminFinanceController::class, 'finalizeMonth']);
+        Route::post('/admin/finalize-month', [\App\Http\Controllers\Api\AdminFinanceController::class, 'finalizeMonth'])->middleware('role:admin,calculations');
         Route::get('/admin/commissions', [\App\Http\Controllers\Api\AdminFinanceController::class, 'commissions']);
         Route::get('/admin/commissions/chain/{transactionId}', [\App\Http\Controllers\Api\AdminFinanceController::class, 'commissionChain'])->whereNumber('transactionId');
         Route::get('/admin/pool', [\App\Http\Controllers\Api\AdminFinanceController::class, 'pool']);
@@ -331,7 +331,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/admin/reports/{id}/download', [\App\Http\Controllers\Api\AdminFinanceController::class, 'downloadReport'])->whereNumber('id');
         Route::get('/admin/report-availability', [\App\Http\Controllers\Api\AdminFinanceController::class, 'reportAvailability']);
         Route::get('/admin/currencies', [\App\Http\Controllers\Api\AdminFinanceController::class, 'currencies']);
-        Route::patch('/admin/currencies/rates/{id}', [\App\Http\Controllers\Api\AdminFinanceController::class, 'updateCurrencyRate'])->whereNumber('id');
+        Route::patch('/admin/currencies/rates/{id}', [\App\Http\Controllers\Api\AdminFinanceController::class, 'updateCurrencyRate'])->whereNumber('id')->middleware('role:admin,calculations');
         Route::post('/admin/currencies/vat', [\App\Http\Controllers\Api\AdminFinanceController::class, 'addVatRate']);
         Route::get('/admin/transaction-import/form-data', [\App\Http\Controllers\Api\TransactionImportController::class, 'formData']);
         Route::get('/admin/transaction-import/sheet-names', [\App\Http\Controllers\Api\TransactionImportController::class, 'sheetNames']);
@@ -351,12 +351,12 @@ Route::prefix('v1')->group(function () {
         Route::delete('/admin/roadmap/{id}', [\App\Http\Controllers\Api\RoadmapController::class, 'destroy'])->whereNumber('id');
         Route::get('/admin/transaction-import/history', [\App\Http\Controllers\Api\TransactionImportController::class, 'history']);
         Route::get('/admin/transaction-import/check-duplicate', [\App\Http\Controllers\Api\TransactionImportController::class, 'checkDuplicate']);
-        Route::post('/admin/transaction-import/{id}/rollback', [\App\Http\Controllers\Api\TransactionImportController::class, 'rollback']);
-        Route::post('/admin/transaction-import/{id}/calculate', [\App\Http\Controllers\Api\TransactionImportController::class, 'calculateCommissions']);
+        Route::post('/admin/transaction-import/{id}/rollback', [\App\Http\Controllers\Api\TransactionImportController::class, 'rollback'])->middleware('role:admin,calculations');
+        Route::post('/admin/transaction-import/{id}/calculate', [\App\Http\Controllers\Api\TransactionImportController::class, 'calculateCommissions'])->middleware('role:admin,calculations');
         Route::get('/admin/transaction-import/{id}/errors.csv', [\App\Http\Controllers\Api\TransactionImportController::class, 'errorsCsv'])->whereNumber('id');
-        Route::post('/admin/transactions/{id}/calculate', [\App\Http\Controllers\Api\TransactionImportController::class, 'calculateSingle']);
-        Route::put('/admin/transactions/{id}', [\App\Http\Controllers\Api\TransactionImportController::class, 'update'])->whereNumber('id');
-        Route::delete('/admin/transactions/{id}', [\App\Http\Controllers\Api\TransactionImportController::class, 'destroy'])->whereNumber('id');
+        Route::post('/admin/transactions/{id}/calculate', [\App\Http\Controllers\Api\TransactionImportController::class, 'calculateSingle'])->middleware('role:admin,calculations');
+        Route::put('/admin/transactions/{id}', [\App\Http\Controllers\Api\TransactionImportController::class, 'update'])->whereNumber('id')->middleware('role:admin,calculations');
+        Route::delete('/admin/transactions/{id}', [\App\Http\Controllers\Api\TransactionImportController::class, 'destroy'])->whereNumber('id')->middleware('role:admin,calculations');
 
         // Admin — Manual transaction entry (✅Транзакции.md)
         Route::get('/admin/manual-tx/contracts', [\App\Http\Controllers\Api\ManualTransactionController::class, 'searchContracts']);
@@ -367,8 +367,8 @@ Route::prefix('v1')->group(function () {
         Route::delete('/admin/manual-tx/drafts/{id}', [\App\Http\Controllers\Api\ManualTransactionController::class, 'deleteDraft'])->whereNumber('id');
         Route::post('/admin/manual-tx/drafts/{id}/duplicate', [\App\Http\Controllers\Api\ManualTransactionController::class, 'duplicateDraft'])->whereNumber('id');
         Route::delete('/admin/manual-tx/drafts', [\App\Http\Controllers\Api\ManualTransactionController::class, 'clearDrafts']);
-        Route::post('/admin/manual-tx/calc', [\App\Http\Controllers\Api\ManualTransactionController::class, 'calculateDrafts']);
-        Route::post('/admin/manual-tx/fix', [\App\Http\Controllers\Api\ManualTransactionController::class, 'fixDrafts']);
+        Route::post('/admin/manual-tx/calc', [\App\Http\Controllers\Api\ManualTransactionController::class, 'calculateDrafts'])->middleware('role:admin,calculations');
+        Route::post('/admin/manual-tx/fix', [\App\Http\Controllers\Api\ManualTransactionController::class, 'fixDrafts'])->middleware('role:admin,calculations');
         Route::get('/admin/manual-tx/products/{id}/rates', [\App\Http\Controllers\Api\ManualTransactionController::class, 'productRates'])->whereNumber('id');
 
         // Admin Monitoring (site status, error feed, queue control)
@@ -402,19 +402,19 @@ Route::prefix('v1')->group(function () {
         Route::delete('/admin/mail/templates/{id}', [\App\Http\Controllers\Api\AdminMailController::class, 'destroyTemplate']);
 
         // Admin — Monthly finalisation (detachment / OP penalties on commissions)
-        Route::post('/admin/finalize/preview', [\App\Http\Controllers\Api\AdminFinalizeController::class, 'preview']);
+        Route::post('/admin/finalize/preview', [\App\Http\Controllers\Api\AdminFinalizeController::class, 'preview'])->middleware('role:admin,calculations');
         // throttle 30/мин — admin/calculations часто перезапускают расчёт
         // после ручных правок (Транзакции / Пул / Карточка периода).
         // 5/мин ловило ложные 429 при обычной работе финдиректора.
-        Route::post('/admin/finalize/apply', [\App\Http\Controllers\Api\AdminFinalizeController::class, 'apply'])->middleware('throttle:30,1');
+        Route::post('/admin/finalize/apply', [\App\Http\Controllers\Api\AdminFinalizeController::class, 'apply'])->middleware(['role:admin,calculations', 'throttle:30,1']);
 
         // Admin — Pool (leader pool calc with manual «Участвует» moderation)
         Route::get('/admin/pool/participants', [\App\Http\Controllers\Api\AdminPoolController::class, 'participants']);
-        Route::put('/admin/pool/participants', [\App\Http\Controllers\Api\AdminPoolController::class, 'toggleParticipant']);
-        Route::post('/admin/pool/preview', [\App\Http\Controllers\Api\AdminPoolController::class, 'preview']);
-        Route::post('/admin/pool/apply', [\App\Http\Controllers\Api\AdminPoolController::class, 'apply'])->middleware('throttle:10,1');
+        Route::put('/admin/pool/participants', [\App\Http\Controllers\Api\AdminPoolController::class, 'toggleParticipant'])->middleware('role:admin,calculations');
+        Route::post('/admin/pool/preview', [\App\Http\Controllers\Api\AdminPoolController::class, 'preview'])->middleware('role:admin,calculations');
+        Route::post('/admin/pool/apply', [\App\Http\Controllers\Api\AdminPoolController::class, 'apply'])->middleware(['role:admin,calculations', 'throttle:10,1']);
         Route::get('/admin/pool/progress', [\App\Http\Controllers\Api\AdminPoolController::class, 'progress']);
-        Route::post('/admin/pool/reopen', [\App\Http\Controllers\Api\AdminPoolController::class, 'reopen'])->middleware('throttle:5,1');
+        Route::post('/admin/pool/reopen', [\App\Http\Controllers\Api\AdminPoolController::class, 'reopen'])->middleware(['role:admin,calculations', 'throttle:5,1']);
 
         // Admin — Analytics (reconciliation, anomalies, funnel, cohorts, owner)
         Route::get('/admin/analytics/reconciliation', [\App\Http\Controllers\Api\AdminAnalyticsController::class, 'reconciliation']);

@@ -56,5 +56,12 @@ export function usePermissions() {
     return permission(section) === 'view';
   }
 
-  return { userRoles, permission, canView, canEdit, canFull, isReadOnly };
+  // Все КНОПКИ РАСЧЁТОВ (финализация, пул, пересчёт комиссий, фиксация
+  // транзакций, удаление с пересчётом) доступны только руководителю
+  // расчётов (роль calculations) и админу. Бэкенд дублирует гард
+  // (role:admin,calculations на соответствующих роутах).
+  const canCalc = computed(() =>
+    userRoles.value.includes('calculations') || userRoles.value.includes('admin'));
+
+  return { userRoles, permission, canView, canEdit, canFull, isReadOnly, canCalc };
 }
