@@ -2493,6 +2493,39 @@ class ChatController extends Controller
     }
 
     /**
+     * GET /chat/partner-lookup?q=… — поиск ФК (партнёров) для добавления в
+     * участники тикета. Только staff. Возвращает WebUser.id (участник хранит
+     * именно его), и только партнёров с логином (consultant.webUser IS NOT
+     * NULL) — иначе добавленный не сможет открыть чат.
+     */
+    public function partnerLookup(Request $request): JsonResponse
+    {
+        if (! $request->user() || ! $request->user()->isStaff()) {
+            return response()->json(['items' => []], 403);
+        }
+        $q = trim((string) $request->input('q', ''));
+        if (mb_strlen($q) < 2) return response()->json(['items' => []]);
+
+        $like = '%' . $q . '%';
+        $rows = DB::table('consultant as c')
+            ->join('WebUser as u', 'u.id', '=', 'c.webUser')
+            ->whereNull('c.dateDeleted')
+            ->where(function ($w) use ($like) {
+                $w->where('c.personName', 'ilike', $like)
+                  ->orWhere('c.participantCode', 'ilike', $like);
+            })
+            ->orderBy('c.personName')
+            ->limit(20)
+            ->get(['u.id as webUserId', 'c.personName', 'c.participantCode']);
+
+        return response()->json(['items' => $rows->map(fn ($r) => [
+            'id' => (int) $r->webUserId,
+            'name' => $r->personName,
+            'code' => $r->participantCode,
+        ])->values()]);
+    }
+
+    /**
      * POST /chat/tickets/{id}/participants — добавить сотрудника в чат.
      * Только staff может приглашать. Идемпотентно по уникальному ключу
      * (ticket_id, user_id). Пишет системное сообщение.
@@ -2517,12 +2550,10 @@ class ChatController extends Controller
         $newUser = DB::table('WebUser')->where('id', $newUserId)->first();
         if (! $newUser) return response()->json(['message' => 'Пользователь не найден'], 404);
 
-        // Только staff можно приглашать. Партнёр не должен получить
-        // доступ к чужому чату через эту дверь.
-        $newUserModel = \App\Models\User::find($newUserId);
-        if (! $newUserModel?->isStaff()) {
-            return response()->json(['message' => 'Можно добавлять только сотрудников'], 422);
-        }
+        // Приглашать может только staff (проверено выше). Добавлять можно как
+        // сотрудника, так и ФК-партнёра (у партнёра есть свой WebUser-логин —
+        // он увидит чат, но НЕ внутренние заметки: они отдельным staff-гейтом).
+        // Партнёр сам себя сюда не добавит — эндпоинт доступен только staff.
 
         $newUserName = trim(($newUser->lastName ?? '') . ' ' . ($newUser->firstName ?? ''));
 

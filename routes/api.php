@@ -143,7 +143,8 @@ Route::prefix('v1')->group(function () {
         Route::post('/chat/tickets/{id}/csat', [\App\Http\Controllers\Api\ChatController::class, 'submitCsat'])->middleware('throttle:5,1');
         Route::get('/chat/tickets/{id}/notes', [\App\Http\Controllers\Api\ChatController::class, 'notes']);
         Route::post('/chat/tickets/{id}/notes', [\App\Http\Controllers\Api\ChatController::class, 'addNote']);
-        // Дополнительные участники чата (приглашённые сотрудники)
+        // Дополнительные участники чата (сотрудники и ФК-партнёры)
+        Route::get('/chat/partner-lookup', [\App\Http\Controllers\Api\ChatController::class, 'partnerLookup']);
         Route::get('/chat/tickets/{id}/participants', [\App\Http\Controllers\Api\ChatController::class, 'listParticipants'])->whereNumber('id');
         Route::post('/chat/tickets/{id}/participants', [\App\Http\Controllers\Api\ChatController::class, 'addParticipant'])->whereNumber('id');
         Route::delete('/chat/tickets/{id}/participants/{userId}', [\App\Http\Controllers\Api\ChatController::class, 'removeParticipant'])->whereNumber('id')->whereNumber('userId');
@@ -239,7 +240,7 @@ Route::prefix('v1')->group(function () {
             Route::post('/impersonate/leave', [ImpersonateController::class, 'leave']);
         });
 
-        Route::middleware(['role:admin,backoffice,support,finance,head,calculations,corrections,education', 'restrict.education', 'restrict.head', 'throttle:2400,1'])->group(function () {
+        Route::middleware(['role:admin,backoffice,support,finance,head,calculations,corrections,education', 'restrict.education', 'restrict.head', 'restrict.support', 'restrict.corrections', 'throttle:2400,1'])->group(function () {
         Route::get('/admin/dashboard', [\App\Http\Controllers\Api\AdminDashboardController::class, 'index']);
         Route::get('/admin/export/{type}', [\App\Http\Controllers\Api\ExportController::class, 'export'])->middleware('throttle:10,1');
         Route::get('/admin/users', [AdminUserController::class, 'index']);

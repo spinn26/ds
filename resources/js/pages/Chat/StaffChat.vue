@@ -1028,6 +1028,31 @@
                 Добавить в чат
               </v-btn>
             </div>
+            <v-divider />
+            <v-list-subheader class="text-caption">Добавить ФК (партнёра)</v-list-subheader>
+            <div class="px-3 pb-3">
+              <v-autocomplete v-model="partnerToAdd" :items="partnerOptions"
+                item-title="name" item-value="id"
+                placeholder="Введите ФИО или код партнёра…"
+                variant="outlined" density="compact" hide-details clearable
+                no-filter :loading="partnerSearching"
+                @update:search="searchPartners">
+                <template #item="{ props, item }">
+                  <v-list-item v-bind="props" :title="item.raw.name"
+                    :subtitle="item.raw.code ? ('Код: ' + item.raw.code) : undefined" />
+                </template>
+                <template #no-data>
+                  <div class="px-3 py-2 text-caption text-medium-emphasis">
+                    {{ partnerSearching ? 'Поиск…' : 'Введите 2+ символа' }}
+                  </div>
+                </template>
+              </v-autocomplete>
+              <v-btn class="mt-2" color="primary" variant="tonal" :loading="participantSaving"
+                :disabled="!partnerToAdd"
+                prepend-icon="mdi-account-plus" @click="addPartner" block>
+                Добавить ФК в чат
+              </v-btn>
+            </div>
           </v-list>
         </v-card-text>
       </v-card>
@@ -1305,6 +1330,21 @@ const participantsDialog = ref(false);
 const participantToAdd = ref(null);
 const participantSaving = ref(false);
 
+// Добавление ФК (партнёра) в участники: async-поиск по WebUser-логинам.
+const partnerToAdd = ref(null);
+const partnerOptions = ref([]); // [{ id: webUserId, name, code }]
+const partnerSearching = ref(false);
+const { debounced: searchPartners } = useDebounce(async (q) => {
+  const term = (q || '').trim();
+  if (term.length < 2) { partnerOptions.value = []; partnerSearching.value = false; return; }
+  partnerSearching.value = true;
+  try {
+    const { data } = await api.get('/chat/partner-lookup', { params: { q: term } });
+    partnerOptions.value = Array.isArray(data?.items) ? data.items : [];
+  } catch { partnerOptions.value = []; }
+  partnerSearching.value = false;
+}, 350);
+
 // Список сотрудников, которых можно добавить = staffList минус уже
 // участвующие (включая created_by, recipient, assigned).
 const addableStaff = computed(() => {
@@ -1357,11 +1397,13 @@ function pInitials(name) {
   return ((p[0]?.[0] || '') + (p[1]?.[0] || '')).toUpperCase() || '?';
 }
 function pShortRole(role) {
-  if (!role) return '—';
+  // Партнёр (ФК) не имеет staff-роли — у него пустой/неизвестный role.
+  if (!role) return 'ФК';
   const map = {
     admin: 'Админ', backoffice: 'Бэк-офис', support: 'Поддержка',
     head: 'Руководитель', finance: 'Финансы', calculations: 'Расчёты',
     corrections: 'Корректировки', education: 'Обучение',
+    partner: 'ФК', consultant: 'ФК',
   };
   const first = String(role).split(',')[0].trim();
   return map[first] || first;
@@ -1383,18 +1425,20 @@ async function loadParticipants() {
 
 function openParticipantsDialog() {
   participantToAdd.value = null;
+  partnerToAdd.value = null;
+  partnerOptions.value = [];
   participantsDialog.value = true;
   loadParticipants();
 }
 
-async function addParticipant() {
-  if (!participantToAdd.value || !activeChat.value?.id) return;
+async function doAddParticipant(userId) {
+  if (!userId || !activeChat.value?.id) return;
   participantSaving.value = true;
   try {
-    await api.post(`/chat/tickets/${activeChat.value.id}/participants`, {
-      user_id: participantToAdd.value,
-    });
+    await api.post(`/chat/tickets/${activeChat.value.id}/participants`, { user_id: userId });
     participantToAdd.value = null;
+    partnerToAdd.value = null;
+    partnerOptions.value = [];
     await loadParticipants();
     await refreshMessages();
   } catch (e) {
@@ -1402,6 +1446,8 @@ async function addParticipant() {
   }
   participantSaving.value = false;
 }
+function addParticipant() { return doAddParticipant(participantToAdd.value); }
+function addPartner() { return doAddParticipant(partnerToAdd.value); }
 
 async function removeParticipant(p) {
   if (!confirm(`Убрать ${p.name} из чата?`)) return;
