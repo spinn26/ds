@@ -78,7 +78,9 @@ class AdminUserController extends Controller
             'phone' => $u->phone,
             'role' => $u->role,
             'gender' => $u->gender,
-            'birthDate' => $u->birthDate,
+            // Y-m-d, иначе datetime-каст сериализует Carbon в UTC и при
+            // app-tz Europe/Moscow дата уезжает на день назад (см. ProfileController).
+            'birthDate' => $u->birthDate?->format('Y-m-d'),
             'isBlocked' => (bool) $u->isBlocked,
             'agreement' => (bool) $u->agreement,
             'participantCode' => $codes[$u->id] ?? null,

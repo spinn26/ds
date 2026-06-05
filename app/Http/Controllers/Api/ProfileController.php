@@ -86,7 +86,11 @@ class ProfileController extends Controller
                 'nicTG' => $user->nicTG,
                 'telegram' => $user->nicTG,
                 'gender' => $user->gender,
-                'birthDate' => $user->birthDate,
+                // Чистая дата Y-m-d (НЕ Carbon): иначе datetime-каст сериализует
+                // в UTC, и при app-tz Europe/Moscow дата уезжает на день назад
+                // (00:00 МСК → 21:00Z пред. дня) → фронт показывал −1 день и
+                // правка «не сохранялась». Запись не сдвигается, только чтение.
+                'birthDate' => $user->birthDate?->format('Y-m-d'),
                 'country' => $country,
                 'city' => $city,
                 'position' => $user->position ?? null,

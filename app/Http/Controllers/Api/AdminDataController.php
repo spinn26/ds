@@ -250,7 +250,10 @@ class AdminDataController extends Controller
                 'phone' => $webUser->phone,
                 'nicTG' => $webUser->nicTG,
                 'gender' => $webUser->gender,
-                'birthDate' => $webUser->birthDate,
+                // $webUser — stdClass из DB::table (не модель): birthDate это
+                // строка-таймстамп Postgres '1980-02-18 00:00:00'. Отдаём Y-m-d,
+                // иначе фронт (split('T')) не распознаёт и поле даты пустое.
+                'birthDate' => $webUser->birthDate ? substr((string) $webUser->birthDate, 0, 10) : null,
                 'role' => $webUser->role,
                 'isBlocked' => (bool) ($webUser->isBlocked ?? false),
             ] : null,
