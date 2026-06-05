@@ -233,6 +233,9 @@ class AdminProductCatalogController extends Controller
             'active'     => false,
             'updated_at' => now(),
         ]);
+        // Иначе деактивированный продукт висит в кэше калькулятора до 10 мин,
+        // и его программу можно выбрать → «Программа не найдена или неактивна».
+        \Illuminate\Support\Facades\Cache::forget('calculator:product-matrix:v2');
         return response()->json(['status' => 'deactivated']);
     }
 
@@ -246,6 +249,7 @@ class AdminProductCatalogController extends Controller
             'active'     => $next,
             'updated_at' => now(),
         ]);
+        \Illuminate\Support\Facades\Cache::forget('calculator:product-matrix:v2');
         return response()->json(['publishStatus' => $next ? 'published' : 'draft']);
     }
 
@@ -316,6 +320,7 @@ class AdminProductCatalogController extends Controller
             ->where('id', $programId)
             ->where('product_id', $productId)
             ->update(['active' => false, 'updated_at' => now()]);
+        \Illuminate\Support\Facades\Cache::forget('calculator:product-matrix:v2');
         return response()->json(['status' => 'deactivated']);
     }
 
