@@ -24,15 +24,29 @@ class PaymentRegistryReport extends AbstractReportType
             ->get(['id', 'personName', 'activity']);
         $names = DB::table('directory_of_activities')->pluck('name', 'id');
 
+        // «Начислено» = только транзакционные комиссии (transaction IS NOT NULL).
+        // Раньше суммировались все типы, и legacy nonTransactional попадал и сюда,
+        // и (по канону снимка rebuildBalance) должен быть в «Прочее» → расхождение.
         $accruedByCons = DB::table('commission')
             ->whereNull('deletedAt')
+            ->whereNotNull('transaction')
             ->whereBetween('date', [$from, $to])
             ->select('consultant', DB::raw('SUM(COALESCE("amountRUB", 0)) as accrued'))
             ->groupBy('consultant')->pluck('accrued', 'consultant');
 
+        // «Прочее» = ручные other_accruals + legacy nonTransactional (commission
+        // без transaction) — единообразно с UI-реестром и снимком consultantBalance
+        // (accruedNonTransactional). Раньше экспорт legacy-слой терял.
         $otherByCons = DB::table('other_accruals')
             ->whereBetween('accrual_date', [$from, $to])
             ->select('consultant', DB::raw('SUM(COALESCE(amount, 0)) as other'))
+            ->groupBy('consultant')->pluck('other', 'consultant');
+
+        $legacyOtherByCons = DB::table('commission')
+            ->whereNull('deletedAt')
+            ->whereNull('transaction')
+            ->whereBetween('date', [$from, $to])
+            ->select('consultant', DB::raw('SUM(COALESCE("amountRUB", 0)) as other'))
             ->groupBy('consultant')->pluck('other', 'consultant');
 
         $poolByCons = DB::table('poolLog')
@@ -43,7 +57,7 @@ class PaymentRegistryReport extends AbstractReportType
         $paidByCons = DB::table('consultantPayment as cp')
             ->join('consultantBalance as cb', 'cb.id', '=', 'cp.consultantBalance')
             ->whereBetween('cp.paymentDate', [$from, $to])
-            ->where('cp.status', 1)
+            ->whereIn('cp.status', [1, 2])
             ->select('cb.consultant', DB::raw('SUM(COALESCE(cp.amount, 0)) as paid'))
             ->groupBy('cb.consultant')->pluck('paid', 'consultant');
 
@@ -72,7 +86,7 @@ class PaymentRegistryReport extends AbstractReportType
         $rows = [];
         foreach ($consultants as $c) {
             $accrued = (float) ($accruedByCons[$c->id] ?? 0);
-            $other = (float) ($otherByCons[$c->id] ?? 0);
+            $other = (float) ($otherByCons[$c->id] ?? 0) + (float) ($legacyOtherByCons[$c->id] ?? 0);
             $pool = (float) ($poolByCons[$c->id] ?? 0);
             $paid = (float) ($paidByCons[$c->id] ?? 0);
             $balance = (float) ($balanceByCons[$c->id] ?? 0);
