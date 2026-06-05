@@ -580,11 +580,6 @@ Route::prefix('v1')->group(function () {
         }); // end role:staff
     });
 
-    // Вложения тикетов (legacy /tickets) — публичный signed-роут.
-    Route::get('/tickets/messages/{messageId}/attachment', [\App\Http\Controllers\Api\TicketController::class, 'downloadAttachment'])
-        ->whereNumber('messageId')
-        ->name('tickets.attachment')
-        ->middleware('signed');
 
     // Документы партнёра (паспорта/заявления) — публичный signed-роут.
     // Подпись (URL::temporarySignedRoute) выдаётся бэком в /documents и
