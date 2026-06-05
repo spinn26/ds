@@ -35,9 +35,12 @@ class AuthController extends Controller
             return response()->json(['message' => 'Неверный email или пароль'], 401);
         }
 
-        // Заблокированный/удалённый аккаунт не пускаем — ни токен, ни 2FA-challenge.
-        // Флаг isBlocked выставляют админы; до этого фикса он не проверялся в auth-пути.
-        if ($user->isBlocked || $user->dateDeleted) {
+        // Заблокированный аккаунт не пускаем — ни токен, ни 2FA-challenge.
+        // Флаг isBlocked выставляют админы. ВАЖНО: проверяем ТОЛЬКО isBlocked, НЕ
+        // dateDeleted — последний это Directual-soft-delete артефакт (31 WebUser,
+        // у всех есть пароль, часть привязана к активным консультантам), и
+        // блокировка по нему запирала легитимных пользователей (инцидент 2026-06-05).
+        if ($user->isBlocked) {
             \App\Support\Audit::log('login_blocked', 'WebUser', $user->id);
             return response()->json(['message' => 'Аккаунт заблокирован. Обратитесь в поддержку.'], 403);
         }
