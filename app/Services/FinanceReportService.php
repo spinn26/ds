@@ -519,25 +519,11 @@ class FinanceReportService
                     'totalRub' => round($totalBonusRub + (float) ($balance->accruedPool ?? 0), 2),
                 ],
                 'breakaway' => $breakaway,
-                'monthEnd' => (function () use ($balance, $allCommissions, $otherAccruals, $extraSum, $extraPointsSum, $consultant, $month) {
-                    // Live-агрегация: после ручной фиксации транзакции commission
-                    // уже создан, но consultantBalance ещё не пересчитан ночным
-                    // финализом. Берём max(снимок, live) — чтобы прирост сразу
-                    // отражался и в monthEnd-сводке, и в дашбордах партнёра.
-                    // Жалоба Богдановой 2026-05-22: «внесла начисление —
-                    // отразилось в детализации, но не проставилось в дашбордах».
-                    $liveAccrued = (float) $allCommissions->whereNotNull('transaction')->sum('amountRUB');
-                    $livePool = (float) DB::table('poolLog')
-                        ->where('consultant', $consultant->id)
-                        ->whereBetween('date', [
-                            $month . '-01 00:00:00',
-                            \Carbon\Carbon::parse($month . '-01')->endOfMonth()->format('Y-m-d 23:59:59'),
-                        ])
-                        ->sum('poolBonus');
-
+                'monthEnd' => (function () use ($balance, $otherAccruals, $extraSum, $extraPointsSum, $consultant, $month) {
+                    // ⛔ LIVE-ПЕРЕСЧЁТ УБРАН (2026-06-05): «Начислено»/«Пул» только из
+                    // снимка consultantBalance, обновляемого по кнопке пересчёта.
                     // Сальдо (входящий остаток) = remaining прошлого периода —
-                    // единообразно с реестром выплат и экспортным отчётом, а не
-                    // запаздывающий b.balance текущего месяца (per spec ✅Реестр выплат).
+                    // единообразно с реестром выплат и экспортным отчётом.
                     $incoming = DB::table('consultantBalance')
                         ->where('consultant', $consultant->id)
                         ->where('dateMonth', '<', $month)
@@ -546,8 +532,10 @@ class FinanceReportService
                     $balanceStart = (float) ($incoming ?? 0);
                     $payed = $balance ? (float) ($balance->payed ?? 0) : 0.0;
 
-                    $accrued = max((float) ($balance->accruedTransactional ?? 0), $liveAccrued);
-                    $pool = max((float) ($balance->accruedPool ?? 0), $livePool);
+                    $accrued = (float) ($balance->accruedTransactional ?? 0);
+                    $pool = (float) ($balance->accruedPool ?? 0);
+                    // «Прочее» = снимок nonTransactional уже в accruedNonTransactional?
+                    // Нет — здесь other = ручные other_accruals (live-чтение) + extraSum.
                     $otherRub = round($otherAccruals->sum(fn ($c) => (float) ($c->amount ?? 0)) + $extraSum, 2);
                     $totalAccrued = round($accrued + $otherRub + $pool, 2);
                     $totalPayable = round($balanceStart + $totalAccrued, 2);

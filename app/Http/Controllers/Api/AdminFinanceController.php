@@ -589,49 +589,11 @@ class AdminFinanceController extends Controller
             ];
         }
 
-        // qualificationLog обновляется ночным финализом — в течение дня
-        // ЛП/ГП в нём отстают от свежих commission-записей, и страница
-        // показывает 0 для текущего месяца сразу после ручного ввода
-        // транзакций. Применяем паттерн max(snapshot, live SUM) —
-        // тот же, что в DashboardService / PaymentRegistry / FinanceReport.
-        $year = substr($month, 0, 4);
-        $liveCurrent = DB::table('commission')
-            ->whereIn('consultant', $pageIds)
-            ->where('dateMonth', $month)
-            ->whereNull('deletedAt')
-            ->selectRaw('consultant, SUM("personalVolume") AS pv, SUM("groupVolume") AS gv')
-            ->groupBy('consultant')
-            ->get()
-            ->keyBy('consultant');
-
-        $liveCumulative = DB::table('commission')
-            ->whereIn('consultant', $pageIds)
-            ->where('dateMonth', '>=', $year . '-01')
-            ->where('dateMonth', '<=', $month)
-            ->whereNull('deletedAt')
-            ->selectRaw('consultant, SUM("groupVolume") AS gvc')
-            ->groupBy('consultant')
-            ->get()
-            ->keyBy('consultant');
-
-        foreach ($pageIds as $cid) {
-            $lc = $liveCurrent[$cid] ?? null;
-            $lcum = $liveCumulative[$cid] ?? null;
-            if (! $lc && ! $lcum) continue;
-            $cur = $byConsultant[$cid]['current'] ?? [
-                'id' => null,
-                'personalVolume' => 0.0,
-                'groupVolume' => 0.0,
-                'groupVolumeCumulative' => 0.0,
-                'levelId' => null, 'levelTitle' => null, 'levelNum' => null,
-                'mandatoryGP' => 0.0,
-                'date' => $start,
-            ];
-            $cur['personalVolume'] = round(max((float) $cur['personalVolume'], (float) ($lc->pv ?? 0)), 2);
-            $cur['groupVolume'] = round(max((float) $cur['groupVolume'], (float) ($lc->gv ?? 0)), 2);
-            $cur['groupVolumeCumulative'] = round(max((float) $cur['groupVolumeCumulative'], (float) ($lcum->gvc ?? 0)), 2);
-            $byConsultant[$cid]['current'] = $cur;
-        }
+        // ⛔ LIVE-ПЕРЕСЧЁТ УБРАН (2026-06-05): ЛП/ГП/НГП показываются ТОЛЬКО из
+        // снимка qualificationLog ($byConsultant), обновляемого по кнопке
+        // пересчёта руководителем расчётов. Раньше тут был max(snapshot, live SUM
+        // commission) — он подхватывал свежие транзакции до пересчёта, но это и
+        // есть «лайв-расчёт».
 
         $activityMap = [1 => 'active', 3 => 'terminated', 4 => 'registered', 5 => 'excluded'];
 

@@ -126,37 +126,13 @@ class AdminPaymentRegistryController extends Controller
             ->groupBy('consultant')
             ->pluck('extra', 'consultant');
 
-        // Live SUM по commission и poolLog за месяц — на случай если
-        // consultantBalance.accruedTransactional/accruedPool ещё не пересчитан
-        // (Богданова: после ручной фиксации транзакции commission создан,
-        // но в Реестре выплат «Начислено: 0», т.к. снимок ночной).
-        // Если live-сумма больше снимка — используем её (новые транзакции),
-        // иначе оставляем снимок (там может быть учтена логика отрыва и т.п.).
-        // «Начислено» = только транзакционные комиссии. nonTransactional идёт
-        // в «Прочее» (см. ниже) — иначе он задваивался бы (в accrued и в other).
-        $liveAccruedByCons = DB::table('commission')
-            ->where('dateMonth', $dm)
-            ->whereNotNull('transaction')
-            ->whereNull('deletedAt')
-            ->select('consultant', DB::raw('SUM(COALESCE("amountRUB", 0)) as accrued'))
-            ->groupBy('consultant')
-            ->pluck('accrued', 'consultant');
-
-        // Live legacy nonTransactional (commission без transaction) — чтобы свежие
-        // ручные начисления отражались в «Прочее» до ночного пересчёта снимка.
-        $liveNonTxByCons = DB::table('commission')
-            ->where('dateMonth', $dm)
-            ->whereNull('transaction')
-            ->whereNull('deletedAt')
-            ->select('consultant', DB::raw('SUM(COALESCE("amountRUB", 0)) as nontx'))
-            ->groupBy('consultant')
-            ->pluck('nontx', 'consultant');
-
-        $livePoolByCons = DB::table('poolLog')
-            ->whereBetween('date', [$periodFrom, $periodTo])
-            ->select('consultant', DB::raw('SUM(COALESCE("poolBonus", 0)) as pool'))
-            ->groupBy('consultant')
-            ->pluck('pool', 'consultant');
+        // ⛔ LIVE-ПЕРЕСЧЁТ УБРАН (2026-06-05): «Начислено»/«Пул» читаются ТОЛЬКО
+        // из снимка consultantBalance (accruedTransactional/accruedNonTransactional/
+        // accruedPool), который обновляется по кнопке пересчёта руководителем
+        // расчётов. Раньше тут был max(снимок, live SUM(commission/poolLog)) —
+        // он показывал свежие транзакции до пересчёта, но это и есть «лайв-расчёт».
+        // Ручные other_accruals (extraByCons) остаются live — это не расчёт, а
+        // отображение введённых начислений.
 
         // Сальдо (входящий остаток) = remaining последнего периода ДО выбранного
         // месяца — per spec ✅Реестр выплат и единообразно с экспортным
@@ -187,24 +163,15 @@ class AdminPaymentRegistryController extends Controller
         // Activity name lookup for partner-status filter UI.
         $activityNames = DB::table('directory_of_activities')->pluck('name', 'id');
 
-        $items = $rows->map(function ($r) use ($verified, $activityNames, $extraByCons, $liveAccruedByCons, $livePoolByCons, $incomingByCons, $liveNonTxByCons) {
-            // accrued = max(снимок, live SUM commission за месяц). Прирост от
-            // ручной фиксации транзакции (commission уже есть, снимок ещё нет)
-            // подхватывается тут же.
-            $snapshotAccrued = (float) ($r->accruedTransactional ?? 0);
-            $liveAccrued = (float) ($liveAccruedByCons[$r->consultant] ?? 0);
-            $accrued = max($snapshotAccrued, $liveAccrued);
+        $items = $rows->map(function ($r) use ($verified, $activityNames, $extraByCons, $incomingByCons) {
+            // Только снимок (без live-пересчёта). Обновляется кнопкой пересчёта.
+            $accrued = (float) ($r->accruedTransactional ?? 0);
+            $pool = (float) ($r->accruedPool ?? 0);
 
-            $snapshotPool = (float) ($r->accruedPool ?? 0);
-            $livePool = (float) ($livePoolByCons[$r->consultant] ?? 0);
-            $pool = max($snapshotPool, $livePool);
-
+            // «Прочее» = снимок nonTransactional + ручные other_accruals (live-чтение
+            // введённых начислений, не расчёт).
             $extra = (float) ($extraByCons[$r->consultant] ?? 0);
-            // «Прочее» = max(снимок nonTransactional, live nonTransactional) +
-            // ручные other_accruals. max — чтобы свежие nonTx (ещё не в снимке)
-            // отражались, но без задвоения с уже учтённым снимком.
-            $nonTx = max((float) ($r->accruedNonTransactional ?? 0), (float) ($liveNonTxByCons[$r->consultant] ?? 0));
-            $other = $nonTx + $extra;
+            $other = (float) ($r->accruedNonTransactional ?? 0) + $extra;
             $accruedTotal = $accrued + $other + $pool;
             // Сальдо = входящий остаток (remaining прошлого периода), а не
             // запаздывающий b.balance текущего месяца — см. $incomingByCons.

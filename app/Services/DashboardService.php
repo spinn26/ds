@@ -139,28 +139,12 @@ class DashboardService
         // когда отрыва формально нет — фронту нужно показать прогресс-шкалу.
         $breakaway = $this->buildBreakawaySummary($consultant->id, $month, $currentQLog);
 
-        // Personal/Group volumes for period
-        // qualificationLog обновляется ночным финализом (partners:check-statuses
-        // в 02:00). После ручной фиксации/импорта transaction новые commission
-        // уже есть, но snapshot ещё нет — карточка «ОП по ГП» показывала 0,
-        // прогресс-бар плана не двигался.
-        // Берём max(snapshot, live SUM) — паттерн из Реестра выплат.
-        $snapshotPersonal = (float) ($periodQLog->personalVolume ?? $consultant->personalVolume ?? 0);
-        $snapshotGroup = (float) ($periodQLog->groupVolume ?? $consultant->groupVolume ?? 0);
-
-        $livePersonal = (float) DB::table('commission')
-            ->where('consultant', $consultant->id)
-            ->where('dateMonth', $month)
-            ->whereNull('deletedAt')
-            ->sum('personalVolume');
-        $liveGroup = (float) DB::table('commission')
-            ->where('consultant', $consultant->id)
-            ->where('dateMonth', $month)
-            ->whereNull('deletedAt')
-            ->sum('groupVolume');
-
-        $personalVolume = max($snapshotPersonal, $livePersonal);
-        $groupVolume = max($snapshotGroup, $liveGroup);
+        // Personal/Group volumes for period — ТОЛЬКО снимок (qualificationLog),
+        // без live-пересчёта. Снимок обновляется по кнопке пересчёта руководителем
+        // расчётов. Раньше брался max(snapshot, live SUM commission) — это и есть
+        // «лайв-расчёт», убран 2026-06-05.
+        $personalVolume = (float) ($periodQLog->personalVolume ?? $consultant->personalVolume ?? 0);
+        $groupVolume = (float) ($periodQLog->groupVolume ?? $consultant->groupVolume ?? 0);
 
         // НГП (накопительный) = последний НЕ-NULL groupVolumeCumulative с
         // date <= конец периода. Carry-forward делает дашборд согласованным с
