@@ -3,19 +3,14 @@
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
 
-// Ежедневная проверка статусов партнёров
-Schedule::command('partners:check-statuses')->dailyAt('02:00');
-
-// Ежедневное применение Отрыва/ОП за текущий месяц (04:00).
-// MonthlyPenaltyRunner идемпотентный: откатывает прошлые withheld* и
-// пересчитывает заново от brutto, так что ночной прогон безопасен
-// для уже финализированных дней внутри месяца.
-//   - закрытый период (PeriodFreezeService) автоматически пропускается;
-//   - можно вручную: `php artisan finalize:apply` или с явными аргументами.
-Schedule::command('finalize:apply')
-    ->dailyAt('04:00')
-    ->withoutOverlapping(60)
-    ->runInBackground();
+// ⛔ АВТО-ПЕРЕСЧЁТЫ ОТКЛЮЧЕНЫ (2026-06-05, по требованию): все расчёты
+// (статусы/квалификации, Отрыв/ОП, пул) выполняются ТОЛЬКО по кнопке
+// руководителем расчётов — никаких ночных авто-прогонов. Раскомментировать
+// можно только по явному запросу владельца.
+//   - проверка статусов: `php artisan partners:check-statuses` (или кнопка);
+//   - финализация Отрыв/ОП: `php artisan finalize:apply` (или кнопка периода).
+// Schedule::command('partners:check-statuses')->dailyAt('02:00');
+// Schedule::command('finalize:apply')->dailyAt('04:00')->withoutOverlapping(60)->runInBackground();
 
 // 1-го числа каждого месяца в 00:00 — копирование курсов валют с прошлого
 // месяца как заглушка, чтобы расчёты платформы не падали (per spec
