@@ -154,7 +154,7 @@
             закрыт
             <v-tooltip activator="parent">Период закрыт — действия с импортом запрещены</v-tooltip>
           </v-chip>
-          <v-btn v-if="canFull('import') && (item.status === 'success' || item.status === 'partial')"
+          <v-btn v-if="canCalc && (item.status === 'success' || item.status === 'partial')"
             icon size="x-small" variant="text" color="primary"
             :loading="calculatingId === item.id"
             :disabled="item.frozen"
@@ -164,7 +164,7 @@
               {{ item.frozen ? 'Период закрыт — расчёт запрещён' : 'Рассчитать комиссии' }}
             </v-tooltip>
           </v-btn>
-          <v-btn v-if="canFull('import') && item.status !== 'rolled_back'"
+          <v-btn v-if="canCalc && item.status !== 'rolled_back'"
             icon size="x-small" variant="text" color="warning"
             :disabled="item.frozen"
             @click="confirmRollback(item)">
@@ -275,7 +275,8 @@ import ImportProgressDialog from '../../components/ImportProgressDialog.vue';
 import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 import { usePermissions } from '../../composables/usePermissions';
 
-const { canFull } = usePermissions();
+// Импорт — canFull('import'); расчёт/откат комиссий — только руководитель расчётов.
+const { canFull, canCalc } = usePermissions();
 
 const counterparties = ref([]);
 const currencies = ref([]);

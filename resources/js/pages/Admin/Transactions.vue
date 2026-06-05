@@ -88,7 +88,7 @@
             density="compact"
             @update:options="onContractOpts">
             <template #item.add="{ item }">
-              <v-btn v-if="canFull('transactions')" icon="mdi-plus-circle" size="small" variant="text" color="primary"
+              <v-btn v-if="canCalc" icon="mdi-plus-circle" size="small" variant="text" color="primary"
                 title="Добавить в черновики"
                 @click="addContractToDrafts(item.id)" />
             </template>
@@ -355,10 +355,10 @@
                            на одну дату). Копируем contract+amount+date+
                            currency+comment+parameter+yearKV; commission-флаги
                            сбрасываются — пусть оператор решает заново. -->
-                      <v-btn v-if="canFull('transactions')" icon="mdi-content-duplicate" size="x-small" variant="text" color="primary"
+                      <v-btn v-if="canCalc" icon="mdi-content-duplicate" size="x-small" variant="text" color="primary"
                         title="Дублировать черновик"
                         @click="duplicateDraft(d)" />
-                      <v-btn v-if="canFull('transactions')" icon="mdi-trash-can-outline" size="x-small" variant="text" color="error"
+                      <v-btn v-if="canCalc" icon="mdi-trash-can-outline" size="x-small" variant="text" color="error"
                         title="Удалить черновик"
                         @click="removeDraft(d)" />
                     </template>
@@ -413,14 +413,14 @@
           </div><!-- /manual-tx-scroll -->
 
           <v-card-actions class="d-flex flex-wrap ga-2">
-            <v-btn v-if="canFull('transactions')" color="primary" :disabled="!calculableIds.length || calculating" prepend-icon="mdi-calculator"
+            <v-btn v-if="canCalc" color="primary" :disabled="!calculableIds.length || calculating" prepend-icon="mdi-calculator"
               :loading="calculating" @click="calcAll" size="large">
               Рассчитать транзакции
               <v-chip v-if="dirtyCount" size="x-small" color="white" variant="elevated" class="ms-2">
                 {{ dirtyCount }}
               </v-chip>
             </v-btn>
-            <v-btn v-if="canFull('transactions')" color="success" :disabled="!fixableIds.length || fixing" prepend-icon="mdi-content-save"
+            <v-btn v-if="canCalc" color="success" :disabled="!fixableIds.length || fixing" prepend-icon="mdi-content-save"
               :loading="fixing" @click="fixAll" size="large" variant="outlined">
               Зафиксировать транзакции
               <v-chip v-if="fixableIds.length" size="x-small" color="success" variant="elevated" class="ms-2">
@@ -428,7 +428,7 @@
               </v-chip>
             </v-btn>
             <v-spacer />
-            <v-btn v-if="canFull('transactions') && drafts.length" color="error" variant="text" prepend-icon="mdi-trash-can-outline" @click="clearAll">
+            <v-btn v-if="canCalc && drafts.length" color="error" variant="text" prepend-icon="mdi-trash-can-outline" @click="clearAll">
               Очистить все транзакции
             </v-btn>
           </v-card-actions>
@@ -577,7 +577,7 @@
             <v-btn icon="mdi-pencil" size="x-small" variant="text" color="primary"
               :title="item.periodFrozen ? 'Период закрыт — нельзя править' : 'Редактировать транзакцию'"
               :disabled="item.periodFrozen" @click="openEditTx(item)" />
-            <v-btn v-if="canFull('reports-access')" icon="mdi-trash-can-outline" size="x-small"
+            <v-btn v-if="canCalc" icon="mdi-trash-can-outline" size="x-small"
               variant="text" color="error"
               :title="item.periodFrozen ? 'Период закрыт — нельзя удалить' : 'Удалить транзакцию (с пересчётом цепочки)'"
               :disabled="item.periodFrozen || deletingTxId === item.id"
@@ -644,12 +644,12 @@ import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 import { fmt2, fmtDate } from '../../composables/useDesign';
 import { usePermissions } from '../../composables/usePermissions';
 
-const { canFull } = usePermissions();
+// Все кнопки расчётов/финализации — только у руководителя расчётов (canCalc).
+const { canCalc } = usePermissions();
 
-// Перерасчёт штрафов §5 — только admin + calculations (scope reports-access).
-// Та же гарда стоит и в backend AdminFinalizeController, кнопка просто
-// скрывает её у тех, кто всё равно получит 403.
-const canManagePeriod = computed(() => canFull('reports-access'));
+// Перерасчёт штрафов §5 — только admin + calculations. Та же гарда в backend
+// (role:admin,calculations), кнопка просто скрывает её у тех, кто получит 403.
+const canManagePeriod = canCalc;
 const recalcing = ref(false);
 
 function recalcErrorMessage(e, fallback) {

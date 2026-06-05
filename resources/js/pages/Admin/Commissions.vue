@@ -235,7 +235,7 @@
            наставников + пересчитывает балансы (DELETE /admin/transactions/{id}).
            @click.stop — иначе клик по строке развернёт аккордеон. -->
       <template #item.actions="{ item }">
-        <v-btn v-if="canFull('reports-access')" icon="mdi-trash-can-outline" size="x-small"
+        <v-btn v-if="canCalc" icon="mdi-trash-can-outline" size="x-small"
           variant="text" color="error"
           :title="item.periodFrozen ? 'Период закрыт — нельзя удалить' : 'Удалить транзакцию со всеми комиссиями (пересчёт цепочки)'"
           :disabled="item.periodFrozen || deletingTxId === item.id"
@@ -324,7 +324,8 @@ import { usePermissions } from '../../composables/usePermissions';
 
 const confirmDialog = useConfirm();
 const { showSuccess, showError, showInfo } = useSnackbar();
-const { canFull } = usePermissions();
+// Удаление транзакции/комиссии — только у руководителя расчётов (canCalc).
+const { canCalc } = usePermissions();
 
 const items = ref([]);
 const total = ref(0);

@@ -31,12 +31,12 @@
         <v-icon v-else color="error" title="Отчёты скрыты от партнёров">mdi-minus-circle</v-icon>
       </template>
       <template #item.visibilityToggle="{ item }">
-        <v-btn v-if="canFull('reports-access') && !item.isFrozen && !item.isVisibleToPartners"
+        <v-btn v-if="canCalc && !item.isFrozen && !item.isVisibleToPartners"
           size="x-small" color="success" variant="tonal" prepend-icon="mdi-eye"
           @click="toggleVisibility(item, true)">
           Сделать доступным
         </v-btn>
-        <v-btn v-else-if="canFull('reports-access') && !item.isFrozen && item.isVisibleToPartners"
+        <v-btn v-else-if="canCalc && !item.isFrozen && item.isVisibleToPartners"
           size="x-small" color="error" variant="tonal" prepend-icon="mdi-eye-off"
           @click="toggleVisibility(item, false)">
           Сделать недоступным
@@ -47,7 +47,7 @@
         <v-chip v-if="item.isFrozen" size="x-small" color="error" variant="flat" prepend-icon="mdi-lock">
           Период закрыт
         </v-chip>
-        <v-btn v-else-if="canFull('reports-access')"
+        <v-btn v-else-if="canCalc"
           size="x-small" color="success" variant="tonal" prepend-icon="mdi-lock"
           @click="confirmClose(item)">
           Закрыть период
@@ -57,7 +57,7 @@
         <v-btn icon="mdi-card-account-details-outline" size="x-small" variant="text"
           color="primary" title="Карточка периода"
           :to="`/manage/periods/${item.year}-${String(item.month).padStart(2, '0')}`" />
-        <v-btn v-if="canFull('reports-access') && item.isFrozen"
+        <v-btn v-if="canCalc && item.isFrozen"
           icon="mdi-lock-open" size="x-small" variant="text"
           color="warning" title="Переоткрыть период (только в исключительных случаях)"
           @click="confirmReopen(item)" />
@@ -98,7 +98,8 @@ import { useConfirm } from '../../composables/useConfirm';
 import { usePermissions } from '../../composables/usePermissions';
 
 const confirm = useConfirm();
-const { canFull } = usePermissions();
+// Управление периодами (публикация/закрытие/реопен) — только руководитель расчётов.
+const { canCalc } = usePermissions();
 
 const rows = ref([]);
 const loading = ref(false);

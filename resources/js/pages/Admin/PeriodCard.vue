@@ -177,11 +177,10 @@ import { usePermissions } from '../../composables/usePermissions';
 const route = useRoute();
 const { showSuccess, showError } = useSnackbar();
 const confirm = useConfirm();
-const { canFull } = usePermissions();
+// Публикация / закрытие периода / пересчёт — только руководитель расчётов.
+const { canCalc } = usePermissions();
 
-// reports-access = публикация / закрытие периода / принудительный пересчёт
-// (cabinetPermissions.js). По спеке = admin + calculations (Богданова).
-const canManagePeriod = computed(() => canFull('reports-access'));
+const canManagePeriod = canCalc;
 
 const ym = computed(() => route.params.ym || ''); // YYYY-MM
 const year = computed(() => parseInt(ym.value.slice(0, 4), 10));

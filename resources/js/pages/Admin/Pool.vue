@@ -81,12 +81,12 @@
              но это не понятно пользователю; теперь оператор всегда может
              нажать «Рассчитать», даже на месяце без партнёров (получит
              корректный 0). -->
-        <v-btn v-if="canFull('pool')" color="success" prepend-icon="mdi-account-multiple-plus" size="large"
+        <v-btn v-if="canCalc" color="success" prepend-icon="mdi-account-multiple-plus" size="large"
           :disabled="isFrozen" :loading="calcing"
           @click="calcPool">
           Рассчитать пул
         </v-btn>
-        <v-btn v-if="canFull('pool') && result && !isFrozen" color="primary" prepend-icon="mdi-lock-check"
+        <v-btn v-if="canCalc && result && !isFrozen" color="primary" prepend-icon="mdi-lock-check"
           size="large" variant="flat" :loading="applying" @click="applyPool">
           Зафиксировать пул
         </v-btn>
@@ -226,10 +226,10 @@ import { usePermissions } from '../../composables/usePermissions';
 
 const confirm = useConfirm();
 const auth = useAuthStore();
-const { canFull } = usePermissions();
+// Все кнопки пула/расчёта — только у руководителя расчётов.
+const { canCalc } = usePermissions();
 
-// Перерасчёт штрафов §5 — только admin + calculations (reports-access).
-const canManagePeriod = computed(() => canFull('reports-access'));
+const canManagePeriod = canCalc;
 const recalcing = ref(false);
 
 function recalcErrorMessage(e, fallback) {
