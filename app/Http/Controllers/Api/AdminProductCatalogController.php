@@ -181,6 +181,8 @@ class AdminProductCatalogController extends Controller
             'updated_at'       => now(),
         ]);
 
+        $this->syncToLegacyProduct($id);
+
         return $this->showProduct($id);
     }
 
@@ -219,6 +221,8 @@ class AdminProductCatalogController extends Controller
 
         DB::table('products_catalog')->where('id', $id)->update($update);
 
+        $this->syncToLegacyProduct($id);
+
         // Калькулятор кэширует матрицу продуктов на 10 минут — без инвалидации
         // снятая галка появится в дропдауне только через эти 10 минут.
         \Illuminate\Support\Facades\Cache::forget('calculator:product-matrix:v2');
@@ -233,6 +237,7 @@ class AdminProductCatalogController extends Controller
             'active'     => false,
             'updated_at' => now(),
         ]);
+        $this->syncToLegacyProduct($id);
         // Иначе деактивированный продукт висит в кэше калькулятора до 10 мин,
         // и его программу можно выбрать → «Программа не найдена или неактивна».
         \Illuminate\Support\Facades\Cache::forget('calculator:product-matrix:v2');
@@ -249,6 +254,7 @@ class AdminProductCatalogController extends Controller
             'active'     => $next,
             'updated_at' => now(),
         ]);
+        $this->syncToLegacyProduct($id);
         \Illuminate\Support\Facades\Cache::forget('calculator:product-matrix:v2');
         return response()->json(['publishStatus' => $next ? 'published' : 'draft']);
     }
@@ -296,6 +302,7 @@ class AdminProductCatalogController extends Controller
             'created_at'     => now(),
             'updated_at'     => now(),
         ]));
+        $this->syncToLegacyProgram($newId);
         \Illuminate\Support\Facades\Cache::forget('calculator:product-matrix:v2');
         return $this->showSingleProgram($newId);
     }
@@ -309,6 +316,7 @@ class AdminProductCatalogController extends Controller
             ->where('id', $programId)
             ->where('product_id', $productId)
             ->update($payload);
+        $this->syncToLegacyProgram($programId);
         \Illuminate\Support\Facades\Cache::forget('calculator:product-matrix:v2');
         return $this->showSingleProgram($programId);
     }
@@ -320,6 +328,7 @@ class AdminProductCatalogController extends Controller
             ->where('id', $programId)
             ->where('product_id', $productId)
             ->update(['active' => false, 'updated_at' => now()]);
+        $this->syncToLegacyProgram($programId);
         \Illuminate\Support\Facades\Cache::forget('calculator:product-matrix:v2');
         return response()->json(['status' => 'deactivated']);
     }
@@ -453,6 +462,80 @@ class AdminProductCatalogController extends Controller
             'tariffs'              => $tariffs,
             'legacyProgramId'      => isset($r->legacy_program_id) ? (int) $r->legacy_program_id : null,
         ];
+    }
+
+    /**
+     * Keep the legacy `product` row in sync with its catalog counterpart.
+     *
+     * Called after every write to products_catalog. If no legacy row exists
+     * yet (new catalog product), one is created and legacy_product_id is
+     * written back so all downstream FK constraints can reference it.
+     */
+    private function syncToLegacyProduct(int $catalogId): void
+    {
+        $cat = DB::table('products_catalog')->where('id', $catalogId)->first();
+        if (! $cat) return;
+
+        $legacyData = [
+            'name'                => $cat->name,
+            'active'              => (bool) $cat->active,
+            'publish_status'      => $cat->active ? 'published' : 'draft',
+            'visibleToResident'   => (bool) ($cat->visible_to_resident ?? false),
+            'visibleToCalculator' => (bool) ($cat->visible_to_calculator ?? false),
+        ];
+
+        if ($cat->legacy_product_id) {
+            DB::table('product')->where('id', $cat->legacy_product_id)->update($legacyData);
+            return;
+        }
+
+        // New catalog product — create a legacy row and write back the FK.
+        $newId = DB::transaction(function () use ($legacyData) {
+            $nextId = (DB::table('product')->max('id') ?? 0) + 1;
+            DB::table('product')->insert(array_merge($legacyData, ['id' => $nextId]));
+            return $nextId;
+        });
+
+        DB::table('products_catalog')->where('id', $catalogId)
+            ->update(['legacy_product_id' => $newId]);
+    }
+
+    /**
+     * Keep the legacy `program` row in sync with its catalog counterpart.
+     *
+     * Called after every write to programs_catalog. Creates a legacy row
+     * the first time so contract FKs can reference it.
+     */
+    private function syncToLegacyProgram(int $catalogProgramId): void
+    {
+        $prog = DB::table('programs_catalog')->where('id', $catalogProgramId)->first();
+        if (! $prog) return;
+
+        $legacyProductId = DB::table('products_catalog')
+            ->where('id', $prog->product_id)
+            ->value('legacy_product_id');
+
+        if (! $legacyProductId) return; // product not yet synced — caller should sync product first
+
+        $legacyData = [
+            'name'    => $prog->name,
+            'product' => $legacyProductId,
+            'active'  => (bool) $prog->active,
+        ];
+
+        if ($prog->legacy_program_id) {
+            DB::table('program')->where('id', $prog->legacy_program_id)->update($legacyData);
+            return;
+        }
+
+        $newId = DB::transaction(function () use ($legacyData) {
+            $nextId = (DB::table('program')->max('id') ?? 0) + 1;
+            DB::table('program')->insert(array_merge($legacyData, ['id' => $nextId]));
+            return $nextId;
+        });
+
+        DB::table('programs_catalog')->where('id', $catalogProgramId)
+            ->update(['legacy_program_id' => $newId]);
     }
 
     /** Subset of incoming program payload that maps onto programs_catalog columns. */
