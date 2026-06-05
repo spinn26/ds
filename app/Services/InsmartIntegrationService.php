@@ -83,7 +83,7 @@ class InsmartIntegrationService
                 : null;
 
             // 4) Контракт «Активирован»
-            $contractNumber = 'INSMART-' . ($externalId ?? uniqid());
+            $contractNumber = strtoupper(substr($externalId ?? uniqid('', true), 0, 8));
             $contractId = LegacyId::next('contract');
             DB::table('contract')->insert([
                 'id' => $contractId,
