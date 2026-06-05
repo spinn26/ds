@@ -483,13 +483,9 @@ class ProfileController extends Controller
             return response()->json(['message' => 'Сначала заполните реквизиты ИП'], 422);
         }
 
-        // После верификации реквизиты редактировать нельзя (2026-06-03).
-        if ($requisite->verified) {
-            return response()->json([
-                'message' => 'Реквизиты подтверждены и не могут быть изменены. Для изменения обратитесь в поддержку.',
-            ], 422);
-        }
-
+        // Банковские реквизиты партнёр может менять и после верификации
+        // (по требованию 2026-06-05 — НЕ блокируем). Идентификация ИП
+        // (updateRequisites) при этом остаётся защищённой от изменения.
         $bankReq = BankRequisite::where('requisites', $requisite->id)
             ->active()
             ->first();
@@ -507,16 +503,21 @@ class ProfileController extends Controller
             'WebUser' => $user->id,
         ];
 
-        DB::transaction(function () use ($bankReq, $data, $consultant, $requisite, $user) {
+        DB::transaction(function () use ($bankReq, $data, $consultant) {
             if ($bankReq) {
                 $bankReq->update($data);
             } else {
                 BankRequisite::create($data);
             }
 
-            // Банк — второй шаг флоу. Авто-верификация отключена: фиксируем
-            // статус «на проверке», реквизиты уйдут на ручную верификацию.
-            $this->setRequisitesPending($consultant, $requisite, $user);
+            // Меняется ТОЛЬКО банковский счёт → на повторную проверку уходит
+            // лишь банк (verified=false уже в $data). Идентификация ИП остаётся
+            // подтверждённой. Платёжный гейт закрываем до повторной верификации
+            // счёта (анти-fraud: смена реквизитов выплат требует переподтверждения).
+            if ((int) $consultant->statusRequisites === 3) {
+                $consultant->statusRequisites = 2;
+                $consultant->save();
+            }
         });
 
         $bankReq = BankRequisite::where('requisites', $requisite->id)->active()->first();

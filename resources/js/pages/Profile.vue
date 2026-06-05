@@ -382,8 +382,8 @@
               <v-alert v-if="profile.bankRequisites?.verificationStatus === 'verified'"
                 type="success" variant="tonal" density="compact" class="mb-3"
                 icon="mdi-check-circle-outline">
-                Банковские реквизиты подтверждены. Изменить их можно только через
-                обращение в поддержку — раздел «Верификация реквизитов».
+                Банковские реквизиты подтверждены. Их можно изменить — после
+                сохранения новые реквизиты уйдут на повторную проверку финменеджеру.
               </v-alert>
               <v-alert v-else-if="profile.bankRequisites?.verificationStatus === 'rejected'"
                 type="error" variant="tonal" density="compact" class="mb-3"
@@ -395,7 +395,9 @@
                 icon="mdi-clock-outline">
                 Банковские реквизиты приняты и проверяются финменеджером.
               </v-alert>
-              <v-form :disabled="isBankRequisitesVerified">
+              <!-- Банковские реквизиты редактируемы и после верификации
+                   (по требованию 2026-06-05): партнёр может сменить счёт. -->
+              <v-form>
               <v-row dense>
                 <v-col cols="12" md="6">
                   <v-text-field v-model="bankForm.bankName" label="Наименование банка" />
@@ -419,7 +421,7 @@
               </v-alert>
             </div>
             <div class="ds-card__actions">
-              <v-btn color="primary" :loading="savingBank" :disabled="isBankRequisitesVerified"
+              <v-btn color="primary" :loading="savingBank"
                 prepend-icon="mdi-content-save" @click="saveBankRequisites">
                 Сохранить
               </v-btn>
@@ -882,13 +884,6 @@ const missingRequisiteFields = computed(() =>
 const isRequisitesVerified = computed(() =>
   profile.value?.requisites?.verificationStatus === 'verified'
 );
-// Bank requisites lock on their OWN verified status (not the ИП one): once
-// a finmanager confirms the bank details, editing is closed and the partner
-// must request a change through a support ticket ("Верификация реквизитов").
-const isBankRequisitesVerified = computed(() =>
-  profile.value?.bankRequisites?.verificationStatus === 'verified'
-);
-
 const initials = computed(() => {
   const u = profile.value.user;
   return `${u?.firstName?.[0] || ''}${u?.lastName?.[0] || ''}`.toUpperCase();

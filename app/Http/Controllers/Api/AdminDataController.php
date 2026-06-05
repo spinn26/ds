@@ -1877,6 +1877,28 @@ class AdminDataController extends Controller
         return response()->json($result);
     }
 
+    /**
+     * Синхронизация банковской строки + платёжного гейта со статусом
+     * верификации ИП-реквизита. Без этого при подтверждении ИП банковская
+     * строка остаётся verified=false → у партнёра «Банковские реквизиты —
+     * На проверке» при уже подтверждённом ИП (баг 2026-06-05). На verify —
+     * банк подтверждаем и снимаем гейт (statusRequisites=3); на reject —
+     * откатываем банк в «на проверке» и закрываем гейт (statusRequisites=2).
+     */
+    private function syncRequisiteVerification(Requisite $requisite, bool $verified): void
+    {
+        DB::table('bankrequisites')
+            ->where('requisites', $requisite->id)
+            ->whereNull('deletedAt')
+            ->update(['verified' => $verified]);
+
+        if ($requisite->consultant) {
+            DB::table('consultant')
+                ->where('id', $requisite->consultant)
+                ->update(['statusRequisites' => $verified ? 3 : 2]);
+        }
+    }
+
     /** Верификация/отклонение реквизитов */
     public function verifyRequisites(Request $request, int $id): JsonResponse
     {
@@ -1895,6 +1917,8 @@ class AdminDataController extends Controller
             $requisite->rejection_reason = null; // снимаем причину отказа
             $requisite->dateChange = now();
             $requisite->save();
+            // Подтверждаем и банковскую строку + снимаем платёжный гейт.
+            $this->syncRequisiteVerification($requisite, true);
 
             if ($consultantUserId) {
                 \App\Http\Controllers\Api\NotificationController::create(
@@ -1920,6 +1944,8 @@ class AdminDataController extends Controller
             ?: 'Реквизиты отклонены финменеджером. Проверьте данные и отправьте повторно.';
         $requisite->dateChange = now();
         $requisite->save();
+        // Откатываем банковскую строку в «на проверке» + закрываем гейт.
+        $this->syncRequisiteVerification($requisite, false);
 
         // Отправка комментария через коммуникацию (legacy-таблица без серийного id).
         if ($request->filled('comment')) {
@@ -2612,6 +2638,8 @@ class AdminDataController extends Controller
                 $r->status = $data['action'] === 'verify' ? 3 : 2;
                 $r->dateChange = now();
                 $r->save();
+                // Синхронизируем банковскую строку + платёжный гейт.
+                $this->syncRequisiteVerification($r, $data['action'] === 'verify');
 
                 if ($data['action'] === 'reject' && ! empty($data['comment'])) {
                     DB::transaction(function () use ($r, $data) {
