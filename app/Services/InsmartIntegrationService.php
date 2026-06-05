@@ -210,28 +210,44 @@ class InsmartIntegrationService
 
     private function resolveProductAndProgram(array $payload): array
     {
-        $code = $payload['productCode'] ?? $payload['type'] ?? null;
-        $name = $payload['productName'] ?? 'Insmart Product';
+        $typeCode     = isset($payload['type']) ? (int) $payload['type'] : null;
+        $companyAlias = $payload['company'] ?? null;
+        $name         = $payload['productName'] ?? 'Insmart Product';
         $providerName = $payload['providerName'] ?? $payload['company'] ?? null;
 
+        // Fast path: exact hit in mapping table.
+        if ($typeCode !== null && $companyAlias) {
+            $map = DB::table('insmart_type_map')
+                ->where('insmart_type', $typeCode)
+                ->where('insmart_company', $companyAlias)
+                ->first();
+            if ($map) {
+                return [(int) $map->product_id, (int) $map->program_id];
+            }
+        }
+
+        // Slow path: find or create product.
+        // If we know the type but not this company, reuse the product for that type.
         $productId = null;
-        if ($code) {
-            $productId = DB::table('product')->where('formLink', 'ilike', '%' . $code . '%')->value('id');
+        if ($typeCode !== null) {
+            $productId = (int) (DB::table('insmart_type_map')
+                ->where('insmart_type', $typeCode)
+                ->value('product_id') ?? 0) ?: null;
         }
         if (! $productId) {
             $productId = LegacyId::next('product');
             DB::table('product')->insert([
-                'id' => $productId,
-                'name' => $name,
-                'active' => true,
+                'id'                 => $productId,
+                'name'               => $name,
+                'active'             => true,
                 'visibleToCalculator' => false,
-                'visibleToResident' => false,
-                'noComission' => false,
-                'publish_status' => 'draft',
+                'visibleToResident'  => false,
+                'noComission'        => false,
+                'publish_status'     => 'draft',
             ]);
         }
 
-        // Программа: одна на провайдер+продукт
+        // Find or create program: match by product + company alias (providerName).
         $programId = DB::table('program')
             ->where('product', $productId)
             ->where('providerName', $providerName)
@@ -239,12 +255,22 @@ class InsmartIntegrationService
         if (! $programId) {
             $programId = LegacyId::next('program');
             DB::table('program')->insert([
-                'id' => $programId,
-                'product' => $productId,
-                'name' => $name . ($providerName ? " ({$providerName})" : ''),
-                'productName' => $name,
+                'id'           => $programId,
+                'product'      => $productId,
+                'name'         => $name . ($providerName ? " ({$providerName})" : ''),
+                'productName'  => $name,
                 'providerName' => $providerName,
-                'active' => true,
+                'active'       => true,
+            ]);
+        }
+
+        // Auto-register so the next identical webhook hits the fast path.
+        if ($typeCode !== null && $companyAlias) {
+            DB::table('insmart_type_map')->insertOrIgnore([
+                'insmart_type'    => $typeCode,
+                'insmart_company' => $companyAlias,
+                'product_id'      => $productId,
+                'program_id'      => $programId,
             ]);
         }
 
