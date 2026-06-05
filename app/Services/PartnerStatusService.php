@@ -36,10 +36,15 @@ class PartnerStatusService
      */
     public function recomputeVolumeAndActivate(int $consultantId): bool
     {
-        $consultant = Consultant::find($consultantId);
-        if (! $consultant) {
-            return false;
-        }
+        // Lock the consultant row for the read-modify-write: real-time commission
+        // calc + nightly sweep + queued import workers can otherwise interleave
+        // and lost-update personalVolume / double-activate. activate() opens its
+        // own (nested) transaction — that's a savepoint, safe.
+        return DB::transaction(function () use ($consultantId) {
+            $consultant = Consultant::whereKey($consultantId)->lockForUpdate()->first();
+            if (! $consultant) {
+                return false;
+            }
 
         // Sum personalVolume across all non-deleted transactions for contracts
         // owned by this consultant. For Active partners the period resets on
@@ -63,7 +68,8 @@ class PartnerStatusService
             $consultant->save();
         }
 
-        return $this->activate($consultant);
+            return $this->activate($consultant);
+        });
     }
 
     /**

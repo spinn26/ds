@@ -26,12 +26,16 @@ class TelegramWebhookController extends Controller
     public function handle(Request $request): JsonResponse
     {
         $expected = (string) config('services.telegram.webhook_secret', '');
-        if ($expected !== '') {
-            $got = (string) $request->header('X-Telegram-Bot-Api-Secret-Token', '');
-            if (! hash_equals($expected, $got)) {
-                Log::warning('telegram webhook bad secret', ['ip' => $request->ip()]);
-                return response()->json(['ok' => false], 401);
-            }
+        // Fail-closed: без секрета не обрабатываем (форджед update мог бы читать
+        // статус/email по chat_id или отвязать чужой Telegram).
+        if ($expected === '') {
+            Log::warning('telegram webhook: secret not configured — rejecting', ['ip' => $request->ip()]);
+            return response()->json(['ok' => false], 503);
+        }
+        $got = (string) $request->header('X-Telegram-Bot-Api-Secret-Token', '');
+        if (! hash_equals($expected, $got)) {
+            Log::warning('telegram webhook bad secret', ['ip' => $request->ip()]);
+            return response()->json(['ok' => false], 401);
         }
 
         $update = $request->all();

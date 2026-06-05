@@ -117,6 +117,11 @@ class TwoFactorController extends Controller
         if (! $user || ! $user->two_factor_enabled) {
             return response()->json(['message' => 'Пользователь не найден или 2FA отключён'], 422);
         }
+        // Та же гарда, что в AuthController::login — иначе 2FA-аккаунт обходит блокировку.
+        if ($user->isBlocked || $user->dateDeleted) {
+            Audit::log('login_blocked', 'WebUser', $user->id);
+            return response()->json(['message' => 'Аккаунт заблокирован. Обратитесь в поддержку.'], 403);
+        }
         $secret = Crypt::decryptString($user->two_factor_secret);
         if (! $this->ga()->verifyKey($secret, $request->input('code'))) {
             return response()->json(['message' => 'Неверный код'], 422);

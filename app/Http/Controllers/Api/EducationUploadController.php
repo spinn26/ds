@@ -42,8 +42,11 @@ class EducationUploadController extends Controller
             'file' => [
                 'required', 'file',
                 'max:51200',   // 50 MB
+                // SVG НАМЕРЕННО исключён: файлы отдаются с того же origin, что и SPA,
+                // а <script> внутри .svg исполнится в браузере (stored-XSS → кража
+                // Sanctum-токена из localStorage).
                 'mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,txt,csv,zip,'
-                    . 'png,jpg,jpeg,gif,webp,svg,'
+                    . 'png,jpg,jpeg,gif,webp,'
                     . 'mp3,wav,m4a,ogg,'
                     . 'mp4,webm,mov',
             ],

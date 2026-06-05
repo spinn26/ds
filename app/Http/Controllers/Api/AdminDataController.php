@@ -422,6 +422,12 @@ class AdminDataController extends Controller
                     DB::table('WebUser')->where('id', $consultant->webUser)->update($userUpdates);
                 }
 
+                // При блокировке отзываем токены — иначе залогиненный партнёр
+                // работает до истечения токена (≤7 дней).
+                if (! empty($userUpdates['isBlocked'])) {
+                    \App\Models\User::find($consultant->webUser)?->tokens()->delete();
+                }
+
                 // Keep consultant.personName in sync with WebUser name parts
                 if (isset($userUpdates['firstName']) || isset($userUpdates['lastName']) || isset($userUpdates['patronymic'])) {
                     $u = DB::table('WebUser')->where('id', $consultant->webUser)->first();
@@ -506,6 +512,10 @@ class AdminDataController extends Controller
                         if ($c->webUser) {
                             DB::table('WebUser')->where('id', $c->webUser)
                                 ->update(['isBlocked' => $data['action'] === 'block']);
+                            // Блокировка выкидывает уже залогиненного — отзываем токены.
+                            if ($data['action'] === 'block') {
+                                \App\Models\User::find($c->webUser)?->tokens()->delete();
+                            }
                             $ok++;
                         } else {
                             $fail++;

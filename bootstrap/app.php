@@ -25,6 +25,8 @@ return Application::configure(basePath: dirname(__DIR__))
             'role' => \App\Http\Middleware\CheckRole::class,
             'restrict.education' => \App\Http\Middleware\RestrictEducationWrites::class,
             'restrict.head' => \App\Http\Middleware\RestrictHeadWrites::class,
+            'restrict.support' => \App\Http\Middleware\RestrictSupportWrites::class,
+            'restrict.corrections' => \App\Http\Middleware\RestrictCorrectionsWrites::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

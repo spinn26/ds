@@ -165,6 +165,12 @@ class AdminUserController extends Controller
 
             $user->saveQuietly();
 
+            // Блокировка должна выкидывать уже залогиненного: отзываем токены
+            // (иначе живёт до истечения ≤7 дней).
+            if ($user->isBlocked) {
+                $user->tokens()->delete();
+            }
+
             if ($request->has('participantCode') && $consultant) {
                 $code = $request->input('participantCode');
                 $consultant->participantCode = $code === '' ? null : $code;

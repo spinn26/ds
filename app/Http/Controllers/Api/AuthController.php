@@ -35,6 +35,13 @@ class AuthController extends Controller
             return response()->json(['message' => 'Неверный email или пароль'], 401);
         }
 
+        // Заблокированный/удалённый аккаунт не пускаем — ни токен, ни 2FA-challenge.
+        // Флаг isBlocked выставляют админы; до этого фикса он не проверялся в auth-пути.
+        if ($user->isBlocked || $user->dateDeleted) {
+            \App\Support\Audit::log('login_blocked', 'WebUser', $user->id);
+            return response()->json(['message' => 'Аккаунт заблокирован. Обратитесь в поддержку.'], 403);
+        }
+
         // Если 2FA включён — отдаём challenge, не выдавая полноценный
         // токен до проверки TOTP-кода.
         if ($user->two_factor_enabled) {
