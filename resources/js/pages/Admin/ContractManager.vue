@@ -626,7 +626,7 @@ async function ensureFormData() {
     formData.value = fd.data;
     productOptions.value = (products.data?.data || [])
       .filter(p => p.legacyProductId)
-      .map(p => ({ id: p.legacyProductId, name: p.name }));
+      .map(p => ({ id: p.legacyProductId, name: p.name, catalogId: p.id }));
     supplierOptions.value = fd.data.suppliers || [];
   } catch {}
 }
@@ -635,9 +635,12 @@ async function onProductChange(pid) {
   form.value.program = null;
   if (!pid) return;
   if (programsByProduct.value[pid]) return;
+  const catalogId = productOptions.value.find(p => p.id === pid)?.catalogId;
   try {
-    const { data } = await api.get(`/admin/products/${pid}/programs`);
-    programsByProduct.value[pid] = (data?.data || data || []).map(p => ({ id: p.id, name: p.name }));
+    const { data } = await api.get(`/admin/products-catalog/${catalogId}/programs`);
+    programsByProduct.value[pid] = (data?.data || data || [])
+      .filter(p => p.legacyProgramId)
+      .map(p => ({ id: p.legacyProgramId, name: p.name }));
   } catch {}
 }
 

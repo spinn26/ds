@@ -65,9 +65,14 @@ class AdminContestController extends Controller
             'statuses' => DB::table('status_contest')->orderBy('id')->get(['id', 'name']),
             'criteria' => DB::table('criterion')->whereNull('delete')->orderBy('name')
                 ->get(['id', 'name']),
-            'products' => DB::table('product')->where('active', true)->orderBy('name')
-                ->get(['id', 'name']),
-            'programs' => DB::table('program')->orderBy('name')->get(['id', 'name', 'product']),
+            'products' => DB::table('products_catalog')->where('active', true)
+                ->whereNotNull('legacy_product_id')->orderBy('name')
+                ->get(['legacy_product_id as id', 'name']),
+            'programs' => DB::table('programs_catalog as g')
+                ->join('products_catalog as pc', 'pc.id', '=', 'g.product_id')
+                ->where('g.active', true)->whereNotNull('g.legacy_program_id')
+                ->whereNotNull('pc.legacy_product_id')->orderBy('g.name')
+                ->get(['g.legacy_program_id as id', 'g.name', 'pc.legacy_product_id as product']),
         ]);
     }
 

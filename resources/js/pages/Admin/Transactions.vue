@@ -1287,11 +1287,11 @@ onMounted(async () => {
   await Promise.all([loadContracts(), loadDrafts(), loadLog()]);
   try {
     const [products, formData, lookups] = await Promise.all([
-      api.get('/admin/products', { params: { per_page: 1000, active: true } }).catch(() => ({ data: { data: [] } })),
+      api.get('/admin/products-catalog', { params: { per_page: 1000, active: true } }).catch(() => ({ data: { data: [] } })),
       api.get('/admin/transaction-import/form-data').catch(() => ({ data: { currencies: [] } })),
       api.get('/admin/manual-tx/lookups').catch(() => ({ data: { suppliers: [], providers: [] } })),
     ]);
-    productList.value = (products.data?.data || []).map(p => ({ id: p.id, name: p.name }));
+    productList.value = (products.data?.data || []).filter(p => p.legacyProductId).map(p => ({ id: p.legacyProductId, name: p.name }));
     currencyOptions.value = (formData.data?.currencies || []).map(c => ({
       id: c.id, symbol: c.symbol || c.name, name: c.name,
     }));

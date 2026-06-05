@@ -451,6 +451,7 @@ class AdminProductCatalogController extends Controller
             'dominantColor'        => $r->dominant_color,
             'rateLines'            => (int) $r->rate_lines,
             'tariffs'              => $tariffs,
+            'legacyProgramId'      => isset($r->legacy_program_id) ? (int) $r->legacy_program_id : null,
         ];
     }
 
