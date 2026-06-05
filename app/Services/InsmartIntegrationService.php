@@ -75,6 +75,13 @@ class InsmartIntegrationService
             // 3) Resolve product+program (per spec §3.3 «Авто-наполнение»)
             [$productId, $programId] = $this->resolveProductAndProgram($payload);
 
+            $productName = $productId
+                ? DB::table('product')->where('id', $productId)->value('name')
+                : null;
+            $programName = $programId
+                ? DB::table('program')->where('id', $programId)->value('name')
+                : null;
+
             // 4) Контракт «Активирован»
             $contractNumber = 'INSMART-' . ($externalId ?? uniqid());
             $contractId = LegacyId::next('contract');
@@ -88,9 +95,9 @@ class InsmartIntegrationService
                 'consultant' => $consultantId,
                 'consultantName' => DB::table('consultant')->where('id', $consultantId)->value('personName'),
                 'product' => $productId,
-                'productName' => $payload['productName'] ?? null,
+                'productName' => $productName,
                 'program' => $programId,
-                'programName' => $payload['productName'] ?? null,
+                'programName' => $programName,
                 'currency' => $this->resolveCurrencyId($payload['currency'] ?? 'RUB'),
                 'ammount' => $payload['policyAmount'] ?? $payload['price'] ?? 0,
                 'createDate' => now(),
