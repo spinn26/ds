@@ -1799,7 +1799,6 @@ const priorities = [
 ];
 const statuses = [
   { label: 'Новый', value: 'new', color: chatStatusColors.new, icon: 'mdi-circle-outline' },
-  { label: 'Назначен', value: 'assigned', color: chatStatusColors.assigned, icon: 'mdi-account-arrow-right' },
   { label: 'В работе', value: 'open', color: chatStatusColors.open, icon: 'mdi-progress-clock' },
   { label: 'Ожидание', value: 'pending', color: chatStatusColors.pending, icon: 'mdi-pause-circle' },
   { label: 'Решён', value: 'resolved', color: chatStatusColors.resolved, icon: 'mdi-check-circle' },

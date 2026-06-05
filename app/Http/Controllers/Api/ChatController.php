@@ -1059,7 +1059,7 @@ class ChatController extends Controller
         }
 
         $request->validate([
-            'status' => 'required|in:new,assigned,open,pending,resolved,closed',
+            'status' => 'required|in:new,open,pending,resolved,closed',
             'priority' => 'nullable|in:critical,high,medium,low',
             'tags' => 'nullable|array',
             'tags.*' => 'string|max:64',
@@ -1270,17 +1270,12 @@ class ChatController extends Controller
         $assignee = DB::table('WebUser')->where('id', $request->user_id)->first();
         $assigneeName = $assignee ? trim(($assignee->lastName ?? '') . ' ' . ($assignee->firstName ?? '')) : '—';
 
-        // Reassign vs первичное назначение per spec 2026-05-28:
-        //   - первичное (assigned_to=null → X) ИЛИ self-claim (X → X) — статус 'open'
-        //     (логика claim&hide: сотрудник сам берёт чат в работу)
-        //   - reassign на ДРУГОГО (X → Y, X≠Y) — статус 'assigned', чтобы у нового
-        //     адресата чат подсветился отдельной колонкой и он не пропустил передачу.
-        //     Назначенный переводит в 'open' автоматически при первом своём ответе
-        //     (см. sendMessage auto-claim).
+        // Любое назначение (первичное, self-claim, reassign) переводит тикет в
+        // «В работе» (open). Отдельный статус 'assigned' убран как избыточный —
+        // он дублировал 'open' и путал операторов (упрощение статусов 2026-06-05).
         $prevAssignedTo = $existing->assigned_to ? (int) $existing->assigned_to : null;
         $newAssignedTo = (int) $request->user_id;
-        $isReassign = $prevAssignedTo !== null && $prevAssignedTo !== $newAssignedTo;
-        $newStatus = $isReassign ? 'assigned' : 'open';
+        $newStatus = 'open';
 
         DB::table('chat_tickets')->where('id', $id)->update([
             'assigned_to' => $request->user_id,
