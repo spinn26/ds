@@ -28,6 +28,22 @@ class CommissionCalculator
      */
     public const UNKNOWN_CONSULTANT_ID = 536;
 
+    /**
+     * Исторические данные до этой даты неизменны и НЕ пересчитываются.
+     * Любой движок пересчёта (каскад, финализация, пул, баланс) обязан
+     * пропускать строки с датой/периодом раньше HISTORICAL_CUTOFF —
+     * это защищает выгруженную из Directual историю от перезаписи.
+     */
+    public const HISTORICAL_CUTOFF = '2026-06-01';
+
+    /** true, если дата (YYYY-MM-DD или YYYY-MM) относится к историческому периоду. */
+    public static function isHistorical(?string $date): bool
+    {
+        if (! $date) return false;
+        $ym = substr((string) $date, 0, 7); // YYYY-MM
+        return strlen($ym) === 7 && $ym < substr(self::HISTORICAL_CUTOFF, 0, 7);
+    }
+
     public function __construct(
         private readonly PartnerStatusService $statusService,
         private readonly PeriodFreezeService $periodFreeze,
@@ -121,6 +137,13 @@ class CommissionCalculator
 
     private function rebuildBalance(int $consultantId, string $dateMonth, string $dateYear): void
     {
+        // Исторический баланс (< HISTORICAL_CUTOFF) неизменен — не перезаписываем.
+        $ym = str_contains($dateMonth, '-') ? $dateMonth
+            : sprintf('%04d-%02d', (int) $dateYear, (int) substr($dateMonth, -2));
+        if (self::isHistorical($ym)) {
+            return;
+        }
+
         $sums = DB::table('commission')
             ->where('consultant', $consultantId)
             ->where('dateMonth', $dateMonth)
@@ -194,6 +217,22 @@ class CommissionCalculator
             ->first();
         if (! $tx) return ['error' => 'Транзакция не найдена или удалена'];
 
+        // Защита ДО любого изменения commission (раньше freeze стоял ПОСЛЕ
+        // soft-delete → для закрытого периода commission удалялся, затем метод
+        // бейлил, оставляя 0 строк — потеря данных).
+        //
+        // 1) Исторические данные (< HISTORICAL_CUTOFF) неизменны.
+        $txDate = $tx->date ?: ($tx->dateMonth && str_contains((string) $tx->dateMonth, '-') ? $tx->dateMonth . '-01' : null);
+        if (self::isHistorical($txDate)) {
+            return ['error' => 'Транзакция до ' . self::HISTORICAL_CUTOFF . ' — исторические данные не пересчитываются'];
+        }
+        // 2) Заморозка закрытого месяца. dateMonth = 'YYYY-MM' → берём 2 последних символа.
+        $txMonth = $tx->dateMonth ? (int) substr((string) $tx->dateMonth, -2) : null;
+        $txYear  = $tx->dateYear ? (int) $tx->dateYear : null;
+        if ($txYear && $txMonth && $this->periodFreeze->isFrozen($txYear, $txMonth)) {
+            return ['error' => "Период {$tx->dateMonth} закрыт — комиссии не пересчитываются"];
+        }
+
         // Удаляем ранее посчитанные commission по этой транзакции — иначе
         // повторный вызов calculateForTransaction (после правки тх, бэкфилла
         // или ручного «Пересчитать») плодит дубли (наблюдалось: 6 commission
@@ -202,17 +241,6 @@ class CommissionCalculator
             ->where('transaction', $transactionId)
             ->whereNull('deletedAt')
             ->update(['deletedAt' => now()]);
-
-        // Заморозка: нельзя пересчитывать комиссии в закрытом месяце.
-        // Per ./.claude/specs/✅Комиссии .md Part 2 §1.
-        // ВАЖНО: dateMonth хранится как 'YYYY-MM' (например, '2026-02'),
-        // intval() даёт 2026, не 2 → проверка заморозки никогда не срабатывала.
-        // Берём последние 2 символа (число месяца).
-        $txMonth = $tx->dateMonth ? (int) substr((string) $tx->dateMonth, -2) : null;
-        $txYear  = $tx->dateYear ? (int) $tx->dateYear : null;
-        if ($txYear && $txMonth && $this->periodFreeze->isFrozen($txYear, $txMonth)) {
-            return ['error' => "Период {$tx->dateMonth} закрыт — комиссии не пересчитываются"];
-        }
 
         $contract = DB::table('contract')->where('id', $tx->contract)->whereNull('deletedAt')->first();
         if (! $contract) return ['error' => 'Контракт не найден или удалён'];

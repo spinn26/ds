@@ -31,6 +31,14 @@ class MonthlyFinalisationRunner
      */
     public function applyForMonth(int $year, int $month): array
     {
+        // Исторические данные (< HISTORICAL_CUTOFF) неизменны — финализация не пишет.
+        if (CommissionCalculator::isHistorical(sprintf('%04d-%02d', $year, $month))) {
+            return [
+                'error' => "Период {$month}.{$year} — исторический (< " . CommissionCalculator::HISTORICAL_CUTOFF . "), финализация невозможна",
+                'total' => 0, 'otrifApplied' => 0, 'opApplied' => 0, 'errors' => [],
+            ];
+        }
+
         if ($this->periodFreeze->isFrozen($year, $month)) {
             return [
                 'error' => "Период {$month}.{$year} закрыт — финализация невозможна",

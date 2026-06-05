@@ -735,6 +735,14 @@ class TransactionImportController extends Controller
             return response()->json(['message' => 'Транзакция не найдена'], 404);
         }
 
+        // Исторические данные (< HISTORICAL_CUTOFF) неизменны — удалять нельзя.
+        if (\App\Services\CommissionCalculator::isHistorical($tx->date ?? null)) {
+            return response()->json([
+                'message' => 'Транзакция до ' . \App\Services\CommissionCalculator::HISTORICAL_CUTOFF
+                    . ' — исторические данные нельзя удалять или изменять.',
+            ], 422);
+        }
+
         $period = $freeze->resolvePeriod(date: $tx->date);
         if ($period && $freeze->isFrozen($period[0], $period[1])) {
             return response()->json([

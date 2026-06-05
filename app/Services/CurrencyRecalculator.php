@@ -47,6 +47,11 @@ class CurrencyRecalculator
         $year = (int) $period->format('Y');
         $month = (int) $period->format('m');
 
+        // Исторические данные (< HISTORICAL_CUTOFF) неизменны — курс к ним не применяем.
+        if (CommissionCalculator::isHistorical(sprintf('%04d-%02d', $year, $month))) {
+            return ['updated' => 0, 'skipped' => 0, 'frozen' => true, 'commissionsAffected' => 0];
+        }
+
         if ($this->periodFreeze->isFrozen($year, $month)) {
             return ['updated' => 0, 'skipped' => 0, 'frozen' => true, 'commissionsAffected' => 0];
         }

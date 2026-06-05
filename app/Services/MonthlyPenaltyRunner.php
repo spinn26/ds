@@ -44,6 +44,21 @@ class MonthlyPenaltyRunner
      */
     public function run(int $year, int $month, bool $applyWrite = false): array
     {
+        // Исторические данные (< HISTORICAL_CUTOFF) неизменны — не пишем штрафы.
+        // Read-режим (applyWrite=false, превью) разрешён.
+        if ($applyWrite && CommissionCalculator::isHistorical(sprintf('%04d-%02d', $year, $month))) {
+            return [
+                'year' => $year,
+                'month' => $month,
+                'applyWrite' => $applyWrite,
+                'frozen' => true,
+                'processed' => 0,
+                'affected' => 0,
+                'consultants' => [],
+                'error' => "Период {$month}.{$year} — исторический (< " . CommissionCalculator::HISTORICAL_CUTOFF . "), финализация не применяется",
+            ];
+        }
+
         if ($this->periodFreeze->isFrozen($year, $month)) {
             return [
                 'year' => $year,

@@ -47,7 +47,7 @@ class PoolRunner
      * Март 2026 граница (если ещё не закрыт) — оператор сам решает
      * переходить на live или нет, для этого freeze-логика остаётся.
      */
-    public const HISTORICAL_BEFORE = ['year' => 2026, 'month' => 4]; // < апрель 2026
+    public const HISTORICAL_BEFORE = ['year' => 2026, 'month' => 6]; // < июнь 2026 (HISTORICAL_CUTOFF)
 
     public function run(int $year, int $month, bool $applyWrite = false): array
     {
@@ -62,7 +62,7 @@ class PoolRunner
         // «нужен live-пересчёт», и мы пропускаем historical-блокировку.
         // Это случай март 2026: разморожен 2026-05-06 для пересчёта пула
         // после изменения qualificationLog/выручки.
-        if ($applyWrite && $isHistorical && ! $this->periodFreeze->wasReopened($year, $month)) {
+        if ($applyWrite && $isHistorical) {
             return [
                 'year' => $year, 'month' => $month,
                 'revenue' => 0.0, 'fund' => 0.0,
