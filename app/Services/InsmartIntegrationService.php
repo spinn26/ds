@@ -69,7 +69,12 @@ class InsmartIntegrationService
             // 1) Resolve consultant (per spec §3.2)
             $consultantId = $this->resolveConsultant($payload);
 
-            // 2) Resolve client (per spec §3.3) — пишем в person, потом client.
+            // 2) Если клиент сам является ФК — контракт идёт его инвайтеру.
+            //    ФК не может продавать самому себе; client-запись при этом
+            //    создаётся на имя инвайтера (реального куратора сделки).
+            $consultantId = $this->redirectIfClientIsPartner($payload, $consultantId);
+
+            // 3) Resolve client (per spec §3.3) — пишем в person, потом client.
             $clientId = $this->resolveClient($payload, $consultantId);
 
             // 3) Resolve product+program (per spec §3.3 «Авто-наполнение»)
@@ -138,7 +143,7 @@ class InsmartIntegrationService
         });
     }
 
-    /** Per spec §3.2: «для себя» → комиссия идёт наставнику. */
+    /** Per spec §3.2: находим consultant по appClientId из payload. */
     private function resolveConsultant(array $payload): int
     {
         $partnerId = $payload['partnerId'] ?? $payload['appClientId'] ?? null;
@@ -147,16 +152,44 @@ class InsmartIntegrationService
         $partner = DB::table('consultant')->where('id', $partnerId)->first();
         if (! $partner) return CommissionCalculator::UNKNOWN_CONSULTANT_ID;
 
-        $clientFio = mb_strtolower(trim((string) ($payload['clientFio'] ?? $payload['insurant'] ?? '')));
-        $partnerFio = mb_strtolower(trim((string) $partner->personName));
-        if ($clientFio && $clientFio === $partnerFio && $partner->inviter) {
-            Log::info('InsmartIntegrationService: self-purchase, redirect to inviter', [
-                'partnerId' => $partner->id, 'inviterId' => $partner->inviter,
-            ]);
-            return (int) $partner->inviter;
-        }
-
         return (int) $partner->id;
+    }
+
+    /**
+     * Если клиент сам является зарегистрированным партнёром (ФК) —
+     * контракт не может быть на него же. Переключаем на его инвайтера.
+     * Проверяем по email и phone (надёжнее, чем ФИО).
+     */
+    private function redirectIfClientIsPartner(array $payload, int $consultantId): int
+    {
+        $email = $payload['clientEmail'] ?? $payload['email'] ?? null;
+        $phone = $payload['clientPhone'] ?? $payload['phone'] ?? null;
+
+        $webUser = null;
+        if ($email) {
+            $webUser = DB::table('WebUser')->where('email', $email)->whereNull('dateDeleted')->first();
+        }
+        if (! $webUser && $phone) {
+            $webUser = DB::table('WebUser')->where('phone', $phone)->whereNull('dateDeleted')->first();
+        }
+        if (! $webUser) return $consultantId;
+
+        $clientConsultant = DB::table('consultant')->where('webUser', $webUser->id)->first();
+        if (! $clientConsultant) return $consultantId;
+
+        // Клиент — ФК. Контракт идёт его инвайтеру.
+        $inviterId = $clientConsultant->inviter
+            ? (int) $clientConsultant->inviter
+            : CommissionCalculator::UNKNOWN_CONSULTANT_ID;
+
+        Log::info('InsmartIntegrationService: client is a partner (ФК), redirect contract to inviter', [
+            'clientWebUserId'   => $webUser->id,
+            'clientConsultantId' => $clientConsultant->id,
+            'originalConsultantId' => $consultantId,
+            'inviterId'         => $inviterId,
+        ]);
+
+        return $inviterId;
     }
 
     /**
