@@ -52,8 +52,13 @@ class AdminQuestionnaireController extends Controller
             ->forPage($page, $per)
             ->get();
 
+        $cityIds = $rows->pluck('city')->filter()->unique()->values()->all();
+        $cities = $cityIds
+            ? DB::table('city')->whereIn('id', $cityIds)->pluck('cityNameRu', 'id')
+            : collect();
+
         return response()->json([
-            'data' => $rows->map(fn ($r) => $this->mapRow($r))->values(),
+            'data' => $rows->map(fn ($r) => $this->mapRow($r, $cities))->values(),
             'total' => $total,
         ]);
     }
@@ -75,7 +80,11 @@ class AdminQuestionnaireController extends Controller
             return response()->json(['message' => 'Партнёр не найден'], 404);
         }
 
-        return response()->json($this->mapRow($row));
+        $cities = $row->city
+            ? DB::table('city')->where('id', $row->city)->pluck('cityNameRu', 'id')
+            : collect();
+
+        return response()->json($this->mapRow($row, $cities));
     }
 
     /**
@@ -140,14 +149,14 @@ class AdminQuestionnaireController extends Controller
         return $q;
     }
 
-    private function mapRow($r): array
+    private function mapRow($r, $cities = null): array
     {
         return [
             'id' => $r->id,
             'name' => trim(($r->lastName ?? '') . ' ' . ($r->firstName ?? '') . ' ' . ($r->patronymic ?? '')),
             'email' => $r->email,
             'phone' => $r->phone,
-            'city' => $r->city,
+            'city' => $r->city ? ($cities[$r->city] ?? $r->city) : null,
             'completed_at' => $r->questionnaireCompletedAt,
             'fields' => array_combine(
                 array_keys(self::FIELDS),
