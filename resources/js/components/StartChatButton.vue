@@ -73,7 +73,10 @@ async function startChat() {
 
     const { data } = await api.post('/chat/tickets', payload);
     router.push(`/manage/chat?open=${data.ticket?.id || ''}`);
-  } catch {}
-  starting.value = false;
+  } catch {
+    // error shown by global api.js interceptor (429 / 5xx)
+  } finally {
+    starting.value = false;
+  }
 }
 </script>
