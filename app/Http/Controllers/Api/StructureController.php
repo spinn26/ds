@@ -9,6 +9,7 @@ use App\Services\ConsultantService;
 use App\Services\XlsxExportService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -49,6 +50,7 @@ class StructureController extends Controller
                 $rows = $query->orderBy('personName')->limit(500)->get();
                 $members = $this->consultantService->formatMembers($rows);
                 $members = $this->consultantService->applyFilters($members, $request->all());
+                $members = $this->applySort($members, $request);
 
                 return response()->json(['data' => $members->values()]);
             }
@@ -66,6 +68,7 @@ class StructureController extends Controller
                 ->orderBy('personName')
                 ->get();
             $topLevel = $this->consultantService->formatMembers($topLevelRows);
+            $topLevel = $this->applySort($topLevel, $request);
             return response()->json(['data' => $topLevel->values()]);
         }
 
@@ -86,6 +89,7 @@ class StructureController extends Controller
             $rows = $query->orderBy('personName')->limit(500)->get();
             $members = $this->consultantService->formatMembers($rows);
             $members = $this->consultantService->applyFilters($members, $request->all());
+            $members = $this->applySort($members, $request);
             return response()->json(['data' => $members->values()]);
         }
 
@@ -94,6 +98,7 @@ class StructureController extends Controller
             ->whereNull('dateDeleted')
             ->get();
         $members = $this->consultantService->formatMembers($rows);
+        $members = $this->applySort($members, $request);
         return response()->json(['data' => $members->values()]);
     }
 
@@ -181,8 +186,97 @@ class StructureController extends Controller
         // оператор фильтровал «Активен», но в развёртке всё равно были
         // терминированные. Frontend начал передавать filterParams() сюда.
         $members = $this->consultantService->applyFilters($members, $request->all());
+        $members = $this->applySort($members, $request);
 
         return response()->json(['data' => $members->values()]);
+    }
+
+    /**
+     * XLSX-экспорт всей структуры (или отфильтрованного подмножества).
+     * Без привязки к конкретной ветке — выгружает всё дерево с учётом фильтров.
+     *
+     * Партнёр получает своих потомков; сотрудник — всю базу консультантов.
+     */
+    public function exportFiltered(Request $request): StreamedResponse
+    {
+        $user = $request->user();
+        $userRoles = array_map('trim', explode(',', $user->role ?? ''));
+        $isStaff = (bool) array_intersect($userRoles, ['admin', 'backoffice', 'support', 'head', 'calculations', 'corrections']);
+        $consultant = Consultant::where('webUser', $user->id)->first();
+        $hasFilters = $this->hasActiveFilters($request);
+
+        if ($isStaff && ! in_array('consultant', $userRoles)) {
+            $query = Consultant::whereNull('dateDeleted')
+                ->whereNotIn('id', $this->systemConsultantIds());
+            if ($request->filled('search')) {
+                $query->where('personName', 'ilike', '%' . $request->search . '%');
+            }
+            $this->applyDateRangePrefilter($query, $request);
+            $rows = $query->orderBy('personName')->limit(5000)->get();
+            $filenameBase = 'structure-all';
+        } else {
+            if (! $consultant) {
+                abort(403);
+            }
+            $descendantIds = $this->descendantIds($consultant->id);
+            $query = Consultant::whereIn('id', $descendantIds)->whereNull('dateDeleted');
+            $this->applyDateRangePrefilter($query, $request);
+            $rows = $query->orderBy('personName')->limit(5000)->get();
+            $baseName = preg_replace('/[^\p{L}\d\s\-]/u', '', $consultant->personName ?? 'export');
+            $filenameBase = 'structure-' . trim($baseName);
+        }
+
+        $members = $this->consultantService->formatMembers($rows);
+        if ($hasFilters) {
+            $members = $this->consultantService->applyFilters($members, $request->all());
+        }
+        $members = $this->applySort($members, $request);
+
+        $headers = [
+            'ФИО',
+            'Квалификация',
+            'Статус активности',
+            'ЛП',
+            'ГП',
+            'НГП',
+            'Клиенты',
+            'Контракты',
+            'Партнёры',
+            'Город',
+            'Дата рождения',
+            'Дата активации',
+            'Дата смены статуса',
+            'Пригласитель',
+        ];
+
+        $exportRows = $members->map(fn ($m) => [
+            $m['personName'] ?? null,
+            $m['qualification']
+                ? ($m['qualification']['level'] . ' [' . $m['qualification']['title'] . ']')
+                : null,
+            $m['activityName'] ?? null,
+            $m['personalVolume'] ?? 0,
+            $m['groupVolume'] ?? 0,
+            $m['groupVolumeCumulative'] ?? 0,
+            $m['clientCount'] ?? 0,
+            $m['contractCount'] ?? 0,
+            $m['partnersCount'] ?? 0,
+            $m['city'] ?? null,
+            $m['birthDate'] ?? null,
+            $m['dateActivity'] ?? null,
+            $m['dateDeterministic'] ?? null,
+            $m['inviterName'] ?? null,
+        ]);
+
+        $filename = $filenameBase . '-' . now()->format('Y-m-d');
+
+        return $this->xlsx->stream(
+            $filename,
+            'Структура',
+            $headers,
+            $exportRows,
+            ['numericColumns' => [4, 5, 6, 7, 8, 9]],
+        );
     }
 
     /**
@@ -270,6 +364,39 @@ class StructureController extends Controller
                 'dateColumns' => [6, 14],
             ],
         );
+    }
+
+    /**
+     * Сортировка коллекции members по одному из числовых полей.
+     * Применяется ПОСЛЕ formatMembers() и applyFilters(), потому что
+     * поля (personalVolume, groupVolume, …) вычисляются там.
+     *
+     * sort_by: lp | gp | ngp | clients | contracts | partners
+     * sort_dir: desc (по умолчанию) | asc
+     */
+    private function applySort(Collection $members, Request $request): Collection
+    {
+        $sortBy = $request->input('sort_by');
+        $sortDir = $request->input('sort_dir', 'desc');
+
+        $fieldMap = [
+            'lp'        => 'personalVolume',
+            'gp'        => 'groupVolume',
+            'ngp'       => 'groupVolumeCumulative',
+            'clients'   => 'clientCount',
+            'contracts' => 'contractCount',
+            'partners'  => 'partnersCount',
+        ];
+
+        if (! $sortBy || ! isset($fieldMap[$sortBy])) {
+            return $members;
+        }
+
+        $field = $fieldMap[$sortBy];
+
+        return $sortDir === 'asc'
+            ? $members->sortBy(fn ($m) => (float) ($m[$field] ?? 0))
+            : $members->sortByDesc(fn ($m) => (float) ($m[$field] ?? 0));
     }
 
     /**

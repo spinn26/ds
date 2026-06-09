@@ -880,6 +880,7 @@ const menuItems = [
   { group: 'Обзор', partner: true },
   { label: 'Дашборд', icon: 'mdi-view-dashboard-outline', path: '/dashboard', partner: true },
   { label: 'Отчёт начислений', icon: 'mdi-bank-outline', path: '/finance/report', partner: true },
+  { label: 'Реестр выплат', icon: 'mdi-cash-register', path: '/my-payments', partner: true },
 
   { group: 'Работа', partner: true },
   { label: 'Калькулятор объёмов', icon: 'mdi-calculator', path: '/finance/calculator', partner: true },
@@ -990,6 +991,7 @@ const menuItems = [
   // Аналитика — для руководителя / админа
   { group: 'Аналитика', adminSection: 'owner-dashboard' },
   { label: 'Дашборд руководителя', icon: 'mdi-crown', path: '/manage/owner-dashboard', adminSection: 'owner-dashboard' },
+  { label: 'Матрица продаж', icon: 'mdi-table-large', path: '/manage/reports/sales-matrix', adminSection: 'owner-dashboard' },
   { label: 'Сверка балансов', icon: 'mdi-scale-balance', path: '/manage/reconciliation', adminSection: 'reconciliation' },
   { label: 'Аномалии', icon: 'mdi-alert-decagram', path: '/manage/anomalies', adminSection: 'anomalies' },
   { label: 'Когорты', icon: 'mdi-chart-line', path: '/manage/cohorts', adminSection: 'cohorts' },

@@ -17,6 +17,11 @@
         </v-chip>
         <v-btn v-if="activeFilterCount > 0" size="small" variant="text" color="secondary"
           prepend-icon="mdi-filter-remove" @click="resetFilters">Сбросить</v-btn>
+        <v-spacer />
+        <v-btn size="small" variant="tonal" prepend-icon="mdi-download"
+          :loading="exportingAll" @click="exportAll">
+          Экспорт структуры
+        </v-btn>
       </div>
       <v-expand-transition>
         <div v-if="showAdvanced" class="d-flex ga-3 flex-wrap align-start mt-3">
@@ -61,12 +66,36 @@
             <th>Квалификация</th>
             <th>Статус</th>
             <th style="white-space:nowrap">Дата смены статуса</th>
-            <th class="text-right" style="white-space:nowrap">ЛП</th>
-            <th class="text-right" style="white-space:nowrap">ГП</th>
-            <th class="text-right" style="white-space:nowrap">НГП</th>
-            <th class="text-right" style="width:90px">Клиенты</th>
-            <th class="text-right" style="width:100px">Контракты</th>
-            <th class="text-right" style="width:100px">Партнёры</th>
+            <th class="text-right sort-th" style="white-space:nowrap" @click="sortToggle('lp')">
+              ЛП <v-icon size="13" :class="sortBy === 'lp' ? 'text-primary' : 'text-disabled'">
+                {{ sortBy === 'lp' ? (sortDir === 'desc' ? 'mdi-sort-descending' : 'mdi-sort-ascending') : 'mdi-sort' }}
+              </v-icon>
+            </th>
+            <th class="text-right sort-th" style="white-space:nowrap" @click="sortToggle('gp')">
+              ГП <v-icon size="13" :class="sortBy === 'gp' ? 'text-primary' : 'text-disabled'">
+                {{ sortBy === 'gp' ? (sortDir === 'desc' ? 'mdi-sort-descending' : 'mdi-sort-ascending') : 'mdi-sort' }}
+              </v-icon>
+            </th>
+            <th class="text-right sort-th" style="white-space:nowrap" @click="sortToggle('ngp')">
+              НГП <v-icon size="13" :class="sortBy === 'ngp' ? 'text-primary' : 'text-disabled'">
+                {{ sortBy === 'ngp' ? (sortDir === 'desc' ? 'mdi-sort-descending' : 'mdi-sort-ascending') : 'mdi-sort' }}
+              </v-icon>
+            </th>
+            <th class="text-right sort-th" style="width:90px" @click="sortToggle('clients')">
+              Клиенты <v-icon size="13" :class="sortBy === 'clients' ? 'text-primary' : 'text-disabled'">
+                {{ sortBy === 'clients' ? (sortDir === 'desc' ? 'mdi-sort-descending' : 'mdi-sort-ascending') : 'mdi-sort' }}
+              </v-icon>
+            </th>
+            <th class="text-right sort-th" style="width:100px" @click="sortToggle('contracts')">
+              Контракты <v-icon size="13" :class="sortBy === 'contracts' ? 'text-primary' : 'text-disabled'">
+                {{ sortBy === 'contracts' ? (sortDir === 'desc' ? 'mdi-sort-descending' : 'mdi-sort-ascending') : 'mdi-sort' }}
+              </v-icon>
+            </th>
+            <th class="text-right sort-th" style="width:100px" @click="sortToggle('partners')">
+              Партнёры <v-icon size="13" :class="sortBy === 'partners' ? 'text-primary' : 'text-disabled'">
+                {{ sortBy === 'partners' ? (sortDir === 'desc' ? 'mdi-sort-descending' : 'mdi-sort-ascending') : 'mdi-sort' }}
+              </v-icon>
+            </th>
             <th style="width:50px"></th>
           </tr>
         </thead>
@@ -147,6 +176,40 @@ import { fmt, getActivityColorByName } from '../composables/useDesign';
 const loading = ref(false);
 const showAdvanced = ref(false);
 const exportingId = ref(null);
+const exportingAll = ref(false);
+const sortBy = ref('');
+const sortDir = ref('desc');
+
+function sortToggle(field) {
+  if (sortBy.value === field) {
+    sortDir.value = sortDir.value === 'desc' ? 'asc' : 'desc';
+  } else {
+    sortBy.value = field;
+    sortDir.value = 'desc';
+  }
+  page.value = 1;
+  loadData();
+}
+
+async function exportAll() {
+  exportingAll.value = true;
+  try {
+    const resp = await api.get('/structure/export', { params: filterParams(), responseType: 'blob' });
+    const url = URL.createObjectURL(resp.data);
+    const a = document.createElement('a');
+    a.href = url;
+    const cd = resp.headers?.['content-disposition'] || '';
+    const m = /filename\*?=(?:UTF-8'')?\"?([^\";]+)/i.exec(cd);
+    a.download = m ? decodeURIComponent(m[1]) : 'structure.xlsx';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    console.error('structure export failed', e);
+  }
+  exportingAll.value = false;
+}
 
 async function exportSubtree(row) {
   if (!row?.id) return;
@@ -336,6 +399,7 @@ function filterParams() {
   // Опциональный фильтр «только 1 линия» — приходит из дашборда query.
   // Бэк, который его не знает, просто проигнорирует параметр.
   if (filters.value.line) params.line = filters.value.line;
+  if (sortBy.value) { params.sort_by = sortBy.value; params.sort_dir = sortDir.value; }
   return params;
 }
 
@@ -410,6 +474,16 @@ onMounted(() => {
 /* DS-патч на Структуру: tabular-nums на счётчиках/балансах. */
 :deep(.text-h5), :deep(.text-h6), :deep(.text-subtitle-1) {
   font-variant-numeric: tabular-nums;
+}
+
+/* Сортируемые заголовки таблицы */
+.sort-th {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.sort-th:hover {
+  color: rgb(var(--v-theme-primary));
 }
 
 /* --- Дерево структуры: коннекторы наставник → команда --- */

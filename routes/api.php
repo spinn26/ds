@@ -184,11 +184,14 @@ Route::prefix('v1')->group(function () {
         Route::get('/profile/countries', [ProfileController::class, 'countries']);
 
         Route::get('/structure', [StructureController::class, 'index']);
+        Route::get('/structure/export', [StructureController::class, 'exportFiltered']);
         Route::get('/structure/{consultantId}/children', [StructureController::class, 'children']);
         Route::get('/structure/{consultantId}/export', [StructureController::class, 'exportSubtree'])->whereNumber('consultantId');
         Route::get('/structure/qualification-levels', [StructureController::class, 'qualificationLevels']);
         Route::get('/structure/activity-statuses', [StructureController::class, 'activityStatuses']);
         Route::get('/structure/cities', [StructureController::class, 'cities']);
+
+        Route::get('/my-payments', [\App\Http\Controllers\Api\MyPaymentsController::class, 'index']);
 
         Route::get('/communication', [CommunicationController::class, 'index']);
         Route::get('/communication/unread-count', [CommunicationController::class, 'unreadCount']);
@@ -462,6 +465,10 @@ Route::prefix('v1')->group(function () {
         Route::get('/admin/integrations/{service}/config', [\App\Http\Controllers\Api\AdminIntegrationsController::class, 'config']);
         Route::put('/admin/integrations/{service}/config', [\App\Http\Controllers\Api\AdminIntegrationsController::class, 'saveConfig']);
         Route::get('/admin/ops/settings', [\App\Http\Controllers\Api\AdminOpsController::class, 'settingsShow']);
+
+        // Admin — Reports: Product Sales Matrix (MVP admin-only)
+        Route::get('/admin/reports/sales-matrix', [\App\Http\Controllers\Api\ProductSalesMatrixController::class, 'index']);
+        Route::get('/admin/reports/sales-matrix/monthly', [\App\Http\Controllers\Api\ProductSalesMatrixController::class, 'monthly']);
 
         // Admin — Payment registry (spec ✅Реестр выплат.md)
         Route::get('/admin/payment-registry', [\App\Http\Controllers\Api\AdminPaymentRegistryController::class, 'index']);

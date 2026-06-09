@@ -117,6 +117,19 @@ return [
             // `SET statement_timeout`. Делается в AppServiceProvider::boot().
         ],
 
+        'directual_mysql' => [
+            'driver'    => 'mysql',
+            'host'      => env('DIRECTUAL_MYSQL_HOST', 'dev.dsconsult.ru'),
+            'port'      => env('DIRECTUAL_MYSQL_PORT', '3306'),
+            'database'  => env('DIRECTUAL_MYSQL_DATABASE', 'directual_import'),
+            'username'  => env('DIRECTUAL_MYSQL_USERNAME', 'directual'),
+            'password'  => env('DIRECTUAL_MYSQL_PASSWORD', 'Ds2026import!'),
+            'charset'   => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix'    => '',
+            'strict'    => false,
+        ],
+
         'sqlsrv' => [
             'driver' => 'sqlsrv',
             'url' => env('DB_URL'),
