@@ -251,9 +251,34 @@ class ChatController extends Controller
                 ->pluck('avatar', 'id');
         }
 
-        $data = $tickets->map(function ($t) use ($unreadMap, $lastMsgMap, $user, $newForMeSet, $avatarMap) {
+        // Имя постановщика (created_by → WebUser) батчом
+        $creatorNameMap = collect();
+        if ($createdByIds->isNotEmpty()) {
+            $creatorNameMap = DB::table('WebUser')
+                ->whereIn('id', $createdByIds)
+                ->selectRaw('id, TRIM(COALESCE("lastName",\'\') || \' \' || COALESCE("firstName\",\'\')) as full_name')
+                ->get()
+                ->pluck('full_name', 'id');
+        }
+
+        // Наблюдатели (chat_ticket_participants) батчом — группируем по ticket_id
+        $participantsMap = collect();
+        if ($ticketIds->isNotEmpty()) {
+            $participantsMap = DB::table('chat_ticket_participants')
+                ->whereIn('ticket_id', $ticketIds)
+                ->select('ticket_id', 'user_id', 'user_name')
+                ->get()
+                ->groupBy('ticket_id');
+        }
+
+        $data = $tickets->map(function ($t) use ($unreadMap, $lastMsgMap, $user, $newForMeSet, $avatarMap, $creatorNameMap, $participantsMap) {
             $t->unread = $unreadMap[$t->id] ?? 0;
             $t->is_new_for_me = $newForMeSet->contains($t->id);
+            $t->creator_name = ! empty($t->created_by) ? ($creatorNameMap[$t->created_by] ?? null) : null;
+            $t->participants = ($participantsMap[$t->id] ?? collect())->map(fn ($p) => [
+                'user_id'   => $p->user_id,
+                'user_name' => $p->user_name,
+            ])->values()->all();
             $t->customer_avatar = (! empty($t->created_by) && isset($avatarMap[$t->created_by]))
                 ? '/storage/' . $avatarMap[$t->created_by]
                 : null;

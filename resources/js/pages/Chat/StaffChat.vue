@@ -133,6 +133,20 @@
               </span>
               <span class="chat-item-status-chip" :style="{ background: statusClr(t.status) + '22', color: statusClr(t.status) }">{{ statusTxt(t.status) }}</span>
             </div>
+            <!-- Роли: исполнитель / постановщик / наблюдатели -->
+            <div class="chat-item-roles">
+              <span v-if="t.assigned_name" class="role-chip role-assignee" title="Исполнитель">
+                <v-icon size="10">mdi-account-hard-hat</v-icon> {{ t.assigned_name }}
+              </span>
+              <span v-if="t.creator_name" class="role-chip role-creator" title="Постановщик">
+                <v-icon size="10">mdi-account-edit</v-icon> {{ t.creator_name }}
+              </span>
+              <template v-if="t.participants?.length">
+                <span v-for="p in t.participants" :key="p.user_id" class="role-chip role-observer" title="Наблюдатель">
+                  <v-icon size="10">mdi-eye-outline</v-icon> {{ p.user_name }}
+                </span>
+              </template>
+            </div>
           </div>
           <button class="chat-item-pin" :class="{ active: t.pinned_at }" :title="t.pinned_at ? 'Открепить' : 'Закрепить'" @click.stop="togglePin(t, $event)">
             <v-icon size="14">{{ t.pinned_at ? 'mdi-pin' : 'mdi-pin-outline' }}</v-icon>
@@ -2828,6 +2842,11 @@ onUnmounted(() => {
 .chat-item-bottom .customer,
 .chat-item-bottom .recipient { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .chat-item-bottom .chat-item-status-chip { flex-shrink: 0; }
+.chat-item-roles { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.role-chip { display: inline-flex; align-items: center; gap: 2px; font-size: 10px; padding: 1px 5px; border-radius: 4px; white-space: nowrap; }
+.role-assignee { background: rgba(var(--v-theme-primary), 0.12); color: rgb(var(--v-theme-primary)); }
+.role-creator  { background: rgba(var(--v-theme-secondary), 0.12); color: rgb(var(--v-theme-secondary)); }
+.role-observer { background: rgba(var(--v-theme-on-surface), 0.07); color: rgba(var(--v-theme-on-surface), 0.55); }
 /* «Новый для вас»: акцентируем через theme.primary (раньше был
    inline-хардкод #a78bfa, не реагировал на тёмную тему). */
 .chip-new-for-me {
