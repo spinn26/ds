@@ -2160,7 +2160,8 @@ class AdminDataController extends Controller
             // «Поставщик = Insmart» работал, дополнительно матчим по
             // contract.productName на ins+mart (см. SupplierResolver).
             $query->where(function ($w) use ($sup, $request) {
-                $w->where('pr.providerName', 'ilike', $sup);
+                $w->where('pr.providerName', 'ilike', $sup)
+                  ->orWhere('pr.vendorName', 'ilike', $sup);
                 if (preg_match('/ins+mart/i', (string) $request->supplier)) {
                     $w->orWhere('c.productName', 'ilike', '%insmart%')
                       ->orWhere('c.productName', 'ilike', '%inssmart%');
@@ -2196,7 +2197,7 @@ class AdminDataController extends Controller
                 'c.productName', 'c.programName', 'c.status', 'c.ammount', 'c.currency',
                 'c.openDate', 'c.createDate', 'c.createdAt', 'c.comment',
                 'c.counterpartyContractId',
-                'pr.providerName as supplierName',
+                DB::raw('COALESCE(NULLIF(pr."vendorName",\'\'), pr."providerName") as "supplierName"'),
             ])
             ->get();
 
@@ -2278,20 +2279,30 @@ class AdminDataController extends Controller
     public function contractFormData(): JsonResponse
     {
         // ── Поставщики ─────────────────────────────────────────────────────
-        // Источник 1: legacy program.providerName (исторические данные).
+        // Источник 1a: legacy program.providerName (провайдер/страховщик).
+        // Источник 1b: legacy program.vendorName (канал дистрибуции: RG.HT, Inssmart).
+        // Для отображения в списке используем COALESCE(vendorName, providerName):
+        // vendorName = «кто продаёт» (поставщик-канал), providerName = «кто оказывает услугу».
         $supRows = DB::table('program as pr')
             ->leftJoin('product as p', 'p.id', '=', 'pr.product')
-            ->whereNotNull('pr.providerName')
             ->whereNull('pr.dateDeleted')
+            ->where(function ($q) {
+                $q->whereNotNull('pr.providerName')->orWhereNotNull('pr.vendorName');
+            })
             ->distinct()
-            ->get(['pr.providerName', 'p.name as productName']);
+            ->get(['pr.providerName', 'pr.vendorName', 'p.name as productName']);
         $supSet = [];
         $hasInsmart = false;
         foreach ($supRows as $r) {
-            if (\App\Support\SupplierResolver::isInsmartProduct($r->productName)) {
+            // Канал дистрибуции (vendorName) имеет приоритет как «поставщик»
+            $effectiveName = ($r->vendorName !== null && $r->vendorName !== '')
+                ? $r->vendorName
+                : $r->providerName;
+            if (\App\Support\SupplierResolver::isInsmartProduct($r->productName)
+                || preg_match('/ins+mart/i', (string) $effectiveName)) {
                 $hasInsmart = true;
-            } elseif ($r->providerName !== null && $r->providerName !== '') {
-                $supSet[$r->providerName] = true;
+            } elseif ($effectiveName !== null && $effectiveName !== '') {
+                $supSet[$effectiveName] = true;
             }
         }
         // Источник 2: programs_catalog.vendor (новый каталог).

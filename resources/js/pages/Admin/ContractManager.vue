@@ -431,16 +431,14 @@ const filterPrograms = computed(() => {
     ? all
     // Coerce — productId на бекэнде int, filters.product может быть int или string
     : all.filter(p => String(p.productId) === String(filters.value.product));
-  // Дедуп: одна и та же программа («Жизнь+») в legacy `program` имеет
-  // 5–10 строк с разными vendorName/term/provider — оператор видел
-  // «Жизнь+ ×8» в фильтре. Оставляем по одному представителю на
-  // (name, productId); фильтрация на бэке идёт по contract.programName,
-  // так что выбор одного id поднимает контракты по всем вариантам.
+  // Дедуп только по имени: бэк фильтрует по contract.programName (строка),
+  // поэтому один вариант с любым id поднимает все контракты с этим именем.
+  // Ключ name|productId давал множественные «Робоэдвайзер» когда программа
+  // числится под несколькими продуктами или имеет несколько legacy-строк.
   const seen = new Set();
   return scoped.filter(p => {
-    const key = `${p.name}|${p.productId ?? ''}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
+    if (seen.has(p.name)) return false;
+    seen.add(p.name);
     return true;
   });
 });
