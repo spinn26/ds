@@ -256,7 +256,7 @@ class ChatController extends Controller
         if ($createdByIds->isNotEmpty()) {
             $creatorNameMap = DB::table('WebUser')
                 ->whereIn('id', $createdByIds)
-                ->selectRaw('id, TRIM(COALESCE("lastName",\'\') || \' \' || COALESCE("firstName\",\'\')) as full_name')
+                ->selectRaw('id, TRIM(COALESCE("lastName",\'\') || \' \' || COALESCE("firstName",\'\')) as full_name')
                 ->get()
                 ->pluck('full_name', 'id');
         }
