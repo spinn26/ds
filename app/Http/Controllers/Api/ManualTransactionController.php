@@ -460,9 +460,25 @@ class ManualTransactionController extends Controller
                     $date = \Carbon\Carbon::parse($draft->date);
 
                     // draft.parameter — это commissionCalcProperty.id, выбранный
-                    // в дропдауне «Свойство». Без проброса в транзакцию колонка
-                    // «Свойство» в /manage/commissions показывала «—», и партнёр
-                    // в расчётном листе тоже терял МФ/Апфронт-метку.
+                    // в дропдауне «Свойство». Для has_year_kv продуктов Свойство
+                    // скрыто в UI — берём ID из yearKV автоматически.
+                    $draftFull = $this->loadDraftWithRefs($draft->id);
+                    $storedParam = $draft->parameter;
+                    if (($draftFull?->productHasYearKv ?? false) && $storedParam === null && $draft->yearKV !== null) {
+                        $yearNum = (int) $draft->yearKV;
+                        $params = $this->loadParametersForPrograms([(int) $draft->contract])[$draft->contract] ?? [];
+                        // loadParametersForPrograms keys by programId, not contractId — re-fetch
+                        $programId = $draftFull?->programId ?? null;
+                        if ($programId) {
+                            $params2 = $this->loadParametersForPrograms([(int) $programId])[(int) $programId] ?? [];
+                            foreach ($params2 as $p) {
+                                if (preg_match('/(?<!\d)' . $yearNum . '(?!\d)/', $p['title'])) {
+                                    $storedParam = (string) $p['id'];
+                                    break;
+                                }
+                            }
+                        }
+                    }
                     $txId = DB::table('transaction')->insertGetId([
                         'contract' => $draft->contract,
                         'amount' => $amount,
@@ -478,8 +494,8 @@ class ManualTransactionController extends Controller
                         'dateCreated' => now(),
                         'changedAt' => now(),
                         'comment' => $draft->comment ?: 'Ручной ввод #' . $request->user()->id,
-                        'commissionCalcProperty' => $draft->parameter !== null && $draft->parameter !== ''
-                            ? (int) $draft->parameter : null,
+                        'commissionCalcProperty' => $storedParam !== null && $storedParam !== ''
+                            ? (int) $storedParam : null,
                         'score' => $draft->yearKV !== null ? (int) $draft->yearKV : null,
                         'dsCommissionPercentage' => $draft->dsCommissionPercentage,
                         'dsCommissionAbsolute' => $draft->dsCommissionAbsolute,
@@ -536,6 +552,21 @@ class ManualTransactionController extends Controller
         $isMedlife = $productRow && stripos((string) $productRow->name, 'medlife') !== false
             || $productRow && stripos((string) $productRow->name, 'медлайф') !== false;
 
+        // Для продуктов с has_year_kv (EVO, Medlife, Manhattan Trust и др.)
+        // Свойство скрыто в UI; parameter выводим из yearKV автоматически.
+        // Ищем commissionCalcProperty у программы, чей title содержит нужный год.
+        $resolvedParameter = $draft->parameter;
+        if (($draft->productHasYearKv ?? false) && $resolvedParameter === null && $draft->yearKV !== null) {
+            $yearNum = (int) $draft->yearKV;
+            $params = $this->loadParametersForPrograms([(int) $contract->program])[$contract->program] ?? [];
+            foreach ($params as $p) {
+                if (preg_match('/(?<!\d)' . $yearNum . '(?!\d)/', $p['title'])) {
+                    $resolvedParameter = (string) $p['id'];
+                    break;
+                }
+            }
+        }
+
         // %ДС: override → Medlife: первая транзакция → программа → справочник → 100%
         $dsPercent = (float) ($draft->dsCommissionPercentage ?? 0);
 
@@ -558,12 +589,13 @@ class ManualTransactionController extends Controller
             $dsPercent = (float) $programRow->dsPercent;
         }
         if ($dsPercent <= 0 && $contract->program) {
-            // Тот же резолвер, что в каскаде (program × term × год КВ × дата) —
-            // иначе превью показывало бы не ту ставку, чем фактический расчёт.
+            // Тот же резолвер, что в каскаде (program × term × год КВ × дата).
+            // $resolvedParameter = commissionCalcProperty.id (для has_year_kv
+            // продуктов он уже выведен автоматически из yearKV выше).
             $dsPercent = (float) (\App\Services\CommissionCalculator::resolveLegacyDsCommission(
                 (int) $contract->program,
                 $contract->term ?? null,
-                $draft->parameter ?? null,
+                $resolvedParameter ?? null,
                 $draft->date ?? null,
             ) ?? 0);
         }

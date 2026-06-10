@@ -194,13 +194,14 @@
                         @update:model-value="v => patchField(d, 'comment', v)" />
                     </template>
                     <template v-else-if="h.key === 'parameter'">
-                      <!-- У продукта явно отключено «Свойство» — поле для
-                           этой строки неактивно (даже если в legacy осталось
-                           значение, его всё равно нельзя редактировать). -->
-                      <span v-if="d.productHasProperty === false" class="text-medium-emphasis">—</span>
+                      <!-- Для has_year_kv продуктов (EVO, Medlife, Manhattan Trust)
+                           свойство определяется yearKV автоматически — не показываем. -->
+                      <span v-if="d.productHasProperty === false || d.productHasYearKv === true"
+                        class="text-medium-emphasis">—</span>
                       <template v-else-if="(d.availableParameters?.length || 0) > 1">
-                        <v-select :model-value="d.parameter" :items="d.availableParameters"
-                          item-title="title" item-value="title"
+                        <v-select :model-value="d.parameter !== null ? Number(d.parameter) : null"
+                          :items="d.availableParameters"
+                          item-title="title" item-value="id"
                           density="compact" hide-details variant="plain" placeholder="Выберите"
                           @update:model-value="v => patchField(d, 'parameter', v)" />
                       </template>
@@ -227,8 +228,9 @@
                         @update:model-value="v => patchField(d, 'yearKV', v)" />
                     </template>
                     <template v-else-if="h.key === 'amount'">
-                      <v-text-field :model-value="d.amount" type="number" density="compact" hide-details variant="plain"
-                        reverse @update:model-value="v => patchField(d, 'amount', v)" />
+                      <v-text-field :model-value="fmtAmt(d.amount)" inputmode="decimal"
+                        density="compact" hide-details variant="plain"
+                        reverse @update:model-value="v => patchField(d, 'amount', parseAmt(v))" />
                     </template>
                     <template v-else-if="h.key === 'currency'">
                       <v-select :model-value="d.currencyId" :items="currencyOptions" item-title="symbol" item-value="id"
@@ -642,6 +644,18 @@ import DataTableWrapper from '../../components/DataTableWrapper.vue';
 import StartChatButton from '../../components/StartChatButton.vue';
 import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 import { fmt2, fmtDate } from '../../composables/useDesign';
+
+function fmtAmt(v) {
+  if (v == null || v === '') return '';
+  const n = Number(v);
+  if (isNaN(n)) return String(v);
+  return n.toLocaleString('ru-RU', { maximumFractionDigits: 2 });
+}
+function parseAmt(v) {
+  if (v == null || v === '') return null;
+  const n = parseFloat(String(v).replace(/[\s ]/g, '').replace(',', '.'));
+  return isNaN(n) ? null : n;
+}
 import { usePermissions } from '../../composables/usePermissions';
 
 // Все кнопки расчётов/финализации — только у руководителя расчётов (canCalc).
@@ -1325,6 +1339,10 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+/* Убираем spin-кнопки у всех number-input в таблице — при случайном наведении меняли сумму */
+.manual-tx-table :deep(input[type="number"]::-webkit-inner-spin-button),
+.manual-tx-table :deep(input[type="number"]::-webkit-outer-spin-button) { -webkit-appearance: none; margin: 0; }
+.manual-tx-table :deep(input[type="number"]) { -moz-appearance: textfield; }
 .manual-tx-table :deep(table) { border-collapse: separate; border-spacing: 0; }
 .manual-tx-table :deep(td) { vertical-align: middle; }
 .manual-tx-table :deep(th) {
