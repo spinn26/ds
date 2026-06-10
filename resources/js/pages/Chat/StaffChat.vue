@@ -263,31 +263,60 @@
                 {{ slaLabel }}
               </v-chip>
             </div>
-            <!-- Кто из staff имеет доступ к чату: assignee (звёздочка) + явно
-                 приглашённые через chat_ticket_participants. После claim &
-                 hide остальные сотрудники отдела чат НЕ видят, поэтому важно
-                 показать прямо в шапке, кто реально подключён к переписке.
-                 Клик по любому чипу/кнопке "+" — открывает диалог управления. -->
-            <div v-if="chatAccessRow.length" class="d-flex flex-wrap align-center ga-1 mt-2">
-              <span class="text-caption text-medium-emphasis mr-1">В работе:</span>
-              <v-chip v-for="p in chatAccessRow" :key="'access-' + p.userId"
-                size="x-small" variant="tonal"
-                :color="p.kind === 'assignee' ? 'primary' : undefined"
-                :title="p.kind === 'assignee' ? 'Назначен · ' + (p.roleLabel || '') : 'Приглашён · ' + (p.roleLabel || '')"
-                @click="openParticipantsDialog">
-                <template #prepend>
-                  <v-avatar size="18" :color="p.kind === 'assignee' ? 'primary' : 'grey-lighten-1'"
-                    class="text-caption font-weight-bold">
-                    {{ pInitials(p.name) }}
-                  </v-avatar>
-                </template>
-                {{ p.name }}
-                <v-icon v-if="p.kind === 'assignee'" end size="11">mdi-star</v-icon>
-              </v-chip>
-              <v-btn icon variant="text" size="x-small" title="Добавить участника"
-                @click="openParticipantsDialog">
-                <v-icon size="14">mdi-account-plus</v-icon>
-              </v-btn>
+            <!-- Роли: постановщик / исполнитель / наблюдатели -->
+            <div class="roles-grid mt-2">
+              <!-- Постановщик -->
+              <span class="role-label">Постановщик</span>
+              <span class="role-value">
+                <span v-if="activeChat.creator_name" class="role-person">
+                  <v-icon size="13" color="secondary">mdi-account-edit</v-icon>
+                  {{ activeChat.creator_name }}
+                </span>
+                <span v-else-if="activeChat.customer_name" class="role-person">
+                  <v-icon size="13" color="secondary">mdi-account-edit</v-icon>
+                  {{ activeChat.customer_name }}
+                </span>
+                <span v-else class="text-disabled">—</span>
+              </span>
+
+              <!-- Исполнитель -->
+              <span class="role-label">Исполнитель</span>
+              <span class="role-value">
+                <v-chip v-if="chatAccessRow.find(p => p.kind === 'assignee')"
+                  size="x-small" variant="tonal" color="primary"
+                  @click="openParticipantsDialog">
+                  <template #prepend>
+                    <v-avatar size="16" color="primary" class="text-caption font-weight-bold">
+                      {{ pInitials(chatAccessRow.find(p => p.kind === 'assignee').name) }}
+                    </v-avatar>
+                  </template>
+                  {{ chatAccessRow.find(p => p.kind === 'assignee').name }}
+                  <v-icon end size="11">mdi-star</v-icon>
+                </v-chip>
+                <span v-else class="text-disabled text-caption">Не назначен</span>
+                <v-btn icon variant="text" size="x-small" title="Изменить исполнителя"
+                  class="ml-1" @click="openParticipantsDialog">
+                  <v-icon size="13">mdi-account-plus</v-icon>
+                </v-btn>
+              </span>
+
+              <!-- Наблюдатели -->
+              <template v-if="chatAccessRow.filter(p => p.kind !== 'assignee').length">
+                <span class="role-label">Наблюдатели</span>
+                <span class="role-value d-flex flex-wrap ga-1">
+                  <v-chip v-for="p in chatAccessRow.filter(p => p.kind !== 'assignee')"
+                    :key="'obs-' + p.userId"
+                    size="x-small" variant="tonal"
+                    @click="openParticipantsDialog">
+                    <template #prepend>
+                      <v-avatar size="16" color="grey-lighten-1" class="text-caption font-weight-bold">
+                        {{ pInitials(p.name) }}
+                      </v-avatar>
+                    </template>
+                    {{ p.name }}
+                  </v-chip>
+                </span>
+              </template>
             </div>
           </div>
           <div class="chat-header-actions d-flex align-center ga-1">
@@ -2842,6 +2871,10 @@ onUnmounted(() => {
 .chat-item-bottom .customer,
 .chat-item-bottom .recipient { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .chat-item-bottom .chat-item-status-chip { flex-shrink: 0; }
+.roles-grid { display: grid; grid-template-columns: 90px 1fr; align-items: center; gap: 5px 8px; }
+.role-label { font-size: 11px; font-weight: 600; color: rgba(var(--v-theme-on-surface), 0.45); text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; }
+.role-value { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.role-person { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: rgba(var(--v-theme-on-surface), 0.85); }
 .chat-item-roles { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
 .role-chip { display: inline-flex; align-items: center; gap: 2px; font-size: 10px; padding: 1px 5px; border-radius: 4px; white-space: nowrap; }
 .role-assignee { background: rgba(var(--v-theme-primary), 0.12); color: rgb(var(--v-theme-primary)); }
