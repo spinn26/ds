@@ -2122,19 +2122,34 @@ class AdminDataController extends Controller
         if ($request->filled('status')) $query->where('c.status', $request->status);
         if ($request->filled('number')) $query->where('c.number', 'ilike', '%' . $request->number . '%');
         if ($request->filled('comment')) $query->where('c.comment', 'ilike', '%' . $request->comment . '%');
-        if ($request->filled('product')) $query->where('c.product', $request->product);
+        // Продукт: историчесские контракты (Directual) хранят productName,
+        // а не FK. Резолвим имя и матчим по productName — та же схема что
+        // для программы ниже. Отрицательный id → catalog-only продукт.
+        if ($request->filled('product')) {
+            $productId = (int) $request->product;
+            $productName = $productId < 0
+                ? DB::table('products_catalog')->where('id', -$productId)->value('name')
+                : DB::table('product')->where('id', $productId)->value('name');
+            if ($productName) {
+                $query->where('c.productName', $productName);
+            } else {
+                $query->where('c.product', $productId);
+            }
+        }
         // Программа: дропдаун дедуплицирован (один id-представитель на
         // имя), поэтому фильтр матчит по contract.programName, чтобы
         // выбор «Жизнь+» поднимал ВСЕ варианты этой программы. Если
         // имя не разрезолвилось (id невалидный) — fallback на FK.
+        // Отрицательный id → catalog-only программа (нет legacy-строки).
         if ($request->filled('program')) {
-            $programName = DB::table('program')
-                ->where('id', $request->program)
-                ->value('name');
+            $programId = (int) $request->program;
+            $programName = $programId < 0
+                ? DB::table('programs_catalog')->where('id', -$programId)->value('name')
+                : DB::table('program')->where('id', $programId)->value('name');
             if ($programName) {
                 $query->where('c.programName', $programName);
             } else {
-                $query->where('c.program', $request->program);
+                $query->where('c.program', $programId);
             }
         }
         if ($request->filled('setup')) $query->where('c.setup', $request->setup);
@@ -2254,14 +2269,16 @@ class AdminDataController extends Controller
 
     /**
      * Form-data для модалки контракта: справочники.
+     *
+     * Данные собираются из ДВУХ источников: legacy-таблиц (`product`, `program`,
+     * `program.providerName`) и нового каталога (`products_catalog`,
+     * `programs_catalog`, `programs_catalog.vendor`). Объединяем по обоим,
+     * чтобы фильтры показывали как историческите, так и новые позиции.
      */
     public function contractFormData(): JsonResponse
     {
-        // Insmart-продукты (названы «… Inssmart») сворачиваем в единого
-        // поставщика «Insmart» — их providerName хранит конечного страховщика
-        // (Армеец/БАСК/Спасские ворота…), а в UI-фильтре поставщик должен быть
-        // «Insmart». Та же логика, что в ManualTransactionController::
-        // suppliersAndProviders (Транзакции/Комиссии) — см. SupplierResolver.
+        // ── Поставщики ─────────────────────────────────────────────────────
+        // Источник 1: legacy program.providerName (исторические данные).
         $supRows = DB::table('program as pr')
             ->leftJoin('product as p', 'p.id', '=', 'pr.product')
             ->whereNotNull('pr.providerName')
@@ -2277,32 +2294,103 @@ class AdminDataController extends Controller
                 $supSet[$r->providerName] = true;
             }
         }
+        // Источник 2: programs_catalog.vendor (новый каталог).
+        DB::table('programs_catalog')
+            ->whereNotNull('vendor')
+            ->where('vendor', '!=', '')
+            ->distinct()
+            ->pluck('vendor')
+            ->each(fn ($v) => $supSet[$v] = true);
+
         $suppliers = array_keys($supSet);
         sort($suppliers, SORT_NATURAL | SORT_FLAG_CASE);
         if ($hasInsmart) array_unshift($suppliers, 'Insmart');
         $suppliers = array_values($suppliers);
 
-        $programs = DB::table('program')
+        // ── Программы ──────────────────────────────────────────────────────
+        // Источник 1: legacy program (все исторические программы).
+        $legacyPrograms = DB::table('program')
             ->whereNull('dateDeleted')
             ->orderBy('name')
             ->get(['id', 'name', 'product as productId', 'providerName']);
+
+        // Источник 2: programs_catalog без legacy_program_id (19 программ,
+        // которые есть только в новом каталоге и не попали в sync).
+        // productId = products_catalog.legacy_product_id (чтобы фильтр
+        // «по продукту» в ContractManager работал по тому же FK-пространству).
+        $catalogOnlyPrograms = DB::table('programs_catalog as pg')
+            ->join('products_catalog as pc', 'pc.id', '=', 'pg.product_id')
+            ->whereNull('pg.legacy_program_id')
+            ->where('pg.active', true)
+            ->orderBy('pg.name')
+            ->select(
+                DB::raw('-(pg.id) as id'),       // отрицательный id → фронт видит его как «нет в legacy»
+                'pg.name',
+                'pc.legacy_product_id as productId',
+                'pg.vendor as providerName'
+            )
+            ->get();
+
+        $programs = $legacyPrograms->concat($catalogOnlyPrograms)->sortBy('name')->values();
+
+        // ── Продукты ───────────────────────────────────────────────────────
+        // Источник 1: все active legacy products. Для продуктов, у которых
+        // есть запись в products_catalog, подставляем имя из каталога
+        // (каталог хранит «правильное» отображаемое имя, legacy может быть
+        // устаревшим). catalogId пробрасывается на фронт для загрузки
+        // программ при создании контракта.
+        $catalogMap = DB::table('products_catalog')
+            ->whereNotNull('legacy_product_id')
+            ->where('active', true)
+            ->get(['id as catalog_id', 'legacy_product_id', 'name as catalog_name'])
+            ->keyBy('legacy_product_id');
+
+        $legacyProducts = DB::table('product')
+            ->where('active', true)
+            ->orderBy('name')
+            ->select('id', 'name',
+                DB::raw('COALESCE(has_property, false) AS "hasProperty"'),
+                DB::raw('COALESCE(has_term, false) AS "hasTerm"'),
+                DB::raw('COALESCE(has_year_kv, false) AS "hasYearKv"'),
+            )
+            ->get()
+            ->map(function ($p) use ($catalogMap) {
+                $cat = $catalogMap->get($p->id);
+                return [
+                    'id'          => $p->id,
+                    'name'        => $cat ? $cat->catalog_name : $p->name,
+                    'catalogId'   => $cat ? (int) $cat->catalog_id : null,
+                    'hasProperty' => $p->hasProperty,
+                    'hasTerm'     => $p->hasTerm,
+                    'hasYearKv'   => $p->hasYearKv,
+                ];
+            });
+
+        // Источник 2: catalog-only продукты (без legacy_product_id — 1 шт).
+        $catalogOnlyProducts = DB::table('products_catalog')
+            ->whereNull('legacy_product_id')
+            ->where('active', true)
+            ->orderBy('name')
+            ->get(['id as catalog_id', 'name'])
+            ->map(fn ($p) => [
+                'id'          => -(int)$p->catalog_id,   // отрицательный → нет в legacy
+                'name'        => $p->name,
+                'catalogId'   => (int) $p->catalog_id,
+                'hasProperty' => false,
+                'hasTerm'     => false,
+                'hasYearKv'   => false,
+            ]);
+
+        $products = $legacyProducts->concat($catalogOnlyProducts)->sortBy('name')->values();
 
         return response()->json([
             'statuses' => DB::table('contractStatus')->orderBy('id')->get(['id', 'name']),
             'currencies' => DB::table('currency')->where('selectable', true)->orderBy('id')
                 ->get()->map(fn ($c) => ['id' => $c->id, 'symbol' => $c->symbol, 'name' => $c->nameRu]),
-            // Реальные имена колонок в legacy: country.countryNameRu, riskProfile.name, setup.setup
             'countries' => DB::table('country')->orderBy('countryNameRu')
                 ->get()->map(fn ($c) => ['id' => $c->id, 'name' => $c->countryNameRu]),
             'riskProfiles' => DB::table('riskProfile')->orderBy('id')
                 ->get()->map(fn ($r) => ['id' => $r->id, 'name' => $r->name]),
-            // Сетап + ФИО ФК — оператору проще выбирать «565395 Иванов И.И.»
-            // чем угадывать кому принадлежит код.
-            //
-            // По требованию заказчика 2026-05-06: показывать только «свой»
-            // короткий список ФК (11 кодов). Остальные сетапы есть в БД, но
-            // не релевантны для заведения контрактов на платформе.
-            // Если список нужно расширить — правится здесь без миграций.
             'setups' => DB::table('setup as s')
                 ->leftJoin('consultant as c', 'c.id', '=', 's.consultant')
                 ->whereIn('s.setup', self::ALLOWED_SETUP_CODES)
@@ -2315,16 +2403,7 @@ class AdminDataController extends Controller
                 ]),
             'suppliers' => $suppliers,
             'programs'  => $programs,
-            // Конфиг-флаги продукта для условного показа полей в формах
-            // транзакций / калькулятора: «Свойство», «Срок контракта», «Год КВ».
-            'products' => DB::table('product')
-                ->where('active', true)
-                ->select('id', 'name',
-                    DB::raw('COALESCE(has_property, false) AS "hasProperty"'),
-                    DB::raw('COALESCE(has_term, false) AS "hasTerm"'),
-                    DB::raw('COALESCE(has_year_kv, false) AS "hasYearKv"'),
-                )
-                ->orderBy('name')->get(),
+            'products'  => $products,
         ]);
     }
 

@@ -619,15 +619,12 @@ async function loadPartnerRequisites() {
 async function ensureFormData() {
   if (formData.value.statuses.length) return;
   try {
-    const [fd, products] = await Promise.all([
-      api.get('/admin/contracts/form-data'),
-      api.get('/admin/products-catalog', { params: { per_page: 1000, active: true } }).catch(() => ({ data: { data: [] } })),
-    ]);
-    formData.value = fd.data;
-    productOptions.value = (products.data?.data || [])
-      .filter(p => p.legacyProductId)
-      .map(p => ({ id: p.legacyProductId, name: p.name, catalogId: p.id }));
-    supplierOptions.value = fd.data.suppliers || [];
+    const { data } = await api.get('/admin/contracts/form-data');
+    formData.value = data;
+    // products теперь приходят из contractFormData — merged список:
+    // legacy product + products_catalog (с catalogId для загрузки программ).
+    productOptions.value = (data.products || []);
+    supplierOptions.value = data.suppliers || [];
   } catch {}
 }
 
@@ -635,13 +632,25 @@ async function onProductChange(pid) {
   form.value.program = null;
   if (!pid) return;
   if (programsByProduct.value[pid]) return;
-  const catalogId = productOptions.value.find(p => p.id === pid)?.catalogId;
-  try {
-    const { data } = await api.get(`/admin/products-catalog/${catalogId}/programs`);
-    programsByProduct.value[pid] = (data?.data || data || [])
-      .filter(p => p.legacyProgramId)
-      .map(p => ({ id: p.legacyProgramId, name: p.name }));
-  } catch {}
+  const opt = productOptions.value.find(p => p.id === pid);
+  const catalogId = opt?.catalogId;
+  if (catalogId) {
+    // Продукт есть в каталоге — загружаем программы оттуда.
+    try {
+      const { data } = await api.get(`/admin/products-catalog/${catalogId}/programs`);
+      programsByProduct.value[pid] = (data?.data || data || [])
+        .filter(p => p.legacyProgramId)
+        .map(p => ({ id: p.legacyProgramId, name: p.name }));
+    } catch {}
+  } else {
+    // Исторический продукт без каталога — используем legacy-программы
+    // из formData (уже загружены при ensureFormData).
+    const seen = new Set();
+    programsByProduct.value[pid] = (formData.value.programs || [])
+      .filter(p => String(p.productId) === String(pid))
+      .filter(p => { const k = p.name; if (seen.has(k)) return false; seen.add(k); return true; })
+      .map(p => ({ id: p.id, name: p.name }));
+  }
 }
 
 function searchClients(q) {

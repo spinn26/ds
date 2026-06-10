@@ -196,9 +196,15 @@ function emitRange(f, t) {
 
 function onModeChange(v) {
   mode.value = v;
-  emitRange('', '');
   pickerMonth.value = null;
   pickerQuarter.value = null;
+  // For year mode: immediately apply the current pickerYear so the filter
+  // activates without requiring the user to re-select the already-shown value.
+  if (v === 'year' && pickerYear.value) {
+    onYearChange(pickerYear.value);
+  } else {
+    emitRange('', '');
+  }
 }
 
 function reset() {
