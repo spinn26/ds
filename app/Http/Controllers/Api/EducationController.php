@@ -354,6 +354,22 @@ class EducationController extends Controller
             ->all();
         $viewedSet = array_flip($viewedIds);
 
+        // Drip availability — batch to avoid N+1.
+        // Only run per-lesson checks when the course actually uses drip/stop config.
+        $hasDrip = Schema::hasColumn('education_lessons', 'drip_open_at')
+            && $lessons->contains(fn ($l) =>
+                ! empty($l->drip_open_at)
+                || (! empty($l->drip_delay_hours) && (int) $l->drip_delay_hours > 0)
+                || ! empty($l->is_stop_lesson)
+            );
+        $availabilityMap = [];
+        if ($hasDrip) {
+            $drip = app(\App\Services\DripScheduleService::class);
+            foreach ($lessons as $l) {
+                $availabilityMap[$l->id] = $drip->lessonAvailability($l, $userId, $course);
+            }
+        }
+
         $tests = DB::table('education_tests')
             ->where('course_id', $id)
             ->orderBy('sort_order')
@@ -391,10 +407,11 @@ class EducationController extends Controller
                 'product_ids' => $productIds,
                 'program_ids' => $programIds,
             ],
-            'lessons' => $lessons->map(function ($l) use ($viewedSet) {
+            'lessons' => $lessons->map(function ($l) use ($viewedSet, $hasDrip, $availabilityMap) {
                 $hasArrays = Schema::hasColumn('education_lessons', 'video_urls');
                 $videos = $this->expandUrlArray($hasArrays ? ($l->video_urls ?? null) : null, $l->video_url ?? null);
                 $docs = $this->expandUrlArray($hasArrays ? ($l->document_urls ?? null) : null, $l->document_url ?? null);
+                $av = $hasDrip ? ($availabilityMap[$l->id] ?? ['open' => true, 'reason' => null]) : ['open' => true, 'reason' => null];
                 return [
                     'id' => $l->id,
                     'title' => $l->title,
@@ -407,6 +424,9 @@ class EducationController extends Controller
                     'document_urls' => $docs,
                     'is_test' => (bool) ($l->is_test ?? false),
                     'viewed' => isset($viewedSet[$l->id]),
+                    'available' => $av['open'],
+                    'unavailableReason' => $av['reason'],
+                    'requiresHomework' => (bool) ($l->requires_homework ?? false),
                 ];
             })->values(),
             'tests' => $tests,
