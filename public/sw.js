@@ -1,10 +1,14 @@
-const CACHE_NAME = 'ds-platform-v1';
-const STATIC_ASSETS = [
-  '/',
-  '/manifest.json',
-];
+// v2 — bump this string on every deploy to evict stale JS/CSS caches on iOS Safari.
+// iOS Safari не убивает старый SW пока открыта хотя бы одна вкладка; новый CACHE_NAME
+// гарантирует что activate-фаза удалит весь старый кэш при переходе на новую версию.
+const CACHE_NAME = 'ds-platform-v2';
 
-// Install — cache static assets
+// Кэшируем только HTML-оболочку (для офлайн-fallback).
+// JS/CSS-чанки имеют content-hash в имени — браузерный HTTP-кэш обрабатывает их сам.
+// SW их не трогает: это исключает ситуацию «старый JS-файл из кэша SW +
+// новый HTML из сети» = SyntaxError / белый экран.
+const STATIC_ASSETS = ['/'];
+
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS))
@@ -12,7 +16,6 @@ self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
 
-// Activate — clean old caches
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
@@ -22,21 +25,34 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Fetch — network first, fallback to cache
 self.addEventListener('fetch', (event) => {
-  // Skip API requests
-  if (event.request.url.includes('/api/')) return;
+  const url = new URL(event.request.url);
 
+  // API — не трогаем
+  if (url.pathname.startsWith('/api/')) return;
+
+  // Vite build-ассеты (content-hash имена) — только сеть, SW не кэширует.
+  // Если сеть недоступна — браузер сам отдаёт из HTTP-кэша.
+  if (url.pathname.startsWith('/build/')) return;
+
+  // HTML-навигация: сеть → кэш-оболочка (офлайн fallback)
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request).catch(() => caches.match('/'))
+    );
+    return;
+  }
+
+  // Остальное (manifest.json, иконки) — network first, кэш как fallback
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        // Cache successful responses
         if (response.ok && event.request.method === 'GET') {
           const clone = response.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
         }
         return response;
       })
-      .catch(() => caches.match(event.request).then((cached) => cached || caches.match('/')))
+      .catch(() => caches.match(event.request))
   );
 });

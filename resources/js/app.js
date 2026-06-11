@@ -30,7 +30,10 @@ if (import.meta.env.PROD && import.meta.env.VITE_SENTRY_DSN) {
     });
 }
 
-const savedTheme = localStorage.getItem('theme') || 'light';
+// Safari private mode throws SecurityError on localStorage — fall back to defaults.
+let savedTheme = 'light';
+try { savedTheme = localStorage.getItem('theme') || 'light'; } catch {}
+
 
 const vuetify = createVuetify({
     components,
@@ -152,7 +155,7 @@ const vueQueryOptions = {
 // i18n
 const i18n = createI18n({
     legacy: false,
-    locale: localStorage.getItem('locale') || 'ru',
+    locale: (() => { try { return localStorage.getItem('locale') || 'ru'; } catch { return 'ru'; } })(),
     fallbackLocale: 'ru',
     messages: { ru, en },
 });
