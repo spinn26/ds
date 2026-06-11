@@ -65,7 +65,6 @@ class ContractImportController extends Controller
 
         $products = DB::table('product')
             ->where('active', true)
-            ->whereNull('dateDeleted')
             ->orderBy('name')
             ->get()
             ->map(fn ($p) => ['id' => $p->id, 'name' => $p->name]);
