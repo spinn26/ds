@@ -25,6 +25,7 @@
         "chart.js": "^4.5.1",
         "dayjs": "^1.11.20",
         "exceljs": "^4.4.0",
+        "libphonenumber-js": "^1.13.6",
         "maska": "^3.2.0",
         "pinia": "^3.0.4",
         "pinia-plugin-persistedstate": "^4.7.1",

@@ -11,6 +11,12 @@ export default defineConfig({
         vue(),
     ],
     build: {
+        // ES2020 = Chrome 87 / Safari 14 / Firefox 78 — минимум для Vue 3 + Vuetify 3.
+        // Явный target запрещает Vite 7 эмитировать ES2022-синтаксис
+        // (private class fields #f, ||= /&&=, at()), которые ломают Safari 14.0
+        // и Android WebView ≤ Chrome 86 — эти браузеры падают с SyntaxError
+        // ещё до монтирования Vue, что выглядит как «белый экран».
+        target: 'es2020',
         rollupOptions: {
             output: {
                 manualChunks: {
