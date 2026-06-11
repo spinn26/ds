@@ -54,9 +54,9 @@ class ProductSalesMatrixController extends Controller
                 'pg.id   as program_id',
                 'pg.name as program_name',
                 DB::raw('COALESCE(pg."providerName", \'—\') as supplier'),
-                DB::raw('SUM(COALESCE(t."amountUSD", 0))      as volume'),
+                DB::raw('SUM(COALESCE(t."amountRUB", 0))      as volume'),
                 DB::raw('COUNT(DISTINCT co.id)                as contract_count'),
-                DB::raw('SUM(COALESCE(t."netRevenueUSD", 0))  as revenue'),
+                DB::raw('SUM(COALESCE(t."netRevenueRUB", 0))  as revenue'),
                 DB::raw('SUM(COALESCE(t."personalVolume", 0)) as points'),
                 DB::raw('COUNT(DISTINCT co.consultant)         as fc_count'),
                 DB::raw('COUNT(DISTINCT co.client)             as client_count'),
@@ -82,6 +82,7 @@ class ProductSalesMatrixController extends Controller
                 $productMap[$pid] = [
                     'productId'   => $pid,
                     'productName' => $r->product_name,
+                    'suppliers'   => [],
                     'programs'    => [],
                     'volume'      => 0,
                     'count'       => 0,
@@ -90,6 +91,9 @@ class ProductSalesMatrixController extends Controller
                     'fcSet'       => [],
                     'clientSet'   => [],
                 ];
+            }
+            if ($r->supplier !== '—' && ! in_array($r->supplier, $productMap[$pid]['suppliers'])) {
+                $productMap[$pid]['suppliers'][] = $r->supplier;
             }
 
             $volume   = (float) $r->volume;
@@ -158,9 +162,9 @@ class ProductSalesMatrixController extends Controller
         }
 
         $totalsRow = $totalsQ->selectRaw('
-            SUM(COALESCE(t."amountUSD", 0))      as volume,
+            SUM(COALESCE(t."amountRUB", 0))      as volume,
             COUNT(DISTINCT co.id)                as contract_count,
-            SUM(COALESCE(t."netRevenueUSD", 0))  as revenue,
+            SUM(COALESCE(t."netRevenueRUB", 0))  as revenue,
             SUM(COALESCE(t."personalVolume", 0)) as points,
             COUNT(DISTINCT co.consultant)         as fc_count,
             COUNT(DISTINCT co.client)             as client_count
@@ -187,6 +191,7 @@ class ProductSalesMatrixController extends Controller
             $resultRows[] = [
                 'productId'   => $prod['productId'],
                 'productName' => $prod['productName'],
+                'suppliers'   => $prod['suppliers'],
                 'volume'      => round($vol, 2),
                 'count'       => $cnt,
                 'avgCheck'    => $cnt > 0 ? round($vol / $cnt, 2) : 0,
@@ -263,9 +268,9 @@ class ProductSalesMatrixController extends Controller
                 'p.id   as product_id',
                 'pg.id  as program_id',
                 't.dateMonth',
-                DB::raw('SUM(COALESCE(t."amountUSD", 0))      as volume'),
+                DB::raw('SUM(COALESCE(t."amountRUB", 0))      as volume'),
                 DB::raw('COUNT(DISTINCT co.id)                as contract_count'),
-                DB::raw('SUM(COALESCE(t."netRevenueUSD", 0))  as revenue'),
+                DB::raw('SUM(COALESCE(t."netRevenueRUB", 0))  as revenue'),
                 DB::raw('SUM(COALESCE(t."personalVolume", 0)) as points'),
                 DB::raw('COUNT(DISTINCT co.consultant)         as fc_count'),
                 DB::raw('COUNT(DISTINCT co.client)             as client_count'),

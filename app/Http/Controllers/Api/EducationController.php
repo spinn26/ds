@@ -412,21 +412,25 @@ class EducationController extends Controller
                 $videos = $this->expandUrlArray($hasArrays ? ($l->video_urls ?? null) : null, $l->video_url ?? null);
                 $docs = $this->expandUrlArray($hasArrays ? ($l->document_urls ?? null) : null, $l->document_url ?? null);
                 $av = $hasDrip ? ($availabilityMap[$l->id] ?? ['open' => true, 'reason' => null]) : ['open' => true, 'reason' => null];
+                $body = null;
+                if (! empty($l->body)) {
+                    $decoded = is_array($l->body) ? $l->body : json_decode($l->body, true);
+                    if (is_array($decoded)) $body = $decoded;
+                }
                 return [
                     'id' => $l->id,
                     'title' => $l->title,
                     'content' => $l->content,
-                    'content_type' => $l->content_type,
-                    // Legacy single-поля оставлены на случай старого фронта.
-                    'video_url' => $videos[0] ?? null,
-                    'document_url' => $docs[0] ?? null,
-                    'video_urls' => $videos,
-                    'document_urls' => $docs,
-                    'is_test' => (bool) ($l->is_test ?? false),
+                    'contentType' => $l->content_type,
+                    'body' => $body,
+                    'videoUrls' => $videos,
+                    'documentUrls' => $docs,
+                    'isTest' => (bool) ($l->is_test ?? false),
                     'viewed' => isset($viewedSet[$l->id]),
                     'available' => $av['open'],
                     'unavailableReason' => $av['reason'],
                     'requiresHomework' => (bool) ($l->requires_homework ?? false),
+                    'homeworkInstructions' => $l->homework_instructions ?? null,
                 ];
             })->values(),
             'tests' => $tests,

@@ -458,9 +458,10 @@ class AdminFinanceController extends Controller
         $query = DB::table('poolLog');
 
         if ($request->filled('month')) {
-            // filter by date range if month provided
-            $start = $request->month . '-01';
-            $end = date('Y-m-t', strtotime($start));
+            $year  = $request->integer('year', (int) date('Y'));
+            $month = $request->integer('month');
+            $start = sprintf('%04d-%02d-01', $year, $month);
+            $end   = date('Y-m-t', strtotime($start));
             $query->whereBetween('date', [$start, $end]);
         }
 
