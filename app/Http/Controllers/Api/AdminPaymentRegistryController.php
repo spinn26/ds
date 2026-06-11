@@ -140,13 +140,15 @@ class AdminPaymentRegistryController extends Controller
         // ночной перенос remaining→balance запаздывает (напр. июнь: balance=0
         // при remaining≈50k у прошлого месяца) → UI показывал Сальдо=0,
         // расходясь с бухгалтерским экспорт-отчётом.
-        $incomingByCons = DB::table('consultantBalance as cb1')
-            ->whereRaw('cb1.id = (SELECT cb2.id FROM "consultantBalance" cb2
-                WHERE cb2.consultant = cb1.consultant
-                  AND cb2."dateMonth" < ?
-                ORDER BY cb2."dateMonth" DESC LIMIT 1)', [$dm])
-            ->select('cb1.consultant', 'cb1.remaining')
-            ->pluck('remaining', 'consultant');
+        // DISTINCT ON — single-pass instead of N correlated subqueries (prev version timed out on prod).
+        // Picks the most recent row per consultant where dateMonth < selected month.
+        $incomingByCons = collect(DB::select(
+            'SELECT DISTINCT ON (consultant) consultant, remaining
+             FROM "consultantBalance"
+             WHERE "dateMonth" < ?
+             ORDER BY consultant, "dateMonth" DESC',
+            [$dm]
+        ))->pluck('remaining', 'consultant');
 
         // Batch-load requisite verification for every partner in the result.
         $consultantIds = $rows->pluck('consultant')->filter()->unique()->values()->all();
