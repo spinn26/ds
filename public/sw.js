@@ -17,12 +17,15 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
+  // Удаляем старые кэши. clients.claim() намеренно убран:
+  // на iOS он перехватывает управление страницей mid-load и прерывает
+  // уже идущие запросы ресурсов — это вызывает бесконечный спиннер.
+  // Новый SW возьмёт управление на следующей навигации без claim().
   event.waitUntil(
     caches.keys().then((keys) =>
       Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
     )
   );
-  self.clients.claim();
 });
 
 self.addEventListener('fetch', (event) => {
