@@ -31,6 +31,14 @@ class AdminQuestionnaireController extends Controller
         'incomeFactors'         => 'От чего зависит доход',
     ];
 
+    /** Перевод коротких enum-значений → читаемые строки для экспорта. */
+    private const ENUM_LABELS = [
+        'salesExperience'       => ['none' => 'Нет', '<1' => 'До 1 года', '1-3' => '1–3 года', '3+' => 'Более 3 лет'],
+        'hasPotentialClients'   => ['yes' => 'Да', 'partly' => 'Частично', 'no' => 'Нет'],
+        'potentialClientsCount' => ['<10' => 'До 10', '10-30' => '10–30', '30-100' => '30–100', '100+' => 'Более 100'],
+        'weeklyHours'           => ['<10' => 'До 10 ч', '10-20' => '10–20 ч', '20-40' => '20–40 ч', 'full-time' => 'Полный день'],
+    ];
+
     /**
      * GET /admin/partners/questionnaires
      *
@@ -106,16 +114,23 @@ class AdminQuestionnaireController extends Controller
         $headers = ['ФИО', 'E-mail', 'Телефон', 'Город', 'Заполнено'];
         foreach (self::FIELDS as $label) $headers[] = $label;
 
-        $rows = $dbRows->map(function ($r) {
+        $cityIds = $dbRows->pluck('city')->filter()->unique()->values()->all();
+        $cities = $cityIds
+            ? DB::table('city')->whereIn('id', $cityIds)->pluck('cityNameRu', 'id')
+            : collect();
+
+        $rows = $dbRows->map(function ($r) use ($cities) {
+            $cityName = $r->city ? ($cities[$r->city] ?? $r->city) : '';
             $line = [
                 trim(($r->lastName ?? '') . ' ' . ($r->firstName ?? '') . ' ' . ($r->patronymic ?? '')),
                 $r->email ?? '',
                 $r->phone ?? '',
-                $r->city ?? '',
+                $cityName,
                 $r->questionnaireCompletedAt ?? '',
             ];
             foreach (array_keys(self::FIELDS) as $f) {
-                $line[] = $r->{$f} ?? '';
+                $val = $r->{$f} ?? '';
+                $line[] = self::ENUM_LABELS[$f][$val] ?? $val;
             }
             return $line;
         })->all();

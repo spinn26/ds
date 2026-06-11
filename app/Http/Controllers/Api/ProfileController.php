@@ -201,14 +201,14 @@ class ProfileController extends Controller
     public function saveQuestionnaire(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'workField' => ['nullable', 'string', 'max:255'],
+            'workField' => ['required', 'string', 'max:255'],
             'salesExperience' => ['required', 'string', 'in:none,<1,1-3,3+'],
-            'financeExperience' => ['nullable', 'string', 'max:4000'],
+            'financeExperience' => ['required', 'string', 'max:4000'],
             'hasPotentialClients' => ['required', 'string', 'in:yes,partly,no'],
             'potentialClientsCount' => ['nullable', 'string', 'in:<10,10-30,30-100,100+'],
-            'currentIncome' => ['nullable', 'string', 'max:128'],
+            'currentIncome' => ['required', 'string', 'max:128'],
             'weeklyHours' => ['required', 'string', 'in:<10,10-20,20-40,full-time'],
-            'incomeFactors' => ['nullable', 'string', 'max:4000'],
+            'incomeFactors' => ['required', 'string', 'max:4000'],
         ]);
 
         $user = $request->user();

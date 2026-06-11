@@ -53,7 +53,7 @@
         <div class="mb-5">
           <label class="q-label">
             <span class="q-num">3.</span>
-            В какой сфере вы сейчас работаете или работали?
+            В какой сфере вы сейчас работаете или работали? <span class="req">*</span>
           </label>
           <v-text-field
             v-model="form.workField"
@@ -89,7 +89,7 @@
         <div class="mb-5">
           <label class="q-label">
             <span class="q-num">5.</span>
-            Есть ли опыт в финансах / инвестициях / страховании?
+            Есть ли опыт в финансах / инвестициях / страховании? <span class="req">*</span>
           </label>
           <v-textarea
             v-model="form.financeExperience"
@@ -148,7 +148,7 @@
         <div class="mb-5">
           <label class="q-label">
             <span class="q-num">8.</span>
-            Ваш текущий доход в месяц?
+            Ваш текущий доход в месяц? <span class="req">*</span>
           </label>
           <v-text-field
             v-model="form.currentIncome"
@@ -184,7 +184,7 @@
         <div class="mb-2">
           <label class="q-label">
             <span class="q-num">10.</span>
-            Как вы считаете, от чего зависит доход в этой сфере?
+            Как вы считаете, от чего зависит доход в этой сфере? <span class="req">*</span>
           </label>
           <v-textarea
             v-model="form.incomeFactors"
@@ -267,17 +267,27 @@ watch(() => form.value.hasPotentialClients, (v) => {
   if (v === 'no') form.value.potentialClientsCount = null;
 });
 
-// Required for submission: Q4, Q6, Q9
-const requiredCount = 3;
+// Required for submission: Q3, Q4, Q5, Q6, Q8, Q9, Q10 (Q7 conditional on Q6).
+const requiredCount = computed(() => {
+  // Q7 required only when Q6 is yes/partly
+  const hasClientsQ = form.value.hasPotentialClients && form.value.hasPotentialClients !== 'no';
+  return hasClientsQ ? 8 : 7;
+});
 const filledCount = computed(() => {
   let n = 0;
+  if (form.value.workField?.trim()) n++;
   if (form.value.salesExperience) n++;
+  if (form.value.financeExperience?.trim()) n++;
   if (form.value.hasPotentialClients) n++;
+  const hasClientsQ = form.value.hasPotentialClients && form.value.hasPotentialClients !== 'no';
+  if (hasClientsQ && form.value.potentialClientsCount) n++;
+  if (form.value.currentIncome?.trim()) n++;
   if (form.value.weeklyHours) n++;
+  if (form.value.incomeFactors?.trim()) n++;
   return n;
 });
-const progress = computed(() => (filledCount.value / requiredCount) * 100);
-const canSubmit = computed(() => filledCount.value === requiredCount);
+const progress = computed(() => (filledCount.value / requiredCount.value) * 100);
+const canSubmit = computed(() => filledCount.value >= requiredCount.value);
 
 async function submit() {
   if (!canSubmit.value) return;

@@ -300,6 +300,9 @@ Route::prefix('v1')->group(function () {
 
         // Admin — Contracts import from Google Sheets
         Route::get('/admin/contract-import/sheet-names', [\App\Http\Controllers\Api\ContractImportController::class, 'sheetNames']);
+        Route::get('/admin/contract-import/form-data', [\App\Http\Controllers\Api\ContractImportController::class, 'formData']);
+        Route::get('/admin/contract-import/client-search', [\App\Http\Controllers\Api\ContractImportController::class, 'clientSearch']);
+        Route::get('/admin/contract-import/programs/{productId}', [\App\Http\Controllers\Api\ContractImportController::class, 'programsByProduct'])->whereNumber('productId');
         Route::get('/admin/contract-import/history', [\App\Http\Controllers\Api\ContractImportController::class, 'history']);
         Route::post('/admin/contract-import/from-sheets', [\App\Http\Controllers\Api\ContractImportController::class, 'importFromSheets'])->middleware('throttle:30,1');
         Route::post('/admin/contract-import/preview/from-sheets', [\App\Http\Controllers\Api\ContractImportController::class, 'previewFromSheets'])->middleware('throttle:30,1');

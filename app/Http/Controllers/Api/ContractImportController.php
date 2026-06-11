@@ -54,6 +54,65 @@ class ContractImportController extends Controller
         return response()->json(['sheets' => $sheets]);
     }
 
+    /** Справочные данные для формы редактирования строки буфера. */
+    public function formData(): JsonResponse
+    {
+        $currencies = DB::table('currency')
+            ->where('selectable', true)
+            ->orderBy('id')
+            ->get()
+            ->map(fn ($c) => ['id' => $c->id, 'symbol' => $c->symbol, 'name' => $c->nameRu ?? $c->currencyName]);
+
+        $products = DB::table('product')
+            ->where('active', true)
+            ->whereNull('dateDeleted')
+            ->orderBy('name')
+            ->get()
+            ->map(fn ($p) => ['id' => $p->id, 'name' => $p->name]);
+
+        $statuses = DB::table('contractStatus')
+            ->orderBy('id')
+            ->get()
+            ->map(fn ($s) => ['id' => $s->id, 'name' => $s->name]);
+
+        return response()->json([
+            'currencies' => $currencies,
+            'products'   => $products,
+            'statuses'   => $statuses,
+        ]);
+    }
+
+    /** Поиск клиентов по имени (для autocomplete в форме редактирования). */
+    public function clientSearch(Request $request): JsonResponse
+    {
+        $q = trim((string) $request->input('q', ''));
+        if (strlen($q) < 2) {
+            return response()->json(['data' => []]);
+        }
+        $rows = DB::table('client')
+            ->where('personName', 'ilike', "%{$q}%")
+            ->whereNull('dateDeleted')
+            ->orderBy('personName')
+            ->limit(30)
+            ->get()
+            ->map(fn ($c) => ['id' => $c->id, 'name' => $c->personName]);
+
+        return response()->json(['data' => $rows]);
+    }
+
+    /** Программы по product_id (для зависимого select). */
+    public function programsByProduct(int $productId): JsonResponse
+    {
+        $rows = DB::table('program')
+            ->where('product', $productId)
+            ->whereNull('dateDeleted')
+            ->orderBy('name')
+            ->get()
+            ->map(fn ($p) => ['id' => $p->id, 'name' => $p->name]);
+
+        return response()->json(['data' => $rows]);
+    }
+
     /** Импорт контрактов из выбранного листа. */
     /**
      * Preview-режим (per spec ✅Загрузка контрактов §1.2-§3):

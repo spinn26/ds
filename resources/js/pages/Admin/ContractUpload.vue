@@ -136,24 +136,66 @@
                 density="compact" variant="outlined" />
             </v-col>
             <v-col cols="12" sm="6">
-              <v-text-field v-model.number="editForm.client" label="Client ID *" type="number"
-                density="compact" variant="outlined" />
+              <v-autocomplete
+                v-model="editForm.client"
+                v-model:search="clientSearch"
+                :items="clientOptions"
+                item-title="name" item-value="id"
+                label="Клиент *"
+                density="compact" variant="outlined"
+                :loading="clientSearching"
+                no-data-text="Введите имя (мин. 2 символа)"
+                clearable
+                @update:search="onClientSearch"
+              />
             </v-col>
             <v-col cols="12" sm="6">
-              <v-text-field v-model.number="editForm.product" label="Product ID *" type="number"
-                density="compact" variant="outlined" />
+              <v-select
+                v-model="editForm.product"
+                :items="products"
+                item-title="name" item-value="id"
+                label="Продукт *"
+                density="compact" variant="outlined"
+                clearable
+                @update:model-value="onProductChange"
+              />
             </v-col>
             <v-col cols="12" sm="6">
-              <v-text-field v-model.number="editForm.program" label="Program ID" type="number"
-                density="compact" variant="outlined" />
+              <v-select
+                v-model="editForm.program"
+                :items="programs"
+                item-title="name" item-value="id"
+                label="Программа"
+                density="compact" variant="outlined"
+                clearable
+                :disabled="!editForm.product"
+                no-data-text="Выберите продукт"
+              />
             </v-col>
             <v-col cols="12" sm="6">
-              <v-text-field v-model.number="editForm.ammount" label="Сумма *" type="number"
-                density="compact" variant="outlined" />
+              <v-text-field v-model="editForm.ammount" label="Сумма *"
+                density="compact" variant="outlined"
+                hint="Допускается дробное: 303626.5" persistent-hint />
             </v-col>
             <v-col cols="12" sm="6">
-              <v-text-field v-model.number="editForm.currency" label="Currency ID" type="number"
-                density="compact" variant="outlined" />
+              <v-select
+                v-model="editForm.currency"
+                :items="currencies"
+                item-title="symbol" item-value="id"
+                label="Валюта"
+                density="compact" variant="outlined"
+                clearable
+              />
+            </v-col>
+            <v-col cols="12" sm="6">
+              <v-select
+                v-model="editForm.status"
+                :items="statuses"
+                item-title="name" item-value="id"
+                label="Статус"
+                density="compact" variant="outlined"
+                clearable
+              />
             </v-col>
             <v-col cols="12" sm="6">
               <v-text-field v-model="editForm.createDate" label="Дата создания" type="date"
@@ -184,11 +226,12 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import api from '../../api';
 import PageHeader from '../../components/PageHeader.vue';
 import { useConfirm } from '../../composables/useConfirm';
 import { usePermissions } from '../../composables/usePermissions';
+import { useDebounce } from '../../composables/useDebounce';
 
 const confirm = useConfirm();
 const { canFull } = usePermissions();
@@ -197,6 +240,9 @@ const form = ref({ sheet: null, currency: null });
 const sheetNames = ref([]);
 const sheetsError = ref('');
 const currencies = ref([]);
+const products = ref([]);
+const programs = ref([]);
+const statuses = ref([]);
 const loadingSheets = ref(false);
 const loadingPreview = ref(false);
 const finalizing = ref(false);
@@ -208,6 +254,9 @@ const editOpen = ref(false);
 const editingRow = ref(null);
 const editForm = ref({});
 const editSaving = ref(false);
+const clientSearch = ref('');
+const clientOptions = ref([]);
+const clientSearching = ref(false);
 
 const snack = ref({ open: false, color: 'success', text: '' });
 function notify(text, color = 'success') { snack.value = { open: true, color, text }; }
@@ -232,12 +281,36 @@ async function loadSheetNames() {
   loadingSheets.value = false;
 }
 
-async function loadCurrencies() {
+async function loadFormData() {
   try {
-    const { data } = await api.get('/admin/transaction-import/form-data');
-    currencies.value = (data.currencies || []).map(c => ({
-      id: c.id, symbol: c.symbol || c.name, name: c.name,
-    }));
+    const { data } = await api.get('/admin/contract-import/form-data');
+    currencies.value = data.currencies || [];
+    products.value = data.products || [];
+    statuses.value = data.statuses || [];
+  } catch {}
+}
+
+const { debounced: debouncedClientSearch } = useDebounce(async (q) => {
+  if (!q || q.length < 2) { clientOptions.value = []; return; }
+  clientSearching.value = true;
+  try {
+    const { data } = await api.get('/admin/contract-import/client-search', { params: { q } });
+    clientOptions.value = data.data || [];
+  } catch {}
+  clientSearching.value = false;
+}, 300);
+
+function onClientSearch(q) {
+  debouncedClientSearch(q);
+}
+
+async function onProductChange(productId) {
+  editForm.value.program = null;
+  programs.value = [];
+  if (!productId) return;
+  try {
+    const { data } = await api.get(`/admin/contract-import/programs/${productId}`);
+    programs.value = data.data || [];
   } catch {}
 }
 
@@ -269,9 +342,38 @@ async function loadList() {
   } catch {}
 }
 
-function openEdit(row) {
+async function openEdit(row) {
   editingRow.value = row;
   editForm.value = { ...(row.rowData || {}) };
+  clientSearch.value = '';
+  clientOptions.value = [];
+  programs.value = [];
+
+  // Preload client option for autocomplete display
+  const clientId = editForm.value.client;
+  if (clientId) {
+    try {
+      const { data } = await api.get('/admin/contract-import/client-search', { params: { q: String(clientId) } });
+      // Try exact id match first, then fall back to searching by id as string
+      const found = (data.data || []).find(c => c.id === clientId);
+      if (found) {
+        clientOptions.value = [found];
+      } else {
+        // Fetch by id directly
+        const res = await api.get('/admin/contract-import/client-search', { params: { q: editForm.value.clientName || String(clientId) } });
+        clientOptions.value = res.data.data || [];
+      }
+    } catch {}
+  }
+
+  // Preload programs for selected product
+  if (editForm.value.product) {
+    try {
+      const { data } = await api.get(`/admin/contract-import/programs/${editForm.value.product}`);
+      programs.value = data.data || [];
+    } catch {}
+  }
+
   editOpen.value = true;
 }
 
@@ -346,7 +448,7 @@ async function exitPreview() {
 
 onMounted(() => {
   loadSheetNames();
-  loadCurrencies();
+  loadFormData();
 });
 </script>
 

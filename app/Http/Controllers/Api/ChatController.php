@@ -380,17 +380,16 @@ class ChatController extends Controller
             $recipientName = $recipient ? trim(($recipient->lastName ?? '') . ' ' . ($recipient->firstName ?? '')) : null;
         }
 
-        // Dedup: если открытый тикет для того же получателя + контекста уже есть —
-        // возвращаем его, не создаём дубль. Без этого многократный клик «Написать
-        // партнёру» создавал N тикетов и выбивал throttle:10,1.
-        if ($recipientId) {
-            $ctxType = $request->input('context_type');
-            $ctxId   = $request->input('context_id');
+        // Dedup: защита от двойного клика «Написать партнёру» без контекста.
+        // Когда тикет создаётся из конкретного контракта/клиента/партнёра
+        // (context_type + context_id заданы) — деdup НЕ применяем: по одному
+        // контракту может быть открыто несколько параллельных запросов.
+        $ctxType = $request->input('context_type');
+        $ctxId   = $request->input('context_id');
+        if ($recipientId && ! ($ctxType && $ctxId)) {
             $dup = DB::table('chat_tickets')
                 ->where('recipient_id', $recipientId)
-                ->when($ctxType && $ctxId, fn ($q) => $q
-                    ->where('context_type', $ctxType)
-                    ->where('context_id', (string) $ctxId))
+                ->whereNull('context_type')
                 ->whereNotIn('status', ['closed', 'resolved'])
                 ->orderByDesc('id')
                 ->value('id');

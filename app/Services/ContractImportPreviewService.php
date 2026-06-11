@@ -143,6 +143,21 @@ class ContractImportPreviewService
             }
         }
 
+        // 8. Сумма: запятая как десятичный разделитель (303626,5 → 303626.5)
+        foreach (['ammount', 'amount'] as $f) {
+            if (isset($row[$f]) && is_string($row[$f])) {
+                $row[$f] = str_replace([' ', "\u{00A0}"], '', str_replace(',', '.', trim($row[$f])));
+            }
+        }
+
+        // 9. Статус: русское название → integer ID из contractStatus
+        if (! empty($row['status']) && ! is_numeric($row['status'])) {
+            $found = DB::table('contractStatus')
+                ->where('name', 'ilike', trim((string) $row['status']))
+                ->value('id');
+            $row['status'] = $found ? (int) $found : null;
+        }
+
         return $row;
     }
 
