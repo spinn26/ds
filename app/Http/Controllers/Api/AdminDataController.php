@@ -323,6 +323,20 @@ class AdminDataController extends Controller
     }
 
     /**
+     * Канонизация пола: легаси-значения Directual («Мужской»/«Женский»),
+     * однобуквенные коды и en-варианты → «male»/«female». null — если пусто
+     * или нераспознано (тогда пол просто не меняется/очищается).
+     */
+    private function normalizeGender($v): ?string
+    {
+        $s = mb_strtolower(trim((string) $v));
+        if ($s === '') return null;
+        if (in_array($s, ['male', 'm', 'м', 'муж', 'мужской'], true)) return 'male';
+        if (in_array($s, ['female', 'f', 'ж', 'жен', 'женский'], true)) return 'female';
+        return null;
+    }
+
+    /**
      * Редактирование партнёра: обновляем Consultant и связанный WebUser.
      * Все поля опциональны — обновляются только присланные.
      */
@@ -336,6 +350,13 @@ class AdminDataController extends Controller
         // ФИО: только кириллица + пробел/дефис. Поля sometimes — если они
         // вообще пришли в запросе, валидируем формат; если null/пусто,
         // правило regex автоматически пропускается (nullable).
+        // Легаси-значения пола приходят из Directual по-русски («Мужской»/
+        // «Женский»); приводим к канону male/female до валидации, иначе
+        // in:male,female отклонит сохранение старой записи.
+        if ($request->has('gender')) {
+            $request->merge(['gender' => $this->normalizeGender($request->input('gender'))]);
+        }
+
         $cyrillicRegex = '/^[А-Яа-яЁё][А-Яа-яЁё\s\-]*$/u';
         $data = $request->validate([
             // consultant fields

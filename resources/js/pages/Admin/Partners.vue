@@ -894,6 +894,17 @@ const genderOptions = [
   { title: 'Женский', value: 'female' },
 ];
 
+// Легаси-партнёры из Directual хранят пол по-русски («Мужской»/«Женский»),
+// новые — «male»/«female». Приводим к канону, иначе v-select не находит
+// значение и сохранение падает на валидации in:male,female.
+function normalizeGender(v) {
+  const s = String(v || '').trim().toLowerCase();
+  if (!s) return null;
+  if (['male', 'm', 'м', 'муж', 'мужской'].includes(s)) return 'male';
+  if (['female', 'f', 'ж', 'жен', 'женский'].includes(s)) return 'female';
+  return null;
+}
+
 // Роли — единый перечень с Admin/Users.vue. WebUser.role хранится как
 // CSV (например "registered,consultant"), поэтому работаем через прокси
 // editFormRoles: array ↔ string.
@@ -973,7 +984,7 @@ async function openEdit(item) {
       email: u.email || '',
       phone: u.phone || '',
       nicTG: u.nicTG || '',
-      gender: u.gender || null,
+      gender: normalizeGender(u.gender),
       birthDate: u.birthDate || null,
       role: u.role || '',
       isBlocked: !!u.isBlocked,

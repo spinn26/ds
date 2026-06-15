@@ -118,7 +118,11 @@ onMounted(() => {
 <style scoped>
 .phone-input-wrap {
   display: flex;
-  align-items: stretch;
+  /* flex-start, а не stretch: у v-text-field под полем зарезервирована
+     строка сообщений (details). При stretch префикс тянулся на всю высоту
+     вместе с ней и выглядел как отдельная высокая рамка. Выравниваем по
+     верху и фиксируем высоту префикса под высоту самого поля. */
+  align-items: flex-start;
   gap: 0;
 }
 .phone-input-prefix {
@@ -132,8 +136,9 @@ onMounted(() => {
   font-size: 14px;
   background: transparent;
   user-select: none;
-  /* Высота под density=compact (~40px), синхронно с v-text-field. */
-  min-height: 40px;
+  /* Высота поля при density=compact (~40px), синхронно с v-text-field. */
+  height: 40px;
+  flex: 0 0 auto;
   transition: border-color 120ms;
 }
 .phone-input-prefix.is-focused {
