@@ -525,6 +525,8 @@ class ProductSalesMatrixController extends Controller
             'to'          => 'required|date_format:Y-m',
             'products'    => 'nullable|array',
             'products.*'  => 'integer',
+            'suppliers'   => 'nullable|array',
+            'suppliers.*' => 'string|max:200',
         ]);
 
         $from   = $params['from'];
@@ -556,6 +558,9 @@ class ProductSalesMatrixController extends Controller
             ->orderBy('pg.name')
             ->orderBy('t.dateMonth');
 
+        if (! empty($params['suppliers'])) {
+            $q->whereIn(DB::raw('COALESCE(pg."providerName", \'—\')'), $params['suppliers']);
+        }
         if (! empty($params['products'])) {
             $q->whereIn('p.id', $params['products']);
         }
@@ -612,18 +617,21 @@ class ProductSalesMatrixController extends Controller
         // Distinct FC count per product (exact, product-level only)
         $fcCounts = DB::table('transaction as t')
             ->join('contract as co', 'co.id', '=', 't.contract')
+            ->join('program as pg',  'pg.id', '=', 'co.program')
             ->whereBetween('t.dateMonth', [$from, $to])
             ->whereNotNull('co.openDate')
             ->whereNull('co.deletedAt')
             ->whereNull('t.deletedAt')
+            ->when(! empty($params['suppliers']), fn ($q) =>
+                $q->whereIn(DB::raw('COALESCE(pg."providerName", \'—\')'), $params['suppliers'])
+            )
+            ->when(! empty($params['products']), fn ($q) =>
+                $q->whereIn('co.product', $params['products'])
+            )
             ->select('co.product as product_id', DB::raw('COUNT(DISTINCT co.consultant) as fc_count'))
             ->groupBy('co.product')
             ->get()
             ->keyBy('product_id');
-
-        if (! empty($params['products'])) {
-            // Already filtered above; just use what's there
-        }
 
         $result = [];
         foreach ($productMap as $pid => $prod) {
@@ -634,13 +642,29 @@ class ProductSalesMatrixController extends Controller
 
         $grand['fcCount'] = (int) DB::table('transaction as t')
             ->join('contract as co', 'co.id', '=', 't.contract')
+            ->join('program as pg',  'pg.id', '=', 'co.program')
             ->whereBetween('t.dateMonth', [$from, $to])
             ->whereNotNull('co.openDate')
             ->whereNull('co.deletedAt')
             ->whereNull('t.deletedAt')
+            ->when(! empty($params['suppliers']), fn ($q) =>
+                $q->whereIn(DB::raw('COALESCE(pg."providerName", \'—\')'), $params['suppliers'])
+            )
             ->when(! empty($params['products']), fn ($q) => $q->whereIn('co.product', $params['products']))
             ->distinct()
             ->count('co.consultant');
+
+        $allSuppliers = DB::table('transaction as t')
+            ->join('contract as co', 'co.id', '=', 't.contract')
+            ->join('program as pg',  'pg.id', '=', 'co.program')
+            ->whereBetween('t.dateMonth', [$from, $to])
+            ->whereNotNull('co.openDate')
+            ->whereNull('co.deletedAt')
+            ->whereNull('t.deletedAt')
+            ->whereNotNull('pg.providerName')
+            ->distinct()
+            ->orderBy('pg.providerName')
+            ->pluck('pg.providerName');
 
         $allProducts = DB::table('transaction as t')
             ->join('contract as co', 'co.id', '=', 't.contract')
@@ -659,6 +683,7 @@ class ProductSalesMatrixController extends Controller
             'period'      => ['from' => $from, 'to' => $to, 'months' => $months],
             'rows'        => $result,
             'grandTotals' => $grand,
+            'suppliers'   => $allSuppliers->values(),
             'products'    => $allProducts->values(),
         ]);
     }

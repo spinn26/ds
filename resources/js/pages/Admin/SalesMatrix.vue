@@ -50,11 +50,17 @@
             <!-- Custom range -->
             <template v-if="periodMode === 'range'">
               <v-text-field v-model="rangeFrom" type="month" density="compact" variant="outlined"
-                hide-details label="С" style="max-width:158px" @change="reload" />
+                hide-details label="С" style="max-width:158px" @update:model-value="reload" />
               <span class="text-medium-emphasis">—</span>
               <v-text-field v-model="rangeTo" type="month" density="compact" variant="outlined"
-                hide-details label="По" style="max-width:158px" @change="reload" />
+                hide-details label="По" style="max-width:158px" @update:model-value="reload" />
             </template>
+
+            <!-- Supplier filter -->
+            <v-autocomplete v-model="filterSuppliers" :items="supplierOptions"
+              placeholder="Все поставщики" prepend-inner-icon="mdi-domain"
+              multiple chips closable-chips density="compact" variant="outlined"
+              hide-details style="max-width:240px" @update:model-value="loadData" />
 
             <!-- Product filter -->
             <v-autocomplete v-model="filterProducts" :items="productOptions"
@@ -63,7 +69,7 @@
               multiple chips closable-chips density="compact" variant="outlined"
               hide-details style="max-width:280px" @update:model-value="loadData" />
 
-            <v-btn v-if="filterProducts.length" icon="mdi-filter-remove" size="small"
+            <v-btn v-if="filterProducts.length || filterSuppliers.length" icon="mdi-filter-remove" size="small"
               variant="text" title="Сбросить" @click="resetFilters" />
 
             <v-spacer />
@@ -88,7 +94,8 @@
                     <template #prepend>
                       <v-checkbox-btn :model-value="selectedMetricKeys.includes(m.key)"
                         :disabled="selectedMetricKeys.length >= 2 && !selectedMetricKeys.includes(m.key)"
-                        color="primary" density="compact" />
+                        color="primary" density="compact"
+                        @click.stop="toggleMetric(m.key)" />
                     </template>
                   </v-list-item>
                 </v-list>
@@ -287,6 +294,8 @@ const loading          = ref(false);
 const rows             = ref([]);
 const grandTotals      = ref(null);
 const months           = ref([]);
+const supplierOptions  = ref([]);
+const filterSuppliers  = ref([]);
 const productOptions   = ref([]);
 const filterProducts   = ref([]);
 const expandedProducts = ref(new Set());
@@ -298,8 +307,8 @@ function toggleProduct(pid) {
 }
 function expandAll()   { expandedProducts.value = new Set(rows.value.map(r => r.productId)); }
 function collapseAll() { expandedProducts.value = new Set(); }
-function resetFilters() { filterProducts.value = []; loadData(); }
-function reload() { productOptions.value = []; filterProducts.value = []; loadData(); }
+function resetFilters() { filterProducts.value = []; filterSuppliers.value = []; loadData(); }
+function reload() { productOptions.value = []; supplierOptions.value = []; filterProducts.value = []; filterSuppliers.value = []; loadData(); }
 function onPeriodModeChange() { reload(); }
 
 async function loadData() {
@@ -308,12 +317,14 @@ async function loadData() {
     const p = new URLSearchParams();
     p.set('from', periodFrom.value);
     p.set('to',   periodTo.value);
+    filterSuppliers.value.forEach(s => p.append('suppliers[]', s));
     filterProducts.value.forEach(id => p.append('products[]', id));
     const { data } = await api.get(`/admin/reports/sales-matrix/period?${p}`);
     rows.value        = data.rows           ?? [];
     months.value      = data.period?.months ?? [];
     grandTotals.value = data.grandTotals    ?? null;
-    if (!productOptions.value.length) productOptions.value = data.products ?? [];
+    if (!supplierOptions.value.length) supplierOptions.value = data.suppliers ?? [];
+    if (!productOptions.value.length)  productOptions.value  = data.products  ?? [];
   } catch (e) { console.error('matrix load failed', e); }
   loading.value = false;
 }
