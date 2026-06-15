@@ -533,14 +533,25 @@ class ProductSalesMatrixController extends Controller
         $to     = $params['to'];
         $months = $this->monthRange($from, $to);
 
-        $q = DB::table('transaction as t')
+        // Базовый builder (только активированные контракты, все фильтры)
+        $base = fn () => DB::table('transaction as t')
             ->join('contract as co', 'co.id', '=', 't.contract')
-            ->join('product as p',   'p.id',  '=', 'co.product')
             ->join('program as pg',  'pg.id', '=', 'co.program')
             ->whereBetween('t.dateMonth', [$from, $to])
+            ->where('co.status', 1)
             ->whereNotNull('co.openDate')
             ->whereNull('co.deletedAt')
             ->whereNull('t.deletedAt')
+            ->when(! empty($params['suppliers']), fn ($q) =>
+                $q->whereIn(DB::raw('COALESCE(pg."providerName", \'—\')'), $params['suppliers'])
+            )
+            ->when(! empty($params['products']), fn ($q) =>
+                $q->whereIn('co.product', $params['products'])
+            );
+
+        // Основная агрегация: продукт × программа × месяц
+        $rows = $base()
+            ->join('product as p', 'p.id', '=', 'co.product')
             ->select([
                 'p.id   as product_id',
                 'p.name as product_name',
@@ -552,24 +563,17 @@ class ProductSalesMatrixController extends Controller
                 DB::raw('SUM(COALESCE(t."netRevenueRUB", 0)) as revenue'),
                 DB::raw('SUM(COALESCE(t."personalVolume",0)) as points'),
                 DB::raw('COUNT(DISTINCT co.client)            as client_count'),
+                DB::raw('COUNT(DISTINCT co.consultant)        as fc_count'),
             ])
             ->groupBy('p.id', 'p.name', 'pg.id', 'pg.name', 't.dateMonth')
             ->orderBy('p.name')
             ->orderBy('pg.name')
-            ->orderBy('t.dateMonth');
-
-        if (! empty($params['suppliers'])) {
-            $q->whereIn(DB::raw('COALESCE(pg."providerName", \'—\')'), $params['suppliers']);
-        }
-        if (! empty($params['products'])) {
-            $q->whereIn('p.id', $params['products']);
-        }
-
-        $rows = $q->get();
+            ->orderBy('t.dateMonth')
+            ->get();
 
         $productMap = [];
-        $grand      = ['volume' => 0, 'count' => 0, 'revenue' => 0, 'points' => 0,
-                       'clientCount' => 0, 'monthly' => []];
+        $grand      = ['volume' => 0, 'count' => 0, 'revenue' => 0,
+                       'points' => 0, 'clientCount' => 0, 'monthly' => []];
 
         foreach ($rows as $r) {
             $pid  = $r->product_id;
@@ -581,6 +585,7 @@ class ProductSalesMatrixController extends Controller
             $rv = round((float) $r->revenue, 2);
             $pt = round((float) $r->points,  2);
             $cl = (int)         $r->client_count;
+            $fc = (int)         $r->fc_count;
             $vals = ['volume' => $v, 'count' => $c, 'revenue' => $rv,
                      'points' => $pt, 'clientCount' => $cl];
 
@@ -599,13 +604,16 @@ class ProductSalesMatrixController extends Controller
                 ];
             }
 
-            // Program
-            $productMap[$pid]['programs'][$pgid]['monthly'][$mo] = $vals;
+            // Program monthly: fcCount корректен на уровне (программа × месяц)
+            $productMap[$pid]['programs'][$pgid]['monthly'][$mo] = array_merge($vals, [
+                'fcCount'  => $fc,
+                'avgCheck' => $c > 0 ? round($v / $c, 2) : 0,
+            ]);
             foreach ($vals as $k => $val) {
                 $productMap[$pid]['programs'][$pgid][$k] += $val;
             }
 
-            // Product
+            // Product & grand: только базовые метрики (fcCount добавляется отдельными запросами)
             foreach ($vals as $k => $val) {
                 $productMap[$pid]['monthly'][$mo][$k]  = ($productMap[$pid]['monthly'][$mo][$k] ?? 0) + $val;
                 $productMap[$pid][$k]                 += $val;
@@ -614,24 +622,55 @@ class ProductSalesMatrixController extends Controller
             }
         }
 
-        // Distinct FC count per product (exact, product-level only)
-        $fcCounts = DB::table('transaction as t')
-            ->join('contract as co', 'co.id', '=', 't.contract')
-            ->join('program as pg',  'pg.id', '=', 'co.program')
-            ->whereBetween('t.dateMonth', [$from, $to])
-            ->whereNotNull('co.openDate')
-            ->whereNull('co.deletedAt')
-            ->whereNull('t.deletedAt')
-            ->when(! empty($params['suppliers']), fn ($q) =>
-                $q->whereIn(DB::raw('COALESCE(pg."providerName", \'—\')'), $params['suppliers'])
-            )
-            ->when(! empty($params['products']), fn ($q) =>
-                $q->whereIn('co.product', $params['products'])
-            )
+        // FC distinct по (продукт × месяц) — нельзя суммировать программные значения
+        $fcMonthlyRows = $base()
+            ->select('co.product as product_id', 't.dateMonth',
+                     DB::raw('COUNT(DISTINCT co.consultant) as fc_count'))
+            ->groupBy('co.product', 't.dateMonth')
+            ->get();
+
+        $fcMonthlyIdx = [];
+        foreach ($fcMonthlyRows as $r) {
+            $fcMonthlyIdx[$r->product_id][$r->dateMonth] = (int) $r->fc_count;
+        }
+
+        // Grand monthly fcCount
+        $grandFcMonthly = $base()
+            ->select('t.dateMonth', DB::raw('COUNT(DISTINCT co.consultant) as fc_count'))
+            ->groupBy('t.dateMonth')
+            ->get()
+            ->pluck('fc_count', 'dateMonth');
+
+        // FC distinct по продукту итого
+        $fcCounts = $base()
             ->select('co.product as product_id', DB::raw('COUNT(DISTINCT co.consultant) as fc_count'))
             ->groupBy('co.product')
             ->get()
             ->keyBy('product_id');
+
+        $grand['fcCount'] = (int) $base()->distinct()->count('co.consultant');
+
+        // Производные поля: avgCheck и fcCount на уровне продукта/гранда
+        foreach ($productMap as $pid => &$prod) {
+            $prod['avgCheck'] = $prod['count'] > 0 ? round($prod['volume'] / $prod['count'], 2) : 0;
+            foreach ($prod['monthly'] as $mo => &$mv) {
+                $mv['avgCheck'] = $mv['count'] > 0 ? round($mv['volume'] / $mv['count'], 2) : 0;
+                $mv['fcCount']  = $fcMonthlyIdx[$pid][$mo] ?? 0;
+            }
+            unset($mv);
+            foreach ($prod['programs'] as &$prog) {
+                $prog['avgCheck'] = $prog['count'] > 0 ? round($prog['volume'] / $prog['count'], 2) : 0;
+            }
+            unset($prog);
+        }
+        unset($prod);
+
+        $grand['avgCheck'] = $grand['count'] > 0 ? round($grand['volume'] / $grand['count'], 2) : 0;
+        foreach ($grand['monthly'] as $mo => &$gv) {
+            $gv['avgCheck'] = $gv['count'] > 0 ? round($gv['volume'] / $gv['count'], 2) : 0;
+            $gv['fcCount']  = (int) ($grandFcMonthly[$mo] ?? 0);
+        }
+        unset($gv);
 
         $result = [];
         foreach ($productMap as $pid => $prod) {
@@ -640,39 +679,14 @@ class ProductSalesMatrixController extends Controller
             $result[]         = $prod;
         }
 
-        $grand['fcCount'] = (int) DB::table('transaction as t')
-            ->join('contract as co', 'co.id', '=', 't.contract')
-            ->join('program as pg',  'pg.id', '=', 'co.program')
-            ->whereBetween('t.dateMonth', [$from, $to])
-            ->whereNotNull('co.openDate')
-            ->whereNull('co.deletedAt')
-            ->whereNull('t.deletedAt')
-            ->when(! empty($params['suppliers']), fn ($q) =>
-                $q->whereIn(DB::raw('COALESCE(pg."providerName", \'—\')'), $params['suppliers'])
-            )
-            ->when(! empty($params['products']), fn ($q) => $q->whereIn('co.product', $params['products']))
-            ->distinct()
-            ->count('co.consultant');
-
-        $allSuppliers = DB::table('transaction as t')
-            ->join('contract as co', 'co.id', '=', 't.contract')
-            ->join('program as pg',  'pg.id', '=', 'co.program')
-            ->whereBetween('t.dateMonth', [$from, $to])
-            ->whereNotNull('co.openDate')
-            ->whereNull('co.deletedAt')
-            ->whereNull('t.deletedAt')
+        $allSuppliers = $base()
             ->whereNotNull('pg.providerName')
             ->distinct()
             ->orderBy('pg.providerName')
             ->pluck('pg.providerName');
 
-        $allProducts = DB::table('transaction as t')
-            ->join('contract as co', 'co.id', '=', 't.contract')
+        $allProducts = $base()
             ->join('product as p', 'p.id', '=', 'co.product')
-            ->whereBetween('t.dateMonth', [$from, $to])
-            ->whereNotNull('co.openDate')
-            ->whereNull('co.deletedAt')
-            ->whereNull('t.deletedAt')
             ->select('p.id', 'p.name')
             ->distinct()
             ->orderBy('p.name')

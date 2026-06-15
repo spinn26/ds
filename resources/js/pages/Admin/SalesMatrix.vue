@@ -274,11 +274,13 @@ const periodLabel = computed(() => {
 
 // ─── Metrics ──────────────────────────────────────────────────
 const allMetrics = [
-  { key: 'volume',      short: 'Объём',   label: 'Объём (₽)',        fmt: 'rub' },
-  { key: 'count',       short: 'Кол-во',  label: 'Кол-во',           fmt: 'int' },
-  { key: 'revenue',     short: 'Выручка', label: 'Выручка (₽)',      fmt: 'rub' },
-  { key: 'points',      short: 'Баллы',   label: 'Баллы',            fmt: 'num' },
-  { key: 'clientCount', short: 'Клиенты', label: 'Кол-во клиентов',  fmt: 'int' },
+  { key: 'volume',      short: 'Объём',    label: 'Объём ($)',         fmt: 'rub' },
+  { key: 'count',       short: 'Кол-во',   label: 'Кол-во (шт)',       fmt: 'int' },
+  { key: 'avgCheck',    short: 'Ср.чек',   label: 'Средний чек ($)',   fmt: 'rub' },
+  { key: 'revenue',     short: 'Выручка',  label: 'Выручка ($)',       fmt: 'rub' },
+  { key: 'points',      short: 'Баллы',    label: 'Баллы',             fmt: 'num' },
+  { key: 'fcCount',     short: 'Кол-во ФК', label: 'Кол-во ФК',       fmt: 'int' },
+  { key: 'clientCount', short: 'Клиенты',  label: 'Кол-во клиентов',  fmt: 'int' },
 ];
 const selectedMetricKeys = ref(['volume', 'revenue']);
 const activeMetrics = computed(() => allMetrics.filter(m => selectedMetricKeys.value.includes(m.key)));
