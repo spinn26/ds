@@ -113,7 +113,7 @@
     <v-card class="mt-3">
       <v-card-title class="pa-3 d-flex align-center ga-2">
         <v-icon color="primary">mdi-filter-variant</v-icon>
-        Воронка нового партнёра
+        Воронка нового партнёра — за всё время
       </v-card-title>
       <v-card-text>
         <div v-for="(s, i) in funnelSteps" :key="s.key" class="mb-4">
@@ -128,17 +128,53 @@
             </span>
           </div>
           <v-progress-linear
-            :model-value="widthOf(s)"
+            :model-value="widthOf(s, totalEver)"
             :color="s.negative ? 'error' : 'primary'"
             height="28"
             rounded
           >
             <span class="funnel-pct text-caption">
-              {{ widthOf(s).toFixed(1) }}% от {{ totalEver.toLocaleString('ru-RU') }} зарегистрированных
+              {{ widthOf(s, totalEver).toFixed(1) }}% от {{ totalEver.toLocaleString('ru-RU') }} зарегистрированных
             </span>
           </v-progress-linear>
         </div>
         <div v-if="!funnelSteps.length" class="text-center text-medium-emphasis pa-4">
+          Нет данных по воронке за выбранный период
+        </div>
+      </v-card-text>
+    </v-card>
+
+    <!-- Вторая воронка: только партнёры, зарегистрированные с 1 июня
+         текущего года — чтобы видеть конверсию свежего набора отдельно. -->
+    <v-card class="mt-3">
+      <v-card-title class="pa-3 d-flex align-center ga-2">
+        <v-icon color="primary">mdi-calendar-start</v-icon>
+        Воронка нового партнёра — зарегистрированы с 1 июня {{ currentYear }}
+      </v-card-title>
+      <v-card-text>
+        <div v-for="(s, i) in funnelStepsSince" :key="s.key" class="mb-4">
+          <div class="d-flex align-center mb-1">
+            <span class="text-body-1 font-weight-medium">{{ s.label }}</span>
+            <v-spacer />
+            <span class="text-body-1 font-weight-bold">
+              {{ s.count.toLocaleString('ru-RU') }}
+            </span>
+            <span v-if="i > 0" class="text-caption text-medium-emphasis ms-3" style="min-width: 100px; text-align:right">
+              {{ s.rate }}% от пред. шага
+            </span>
+          </div>
+          <v-progress-linear
+            :model-value="widthOf(s, totalEverSince)"
+            :color="s.negative ? 'error' : 'primary'"
+            height="28"
+            rounded
+          >
+            <span class="funnel-pct text-caption">
+              {{ widthOf(s, totalEverSince).toFixed(1) }}% от {{ totalEverSince.toLocaleString('ru-RU') }} зарегистрированных
+            </span>
+          </v-progress-linear>
+        </div>
+        <div v-if="!funnelStepsSince.length" class="text-center text-medium-emphasis pa-4">
           Нет данных по воронке за выбранный период
         </div>
       </v-card-text>
@@ -154,6 +190,11 @@ import { PageHeader, MoneyCell } from '../../components';
 const data = ref({});
 const funnelSteps = ref([]);
 const totalEver = ref(0);
+// Вторая воронка — партнёры, зарегистрированные с 1 июня текущего года.
+const funnelStepsSince = ref([]);
+const totalEverSince = ref(0);
+const currentYear = new Date().getFullYear();
+const sinceDate = `${currentYear}-06-01`;
 
 const latestMonth = computed(() => {
   const arr = data.value.monthlyRevenue || [];
@@ -166,9 +207,11 @@ const maxRev = computed(() => {
 });
 
 function barFor(v) { return maxRev.value > 0 ? (Number(v) / maxRev.value) * 100 : 0; }
-function widthOf(s) {
-  if (!totalEver.value) return 0;
-  return (s.count / totalEver.value) * 100;
+// total — число «всего зарегистрировано» для конкретной воронки
+// (в шаблоне ref-ы авто-разворачиваются, сюда приходит число).
+function widthOf(s, total) {
+  if (!total) return 0;
+  return (s.count / total) * 100;
 }
 
 function formatMonth(v) {
@@ -180,13 +223,16 @@ async function load() {
   // Грузим оба эндпоинта параллельно — единый дашборд показывает обе
   // секции (KPI/Топ + воронка) одним экраном.
   try {
-    const [dash, funnel] = await Promise.all([
+    const [dash, funnel, funnelSince] = await Promise.all([
       api.get('/admin/analytics/owner-dashboard'),
       api.get('/admin/analytics/funnel'),
+      api.get('/admin/analytics/funnel', { params: { since: sinceDate } }),
     ]);
     data.value = dash.data || {};
     funnelSteps.value = funnel.data?.steps || [];
     totalEver.value = funnel.data?.totalEverRegistered || 0;
+    funnelStepsSince.value = funnelSince.data?.steps || [];
+    totalEverSince.value = funnelSince.data?.totalEverRegistered || 0;
   } catch {}
 }
 onMounted(load);
