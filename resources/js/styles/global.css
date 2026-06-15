@@ -1,7 +1,11 @@
 /* DS Consulting Design System — Airy & Rounded */
 
-/* Smooth transitions */
-* {
+/* Smooth transitions (theme-switch + hover). Раньше был `*` — это
+   перф-анти-паттерн: анимировало каждый элемент. Сужено до поверхностей
+   и интерактивных элементов, которые реально меняют цвет/тень. */
+.v-card, .v-sheet, .v-navigation-drawer, .v-app-bar, .topbar,
+.v-btn, .v-chip, .v-list-item, .v-field, .v-tab, .v-table,
+.v-data-table th, .v-data-table td, a {
   transition: background-color 0.2s ease, color 0.1s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -15,14 +19,16 @@
   background: rgb(var(--v-theme-surface)) !important;
 }
 
-/* Subtle separators on data-table rows so they don't bleed together */
-.v-data-table :deep(tbody tr td),
-.v-data-table-server :deep(tbody tr td),
+/* Subtle separators on data-table rows so they don't bleed together.
+   NB: это глобальный CSS, а не scoped-блок SFC — здесь `:deep()` невалиден
+   и роняет всё правило, поэтому селекторы обычные (descendant). */
+.v-data-table tbody tr td,
+.v-data-table-server tbody tr td,
 .v-table tbody tr td {
   border-bottom: 1px solid rgba(0, 0, 0, 0.06) !important;
 }
-.v-theme--dark .v-data-table :deep(tbody tr td),
-.v-theme--dark .v-data-table-server :deep(tbody tr td),
+.v-theme--dark .v-data-table tbody tr td,
+.v-theme--dark .v-data-table-server tbody tr td,
 .v-theme--dark .v-table tbody tr td {
   border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
 }
@@ -402,4 +408,17 @@
 .v-theme--dark .vue-tel-input .vti__dropdown-list {
   background: rgb(var(--v-theme-surface));
   color: rgb(var(--v-theme-on-surface));
+}
+
+/* Доступность: уважаем системную настройку «уменьшить движение» — глушим
+   transition/анимации (hover-lift, ds-blink, плавная смена темы и т.п.). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

@@ -21,8 +21,10 @@
   --ds-primary-soft:          #E8F1E9;
   --ds-primary-tint:          #F4F9F4;
 
-  --ds-secondary:             #6EE87A;   /* brand mint */
-  --ds-on-secondary:          #0A2B10;
+  /* secondary держим в синхроне с Vuetify-темой (app.js — источник истины
+     для UI-цветов). Это читаемый teal-зелёный; яркий мятный — это brand. */
+  --ds-secondary:             #00796B;
+  --ds-on-secondary:          #FFFFFF;
   --ds-secondary-container:   #C8FBCE;
   --ds-on-secondary-container: #001505;
 
