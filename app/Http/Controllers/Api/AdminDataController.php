@@ -2356,8 +2356,21 @@ class AdminDataController extends Controller
             ->get(['id as catalog_id', 'legacy_product_id', 'name as catalog_name'])
             ->keyBy('legacy_product_id');
 
+        // Дополнительно включаем legacy-продукты, которые сами помечены
+        // active=false, но на них ссылается АКТИВНАЯ запись каталога
+        // (рассинхрон active между legacy и catalog). Иначе такой продукт
+        // выпадает из списка целиком: из источника 1 — по active=false,
+        // из источника 2 — потому что legacy_product_id у него заполнен.
+        // id остаётся реальным legacy product.id → FK contract.product валиден.
+        $catalogLegacyIds = $catalogMap->keys()->all();
+
         $legacyProducts = DB::table('product')
-            ->where('active', true)
+            ->where(function ($q) use ($catalogLegacyIds) {
+                $q->where('active', true);
+                if (! empty($catalogLegacyIds)) {
+                    $q->orWhereIn('id', $catalogLegacyIds);
+                }
+            })
             ->orderBy('name')
             ->select('id', 'name',
                 DB::raw('COALESCE(has_property, false) AS "hasProperty"'),
