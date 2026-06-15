@@ -68,7 +68,7 @@
           <v-list>
             <v-list-item v-for="(p, i) in data.topPartners || []" :key="p.id">
               <template #prepend>
-                <v-avatar size="32" color="primary"><span class="text-caption text-white">{{ i + 1 }}</span></v-avatar>
+                <v-avatar size="32" color="primary"><span class="text-caption">{{ i + 1 }}</span></v-avatar>
               </template>
               <v-list-item-title>{{ p.personName }}</v-list-item-title>
               <v-list-item-subtitle>{{ p.title ? `${p.level} [${p.title}]` : 'нет квалификации' }}</v-list-item-subtitle>

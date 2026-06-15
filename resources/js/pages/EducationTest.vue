@@ -338,7 +338,7 @@ onMounted(load);
 }
 .dot.done { background: var(--ds-primary-soft, rgba(46, 125, 50, 0.12)); color: rgb(var(--v-theme-primary)); }
 .dot.current {
-  background: rgb(var(--v-theme-primary)); color: white;
+  background: rgb(var(--v-theme-primary)); color: rgb(var(--v-theme-on-primary));
   border-color: rgb(var(--v-theme-primary));
 }
 

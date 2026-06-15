@@ -1470,7 +1470,7 @@ onUnmounted(() => {
 .conn-banner { position: absolute; top: 0; left: 0; right: 0; z-index: 100; padding: 6px 12px; background: rgba(var(--v-theme-warning), 0.15); color: rgb(var(--v-theme-warning)); font-size: 12px; display: flex; align-items: center; gap: 6px; }
 .unread-badge {
   position: absolute; right: 12px; top: 12px;
-  background: rgb(var(--v-theme-primary)); color: #fff;
+  background: rgb(var(--v-theme-primary)); color: rgb(var(--v-theme-on-primary));
   font-size: 10px; font-weight: 700;
   padding: 1px 6px; border-radius: 10px;
   min-width: 18px; text-align: center; line-height: 1.4;
@@ -1555,7 +1555,7 @@ onUnmounted(() => {
 .msg-system { font-size: 12px; color: rgba(var(--v-theme-on-surface), 0.5); padding: 3px 10px; background: rgba(var(--v-theme-on-surface), 0.04); border-radius: 8px; }
 .msg-avatar { flex-shrink: 0; }
 .avatar-circle { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; color: #fff; letter-spacing: -0.3px; }
-.avatar-circle.agent { background: rgb(var(--v-theme-secondary)); }
+.avatar-circle.agent { background: rgb(var(--v-theme-secondary)); color: rgb(var(--v-theme-on-secondary)); }
 .avatar-circle.mine { background: rgb(var(--v-theme-primary)); }
 /* В тёмной теме яркий primary бьёт по глазам — приглушаем. */
 .v-theme--dark .avatar-circle.mine { background: rgba(46, 125, 50, 0.65); }
@@ -1641,7 +1641,7 @@ onUnmounted(() => {
 .msg-edit-actions { display: flex; gap: 6px; justify-content: flex-end; margin-top: 6px; }
 .msg-edit-btn { padding: 3px 10px; border-radius: 6px; border: none; cursor: pointer; font-size: 11px; font-weight: 600; }
 .msg-edit-btn.cancel { background: transparent; color: rgba(var(--v-theme-on-surface), 0.6); }
-.msg-edit-btn.save { background: rgb(var(--v-theme-primary)); color: #fff; }
+.msg-edit-btn.save { background: rgb(var(--v-theme-primary)); color: rgb(var(--v-theme-on-primary)); }
 
 /* Reply preview bar above input — компактный без v-alert */
 .reply-bar {

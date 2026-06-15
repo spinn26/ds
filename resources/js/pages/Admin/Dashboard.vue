@@ -83,7 +83,8 @@
               <v-progress-linear :model-value="step.percent" height="20" rounded
                 :color="funnelColor(i)">
                 <template #default>
-                  <span class="text-caption font-weight-bold text-white">{{ step.percent }}%</span>
+                  <span class="text-caption font-weight-bold text-white"
+                    style="text-shadow: 0 0 3px rgba(0,0,0,0.6)">{{ step.percent }}%</span>
                 </template>
               </v-progress-linear>
             </div>

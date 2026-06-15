@@ -33,7 +33,7 @@
           <!-- Regular item -->
           <v-list-item v-if="!item.group" :to="item.path || null" :prepend-icon="item.icon"
             :active="isActivePath(item.path)"
-            :color="item.adminSection ? 'secondary' : 'primary'"
+            :color="item.adminSection ? 'brand' : 'primary'"
             :title="item.label"
             class="menu-item" @click="onMenuClick(item)">
             <template #append v-if="!rail">
@@ -167,7 +167,7 @@
         <template #activator="{ props }">
           <v-avatar v-bind="props" :color="auth.isAdmin ? 'secondary' : 'primary'" size="36" class="cursor-pointer ml-1">
             <v-img v-if="auth.user?.avatarUrl" :src="auth.user.avatarUrl" cover />
-            <span v-else class="text-caption text-white font-weight-bold">{{ initials }}</span>
+            <span v-else class="text-caption font-weight-bold">{{ initials }}</span>
           </v-avatar>
         </template>
         <v-card rounded="lg" elevation="8">
@@ -176,7 +176,7 @@
               <div class="position-relative">
                 <v-avatar :color="auth.isAdmin ? 'secondary' : 'primary'" size="56">
                   <v-img v-if="auth.user?.avatarUrl" :src="auth.user.avatarUrl" cover />
-                  <span v-else class="text-h5 text-white font-weight-bold">{{ initials }}</span>
+                  <span v-else class="text-h5 font-weight-bold">{{ initials }}</span>
                 </v-avatar>
                 <v-btn icon size="x-small" color="primary" variant="flat"
                   class="position-absolute" style="bottom:-4px;right:-4px"

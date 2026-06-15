@@ -166,7 +166,7 @@
     <v-card v-if="selectedPartner" rounded="lg">
       <v-card-title class="d-flex align-center ga-2 pa-4 pb-2">
         <v-avatar color="primary" size="40" class="flex-shrink-0">
-          <span class="text-body-2 font-weight-bold text-white">
+          <span class="text-body-2 font-weight-bold">
             {{ avatarInitials(selectedPartner) }}
           </span>
         </v-avatar>

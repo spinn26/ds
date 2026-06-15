@@ -63,7 +63,7 @@
       <v-menu>
         <template #activator="{ props }">
           <v-avatar v-bind="props" color="secondary" size="32" class="cursor-pointer">
-            <span class="text-caption text-white">{{ initials }}</span>
+            <span class="text-caption">{{ initials }}</span>
           </v-avatar>
         </template>
         <v-list density="compact">

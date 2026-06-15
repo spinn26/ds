@@ -10,7 +10,7 @@
             <v-list-item v-for="t in data.tasks || []" :key="t.day">
               <template #prepend>
                 <v-avatar :color="t.overdue ? 'error' : (t.daysLeft <= 3 ? 'warning' : 'primary')" size="36">
-                  <span class="text-body-2 text-white">{{ t.day }}</span>
+                  <span class="text-body-2">{{ t.day }}</span>
                 </v-avatar>
               </template>
               <v-list-item-title>{{ t.title }}</v-list-item-title>

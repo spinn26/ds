@@ -364,7 +364,7 @@ onMounted(load);
 .analytics-head h2 { display: flex; align-items: center; gap: 8px; font-size: 20px; font-weight: 700; margin: 0; }
 .period-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .period-chip { padding: 4px 12px; border-radius: var(--ds-radius-lg, 12px); border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); background: transparent; color: rgba(var(--v-theme-on-surface), 0.7); font-size: 12px; cursor: pointer; font-weight: 600; transition: all 0.15s; }
-.period-chip.active { background: rgb(var(--v-theme-primary)); color: #fff; border-color: rgb(var(--v-theme-primary)); }
+.period-chip.active { background: rgb(var(--v-theme-primary)); color: rgb(var(--v-theme-on-primary)); border-color: rgb(var(--v-theme-primary)); }
 
 .loading-state { display: flex; align-items: center; gap: 10px; padding: 40px; justify-content: center; color: rgba(var(--v-theme-on-surface), 0.5); }
 
