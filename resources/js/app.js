@@ -52,7 +52,13 @@ const vuetify = createVuetify({
             light: {
                 colors: {
                     primary: '#2E7D32',
-                    secondary: '#6EE87A',
+                    // secondary как ЧИТАЕМЫЙ UI-цвет (текст/иконки/tonal-чипы):
+                    // tealный зелёный с контрастом ~4.7:1 на белом, отличим от
+                    // forest-green primary. Прежний яркий мятный #6EE87A не
+                    // читался как текст в светлой теме (кнопки «Сбросить», числа
+                    // дашборда, чип «контрактов») — он сохранён в токене brand
+                    // для декоративных поверхностей.
+                    secondary: '#00796B',
                     tertiary: '#4361A8',
                     success: '#2E7D32',
                     warning: '#ED6C02',
