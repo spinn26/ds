@@ -485,6 +485,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/admin/reports/sales-matrix', [\App\Http\Controllers\Api\ProductSalesMatrixController::class, 'index']);
         Route::get('/admin/reports/sales-matrix/fc', [\App\Http\Controllers\Api\ProductSalesMatrixController::class, 'fcMatrix']);
         Route::get('/admin/reports/sales-matrix/period', [\App\Http\Controllers\Api\ProductSalesMatrixController::class, 'quarterlyMatrix']);
+        Route::get('/admin/reports/sales-matrix/forecast', [\App\Http\Controllers\Api\ProductSalesMatrixController::class, 'forecastMatrix']);
         Route::get('/admin/reports/sales-matrix/monthly', [\App\Http\Controllers\Api\ProductSalesMatrixController::class, 'monthly']);
 
         // Admin — Payment registry (spec ✅Реестр выплат.md)

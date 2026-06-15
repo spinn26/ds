@@ -992,6 +992,7 @@ const menuItems = [
   { group: 'Аналитика', adminSection: 'owner-dashboard' },
   { label: 'Дашборд руководителя', icon: 'mdi-crown', path: '/manage/owner-dashboard', adminSection: 'owner-dashboard' },
   { label: 'Матрица продаж', icon: 'mdi-table-large', path: '/manage/reports/sales-matrix', adminSection: 'owner-dashboard' },
+  { label: 'Курсы для отчётов', icon: 'mdi-currency-rub', path: '/manage/management-currencies', adminSection: 'owner-dashboard' },
   { label: 'Сверка балансов', icon: 'mdi-scale-balance', path: '/manage/reconciliation', adminSection: 'reconciliation' },
   { label: 'Аномалии', icon: 'mdi-alert-decagram', path: '/manage/anomalies', adminSection: 'anomalies' },
   { label: 'Когорты', icon: 'mdi-chart-line', path: '/manage/cohorts', adminSection: 'cohorts' },

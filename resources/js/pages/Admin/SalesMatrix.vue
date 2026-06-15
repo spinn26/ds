@@ -3,18 +3,161 @@
     <!-- Header + mode toggle -->
     <div class="d-flex align-center mb-4 ga-3">
       <PageHeader title="Матрица продаж по продуктам" icon="mdi-table-large" class="flex-grow-1 mb-0" />
+      <v-btn size="small" variant="tonal" prepend-icon="mdi-currency-rub"
+        to="/manage/management-currencies" title="Курсы валют для отчётов">
+        Курсы
+      </v-btn>
       <v-btn-toggle v-model="reportMode" density="compact" variant="outlined" mandatory color="primary">
         <v-btn value="actual"   size="small" prepend-icon="mdi-check-circle-outline">Фактический</v-btn>
         <v-btn value="forecast" size="small" prepend-icon="mdi-chart-timeline-variant">Прогнозный</v-btn>
       </v-btn-toggle>
     </div>
 
-    <!-- Forecast placeholder -->
-    <v-card v-if="reportMode === 'forecast'" class="pa-10 text-center" elevation="0">
-      <v-icon size="56" color="primary" class="mb-4 d-block">mdi-chart-timeline-variant</v-icon>
-      <div class="text-h6 mb-2">Прогнозный отчёт</div>
-      <div class="text-body-2 text-medium-emphasis">В разработке — появится после заполнения прогнозных дат активации контрактов.</div>
-    </v-card>
+    <!-- Forecast mode -->
+    <template v-if="reportMode === 'forecast'">
+      <!-- Filter bar -->
+      <v-card class="ds-card mb-3" elevation="0">
+        <v-card-text class="pa-2">
+          <div class="d-flex ga-1 flex-wrap align-center">
+            <v-autocomplete v-model="fcFilterSuppliers" :items="fcSupplierOptions"
+              placeholder="Поставщик" prepend-inner-icon="mdi-domain"
+              multiple chips closable-chips density="compact" variant="outlined"
+              hide-details style="width:190px; flex:0 0 190px"
+              @update:model-value="loadForecast" />
+            <v-autocomplete v-model="fcFilterProducts" :items="fcProductOptions"
+              item-title="name" item-value="id" placeholder="Продукт"
+              prepend-inner-icon="mdi-magnify"
+              multiple chips closable-chips density="compact" variant="outlined"
+              hide-details style="width:220px; flex:0 0 220px"
+              @update:model-value="onFcProductFilter" />
+            <v-btn v-if="fcFilterProducts.length || fcFilterSuppliers.length"
+              icon="mdi-filter-remove" size="x-small" variant="text" @click="resetFcFilters" />
+            <v-spacer />
+            <v-btn size="x-small" variant="text" prepend-icon="mdi-expand-all-outline"   @click="fcExpandAll">Все</v-btn>
+            <v-btn size="x-small" variant="text" prepend-icon="mdi-collapse-all-outline" @click="fcCollapseAll">Свернуть</v-btn>
+          </div>
+        </v-card-text>
+      </v-card>
+
+      <v-progress-linear v-if="fcLoading" indeterminate color="primary" rounded class="mb-3" />
+
+      <!-- Hint: contracts without forecast date -->
+      <v-alert v-if="fcNoDateCount > 0 && !fcLoading" type="info" variant="tonal"
+        density="compact" class="mb-3" icon="mdi-calendar-alert">
+        <span>{{ fcNoDateCount }} контр. без даты прогноза — выделены колонкой «Без даты».</span>
+        <v-btn size="x-small" variant="text" color="info" class="ml-2"
+          to="/manage/contracts">Заполнить в менеджере</v-btn>
+      </v-alert>
+
+      <!-- Summary chips -->
+      <div v-if="fcGrandTotals && !fcLoading" class="d-flex ga-2 flex-wrap mb-3">
+        <v-chip size="small" variant="tonal" color="primary"   prepend-icon="mdi-package-variant">{{ fcRows.length }} продуктов</v-chip>
+        <v-chip size="small" variant="tonal" color="secondary" prepend-icon="mdi-file-document-outline">{{ fmt0(fcGrandTotals.count) }} в очереди</v-chip>
+        <v-chip size="small" variant="tonal"                   prepend-icon="mdi-cash">{{ fmtRub(fcGrandTotals.volume) }} объём</v-chip>
+      </div>
+
+      <!-- Forecast matrix table -->
+      <v-card v-if="!fcLoading" class="ds-card mx-card-wrap" elevation="0">
+        <div class="mx-scroll">
+          <table class="mx-tbl">
+            <thead>
+              <tr>
+                <th class="th-name" rowspan="2">Продукт / Программа</th>
+                <th v-for="mo in fcMonths" :key="mo"
+                  :colspan="3" class="th-mgroup" :class="{ 'th-nodate': mo === fcNullKey }">
+                  {{ mo === fcNullKey ? 'Без даты' : fmtMonthHdr(mo) }}
+                </th>
+                <th colspan="3" class="th-mgroup th-total-hd">Итого</th>
+              </tr>
+              <tr>
+                <template v-for="mo in fcMonths" :key="`fsh-${mo}`">
+                  <th class="th-sub">Объём</th>
+                  <th class="th-sub">Кол-во</th>
+                  <th class="th-sub th-sub-last">Клиенты</th>
+                </template>
+                <th class="th-sub th-sub-total">Объём</th>
+                <th class="th-sub th-sub-total">Кол-во</th>
+                <th class="th-sub th-sub-total">Клиенты</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template v-for="prod in fcRows" :key="`fp${prod.productId}`">
+                <tr class="tr-prod" @click="fcToggle(prod.productId)">
+                  <td class="td-name">
+                    <div class="cell-row">
+                      <v-icon size="14" class="ico-expand">
+                        {{ fcExpanded.has(prod.productId) ? 'mdi-chevron-down' : 'mdi-chevron-right' }}
+                      </v-icon>
+                      <span class="label-prod">{{ prod.productName }}</span>
+                      <span class="prog-pill">{{ prod.programs.length }}</span>
+                    </div>
+                  </td>
+                  <template v-for="mo in fcMonths" :key="`fp${prod.productId}-${mo}`">
+                    <td class="td-num" :class="{ 'fc-nodate': mo === fcNullKey }">
+                      <span :class="fmtClass(prod.monthly[mo]?.volume)">{{ fmtCell(prod.monthly[mo]?.volume, { fmt: 'rub' }) }}</span>
+                    </td>
+                    <td class="td-num" :class="{ 'fc-nodate': mo === fcNullKey }">
+                      <span :class="fmtClass(prod.monthly[mo]?.count)">{{ fmtCell(prod.monthly[mo]?.count, { fmt: 'int' }) }}</span>
+                    </td>
+                    <td class="td-num td-sep" :class="{ 'fc-nodate': mo === fcNullKey }">
+                      <span :class="fmtClass(prod.monthly[mo]?.clientCount)">{{ fmtCell(prod.monthly[mo]?.clientCount, { fmt: 'int' }) }}</span>
+                    </td>
+                  </template>
+                  <td class="td-num td-total">{{ fmtCell(prod.volume, { fmt: 'rub' }) }}</td>
+                  <td class="td-num td-total">{{ fmtCell(prod.count, { fmt: 'int' }) }}</td>
+                  <td class="td-num td-total">{{ fmtCell(prod.clientCount, { fmt: 'int' }) }}</td>
+                </tr>
+
+                <template v-if="fcExpanded.has(prod.productId)">
+                  <tr v-for="pg in prod.programs" :key="`fpg${pg.programId}`" class="tr-prog">
+                    <td class="td-name">
+                      <div class="cell-row cell-l2">
+                        <span class="tree-arm"></span>
+                        <span class="label-prog">{{ pg.programName }}</span>
+                      </div>
+                    </td>
+                    <template v-for="mo in fcMonths" :key="`fpg${pg.programId}-${mo}`">
+                      <td class="td-num td-dim" :class="{ 'fc-nodate': mo === fcNullKey }">
+                        <span :class="fmtClass(pg.monthly[mo]?.volume)">{{ fmtCell(pg.monthly[mo]?.volume, { fmt: 'rub' }) }}</span>
+                      </td>
+                      <td class="td-num td-dim" :class="{ 'fc-nodate': mo === fcNullKey }">
+                        <span :class="fmtClass(pg.monthly[mo]?.count)">{{ fmtCell(pg.monthly[mo]?.count, { fmt: 'int' }) }}</span>
+                      </td>
+                      <td class="td-num td-dim td-sep" :class="{ 'fc-nodate': mo === fcNullKey }">
+                        <span :class="fmtClass(pg.monthly[mo]?.clientCount)">{{ fmtCell(pg.monthly[mo]?.clientCount, { fmt: 'int' }) }}</span>
+                      </td>
+                    </template>
+                    <td class="td-num td-total td-dim">{{ fmtCell(pg.volume, { fmt: 'rub' }) }}</td>
+                    <td class="td-num td-total td-dim">{{ fmtCell(pg.count, { fmt: 'int' }) }}</td>
+                    <td class="td-num td-total td-dim">{{ fmtCell(pg.clientCount, { fmt: 'int' }) }}</td>
+                  </tr>
+                </template>
+              </template>
+
+              <!-- Grand totals -->
+              <tr v-if="fcGrandTotals && fcRows.length" class="tr-grand">
+                <td class="td-name"><strong>ИТОГО</strong></td>
+                <template v-for="mo in fcMonths" :key="`fg-${mo}`">
+                  <td class="td-num" :class="{ 'fc-nodate': mo === fcNullKey }"><strong>{{ fmtCell(fcGrandTotals.monthly[mo]?.volume, { fmt: 'rub' }) }}</strong></td>
+                  <td class="td-num" :class="{ 'fc-nodate': mo === fcNullKey }"><strong>{{ fmtCell(fcGrandTotals.monthly[mo]?.count, { fmt: 'int' }) }}</strong></td>
+                  <td class="td-num td-sep" :class="{ 'fc-nodate': mo === fcNullKey }"><strong>{{ fmtCell(fcGrandTotals.monthly[mo]?.clientCount, { fmt: 'int' }) }}</strong></td>
+                </template>
+                <td class="td-num td-total"><strong>{{ fmtCell(fcGrandTotals.volume, { fmt: 'rub' }) }}</strong></td>
+                <td class="td-num td-total"><strong>{{ fmtCell(fcGrandTotals.count, { fmt: 'int' }) }}</strong></td>
+                <td class="td-num td-total"><strong>{{ fmtCell(fcGrandTotals.clientCount, { fmt: 'int' }) }}</strong></td>
+              </tr>
+
+              <tr v-if="!fcRows.length && !fcLoading">
+                <td :colspan="1 + fcMonths.length * 3 + 3" class="td-empty">
+                  <v-icon class="mb-2 d-block mx-auto" size="36" color="grey-lighten-1">mdi-table-off</v-icon>
+                  Нет контрактов в очереди (статусы «Сбор документов», «Комплайнс»)
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </v-card>
+    </template>
 
     <template v-if="reportMode === 'actual'">
       <!-- Filter bar -->
@@ -68,14 +211,16 @@
             <v-autocomplete v-model="filterSuppliers" :items="supplierOptions"
               placeholder="Поставщик" prepend-inner-icon="mdi-domain"
               multiple chips closable-chips density="compact" variant="outlined"
-              hide-details style="width:190px; flex:0 0 190px" @update:model-value="loadData" />
+              hide-details style="width:190px; flex:0 0 190px"
+              @update:model-value="onSupplierFilterChange" />
 
-            <!-- Product filter -->
+            <!-- Product filter: debounce чтобы не закрывать дропдаун при множественном выборе -->
             <v-autocomplete v-model="filterProducts" :items="productOptions"
               item-title="name" item-value="id" placeholder="Продукт"
               prepend-inner-icon="mdi-magnify"
               multiple chips closable-chips density="compact" variant="outlined"
-              hide-details style="width:220px; flex:0 0 220px" @update:model-value="loadData" />
+              hide-details style="width:220px; flex:0 0 220px"
+              @update:model-value="onProductFilterChange" />
 
             <v-btn v-if="filterProducts.length || filterSuppliers.length"
               icon="mdi-filter-remove" size="x-small" variant="text" title="Сбросить" @click="resetFilters" />
@@ -231,7 +376,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue';
+import { ref, computed, watch, onMounted, nextTick } from 'vue';
 import api from '../../api';
 import PageHeader from '../../components/PageHeader.vue';
 
@@ -290,10 +435,10 @@ const periodLabel = computed(() => {
 // ─── Metrics (persist to localStorage) ───────────────────────
 const METRICS_KEY = 'salesMatrix:metrics';
 const allMetrics = [
-  { key: 'volume',      short: 'Объём',     label: 'Объём ($)',        fmt: 'rub' },
+  { key: 'volume',      short: 'Объём',     label: 'Объём (₽)',        fmt: 'rub' },
   { key: 'count',       short: 'Кол-во',    label: 'Кол-во (шт)',      fmt: 'int' },
-  { key: 'avgCheck',    short: 'Ср.чек',    label: 'Средний чек ($)',  fmt: 'rub' },
-  { key: 'revenue',     short: 'Выручка',   label: 'Выручка ($)',      fmt: 'rub' },
+  { key: 'avgCheck',    short: 'Ср.чек',    label: 'Средний чек (₽)',  fmt: 'rub' },
+  { key: 'revenue',     short: 'Выручка',   label: 'Выручка (₽)',      fmt: 'rub' },
   { key: 'points',      short: 'Баллы',     label: 'Баллы',            fmt: 'num' },
   { key: 'fcCount',     short: 'Кол-во ФК', label: 'Кол-во ФК',       fmt: 'int' },
   { key: 'clientCount', short: 'Клиенты',   label: 'Кол-во клиентов', fmt: 'int' },
@@ -310,15 +455,27 @@ function toggleMetric(key) {
   localStorage.setItem(METRICS_KEY, JSON.stringify(selectedMetricKeys.value));
 }
 
+// ─── Filters persistence ──────────────────────────────────────
+const SUPPLIERS_KEY = 'salesMatrix:suppliers';
+const PRODUCTS_KEY  = 'salesMatrix:products';
+function _loadSaved(key, validate) {
+  try { const v = JSON.parse(localStorage.getItem(key)); return validate(v) ? v : null; }
+  catch { return null; }
+}
+
 // ─── Data ─────────────────────────────────────────────────────
 const loading          = ref(false);
 const rows             = ref([]);
 const grandTotals      = ref(null);
 const months           = ref([]);
 const supplierOptions  = ref([]);
-const filterSuppliers  = ref([]);
+const filterSuppliers  = ref(
+  _loadSaved(SUPPLIERS_KEY, v => Array.isArray(v) && v.every(s => typeof s === 'string')) ?? []
+);
 const productOptions   = ref([]);
-const filterProducts   = ref([]);
+const filterProducts   = ref(
+  _loadSaved(PRODUCTS_KEY, v => Array.isArray(v) && v.every(n => Number.isInteger(n))) ?? []
+);
 const expandedProducts = ref(new Set());
 
 function toggleProduct(pid) {
@@ -331,13 +488,32 @@ function collapseAll() { expandedProducts.value = new Set(); }
 async function resetFilters() {
   filterProducts.value = [];
   filterSuppliers.value = [];
+  localStorage.removeItem(SUPPLIERS_KEY);
+  localStorage.removeItem(PRODUCTS_KEY);
   await nextTick();
-  loadData();
+  loadData({ updateOptions: true });
 }
 function reload() { loadData(); }
 function onPeriodModeChange() { reload(); }
 
-async function loadData() {
+watch(reportMode, (mode) => {
+  if (mode === 'forecast' && !fcRows.value.length && !fcLoading.value) loadForecast();
+});
+
+// Debounce для фильтра продуктов — не закрываем дропдаун при множественном выборе
+let _productTimer = null;
+function onProductFilterChange() {
+  localStorage.setItem(PRODUCTS_KEY, JSON.stringify(filterProducts.value));
+  clearTimeout(_productTimer);
+  _productTimer = setTimeout(() => loadData({ updateOptions: false }), 350);
+}
+
+function onSupplierFilterChange() {
+  localStorage.setItem(SUPPLIERS_KEY, JSON.stringify(filterSuppliers.value));
+  loadData({ updateOptions: true });
+}
+
+async function loadData({ updateOptions = true } = {}) {
   loading.value = true;
   try {
     const p = new URLSearchParams();
@@ -349,27 +525,81 @@ async function loadData() {
     rows.value        = data.rows           ?? [];
     months.value      = data.period?.months ?? [];
     grandTotals.value = data.grandTotals    ?? null;
-    // Всегда обновляем опции — иначе чипы показывают ID вместо названий
-    supplierOptions.value = data.suppliers ?? [];
-    productOptions.value  = data.products  ?? [];
+    if (updateOptions) {
+      supplierOptions.value = data.suppliers ?? [];
+      productOptions.value  = data.products  ?? [];
+    }
   } catch (e) { console.error('matrix load failed', e); }
   loading.value = false;
+}
+
+// ─── Forecast state ───────────────────────────────────────────
+const fcLoading         = ref(false);
+const fcRows            = ref([]);
+const fcGrandTotals     = ref(null);
+const fcMonths          = ref([]);
+const fcNullKey         = ref('__no_date__');
+const fcNoDateCount     = ref(0);
+const fcSupplierOptions = ref([]);
+const fcProductOptions  = ref([]);
+const fcFilterSuppliers = ref([]);
+const fcFilterProducts  = ref([]);
+const fcExpanded        = ref(new Set());
+
+function fcToggle(pid) {
+  const s = new Set(fcExpanded.value);
+  if (s.has(pid)) s.delete(pid); else s.add(pid);
+  fcExpanded.value = s;
+}
+function fcExpandAll()   { fcExpanded.value = new Set(fcRows.value.map(r => r.productId)); }
+function fcCollapseAll() { fcExpanded.value = new Set(); }
+async function resetFcFilters() {
+  fcFilterProducts.value  = [];
+  fcFilterSuppliers.value = [];
+  await nextTick();
+  loadForecast();
+}
+
+let _fcProductTimer = null;
+function onFcProductFilter() {
+  clearTimeout(_fcProductTimer);
+  _fcProductTimer = setTimeout(loadForecast, 350);
+}
+
+async function loadForecast({ updateOptions = true } = {}) {
+  fcLoading.value = true;
+  try {
+    const p = new URLSearchParams();
+    fcFilterSuppliers.value.forEach(s => p.append('suppliers[]', s));
+    fcFilterProducts.value.forEach(id => p.append('products[]', id));
+    const { data } = await api.get(`/admin/reports/sales-matrix/forecast?${p}`);
+    fcRows.value        = data.rows        ?? [];
+    fcGrandTotals.value = data.grandTotals ?? null;
+    fcMonths.value      = data.months      ?? [];
+    fcNullKey.value     = data.nullKey     ?? '__no_date__';
+    fcNoDateCount.value = data.noDateCount ?? 0;
+    if (updateOptions) {
+      fcSupplierOptions.value = data.suppliers ?? [];
+      fcProductOptions.value  = data.products  ?? [];
+    }
+  } catch (e) { console.error('forecast load failed', e); }
+  fcLoading.value = false;
 }
 
 // ─── Formatting ───────────────────────────────────────────────
 const MONTHS_SHORT = ['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'];
 function fmtMonthHdr(dm) {
-  const [, m] = (dm || '').split('-');
-  return MONTHS_SHORT[parseInt(m, 10) - 1] ?? dm;
+  const [y, m] = (dm || '').split('-');
+  const mn = MONTHS_SHORT[parseInt(m, 10) - 1] ?? dm;
+  return `${mn} '${String(y).slice(2)}`;
 }
 
 function fmt0(val) { return Number(val || 0).toLocaleString('ru-RU'); }
 
 function fmtRub(val) {
   const n = Number(val || 0);
-  if (n >= 1e9) return (n/1e9).toLocaleString('ru-RU', { maximumFractionDigits: 1 }) + ' млрд ₽';
-  if (n >= 1e6) return (n/1e6).toLocaleString('ru-RU', { maximumFractionDigits: 1 }) + ' млн ₽';
-  if (n >= 1e3) return (n/1e3).toLocaleString('ru-RU', { maximumFractionDigits: 0 }) + ' тыс ₽';
+  if (n >= 1e6) return (n/1e6).toLocaleString('ru-RU', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' М ₽';
+  if (n >= 1e3) return (n/1e3).toLocaleString('ru-RU', { maximumFractionDigits: 1 }) + ' К ₽';
   return n.toLocaleString('ru-RU', { maximumFractionDigits: 0 }) + ' ₽';
 }
 
@@ -379,9 +609,9 @@ function fmtCell(val, m) {
   if (isNaN(n) || n === 0) return '—';
   if (m.fmt === 'int') return n.toLocaleString('ru-RU');
   if (m.fmt === 'rub') {
-    if (n >= 1e6) return (n/1e6).toLocaleString('ru-RU', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' M';
-    if (n >= 1e3) return n.toLocaleString('ru-RU', { maximumFractionDigits: 0 });
-    return n.toLocaleString('ru-RU', { maximumFractionDigits: 2 });
+    if (n >= 1e6) return (n/1e6).toLocaleString('ru-RU', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + 'М₽';
+    if (n >= 1e3) return (n/1e3).toLocaleString('ru-RU', { maximumFractionDigits: 0 }) + ' ₽';
+    return n.toLocaleString('ru-RU', { maximumFractionDigits: 2 }) + ' ₽';
   }
   return n.toLocaleString('ru-RU', { maximumFractionDigits: 2 });
 }
@@ -583,6 +813,13 @@ onMounted(loadData);
 
 /* Empty/zero value style */
 .val-empty { color: rgba(var(--v-theme-on-surface), 0.22); }
+
+/* Forecast: «без даты» колонка */
+.th-nodate {
+  background: rgba(var(--v-theme-warning), 0.08) !important;
+  color: rgb(var(--v-theme-warning)) !important;
+}
+.fc-nodate { background: rgba(var(--v-theme-warning), 0.04); }
 
 /* Grand totals row */
 .tr-grand td {
