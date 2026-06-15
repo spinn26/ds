@@ -119,7 +119,7 @@ class ConsultantService
         $webUserIds = $consultants->pluck('webUser')->filter()->unique();
         $webUsers = $webUserIds->isNotEmpty()
             ? DB::table('WebUser')->whereIn('id', $webUserIds)
-                ->get(['id', 'firstName', 'lastName', 'patronymic'])
+                ->get(['id', 'firstName', 'lastName', 'patronymic', 'email', 'phone', 'nicTG'])
                 ->keyBy('id')
             : collect();
 
@@ -189,6 +189,9 @@ class ConsultantService
                 'residentCount' => $subCount,
                 'fcCount' => 0,
                 'partnersCount' => $subCount,
+                'email' => $webUser?->email ?? null,
+                'phone' => $webUser?->phone ?? null,
+                'nicTG' => $webUser?->nicTG ?? null,
                 'inviterName' => $c->inviterName,
                 'birthDate' => $birthDate,
                 'city' => $cityName,

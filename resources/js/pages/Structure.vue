@@ -253,6 +253,31 @@
 
         <v-divider class="mb-3" />
 
+        <!-- Контактные данные -->
+        <div v-if="selectedPartner.email || selectedPartner.phone || selectedPartner.nicTG"
+          class="d-flex flex-column ga-2 mb-3">
+          <div v-if="selectedPartner.phone" class="d-flex align-center ga-2">
+            <v-icon size="18" color="medium-emphasis">mdi-phone-outline</v-icon>
+            <a :href="'tel:' + selectedPartner.phone" class="text-body-2 contact-link">
+              {{ selectedPartner.phone }}
+            </a>
+          </div>
+          <div v-if="selectedPartner.email" class="d-flex align-center ga-2">
+            <v-icon size="18" color="medium-emphasis">mdi-email-outline</v-icon>
+            <a :href="'mailto:' + selectedPartner.email" class="text-body-2 contact-link">
+              {{ selectedPartner.email }}
+            </a>
+          </div>
+          <div v-if="selectedPartner.nicTG" class="d-flex align-center ga-2">
+            <v-icon size="18" color="medium-emphasis">mdi-send-outline</v-icon>
+            <a :href="'https://t.me/' + selectedPartner.nicTG.replace('@', '')"
+              target="_blank" rel="noopener" class="text-body-2 contact-link">
+              {{ selectedPartner.nicTG.startsWith('@') ? selectedPartner.nicTG : '@' + selectedPartner.nicTG }}
+            </a>
+          </div>
+        </div>
+        <v-divider v-if="selectedPartner.email || selectedPartner.phone || selectedPartner.nicTG" class="mb-3" />
+
         <!-- Персональные данные -->
         <div class="d-flex flex-column ga-2">
           <div v-if="selectedPartner.city" class="d-flex align-center ga-2">
@@ -715,5 +740,10 @@ onMounted(() => {
   padding: 8px 10px;
   text-align: center;
 }
+.contact-link {
+  color: rgb(var(--v-theme-primary));
+  text-decoration: none;
+}
+.contact-link:hover { text-decoration: underline; }
 </style>
 
