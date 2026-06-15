@@ -149,7 +149,7 @@
     <v-card class="mt-3">
       <v-card-title class="pa-3 d-flex align-center ga-2">
         <v-icon color="primary">mdi-calendar-start</v-icon>
-        Воронка нового партнёра — зарегистрированы с 1 июня {{ currentYear }}
+        Новая бизнес-модель — зарегистрированы с 1 июня {{ currentYear }}
       </v-card-title>
       <v-card-text>
         <div v-for="(s, i) in funnelStepsSince" :key="s.key" class="mb-4">
@@ -231,7 +231,10 @@ async function load() {
     data.value = dash.data || {};
     funnelSteps.value = funnel.data?.steps || [];
     totalEver.value = funnel.data?.totalEverRegistered || 0;
-    funnelStepsSince.value = funnelSince.data?.steps || [];
+    // У «новой бизнес-модели» квалификационные ступени (Expert / Top FC)
+    // нерелевантны — свежий набор до них ещё не дошёл, поэтому их скрываем.
+    funnelStepsSince.value = (funnelSince.data?.steps || [])
+      .filter(s => s.key !== 'qualExpert' && s.key !== 'qualLeader');
     totalEverSince.value = funnelSince.data?.totalEverRegistered || 0;
   } catch {}
 }
