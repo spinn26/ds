@@ -350,6 +350,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/admin/currencies/management-rates', [\App\Http\Controllers\Api\AdminFinanceController::class, 'managementCurrencies']);
         Route::post('/admin/currencies/management-rates', [\App\Http\Controllers\Api\AdminFinanceController::class, 'storeManagementCurrencyRate'])->middleware('role:admin,calculations');
         Route::patch('/admin/currencies/management-rates/{id}', [\App\Http\Controllers\Api\AdminFinanceController::class, 'updateManagementCurrencyRate'])->whereNumber('id')->middleware('role:admin,calculations');
+        Route::post('/admin/currencies/management-rates/copy-from-main', [\App\Http\Controllers\Api\AdminFinanceController::class, 'copyManagementRatesFromMain'])->middleware('role:admin,calculations');
         Route::get('/admin/transaction-import/form-data', [\App\Http\Controllers\Api\TransactionImportController::class, 'formData']);
         Route::get('/admin/transaction-import/sheet-names', [\App\Http\Controllers\Api\TransactionImportController::class, 'sheetNames']);
         Route::post('/admin/transaction-import', [\App\Http\Controllers\Api\TransactionImportController::class, 'import'])->middleware('throttle:30,1');

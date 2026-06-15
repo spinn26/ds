@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div>
     <PageHeader title="Справочники для отчётов руководителей" icon="mdi-chart-line" />
 
@@ -17,6 +17,10 @@
         Курсы валют (управленческий справочник)
         <v-chip size="x-small" color="primary" variant="tonal">{{ rates.length }}</v-chip>
         <v-spacer />
+        <v-btn v-if="canEdit('currencies')" variant="outlined" color="secondary" size="small"
+          prepend-icon="mdi-content-copy" class="mr-2" @click="copyDialogOpen = true">
+          Скопировать из основного
+        </v-btn>
         <v-btn v-if="canEdit('currencies')" color="primary" size="small"
           prepend-icon="mdi-plus" @click="openAdd">Добавить курс</v-btn>
       </v-card-title>
@@ -35,6 +39,28 @@
         <template #no-data><EmptyState message="Нет курсов. Добавьте вручную или скопируйте из основного справочника." /></template>
       </v-data-table>
     </v-card>
+
+    <!-- Диалог: скопировать из основного справочника -->
+    <v-dialog v-model="copyDialogOpen" max-width="400">
+      <v-card>
+        <v-card-title>Скопировать из основного справочника</v-card-title>
+        <v-card-text>
+          <p class="text-body-2 text-medium-emphasis mb-4">
+            Берёт последние известные курсы за выбранный период из основного справочника
+            (используемого для расчёта транзакций) и записывает их в управленческий.
+            Существующие записи не перезаписываются.
+          </p>
+          <v-text-field v-model="copyPeriod" type="month"
+            label="Период *" variant="outlined" density="comfortable"
+            hint="Выберите месяц и год" persistent-hint />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="copyDialogOpen = false">Отмена</v-btn>
+          <v-btn color="primary" :loading="copying" @click="copyFromMain">Скопировать</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
     <!-- Диалог редактирования / добавления -->
     <v-dialog v-model="dialogOpen" max-width="440">
@@ -75,6 +101,7 @@ const { canEdit } = usePermissions();
 
 const loading  = ref(true);
 const saving   = ref(false);
+const copying  = ref(false);
 const rates    = ref([]);
 const allCurrencies = ref([]);
 
@@ -100,6 +127,25 @@ const fmtRate = (n) => Number(n || 0).toLocaleString('ru-RU', { minimumFractionD
 const snack = ref({ open: false, color: 'success', text: '' });
 function notify(text, color = 'success') { snack.value = { open: true, color, text }; }
 
+// --- Copy from main ---
+const copyDialogOpen = ref(false);
+const copyPeriod     = ref(new Date().toISOString().slice(0, 7));
+
+async function copyFromMain() {
+  if (!copyPeriod.value) { notify('Выберите период', 'warning'); return; }
+  copying.value = true;
+  try {
+    const { data } = await api.post('/admin/currencies/management-rates/copy-from-main', { period: copyPeriod.value });
+    copyDialogOpen.value = false;
+    await loadData();
+    notify(data.message || 'Курсы скопированы');
+  } catch (e) {
+    notify(e.response?.data?.message || 'Ошибка', 'error');
+  }
+  copying.value = false;
+}
+
+// --- Add / edit ---
 const dialogOpen  = ref(false);
 const editTarget  = ref(null);
 const form        = ref({ currency: null, date: '', rate: 0 });

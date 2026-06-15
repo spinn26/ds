@@ -1234,6 +1234,63 @@ class AdminFinanceController extends Controller
         return response()->json(['message' => 'Курс добавлен', 'id' => $id], 201);
     }
 
+    /**
+     * POST /admin/currencies/management-rates/copy-from-main
+     * Копирует курсы из основного справочника (currencyRate) в управленческий
+     * (management_currency_rate) за указанный период.
+     * Идемпотентно: если запись уже есть — пропускает.
+     */
+    public function copyManagementRatesFromMain(Request $request): JsonResponse
+    {
+        $request->validate([
+            'period' => 'required|date_format:Y-m', // e.g. "2026-05"
+        ]);
+
+        $period     = $request->period; // "2026-05"
+        $monthStart = $period . '-01';
+        $monthEnd   = date('Y-m-t', strtotime($monthStart));
+
+        // Берём последний курс каждой валюты за этот месяц из основного справочника
+        $rows = DB::select(
+            'SELECT DISTINCT ON (currency) currency, rate, date
+               FROM "currencyRate"
+              WHERE date BETWEEN ? AND ?
+              ORDER BY currency, date DESC',
+            [$monthStart, $monthEnd]
+        );
+
+        if (empty($rows)) {
+            return response()->json(['message' => 'В основном справочнике нет курсов за этот период', 'copied' => 0, 'skipped' => 0]);
+        }
+
+        $copied  = 0;
+        $skipped = 0;
+        foreach ($rows as $row) {
+            $exists = DB::table('management_currency_rate')
+                ->where('currency', $row->currency)
+                ->whereDate('date', $monthStart)
+                ->exists();
+            if ($exists) {
+                $skipped++;
+                continue;
+            }
+            DB::table('management_currency_rate')->insert([
+                'currency'   => $row->currency,
+                'rate'       => $row->rate,
+                'date'       => $monthStart,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+            $copied++;
+        }
+
+        return response()->json([
+            'message' => "Скопировано: {$copied}, пропущено (уже есть): {$skipped}",
+            'copied'  => $copied,
+            'skipped' => $skipped,
+        ]);
+    }
+
     /** Импорт транзакций — placeholder */
     public function transactionImport(): JsonResponse
     {
