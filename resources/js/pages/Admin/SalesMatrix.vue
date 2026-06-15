@@ -1,273 +1,256 @@
-<template>
+﻿<template>
   <div>
-    <PageHeader title="Матрица продаж по продуктам" icon="mdi-table-large" />
-
-    <!-- Filters -->
-    <v-card class="ds-card mb-3 pa-3" elevation="0">
-      <div class="d-flex ga-2 flex-wrap align-center">
-        <v-select
-          v-model="year"
-          :items="yearOptions"
-          label="Год"
-          density="compact"
-          variant="outlined"
-          hide-details
-          style="max-width:100px"
-          @update:model-value="onYearChange" />
-
-        <v-autocomplete
-          v-model="filterSuppliers"
-          :items="supplierOptions"
-          label="Поставщик"
-          multiple
-          chips
-          closable-chips
-          density="compact"
-          variant="outlined"
-          hide-details
-          style="max-width:280px"
-          @update:model-value="loadData" />
-
-        <v-autocomplete
-          v-model="filterProducts"
-          :items="productOptions"
-          item-title="name"
-          item-value="id"
-          label="Продукт"
-          multiple
-          chips
-          closable-chips
-          density="compact"
-          variant="outlined"
-          hide-details
-          style="max-width:280px"
-          @update:model-value="loadData" />
-
-        <v-btn v-if="filterSuppliers.length || filterProducts.length"
-          size="small" variant="text" prepend-icon="mdi-filter-remove"
-          @click="resetFilters">Сбросить</v-btn>
-
-        <v-spacer />
-
-        <!-- Expand/collapse all -->
-        <v-btn size="small" variant="text" prepend-icon="mdi-expand-all-outline"
-          @click="expandAll">Развернуть</v-btn>
-        <v-btn size="small" variant="text" prepend-icon="mdi-collapse-all-outline"
-          @click="collapseAll">Свернуть</v-btn>
-
-        <!-- Column toggles -->
-        <v-menu :close-on-content-click="false" location="bottom end">
-          <template #activator="{ props }">
-            <v-btn v-bind="props" size="small" variant="outlined" prepend-icon="mdi-view-column-outline">
-              Метрики ({{ visibleMetrics.length }}/{{ allMetrics.length }})
-            </v-btn>
-          </template>
-          <v-card min-width="210">
-            <v-list density="compact" class="pa-1">
-              <v-list-item v-for="m in allMetrics" :key="m.key"
-                :title="m.label" style="cursor:pointer" @click="toggleMetric(m.key)">
-                <template #prepend>
-                  <v-checkbox-btn :model-value="visibleMetrics.includes(m.key)" color="primary" />
-                </template>
-              </v-list-item>
-            </v-list>
-          </v-card>
-        </v-menu>
-
-        <!-- View mode toggle -->
-        <v-btn-toggle v-model="viewMode" density="compact" variant="outlined" mandatory>
-          <v-btn value="year" size="small" prepend-icon="mdi-calendar-text">Год</v-btn>
-          <v-btn value="monthly" size="small" prepend-icon="mdi-calendar-month">Месяцы</v-btn>
-        </v-btn-toggle>
-      </div>
-    </v-card>
-
-    <v-progress-linear v-if="loading" indeterminate color="primary" class="mb-1" />
-
-    <!-- Summary chips -->
-    <div v-if="grandTotals && !loading" class="d-flex ga-2 flex-wrap mb-3">
-      <v-chip size="small" variant="tonal" color="primary">
-        <v-icon start size="14">mdi-package-variant</v-icon>
-        {{ rows.length }} продуктов
-      </v-chip>
-      <v-chip size="small" variant="tonal" color="secondary">
-        <v-icon start size="14">mdi-file-document-outline</v-icon>
-        {{ grandTotals.count.toLocaleString('ru-RU') }} контрактов
-      </v-chip>
-      <v-chip size="small" variant="tonal">
-        <v-icon start size="14">mdi-cash</v-icon>
-        {{ fmtRub(grandTotals.volume) }} объём
-      </v-chip>
-      <v-chip size="small" variant="tonal" color="success">
-        <v-icon start size="14">mdi-trending-up</v-icon>
-        {{ fmtRub(grandTotals.revenue) }} выручка
-      </v-chip>
+    <div class="d-flex align-center mb-3 ga-2">
+      <PageHeader title="Матрица продаж по продуктам" icon="mdi-table-large" class="flex-grow-1 mb-0" />
+      <v-btn-toggle v-model="reportMode" density="compact" variant="outlined" mandatory color="primary">
+        <v-btn value="actual"   size="small" prepend-icon="mdi-check-circle-outline">Фактический</v-btn>
+        <v-btn value="forecast" size="small" prepend-icon="mdi-chart-timeline-variant">Прогнозный</v-btn>
+      </v-btn-toggle>
     </div>
 
-    <!-- ─── YEAR VIEW ──────────────────────────────────────────── -->
-    <v-card v-if="viewMode === 'year' && !loading" class="ds-card" elevation="0">
-      <div style="overflow-x:auto">
-        <table class="matrix-table">
-          <thead>
-            <tr>
-              <th class="col-product">Продукт / Программа</th>
-              <th class="col-supplier">Поставщик</th>
-              <th v-for="m in activeMetrics" :key="m.key" class="col-num">{{ m.label }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <template v-for="prod in rows" :key="prod.productId">
-              <!-- Product row -->
-              <tr class="row-product" @click="toggleProduct(prod.productId)">
-                <td class="col-product">
-                  <div class="cell-name">
-                    <v-icon size="15" class="mr-1 text-primary">
-                      {{ expandedProducts.has(prod.productId) ? 'mdi-chevron-down' : 'mdi-chevron-right' }}
-                    </v-icon>
-                    {{ prod.productName }}
-                    <span class="prog-count">{{ prod.programs.length }}</span>
-                  </div>
-                </td>
-                <td class="col-supplier">
-                  <span v-if="prod.suppliers?.length" class="supplier-list">
-                    {{ prod.suppliers.join(', ') }}
-                  </span>
-                  <span v-else class="text-disabled">—</span>
-                </td>
+    <!-- Forecast placeholder -->
+    <v-card v-if="reportMode === 'forecast'" class="pa-8 text-center">
+      <v-icon size="48" color="primary" class="mb-3">mdi-chart-timeline-variant</v-icon>
+      <div class="text-h6 mb-2">Прогнозный отчёт</div>
+      <div class="text-body-2 text-medium-emphasis">В разработке. Будет показывать ожидаемый объём по контрактам с прогнозными датами активации.</div>
+    </v-card>
+
+    <template v-if="reportMode === 'actual'">
+      <!-- Filters -->
+      <v-card class="ds-card mb-3 pa-3" elevation="0">
+        <div class="d-flex ga-2 flex-wrap align-center">
+          <v-select
+            v-model="year"
+            :items="yearOptions"
+            label="Год"
+            density="compact"
+            variant="outlined"
+            hide-details
+            style="max-width:100px"
+            @update:model-value="onYearChange" />
+
+          <v-autocomplete
+            v-model="filterProducts"
+            :items="productOptions"
+            item-title="name"
+            item-value="id"
+            label="Продукт"
+            multiple
+            chips
+            closable-chips
+            density="compact"
+            variant="outlined"
+            hide-details
+            style="max-width:320px"
+            @update:model-value="loadData" />
+
+          <v-btn v-if="filterProducts.length"
+            size="small" variant="text" prepend-icon="mdi-filter-remove"
+            @click="resetFilters">Сбросить</v-btn>
+
+          <v-spacer />
+
+          <!-- Expand/collapse all -->
+          <v-btn size="small" variant="text" prepend-icon="mdi-expand-all-outline"
+            @click="expandAll">Развернуть</v-btn>
+          <v-btn size="small" variant="text" prepend-icon="mdi-collapse-all-outline"
+            @click="collapseAll">Свернуть</v-btn>
+
+          <!-- Column toggles -->
+          <v-menu :close-on-content-click="false" location="bottom end">
+            <template #activator="{ props }">
+              <v-btn v-bind="props" size="small" variant="outlined" prepend-icon="mdi-view-column-outline">
+                Метрики ({{ visibleMetrics.length }}/{{ allMetrics.length }})
+              </v-btn>
+            </template>
+            <v-card min-width="210">
+              <v-list density="compact" class="pa-1">
+                <v-list-item v-for="m in allMetrics" :key="m.key"
+                  :title="m.label" style="cursor:pointer" @click="toggleMetric(m.key)">
+                  <template #prepend>
+                    <v-checkbox-btn :model-value="visibleMetrics.includes(m.key)" color="primary" />
+                  </template>
+                </v-list-item>
+              </v-list>
+            </v-card>
+          </v-menu>
+
+          <!-- View mode toggle -->
+          <v-btn-toggle v-model="viewMode" density="compact" variant="outlined" mandatory>
+            <v-btn value="year" size="small" prepend-icon="mdi-calendar-text">Год</v-btn>
+            <v-btn value="monthly" size="small" prepend-icon="mdi-calendar-month">Месяцы</v-btn>
+          </v-btn-toggle>
+        </div>
+      </v-card>
+
+      <v-progress-linear v-if="loading" indeterminate color="primary" class="mb-1" />
+
+      <!-- Summary chips -->
+      <div v-if="grandTotals && !loading" class="d-flex ga-2 flex-wrap mb-3">
+        <v-chip size="small" variant="tonal" color="primary">
+          <v-icon start size="14">mdi-package-variant</v-icon>
+          {{ rows.length }} продуктов
+        </v-chip>
+        <v-chip size="small" variant="tonal" color="secondary">
+          <v-icon start size="14">mdi-file-document-outline</v-icon>
+          {{ grandTotals.count.toLocaleString('ru-RU') }} контрактов
+        </v-chip>
+        <v-chip size="small" variant="tonal">
+          <v-icon start size="14">mdi-cash</v-icon>
+          {{ fmtRub(grandTotals.volume) }} объём
+        </v-chip>
+        <v-chip size="small" variant="tonal" color="success">
+          <v-icon start size="14">mdi-trending-up</v-icon>
+          {{ fmtRub(grandTotals.revenue) }} выручка
+        </v-chip>
+      </div>
+
+      <!-- ─── YEAR VIEW ──────────────────────────────────────────── -->
+      <v-card v-if="viewMode === 'year' && !loading" class="ds-card" elevation="0">
+        <div style="overflow-x:auto">
+          <table class="matrix-table">
+            <thead>
+              <tr>
+                <th class="col-product">Продукт / Программа</th>
+                <th v-for="m in activeMetrics" :key="m.key" class="col-num">{{ m.label }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template v-for="prod in rows" :key="prod.productId">
+                <!-- Product row -->
+                <tr class="row-product" @click="toggleProduct(prod.productId)">
+                  <td class="col-product">
+                    <div class="cell-name">
+                      <v-icon size="15" class="mr-1 text-primary">
+                        {{ expandedProducts.has(prod.productId) ? 'mdi-chevron-down' : 'mdi-chevron-right' }}
+                      </v-icon>
+                      {{ prod.productName }}
+                      <span class="prog-count">{{ prod.programs.length }}</span>
+                    </div>
+                  </td>
+                  <td v-for="m in activeMetrics" :key="m.key" class="col-num num-product">
+                    {{ fmtCell(prod[m.key], m) }}
+                  </td>
+                </tr>
+                <!-- Program sub-rows -->
+                <template v-if="expandedProducts.has(prod.productId)">
+                  <tr v-for="pg in prod.programs" :key="pg.programId" class="row-program">
+                    <td class="col-product">
+                      <div class="cell-name cell-sub">
+                        <span class="sub-connector"></span>
+                        {{ pg.programName }}
+                        <span v-if="pg.supplier && pg.supplier !== '—'" class="supplier-tag">
+                          {{ pg.supplier }}
+                        </span>
+                      </div>
+                    </td>
+                    <td v-for="m in activeMetrics" :key="m.key" class="col-num num-program">
+                      {{ fmtCell(pg[m.key], m) }}
+                    </td>
+                  </tr>
+                </template>
+              </template>
+
+              <!-- Grand totals row -->
+              <tr v-if="grandTotals" class="row-totals">
+                <td class="col-product"><strong>ИТОГО</strong></td>
                 <td v-for="m in activeMetrics" :key="m.key" class="col-num num-product">
-                  {{ fmtCell(prod[m.key], m) }}
+                  <strong>{{ fmtCell(grandTotals[m.key], m) }}</strong>
                 </td>
               </tr>
-              <!-- Program sub-rows -->
-              <template v-if="expandedProducts.has(prod.productId)">
-                <tr v-for="pg in prod.programs" :key="pg.programId" class="row-program">
-                  <td class="col-product">
-                    <div class="cell-name cell-sub">
-                      <span class="sub-connector"></span>
-                      {{ pg.programName }}
-                    </div>
-                  </td>
-                  <td class="col-supplier">
-                    <v-chip v-if="pg.supplier && pg.supplier !== '—'"
-                      size="x-small" variant="tonal" color="secondary">
-                      {{ pg.supplier }}
-                    </v-chip>
-                    <span v-else class="text-disabled">—</span>
-                  </td>
-                  <td v-for="m in activeMetrics" :key="m.key" class="col-num num-program">
-                    {{ fmtCell(pg[m.key], m) }}
-                  </td>
-                </tr>
-              </template>
-            </template>
 
-            <!-- Grand totals row -->
-            <tr v-if="grandTotals" class="row-totals">
-              <td class="col-product"><strong>ИТОГО</strong></td>
-              <td class="col-supplier"></td>
-              <td v-for="m in activeMetrics" :key="m.key" class="col-num num-product">
-                <strong>{{ fmtCell(grandTotals[m.key], m) }}</strong>
-              </td>
-            </tr>
-
-            <tr v-if="!rows.length && !loading">
-              <td :colspan="2 + activeMetrics.length" class="text-center pa-6 text-medium-emphasis">
-                Нет данных за {{ year }} год
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </v-card>
-
-    <!-- ─── MONTHLY VIEW ───────────────────────────────────────── -->
-    <v-card v-if="viewMode === 'monthly' && !loading" class="ds-card" elevation="0">
-      <div class="pa-3 pb-1 d-flex align-center ga-3">
-        <v-select v-model="monthlyMetric" :items="allMetrics" item-title="label" item-value="key"
-          label="Метрика" density="compact" variant="outlined" hide-details style="max-width:200px" />
-        <span class="text-caption text-medium-emphasis">
-          {{ activeMetricDef?.label }} по месяцам {{ year }}
-        </span>
-      </div>
-      <div style="overflow-x:auto">
-        <table class="matrix-table">
-          <thead>
-            <tr>
-              <th class="col-product">Продукт / Программа</th>
-              <th class="col-supplier">Поставщик</th>
-              <th v-for="mo in months" :key="mo" class="col-num">{{ fmtMonthHdr(mo) }}</th>
-              <th class="col-num col-total">Итого</th>
-            </tr>
-          </thead>
-          <tbody>
-            <template v-for="prod in rows" :key="'m-' + prod.productId">
-              <tr class="row-product" @click="toggleProduct(prod.productId)">
-                <td class="col-product">
-                  <div class="cell-name">
-                    <v-icon size="15" class="mr-1 text-primary">
-                      {{ expandedProducts.has(prod.productId) ? 'mdi-chevron-down' : 'mdi-chevron-right' }}
-                    </v-icon>
-                    {{ prod.productName }}
-                  </div>
-                </td>
-                <td class="col-supplier">
-                  <span v-if="prod.suppliers?.length" class="supplier-list">{{ prod.suppliers.join(', ') }}</span>
-                  <span v-else class="text-disabled">—</span>
-                </td>
-                <td v-for="mo in months" :key="mo" class="col-num num-product">
-                  {{ fmtCell(productMonthly(prod.productId, mo), activeMetricDef) }}
-                </td>
-                <td class="col-num col-total num-product">
-                  {{ fmtCell(prod[monthlyMetric], activeMetricDef) }}
+              <tr v-if="!rows.length && !loading">
+                <td :colspan="1 + activeMetrics.length" class="text-center pa-6 text-medium-emphasis">
+                  Нет данных за {{ year }} год
                 </td>
               </tr>
-              <template v-if="expandedProducts.has(prod.productId)">
-                <tr v-for="pg in prod.programs" :key="'m-' + pg.programId" class="row-program">
+            </tbody>
+          </table>
+        </div>
+      </v-card>
+
+      <!-- ─── MONTHLY VIEW ───────────────────────────────────────── -->
+      <v-card v-if="viewMode === 'monthly' && !loading" class="ds-card" elevation="0">
+        <div class="pa-3 pb-1 d-flex align-center ga-3">
+          <v-select v-model="monthlyMetric" :items="allMetrics" item-title="label" item-value="key"
+            label="Метрика" density="compact" variant="outlined" hide-details style="max-width:200px" />
+          <span class="text-caption text-medium-emphasis">
+            {{ activeMetricDef?.label }} по месяцам {{ year }}
+          </span>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="matrix-table">
+            <thead>
+              <tr>
+                <th class="col-product">Продукт / Программа</th>
+                <th v-for="mo in months" :key="mo" class="col-num">{{ fmtMonthHdr(mo) }}</th>
+                <th class="col-num col-total">Итого</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template v-for="prod in rows" :key="'m-' + prod.productId">
+                <tr class="row-product" @click="toggleProduct(prod.productId)">
                   <td class="col-product">
-                    <div class="cell-name cell-sub">
-                      <span class="sub-connector"></span>
-                      {{ pg.programName }}
+                    <div class="cell-name">
+                      <v-icon size="15" class="mr-1 text-primary">
+                        {{ expandedProducts.has(prod.productId) ? 'mdi-chevron-down' : 'mdi-chevron-right' }}
+                      </v-icon>
+                      {{ prod.productName }}
                     </div>
                   </td>
-                  <td class="col-supplier">
-                    <v-chip v-if="pg.supplier && pg.supplier !== '—'"
-                      size="x-small" variant="tonal" color="secondary">{{ pg.supplier }}</v-chip>
-                    <span v-else class="text-disabled">—</span>
+                  <td v-for="mo in months" :key="mo" class="col-num num-product">
+                    {{ fmtCell(productMonthly(prod.productId, mo), activeMetricDef) }}
                   </td>
-                  <td v-for="mo in months" :key="mo" class="col-num num-program">
-                    {{ fmtCell(programMonthly(prod.productId, pg.programId, mo), activeMetricDef) }}
-                  </td>
-                  <td class="col-num col-total num-program">
-                    {{ fmtCell(pg[monthlyMetric], activeMetricDef) }}
+                  <td class="col-num col-total num-product">
+                    {{ fmtCell(prod[monthlyMetric], activeMetricDef) }}
                   </td>
                 </tr>
+                <template v-if="expandedProducts.has(prod.productId)">
+                  <tr v-for="pg in prod.programs" :key="'m-' + pg.programId" class="row-program">
+                    <td class="col-product">
+                      <div class="cell-name cell-sub">
+                        <span class="sub-connector"></span>
+                        {{ pg.programName }}
+                        <span v-if="pg.supplier && pg.supplier !== '—'" class="supplier-tag">
+                          {{ pg.supplier }}
+                        </span>
+                      </div>
+                    </td>
+                    <td v-for="mo in months" :key="mo" class="col-num num-program">
+                      {{ fmtCell(programMonthly(prod.productId, pg.programId, mo), activeMetricDef) }}
+                    </td>
+                    <td class="col-num col-total num-program">
+                      {{ fmtCell(pg[monthlyMetric], activeMetricDef) }}
+                    </td>
+                  </tr>
+                </template>
               </template>
-            </template>
-            <tr v-if="!rows.length && !loading">
-              <td :colspan="2 + months.length + 1" class="text-center pa-6 text-medium-emphasis">
-                Нет данных за {{ year }} год
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </v-card>
+              <tr v-if="!rows.length && !loading">
+                <td :colspan="1 + months.length + 1" class="text-center pa-6 text-medium-emphasis">
+                  Нет данных за {{ year }} год
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </v-card>
+    </template>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
 import PageHeader from '../../components/PageHeader.vue';
+
+const reportMode = ref('actual');
 
 const loading = ref(false);
 const rows = ref([]);
 const grandTotals = ref(null);
-const supplierOptions = ref([]);
 const productOptions = ref([]);
 
 const year = ref(new Date().getFullYear());
-const filterSuppliers = ref([]);
 const filterProducts = ref([]);
 const viewMode = ref('year');
 const monthlyMetric = ref('volume');
@@ -313,7 +296,6 @@ function collapseAll() {
 }
 
 function resetFilters() {
-  filterSuppliers.value = [];
   filterProducts.value = [];
   loadData();
 }
@@ -336,7 +318,6 @@ function fmtCell(val, metricDef) {
   if (n === 0) return '—';
   if (m.fmt === 'int') return n.toLocaleString('ru-RU');
   if (m.fmt === 'rub') {
-    // Крупные суммы — сокращённо
     if (n >= 1_000_000) return (n / 1_000_000).toLocaleString('ru-RU', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' M';
     if (n >= 1_000)     return n.toLocaleString('ru-RU', { maximumFractionDigits: 0 });
     return n.toLocaleString('ru-RU', { maximumFractionDigits: 2 });
@@ -370,7 +351,6 @@ async function loadData() {
   try {
     const params = new URLSearchParams();
     params.set('year', year.value);
-    filterSuppliers.value.forEach(s => params.append('suppliers[]', s));
     filterProducts.value.forEach(p => params.append('products[]', p));
 
     const qs = params.toString();
@@ -382,8 +362,7 @@ async function loadData() {
     rows.value        = main.data.rows ?? [];
     grandTotals.value = main.data.grandTotals ?? null;
 
-    if (!supplierOptions.value.length) supplierOptions.value = main.data.suppliers ?? [];
-    if (!productOptions.value.length)  productOptions.value  = main.data.products  ?? [];
+    if (!productOptions.value.length) productOptions.value = main.data.products ?? [];
 
     months.value      = mon.data.months ?? [];
     monthlyData.value = mon.data.data   ?? {};
@@ -395,9 +374,7 @@ async function loadData() {
 }
 
 function onYearChange() {
-  supplierOptions.value = [];
   productOptions.value  = [];
-  filterSuppliers.value = [];
   filterProducts.value  = [];
   loadData();
 }
@@ -430,8 +407,7 @@ onMounted(loadData);
 }
 
 /* ─── Column widths ─── */
-.col-product { min-width: 220px; max-width: 280px; }
-.col-supplier { min-width: 120px; max-width: 160px; }
+.col-product { min-width: 240px; max-width: 340px; }
 .col-num {
   min-width: 90px;
   text-align: right;
@@ -496,11 +472,13 @@ onMounted(loadData);
   margin-left: 4px;
 }
 
+.supplier-tag {
+  font-size: 10px;
+  color: rgba(var(--v-theme-on-surface), 0.5);
+  margin-left: 6px;
+  font-weight: 400;
+}
+
 .num-product { color: rgb(var(--v-theme-on-surface)); }
 .num-program { color: rgba(var(--v-theme-on-surface), 0.75); }
-
-.supplier-list {
-  font-size: 11px;
-  color: rgba(var(--v-theme-on-surface), 0.65);
-}
 </style>
