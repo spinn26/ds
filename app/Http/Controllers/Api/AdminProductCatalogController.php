@@ -47,7 +47,7 @@ class AdminProductCatalogController extends Controller
             ->leftJoin('programs_catalog as g', 'g.product_id', '=', 'p.id')
             ->groupBy('p.id', 'p.name', 'p.type', 'p.open_product_url', 'p.active', 'p.created_at',
                 'p.image_url', 'p.hero_image', 'p.description', 'p.legacy_product_id',
-                'p.visible_to_resident', 'p.visible_to_calculator')
+                'p.visible_to_resident', 'p.visible_to_calculator', 'p.is_primary')
             ->select([
                 'p.id',
                 'p.name',
@@ -61,6 +61,7 @@ class AdminProductCatalogController extends Controller
                 'p.legacy_product_id',
                 'p.visible_to_resident',
                 'p.visible_to_calculator',
+                'p.is_primary',
                 DB::raw('COUNT(g.id) AS programs_count'),
                 DB::raw('COUNT(g.id) FILTER (WHERE g.active=true)  AS programs_active'),
                 DB::raw('COUNT(g.id) FILTER (WHERE g.has_red=true) AS programs_red'),
@@ -114,12 +115,12 @@ class AdminProductCatalogController extends Controller
             ->leftJoin('programs_catalog as g', 'g.product_id', '=', 'p.id')
             ->groupBy('p.id', 'p.name', 'p.type', 'p.open_product_url', 'p.active', 'p.created_at',
                 'p.image_url', 'p.hero_image', 'p.description', 'p.legacy_product_id',
-                'p.visible_to_resident', 'p.visible_to_calculator')
+                'p.visible_to_resident', 'p.visible_to_calculator', 'p.is_primary')
             ->where('p.id', $id)
             ->select([
                 'p.id', 'p.name', 'p.type', 'p.open_product_url', 'p.active', 'p.created_at',
                 'p.image_url', 'p.hero_image', 'p.description', 'p.legacy_product_id',
-                'p.visible_to_resident', 'p.visible_to_calculator',
+                'p.visible_to_resident', 'p.visible_to_calculator', 'p.is_primary',
                 DB::raw('COUNT(g.id) AS programs_count'),
                 DB::raw('COUNT(g.id) FILTER (WHERE g.active=true)  AS programs_active'),
                 DB::raw('COUNT(g.id) FILTER (WHERE g.has_red=true) AS programs_red'),
@@ -166,6 +167,9 @@ class AdminProductCatalogController extends Controller
             'description'    => 'nullable|string|max:4000',
             'imageUrl'       => 'nullable|string|max:1000',
             'heroImage'      => 'nullable|string|max:1000',
+            // Основной (true) / дополнительный (false) продукт. По умолчанию
+            // основной — витрина ФК выводит такие первыми.
+            'isPrimary'      => 'nullable|boolean',
         ]);
 
         $id = DB::table('products_catalog')->insertGetId([
@@ -176,6 +180,7 @@ class AdminProductCatalogController extends Controller
             'image_url'        => $payload['imageUrl'] ?? null,
             'hero_image'       => $payload['heroImage'] ?? null,
             'active'           => $payload['active'] ?? true,
+            'is_primary'       => $payload['isPrimary'] ?? true,
             'imported_from'    => 'admin-ui',
             'created_at'       => now(),
             'updated_at'       => now(),
@@ -197,6 +202,7 @@ class AdminProductCatalogController extends Controller
             'description'         => 'nullable|string|max:4000',
             'imageUrl'            => 'nullable|string|max:1000',
             'heroImage'           => 'nullable|string|max:1000',
+            'isPrimary'           => 'nullable|boolean',
             // Видимость продукта-зонтика (migration 2026_05_28_000030).
             // visible_to_calculator=false убирает продукт и ВСЕ его программы
             // из калькулятора без необходимости снимать active.
@@ -216,6 +222,7 @@ class AdminProductCatalogController extends Controller
         if ($request->has('description'))         $update['description']           = $payload['description'];
         if ($request->has('imageUrl'))            $update['image_url']             = $payload['imageUrl'];
         if ($request->has('heroImage'))           $update['hero_image']            = $payload['heroImage'];
+        if ($request->has('isPrimary'))           $update['is_primary']            = (bool) ($payload['isPrimary'] ?? true);
         if ($request->has('visibleToResident'))   $update['visible_to_resident']   = (bool) ($payload['visibleToResident'] ?? true);
         if ($request->has('visibleToCalculator')) $update['visible_to_calculator'] = (bool) ($payload['visibleToCalculator'] ?? true);
 
@@ -393,6 +400,10 @@ class AdminProductCatalogController extends Controller
             'visibleToCalculator'  => property_exists($r, 'visible_to_calculator')
                 ? (bool) $r->visible_to_calculator
                 : $active,
+            // Основной / дополнительный (migration 2026_06_15_000050).
+            'isPrimary'            => property_exists($r, 'is_primary')
+                ? (bool) $r->is_primary
+                : true,
             'hasProperty'          => false,
             'hasTerm'              => $hasTerm,
             'hasYearKv'            => $hasYearKv,

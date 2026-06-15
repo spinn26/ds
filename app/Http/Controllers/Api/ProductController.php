@@ -52,6 +52,11 @@ class ProductController extends Controller
             $query->where('name', 'ilike', '%' . $request->search . '%');
         }
 
+        // Сортировка витрины: основные продукты первыми, затем дополнительные
+        // (migration 2026_06_15_000050), внутри группы — по названию.
+        if (Schema::hasColumn('products_catalog', 'is_primary')) {
+            $query->orderByDesc('is_primary');
+        }
         $productRows = $query->orderBy('name')->get();
         if ($productRows->isEmpty()) {
             return response()->json(['products' => [], 'categories' => [], 'accessCheck' => $accessCheck]);
@@ -221,6 +226,7 @@ class ProductController extends Controller
                 'name' => $p->name,
                 'description' => $p->description ?? null,
                 'typeName' => $p->type ?? null,
+                'isPrimary' => (bool) ($p->is_primary ?? true),
                 'active' => (bool) $p->active,
                 'accessible' => $available,
                 'available' => $available,

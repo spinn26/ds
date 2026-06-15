@@ -48,6 +48,11 @@
         @update:items-per-page="v => { perPage = v; page = 1; loadProducts(); }"
         @update:expanded="onExpandedChange"
       >
+        <template #item.name="{ item }">
+          {{ item.name }}
+          <v-chip v-if="item.isPrimary === false" size="x-small" color="warning"
+            variant="tonal" class="ms-2">Доп.</v-chip>
+        </template>
         <template #item.active="{ item }">
           <StatusChip
             :color="item.active ? 'success' : 'grey'"
@@ -175,6 +180,14 @@
                 item-title="name" item-value="name" label="Тип / категория"
                 clearable hint="Определяет категорию продукта. Очистить = убрать категорию." persistent-hint
                 prepend-inner-icon="mdi-shape" />
+            </v-col>
+            <v-col cols="12" md="6">
+              <!-- Основной / дополнительный: в каталоге ФК основные выводятся
+                   первыми, дополнительные — после. -->
+              <v-select v-model="editProduct.isPrimary" :items="primaryItems"
+                item-title="title" item-value="value" label="Вид продукта"
+                hint="Основные показываются в каталоге ФК выше дополнительных" persistent-hint
+                prepend-inner-icon="mdi-star-circle" />
             </v-col>
             <v-col cols="12" md="6">
               <v-select v-model="editProduct.educationCourseId" :items="courseItems"
@@ -547,6 +560,11 @@ function resetProductFilters() {
   filters.value = { search: '', active: null };
   loadProducts();
 }
+// Вид продукта: основной / дополнительный (catalog.is_primary).
+const primaryItems = [
+  { title: 'Основной', value: true },
+  { title: 'Дополнительный', value: false },
+];
 const activeOptions = [
   { title: 'Активные', value: 'true' },
   { title: 'Неактивные', value: 'false' },
@@ -694,6 +712,7 @@ function openCreateProduct() {
     educationUrl: '', instructionUrl: '', openProductUrl: '',
     active: true, noComission: false, visibleToResident: true, visibleToCalculator: true,
     hasProperty: false, hasTerm: false, hasYearKv: false,
+    isPrimary: true,
     publishStatus: 'draft',
   };
   productError.value = '';
