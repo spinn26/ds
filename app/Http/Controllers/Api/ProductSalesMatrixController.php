@@ -312,4 +312,215 @@ class ProductSalesMatrixController extends Controller
             'data'   => $data,
         ]);
     }
+
+    /**
+     * GET /admin/reports/sales-matrix/fc
+     *
+     * Матрица продаж в разрезе ФК → Продукт → Программа,
+     * с разбивкой по месяцам внутри заданного периода (квартал / произвольный диапазон).
+     *
+     * Params:
+     *   from       Y-m  (required) — начало периода, напр. "2026-01"
+     *   to         Y-m  (required) — конец  периода, напр. "2026-03"
+     *   products[] int  (optional) — фильтр по product.id
+     */
+    public function fcMatrix(Request $request): JsonResponse
+    {
+        $params = $request->validate([
+            'from'        => 'required|date_format:Y-m',
+            'to'          => 'required|date_format:Y-m',
+            'products'    => 'nullable|array',
+            'products.*'  => 'integer',
+        ]);
+
+        $from = $params['from'];
+        $to   = $params['to'];
+
+        $months = $this->monthRange($from, $to);
+
+        $q = DB::table('transaction as t')
+            ->join('contract as co', 'co.id', '=', 't.contract')
+            ->join('consultant as cons', 'cons.id', '=', 'co.consultant')
+            ->join(DB::raw('"WebUser" as wu'), DB::raw('wu.id'), '=', DB::raw('cons."webUser"'))
+            ->join('product as p', 'p.id', '=', 'co.product')
+            ->join('program as pg', 'pg.id', '=', 'co.program')
+            ->whereBetween('t.dateMonth', [$from, $to])
+            ->whereNotNull('co.openDate')
+            ->whereNull('co.deletedAt')
+            ->whereNull('t.deletedAt')
+            ->select([
+                'co.consultant                                           as fc_id',
+                DB::raw('wu."lastName" || \' \' || wu."firstName"       as fc_name'),
+                'p.id                                                   as product_id',
+                'p.name                                                 as product_name',
+                'pg.id                                                  as program_id',
+                'pg.name                                                as program_name',
+                't.dateMonth',
+                DB::raw('SUM(COALESCE(t."amountRUB",     0))           as volume'),
+                DB::raw('COUNT(DISTINCT co.id)                          as cnt'),
+                DB::raw('SUM(COALESCE(t."netRevenueRUB", 0))           as revenue'),
+                DB::raw('SUM(COALESCE(t."personalVolume",0))           as points'),
+                DB::raw('COUNT(DISTINCT co.client)                      as client_count'),
+            ])
+            ->groupBy(
+                'co.consultant',
+                DB::raw('wu."lastName"'), DB::raw('wu."firstName"'),
+                'p.id', 'p.name', 'pg.id', 'pg.name', 't.dateMonth'
+            )
+            ->orderBy(DB::raw('wu."lastName"'))
+            ->orderBy(DB::raw('wu."firstName"'))
+            ->orderBy('p.name')
+            ->orderBy('pg.name')
+            ->orderBy('t.dateMonth');
+
+        if (! empty($params['products'])) {
+            $q->whereIn('p.id', $params['products']);
+        }
+
+        $rows = $q->get();
+
+        // Build tree: fc → product → program → month → metrics
+        $fcMap = [];
+        foreach ($rows as $r) {
+            $fcId = $r->fc_id;
+            $pid  = $r->product_id;
+            $pgid = $r->program_id;
+            $mo   = $r->dateMonth;
+
+            $v  = round((float) $r->volume,  2);
+            $c  = (int)         $r->cnt;
+            $rv = round((float) $r->revenue, 2);
+            $pt = round((float) $r->points,  2);
+            $cl = (int)         $r->client_count;
+
+            if (! isset($fcMap[$fcId])) {
+                $fcMap[$fcId] = [
+                    'fcId' => $fcId, 'fcName' => $r->fc_name,
+                    'v' => 0, 'c' => 0, 'rv' => 0, 'pt' => 0, 'cl' => 0,
+                    'monthly' => [], 'products' => [],
+                ];
+            }
+            if (! isset($fcMap[$fcId]['products'][$pid])) {
+                $fcMap[$fcId]['products'][$pid] = [
+                    'productId' => $pid, 'productName' => $r->product_name,
+                    'v' => 0, 'c' => 0, 'rv' => 0, 'pt' => 0, 'cl' => 0,
+                    'monthly' => [], 'programs' => [],
+                ];
+            }
+            if (! isset($fcMap[$fcId]['products'][$pid]['programs'][$pgid])) {
+                $fcMap[$fcId]['products'][$pid]['programs'][$pgid] = [
+                    'programId' => $pgid, 'programName' => $r->program_name,
+                    'v' => 0, 'c' => 0, 'rv' => 0, 'pt' => 0, 'cl' => 0,
+                    'monthly' => [],
+                ];
+            }
+
+            $vals = ['volume' => $v, 'count' => $c, 'revenue' => $rv, 'points' => $pt, 'clientCount' => $cl];
+
+            // Program
+            $pg = &$fcMap[$fcId]['products'][$pid]['programs'][$pgid];
+            $pg['monthly'][$mo] = $vals;
+            $pg['v'] += $v; $pg['c'] += $c; $pg['rv'] += $rv; $pg['pt'] += $pt; $pg['cl'] += $cl;
+
+            // Product
+            $pr = &$fcMap[$fcId]['products'][$pid];
+            foreach ($vals as $k => $val) {
+                $pr['monthly'][$mo][$k] = ($pr['monthly'][$mo][$k] ?? 0) + $val;
+            }
+            $pr['v'] += $v; $pr['c'] += $c; $pr['rv'] += $rv; $pr['pt'] += $pt; $pr['cl'] += $cl;
+
+            // FC
+            $fc = &$fcMap[$fcId];
+            foreach ($vals as $k => $val) {
+                $fc['monthly'][$mo][$k] = ($fc['monthly'][$mo][$k] ?? 0) + $val;
+            }
+            $fc['v'] += $v; $fc['c'] += $c; $fc['rv'] += $rv; $fc['pt'] += $pt; $fc['cl'] += $cl;
+        }
+        unset($fc, $pr, $pg);
+
+        // Flatten tree & accumulate grand totals
+        $result = [];
+        $grand  = ['volume' => 0, 'count' => 0, 'revenue' => 0, 'points' => 0, 'clientCount' => 0, 'monthly' => []];
+
+        foreach ($fcMap as $fc) {
+            $products = [];
+            foreach ($fc['products'] as $prod) {
+                $programs = [];
+                foreach ($prod['programs'] as $pg) {
+                    $programs[] = [
+                        'programId'   => $pg['programId'],
+                        'programName' => $pg['programName'],
+                        'volume'      => $pg['v'],  'count'       => $pg['c'],
+                        'revenue'     => $pg['rv'], 'points'      => $pg['pt'],
+                        'clientCount' => $pg['cl'],
+                        'monthly'     => $pg['monthly'],
+                    ];
+                }
+                $products[] = [
+                    'productId'   => $prod['productId'],
+                    'productName' => $prod['productName'],
+                    'volume'      => $prod['v'],  'count'       => $prod['c'],
+                    'revenue'     => $prod['rv'], 'points'      => $prod['pt'],
+                    'clientCount' => $prod['cl'],
+                    'monthly'     => $prod['monthly'],
+                    'programs'    => array_values($programs),
+                ];
+            }
+            $result[] = [
+                'fcId'        => $fc['fcId'],
+                'fcName'      => $fc['fcName'],
+                'volume'      => $fc['v'],  'count'       => $fc['c'],
+                'revenue'     => $fc['rv'], 'points'      => $fc['pt'],
+                'clientCount' => $fc['cl'],
+                'monthly'     => $fc['monthly'],
+                'products'    => array_values($products),
+            ];
+
+            $grand['volume']      += $fc['v'];
+            $grand['count']       += $fc['c'];
+            $grand['revenue']     += $fc['rv'];
+            $grand['points']      += $fc['pt'];
+            $grand['clientCount'] += $fc['cl'];
+            foreach ($fc['monthly'] as $mo => $vals) {
+                foreach ($vals as $k => $val) {
+                    $grand['monthly'][$mo][$k] = ($grand['monthly'][$mo][$k] ?? 0) + $val;
+                }
+            }
+        }
+
+        // Products available in this period (for filter)
+        $allProducts = DB::table('transaction as t')
+            ->join('contract as co', 'co.id', '=', 't.contract')
+            ->join('product as p', 'p.id', '=', 'co.product')
+            ->whereBetween('t.dateMonth', [$from, $to])
+            ->whereNotNull('co.openDate')
+            ->whereNull('co.deletedAt')
+            ->whereNull('t.deletedAt')
+            ->select('p.id', 'p.name')
+            ->distinct()
+            ->orderBy('p.name')
+            ->get()
+            ->map(fn ($r) => ['id' => $r->id, 'name' => $r->name]);
+
+        return response()->json([
+            'period'      => ['from' => $from, 'to' => $to, 'months' => $months],
+            'rows'        => $result,
+            'grandTotals' => $grand,
+            'products'    => $allProducts->values(),
+        ]);
+    }
+
+    private function monthRange(string $from, string $to): array
+    {
+        $months = [];
+        $cur    = $from;
+        while ($cur <= $to) {
+            $months[] = $cur;
+            [$y, $m]  = explode('-', $cur);
+            $m = (int) $m + 1;
+            if ($m > 12) { $m = 1; $y = (int) $y + 1; }
+            $cur = sprintf('%04d-%02d', (int) $y, $m);
+        }
+        return $months;
+    }
 }

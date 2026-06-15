@@ -1,7 +1,7 @@
 ﻿<template>
   <div>
     <div class="d-flex align-center mb-3 ga-2">
-      <PageHeader title="Матрица продаж по продуктам" icon="mdi-table-large" class="flex-grow-1 mb-0" />
+      <PageHeader title="Матрица продаж" icon="mdi-table-large" class="flex-grow-1 mb-0" />
       <v-btn-toggle v-model="reportMode" density="compact" variant="outlined" mandatory color="primary">
         <v-btn value="actual"   size="small" prepend-icon="mdi-check-circle-outline">Фактический</v-btn>
         <v-btn value="forecast" size="small" prepend-icon="mdi-chart-timeline-variant">Прогнозный</v-btn>
@@ -19,67 +19,52 @@
       <!-- Filters -->
       <v-card class="ds-card mb-3 pa-3" elevation="0">
         <div class="d-flex ga-2 flex-wrap align-center">
-          <v-select
-            v-model="year"
-            :items="yearOptions"
-            label="Год"
-            density="compact"
-            variant="outlined"
-            hide-details
-            style="max-width:100px"
-            @update:model-value="onYearChange" />
+          <!-- Period: year + quarter -->
+          <v-select v-model="periodYear" :items="yearOptions" label="Год"
+            density="compact" variant="outlined" hide-details style="max-width:90px"
+            @update:model-value="reload" />
 
-          <v-autocomplete
-            v-model="filterProducts"
-            :items="productOptions"
-            item-title="name"
-            item-value="id"
-            label="Продукт"
-            multiple
-            chips
-            closable-chips
-            density="compact"
-            variant="outlined"
-            hide-details
-            style="max-width:320px"
+          <v-btn-toggle v-model="periodQuarter" density="compact" variant="outlined" mandatory
+            @update:model-value="reload">
+            <v-btn v-for="q in quarterOptions" :key="q" :value="q" size="small">{{ q }}</v-btn>
+          </v-btn-toggle>
+
+          <!-- Product filter -->
+          <v-autocomplete v-model="filterProducts" :items="productOptions"
+            item-title="name" item-value="id" label="Продукт"
+            multiple chips closable-chips density="compact" variant="outlined"
+            hide-details style="max-width:300px"
             @update:model-value="loadData" />
 
-          <v-btn v-if="filterProducts.length"
-            size="small" variant="text" prepend-icon="mdi-filter-remove"
-            @click="resetFilters">Сбросить</v-btn>
+          <v-btn v-if="filterProducts.length" size="small" variant="text"
+            prepend-icon="mdi-filter-remove" @click="resetFilters">Сбросить</v-btn>
 
           <v-spacer />
 
-          <!-- Expand/collapse all -->
-          <v-btn size="small" variant="text" prepend-icon="mdi-expand-all-outline"
-            @click="expandAll">Развернуть</v-btn>
-          <v-btn size="small" variant="text" prepend-icon="mdi-collapse-all-outline"
-            @click="collapseAll">Свернуть</v-btn>
+          <v-btn size="small" variant="text" prepend-icon="mdi-expand-all-outline" @click="expandAll">Развернуть</v-btn>
+          <v-btn size="small" variant="text" prepend-icon="mdi-collapse-all-outline" @click="collapseAll">Свернуть</v-btn>
 
-          <!-- Column toggles -->
+          <!-- Metrics selector (max 2) -->
           <v-menu :close-on-content-click="false" location="bottom end">
             <template #activator="{ props }">
               <v-btn v-bind="props" size="small" variant="outlined" prepend-icon="mdi-view-column-outline">
-                Метрики ({{ visibleMetrics.length }}/{{ allMetrics.length }})
+                Метрики ({{ selectedMetricKeys.length }}/2)
               </v-btn>
             </template>
             <v-card min-width="210">
               <v-list density="compact" class="pa-1">
-                <v-list-item v-for="m in allMetrics" :key="m.key"
-                  :title="m.label" style="cursor:pointer" @click="toggleMetric(m.key)">
+                <v-list-item v-for="m in allMetrics" :key="m.key" :title="m.label"
+                  style="cursor:pointer" @click="toggleMetric(m.key)">
                   <template #prepend>
-                    <v-checkbox-btn :model-value="visibleMetrics.includes(m.key)" color="primary" />
+                    <v-checkbox-btn :model-value="selectedMetricKeys.includes(m.key)"
+                      :disabled="selectedMetricKeys.length >= 2 && !selectedMetricKeys.includes(m.key)"
+                      color="primary" />
                   </template>
                 </v-list-item>
               </v-list>
+              <div class="text-caption text-medium-emphasis px-3 pb-2">Максимум 2 метрики</div>
             </v-card>
           </v-menu>
-
-          <!-- View mode toggle -->
-          <v-btn-toggle v-model="viewMode" density="compact" variant="outlined" mandatory>
-            <v-btn value="year" size="small" prepend-icon="mdi-calendar-text">Год</v-btn>
-            <v-btn value="monthly" size="small" prepend-icon="mdi-calendar-month">Месяцы</v-btn>
-          </v-btn-toggle>
         </div>
       </v-card>
 
@@ -88,12 +73,12 @@
       <!-- Summary chips -->
       <div v-if="grandTotals && !loading" class="d-flex ga-2 flex-wrap mb-3">
         <v-chip size="small" variant="tonal" color="primary">
-          <v-icon start size="14">mdi-package-variant</v-icon>
-          {{ rows.length }} продуктов
+          <v-icon start size="14">mdi-account-group-outline</v-icon>
+          {{ rows.length }} ФК
         </v-chip>
         <v-chip size="small" variant="tonal" color="secondary">
           <v-icon start size="14">mdi-file-document-outline</v-icon>
-          {{ grandTotals.count.toLocaleString('ru-RU') }} контрактов
+          {{ (grandTotals.count || 0).toLocaleString('ru-RU') }} контрактов
         </v-chip>
         <v-chip size="small" variant="tonal">
           <v-icon start size="14">mdi-cash</v-icon>
@@ -105,129 +90,115 @@
         </v-chip>
       </div>
 
-      <!-- ─── YEAR VIEW ──────────────────────────────────────────── -->
-      <v-card v-if="viewMode === 'year' && !loading" class="ds-card" elevation="0">
+      <!-- Matrix table -->
+      <v-card v-if="!loading" class="ds-card" elevation="0">
         <div style="overflow-x:auto">
           <table class="matrix-table">
             <thead>
+              <!-- Row 1: month groups + total group -->
               <tr>
-                <th class="col-product">Продукт / Программа</th>
-                <th v-for="m in activeMetrics" :key="m.key" class="col-num">{{ m.label }}</th>
+                <th class="col-name" rowspan="2">ФК / Продукт / Программа</th>
+                <th v-for="mo in months" :key="mo"
+                  :colspan="activeMetrics.length" class="month-group">
+                  {{ fmtMonthHdr(mo) }}
+                </th>
+                <th :colspan="activeMetrics.length" class="month-group total-group">
+                  Итого {{ periodLabel }}
+                </th>
+              </tr>
+              <!-- Row 2: metric sub-headers -->
+              <tr>
+                <template v-for="mo in months" :key="`sh-${mo}`">
+                  <th v-for="m in activeMetrics" :key="`${mo}-${m.key}`" class="col-num-sub">
+                    {{ m.shortLabel }}
+                  </th>
+                </template>
+                <th v-for="m in activeMetrics" :key="`tot-${m.key}`" class="col-num-sub total-sub">
+                  {{ m.shortLabel }}
+                </th>
               </tr>
             </thead>
             <tbody>
-              <template v-for="prod in rows" :key="prod.productId">
-                <!-- Product row -->
-                <tr class="row-product" @click="toggleProduct(prod.productId)">
-                  <td class="col-product">
+              <template v-for="fc in rows" :key="fc.fcId">
+                <!-- FC row -->
+                <tr class="row-fc" @click="toggleFc(fc.fcId)">
+                  <td class="col-name">
                     <div class="cell-name">
-                      <v-icon size="15" class="mr-1 text-primary">
-                        {{ expandedProducts.has(prod.productId) ? 'mdi-chevron-down' : 'mdi-chevron-right' }}
+                      <v-icon size="13" class="mr-1">
+                        {{ expandedFcs.has(fc.fcId) ? 'mdi-chevron-down' : 'mdi-chevron-right' }}
                       </v-icon>
-                      {{ prod.productName }}
-                      <span class="prog-count">{{ prod.programs.length }}</span>
+                      <span class="fc-name">{{ fc.fcName }}</span>
                     </div>
                   </td>
-                  <td v-for="m in activeMetrics" :key="m.key" class="col-num num-product">
-                    {{ fmtCell(prod[m.key], m) }}
+                  <template v-for="mo in months" :key="`fc-${fc.fcId}-${mo}`">
+                    <td v-for="m in activeMetrics" :key="`${mo}-${m.key}`" class="col-num">
+                      {{ fmtCell(fc.monthly[mo]?.[m.key], m) }}
+                    </td>
+                  </template>
+                  <td v-for="m in activeMetrics" :key="`fc-tot-${m.key}`" class="col-num total-cell">
+                    {{ fmtCell(fc[m.key], m) }}
                   </td>
                 </tr>
-                <!-- Program sub-rows -->
-                <template v-if="expandedProducts.has(prod.productId)">
-                  <tr v-for="pg in prod.programs" :key="pg.programId" class="row-program">
-                    <td class="col-product">
-                      <div class="cell-name cell-sub">
-                        <span class="sub-connector"></span>
-                        {{ pg.programName }}
-                        <span v-if="pg.supplier && pg.supplier !== '—'" class="supplier-tag">
-                          {{ pg.supplier }}
-                        </span>
-                      </div>
-                    </td>
-                    <td v-for="m in activeMetrics" :key="m.key" class="col-num num-program">
-                      {{ fmtCell(pg[m.key], m) }}
-                    </td>
-                  </tr>
+
+                <!-- Product rows -->
+                <template v-if="expandedFcs.has(fc.fcId)">
+                  <template v-for="prod in fc.products" :key="`${fc.fcId}-${prod.productId}`">
+                    <tr class="row-product" @click="toggleProduct(`${fc.fcId}-${prod.productId}`)">
+                      <td class="col-name">
+                        <div class="cell-name cell-level1">
+                          <v-icon size="12" class="mr-1">
+                            {{ expandedProducts.has(`${fc.fcId}-${prod.productId}`) ? 'mdi-chevron-down' : 'mdi-chevron-right' }}
+                          </v-icon>
+                          {{ prod.productName }}
+                        </div>
+                      </td>
+                      <template v-for="mo in months" :key="`pr-${prod.productId}-${mo}`">
+                        <td v-for="m in activeMetrics" :key="`${mo}-${m.key}`" class="col-num">
+                          {{ fmtCell(prod.monthly[mo]?.[m.key], m) }}
+                        </td>
+                      </template>
+                      <td v-for="m in activeMetrics" :key="`pr-tot-${m.key}`" class="col-num total-cell">
+                        {{ fmtCell(prod[m.key], m) }}
+                      </td>
+                    </tr>
+
+                    <!-- Program rows -->
+                    <template v-if="expandedProducts.has(`${fc.fcId}-${prod.productId}`)">
+                      <tr v-for="pg in prod.programs" :key="pg.programId" class="row-program">
+                        <td class="col-name">
+                          <div class="cell-name cell-level2">{{ pg.programName }}</div>
+                        </td>
+                        <template v-for="mo in months" :key="`pg-${pg.programId}-${mo}`">
+                          <td v-for="m in activeMetrics" :key="`${mo}-${m.key}`" class="col-num num-dim">
+                            {{ fmtCell(pg.monthly[mo]?.[m.key], m) }}
+                          </td>
+                        </template>
+                        <td v-for="m in activeMetrics" :key="`pg-tot-${m.key}`" class="col-num total-cell num-dim">
+                          {{ fmtCell(pg[m.key], m) }}
+                        </td>
+                      </tr>
+                    </template>
+                  </template>
                 </template>
               </template>
 
-              <!-- Grand totals row -->
-              <tr v-if="grandTotals" class="row-totals">
-                <td class="col-product"><strong>ИТОГО</strong></td>
-                <td v-for="m in activeMetrics" :key="m.key" class="col-num num-product">
+              <!-- Grand totals -->
+              <tr v-if="grandTotals && rows.length" class="row-totals">
+                <td class="col-name"><strong>ИТОГО</strong></td>
+                <template v-for="mo in months" :key="`g-${mo}`">
+                  <td v-for="m in activeMetrics" :key="`${mo}-${m.key}`" class="col-num">
+                    <strong>{{ fmtCell(grandTotals.monthly[mo]?.[m.key], m) }}</strong>
+                  </td>
+                </template>
+                <td v-for="m in activeMetrics" :key="`g-tot-${m.key}`" class="col-num total-cell">
                   <strong>{{ fmtCell(grandTotals[m.key], m) }}</strong>
                 </td>
               </tr>
 
               <tr v-if="!rows.length && !loading">
-                <td :colspan="1 + activeMetrics.length" class="text-center pa-6 text-medium-emphasis">
-                  Нет данных за {{ year }} год
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </v-card>
-
-      <!-- ─── MONTHLY VIEW ───────────────────────────────────────── -->
-      <v-card v-if="viewMode === 'monthly' && !loading" class="ds-card" elevation="0">
-        <div class="pa-3 pb-1 d-flex align-center ga-3">
-          <v-select v-model="monthlyMetric" :items="allMetrics" item-title="label" item-value="key"
-            label="Метрика" density="compact" variant="outlined" hide-details style="max-width:200px" />
-          <span class="text-caption text-medium-emphasis">
-            {{ activeMetricDef?.label }} по месяцам {{ year }}
-          </span>
-        </div>
-        <div style="overflow-x:auto">
-          <table class="matrix-table">
-            <thead>
-              <tr>
-                <th class="col-product">Продукт / Программа</th>
-                <th v-for="mo in months" :key="mo" class="col-num">{{ fmtMonthHdr(mo) }}</th>
-                <th class="col-num col-total">Итого</th>
-              </tr>
-            </thead>
-            <tbody>
-              <template v-for="prod in rows" :key="'m-' + prod.productId">
-                <tr class="row-product" @click="toggleProduct(prod.productId)">
-                  <td class="col-product">
-                    <div class="cell-name">
-                      <v-icon size="15" class="mr-1 text-primary">
-                        {{ expandedProducts.has(prod.productId) ? 'mdi-chevron-down' : 'mdi-chevron-right' }}
-                      </v-icon>
-                      {{ prod.productName }}
-                    </div>
-                  </td>
-                  <td v-for="mo in months" :key="mo" class="col-num num-product">
-                    {{ fmtCell(productMonthly(prod.productId, mo), activeMetricDef) }}
-                  </td>
-                  <td class="col-num col-total num-product">
-                    {{ fmtCell(prod[monthlyMetric], activeMetricDef) }}
-                  </td>
-                </tr>
-                <template v-if="expandedProducts.has(prod.productId)">
-                  <tr v-for="pg in prod.programs" :key="'m-' + pg.programId" class="row-program">
-                    <td class="col-product">
-                      <div class="cell-name cell-sub">
-                        <span class="sub-connector"></span>
-                        {{ pg.programName }}
-                        <span v-if="pg.supplier && pg.supplier !== '—'" class="supplier-tag">
-                          {{ pg.supplier }}
-                        </span>
-                      </div>
-                    </td>
-                    <td v-for="mo in months" :key="mo" class="col-num num-program">
-                      {{ fmtCell(programMonthly(prod.productId, pg.programId, mo), activeMetricDef) }}
-                    </td>
-                    <td class="col-num col-total num-program">
-                      {{ fmtCell(pg[monthlyMetric], activeMetricDef) }}
-                    </td>
-                  </tr>
-                </template>
-              </template>
-              <tr v-if="!rows.length && !loading">
-                <td :colspan="1 + months.length + 1" class="text-center pa-6 text-medium-emphasis">
-                  Нет данных за {{ year }} год
+                <td :colspan="1 + months.length * activeMetrics.length + activeMetrics.length"
+                  class="text-center pa-6 text-medium-emphasis">
+                  Нет данных за {{ periodLabel }}
                 </td>
               </tr>
             </tbody>
@@ -243,61 +214,108 @@ import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
 import PageHeader from '../../components/PageHeader.vue';
 
+// ─── Report mode ──────────────────────────────────────────────
 const reportMode = ref('actual');
 
-const loading = ref(false);
-const rows = ref([]);
-const grandTotals = ref(null);
-const productOptions = ref([]);
+// ─── Period ───────────────────────────────────────────────────
+const quarterOptions = ['Q1', 'Q2', 'Q3', 'Q4'];
+const quarterRanges  = { Q1: [1, 3], Q2: [4, 6], Q3: [7, 9], Q4: [10, 12] };
 
-const year = ref(new Date().getFullYear());
-const filterProducts = ref([]);
-const viewMode = ref('year');
-const monthlyMetric = ref('volume');
-const monthlyData = ref({});
-const months = ref([]);
+const now = new Date();
+const currentQ = `Q${Math.ceil((now.getMonth() + 1) / 3)}`;
+const periodYear    = ref(now.getFullYear());
+const periodQuarter = ref(currentQ);
 
-const yearOptions = Array.from({ length: 7 }, (_, i) => new Date().getFullYear() - i);
+const periodFrom  = computed(() => `${periodYear.value}-${String(quarterRanges[periodQuarter.value][0]).padStart(2, '0')}`);
+const periodTo    = computed(() => `${periodYear.value}-${String(quarterRanges[periodQuarter.value][1]).padStart(2, '0')}`);
+const periodLabel = computed(() => `${periodQuarter.value} ${periodYear.value}`);
+const yearOptions = Array.from({ length: 7 }, (_, i) => now.getFullYear() - i);
 
+// ─── Metrics ──────────────────────────────────────────────────
 const allMetrics = [
-  { key: 'volume',      label: 'Объём (₽)',       fmt: 'rub'  },
-  { key: 'count',       label: 'Кол-во (шт)',      fmt: 'int'  },
-  { key: 'avgCheck',    label: 'Средний чек (₽)',  fmt: 'rub'  },
-  { key: 'revenue',     label: 'Выручка (₽)',      fmt: 'rub'  },
-  { key: 'points',      label: 'Баллы',            fmt: 'num'  },
-  { key: 'fcCount',     label: 'Кол-во ФК',        fmt: 'int'  },
-  { key: 'clientCount', label: 'Кол-во клиентов',  fmt: 'int'  },
+  { key: 'volume',      shortLabel: 'Объём',    label: 'Объём (₽)',       fmt: 'rub' },
+  { key: 'count',       shortLabel: 'Кол-во',   label: 'Кол-во',          fmt: 'int' },
+  { key: 'revenue',     shortLabel: 'Выручка',  label: 'Выручка (₽)',     fmt: 'rub' },
+  { key: 'points',      shortLabel: 'Баллы',    label: 'Баллы',           fmt: 'num' },
+  { key: 'clientCount', shortLabel: 'Клиенты',  label: 'Кол-во клиентов', fmt: 'int' },
 ];
-
-const visibleMetrics = ref(['volume', 'count', 'avgCheck', 'revenue', 'points', 'fcCount', 'clientCount']);
-const expandedProducts = ref(new Set());
-
-const activeMetrics = computed(() => allMetrics.filter(m => visibleMetrics.value.includes(m.key)));
-const activeMetricDef = computed(() => allMetrics.find(m => m.key === monthlyMetric.value) ?? allMetrics[0]);
+const selectedMetricKeys = ref(['volume', 'revenue']);
+const activeMetrics = computed(() => allMetrics.filter(m => selectedMetricKeys.value.includes(m.key)));
 
 function toggleMetric(key) {
-  const idx = visibleMetrics.value.indexOf(key);
-  if (idx === -1) visibleMetrics.value.push(key);
-  else if (visibleMetrics.value.length > 1) visibleMetrics.value.splice(idx, 1);
+  const idx = selectedMetricKeys.value.indexOf(key);
+  if (idx !== -1) {
+    if (selectedMetricKeys.value.length > 1) selectedMetricKeys.value.splice(idx, 1);
+  } else if (selectedMetricKeys.value.length < 2) {
+    selectedMetricKeys.value.push(key);
+  }
 }
 
-function toggleProduct(id) {
+// ─── Data ─────────────────────────────────────────────────────
+const loading        = ref(false);
+const rows           = ref([]);
+const grandTotals    = ref(null);
+const months         = ref([]);
+const productOptions = ref([]);
+const filterProducts = ref([]);
+
+const expandedFcs      = ref(new Set());
+const expandedProducts = ref(new Set());
+
+function toggleFc(fcId) {
+  const s = new Set(expandedFcs.value);
+  if (s.has(fcId)) s.delete(fcId); else s.add(fcId);
+  expandedFcs.value = s;
+}
+
+function toggleProduct(key) {
   const s = new Set(expandedProducts.value);
-  if (s.has(id)) s.delete(id); else s.add(id);
+  if (s.has(key)) s.delete(key); else s.add(key);
   expandedProducts.value = s;
 }
 
 function expandAll() {
-  expandedProducts.value = new Set(rows.value.map(r => r.productId));
+  expandedFcs.value = new Set(rows.value.map(r => r.fcId));
+  const keys = new Set();
+  for (const fc of rows.value) {
+    for (const p of fc.products) keys.add(`${fc.fcId}-${p.productId}`);
+  }
+  expandedProducts.value = keys;
 }
 
 function collapseAll() {
+  expandedFcs.value      = new Set();
   expandedProducts.value = new Set();
 }
 
 function resetFilters() {
   filterProducts.value = [];
   loadData();
+}
+
+function reload() {
+  productOptions.value = [];
+  filterProducts.value = [];
+  loadData();
+}
+
+async function loadData() {
+  loading.value = true;
+  try {
+    const params = new URLSearchParams();
+    params.set('from', periodFrom.value);
+    params.set('to',   periodTo.value);
+    filterProducts.value.forEach(p => params.append('products[]', p));
+
+    const { data } = await api.get(`/admin/reports/sales-matrix/fc?${params}`);
+    rows.value        = data.rows        ?? [];
+    months.value      = data.period?.months ?? [];
+    grandTotals.value = data.grandTotals ?? null;
+    if (!productOptions.value.length) productOptions.value = data.products ?? [];
+  } catch (e) {
+    console.error('fc-matrix load failed', e);
+  }
+  loading.value = false;
 }
 
 // ─── Formatting ───────────────────────────────────────────────
@@ -310,12 +328,10 @@ function fmtRub(val) {
   return n.toLocaleString('ru-RU', { maximumFractionDigits: 0 }) + ' ₽';
 }
 
-function fmtCell(val, metricDef) {
+function fmtCell(val, m) {
   if (val == null || val === '') return '—';
-  const m = metricDef ?? { fmt: 'num' };
   const n = Number(val);
-  if (isNaN(n)) return '—';
-  if (n === 0) return '—';
+  if (isNaN(n) || n === 0) return '—';
   if (m.fmt === 'int') return n.toLocaleString('ru-RU');
   if (m.fmt === 'rub') {
     if (n >= 1_000_000) return (n / 1_000_000).toLocaleString('ru-RU', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' M';
@@ -325,160 +341,95 @@ function fmtCell(val, metricDef) {
   return n.toLocaleString('ru-RU', { maximumFractionDigits: 2 });
 }
 
-const MONTHS_SHORT = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн',
-  'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'];
-
+const MONTHS_SHORT = ['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'];
 function fmtMonthHdr(dm) {
   const [, m] = (dm || '').split('-');
   return MONTHS_SHORT[parseInt(m, 10) - 1] ?? dm;
-}
-
-function productMonthly(productId, mo) {
-  let total = 0;
-  for (const pgData of Object.values(monthlyData.value[productId] ?? {})) {
-    total += Number(pgData[mo]?.[monthlyMetric.value] ?? 0);
-  }
-  return total || null;
-}
-
-function programMonthly(productId, programId, mo) {
-  return monthlyData.value[productId]?.[programId]?.[mo]?.[monthlyMetric.value] || null;
-}
-
-// ─── Data loading ─────────────────────────────────────────────
-async function loadData() {
-  loading.value = true;
-  try {
-    const params = new URLSearchParams();
-    params.set('year', year.value);
-    filterProducts.value.forEach(p => params.append('products[]', p));
-
-    const qs = params.toString();
-    const [main, mon] = await Promise.all([
-      api.get(`/admin/reports/sales-matrix?${qs}`),
-      api.get(`/admin/reports/sales-matrix/monthly?${qs}`),
-    ]);
-
-    rows.value        = main.data.rows ?? [];
-    grandTotals.value = main.data.grandTotals ?? null;
-
-    if (!productOptions.value.length) productOptions.value = main.data.products ?? [];
-
-    months.value      = mon.data.months ?? [];
-    monthlyData.value = mon.data.data   ?? {};
-
-  } catch (e) {
-    console.error('sales-matrix load failed', e);
-  }
-  loading.value = false;
-}
-
-function onYearChange() {
-  productOptions.value  = [];
-  filterProducts.value  = [];
-  loadData();
 }
 
 onMounted(loadData);
 </script>
 
 <style scoped>
-/* ─── Matrix table base ─── */
 .matrix-table {
   border-collapse: collapse;
   width: 100%;
   font-size: 13px;
 }
-
 .matrix-table th,
 .matrix-table td {
-  padding: 7px 10px;
+  padding: 6px 10px;
   border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.07);
   white-space: nowrap;
 }
-
 .matrix-table th {
   background: rgba(var(--v-theme-surface-variant), 0.5);
   font-weight: 600;
-  font-size: 12px;
+  font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: rgba(var(--v-theme-on-surface), 0.65);
+  letter-spacing: 0.04em;
+  color: rgba(var(--v-theme-on-surface), 0.6);
 }
 
-/* ─── Column widths ─── */
-.col-product { min-width: 240px; max-width: 340px; }
-.col-num {
-  min-width: 90px;
+/* Month group header */
+.month-group {
+  text-align: center;
+  border-right: 2px solid rgba(var(--v-theme-on-surface), 0.1);
+  padding: 8px 10px;
+}
+.total-group {
+  background: rgba(var(--v-theme-primary), 0.06);
+}
+
+/* Sub-metric headers */
+.col-num-sub {
   text-align: right;
   font-variant-numeric: tabular-nums;
+  min-width: 80px;
+  font-size: 10px;
 }
-.col-total {
-  background: rgba(var(--v-theme-primary), 0.05);
-  font-weight: 600;
-}
-
-/* ─── Row types ─── */
-.row-product {
-  cursor: pointer;
-  background: rgba(var(--v-theme-surface), 1);
-}
-.row-product:hover { background: rgba(var(--v-theme-primary), 0.05) !important; }
-.row-product td { font-weight: 500; }
-
-.row-program td { background: transparent; }
-.row-program:hover td { background: rgba(var(--v-theme-primary), 0.03) !important; }
-
-.row-totals td {
-  background: rgba(var(--v-theme-primary), 0.07) !important;
-  border-top: 2px solid rgba(var(--v-theme-primary), 0.2);
+.total-sub {
+  background: rgba(var(--v-theme-primary), 0.04);
 }
 
-/* ─── Cell content ─── */
+/* Name column */
+.col-name { min-width: 200px; max-width: 280px; }
 .cell-name {
   display: flex;
   align-items: center;
-  gap: 4px;
 }
-.cell-sub {
-  padding-left: 24px;
-  font-size: 12px;
-  font-weight: 400;
-}
-.sub-connector {
-  display: inline-block;
-  width: 14px;
-  height: 14px;
-  border-left: 1px solid rgba(var(--v-theme-on-surface), 0.2);
-  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.2);
-  margin-right: 4px;
-  flex-shrink: 0;
-  position: relative;
-  top: -4px;
-}
+.cell-level1 { padding-left: 20px; }
+.cell-level2 { padding-left: 40px; font-size: 12px; }
+.fc-name { font-weight: 600; }
 
-.prog-count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 4px;
-  border-radius: 9px;
-  background: rgba(var(--v-theme-primary), 0.12);
-  color: rgb(var(--v-theme-primary));
-  font-size: 11px;
-  font-weight: 700;
-  margin-left: 4px;
+/* Numeric cells */
+.col-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  min-width: 75px;
 }
-
-.supplier-tag {
-  font-size: 10px;
-  color: rgba(var(--v-theme-on-surface), 0.5);
-  margin-left: 6px;
-  font-weight: 400;
+.total-cell {
+  background: rgba(var(--v-theme-primary), 0.04);
+  font-weight: 600;
+  border-left: 1px solid rgba(var(--v-theme-primary), 0.15);
 }
+.num-dim { color: rgba(var(--v-theme-on-surface), 0.7); font-weight: 400; }
 
-.num-product { color: rgb(var(--v-theme-on-surface)); }
-.num-program { color: rgba(var(--v-theme-on-surface), 0.75); }
+/* Row types */
+.row-fc {
+  cursor: pointer;
+  background: rgba(var(--v-theme-surface), 1);
+}
+.row-fc:hover td { background: rgba(var(--v-theme-primary), 0.05) !important; }
+.row-fc td { font-weight: 500; border-top: 1px solid rgba(var(--v-theme-on-surface), 0.1); }
+
+.row-product { cursor: pointer; }
+.row-product:hover td { background: rgba(var(--v-theme-primary), 0.03) !important; }
+
+.row-program:hover td { background: rgba(var(--v-theme-on-surface), 0.02) !important; }
+
+.row-totals td {
+  background: rgba(var(--v-theme-primary), 0.08) !important;
+  border-top: 2px solid rgba(var(--v-theme-primary), 0.25);
+}
 </style>

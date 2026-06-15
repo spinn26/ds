@@ -483,6 +483,7 @@ Route::prefix('v1')->group(function () {
 
         // Admin — Reports: Product Sales Matrix (MVP admin-only)
         Route::get('/admin/reports/sales-matrix', [\App\Http\Controllers\Api\ProductSalesMatrixController::class, 'index']);
+        Route::get('/admin/reports/sales-matrix/fc', [\App\Http\Controllers\Api\ProductSalesMatrixController::class, 'fcMatrix']);
         Route::get('/admin/reports/sales-matrix/monthly', [\App\Http\Controllers\Api\ProductSalesMatrixController::class, 'monthly']);
 
         // Admin — Payment registry (spec ✅Реестр выплат.md)
