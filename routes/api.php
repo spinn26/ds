@@ -173,6 +173,7 @@ Route::prefix('v1')->group(function () {
 
         Route::get('/contracts/my', [ContractController::class, 'myContracts']);
         Route::get('/contracts/team', [ContractController::class, 'teamContracts']);
+        Route::get('/contracts/team/{id}/chain', [ContractController::class, 'teamConsultantChain'])->whereNumber('id');
         Route::get('/contracts/statuses', [ContractController::class, 'statuses']);
         Route::get('/contracts/products', [ContractController::class, 'products']);
         Route::get('/contracts/programs', [ContractController::class, 'programs']);

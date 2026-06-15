@@ -156,6 +156,62 @@ class ContractController extends Controller
     }
 
     /**
+     * Цепочка наставников (вверх по структуре) для консультанта команды.
+     *
+     * Возвращает путь от выбранного консультанта вверх по `inviter` до
+     * текущего партнёра (viewer) включительно — чтобы на странице «Контракты
+     * команды» по клику на ФИО ФК показать его ветку. Авторизация: консультант
+     * должен входить в команду viewer'а (или быть им самим).
+     */
+    public function teamConsultantChain(Request $request, int $id): JsonResponse
+    {
+        $user = $request->user();
+        $viewer = Consultant::where('webUser', $user->id)->first();
+        if (! $viewer) {
+            return response()->json(['chain' => []]);
+        }
+
+        $teamIds = $this->consultantService->getTeamIds($viewer->id);
+        if ($id !== $viewer->id && ! in_array($id, $teamIds, true)) {
+            return response()->json(['message' => 'Консультант не входит в вашу команду'], 403);
+        }
+
+        $chain = [];
+        $visited = [];
+        $currentId = $id;
+        // Глубина structure ограничена; 30 — заведомо больше реальной.
+        for ($i = 0; $i < 30; $i++) {
+            if (in_array($currentId, $visited, true)) break;
+            $visited[] = $currentId;
+
+            $row = DB::table('consultant')
+                ->where('id', $currentId)
+                ->select(['id', 'personName', 'inviter', 'status_and_lvl'])
+                ->first();
+            if (! $row) break;
+
+            $levelTitle = $row->status_and_lvl
+                ? DB::table('status_levels')->where('id', $row->status_and_lvl)->value('title')
+                : null;
+
+            $chain[] = [
+                'id' => $row->id,
+                'personName' => $row->personName,
+                'level' => $levelTitle,
+                'depth' => count($chain),
+                'isViewer' => (int) $row->id === (int) $viewer->id,
+            ];
+
+            // Дошли до текущего партнёра — выше его ветку не показываем.
+            if ((int) $row->id === (int) $viewer->id) break;
+            if (! $row->inviter) break;
+            $currentId = (int) $row->inviter;
+        }
+
+        return response()->json(['chain' => $chain]);
+    }
+
+    /**
      * Список статусов контрактов (для фильтра).
      */
     public function statuses(): JsonResponse

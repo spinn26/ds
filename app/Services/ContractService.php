@@ -204,6 +204,7 @@ class ContractService
 
             if ($includeConsultant) {
                 $data['consultantName'] = $c->consultantName;
+                $data['consultantId'] = $c->consultant ?? null;
             }
 
             return $data;

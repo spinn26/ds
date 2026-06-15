@@ -81,6 +81,11 @@
       <template #item.openDate="{ value }">
         {{ fmtDate(value) }}
       </template>
+      <template #item.consultantName="{ item }">
+        <a v-if="item.consultantId" href="#" class="consultant-link"
+          @click.prevent="openChain(item)">{{ item.consultantName }}</a>
+        <span v-else>{{ item.consultantName }}</span>
+      </template>
       <template #item.statusName="{ value }">
         <StatusChip :value="value" kind="contract" size="x-small" :text="value" />
       </template>
@@ -103,6 +108,34 @@
       </template>
       <template #no-data><EmptyState /></template>
     </v-data-table-server>
+
+    <!-- Цепочка наставников (вверх по структуре) — открывается кликом по
+         ФИО ФК. Показывает путь от выбранного консультанта до вас. -->
+    <v-dialog v-model="chainDialog" max-width="520">
+      <v-card>
+        <v-card-title class="d-flex align-center ga-2">
+          <v-icon size="22">mdi-file-tree</v-icon>
+          Ветка вверх
+          <v-spacer />
+          <v-btn icon="mdi-close" variant="text" size="small" @click="chainDialog = false" />
+        </v-card-title>
+        <v-card-text>
+          <div class="text-caption text-medium-emphasis mb-2">
+            {{ chainConsultantName }} → вы
+          </div>
+          <v-skeleton-loader v-if="chainLoading" type="list-item-two-line@3" />
+          <v-list v-else-if="chain.length" density="compact">
+            <v-list-item v-for="(p, idx) in chain" :key="p.id"
+              :prepend-icon="idx === 0 ? 'mdi-account-circle' : (p.isViewer ? 'mdi-account-star' : 'mdi-account-arrow-up')"
+              :title="p.personName"
+              :subtitle="idx === 0
+                ? ('Прямой ФК' + (p.level ? ' · ' + p.level : ''))
+                : (p.isViewer ? 'Вы' : `Уровень ${idx}`) + (p.level ? ' · ' + p.level : '')" />
+          </v-list>
+          <EmptyState v-else message="Цепочка пуста" />
+        </v-card-text>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
@@ -124,6 +157,25 @@ const loading = ref(false);
 const page = ref(1);
 const perPage = ref(25);
 const advancedOpen = ref(false);
+
+// Диалог «Ветка вверх» (цепочка наставников выбранного ФК).
+const chainDialog = ref(false);
+const chain = ref([]);
+const chainLoading = ref(false);
+const chainConsultantName = ref('');
+
+async function openChain(item) {
+  if (!item.consultantId) return;
+  chainConsultantName.value = item.consultantName || '';
+  chain.value = [];
+  chainLoading.value = true;
+  chainDialog.value = true;
+  try {
+    const { data } = await api.get(`/contracts/team/${item.consultantId}/chain`);
+    chain.value = data.chain || [];
+  } catch {}
+  chainLoading.value = false;
+}
 const filters = ref({
   search: '',
   consultantSearch: '',
@@ -238,5 +290,13 @@ onMounted(loadData);
 }
 .filter-range :deep(.v-field) {
   min-width: 100px;
+}
+.consultant-link {
+  color: rgb(var(--v-theme-primary));
+  text-decoration: none;
+  cursor: pointer;
+}
+.consultant-link:hover {
+  text-decoration: underline;
 }
 </style>
