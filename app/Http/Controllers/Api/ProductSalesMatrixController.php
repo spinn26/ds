@@ -510,6 +510,159 @@ class ProductSalesMatrixController extends Controller
         ]);
     }
 
+    /**
+     * GET /admin/reports/sales-matrix/quarterly
+     *
+     * Матрица продаж в разрезе Продукт → Программа с разбивкой по месяцам
+     * за произвольный период (квартал / диапазон).
+     *
+     * Params: from (Y-m), to (Y-m), products[] (int, optional)
+     */
+    public function quarterlyMatrix(Request $request): JsonResponse
+    {
+        $params = $request->validate([
+            'from'        => 'required|date_format:Y-m',
+            'to'          => 'required|date_format:Y-m',
+            'products'    => 'nullable|array',
+            'products.*'  => 'integer',
+        ]);
+
+        $from   = $params['from'];
+        $to     = $params['to'];
+        $months = $this->monthRange($from, $to);
+
+        $q = DB::table('transaction as t')
+            ->join('contract as co', 'co.id', '=', 't.contract')
+            ->join('product as p',   'p.id',  '=', 'co.product')
+            ->join('program as pg',  'pg.id', '=', 'co.program')
+            ->whereBetween('t.dateMonth', [$from, $to])
+            ->whereNotNull('co.openDate')
+            ->whereNull('co.deletedAt')
+            ->whereNull('t.deletedAt')
+            ->select([
+                'p.id   as product_id',
+                'p.name as product_name',
+                'pg.id   as program_id',
+                'pg.name as program_name',
+                't.dateMonth',
+                DB::raw('SUM(COALESCE(t."amountRUB",     0)) as volume'),
+                DB::raw('COUNT(DISTINCT co.id)               as cnt'),
+                DB::raw('SUM(COALESCE(t."netRevenueRUB", 0)) as revenue'),
+                DB::raw('SUM(COALESCE(t."personalVolume",0)) as points'),
+                DB::raw('COUNT(DISTINCT co.client)            as client_count'),
+            ])
+            ->groupBy('p.id', 'p.name', 'pg.id', 'pg.name', 't.dateMonth')
+            ->orderBy('p.name')
+            ->orderBy('pg.name')
+            ->orderBy('t.dateMonth');
+
+        if (! empty($params['products'])) {
+            $q->whereIn('p.id', $params['products']);
+        }
+
+        $rows = $q->get();
+
+        $productMap = [];
+        $grand      = ['volume' => 0, 'count' => 0, 'revenue' => 0, 'points' => 0,
+                       'clientCount' => 0, 'monthly' => []];
+
+        foreach ($rows as $r) {
+            $pid  = $r->product_id;
+            $pgid = $r->program_id;
+            $mo   = $r->dateMonth;
+
+            $v  = round((float) $r->volume,  2);
+            $c  = (int)         $r->cnt;
+            $rv = round((float) $r->revenue, 2);
+            $pt = round((float) $r->points,  2);
+            $cl = (int)         $r->client_count;
+            $vals = ['volume' => $v, 'count' => $c, 'revenue' => $rv,
+                     'points' => $pt, 'clientCount' => $cl];
+
+            if (! isset($productMap[$pid])) {
+                $productMap[$pid] = [
+                    'productId' => $pid, 'productName' => $r->product_name,
+                    'volume' => 0, 'count' => 0, 'revenue' => 0, 'points' => 0, 'clientCount' => 0,
+                    'monthly' => [], 'programs' => [],
+                ];
+            }
+            if (! isset($productMap[$pid]['programs'][$pgid])) {
+                $productMap[$pid]['programs'][$pgid] = [
+                    'programId' => $pgid, 'programName' => $r->program_name,
+                    'volume' => 0, 'count' => 0, 'revenue' => 0, 'points' => 0, 'clientCount' => 0,
+                    'monthly' => [],
+                ];
+            }
+
+            // Program
+            $productMap[$pid]['programs'][$pgid]['monthly'][$mo] = $vals;
+            foreach ($vals as $k => $val) {
+                $productMap[$pid]['programs'][$pgid][$k] += $val;
+            }
+
+            // Product
+            foreach ($vals as $k => $val) {
+                $productMap[$pid]['monthly'][$mo][$k]  = ($productMap[$pid]['monthly'][$mo][$k] ?? 0) + $val;
+                $productMap[$pid][$k]                 += $val;
+                $grand['monthly'][$mo][$k]             = ($grand['monthly'][$mo][$k] ?? 0) + $val;
+                $grand[$k]                            += $val;
+            }
+        }
+
+        // Distinct FC count per product (exact, product-level only)
+        $fcCounts = DB::table('transaction as t')
+            ->join('contract as co', 'co.id', '=', 't.contract')
+            ->whereBetween('t.dateMonth', [$from, $to])
+            ->whereNotNull('co.openDate')
+            ->whereNull('co.deletedAt')
+            ->whereNull('t.deletedAt')
+            ->select('co.product as product_id', DB::raw('COUNT(DISTINCT co.consultant) as fc_count'))
+            ->groupBy('co.product')
+            ->get()
+            ->keyBy('product_id');
+
+        if (! empty($params['products'])) {
+            // Already filtered above; just use what's there
+        }
+
+        $result = [];
+        foreach ($productMap as $pid => $prod) {
+            $prod['fcCount']  = (int) ($fcCounts[$pid]->fc_count ?? 0);
+            $prod['programs'] = array_values($prod['programs']);
+            $result[]         = $prod;
+        }
+
+        $grand['fcCount'] = (int) DB::table('transaction as t')
+            ->join('contract as co', 'co.id', '=', 't.contract')
+            ->whereBetween('t.dateMonth', [$from, $to])
+            ->whereNotNull('co.openDate')
+            ->whereNull('co.deletedAt')
+            ->whereNull('t.deletedAt')
+            ->when(! empty($params['products']), fn ($q) => $q->whereIn('co.product', $params['products']))
+            ->distinct()
+            ->count('co.consultant');
+
+        $allProducts = DB::table('transaction as t')
+            ->join('contract as co', 'co.id', '=', 't.contract')
+            ->join('product as p', 'p.id', '=', 'co.product')
+            ->whereBetween('t.dateMonth', [$from, $to])
+            ->whereNotNull('co.openDate')
+            ->whereNull('co.deletedAt')
+            ->whereNull('t.deletedAt')
+            ->select('p.id', 'p.name')
+            ->distinct()
+            ->orderBy('p.name')
+            ->get()
+            ->map(fn ($r) => ['id' => $r->id, 'name' => $r->name]);
+
+        return response()->json([
+            'period'      => ['from' => $from, 'to' => $to, 'months' => $months],
+            'rows'        => $result,
+            'grandTotals' => $grand,
+            'products'    => $allProducts->values(),
+        ]);
+    }
+
     private function monthRange(string $from, string $to): array
     {
         $months = [];
