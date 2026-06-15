@@ -111,7 +111,7 @@
                     <v-icon size="18">{{ row._expanded ? 'mdi-chevron-down' : 'mdi-chevron-right' }}</v-icon>
                   </v-btn>
                   <span v-else class="tree-toggle"></span>
-                  <span class="tree-label">{{ row.personName }}</span>
+                  <span class="tree-label partner-link" @click.stop="openCard(row)">{{ row.personName }}</span>
                 </span>
               </td>
               <td class="text-center">{{ row.level ?? '—' }}</td>
@@ -160,6 +160,138 @@
       </div>
     </v-card>
   </div>
+
+  <!-- Карточка партнёра -->
+  <v-dialog v-model="cardOpen" max-width="480" scrollable>
+    <v-card v-if="selectedPartner" rounded="lg">
+      <v-card-title class="d-flex align-center ga-2 pa-4 pb-2">
+        <v-avatar color="primary" size="40" class="flex-shrink-0">
+          <span class="text-body-2 font-weight-bold text-white">
+            {{ avatarInitials(selectedPartner) }}
+          </span>
+        </v-avatar>
+        <div class="flex-grow-1 min-width-0">
+          <div class="text-subtitle-1 font-weight-bold text-truncate">{{ selectedPartner.personName }}</div>
+          <StatusChip v-if="selectedPartner.activityName"
+            :value="selectedPartner.activityName" kind="activityName"
+            size="x-small" :text="selectedPartner.activityName" class="mt-1" />
+        </div>
+        <v-btn icon size="small" variant="text" @click="cardOpen = false">
+          <v-icon>mdi-close</v-icon>
+        </v-btn>
+      </v-card-title>
+
+      <v-divider />
+
+      <v-card-text class="pa-4">
+        <!-- Квалификация -->
+        <div class="d-flex ga-3 mb-3 flex-wrap">
+          <div class="info-block">
+            <div class="text-caption text-medium-emphasis">Уровень</div>
+            <div class="text-body-2 font-weight-medium">{{ selectedPartner.level ?? '—' }}</div>
+          </div>
+          <div class="info-block flex-grow-1">
+            <div class="text-caption text-medium-emphasis">Квалификация</div>
+            <div class="text-body-2 font-weight-medium">
+              <span v-if="selectedPartner.qualification">
+                {{ selectedPartner.qualification.level }} [{{ selectedPartner.qualification.title }}]
+              </span>
+              <span v-else>—</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Объёмы -->
+        <v-row dense class="mb-3">
+          <v-col cols="4">
+            <div class="volume-block">
+              <div class="text-caption text-medium-emphasis">ЛП</div>
+              <div class="text-body-2 font-weight-bold" style="font-variant-numeric:tabular-nums">
+                {{ fmt(selectedPartner.personalVolume) }}
+              </div>
+            </div>
+          </v-col>
+          <v-col cols="4">
+            <div class="volume-block">
+              <div class="text-caption text-medium-emphasis">ГП</div>
+              <div class="text-body-2 font-weight-bold" style="font-variant-numeric:tabular-nums">
+                {{ fmt(selectedPartner.groupVolume) }}
+              </div>
+            </div>
+          </v-col>
+          <v-col cols="4">
+            <div class="volume-block">
+              <div class="text-caption text-medium-emphasis">НГП</div>
+              <div class="text-body-2 font-weight-bold" style="font-variant-numeric:tabular-nums">
+                {{ fmt(selectedPartner.groupVolumeCumulative) }}
+              </div>
+            </div>
+          </v-col>
+        </v-row>
+
+        <!-- Счётчики -->
+        <v-row dense class="mb-3">
+          <v-col cols="4">
+            <div class="volume-block">
+              <div class="text-caption text-medium-emphasis">Клиенты</div>
+              <div class="text-body-2 font-weight-medium">{{ selectedPartner.clientCount ?? 0 }}</div>
+            </div>
+          </v-col>
+          <v-col cols="4">
+            <div class="volume-block">
+              <div class="text-caption text-medium-emphasis">Контракты</div>
+              <div class="text-body-2 font-weight-medium">{{ selectedPartner.contractCount ?? 0 }}</div>
+            </div>
+          </v-col>
+          <v-col cols="4">
+            <div class="volume-block">
+              <div class="text-caption text-medium-emphasis">Партнёры</div>
+              <div class="text-body-2 font-weight-medium">{{ selectedPartner.partnersCount ?? 0 }}</div>
+            </div>
+          </v-col>
+        </v-row>
+
+        <v-divider class="mb-3" />
+
+        <!-- Персональные данные -->
+        <div class="d-flex flex-column ga-2">
+          <div v-if="selectedPartner.city" class="d-flex align-center ga-2">
+            <v-icon size="18" color="medium-emphasis">mdi-map-marker-outline</v-icon>
+            <span class="text-body-2">{{ selectedPartner.city }}</span>
+          </div>
+          <div v-if="selectedPartner.birthDate" class="d-flex align-center ga-2">
+            <v-icon size="18" color="medium-emphasis">mdi-cake-variant-outline</v-icon>
+            <span class="text-body-2">{{ selectedPartner.birthDate }}</span>
+          </div>
+          <div v-if="selectedPartner.dateActivity" class="d-flex align-center ga-2">
+            <v-icon size="18" color="medium-emphasis">mdi-calendar-check-outline</v-icon>
+            <span class="text-body-2">Активирован: {{ selectedPartner.dateActivity }}</span>
+          </div>
+          <div v-if="statusChangeDate(selectedPartner)" class="d-flex align-center ga-2">
+            <v-icon size="18" color="medium-emphasis">mdi-calendar-clock-outline</v-icon>
+            <span class="text-body-2">
+              {{ isActive(selectedPartner) ? 'Конец цикла:' : 'Срок активации:' }}
+              {{ statusChangeDate(selectedPartner) }}
+            </span>
+          </div>
+          <div v-if="selectedPartner.inviterName" class="d-flex align-center ga-2">
+            <v-icon size="18" color="medium-emphasis">mdi-account-arrow-up-outline</v-icon>
+            <span class="text-body-2">Пригласитель: {{ selectedPartner.inviterName }}</span>
+          </div>
+          <div v-if="selectedPartner.personalVolumeSinceActivation != null && isActive(selectedPartner)"
+            class="d-flex align-center ga-2">
+            <v-icon size="18" :color="selectedPartner.personalVolumeSinceActivation < 500 ? 'warning' : 'success'">
+              mdi-trending-up
+            </v-icon>
+            <span class="text-body-2"
+              :class="selectedPartner.personalVolumeSinceActivation < 500 ? 'text-warning' : 'text-success'">
+              ЛП с активации: {{ fmt(selectedPartner.personalVolumeSinceActivation) }} / 500
+            </span>
+          </div>
+        </div>
+      </v-card-text>
+    </v-card>
+  </v-dialog>
 </template>
 
 <script setup>
@@ -174,6 +306,19 @@ import SmartRangeFilter from '../components/SmartRangeFilter.vue';
 import { fmt, getActivityColorByName } from '../composables/useDesign';
 
 const loading = ref(false);
+const cardOpen = ref(false);
+const selectedPartner = ref(null);
+
+function openCard(row) {
+  selectedPartner.value = row;
+  cardOpen.value = true;
+}
+
+function avatarInitials(row) {
+  const parts = (row.personName || '').trim().split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return (parts[0]?.[0] ?? '?').toUpperCase();
+}
 const showAdvanced = ref(false);
 const exportingId = ref(null);
 const exportingAll = ref(false);
@@ -544,5 +689,31 @@ onMounted(() => {
 }
 /* Корневые узлы — чуть жирнее для «явности» уровней. */
 .tree-root .tree-label { font-weight: 600; }
+
+/* Кликабельное имя партнёра */
+.partner-link {
+  cursor: pointer;
+  color: rgb(var(--v-theme-primary));
+  border-radius: 4px;
+  padding: 0 2px;
+  transition: background 0.15s;
+}
+.partner-link:hover {
+  background: rgba(var(--v-theme-primary), 0.08);
+}
+
+/* Блоки данных в карточке */
+.info-block {
+  background: rgba(var(--v-theme-on-surface), 0.04);
+  border-radius: 8px;
+  padding: 8px 12px;
+  min-width: 80px;
+}
+.volume-block {
+  background: rgba(var(--v-theme-primary), 0.06);
+  border-radius: 8px;
+  padding: 8px 10px;
+  text-align: center;
+}
 </style>
 
