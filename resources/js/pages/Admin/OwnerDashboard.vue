@@ -131,8 +131,9 @@
             :model-value="widthOf(s)"
             :color="s.negative ? 'error' : 'primary'"
             height="28"
+            rounded
           >
-            <span class="text-caption text-white px-2">
+            <span class="funnel-pct text-caption">
               {{ widthOf(s).toFixed(1) }}% от {{ totalEver.toLocaleString('ru-RU') }} зарегистрированных
             </span>
           </v-progress-linear>
@@ -198,5 +199,16 @@ onMounted(load);
   font-size: 16px !important;
   font-weight: 600 !important;
   letter-spacing: -0.01em;
+}
+/* Подпись % поверх полосы воронки — тёмная подложка для читаемости на
+   любом фоне в обеих темах (см. также FunnelSteps.vue). */
+.funnel-pct {
+  color: #fff;
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 6px;
+  padding: 1px 8px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 </style>

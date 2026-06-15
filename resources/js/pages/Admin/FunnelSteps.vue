@@ -16,8 +16,9 @@
         :model-value="widthOf(s)"
         :color="s.negative ? 'error' : 'primary'"
         height="28"
+        rounded
       >
-        <span class="text-caption text-white px-2">
+        <span class="funnel-pct text-caption">
           {{ widthOf(s).toFixed(1) }}% от {{ totalEver.toLocaleString('ru-RU') }} зарег.
         </span>
       </v-progress-linear>
@@ -36,3 +37,18 @@ function widthOf(s) {
   return (s.count / props.totalEver) * 100;
 }
 </script>
+
+<style scoped>
+/* Подпись поверх полосы: тёмная полупрозрачная подложка делает текст
+   читаемым на любом фоне (зелёная/красная заливка, светлый трек в светлой
+   теме, тёмный трек в тёмной) — раньше голый text-white терялся на светлом. */
+.funnel-pct {
+  color: #fff;
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 6px;
+  padding: 1px 8px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+</style>
