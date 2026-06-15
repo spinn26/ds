@@ -77,23 +77,22 @@
             <v-btn size="x-small" variant="text" prepend-icon="mdi-expand-all-outline" @click="expandAll">Все</v-btn>
             <v-btn size="x-small" variant="text" prepend-icon="mdi-collapse-all-outline" @click="collapseAll">Свернуть</v-btn>
 
-            <!-- Metrics selector (max 2) -->
+            <!-- Metrics selector -->
             <v-menu :close-on-content-click="false" location="bottom end">
               <template #activator="{ props }">
                 <v-btn v-bind="props" size="small" variant="tonal" color="primary"
                   prepend-icon="mdi-tune">
-                  Метрики · {{ selectedMetricKeys.length }}/2
+                  Метрики · {{ selectedMetricKeys.length }}
                 </v-btn>
               </template>
               <v-card min-width="220" elevation="4">
-                <v-card-title class="text-body-2 pa-3 pb-1 font-weight-medium">Выберите до 2 метрик</v-card-title>
+                <v-card-title class="text-body-2 pa-3 pb-1 font-weight-medium">Метрики</v-card-title>
                 <v-divider />
                 <v-list density="compact" class="pa-1">
                   <v-list-item v-for="m in allMetrics" :key="m.key" :title="m.label"
                     rounded="lg" style="cursor:pointer" @click="toggleMetric(m.key)">
                     <template #prepend>
                       <v-checkbox-btn :model-value="selectedMetricKeys.includes(m.key)"
-                        :disabled="selectedMetricKeys.length >= 2 && !selectedMetricKeys.includes(m.key)"
                         color="primary" density="compact"
                         @click.stop="toggleMetric(m.key)" />
                     </template>
@@ -288,7 +287,7 @@ const activeMetrics = computed(() => allMetrics.filter(m => selectedMetricKeys.v
 function toggleMetric(key) {
   const idx = selectedMetricKeys.value.indexOf(key);
   if (idx !== -1) { if (selectedMetricKeys.value.length > 1) selectedMetricKeys.value.splice(idx, 1); }
-  else if (selectedMetricKeys.value.length < 2) selectedMetricKeys.value.push(key);
+  else selectedMetricKeys.value.push(key);
 }
 
 // ─── Data ─────────────────────────────────────────────────────
@@ -310,7 +309,7 @@ function toggleProduct(pid) {
 function expandAll()   { expandedProducts.value = new Set(rows.value.map(r => r.productId)); }
 function collapseAll() { expandedProducts.value = new Set(); }
 function resetFilters() { filterProducts.value = []; filterSuppliers.value = []; loadData(); }
-function reload() { productOptions.value = []; supplierOptions.value = []; filterProducts.value = []; filterSuppliers.value = []; loadData(); }
+function reload() { productOptions.value = []; supplierOptions.value = []; loadData(); }
 function onPeriodModeChange() { reload(); }
 
 async function loadData() {
