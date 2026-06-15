@@ -74,6 +74,7 @@ const routes = [
             { path: 'manage/reports', component: () => import('../pages/Admin/Reports.vue'), meta: { staff: true } },
             { path: 'manage/reports/sales-matrix', component: () => import('../pages/Admin/SalesMatrix.vue'), meta: { staff: true } },
             { path: 'manage/currencies', component: () => import('../pages/Admin/Currencies.vue'), meta: { staff: true } },
+            { path: 'manage/management-currencies', component: () => import('../pages/Admin/ManagementCurrencies.vue'), meta: { staff: true } },
             { path: 'manage/products', component: () => import('../pages/Admin/Products.vue'), meta: { staff: true } },
             { path: 'manage/products-preview', component: () => import('../pages/Admin/ProductsPreview.vue'), meta: { staff: true } },
             { path: 'manage/education', component: () => import('../pages/Admin/EducationConstructor.vue'), meta: { staff: true } },

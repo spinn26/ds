@@ -209,6 +209,16 @@
             <v-col cols="4"><v-text-field v-model="form.openDate" label="Открытия" type="date" variant="outlined" density="comfortable" /></v-col>
             <v-col cols="4"><v-text-field v-model="form.closeDate" label="Закрытия" type="date" variant="outlined" density="comfortable" /></v-col>
           </v-row>
+          <!-- Прогноз активации: обязателен для всех статусов кроме «Активирован» (id=1) -->
+          <v-text-field v-if="form.status !== 1"
+            v-model="form.activation_forecast"
+            label="Прогноз активации *"
+            type="date"
+            variant="outlined"
+            density="comfortable"
+            class="mt-2"
+            hint="Ожидаемая дата активации контракта"
+            persistent-hint />
 
           <!-- Блок «Сумма» -->
           <div class="text-subtitle-2 font-weight-bold mb-2 mt-3">Сумма</div>
@@ -475,6 +485,7 @@ const blankForm = () => ({
   product: null, program: null, country: null,
   createDate: new Date().toISOString().slice(0, 10),
   openDate: '', closeDate: '',
+  activation_forecast: '',
   ammount: 0, currency: null,
   riskProfile: null, setup: null, type: null, comment: '',
 });
@@ -572,6 +583,7 @@ async function openEdit(item) {
       createDate: (c.createDate || '').slice(0, 10),
       openDate: (c.openDate || '').slice(0, 10),
       closeDate: (c.closeDate || '').slice(0, 10),
+      activation_forecast: (c.activation_forecast || '').slice(0, 10),
       ammount: Number(c.ammount || 0),
       currency: c.currency,
       riskProfile: c.riskProfile,

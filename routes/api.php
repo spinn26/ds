@@ -165,6 +165,12 @@ Route::prefix('v1')->group(function () {
         Route::get('/status-levels', [DashboardController::class, 'statusLevels']);
 
         Route::get('/clients', [ClientController::class, 'index']);
+
+        // Комментарии к карточке партнёра (Structure.vue)
+        Route::get('/partner-comments/{consultantId}', [\App\Http\Controllers\Api\PartnerCommentsController::class, 'index'])->whereNumber('consultantId');
+        Route::post('/partner-comments', [\App\Http\Controllers\Api\PartnerCommentsController::class, 'store']);
+        Route::delete('/partner-comments/{id}', [\App\Http\Controllers\Api\PartnerCommentsController::class, 'destroy'])->whereNumber('id');
+
         Route::get('/contracts/my', [ContractController::class, 'myContracts']);
         Route::get('/contracts/team', [ContractController::class, 'teamContracts']);
         Route::get('/contracts/statuses', [ContractController::class, 'statuses']);
@@ -340,6 +346,10 @@ Route::prefix('v1')->group(function () {
         Route::get('/admin/currencies', [\App\Http\Controllers\Api\AdminFinanceController::class, 'currencies']);
         Route::patch('/admin/currencies/rates/{id}', [\App\Http\Controllers\Api\AdminFinanceController::class, 'updateCurrencyRate'])->whereNumber('id')->middleware('role:admin,calculations');
         Route::post('/admin/currencies/vat', [\App\Http\Controllers\Api\AdminFinanceController::class, 'addVatRate']);
+        // Второй справочник курсов — для отчётов руководителей (нет пересчёта транзакций)
+        Route::get('/admin/currencies/management-rates', [\App\Http\Controllers\Api\AdminFinanceController::class, 'managementCurrencies']);
+        Route::post('/admin/currencies/management-rates', [\App\Http\Controllers\Api\AdminFinanceController::class, 'storeManagementCurrencyRate'])->middleware('role:admin,calculations');
+        Route::patch('/admin/currencies/management-rates/{id}', [\App\Http\Controllers\Api\AdminFinanceController::class, 'updateManagementCurrencyRate'])->whereNumber('id')->middleware('role:admin,calculations');
         Route::get('/admin/transaction-import/form-data', [\App\Http\Controllers\Api\TransactionImportController::class, 'formData']);
         Route::get('/admin/transaction-import/sheet-names', [\App\Http\Controllers\Api\TransactionImportController::class, 'sheetNames']);
         Route::post('/admin/transaction-import', [\App\Http\Controllers\Api\TransactionImportController::class, 'import'])->middleware('throttle:30,1');

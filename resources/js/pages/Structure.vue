@@ -314,6 +314,44 @@
             </span>
           </div>
         </div>
+
+        <v-divider class="my-3" />
+
+        <!-- Комментарии -->
+        <div class="text-caption text-medium-emphasis mb-2 d-flex align-center ga-1">
+          <v-icon size="14">mdi-comment-text-outline</v-icon>
+          Комментарии
+        </div>
+
+        <div v-if="commentsLoading" class="d-flex justify-center py-2">
+          <v-progress-circular indeterminate size="20" width="2" />
+        </div>
+        <div v-else>
+          <div v-if="comments.length === 0" class="text-caption text-disabled mb-2">Нет комментариев</div>
+          <div v-for="c in comments" :key="c.id" class="comment-item mb-2">
+            <div class="d-flex align-center justify-space-between">
+              <span class="text-caption font-weight-medium">{{ c.author_name || 'Пользователь' }}</span>
+              <div class="d-flex align-center ga-1">
+                <span class="text-caption text-disabled">{{ fmtDate(c.created_at) }}</span>
+                <v-btn v-if="c.author_id === currentUserId" icon size="x-small" variant="text"
+                  color="error" @click="deleteComment(c.id)" title="Удалить">
+                  <v-icon size="12">mdi-close</v-icon>
+                </v-btn>
+              </div>
+            </div>
+            <div class="text-body-2 mt-1">{{ c.body }}</div>
+          </div>
+        </div>
+
+        <div class="d-flex ga-2 mt-2">
+          <v-textarea v-model="newComment" placeholder="Написать комментарий..."
+            variant="outlined" density="compact" rows="2" hide-details
+            class="grow" style="font-size:13px" />
+          <v-btn :loading="commentSaving" :disabled="!newComment.trim()"
+            color="primary" size="small" icon @click="submitComment">
+            <v-icon>mdi-send</v-icon>
+          </v-btn>
+        </div>
       </v-card-text>
     </v-card>
   </v-dialog>
@@ -329,14 +367,64 @@ import EmptyState from '../components/EmptyState.vue';
 import StatusChip from '../components/StatusChip.vue';
 import SmartRangeFilter from '../components/SmartRangeFilter.vue';
 import { fmt, getActivityColorByName } from '../composables/useDesign';
+import { useAuthStore } from '../stores/auth';
+
+const auth = useAuthStore();
+const currentUserId = computed(() => auth.user?.id ?? null);
 
 const loading = ref(false);
 const cardOpen = ref(false);
 const selectedPartner = ref(null);
 
+// Комментарии
+const comments      = ref([]);
+const commentsLoading = ref(false);
+const newComment    = ref('');
+const commentSaving = ref(false);
+
+function fmtDate(d) {
+  if (!d) return '';
+  return new Date(d).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
+async function loadComments(consultantId) {
+  commentsLoading.value = true;
+  comments.value = [];
+  try {
+    const { data } = await api.get(`/partner-comments/${consultantId}`);
+    comments.value = data.data || [];
+  } finally {
+    commentsLoading.value = false;
+  }
+}
+
+async function submitComment() {
+  if (!newComment.value.trim() || !selectedPartner.value) return;
+  commentSaving.value = true;
+  try {
+    const { data } = await api.post('/partner-comments', {
+      consultant_id: selectedPartner.value.id,
+      body: newComment.value.trim(),
+    });
+    comments.value.unshift(data.comment);
+    newComment.value = '';
+  } finally {
+    commentSaving.value = false;
+  }
+}
+
+async function deleteComment(id) {
+  try {
+    await api.delete(`/partner-comments/${id}`);
+    comments.value = comments.value.filter(c => c.id !== id);
+  } catch {}
+}
+
 function openCard(row) {
   selectedPartner.value = row;
+  newComment.value = '';
   cardOpen.value = true;
+  loadComments(row.id);
 }
 
 function avatarInitials(row) {
@@ -641,6 +729,12 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.comment-item {
+  background: rgba(var(--v-theme-on-surface), 0.04);
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+
 /* DS-патч на Структуру: tabular-nums на счётчиках/балансах. */
 :deep(.text-h5), :deep(.text-h6), :deep(.text-subtitle-1) {
   font-variant-numeric: tabular-nums;

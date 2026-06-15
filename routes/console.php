@@ -18,6 +18,10 @@ use Illuminate\Support\Facades\Schedule;
 Schedule::command('currencies:copy-monthly-rates')
     ->monthlyOn(1, '00:00');
 
+// Второй справочник курсов — для отчётов руководителей.
+Schedule::command('currencies:copy-monthly-management-rates')
+    ->monthlyOn(1, '00:05');
+
 // Реквизиты на ручной верификации дольше 1 рабочего дня → уведомление
 // финменеджеру (Богданова). Идемпотентно (overdue_notified_at), поэтому
 // частый прогон безопасен; шлём только в рабочие часы будней.

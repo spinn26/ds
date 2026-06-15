@@ -1146,6 +1146,94 @@ class AdminFinanceController extends Controller
         return response()->json(['message' => 'Ставка НДС добавлена']);
     }
 
+    /**
+     * GET /admin/currencies/management-rates — курсы справочника руководителей.
+     * Возвращает последние 24 месяца.
+     */
+    public function managementCurrencies(): JsonResponse
+    {
+        $currencyMeta = DB::table('currency')->orderBy('id')->get()
+            ->map(fn ($c) => [
+                'id'   => $c->id,
+                'name' => $c->nameRu ?? $c->nameEn ?? $c->currencyName ?? '',
+                'symbol' => $c->symbol,
+            ])->keyBy('id');
+
+        $minDate = now()->subMonths(24)->startOfMonth();
+        $rates = DB::table('management_currency_rate')
+            ->where('date', '>=', $minDate)
+            ->orderByDesc('date')
+            ->orderBy('currency')
+            ->get()
+            ->map(function ($r) use ($currencyMeta) {
+                $meta = $currencyMeta[$r->currency] ?? null;
+                return [
+                    'id'           => $r->id,
+                    'currencyId'   => $r->currency,
+                    'symbol'       => $meta['symbol'] ?? '',
+                    'currencyName' => $meta['name'] ?? '',
+                    'rate'         => round((float) $r->rate, 8),
+                    'date'         => $r->date,
+                    'period'       => $r->date ? substr((string) $r->date, 0, 7) : null,
+                ];
+            });
+
+        return response()->json([
+            'currencies'     => $currencyMeta->values(),
+            'currencyRates'  => $rates,
+        ]);
+    }
+
+    /**
+     * PATCH /admin/currencies/management-rates/{id} — обновить курс руководителей.
+     * В отличие от основного справочника, пересчёт транзакций НЕ запускается.
+     */
+    public function updateManagementCurrencyRate(Request $request, int $id): JsonResponse
+    {
+        $request->validate(['rate' => 'required|numeric|min:0']);
+        $row = DB::table('management_currency_rate')->where('id', $id)->first();
+        if (! $row) return response()->json(['message' => 'Курс не найден'], 404);
+
+        DB::table('management_currency_rate')->where('id', $id)->update([
+            'rate'       => $request->rate,
+            'updated_at' => now(),
+        ]);
+
+        return response()->json(['message' => 'Курс обновлён']);
+    }
+
+    /**
+     * POST /admin/currencies/management-rates — добавить строку курса вручную.
+     * Нужно при первом заполнении (нет истории для копирования).
+     */
+    public function storeManagementCurrencyRate(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'currency' => 'required|integer|exists:currency,id',
+            'rate'     => 'required|numeric|min:0',
+            'date'     => 'required|date',
+        ]);
+
+        $exists = DB::table('management_currency_rate')
+            ->where('currency', $data['currency'])
+            ->whereDate('date', $data['date'])
+            ->exists();
+
+        if ($exists) {
+            return response()->json(['message' => 'Курс для этой валюты за этот период уже существует'], 422);
+        }
+
+        $id = DB::table('management_currency_rate')->insertGetId([
+            'currency'   => $data['currency'],
+            'rate'       => $data['rate'],
+            'date'       => $data['date'],
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return response()->json(['message' => 'Курс добавлен', 'id' => $id], 201);
+    }
+
     /** Импорт транзакций — placeholder */
     public function transactionImport(): JsonResponse
     {

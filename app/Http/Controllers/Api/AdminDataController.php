@@ -2509,7 +2509,17 @@ class AdminDataController extends Controller
             'setup' => 'nullable|integer|exists:setup,id',
             'type' => 'nullable|string|max:50',
             'comment' => 'nullable|string|max:2000',
+            // Обязательно для всех статусов кроме «Активирован» (id=1)
+            'activation_forecast' => 'nullable|date',
         ]);
+
+        // activation_forecast обязателен если статус != 1 (Активирован)
+        if (($data['status'] ?? null) != 1 && empty($data['activation_forecast'])) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => ['activation_forecast' => ['Укажите прогноз активации контракта']],
+            ], 422);
+        }
 
         // Партнёр и его данные подтягиваются из клиента
         $client = DB::table('client')->where('id', $data['client'])->first();
@@ -2544,6 +2554,8 @@ class AdminDataController extends Controller
                 'setup' => $data['setup'] ?? null,
                 'type' => $data['type'] ?? null,
                 'comment' => $data['comment'] ?? null,
+                // Статус «Активирован» (id=1) — прогноз очищается
+                'activation_forecast' => ($data['status'] == 1) ? null : ($data['activation_forecast'] ?? null),
                 'createdAt' => now(),
                 'changedAt' => now(),
             ]);
@@ -2591,7 +2603,21 @@ class AdminDataController extends Controller
             'setup' => 'nullable|integer|exists:setup,id',
             'type' => 'nullable|string|max:50',
             'comment' => 'nullable|string|max:2000',
+            'activation_forecast' => 'nullable|date',
         ]);
+
+        // Проверяем прогноз: нужен если статус меняется на не-Активирован
+        $newStatus = $data['status'] ?? (int) $contract->status;
+        if ($newStatus != 1 && array_key_exists('activation_forecast', $data) && empty($data['activation_forecast'])) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => ['activation_forecast' => ['Укажите прогноз активации контракта']],
+            ], 422);
+        }
+        // При переводе в «Активирован» — принудительно очищаем прогноз
+        if ($newStatus == 1) {
+            $data['activation_forecast'] = null;
+        }
 
         DB::transaction(function () use ($data, $contract) {
             // Денормализация имён при изменении FK (для совместимости с прежними запросами)
