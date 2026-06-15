@@ -177,42 +177,47 @@ class AdminAnalyticsController extends Controller
         ]);
     }
 
-    /** GET /admin/analytics/funnel — воронка нового партнёра. */
-    public function funnel(): JsonResponse
+    /**
+     * GET /admin/analytics/funnel — воронка нового партнёра.
+     * ?since=YYYY-MM-DD  — ограничить только партнёрами, зарегистрированными
+     *                       начиная с этой даты (dateCreated >= since).
+     */
+    public function funnel(Request $request): JsonResponse
     {
-        // Все партнёры, не удалённые.
-        $total        = (int) DB::scalar('SELECT COUNT(*) FROM consultant WHERE "dateDeleted" IS NULL');
-        // Активированные (active=true или activity=1)
-        $activated    = (int) DB::scalar('SELECT COUNT(*) FROM consultant WHERE "dateDeleted" IS NULL AND (active = true OR activity = 1)');
-        // С минимум одной транзакцией через один из контрактов
-        $withTx       = (int) DB::scalar(
+        $since = $request->input('since'); // nullable, e.g. '2026-06-01'
+        $sw    = $since ? ' AND "dateCreated" >= ?' : '';
+        $b     = $since ? [$since] : [];
+
+        $total      = (int) DB::scalar('SELECT COUNT(*) FROM consultant WHERE "dateDeleted" IS NULL' . $sw, $b);
+        $activated  = (int) DB::scalar('SELECT COUNT(*) FROM consultant WHERE "dateDeleted" IS NULL AND (active = true OR activity = 1)' . $sw, $b);
+        $withTx     = (int) DB::scalar(
             'SELECT COUNT(DISTINCT c.id) FROM consultant c
               JOIN contract ct ON ct.consultant = c.id
               JOIN transaction t ON t.contract = ct.id
-             WHERE c."dateDeleted" IS NULL AND t."deletedAt" IS NULL'
+             WHERE c."dateDeleted" IS NULL AND t."deletedAt" IS NULL' . ($since ? ' AND c."dateCreated" >= ?' : ''),
+            $b
         );
-        // Достигшие квалификации ≥ 3 (Expert)
-        $qualExpert   = (int) DB::scalar(
+        $qualExpert = (int) DB::scalar(
             'SELECT COUNT(DISTINCT c.id) FROM consultant c
               JOIN status_levels sl ON sl.id = c.status_and_lvl
-             WHERE c."dateDeleted" IS NULL AND sl.level >= 3'
+             WHERE c."dateDeleted" IS NULL AND sl.level >= 3' . ($since ? ' AND c."dateCreated" >= ?' : ''),
+            $b
         );
-        // Квалификация 6+ (TOP FC)
-        $qualLeader   = (int) DB::scalar(
+        $qualLeader = (int) DB::scalar(
             'SELECT COUNT(DISTINCT c.id) FROM consultant c
               JOIN status_levels sl ON sl.id = c.status_and_lvl
-             WHERE c."dateDeleted" IS NULL AND sl.level >= 6'
+             WHERE c."dateDeleted" IS NULL AND sl.level >= 6' . ($since ? ' AND c."dateCreated" >= ?' : ''),
+            $b
         );
-        // Терминированные
-        $terminated   = (int) DB::scalar('SELECT COUNT(*) FROM consultant WHERE activity = 3 AND "dateDeleted" IS NULL');
+        $terminated = (int) DB::scalar('SELECT COUNT(*) FROM consultant WHERE activity = 3 AND "dateDeleted" IS NULL' . $sw, $b);
 
         $steps = [
-            ['key' => 'total',      'label' => 'Зарегистрированы',       'count' => $total,      'baseline' => $total],
-            ['key' => 'activated',  'label' => 'Активированы (500 ЛП)',  'count' => $activated,  'baseline' => $total],
-            ['key' => 'withTx',     'label' => 'Есть первая сделка',     'count' => $withTx,     'baseline' => $activated],
-            ['key' => 'qualExpert', 'label' => 'Квалификация ≥ Expert',  'count' => $qualExpert, 'baseline' => $withTx],
-            ['key' => 'qualLeader', 'label' => 'Квалификация ≥ Top FC',  'count' => $qualLeader, 'baseline' => $qualExpert],
-            ['key' => 'terminated', 'label' => 'Терминированы',          'count' => $terminated, 'baseline' => $total, 'negative' => true],
+            ['key' => 'total',      'label' => 'Зарегистрированы',      'count' => $total,      'baseline' => $total],
+            ['key' => 'activated',  'label' => 'Активированы (500 ЛП)', 'count' => $activated,  'baseline' => $total],
+            ['key' => 'withTx',     'label' => 'Есть первая сделка',    'count' => $withTx,     'baseline' => $activated],
+            ['key' => 'qualExpert', 'label' => 'Квалификация ≥ Expert', 'count' => $qualExpert, 'baseline' => $withTx],
+            ['key' => 'qualLeader', 'label' => 'Квалификация ≥ Top FC', 'count' => $qualLeader, 'baseline' => $qualExpert],
+            ['key' => 'terminated', 'label' => 'Терминированы',         'count' => $terminated, 'baseline' => $total, 'negative' => true],
         ];
         foreach ($steps as &$s) {
             $s['rate'] = $s['baseline'] > 0 ? round($s['count'] * 100 / $s['baseline'], 1) : 0;

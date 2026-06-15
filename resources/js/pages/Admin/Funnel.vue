@@ -9,50 +9,54 @@
       </v-card-text>
     </v-card>
 
-    <v-card>
+    <!-- Воронка: все партнёры за всё время -->
+    <v-card class="mb-4">
+      <v-card-title class="text-h6 pa-4 pb-2">
+        <v-icon start>mdi-chart-waterfall</v-icon>
+        Все партнёры (за всё время)
+      </v-card-title>
       <v-card-text>
-        <div v-for="(s, i) in steps" :key="s.key" class="mb-4">
-          <div class="d-flex align-center mb-1">
-            <span class="text-body-1 font-weight-medium">{{ s.label }}</span>
-            <v-spacer />
-            <span class="text-body-1 font-weight-bold">
-              {{ s.count.toLocaleString('ru-RU') }}
-            </span>
-            <span v-if="i > 0" class="text-caption text-medium-emphasis ms-3" style="min-width: 80px; text-align:right">
-              {{ s.rate }}% от пред.
-            </span>
-          </div>
-          <v-progress-linear
-            :model-value="widthOf(s)"
-            :color="s.negative ? 'error' : 'primary'"
-            height="28"
-          >
-            <span class="text-caption text-white px-2">{{ widthOf(s).toFixed(1) }}% от {{ totalEver.toLocaleString('ru-RU') }} зарег.</span>
-          </v-progress-linear>
-        </div>
+        <FunnelSteps :steps="steps" :total-ever="totalEver" />
+      </v-card-text>
+    </v-card>
+
+    <!-- Воронка: партнёры с 1 июня текущего года -->
+    <v-card>
+      <v-card-title class="text-h6 pa-4 pb-2">
+        <v-icon start>mdi-calendar-start</v-icon>
+        Зарегистрированы с 1 июня {{ currentYear }}
+      </v-card-title>
+      <v-card-text>
+        <FunnelSteps :steps="stepsSince" :total-ever="totalEverSince" />
       </v-card-text>
     </v-card>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, onMounted } from 'vue';
 import api from '../../api';
 import { PageHeader } from '../../components';
+import FunnelSteps from './FunnelSteps.vue';
 
-const steps = ref([]);
-const totalEver = ref(0);
+const currentYear = new Date().getFullYear();
+const sinceDate   = `${currentYear}-06-01`;
 
-function widthOf(s) {
-  if (!totalEver.value) return 0;
-  return (s.count / totalEver.value) * 100;
-}
+const steps       = ref([]);
+const totalEver   = ref(0);
+const stepsSince  = ref([]);
+const totalEverSince = ref(0);
 
 async function load() {
   try {
-    const { data } = await api.get('/admin/analytics/funnel');
-    steps.value = data.steps || [];
-    totalEver.value = data.totalEverRegistered || 0;
+    const [all, since] = await Promise.all([
+      api.get('/admin/analytics/funnel'),
+      api.get('/admin/analytics/funnel', { params: { since: sinceDate } }),
+    ]);
+    steps.value       = all.data.steps || [];
+    totalEver.value   = all.data.totalEverRegistered || 0;
+    stepsSince.value  = since.data.steps || [];
+    totalEverSince.value = since.data.totalEverRegistered || 0;
   } catch {}
 }
 onMounted(load);
