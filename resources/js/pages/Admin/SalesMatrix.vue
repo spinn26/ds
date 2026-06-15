@@ -47,13 +47,19 @@
               item-title="t" item-value="v" density="compact" variant="outlined"
               hide-details style="width:128px; flex:0 0 128px" @update:model-value="reload" />
 
-            <!-- Custom range -->
+            <!-- Custom range: year+month selects (no native type=month — browser locale) -->
             <template v-if="periodMode === 'range'">
-              <v-text-field v-model="rangeFrom" type="month" density="compact" variant="outlined"
-                hide-details label="С" style="width:148px; flex:0 0 148px" @update:model-value="reload" />
-              <span class="text-medium-emphasis mx-1">—</span>
-              <v-text-field v-model="rangeTo" type="month" density="compact" variant="outlined"
-                hide-details label="По" style="width:148px; flex:0 0 148px" @update:model-value="reload" />
+              <v-select v-model="rangeFromYear" :items="yearOptions" density="compact" variant="outlined"
+                hide-details style="width:86px;flex:0 0 86px" @update:model-value="reload" />
+              <v-select v-model="rangeFromMonth" :items="monthOpts" item-title="t" item-value="v"
+                density="compact" variant="outlined" hide-details style="width:120px;flex:0 0 120px"
+                @update:model-value="reload" />
+              <span class="text-medium-emphasis" style="flex-shrink:0">—</span>
+              <v-select v-model="rangeToYear" :items="yearOptions" density="compact" variant="outlined"
+                hide-details style="width:86px;flex:0 0 86px" @update:model-value="reload" />
+              <v-select v-model="rangeToMonth" :items="monthOpts" item-title="t" item-value="v"
+                density="compact" variant="outlined" hide-details style="width:120px;flex:0 0 120px"
+                @update:model-value="reload" />
             </template>
 
             <v-divider vertical class="mx-1" style="height:24px;align-self:center" />
@@ -225,7 +231,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, nextTick } from 'vue';
 import api from '../../api';
 import PageHeader from '../../components/PageHeader.vue';
 
@@ -240,8 +246,14 @@ const periodMode    = ref('quarter');
 const periodYear    = ref(now.getFullYear());
 const periodQuarter = ref(currentQ);
 const periodMonth   = ref(String(now.getMonth() + 1).padStart(2, '0'));
-const rangeFrom     = ref(`${now.getFullYear()}-01`);
-const rangeTo       = ref(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
+
+// Диапазон — раздельные year/month чтобы избежать нативного type=month (локаль браузера)
+const rangeFromYear  = ref(now.getFullYear());
+const rangeFromMonth = ref('01');
+const rangeToYear    = ref(now.getFullYear());
+const rangeToMonth   = ref(String(now.getMonth() + 1).padStart(2, '0'));
+const rangeFrom = computed(() => `${rangeFromYear.value}-${rangeFromMonth.value}`);
+const rangeTo   = computed(() => `${rangeToYear.value}-${rangeToMonth.value}`);
 
 const yearOptions   = Array.from({ length: 7 }, (_, i) => now.getFullYear() - i);
 const quarterRanges = { Q1: [1,3], Q2: [4,6], Q3: [7,9], Q4: [10,12] };
@@ -270,26 +282,32 @@ const periodLabel = computed(() => {
   if (periodMode.value === 'year')    return String(periodYear.value);
   if (periodMode.value === 'quarter') return `${periodQuarter.value} ${periodYear.value}`;
   if (periodMode.value === 'month')   return `${monthOpts.find(m => m.v === periodMonth.value)?.t} ${periodYear.value}`;
-  return `${rangeFrom.value} — ${rangeTo.value}`;
+  const fl = monthOpts.find(m => m.v === rangeFromMonth.value)?.t;
+  const tl = monthOpts.find(m => m.v === rangeToMonth.value)?.t;
+  return `${fl} ${rangeFromYear.value} — ${tl} ${rangeToYear.value}`;
 });
 
-// ─── Metrics ──────────────────────────────────────────────────
+// ─── Metrics (persist to localStorage) ───────────────────────
+const METRICS_KEY = 'salesMatrix:metrics';
 const allMetrics = [
-  { key: 'volume',      short: 'Объём',    label: 'Объём ($)',         fmt: 'rub' },
-  { key: 'count',       short: 'Кол-во',   label: 'Кол-во (шт)',       fmt: 'int' },
-  { key: 'avgCheck',    short: 'Ср.чек',   label: 'Средний чек ($)',   fmt: 'rub' },
-  { key: 'revenue',     short: 'Выручка',  label: 'Выручка ($)',       fmt: 'rub' },
-  { key: 'points',      short: 'Баллы',    label: 'Баллы',             fmt: 'num' },
+  { key: 'volume',      short: 'Объём',     label: 'Объём ($)',        fmt: 'rub' },
+  { key: 'count',       short: 'Кол-во',    label: 'Кол-во (шт)',      fmt: 'int' },
+  { key: 'avgCheck',    short: 'Ср.чек',    label: 'Средний чек ($)',  fmt: 'rub' },
+  { key: 'revenue',     short: 'Выручка',   label: 'Выручка ($)',      fmt: 'rub' },
+  { key: 'points',      short: 'Баллы',     label: 'Баллы',            fmt: 'num' },
   { key: 'fcCount',     short: 'Кол-во ФК', label: 'Кол-во ФК',       fmt: 'int' },
-  { key: 'clientCount', short: 'Клиенты',  label: 'Кол-во клиентов',  fmt: 'int' },
+  { key: 'clientCount', short: 'Клиенты',   label: 'Кол-во клиентов', fmt: 'int' },
 ];
-const selectedMetricKeys = ref(['volume', 'revenue']);
+const validKeys = allMetrics.map(m => m.key);
+const _saved = (() => { try { const s = JSON.parse(localStorage.getItem(METRICS_KEY)); return Array.isArray(s) && s.every(k => validKeys.includes(k)) && s.length ? s : null; } catch { return null; } })();
+const selectedMetricKeys = ref(_saved ?? ['volume', 'revenue']);
 const activeMetrics = computed(() => allMetrics.filter(m => selectedMetricKeys.value.includes(m.key)));
 
 function toggleMetric(key) {
   const idx = selectedMetricKeys.value.indexOf(key);
   if (idx !== -1) { if (selectedMetricKeys.value.length > 1) selectedMetricKeys.value.splice(idx, 1); }
   else selectedMetricKeys.value.push(key);
+  localStorage.setItem(METRICS_KEY, JSON.stringify(selectedMetricKeys.value));
 }
 
 // ─── Data ─────────────────────────────────────────────────────
@@ -310,8 +328,13 @@ function toggleProduct(pid) {
 }
 function expandAll()   { expandedProducts.value = new Set(rows.value.map(r => r.productId)); }
 function collapseAll() { expandedProducts.value = new Set(); }
-function resetFilters() { filterProducts.value = []; filterSuppliers.value = []; loadData(); }
-function reload() { productOptions.value = []; supplierOptions.value = []; loadData(); }
+async function resetFilters() {
+  filterProducts.value = [];
+  filterSuppliers.value = [];
+  await nextTick();
+  loadData();
+}
+function reload() { loadData(); }
 function onPeriodModeChange() { reload(); }
 
 async function loadData() {
@@ -326,8 +349,9 @@ async function loadData() {
     rows.value        = data.rows           ?? [];
     months.value      = data.period?.months ?? [];
     grandTotals.value = data.grandTotals    ?? null;
-    if (!supplierOptions.value.length) supplierOptions.value = data.suppliers ?? [];
-    if (!productOptions.value.length)  productOptions.value  = data.products  ?? [];
+    // Всегда обновляем опции — иначе чипы показывают ID вместо названий
+    supplierOptions.value = data.suppliers ?? [];
+    productOptions.value  = data.products  ?? [];
   } catch (e) { console.error('matrix load failed', e); }
   loading.value = false;
 }
@@ -371,8 +395,11 @@ onMounted(loadData);
 </script>
 
 <style scoped>
-/* ─── Scroll wrapper ─── */
-.mx-scroll { overflow-x: auto; }
+/* ─── Scroll wrapper: handles both axes; sticky thead works within this context ─── */
+.mx-scroll {
+  overflow: auto;
+  max-height: calc(100vh - 240px);
+}
 
 /* ─── Table base ─── */
 .mx-tbl {
@@ -473,17 +500,28 @@ onMounted(loadData);
   align-items: center;
   gap: 4px;
   padding: 6px 10px;
+  overflow: hidden;
 }
 .cell-l2 { padding-left: 14px; }
 
 /* Product row */
 .tr-prod { cursor: pointer; }
-.tr-prod:hover .td-name    { background: rgba(var(--v-theme-primary), 0.04); }
+/* td-name остаётся непрозрачным — иначе скроллированный контент под sticky-колонкой просвечивает */
+.tr-prod:hover .td-name    { background: rgb(var(--v-theme-surface)); }
 .tr-prod:hover td          { background: rgba(var(--v-theme-primary), 0.03); }
 .tr-prod td                { background: rgb(var(--v-theme-surface)); }
 
 .ico-expand { flex-shrink: 0; opacity: 0.55; }
-.label-prod { font-weight: 600; color: rgb(var(--v-theme-on-surface)); line-height: 1.3; }
+.label-prod {
+  font-weight: 600;
+  color: rgb(var(--v-theme-on-surface));
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1 1 0;
+  min-width: 0;
+}
 .prog-pill {
   font-size: 10px; font-weight: 700;
   padding: 1px 5px; border-radius: 8px;
@@ -502,6 +540,11 @@ onMounted(loadData);
   font-size: 12px;
   color: rgba(var(--v-theme-on-surface), 0.7);
   font-weight: 400;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1 1 0;
+  min-width: 0;
 }
 .tree-arm {
   display: inline-block;
