@@ -18,59 +18,61 @@
 
     <template v-if="reportMode === 'actual'">
       <!-- Filter bar -->
-      <v-card class="ds-card mb-4" elevation="0">
-        <v-card-text class="pa-3">
-          <div class="d-flex ga-2 flex-wrap align-center">
+      <v-card class="ds-card mb-3" elevation="0">
+        <v-card-text class="pa-2">
+          <div class="d-flex ga-1 flex-wrap align-center">
 
             <!-- Period mode selector -->
             <v-btn-toggle v-model="periodMode" mandatory density="compact" variant="outlined" color="primary"
               @update:model-value="onPeriodModeChange">
-              <v-btn value="year"    size="small">Год</v-btn>
-              <v-btn value="quarter" size="small">Квартал</v-btn>
-              <v-btn value="month"   size="small">Месяц</v-btn>
-              <v-btn value="range"   size="small">Диапазон</v-btn>
+              <v-btn value="year"    size="x-small">Год</v-btn>
+              <v-btn value="quarter" size="x-small">Квартал</v-btn>
+              <v-btn value="month"   size="x-small">Месяц</v-btn>
+              <v-btn value="range"   size="x-small">Диапазон</v-btn>
             </v-btn-toggle>
 
             <!-- Year (all modes except range) -->
             <v-select v-if="periodMode !== 'range'" v-model="periodYear" :items="yearOptions"
-              density="compact" variant="outlined" hide-details style="max-width:82px"
+              density="compact" variant="outlined" hide-details style="width:92px; flex:0 0 92px"
               @update:model-value="reload" />
 
             <!-- Q1–Q4 -->
             <v-btn-toggle v-if="periodMode === 'quarter'" v-model="periodQuarter" mandatory
               density="compact" variant="outlined" @update:model-value="reload">
-              <v-btn v-for="q in ['Q1','Q2','Q3','Q4']" :key="q" :value="q" size="small">{{ q }}</v-btn>
+              <v-btn v-for="q in ['Q1','Q2','Q3','Q4']" :key="q" :value="q" size="x-small">{{ q }}</v-btn>
             </v-btn-toggle>
 
             <!-- Single month -->
             <v-select v-if="periodMode === 'month'" v-model="periodMonth" :items="monthOpts"
               item-title="t" item-value="v" density="compact" variant="outlined"
-              hide-details style="max-width:135px" @update:model-value="reload" />
+              hide-details style="width:128px; flex:0 0 128px" @update:model-value="reload" />
 
             <!-- Custom range -->
             <template v-if="periodMode === 'range'">
               <v-text-field v-model="rangeFrom" type="month" density="compact" variant="outlined"
-                hide-details label="С" style="max-width:158px" @update:model-value="reload" />
-              <span class="text-medium-emphasis">—</span>
+                hide-details label="С" style="width:148px; flex:0 0 148px" @update:model-value="reload" />
+              <span class="text-medium-emphasis mx-1">—</span>
               <v-text-field v-model="rangeTo" type="month" density="compact" variant="outlined"
-                hide-details label="По" style="max-width:158px" @update:model-value="reload" />
+                hide-details label="По" style="width:148px; flex:0 0 148px" @update:model-value="reload" />
             </template>
+
+            <v-divider vertical class="mx-1" style="height:24px;align-self:center" />
 
             <!-- Supplier filter -->
             <v-autocomplete v-model="filterSuppliers" :items="supplierOptions"
-              placeholder="Все поставщики" prepend-inner-icon="mdi-domain"
+              placeholder="Поставщик" prepend-inner-icon="mdi-domain"
               multiple chips closable-chips density="compact" variant="outlined"
-              hide-details style="max-width:240px" @update:model-value="loadData" />
+              hide-details style="width:190px; flex:0 0 190px" @update:model-value="loadData" />
 
             <!-- Product filter -->
             <v-autocomplete v-model="filterProducts" :items="productOptions"
-              item-title="name" item-value="id" placeholder="Все продукты"
+              item-title="name" item-value="id" placeholder="Продукт"
               prepend-inner-icon="mdi-magnify"
               multiple chips closable-chips density="compact" variant="outlined"
-              hide-details style="max-width:280px" @update:model-value="loadData" />
+              hide-details style="width:220px; flex:0 0 220px" @update:model-value="loadData" />
 
-            <v-btn v-if="filterProducts.length || filterSuppliers.length" icon="mdi-filter-remove" size="small"
-              variant="text" title="Сбросить" @click="resetFilters" />
+            <v-btn v-if="filterProducts.length || filterSuppliers.length"
+              icon="mdi-filter-remove" size="x-small" variant="text" title="Сбросить" @click="resetFilters" />
 
             <v-spacer />
 
@@ -80,12 +82,12 @@
             <!-- Metrics selector -->
             <v-menu :close-on-content-click="false" location="bottom end">
               <template #activator="{ props }">
-                <v-btn v-bind="props" size="small" variant="tonal" color="primary"
+                <v-btn v-bind="props" size="x-small" variant="tonal" color="primary"
                   prepend-icon="mdi-tune">
                   Метрики · {{ selectedMetricKeys.length }}
                 </v-btn>
               </template>
-              <v-card min-width="220" elevation="4">
+              <v-card min-width="210" elevation="4">
                 <v-card-title class="text-body-2 pa-3 pb-1 font-weight-medium">Метрики</v-card-title>
                 <v-divider />
                 <v-list density="compact" class="pa-1">
@@ -416,8 +418,8 @@ onMounted(loadData);
 /* Month group header (level 1) */
 .th-mgroup {
   text-align: center;
-  padding: 9px 10px 7px;
-  font-size: 12px;
+  padding: 7px 8px 5px;
+  font-size: 11px;
   font-weight: 600;
   color: rgba(var(--v-theme-on-surface), 0.75);
   background: rgba(var(--v-theme-surface-variant), 0.9);
@@ -435,14 +437,14 @@ onMounted(loadData);
 /* Metric sub-header (level 2) */
 .th-sub {
   text-align: right;
-  padding: 5px 10px 7px;
+  padding: 4px 8px 6px;
   font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: rgba(var(--v-theme-on-surface), 0.45);
   background: rgba(var(--v-theme-surface-variant), 0.9);
-  min-width: 82px;
+  min-width: 72px;
   border-bottom: 2px solid rgba(var(--v-theme-on-surface), 0.12) !important;
 }
 .th-sub-last { border-right: 1px solid rgba(var(--v-theme-on-surface), 0.08); }
@@ -469,8 +471,8 @@ onMounted(loadData);
 .cell-row {
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 8px 14px;
+  gap: 4px;
+  padding: 6px 10px;
 }
 .cell-l2 { padding-left: 14px; }
 
@@ -515,10 +517,10 @@ onMounted(loadData);
 /* Numeric cells */
 .td-num {
   text-align: right;
-  padding: 7px 10px;
+  padding: 6px 8px;
   font-variant-numeric: tabular-nums;
-  font-size: 13px;
-  min-width: 82px;
+  font-size: 12px;
+  min-width: 72px;
   color: rgb(var(--v-theme-on-surface));
 }
 /* Month right separator */
