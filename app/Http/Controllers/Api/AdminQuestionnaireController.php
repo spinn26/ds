@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Enums\PartnerActivity;
 use App\Http\Controllers\Controller;
 use App\Services\XlsxExportService;
 use Illuminate\Http\JsonResponse;
@@ -49,14 +50,17 @@ class AdminQuestionnaireController extends Controller
     {
         $search = trim((string) $request->input('search', ''));
         $only = (bool) $request->input('only_completed', true);
+        $status = $request->filled('status') ? (int) $request->input('status') : null;
+        $from = $request->filled('date_from') ? (string) $request->input('date_from') : null;
+        $to = $request->filled('date_to') ? (string) $request->input('date_to') : null;
         $page = max(1, (int) $request->input('page', 1));
         $per = min(100, max(10, (int) $request->input('per', 25)));
 
-        $q = $this->baseQuery($search, $only);
+        $q = $this->baseQuery($search, $only, $status, $from, $to);
         $total = (clone $q)->count();
         $rows = $q
-            ->orderByDesc('questionnaireCompletedAt')
-            ->orderBy('lastName')
+            ->orderByDesc('w.questionnaireCompletedAt')
+            ->orderBy('w.lastName')
             ->forPage($page, $per)
             ->get();
 
@@ -92,6 +96,12 @@ class AdminQuestionnaireController extends Controller
             ? DB::table('city')->where('id', $row->city)->pluck('cityNameRu', 'id')
             : collect();
 
+        // Статус берём из consultant по тому же FK, что и в списке.
+        $row->partnerActivity = DB::table('consultant')
+            ->where('webUser', $id)
+            ->whereNull('dateDeleted')
+            ->value('activity');
+
         return response()->json($this->mapRow($row, $cities));
     }
 
@@ -105,13 +115,16 @@ class AdminQuestionnaireController extends Controller
     {
         $search = trim((string) $request->input('search', ''));
         $only = (bool) $request->input('only_completed', true);
+        $status = $request->filled('status') ? (int) $request->input('status') : null;
+        $from = $request->filled('date_from') ? (string) $request->input('date_from') : null;
+        $to = $request->filled('date_to') ? (string) $request->input('date_to') : null;
 
-        $dbRows = $this->baseQuery($search, $only)
-            ->orderByDesc('questionnaireCompletedAt')
-            ->orderBy('lastName')
+        $dbRows = $this->baseQuery($search, $only, $status, $from, $to)
+            ->orderByDesc('w.questionnaireCompletedAt')
+            ->orderBy('w.lastName')
             ->get();
 
-        $headers = ['ФИО', 'E-mail', 'Телефон', 'Город', 'Заполнено'];
+        $headers = ['ФИО', 'E-mail', 'Телефон', 'Город', 'Заполнено', 'Статус'];
         foreach (self::FIELDS as $label) $headers[] = $label;
 
         $cityIds = $dbRows->pluck('city')->filter()->unique()->values()->all();
@@ -127,6 +140,7 @@ class AdminQuestionnaireController extends Controller
                 $r->phone ?? '',
                 $cityName,
                 $r->questionnaireCompletedAt ?? '',
+                $this->statusLabel($r->partnerActivity ?? null),
             ];
             foreach (array_keys(self::FIELDS) as $f) {
                 $val = $r->{$f} ?? '';
@@ -144,24 +158,56 @@ class AdminQuestionnaireController extends Controller
         );
     }
 
-    private function baseQuery(string $search, bool $onlyCompleted)
+    /**
+     * Базовый запрос со всеми фильтрами.
+     *
+     * @param  string    $search    поиск по ФИО / e-mail / телефону
+     * @param  bool      $only      только с заполненной анкетой
+     * @param  int|null  $status    PartnerActivity (4 = Зарегистрирован) — фильтр по статусу
+     * @param  string|null $from    дата заполнения анкеты от (Y-m-d, включительно)
+     * @param  string|null $to      дата заполнения анкеты до (Y-m-d, включительно)
+     */
+    private function baseQuery(string $search, bool $onlyCompleted, ?int $status = null, ?string $from = null, ?string $to = null)
     {
-        $q = DB::table('WebUser')
-            ->where('role', 'like', '%consultant%')
-            ->whereNull('dateDeleted');
+        // Статус (activity) живёт в consultant, анкета — в WebUser; связь
+        // consultant."webUser" = WebUser.id (чистая 1:1, дублей нет). LEFT JOIN,
+        // чтобы вернуть статус для отображения и фильтровать по нему.
+        $q = DB::table('WebUser as w')
+            ->leftJoin('consultant as c', function ($j) {
+                $j->on('c.webUser', '=', 'w.id')->whereNull('c.dateDeleted');
+            })
+            ->where('w.role', 'like', '%consultant%')
+            ->whereNull('w.dateDeleted')
+            ->select('w.*', 'c.activity as partnerActivity');
 
         if ($onlyCompleted) {
-            $q->whereNotNull('questionnaireCompletedAt');
+            $q->whereNotNull('w.questionnaireCompletedAt');
+        }
+        if ($status !== null) {
+            $q->where('c.activity', $status);
+        }
+        if ($from !== null) {
+            $q->whereDate('w.questionnaireCompletedAt', '>=', $from);
+        }
+        if ($to !== null) {
+            $q->whereDate('w.questionnaireCompletedAt', '<=', $to);
         }
         if ($search !== '') {
             $q->where(function ($w) use ($search) {
-                $w->where('lastName', 'ilike', "%{$search}%")
-                  ->orWhere('firstName', 'ilike', "%{$search}%")
-                  ->orWhere('email', 'ilike', "%{$search}%")
-                  ->orWhere('phone', 'ilike', "%{$search}%");
+                $w->where('w.lastName', 'ilike', "%{$search}%")
+                  ->orWhere('w.firstName', 'ilike', "%{$search}%")
+                  ->orWhere('w.email', 'ilike', "%{$search}%")
+                  ->orWhere('w.phone', 'ilike', "%{$search}%");
             });
         }
         return $q;
+    }
+
+    /** Читаемая метка статуса партнёра по значению activity. */
+    private function statusLabel($activity): string
+    {
+        if ($activity === null || $activity === '') return '';
+        return PartnerActivity::tryFrom((int) $activity)?->label() ?? '';
     }
 
     private function mapRow($r, $cities = null): array
@@ -173,6 +219,7 @@ class AdminQuestionnaireController extends Controller
             'phone' => $r->phone,
             'city' => $r->city ? ($cities[$r->city] ?? $r->city) : null,
             'completed_at' => $r->questionnaireCompletedAt,
+            'status' => $this->statusLabel($r->partnerActivity ?? null),
             'fields' => array_combine(
                 array_keys(self::FIELDS),
                 array_map(fn ($k) => $r->{$k} ?? null, array_keys(self::FIELDS))

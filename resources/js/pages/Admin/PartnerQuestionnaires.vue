@@ -13,8 +13,18 @@
       <div class="d-flex ga-2 flex-wrap align-center">
         <v-text-field v-model="search" placeholder="Поиск по ФИО / e-mail / телефону"
           density="compact" variant="outlined" hide-details rounded clearable
-          prepend-inner-icon="mdi-magnify" style="max-width:360px"
+          prepend-inner-icon="mdi-magnify" style="max-width:320px"
           @update:model-value="onFilterChange" />
+        <v-select v-model="status" :items="statusOptions" item-title="title" item-value="value"
+          placeholder="Статус" density="compact" variant="outlined" hide-details rounded clearable
+          prepend-inner-icon="mdi-account-check" style="max-width:220px"
+          @update:model-value="onFilterChange" />
+        <v-text-field v-model="dateFrom" type="date" placeholder="Заполнено с"
+          density="compact" variant="outlined" hide-details rounded clearable
+          style="max-width:180px" @update:model-value="onFilterChange" />
+        <v-text-field v-model="dateTo" type="date" placeholder="Заполнено по"
+          density="compact" variant="outlined" hide-details rounded clearable
+          style="max-width:180px" @update:model-value="onFilterChange" />
         <v-checkbox v-model="onlyCompleted" label="Только заполненные"
           density="compact" hide-details color="primary"
           @update:model-value="onFilterChange" />
@@ -26,6 +36,13 @@
       <v-data-table-server v-model:items-per-page="perPage" v-model:page="page"
         :items="rows" :headers="headers" :items-length="total" :loading="loading"
         density="comfortable" hover @update:options="loadServer">
+        <template #item.status="{ item }">
+          <v-chip v-if="item.status" size="x-small" variant="tonal"
+            :color="statusColor(item.status)">
+            {{ item.status }}
+          </v-chip>
+          <span v-else class="text-disabled">—</span>
+        </template>
         <template #item.completed_at="{ item }">
           <span v-if="item.completed_at" class="text-caption">
             {{ formatDate(item.completed_at) }}
@@ -92,6 +109,17 @@ import { useDebounce } from '../../composables/useDebounce';
 
 const search = ref('');
 const onlyCompleted = ref(true);
+const status = ref(null);
+const dateFrom = ref(null);
+const dateTo = ref(null);
+// Значения = PartnerActivity. Порядок: сначала «Зарегистрирован» — основной
+// сценарий куратора (выгрузить новичков).
+const statusOptions = [
+  { value: 4, title: 'Зарегистрирован' },
+  { value: 1, title: 'Активен' },
+  { value: 3, title: 'Терминирован' },
+  { value: 5, title: 'Исключён' },
+];
 const page = ref(1);
 const perPage = ref(25);
 const rows = ref([]);
@@ -109,6 +137,7 @@ const headers = [
   { title: 'E-mail', key: 'email', sortable: false },
   { title: 'Телефон', key: 'phone', sortable: false, width: 160 },
   { title: 'Город', key: 'city', sortable: false, width: 140 },
+  { title: 'Статус', key: 'status', sortable: false, width: 150 },
   { title: 'Заполнено', key: 'completed_at', sortable: false, width: 170 },
   { title: '', key: 'actions', sortable: false, width: 140, align: 'end' },
 ];
@@ -137,6 +166,16 @@ function formatField(key, value) {
   return enumMap[key]?.[value] ?? value;
 }
 
+// Цвет чипа статуса по его метке (label из PartnerActivity).
+function statusColor(label) {
+  if (!label) return 'default';
+  if (label.includes('Зарегистрирован')) return 'info';
+  if (label.includes('Активен')) return 'success';
+  if (label.includes('Терминирован')) return 'error';
+  if (label.includes('Исключён')) return 'warning';
+  return 'default';
+}
+
 function formatDate(s) {
   if (!s) return '—';
   const d = new Date(s);
@@ -151,6 +190,9 @@ async function loadServer() {
       params: {
         search: search.value || undefined,
         only_completed: onlyCompleted.value ? 1 : 0,
+        status: status.value ?? undefined,
+        date_from: dateFrom.value || undefined,
+        date_to: dateTo.value || undefined,
         page: page.value,
         per: perPage.value,
       },
@@ -190,6 +232,9 @@ async function exportCsv() {
       params: {
         search: search.value || undefined,
         only_completed: onlyCompleted.value ? 1 : 0,
+        status: status.value ?? undefined,
+        date_from: dateFrom.value || undefined,
+        date_to: dateTo.value || undefined,
       },
       responseType: 'blob',
     });
