@@ -317,6 +317,10 @@ Route::prefix('v1')->group(function () {
             // Аудит-лог (просмотр всех действий).
             Route::get('/admin/audit-log', [\App\Http\Controllers\Api\AdminAuditController::class, 'index']);
 
+            // Редактор матрицы квалификаций (status_levels) — влияет на расчёты.
+            Route::get('/admin/qualification-matrix', [\App\Http\Controllers\Api\AdminQualificationMatrixController::class, 'index']);
+            Route::put('/admin/qualification-matrix', [\App\Http\Controllers\Api\AdminQualificationMatrixController::class, 'update']);
+
             // i18n-переопределения.
             Route::get('/admin/translations', [\App\Http\Controllers\Api\AdminTranslationController::class, 'index']);
             Route::post('/admin/translations', [\App\Http\Controllers\Api\AdminTranslationController::class, 'store']);

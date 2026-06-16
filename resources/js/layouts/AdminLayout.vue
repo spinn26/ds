@@ -160,6 +160,7 @@ const menuItems = [
     title: 'Финансы и контроль', icon: 'mdi-scale-balance',
     children: [
       { to: '/admin/reconciliation', title: 'Сверка балансов', icon: 'mdi-scale-balance' },
+      { to: '/admin/qualification-matrix', title: 'Матрица квалификаций', icon: 'mdi-stairs' },
       { to: '/admin/anomalies', title: 'Аномалии', icon: 'mdi-alert-decagram' },
       { to: '/admin/cohorts', title: 'Когорты', icon: 'mdi-chart-line' },
     ],
