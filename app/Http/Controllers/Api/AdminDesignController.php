@@ -7,6 +7,7 @@ use App\Models\DesignTheme;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 /**
  * Раздел «Дизайн» (CMS-подобный): шаблоны логотипа/палитр/CSS.
@@ -55,6 +56,24 @@ class AdminDesignController extends Controller
         return response()->json(['message' => 'Шаблон удалён']);
     }
 
+    /**
+     * Загрузка ассета дизайна (логотип / фавикон). SVG исключён намеренно —
+     * inline-<script> в .svg = stored-XSS (как в EducationUploadController).
+     */
+    public function upload(Request $request): JsonResponse
+    {
+        $request->validate([
+            'file' => ['required', 'file', 'max:4096', 'mimes:png,jpg,jpeg,webp,gif,ico'],
+        ]);
+
+        $file = $request->file('file');
+        $ext = strtolower($file->getClientOriginalExtension() ?: 'png');
+        $name = Str::random(24) . '.' . $ext;
+        $path = $file->storeAs('design/' . now()->format('Y-m'), $name, 'public');
+
+        return response()->json(['url' => \Illuminate\Support\Facades\Storage::url($path)]);
+    }
+
     /** Сделать шаблон активным (ровно один активный — partial unique index). */
     public function activate(int $id): JsonResponse
     {
@@ -86,6 +105,8 @@ class AdminDesignController extends Controller
             'config.radius.md' => ['nullable', 'integer', 'min:0', 'max:60'],
             'config.radius.lg' => ['nullable', 'integer', 'min:0', 'max:60'],
             'config.radius.xl' => ['nullable', 'integer', 'min:0', 'max:60'],
+            'config.shadows' => ['nullable', 'array'],
+            'config.shadows.card' => ['nullable', 'string', 'in:,none,soft,medium,strong'],
             'config.customCss' => ['nullable', 'string', 'max:50000'],
         ]);
     }

@@ -21,6 +21,7 @@ export const useDesignStore = defineStore('design', {
       colors: { light: {}, dark: {} },
       typography: { fontFamily: '', baseSize: null },
       radius: { sm: null, md: null, lg: null, xl: null },
+      shadows: { card: '' },
       customCss: '',
     },
     loaded: false,
@@ -82,6 +83,18 @@ export const useDesignStore = defineStore('design', {
       // Чтобы скругления были видны на Vuetify-компонентах, маппим их.
       if (r.lg) css += `.v-card{border-radius:${r.lg}px !important;}`;
       if (r.md) css += `.v-btn,.v-field{border-radius:${r.md}px !important;}`;
+
+      // Тень карточек — пресет.
+      const SHADOWS = {
+        none: 'none',
+        soft: '0 1px 2px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.04)',
+        medium: '0 2px 4px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.08)',
+        strong: '0 6px 12px rgba(0,0,0,0.10), 0 18px 44px rgba(0,0,0,0.14)',
+      };
+      const cardShadow = config.shadows?.card;
+      if (cardShadow && SHADOWS[cardShadow]) {
+        css += `.v-card{box-shadow:${SHADOWS[cardShadow]} !important;}`;
+      }
 
       this.setStyleEl('ds-design-vars', css);
     },

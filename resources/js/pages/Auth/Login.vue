@@ -10,15 +10,18 @@
       </div>
 
       <header class="hero-brand">
-        <div class="hero-mark">DS</div>
+        <div class="hero-mark">
+          <img v-if="design.logoUrl" :src="design.logoUrl" alt="logo" style="max-height: 32px" />
+          <template v-else>{{ design.logoText }}</template>
+        </div>
         <div>
-          <div class="hero-brand-title">DS Consulting</div>
+          <div class="hero-brand-title">{{ design.brandName }}</div>
           <div class="hero-brand-sub">Партнёрская платформа</div>
         </div>
       </header>
 
       <div class="hero-pitch">
-        <h1 class="hero-headline">Партнёрский кабинет для финансовых консультантов</h1>
+        <h1 class="hero-headline">{{ design.config.loginTitle || 'Партнёрский кабинет для финансовых консультантов' }}</h1>
         <p class="hero-lead">
           Клиенты, контракты, комиссии и обучение — в одном месте.
           Real-time чат с поддержкой и кураторами.
@@ -33,8 +36,11 @@
       <div class="auth-form">
         <!-- На мобилке логотип сверху над формой -->
         <div v-if="mobile" class="form-mobile-brand">
-          <div class="hero-mark hero-mark--inverse">DS</div>
-          <div class="hero-brand-title text-on-surface">DS Consulting</div>
+          <div class="hero-mark hero-mark--inverse">
+            <img v-if="design.logoUrl" :src="design.logoUrl" alt="logo" style="max-height: 28px" />
+            <template v-else>{{ design.logoText }}</template>
+          </div>
+          <div class="hero-brand-title text-on-surface">{{ design.brandName }}</div>
         </div>
 
         <div class="form-eyebrow">вход в кабинет</div>
@@ -130,8 +136,10 @@ import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useDisplay } from 'vuetify';
 import { useAuthStore } from '../../stores/auth';
+import { useDesignStore } from '../../stores/design';
 import BrandWaves from '../../components/BrandWaves.vue';
 
+const design = useDesignStore();
 const { mobile } = useDisplay();
 
 const auth = useAuthStore();

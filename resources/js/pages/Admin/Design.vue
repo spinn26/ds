@@ -65,8 +65,22 @@
               <v-row dense>
                 <v-col cols="12" sm="6"><v-text-field v-model="form.config.brandName" label="Название бренда" density="compact" hide-details /></v-col>
                 <v-col cols="12" sm="6"><v-text-field v-model="form.config.logoText" label="Текст лого (если нет картинки)" density="compact" hide-details /></v-col>
-                <v-col cols="12" sm="6"><v-text-field v-model="form.config.logoUrl" label="URL логотипа (png/svg)" density="compact" hide-details prepend-inner-icon="mdi-image" /></v-col>
-                <v-col cols="12" sm="6"><v-text-field v-model="form.config.faviconUrl" label="URL фавикона" density="compact" hide-details prepend-inner-icon="mdi-web" /></v-col>
+                <v-col cols="12" sm="6">
+                  <v-text-field v-model="form.config.logoUrl" label="URL логотипа (png/jpg/webp)" density="compact" hide-details prepend-inner-icon="mdi-image">
+                    <template #append-inner>
+                      <v-btn icon="mdi-upload" size="x-small" variant="text" title="Загрузить файл" @click="$refs.logoInput.click()" />
+                    </template>
+                  </v-text-field>
+                  <input ref="logoInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif" class="d-none" @change="e => uploadAsset('logoUrl', e)" />
+                </v-col>
+                <v-col cols="12" sm="6">
+                  <v-text-field v-model="form.config.faviconUrl" label="URL фавикона (png/ico)" density="compact" hide-details prepend-inner-icon="mdi-web">
+                    <template #append-inner>
+                      <v-btn icon="mdi-upload" size="x-small" variant="text" title="Загрузить файл" @click="$refs.faviconInput.click()" />
+                    </template>
+                  </v-text-field>
+                  <input ref="faviconInput" type="file" accept="image/png,image/x-icon,image/vnd.microsoft.icon,image/webp" class="d-none" @change="e => uploadAsset('faviconUrl', e)" />
+                </v-col>
                 <v-col cols="12"><v-text-field v-model="form.config.loginTitle" label="Заголовок страницы входа" density="compact" hide-details placeholder="напр. «Партнёрская платформа DS»" /></v-col>
               </v-row>
               <div v-if="form.config.logoUrl" class="mt-2">
@@ -145,6 +159,21 @@
             </v-expansion-panel-text>
           </v-expansion-panel>
 
+          <!-- Тени -->
+          <v-expansion-panel value="shadows">
+            <v-expansion-panel-title>
+              <v-icon start size="20">mdi-box-shadow</v-icon> Тени
+            </v-expansion-panel-title>
+            <v-expansion-panel-text>
+              <v-select v-model="form.config.shadows.card" :items="shadowPresets"
+                item-title="title" item-value="value" label="Тень карточек"
+                density="compact" hide-details style="max-width: 320px" />
+              <div class="text-caption text-medium-emphasis mt-2">
+                Применяется к карточкам (.v-card). Пусто = тень по умолчанию темы.
+              </div>
+            </v-expansion-panel-text>
+          </v-expansion-panel>
+
           <!-- Кастомный CSS -->
           <v-expansion-panel value="css">
             <v-expansion-panel-title>
@@ -195,6 +224,13 @@ const colorLabels = {
   'surface-variant': 'Поверхность-вариант', outline: 'Обводка',
   'outline-variant': 'Обводка-вариант', brand: 'Бренд (мята)', 'brand-ink': 'Бренд-текст',
 };
+const shadowPresets = [
+  { title: 'По умолчанию (тема)', value: '' },
+  { title: 'Без тени', value: 'none' },
+  { title: 'Мягкая', value: 'soft' },
+  { title: 'Средняя', value: 'medium' },
+  { title: 'Сильная', value: 'strong' },
+];
 const fontPresets = [
   "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif",
   "'Roboto', system-ui, sans-serif",
@@ -224,6 +260,7 @@ function emptyConfig() {
     colors: { light: {}, dark: {} },
     typography: { fontFamily: '', baseSize: 14 },
     radius: { sm: 6, md: 8, lg: 12, xl: 16 },
+    shadows: { card: '' },
     customCss: '',
   };
 }
@@ -248,7 +285,25 @@ function fillForm(t) {
     colors: { light: { ...(c.colors?.light || {}) }, dark: { ...(c.colors?.dark || {}) } },
     typography: { ...base.typography, ...(c.typography || {}) },
     radius: { ...base.radius, ...(c.radius || {}) },
+    shadows: { ...base.shadows, ...(c.shadows || {}) },
   };
+}
+
+async function uploadAsset(field, e) {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  try {
+    const fd = new FormData();
+    fd.append('file', file);
+    const { data } = await api.post('/admin/design/upload', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    form.config[field] = data.url;
+    notify('Файл загружен');
+  } catch (err) {
+    notify(err.response?.data?.message || 'Ошибка загрузки файла', 'error');
+  }
+  e.target.value = '';
 }
 
 function selectTemplate(t) {

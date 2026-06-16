@@ -61,10 +61,12 @@ Route::prefix('v1')->group(function () {
         Route::post('/2fa/verify', [\App\Http\Controllers\Api\TwoFactorController::class, 'verify']);
     });
 
-    Route::middleware('auth:sanctum')->group(function () {
-        // Активный дизайн (логотип/палитры/CSS) — применяется SPA в рантайме.
-        Route::get('/design/active', [\App\Http\Controllers\Api\DesignController::class, 'active']);
+    // Активный дизайн (логотип/палитры/CSS) — ПУБЛИЧНО: применяется SPA в
+    // рантайме, в т.ч. на странице входа (до авторизации). Это только брендинг.
+    Route::get('/design/active', [\App\Http\Controllers\Api\DesignController::class, 'active'])
+        ->middleware('throttle:60,1');
 
+    Route::middleware('auth:sanctum')->group(function () {
         // 2FA setup/confirm/disable/status — под авторизацией.
         Route::get('/2fa/status', [\App\Http\Controllers\Api\TwoFactorController::class, 'status']);
         Route::post('/2fa/setup', [\App\Http\Controllers\Api\TwoFactorController::class, 'setup']);
@@ -262,6 +264,7 @@ Route::prefix('v1')->group(function () {
             Route::put('/admin/design/themes/{id}', [\App\Http\Controllers\Api\AdminDesignController::class, 'update'])->whereNumber('id');
             Route::delete('/admin/design/themes/{id}', [\App\Http\Controllers\Api\AdminDesignController::class, 'destroy'])->whereNumber('id');
             Route::post('/admin/design/themes/{id}/activate', [\App\Http\Controllers\Api\AdminDesignController::class, 'activate'])->whereNumber('id');
+            Route::post('/admin/design/upload', [\App\Http\Controllers\Api\AdminDesignController::class, 'upload'])->middleware('throttle:30,1');
         });
 
         Route::middleware(['role:admin,backoffice,support,finance,head,calculations,corrections,education', 'restrict.education', 'restrict.head', 'restrict.support', 'restrict.corrections', 'throttle:2400,1'])->group(function () {
