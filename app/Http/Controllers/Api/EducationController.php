@@ -553,7 +553,9 @@ class EducationController extends Controller
             }
         }
 
-        $passed = $correct === $total;
+        // Порог сдачи настраивается из админки (Обучение), фолбэк 100% (всё верно).
+        $passPercent = (int) \App\Models\SystemSetting::value('education.pass_percent', 100);
+        $passed = $total > 0 && ($correct * 100 / $total) >= $passPercent;
 
         // Сохраняем КАЖДУЮ попытку (включая неудачные) для куратора —
         // он анализирует на каких вопросах партнёры спотыкаются и

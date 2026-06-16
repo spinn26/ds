@@ -41,15 +41,17 @@ Schedule::command('platform:health-check')
 
 // Истёкшие Sanctum-токены: с SANCTUM_TOKEN_EXPIRATION=43200 (30 дней)
 // токены копятся в personal_access_tokens. Чистим раз в сутки.
-Schedule::command('sanctum:prune-expired --hours=24')->dailyAt('03:00');
+$tokenHours = (int) \App\Models\SystemSetting::value('maintenance.sanctum_token_retention_hours', 24);
+Schedule::command("sanctum:prune-expired --hours={$tokenHours}")->dailyAt('03:00');
 
 // Failed jobs — срок хранения настраивается в админке (Обслуживание),
 // фолбэк 30 дней. Читается при загрузке планировщика.
 $failedHours = (int) \App\Models\SystemSetting::value('maintenance.failed_jobs_retention_days', 30) * 24;
 Schedule::command("queue:prune-failed --hours={$failedHours}")->dailyAt('03:15');
 
-// Job batches старше 7 дней (unfinished — старше суток).
-Schedule::command('queue:prune-batches --hours=168 --unfinished=24')
+// Job batches — срок хранения настраивается (Обслуживание), фолбэк 7 дней.
+$batchHours = (int) \App\Models\SystemSetting::value('maintenance.job_batch_retention_days', 7) * 24;
+Schedule::command("queue:prune-batches --hours={$batchHours} --unfinished=24")
     ->dailyAt('03:20');
 
 // Журнал интеграций (integration_events): хранить 90 дней. Таблица растёт

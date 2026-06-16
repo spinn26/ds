@@ -109,7 +109,8 @@ class ApiSettingsService
     /** Все значения (decrypted) — из памяти, 5-минутный кэш. */
     public function all(): array
     {
-        return Cache::remember(self::CACHE_KEY, self::CACHE_TTL, function () {
+        $ttl = (int) \App\Models\SystemSetting::value('performance.api_settings_cache_ttl', self::CACHE_TTL);
+        return Cache::remember(self::CACHE_KEY, $ttl, function () {
             $out = [];
             foreach (ApiSetting::all() as $s) {
                 $out[$s->key] = $s->value;

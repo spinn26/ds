@@ -51,7 +51,8 @@ class GeoService
         $provider = $this->hasGoogle() ? 'google' : 'osm';
         $cacheKey = 'geo:city:' . $provider . ':' . mb_strtolower($query);
 
-        return Cache::remember($cacheKey, self::CACHE_TTL, function () use ($provider, $query, $count) {
+        $ttl = (int) \App\Models\SystemSetting::value('performance.geo_cache_ttl_hours', 24) * 3600;
+        return Cache::remember($cacheKey, $ttl, function () use ($provider, $query, $count) {
             return $provider === 'google'
                 ? $this->suggestViaGoogle($query, $count)
                 : $this->suggestViaNominatim($query, $count);

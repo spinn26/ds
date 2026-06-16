@@ -40,13 +40,13 @@
                   @update:model-value="markDirty" />
                 <v-text-field v-else-if="item.type === 'int' || item.type === 'float'"
                   v-model.number="form[item.key]" type="number" density="compact"
-                  variant="outlined" hide-details style="max-width: 220px"
+                  variant="outlined" hide-details class="ctl-num"
                   @update:model-value="markDirty" />
                 <v-textarea v-else-if="item.type === 'json'" v-model="form[item.key]"
                   rows="3" auto-grow density="compact" variant="outlined" hide-details
-                  @update:model-value="markDirty" />
+                  class="ctl-wide" @update:model-value="markDirty" />
                 <v-text-field v-else v-model="form[item.key]" density="compact"
-                  variant="outlined" hide-details style="max-width: 360px"
+                  variant="outlined" hide-details class="ctl-wide"
                   :placeholder="item.isSecret ? '•••••• (скрыто)' : ''"
                   @update:model-value="markDirty" />
               </div>
@@ -132,5 +132,14 @@ onMounted(load);
 .setting-row:last-child { border-bottom: none; }
 .setting-meta { flex: 1 1 auto; min-width: 0; }
 .setting-meta code { display: block; margin-top: 2px; }
-.setting-control { flex: 0 0 auto; display: flex; align-items: center; }
+/* Фикс ширины: без явной ширины v-text-field в flex:0 0 контейнере
+   схлопывался до контента («ekat»). Задаём предсказуемую ширину. */
+.setting-control { flex: 0 0 auto; display: flex; align-items: center; justify-content: flex-end; }
+.setting-control .ctl-wide { width: 360px; }
+.setting-control .ctl-num { width: 200px; }
+@media (max-width: 700px) {
+  .setting-row { flex-direction: column; gap: 8px; }
+  .setting-control { justify-content: flex-start; }
+  .setting-control .ctl-wide, .setting-control .ctl-num { width: 100%; }
+}
 </style>
