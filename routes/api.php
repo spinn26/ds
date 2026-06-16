@@ -307,6 +307,9 @@ Route::prefix('v1')->group(function () {
             Route::put('/admin/content-pages/{id}', [\App\Http\Controllers\Api\AdminContentPageController::class, 'update'])->whereNumber('id');
             Route::delete('/admin/content-pages/{id}', [\App\Http\Controllers\Api\AdminContentPageController::class, 'destroy'])->whereNumber('id');
 
+            // Рассылка in-app уведомлений (всем / по ролям).
+            Route::post('/admin/notifications/broadcast', [\App\Http\Controllers\Api\NotificationController::class, 'broadcast'])->middleware('throttle:20,1');
+
             // Система: кэш и планировщик.
             Route::post('/admin/ops/cache/clear', [\App\Http\Controllers\Api\AdminOpsController::class, 'clearCache'])->middleware('throttle:30,1');
             Route::get('/admin/ops/scheduled', [\App\Http\Controllers\Api\AdminOpsController::class, 'scheduledTasks']);

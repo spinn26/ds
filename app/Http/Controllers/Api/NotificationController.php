@@ -153,6 +153,51 @@ class NotificationController extends Controller
         return count($userIds);
     }
 
+    /**
+     * POST /admin/notifications/broadcast — ручная рассылка уведомления
+     * (всем / по ролям). Bulk-insert чанками; socket не дёргаем поштучно
+     * (получат при следующем опросе/обновлении) — иначе массовая отправка
+     * подвисает на сотнях socket-запросов.
+     */
+    public function broadcast(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'title' => ['required', 'string', 'max:255'],
+            'message' => ['nullable', 'string', 'max:2000'],
+            'link' => ['nullable', 'string', 'max:500'],
+            'target' => ['required', 'in:all,roles'],
+            'roles' => ['nullable', 'array'],
+            'roles.*' => ['string', 'max:64'],
+        ]);
+
+        $q = DB::table('WebUser')->whereNull('dateDeleted');
+        if ($data['target'] === 'roles') {
+            $roles = $data['roles'] ?? [];
+            if (! $roles) {
+                return response()->json(['message' => 'Не выбраны роли'], 422);
+            }
+            $q->where(function ($x) use ($roles) {
+                foreach ($roles as $r) $x->orWhere('role', 'ilike', '%' . $r . '%');
+            });
+        }
+
+        $ids = $q->pluck('id');
+        $now = now();
+        $count = 0;
+        foreach ($ids->chunk(500) as $chunk) {
+            $rows = $chunk->map(fn ($id) => [
+                'user_id' => $id, 'type' => 'system',
+                'title' => $data['title'], 'message' => $data['message'] ?? null,
+                'icon' => 'mdi-bell', 'color' => 'grey',
+                'link' => $data['link'] ?? null, 'read' => false, 'created_at' => $now,
+            ])->all();
+            DB::table('notifications')->insert($rows);
+            $count += count($rows);
+        }
+
+        return response()->json(['message' => "Отправлено: {$count}", 'count' => $count]);
+    }
+
     /** Shortcut: разослать всем staff-ролям. */
     public static function notifyStaff(string $type, string $title, ?string $message = null, ?string $link = null): int
     {
