@@ -188,6 +188,42 @@
               </v-list>
             </div>
           </v-card>
+
+          <!-- Кастомные поля (создаются админом в /admin/custom-fields). -->
+          <v-card v-if="customFields.length" class="ds-card mt-3">
+            <div class="ds-card__head">
+              <div class="ds-title-l d-flex align-center ga-2">
+                <v-icon color="primary">mdi-form-select</v-icon>
+                Дополнительные сведения
+              </div>
+            </div>
+            <div class="ds-card__body">
+              <v-row dense>
+                <v-col v-for="f in customFields" :key="f.id" cols="12" sm="6">
+                  <v-text-field v-if="f.type === 'text' || f.type === 'number'"
+                    v-model="cfValues[f.id]" :type="f.type === 'number' ? 'number' : 'text'"
+                    :label="f.label + (f.required ? ' *' : '')" :hint="f.description" persistent-hint
+                    density="compact" :error-messages="cfErrors[f.id]" />
+                  <v-textarea v-else-if="f.type === 'textarea'" v-model="cfValues[f.id]"
+                    :label="f.label + (f.required ? ' *' : '')" :hint="f.description" persistent-hint
+                    rows="2" auto-grow density="compact" :error-messages="cfErrors[f.id]" />
+                  <v-text-field v-else-if="f.type === 'date'" v-model="cfValues[f.id]" type="date"
+                    :label="f.label + (f.required ? ' *' : '')" :hint="f.description" persistent-hint
+                    density="compact" :error-messages="cfErrors[f.id]" />
+                  <v-select v-else-if="f.type === 'select'" v-model="cfValues[f.id]" :items="f.options || []"
+                    :label="f.label + (f.required ? ' *' : '')" :hint="f.description" persistent-hint
+                    density="compact" clearable :error-messages="cfErrors[f.id]" />
+                  <v-checkbox v-else-if="f.type === 'checkbox'" v-model="cfValues[f.id]"
+                    :label="f.label + (f.required ? ' *' : '')" density="compact"
+                    :error-messages="cfErrors[f.id]" />
+                </v-col>
+              </v-row>
+              <div class="d-flex justify-end mt-2">
+                <v-btn color="primary" size="small" prepend-icon="mdi-content-save"
+                  :loading="cfSaving" @click="saveCustomFields">Сохранить</v-btn>
+              </div>
+            </div>
+          </v-card>
         </div>
 
         <!-- ════════════════  ДОКУМЕНТЫ  ════════════════ -->
@@ -708,6 +744,45 @@ const docsList = computed(() =>
 const loading = ref(true);
 const tab = ref('info');
 const profile = ref({});
+
+// Кастомные поля пользователя (определяются админом).
+const customFields = ref([]);
+const cfValues = ref({});
+const cfErrors = ref({});
+const cfSaving = ref(false);
+
+async function loadCustomFields() {
+  try {
+    const { data } = await api.get('/custom-fields');
+    customFields.value = data.fields || [];
+    const vals = {};
+    for (const f of customFields.value) vals[f.id] = f.value;
+    cfValues.value = vals;
+  } catch { /* нет полей — секция не показывается */ }
+}
+
+async function saveCustomFields() {
+  cfSaving.value = true;
+  cfErrors.value = {};
+  try {
+    await api.put('/custom-fields/values', { values: { ...cfValues.value } });
+    showSuccess('Дополнительные сведения сохранены');
+  } catch (e) {
+    if (e.response?.status === 422) {
+      const ve = e.response.data.errors || {};
+      const mapped = {};
+      for (const [k, v] of Object.entries(ve)) {
+        const id = k.replace('values.', '');
+        mapped[id] = v[0];
+      }
+      cfErrors.value = mapped;
+      showError('Заполните обязательные поля');
+    } else {
+      showError(e.response?.data?.message || 'Ошибка сохранения');
+    }
+  }
+  cfSaving.value = false;
+}
 const avatarInput = ref(null);
 const avatarUploading = ref(false);
 
@@ -1131,6 +1206,7 @@ onMounted(() => {
   loadDocuments();
   load2faStatus();
   loadTelegram();
+  loadCustomFields();
 });
 
 // === Telegram ===

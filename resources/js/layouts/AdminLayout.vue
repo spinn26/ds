@@ -139,6 +139,7 @@ const menuItems = [
       { to: '/admin/users', title: 'Пользователи', icon: 'mdi-account-cog' },
       { to: '/admin/partners', title: 'Партнёры', icon: 'mdi-account-group' },
       { to: '/admin/clients', title: 'Клиенты', icon: 'mdi-account-multiple' },
+      { to: '/admin/custom-fields', title: 'Кастомные поля', icon: 'mdi-form-select' },
       { to: '/admin/activity', title: 'Активность', icon: 'mdi-account-multiple-check' },
     ],
   },

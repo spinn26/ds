@@ -73,6 +73,10 @@ Route::prefix('v1')->group(function () {
         Route::post('/2fa/confirm', [\App\Http\Controllers\Api\TwoFactorController::class, 'confirm']);
         Route::post('/2fa/disable', [\App\Http\Controllers\Api\TwoFactorController::class, 'disable']);
 
+        // Кастомные поля текущего пользователя (заполнение в профиле).
+        Route::get('/custom-fields', [\App\Http\Controllers\Api\CustomFieldController::class, 'index']);
+        Route::put('/custom-fields/values', [\App\Http\Controllers\Api\CustomFieldController::class, 'updateValues']);
+
         // Глобальный поиск (Ctrl+K) — все auth.
         Route::get('/search', [\App\Http\Controllers\Api\SearchController::class, 'index']);
 
@@ -265,6 +269,12 @@ Route::prefix('v1')->group(function () {
             Route::delete('/admin/design/themes/{id}', [\App\Http\Controllers\Api\AdminDesignController::class, 'destroy'])->whereNumber('id');
             Route::post('/admin/design/themes/{id}/activate', [\App\Http\Controllers\Api\AdminDesignController::class, 'activate'])->whereNumber('id');
             Route::post('/admin/design/upload', [\App\Http\Controllers\Api\AdminDesignController::class, 'upload'])->middleware('throttle:30,1');
+
+            // Кастомные поля пользователей (определения) — только admin.
+            Route::get('/admin/custom-fields', [\App\Http\Controllers\Api\AdminCustomFieldController::class, 'index']);
+            Route::post('/admin/custom-fields', [\App\Http\Controllers\Api\AdminCustomFieldController::class, 'store']);
+            Route::put('/admin/custom-fields/{id}', [\App\Http\Controllers\Api\AdminCustomFieldController::class, 'update'])->whereNumber('id');
+            Route::delete('/admin/custom-fields/{id}', [\App\Http\Controllers\Api\AdminCustomFieldController::class, 'destroy'])->whereNumber('id');
         });
 
         Route::middleware(['role:admin,backoffice,support,finance,head,calculations,corrections,education', 'restrict.education', 'restrict.head', 'restrict.support', 'restrict.corrections', 'throttle:2400,1'])->group(function () {
