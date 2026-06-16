@@ -190,6 +190,7 @@ const menuItems = [
   {
     title: 'Настройки', icon: 'mdi-cog',
     children: [
+      { to: '/admin/design', title: 'Дизайн', icon: 'mdi-palette' },
       { to: '/admin/settings', title: 'Настройки системы', icon: 'mdi-tune' },
       { to: '/admin/integrations', title: 'Интеграции', icon: 'mdi-cloud-sync' },
       { to: '/admin/monitoring', title: 'Мониторинг', icon: 'mdi-pulse' },

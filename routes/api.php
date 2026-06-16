@@ -62,6 +62,9 @@ Route::prefix('v1')->group(function () {
     });
 
     Route::middleware('auth:sanctum')->group(function () {
+        // Активный дизайн (логотип/палитры/CSS) — применяется SPA в рантайме.
+        Route::get('/design/active', [\App\Http\Controllers\Api\DesignController::class, 'active']);
+
         // 2FA setup/confirm/disable/status — под авторизацией.
         Route::get('/2fa/status', [\App\Http\Controllers\Api\TwoFactorController::class, 'status']);
         Route::post('/2fa/setup', [\App\Http\Controllers\Api\TwoFactorController::class, 'setup']);
@@ -252,6 +255,13 @@ Route::prefix('v1')->group(function () {
             // Раздел «Настройки» (system_settings) — только admin.
             Route::get('/admin/settings', [\App\Http\Controllers\Api\AdminSettingsController::class, 'index']);
             Route::put('/admin/settings', [\App\Http\Controllers\Api\AdminSettingsController::class, 'update']);
+
+            // Раздел «Дизайн» (шаблоны логотипа/палитр/CSS) — только admin.
+            Route::get('/admin/design/themes', [\App\Http\Controllers\Api\AdminDesignController::class, 'index']);
+            Route::post('/admin/design/themes', [\App\Http\Controllers\Api\AdminDesignController::class, 'store']);
+            Route::put('/admin/design/themes/{id}', [\App\Http\Controllers\Api\AdminDesignController::class, 'update'])->whereNumber('id');
+            Route::delete('/admin/design/themes/{id}', [\App\Http\Controllers\Api\AdminDesignController::class, 'destroy'])->whereNumber('id');
+            Route::post('/admin/design/themes/{id}/activate', [\App\Http\Controllers\Api\AdminDesignController::class, 'activate'])->whereNumber('id');
         });
 
         Route::middleware(['role:admin,backoffice,support,finance,head,calculations,corrections,education', 'restrict.education', 'restrict.head', 'restrict.support', 'restrict.corrections', 'throttle:2400,1'])->group(function () {

@@ -1,0 +1,82 @@
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use App\Models\DesignTheme;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+
+/**
+ * Раздел «Дизайн» (CMS-подобный): шаблоны логотипа/палитр/CSS.
+ * Только admin. Импорт = создание из присланного config, экспорт = отдаём
+ * config (фронт сам скачивает файлом).
+ */
+class AdminDesignController extends Controller
+{
+    public function index(): JsonResponse
+    {
+        $themes = DesignTheme::query()->orderByDesc('is_active')->orderBy('name')
+            ->get(['id', 'name', 'is_active', 'config', 'updated_at']);
+
+        return response()->json(['themes' => $themes]);
+    }
+
+    public function store(Request $request): JsonResponse
+    {
+        $data = $this->validateData($request);
+        $theme = DesignTheme::create([
+            'name' => $data['name'],
+            'is_active' => false,
+            'config' => $data['config'],
+        ]);
+
+        return response()->json(['theme' => $theme], 201);
+    }
+
+    public function update(int $id, Request $request): JsonResponse
+    {
+        $theme = DesignTheme::findOrFail($id);
+        $data = $this->validateData($request);
+        $theme->update(['name' => $data['name'], 'config' => $data['config']]);
+
+        return response()->json(['theme' => $theme->fresh()]);
+    }
+
+    public function destroy(int $id): JsonResponse
+    {
+        $theme = DesignTheme::findOrFail($id);
+        if ($theme->is_active) {
+            return response()->json(['message' => 'Нельзя удалить активный шаблон'], 422);
+        }
+        $theme->delete();
+
+        return response()->json(['message' => 'Шаблон удалён']);
+    }
+
+    /** Сделать шаблон активным (ровно один активный — partial unique index). */
+    public function activate(int $id): JsonResponse
+    {
+        $theme = DesignTheme::findOrFail($id);
+        DB::transaction(function () use ($theme) {
+            DesignTheme::query()->where('is_active', true)->update(['is_active' => false]);
+            $theme->update(['is_active' => true]);
+        });
+
+        return response()->json(['message' => 'Шаблон активирован', 'theme' => $theme->fresh()]);
+    }
+
+    private function validateData(Request $request): array
+    {
+        return $request->validate([
+            'name' => ['required', 'string', 'max:120'],
+            'config' => ['required', 'array'],
+            'config.brandName' => ['nullable', 'string', 'max:120'],
+            'config.logoText' => ['nullable', 'string', 'max:40'],
+            'config.logoUrl' => ['nullable', 'string', 'max:1000'],
+            'config.colors' => ['nullable', 'array'],
+            'config.customCss' => ['nullable', 'string', 'max:50000'],
+        ]);
+    }
+}

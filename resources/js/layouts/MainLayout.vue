@@ -7,8 +7,11 @@
       <div class="sidebar-header d-flex align-center pa-4" :class="{ 'justify-center': rail }">
         <div v-if="!rail" class="flex-grow-1">
           <div class="d-flex align-center ga-1">
-            <span class="text-h6 font-weight-black text-primary">DS</span>
-            <span class="text-caption text-medium-emphasis">ПЛАТФОРМА</span>
+            <img v-if="design.logoUrl" :src="design.logoUrl" alt="logo" style="max-height: 26px" />
+            <template v-else>
+              <span class="text-h6 font-weight-black text-primary">{{ design.logoText }}</span>
+              <span class="text-caption text-medium-emphasis">{{ brandSuffix }}</span>
+            </template>
           </div>
           <div v-if="cabinetName" class="text-caption" style="font-size: 0.6rem; letter-spacing: 1px; opacity: 0.6; margin-top: -2px">
             {{ cabinetName }}
@@ -393,6 +396,16 @@ import { provideConfirm } from '../composables/useConfirm';
 import { availableSections as configAvailableSections } from '../config/cabinetPermissions';
 import { useNotificationSound } from '../composables/useNotificationSound';
 import api from '../api';
+import { useDesignStore } from '../stores/design';
+
+const design = useDesignStore();
+// Суффикс бренда в шапке = brandName без короткого logoText («ПЛАТФОРМА»).
+const brandSuffix = computed(() => {
+  const name = (design.brandName || '').trim();
+  const mark = (design.logoText || '').trim();
+  const suffix = mark && name.startsWith(mark) ? name.slice(mark.length).trim() : name;
+  return suffix || 'ПЛАТФОРМА';
+});
 
 const { showNotification } = useSnackbar();
 const { play: playNotifSound, isEnabled: soundEnabled, setEnabled: setSoundEnabled } = useNotificationSound();

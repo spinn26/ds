@@ -189,3 +189,9 @@ app.use(VueTelInput, {
     dynamicPlaceholder: true,
 });
 app.mount('#app');
+
+// Активный дизайн (логотип/палитры/CSS) — применяем после монтирования.
+// Дефолты в createVuetify совпадают с сид-шаблоном, поэтому вспышки нет.
+import('./stores/design').then(({ useDesignStore }) => {
+    useDesignStore(pinia).load(vuetify);
+});
