@@ -278,6 +278,9 @@ Route::prefix('v1')->group(function () {
             // Значения кастомных полей конкретного пользователя (по WebUser.id).
             Route::get('/admin/users/{userId}/custom-fields', [\App\Http\Controllers\Api\AdminCustomFieldController::class, 'userFields'])->whereNumber('userId');
             Route::put('/admin/users/{userId}/custom-fields', [\App\Http\Controllers\Api\AdminCustomFieldController::class, 'saveUserValues'])->whereNumber('userId');
+            // Обязательность стандартных полей профиля.
+            Route::get('/admin/builtin-fields', [\App\Http\Controllers\Api\AdminCustomFieldController::class, 'builtinFields']);
+            Route::put('/admin/builtin-fields', [\App\Http\Controllers\Api\AdminCustomFieldController::class, 'saveBuiltin']);
         });
 
         Route::middleware(['role:admin,backoffice,support,finance,head,calculations,corrections,education', 'restrict.education', 'restrict.head', 'restrict.support', 'restrict.corrections', 'throttle:2400,1'])->group(function () {

@@ -129,6 +129,36 @@ class ProfileController extends Controller
     {
         $user = $request->user();
 
+        // Проверка обязательных СТАНДАРТНЫХ полей (настраивается админом в
+        // разделе «Кастомные поля» → «Стандартные поля»). Берём итоговое
+        // значение (из запроса либо текущее) и требуем непустое.
+        $requiredBuiltin = (array) \App\Models\SystemSetting::value('profile.required_builtin_fields', []);
+        if ($requiredBuiltin) {
+            $resolved = [
+                'firstName' => $request->input('firstName', $user->firstName),
+                'lastName' => $request->input('lastName', $user->lastName),
+                'patronymic' => $request->input('patronymic', $user->patronymic),
+                'email' => $request->input('email', $user->email),
+                'phone' => $request->input('phone', $user->phone),
+                'nicTG' => $request->input('telegram', $request->input('nicTG', $user->nicTG)),
+                'gender' => $request->input('gender', $user->gender),
+                'birthDate' => $request->input('birthDate', $user->birthDate),
+                'city' => $request->has('city') ? $request->input('city') : $user->city,
+                'country' => $request->has('country') ? $request->input('country') : $user->taxResidency,
+            ];
+            $labels = \App\Http\Controllers\Api\AdminCustomFieldController::BUILTIN_FIELDS;
+            $errors = [];
+            foreach ($requiredBuiltin as $key) {
+                $val = $resolved[$key] ?? null;
+                if ($val === null || $val === '') {
+                    $errors[$key] = ["Поле «" . ($labels[$key] ?? $key) . "» обязательно для заполнения"];
+                }
+            }
+            if ($errors) {
+                throw \Illuminate\Validation\ValidationException::withMessages($errors);
+            }
+        }
+
         $user->phone = $request->input('phone', $user->phone);
         $user->nicTG = $request->input('telegram', $request->input('nicTG', $user->nicTG));
         $user->gender = $request->input('gender', $user->gender);

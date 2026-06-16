@@ -11,6 +11,29 @@
       Обязательные поля нужно заполнить, чтобы сохранить.
     </v-alert>
 
+    <!-- Стандартные поля пользователя: обязательность при заполнении профиля. -->
+    <v-card class="mb-4">
+      <v-card-title class="text-subtitle-2 d-flex align-center">
+        Стандартные поля пользователя
+        <v-spacer />
+        <v-btn color="primary" size="small" prepend-icon="mdi-content-save"
+          :loading="builtinSaving" @click="saveBuiltin">Сохранить обязательность</v-btn>
+      </v-card-title>
+      <v-card-text>
+        <div class="text-caption text-medium-emphasis mb-2">
+          Отметьте поля, обязательные к заполнению в профиле. Незаполненные
+          обязательные блокируют сохранение профиля пользователем.
+        </div>
+        <v-row dense>
+          <v-col v-for="b in builtinFields" :key="b.key" cols="12" sm="6" md="4">
+            <v-switch v-model="b.required" :label="b.label" color="warning"
+              density="compact" hide-details inset />
+          </v-col>
+        </v-row>
+      </v-card-text>
+    </v-card>
+
+    <div class="text-subtitle-2 font-weight-bold mb-2">Кастомные поля</div>
     <v-card>
       <v-data-table :items="fields" :headers="headers" density="comfortable" hover :loading="loading">
         <template #item.type="{ value }"><v-chip size="x-small" variant="tonal">{{ typeLabel(value) }}</v-chip></template>
@@ -105,6 +128,8 @@ const headers = [
 ];
 
 const fields = ref([]);
+const builtinFields = ref([]);
+const builtinSaving = ref(false);
 const loading = ref(false);
 const dialog = ref(false);
 const saving = ref(false);
@@ -124,6 +149,23 @@ async function load() {
     fields.value = data.fields || [];
   } catch (e) { notify(e.response?.data?.message || 'Ошибка загрузки', 'error'); }
   loading.value = false;
+}
+
+async function loadBuiltin() {
+  try {
+    const { data } = await api.get('/admin/builtin-fields');
+    builtinFields.value = data.fields || [];
+  } catch { /* ignore */ }
+}
+
+async function saveBuiltin() {
+  builtinSaving.value = true;
+  try {
+    const required = builtinFields.value.filter(b => b.required).map(b => b.key);
+    await api.put('/admin/builtin-fields', { required });
+    notify('Обязательность стандартных полей сохранена');
+  } catch (e) { notify(e.response?.data?.message || 'Ошибка', 'error'); }
+  builtinSaving.value = false;
 }
 
 function openCreate() {
@@ -166,5 +208,5 @@ async function remove(item) {
   } catch (e) { notify(e.response?.data?.message || 'Ошибка удаления', 'error'); }
 }
 
-onMounted(load);
+onMounted(() => { load(); loadBuiltin(); });
 </script>

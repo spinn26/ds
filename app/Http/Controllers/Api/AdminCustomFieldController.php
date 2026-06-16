@@ -130,4 +130,46 @@ class AdminCustomFieldController extends Controller
             default => $value,
         };
     }
+
+    /**
+     * Стандартные (встроенные) поля профиля, для которых можно включить
+     * обязательность. Ключи совпадают с тем, что читает ProfileController.
+     */
+    public const BUILTIN_FIELDS = [
+        'lastName' => 'Фамилия',
+        'firstName' => 'Имя',
+        'patronymic' => 'Отчество',
+        'email' => 'E-mail',
+        'phone' => 'Телефон',
+        'nicTG' => 'Telegram',
+        'gender' => 'Пол',
+        'birthDate' => 'Дата рождения',
+        'city' => 'Город',
+        'country' => 'Страна (налоговое резидентство)',
+    ];
+
+    /** GET /admin/builtin-fields — каталог стандартных полей + текущие обязательные. */
+    public function builtinFields(): JsonResponse
+    {
+        $required = (array) \App\Models\SystemSetting::value('profile.required_builtin_fields', []);
+        $fields = [];
+        foreach (self::BUILTIN_FIELDS as $key => $label) {
+            $fields[] = ['key' => $key, 'label' => $label, 'required' => in_array($key, $required, true)];
+        }
+
+        return response()->json(['fields' => $fields]);
+    }
+
+    /** PUT /admin/builtin-fields — сохранить список обязательных стандартных полей. */
+    public function saveBuiltin(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'required' => ['array'],
+            'required.*' => ['string', Rule::in(array_keys(self::BUILTIN_FIELDS))],
+        ]);
+        $required = array_values(array_unique($data['required'] ?? []));
+        \App\Models\SystemSetting::put('profile.required_builtin_fields', $required);
+
+        return response()->json(['message' => 'Сохранено', 'required' => $required]);
+    }
 }
