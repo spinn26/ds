@@ -209,8 +209,9 @@
             <v-col cols="4"><v-text-field v-model="form.openDate" label="Открытия" type="date" variant="outlined" density="comfortable" /></v-col>
             <v-col cols="4"><v-text-field v-model="form.closeDate" label="Закрытия" type="date" variant="outlined" density="comfortable" /></v-col>
           </v-row>
-          <!-- Прогноз активации: обязателен для всех статусов кроме «Активирован» (id=1) -->
-          <v-text-field v-if="form.status !== 1"
+          <!-- Прогноз активации: скрыт/не нужен для статусов без прогноза
+               (Активирован / Закрыто нереализовано / Лапсирован) -->
+          <v-text-field v-if="!NO_FORECAST_STATUSES.includes(form.status)"
             v-model="form.activation_forecast"
             label="Прогноз активации *"
             type="date"
@@ -397,6 +398,9 @@ const { canEdit } = usePermissions();
 // меняет drawer на view-only.
 const readOnly = computed(() => !canEdit('contracts'));
 
+// Статусы без прогноза активации: 1 Активирован, 6 Закрыто нереализовано, 10 Лапсирован
+const NO_FORECAST_STATUSES = [1, 6, 10];
+
 const items = ref([]);
 const total = ref(0);
 const loading = ref(false);
@@ -552,6 +556,11 @@ const canSave = computed(() =>
   form.value.createDate && form.value.ammount > 0 && form.value.currency &&
   !numberCheck.value.exists
 );
+
+// При выборе статуса без прогноза — очищаем дату прогноза активации
+watch(() => form.value.status, (s) => {
+  if (NO_FORECAST_STATUSES.includes(s)) form.value.activation_forecast = '';
+});
 
 const snack = ref({ open: false, color: 'success', text: '' });
 function notify(text, color = 'success') { snack.value = { open: true, color, text }; }

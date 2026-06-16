@@ -2534,8 +2534,12 @@ class AdminDataController extends Controller
             'activation_forecast' => 'nullable|date',
         ]);
 
-        // activation_forecast обязателен если статус != 1 (Активирован)
-        if (($data['status'] ?? null) != 1 && empty($data['activation_forecast'])) {
+        // Статусы, для которых прогноз активации не нужен и очищается:
+        // 1 Активирован, 6 Закрыто нереализовано, 10 Лапсирован
+        $noForecastStatuses = [1, 6, 10];
+
+        // activation_forecast обязателен только для статусов вне этого набора
+        if (! in_array((int) ($data['status'] ?? 0), $noForecastStatuses, true) && empty($data['activation_forecast'])) {
             return response()->json([
                 'message' => 'Validation failed',
                 'errors' => ['activation_forecast' => ['Укажите прогноз активации контракта']],
@@ -2575,8 +2579,8 @@ class AdminDataController extends Controller
                 'setup' => $data['setup'] ?? null,
                 'type' => $data['type'] ?? null,
                 'comment' => $data['comment'] ?? null,
-                // Статус «Активирован» (id=1) — прогноз очищается
-                'activation_forecast' => ($data['status'] == 1) ? null : ($data['activation_forecast'] ?? null),
+                // Статусы без прогноза (Активирован/Закрыто нереализовано/Лапсирован) — очищаем
+                'activation_forecast' => in_array((int) $data['status'], $noForecastStatuses, true) ? null : ($data['activation_forecast'] ?? null),
                 'createdAt' => now(),
                 'changedAt' => now(),
             ]);
@@ -2627,16 +2631,20 @@ class AdminDataController extends Controller
             'activation_forecast' => 'nullable|date',
         ]);
 
-        // Проверяем прогноз: нужен если статус меняется на не-Активирован
+        // Статусы без прогноза: 1 Активирован, 6 Закрыто нереализовано, 10 Лапсирован
+        $noForecastStatuses = [1, 6, 10];
         $newStatus = $data['status'] ?? (int) $contract->status;
-        if ($newStatus != 1 && array_key_exists('activation_forecast', $data) && empty($data['activation_forecast'])) {
+
+        // Прогноз нужен только при переводе в статус вне набора «без прогноза»
+        if (! in_array((int) $newStatus, $noForecastStatuses, true)
+            && array_key_exists('activation_forecast', $data) && empty($data['activation_forecast'])) {
             return response()->json([
                 'message' => 'Validation failed',
                 'errors' => ['activation_forecast' => ['Укажите прогноз активации контракта']],
             ], 422);
         }
-        // При переводе в «Активирован» — принудительно очищаем прогноз
-        if ($newStatus == 1) {
+        // При переводе в Активирован/Закрыто нереализовано/Лапсирован — очищаем прогноз
+        if (in_array((int) $newStatus, $noForecastStatuses, true)) {
             $data['activation_forecast'] = null;
         }
 
