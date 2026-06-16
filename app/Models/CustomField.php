@@ -19,6 +19,7 @@ class CustomField extends Model
             'required' => 'boolean',
             'active' => 'boolean',
             'options' => 'array',
+            'roles' => 'array',
         ];
     }
 

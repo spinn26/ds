@@ -275,6 +275,9 @@ Route::prefix('v1')->group(function () {
             Route::post('/admin/custom-fields', [\App\Http\Controllers\Api\AdminCustomFieldController::class, 'store']);
             Route::put('/admin/custom-fields/{id}', [\App\Http\Controllers\Api\AdminCustomFieldController::class, 'update'])->whereNumber('id');
             Route::delete('/admin/custom-fields/{id}', [\App\Http\Controllers\Api\AdminCustomFieldController::class, 'destroy'])->whereNumber('id');
+            // Значения кастомных полей конкретного пользователя (по WebUser.id).
+            Route::get('/admin/users/{userId}/custom-fields', [\App\Http\Controllers\Api\AdminCustomFieldController::class, 'userFields'])->whereNumber('userId');
+            Route::put('/admin/users/{userId}/custom-fields', [\App\Http\Controllers\Api\AdminCustomFieldController::class, 'saveUserValues'])->whereNumber('userId');
         });
 
         Route::middleware(['role:admin,backoffice,support,finance,head,calculations,corrections,education', 'restrict.education', 'restrict.head', 'restrict.support', 'restrict.corrections', 'throttle:2400,1'])->group(function () {

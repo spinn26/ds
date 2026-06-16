@@ -42,6 +42,11 @@
             <v-col v-if="form.type === 'select'" cols="12">
               <v-combobox v-model="form.options" label="Варианты (Enter для добавления)" multiple chips closable-chips density="compact" />
             </v-col>
+            <v-col cols="12">
+              <v-select v-model="form.roles" :items="roleOptions" item-title="title" item-value="value"
+                label="Показывать ролям (пусто = всем)" multiple chips closable-chips density="compact"
+                hint="Если выбраны роли — поле видят только пользователи с этими ролями" persistent-hint />
+            </v-col>
             <v-col cols="12"><v-text-field v-model="form.description" label="Подсказка (необязательно)" density="compact" /></v-col>
             <v-col cols="6"><v-switch v-model="form.required" label="Обязательное" color="warning" density="compact" hide-details /></v-col>
             <v-col cols="6"><v-switch v-model="form.active" label="Активно" color="success" density="compact" hide-details /></v-col>
@@ -75,6 +80,20 @@ const typeItems = [
 ];
 function typeLabel(v) { return typeItems.find(t => t.value === v)?.title || v; }
 
+// Роли (зеркало списка из Admin/Partners.vue) для таргетинга полей.
+const roleOptions = [
+  { title: 'Администратор', value: 'admin' },
+  { title: 'Бэкофис', value: 'backoffice' },
+  { title: 'Техподдержка', value: 'support' },
+  { title: 'Руководитель', value: 'head' },
+  { title: 'Фин. менеджер', value: 'finance' },
+  { title: 'Расчёты', value: 'calculations' },
+  { title: 'Правки', value: 'corrections' },
+  { title: 'Отдел обучения', value: 'education' },
+  { title: 'Консультант', value: 'consultant' },
+  { title: 'Зарегистрирован-Партнёр', value: 'registered' },
+];
+
 const headers = [
   { title: 'Название', key: 'label' },
   { title: 'Ключ', key: 'key', width: 160 },
@@ -94,7 +113,7 @@ const snack = ref({ open: false, color: 'success', text: '' });
 const form = reactive(emptyForm());
 
 function emptyForm() {
-  return { id: null, key: '', label: '', type: 'text', required: false, active: true, options: [], description: '', sort_order: 0 };
+  return { id: null, key: '', label: '', type: 'text', required: false, active: true, options: [], roles: [], description: '', sort_order: 0 };
 }
 function notify(text, color = 'success') { snack.value = { open: true, color, text }; }
 
@@ -113,7 +132,7 @@ function openCreate() {
   dialog.value = true;
 }
 function openEdit(item) {
-  Object.assign(form, { ...emptyForm(), ...item, options: item.options || [] });
+  Object.assign(form, { ...emptyForm(), ...item, options: item.options || [], roles: item.roles || [] });
   Object.keys(errs).forEach(k => delete errs[k]);
   dialog.value = true;
 }

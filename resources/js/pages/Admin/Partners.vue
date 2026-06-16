@@ -277,6 +277,27 @@
             </v-row>
             </v-form>
 
+            <!-- Кастомные поля пользователя (определяются в /admin/custom-fields). -->
+            <template v-if="pcfFields.length">
+              <v-divider class="my-4" />
+              <div class="text-subtitle-2 font-weight-bold mb-2">Дополнительные сведения</div>
+              <v-row dense>
+                <v-col v-for="pf in pcfFields" :key="pf.id" cols="12" sm="6">
+                  <v-text-field v-if="pf.type === 'text' || pf.type === 'number'"
+                    v-model="pcfValues[pf.id]" :type="pf.type === 'number' ? 'number' : 'text'"
+                    :label="pf.label + (pf.required ? ' *' : '')" density="compact" hide-details />
+                  <v-textarea v-else-if="pf.type === 'textarea'" v-model="pcfValues[pf.id]"
+                    :label="pf.label + (pf.required ? ' *' : '')" rows="2" auto-grow density="compact" hide-details />
+                  <v-text-field v-else-if="pf.type === 'date'" v-model="pcfValues[pf.id]" type="date"
+                    :label="pf.label + (pf.required ? ' *' : '')" density="compact" hide-details />
+                  <v-select v-else-if="pf.type === 'select'" v-model="pcfValues[pf.id]" :items="pf.options || []"
+                    :label="pf.label + (pf.required ? ' *' : '')" density="compact" hide-details clearable />
+                  <v-checkbox v-else-if="pf.type === 'checkbox'" v-model="pcfValues[pf.id]"
+                    :label="pf.label + (pf.required ? ' *' : '')" density="compact" hide-details />
+                </v-col>
+              </v-row>
+            </template>
+
             <template v-if="auth.isAdmin">
               <v-divider class="my-4" />
               <div class="d-flex align-center mb-2 ga-2">
@@ -795,6 +816,9 @@ async function saveNewPartner() {
 const editDialog = ref(false);
 const editLoading = ref(false);
 const editForm = ref(null);
+// Кастомные поля редактируемого пользователя (по WebUser.id).
+const pcfFields = ref([]);
+const pcfValues = ref({});
 const editErrors = ref({});
 const saving = ref(false);
 const statusMsg = ref('');
@@ -989,7 +1013,20 @@ async function openEdit(item) {
       role: u.role || '',
       isBlocked: !!u.isBlocked,
       newPassword: '',
+      webUserId: u.id || null,
     };
+    // Кастомные поля пользователя (по WebUser.id).
+    pcfFields.value = [];
+    pcfValues.value = {};
+    if (u.id) {
+      try {
+        const { data: cf } = await api.get(`/admin/users/${u.id}/custom-fields`);
+        pcfFields.value = cf.fields || [];
+        const vals = {};
+        for (const fld of pcfFields.value) vals[fld.id] = fld.value;
+        pcfValues.value = vals;
+      } catch {}
+    }
   } catch {}
   editLoading.value = false;
 }
@@ -1014,6 +1051,12 @@ async function saveEdit() {
       isBlocked: !!f.isBlocked,
       newPassword: f.newPassword || null,
     });
+    // Кастомные поля пользователя — отдельным запросом (если есть WebUser).
+    if (f.webUserId && pcfFields.value.length) {
+      try {
+        await api.put(`/admin/users/${f.webUserId}/custom-fields`, { values: { ...pcfValues.value } });
+      } catch { /* не критично для основного сохранения */ }
+    }
     editDialog.value = false;
     loadData();
   } catch (e) {

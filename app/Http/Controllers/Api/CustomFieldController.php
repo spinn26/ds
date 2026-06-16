@@ -25,8 +25,16 @@ class CustomFieldController extends Controller
         }
 
         $userId = $request->user()->id;
+        $userRoles = array_filter(array_map('trim', explode(',', (string) ($request->user()->role ?? ''))));
+
         $fields = CustomField::query()->where('active', true)
-            ->orderBy('sort_order')->orderBy('id')->get();
+            ->orderBy('sort_order')->orderBy('id')->get()
+            // Привязка к ролям: пустой roles = всем; иначе — пересечение с ролями юзера.
+            ->filter(function ($f) use ($userRoles) {
+                $roles = $f->roles ?? [];
+                return empty($roles) || count(array_intersect($roles, $userRoles)) > 0;
+            })
+            ->values();
 
         $values = CustomFieldValue::query()
             ->whereIn('field_id', $fields->pluck('id'))
