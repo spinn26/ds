@@ -8,13 +8,23 @@
         Курсы
       </v-btn>
       <v-btn-toggle v-model="reportMode" density="compact" variant="outlined" mandatory color="primary">
-        <v-btn value="actual"   size="small" prepend-icon="mdi-check-circle-outline">Фактический</v-btn>
-        <v-btn value="forecast" size="small" prepend-icon="mdi-chart-timeline-variant">Прогнозный</v-btn>
+        <v-btn value="inwork" size="small" prepend-icon="mdi-progress-clock">
+          В работе
+          <v-tooltip activator="parent" location="bottom" text="Контракты в работе (прогноз активации)" />
+        </v-btn>
+        <v-btn value="forecast" size="small" prepend-icon="mdi-chart-timeline-variant">
+          Прогноз
+          <v-tooltip activator="parent" location="bottom" text="Прогноз доходов: Активированные контракты" />
+        </v-btn>
+        <v-btn value="fact" size="small" prepend-icon="mdi-check-circle-outline">
+          Факт
+          <v-tooltip activator="parent" location="bottom" text="Финансовый факт: Транзакции и пополнения" />
+        </v-btn>
       </v-btn-toggle>
     </div>
 
-    <!-- Forecast mode -->
-    <template v-if="reportMode === 'forecast'">
+    <!-- "В работе": pipeline-контракты (статусы 2/3) по прогнозу активации -->
+    <template v-if="reportMode === 'inwork'">
       <!-- Filter bar -->
       <v-card class="ds-card mb-3" elevation="0">
         <v-card-text class="pa-2">
@@ -159,7 +169,9 @@
       </v-card>
     </template>
 
-    <template v-if="reportMode === 'actual'">
+    <!-- "Прогноз" (активированные контракты, /period) и "Факт" (транзакции, /fact)
+         используют одну таблицу: период + метрики, различается только endpoint -->
+    <template v-if="reportMode === 'forecast' || reportMode === 'fact'">
       <!-- Filter bar -->
       <v-card class="ds-card mb-3" elevation="0">
         <v-card-text class="pa-2">
@@ -381,7 +393,10 @@ import api from '../../api';
 import PageHeader from '../../components/PageHeader.vue';
 
 // ─── Report mode ──────────────────────────────────────────────
-const reportMode = ref('actual');
+// inwork  — контракты в работе (pipeline, /forecast)
+// forecast — прогноз доходов: активированные контракты (/period)
+// fact    — финансовый факт: транзакции и пополнения (/fact)
+const reportMode = ref('forecast');
 
 // ─── Period ───────────────────────────────────────────────────
 const now = new Date();
@@ -497,7 +512,12 @@ function reload() { loadData(); }
 function onPeriodModeChange() { reload(); }
 
 watch(reportMode, (mode) => {
-  if (mode === 'forecast' && !fcRows.value.length && !fcLoading.value) loadForecast();
+  if (mode === 'inwork') {
+    if (!fcRows.value.length && !fcLoading.value) loadForecast();
+  } else {
+    // 'forecast' (активированные) или 'fact' (транзакции) — перезагружаем нужный endpoint
+    loadData();
+  }
 });
 
 // Debounce для фильтра продуктов — не закрываем дропдаун при множественном выборе
@@ -521,7 +541,8 @@ async function loadData({ updateOptions = true } = {}) {
     p.set('to',   periodTo.value);
     filterSuppliers.value.forEach(s => p.append('suppliers[]', s));
     filterProducts.value.forEach(id => p.append('products[]', id));
-    const { data } = await api.get(`/admin/reports/sales-matrix/period?${p}`);
+    const endpoint = reportMode.value === 'fact' ? 'fact' : 'period';
+    const { data } = await api.get(`/admin/reports/sales-matrix/${endpoint}?${p}`);
     rows.value        = data.rows           ?? [];
     months.value      = data.period?.months ?? [];
     grandTotals.value = data.grandTotals    ?? null;

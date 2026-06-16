@@ -903,6 +903,201 @@ class ProductSalesMatrixController extends Controller
         ]);
     }
 
+    /**
+     * GET /admin/reports/sales-matrix/fact
+     *
+     * Финансовый факт: все транзакции и пополнения за период, сгруппированные
+     * по продукту → программе с разбивкой по месяцу транзакции (t.dateMonth).
+     * В отличие от /period (активированные контракты по дате активации), здесь
+     * учитываются все платежи, включая ежемесячные взносы рассрочки и пополнения.
+     * Структура ответа совпадает с quarterlyMatrix — фронт рендерит той же таблицей.
+     *
+     * Params: from (Y-m), to (Y-m), products[] (int, optional), suppliers[] (str, optional)
+     */
+    public function factMatrix(Request $request): JsonResponse
+    {
+        $params = $request->validate([
+            'from'        => 'required|date_format:Y-m',
+            'to'          => 'required|date_format:Y-m',
+            'products'    => 'nullable|array',
+            'products.*'  => 'integer',
+            'suppliers'   => 'nullable|array',
+            'suppliers.*' => 'string|max:200',
+        ]);
+
+        $from   = $params['from'];
+        $to     = $params['to'];
+        $months = $this->monthRange($from, $to);
+
+        // Базовый builder: транзакции внутри периода по месяцу транзакции (dateMonth).
+        // amountRUB/netRevenueRUB уже в рублях — конвертация валют не нужна.
+        $base = fn () => DB::table('transaction as t')
+            ->join('contract as co', 'co.id', '=', 't.contract')
+            ->join('program as pg', 'pg.id', '=', 'co.program')
+            ->whereBetween('t.dateMonth', [$from, $to])
+            ->whereNotNull('co.openDate')
+            ->whereNull('co.deletedAt')
+            ->whereNull('t.deletedAt')
+            ->when(! empty($params['suppliers']), fn ($q) =>
+                $q->whereIn(DB::raw('COALESCE(pg."providerName", \'—\')'), $params['suppliers'])
+            )
+            ->when(! empty($params['products']), fn ($q) =>
+                $q->whereIn('co.product', $params['products'])
+            );
+
+        $rows = $base()
+            ->join('product as p', 'p.id', '=', 'co.product')
+            ->select([
+                'p.id   as product_id',
+                'p.name as product_name',
+                'pg.id   as program_id',
+                'pg.name as program_name',
+                't.dateMonth as period_month',
+                DB::raw('SUM(COALESCE(t."amountRUB", 0))      as volume'),
+                DB::raw('COUNT(DISTINCT co.id)                as cnt'),
+                DB::raw('SUM(COALESCE(t."netRevenueRUB", 0))  as revenue'),
+                DB::raw('SUM(COALESCE(t."personalVolume", 0)) as points'),
+                DB::raw('COUNT(DISTINCT co.client)            as client_count'),
+                DB::raw('COUNT(DISTINCT co.consultant)        as fc_count'),
+            ])
+            ->groupBy('p.id', 'p.name', 'pg.id', 'pg.name', 't.dateMonth')
+            ->orderBy('p.name')
+            ->orderBy('pg.name')
+            ->orderBy('t.dateMonth')
+            ->get();
+
+        $productMap = [];
+        $grand      = ['volume' => 0, 'count' => 0, 'revenue' => 0,
+                       'points' => 0, 'clientCount' => 0, 'monthly' => []];
+
+        foreach ($rows as $r) {
+            $pid  = $r->product_id;
+            $pgid = $r->program_id;
+            $mo   = $r->period_month;
+
+            $v  = round((float) $r->volume,  2);
+            $c  = (int)         $r->cnt;
+            $rv = round((float) $r->revenue, 2);
+            $pt = round((float) $r->points,  4);
+            $cl = (int)         $r->client_count;
+            $fc = (int)         $r->fc_count;
+            $vals = ['volume' => $v, 'count' => $c, 'revenue' => $rv,
+                     'points' => $pt, 'clientCount' => $cl];
+
+            if (! isset($productMap[$pid])) {
+                $productMap[$pid] = [
+                    'productId' => $pid, 'productName' => $r->product_name,
+                    'volume' => 0, 'count' => 0, 'revenue' => 0, 'points' => 0, 'clientCount' => 0,
+                    'monthly' => [], 'programs' => [],
+                ];
+            }
+            if (! isset($productMap[$pid]['programs'][$pgid])) {
+                $productMap[$pid]['programs'][$pgid] = [
+                    'programId' => $pgid, 'programName' => $r->program_name,
+                    'volume' => 0, 'count' => 0, 'revenue' => 0, 'points' => 0, 'clientCount' => 0,
+                    'monthly' => [],
+                ];
+            }
+
+            $productMap[$pid]['programs'][$pgid]['monthly'][$mo] = array_merge($vals, [
+                'fcCount'  => $fc,
+                'avgCheck' => $c > 0 ? round($v / $c, 2) : 0,
+            ]);
+            foreach ($vals as $k => $val) {
+                $productMap[$pid]['programs'][$pgid][$k] += $val;
+            }
+
+            foreach ($vals as $k => $val) {
+                $productMap[$pid]['monthly'][$mo][$k]  = ($productMap[$pid]['monthly'][$mo][$k] ?? 0) + $val;
+                $productMap[$pid][$k]                 += $val;
+                $grand['monthly'][$mo][$k]             = ($grand['monthly'][$mo][$k] ?? 0) + $val;
+                $grand[$k]                            += $val;
+            }
+        }
+
+        // FC distinct по (продукт × месяц) — нельзя суммировать программные значения
+        $fcMonthlyRows = $base()
+            ->select([
+                'co.product as product_id',
+                't.dateMonth as period_month',
+                DB::raw('COUNT(DISTINCT co.consultant) as fc_count'),
+            ])
+            ->groupBy('co.product', 't.dateMonth')
+            ->get();
+
+        $fcMonthlyIdx = [];
+        foreach ($fcMonthlyRows as $r) {
+            $fcMonthlyIdx[$r->product_id][$r->period_month] = (int) $r->fc_count;
+        }
+
+        // Grand monthly fcCount
+        $grandFcMonthly = $base()
+            ->select(['t.dateMonth as period_month', DB::raw('COUNT(DISTINCT co.consultant) as fc_count')])
+            ->groupBy('t.dateMonth')
+            ->get()
+            ->pluck('fc_count', 'period_month');
+
+        // FC distinct по продукту итого
+        $fcCounts = $base()
+            ->select('co.product as product_id', DB::raw('COUNT(DISTINCT co.consultant) as fc_count'))
+            ->groupBy('co.product')
+            ->get()
+            ->keyBy('product_id');
+
+        $grand['fcCount'] = (int) $base()->distinct()->count('co.consultant');
+
+        // Производные поля: avgCheck и fcCount на уровне продукта/гранда
+        foreach ($productMap as $pid => &$prod) {
+            $prod['avgCheck'] = $prod['count'] > 0 ? round($prod['volume'] / $prod['count'], 2) : 0;
+            foreach ($prod['monthly'] as $mo => &$mv) {
+                $mv['avgCheck'] = $mv['count'] > 0 ? round($mv['volume'] / $mv['count'], 2) : 0;
+                $mv['fcCount']  = $fcMonthlyIdx[$pid][$mo] ?? 0;
+            }
+            unset($mv);
+            foreach ($prod['programs'] as &$prog) {
+                $prog['avgCheck'] = $prog['count'] > 0 ? round($prog['volume'] / $prog['count'], 2) : 0;
+            }
+            unset($prog);
+        }
+        unset($prod);
+
+        $grand['avgCheck'] = $grand['count'] > 0 ? round($grand['volume'] / $grand['count'], 2) : 0;
+        foreach ($grand['monthly'] as $mo => &$gv) {
+            $gv['avgCheck'] = $gv['count'] > 0 ? round($gv['volume'] / $gv['count'], 2) : 0;
+            $gv['fcCount']  = (int) ($grandFcMonthly[$mo] ?? 0);
+        }
+        unset($gv);
+
+        $result = [];
+        foreach ($productMap as $pid => $prod) {
+            $prod['fcCount']  = (int) ($fcCounts[$pid]->fc_count ?? 0);
+            $prod['programs'] = array_values($prod['programs']);
+            $result[]         = $prod;
+        }
+
+        $allSuppliers = $base()
+            ->whereNotNull('pg.providerName')
+            ->distinct()
+            ->orderBy('pg.providerName')
+            ->pluck('pg.providerName');
+
+        $allProducts = $base()
+            ->join('product as p', 'p.id', '=', 'co.product')
+            ->select('p.id', 'p.name')
+            ->distinct()
+            ->orderBy('p.name')
+            ->get()
+            ->map(fn ($r) => ['id' => $r->id, 'name' => $r->name]);
+
+        return response()->json([
+            'period'      => ['from' => $from, 'to' => $to, 'months' => $months],
+            'rows'        => $result,
+            'grandTotals' => $grand,
+            'suppliers'   => $allSuppliers->values(),
+            'products'    => $allProducts->values(),
+        ]);
+    }
+
     private function monthRange(string $from, string $to): array
     {
         $months = [];
