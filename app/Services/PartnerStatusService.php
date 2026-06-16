@@ -19,7 +19,7 @@ class PartnerStatusService
     public function register(Consultant $consultant): void
     {
         $consultant->activity = PartnerActivity::Registered;
-        $consultant->activationDeadline = Carbon::now()->addDays(PartnerActivity::ACTIVATION_DAYS);
+        $consultant->activationDeadline = Carbon::now()->addDays(PartnerActivity::activationDays());
         $consultant->terminationCount = $consultant->terminationCount ?? 0;
         $consultant->save();
 
@@ -101,7 +101,7 @@ class PartnerStatusService
         }
 
         $personalVolume = (float) ($consultant->personalVolume ?? 0);
-        if ($personalVolume < PartnerActivity::ACTIVATION_POINTS) {
+        if ($personalVolume < PartnerActivity::activationPoints()) {
             return false;
         }
 
@@ -147,7 +147,7 @@ class PartnerStatusService
             $consultant->active = false;
             $consultant->dateDeactivity = Carbon::now();
 
-            if ($newCount >= PartnerActivity::MAX_TERMINATIONS) {
+            if ($newCount >= PartnerActivity::maxTerminations()) {
                 // 3-я терминация → Исключен
                 $consultant->activity = PartnerActivity::Excluded;
                 $consultant->save();
@@ -219,7 +219,7 @@ class PartnerStatusService
             $consultant->personalVolume = 0;
             $consultant->groupVolume = 0;
             $consultant->groupVolumeCumulative = 0;
-            $consultant->activationDeadline = Carbon::now()->addDays(PartnerActivity::ACTIVATION_DAYS);
+            $consultant->activationDeadline = Carbon::now()->addDays(PartnerActivity::activationDays());
             $consultant->yearPeriodEnd = null;
             $consultant->save();
         });
@@ -248,7 +248,7 @@ class PartnerStatusService
         $count = 0;
         foreach ($expired as $consultant) {
             $personalVolume = (float) ($consultant->personalVolume ?? 0);
-            if ($personalVolume < PartnerActivity::ACTIVATION_POINTS) {
+            if ($personalVolume < PartnerActivity::activationPoints()) {
                 $this->terminate($consultant, 'Не набрал ЛП=500 за 90 дней');
                 $count++;
             }
@@ -271,7 +271,7 @@ class PartnerStatusService
         $count = 0;
         foreach ($expired as $consultant) {
             $personalVolume = (float) ($consultant->personalVolume ?? 0);
-            if ($personalVolume < PartnerActivity::ACTIVATION_POINTS) {
+            if ($personalVolume < PartnerActivity::activationPoints()) {
                 $this->terminate($consultant, 'ЛП < 500 за годовой период');
                 $count++;
             } else {
@@ -297,14 +297,14 @@ class PartnerStatusService
             'hasAccess' => $activity->hasAccess(),
             'canInvite' => $activity->canInvite(),
             'terminationCount' => $consultant->terminationCount ?? 0,
-            'maxTerminations' => PartnerActivity::MAX_TERMINATIONS,
+            'maxTerminations' => PartnerActivity::maxTerminations(),
         ];
 
         // Обратный отсчёт
         if ($activity === PartnerActivity::Registered && $consultant->activationDeadline) {
             $info['activationDeadline'] = $consultant->activationDeadline->toIso8601String();
             $info['daysRemaining'] = max(0, (int) Carbon::now()->diffInDays($consultant->activationDeadline, false));
-            $info['requiredPoints'] = PartnerActivity::ACTIVATION_POINTS;
+            $info['requiredPoints'] = PartnerActivity::activationPoints();
             $info['currentPoints'] = (float) ($consultant->personalVolume ?? 0);
         }
 
@@ -317,7 +317,7 @@ class PartnerStatusService
             if ($endDate) {
                 $info['yearPeriodEnd'] = $endDate instanceof Carbon ? $endDate->toIso8601String() : Carbon::parse($endDate)->toIso8601String();
                 $info['daysRemaining'] = max(0, (int) Carbon::now()->diffInDays($endDate, false));
-                $info['requiredPoints'] = PartnerActivity::ACTIVATION_POINTS;
+                $info['requiredPoints'] = PartnerActivity::activationPoints();
                 $info['currentPoints'] = (float) ($consultant->personalVolume ?? 0);
             }
         }

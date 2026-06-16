@@ -80,7 +80,7 @@ class CheckPartnerStatuses extends Command
             ->where('yearPeriodEnd', '<=', $twoMonthsFromNow)
             ->where('yearPeriodEnd', '>', Carbon::now())
             ->where(function ($q) {
-                $q->where('personalVolume', '<', PartnerActivity::ACTIVATION_POINTS)
+                $q->where('personalVolume', '<', PartnerActivity::activationPoints())
                   ->orWhereNull('personalVolume');
             })
             ->get();
@@ -95,7 +95,7 @@ class CheckPartnerStatuses extends Command
                     'category' => 2, // Техподдержка
                     'message' => "Внимание! До окончания годового периода осталось {$daysLeft} дней. "
                         . "Для сохранения статуса «Активен» необходимо набрать ЛП = "
-                        . PartnerActivity::ACTIVATION_POINTS . " баллов. "
+                        . PartnerActivity::activationPoints() . " баллов. "
                         . "Текущий ЛП: " . round((float) ($p->personalVolume ?? 0), 2),
                     'date' => now(),
                     'direction' => 'ds2p',
@@ -122,7 +122,7 @@ class CheckPartnerStatuses extends Command
             ->where('activationDeadline', '<=', $oneMonthFromNow)
             ->where('activationDeadline', '>', Carbon::now())
             ->where(function ($q) {
-                $q->where('personalVolume', '<', PartnerActivity::ACTIVATION_POINTS)
+                $q->where('personalVolume', '<', PartnerActivity::activationPoints())
                   ->orWhereNull('personalVolume');
             })
             ->get();
@@ -135,7 +135,7 @@ class CheckPartnerStatuses extends Command
                     'consultant' => $p->id,
                     'category' => 2,
                     'message' => "Внимание! До окончания срока активации осталось {$daysLeft} дней. "
-                        . "Необходимо набрать ЛП = " . PartnerActivity::ACTIVATION_POINTS . " баллов. "
+                        . "Необходимо набрать ЛП = " . PartnerActivity::activationPoints() . " баллов. "
                         . "Текущий ЛП: " . round((float) ($p->personalVolume ?? 0), 2),
                     'date' => now(),
                     'direction' => 'ds2p',
@@ -156,14 +156,14 @@ class CheckPartnerStatuses extends Command
     {
         $count = DB::table('consultant')
             ->where('activity', PartnerActivity::Terminated->value)
-            ->where('terminationCount', '>=', PartnerActivity::MAX_TERMINATIONS)
+            ->where('terminationCount', '>=', PartnerActivity::maxTerminations())
             ->whereNull('dateDeleted')
             ->count();
 
         if ($count > 0) {
             DB::table('consultant')
                 ->where('activity', PartnerActivity::Terminated->value)
-                ->where('terminationCount', '>=', PartnerActivity::MAX_TERMINATIONS)
+                ->where('terminationCount', '>=', PartnerActivity::maxTerminations())
                 ->whereNull('dateDeleted')
                 ->update([
                     'activity' => PartnerActivity::Excluded->value,

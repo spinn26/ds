@@ -145,6 +145,6 @@ class Consultant extends Model
 
     public function hasReachedMaxTerminations(): bool
     {
-        return ($this->terminationCount ?? 0) >= PartnerActivity::MAX_TERMINATIONS;
+        return ($this->terminationCount ?? 0) >= PartnerActivity::maxTerminations();
     }
 }

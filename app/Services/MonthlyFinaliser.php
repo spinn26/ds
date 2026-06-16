@@ -39,12 +39,15 @@ class MonthlyFinaliser
             return array_fill_keys(array_keys($branchVolumes), 1.0);
         }
 
+        // Порог/штраф отрыва настраиваются (detachment.threshold/penalty),
+        // фолбэк — константы. Читаем до цикла.
+        $threshold = (float) \App\Models\SystemSetting::value('detachment.threshold', self::DETACHMENT_THRESHOLD);
+        $penalty = (float) \App\Models\SystemSetting::value('detachment.penalty', self::DETACHMENT_PENALTY);
+
         $multipliers = [];
         foreach ($branchVolumes as $key => $volume) {
             $share = $volume / $total;
-            $multipliers[$key] = $share > self::DETACHMENT_THRESHOLD
-                ? self::DETACHMENT_PENALTY
-                : 1.0;
+            $multipliers[$key] = $share > $threshold ? $penalty : 1.0;
         }
         return $multipliers;
     }
@@ -57,7 +60,8 @@ class MonthlyFinaliser
     public function opMultiplier(float $actualGroupVolume, float $requiredOpVolume): float
     {
         if ($requiredOpVolume <= 0) return 1.0;
-        return $actualGroupVolume >= $requiredOpVolume ? 1.0 : (1.0 - self::OP_PENALTY);
+        $opPenalty = (float) \App\Models\SystemSetting::value('op.penalty', self::OP_PENALTY);
+        return $actualGroupVolume >= $requiredOpVolume ? 1.0 : (1.0 - $opPenalty);
     }
 
     /**

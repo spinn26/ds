@@ -39,7 +39,9 @@ class PoolCalculator
      */
     public function shareValues(float $vatExclusiveRevenue, array $nominalCounts): array
     {
-        $fund = $vatExclusiveRevenue * self::POOL_PERCENT;
+        // Процент пула настраивается из админки (pool.percent), фолбэк — константа.
+        $poolPercent = (float) \App\Models\SystemSetting::value('pool.percent', self::POOL_PERCENT);
+        $fund = $vatExclusiveRevenue * $poolPercent;
         $shares = [];
         for ($level = self::LEADER_LEVEL_MIN; $level <= self::LEADER_LEVEL_MAX; $level++) {
             $cumulative = 0;
