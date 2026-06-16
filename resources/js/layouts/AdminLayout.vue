@@ -170,6 +170,7 @@ const menuItems = [
   {
     title: 'Маркетинг и уведомления', icon: 'mdi-bullhorn',
     children: [
+      { to: '/admin/announcements', title: 'Объявления', icon: 'mdi-bullhorn' },
       { to: '/admin/mail', title: 'Почтовая рассылка', icon: 'mdi-email-fast' },
       { to: '/admin/triggers', title: 'Триггеры уведомлений', icon: 'mdi-robot' },
     ],

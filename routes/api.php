@@ -77,6 +77,9 @@ Route::prefix('v1')->group(function () {
         Route::get('/custom-fields', [\App\Http\Controllers\Api\CustomFieldController::class, 'index']);
         Route::put('/custom-fields/values', [\App\Http\Controllers\Api\CustomFieldController::class, 'updateValues']);
 
+        // Активные объявления для баннера в шапке.
+        Route::get('/announcements/active', [\App\Http\Controllers\Api\AnnouncementController::class, 'active']);
+
         // Глобальный поиск (Ctrl+K) — все auth.
         Route::get('/search', [\App\Http\Controllers\Api\SearchController::class, 'index']);
 
@@ -281,6 +284,12 @@ Route::prefix('v1')->group(function () {
             // Обязательность стандартных полей профиля.
             Route::get('/admin/builtin-fields', [\App\Http\Controllers\Api\AdminCustomFieldController::class, 'builtinFields']);
             Route::put('/admin/builtin-fields', [\App\Http\Controllers\Api\AdminCustomFieldController::class, 'saveBuiltin']);
+
+            // Системные объявления (баннеры).
+            Route::get('/admin/announcements', [\App\Http\Controllers\Api\AdminAnnouncementController::class, 'index']);
+            Route::post('/admin/announcements', [\App\Http\Controllers\Api\AdminAnnouncementController::class, 'store']);
+            Route::put('/admin/announcements/{id}', [\App\Http\Controllers\Api\AdminAnnouncementController::class, 'update'])->whereNumber('id');
+            Route::delete('/admin/announcements/{id}', [\App\Http\Controllers\Api\AdminAnnouncementController::class, 'destroy'])->whereNumber('id');
         });
 
         Route::middleware(['role:admin,backoffice,support,finance,head,calculations,corrections,education', 'restrict.education', 'restrict.head', 'restrict.support', 'restrict.corrections', 'throttle:2400,1'])->group(function () {

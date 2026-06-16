@@ -153,6 +153,7 @@ const routes = [
             { path: 'settings', component: () => import('../pages/Admin/Settings.vue') },
             { path: 'design', component: () => import('../pages/Admin/Design.vue') },
             { path: 'custom-fields', component: () => import('../pages/Admin/CustomFields.vue') },
+            { path: 'announcements', component: () => import('../pages/Admin/Announcements.vue') },
             // API-ключи и токены перенесены во вкладку «API ключи»
             // раздела Интеграции (единая точка настройки внешних
             // сервисов). Старый путь редиректит для бэкап-ссылок.

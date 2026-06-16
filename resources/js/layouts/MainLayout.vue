@@ -232,6 +232,14 @@
     <!-- Content -->
     <v-main class="content-main" :class="{ 'content-main--full-bleed': isFullBleedRoute }">
       <v-container fluid :class="isFullBleedRoute ? 'pa-0' : 'pa-4 pa-md-6'">
+        <!-- Системные объявления (админ → /admin/announcements). -->
+        <v-alert v-for="a in visibleAnnouncements" :key="a.id"
+          :type="a.type" variant="tonal" density="comfortable" class="mb-3"
+          :closable="a.dismissible" @click:close="dismissAnnouncement(a.id)">
+          <div class="font-weight-bold">{{ a.title }}</div>
+          <div v-if="a.body" class="text-body-2" style="white-space: pre-line">{{ a.body }}</div>
+        </v-alert>
+
         <!-- Глобальный баннер: реквизиты на ручной проверке.
              Скрываем на /profile и /education — там партнёр и так знает.
              Скрываем на чате (full-bleed) — не ломаем layout. -->
@@ -406,6 +414,28 @@ const brandSuffix = computed(() => {
   const suffix = mark && name.startsWith(mark) ? name.slice(mark.length).trim() : name;
   return suffix || 'ПЛАТФОРМА';
 });
+
+// Системные объявления (баннеры). Закрытые помним в localStorage по id.
+const announcements = ref([]);
+const dismissedAnnouncements = ref(loadDismissed());
+function loadDismissed() {
+  try { return JSON.parse(localStorage.getItem('dismissed-announcements') || '[]'); } catch { return []; }
+}
+const visibleAnnouncements = computed(() =>
+  announcements.value.filter(a => !dismissedAnnouncements.value.includes(a.id))
+);
+async function loadAnnouncements() {
+  try {
+    const { data } = await api.get('/announcements/active');
+    announcements.value = data.announcements || [];
+  } catch { /* ignore */ }
+}
+function dismissAnnouncement(id) {
+  if (!dismissedAnnouncements.value.includes(id)) {
+    dismissedAnnouncements.value.push(id);
+    try { localStorage.setItem('dismissed-announcements', JSON.stringify(dismissedAnnouncements.value)); } catch {}
+  }
+}
 
 const { showNotification } = useSnackbar();
 const { play: playNotifSound, isEnabled: soundEnabled, setEnabled: setSoundEnabled } = useNotificationSound();
@@ -590,6 +620,7 @@ async function onQuestionnaireCompleted() {
 
 // Load status info for TopBar
 onMounted(async () => {
+  loadAnnouncements();
   try {
     const { data } = await api.get('/profile');
     statusInfo.value = {
