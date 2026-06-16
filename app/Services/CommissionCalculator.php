@@ -290,7 +290,8 @@ class CommissionCalculator
         }
 
         if ($dsComPercent <= 0) {
-            $dsComPercent = 100; // Fallback
+            // Fallback %ДС — настраивается (commission.default_ds_percent, фолбэк 100).
+            $dsComPercent = (float) \App\Models\SystemSetting::value('commission.default_ds_percent', 100);
         }
 
         // ЛП per program.pointsMethod, same switch as CalculatorController::computePoints.
@@ -310,7 +311,9 @@ class CommissionCalculator
         // the one in which the НГП threshold was crossed. Passing tx->date to
         // the resolver below gives each historical transaction its own rate.
         $qualLevel = $this->getQualificationLevel($consultantId, $tx->date);
-        $qualPercent = $qualLevel ? (float) $qualLevel->percent : 15; // Start = 15%
+        // Стартовый % (нет квалификации) — настраивается (commission.startup_percent, фолбэк 15).
+        $startupPercent = (float) \App\Models\SystemSetting::value('commission.startup_percent', 15);
+        $qualPercent = $qualLevel ? (float) $qualLevel->percent : $startupPercent;
 
         // Групповой бонус = ЛП * % квалификации / 100
         $groupBonus = $personalVolume * $qualPercent / 100;
@@ -368,7 +371,7 @@ class CommissionCalculator
             if (! $inviter) break;
 
             $inviterLevel = $this->getQualificationLevel($inviterId, $tx->date);
-            $inviterPercent = $inviterLevel ? (float) $inviterLevel->percent : 15;
+            $inviterPercent = $inviterLevel ? (float) $inviterLevel->percent : $startupPercent;
 
             // Маржинальная разница — разница процентов между наставником и нижестоящим
             $marginPercent = $inviterPercent - $prevPercent;
