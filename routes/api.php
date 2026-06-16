@@ -66,6 +66,10 @@ Route::prefix('v1')->group(function () {
     Route::get('/design/active', [\App\Http\Controllers\Api\DesignController::class, 'active'])
         ->middleware('throttle:60,1');
 
+    // Переопределения строк i18n — ПУБЛИЧНО (применяются SPA на старте).
+    Route::get('/i18n/overrides', [\App\Http\Controllers\Api\TranslationController::class, 'overrides'])
+        ->middleware('throttle:60,1');
+
     Route::middleware(['auth:sanctum', 'maintenance'])->group(function () {
         // Контент-страница по slug + активные фиче-флаги (доступны всем auth).
         Route::get('/page/{slug}', [\App\Http\Controllers\Api\ContentPageController::class, 'show']);
@@ -312,6 +316,11 @@ Route::prefix('v1')->group(function () {
 
             // Аудит-лог (просмотр всех действий).
             Route::get('/admin/audit-log', [\App\Http\Controllers\Api\AdminAuditController::class, 'index']);
+
+            // i18n-переопределения.
+            Route::get('/admin/translations', [\App\Http\Controllers\Api\AdminTranslationController::class, 'index']);
+            Route::post('/admin/translations', [\App\Http\Controllers\Api\AdminTranslationController::class, 'store']);
+            Route::delete('/admin/translations/{id}', [\App\Http\Controllers\Api\AdminTranslationController::class, 'destroy'])->whereNumber('id');
 
             // Система: кэш и планировщик.
             Route::post('/admin/ops/cache/clear', [\App\Http\Controllers\Api\AdminOpsController::class, 'clearCache'])->middleware('throttle:30,1');

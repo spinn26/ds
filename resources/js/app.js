@@ -17,6 +17,7 @@ import './styles/ds-tokens.css';
 import './styles/global.css';
 import router from './router';
 import App from './App.vue';
+import api from './api';
 import { ru, en } from './i18n';
 
 // Sentry — lazy-loaded in production
@@ -195,3 +196,21 @@ app.mount('#app');
 import('./stores/design').then(({ useDesignStore }) => {
     useDesignStore(pinia).load(vuetify);
 });
+
+// i18n-переопределения строк интерфейса (из админки) — мёржим поверх бандла.
+api.get('/i18n/overrides').then(({ data }) => {
+    const overrides = data?.overrides || {};
+    const setDeep = (obj, path, val) => {
+        const parts = path.split('.');
+        let o = obj;
+        parts.forEach((p, idx) => {
+            if (idx === parts.length - 1) o[p] = val;
+            else { o[p] = (typeof o[p] === 'object' && o[p]) ? o[p] : {}; o = o[p]; }
+        });
+    };
+    for (const [locale, map] of Object.entries(overrides)) {
+        const nested = {};
+        for (const [key, value] of Object.entries(map)) setDeep(nested, key, value);
+        i18n.global.mergeLocaleMessage(locale, nested);
+    }
+}).catch(() => { /* нет оверрайдов / не залогинен — игнор */ });

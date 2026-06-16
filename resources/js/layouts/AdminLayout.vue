@@ -205,6 +205,7 @@ const menuItems = [
       { to: '/admin/design', title: 'Дизайн', icon: 'mdi-palette' },
       { to: '/admin/settings', title: 'Настройки системы', icon: 'mdi-tune' },
       { to: '/admin/feature-flags', title: 'Фиче-флаги', icon: 'mdi-flag-variant' },
+      { to: '/admin/translations', title: 'Переводы интерфейса', icon: 'mdi-translate' },
       { to: '/admin/integrations', title: 'Интеграции', icon: 'mdi-cloud-sync' },
       { to: '/admin/monitoring', title: 'Мониторинг', icon: 'mdi-pulse' },
     ],

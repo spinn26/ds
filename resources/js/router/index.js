@@ -164,6 +164,7 @@ const routes = [
             { path: 'login-log', component: () => import('../pages/Admin/LoginLog.vue') },
             { path: 'notifications-broadcast', component: () => import('../pages/Admin/NotificationBroadcast.vue') },
             { path: 'audit-log', component: () => import('../pages/Admin/AuditLog.vue') },
+            { path: 'translations', component: () => import('../pages/Admin/Translations.vue') },
             // API-ключи и токены перенесены во вкладку «API ключи»
             // раздела Интеграции (единая точка настройки внешних
             // сервисов). Старый путь редиректит для бэкап-ссылок.
