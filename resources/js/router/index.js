@@ -7,6 +7,7 @@ const routes = [
     { path: '/register', component: () => import('../pages/Auth/Register.vue'), meta: { guest: true } },
     { path: '/forgot-password', component: () => import('../pages/Auth/ForgotPassword.vue'), meta: { guest: true } },
     { path: '/reset-password', component: () => import('../pages/Auth/ResetPassword.vue'), meta: { guest: true } },
+    { path: '/maintenance', component: () => import('../pages/Maintenance.vue'), meta: { guest: true } },
 
     // === Partner SPA + Admin management pages ===
     {
@@ -42,6 +43,7 @@ const routes = [
             { path: 'help', component: () => import('../pages/Help.vue') },
             { path: 'instructions', component: () => import('../pages/Instructions.vue') },
             { path: 'profile', component: () => import('../pages/Profile.vue') },
+            { path: 'page/:slug', component: () => import('../pages/ContentPageView.vue') },
 
             // Staff management pages (inside main layout, staff-only)
             // Единый Рабочий стол: и «Главная» (/), и пункт меню «Рабочий стол»
@@ -154,6 +156,8 @@ const routes = [
             { path: 'design', component: () => import('../pages/Admin/Design.vue') },
             { path: 'custom-fields', component: () => import('../pages/Admin/CustomFields.vue') },
             { path: 'announcements', component: () => import('../pages/Admin/Announcements.vue') },
+            { path: 'feature-flags', component: () => import('../pages/Admin/FeatureFlags.vue') },
+            { path: 'content-pages', component: () => import('../pages/Admin/ContentPages.vue') },
             // API-ключи и токены перенесены во вкладку «API ключи»
             // раздела Интеграции (единая точка настройки внешних
             // сервисов). Старый путь редиректит для бэкап-ссылок.

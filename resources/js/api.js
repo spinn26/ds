@@ -57,6 +57,15 @@ api.interceptors.response.use(
             return api.request(config);
         }
 
+        // Режим обслуживания (503 с maintenance:true) — уводим на /maintenance.
+        if (status === 503 && error.response?.data?.maintenance) {
+            try { sessionStorage.setItem('maintenance_message', error.response.data.message || ''); } catch {}
+            if (!window.location.pathname.startsWith('/maintenance')) {
+                window.location.href = '/maintenance';
+            }
+            return Promise.reject(error);
+        }
+
         if (status === 401) {
             if (!url.includes('/auth/login') && !url.includes('/auth/register') && !url.includes('/auth/me')) {
                 localStorage.removeItem('auth');

@@ -149,6 +149,7 @@ const menuItems = [
       { to: '/admin/products', title: 'Продукты', icon: 'mdi-package-variant' },
       { to: '/admin/contests', title: 'Конкурсы и события', icon: 'mdi-trophy' },
       { to: '/admin/news', title: 'Новости', icon: 'mdi-newspaper' },
+      { to: '/admin/content-pages', title: 'Контент-страницы', icon: 'mdi-file-document-edit' },
       { to: '/admin/roadmap', title: 'Роадмап', icon: 'mdi-map-marker-path' },
     ],
   },
@@ -197,6 +198,7 @@ const menuItems = [
     children: [
       { to: '/admin/design', title: 'Дизайн', icon: 'mdi-palette' },
       { to: '/admin/settings', title: 'Настройки системы', icon: 'mdi-tune' },
+      { to: '/admin/feature-flags', title: 'Фиче-флаги', icon: 'mdi-flag-variant' },
       { to: '/admin/integrations', title: 'Интеграции', icon: 'mdi-cloud-sync' },
       { to: '/admin/monitoring', title: 'Мониторинг', icon: 'mdi-pulse' },
     ],

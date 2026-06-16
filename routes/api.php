@@ -66,7 +66,11 @@ Route::prefix('v1')->group(function () {
     Route::get('/design/active', [\App\Http\Controllers\Api\DesignController::class, 'active'])
         ->middleware('throttle:60,1');
 
-    Route::middleware('auth:sanctum')->group(function () {
+    Route::middleware(['auth:sanctum', 'maintenance'])->group(function () {
+        // Контент-страница по slug + активные фиче-флаги (доступны всем auth).
+        Route::get('/page/{slug}', [\App\Http\Controllers\Api\ContentPageController::class, 'show']);
+        Route::get('/features', [\App\Http\Controllers\Api\ContentPageController::class, 'features']);
+
         // 2FA setup/confirm/disable/status — под авторизацией.
         Route::get('/2fa/status', [\App\Http\Controllers\Api\TwoFactorController::class, 'status']);
         Route::post('/2fa/setup', [\App\Http\Controllers\Api\TwoFactorController::class, 'setup']);
@@ -290,6 +294,18 @@ Route::prefix('v1')->group(function () {
             Route::post('/admin/announcements', [\App\Http\Controllers\Api\AdminAnnouncementController::class, 'store']);
             Route::put('/admin/announcements/{id}', [\App\Http\Controllers\Api\AdminAnnouncementController::class, 'update'])->whereNumber('id');
             Route::delete('/admin/announcements/{id}', [\App\Http\Controllers\Api\AdminAnnouncementController::class, 'destroy'])->whereNumber('id');
+
+            // Фиче-флаги.
+            Route::get('/admin/feature-flags', [\App\Http\Controllers\Api\AdminFeatureFlagController::class, 'index']);
+            Route::post('/admin/feature-flags', [\App\Http\Controllers\Api\AdminFeatureFlagController::class, 'store']);
+            Route::put('/admin/feature-flags/{id}', [\App\Http\Controllers\Api\AdminFeatureFlagController::class, 'update'])->whereNumber('id');
+            Route::delete('/admin/feature-flags/{id}', [\App\Http\Controllers\Api\AdminFeatureFlagController::class, 'destroy'])->whereNumber('id');
+
+            // Контент-страницы.
+            Route::get('/admin/content-pages', [\App\Http\Controllers\Api\AdminContentPageController::class, 'index']);
+            Route::post('/admin/content-pages', [\App\Http\Controllers\Api\AdminContentPageController::class, 'store']);
+            Route::put('/admin/content-pages/{id}', [\App\Http\Controllers\Api\AdminContentPageController::class, 'update'])->whereNumber('id');
+            Route::delete('/admin/content-pages/{id}', [\App\Http\Controllers\Api\AdminContentPageController::class, 'destroy'])->whereNumber('id');
         });
 
         Route::middleware(['role:admin,backoffice,support,finance,head,calculations,corrections,education', 'restrict.education', 'restrict.head', 'restrict.support', 'restrict.corrections', 'throttle:2400,1'])->group(function () {
