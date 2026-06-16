@@ -150,6 +150,7 @@ const menuItems = [
       { to: '/admin/contests', title: 'Конкурсы и события', icon: 'mdi-trophy' },
       { to: '/admin/news', title: 'Новости', icon: 'mdi-newspaper' },
       { to: '/admin/content-pages', title: 'Контент-страницы', icon: 'mdi-file-document-edit' },
+      { to: '/admin/media', title: 'Медиа-библиотека', icon: 'mdi-folder-multiple-image' },
       { to: '/admin/roadmap', title: 'Роадмап', icon: 'mdi-map-marker-path' },
     ],
   },

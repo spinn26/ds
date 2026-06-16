@@ -310,6 +310,11 @@ Route::prefix('v1')->group(function () {
             // Система: кэш и планировщик.
             Route::post('/admin/ops/cache/clear', [\App\Http\Controllers\Api\AdminOpsController::class, 'clearCache'])->middleware('throttle:30,1');
             Route::get('/admin/ops/scheduled', [\App\Http\Controllers\Api\AdminOpsController::class, 'scheduledTasks']);
+
+            // Медиа-библиотека.
+            Route::get('/admin/media', [\App\Http\Controllers\Api\AdminMediaController::class, 'index']);
+            Route::post('/admin/media', [\App\Http\Controllers\Api\AdminMediaController::class, 'upload'])->middleware('throttle:60,1');
+            Route::delete('/admin/media', [\App\Http\Controllers\Api\AdminMediaController::class, 'destroy']);
         });
 
         Route::middleware(['role:admin,backoffice,support,finance,head,calculations,corrections,education', 'restrict.education', 'restrict.head', 'restrict.support', 'restrict.corrections', 'throttle:2400,1'])->group(function () {
@@ -320,6 +325,11 @@ Route::prefix('v1')->group(function () {
         Route::put('/admin/users/{id}', [AdminUserController::class, 'update']);
         Route::delete('/admin/users/{id}', [AdminUserController::class, 'destroy']);
         Route::get('/admin/users/{id}/login-history', [AdminUserController::class, 'loginHistory'])->whereNumber('id');
+
+        // Сегменты партнёров (сохранённые фильтры) — доступны staff-страницам.
+        Route::get('/admin/user-segments', [\App\Http\Controllers\Api\AdminUserSegmentController::class, 'index']);
+        Route::post('/admin/user-segments', [\App\Http\Controllers\Api\AdminUserSegmentController::class, 'store']);
+        Route::delete('/admin/user-segments/{id}', [\App\Http\Controllers\Api\AdminUserSegmentController::class, 'destroy'])->whereNumber('id');
 
         Route::get('/admin/partners', [\App\Http\Controllers\Api\AdminDataController::class, 'partners']);
         Route::get('/admin/partners/lookup', [\App\Http\Controllers\Api\AdminDataController::class, 'partnerLookup']);

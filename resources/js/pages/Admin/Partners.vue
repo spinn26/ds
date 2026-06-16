@@ -52,6 +52,23 @@
           prepend-icon="mdi-filter-off-outline" @click="resetFilters">
           Сбросить
         </v-btn>
+        <!-- Сегменты (сохранённые фильтры) -->
+        <v-select v-model="selectedSegment" :items="segments" item-title="name" item-value="id"
+          placeholder="Сегмент" density="compact" variant="outlined" hide-details clearable
+          prepend-inner-icon="mdi-filter-variant" style="max-width: 200px"
+          @update:model-value="applySegment">
+          <template #append-item>
+            <v-divider />
+            <v-list-item v-for="s in segments" :key="'del-' + s.id" density="compact">
+              <v-list-item-title class="text-caption">{{ s.name }}</v-list-item-title>
+              <template #append>
+                <v-btn icon="mdi-delete" size="x-small" variant="text" color="error" @click.stop="deleteSegment(s.id)" />
+              </template>
+            </v-list-item>
+          </template>
+        </v-select>
+        <v-btn size="small" variant="text" prepend-icon="mdi-content-save-outline"
+          title="Сохранить текущие фильтры как сегмент" @click="saveSegment">Сегмент</v-btn>
         <ColumnVisibilityMenu
           :headers="toggleableColumns"
           v-model:visible="columnVisible"
@@ -639,6 +656,51 @@ function resetFilters() {
   loadData();
 }
 
+// ===== Сегменты (сохранённые фильтры) =====
+const segments = ref([]);
+const selectedSegment = ref(null);
+
+function currentCriteria() {
+  return {
+    search: search.value || '',
+    activity: activityFilter.value ?? null,
+    status: statusFilter.value ?? null,
+    ...filters.value,
+  };
+}
+
+async function loadSegments() {
+  try { const { data } = await api.get('/admin/user-segments'); segments.value = data.segments || []; } catch {}
+}
+
+function applySegment(id) {
+  const seg = segments.value.find(s => s.id === id);
+  if (!seg) return;
+  const c = seg.criteria || {};
+  search.value = c.search || '';
+  activityFilter.value = c.activity ?? null;
+  statusFilter.value = c.status ?? null;
+  filters.value = {
+    partnerId: c.partnerId || '', inviterName: c.inviterName || '',
+    email: c.email || '', phone: c.phone || '',
+  };
+  loadData();
+}
+
+async function saveSegment() {
+  const name = (prompt('Название сегмента:') || '').trim();
+  if (!name) return;
+  try {
+    await api.post('/admin/user-segments', { name, criteria: currentCriteria() });
+    await loadSegments();
+  } catch {}
+}
+
+async function deleteSegment(id) {
+  if (!confirm('Удалить сегмент?')) return;
+  try { await api.delete(`/admin/user-segments/${id}`); selectedSegment.value = null; await loadSegments(); } catch {}
+}
+
 const activityOptions = [
   { title: 'Активен', value: '1' },
   { title: 'Терминирован', value: '3' },
@@ -1160,7 +1222,7 @@ async function changeStatus(action) {
   }
 }
 
-onMounted(loadData);
+onMounted(() => { loadData(); loadSegments(); });
 </script>
 
 <style scoped>
