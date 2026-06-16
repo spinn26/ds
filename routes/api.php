@@ -321,6 +321,14 @@ Route::prefix('v1')->group(function () {
             Route::get('/admin/qualification-matrix', [\App\Http\Controllers\Api\AdminQualificationMatrixController::class, 'index']);
             Route::put('/admin/qualification-matrix', [\App\Http\Controllers\Api\AdminQualificationMatrixController::class, 'update']);
 
+            // Исходящие вебхуки.
+            Route::get('/admin/webhooks', [\App\Http\Controllers\Api\AdminWebhookController::class, 'index']);
+            Route::post('/admin/webhooks', [\App\Http\Controllers\Api\AdminWebhookController::class, 'store']);
+            Route::put('/admin/webhooks/{id}', [\App\Http\Controllers\Api\AdminWebhookController::class, 'update'])->whereNumber('id');
+            Route::delete('/admin/webhooks/{id}', [\App\Http\Controllers\Api\AdminWebhookController::class, 'destroy'])->whereNumber('id');
+            Route::post('/admin/webhooks/{id}/test', [\App\Http\Controllers\Api\AdminWebhookController::class, 'test'])->whereNumber('id')->middleware('throttle:20,1');
+            Route::get('/admin/webhooks/{id}/deliveries', [\App\Http\Controllers\Api\AdminWebhookController::class, 'deliveries'])->whereNumber('id');
+
             // i18n-переопределения.
             Route::get('/admin/translations', [\App\Http\Controllers\Api\AdminTranslationController::class, 'index']);
             Route::post('/admin/translations', [\App\Http\Controllers\Api\AdminTranslationController::class, 'store']);

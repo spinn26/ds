@@ -208,6 +208,7 @@ const menuItems = [
       { to: '/admin/feature-flags', title: 'Фиче-флаги', icon: 'mdi-flag-variant' },
       { to: '/admin/translations', title: 'Переводы интерфейса', icon: 'mdi-translate' },
       { to: '/admin/integrations', title: 'Интеграции', icon: 'mdi-cloud-sync' },
+      { to: '/admin/webhooks', title: 'Вебхуки', icon: 'mdi-webhook' },
       { to: '/admin/monitoring', title: 'Мониторинг', icon: 'mdi-pulse' },
     ],
   },

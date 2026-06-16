@@ -24,6 +24,11 @@ class AdminAnnouncementController extends Controller
     {
         $a = Announcement::create($this->validateData($request));
 
+        // Исходящий вебхук (best-effort, не влияет на ответ).
+        \App\Services\WebhookService::dispatch('announcement.created', [
+            'id' => $a->id, 'title' => $a->title, 'type' => $a->type,
+        ]);
+
         return response()->json(['announcement' => $a], 201);
     }
 
