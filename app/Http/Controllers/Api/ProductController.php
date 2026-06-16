@@ -143,11 +143,14 @@ class ProductController extends Controller
         $products = $productRows->map(function ($p) use ($consultant, $hasAccess, $includeDrafts, $coursesByLegacy, $completedSet, $legacyPrograms, $catalogProgs, $currencyMap, $typeToId) {
             $legacyId = $p->legacy_product_id ? (int) $p->legacy_product_id : null;
 
-            $testPassed = ($consultant && $legacyId)
-                ? $this->isTestPassedForProduct($consultant, $legacyId)
-                : false;
-
             $linkedCourses = $legacyId ? ($coursesByLegacy[$legacyId] ?? collect()) : collect();
+
+            // «Тест пройден» = все курсы продукта пройдены (тот же источник,
+            // что и `available` — education_course_completions). Раньше брали
+            // из consultant.soldProducts, который submitTest НЕ заполняет, из-за
+            // чего флаг навсегда оставался false после успешной сдачи теста.
+            $testPassed = $linkedCourses->isNotEmpty()
+                && $linkedCourses->every(fn ($c) => isset($completedSet[$c->id]));
             // Партнёр в статусе ФК (2) / Резидент (3) НЕ проходит курсы —
             // витрина открыта по активности. Это покрывает и текущих, и тех,
             // кто станет партнёром позже. education_exempt оставлен как
@@ -529,17 +532,5 @@ class ProductController extends Controller
             'needsRequisites' => false,
             'needsAcceptance' => false,
         ];
-    }
-
-    private function isTestPassedForProduct(Consultant $consultant, int $productId): bool
-    {
-        $soldProducts = $consultant->soldProducts ?? '';
-        if (empty($soldProducts)) {
-            return false;
-        }
-
-        $passedIds = array_map('intval', explode(',', (string) $soldProducts));
-
-        return in_array($productId, $passedIds);
     }
 }

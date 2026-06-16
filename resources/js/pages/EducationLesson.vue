@@ -79,21 +79,38 @@
         </div>
 
         <div class="body-blocks">
-          <!-- Урок-тест: CTA на прохождение теста курса -->
+          <!-- Урок-тест: CTA на прохождение / статус «пройдено» -->
           <div v-if="lesson.isTest" class="test-lesson-card">
-            <v-icon size="64" color="primary" class="mb-3">mdi-help-circle-outline</v-icon>
-            <div class="text-h5 font-weight-bold mb-2">Тест по курсу</div>
-            <div class="text-body-1 text-medium-emphasis mb-4" style="max-width: 540px;">
-              Это итоговый тест. Ответьте правильно на все вопросы — и курс будет
-              считаться пройденным. После сдачи откроется доступ к продукту.
-            </div>
-            <v-btn
-              :to="`/education/courses/${route.params.id}/test`"
-              color="primary" size="large"
-              prepend-icon="mdi-play"
-            >
-              Пройти тест
-            </v-btn>
+            <template v-if="coursePassed">
+              <v-icon size="64" color="success" class="mb-3">mdi-check-decagram</v-icon>
+              <div class="text-h5 font-weight-bold mb-2">Тест пройден</div>
+              <div class="text-body-1 text-medium-emphasis mb-4" style="max-width: 540px;">
+                Вы успешно сдали итоговый тест по курсу — доступ к продукту открыт.
+                При желании можно пройти его ещё раз.
+              </div>
+              <v-btn
+                :to="`/education/courses/${route.params.id}/test`"
+                variant="tonal" color="primary" size="large"
+                prepend-icon="mdi-restart"
+              >
+                Пройти заново
+              </v-btn>
+            </template>
+            <template v-else>
+              <v-icon size="64" color="primary" class="mb-3">mdi-help-circle-outline</v-icon>
+              <div class="text-h5 font-weight-bold mb-2">Тест по курсу</div>
+              <div class="text-body-1 text-medium-emphasis mb-4" style="max-width: 540px;">
+                Это итоговый тест. Ответьте правильно на все вопросы — и курс будет
+                считаться пройденным. После сдачи откроется доступ к продукту.
+              </div>
+              <v-btn
+                :to="`/education/courses/${route.params.id}/test`"
+                color="primary" size="large"
+                prepend-icon="mdi-play"
+              >
+                Пройти тест
+              </v-btn>
+            </template>
           </div>
 
           <!-- Описание из legacy content -->
@@ -445,6 +462,12 @@ const nextLesson = computed(() => {
 const hasTest = computed(() => {
   const c = findInTree(tree.value, Number(route.params.id));
   return c?.hasTest && !c?.testPassed;
+});
+
+// Тест курса уже сдан — для урока-теста показываем «пройдено», а не CTA.
+const coursePassed = computed(() => {
+  const c = findInTree(tree.value, Number(route.params.id));
+  return !!c?.testPassed;
 });
 
 // Показываем sidebar только если есть что отрисовать: либо подмодули
