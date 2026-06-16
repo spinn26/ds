@@ -331,4 +331,45 @@ class AdminOpsController extends Controller
 
         return response()->json(['settings' => $settings]);
     }
+
+    /** POST /admin/ops/cache/clear — очистка кэшей приложения. */
+    public function clearCache(Request $request): JsonResponse
+    {
+        $target = $request->input('target', 'app');
+        $map = [
+            'app' => 'cache:clear',
+            'config' => 'config:clear',
+            'route' => 'route:clear',
+            'view' => 'view:clear',
+        ];
+        if (! isset($map[$target])) {
+            return response()->json(['message' => 'Неизвестная цель'], 422);
+        }
+
+        \Illuminate\Support\Facades\Artisan::call($map[$target]);
+        // Доп. сброс известных in-memory карт (на случай иного стора).
+        if ($target === 'app') {
+            Cache::forget('calculator:product-matrix:v2');
+            Cache::forget('system_settings:map');
+            Cache::forget('feature_flags:map');
+        }
+
+        return response()->json([
+            'message' => 'Кэш очищен: ' . $map[$target],
+            'output' => trim(\Illuminate\Support\Facades\Artisan::output()),
+        ]);
+    }
+
+    /** GET /admin/ops/scheduled — список задач планировщика (read-only). */
+    public function scheduledTasks(): JsonResponse
+    {
+        try {
+            \Illuminate\Support\Facades\Artisan::call('schedule:list');
+            $output = \Illuminate\Support\Facades\Artisan::output();
+        } catch (\Throwable $e) {
+            $output = 'Не удалось получить список: ' . $e->getMessage();
+        }
+
+        return response()->json(['output' => trim($output)]);
+    }
 }

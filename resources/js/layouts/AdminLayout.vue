@@ -166,6 +166,7 @@ const menuItems = [
     children: [
       { to: '/admin/calendar', title: 'Календарь операций', icon: 'mdi-calendar-check' },
       { to: '/admin/bulk-ops', title: 'Массовые операции', icon: 'mdi-format-list-bulleted-square' },
+      { to: '/admin/system', title: 'Система (кэш/планировщик)', icon: 'mdi-server-network' },
     ],
   },
   {

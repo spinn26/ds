@@ -158,6 +158,7 @@ const routes = [
             { path: 'announcements', component: () => import('../pages/Admin/Announcements.vue') },
             { path: 'feature-flags', component: () => import('../pages/Admin/FeatureFlags.vue') },
             { path: 'content-pages', component: () => import('../pages/Admin/ContentPages.vue') },
+            { path: 'system', component: () => import('../pages/Admin/SystemOps.vue') },
             // API-ключи и токены перенесены во вкладку «API ключи»
             // раздела Интеграции (единая точка настройки внешних
             // сервисов). Старый путь редиректит для бэкап-ссылок.

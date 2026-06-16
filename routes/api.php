@@ -306,6 +306,10 @@ Route::prefix('v1')->group(function () {
             Route::post('/admin/content-pages', [\App\Http\Controllers\Api\AdminContentPageController::class, 'store']);
             Route::put('/admin/content-pages/{id}', [\App\Http\Controllers\Api\AdminContentPageController::class, 'update'])->whereNumber('id');
             Route::delete('/admin/content-pages/{id}', [\App\Http\Controllers\Api\AdminContentPageController::class, 'destroy'])->whereNumber('id');
+
+            // Система: кэш и планировщик.
+            Route::post('/admin/ops/cache/clear', [\App\Http\Controllers\Api\AdminOpsController::class, 'clearCache'])->middleware('throttle:30,1');
+            Route::get('/admin/ops/scheduled', [\App\Http\Controllers\Api\AdminOpsController::class, 'scheduledTasks']);
         });
 
         Route::middleware(['role:admin,backoffice,support,finance,head,calculations,corrections,education', 'restrict.education', 'restrict.head', 'restrict.support', 'restrict.corrections', 'throttle:2400,1'])->group(function () {
