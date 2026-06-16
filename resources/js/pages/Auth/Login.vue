@@ -61,6 +61,7 @@
         <!-- Шаг 1: email + password -->
         <v-form v-if="!challenge" @submit.prevent="handleLogin" class="form-fields">
           <v-text-field
+            v-autofill
             v-model="email"
             label="Электронная почта"
             type="email"
@@ -72,6 +73,7 @@
             required
           />
           <v-text-field
+            v-autofill
             v-model="password"
             label="Пароль"
             :type="showPw ? 'text' : 'password'"
@@ -141,6 +143,27 @@ import BrandWaves from '../../components/BrandWaves.vue';
 
 const design = useDesignStore();
 const { mobile } = useDisplay();
+
+// Chrome-автозаполнение не триггерит input-событие → Vuetify не обновляет
+// v-model, плавающий label не поднимается и накладывается на значение.
+// Директива ловит CSS-анимацию автозаполнения и форсит input-событие.
+const vAutofill = {
+  mounted(el) {
+    const input = el.querySelector('input');
+    if (!input) return;
+    const sync = () => input.dispatchEvent(new Event('input', { bubbles: true }));
+    const onAnim = (e) => { if (e.animationName === 'dsAutofillStart') sync(); };
+    input.addEventListener('animationstart', onAnim);
+    // Подстраховка: значение могло быть подставлено до навешивания слушателя
+    setTimeout(() => {
+      try { if (input.value && input.matches(':-webkit-autofill')) sync(); } catch { /* noop */ }
+    }, 400);
+    el._dsAutofill = { input, onAnim };
+  },
+  unmounted(el) {
+    if (el._dsAutofill) el._dsAutofill.input.removeEventListener('animationstart', el._dsAutofill.onAnim);
+  },
+};
 
 const auth = useAuthStore();
 const router = useRouter();
@@ -352,4 +375,24 @@ function cancelVerify() {
   text-decoration: none;
 }
 .form-aux :deep(a:hover) { text-decoration: underline; }
+</style>
+
+<!-- Global (НЕ scoped): имя keyframe должно остаться стабильным —
+     по нему JS-директива ловит событие автозаполнения. Селектор
+     ограничен .auth-form, поэтому не протекает на другие страницы. -->
+<style>
+@keyframes dsAutofillStart { from { opacity: 1; } to { opacity: 1; } }
+
+.auth-form input:-webkit-autofill,
+.auth-form input:-webkit-autofill:hover,
+.auth-form input:-webkit-autofill:focus {
+  /* триггер animationstart для директивы */
+  animation-name: dsAutofillStart;
+  animation-duration: 0.001s;
+  /* убрать синий/жёлтый фон автозаполнения, сохранить читаемый текст */
+  -webkit-text-fill-color: rgb(var(--v-theme-on-surface));
+  -webkit-box-shadow: 0 0 0 1000px rgb(var(--v-theme-surface)) inset;
+  caret-color: rgb(var(--v-theme-on-surface));
+  transition: background-color 9999s ease-in-out 0s;
+}
 </style>
