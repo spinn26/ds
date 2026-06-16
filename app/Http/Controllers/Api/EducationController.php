@@ -42,7 +42,8 @@ class EducationController extends Controller
     public function search(Request $request): JsonResponse
     {
         $q = trim((string) $request->query('q', ''));
-        if (mb_strlen($q) < 2) return response()->json(['items' => []]);
+        $minChars = (int) \App\Models\SystemSetting::value('education.search_min_chars', 2);
+        if (mb_strlen($q) < $minChars) return response()->json(['items' => []]);
         $like = '%' . mb_strtolower($q) . '%';
 
         $courses = DB::table('education_courses')
@@ -78,7 +79,8 @@ class EducationController extends Controller
                 ])
             : collect();
 
-        $items = $courses->concat($lessons)->concat($kb)->take(30)->values();
+        $limit = (int) \App\Models\SystemSetting::value('education.search_limit', 30);
+        $items = $courses->concat($lessons)->concat($kb)->take($limit)->values();
         return response()->json(['items' => $items]);
     }
 

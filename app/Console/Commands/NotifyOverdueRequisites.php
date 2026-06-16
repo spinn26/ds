@@ -92,7 +92,9 @@ class NotifyOverdueRequisites extends Command
 
     private function resolveRecipientId(): ?int
     {
-        $email = config('services.requisites.overdue_notify_email');
+        // Приоритет — настройка из админки, фолбэк — config/services.
+        $email = \App\Models\SystemSetting::value('notifications.requisites_overdue_email')
+            ?: config('services.requisites.overdue_notify_email');
         if (! $email) {
             return null;
         }

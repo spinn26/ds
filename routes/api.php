@@ -248,6 +248,10 @@ Route::prefix('v1')->group(function () {
         Route::middleware('role:admin')->group(function () {
             Route::post('/impersonate/{user}', [ImpersonateController::class, 'impersonate']);
             Route::post('/impersonate/leave', [ImpersonateController::class, 'leave']);
+
+            // Раздел «Настройки» (system_settings) — только admin.
+            Route::get('/admin/settings', [\App\Http\Controllers\Api\AdminSettingsController::class, 'index']);
+            Route::put('/admin/settings', [\App\Http\Controllers\Api\AdminSettingsController::class, 'update']);
         });
 
         Route::middleware(['role:admin,backoffice,support,finance,head,calculations,corrections,education', 'restrict.education', 'restrict.head', 'restrict.support', 'restrict.corrections', 'throttle:2400,1'])->group(function () {
@@ -486,6 +490,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/admin/reports/sales-matrix/fc', [\App\Http\Controllers\Api\ProductSalesMatrixController::class, 'fcMatrix']);
         Route::get('/admin/reports/sales-matrix/period', [\App\Http\Controllers\Api\ProductSalesMatrixController::class, 'quarterlyMatrix']);
         Route::get('/admin/reports/sales-matrix/forecast', [\App\Http\Controllers\Api\ProductSalesMatrixController::class, 'forecastMatrix']);
+        Route::get('/admin/reports/sales-matrix/fact', [\App\Http\Controllers\Api\ProductSalesMatrixController::class, 'factMatrix']);
         Route::get('/admin/reports/sales-matrix/monthly', [\App\Http\Controllers\Api\ProductSalesMatrixController::class, 'monthly']);
 
         // Admin — Payment registry (spec ✅Реестр выплат.md)

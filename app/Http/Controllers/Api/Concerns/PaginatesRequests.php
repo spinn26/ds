@@ -24,8 +24,12 @@ trait PaginatesRequests
 
     protected function paginationPerPage(Request $request): int
     {
-        $perPage = (int) $request->input('per_page', $this->defaultPerPage);
-        return max(1, min($this->maxPerPage, $perPage));
+        // Значения настраиваются из админки (system_settings) с фолбэком
+        // на прежние константы.
+        $default = (int) \App\Models\SystemSetting::value('pagination.default_per_page', $this->defaultPerPage);
+        $max = (int) \App\Models\SystemSetting::value('pagination.max_per_page', $this->maxPerPage);
+        $perPage = (int) $request->input('per_page', $default);
+        return max(1, min($max, $perPage));
     }
 
     protected function paginationPage(Request $request): int

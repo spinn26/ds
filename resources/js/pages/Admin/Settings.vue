@@ -1,46 +1,136 @@
 <template>
   <div>
-    <PageHeader title="Настройки системы" icon="mdi-cog" />
+    <PageHeader title="Настройки системы" icon="mdi-cog">
+      <template #actions>
+        <v-btn color="primary" prepend-icon="mdi-content-save" :loading="saving"
+          :disabled="!dirty" @click="save">Сохранить</v-btn>
+      </template>
+    </PageHeader>
 
-    <v-alert type="warning" variant="tonal" class="mb-3">
-      Большинство констант сейчас зашиты в коде. Редактирование через UI требует
-      таблицы <code>system_settings</code> и передачи значений в сервисы. Страница
-      показывает текущие значения для инспекции.
+    <v-alert type="info" variant="tonal" density="comfortable" class="mb-3">
+      Изменения применяются сразу после сохранения. Каждый параметр читается
+      сервисами с фолбэком на прежнее значение, поэтому пустые/некорректные
+      значения безопасны. Денежные правила (комиссии/пул/штрафы) появятся здесь
+      в следующей фазе.
     </v-alert>
 
     <v-card>
-      <div class="d-flex justify-end px-3 pt-2">
-        <ColumnVisibilityMenu :headers="headers" v-model:visible="columnVisible" storage-key="settings-cols" />
+      <v-tabs v-model="tab" color="primary" show-arrows>
+        <v-tab v-for="g in groups" :key="g.category" :value="g.category">
+          {{ g.title }}
+        </v-tab>
+      </v-tabs>
+
+      <v-divider />
+
+      <v-window v-model="tab">
+        <v-window-item v-for="g in groups" :key="g.category" :value="g.category">
+          <v-card-text>
+            <div v-for="item in g.items" :key="item.key" class="setting-row">
+              <div class="setting-meta">
+                <div class="text-body-2 font-weight-medium">{{ item.label || item.key }}</div>
+                <div v-if="item.description" class="text-caption text-medium-emphasis">
+                  {{ item.description }}
+                </div>
+                <code class="text-caption text-disabled">{{ item.key }}</code>
+              </div>
+              <div class="setting-control">
+                <v-switch v-if="item.type === 'bool'" v-model="form[item.key]"
+                  color="primary" density="compact" hide-details inset
+                  @update:model-value="markDirty" />
+                <v-text-field v-else-if="item.type === 'int' || item.type === 'float'"
+                  v-model.number="form[item.key]" type="number" density="compact"
+                  variant="outlined" hide-details style="max-width: 220px"
+                  @update:model-value="markDirty" />
+                <v-textarea v-else-if="item.type === 'json'" v-model="form[item.key]"
+                  rows="3" auto-grow density="compact" variant="outlined" hide-details
+                  @update:model-value="markDirty" />
+                <v-text-field v-else v-model="form[item.key]" density="compact"
+                  variant="outlined" hide-details style="max-width: 360px"
+                  :placeholder="item.isSecret ? '•••••• (скрыто)' : ''"
+                  @update:model-value="markDirty" />
+              </div>
+            </div>
+            <EmptyState v-if="!g.items.length" message="Нет параметров в этой категории" />
+          </v-card-text>
+        </v-window-item>
+      </v-window>
+
+      <div v-if="loading" class="pa-6 d-flex justify-center">
+        <v-progress-circular indeterminate color="primary" />
       </div>
-      <v-data-table :items="settings" :headers="visibleHeaders" density="comfortable" hover>
-        <template #item.editable="{ value }">
-          <BooleanCell :value="!!value" :tooltip="{ on: 'Можно менять', off: 'Только код' }" />
-        </template>
-        <template #item.source="{ value }"><code class="text-caption">{{ value }}</code></template>
-      </v-data-table>
     </v-card>
+
+    <v-snackbar v-model="snack.open" :color="snack.color" timeout="4000">{{ snack.text }}</v-snackbar>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, reactive, onMounted } from 'vue';
 import api from '../../api';
-import { PageHeader, BooleanCell, ColumnVisibilityMenu } from '../../components';
+import { PageHeader, EmptyState } from '../../components';
 
-const settings = ref([]);
+const groups = ref([]);
+const form = reactive({});
+const tab = ref(null);
+const loading = ref(true);
+const saving = ref(false);
+const dirty = ref(false);
+const snack = ref({ open: false, color: 'success', text: '' });
 
-const headers = [
-  { title: 'Параметр', key: 'label' },
-  { title: 'Значение', key: 'value', width: 150 },
-  { title: 'Источник', key: 'source' },
-  { title: 'Меняется', key: 'editable', width: 100 },
-];
-
-const columnVisible = ref({});
-const visibleHeaders = computed(() => headers.filter(h => columnVisible.value[h.key] !== false));
+function notify(text, color = 'success') { snack.value = { open: true, color, text }; }
+function markDirty() { dirty.value = true; }
 
 async function load() {
-  try { const { data } = await api.get('/admin/ops/settings'); settings.value = data.settings || []; } catch {}
+  loading.value = true;
+  try {
+    const { data } = await api.get('/admin/settings');
+    groups.value = data.groups || [];
+    for (const g of groups.value) {
+      for (const item of g.items) {
+        form[item.key] = item.value;
+      }
+    }
+    if (groups.value.length) tab.value = groups.value[0].category;
+  } catch (e) {
+    notify(e.response?.data?.message || 'Ошибка загрузки', 'error');
+  }
+  loading.value = false;
 }
+
+async function save() {
+  saving.value = true;
+  try {
+    const payload = {};
+    for (const g of groups.value) {
+      for (const item of g.items) {
+        // Скрытые поля не отправляем пустыми (чтобы не затирать секрет).
+        if (item.isSecret && (form[item.key] === null || form[item.key] === '')) continue;
+        payload[item.key] = form[item.key];
+      }
+    }
+    await api.put('/admin/settings', { settings: payload });
+    dirty.value = false;
+    notify('Настройки сохранены');
+  } catch (e) {
+    notify(e.response?.data?.message || 'Ошибка сохранения', 'error');
+  }
+  saving.value = false;
+}
+
 onMounted(load);
 </script>
+
+<style scoped>
+.setting-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 24px;
+  padding: 14px 0;
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.06);
+}
+.setting-row:last-child { border-bottom: none; }
+.setting-meta { flex: 1 1 auto; min-width: 0; }
+.setting-meta code { display: block; margin-top: 2px; }
+.setting-control { flex: 0 0 auto; display: flex; align-items: center; }
+</style>

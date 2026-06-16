@@ -43,8 +43,10 @@ Schedule::command('platform:health-check')
 // токены копятся в personal_access_tokens. Чистим раз в сутки.
 Schedule::command('sanctum:prune-expired --hours=24')->dailyAt('03:00');
 
-// Failed jobs старше 30 дней — иначе таблица растёт.
-Schedule::command('queue:prune-failed --hours=720')->dailyAt('03:15');
+// Failed jobs — срок хранения настраивается в админке (Обслуживание),
+// фолбэк 30 дней. Читается при загрузке планировщика.
+$failedHours = (int) \App\Models\SystemSetting::value('maintenance.failed_jobs_retention_days', 30) * 24;
+Schedule::command("queue:prune-failed --hours={$failedHours}")->dailyAt('03:15');
 
 // Job batches старше 7 дней (unfinished — старше суток).
 Schedule::command('queue:prune-batches --hours=168 --unfinished=24')
@@ -53,8 +55,9 @@ Schedule::command('queue:prune-batches --hours=168 --unfinished=24')
 // Журнал интеграций (integration_events): хранить 90 дней. Таблица растёт
 // на ~1000 событий/день — за год это гигабайты, в основном бесполезные.
 Schedule::call(function () {
+    $days = (int) \App\Models\SystemSetting::value('maintenance.integration_events_retention_days', 90);
     \Illuminate\Support\Facades\DB::table('integration_events')
-        ->where('created_at', '<', now()->subDays(90))
+        ->where('created_at', '<', now()->subDays($days))
         ->delete();
 })->dailyAt('03:30')->name('integration-events:prune');
 
@@ -62,8 +65,9 @@ Schedule::call(function () {
 // (для compliance достаточно chat_ticket_changes).
 Schedule::call(function () {
     if (\Illuminate\Support\Facades\Schema::hasTable('mail_log')) {
+        $days = (int) \App\Models\SystemSetting::value('maintenance.mail_log_retention_days', 365);
         \Illuminate\Support\Facades\DB::table('mail_log')
-            ->where('created_at', '<', now()->subYear())
+            ->where('created_at', '<', now()->subDays($days))
             ->delete();
     }
 })->monthlyOn(1, '03:45')->name('mail-log:prune');

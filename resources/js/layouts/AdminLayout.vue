@@ -120,16 +120,56 @@ function toggleRail() {
   localStorage.setItem('admin-nav-rail', rail.value ? '1' : '0');
 }
 
+// Bitrix-style разбивка админ-консоли на верхнеуровневые категории.
+// Каждая категория — раскрывающаяся группа (v-list-group) с пунктами.
 const menuItems = [
-  { to: '/admin/dashboard', icon: 'mdi-chart-areaspline', title: 'Дашборд' },
-  { to: '/admin/owner-dashboard', icon: 'mdi-crown', title: 'Дашборд руководителя' },
-  { to: '/admin/users', icon: 'mdi-account-cog', title: 'Пользователи' },
-  { to: '/admin/partners', icon: 'mdi-account-group', title: 'Партнёры' },
-  { to: '/admin/clients', icon: 'mdi-account-multiple', title: 'Клиенты' },
-  { to: '/admin/news', icon: 'mdi-newspaper', title: 'Новости' },
-  { to: '/admin/roadmap', icon: 'mdi-map-marker-path', title: 'Роадмап' },
-  { to: '/admin/products', icon: 'mdi-package-variant', title: 'Продукты' },
-  { to: '/admin/contests', icon: 'mdi-trophy', title: 'Конкурсы и события' },
+  {
+    title: 'Рабочий стол', icon: 'mdi-view-dashboard',
+    children: [
+      { to: '/admin/dashboard', title: 'Дашборд', icon: 'mdi-chart-areaspline' },
+      { to: '/admin/owner-dashboard', title: 'Дашборд руководителя', icon: 'mdi-crown' },
+    ],
+  },
+  {
+    title: 'Пользователи и клиенты', icon: 'mdi-account-group',
+    children: [
+      { to: '/admin/users', title: 'Пользователи', icon: 'mdi-account-cog' },
+      { to: '/admin/partners', title: 'Партнёры', icon: 'mdi-account-group' },
+      { to: '/admin/clients', title: 'Клиенты', icon: 'mdi-account-multiple' },
+      { to: '/admin/activity', title: 'Активность', icon: 'mdi-account-multiple-check' },
+    ],
+  },
+  {
+    title: 'Контент и продукты', icon: 'mdi-package-variant',
+    children: [
+      { to: '/admin/products', title: 'Продукты', icon: 'mdi-package-variant' },
+      { to: '/admin/contests', title: 'Конкурсы и события', icon: 'mdi-trophy' },
+      { to: '/admin/news', title: 'Новости', icon: 'mdi-newspaper' },
+      { to: '/admin/roadmap', title: 'Роадмап', icon: 'mdi-map-marker-path' },
+    ],
+  },
+  {
+    title: 'Финансы и контроль', icon: 'mdi-scale-balance',
+    children: [
+      { to: '/admin/reconciliation', title: 'Сверка балансов', icon: 'mdi-scale-balance' },
+      { to: '/admin/anomalies', title: 'Аномалии', icon: 'mdi-alert-decagram' },
+      { to: '/admin/cohorts', title: 'Когорты', icon: 'mdi-chart-line' },
+    ],
+  },
+  {
+    title: 'Операции', icon: 'mdi-cogs',
+    children: [
+      { to: '/admin/calendar', title: 'Календарь операций', icon: 'mdi-calendar-check' },
+      { to: '/admin/bulk-ops', title: 'Массовые операции', icon: 'mdi-format-list-bulleted-square' },
+    ],
+  },
+  {
+    title: 'Маркетинг и уведомления', icon: 'mdi-bullhorn',
+    children: [
+      { to: '/admin/mail', title: 'Почтовая рассылка', icon: 'mdi-email-fast' },
+      { to: '/admin/triggers', title: 'Триггеры уведомлений', icon: 'mdi-robot' },
+    ],
+  },
   {
     title: 'Справочники', icon: 'mdi-book-cog',
     children: [
@@ -147,17 +187,14 @@ const menuItems = [
       { to: '/admin/references/meetingType',         title: 'Типы встреч',            icon: 'mdi-calendar-account' },
     ],
   },
-  { to: '/admin/reconciliation', icon: 'mdi-scale-balance', title: 'Сверка балансов' },
-  { to: '/admin/anomalies', icon: 'mdi-alert-decagram', title: 'Аномалии' },
-  { to: '/admin/calendar', icon: 'mdi-calendar-check', title: 'Календарь операций' },
-  { to: '/admin/bulk-ops', icon: 'mdi-format-list-bulleted-square', title: 'Массовые операции' },
-  { to: '/admin/cohorts', icon: 'mdi-chart-line', title: 'Когорты' },
-  { to: '/admin/mail', icon: 'mdi-email-fast', title: 'Почтовая рассылка' },
-  { to: '/admin/triggers', icon: 'mdi-robot', title: 'Триггеры уведомлений' },
-  { to: '/admin/integrations', icon: 'mdi-cloud-sync', title: 'Интеграции' },
-  { to: '/admin/settings', icon: 'mdi-cog', title: 'Настройки системы' },
-  { to: '/admin/activity', icon: 'mdi-account-multiple-check', title: 'Активность' },
-  { to: '/admin/monitoring', icon: 'mdi-pulse', title: 'Мониторинг' },
+  {
+    title: 'Настройки', icon: 'mdi-cog',
+    children: [
+      { to: '/admin/settings', title: 'Настройки системы', icon: 'mdi-tune' },
+      { to: '/admin/integrations', title: 'Интеграции', icon: 'mdi-cloud-sync' },
+      { to: '/admin/monitoring', title: 'Мониторинг', icon: 'mdi-pulse' },
+    ],
+  },
 ];
 
 const initials = computed(() =>
