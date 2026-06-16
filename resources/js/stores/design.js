@@ -22,6 +22,7 @@ export const useDesignStore = defineStore('design', {
       typography: { fontFamily: '', baseSize: null },
       radius: { sm: null, md: null, lg: null, xl: null },
       shadows: { card: '' },
+      tokens: {},
       customCss: '',
     },
     loaded: false,
@@ -76,6 +77,13 @@ export const useDesignStore = defineStore('design', {
       if (r.md) root += `--ds-radius-md:${r.md}px;`;
       if (r.lg) root += `--ds-radius-lg:${r.lg}px;`;
       if (r.xl) root += `--ds-radius-xl:${r.xl}px;`;
+
+      // Расширенные токены: произвольные --ds-* (отступы, высоты, анимации,
+      // тени-уровни и т.д.). Значение — полная CSS-строка (с единицами).
+      const tokens = config.tokens || {};
+      for (const [k, v] of Object.entries(tokens)) {
+        if (v !== null && v !== undefined && v !== '') root += `--ds-${k}:${v};`;
+      }
 
       let css = root ? `:root{${root}}` : '';
       if (t.fontFamily) css += `.v-application,body{font-family:${t.fontFamily} !important;}`;

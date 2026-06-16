@@ -107,6 +107,8 @@ class AdminDesignController extends Controller
             'config.radius.xl' => ['nullable', 'integer', 'min:0', 'max:60'],
             'config.shadows' => ['nullable', 'array'],
             'config.shadows.card' => ['nullable', 'string', 'in:,none,soft,medium,strong'],
+            'config.tokens' => ['nullable', 'array'],
+            'config.tokens.*' => ['nullable', 'string', 'max:300'],
             'config.customCss' => ['nullable', 'string', 'max:50000'],
         ]);
     }

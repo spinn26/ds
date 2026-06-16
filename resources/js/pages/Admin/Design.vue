@@ -174,6 +174,30 @@
             </v-expansion-panel-text>
           </v-expansion-panel>
 
+          <!-- Расширенные токены (полная кастомизация --ds-*) -->
+          <v-expansion-panel value="tokens">
+            <v-expansion-panel-title>
+              <v-icon start size="20">mdi-tune-variant</v-icon> Расширенные токены (--ds-*)
+            </v-expansion-panel-title>
+            <v-expansion-panel-text>
+              <template v-for="g in tokenGroups" :key="g.title">
+                <div class="text-overline text-medium-emphasis mt-2">{{ g.title }}</div>
+                <v-row dense>
+                  <v-col v-for="[key, label] in g.tokens" :key="key" cols="12" sm="6" md="4">
+                    <v-text-field :model-value="form.config.tokens[key]"
+                      @update:model-value="v => (form.config.tokens[key] = v)"
+                      :label="label" density="compact" hide-details class="token-field" />
+                  </v-col>
+                </v-row>
+              </template>
+              <div class="text-caption text-medium-emphasis mt-3">
+                Значение — полная CSS-строка с единицами (напр. <code>16px</code>,
+                <code>120ms</code>, <code>cubic-bezier(...)</code>, box-shadow).
+                Влияет на компоненты, использующие соответствующие <code>--ds-*</code> токены.
+              </div>
+            </v-expansion-panel-text>
+          </v-expansion-panel>
+
           <!-- Кастомный CSS -->
           <v-expansion-panel value="css">
             <v-expansion-panel-title>
@@ -224,6 +248,29 @@ const colorLabels = {
   'surface-variant': 'Поверхность-вариант', outline: 'Обводка',
   'outline-variant': 'Обводка-вариант', brand: 'Бренд (мята)', 'brand-ink': 'Бренд-текст',
 };
+// Каталог расширенных --ds-* токенов для «полной кастомизации».
+// value формы = config.tokens[key]; значение — полная CSS-строка.
+const tokenGroups = [
+  { title: 'Отступы', tokens: [
+    ['space-1', 'space-1'], ['space-2', 'space-2'], ['space-3', 'space-3'], ['space-4', 'space-4 (контент)'],
+    ['space-5', 'space-5'], ['space-6', 'space-6'], ['space-7', 'space-7'], ['space-8', 'space-8'],
+  ] },
+  { title: 'Скругления (доп.)', tokens: [
+    ['radius-xs', 'radius-xs'], ['radius-2xl', 'radius-2xl'], ['radius-pill', 'radius-pill'],
+  ] },
+  { title: 'Высоты контролов', tokens: [
+    ['h-control', 'h-control'], ['h-control-sm', 'h-control-sm'], ['h-control-lg', 'h-control-lg'],
+    ['h-row', 'h-row'], ['h-row-compact', 'h-row-compact'],
+  ] },
+  { title: 'Анимации', tokens: [
+    ['dur-fast', 'dur-fast'], ['dur-medium', 'dur-medium'], ['dur-slow', 'dur-slow'],
+    ['ease-standard', 'ease-standard'],
+  ] },
+  { title: 'Тени (по уровням)', tokens: [
+    ['shadow-1', 'shadow-1'], ['shadow-2', 'shadow-2'], ['shadow-3', 'shadow-3'], ['shadow-4', 'shadow-4'],
+  ] },
+];
+
 const shadowPresets = [
   { title: 'По умолчанию (тема)', value: '' },
   { title: 'Без тени', value: 'none' },
@@ -261,6 +308,7 @@ function emptyConfig() {
     typography: { fontFamily: '', baseSize: 14 },
     radius: { sm: 6, md: 8, lg: 12, xl: 16 },
     shadows: { card: '' },
+    tokens: {},
     customCss: '',
   };
 }
@@ -286,6 +334,7 @@ function fillForm(t) {
     typography: { ...base.typography, ...(c.typography || {}) },
     radius: { ...base.radius, ...(c.radius || {}) },
     shadows: { ...base.shadows, ...(c.shadows || {}) },
+    tokens: { ...(c.tokens || {}) },
   };
 }
 
