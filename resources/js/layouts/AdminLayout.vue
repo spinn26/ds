@@ -6,7 +6,8 @@
       <div class="d-flex align-center pa-4 drawer-brand">
         <div v-if="!rail" class="flex-grow-1">
           <div class="d-flex align-center ga-1">
-            <span class="text-h6 font-weight-black text-white">DS</span>
+            <img v-if="design.logoUrl" :src="design.logoUrl" alt="logo" style="max-height: 24px" />
+            <span v-else class="text-h6 font-weight-black text-white">{{ design.logoText }}</span>
             <span class="text-caption text-grey-lighten-1">УПРАВЛЕНИЕ</span>
           </div>
           <div style="font-size: 0.55rem; letter-spacing: 1.5px; color: rgba(255,255,255,0.35); margin-top: -2px">
@@ -56,7 +57,7 @@
     <v-app-bar flat border="b" color="grey-darken-4" theme="dark">
       <v-app-bar-nav-icon v-if="mobile" @click="drawer = !drawer" />
       <v-toolbar-title class="text-body-1">
-        <v-icon icon="mdi-shield-crown" color="secondary" class="mr-1" /> DS Управление
+        <v-icon icon="mdi-shield-crown" color="secondary" class="mr-1" /> {{ design.logoText }} Управление
       </v-toolbar-title>
       <v-spacer />
       <span class="text-body-2 text-grey-lighten-1 mr-3">{{ auth.user?.firstName }} {{ auth.user?.lastName }}</span>
@@ -91,6 +92,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useDisplay, useTheme } from 'vuetify';
 import { useAuthStore } from '../stores/auth';
+import { useDesignStore } from '../stores/design';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import GlobalSnackbar from '../components/GlobalSnackbar.vue';
 import { provideConfirm } from '../composables/useConfirm';
@@ -99,6 +101,7 @@ const confirmRef = ref(null);
 provideConfirm(confirmRef);
 
 const auth = useAuthStore();
+const design = useDesignStore();
 const { mobile } = useDisplay();
 const theme = useTheme();
 

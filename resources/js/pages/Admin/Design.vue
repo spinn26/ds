@@ -126,11 +126,18 @@ import { useDesignStore } from '../../stores/design';
 const theme = useTheme();
 const design = useDesignStore();
 
-const colorKeys = ['primary', 'secondary', 'tertiary', 'success', 'warning', 'error', 'info', 'background', 'surface', 'brand'];
+const colorKeys = [
+  'primary', 'secondary', 'tertiary', 'success', 'warning', 'error', 'info',
+  'background', 'surface', 'on-surface', 'on-surface-variant', 'surface-variant',
+  'outline', 'outline-variant', 'brand', 'brand-ink',
+];
 const colorLabels = {
   primary: 'Основной', secondary: 'Вторичный', tertiary: 'Третичный',
   success: 'Успех', warning: 'Предупреждение', error: 'Ошибка', info: 'Инфо',
-  background: 'Фон', surface: 'Поверхность', brand: 'Бренд (мята)',
+  background: 'Фон', surface: 'Поверхность',
+  'on-surface': 'Текст на поверхности', 'on-surface-variant': 'Текст вторичный',
+  'surface-variant': 'Поверхность-вариант', outline: 'Обводка',
+  'outline-variant': 'Обводка-вариант', brand: 'Бренд (мята)', 'brand-ink': 'Бренд-текст',
 };
 
 const themes = ref([]);
