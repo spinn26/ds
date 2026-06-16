@@ -139,6 +139,9 @@ Route::prefix('v1')->group(function () {
         Route::post('/notifications/{id}/read', [\App\Http\Controllers\Api\NotificationController::class, 'markRead']);
         Route::post('/notifications/read-all', [\App\Http\Controllers\Api\NotificationController::class, 'markAllRead']);
 
+        // Кастомные пункты меню для текущего пользователя (выдача для layouts).
+        Route::get('/menu/published', [\App\Http\Controllers\Api\AdminMenuController::class, 'published']);
+
         // Chat system v2
         Route::get('/chat/tickets', [\App\Http\Controllers\Api\ChatController::class, 'index']);
         Route::post('/chat/tickets', [\App\Http\Controllers\Api\ChatController::class, 'store'])->middleware('throttle:10,1');
@@ -328,6 +331,13 @@ Route::prefix('v1')->group(function () {
             Route::delete('/admin/webhooks/{id}', [\App\Http\Controllers\Api\AdminWebhookController::class, 'destroy'])->whereNumber('id');
             Route::post('/admin/webhooks/{id}/test', [\App\Http\Controllers\Api\AdminWebhookController::class, 'test'])->whereNumber('id')->middleware('throttle:20,1');
             Route::get('/admin/webhooks/{id}/deliveries', [\App\Http\Controllers\Api\AdminWebhookController::class, 'deliveries'])->whereNumber('id');
+
+            // Конструктор меню (кастомные пункты навигации).
+            Route::get('/admin/menu-items', [\App\Http\Controllers\Api\AdminMenuController::class, 'index']);
+            Route::post('/admin/menu-items', [\App\Http\Controllers\Api\AdminMenuController::class, 'store']);
+            Route::put('/admin/menu-items/{id}', [\App\Http\Controllers\Api\AdminMenuController::class, 'update'])->whereNumber('id');
+            Route::delete('/admin/menu-items/{id}', [\App\Http\Controllers\Api\AdminMenuController::class, 'destroy'])->whereNumber('id');
+            Route::post('/admin/menu-items/reorder', [\App\Http\Controllers\Api\AdminMenuController::class, 'reorder']);
 
             // i18n-переопределения.
             Route::get('/admin/translations', [\App\Http\Controllers\Api\AdminTranslationController::class, 'index']);

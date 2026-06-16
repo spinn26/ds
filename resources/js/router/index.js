@@ -167,6 +167,7 @@ const routes = [
             { path: 'translations', component: () => import('../pages/Admin/Translations.vue') },
             { path: 'qualification-matrix', component: () => import('../pages/Admin/QualificationMatrix.vue') },
             { path: 'webhooks', component: () => import('../pages/Admin/Webhooks.vue') },
+            { path: 'menu-builder', component: () => import('../pages/Admin/MenuBuilder.vue') },
             // API-ключи и токены перенесены во вкладку «API ключи»
             // раздела Интеграции (единая точка настройки внешних
             // сервисов). Старый путь редиректит для бэкап-ссылок.

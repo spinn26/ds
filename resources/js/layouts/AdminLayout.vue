@@ -30,14 +30,16 @@
         <template v-for="item in menuItems" :key="item.title">
           <!-- Simple item -->
           <v-list-item v-if="!item.children"
-            :to="item.to" :prepend-icon="item.icon" :title="item.title" color="secondary" />
+            v-bind="item.external ? { href: item.to, target: '_blank' } : { to: item.to }"
+            :prepend-icon="item.icon" :title="item.title" color="secondary" />
           <!-- Expandable group -->
           <v-list-group v-else :value="item.title">
             <template #activator="{ props }">
               <v-list-item v-bind="props" :prepend-icon="item.icon" :title="item.title" color="secondary" />
             </template>
             <v-list-item v-for="child in item.children" :key="child.to"
-              :to="child.to" :title="child.title"
+              v-bind="child.external ? { href: child.to, target: '_blank' } : { to: child.to }"
+              :title="child.title"
               :prepend-icon="child.icon || 'mdi-circle-small'" color="secondary" class="ps-6" />
           </v-list-group>
         </template>
@@ -91,6 +93,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useDisplay, useTheme } from 'vuetify';
+import api from '../api';
 import { useAuthStore } from '../stores/auth';
 import { useDesignStore } from '../stores/design';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
@@ -110,6 +113,7 @@ let prevTheme = '';
 onMounted(() => {
   prevTheme = theme.global.name.value;
   theme.global.name.value = 'dark';
+  loadCustomMenu();
 });
 onUnmounted(() => {
   theme.global.name.value = prevTheme || localStorage.getItem('theme') || 'dark';
@@ -125,7 +129,7 @@ function toggleRail() {
 
 // Bitrix-style разбивка админ-консоли на верхнеуровневые категории.
 // Каждая категория — раскрывающаяся группа (v-list-group) с пунктами.
-const menuItems = [
+const baseMenuItems = [
   {
     title: 'Рабочий стол', icon: 'mdi-view-dashboard',
     children: [
@@ -209,10 +213,44 @@ const menuItems = [
       { to: '/admin/translations', title: 'Переводы интерфейса', icon: 'mdi-translate' },
       { to: '/admin/integrations', title: 'Интеграции', icon: 'mdi-cloud-sync' },
       { to: '/admin/webhooks', title: 'Вебхуки', icon: 'mdi-webhook' },
+      { to: '/admin/menu-builder', title: 'Конструктор меню', icon: 'mdi-menu' },
       { to: '/admin/monitoring', title: 'Мониторинг', icon: 'mdi-pulse' },
     ],
   },
 ];
+
+// Кастомные пункты меню (Конструктор меню). Загружаются с сервера и
+// мёржатся поверх статики: пункт с group_title подставляется в одноимённую
+// группу, без group_title — становится самостоятельным пунктом. Пустой
+// набор / ошибка загрузки → меню как раньше.
+const customItems = ref([]);
+async function loadCustomMenu() {
+  try {
+    const { data } = await api.get('/menu/published', { params: { area: 'admin' } });
+    customItems.value = data.items || [];
+  } catch { customItems.value = []; }
+}
+
+const menuItems = computed(() => {
+  if (!customItems.value.length) return baseMenuItems;
+  // Глубокая, но дешёвая копия групп (только children мутируем).
+  const groups = baseMenuItems.map((g) => (g.children ? { ...g, children: [...g.children] } : { ...g }));
+  const extra = [];
+  for (const it of customItems.value) {
+    const node = { to: it.to, title: it.title, icon: it.icon || 'mdi-circle-small', external: it.external };
+    if (it.group_title) {
+      const g = groups.find((x) => x.title === it.group_title && x.children);
+      if (g) { g.children.push(node); continue; }
+      // Группа не найдена — создаём новую с этим заголовком.
+      let ng = groups.find((x) => x.title === it.group_title);
+      if (!ng) { ng = { title: it.group_title, icon: it.icon || 'mdi-shape', children: [] }; groups.push(ng); }
+      (ng.children || (ng.children = [])).push(node);
+    } else {
+      extra.push(node);
+    }
+  }
+  return extra.length ? [...groups, ...extra] : groups;
+});
 
 const initials = computed(() =>
   `${auth.user?.firstName?.[0] || ''}${auth.user?.lastName?.[0] || ''}`.toUpperCase()
