@@ -310,6 +310,9 @@ Route::prefix('v1')->group(function () {
             // Рассылка in-app уведомлений (всем / по ролям).
             Route::post('/admin/notifications/broadcast', [\App\Http\Controllers\Api\NotificationController::class, 'broadcast'])->middleware('throttle:20,1');
 
+            // Аудит-лог (просмотр всех действий).
+            Route::get('/admin/audit-log', [\App\Http\Controllers\Api\AdminAuditController::class, 'index']);
+
             // Система: кэш и планировщик.
             Route::post('/admin/ops/cache/clear', [\App\Http\Controllers\Api\AdminOpsController::class, 'clearCache'])->middleware('throttle:30,1');
             Route::get('/admin/ops/scheduled', [\App\Http\Controllers\Api\AdminOpsController::class, 'scheduledTasks']);
