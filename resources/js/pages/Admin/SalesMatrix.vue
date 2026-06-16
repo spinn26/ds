@@ -29,6 +29,55 @@
       <v-card class="ds-card mb-3" elevation="0">
         <v-card-text class="pa-2">
           <div class="d-flex ga-1 flex-wrap align-center">
+
+            <!-- Period mode (по прогнозной дате активации; «Всё» = без ограничения) -->
+            <v-btn-toggle v-model="fcPeriodMode" mandatory density="compact" variant="outlined" color="primary"
+              @update:model-value="loadForecast">
+              <v-btn value="all"     size="x-small">Всё</v-btn>
+              <v-btn value="year"    size="x-small">Год</v-btn>
+              <v-btn value="quarter" size="x-small">Квартал</v-btn>
+              <v-btn value="month"   size="x-small">Месяц</v-btn>
+              <v-btn value="range"   size="x-small">Диапазон</v-btn>
+            </v-btn-toggle>
+
+            <v-select v-if="fcPeriodMode !== 'all' && fcPeriodMode !== 'range'" v-model="fcPeriodYear" :items="fcYearOptions"
+              density="compact" variant="outlined" hide-details style="width:92px; flex:0 0 92px"
+              @update:model-value="loadForecast" />
+
+            <v-btn-toggle v-if="fcPeriodMode === 'quarter'" v-model="fcPeriodQuarter" mandatory
+              density="compact" variant="outlined" @update:model-value="loadForecast">
+              <v-btn v-for="q in ['Q1','Q2','Q3','Q4']" :key="q" :value="q" size="x-small">{{ q }}</v-btn>
+            </v-btn-toggle>
+
+            <v-select v-if="fcPeriodMode === 'month'" v-model="fcPeriodMonth" :items="monthOpts"
+              item-title="t" item-value="v" density="compact" variant="outlined"
+              hide-details style="width:128px; flex:0 0 128px" @update:model-value="loadForecast" />
+
+            <template v-if="fcPeriodMode === 'range'">
+              <v-select v-model="fcRangeFromYear" :items="fcYearOptions" density="compact" variant="outlined"
+                hide-details style="width:86px;flex:0 0 86px" @update:model-value="loadForecast" />
+              <v-select v-model="fcRangeFromMonth" :items="monthOpts" item-title="t" item-value="v"
+                density="compact" variant="outlined" hide-details style="width:120px;flex:0 0 120px"
+                @update:model-value="loadForecast" />
+              <span class="text-medium-emphasis" style="flex-shrink:0">—</span>
+              <v-select v-model="fcRangeToYear" :items="fcYearOptions" density="compact" variant="outlined"
+                hide-details style="width:86px;flex:0 0 86px" @update:model-value="loadForecast" />
+              <v-select v-model="fcRangeToMonth" :items="monthOpts" item-title="t" item-value="v"
+                density="compact" variant="outlined" hide-details style="width:120px;flex:0 0 120px"
+                @update:model-value="loadForecast" />
+            </template>
+
+            <v-divider vertical class="mx-1" style="height:24px;align-self:center" />
+
+            <!-- Status filter (стадия pipeline) -->
+            <v-btn-toggle v-model="fcStatuses" multiple density="compact" variant="outlined" color="primary"
+              @update:model-value="onFcStatusChange">
+              <v-btn :value="2" size="x-small">Сбор док.</v-btn>
+              <v-btn :value="3" size="x-small">Комплайнс</v-btn>
+            </v-btn-toggle>
+
+            <v-divider vertical class="mx-1" style="height:24px;align-self:center" />
+
             <v-autocomplete v-model="fcFilterSuppliers" :items="fcSupplierOptions"
               placeholder="Поставщик" prepend-inner-icon="mdi-domain"
               multiple chips closable-chips density="compact" variant="outlined"
@@ -42,9 +91,34 @@
               @update:model-value="onFcProductFilter" />
             <v-btn v-if="fcFilterProducts.length || fcFilterSuppliers.length"
               icon="mdi-filter-remove" size="x-small" variant="text" @click="resetFcFilters" />
+
             <v-spacer />
+
             <v-btn size="x-small" variant="text" prepend-icon="mdi-expand-all-outline"   @click="fcExpandAll">Все</v-btn>
             <v-btn size="x-small" variant="text" prepend-icon="mdi-collapse-all-outline" @click="fcCollapseAll">Свернуть</v-btn>
+
+            <!-- Metrics selector -->
+            <v-menu :close-on-content-click="false" location="bottom end">
+              <template #activator="{ props }">
+                <v-btn v-bind="props" size="x-small" variant="tonal" color="primary" prepend-icon="mdi-tune">
+                  Метрики · {{ fcSelectedMetricKeys.length }}
+                </v-btn>
+              </template>
+              <v-card min-width="210" elevation="4">
+                <v-card-title class="text-body-2 pa-3 pb-1 font-weight-medium">Метрики</v-card-title>
+                <v-divider />
+                <v-list density="compact" class="pa-1">
+                  <v-list-item v-for="m in fcAllMetrics" :key="m.key" :title="m.label"
+                    rounded="lg" style="cursor:pointer" @click="fcToggleMetric(m.key)">
+                    <template #prepend>
+                      <v-checkbox-btn :model-value="fcSelectedMetricKeys.includes(m.key)"
+                        color="primary" density="compact"
+                        @click.stop="fcToggleMetric(m.key)" />
+                    </template>
+                  </v-list-item>
+                </v-list>
+              </v-card>
+            </v-menu>
           </div>
         </v-card-text>
       </v-card>
@@ -74,20 +148,21 @@
               <tr>
                 <th class="th-name" rowspan="2">Продукт / Программа</th>
                 <th v-for="mo in fcMonths" :key="mo"
-                  :colspan="3" class="th-mgroup" :class="{ 'th-nodate': mo === fcNullKey }">
+                  :colspan="fcActiveMetrics.length" class="th-mgroup" :class="{ 'th-nodate': mo === fcNullKey }">
                   {{ mo === fcNullKey ? 'Без даты' : fmtMonthHdr(mo) }}
                 </th>
-                <th colspan="3" class="th-mgroup th-total-hd">Итого</th>
+                <th :colspan="fcActiveMetrics.length" class="th-mgroup th-total-hd">Итого</th>
               </tr>
               <tr>
                 <template v-for="mo in fcMonths" :key="`fsh-${mo}`">
-                  <th class="th-sub">Объём</th>
-                  <th class="th-sub">Кол-во</th>
-                  <th class="th-sub th-sub-last">Клиенты</th>
+                  <th v-for="(m, mi) in fcActiveMetrics" :key="m.key"
+                    class="th-sub" :class="{ 'th-sub-last': mi === fcActiveMetrics.length - 1 }">
+                    {{ m.short }}
+                  </th>
                 </template>
-                <th class="th-sub th-sub-total">Объём</th>
-                <th class="th-sub th-sub-total">Кол-во</th>
-                <th class="th-sub th-sub-total">Клиенты</th>
+                <th v-for="m in fcActiveMetrics" :key="`ftot-${m.key}`" class="th-sub th-sub-total">
+                  {{ m.short }}
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -103,19 +178,14 @@
                     </div>
                   </td>
                   <template v-for="mo in fcMonths" :key="`fp${prod.productId}-${mo}`">
-                    <td class="td-num" :class="{ 'fc-nodate': mo === fcNullKey }">
-                      <span :class="fmtClass(prod.monthly[mo]?.volume)">{{ fmtCell(prod.monthly[mo]?.volume, { fmt: 'rub' }) }}</span>
-                    </td>
-                    <td class="td-num" :class="{ 'fc-nodate': mo === fcNullKey }">
-                      <span :class="fmtClass(prod.monthly[mo]?.count)">{{ fmtCell(prod.monthly[mo]?.count, { fmt: 'int' }) }}</span>
-                    </td>
-                    <td class="td-num td-sep" :class="{ 'fc-nodate': mo === fcNullKey }">
-                      <span :class="fmtClass(prod.monthly[mo]?.clientCount)">{{ fmtCell(prod.monthly[mo]?.clientCount, { fmt: 'int' }) }}</span>
+                    <td v-for="(m, mi) in fcActiveMetrics" :key="m.key"
+                      class="td-num" :class="{ 'td-sep': mi === fcActiveMetrics.length - 1, 'fc-nodate': mo === fcNullKey }">
+                      <span :class="fmtClass(prod.monthly[mo]?.[m.key])">{{ fmtCell(prod.monthly[mo]?.[m.key], m) }}</span>
                     </td>
                   </template>
-                  <td class="td-num td-total">{{ fmtCell(prod.volume, { fmt: 'rub' }) }}</td>
-                  <td class="td-num td-total">{{ fmtCell(prod.count, { fmt: 'int' }) }}</td>
-                  <td class="td-num td-total">{{ fmtCell(prod.clientCount, { fmt: 'int' }) }}</td>
+                  <td v-for="m in fcActiveMetrics" :key="`fpt-${m.key}`" class="td-num td-total">
+                    {{ fmtCell(prod[m.key], m) }}
+                  </td>
                 </tr>
 
                 <template v-if="fcExpanded.has(prod.productId)">
@@ -127,19 +197,14 @@
                       </div>
                     </td>
                     <template v-for="mo in fcMonths" :key="`fpg${pg.programId}-${mo}`">
-                      <td class="td-num td-dim" :class="{ 'fc-nodate': mo === fcNullKey }">
-                        <span :class="fmtClass(pg.monthly[mo]?.volume)">{{ fmtCell(pg.monthly[mo]?.volume, { fmt: 'rub' }) }}</span>
-                      </td>
-                      <td class="td-num td-dim" :class="{ 'fc-nodate': mo === fcNullKey }">
-                        <span :class="fmtClass(pg.monthly[mo]?.count)">{{ fmtCell(pg.monthly[mo]?.count, { fmt: 'int' }) }}</span>
-                      </td>
-                      <td class="td-num td-dim td-sep" :class="{ 'fc-nodate': mo === fcNullKey }">
-                        <span :class="fmtClass(pg.monthly[mo]?.clientCount)">{{ fmtCell(pg.monthly[mo]?.clientCount, { fmt: 'int' }) }}</span>
+                      <td v-for="(m, mi) in fcActiveMetrics" :key="m.key"
+                        class="td-num td-dim" :class="{ 'td-sep': mi === fcActiveMetrics.length - 1, 'fc-nodate': mo === fcNullKey }">
+                        <span :class="fmtClass(pg.monthly[mo]?.[m.key])">{{ fmtCell(pg.monthly[mo]?.[m.key], m) }}</span>
                       </td>
                     </template>
-                    <td class="td-num td-total td-dim">{{ fmtCell(pg.volume, { fmt: 'rub' }) }}</td>
-                    <td class="td-num td-total td-dim">{{ fmtCell(pg.count, { fmt: 'int' }) }}</td>
-                    <td class="td-num td-total td-dim">{{ fmtCell(pg.clientCount, { fmt: 'int' }) }}</td>
+                    <td v-for="m in fcActiveMetrics" :key="`fpgt-${m.key}`" class="td-num td-total td-dim">
+                      {{ fmtCell(pg[m.key], m) }}
+                    </td>
                   </tr>
                 </template>
               </template>
@@ -148,17 +213,18 @@
               <tr v-if="fcGrandTotals && fcRows.length" class="tr-grand">
                 <td class="td-name"><strong>ИТОГО</strong></td>
                 <template v-for="mo in fcMonths" :key="`fg-${mo}`">
-                  <td class="td-num" :class="{ 'fc-nodate': mo === fcNullKey }"><strong>{{ fmtCell(fcGrandTotals.monthly[mo]?.volume, { fmt: 'rub' }) }}</strong></td>
-                  <td class="td-num" :class="{ 'fc-nodate': mo === fcNullKey }"><strong>{{ fmtCell(fcGrandTotals.monthly[mo]?.count, { fmt: 'int' }) }}</strong></td>
-                  <td class="td-num td-sep" :class="{ 'fc-nodate': mo === fcNullKey }"><strong>{{ fmtCell(fcGrandTotals.monthly[mo]?.clientCount, { fmt: 'int' }) }}</strong></td>
+                  <td v-for="(m, mi) in fcActiveMetrics" :key="m.key"
+                    class="td-num" :class="{ 'td-sep': mi === fcActiveMetrics.length - 1, 'fc-nodate': mo === fcNullKey }">
+                    <strong>{{ fmtCell(fcGrandTotals.monthly[mo]?.[m.key], m) }}</strong>
+                  </td>
                 </template>
-                <td class="td-num td-total"><strong>{{ fmtCell(fcGrandTotals.volume, { fmt: 'rub' }) }}</strong></td>
-                <td class="td-num td-total"><strong>{{ fmtCell(fcGrandTotals.count, { fmt: 'int' }) }}</strong></td>
-                <td class="td-num td-total"><strong>{{ fmtCell(fcGrandTotals.clientCount, { fmt: 'int' }) }}</strong></td>
+                <td v-for="m in fcActiveMetrics" :key="`fgt-${m.key}`" class="td-num td-total">
+                  <strong>{{ fmtCell(fcGrandTotals[m.key], m) }}</strong>
+                </td>
               </tr>
 
               <tr v-if="!fcRows.length && !fcLoading">
-                <td :colspan="1 + fcMonths.length * 3 + 3" class="td-empty">
+                <td :colspan="1 + fcMonths.length * fcActiveMetrics.length + fcActiveMetrics.length" class="td-empty">
                   <v-icon class="mb-2 d-block mx-auto" size="36" color="grey-lighten-1">mdi-table-off</v-icon>
                   Нет контрактов в очереди (статусы «Сбор документов», «Комплайнс»)
                 </td>
@@ -567,6 +633,61 @@ const fcFilterSuppliers = ref([]);
 const fcFilterProducts  = ref([]);
 const fcExpanded        = ref(new Set());
 
+// Forecast metrics (доступны только не-транзакционные: нет выручки/баллов)
+const FC_METRICS_KEY = 'salesMatrix:fcMetrics';
+const fcAllMetrics = [
+  { key: 'volume',      short: 'Объём',     label: 'Объём (₽)',       fmt: 'rub' },
+  { key: 'count',       short: 'Кол-во',    label: 'Кол-во (шт)',     fmt: 'int' },
+  { key: 'clientCount', short: 'Клиенты',   label: 'Кол-во клиентов', fmt: 'int' },
+  { key: 'avgCheck',    short: 'Ср.чек',    label: 'Средний чек (₽)', fmt: 'rub' },
+  { key: 'fcCount',     short: 'Кол-во ФК', label: 'Кол-во ФК',       fmt: 'int' },
+];
+const fcValidKeys = fcAllMetrics.map(m => m.key);
+const _fcSaved = (() => { try { const s = JSON.parse(localStorage.getItem(FC_METRICS_KEY)); return Array.isArray(s) && s.every(k => fcValidKeys.includes(k)) && s.length ? s : null; } catch { return null; } })();
+const fcSelectedMetricKeys = ref(_fcSaved ?? ['volume', 'count', 'clientCount']);
+const fcActiveMetrics = computed(() => fcAllMetrics.filter(m => fcSelectedMetricKeys.value.includes(m.key)));
+function fcToggleMetric(key) {
+  const idx = fcSelectedMetricKeys.value.indexOf(key);
+  if (idx !== -1) { if (fcSelectedMetricKeys.value.length > 1) fcSelectedMetricKeys.value.splice(idx, 1); }
+  else fcSelectedMetricKeys.value.push(key);
+  localStorage.setItem(FC_METRICS_KEY, JSON.stringify(fcSelectedMetricKeys.value));
+}
+
+// Forecast period (по activation_forecast; 'all' = без ограничения; включает будущие годы)
+const fcPeriodMode    = ref('all');
+const fcPeriodYear    = ref(now.getFullYear());
+const fcPeriodQuarter = ref(currentQ);
+const fcPeriodMonth   = ref(String(now.getMonth() + 1).padStart(2, '0'));
+const fcRangeFromYear  = ref(now.getFullYear());
+const fcRangeFromMonth = ref('01');
+const fcRangeToYear    = ref(now.getFullYear());
+const fcRangeToMonth   = ref('12');
+const fcYearOptions = Array.from({ length: 9 }, (_, i) => now.getFullYear() + 2 - i); // year+2 … year-6
+const fcPeriodFrom = computed(() => {
+  const y = fcPeriodYear.value;
+  if (fcPeriodMode.value === 'year')    return `${y}-01`;
+  if (fcPeriodMode.value === 'quarter') return `${y}-${String(quarterRanges[fcPeriodQuarter.value][0]).padStart(2,'0')}`;
+  if (fcPeriodMode.value === 'month')   return `${y}-${fcPeriodMonth.value}`;
+  if (fcPeriodMode.value === 'range')   return `${fcRangeFromYear.value}-${fcRangeFromMonth.value}`;
+  return null;
+});
+const fcPeriodTo = computed(() => {
+  const y = fcPeriodYear.value;
+  if (fcPeriodMode.value === 'year')    return `${y}-12`;
+  if (fcPeriodMode.value === 'quarter') return `${y}-${String(quarterRanges[fcPeriodQuarter.value][1]).padStart(2,'0')}`;
+  if (fcPeriodMode.value === 'month')   return `${y}-${fcPeriodMonth.value}`;
+  if (fcPeriodMode.value === 'range')   return `${fcRangeToYear.value}-${fcRangeToMonth.value}`;
+  return null;
+});
+
+// Forecast status filter (2 = Сбор документов, 3 = Комплайнс)
+const fcStatuses = ref([2, 3]);
+function onFcStatusChange() {
+  // не допускаем пустой выбор — иначе данных не будет
+  if (!fcStatuses.value.length) { fcStatuses.value = [2, 3]; return; }
+  loadForecast();
+}
+
 function fcToggle(pid) {
   const s = new Set(fcExpanded.value);
   if (s.has(pid)) s.delete(pid); else s.add(pid);
@@ -593,6 +714,11 @@ async function loadForecast({ updateOptions = true } = {}) {
     const p = new URLSearchParams();
     fcFilterSuppliers.value.forEach(s => p.append('suppliers[]', s));
     fcFilterProducts.value.forEach(id => p.append('products[]', id));
+    fcStatuses.value.forEach(s => p.append('statuses[]', s));
+    if (fcPeriodFrom.value && fcPeriodTo.value) {
+      p.set('from', fcPeriodFrom.value);
+      p.set('to',   fcPeriodTo.value);
+    }
     const { data } = await api.get(`/admin/reports/sales-matrix/forecast?${p}`);
     fcRows.value        = data.rows        ?? [];
     fcGrandTotals.value = data.grandTotals ?? null;

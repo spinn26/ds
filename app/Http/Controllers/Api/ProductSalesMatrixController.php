@@ -734,10 +734,15 @@ class ProductSalesMatrixController extends Controller
     /**
      * GET /admin/reports/sales-matrix/forecast
      *
-     * Pipeline-контракты (статусы 2, 3), сгруппированные по activation_forecast.
-     * Контракты без даты попадают в бакет NULL_BUCKET ('—').
+     * Pipeline-контракты, сгруппированные по прогнозной дате активации
+     * (activation_forecast). Контракты без даты попадают в бакет NULL_KEY
+     * и показываются всегда (даже при заданном периоде).
      *
-     * Params: suppliers[], products[]
+     * Params:
+     *   suppliers[]  str  (optional)
+     *   products[]   int  (optional)
+     *   statuses[]   int  (optional, subset of [2,3]; default both)
+     *   from, to     Y-m  (optional; фильтр по месяцу прогнозной активации)
      */
     public function forecastMatrix(Request $request): JsonResponse
     {
@@ -746,22 +751,53 @@ class ProductSalesMatrixController extends Controller
             'suppliers.*' => 'string|max:200',
             'products'    => 'nullable|array',
             'products.*'  => 'integer',
+            'statuses'    => 'nullable|array',
+            'statuses.*'  => 'integer|in:2,3',
+            'from'        => 'nullable|date_format:Y-m',
+            'to'          => 'nullable|date_format:Y-m',
         ]);
 
         // 2 = Сбор документов, 3 = Комплайнс
-        $PIPELINE = [2, 3];
         $NULL_KEY = '__no_date__';
+        $statuses = ! empty($params['statuses'])
+            ? array_values(array_unique($params['statuses']))
+            : [2, 3];
+
+        // Границы периода по activation_forecast (правая граница исключительная)
+        $from = $params['from'] ?? null;
+        $to   = $params['to']   ?? null;
+        $hasPeriod   = $from && $to;
+        $toExclusive = null;
+        if ($hasPeriod) {
+            [$ty, $tm] = explode('-', $to);
+            $tm = (int) $tm + 1;
+            if ($tm > 12) { $tm = 1; $ty = (int) $ty + 1; }
+            $toExclusive = sprintf('%04d-%02d-01', (int) $ty, $tm);
+        }
 
         $base = fn () => DB::table('contract as co')
             ->join('program as pg', 'pg.id', '=', 'co.program')
-            ->whereIn('co.status', $PIPELINE)
+            ->whereIn('co.status', $statuses)
             ->whereRaw('co."deletedAt" IS NULL')
+            // Период применяется только к датированным; без даты — показываем всегда
+            ->when($hasPeriod, fn ($q) =>
+                $q->where(function ($w) use ($from, $toExclusive) {
+                    $w->whereNull('co.activation_forecast')
+                      ->orWhere(function ($w2) use ($from, $toExclusive) {
+                          $w2->whereRaw('co.activation_forecast >= ?', [$from . '-01'])
+                             ->whereRaw('co.activation_forecast <  ?', [$toExclusive]);
+                      });
+                })
+            )
             ->when(! empty($params['suppliers']), fn ($q) =>
                 $q->whereIn(DB::raw('COALESCE(pg."providerName", \'—\')'), $params['suppliers'])
             )
             ->when(! empty($params['products']), fn ($q) =>
                 $q->whereIn('co.product', $params['products'])
             );
+
+        $periodExpr  = DB::raw("TO_CHAR(DATE_TRUNC('month', co.activation_forecast), 'YYYY-MM') as period_month");
+        $periodTrunc = DB::raw("DATE_TRUNC('month', co.activation_forecast)");
 
         $rows = $base()
             ->join('product as p', 'p.id', '=', 'co.product')
@@ -774,14 +810,13 @@ class ProductSalesMatrixController extends Controller
                 'p.name as product_name',
                 'pg.id   as program_id',
                 'pg.name as program_name',
-                DB::raw("TO_CHAR(DATE_TRUNC('month', co.activation_forecast), 'YYYY-MM') as period_month"),
+                $periodExpr,
                 DB::raw("SUM(COALESCE(co.ammount, 0) * COALESCE(mcr.rate, 1)) as volume"),
                 DB::raw('COUNT(DISTINCT co.id)         as cnt'),
                 DB::raw('COUNT(DISTINCT co.client)     as client_count'),
                 DB::raw('COUNT(DISTINCT co.consultant) as fc_count'),
             ])
-            ->groupBy('p.id', 'p.name', 'pg.id', 'pg.name',
-                      DB::raw("DATE_TRUNC('month', co.activation_forecast)"))
+            ->groupBy('p.id', 'p.name', 'pg.id', 'pg.name', $periodTrunc)
             ->orderBy('p.name')
             ->orderBy('pg.name')
             ->orderByRaw("DATE_TRUNC('month', co.activation_forecast) NULLS LAST")
@@ -804,6 +839,7 @@ class ProductSalesMatrixController extends Controller
             $c  = (int) $r->cnt;
             $cl = (int) $r->client_count;
             $fc = (int) $r->fc_count;
+            $vals = ['volume' => $v, 'count' => $c, 'clientCount' => $cl];
 
             if (! isset($productMap[$pid])) {
                 $productMap[$pid] = [
@@ -823,57 +859,78 @@ class ProductSalesMatrixController extends Controller
                 ];
             }
 
-            $slot = ['volume' => $v, 'count' => $c, 'clientCount' => $cl, 'fcCount' => $fc];
+            // Программа: одна строка = одна программа×месяц
+            $productMap[$pid]['programs'][$pgid]['monthly'][$mo] = array_merge($vals, [
+                'fcCount'  => $fc,
+                'avgCheck' => $c > 0 ? round($v / $c, 2) : 0,
+            ]);
+            foreach ($vals as $k => $val) {
+                $productMap[$pid]['programs'][$pgid][$k] += $val;
+            }
 
-            $productMap[$pid]['monthly'][$mo]                    = $slot;
-            $productMap[$pid]['programs'][$pgid]['monthly'][$mo] = $slot;
-
-            $productMap[$pid]['volume']      += $v;
-            $productMap[$pid]['count']       += $c;
-            $productMap[$pid]['clientCount'] += $cl;
-
-            $productMap[$pid]['programs'][$pgid]['volume']      += $v;
-            $productMap[$pid]['programs'][$pgid]['count']       += $c;
-            $productMap[$pid]['programs'][$pgid]['clientCount'] += $cl;
-
-            $grand['volume']      += $v;
-            $grand['count']       += $c;
-            $grand['clientCount'] += $cl;
-            $grand['monthly'][$mo]['volume']      = ($grand['monthly'][$mo]['volume']      ?? 0) + $v;
-            $grand['monthly'][$mo]['count']       = ($grand['monthly'][$mo]['count']       ?? 0) + $c;
-            $grand['monthly'][$mo]['clientCount'] = ($grand['monthly'][$mo]['clientCount'] ?? 0) + $cl;
+            // Продукт и гранд: аккумулируем по месяцам (несколько программ в одном месяце)
+            foreach ($vals as $k => $val) {
+                $productMap[$pid]['monthly'][$mo][$k]  = ($productMap[$pid]['monthly'][$mo][$k] ?? 0) + $val;
+                $productMap[$pid][$k]                 += $val;
+                $grand['monthly'][$mo][$k]             = ($grand['monthly'][$mo][$k] ?? 0) + $val;
+                $grand[$k]                            += $val;
+            }
         }
 
-        // avgCheck для тоталов продуктов
-        foreach ($productMap as &$prod) {
+        // FC distinct по (продукт × месяц) — суммировать программные значения нельзя
+        $fcMonthlyIdx = [];
+        foreach ($base()->select(['co.product as product_id', $periodExpr, DB::raw('COUNT(DISTINCT co.consultant) as fc_count')])
+                     ->groupBy('co.product', $periodTrunc)->get() as $r) {
+            $fcMonthlyIdx[$r->product_id][$r->period_month ?? $NULL_KEY] = (int) $r->fc_count;
+        }
+
+        $grandFcMonthly = [];
+        foreach ($base()->select([$periodExpr, DB::raw('COUNT(DISTINCT co.consultant) as fc_count')])
+                     ->groupBy($periodTrunc)->get() as $r) {
+            $grandFcMonthly[$r->period_month ?? $NULL_KEY] = (int) $r->fc_count;
+        }
+
+        $fcCounts = $base()
+            ->select('co.product as product_id', DB::raw('COUNT(DISTINCT co.consultant) as fc_count'))
+            ->groupBy('co.product')
+            ->get()
+            ->keyBy('product_id');
+
+        $grand['fcCount'] = (int) $base()->distinct()->count('co.consultant');
+
+        // Производные поля: avgCheck + fcCount на уровне продукта/гранда
+        foreach ($productMap as $pid => &$prod) {
             $prod['avgCheck'] = $prod['count'] > 0 ? round($prod['volume'] / $prod['count'], 2) : 0;
-            foreach ($prod['monthly'] as &$slot) {
-                $slot['avgCheck'] = $slot['count'] > 0 ? round($slot['volume'] / $slot['count'], 2) : 0;
+            $prod['fcCount']  = (int) ($fcCounts[$pid]->fc_count ?? 0);
+            foreach ($prod['monthly'] as $mo => &$mv) {
+                $mv['avgCheck'] = ($mv['count'] ?? 0) > 0 ? round($mv['volume'] / $mv['count'], 2) : 0;
+                $mv['fcCount']  = $fcMonthlyIdx[$pid][$mo] ?? 0;
             }
-            unset($slot);
-            foreach ($prod['programs'] as &$pg) {
-                $pg['avgCheck'] = $pg['count'] > 0 ? round($pg['volume'] / $pg['count'], 2) : 0;
-                foreach ($pg['monthly'] as &$slot) {
-                    $slot['avgCheck'] = $slot['count'] > 0 ? round($slot['volume'] / $slot['count'], 2) : 0;
-                }
-                unset($slot);
-                $pg['programs'] = array_values($pg['programs'] ?? []);
+            unset($mv);
+            foreach ($prod['programs'] as &$prog) {
+                $prog['avgCheck'] = $prog['count'] > 0 ? round($prog['volume'] / $prog['count'], 2) : 0;
             }
-            unset($pg);
+            unset($prog);
             $prod['programs'] = array_values($prod['programs']);
         }
         unset($prod);
 
         $grand['avgCheck'] = $grand['count'] > 0 ? round($grand['volume'] / $grand['count'], 2) : 0;
-        foreach ($grand['monthly'] as &$gv) {
+        foreach ($grand['monthly'] as $mo => &$gv) {
             $gv['avgCheck'] = ($gv['count'] ?? 0) > 0 ? round($gv['volume'] / $gv['count'], 2) : 0;
+            $gv['fcCount']  = $grandFcMonthly[$mo] ?? 0;
         }
         unset($gv);
 
         // Статистика без даты
         $noDateCount = $base()->whereNull('co.activation_forecast')->count();
 
-        sort($months);
+        // Колонки месяцев: при заданном периоде показываем весь диапазон (включая пустые)
+        if ($hasPeriod) {
+            $months = $this->monthRange($from, $to);
+        } else {
+            sort($months);
+        }
         if ($noDateCount > 0) {
             $months[] = $NULL_KEY;
         }
