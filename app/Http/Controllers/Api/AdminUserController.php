@@ -221,6 +221,40 @@ class AdminUserController extends Controller
      * накапливаться с момента, когда соответствующий Audit::log() вызов
      * уже стоит в коде.
      */
+    /** GET /admin/login-log — глобальный журнал входов (audit_log). */
+    public function loginLog(Request $request): JsonResponse
+    {
+        $q = DB::table('audit_log as a')
+            ->leftJoin('WebUser as w', 'w.id', '=', 'a.user_id')
+            ->whereIn('a.action', ['login', 'login_2fa_challenge'])
+            ->orderByDesc('a.created_at');
+
+        if ($s = trim((string) $request->input('search', ''))) {
+            $q->where(function ($x) use ($s) {
+                $x->where('w.email', 'ilike', "%{$s}%")
+                  ->orWhere('w.lastName', 'ilike', "%{$s}%")
+                  ->orWhere('w.firstName', 'ilike', "%{$s}%")
+                  ->orWhere('a.ip', 'ilike', "%{$s}%");
+            });
+        }
+
+        $rows = $q->limit(300)->get([
+            'a.id', 'a.action', 'a.ip', 'a.user_agent', 'a.created_at', 'a.user_id',
+            'w.firstName', 'w.lastName', 'w.email',
+        ])->map(fn ($r) => [
+            'id' => $r->id,
+            'action' => $r->action,
+            'ip' => $r->ip,
+            'userAgent' => $r->user_agent,
+            'createdAt' => $r->created_at,
+            'userId' => $r->user_id,
+            'name' => trim(($r->lastName ?? '') . ' ' . ($r->firstName ?? '')) ?: ($r->email ?? '—'),
+            'email' => $r->email,
+        ]);
+
+        return response()->json(['data' => $rows]);
+    }
+
     public function loginHistory(int $id, \App\Services\IpGeoService $geo): JsonResponse
     {
         $user = User::find($id);

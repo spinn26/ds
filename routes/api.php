@@ -325,6 +325,7 @@ Route::prefix('v1')->group(function () {
         Route::put('/admin/users/{id}', [AdminUserController::class, 'update']);
         Route::delete('/admin/users/{id}', [AdminUserController::class, 'destroy']);
         Route::get('/admin/users/{id}/login-history', [AdminUserController::class, 'loginHistory'])->whereNumber('id');
+        Route::get('/admin/login-log', [AdminUserController::class, 'loginLog']);
 
         // Сегменты партнёров (сохранённые фильтры) — доступны staff-страницам.
         Route::get('/admin/user-segments', [\App\Http\Controllers\Api\AdminUserSegmentController::class, 'index']);

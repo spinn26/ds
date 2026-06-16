@@ -140,6 +140,7 @@ const menuItems = [
       { to: '/admin/partners', title: 'Партнёры', icon: 'mdi-account-group' },
       { to: '/admin/clients', title: 'Клиенты', icon: 'mdi-account-multiple' },
       { to: '/admin/custom-fields', title: 'Кастомные поля', icon: 'mdi-form-select' },
+      { to: '/admin/login-log', title: 'Журнал входов', icon: 'mdi-login-variant' },
       { to: '/admin/activity', title: 'Активность', icon: 'mdi-account-multiple-check' },
     ],
   },
@@ -167,6 +168,7 @@ const menuItems = [
     children: [
       { to: '/admin/calendar', title: 'Календарь операций', icon: 'mdi-calendar-check' },
       { to: '/admin/bulk-ops', title: 'Массовые операции', icon: 'mdi-format-list-bulleted-square' },
+      { to: '/admin/export-center', title: 'Центр экспорта', icon: 'mdi-database-export' },
       { to: '/admin/system', title: 'Система (кэш/планировщик)', icon: 'mdi-server-network' },
     ],
   },
