@@ -196,10 +196,12 @@ import { ref, computed, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import api from '../api';
 import { useAuthStore } from '../stores/auth';
+import { useEducationStore } from '../stores/education';
 import EmptyState from '../components/EmptyState.vue';
 
 const route = useRoute();
 const auth = useAuthStore();
+const edu = useEducationStore();
 const loading = ref(true);
 const submitting = ref(false);
 const tests = ref([]);
@@ -267,6 +269,9 @@ async function submit() {
       });
     }
     result.value = { ...data, wrongIndexes };
+    // Мгновенно помечаем курс сданным в общем сторе — списки/карточки
+    // обновятся без перезахода.
+    if (data.passed) edu.markPassed(route.params.id);
   } catch {} finally { submitting.value = false; }
 }
 

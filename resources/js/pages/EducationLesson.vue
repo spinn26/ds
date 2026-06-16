@@ -276,6 +276,9 @@ import { useRoute, useRouter } from 'vue-router';
 import api from '../api';
 import CourseTreeNode from '../components/education/CourseTreeNode.vue';
 import LessonBlockRenderer from '../components/education/LessonBlockRenderer.vue';
+import { useEducationStore } from '../stores/education';
+
+const edu = useEducationStore();
 
 // === Scroll progress ===
 // 0..1 — позиция scroll'а страницы. Используется в scaleX progress-bar
@@ -461,13 +464,14 @@ const nextLesson = computed(() => {
 
 const hasTest = computed(() => {
   const c = findInTree(tree.value, Number(route.params.id));
-  return c?.hasTest && !c?.testPassed;
+  return c?.hasTest && !c?.testPassed && !edu.isPassed(route.params.id);
 });
 
 // Тест курса уже сдан — для урока-теста показываем «пройдено», а не CTA.
+// Учитываем и серверный testPassed, и оптимистичный стор (сдача без перезахода).
 const coursePassed = computed(() => {
   const c = findInTree(tree.value, Number(route.params.id));
-  return !!c?.testPassed;
+  return !!c?.testPassed || edu.isPassed(route.params.id);
 });
 
 // Показываем sidebar только если есть что отрисовать: либо подмодули
@@ -573,6 +577,7 @@ async function load() {
       api.get(`/education/courses/${route.params.id}/full`),
     ]);
     tree.value = t.tree || [];
+    edu.seedFromCourses(tree.value);
     courseDetail.value = d;
   } catch {}
   loading.value = false;

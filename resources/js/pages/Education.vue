@@ -112,7 +112,7 @@
             <div v-if="!c.coverUrl" class="course-cover-brand">DS</div>
             <div class="course-num">{{ String(idx + 1).padStart(2, '0') }}</div>
             <v-chip
-              v-if="c.productId && !c.testPassed"
+              v-if="c.productId && !isCoursePassed(c)"
               size="x-small" color="warning" variant="elevated"
               class="cover-chip"
             >
@@ -120,7 +120,7 @@
               нужен тест
             </v-chip>
             <v-chip
-              v-else-if="c.productId && c.testPassed"
+              v-else-if="c.productId && isCoursePassed(c)"
               size="x-small" color="success" variant="elevated"
               class="cover-chip"
             >
@@ -162,6 +162,14 @@
 import { ref, computed, onMounted } from 'vue';
 import api from '../api';
 import EmptyState from '../components/EmptyState.vue';
+import { useEducationStore } from '../stores/education';
+
+const edu = useEducationStore();
+// Статус сдачи теста курса с учётом оптимистичного стора (мгновенно после
+// сдачи на той же вкладке, без рефетча).
+function isCoursePassed(c) {
+  return !!c?.testPassed || edu.isPassed(c?.id);
+}
 
 const tree = ref([]);
 const kbStats = ref({ articles: 0, lastUpdated: null });
@@ -214,7 +222,7 @@ const inProgressCount = computed(() =>
   courses.value.filter(c => c.progress > 0 && c.progress < 100).length
 );
 const pendingTestCount = computed(() =>
-  courses.value.filter(c => c.productId && !c.testPassed).length
+  courses.value.filter(c => c.productId && !isCoursePassed(c)).length
 );
 const continueCourse = computed(() => {
   const inProg = courses.value.find(c => c.progress > 0 && c.progress < 100);
@@ -282,6 +290,7 @@ async function loadTree() {
       api.get('/education/kb'),
     ]);
     tree.value = t.tree || [];
+    edu.seedFromCourses(tree.value);
     const articles = (kb.sections || []).reduce((sum, s) => {
       let cnt = s.articleCount || 0;
       const stack = [...(s.children || [])];
