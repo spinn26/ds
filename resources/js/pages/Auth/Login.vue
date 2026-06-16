@@ -151,17 +151,28 @@ const vAutofill = {
   mounted(el) {
     const input = el.querySelector('input');
     if (!input) return;
-    const sync = () => input.dispatchEvent(new Event('input', { bubbles: true }));
+    const sync = () => {
+      if (document.activeElement === input) return; // не мешаем ручному вводу
+      if (input.value) input.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+    // Chrome: ловим CSS-анимацию автозаполнения
     const onAnim = (e) => { if (e.animationName === 'dsAutofillStart') sync(); };
     input.addEventListener('animationstart', onAnim);
-    // Подстраховка: значение могло быть подставлено до навешивания слушателя
-    setTimeout(() => {
-      try { if (input.value && input.matches(':-webkit-autofill')) sync(); } catch { /* noop */ }
-    }, 400);
-    el._dsAutofill = { input, onAnim };
+    // Safari не триггерит animationstart на autofill → поллим значение
+    // несколько секунд после монтирования.
+    let tries = 0;
+    const poll = setInterval(() => {
+      tries += 1;
+      if (input.value) { sync(); clearInterval(poll); }
+      else if (tries >= 15) clearInterval(poll); // ~3s
+    }, 200);
+    el._dsAutofill = { input, onAnim, poll };
   },
   unmounted(el) {
-    if (el._dsAutofill) el._dsAutofill.input.removeEventListener('animationstart', el._dsAutofill.onAnim);
+    if (el._dsAutofill) {
+      el._dsAutofill.input.removeEventListener('animationstart', el._dsAutofill.onAnim);
+      clearInterval(el._dsAutofill.poll);
+    }
   },
 };
 
@@ -394,5 +405,12 @@ function cancelVerify() {
   -webkit-box-shadow: 0 0 0 1000px rgb(var(--v-theme-surface)) inset;
   caret-color: rgb(var(--v-theme-on-surface));
   transition: background-color 9999s ease-in-out 0s;
+}
+
+/* Safari может не отдать значение автозаполнения в JS (особенно пароль),
+   тогда v-model пуст и Vuetify держит «опущенный» label поверх значения.
+   Чисто-CSS подстраховка: прячем опущенный (не плавающий) label при autofill. */
+.auth-form .v-field:has(input:-webkit-autofill) .v-field-label:not(.v-field-label--floating) {
+  opacity: 0;
 }
 </style>
