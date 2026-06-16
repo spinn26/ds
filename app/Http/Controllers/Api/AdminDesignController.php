@@ -75,7 +75,17 @@ class AdminDesignController extends Controller
             'config.brandName' => ['nullable', 'string', 'max:120'],
             'config.logoText' => ['nullable', 'string', 'max:40'],
             'config.logoUrl' => ['nullable', 'string', 'max:1000'],
+            'config.faviconUrl' => ['nullable', 'string', 'max:1000'],
+            'config.loginTitle' => ['nullable', 'string', 'max:160'],
             'config.colors' => ['nullable', 'array'],
+            'config.typography' => ['nullable', 'array'],
+            'config.typography.fontFamily' => ['nullable', 'string', 'max:300'],
+            'config.typography.baseSize' => ['nullable', 'integer', 'min:10', 'max:24'],
+            'config.radius' => ['nullable', 'array'],
+            'config.radius.sm' => ['nullable', 'integer', 'min:0', 'max:60'],
+            'config.radius.md' => ['nullable', 'integer', 'min:0', 'max:60'],
+            'config.radius.lg' => ['nullable', 'integer', 'min:0', 'max:60'],
+            'config.radius.xl' => ['nullable', 'integer', 'min:0', 'max:60'],
             'config.customCss' => ['nullable', 'string', 'max:50000'],
         ]);
     }

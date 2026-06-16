@@ -16,7 +16,11 @@ export const useDesignStore = defineStore('design', {
       brandName: 'DS ПЛАТФОРМА',
       logoText: 'DS',
       logoUrl: null,
+      faviconUrl: null,
+      loginTitle: null,
       colors: { light: {}, dark: {} },
+      typography: { fontFamily: '', baseSize: null },
+      radius: { sm: null, md: null, lg: null, xl: null },
       customCss: '',
     },
     loaded: false,
@@ -51,20 +55,60 @@ export const useDesignStore = defineStore('design', {
           }
         }
       }
-      // 2) Кастомный CSS.
+      // 2) Сгенерированные дизайн-токены (типографика, скругления).
+      this.injectGenerated(config);
+      // 3) Фавикон.
+      if (config.faviconUrl) this.setFavicon(config.faviconUrl);
+      // 4) Пользовательский кастомный CSS (поверх всего).
       this.injectCss(config.customCss || '');
-      // 3) Логотип/бренд — через стор (config уже обновлён вызывающим).
+      // 5) Логотип/бренд — читаются лейаутами через геттеры стора.
+    },
+
+    /** CSS из типографики/скруглений — отдельный <style>, чтобы не смешивать
+       с пользовательским CSS. */
+    injectGenerated(config) {
+      const t = config.typography || {};
+      const r = config.radius || {};
+      let root = '';
+      if (t.fontFamily) root += `--ds-font-sans:${t.fontFamily};`;
+      if (r.sm) root += `--ds-radius-sm:${r.sm}px;`;
+      if (r.md) root += `--ds-radius-md:${r.md}px;`;
+      if (r.lg) root += `--ds-radius-lg:${r.lg}px;`;
+      if (r.xl) root += `--ds-radius-xl:${r.xl}px;`;
+
+      let css = root ? `:root{${root}}` : '';
+      if (t.fontFamily) css += `.v-application,body{font-family:${t.fontFamily} !important;}`;
+      if (t.baseSize) css += `.v-application{font-size:${t.baseSize}px;}`;
+      // Чтобы скругления были видны на Vuetify-компонентах, маппим их.
+      if (r.lg) css += `.v-card{border-radius:${r.lg}px !important;}`;
+      if (r.md) css += `.v-btn,.v-field{border-radius:${r.md}px !important;}`;
+
+      this.setStyleEl('ds-design-vars', css);
+    },
+
+    setFavicon(href) {
+      let link = document.querySelector("link[rel~='icon']");
+      if (!link) {
+        link = document.createElement('link');
+        link.rel = 'icon';
+        document.head.appendChild(link);
+      }
+      link.href = href;
     },
 
     injectCss(css) {
-      let el = document.getElementById('ds-custom-css');
+      this.setStyleEl('ds-custom-css', css || '');
+    },
+
+    setStyleEl(id, css) {
+      let el = document.getElementById(id);
       if (!css) {
         if (el) el.textContent = '';
         return;
       }
       if (!el) {
         el = document.createElement('style');
-        el.id = 'ds-custom-css';
+        el.id = id;
         document.head.appendChild(el);
       }
       el.textContent = css;
