@@ -817,7 +817,7 @@ function fmt0(val) { return Number(val || 0).toLocaleString('ru-RU'); }
 function fmtRub(val) {
   const n = Number(val || 0);
   if (n >= 1e6) return (n/1e6).toLocaleString('ru-RU', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' М ₽';
-  if (n >= 1e3) return (n/1e3).toLocaleString('ru-RU', { maximumFractionDigits: 1 }) + ' К ₽';
+  if (n >= 1e3) return (n/1e3).toLocaleString('ru-RU', { maximumFractionDigits: 1 }) + ' Т ₽';
   return n.toLocaleString('ru-RU', { maximumFractionDigits: 0 }) + ' ₽';
 }
 
@@ -828,7 +828,7 @@ function fmtCell(val, m) {
   if (m.fmt === 'int') return n.toLocaleString('ru-RU');
   if (m.fmt === 'rub') {
     if (n >= 1e6) return (n/1e6).toLocaleString('ru-RU', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' М ₽';
-    if (n >= 1e3) return (n/1e3).toLocaleString('ru-RU', { maximumFractionDigits: 1 }) + ' К ₽';
+    if (n >= 1e3) return (n/1e3).toLocaleString('ru-RU', { maximumFractionDigits: 1 }) + ' Т ₽';
     return n.toLocaleString('ru-RU', { maximumFractionDigits: 2 }) + ' ₽';
   }
   return n.toLocaleString('ru-RU', { maximumFractionDigits: 2 });
