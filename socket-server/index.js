@@ -197,6 +197,25 @@ io.on('connection', (socket) => {
     socket.to(room).emit('ticket:user-left', { userId, userName, ticketId });
   });
 
+  // === Join / leave task room (модуль «Задачи») ===
+  // Доступ к данным задачи уже ограничен на уровне REST (staff/admin),
+  // здесь по комнате рассылаются только события комментариев.
+  socket.on('task:join', (taskId) => {
+    const room = `task:${taskId}`;
+    socket.join(room);
+    onlineUsers.get(userId)?.rooms.add(room);
+  });
+  socket.on('task:leave', (taskId) => {
+    const room = `task:${taskId}`;
+    socket.leave(room);
+    onlineUsers.get(userId)?.rooms.delete(room);
+  });
+  socket.on('task:typing', ({ taskId, isTyping }) => {
+    const room = `task:${taskId}`;
+    if (!socket.rooms.has(room)) return;
+    socket.to(room).emit('task:typing', { userId, userName, isTyping });
+  });
+
   // === Typing indicator ===
   // Only honor typing for rooms this socket has actually joined (join
   // gate runs the access check). Prevents a client from spraying typing

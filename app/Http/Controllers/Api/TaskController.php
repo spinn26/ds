@@ -336,12 +336,21 @@ class TaskController extends Controller
 
         \App\Services\TaskNotifier::commented($task, (int) $request->user()->id, $data['body']);
 
-        return response()->json(['comment' => [
+        $payload = [
             'id' => $comment->id,
             'body' => $comment->body,
             'created_at' => $comment->created_at,
             'author' => $author,
-        ]], 201);
+        ];
+
+        // Realtime: рассылаем новый комментарий в комнату задачи (best-effort).
+        try {
+            app(\App\Services\SocketService::class)->emit('task:comment', "task:{$id}", ['task_id' => $id, 'comment' => $payload]);
+        } catch (\Throwable) {
+            // socket-сервер может быть офлайн — не критично, REST уже сохранил.
+        }
+
+        return response()->json(['comment' => $payload], 201);
     }
 
     // ───────────── helpers ─────────────

@@ -238,7 +238,10 @@
 <script setup>
 import { ref, reactive, watch, computed, onUnmounted } from 'vue';
 import api from '../api';
+import { useAuthStore } from '../stores/auth';
 import UserPicker from './UserPicker.vue';
+
+const auth = useAuthStore();
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -389,6 +392,38 @@ function initials(name) { return (name || '?').split(' ').map((w) => w[0]).slice
 function fmt(s) { if (!s) return ''; const d = new Date(s); return isNaN(d) ? s : d.toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' }); }
 function toLocalInput(s) { if (!s) return ''; const d = new Date(s); if (isNaN(d)) return ''; const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; }
 
+// ─── Realtime: чат задачи через Socket.IO ───
+let socket = null;
+let joinedTaskId = null;
+async function ensureSocket() {
+  if (socket || !auth.token) return;
+  try {
+    const { io } = await import('socket.io-client');
+    const isLocal = ['localhost', '127.0.0.1'].includes(location.hostname);
+    const defaultHost = isLocal
+      ? `ws://${location.hostname}:3001`
+      : `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`;
+    const host = window.__SOCKET_URL__ || defaultHost;
+    socket = io(host, { auth: { token: auth.token }, transports: ['websocket', 'polling'], reconnection: true });
+    socket.on('task:comment', (p) => {
+      if (!task.value || Number(p.task_id) !== Number(task.value.id)) return;
+      const list = task.value.comments || [];
+      if (list.some((c) => c.id === p.comment.id)) return; // дедуп (свой коммент уже добавлен)
+      task.value.comments = [...list, p.comment];
+    });
+  } catch { /* socket-server offline — комментарии остаются по REST */ }
+}
+async function joinTaskRoom(id) {
+  await ensureSocket();
+  if (!socket) return;
+  if (joinedTaskId && joinedTaskId !== id) socket.emit('task:leave', joinedTaskId);
+  socket.emit('task:join', id);
+  joinedTaskId = id;
+}
+function leaveTaskRoom() {
+  if (socket && joinedTaskId) { socket.emit('task:leave', joinedTaskId); joinedTaskId = null; }
+}
+
 async function fetchTask() {
   if (!props.taskId) return;
   loading.value = true;
@@ -408,6 +443,7 @@ async function fetchTask() {
       requires_result: !!data.task.requires_result,
       result: data.task.result || '',
     });
+    joinTaskRoom(task.value.id);
   } catch { /* ignore */ }
   loading.value = false;
 }
@@ -520,7 +556,11 @@ async function toggleTimer() {
   } catch { /* ignore */ }
   timerBusy.value = false;
 }
-onUnmounted(() => { if (tickInterval) clearInterval(tickInterval); });
+onUnmounted(() => {
+  if (tickInterval) clearInterval(tickInterval);
+  leaveTaskRoom();
+  if (socket) { socket.disconnect(); socket = null; }
+});
 
 async function toggleFavorite() {
   if (!task.value) return;
@@ -571,7 +611,7 @@ function close() { emit('update:modelValue', false); }
 
 watch(() => props.modelValue, (v) => {
   if (v) { fetchTask().then(ensureTicking); }
-  else { task.value = null; if (tickInterval) { clearInterval(tickInterval); tickInterval = null; } }
+  else { leaveTaskRoom(); task.value = null; if (tickInterval) { clearInterval(tickInterval); tickInterval = null; } }
 });
 // Смена задачи при открытом окне (напр. переход по связанной задаче).
 watch(() => props.taskId, (id) => { if (props.modelValue && id) fetchTask().then(ensureTicking); });
