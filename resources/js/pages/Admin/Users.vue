@@ -91,6 +91,10 @@
           <v-text-field v-model="editForm.phone" label="Телефон" />
         </v-col>
         <v-col cols="12" sm="6">
+          <v-text-field v-model="editForm.position" label="Должность"
+            placeholder="напр. Генеральный директор" />
+        </v-col>
+        <v-col cols="12" sm="6">
           <v-select
             v-model="editFormRoles"
             :items="allRoleOptions"
@@ -307,7 +311,7 @@ const {
   filters: { search: '', role: null, blocked: null },
   defaults: {
     firstName: '', lastName: '', patronymic: '', email: '', phone: '',
-    role: 'registered', password: '', gender: '', birthDate: '',
+    role: 'registered', position: '', password: '', gender: '', birthDate: '',
     isBlocked: false, agreement: false,
   },
   normalise: (d) => ({

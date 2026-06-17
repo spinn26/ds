@@ -82,6 +82,8 @@ class AdminUserController extends Controller
 
         $codes = Consultant::whereIn('webUser', $rows->pluck('id'))
             ->pluck('participantCode', 'webUser');
+        $positions = \Illuminate\Support\Facades\DB::table('employee_positions')
+            ->whereIn('user_id', $rows->pluck('id'))->pluck('position', 'user_id');
 
         $users = $rows->map(fn ($u) => [
             'id' => $u->id,
@@ -91,6 +93,7 @@ class AdminUserController extends Controller
             'patronymic' => $u->patronymic,
             'phone' => $u->phone,
             'role' => $u->role,
+            'position' => $positions[$u->id] ?? null,
             'gender' => $u->gender,
             // Y-m-d, иначе datetime-каст сериализует Carbon в UTC и при
             // app-tz Europe/Moscow дата уезжает на день назад (см. ProfileController).
@@ -191,6 +194,15 @@ class AdminUserController extends Controller
                 $code = $request->input('participantCode');
                 $consultant->participantCode = $code === '' ? null : $code;
                 $consultant->saveQuietly();
+            }
+
+            // Должность (оргструктура / мини-профиль).
+            if ($request->has('position')) {
+                $pos = trim((string) $request->input('position'));
+                DB::table('employee_positions')->updateOrInsert(
+                    ['user_id' => $user->id],
+                    ['position' => $pos !== '' ? $pos : null, 'updated_at' => now(), 'created_at' => now()],
+                );
             }
         });
 

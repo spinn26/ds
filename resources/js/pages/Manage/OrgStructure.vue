@@ -120,18 +120,10 @@
           <div v-if="emp.position" class="text-body-2 text-medium-emphasis">{{ emp.position }}</div>
           <v-chip size="x-small" :color="emp.status === 'Активен' ? 'success' : (emp.status === 'Уволен' ? 'error' : 'warning')"
             variant="tonal" class="mt-1">{{ emp.status }}</v-chip>
-
-          <!-- Должность: admin вписывает прямо здесь -->
-          <div v-if="isAdmin" class="d-flex align-center ga-2 mt-3">
-            <v-text-field v-model="positionDraft" label="Должность" density="compact" variant="outlined"
-              hide-details @keyup.enter="savePosition" />
-            <v-btn icon="mdi-content-save" size="small" color="primary" variant="tonal" :loading="savingPosition"
-              title="Сохранить должность" @click="savePosition" />
-          </div>
           <v-list density="compact" class="mt-2 text-left">
             <v-list-item v-if="emp.email" :title="emp.email" prepend-icon="mdi-email-outline" :href="`mailto:${emp.email}`" />
             <v-list-item v-if="emp.phone" :title="emp.phone" prepend-icon="mdi-phone-outline" :href="`tel:${emp.phone}`" />
-            <v-list-item v-if="emp.role" :title="emp.role" prepend-icon="mdi-shield-account-outline" />
+            <v-list-item v-if="emp.role" :title="roleLabel(emp.role)" prepend-icon="mdi-shield-account-outline" />
           </v-list>
           <div v-if="emp.departments?.length" class="text-left mt-2">
             <div class="text-caption text-medium-emphasis mb-1">Отделы</div>
@@ -252,29 +244,27 @@ async function removeMember(d, m) {
   } catch (e) { notify(e.response?.data?.message || 'Ошибка', 'error'); }
 }
 
-// Мини-профиль
+// Русские подписи ролей (роль в WebUser может быть CSV).
+const ROLE_LABELS = {
+  admin: 'Администратор', head: 'Руководитель', backoffice: 'Бэк-офис', finance: 'Финансы',
+  support: 'Поддержка', calculations: 'Расчёты', corrections: 'Корректировки',
+  education: 'Обучение', consultant: 'Партнёр', manager: 'Менеджер',
+};
+function roleLabel(role) {
+  return String(role || '').split(/[,\s]+/).filter(Boolean)
+    .map((r) => ROLE_LABELS[r] || r).join(', ') || '—';
+}
+
+// Мини-профиль (только просмотр; должность задаётся в админке пользователей)
 const empDialog = ref(false);
 const emp = ref(null);
-const positionDraft = ref('');
-const savingPosition = ref(false);
 async function openEmployee(id) {
-  emp.value = null; positionDraft.value = '';
+  emp.value = null;
   empDialog.value = true;
   try {
     const { data } = await api.get(`/org/employees/${id}`);
     emp.value = data.employee;
-    positionDraft.value = data.employee.position || '';
   } catch { /* ignore */ }
-}
-async function savePosition() {
-  if (!emp.value) return;
-  savingPosition.value = true;
-  try {
-    const { data } = await api.put(`/org/employees/${emp.value.id}/position`, { position: positionDraft.value });
-    emp.value.position = data.position;
-    notify('Должность сохранена');
-  } catch (e) { notify(e.response?.data?.message || 'Ошибка', 'error'); }
-  savingPosition.value = false;
 }
 
 onMounted(load);
