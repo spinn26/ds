@@ -572,12 +572,10 @@ const allMetrics = [
 const validKeys = allMetrics.map(m => m.key);
 const _saved = (() => { try { const s = JSON.parse(localStorage.getItem(METRICS_KEY)); return Array.isArray(s) && s.every(k => validKeys.includes(k)) && s.length ? s : null; } catch { return null; } })();
 const selectedMetricKeys = ref(_saved ?? ['volume', 'revenue']);
-// В «В работе» контракты не активированы → транзакций нет. Деньги = сумма
-// контракта (метрика «Объём»), Баллы считаются из контракта на бэкенде
-// (computePoints). Скрываем только «Выручку» — она приходит из транзакций.
-const availableMetrics = computed(() => allMetrics.filter(
-  m => !(reportMode.value === 'inwork' && m.key === 'revenue')
-));
+// Все метрики доступны во всех разрезах. В «В работе» Выручка и Баллы —
+// прогноз из контракта (revenue = amountNoVat×%ДС/100, баллы = computePoints),
+// а не из транзакций (бэкенд: injectInWorkPoints).
+const availableMetrics = computed(() => allMetrics);
 const activeMetrics = computed(() => {
   const sel = availableMetrics.value.filter(m => selectedMetricKeys.value.includes(m.key));
   return sel.length ? sel : availableMetrics.value.filter(m => m.key === 'volume');
@@ -825,10 +823,8 @@ function fmtCell(val, m) {
   const n = Number(val);
   if (isNaN(n) || n === 0) return '—';
   if (m.fmt === 'int') return n.toLocaleString('ru-RU');
-  if (m.fmt === 'rub') {
-    if (n >= 1e6) return (n/1e6).toLocaleString('ru-RU', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' М ₽';
-    return n.toLocaleString('ru-RU', { maximumFractionDigits: 2 }) + ' ₽';
-  }
+  // Деньги в ячейках — полное число до копейки, без сокращений и без «₽»
+  // (по требованию: в отчёте смотрят точные суммы, валюту не дублируем).
   return n.toLocaleString('ru-RU', { maximumFractionDigits: 2 });
 }
 
@@ -1019,9 +1015,9 @@ onMounted(loadData);
 /* Numeric cells */
 .td-num {
   text-align: right;
-  padding: 6px 8px;
+  padding: 5px 8px;
   font-variant-numeric: tabular-nums;
-  font-size: 12px;
+  font-size: 11px;
   min-width: 72px;
   white-space: nowrap;
   color: rgb(var(--v-theme-on-surface));

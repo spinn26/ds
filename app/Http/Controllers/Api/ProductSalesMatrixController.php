@@ -802,7 +802,7 @@ class ProductSalesMatrixController extends Controller
                 'pg.id   as program_id',
                 'pg.name as program_name',
                 $periodExpr,
-                DB::raw('SUM(COALESCE(co.ammount, 0) * COALESCE(mcr_co.rate, 1)) as volume'),
+                DB::raw('SUM(COALESCE(co.ammount, 0) * COALESCE(mcr_co.rate, (SELECT cr.rate FROM "currencyRate" cr WHERE cr.currency = co.currency ORDER BY cr.date DESC LIMIT 1), 1)) as volume'),
                 DB::raw('COUNT(DISTINCT co.id)             as cnt'),
                 DB::raw('0                                 as revenue'),
                 DB::raw('0                                 as points'),
@@ -888,14 +888,21 @@ class ProductSalesMatrixController extends Controller
     }
 
     /**
-     * «В работе»: пересчитать баллы (ЛП) каждой ячейки прямо из контрактов
-     * по методике программы (CommissionCalculator::computePoints) — транзакций
-     * ещё нет. Это прогноз: фактические баллы начислятся при активации.
+     * «В работе»: пересчитать баллы (ЛП) и прогнозную выручку ДС каждой ячейки
+     * прямо из контрактов — транзакций ещё нет. Это прогноз: фактические
+     * значения начислятся при активации.
+     *
+     * - Баллы: CommissionCalculator::computePoints (методика программы).
+     * - Выручка (прогноз дохода ДС): amountNoVat × %ДС / 100 (gross-комиссия ДС).
      *
      * %ДС резолвится тем же приоритетом, что и в боевом расчёте:
      * program.dsPercent → тарифная сетка dsCommission (program × term × дата;
      * год КВ у контракта отсутствует, поэтому null — каскад ослабляет сам) →
      * фолбэк commission.default_ds_percent.
+     *
+     * Курс: управленческий курс на месяц создания, при его отсутствии —
+     * последний курс из currencyRate (валютные контракты иначе считались бы
+     * по курсу 1), иначе 1.
      */
     private function injectInWorkPoints(callable $base, array &$assembled): void
     {
@@ -921,13 +928,14 @@ class ProductSalesMatrixController extends Controller
                 'pg.pointsMethod',
                 'pg.fixedCost',
                 'pg.pointsMin',
-                DB::raw('COALESCE(mcr_pt.rate, 1) as rate'),
+                DB::raw('COALESCE(mcr_pt.rate, (SELECT cr.rate FROM "currencyRate" cr WHERE cr.currency = co.currency ORDER BY cr.date DESC LIMIT 1), 1) as rate'),
             ])
             ->get();
 
         $dsCache = [];
-        $byProg = $byProd = $byProdTot = $grandMo = [];
-        $grandTot = 0.0;
+        // [metric][pid][pgid][mo], [metric][pid][mo], [metric][pid], [metric][mo], [metric]
+        $prog = $prodM = $prodT = $grandM = ['points' => [], 'revenue' => []];
+        $grandT = ['points' => 0.0, 'revenue' => 0.0];
 
         foreach ($contracts as $r) {
             $amountRub   = (float) $r->ammount * (float) $r->rate;
@@ -947,46 +955,63 @@ class ProductSalesMatrixController extends Controller
                 $ds = $defaultDs;
             }
 
-            $prog = (object) [
+            $programRow = (object) [
                 'pointsMethod' => $r->pointsMethod,
                 'fixedCost'    => $r->fixedCost,
                 'pointsMin'    => $r->pointsMin,
             ];
-            $pts = \App\Services\CommissionCalculator::computePoints($prog, $amountNoVat, $amountRub, $ds);
+            $vals = [
+                'points'  => \App\Services\CommissionCalculator::computePoints($programRow, $amountNoVat, $amountRub, $ds),
+                'revenue' => $amountNoVat * $ds / 100,
+            ];
 
             $pid = $r->product_id; $pgid = $r->program_id; $mo = $r->period_month;
-            $byProg[$pid][$pgid][$mo] = ($byProg[$pid][$pgid][$mo] ?? 0) + $pts;
-            $byProd[$pid][$mo]        = ($byProd[$pid][$mo] ?? 0) + $pts;
-            $byProdTot[$pid]          = ($byProdTot[$pid] ?? 0) + $pts;
-            $grandMo[$mo]             = ($grandMo[$mo] ?? 0) + $pts;
-            $grandTot                += $pts;
+            foreach ($vals as $k => $v) {
+                $prog[$k][$pid][$pgid][$mo] = ($prog[$k][$pid][$pgid][$mo] ?? 0) + $v;
+                $prodM[$k][$pid][$mo]       = ($prodM[$k][$pid][$mo] ?? 0) + $v;
+                $prodT[$k][$pid]            = ($prodT[$k][$pid] ?? 0) + $v;
+                $grandM[$k][$mo]            = ($grandM[$k][$mo] ?? 0) + $v;
+                $grandT[$k]               += $v;
+            }
         }
 
-        foreach ($assembled['rows'] as &$prod) {
-            $pid = $prod['productId'];
-            $prod['points'] = round($byProdTot[$pid] ?? 0, 2);
-            foreach ($prod['monthly'] as $mo => &$cell) {
-                $cell['points'] = round($byProd[$pid][$mo] ?? 0, 2);
+        $keys = ['points', 'revenue'];
+        foreach ($assembled['rows'] as &$prodRow) {
+            $pid = $prodRow['productId'];
+            foreach ($keys as $k) {
+                $prodRow[$k] = round($prodT[$k][$pid] ?? 0, 2);
+            }
+            foreach ($prodRow['monthly'] as $mo => &$cell) {
+                foreach ($keys as $k) {
+                    $cell[$k] = round($prodM[$k][$pid][$mo] ?? 0, 2);
+                }
             }
             unset($cell);
-            foreach ($prod['programs'] as &$pg) {
+            foreach ($prodRow['programs'] as &$pg) {
                 $pgid = $pg['programId'];
-                $sum = 0.0;
+                $sum = ['points' => 0.0, 'revenue' => 0.0];
                 foreach ($pg['monthly'] as $mo => &$cell) {
-                    $p = round($byProg[$pid][$pgid][$mo] ?? 0, 2);
-                    $cell['points'] = $p;
-                    $sum += $p;
+                    foreach ($keys as $k) {
+                        $cell[$k] = round($prog[$k][$pid][$pgid][$mo] ?? 0, 2);
+                        $sum[$k] += $cell[$k];
+                    }
                 }
                 unset($cell);
-                $pg['points'] = round($sum, 2);
+                foreach ($keys as $k) {
+                    $pg[$k] = round($sum[$k], 2);
+                }
             }
             unset($pg);
         }
-        unset($prod);
+        unset($prodRow);
 
-        $assembled['grandTotals']['points'] = round($grandTot, 2);
+        foreach ($keys as $k) {
+            $assembled['grandTotals'][$k] = round($grandT[$k], 2);
+        }
         foreach ($assembled['grandTotals']['monthly'] as $mo => &$cell) {
-            $cell['points'] = round($grandMo[$mo] ?? 0, 2);
+            foreach ($keys as $k) {
+                $cell[$k] = round($grandM[$k][$mo] ?? 0, 2);
+            }
         }
         unset($cell);
     }
@@ -1495,11 +1520,28 @@ class ProductSalesMatrixController extends Controller
             ->groupBy('co.product')->get()->keyBy('product_id');
         $grand['fcCount'] = (int) $base()->distinct()->count('co.consultant');
 
+        // Клиенты — distinct (как ФК): один клиент может иметь несколько
+        // контрактов/продуктов, поэтому суммировать client_count по ячейкам
+        // нельзя — итоги задвоятся. Считаем уникальных клиентов отдельно.
+        $clMonthlyIdx = [];
+        foreach ($base()->select(['co.product as product_id', $periodExpr, DB::raw('COUNT(DISTINCT co.client) as cl_count')])
+            ->groupBy('co.product', $periodRaw)->get() as $r) {
+            $clMonthlyIdx[$r->product_id][$r->period_month] = (int) $r->cl_count;
+        }
+        $grandClMonthly = $base()
+            ->select([$periodExpr, DB::raw('COUNT(DISTINCT co.client) as cl_count')])
+            ->groupBy($periodRaw)->get()->pluck('cl_count', 'period_month');
+        $clCounts = $base()
+            ->select('co.product as product_id', DB::raw('COUNT(DISTINCT co.client) as cl_count'))
+            ->groupBy('co.product')->get()->keyBy('product_id');
+        $grand['clientCount'] = (int) $base()->distinct()->count('co.client');
+
         foreach ($productMap as $pid => &$prod) {
             $prod['avgCheck'] = $prod['count'] > 0 ? round($prod['volume'] / $prod['count'], 2) : 0;
             foreach ($prod['monthly'] as $mo => &$mv) {
-                $mv['avgCheck'] = $mv['count'] > 0 ? round($mv['volume'] / $mv['count'], 2) : 0;
-                $mv['fcCount']  = $fcMonthlyIdx[$pid][$mo] ?? 0;
+                $mv['avgCheck']    = $mv['count'] > 0 ? round($mv['volume'] / $mv['count'], 2) : 0;
+                $mv['fcCount']     = $fcMonthlyIdx[$pid][$mo] ?? 0;
+                $mv['clientCount'] = $clMonthlyIdx[$pid][$mo] ?? 0;
             }
             unset($mv);
             foreach ($prod['programs'] as &$prog) {
@@ -1511,16 +1553,18 @@ class ProductSalesMatrixController extends Controller
 
         $grand['avgCheck'] = $grand['count'] > 0 ? round($grand['volume'] / $grand['count'], 2) : 0;
         foreach ($grand['monthly'] as $mo => &$gv) {
-            $gv['avgCheck'] = $gv['count'] > 0 ? round($gv['volume'] / $gv['count'], 2) : 0;
-            $gv['fcCount']  = (int) ($grandFcMonthly[$mo] ?? 0);
+            $gv['avgCheck']    = $gv['count'] > 0 ? round($gv['volume'] / $gv['count'], 2) : 0;
+            $gv['fcCount']     = (int) ($grandFcMonthly[$mo] ?? 0);
+            $gv['clientCount'] = (int) ($grandClMonthly[$mo] ?? 0);
         }
         unset($gv);
 
         $result = [];
         foreach ($productMap as $pid => $prod) {
-            $prod['fcCount']  = (int) ($fcCounts[$pid]->fc_count ?? 0);
-            $prod['programs'] = array_values($prod['programs']);
-            $result[]         = $prod;
+            $prod['fcCount']     = (int) ($fcCounts[$pid]->fc_count ?? 0);
+            $prod['clientCount'] = (int) ($clCounts[$pid]->cl_count ?? 0);
+            $prod['programs']    = array_values($prod['programs']);
+            $result[]            = $prod;
         }
 
         $allSuppliers = $base()
