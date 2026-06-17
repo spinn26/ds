@@ -1310,6 +1310,9 @@ class ChatController extends Controller
         // он дублировал 'open' и путал операторов (упрощение статусов 2026-06-05).
         $prevAssignedTo = $existing->assigned_to ? (int) $existing->assigned_to : null;
         $newAssignedTo = (int) $request->user_id;
+        // Назначение сменило исполнителя (первичное назначение тоже считается).
+        // Раньше переменная не объявлялась → ErrorException ниже на каждом assign.
+        $isReassign = $prevAssignedTo !== $newAssignedTo;
         $newStatus = 'open';
 
         DB::table('chat_tickets')->where('id', $id)->update([
