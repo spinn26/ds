@@ -814,8 +814,8 @@ function fmt0(val) { return Number(val || 0).toLocaleString('ru-RU'); }
 
 function fmtRub(val) {
   const n = Number(val || 0);
-  if (n >= 1e6) return (n/1e6).toLocaleString('ru-RU', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' М ₽';
-  return n.toLocaleString('ru-RU', { maximumFractionDigits: 0 }) + ' ₽';
+  // Полное число без сокращений (как в ячейках); «₽» оставляем — это чип-итог.
+  return n.toLocaleString('ru-RU', { maximumFractionDigits: 2 }) + ' ₽';
 }
 
 function fmtCell(val, m) {
