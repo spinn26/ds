@@ -345,6 +345,36 @@ class ContractImportPreviewService
             $errors[] = ['field' => 'closeDate', 'message' => 'Некорректная дата закрытия'];
         }
 
+        // Статус-зависимые обязательные даты:
+        //  - «Активирован» → нужна дата открытия;
+        //  - «Закрыто» / «Лапсировано» → нужна дата закрытия.
+        $statusName = $this->statusName($row['status'] ?? null);
+        if ($statusName) {
+            $low = mb_strtolower($statusName);
+            if (str_contains($low, 'активирован') && empty($row['openDate'])) {
+                $errors[] = ['field' => 'openDate', 'message' => 'Для статуса «Активирован» обязательна дата открытия'];
+            }
+            if ((str_contains($low, 'закры') || str_contains($low, 'лапсир')) && empty($row['closeDate'])) {
+                $errors[] = ['field' => 'closeDate', 'message' => "Для статуса «{$statusName}» обязательна дата закрытия"];
+            }
+        }
+
         return $errors;
+    }
+
+    /** Название статуса контракта по id (мемоизировано на инстанс). */
+    private array $statusNameCache = [];
+
+    private function statusName($id): ?string
+    {
+        if (! $id || ! is_numeric($id)) {
+            return null;
+        }
+        $id = (int) $id;
+        if (! array_key_exists($id, $this->statusNameCache)) {
+            $this->statusNameCache[$id] = DB::table('contractStatus')->where('id', $id)->value('name');
+        }
+
+        return $this->statusNameCache[$id];
     }
 }

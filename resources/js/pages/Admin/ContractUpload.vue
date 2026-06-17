@@ -86,9 +86,18 @@
                 {{ row.rowData?.number || '—' }}
               </span>
             </td>
-            <td>{{ row.rowData?.client || '—' }}</td>
-            <td>{{ row.rowData?.product || '—' }}</td>
-            <td>{{ row.rowData?.program || '—' }}</td>
+            <td>
+              <div :class="hasFieldError(row, 'client') ? 'text-error' : ''">{{ row.rowData?.clientName || row.rowData?.client || '—' }}</div>
+              <div v-if="row.rowData?.clientName" class="text-caption text-medium-emphasis">ID {{ row.rowData.client }}</div>
+            </td>
+            <td>
+              <div :class="hasFieldError(row, 'product') ? 'text-error' : ''">{{ row.rowData?.productName || row.rowData?.product || '—' }}</div>
+              <div v-if="row.rowData?.productName" class="text-caption text-medium-emphasis">ID {{ row.rowData.product }}</div>
+            </td>
+            <td>
+              <div>{{ row.rowData?.programName || row.rowData?.program || '—' }}</div>
+              <div v-if="row.rowData?.programName" class="text-caption text-medium-emphasis">ID {{ row.rowData.program }}</div>
+            </td>
             <td class="text-end">{{ row.rowData?.ammount || row.rowData?.amount || '—' }}</td>
             <td>{{ row.rowData?.createDate || '—' }}</td>
             <td>
@@ -203,7 +212,13 @@
             </v-col>
             <v-col cols="12" sm="6">
               <v-text-field v-model="editForm.openDate" label="Дата открытия" type="date"
-                density="compact" variant="outlined" />
+                density="compact" variant="outlined"
+                hint="Обязательна для статуса «Активирован»" persistent-hint />
+            </v-col>
+            <v-col cols="12" sm="6">
+              <v-text-field v-model="editForm.closeDate" label="Дата закрытия" type="date"
+                density="compact" variant="outlined"
+                hint="Обязательна для статусов «Закрыто» / «Лапсировано»" persistent-hint />
             </v-col>
             <v-col cols="12">
               <v-textarea v-model="editForm.comment" label="Комментарий"
@@ -382,11 +397,13 @@ async function saveEdit() {
   editSaving.value = true;
   try {
     const { data } = await api.patch(`/admin/contract-import/preview/row/${editingRow.value.id}`, editForm.value);
-    editOpen.value = false;
     if (data.status === 'valid') {
+      editOpen.value = false;
       notify('Строка прошла валидацию');
     } else {
-      notify(`Остались ошибки: ${data.errors.length}`, 'warning');
+      // Оставляем форму открытой и показываем конкретные причины (напр. нужна дата).
+      editingRow.value = { ...editingRow.value, errors: data.errors || [] };
+      notify((data.errors || []).map((e) => e.message).join('; ') || 'Остались ошибки', 'warning');
     }
     await loadList();
   } catch (e) {

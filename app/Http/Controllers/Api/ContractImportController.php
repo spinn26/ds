@@ -144,13 +144,34 @@ class ContractImportController extends Controller
             ->orderBy('id')
             ->get();
 
-        $data = $rows->map(fn ($r) => [
+        $decoded = $rows->map(fn ($r) => [
             'id' => $r->id,
             'sessionId' => $r->session_id,
-            'rowData' => json_decode($r->row_data, true),
+            'rowData' => json_decode($r->row_data, true) ?: [],
             'errors' => json_decode($r->errors ?: '[]', true),
             'status' => $r->status,
         ]);
+
+        // Резолвим названия (клиент/продукт/программа/статус/валюта), чтобы
+        // в реестре показывать имена, а не ID — одним батчем на всю выдачу.
+        $pluckIds = fn ($key) => $decoded->pluck("rowData.$key")->filter(fn ($v) => is_numeric($v))->map(fn ($v) => (int) $v)->unique();
+        $clients = DB::table('client')->whereIn('id', $pluckIds('client'))->pluck('personName', 'id');
+        $products = DB::table('product')->whereIn('id', $pluckIds('product'))->pluck('name', 'id');
+        $programs = DB::table('program')->whereIn('id', $pluckIds('program'))->pluck('name', 'id');
+        $statuses = DB::table('contractStatus')->whereIn('id', $pluckIds('status'))->pluck('name', 'id');
+        $currencies = DB::table('currency')->whereIn('id', $pluckIds('currency'))->pluck('symbol', 'id');
+
+        $data = $decoded->map(function ($row) use ($clients, $products, $programs, $statuses, $currencies) {
+            $rd = $row['rowData'];
+            $rd['clientName'] = $rd['clientName'] ?? ($clients[(int) ($rd['client'] ?? 0)] ?? null);
+            $rd['productName'] = $rd['productName'] ?? ($products[(int) ($rd['product'] ?? 0)] ?? null);
+            $rd['programName'] = $rd['programName'] ?? ($programs[(int) ($rd['program'] ?? 0)] ?? null);
+            $rd['statusName'] = $statuses[(int) ($rd['status'] ?? 0)] ?? null;
+            $rd['currencySymbol'] = $currencies[(int) ($rd['currency'] ?? 0)] ?? null;
+            $row['rowData'] = $rd;
+
+            return $row;
+        });
 
         return response()->json([
             'data' => $data,
