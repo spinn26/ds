@@ -590,6 +590,23 @@ class EducationController extends Controller
                 ['user_id', 'course_id'],
                 ['score', 'total', 'completed_at', 'updated_at']
             );
+
+            // Сдача теста = урок-тест пройден: помечаем урок(и) is_test
+            // изученными, иначе в списке «Уроки курса» тест висит «не изучен»
+            // и прогресс не доходит до 100% (изучено 4 из 5), хотя тест сдан.
+            if (Schema::hasColumn('education_lessons', 'is_test')) {
+                $testLessonIds = DB::table('education_lessons')
+                    ->where('course_id', $id)->where('is_test', true)->pluck('id');
+                foreach ($testLessonIds as $lessonId) {
+                    DB::table('education_lesson_views')->insertOrIgnore([
+                        'user_id' => $userId,
+                        'lesson_id' => $lessonId,
+                        'viewed_at' => now(),
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                }
+            }
         }
 
         // Номер/количество попыток и процент правильных — для экрана результата
