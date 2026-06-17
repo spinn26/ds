@@ -80,8 +80,8 @@
           <v-textarea v-model="form.description" label="Описание" density="comfortable" rows="2" class="mt-1" />
           <v-select v-model="form.parent_id" :items="parentOptions" label="Вышестоящий отдел" density="comfortable"
             clearable class="mt-1" />
-          <UserPicker v-model="form.head_id" label="Руководитель" class="mt-1" />
-          <UserPicker v-model="form.deputy_id" label="Заместитель" class="mt-1" />
+          <UserPicker v-model="form.head_id" :preload="editPreload" label="Руководитель" class="mt-1" />
+          <UserPicker v-model="form.deputy_id" :preload="editPreload" label="Заместитель" class="mt-1" />
         </v-card-text>
         <v-card-actions>
           <v-spacer />
@@ -203,9 +203,16 @@ async function load() {
 const dialog = ref(false);
 const saving = ref(false);
 const form = reactive({ id: null, name: '', description: '', parent_id: null, head_id: null, deputy_id: null });
+// Опции для пикеров, чтобы выбранные руководитель/заместитель показывались
+// именем (а не голым id) сразу при открытии формы.
+const editPreload = ref([]);
 function emptyForm() { return { id: null, name: '', description: '', parent_id: null, head_id: null, deputy_id: null }; }
-function openCreate(parentId) { Object.assign(form, emptyForm(), { parent_id: parentId }); dialog.value = true; }
-function openEdit(d) { Object.assign(form, { id: d.id, name: d.name, description: d.description || '', parent_id: d.parent_id, head_id: d.head?.id ?? null, deputy_id: d.deputy?.id ?? null }); dialog.value = true; }
+function openCreate(parentId) { Object.assign(form, emptyForm(), { parent_id: parentId }); editPreload.value = []; dialog.value = true; }
+function openEdit(d) {
+  Object.assign(form, { id: d.id, name: d.name, description: d.description || '', parent_id: d.parent_id, head_id: d.head?.id ?? null, deputy_id: d.deputy?.id ?? null });
+  editPreload.value = [d.head, d.deputy].filter(Boolean);
+  dialog.value = true;
+}
 async function save() {
   saving.value = true;
   try {
