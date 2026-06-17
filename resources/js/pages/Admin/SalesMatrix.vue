@@ -1,30 +1,55 @@
 ﻿<template>
   <div>
     <!-- Header + mode toggle -->
-    <div class="d-flex align-center mb-4 ga-3">
-      <PageHeader title="Матрица продаж по продуктам" icon="mdi-table-large" class="flex-grow-1 mb-0" />
+    <div class="d-flex align-center mb-4 ga-3 flex-wrap">
+      <PageHeader :title="reportType === 'revenue' ? 'Начисление выручки по продуктам' : 'Продажи по продуктам'"
+        icon="mdi-table-large" class="flex-grow-1 mb-0" />
       <v-btn size="small" variant="tonal" prepend-icon="mdi-currency-rub"
         to="/manage/management-currencies" title="Курсы валют для отчётов">
         Курсы
       </v-btn>
+      <!-- Тип отчёта (Part 3, Lena): Продажи / Начисление выручки -->
+      <v-btn-toggle v-model="reportType" density="compact" variant="outlined" mandatory color="secondary">
+        <v-btn value="sales" size="small">Продажи</v-btn>
+        <v-btn value="revenue" size="small">Начисление выручки</v-btn>
+      </v-btn-toggle>
       <v-btn-toggle v-model="reportMode" density="compact" variant="outlined" mandatory color="primary">
         <v-btn value="inwork" size="small" prepend-icon="mdi-progress-clock">
           В работе
           <v-tooltip activator="parent" location="bottom" text="Контракты в работе (прогноз активации)" />
         </v-btn>
         <v-btn value="forecast" size="small" prepend-icon="mdi-chart-timeline-variant">
-          Прогноз
-          <v-tooltip activator="parent" location="bottom" text="Прогноз доходов: Активированные контракты" />
+          Активировано
+          <v-tooltip activator="parent" location="bottom" text="Активированные контракты" />
         </v-btn>
         <v-btn value="fact" size="small" prepend-icon="mdi-check-circle-outline">
           Факт
           <v-tooltip activator="parent" location="bottom" text="Финансовый факт: Транзакции и пополнения" />
         </v-btn>
+        <v-btn value="total" size="small" prepend-icon="mdi-sigma">
+          Итого
+          <v-tooltip activator="parent" location="bottom" text="Итого (в разработке)" />
+        </v-btn>
       </v-btn-toggle>
     </div>
 
+    <!-- Заглушка для неопределённых разрезов: Начисление выручки (весь отчёт)
+         и Итого (в любом отчёте). По указанию Лены — «оставить пустыми», пока
+         не описана логика. -->
+    <v-card v-if="isStub" class="ds-card" elevation="0">
+      <v-card-text class="text-center py-12">
+        <v-icon size="48" color="medium-emphasis" class="mb-3">mdi-hammer-wrench</v-icon>
+        <div class="text-h6 mb-1">Отчёт в разработке</div>
+        <div class="text-body-2 text-medium-emphasis" style="max-width:520px;margin:0 auto">
+          Структура согласована: <b>Продажи</b> и <b>Начисление выручки</b>, каждый в
+          разрезах <b>В работе / Активировано / Факт / Итого</b>.
+          Логика этого разреза будет описана и добавлена отдельно.
+        </div>
+      </v-card-text>
+    </v-card>
+
     <!-- "В работе": pipeline-контракты (статусы 2/3) по прогнозу активации -->
-    <template v-if="reportMode === 'inwork'">
+    <template v-if="reportType === 'sales' && reportMode === 'inwork'">
       <!-- Filter bar -->
       <v-card class="ds-card mb-3" elevation="0">
         <v-card-text class="pa-2">
@@ -237,7 +262,7 @@
 
     <!-- "Прогноз" (активированные контракты, /period) и "Факт" (транзакции, /fact)
          используют одну таблицу: период + метрики, различается только endpoint -->
-    <template v-if="reportMode === 'forecast' || reportMode === 'fact'">
+    <template v-if="reportType === 'sales' && (reportMode === 'forecast' || reportMode === 'fact')">
       <!-- Filter bar -->
       <v-card class="ds-card mb-3" elevation="0">
         <v-card-text class="pa-2">
@@ -464,6 +489,14 @@ import PageHeader from '../../components/PageHeader.vue';
 // fact    — финансовый факт: транзакции и пополнения (/fact)
 const reportMode = ref('forecast');
 
+// ─── Report type (Part 3, Lena) ───────────────────────────────
+// 'sales'   — Продажи (текущая матрица: суммы контрактов)
+// 'revenue' — Начисление выручки (логика будет описана отдельно → заглушка)
+// Разрезы reportMode: inwork=в работе, forecast=активировано, fact=факт,
+// total=итого (итого/начисление-выручка пока заглушки — «оставить пустыми»).
+const reportType = ref('sales');
+const isStub = computed(() => reportType.value === 'revenue' || reportMode.value === 'total');
+
 // ─── Period ───────────────────────────────────────────────────
 const now = new Date();
 const currentQ = `Q${Math.ceil((now.getMonth() + 1) / 3)}`;
@@ -577,8 +610,11 @@ async function resetFilters() {
 function reload() { loadData(); }
 function onPeriodModeChange() { reload(); }
 
-watch(reportMode, (mode) => {
-  if (mode === 'inwork') {
+watch([reportMode, reportType], () => {
+  // Заглушки (Начисление выручки / Итого) данные не грузят — логика будет
+  // описана отдельно, пока показываем пустой плейсхолдер.
+  if (isStub.value) return;
+  if (reportMode.value === 'inwork') {
     if (!fcRows.value.length && !fcLoading.value) loadForecast();
   } else {
     // 'forecast' (активированные) или 'fact' (транзакции) — перезагружаем нужный endpoint
