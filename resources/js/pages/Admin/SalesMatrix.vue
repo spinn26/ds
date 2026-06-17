@@ -308,17 +308,41 @@
                 @update:model-value="reload" />
             </template>
 
-            <!-- Прогноз активации (только «В работе») — доп. фильтр по дате прогноза -->
+            <!-- Прогноз активации (только «В работе») — тот же контрол, что период -->
             <template v-if="reportMode === 'inwork'">
               <v-divider vertical class="mx-1" style="height:24px;align-self:center" />
               <span class="text-caption text-medium-emphasis" style="flex-shrink:0">Прогноз:</span>
-              <v-text-field v-model="fcFrom" type="month" density="compact" variant="outlined" hide-details
-                placeholder="с" style="width:140px; flex:0 0 140px" @update:model-value="reload" />
-              <span class="text-medium-emphasis" style="flex-shrink:0">—</span>
-              <v-text-field v-model="fcTo" type="month" density="compact" variant="outlined" hide-details
-                placeholder="по" style="width:140px; flex:0 0 140px" @update:model-value="reload" />
-              <v-btn v-if="fcFrom || fcTo" icon="mdi-close" size="x-small" variant="text"
-                @click="fcFrom = ''; fcTo = ''; reload()" />
+              <v-btn-toggle v-model="faMode" mandatory density="compact" variant="outlined" color="secondary"
+                @update:model-value="reload">
+                <v-btn value="off"     size="x-small">Все</v-btn>
+                <v-btn value="year"    size="x-small">Год</v-btn>
+                <v-btn value="quarter" size="x-small">Квартал</v-btn>
+                <v-btn value="month"   size="x-small">Месяц</v-btn>
+                <v-btn value="range"   size="x-small">Диапазон</v-btn>
+              </v-btn-toggle>
+              <v-select v-if="faMode !== 'off' && faMode !== 'range'" v-model="faYear" :items="yearOptions"
+                density="compact" variant="outlined" hide-details style="width:92px; flex:0 0 92px"
+                @update:model-value="reload" />
+              <v-btn-toggle v-if="faMode === 'quarter'" v-model="faQuarter" mandatory
+                density="compact" variant="outlined" @update:model-value="reload">
+                <v-btn v-for="q in ['Q1','Q2','Q3','Q4']" :key="q" :value="q" size="x-small">{{ q }}</v-btn>
+              </v-btn-toggle>
+              <v-select v-if="faMode === 'month'" v-model="faMonth" :items="monthOpts"
+                item-title="t" item-value="v" density="compact" variant="outlined"
+                hide-details style="width:128px; flex:0 0 128px" @update:model-value="reload" />
+              <template v-if="faMode === 'range'">
+                <v-select v-model="faFromYear" :items="yearOptions" density="compact" variant="outlined"
+                  hide-details style="width:86px;flex:0 0 86px" @update:model-value="reload" />
+                <v-select v-model="faFromMonth" :items="monthOpts" item-title="t" item-value="v"
+                  density="compact" variant="outlined" hide-details style="width:120px;flex:0 0 120px"
+                  @update:model-value="reload" />
+                <span class="text-medium-emphasis" style="flex-shrink:0">—</span>
+                <v-select v-model="faToYear" :items="yearOptions" density="compact" variant="outlined"
+                  hide-details style="width:86px;flex:0 0 86px" @update:model-value="reload" />
+                <v-select v-model="faToMonth" :items="monthOpts" item-title="t" item-value="v"
+                  density="compact" variant="outlined" hide-details style="width:120px;flex:0 0 120px"
+                  @update:model-value="reload" />
+              </template>
             </template>
 
             <v-divider vertical class="mx-1" style="height:24px;align-self:center" />
@@ -607,9 +631,34 @@ const filterProducts   = ref(
   _loadSaved(PRODUCTS_KEY, v => Array.isArray(v) && v.every(n => Number.isInteger(n))) ?? []
 );
 const expandedProducts = ref(new Set());
-// Доп. фильтр «прогноз активации» (Y-m) — только для режима «В работе».
-const fcFrom = ref('');
-const fcTo   = ref('');
+
+// Доп. фильтр «прогноз активации» — тот же контрол, что и период:
+// Все / Год / Квартал / Месяц / Диапазон. fcFrom/fcTo вычисляются в Y-m.
+// Префикс fa* — чтобы не пересекаться со старым fc* (pipeline-секция).
+const faMode     = ref('off');
+const faYear     = ref(now.getFullYear());
+const faQuarter  = ref(currentQ);
+const faMonth    = ref(String(now.getMonth() + 1).padStart(2, '0'));
+const faFromYear  = ref(now.getFullYear());
+const faFromMonth = ref('01');
+const faToYear    = ref(now.getFullYear());
+const faToMonth   = ref(String(now.getMonth() + 1).padStart(2, '0'));
+const fcFrom = computed(() => {
+  const y = faYear.value;
+  if (faMode.value === 'off')     return '';
+  if (faMode.value === 'year')    return `${y}-01`;
+  if (faMode.value === 'quarter') return `${y}-${String(quarterRanges[faQuarter.value][0]).padStart(2, '0')}`;
+  if (faMode.value === 'month')   return `${y}-${faMonth.value}`;
+  return `${faFromYear.value}-${faFromMonth.value}`;
+});
+const fcTo = computed(() => {
+  const y = faYear.value;
+  if (faMode.value === 'off')     return '';
+  if (faMode.value === 'year')    return `${y}-12`;
+  if (faMode.value === 'quarter') return `${y}-${String(quarterRanges[faQuarter.value][1]).padStart(2, '0')}`;
+  if (faMode.value === 'month')   return `${y}-${faMonth.value}`;
+  return `${faToYear.value}-${faToMonth.value}`;
+});
 
 function toggleProduct(pid) {
   const s = new Set(expandedProducts.value);
