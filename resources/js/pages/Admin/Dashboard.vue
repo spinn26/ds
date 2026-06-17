@@ -1,18 +1,54 @@
 <template>
   <div>
-    <PageHeader title="Панель управления" icon="mdi-chart-areaspline" />
+    <!-- Hero -->
+    <div class="admin-hero mb-4">
+      <div class="admin-hero__bg" />
+      <div class="admin-hero__content">
+        <div class="admin-hero__greet">
+          <div class="admin-hero__eyebrow">ПАНЕЛЬ УПРАВЛЕНИЯ · {{ todayLabel }}</div>
+          <div class="admin-hero__title">{{ greeting }}{{ adminName ? ', ' + adminName : '' }}</div>
+          <div class="admin-hero__sub">Сводка по платформе в реальном времени</div>
+        </div>
+        <div class="admin-hero__stats">
+          <div class="admin-hero__stat">
+            <div class="admin-hero__stat-val">{{ fmtK(kpi.revenueMonth) }} ₽</div>
+            <div class="admin-hero__stat-lbl">Выручка за месяц</div>
+          </div>
+          <div class="admin-hero__divider" />
+          <div class="admin-hero__stat">
+            <div class="admin-hero__stat-val">{{ fmtN(kpi.activePartners) }}</div>
+            <div class="admin-hero__stat-lbl">Активных партнёров</div>
+          </div>
+          <div class="admin-hero__divider" />
+          <div class="admin-hero__stat">
+            <div class="admin-hero__stat-val" :class="kpi.openTickets > 5 ? 'text-warning' : ''">{{ fmtN(kpi.openTickets) }}</div>
+            <div class="admin-hero__stat-lbl">Открытых тикетов</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Быстрые действия -->
+    <div class="d-flex flex-wrap ga-2 mb-4">
+      <v-btn v-for="a in quickActions" :key="a.to" :to="a.to" :prepend-icon="a.icon"
+        variant="tonal" size="small" color="primary" class="qa-btn">{{ a.label }}</v-btn>
+    </div>
 
     <!-- KPI Cards -->
     <v-row class="mb-4" dense>
-      <v-col v-for="card in kpiCards" :key="card.label" cols="6" sm="4" md="3" lg="2">
-        <v-card class="pa-3 text-center stat-card" :color="card.color" variant="tonal">
-          <v-icon :color="card.color" size="24" class="mb-1">{{ card.icon }}</v-icon>
-          <div class="text-h5 font-weight-bold">{{ card.value }}</div>
-          <div class="text-caption text-medium-emphasis">{{ card.label }}</div>
-          <div v-if="card.delta !== null" class="text-caption" :class="deltaClass(card.delta)">
-            <v-icon size="12">{{ card.delta > 0 ? 'mdi-arrow-up' : card.delta < 0 ? 'mdi-arrow-down' : 'mdi-minus' }}</v-icon>
-            {{ fmtDelta(card.delta) }}
+      <v-col v-for="card in kpiCards" :key="card.label" cols="6" sm="4" md="3">
+        <v-card class="kpi-card">
+          <div class="kpi-card__icon" :style="{ background: `rgba(var(--v-theme-${card.color}), 0.12)` }">
+            <v-icon :color="card.color" size="22">{{ card.icon }}</v-icon>
           </div>
+          <div class="kpi-card__body">
+            <div class="kpi-card__value">{{ card.value }}</div>
+            <div class="kpi-card__label">{{ card.label }}</div>
+          </div>
+          <span v-if="card.delta !== null" class="kpi-card__delta" :class="deltaClass(card.delta)">
+            <v-icon size="13">{{ card.delta > 0 ? 'mdi-trending-up' : card.delta < 0 ? 'mdi-trending-down' : 'mdi-trending-neutral' }}</v-icon>
+            {{ fmtDelta(card.delta) }}
+          </span>
         </v-card>
       </v-col>
     </v-row>
@@ -176,8 +212,8 @@ import {
   ArcElement, Filler,
 } from 'chart.js';
 import api from '../../api';
-import PageHeader from '../../components/PageHeader.vue';
 import { fmtDate } from '../../composables/useDesign';
+import { useAuthStore } from '../../stores/auth';
 
 ChartJS.register(
   Title, Tooltip, Legend,
@@ -188,6 +224,27 @@ ChartJS.register(
 
 const loading = ref(true);
 const data = ref({});
+const auth = useAuthStore();
+
+const kpi = computed(() => data.value.kpi || {});
+const adminName = computed(() => auth.user?.firstName || '');
+const greeting = computed(() => {
+  const h = new Date().getHours();
+  if (h < 6) return 'Доброй ночи';
+  if (h < 12) return 'Доброе утро';
+  if (h < 18) return 'Добрый день';
+  return 'Добрый вечер';
+});
+const todayLabel = computed(() => new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' }));
+
+const quickActions = [
+  { label: 'Пользователи', icon: 'mdi-account-cog', to: '/admin/users' },
+  { label: 'Партнёры', icon: 'mdi-account-group', to: '/admin/partners' },
+  { label: 'Продукты', icon: 'mdi-package-variant', to: '/admin/products' },
+  { label: 'Структура', icon: 'mdi-sitemap-outline', to: '/manage/org-structure' },
+  { label: 'Аудит-лог', icon: 'mdi-history', to: '/admin/audit-log' },
+  { label: 'Настройки', icon: 'mdi-cog', to: '/admin/settings' },
+];
 
 const fmtN = (n) => Number(n || 0).toLocaleString('ru-RU');
 const fmtK = (n) => {
@@ -401,4 +458,42 @@ onMounted(async () => {
 .stat-card {
   border-radius: var(--ds-radius-lg, 12px) !important;
 }
+
+/* ── Hero ── */
+.admin-hero { position: relative; overflow: hidden; border-radius: 20px; padding: 26px 28px;
+  background-color: rgb(var(--v-theme-primary));
+  background-image: linear-gradient(135deg, rgba(255,255,255,0.12), rgba(0,0,0,0.22));
+  color: rgb(var(--v-theme-on-primary)); box-shadow: 0 10px 30px rgba(46,125,50,0.25); }
+.admin-hero__bg { position: absolute; inset: 0; pointer-events: none;
+  background:
+    radial-gradient(420px 220px at 92% -20%, rgba(255,255,255,0.22), transparent 70%),
+    radial-gradient(320px 200px at 70% 130%, rgba(255,255,255,0.12), transparent 70%); }
+.admin-hero__content { position: relative; z-index: 1; display: flex; flex-wrap: wrap; gap: 20px;
+  align-items: center; justify-content: space-between; }
+.admin-hero__eyebrow { font-size: 0.66rem; font-weight: 700; letter-spacing: 1.2px; opacity: 0.85; text-transform: uppercase; }
+.admin-hero__title { font-size: 1.7rem; font-weight: 800; letter-spacing: -0.02em; margin-top: 4px; line-height: 1.15; }
+.admin-hero__sub { font-size: 0.9rem; opacity: 0.82; margin-top: 2px; }
+.admin-hero__stats { display: flex; align-items: center; gap: 22px; }
+.admin-hero__stat { text-align: center; min-width: 96px; }
+.admin-hero__stat-val { font-size: 1.5rem; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+.admin-hero__stat-lbl { font-size: 0.72rem; opacity: 0.82; margin-top: 2px; }
+.admin-hero__divider { width: 1px; align-self: stretch; background: rgba(255,255,255,0.25); }
+@media (max-width: 600px) {
+  .admin-hero__title { font-size: 1.35rem; }
+  .admin-hero__stats { gap: 14px; width: 100%; justify-content: space-between; }
+}
+
+/* ── Быстрые действия ── */
+.qa-btn { text-transform: none; letter-spacing: 0; border-radius: 10px; }
+
+/* ── KPI cards ── */
+.kpi-card { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 16px !important;
+  position: relative; transition: transform .15s ease, box-shadow .15s ease; }
+.kpi-card:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(15,30,15,0.10) !important; }
+.kpi-card__icon { width: 44px; height: 44px; border-radius: 13px; display: grid; place-items: center; flex-shrink: 0; }
+.kpi-card__body { min-width: 0; }
+.kpi-card__value { font-size: 1.4rem; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.kpi-card__label { font-size: 0.74rem; color: rgba(var(--v-theme-on-surface), 0.55); margin-top: 1px; }
+.kpi-card__delta { position: absolute; top: 12px; right: 12px; display: inline-flex; align-items: center; gap: 1px;
+  font-size: 0.72rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 </style>
