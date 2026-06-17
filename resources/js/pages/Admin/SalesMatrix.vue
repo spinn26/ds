@@ -827,8 +827,8 @@ function fmtCell(val, m) {
   if (isNaN(n) || n === 0) return '—';
   if (m.fmt === 'int') return n.toLocaleString('ru-RU');
   if (m.fmt === 'rub') {
-    if (n >= 1e6) return (n/1e6).toLocaleString('ru-RU', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + 'М₽';
-    if (n >= 1e3) return (n/1e3).toLocaleString('ru-RU', { maximumFractionDigits: 0 }) + ' ₽';
+    if (n >= 1e6) return (n/1e6).toLocaleString('ru-RU', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' М ₽';
+    if (n >= 1e3) return (n/1e3).toLocaleString('ru-RU', { maximumFractionDigits: 1 }) + ' К ₽';
     return n.toLocaleString('ru-RU', { maximumFractionDigits: 2 }) + ' ₽';
   }
   return n.toLocaleString('ru-RU', { maximumFractionDigits: 2 });
