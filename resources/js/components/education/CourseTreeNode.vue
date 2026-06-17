@@ -24,7 +24,7 @@
       <span class="tree-label">{{ node.title }}</span>
 
       <span
-        v-if="node.lessonCount && progress < 100"
+        v-if="node.lessonCount && progress < 100 && !passed"
         class="tree-mini tabular-nums"
       >
         {{ progress }}%
@@ -46,6 +46,7 @@
 
 <script setup>
 import { ref, computed } from 'vue';
+import { useEducationStore } from '../../stores/education';
 
 const props = defineProps({
   node: { type: Object, required: true },
@@ -53,6 +54,8 @@ const props = defineProps({
   level: { type: Number, default: 1 },
 });
 const emit = defineEmits(['navigate']);
+
+const edu = useEducationStore();
 
 const expanded = ref(props.level <= 2); // первые 2 уровня раскрыты по умолчанию
 const hasChildren = computed(() => (props.node.children?.length || 0) > 0);
@@ -75,13 +78,20 @@ const progress = computed(() =>
   stats.value.total ? Math.round((stats.value.viewed / stats.value.total) * 100) : 0
 );
 
+// «Пройден» = тест сдан (единый критерий со всей платформой). Раньше статус
+// в дереве считался ТОЛЬКО по просмотру уроков → курс со сданным тестом, но
+// не все уроки открыты, показывался «не пройден», хотя в самом курсе —
+// «Тест сдан». Учитываем серверный testPassed + оптимистичный стор.
+const passed = computed(() => !!props.node.testPassed || edu.isPassed(props.node.id));
+const done = computed(() => passed.value || (progress.value === 100 && stats.value.total > 0));
+
 const statusIcon = computed(() => {
-  if (progress.value === 100 && stats.value.total > 0) return 'mdi-check-circle';
+  if (done.value) return 'mdi-check-circle';
   if (progress.value > 0) return 'mdi-circle-slice-4';
   return 'mdi-circle-outline';
 });
 const statusColor = computed(() => {
-  if (progress.value === 100 && stats.value.total > 0) return 'success';
+  if (done.value) return 'success';
   if (progress.value > 0) return 'warning';
   return 'grey-lighten-1';
 });

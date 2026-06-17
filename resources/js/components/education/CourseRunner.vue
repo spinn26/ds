@@ -89,20 +89,25 @@
       <v-divider class="my-3" />
       <div class="text-subtitle-2 font-weight-bold mb-2">Тест</div>
 
+      <!-- Тест сдан — показываем ВСЕГДА при наличии completion, даже если не
+           все уроки просмотрены (единый критерий «пройден = тест сдан»). -->
+      <div v-if="course.completion" class="mb-3">
+        <v-alert type="success" density="compact">
+          Тест сдан: {{ course.completion.score }} / {{ course.completion.total }}
+          <template v-if="course.completion.total">
+            ({{ Math.round(course.completion.score / course.completion.total * 100) }}%)
+          </template>
+        </v-alert>
+      </div>
+
       <v-alert
-        v-if="!allLessonsViewed"
+        v-else-if="!allLessonsViewed"
         type="info"
         density="compact"
         class="mb-3"
       >
         Просмотрите все уроки, чтобы открыть тест.
       </v-alert>
-
-      <div v-else-if="course.completion" class="mb-3">
-        <v-alert type="success" density="compact">
-          Тест сдан: {{ course.completion.score }} / {{ course.completion.total }}
-        </v-alert>
-      </div>
 
       <template v-else>
         <v-alert v-if="testResult && !testResult.passed" type="error" density="compact" class="mb-3">
