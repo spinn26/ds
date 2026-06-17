@@ -48,8 +48,8 @@
       </v-card-text>
     </v-card>
 
-    <!-- "В работе": pipeline-контракты (статусы 2/3) по прогнозу активации -->
-    <template v-if="reportType === 'sales' && reportMode === 'inwork'">
+    <!-- (устар.) pipeline по прогнозу активации — заменён на /inwork по дате создания -->
+    <template v-if="reportType === 'sales' && reportMode === 'pipeline'">
       <!-- Filter bar -->
       <v-card class="ds-card mb-3" elevation="0">
         <v-card-text class="pa-2">
@@ -262,7 +262,7 @@
 
     <!-- "Прогноз" (активированные контракты, /period) и "Факт" (транзакции, /fact)
          используют одну таблицу: период + метрики, различается только endpoint -->
-    <template v-if="reportType === 'sales' && (reportMode === 'forecast' || reportMode === 'fact')">
+    <template v-if="reportType === 'sales' && (reportMode === 'forecast' || reportMode === 'fact' || reportMode === 'inwork')">
       <!-- Filter bar -->
       <v-card class="ds-card mb-3" elevation="0">
         <v-card-text class="pa-2">
@@ -306,6 +306,19 @@
               <v-select v-model="rangeToMonth" :items="monthOpts" item-title="t" item-value="v"
                 density="compact" variant="outlined" hide-details style="width:120px;flex:0 0 120px"
                 @update:model-value="reload" />
+            </template>
+
+            <!-- Прогноз активации (только «В работе») — доп. фильтр по дате прогноза -->
+            <template v-if="reportMode === 'inwork'">
+              <v-divider vertical class="mx-1" style="height:24px;align-self:center" />
+              <span class="text-caption text-medium-emphasis" style="flex-shrink:0">Прогноз:</span>
+              <v-text-field v-model="fcFrom" type="month" density="compact" variant="outlined" hide-details
+                placeholder="с" style="width:140px; flex:0 0 140px" @update:model-value="reload" />
+              <span class="text-medium-emphasis" style="flex-shrink:0">—</span>
+              <v-text-field v-model="fcTo" type="month" density="compact" variant="outlined" hide-details
+                placeholder="по" style="width:140px; flex:0 0 140px" @update:model-value="reload" />
+              <v-btn v-if="fcFrom || fcTo" icon="mdi-close" size="x-small" variant="text"
+                @click="fcFrom = ''; fcTo = ''; reload()" />
             </template>
 
             <v-divider vertical class="mx-1" style="height:24px;align-self:center" />
@@ -591,6 +604,9 @@ const filterProducts   = ref(
   _loadSaved(PRODUCTS_KEY, v => Array.isArray(v) && v.every(n => Number.isInteger(n))) ?? []
 );
 const expandedProducts = ref(new Set());
+// Доп. фильтр «прогноз активации» (Y-m) — только для режима «В работе».
+const fcFrom = ref('');
+const fcTo   = ref('');
 
 function toggleProduct(pid) {
   const s = new Set(expandedProducts.value);
@@ -614,12 +630,9 @@ watch([reportMode, reportType], () => {
   // Заглушки (Начисление выручки / Итого) данные не грузят — логика будет
   // описана отдельно, пока показываем пустой плейсхолдер.
   if (isStub.value) return;
-  if (reportMode.value === 'inwork') {
-    if (!fcRows.value.length && !fcLoading.value) loadForecast();
-  } else {
-    // 'forecast' (активированные) или 'fact' (транзакции) — перезагружаем нужный endpoint
-    loadData();
-  }
+  // inwork (по дате создания) / forecast (активированные) / fact (транзакции) —
+  // все через loadData, различается endpoint.
+  loadData();
 });
 
 // Debounce для фильтра продуктов — не закрываем дропдаун при множественном выборе
@@ -645,7 +658,13 @@ async function loadData({ updateOptions = true } = {}) {
     p.set('to',   periodTo.value);
     filterSuppliers.value.forEach(s => p.append('suppliers[]', s));
     filterProducts.value.forEach(id => p.append('products[]', id));
-    const endpoint = reportMode.value === 'fact' ? 'fact' : 'period';
+    // Доп. фильтр по прогнозу активации — только для «В работе».
+    if (reportMode.value === 'inwork' && fcFrom.value && fcTo.value) {
+      p.set('fcFrom', fcFrom.value);
+      p.set('fcTo', fcTo.value);
+    }
+    const endpoint = reportMode.value === 'inwork' ? 'inwork'
+      : (reportMode.value === 'fact' ? 'fact' : 'period');
     const { data } = await api.get(`/admin/reports/sales-matrix/${endpoint}?${p}`);
     rows.value        = data.rows           ?? [];
     months.value      = data.period?.months ?? [];

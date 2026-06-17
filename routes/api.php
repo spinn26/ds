@@ -656,6 +656,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/admin/reports/sales-matrix', [\App\Http\Controllers\Api\ProductSalesMatrixController::class, 'index']);
         Route::get('/admin/reports/sales-matrix/fc', [\App\Http\Controllers\Api\ProductSalesMatrixController::class, 'fcMatrix']);
         Route::get('/admin/reports/sales-matrix/period', [\App\Http\Controllers\Api\ProductSalesMatrixController::class, 'quarterlyMatrix']);
+        Route::get('/admin/reports/sales-matrix/inwork', [\App\Http\Controllers\Api\ProductSalesMatrixController::class, 'inWorkMatrix']);
         Route::get('/admin/reports/sales-matrix/forecast', [\App\Http\Controllers\Api\ProductSalesMatrixController::class, 'forecastMatrix']);
         Route::get('/admin/reports/sales-matrix/fact', [\App\Http\Controllers\Api\ProductSalesMatrixController::class, 'factMatrix']);
         Route::get('/admin/reports/sales-matrix/monthly', [\App\Http\Controllers\Api\ProductSalesMatrixController::class, 'monthly']);
