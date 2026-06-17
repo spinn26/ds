@@ -2140,7 +2140,7 @@ class AdminDataController extends Controller
         if ($request->filled('consultant_name')) {
             $query->where('c.consultantName', 'ilike', '%' . $request->consultant_name . '%');
         }
-        if ($request->filled('status')) $query->where('c.status', $request->status);
+        if ($request->filled('status')) $query->whereIn('c.status', (array) $request->input('status'));
         if ($request->filled('number')) $query->where('c.number', 'ilike', '%' . $request->number . '%');
         if ($request->filled('comment')) $query->where('c.comment', 'ilike', '%' . $request->comment . '%');
         // Продукт: историчесские контракты (Directual) хранят productName,

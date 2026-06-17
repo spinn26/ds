@@ -38,6 +38,7 @@
       <v-col cols="12" md="2">
         <v-select v-model="statusFilter" :items="statusOptions" label="Статус"
           variant="outlined" density="comfortable" clearable hide-details
+          multiple chips closable-chips
           @update:model-value="loadData" />
       </v-col>
       <v-col cols="12" md="2">
@@ -415,7 +416,7 @@ const items = ref([]);
 const total = ref(0);
 const loading = ref(false);
 const search = ref('');
-const statusFilter = ref(null);
+const statusFilter = ref([]);
 const statusOptions = ref([]);
 const showAdvanced = ref(false);
 const filters = ref({
@@ -788,14 +789,14 @@ const visibleHeaders = computed(() => headers.filter(h => columnVisible.value[h.
 const activeFilterCount = computed(() => {
   let c = 0;
   if (search.value) c++;
-  if (statusFilter.value) c++;
+  if (statusFilter.value?.length) c++;
   Object.values(filters.value).forEach(v => { if (v) c++; });
   return c;
 });
 
 function resetFilters() {
   search.value = '';
-  statusFilter.value = null;
+  statusFilter.value = [];
   filters.value = {
     client: null, client_name: '', consultant_name: '',
     number: '', comment: '', product: null, program: null,
@@ -833,7 +834,7 @@ async function loadData() {
   try {
     const params = { page: page.value, per_page: perPage.value };
     if (search.value) params.search = search.value;
-    if (statusFilter.value) params.status = statusFilter.value;
+    if (statusFilter.value?.length) params.status = statusFilter.value;
     Object.entries(filters.value).forEach(([k, v]) => {
       if (v !== '' && v !== null && v !== undefined) params[k] = v;
     });

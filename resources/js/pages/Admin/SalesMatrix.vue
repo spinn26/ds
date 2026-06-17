@@ -1101,7 +1101,13 @@ onMounted(loadData);
   font-size: 13px;
   padding: 8px 10px;
 }
-.tr-grand .td-name { background: rgba(var(--v-theme-surface-variant), 0.5) !important; }
+/* Непрозрачный фон у липкого «ИТОГО» (0.5-оттенок над сплошным surface),
+   иначе при скролле вправо цифры просвечивают сквозь колонку. */
+.tr-grand .td-name {
+  background:
+    linear-gradient(rgba(var(--v-theme-surface-variant), 0.5), rgba(var(--v-theme-surface-variant), 0.5)),
+    rgb(var(--v-theme-surface)) !important;
+}
 .tr-grand .td-total { background: rgba(var(--v-theme-primary), 0.1) !important; }
 
 /* Empty state */
