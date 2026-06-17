@@ -107,7 +107,7 @@
               placeholder="Поставщик" prepend-inner-icon="mdi-domain"
               multiple chips closable-chips density="compact" variant="outlined"
               hide-details style="width:190px; flex:0 0 190px"
-              @update:model-value="loadForecast" />
+              @update:model-value="onFcSupplierFilter" />
             <v-autocomplete v-model="fcFilterProducts" :items="fcProductOptions"
               item-title="name" item-value="id" placeholder="Продукт"
               prepend-inner-icon="mdi-magnify"
@@ -632,7 +632,9 @@ function onProductFilterChange() {
 
 function onSupplierFilterChange() {
   localStorage.setItem(SUPPLIERS_KEY, JSON.stringify(filterSuppliers.value));
-  loadData({ updateOptions: true });
+  // updateOptions:false — иначе список поставщиков схлопывается до выбранного
+  // и второе значение уже не выбрать (опции строятся один раз при загрузке).
+  loadData({ updateOptions: false });
 }
 
 async function loadData({ updateOptions = true } = {}) {
@@ -741,7 +743,11 @@ async function resetFcFilters() {
 let _fcProductTimer = null;
 function onFcProductFilter() {
   clearTimeout(_fcProductTimer);
-  _fcProductTimer = setTimeout(loadForecast, 350);
+  // updateOptions:false — сохраняем полный список вариантов при мультивыборе.
+  _fcProductTimer = setTimeout(() => loadForecast({ updateOptions: false }), 350);
+}
+function onFcSupplierFilter() {
+  loadForecast({ updateOptions: false });
 }
 
 async function loadForecast({ updateOptions = true } = {}) {
