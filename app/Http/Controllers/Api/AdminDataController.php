@@ -2337,7 +2337,6 @@ class AdminDataController extends Controller
         $suppliers = array_keys($supSet);
         sort($suppliers, SORT_NATURAL | SORT_FLAG_CASE);
         if ($hasInsmart) array_unshift($suppliers, 'Insmart');
-        $suppliers = array_values($suppliers);
 
         // ── Программы ──────────────────────────────────────────────────────
         // Источник 1: legacy program (все исторические программы).
@@ -2556,7 +2555,7 @@ class AdminDataController extends Controller
         $product = DB::table('product')->where('id', $data['product'])->first();
         $program = DB::table('program')->where('id', $data['program'])->first();
 
-        $id = DB::transaction(function () use ($data, $client, $consultantId, $consultantName, $product, $program, $request) {
+        $id = DB::transaction(function () use ($data, $client, $consultantId, $consultantName, $product, $program, $request, $noForecastStatuses) {
             return DB::table('contract')->insertGetId([
                 'number' => $data['number'],
                 'counterpartyContractId' => $data['counterpartyContractId'] ?? null,
