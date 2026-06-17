@@ -308,41 +308,12 @@
                 @update:model-value="reload" />
             </template>
 
-            <!-- Прогноз активации (только «В работе») — тот же контрол, что период -->
+            <!-- Прогноз активации (только «В работе») — как в Менеджере контрактов -->
             <template v-if="reportMode === 'inwork'">
               <v-divider vertical class="mx-1" style="height:24px;align-self:center" />
-              <span class="text-caption text-medium-emphasis" style="flex-shrink:0">Прогноз:</span>
-              <v-btn-toggle v-model="faMode" mandatory density="compact" variant="outlined" color="secondary"
-                @update:model-value="reload">
-                <v-btn value="off"     size="x-small">Все</v-btn>
-                <v-btn value="year"    size="x-small">Год</v-btn>
-                <v-btn value="quarter" size="x-small">Квартал</v-btn>
-                <v-btn value="month"   size="x-small">Месяц</v-btn>
-                <v-btn value="range"   size="x-small">Диапазон</v-btn>
-              </v-btn-toggle>
-              <v-select v-if="faMode !== 'off' && faMode !== 'range'" v-model="faYear" :items="yearOptions"
-                density="compact" variant="outlined" hide-details style="width:92px; flex:0 0 92px"
-                @update:model-value="reload" />
-              <v-btn-toggle v-if="faMode === 'quarter'" v-model="faQuarter" mandatory
-                density="compact" variant="outlined" @update:model-value="reload">
-                <v-btn v-for="q in ['Q1','Q2','Q3','Q4']" :key="q" :value="q" size="x-small">{{ q }}</v-btn>
-              </v-btn-toggle>
-              <v-select v-if="faMode === 'month'" v-model="faMonth" :items="monthOpts"
-                item-title="t" item-value="v" density="compact" variant="outlined"
-                hide-details style="width:128px; flex:0 0 128px" @update:model-value="reload" />
-              <template v-if="faMode === 'range'">
-                <v-select v-model="faFromYear" :items="yearOptions" density="compact" variant="outlined"
-                  hide-details style="width:86px;flex:0 0 86px" @update:model-value="reload" />
-                <v-select v-model="faFromMonth" :items="monthOpts" item-title="t" item-value="v"
-                  density="compact" variant="outlined" hide-details style="width:120px;flex:0 0 120px"
-                  @update:model-value="reload" />
-                <span class="text-medium-emphasis" style="flex-shrink:0">—</span>
-                <v-select v-model="faToYear" :items="yearOptions" density="compact" variant="outlined"
-                  hide-details style="width:86px;flex:0 0 86px" @update:model-value="reload" />
-                <v-select v-model="faToMonth" :items="monthOpts" item-title="t" item-value="v"
-                  density="compact" variant="outlined" hide-details style="width:120px;flex:0 0 120px"
-                  @update:model-value="reload" />
-              </template>
+              <SmartRangeFilter label="Прогноз активации" kind="date"
+                v-model:from="faFrom" v-model:to="faTo"
+                @update:from="reload" @update:to="reload" />
             </template>
 
             <v-divider vertical class="mx-1" style="height:24px;align-self:center" />
@@ -522,6 +493,7 @@
 import { ref, computed, watch, onMounted, nextTick } from 'vue';
 import api from '../../api';
 import PageHeader from '../../components/PageHeader.vue';
+import SmartRangeFilter from '../../components/SmartRangeFilter.vue';
 
 // ─── Report mode ──────────────────────────────────────────────
 // inwork  — контракты в работе (pipeline, /forecast)
@@ -632,33 +604,10 @@ const filterProducts   = ref(
 );
 const expandedProducts = ref(new Set());
 
-// Доп. фильтр «прогноз активации» — тот же контрол, что и период:
-// Все / Год / Квартал / Месяц / Диапазон. fcFrom/fcTo вычисляются в Y-m.
-// Префикс fa* — чтобы не пересекаться со старым fc* (pipeline-секция).
-const faMode     = ref('off');
-const faYear     = ref(now.getFullYear());
-const faQuarter  = ref(currentQ);
-const faMonth    = ref(String(now.getMonth() + 1).padStart(2, '0'));
-const faFromYear  = ref(now.getFullYear());
-const faFromMonth = ref('01');
-const faToYear    = ref(now.getFullYear());
-const faToMonth   = ref(String(now.getMonth() + 1).padStart(2, '0'));
-const fcFrom = computed(() => {
-  const y = faYear.value;
-  if (faMode.value === 'off')     return '';
-  if (faMode.value === 'year')    return `${y}-01`;
-  if (faMode.value === 'quarter') return `${y}-${String(quarterRanges[faQuarter.value][0]).padStart(2, '0')}`;
-  if (faMode.value === 'month')   return `${y}-${faMonth.value}`;
-  return `${faFromYear.value}-${faFromMonth.value}`;
-});
-const fcTo = computed(() => {
-  const y = faYear.value;
-  if (faMode.value === 'off')     return '';
-  if (faMode.value === 'year')    return `${y}-12`;
-  if (faMode.value === 'quarter') return `${y}-${String(quarterRanges[faQuarter.value][1]).padStart(2, '0')}`;
-  if (faMode.value === 'month')   return `${y}-${faMonth.value}`;
-  return `${faToYear.value}-${faToMonth.value}`;
-});
+// Доп. фильтр «прогноз активации» — как в Менеджере контрактов (SmartRangeFilter,
+// даты Y-m-d). faFrom/faTo уходят на бэкенд как fcFrom/fcTo.
+const faFrom = ref('');
+const faTo   = ref('');
 
 function toggleProduct(pid) {
   const s = new Set(expandedProducts.value);
@@ -710,10 +659,10 @@ async function loadData({ updateOptions = true } = {}) {
     p.set('to',   periodTo.value);
     filterSuppliers.value.forEach(s => p.append('suppliers[]', s));
     filterProducts.value.forEach(id => p.append('products[]', id));
-    // Доп. фильтр по прогнозу активации — только для «В работе».
-    if (reportMode.value === 'inwork' && fcFrom.value && fcTo.value) {
-      p.set('fcFrom', fcFrom.value);
-      p.set('fcTo', fcTo.value);
+    // Доп. фильтр по прогнозу активации — только для «В работе» (границы независимы).
+    if (reportMode.value === 'inwork') {
+      if (faFrom.value) p.set('fcFrom', faFrom.value);
+      if (faTo.value) p.set('fcTo', faTo.value);
     }
     const endpoint = reportMode.value === 'inwork' ? 'inwork'
       : (reportMode.value === 'fact' ? 'fact' : 'period');

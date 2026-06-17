@@ -749,8 +749,8 @@ class ProductSalesMatrixController extends Controller
             'products.*'  => 'integer',
             'suppliers'   => 'nullable|array',
             'suppliers.*' => 'string|max:200',
-            'fcFrom'      => 'nullable|date_format:Y-m',
-            'fcTo'        => 'nullable|date_format:Y-m',
+            'fcFrom'      => 'nullable|date',
+            'fcTo'        => 'nullable|date',
         ]);
 
         $from   = $params['from'];
@@ -759,11 +759,10 @@ class ProductSalesMatrixController extends Controller
 
         $toExclusive = $this->monthExclusiveStart($to);
 
-        // Доп. фильтр по прогнозу активации (правая граница исключительная).
+        // Доп. фильтр по прогнозу активации (SmartRangeFilter — даты Y-m-d,
+        // границы независимы и инклюзивны по дню).
         $fcFrom = $params['fcFrom'] ?? null;
         $fcTo   = $params['fcTo']   ?? null;
-        $hasFc  = $fcFrom && $fcTo;
-        $fcToExclusive = $hasFc ? $this->monthExclusiveStart($fcTo) : null;
 
         $EXCLUDED = [1, 6, 8, 10]; // Активирован, Закрыто нереализ., Закрыто, Лапсирован
 
@@ -775,10 +774,8 @@ class ProductSalesMatrixController extends Controller
             ->whereRaw('co."createDate" IS NOT NULL')
             ->whereRaw('co."createDate"::date >= ?', [$from . '-01'])
             ->whereRaw('co."createDate"::date < ?',  [$toExclusive])
-            ->when($hasFc, fn ($q) =>
-                $q->whereRaw('co.activation_forecast >= ?', [$fcFrom . '-01'])
-                  ->whereRaw('co.activation_forecast <  ?', [$fcToExclusive])
-            )
+            ->when($fcFrom, fn ($q) => $q->whereDate('co.activation_forecast', '>=', $fcFrom))
+            ->when($fcTo, fn ($q) => $q->whereDate('co.activation_forecast', '<=', $fcTo))
             ->when(! empty($params['suppliers']), fn ($q) =>
                 $q->whereIn(DB::raw('COALESCE(pg."providerName", \'—\')'), $params['suppliers'])
             )
