@@ -142,6 +142,52 @@ Route::prefix('v1')->group(function () {
         // Кастомные пункты меню для текущего пользователя (выдача для layouts).
         Route::get('/menu/published', [\App\Http\Controllers\Api\AdminMenuController::class, 'published']);
 
+        // ───────── Модуль «Задачи и Проекты» (только admin + staff) ─────────
+        Route::middleware('role:admin,backoffice,support,finance,head,calculations,corrections,education')->group(function () {
+        Route::get('/projects', [\App\Http\Controllers\Api\ProjectController::class, 'index']);
+        Route::post('/projects', [\App\Http\Controllers\Api\ProjectController::class, 'store']);
+        Route::get('/projects/{id}', [\App\Http\Controllers\Api\ProjectController::class, 'show'])->whereNumber('id');
+        Route::put('/projects/{id}', [\App\Http\Controllers\Api\ProjectController::class, 'update'])->whereNumber('id');
+        Route::delete('/projects/{id}', [\App\Http\Controllers\Api\ProjectController::class, 'destroy'])->whereNumber('id');
+        Route::get('/projects/{id}/board', [\App\Http\Controllers\Api\TaskController::class, 'board'])->whereNumber('id');
+        // Колонки канбана проекта.
+        Route::post('/projects/{id}/stages', [\App\Http\Controllers\Api\TaskStageController::class, 'store'])->whereNumber('id');
+        Route::put('/projects/{id}/stages/{stage}', [\App\Http\Controllers\Api\TaskStageController::class, 'update'])->whereNumber('id')->whereNumber('stage');
+        Route::delete('/projects/{id}/stages/{stage}', [\App\Http\Controllers\Api\TaskStageController::class, 'destroy'])->whereNumber('id')->whereNumber('stage');
+        Route::post('/projects/{id}/stages/reorder', [\App\Http\Controllers\Api\TaskStageController::class, 'reorder'])->whereNumber('id');
+        // Задачи.
+        Route::get('/tasks', [\App\Http\Controllers\Api\TaskController::class, 'index']);
+        Route::post('/tasks', [\App\Http\Controllers\Api\TaskController::class, 'store']);
+        Route::get('/tasks/assignable-users', [\App\Http\Controllers\Api\ProjectController::class, 'assignableUsers']);
+        // Общая доска (кастомные колонки) + управление колонками.
+        Route::get('/tasks/board', [\App\Http\Controllers\Api\TaskController::class, 'boardDefault']);
+        Route::post('/tasks/stages', [\App\Http\Controllers\Api\TaskStageController::class, 'storeBoard']);
+        Route::put('/tasks/stages/{stage}', [\App\Http\Controllers\Api\TaskStageController::class, 'updateBoard'])->whereNumber('stage');
+        Route::delete('/tasks/stages/{stage}', [\App\Http\Controllers\Api\TaskStageController::class, 'destroyBoard'])->whereNumber('stage');
+        Route::post('/tasks/stages/reorder', [\App\Http\Controllers\Api\TaskStageController::class, 'reorderBoard']);
+        Route::get('/tasks/search', [\App\Http\Controllers\Api\TaskController::class, 'search']);
+        Route::get('/tasks/{id}', [\App\Http\Controllers\Api\TaskController::class, 'show'])->whereNumber('id');
+        Route::put('/tasks/{id}', [\App\Http\Controllers\Api\TaskController::class, 'update'])->whereNumber('id');
+        Route::post('/tasks/{id}/move', [\App\Http\Controllers\Api\TaskController::class, 'move'])->whereNumber('id');
+        Route::delete('/tasks/{id}', [\App\Http\Controllers\Api\TaskController::class, 'destroy'])->whereNumber('id');
+        Route::post('/tasks/{id}/comments', [\App\Http\Controllers\Api\TaskController::class, 'addComment'])->whereNumber('id');
+        Route::post('/tasks/{id}/favorite', [\App\Http\Controllers\Api\TaskController::class, 'toggleFavorite'])->whereNumber('id');
+        Route::post('/tasks/{id}/attachments', [\App\Http\Controllers\Api\TaskController::class, 'uploadAttachment'])->whereNumber('id');
+        Route::get('/tasks/{id}/attachments/{att}', [\App\Http\Controllers\Api\TaskController::class, 'downloadAttachment'])->whereNumber('id')->whereNumber('att');
+        Route::delete('/tasks/{id}/attachments/{att}', [\App\Http\Controllers\Api\TaskController::class, 'deleteAttachment'])->whereNumber('id')->whereNumber('att');
+        Route::post('/tasks/{id}/links', [\App\Http\Controllers\Api\TaskController::class, 'linkTask'])->whereNumber('id');
+        Route::delete('/tasks/{id}/links/{link}', [\App\Http\Controllers\Api\TaskController::class, 'unlinkTask'])->whereNumber('id')->whereNumber('link');
+        Route::post('/tasks/{id}/delegate', [\App\Http\Controllers\Api\TaskController::class, 'delegate'])->whereNumber('id');
+        Route::post('/tasks/{id}/timer/start', [\App\Http\Controllers\Api\TaskController::class, 'startTimer'])->whereNumber('id');
+        Route::post('/tasks/{id}/timer/stop', [\App\Http\Controllers\Api\TaskController::class, 'stopTimer'])->whereNumber('id');
+        // Шаблоны задач + повторяющиеся.
+        Route::get('/task-templates', [\App\Http\Controllers\Api\TaskTemplateController::class, 'index']);
+        Route::post('/task-templates', [\App\Http\Controllers\Api\TaskTemplateController::class, 'store']);
+        Route::put('/task-templates/{id}', [\App\Http\Controllers\Api\TaskTemplateController::class, 'update'])->whereNumber('id');
+        Route::delete('/task-templates/{id}', [\App\Http\Controllers\Api\TaskTemplateController::class, 'destroy'])->whereNumber('id');
+        Route::post('/task-templates/{id}/instantiate', [\App\Http\Controllers\Api\TaskTemplateController::class, 'instantiate'])->whereNumber('id');
+        }); // конец staff-группы модуля задач
+
         // Chat system v2
         Route::get('/chat/tickets', [\App\Http\Controllers\Api\ChatController::class, 'index']);
         Route::post('/chat/tickets', [\App\Http\Controllers\Api\ChatController::class, 'store'])->middleware('throttle:10,1');
@@ -331,6 +377,10 @@ Route::prefix('v1')->group(function () {
             Route::delete('/admin/webhooks/{id}', [\App\Http\Controllers\Api\AdminWebhookController::class, 'destroy'])->whereNumber('id');
             Route::post('/admin/webhooks/{id}/test', [\App\Http\Controllers\Api\AdminWebhookController::class, 'test'])->whereNumber('id')->middleware('throttle:20,1');
             Route::get('/admin/webhooks/{id}/deliveries', [\App\Http\Controllers\Api\AdminWebhookController::class, 'deliveries'])->whereNumber('id');
+
+            // Права доступа к задачам (матрица роль × действие).
+            Route::get('/admin/task-permissions', [\App\Http\Controllers\Api\AdminTaskPermissionController::class, 'index']);
+            Route::put('/admin/task-permissions', [\App\Http\Controllers\Api\AdminTaskPermissionController::class, 'update']);
 
             // Конструктор меню (кастомные пункты навигации).
             Route::get('/admin/menu-items', [\App\Http\Controllers\Api\AdminMenuController::class, 'index']);

@@ -56,3 +56,9 @@ backups/
 
 # Local sandbox for ad-hoc XLSX experiments
 .tmp_xlsx/
+
+# Локальные дампы Directual и временные скрипты — не коммитить
+база/
+DB/
+tmp_*.php
+check_*.php

@@ -85,3 +85,47 @@ Schedule::command('health:check')->everyMinute();
 Schedule::command('health:queue-check-heartbeat')->everyMinute();
 // Health::schedule heartbeat — фиксирует «scheduler сейчас работает».
 Schedule::command('health:schedule-check-heartbeat')->everyMinute();
+
+// === Напоминания о дедлайнах задач ===
+// Ежедневно в 09:00: исполнителю напоминаем о задачах, у которых дедлайн
+// наступает сегодня и которые ещё не выполнены/отклонены. Идемпотентно в
+// рамках суток (запуск раз в день).
+Schedule::call(function () {
+    if (! \Illuminate\Support\Facades\Schema::hasTable('tasks')) {
+        return;
+    }
+    $tasks = \App\Models\Task::query()
+        ->whereNotNull('assignee_id')
+        ->whereNotNull('deadline')
+        ->whereDate('deadline', today())
+        ->whereNotIn('status', ['done', 'rejected'])
+        ->get();
+    foreach ($tasks as $task) {
+        \App\Http\Controllers\Api\NotificationController::create(
+            (int) $task->assignee_id,
+            'status',
+            'Сегодня дедлайн задачи',
+            $task->title,
+            $task->project_id ? "/projects/{$task->project_id}" : '/tasks',
+        );
+    }
+})->dailyAt('09:00')->name('tasks:remind-deadlines');
+
+// === Повторяющиеся задачи по шаблонам ===
+// Каждый час: для активных шаблонов с наступившим next_run_at создаём задачу
+// и сдвигаем next_run_at на следующий период.
+Schedule::call(function () {
+    if (! \Illuminate\Support\Facades\Schema::hasTable('task_templates')) {
+        return;
+    }
+    $due = \App\Models\TaskTemplate::where('active', true)
+        ->where('recurrence_freq', '!=', 'none')
+        ->whereNotNull('next_run_at')
+        ->where('next_run_at', '<=', now())
+        ->get();
+    foreach ($due as $tpl) {
+        \App\Services\TaskTemplateRunner::instantiate($tpl, (int) $tpl->created_by);
+        $tpl->next_run_at = $tpl->computeNextRun(now());
+        $tpl->save();
+    }
+})->hourly()->name('tasks:recurring');

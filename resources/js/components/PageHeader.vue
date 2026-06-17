@@ -1,7 +1,7 @@
 <template>
   <!-- DS page header: ds-headline-s + опциональный subtitle ниже,
        соответствует desing/ds-layouts.jsx::AppBar (title + subtitle). -->
-  <div class="d-flex justify-space-between align-start mb-4 flex-wrap ga-2 page-header">
+  <div class="d-flex justify-space-between align-start mb-6 flex-wrap ga-2 page-header">
     <div class="d-flex align-center ga-3">
       <div v-if="icon" class="page-header__icon">
         <v-icon :size="22" color="primary">{{ icon }}</v-icon>

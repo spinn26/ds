@@ -36,6 +36,7 @@ const routes = [
             { path: 'structure', component: () => import('../pages/Structure.vue') },
             { path: 'my-payments', component: () => import('../pages/MyPayments.vue') },
             { path: 'products', component: () => import('../pages/Products.vue') },
+            { path: 'tasks', component: () => import('../pages/Tasks/TasksHome.vue'), meta: { staff: true } },
             { path: 'insmart-widget', component: () => import('../pages/InsmartWidget.vue') },
             { path: 'contests', component: () => import('../pages/Contests.vue') },
             { path: 'chat', component: () => import('../pages/Chat/PartnerChat.vue') },

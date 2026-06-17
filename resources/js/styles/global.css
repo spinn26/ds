@@ -9,14 +9,25 @@
   transition: background-color 0.2s ease, color 0.1s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-/* Solid card style — clearly separated from the page background */
+/* Airy card style — hairline border + soft resting shadow so cards float
+   over the page background instead of looking boxed-in. Радиус крупнее
+   (16px) для «воздушного» силуэта. Диалоги/поповеры имеют свои тени ниже
+   и перекрывают это правило. */
 .v-card {
-  border: 1px solid rgba(0, 0, 0, 0.08) !important;
+  border: 1px solid rgba(0, 0, 0, 0.05) !important;
   background: rgb(var(--v-theme-surface)) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 1px 2px rgba(15, 30, 15, 0.03), 0 4px 16px rgba(15, 30, 15, 0.04) !important;
 }
 .v-theme--dark .v-card {
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
   background: rgb(var(--v-theme-surface)) !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25), 0 4px 16px rgba(0, 0, 0, 0.28) !important;
+}
+/* Вложенные карточки (карточка в карточке) — без двойной тени/рамки. */
+.v-card .v-card {
+  box-shadow: none !important;
+  border-radius: 12px !important;
 }
 
 /* Subtle separators on data-table rows so they don't bleed together.

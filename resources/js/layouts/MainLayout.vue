@@ -231,7 +231,7 @@
 
     <!-- Content -->
     <v-main class="content-main" :class="{ 'content-main--full-bleed': isFullBleedRoute }">
-      <v-container fluid :class="isFullBleedRoute ? 'pa-0' : 'pa-4 pa-md-6'">
+      <v-container fluid :class="isFullBleedRoute ? 'pa-0' : 'pa-5 pa-md-8'">
         <!-- Системные объявления (админ → /admin/announcements). -->
         <v-alert v-for="a in visibleAnnouncements" :key="a.id"
           :type="a.type" variant="tonal" density="comfortable" class="mb-3"
@@ -920,6 +920,8 @@ const menuItems = [
   // ---- Partner menu (consultant) ----
   // Shown to everyone (partner and staff) — leads to Workspace
   { label: 'Главная', icon: 'mdi-home-outline', path: '/' },
+  // Задачи и проекты — только для сотрудников (admin/staff), не для партнёров.
+  { label: 'Задачи', icon: 'mdi-checkbox-marked-outline', path: '/tasks', staffOnly: true },
 
   { group: 'Обзор', partner: true },
   { label: 'Дашборд', icon: 'mdi-view-dashboard-outline', path: '/dashboard', partner: true },
@@ -1070,6 +1072,7 @@ const activeBottomNav = computed(() => {
 
 const visibleMenu = computed(() => menuItems.filter((item) => {
   if (item.adminOnly) return auth.isAdmin;
+  if (item.staffOnly) return isStaff.value;
   if (item.adminSection) return isStaff.value && availableSections.value.has(item.adminSection);
   if (item.partner) return isConsultant.value;
   return true;
