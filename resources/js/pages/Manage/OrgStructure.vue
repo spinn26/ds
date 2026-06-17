@@ -14,7 +14,7 @@
             <v-btn :icon="expanded.has(row.dept.id) ? 'mdi-chevron-down' : 'mdi-chevron-right'"
               size="x-small" variant="text" :style="{ visibility: row.hasChildren ? 'visible' : 'hidden' }"
               @click="toggle(row.dept.id)" />
-            <div class="org-card__icon"><v-icon size="18" color="primary">mdi-office-building-outline</v-icon></div>
+            <div class="org-card__icon"><v-icon size="20">mdi-domain</v-icon></div>
             <span class="org-card__name">{{ row.dept.name }}</span>
             <v-chip size="x-small" variant="tonal" color="primary" class="ml-1">{{ row.dept.members.length }} чел.</v-chip>
             <v-spacer />
@@ -271,33 +271,48 @@ onMounted(load);
 </script>
 
 <style scoped>
-.org-tree { display: flex; flex-direction: column; gap: 12px; }
+.org-tree { display: flex; flex-direction: column; gap: 14px; }
 .org-node { position: relative; }
-/* Соединительная линия от родителя к подотделу. */
-.org-node__connector { position: absolute; left: -18px; top: -12px; bottom: 50%; width: 18px;
-  border-left: 2px solid rgba(var(--v-theme-primary), 0.25); border-bottom: 2px solid rgba(var(--v-theme-primary), 0.25);
-  border-bottom-left-radius: 10px; }
-.org-card { border-radius: 14px !important; border: 1px solid rgba(var(--v-border-color), 0.08) !important;
-  box-shadow: 0 1px 2px rgba(15,30,15,0.03) !important; padding: 4px 8px 12px; transition: box-shadow .15s ease, border-color .15s ease; }
-.org-card:hover { box-shadow: 0 6px 18px rgba(15,30,15,0.08) !important; }
-.org-card--root { border-color: rgba(var(--v-theme-primary), 0.25) !important;
-  border-left: 3px solid rgb(var(--v-theme-primary)) !important; }
-.org-card__head { display: flex; align-items: center; gap: 6px; padding: 6px 6px 2px; }
-.org-card__icon { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center;
-  background: rgba(var(--v-theme-primary), 0.1); flex-shrink: 0; }
-.org-card__name { font-weight: 700; font-size: 0.95rem; letter-spacing: -0.01em; }
-.org-card__roles { display: flex; flex-wrap: wrap; gap: 10px 28px; padding: 8px 10px 4px 12px; }
+/* Плавный коннектор родитель→подотдел. */
+.org-node__connector { position: absolute; left: -20px; top: -14px; bottom: 50%; width: 20px;
+  border-left: 2px solid rgba(var(--v-theme-primary), 0.22); border-bottom: 2px solid rgba(var(--v-theme-primary), 0.22);
+  border-bottom-left-radius: 12px; }
+
+.org-card { position: relative; border-radius: 18px !important; overflow: hidden;
+  border: 1px solid rgba(var(--v-border-color), 0.07) !important;
+  background: rgb(var(--v-theme-surface)) !important;
+  box-shadow: 0 1px 2px rgba(15,30,15,0.04), 0 8px 24px rgba(15,30,15,0.05) !important;
+  padding: 6px 10px 14px; transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease; }
+.org-card:hover { transform: translateY(-2px);
+  box-shadow: 0 10px 30px rgba(15,30,15,0.10) !important; border-color: rgba(var(--v-theme-primary), 0.22) !important; }
+/* Цветная полоса-акцент сверху у корневых отделов. */
+.org-card--root::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 3px;
+  background: linear-gradient(90deg, rgb(var(--v-theme-primary)), rgba(var(--v-theme-primary), 0.35)); }
+
+.org-card__head { display: flex; align-items: center; gap: 10px; padding: 8px 6px 4px; }
+.org-card__icon { width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; flex-shrink: 0;
+  background: linear-gradient(135deg, rgba(var(--v-theme-primary), 0.18), rgba(var(--v-theme-primary), 0.06));
+  color: rgb(var(--v-theme-primary)); box-shadow: inset 0 0 0 1px rgba(var(--v-theme-primary), 0.12); }
+.org-card__name { font-weight: 700; font-size: 1rem; letter-spacing: -0.015em; }
+
+.org-card__roles { display: flex; flex-wrap: wrap; gap: 14px 28px; padding: 10px 8px 2px 14px; }
 .org-role { min-width: 0; }
-.org-role--members { flex: 1; min-width: 200px; }
-.org-role__label { font-size: 0.66rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
-  color: rgba(var(--v-theme-on-surface), 0.45); margin-bottom: 4px; }
-.org-role__empty { color: rgba(var(--v-theme-on-surface), 0.35); font-size: 0.85rem; }
-.org-person { display: inline-flex; align-items: center; gap: 8px; border: 0; background: transparent; cursor: pointer;
-  padding: 2px 6px 2px 2px; border-radius: 8px; transition: background .12s ease; max-width: 220px; }
-.org-person:hover { background: rgba(var(--v-theme-primary), 0.08); }
-.org-person__name { font-size: 0.84rem; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.org-mini { border: 0; background: transparent; cursor: pointer; padding: 0; }
-.org-mini :deep(.v-avatar) { border: 2px solid rgb(var(--v-theme-surface)); margin-left: -6px; transition: transform .12s ease; }
+.org-role--members { flex: 1; min-width: 220px; }
+.org-role__label { font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.7px;
+  color: rgba(var(--v-theme-on-surface), 0.42); margin-bottom: 6px; }
+.org-role__empty { color: rgba(var(--v-theme-on-surface), 0.3); font-size: 0.9rem; padding-left: 2px; }
+
+/* Person-pill (руководитель/заместитель) */
+.org-person { display: inline-flex; align-items: center; gap: 9px; border: 0; cursor: pointer; max-width: 230px;
+  padding: 4px 12px 4px 4px; border-radius: 999px; background: rgba(var(--v-theme-on-surface), 0.04);
+  transition: background .14s ease, box-shadow .14s ease; }
+.org-person:hover { background: rgba(var(--v-theme-primary), 0.1); box-shadow: 0 2px 8px rgba(15,30,15,0.08); }
+.org-person :deep(.v-avatar) { box-shadow: 0 0 0 2px rgb(var(--v-theme-surface)), 0 0 0 3px rgba(var(--v-theme-primary), 0.3); }
+.org-person__name { font-size: 0.85rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Стопка аватаров сотрудников */
+.org-mini { border: 0; background: transparent; cursor: pointer; padding: 0; line-height: 0; }
+.org-mini :deep(.v-avatar) { box-shadow: 0 0 0 2px rgb(var(--v-theme-surface)); margin-left: -8px; transition: transform .14s ease; }
 .org-mini:first-child :deep(.v-avatar) { margin-left: 0; }
-.org-mini:hover :deep(.v-avatar) { transform: translateY(-2px); }
+.org-mini:hover :deep(.v-avatar) { transform: translateY(-3px); z-index: 2; }
 </style>
