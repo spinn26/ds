@@ -6,50 +6,70 @@
       </template>
     </PageHeader>
 
-    <v-card :loading="loading">
-      <div v-if="flatTree.length" class="org-tree">
-        <div v-for="row in flatTree" :key="row.dept.id" class="org-row" :style="{ paddingLeft: 12 + row.depth * 22 + 'px' }">
-          <v-btn :icon="expanded.has(row.dept.id) ? 'mdi-chevron-down' : 'mdi-chevron-right'"
-            size="x-small" variant="text" :style="{ visibility: row.hasChildren ? 'visible' : 'hidden' }"
-            @click="toggle(row.dept.id)" />
-          <v-icon size="18" color="primary" class="mr-2">mdi-folder-account-outline</v-icon>
-          <div class="org-row__main">
-            <div class="d-flex align-center ga-2">
-              <span class="org-row__name">{{ row.dept.name }}</span>
-              <span class="org-row__count">{{ row.dept.members.length }}</span>
+    <div v-if="flatTree.length" class="org-tree">
+      <div v-for="row in flatTree" :key="row.dept.id" class="org-node" :style="{ marginLeft: row.depth * 32 + 'px' }">
+        <span v-if="row.depth" class="org-node__connector" />
+        <v-card class="org-card" :class="{ 'org-card--root': !row.depth }">
+          <div class="org-card__head">
+            <v-btn :icon="expanded.has(row.dept.id) ? 'mdi-chevron-down' : 'mdi-chevron-right'"
+              size="x-small" variant="text" :style="{ visibility: row.hasChildren ? 'visible' : 'hidden' }"
+              @click="toggle(row.dept.id)" />
+            <div class="org-card__icon"><v-icon size="18" color="primary">mdi-office-building-outline</v-icon></div>
+            <span class="org-card__name">{{ row.dept.name }}</span>
+            <v-chip size="x-small" variant="tonal" color="primary" class="ml-1">{{ row.dept.members.length }} чел.</v-chip>
+            <v-spacer />
+            <v-menu v-if="isAdmin">
+              <template #activator="{ props }">
+                <v-btn v-bind="props" icon="mdi-dots-vertical" size="x-small" variant="text" />
+              </template>
+              <v-list density="compact">
+                <v-list-item title="Подотдел" prepend-icon="mdi-plus" @click="openCreate(row.dept.id)" />
+                <v-list-item title="Сотрудники" prepend-icon="mdi-account-multiple-plus" @click="openMembers(row.dept)" />
+                <v-list-item title="Редактировать" prepend-icon="mdi-pencil" @click="openEdit(row.dept)" />
+                <v-list-item title="Удалить" prepend-icon="mdi-delete" @click="remove(row.dept)" />
+              </v-list>
+            </v-menu>
+          </div>
+
+          <div class="org-card__roles">
+            <!-- Руководитель -->
+            <div class="org-role">
+              <div class="org-role__label">Руководитель</div>
+              <button v-if="row.dept.head" type="button" class="org-person" @click="openEmployee(row.dept.head.id)">
+                <v-avatar size="30" color="primary"><span class="text-caption">{{ initials(row.dept.head.name) }}</span></v-avatar>
+                <span class="org-person__name">{{ row.dept.head.name }}</span>
+              </button>
+              <span v-else class="org-role__empty">—</span>
             </div>
-            <div v-if="row.dept.head || row.dept.deputy" class="org-row__leads">
-              <span v-if="row.dept.head" class="org-lead" @click.stop="openEmployee(row.dept.head.id)">
-                <v-icon size="12">mdi-account-tie</v-icon>{{ row.dept.head.name }}
-              </span>
-              <span v-if="row.dept.deputy" class="org-lead" @click.stop="openEmployee(row.dept.deputy.id)">
-                <v-icon size="12">mdi-account-arrow-up</v-icon>{{ row.dept.deputy.name }}
-              </span>
+            <!-- Заместитель -->
+            <div class="org-role">
+              <div class="org-role__label">Заместитель</div>
+              <button v-if="row.dept.deputy" type="button" class="org-person" @click="openEmployee(row.dept.deputy.id)">
+                <v-avatar size="30" color="secondary"><span class="text-caption">{{ initials(row.dept.deputy.name) }}</span></v-avatar>
+                <span class="org-person__name">{{ row.dept.deputy.name }}</span>
+              </button>
+              <span v-else class="org-role__empty">—</span>
+            </div>
+            <!-- Сотрудники -->
+            <div class="org-role org-role--members">
+              <div class="org-role__label">Сотрудники</div>
+              <div v-if="row.dept.members.length" class="d-flex align-center flex-wrap ga-1">
+                <button v-for="m in row.dept.members.slice(0, 8)" :key="m.id" type="button" class="org-mini"
+                  :title="m.name" @click="openEmployee(m.id)">
+                  <v-avatar size="30" color="surface-variant"><span class="text-caption">{{ initials(m.name) }}</span></v-avatar>
+                </button>
+                <span v-if="row.dept.members.length > 8" class="text-caption text-medium-emphasis ml-1">+{{ row.dept.members.length - 8 }}</span>
+                <v-btn v-if="isAdmin" icon="mdi-plus" size="x-small" variant="tonal" class="ml-1" @click="openMembers(row.dept)" />
+              </div>
+              <v-btn v-else-if="isAdmin" size="x-small" variant="text" prepend-icon="mdi-account-plus-outline"
+                @click="openMembers(row.dept)">Добавить</v-btn>
+              <span v-else class="org-role__empty">—</span>
             </div>
           </div>
-          <!-- участники (аватары) -->
-          <div class="d-flex align-center org-row__members">
-            <v-avatar v-for="m in row.dept.members.slice(0, 5)" :key="m.id" size="26" color="surface-variant"
-              class="org-avatar" :title="m.name" @click.stop="openEmployee(m.id)">
-              <span class="text-caption">{{ initials(m.name) }}</span>
-            </v-avatar>
-            <span v-if="row.dept.members.length > 5" class="text-caption text-medium-emphasis ml-1">+{{ row.dept.members.length - 5 }}</span>
-          </div>
-          <v-menu v-if="isAdmin">
-            <template #activator="{ props }">
-              <v-btn v-bind="props" icon="mdi-dots-vertical" size="x-small" variant="text" />
-            </template>
-            <v-list density="compact">
-              <v-list-item title="Подотдел" prepend-icon="mdi-plus" @click="openCreate(row.dept.id)" />
-              <v-list-item title="Сотрудники" prepend-icon="mdi-account-multiple-plus" @click="openMembers(row.dept)" />
-              <v-list-item title="Редактировать" prepend-icon="mdi-pencil" @click="openEdit(row.dept)" />
-              <v-list-item title="Удалить" prepend-icon="mdi-delete" @click="remove(row.dept)" />
-            </v-list>
-          </v-menu>
-        </div>
+        </v-card>
       </div>
-      <EmptyState v-else message="Отделы не созданы" />
-    </v-card>
+    </div>
+    <EmptyState v-else message="Отделы не созданы" />
 
     <!-- Создание/редактирование отдела -->
     <v-dialog v-model="dialog" max-width="540">
@@ -235,16 +255,33 @@ onMounted(load);
 </script>
 
 <style scoped>
-.org-tree { padding: 6px 8px; }
-.org-row { display: flex; align-items: center; gap: 6px; padding: 8px 12px 8px 0; border-radius: 10px; }
-.org-row:hover { background: rgba(var(--v-theme-on-surface), 0.03); }
-.org-row__main { flex: 1; min-width: 0; }
-.org-row__name { font-weight: 600; font-size: 0.9rem; }
-.org-row__count { font-size: 0.7rem; font-weight: 600; color: rgba(var(--v-theme-on-surface), 0.45); }
-.org-row__leads { display: flex; gap: 12px; margin-top: 1px; }
-.org-lead { display: inline-flex; align-items: center; gap: 4px; font-size: 0.74rem; color: rgba(var(--v-theme-on-surface), 0.6); cursor: pointer; }
-.org-lead:hover { color: rgb(var(--v-theme-primary)); }
-.org-row__members { padding-right: 4px; }
-.org-avatar { margin-left: -6px; border: 2px solid rgb(var(--v-theme-surface)); cursor: pointer; }
-.org-avatar:first-child { margin-left: 0; }
+.org-tree { display: flex; flex-direction: column; gap: 12px; }
+.org-node { position: relative; }
+/* Соединительная линия от родителя к подотделу. */
+.org-node__connector { position: absolute; left: -18px; top: -12px; bottom: 50%; width: 18px;
+  border-left: 2px solid rgba(var(--v-theme-primary), 0.25); border-bottom: 2px solid rgba(var(--v-theme-primary), 0.25);
+  border-bottom-left-radius: 10px; }
+.org-card { border-radius: 14px !important; border: 1px solid rgba(var(--v-border-color), 0.08) !important;
+  box-shadow: 0 1px 2px rgba(15,30,15,0.03) !important; padding: 4px 8px 12px; transition: box-shadow .15s ease, border-color .15s ease; }
+.org-card:hover { box-shadow: 0 6px 18px rgba(15,30,15,0.08) !important; }
+.org-card--root { border-color: rgba(var(--v-theme-primary), 0.25) !important;
+  border-left: 3px solid rgb(var(--v-theme-primary)) !important; }
+.org-card__head { display: flex; align-items: center; gap: 6px; padding: 6px 6px 2px; }
+.org-card__icon { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center;
+  background: rgba(var(--v-theme-primary), 0.1); flex-shrink: 0; }
+.org-card__name { font-weight: 700; font-size: 0.95rem; letter-spacing: -0.01em; }
+.org-card__roles { display: flex; flex-wrap: wrap; gap: 10px 28px; padding: 8px 10px 4px 12px; }
+.org-role { min-width: 0; }
+.org-role--members { flex: 1; min-width: 200px; }
+.org-role__label { font-size: 0.66rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+  color: rgba(var(--v-theme-on-surface), 0.45); margin-bottom: 4px; }
+.org-role__empty { color: rgba(var(--v-theme-on-surface), 0.35); font-size: 0.85rem; }
+.org-person { display: inline-flex; align-items: center; gap: 8px; border: 0; background: transparent; cursor: pointer;
+  padding: 2px 6px 2px 2px; border-radius: 8px; transition: background .12s ease; max-width: 220px; }
+.org-person:hover { background: rgba(var(--v-theme-primary), 0.08); }
+.org-person__name { font-size: 0.84rem; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.org-mini { border: 0; background: transparent; cursor: pointer; padding: 0; }
+.org-mini :deep(.v-avatar) { border: 2px solid rgb(var(--v-theme-surface)); margin-left: -6px; transition: transform .12s ease; }
+.org-mini:first-child :deep(.v-avatar) { margin-left: 0; }
+.org-mini:hover :deep(.v-avatar) { transform: translateY(-2px); }
 </style>
