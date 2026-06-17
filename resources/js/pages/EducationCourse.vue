@@ -152,9 +152,14 @@
               :key="l.id"
               :title="l.title"
               :subtitle="l.viewed ? '✓ изучен' : 'не изучен'"
-              :prepend-icon="l.viewed ? 'mdi-check-circle' : 'mdi-circle-outline'"
               @click="openLesson(l)"
             >
+              <template #prepend>
+                <!-- Зелёная галка для изученного урока, серый контур — для нет. -->
+                <v-icon :color="l.viewed ? 'success' : 'grey'">
+                  {{ l.viewed ? 'mdi-check-circle' : 'mdi-circle-outline' }}
+                </v-icon>
+              </template>
               <template #append>
                 <v-icon size="small">mdi-chevron-right</v-icon>
               </template>
