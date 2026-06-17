@@ -35,6 +35,9 @@
         <p class="success-sub">
           Доступ к продаже продукта открыт. Условия комиссии — в разделе «Продукты».
         </p>
+        <p class="success-sub">
+          Правильно: <b>{{ result.score }} из {{ result.total }} ({{ result.percent }}%)</b><span v-if="result.attempt"> · попытка №{{ result.attempt }}</span>
+        </p>
 
         <v-btn color="primary" size="x-large" class="success-cta" prepend-icon="mdi-check-circle"
           :to="'/products'">
@@ -72,7 +75,7 @@
             <div>
               <div class="fail-card__title">Тест не пройден</div>
               <div class="fail-card__body">
-                Правильно: <b>{{ result.score }} из {{ result.total }}</b>.
+                Правильно: <b>{{ result.score }} из {{ result.total }} ({{ result.percent }}%)</b><span v-if="result.attempt">, попытка №{{ result.attempt }}</span>.
                 Для допуска нужно 100%. Попытки не ограничены — попробуйте ещё раз.
                 <template v-if="result.wrongIndexes?.length">
                   Ошибки были в вопросах <b>{{ result.wrongIndexes.join(', ') }}</b> — стоит освежить материал.

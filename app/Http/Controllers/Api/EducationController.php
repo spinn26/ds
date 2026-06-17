@@ -316,7 +316,11 @@ class EducationController extends Controller
                 'testPassed' => $testPassed,
                 'testScore' => $completion?->score,
                 'testTotal' => $completion?->total,
-                'completed' => $testPassed && $allLessonsViewed,
+                // «Пройден» = тест сдан (единый критерий со всей платформой:
+                // дерево, гейт продукта, экран теста). Просмотр всех уроков —
+                // отдельный прогресс (lessonViewed/«изучен»), не «пройден».
+                'allLessonsViewed' => $allLessonsViewed,
+                'completed' => $testPassed,
             ];
         })->values();
 
@@ -588,10 +592,19 @@ class EducationController extends Controller
             );
         }
 
+        // Номер/количество попыток и процент правильных — для экрана результата
+        // (партнёр видит «попытка №N» и «X% правильных»).
+        $attempts = DB::table('education_test_attempts')
+            ->where('user_id', $userId)->where('course_id', $id)->count();
+        $percent = $total > 0 ? (int) round($correct * 100 / $total) : 0;
+
         return response()->json([
             'passed' => $passed,
             'score' => $correct,
             'total' => $total,
+            'percent' => $percent,
+            'attempt' => $attempts,
+            'attempts' => $attempts,
         ]);
     }
 }
