@@ -428,7 +428,8 @@
                   </td>
                   <template v-for="mo in months" :key="`p${prod.productId}-${mo}`">
                     <td v-for="(m, mi) in activeMetrics" :key="m.key"
-                      class="td-num" :class="{ 'td-sep': mi === activeMetrics.length - 1 }">
+                      class="td-num" :class="{ 'td-sep': mi === activeMetrics.length - 1, 'td-fc': cellTitle(prod.monthly[mo], m.key) }"
+                      :title="cellTitle(prod.monthly[mo], m.key)">
                       <span :class="fmtClass(prod.monthly[mo]?.[m.key])">
                         {{ fmtCell(prod.monthly[mo]?.[m.key], m) }}
                       </span>
@@ -450,7 +451,8 @@
                     </td>
                     <template v-for="mo in months" :key="`pg${pg.programId}-${mo}`">
                       <td v-for="(m, mi) in activeMetrics" :key="m.key"
-                        class="td-num td-dim" :class="{ 'td-sep': mi === activeMetrics.length - 1 }">
+                        class="td-num td-dim" :class="{ 'td-sep': mi === activeMetrics.length - 1, 'td-fc': cellTitle(pg.monthly[mo], m.key) }"
+                        :title="cellTitle(pg.monthly[mo], m.key)">
                         <span :class="fmtClass(pg.monthly[mo]?.[m.key])">
                           {{ fmtCell(pg.monthly[mo]?.[m.key], m) }}
                         </span>
@@ -468,7 +470,8 @@
                 <td class="td-name"><strong>ИТОГО</strong></td>
                 <template v-for="mo in months" :key="`g-${mo}`">
                   <td v-for="(m, mi) in activeMetrics" :key="m.key"
-                    class="td-num" :class="{ 'td-sep': mi === activeMetrics.length - 1 }">
+                    class="td-num" :class="{ 'td-sep': mi === activeMetrics.length - 1, 'td-fc': cellTitle(grandTotals.monthly[mo], m.key) }"
+                    :title="cellTitle(grandTotals.monthly[mo], m.key)">
                     <strong>{{ fmtCell(grandTotals.monthly[mo]?.[m.key], m) }}</strong>
                   </td>
                 </template>
@@ -829,6 +832,19 @@ function fmtClass(val) {
   return (!val || isNaN(n) || n === 0) ? 'val-empty' : '';
 }
 
+// Тултип ячейки «В работе»: разбивка по прогнозу активации (сколько и когда).
+function cellTitle(cell, metricKey) {
+  if (reportMode.value !== 'inwork') return undefined;
+  if (metricKey !== 'volume' && metricKey !== 'count') return undefined;
+  const fc = cell?.forecast;
+  if (!fc || !fc.length) return undefined;
+  const lines = fc.map((f) => {
+    const when = f.month ? fmtMonthHdr(f.month) : 'Без прогноза';
+    return `${when}: ${fmt0(f.count)} шт · ${fmtRub(f.volume)}`;
+  });
+  return 'Прогноз активации\n' + lines.join('\n');
+}
+
 onMounted(loadData);
 </script>
 
@@ -1046,4 +1062,7 @@ onMounted(loadData);
   color: rgba(var(--v-theme-on-surface), 0.35);
   font-size: 14px;
 }
+/* Ячейка с разбивкой по прогнозу активации — подсказка о наведении. */
+.td-fc { cursor: help; }
+.td-fc span { border-bottom: 1px dotted rgba(var(--v-theme-primary), 0.5); }
 </style>

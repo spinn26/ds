@@ -824,7 +824,70 @@ class ProductSalesMatrixController extends Controller
             ->orderByRaw('DATE_TRUNC(\'month\', co."createDate"::date)')
             ->get();
 
-        return response()->json($this->assembleMatrix($rows, $base, $periodExpr, $periodRaw, $from, $to, $months));
+        $assembled = $this->assembleMatrix($rows, $base, $periodExpr, $periodRaw, $from, $to, $months);
+
+        // Разбивка по прогнозу активации: для каждой ячейки (продукт/программа ×
+        // месяц создания) — сколько контрактов и на какой месяц прогноза.
+        $fcExpr = DB::raw("TO_CHAR(DATE_TRUNC('month', co.activation_forecast), 'YYYY-MM') as fc_month");
+        $fcTruncRaw = DB::raw("DATE_TRUNC('month', co.activation_forecast)");
+        $fcAgg = $base()
+            ->leftJoin('management_currency_rate as mcr_fc', function ($j) {
+                $j->on('mcr_fc.currency', '=', 'co.currency')
+                  ->whereRaw('mcr_fc.date = DATE_TRUNC(\'month\', co."createDate"::date)::date');
+            })
+            ->select([
+                'co.product as product_id', 'co.program as program_id', $periodExpr, $fcExpr,
+                DB::raw('COUNT(DISTINCT co.id) as cnt'),
+                DB::raw('SUM(COALESCE(co.ammount, 0) * COALESCE(mcr_fc.rate, 1)) as vol'),
+            ])
+            ->groupBy('co.product', 'co.program', $periodRaw, $fcTruncRaw)
+            ->get();
+
+        $prog = [];
+        $prodAgg = [];
+        $grandAgg = [];
+        foreach ($fcAgg as $r) {
+            $cm = $r->period_month;
+            $fm = $r->fc_month ?? '—';
+            $cnt = (int) $r->cnt;
+            $vol = round((float) $r->vol, 2);
+            $prog[$r->product_id][$r->program_id][$cm][$fm] = ['count' => $cnt, 'volume' => $vol];
+            $prodAgg[$r->product_id][$cm][$fm]['count'] = ($prodAgg[$r->product_id][$cm][$fm]['count'] ?? 0) + $cnt;
+            $prodAgg[$r->product_id][$cm][$fm]['volume'] = ($prodAgg[$r->product_id][$cm][$fm]['volume'] ?? 0) + $vol;
+            $grandAgg[$cm][$fm]['count'] = ($grandAgg[$cm][$fm]['count'] ?? 0) + $cnt;
+            $grandAgg[$cm][$fm]['volume'] = ($grandAgg[$cm][$fm]['volume'] ?? 0) + $vol;
+        }
+        $toList = function ($map) {
+            $out = [];
+            foreach (($map ?? []) as $fm => $v) {
+                $out[] = ['month' => $fm === '—' ? null : $fm, 'count' => (int) $v['count'], 'volume' => round((float) $v['volume'], 2)];
+            }
+            usort($out, fn ($a, $b) => ($a['month'] ?? '9999') <=> ($b['month'] ?? '9999'));
+
+            return $out;
+        };
+
+        foreach ($assembled['rows'] as &$prodRow) {
+            $pid = $prodRow['productId'];
+            foreach ($prodRow['monthly'] as $cm => &$cell) {
+                $cell['forecast'] = $toList($prodAgg[$pid][$cm] ?? []);
+            }
+            unset($cell);
+            foreach ($prodRow['programs'] as &$pg) {
+                foreach ($pg['monthly'] as $cm => &$cell) {
+                    $cell['forecast'] = $toList($prog[$pid][$pg['programId']][$cm] ?? []);
+                }
+                unset($cell);
+            }
+            unset($pg);
+        }
+        unset($prodRow);
+        foreach ($assembled['grandTotals']['monthly'] as $cm => &$cell) {
+            $cell['forecast'] = $toList($grandAgg[$cm] ?? []);
+        }
+        unset($cell);
+
+        return response()->json($assembled);
     }
 
     /**
