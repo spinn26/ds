@@ -346,7 +346,7 @@
               <template #activator="{ props }">
                 <v-btn v-bind="props" size="x-small" variant="tonal" color="primary"
                   prepend-icon="mdi-tune">
-                  Метрики · {{ selectedMetricKeys.length }}
+                  Метрики · {{ activeMetrics.length }}
                 </v-btn>
               </template>
               <v-card min-width="210" elevation="4">
@@ -572,10 +572,11 @@ const allMetrics = [
 const validKeys = allMetrics.map(m => m.key);
 const _saved = (() => { try { const s = JSON.parse(localStorage.getItem(METRICS_KEY)); return Array.isArray(s) && s.every(k => validKeys.includes(k)) && s.length ? s : null; } catch { return null; } })();
 const selectedMetricKeys = ref(_saved ?? ['volume', 'revenue']);
-// В «В работе» контракты не активированы → транзакций нет, поэтому Выручка и
-// Баллы (берутся из транзакций) бессмысленны — скрываем их в этом разрезе.
+// В «В работе» контракты не активированы → транзакций нет. Деньги = сумма
+// контракта (метрика «Объём»), Баллы считаются из контракта на бэкенде
+// (computePoints). Скрываем только «Выручку» — она приходит из транзакций.
 const availableMetrics = computed(() => allMetrics.filter(
-  m => !(reportMode.value === 'inwork' && (m.key === 'revenue' || m.key === 'points'))
+  m => !(reportMode.value === 'inwork' && m.key === 'revenue')
 ));
 const activeMetrics = computed(() => {
   const sel = availableMetrics.value.filter(m => selectedMetricKeys.value.includes(m.key));

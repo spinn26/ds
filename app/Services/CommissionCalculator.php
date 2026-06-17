@@ -524,6 +524,16 @@ class CommissionCalculator
         float $amountRub,
         float $dsComPercent,
     ): float {
+        return self::computePoints($program, $amountNoVat, $amountRub, $dsComPercent);
+    }
+
+    /** Публичный расчёт ЛП по методике программы (для отчётов/прогноза). */
+    public static function computePoints(
+        ?object $program,
+        float $amountNoVat,
+        float $amountRub,
+        float $dsComPercent,
+    ): float {
         $method = $program->pointsMethod ?? null;
         $fixedCost = $program && $program->fixedCost !== null ? (float) $program->fixedCost : null;
         $pointsMin = $program && $program->pointsMin !== null ? (float) $program->pointsMin : null;

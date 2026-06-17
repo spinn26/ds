@@ -787,18 +787,11 @@ class ProductSalesMatrixController extends Controller
         $periodExpr = DB::raw('TO_CHAR(DATE_TRUNC(\'month\', co."createDate"::date), \'YYYY-MM\') as period_month');
         $periodRaw  = DB::raw('DATE_TRUNC(\'month\', co."createDate"::date)');
 
-        $txSub = DB::table('transaction as t')
-            ->whereRaw('t."deletedAt" IS NULL')
-            ->select([
-                't.contract',
-                DB::raw('SUM(COALESCE(t."netRevenueRUB", 0))  as revenue_rub'),
-                DB::raw('SUM(COALESCE(t."personalVolume", 0)) as points_sum'),
-            ])
-            ->groupBy('t.contract');
-
+        // «В работе» — деньги берём из суммы контракта (Объём), транзакции НЕ
+        // используем: revenue/points из transaction здесь неуместны (контракт
+        // ещё не активирован). Баллы считаем из контракта ниже (computePoints).
         $rows = $base()
             ->join('product as p', 'p.id', '=', 'co.product')
-            ->leftJoinSub($txSub, 'tx', 'tx.contract', '=', 'co.id')
             ->leftJoin('management_currency_rate as mcr_co', function ($j) {
                 $j->on('mcr_co.currency', '=', 'co.currency')
                   ->whereRaw('mcr_co.date = DATE_TRUNC(\'month\', co."createDate"::date)::date');
@@ -811,8 +804,8 @@ class ProductSalesMatrixController extends Controller
                 $periodExpr,
                 DB::raw('SUM(COALESCE(co.ammount, 0) * COALESCE(mcr_co.rate, 1)) as volume'),
                 DB::raw('COUNT(DISTINCT co.id)             as cnt'),
-                DB::raw('SUM(COALESCE(tx.revenue_rub, 0))  as revenue'),
-                DB::raw('SUM(COALESCE(tx.points_sum, 0))   as points'),
+                DB::raw('0                                 as revenue'),
+                DB::raw('0                                 as points'),
                 DB::raw('COUNT(DISTINCT co.client)          as client_count'),
                 DB::raw('COUNT(DISTINCT co.consultant)      as fc_count'),
             ])
@@ -822,6 +815,13 @@ class ProductSalesMatrixController extends Controller
             ->get();
 
         $assembled = $this->assembleMatrix($rows, $base, $periodExpr, $periodRaw, $from, $to, $months);
+
+        // Баллы (ЛП) — расчёт из контракта по методике программы
+        // (CommissionCalculator::computePoints), а НЕ из транзакций.
+        // amountNoVat = сумма×курс / (1+НДС); %ДС — по тарифной сетке на
+        // дату создания. Это прогноз баллов: фактические начислятся при
+        // активации, но для пайплайна «В работе» оцениваем из контракта.
+        $this->injectInWorkPoints($base, $assembled);
 
         // Разбивка по прогнозу активации: для каждой ячейки (продукт/программа ×
         // месяц создания) — сколько контрактов и на какой месяц прогноза.
@@ -885,6 +885,110 @@ class ProductSalesMatrixController extends Controller
         unset($cell);
 
         return response()->json($assembled);
+    }
+
+    /**
+     * «В работе»: пересчитать баллы (ЛП) каждой ячейки прямо из контрактов
+     * по методике программы (CommissionCalculator::computePoints) — транзакций
+     * ещё нет. Это прогноз: фактические баллы начислятся при активации.
+     *
+     * %ДС резолвится тем же приоритетом, что и в боевом расчёте:
+     * program.dsPercent → тарифная сетка dsCommission (program × term × дата;
+     * год КВ у контракта отсутствует, поэтому null — каскад ослабляет сам) →
+     * фолбэк commission.default_ds_percent.
+     */
+    private function injectInWorkPoints(callable $base, array &$assembled): void
+    {
+        $vatPercent = (float) (DB::table('vat')
+            ->where('dateFrom', '<=', now())
+            ->where('dateTo', '>=', now())
+            ->value('value') ?? 0);
+        $defaultDs = (float) \App\Models\SystemSetting::value('commission.default_ds_percent', 100);
+
+        $contracts = $base()
+            ->leftJoin('management_currency_rate as mcr_pt', function ($j) {
+                $j->on('mcr_pt.currency', '=', 'co.currency')
+                  ->whereRaw('mcr_pt.date = DATE_TRUNC(\'month\', co."createDate"::date)::date');
+            })
+            ->select([
+                'co.product as product_id',
+                'co.program as program_id',
+                DB::raw('TO_CHAR(DATE_TRUNC(\'month\', co."createDate"::date), \'YYYY-MM\') as period_month'),
+                DB::raw('co."createDate"::date as cdate'),
+                'co.ammount',
+                'co.term',
+                'pg.dsPercent as program_ds',
+                'pg.pointsMethod',
+                'pg.fixedCost',
+                'pg.pointsMin',
+                DB::raw('COALESCE(mcr_pt.rate, 1) as rate'),
+            ])
+            ->get();
+
+        $dsCache = [];
+        $byProg = $byProd = $byProdTot = $grandMo = [];
+        $grandTot = 0.0;
+
+        foreach ($contracts as $r) {
+            $amountRub   = (float) $r->ammount * (float) $r->rate;
+            $amountNoVat = $vatPercent > 0 ? $amountRub / (1 + $vatPercent / 100) : $amountRub;
+
+            $ds = $r->program_ds !== null ? (float) $r->program_ds : 0.0;
+            if ($ds <= 0) {
+                $key = $r->program_id.'|'.$r->term.'|'.$r->cdate;
+                if (! array_key_exists($key, $dsCache)) {
+                    $dsCache[$key] = \App\Services\CommissionCalculator::resolveLegacyDsCommission(
+                        (int) $r->program_id, $r->term, null, (string) $r->cdate
+                    );
+                }
+                $ds = (float) ($dsCache[$key] ?? 0);
+            }
+            if ($ds <= 0) {
+                $ds = $defaultDs;
+            }
+
+            $prog = (object) [
+                'pointsMethod' => $r->pointsMethod,
+                'fixedCost'    => $r->fixedCost,
+                'pointsMin'    => $r->pointsMin,
+            ];
+            $pts = \App\Services\CommissionCalculator::computePoints($prog, $amountNoVat, $amountRub, $ds);
+
+            $pid = $r->product_id; $pgid = $r->program_id; $mo = $r->period_month;
+            $byProg[$pid][$pgid][$mo] = ($byProg[$pid][$pgid][$mo] ?? 0) + $pts;
+            $byProd[$pid][$mo]        = ($byProd[$pid][$mo] ?? 0) + $pts;
+            $byProdTot[$pid]          = ($byProdTot[$pid] ?? 0) + $pts;
+            $grandMo[$mo]             = ($grandMo[$mo] ?? 0) + $pts;
+            $grandTot                += $pts;
+        }
+
+        foreach ($assembled['rows'] as &$prod) {
+            $pid = $prod['productId'];
+            $prod['points'] = round($byProdTot[$pid] ?? 0, 2);
+            foreach ($prod['monthly'] as $mo => &$cell) {
+                $cell['points'] = round($byProd[$pid][$mo] ?? 0, 2);
+            }
+            unset($cell);
+            foreach ($prod['programs'] as &$pg) {
+                $pgid = $pg['programId'];
+                $sum = 0.0;
+                foreach ($pg['monthly'] as $mo => &$cell) {
+                    $p = round($byProg[$pid][$pgid][$mo] ?? 0, 2);
+                    $cell['points'] = $p;
+                    $sum += $p;
+                }
+                unset($cell);
+                $pg['points'] = round($sum, 2);
+            }
+            unset($pg);
+        }
+        unset($prod);
+
+        $assembled['grandTotals']['points'] = round($grandTot, 2);
+        foreach ($assembled['grandTotals']['monthly'] as $mo => &$cell) {
+            $cell['points'] = round($grandMo[$mo] ?? 0, 2);
+        }
+        unset($cell);
     }
 
     /**
