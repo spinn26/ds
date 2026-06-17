@@ -115,6 +115,7 @@ class OrgStructureController extends Controller
         $headNames = UserLookup::map($depts->pluck('head_id'));
 
         $status = $u->dateDeleted ? 'Уволен' : ($u->isBlocked ? 'Заблокирован' : 'Активен');
+        $position = DB::table('employee_positions')->where('user_id', $id)->value('position');
 
         return response()->json([
             'employee' => [
@@ -123,6 +124,7 @@ class OrgStructureController extends Controller
                 'email' => $u->email,
                 'phone' => $u->phone,
                 'role' => $u->role,
+                'position' => $position,
                 'status' => $status,
                 'departments' => $depts->map(fn ($d) => [
                     'id' => $d->id,
@@ -132,6 +134,19 @@ class OrgStructureController extends Controller
                 ]),
             ],
         ]);
+    }
+
+    /** Сохранить должность сотрудника (admin). */
+    public function setPosition(int $id, Request $request): JsonResponse
+    {
+        $this->assertAdmin($request);
+        $data = $request->validate(['position' => ['nullable', 'string', 'max:255']]);
+        DB::table('employee_positions')->updateOrInsert(
+            ['user_id' => $id],
+            ['position' => $data['position'] ?: null, 'updated_at' => now(), 'created_at' => now()],
+        );
+
+        return response()->json(['position' => $data['position'] ?: null]);
     }
 
     /** Поиск сотрудников для пикеров (ФИО/email). */

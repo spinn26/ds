@@ -195,6 +195,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/org/departments/{id}/members', [\App\Http\Controllers\Api\OrgStructureController::class, 'addMembers'])->whereNumber('id');
         Route::delete('/org/departments/{id}/members/{user}', [\App\Http\Controllers\Api\OrgStructureController::class, 'removeMember'])->whereNumber('id')->whereNumber('user');
         Route::get('/org/employees/{id}', [\App\Http\Controllers\Api\OrgStructureController::class, 'employee'])->whereNumber('id');
+        Route::put('/org/employees/{id}/position', [\App\Http\Controllers\Api\OrgStructureController::class, 'setPosition'])->whereNumber('id');
         Route::get('/org/users', [\App\Http\Controllers\Api\OrgStructureController::class, 'searchUsers']);
         }); // конец staff-группы (задачи + оргструктура)
 
