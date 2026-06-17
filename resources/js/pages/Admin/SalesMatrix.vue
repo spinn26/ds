@@ -353,7 +353,7 @@
                 <v-card-title class="text-body-2 pa-3 pb-1 font-weight-medium">Метрики</v-card-title>
                 <v-divider />
                 <v-list density="compact" class="pa-1">
-                  <v-list-item v-for="m in allMetrics" :key="m.key" :title="m.label"
+                  <v-list-item v-for="m in availableMetrics" :key="m.key" :title="m.label"
                     rounded="lg" style="cursor:pointer" @click="toggleMetric(m.key)">
                     <template #prepend>
                       <v-checkbox-btn :model-value="selectedMetricKeys.includes(m.key)"
@@ -572,7 +572,15 @@ const allMetrics = [
 const validKeys = allMetrics.map(m => m.key);
 const _saved = (() => { try { const s = JSON.parse(localStorage.getItem(METRICS_KEY)); return Array.isArray(s) && s.every(k => validKeys.includes(k)) && s.length ? s : null; } catch { return null; } })();
 const selectedMetricKeys = ref(_saved ?? ['volume', 'revenue']);
-const activeMetrics = computed(() => allMetrics.filter(m => selectedMetricKeys.value.includes(m.key)));
+// В «В работе» контракты не активированы → транзакций нет, поэтому Выручка и
+// Баллы (берутся из транзакций) бессмысленны — скрываем их в этом разрезе.
+const availableMetrics = computed(() => allMetrics.filter(
+  m => !(reportMode.value === 'inwork' && (m.key === 'revenue' || m.key === 'points'))
+));
+const activeMetrics = computed(() => {
+  const sel = availableMetrics.value.filter(m => selectedMetricKeys.value.includes(m.key));
+  return sel.length ? sel : availableMetrics.value.filter(m => m.key === 'volume');
+});
 
 function toggleMetric(key) {
   const idx = selectedMetricKeys.value.indexOf(key);
