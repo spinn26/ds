@@ -479,6 +479,10 @@ class ManualTransactionController extends Controller
                             }
                         }
                     }
+                    // Выравниваем PK-сиквенс: после Directual-восстановления он
+                    // отстаёт → insertGetId врезается в существующий id (duplicate
+                    // transaction_pkey). setval идемпотентен и дёшев.
+                    DB::statement("SELECT setval(pg_get_serial_sequence('transaction', 'id'), GREATEST((SELECT MAX(id) FROM transaction), 1))");
                     $txId = DB::table('transaction')->insertGetId([
                         'contract' => $draft->contract,
                         'amount' => $amount,

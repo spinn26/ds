@@ -125,13 +125,16 @@ class ContractImportPreviewService
             if ($found) $row['riskProfile'] = (int) $found;
         }
 
-        // 6. Currency: тикер (RUB/USD/EUR) → id
+        // 6. Currency: тикер (RUB/USD/EUR) → id. Матчим по всем колонкам-
+        // названиям, т.к. тикер может лежать в symbol / nameEn / currencyName / nameRu.
         if (! empty($row['currency']) && ! is_numeric($row['currency'])) {
             $code = trim($row['currency']);
             $found = DB::table('currency')
                 ->where(function ($q) use ($code) {
-                    $q->where('nameEn', 'ilike', $code)
-                      ->orWhere('symbol', $code);
+                    $q->where('symbol', 'ilike', $code)
+                      ->orWhere('nameEn', 'ilike', $code)
+                      ->orWhere('currencyName', 'ilike', $code)
+                      ->orWhere('nameRu', 'ilike', $code);
                 })->value('id');
             if ($found) $row['currency'] = (int) $found;
         }
@@ -216,6 +219,10 @@ class ContractImportPreviewService
         }
 
         $written = DB::transaction(function () use ($rows) {
+            // Выравниваем PK-сиквенс: после Directual-восстановления он отстаёт,
+            // и авто-id врезается в существующие строки (duplicate contract_pkey).
+            DB::statement("SELECT setval(pg_get_serial_sequence('contract', 'id'), GREATEST((SELECT MAX(id) FROM contract), 1))");
+
             $count = 0;
             foreach ($rows as $r) {
                 $data = json_decode($r->row_data, true) ?: [];
@@ -333,6 +340,16 @@ class ContractImportPreviewService
             $errors[] = ['field' => 'ammount', 'message' => 'Сумма обязательна'];
         } elseif (! is_numeric($amount) || (float) $amount <= 0) {
             $errors[] = ['field' => 'ammount', 'message' => 'Сумма должна быть положительным числом'];
+        }
+
+        // Валюта: должна быть резолвлена в id (иначе строка «RUB» уходит в
+        // integer-колонку currency и insert падает 22P02).
+        if (! empty($row['currency'])) {
+            if (! is_numeric($row['currency'])) {
+                $errors[] = ['field' => 'currency', 'message' => "Валюта «{$row['currency']}» не найдена в справочнике"];
+            } elseif (! DB::table('currency')->where('id', $row['currency'])->exists()) {
+                $errors[] = ['field' => 'currency', 'message' => 'Некорректный ID валюты'];
+            }
         }
 
         if (! empty($row['createDate']) && ! strtotime($row['createDate'])) {
