@@ -2586,10 +2586,15 @@ class AdminDataController extends Controller
                 'comment' => $data['comment'] ?? null,
                 // Статусы без прогноза (Активирован/Закрыто нереализовано/Лапсирован) — очищаем
                 'activation_forecast' => in_array((int) $data['status'], $noForecastStatuses, true) ? null : ($data['activation_forecast'] ?? null),
+                // Дата активации фиксируется, если контракт сразу создаётся «Активированным».
+                'activated_at' => (int) $data['status'] === 1 ? now()->toDateString() : null,
                 'createdAt' => now(),
                 'changedAt' => now(),
             ]);
         });
+
+        // Прогноз начисления — системное поле (см. AccrualForecastService).
+        app(\App\Services\AccrualForecastService::class)->recomputeForContract($id);
 
         return response()->json(['message' => 'Контракт создан', 'id' => $id], 201);
     }
@@ -2652,6 +2657,11 @@ class AdminDataController extends Controller
         if (in_array((int) $newStatus, $noForecastStatuses, true)) {
             $data['activation_forecast'] = null;
         }
+        // Фиксируем дату активации при первом переходе в «Активирован» (id=1) —
+        // точка отсчёта прогноза начисления (см. AccrualForecastService).
+        if ((int) $newStatus === 1 && empty($contract->activated_at)) {
+            $data['activated_at'] = now()->toDateString();
+        }
 
         DB::transaction(function () use ($data, $contract) {
             // Денормализация имён при изменении FK (для совместимости с прежними запросами)
@@ -2674,6 +2684,9 @@ class AdminDataController extends Controller
             // что и подтягивает «История изменений контракта» (per spec §4).
             $contract->fill($data)->save();
         });
+
+        // Прогноз начисления — системное поле, пересчитываем после смены статуса.
+        app(\App\Services\AccrualForecastService::class)->recomputeForContract($contract->id);
 
         return response()->json(['message' => 'Контракт обновлён']);
     }

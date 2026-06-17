@@ -191,6 +191,15 @@
                 prepend-inner-icon="mdi-star-circle" />
             </v-col>
             <v-col cols="12" md="6">
+              <!-- Прогноз начисления: число месяцев, прибавляемых к месяцу
+                   активации контракта (из тарифной матрицы «Период выплаты»). -->
+              <v-select v-model="editProduct.accrualForecastMonths"
+                :items="[{title:'В месяц активации (0)',value:0},{title:'+1 месяц',value:1},{title:'+2 месяца',value:2}]"
+                item-title="title" item-value="value" label="Прогноз начисления"
+                hint="Через сколько месяцев после активации ожидается начисление" persistent-hint
+                prepend-inner-icon="mdi-calendar-clock" />
+            </v-col>
+            <v-col cols="12" md="6">
               <v-select v-model="editProduct.educationCourseId" :items="courseItems"
                 item-title="title" item-value="id" label="Привязанное обучение"
                 clearable prepend-inner-icon="mdi-school"
@@ -719,6 +728,7 @@ function openCreateProduct() {
     active: true, noComission: false, visibleToResident: true, visibleToCalculator: true,
     hasProperty: false, hasTerm: false, hasYearKv: false,
     isPrimary: true,
+    accrualForecastMonths: 0,
     publishStatus: 'draft',
   };
   productError.value = '';

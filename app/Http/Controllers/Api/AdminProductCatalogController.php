@@ -49,7 +49,8 @@ class AdminProductCatalogController extends Controller
             ->leftJoin('programs_catalog as g', 'g.product_id', '=', 'p.id')
             ->groupBy('p.id', 'p.name', 'p.type', 'p.open_product_url', 'p.active', 'p.created_at',
                 'p.image_url', 'p.hero_image', 'p.description', 'p.legacy_product_id',
-                'p.visible_to_resident', 'p.visible_to_calculator', 'p.is_primary')
+                'p.visible_to_resident', 'p.visible_to_calculator', 'p.is_primary',
+                'p.accrual_forecast_months')
             ->select([
                 'p.id',
                 'p.name',
@@ -64,6 +65,7 @@ class AdminProductCatalogController extends Controller
                 'p.visible_to_resident',
                 'p.visible_to_calculator',
                 'p.is_primary',
+                'p.accrual_forecast_months',
                 DB::raw('COUNT(g.id) AS programs_count'),
                 DB::raw('COUNT(g.id) FILTER (WHERE g.active=true)  AS programs_active'),
                 DB::raw('COUNT(g.id) FILTER (WHERE g.has_red=true) AS programs_red'),
@@ -127,12 +129,14 @@ class AdminProductCatalogController extends Controller
             ->leftJoin('programs_catalog as g', 'g.product_id', '=', 'p.id')
             ->groupBy('p.id', 'p.name', 'p.type', 'p.open_product_url', 'p.active', 'p.created_at',
                 'p.image_url', 'p.hero_image', 'p.description', 'p.legacy_product_id',
-                'p.visible_to_resident', 'p.visible_to_calculator', 'p.is_primary')
+                'p.visible_to_resident', 'p.visible_to_calculator', 'p.is_primary',
+                'p.accrual_forecast_months')
             ->where('p.id', $id)
             ->select([
                 'p.id', 'p.name', 'p.type', 'p.open_product_url', 'p.active', 'p.created_at',
                 'p.image_url', 'p.hero_image', 'p.description', 'p.legacy_product_id',
                 'p.visible_to_resident', 'p.visible_to_calculator', 'p.is_primary',
+                'p.accrual_forecast_months',
                 DB::raw('COUNT(g.id) AS programs_count'),
                 DB::raw('COUNT(g.id) FILTER (WHERE g.active=true)  AS programs_active'),
                 DB::raw('COUNT(g.id) FILTER (WHERE g.has_red=true) AS programs_red'),
@@ -220,6 +224,8 @@ class AdminProductCatalogController extends Controller
             // из калькулятора без необходимости снимать active.
             'visibleToResident'   => 'nullable|boolean',
             'visibleToCalculator' => 'nullable|boolean',
+            // Прогноз начисления: месяцев к месяцу активации (0/1/2…).
+            'accrualForecastMonths' => 'nullable|integer|min:0|max:24',
             // Остальные поля формы (productType, educationCourseId, ...) пока
             // не маппятся на catalog-схему и тихо игнорируются.
         ]);
@@ -237,6 +243,7 @@ class AdminProductCatalogController extends Controller
         if ($request->has('isPrimary'))           $update['is_primary']            = (bool) ($payload['isPrimary'] ?? true);
         if ($request->has('visibleToResident'))   $update['visible_to_resident']   = (bool) ($payload['visibleToResident'] ?? true);
         if ($request->has('visibleToCalculator')) $update['visible_to_calculator'] = (bool) ($payload['visibleToCalculator'] ?? true);
+        if ($request->has('accrualForecastMonths')) $update['accrual_forecast_months'] = (int) ($payload['accrualForecastMonths'] ?? 0);
 
         DB::table('products_catalog')->where('id', $id)->update($update);
 
@@ -423,6 +430,10 @@ class AdminProductCatalogController extends Controller
             'programCount'         => $programs,
             'programsRed'          => (int) ($r->programs_red ?? 0),
             'programsActive'       => (int) ($r->programs_active ?? 0),
+            // «Прогноз начисления» — месяцев к месяцу активации (0/1/2).
+            'accrualForecastMonths' => property_exists($r, 'accrual_forecast_months')
+                ? (int) $r->accrual_forecast_months
+                : 0,
         ];
     }
 
