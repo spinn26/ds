@@ -298,7 +298,7 @@ const columnVisible = ref({});
 const visibleHeaders = computed(() => headers.filter(h => columnVisible.value[h.key] !== false));
 
 const {
-  items, loading, page, perPage, total, filters, activeFilterCount,
+  items, loading, page, perPage, total, sortBy, filters, activeFilterCount,
   editDialog, editForm, editErrors, editMessage, saving,
   deleteDialog, deleteTarget,
   load, resetFilters,
@@ -327,11 +327,21 @@ const {
 // назад, поэтому page здесь НЕ трогаем — иначе сбросили бы выбранную
 // страницу обратно. Реагируем только на смену размера страницы.
 function onTableOptions(opts) {
+  let needLoad = false;
   if (opts?.itemsPerPage != null && opts.itemsPerPage !== perPage.value) {
     perPage.value = opts.itemsPerPage;
     page.value = 1;
-    load();
+    needLoad = true;
   }
+  // Клик по заголовку колонки приходит сюда же. Раньше sortBy игнорировался —
+  // у серверной таблицы это значит, что сортировка не работала вовсе.
+  const next = Array.isArray(opts?.sortBy) ? opts.sortBy : [];
+  if (JSON.stringify(next) !== JSON.stringify(sortBy.value)) {
+    sortBy.value = next;
+    page.value = 1;
+    needLoad = true;
+  }
+  if (needLoad) load();
 }
 
 // Роли в БД — CSV-строка; в UI — массив. Прокси через computed.

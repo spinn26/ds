@@ -46,6 +46,7 @@
         show-expand
         @update:page="page = $event; loadProducts()"
         @update:items-per-page="v => { perPage = v; page = 1; loadProducts(); }"
+        @update:sort-by="v => { sortBy = v; page = 1; loadProducts(); }"
         @update:expanded="onExpandedChange"
       >
         <template #item.name="{ item }">
@@ -545,6 +546,7 @@ const products = ref([]);
 const total = ref(0);
 const page = ref(1);
 const perPage = ref(25);
+const sortBy = ref([]);
 const expanded = ref([]);
 
 const filters = ref({ search: '', active: null });
@@ -665,6 +667,10 @@ async function loadProducts() {
     const params = { page: page.value, per_page: perPage.value };
     if (filters.value.search) params.search = filters.value.search;
     if (filters.value.active) params.active = filters.value.active;
+    if (sortBy.value.length) {
+      params.sort_by = sortBy.value[0].key;
+      params.sort_dir = sortBy.value[0].order || 'asc';
+    }
     const { data } = await api.get('/admin/products-catalog', { params });
     products.value = data.data || data;
     total.value = data.total || products.value.length;

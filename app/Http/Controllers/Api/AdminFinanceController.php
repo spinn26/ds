@@ -777,8 +777,8 @@ class AdminFinanceController extends Controller
             'comment'        => 'comment',
         ], 'accrual_date', 'desc');
 
-        $rows = $sub->offset(($request->input('page', 1) - 1) * 25)
-            ->limit(25)
+        $rows = $sub->offset($this->paginationOffset($request))
+            ->limit($this->paginationPerPage($request))
             ->get();
 
         $data = $rows->map(fn ($r) => [
@@ -1010,8 +1010,8 @@ class AdminFinanceController extends Controller
         ], '"consultantPayment"."paymentDate"', 'desc');
 
         $data = $query
-            ->offset(($request->input('page', 1) - 1) * 25)
-            ->limit(25)
+            ->offset($this->paginationOffset($request))
+            ->limit($this->paginationPerPage($request))
             ->get()
             ->map(fn ($p) => [
                 'id' => $p->id,

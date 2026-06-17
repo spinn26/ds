@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Controllers\Api\Concerns\AppliesSorting;
 use App\Http\Controllers\Api\Concerns\PaginatesRequests;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
@@ -26,6 +27,7 @@ use Illuminate\Support\Facades\DB;
 class AdminProductCatalogController extends Controller
 {
     use PaginatesRequests;
+    use AppliesSorting;
 
     /** Distinct ТИП values for filter chips. */
     public function types(): JsonResponse
@@ -81,8 +83,18 @@ class AdminProductCatalogController extends Controller
             ->mergeBindings($q)
             ->count();
 
+        // Сортировка по клику на заголовок. programCount — агрегат
+        // COUNT(g.id) (alias programs_count, допустим в ORDER BY у Postgres).
+        // Дефолт сохраняет прежний порядок: больше программ → выше, затем имя.
+        $this->applySorting($q, $request, [
+            'name'                 => 'p.name',
+            'active'               => 'p.active',
+            'visibleToResident'    => 'p.visible_to_resident',
+            'visibleToCalculator'  => 'p.visible_to_calculator',
+            'programCount'         => 'programs_count',
+        ], 'programs_count', 'desc');
+
         $rows = $q
-            ->orderByRaw('COUNT(g.id) DESC')
             ->orderBy('p.name')
             ->offset($this->paginationOffset($request))
             ->limit($this->paginationPerPage($request))

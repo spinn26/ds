@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Controllers\Api\Concerns\PaginatesRequests;
 use App\Http\Controllers\Controller;
 use App\Models\CommunicationCategory;
 use App\Models\Consultant;
@@ -11,6 +12,8 @@ use Illuminate\Http\Request;
 
 class CommunicationController extends Controller
 {
+    use PaginatesRequests;
+
     /**
      * Список сообщений партнёра (хронологический, последние сверху).
      */
@@ -32,8 +35,8 @@ class CommunicationController extends Controller
 
         $messages = $query
             ->orderByDesc('date')
-            ->offset(($request->input('page', 1) - 1) * 25)
-            ->limit(25)
+            ->offset($this->paginationOffset($request))
+            ->limit($this->paginationPerPage($request))
             ->get()
             ->map(fn ($m) => $this->formatMessage($m));
 

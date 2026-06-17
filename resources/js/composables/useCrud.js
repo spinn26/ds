@@ -83,8 +83,12 @@ export function useCrud(resource, options = {}) {
         ...buildFilterParams(),
       };
       if (sortBy.value.length) {
-        params.sortBy = sortBy.value[0]?.key;
-        params.sortDir = sortBy.value[0]?.order;
+        // Backend trait Concerns/AppliesSorting reads snake_case sort_by /
+        // sort_dir. We previously sent camelCase sortBy/sortDir, which every
+        // controller silently ignored — so clicking a column header did
+        // nothing server-side. Match the canonical contract (see useTableSort).
+        params.sort_by = sortBy.value[0]?.key;
+        params.sort_dir = sortBy.value[0]?.order;
       }
       const { data } = await api.get(`/${resource}`, { params });
       const r = normalise(data);

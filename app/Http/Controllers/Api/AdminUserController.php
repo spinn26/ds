@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Controllers\Api\Concerns\AppliesSorting;
 use App\Http\Controllers\Api\Concerns\PaginatesRequests;
 use App\Http\Controllers\Controller;
 use App\Models\Consultant;
@@ -14,6 +15,7 @@ use Illuminate\Support\Facades\Hash;
 class AdminUserController extends Controller
 {
     use PaginatesRequests;
+    use AppliesSorting;
 
     public function index(Request $request): JsonResponse
     {
@@ -61,7 +63,19 @@ class AdminUserController extends Controller
 
         $total = $query->count();
 
-        $rows = $query->orderByDesc('id')
+        // Сортировка по клику на заголовок. Колонки WebUser в camelCase —
+        // Postgres folds unquoted identifiers to lowercase, поэтому в кавычках.
+        $this->applySorting($query, $request, [
+            'id'         => 'id',
+            'lastName'   => '"lastName"',
+            'firstName'  => '"firstName"',
+            'email'      => 'email',
+            'phone'      => 'phone',
+            'role'       => 'role',
+            'isBlocked'  => '"isBlocked"',
+        ], 'id', 'desc');
+
+        $rows = $query
             ->offset($this->paginationOffset($request))
             ->limit($this->paginationPerPage($request))
             ->get();

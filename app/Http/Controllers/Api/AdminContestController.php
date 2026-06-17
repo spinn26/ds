@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Controllers\Api\Concerns\AppliesSorting;
 use App\Http\Controllers\Api\Concerns\PaginatesRequests;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\Admin\StoreContestRequest;
@@ -14,13 +15,14 @@ use Illuminate\Support\Facades\Schema;
 class AdminContestController extends Controller
 {
     use PaginatesRequests;
+    use AppliesSorting;
 
     /**
      * Paginated list of contests for admin screen.
      */
     public function index(Request $request): JsonResponse
     {
-        $query = DB::table('Contest')->orderByDesc('start');
+        $query = DB::table('Contest');
 
         if ($request->filled('search')) {
             $s = '%' . $request->input('search') . '%';
@@ -37,6 +39,18 @@ class AdminContestController extends Controller
         }
 
         $total = $query->count();
+
+        // typeName/statusName — производные (lookup по id), поэтому сортируем
+        // по нижележащим type/status. end/numberOfWinners в кавычках (end —
+        // ключевое слово SQL, numberOfWinners — camelCase).
+        $this->applySorting($query, $request, [
+            'name'            => 'name',
+            'typeName'        => 'type',
+            'statusName'      => 'status',
+            'start'           => 'start',
+            'end'             => '"end"',
+            'numberOfWinners' => '"numberOfWinners"',
+        ], 'start', 'desc');
 
         $rows = $query
             ->offset($this->paginationOffset($request))
