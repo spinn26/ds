@@ -1023,6 +1023,7 @@ onMounted(loadData);
   font-variant-numeric: tabular-nums;
   font-size: 12px;
   min-width: 72px;
+  white-space: nowrap;
   color: rgb(var(--v-theme-on-surface));
 }
 /* Month right separator */
