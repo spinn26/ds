@@ -26,7 +26,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import api from '../api';
 import { useDebounce } from '../composables/useDebounce';
 
@@ -40,23 +40,40 @@ const props = defineProps({
 });
 defineEmits(['update:modelValue']);
 
-const items = ref([...props.preload]);
+// results — текущая выдача поиска; cache — все когда-либо виденные опции
+// (для отображения имён выбранных чипов, которых нет в текущей выдаче).
+const results = ref([...props.preload]);
+const cache = new Map(props.preload.map((u) => [u.id, u]));
 const loading = ref(false);
+
+const selectedIds = computed(() => (Array.isArray(props.modelValue)
+  ? props.modelValue
+  : (props.modelValue != null ? [props.modelValue] : [])));
+
+// Список для дропдауна: результаты поиска + выбранные (из кэша), чтобы
+// чипы/значение не теряли подписи. Без накопления старых результатов.
+const items = computed(() => {
+  const map = new Map(results.value.map((u) => [u.id, u]));
+  for (const id of selectedIds.value) {
+    if (!map.has(id) && cache.has(id)) map.set(id, cache.get(id));
+  }
+  return [...map.values()];
+});
 
 async function fetchUsers(search) {
   loading.value = true;
   try {
     const { data } = await api.get('/tasks/assignable-users', { params: { search: search || undefined } });
-    // Сохраняем уже выбранные опции, чтобы чипы не теряли имена.
-    const byId = new Map(items.value.map((u) => [u.id, u]));
-    (data.users || []).forEach((u) => byId.set(u.id, u));
-    items.value = [...byId.values()];
+    results.value = data.users || [];
+    results.value.forEach((u) => cache.set(u.id, u));
   } catch { /* ignore */ }
   loading.value = false;
 }
 
 const { debounced } = useDebounce((s) => fetchUsers(s), 300);
-function onSearch(s) { debounced(s); }
+// Игнорируем пустую строку поиска, когда уже что-то выбрано (Vuetify шлёт
+// '' после выбора — иначе сбрасывали бы выдачу без причины).
+function onSearch(s) { debounced(s || ''); }
 
-onMounted(() => { if (!items.value.length) fetchUsers(''); });
+onMounted(() => { fetchUsers(''); });
 </script>
