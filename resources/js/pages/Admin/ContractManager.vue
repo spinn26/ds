@@ -83,6 +83,12 @@
             v-model:to="filters.closed_to"
             @update:from="loadData" @update:to="loadData" />
         </v-col>
+        <v-col cols="12" md="4">
+          <SmartRangeFilter label="Прогноз активации" kind="date"
+            v-model:from="filters.forecast_from"
+            v-model:to="filters.forecast_to"
+            @update:from="loadData" @update:to="loadData" />
+        </v-col>
       </template>
       <v-col v-if="activeFilterCount > 0" cols="auto" class="d-flex align-center">
         <v-chip size="small" color="info" variant="tonal">
@@ -105,6 +111,10 @@
       </template>
       <template #item.statusName="{ value }">
         <StatusChip :value="value" kind="contract" size="x-small" :text="value" />
+      </template>
+      <template #item.activationForecast="{ value }">
+        <span v-if="value">{{ fmtDate(value) }}</span>
+        <span v-else class="text-medium-emphasis">—</span>
       </template>
       <template #item.comment="{ value }">
         <span v-if="value" :title="value" class="d-inline-block text-truncate" style="max-width:240px">
@@ -415,6 +425,7 @@ const filters = ref({
   created_from: '', created_to: '',
   opened_from: '', opened_to: '',
   closed_from: '', closed_to: '',
+  forecast_from: '', forecast_to: '',
 });
 const page = ref(1);
 const perPage = ref(25);
@@ -429,6 +440,7 @@ const headers = [
   { title: 'Партнёр', key: 'consultantName' },
   { title: 'Открыт', key: 'openDate', width: 120 },
   { title: 'Статус', key: 'statusName', width: 130 },
+  { title: 'Прогноз активации', key: 'activationForecast', width: 150 },
   { title: 'Сумма', key: 'ammount', width: 140 },
   { title: 'Продукт', key: 'productName' },
   { title: 'Программа', key: 'programName' },
@@ -791,6 +803,7 @@ function resetFilters() {
     created_from: '', created_to: '',
     opened_from: '', opened_to: '',
     closed_from: '', closed_to: '',
+    forecast_from: '', forecast_to: '',
   };
   loadData();
 }

@@ -2195,6 +2195,9 @@ class AdminDataController extends Controller
         if ($request->filled('opened_to')) $query->where('c.openDate', '<=', $request->opened_to . ' 23:59:59');
         if ($request->filled('closed_from')) $query->where('c.closeDate', '>=', $request->closed_from);
         if ($request->filled('closed_to')) $query->where('c.closeDate', '<=', $request->closed_to . ' 23:59:59');
+        // Прогноз активации — date-only колонка (без времени).
+        if ($request->filled('forecast_from')) $query->where('c.activation_forecast', '>=', $request->forecast_from);
+        if ($request->filled('forecast_to')) $query->where('c.activation_forecast', '<=', $request->forecast_to);
 
         $total = $query->count();
         $this->applySorting($query, $request, [
@@ -2209,6 +2212,7 @@ class AdminDataController extends Controller
             'openDate' => 'c."openDate"',
             'closeDate' => 'c."closeDate"',
             'status' => 'c.status',
+            'activationForecast' => 'c.activation_forecast',
         ], 'c.id', 'desc');
         $rows = $query
             ->offset($this->paginationOffset($request))
@@ -2217,7 +2221,7 @@ class AdminDataController extends Controller
                 'c.id', 'c.number', 'c.clientName', 'c.consultant', 'c.consultantName',
                 'c.productName', 'c.programName', 'c.status', 'c.ammount', 'c.currency',
                 'c.openDate', 'c.createDate', 'c.createdAt', 'c.comment',
-                'c.counterpartyContractId',
+                'c.counterpartyContractId', 'c.activation_forecast',
                 DB::raw('COALESCE(NULLIF(pr."vendorName",\'\'), pr."providerName") as "supplierName"'),
             ])
             ->get();
@@ -2252,6 +2256,8 @@ class AdminDataController extends Controller
                 'ammount' => $c->ammount,
                 'currencySymbol' => $c->currency ? ($currencies[$c->currency] ?? null) : null,
                 'openDate' => $c->openDate,
+                // Y-m-d, иначе date-only уезжает на день назад под МСК.
+                'activationForecast' => $c->activation_forecast ? substr((string) $c->activation_forecast, 0, 10) : null,
             ]);
 
         return response()->json(['data' => $contracts, 'total' => $total]);
