@@ -186,7 +186,17 @@ Route::prefix('v1')->group(function () {
         Route::put('/task-templates/{id}', [\App\Http\Controllers\Api\TaskTemplateController::class, 'update'])->whereNumber('id');
         Route::delete('/task-templates/{id}', [\App\Http\Controllers\Api\TaskTemplateController::class, 'destroy'])->whereNumber('id');
         Route::post('/task-templates/{id}/instantiate', [\App\Http\Controllers\Api\TaskTemplateController::class, 'instantiate'])->whereNumber('id');
-        }); // конец staff-группы модуля задач
+
+        // ───────── Оргструктура компании (только staff; правка — admin) ─────────
+        Route::get('/org/departments', [\App\Http\Controllers\Api\OrgStructureController::class, 'index']);
+        Route::post('/org/departments', [\App\Http\Controllers\Api\OrgStructureController::class, 'store']);
+        Route::put('/org/departments/{id}', [\App\Http\Controllers\Api\OrgStructureController::class, 'update'])->whereNumber('id');
+        Route::delete('/org/departments/{id}', [\App\Http\Controllers\Api\OrgStructureController::class, 'destroy'])->whereNumber('id');
+        Route::post('/org/departments/{id}/members', [\App\Http\Controllers\Api\OrgStructureController::class, 'addMembers'])->whereNumber('id');
+        Route::delete('/org/departments/{id}/members/{user}', [\App\Http\Controllers\Api\OrgStructureController::class, 'removeMember'])->whereNumber('id')->whereNumber('user');
+        Route::get('/org/employees/{id}', [\App\Http\Controllers\Api\OrgStructureController::class, 'employee'])->whereNumber('id');
+        Route::get('/org/users', [\App\Http\Controllers\Api\OrgStructureController::class, 'searchUsers']);
+        }); // конец staff-группы (задачи + оргструктура)
 
         // Chat system v2
         Route::get('/chat/tickets', [\App\Http\Controllers\Api\ChatController::class, 'index']);

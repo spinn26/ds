@@ -51,6 +51,7 @@ const routes = [
             // (/manage/workspace) рендерят один и тот же Workspace.vue.
             // Компонент сам подсказывает блоки под роль (admin / staff / consultant).
             { path: 'manage/workspace', component: () => import('../pages/Workspace.vue'), meta: { staff: true } },
+            { path: 'manage/org-structure', component: () => import('../pages/Manage/OrgStructure.vue'), meta: { staff: true } },
             { path: 'manage/periods', component: () => import('../pages/Admin/Periods.vue'), meta: { staff: true } },
             { path: 'manage/periods/:ym', component: () => import('../pages/Admin/PeriodCard.vue'), meta: { staff: true } },
             { path: 'manage/contracts', component: () => import('../pages/Admin/ContractManager.vue'), meta: { staff: true } },

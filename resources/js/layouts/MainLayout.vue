@@ -972,6 +972,10 @@ const menuItems = [
   // ведёт на тот же Workspace.vue, что и «Главная» (/). Дублирование
   // пункта путало админов. Сам роут оставлен на случай старых букмарков.
 
+  // Компания (оргструктура) — всем staff
+  { group: 'Компания', staffOnly: true },
+  { label: 'Структура компании', icon: 'mdi-sitemap-outline', path: '/manage/org-structure', staffOnly: true },
+
   // Данные
   { group: 'Данные', adminSection: 'partners' },
   { label: 'Партнёры', icon: 'mdi-account-search', path: '/manage/partners', adminSection: 'partners' },
