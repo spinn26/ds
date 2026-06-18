@@ -173,11 +173,15 @@ class ChatController extends Controller
         }
 
         $total = $query->count();
+        // per_page настраивается клиентом (бесконечный скролл sidebar'а),
+        // капаем на 100, чтобы не тянуть всё разом. Дефолт 25 для legacy-вызовов.
+        $perPage = min(max((int) $request->input('per_page', 25), 1), 100);
+        $page = max(1, (int) $request->input('page', 1));
         $tickets = $query
             ->orderByRaw('pinned_at DESC NULLS LAST') // pinned first, nulls at the end
             ->orderByDesc('last_message_at')
-            ->offset(max(0, ($request->input('page', 1) - 1) * 25))
-            ->limit(25)
+            ->offset(($page - 1) * $perPage)
+            ->limit($perPage)
             ->get();
 
         // Batch unread counts with a single LEFT JOIN to chat_read_status
@@ -303,7 +307,9 @@ class ChatController extends Controller
         return response()->json([
             'data' => $data,
             'total' => $total,
-            'last_page' => max(1, ceil($total / 25)),
+            'last_page' => max(1, (int) ceil($total / $perPage)),
+            'page' => $page,
+            'per_page' => $perPage,
         ]);
     }
 

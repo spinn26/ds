@@ -96,7 +96,7 @@
       </div>
 
       <v-divider />
-      <div class="sidebar-list">
+      <div class="sidebar-list" @scroll="onListScroll">
         <div v-for="t in filteredBySmartView" :key="t.id"
           class="chat-item"
           :class="{ active: activeChat?.id === t.id, 'has-unread': t.unread > 0, stale: isStale(t), pinned: t.pinned_at, 'bulk-mode': bulkMode, selected: selectedIds.has(t.id) }"
@@ -159,6 +159,9 @@
         <div v-if="!chats.length && !loading" class="sidebar-empty pa-4 text-center">
           <v-icon size="40" color="grey">mdi-inbox-outline</v-icon>
           <div class="text-body-2 text-medium-emphasis mt-2">Ничего не найдено</div>
+        </div>
+        <div v-if="loadingMore" class="py-2 text-center">
+          <v-progress-circular size="18" width="2" indeterminate color="primary" />
         </div>
       </div>
 
@@ -1312,6 +1315,12 @@ async function createTechSupport() {
 
 const chats = ref([]);
 const loading = ref(false);
+// Бесконечный скролл sidebar'а: грузим страницами по 50 и догружаем при
+// прокрутке вниз, пока page < lastPage (раньше показывались только 25).
+const chatsPage = ref(1);
+const chatsLastPage = ref(1);
+const loadingMore = ref(false);
+const CHATS_PER_PAGE = 50;
 const activeChat = ref(null);
 const messages = ref([]);
 
@@ -2107,20 +2116,49 @@ function onPaste(e) {
 
 const { debounced: debouncedLoad } = useDebounce(loadChats, 400);
 
-async function loadChats() {
-  loading.value = true;
+async function loadChats(append = false) {
+  if (!append) {
+    chatsPage.value = 1;
+    loading.value = true;
+  } else {
+    loadingMore.value = true;
+  }
   try {
-    const params = {};
+    const params = { page: chatsPage.value, per_page: CHATS_PER_PAGE };
     if (filter.value.status) params.status = filter.value.status;
     if (filter.value.priority) params.priority = filter.value.priority;
     if (filter.value.search) params.search = filter.value.search;
     const { data } = await api.get('/chat/tickets', { params });
+    chatsLastPage.value = data.last_page || 1;
+    const incoming = data.data || [];
     // sortChats: pinned → непрочитанные → по дате. Бэкенд отдаёт
     // отсортированное по last_message_at, но «непрочитанные вверх»
     // — клиентское правило (unread считается per-user).
-    chats.value = (data.data || []).slice().sort(sortChats);
+    if (append) {
+      const seen = new Set(chats.value.map(c => c.id));
+      const merged = chats.value.concat(incoming.filter(c => !seen.has(c.id)));
+      chats.value = merged.sort(sortChats);
+    } else {
+      chats.value = incoming.slice().sort(sortChats);
+    }
   } catch {}
   loading.value = false;
+  loadingMore.value = false;
+}
+
+// Догрузка следующей страницы при прокрутке списка вниз.
+async function loadMoreChats() {
+  if (loadingMore.value || loading.value) return;
+  if (chatsPage.value >= chatsLastPage.value) return;
+  chatsPage.value += 1;
+  await loadChats(true);
+}
+
+function onListScroll(e) {
+  const el = e.target;
+  if (el.scrollHeight - el.scrollTop - el.clientHeight < 240) {
+    loadMoreChats();
+  }
 }
 
 // Открытие конкретного тикета по id (используется для ?open=ID — переход
