@@ -679,12 +679,29 @@ class ProductSalesMatrixController extends Controller
 
         $grand['fcCount'] = (int) $base()->distinct()->count('co.consultant');
 
+        // Клиенты — distinct (как ФК): один клиент может купить несколько
+        // продуктов, поэтому суммировать client_count по ячейкам нельзя —
+        // итоги задвоятся. Считаем уникальных клиентов отдельно.
+        $clMonthlyIdx = [];
+        foreach ($base()->select(['co.product as product_id', $periodExpr, DB::raw('COUNT(DISTINCT co.client) as cl_count')])
+            ->groupBy('co.product', $periodRaw)->get() as $r) {
+            $clMonthlyIdx[$r->product_id][$r->period_month] = (int) $r->cl_count;
+        }
+        $grandClMonthly = $base()
+            ->select([$periodExpr, DB::raw('COUNT(DISTINCT co.client) as cl_count')])
+            ->groupBy($periodRaw)->get()->pluck('cl_count', 'period_month');
+        $clCounts = $base()
+            ->select('co.product as product_id', DB::raw('COUNT(DISTINCT co.client) as cl_count'))
+            ->groupBy('co.product')->get()->keyBy('product_id');
+        $grand['clientCount'] = (int) $base()->distinct()->count('co.client');
+
         // Производные поля: avgCheck и fcCount на уровне продукта/гранда
         foreach ($productMap as $pid => &$prod) {
             $prod['avgCheck'] = $prod['count'] > 0 ? round($prod['volume'] / $prod['count'], 2) : 0;
             foreach ($prod['monthly'] as $mo => &$mv) {
-                $mv['avgCheck'] = $mv['count'] > 0 ? round($mv['volume'] / $mv['count'], 2) : 0;
-                $mv['fcCount']  = $fcMonthlyIdx[$pid][$mo] ?? 0;
+                $mv['avgCheck']    = $mv['count'] > 0 ? round($mv['volume'] / $mv['count'], 2) : 0;
+                $mv['fcCount']     = $fcMonthlyIdx[$pid][$mo] ?? 0;
+                $mv['clientCount'] = $clMonthlyIdx[$pid][$mo] ?? 0;
             }
             unset($mv);
             foreach ($prod['programs'] as &$prog) {
@@ -696,16 +713,18 @@ class ProductSalesMatrixController extends Controller
 
         $grand['avgCheck'] = $grand['count'] > 0 ? round($grand['volume'] / $grand['count'], 2) : 0;
         foreach ($grand['monthly'] as $mo => &$gv) {
-            $gv['avgCheck'] = $gv['count'] > 0 ? round($gv['volume'] / $gv['count'], 2) : 0;
-            $gv['fcCount']  = (int) ($grandFcMonthly[$mo] ?? 0);
+            $gv['avgCheck']    = $gv['count'] > 0 ? round($gv['volume'] / $gv['count'], 2) : 0;
+            $gv['fcCount']     = (int) ($grandFcMonthly[$mo] ?? 0);
+            $gv['clientCount'] = (int) ($grandClMonthly[$mo] ?? 0);
         }
         unset($gv);
 
         $result = [];
         foreach ($productMap as $pid => $prod) {
-            $prod['fcCount']  = (int) ($fcCounts[$pid]->fc_count ?? 0);
-            $prod['programs'] = array_values($prod['programs']);
-            $result[]         = $prod;
+            $prod['fcCount']     = (int) ($fcCounts[$pid]->fc_count ?? 0);
+            $prod['clientCount'] = (int) ($clCounts[$pid]->cl_count ?? 0);
+            $prod['programs']    = array_values($prod['programs']);
+            $result[]            = $prod;
         }
 
         $allSuppliers = $base()
@@ -722,13 +741,19 @@ class ProductSalesMatrixController extends Controller
             ->get()
             ->map(fn ($r) => ['id' => $r->id, 'name' => $r->name]);
 
-        return response()->json([
+        $payload = [
             'period'      => ['from' => $from, 'to' => $to, 'months' => $months],
             'rows'        => $result,
             'grandTotals' => $grand,
             'suppliers'   => $allSuppliers->values(),
             'products'    => $allProducts->values(),
-        ]);
+        ];
+
+        // Прогноз начисления (тултип): «Активировано» — по месяцу даты активации
+        // (openDate). Ячейки показывают факт, тултип — прогноз из контракта.
+        $this->injectForecastBreakdown($base, $payload, 'openDate', 'openDate');
+
+        return response()->json($payload);
     }
 
     /**
@@ -823,66 +848,8 @@ class ProductSalesMatrixController extends Controller
         // активации, но для пайплайна «В работе» оцениваем из контракта.
         $this->injectInWorkPoints($base, $assembled);
 
-        // Разбивка по прогнозу активации: для каждой ячейки (продукт/программа ×
-        // месяц создания) — сколько контрактов и на какой месяц прогноза.
-        $fcExpr = DB::raw("TO_CHAR(DATE_TRUNC('month', co.activation_forecast), 'YYYY-MM') as fc_month");
-        $fcTruncRaw = DB::raw("DATE_TRUNC('month', co.activation_forecast)");
-        $fcAgg = $base()
-            ->leftJoin('management_currency_rate as mcr_fc', function ($j) {
-                $j->on('mcr_fc.currency', '=', 'co.currency')
-                  ->whereRaw('mcr_fc.date = DATE_TRUNC(\'month\', co."createDate"::date)::date');
-            })
-            ->select([
-                'co.product as product_id', 'co.program as program_id', $periodExpr, $fcExpr,
-                DB::raw('COUNT(DISTINCT co.id) as cnt'),
-                DB::raw('SUM(COALESCE(co.ammount, 0) * COALESCE(mcr_fc.rate, 1)) as vol'),
-            ])
-            ->groupBy('co.product', 'co.program', $periodRaw, $fcTruncRaw)
-            ->get();
-
-        $prog = [];
-        $prodAgg = [];
-        $grandAgg = [];
-        foreach ($fcAgg as $r) {
-            $cm = $r->period_month;
-            $fm = $r->fc_month ?? '—';
-            $cnt = (int) $r->cnt;
-            $vol = round((float) $r->vol, 2);
-            $prog[$r->product_id][$r->program_id][$cm][$fm] = ['count' => $cnt, 'volume' => $vol];
-            $prodAgg[$r->product_id][$cm][$fm]['count'] = ($prodAgg[$r->product_id][$cm][$fm]['count'] ?? 0) + $cnt;
-            $prodAgg[$r->product_id][$cm][$fm]['volume'] = ($prodAgg[$r->product_id][$cm][$fm]['volume'] ?? 0) + $vol;
-            $grandAgg[$cm][$fm]['count'] = ($grandAgg[$cm][$fm]['count'] ?? 0) + $cnt;
-            $grandAgg[$cm][$fm]['volume'] = ($grandAgg[$cm][$fm]['volume'] ?? 0) + $vol;
-        }
-        $toList = function ($map) {
-            $out = [];
-            foreach (($map ?? []) as $fm => $v) {
-                $out[] = ['month' => $fm === '—' ? null : $fm, 'count' => (int) $v['count'], 'volume' => round((float) $v['volume'], 2)];
-            }
-            usort($out, fn ($a, $b) => ($a['month'] ?? '9999') <=> ($b['month'] ?? '9999'));
-
-            return $out;
-        };
-
-        foreach ($assembled['rows'] as &$prodRow) {
-            $pid = $prodRow['productId'];
-            foreach ($prodRow['monthly'] as $cm => &$cell) {
-                $cell['forecast'] = $toList($prodAgg[$pid][$cm] ?? []);
-            }
-            unset($cell);
-            foreach ($prodRow['programs'] as &$pg) {
-                foreach ($pg['monthly'] as $cm => &$cell) {
-                    $cell['forecast'] = $toList($prog[$pid][$pg['programId']][$cm] ?? []);
-                }
-                unset($cell);
-            }
-            unset($pg);
-        }
-        unset($prodRow);
-        foreach ($assembled['grandTotals']['monthly'] as $cm => &$cell) {
-            $cell['forecast'] = $toList($grandAgg[$cm] ?? []);
-        }
-        unset($cell);
+        // Прогноз начисления (тултип): «В работе» — по месяцу прогноза активации.
+        $this->injectForecastBreakdown($base, $assembled, 'createDate', 'activation_forecast');
 
         return response()->json($assembled);
     }
@@ -1012,6 +979,115 @@ class ProductSalesMatrixController extends Controller
             foreach ($keys as $k) {
                 $cell[$k] = round($grandM[$k][$mo] ?? 0, 2);
             }
+        }
+        unset($cell);
+    }
+
+    /**
+     * Прогноз начисления по ячейкам (тултип): для каждой ячейки
+     * (продукт/программа × месяц периода) — разбивка по месяцу $bucketCol со
+     * счётчиком, объёмом (₽), прогнозной выручкой ДС и баллами. Транзакции не
+     * используются — всё считается из контракта (как injectInWorkPoints),
+     * курс с фолбэком на currencyRate (валютные конвертируются в ₽).
+     *
+     * - «В работе»:      $periodCol = createDate, $bucketCol = activation_forecast
+     * - «Активировано»:  $periodCol = openDate,   $bucketCol = openDate (дата активации)
+     */
+    private function injectForecastBreakdown(callable $base, array &$payload, string $periodCol, string $bucketCol): void
+    {
+        $vatPercent = (float) (DB::table('vat')
+            ->where('dateFrom', '<=', now())->where('dateTo', '>=', now())->value('value') ?? 0);
+        $defaultDs = (float) \App\Models\SystemSetting::value('commission.default_ds_percent', 100);
+
+        $rows = $base()
+            ->leftJoin('management_currency_rate as mcr_fb', function ($j) use ($periodCol) {
+                $j->on('mcr_fb.currency', '=', 'co.currency')
+                  ->whereRaw('mcr_fb.date = DATE_TRUNC(\'month\', co."'.$periodCol.'"::date)::date');
+            })
+            ->select([
+                'co.product as product_id',
+                'co.program as program_id',
+                DB::raw('TO_CHAR(DATE_TRUNC(\'month\', co."'.$periodCol.'"::date), \'YYYY-MM\') as period_month'),
+                DB::raw('TO_CHAR(DATE_TRUNC(\'month\', co."'.$bucketCol.'"::date), \'YYYY-MM\') as bucket_month'),
+                'co.ammount',
+                'co.term',
+                'pg.dsPercent as program_ds',
+                'pg.pointsMethod', 'pg.fixedCost', 'pg.pointsMin',
+                DB::raw('co."'.$periodCol.'"::date as cdate'),
+                DB::raw('COALESCE(mcr_fb.rate, (SELECT cr.rate FROM "currencyRate" cr WHERE cr.currency = co.currency ORDER BY cr.date DESC LIMIT 1), 1) as rate'),
+            ])
+            ->get();
+
+        $dsCache = [];
+        $prog = $prod = $grand = [];
+        $add = function (&$map, $bm, $vol, $rev, $pts) {
+            $map[$bm]['count']   = ($map[$bm]['count'] ?? 0) + 1;
+            $map[$bm]['volume']  = ($map[$bm]['volume'] ?? 0) + $vol;
+            $map[$bm]['revenue'] = ($map[$bm]['revenue'] ?? 0) + $rev;
+            $map[$bm]['points']  = ($map[$bm]['points'] ?? 0) + $pts;
+        };
+
+        foreach ($rows as $r) {
+            $amountRub   = (float) $r->ammount * (float) $r->rate;
+            $amountNoVat = $vatPercent > 0 ? $amountRub / (1 + $vatPercent / 100) : $amountRub;
+
+            $ds = $r->program_ds !== null ? (float) $r->program_ds : 0.0;
+            if ($ds <= 0) {
+                $key = $r->program_id.'|'.$r->term.'|'.$r->cdate;
+                if (! array_key_exists($key, $dsCache)) {
+                    $dsCache[$key] = \App\Services\CommissionCalculator::resolveLegacyDsCommission(
+                        (int) $r->program_id, $r->term, null, (string) $r->cdate
+                    );
+                }
+                $ds = (float) ($dsCache[$key] ?? 0);
+            }
+            if ($ds <= 0) {
+                $ds = $defaultDs;
+            }
+
+            $programRow = (object) ['pointsMethod' => $r->pointsMethod, 'fixedCost' => $r->fixedCost, 'pointsMin' => $r->pointsMin];
+            $rev = $amountNoVat * $ds / 100;
+            $pts = \App\Services\CommissionCalculator::computePoints($programRow, $amountNoVat, $amountRub, $ds);
+
+            $pid = $r->product_id; $pgid = $r->program_id; $cm = $r->period_month; $bm = $r->bucket_month ?? '—';
+            $add($prog[$pid][$pgid][$cm], $bm, $amountRub, $rev, $pts);
+            $add($prod[$pid][$cm], $bm, $amountRub, $rev, $pts);
+            $add($grand[$cm], $bm, $amountRub, $rev, $pts);
+        }
+
+        $toList = function ($map) {
+            $out = [];
+            foreach (($map ?? []) as $bm => $v) {
+                $out[] = [
+                    'month'   => $bm === '—' ? null : $bm,
+                    'count'   => (int) $v['count'],
+                    'volume'  => round((float) $v['volume'], 2),
+                    'revenue' => round((float) $v['revenue'], 2),
+                    'points'  => round((float) $v['points'], 2),
+                ];
+            }
+            usort($out, fn ($a, $b) => ($a['month'] ?? '9999') <=> ($b['month'] ?? '9999'));
+
+            return $out;
+        };
+
+        foreach ($payload['rows'] as &$prodRow) {
+            $pid = $prodRow['productId'];
+            foreach ($prodRow['monthly'] as $cm => &$cell) {
+                $cell['forecast'] = $toList($prod[$pid][$cm] ?? []);
+            }
+            unset($cell);
+            foreach ($prodRow['programs'] as &$pg) {
+                foreach ($pg['monthly'] as $cm => &$cell) {
+                    $cell['forecast'] = $toList($prog[$pid][$pg['programId']][$cm] ?? []);
+                }
+                unset($cell);
+            }
+            unset($pg);
+        }
+        unset($prodRow);
+        foreach ($payload['grandTotals']['monthly'] as $cm => &$cell) {
+            $cell['forecast'] = $toList($grand[$cm] ?? []);
         }
         unset($cell);
     }
@@ -1388,12 +1464,29 @@ class ProductSalesMatrixController extends Controller
 
         $grand['fcCount'] = (int) $base()->distinct()->count('co.consultant');
 
+        // Клиенты — distinct (как ФК): один клиент может купить несколько
+        // продуктов, поэтому суммировать client_count по ячейкам нельзя —
+        // итоги задвоятся. Считаем уникальных клиентов отдельно.
+        $clMonthlyIdx = [];
+        foreach ($base()->select(['co.product as product_id', $periodExpr, DB::raw('COUNT(DISTINCT co.client) as cl_count')])
+            ->groupBy('co.product', $periodRaw)->get() as $r) {
+            $clMonthlyIdx[$r->product_id][$r->period_month] = (int) $r->cl_count;
+        }
+        $grandClMonthly = $base()
+            ->select([$periodExpr, DB::raw('COUNT(DISTINCT co.client) as cl_count')])
+            ->groupBy($periodRaw)->get()->pluck('cl_count', 'period_month');
+        $clCounts = $base()
+            ->select('co.product as product_id', DB::raw('COUNT(DISTINCT co.client) as cl_count'))
+            ->groupBy('co.product')->get()->keyBy('product_id');
+        $grand['clientCount'] = (int) $base()->distinct()->count('co.client');
+
         // Производные поля: avgCheck и fcCount на уровне продукта/гранда
         foreach ($productMap as $pid => &$prod) {
             $prod['avgCheck'] = $prod['count'] > 0 ? round($prod['volume'] / $prod['count'], 2) : 0;
             foreach ($prod['monthly'] as $mo => &$mv) {
-                $mv['avgCheck'] = $mv['count'] > 0 ? round($mv['volume'] / $mv['count'], 2) : 0;
-                $mv['fcCount']  = $fcMonthlyIdx[$pid][$mo] ?? 0;
+                $mv['avgCheck']    = $mv['count'] > 0 ? round($mv['volume'] / $mv['count'], 2) : 0;
+                $mv['fcCount']     = $fcMonthlyIdx[$pid][$mo] ?? 0;
+                $mv['clientCount'] = $clMonthlyIdx[$pid][$mo] ?? 0;
             }
             unset($mv);
             foreach ($prod['programs'] as &$prog) {
@@ -1405,16 +1498,18 @@ class ProductSalesMatrixController extends Controller
 
         $grand['avgCheck'] = $grand['count'] > 0 ? round($grand['volume'] / $grand['count'], 2) : 0;
         foreach ($grand['monthly'] as $mo => &$gv) {
-            $gv['avgCheck'] = $gv['count'] > 0 ? round($gv['volume'] / $gv['count'], 2) : 0;
-            $gv['fcCount']  = (int) ($grandFcMonthly[$mo] ?? 0);
+            $gv['avgCheck']    = $gv['count'] > 0 ? round($gv['volume'] / $gv['count'], 2) : 0;
+            $gv['fcCount']     = (int) ($grandFcMonthly[$mo] ?? 0);
+            $gv['clientCount'] = (int) ($grandClMonthly[$mo] ?? 0);
         }
         unset($gv);
 
         $result = [];
         foreach ($productMap as $pid => $prod) {
-            $prod['fcCount']  = (int) ($fcCounts[$pid]->fc_count ?? 0);
-            $prod['programs'] = array_values($prod['programs']);
-            $result[]         = $prod;
+            $prod['fcCount']     = (int) ($fcCounts[$pid]->fc_count ?? 0);
+            $prod['clientCount'] = (int) ($clCounts[$pid]->cl_count ?? 0);
+            $prod['programs']    = array_values($prod['programs']);
+            $result[]            = $prod;
         }
 
         $allSuppliers = $base()

@@ -833,17 +833,31 @@ function fmtClass(val) {
   return (!val || isNaN(n) || n === 0) ? 'val-empty' : '';
 }
 
-// Тултип ячейки «В работе»: разбивка по прогнозу активации (сколько и когда).
+// Тултип ячейки: прогноз начисления по месяцам (для обоих разрезов).
+// «В работе» — по месяцу прогноза активации, «Активировано» — по дате
+// активации. Для объёма/кол-ва показываем шт+сумму, для выручки — прогноз
+// выручки, для баллов — прогноз баллов. Суммы — в рублях (по курсу).
 function cellTitle(cell, metricKey) {
-  if (reportMode.value !== 'inwork') return undefined;
-  if (metricKey !== 'volume' && metricKey !== 'count') return undefined;
   const fc = cell?.forecast;
   if (!fc || !fc.length) return undefined;
+  let header, valOf;
+  if (metricKey === 'volume' || metricKey === 'count') {
+    header = 'Прогноз активации';
+    valOf = (f) => `${fmt0(f.count)} шт · ${fmtRub(f.volume)}`;
+  } else if (metricKey === 'revenue') {
+    header = 'Прогноз выручки';
+    valOf = (f) => fmtRub(f.revenue);
+  } else if (metricKey === 'points') {
+    header = 'Прогноз баллов';
+    valOf = (f) => Number(f.points || 0).toLocaleString('ru-RU', { maximumFractionDigits: 2 });
+  } else {
+    return undefined;
+  }
   const lines = fc.map((f) => {
     const when = f.month ? fmtMonthHdr(f.month) : 'Без прогноза';
-    return `${when}: ${fmt0(f.count)} шт · ${fmtRub(f.volume)}`;
+    return `${when}: ${valOf(f)}`;
   });
-  return 'Прогноз активации\n' + lines.join('\n');
+  return header + '\n' + lines.join('\n');
 }
 
 onMounted(loadData);
