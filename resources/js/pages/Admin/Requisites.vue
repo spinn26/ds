@@ -8,6 +8,8 @@
           rounded prepend-inner-icon="mdi-magnify" clearable hide-details style="max-width:300px" @update:model-value="debouncedLoad" />
         <v-select v-model="statusFilter" :items="verifyOptions" label="Статус верификации"
           clearable hide-details style="max-width:220px" @update:model-value="loadData" />
+        <v-select v-model="partnerStatusFilter" :items="partnerStatusOptions" label="Статус партнёра"
+          clearable hide-details style="max-width:200px" @update:model-value="loadData" />
         <v-chip v-if="activeFilterCount > 0" size="small" color="info" variant="tonal" class="ml-1">
           {{ activeFilterCount }} {{ activeFilterCount === 1 ? 'фильтр' : 'фильтра' }}
         </v-chip>
@@ -371,17 +373,20 @@ const total = ref(0);
 const loading = ref(false);
 const search = ref('');
 const statusFilter = ref(null);
+const partnerStatusFilter = ref(null);
 
 const activeFilterCount = computed(() => {
   let c = 0;
   if (search.value) c++;
   if (statusFilter.value) c++;
+  if (partnerStatusFilter.value) c++;
   return c;
 });
 
 function resetFilters() {
   search.value = '';
   statusFilter.value = null;
+  partnerStatusFilter.value = null;
   loadData();
 }
 const page = ref(1);
@@ -594,6 +599,14 @@ const verifyOptions = [
   { title: 'Отклонено', value: 'rejected' },
 ];
 
+// Статус партнёра (consultant.activity) — совпадает с PartnerActivity.
+const partnerStatusOptions = [
+  { title: 'Активен', value: 1 },
+  { title: 'Зарегистрирован', value: 4 },
+  { title: 'Терминирован', value: 3 },
+  { title: 'Исключён', value: 5 },
+];
+
 const headers = [
   { title: 'ID', key: 'id', width: 60 },
   { title: 'Партнёр', key: 'consultantName' },
@@ -663,6 +676,7 @@ async function loadData() {
     const params = { page: page.value, per_page: perPage.value };
     if (search.value) params.search = search.value;
     if (statusFilter.value) params.status = statusFilter.value;
+    if (partnerStatusFilter.value) params.partner_status = partnerStatusFilter.value;
     if (sortBy.value) {
       params.sort_by = sortBy.value;
       params.sort_dir = sortDir.value;

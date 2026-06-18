@@ -26,6 +26,11 @@
           clearable hide-details
           style="max-width: 240px; flex: 1 1 180px"
           @update:model-value="loadData" />
+        <v-select v-model="partnerStatusFilter" :items="partnerStatusOptions"
+          placeholder="Статус партнёра" density="compact" variant="outlined"
+          clearable hide-details
+          style="max-width: 200px; flex: 1 1 160px"
+          @update:model-value="loadData" />
         <v-chip v-if="activeFilterCount > 0" size="small" color="info" variant="tonal" class="ml-1">
           {{ activeFilterCount }} {{ activeFilterCount === 1 ? 'фильтр' : 'фильтра' }}
         </v-chip>
@@ -100,6 +105,7 @@ const loading = ref(false);
 const search = ref('');
 const acceptedFilter = ref(null);
 const documentTypeFilter = ref(null);
+const partnerStatusFilter = ref(null);
 const documentOptions = ref([]);
 const expanded = ref([]);
 const page = ref(1);
@@ -110,6 +116,7 @@ const activeFilterCount = computed(() => {
   if (search.value) c++;
   if (acceptedFilter.value) c++;
   if (documentTypeFilter.value) c++;
+  if (partnerStatusFilter.value) c++;
   return c;
 });
 
@@ -117,12 +124,21 @@ function resetFilters() {
   search.value = '';
   acceptedFilter.value = null;
   documentTypeFilter.value = null;
+  partnerStatusFilter.value = null;
   loadData();
 }
 
 const acceptedOptions = [
   { title: 'Акцептовано (всё)', value: 'true' },
   { title: 'Не акцептовано', value: 'false' },
+];
+
+// Статус партнёра (consultant.activity). Значения совпадают с PartnerActivity.
+const partnerStatusOptions = [
+  { title: 'Активен', value: 1 },
+  { title: 'Зарегистрирован', value: 4 },
+  { title: 'Терминирован', value: 3 },
+  { title: 'Исключён', value: 5 },
 ];
 
 const headers = [
@@ -157,6 +173,7 @@ async function loadData() {
     if (search.value) params.search = search.value;
     if (acceptedFilter.value) params.accepted = acceptedFilter.value;
     if (documentTypeFilter.value) params.document_type = documentTypeFilter.value;
+    if (partnerStatusFilter.value) params.partner_status = partnerStatusFilter.value;
     const { data } = await api.get('/admin/acceptance', { params });
     items.value = data.data;
     total.value = data.total;

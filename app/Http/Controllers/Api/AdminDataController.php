@@ -1540,6 +1540,16 @@ class AdminDataController extends Controller
                     break;
             }
         }
+        // Фильтр по статусу партнёра (consultant.activity): 1 Активен,
+        // 3 Терминирован, 4 Зарегистрирован, 5 Исключён. Legacy 2 = «Активен».
+        if ($request->filled('partner_status')) {
+            $statuses = array_map('intval', (array) $request->input('partner_status'));
+            if (in_array(1, $statuses, true)) {
+                $statuses[] = 2;
+            }
+            $ids = DB::table('consultant')->whereIn('activity', $statuses)->pluck('id')->all();
+            $query->whereIn('consultant', $ids ?: [-1]);
+        }
         if ($request->filled('search')) {
             $s = trim((string) $request->search);
             $isNumericLike = preg_match('/^\d{4,}$/', $s) === 1;
@@ -2022,6 +2032,17 @@ class AdminDataController extends Controller
 
         if ($request->filled('search')) {
             $query->where('personName', 'ilike', '%' . $request->search . '%');
+        }
+
+        // Фильтр по статусу партнёра (consultant.activity): 1 Активен,
+        // 3 Терминирован, 4 Зарегистрирован, 5 Исключён. Legacy activity=2
+        // трактуется как «Активен», поэтому при выборе 1 добавляем и 2.
+        if ($request->filled('partner_status')) {
+            $statuses = array_map('intval', (array) $request->input('partner_status'));
+            if (in_array(1, $statuses, true)) {
+                $statuses[] = 2;
+            }
+            $query->whereIn('activity', $statuses);
         }
 
         // Фильтр по виду документа per spec ✅Акцепт документов §1:
