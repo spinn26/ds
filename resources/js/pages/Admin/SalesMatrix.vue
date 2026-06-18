@@ -566,7 +566,7 @@ const allMetrics = [
   { key: 'avgCheck',    short: 'Ср.чек',    label: 'Средний чек (₽)',  fmt: 'rub' },
   { key: 'revenue',     short: 'Выручка',   label: 'Выручка (₽)',      fmt: 'rub' },
   { key: 'points',      short: 'Баллы',     label: 'Баллы',            fmt: 'num' },
-  { key: 'fcCount',     short: 'Кол-во ФК', label: 'Кол-во ФК',       fmt: 'int' },
+  { key: 'fcCount',     short: 'ФК',        label: 'Кол-во ФК',       fmt: 'int' },
   { key: 'clientCount', short: 'Клиенты',   label: 'Кол-во клиентов', fmt: 'int' },
 ];
 const validKeys = allMetrics.map(m => m.key);
@@ -705,7 +705,7 @@ const fcAllMetrics = [
   { key: 'count',       short: 'Кол-во',    label: 'Кол-во (шт)',     fmt: 'int' },
   { key: 'clientCount', short: 'Клиенты',   label: 'Кол-во клиентов', fmt: 'int' },
   { key: 'avgCheck',    short: 'Ср.чек',    label: 'Средний чек (₽)', fmt: 'rub' },
-  { key: 'fcCount',     short: 'Кол-во ФК', label: 'Кол-во ФК',       fmt: 'int' },
+  { key: 'fcCount',     short: 'ФК',        label: 'Кол-во ФК',       fmt: 'int' },
 ];
 const fcValidKeys = fcAllMetrics.map(m => m.key);
 const _fcSaved = (() => { try { const s = JSON.parse(localStorage.getItem(FC_METRICS_KEY)); return Array.isArray(s) && s.every(k => fcValidKeys.includes(k)) && s.length ? s : null; } catch { return null; } })();
