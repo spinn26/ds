@@ -922,14 +922,11 @@ class ProductSalesMatrixController extends Controller
                 $ds = $defaultDs;
             }
 
-            $programRow = (object) [
-                'pointsMethod' => $r->pointsMethod,
-                'fixedCost'    => $r->fixedCost,
-                'pointsMin'    => $r->pointsMin,
-            ];
+            // Выручка ДС = amountNoVat × %ДС / 100; баллы = выручка / 100.
+            $rev = $amountNoVat * $ds / 100;
             $vals = [
-                'points'  => \App\Services\CommissionCalculator::computePoints($programRow, $amountNoVat, $amountRub, $ds),
-                'revenue' => $amountNoVat * $ds / 100,
+                'points'  => $rev / 100,
+                'revenue' => $rev,
             ];
 
             $pid = $r->product_id; $pgid = $r->program_id; $mo = $r->period_month;
@@ -1045,9 +1042,9 @@ class ProductSalesMatrixController extends Controller
                 $ds = $defaultDs;
             }
 
-            $programRow = (object) ['pointsMethod' => $r->pointsMethod, 'fixedCost' => $r->fixedCost, 'pointsMin' => $r->pointsMin];
+            // Выручка ДС = amountNoVat × %ДС / 100; баллы = выручка / 100.
             $rev = $amountNoVat * $ds / 100;
-            $pts = \App\Services\CommissionCalculator::computePoints($programRow, $amountNoVat, $amountRub, $ds);
+            $pts = $rev / 100;
 
             $pid = $r->product_id; $pgid = $r->program_id; $cm = $r->period_month; $bm = $r->bucket_month ?? '—';
             $add($prog[$pid][$pgid][$cm], $bm, $amountRub, $rev, $pts);
