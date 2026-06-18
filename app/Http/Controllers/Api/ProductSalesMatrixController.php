@@ -569,24 +569,19 @@ class ProductSalesMatrixController extends Controller
             ])
             ->groupBy('t.contract');
 
-        // Основная агрегация: продукт × программа × месяц активации
-        // Конвертация в RUB только через management_currency_rate (новый справочник)
-        // Если курс не заполнен — ammount берётся как есть (fallback=1)
+        // Основная агрегация: продукт × программа × месяц активации.
+        // Конвертация в RUB — по новому справочнику management_currency_rate
+        // (эффективный курс на месяц активации), см. rateExpr().
         $rows = $base()
             ->join('product as p', 'p.id', '=', 'co.product')
             ->leftJoinSub($txSub, 'tx', 'tx.contract', '=', 'co.id')
-            ->leftJoin('management_currency_rate as mcr_co', function ($j) {
-                $j->on('mcr_co.currency', '=', 'co.currency')
-                  ->whereRaw('mcr_co.date = DATE_TRUNC(\'month\', co."openDate"::date)::date');
-            })
             ->select([
                 'p.id   as product_id',
                 'p.name as product_name',
                 'pg.id   as program_id',
                 'pg.name as program_name',
                 $periodExpr,
-                DB::raw('SUM(COALESCE(co.ammount, 0)
-                    * COALESCE(mcr_co.rate, 1))                            as volume'),
+                DB::raw('SUM(COALESCE(co.ammount, 0) * '.$this->rateExpr('openDate').') as volume'),
                 DB::raw('COUNT(DISTINCT co.id)                              as cnt'),
                 DB::raw('SUM(COALESCE(tx.revenue_rub, 0))                  as revenue'),
                 DB::raw('SUM(COALESCE(tx.points_sum, 0))                   as points'),
@@ -813,21 +808,16 @@ class ProductSalesMatrixController extends Controller
         $periodRaw  = DB::raw('DATE_TRUNC(\'month\', co."createDate"::date)');
 
         // «В работе» — деньги берём из суммы контракта (Объём), транзакции НЕ
-        // используем: revenue/points из transaction здесь неуместны (контракт
-        // ещё не активирован). Баллы считаем из контракта ниже (computePoints).
+        // используем. Конвертация в RUB — по management_currency_rate (rateExpr).
         $rows = $base()
             ->join('product as p', 'p.id', '=', 'co.product')
-            ->leftJoin('management_currency_rate as mcr_co', function ($j) {
-                $j->on('mcr_co.currency', '=', 'co.currency')
-                  ->whereRaw('mcr_co.date = DATE_TRUNC(\'month\', co."createDate"::date)::date');
-            })
             ->select([
                 'p.id   as product_id',
                 'p.name as product_name',
                 'pg.id   as program_id',
                 'pg.name as program_name',
                 $periodExpr,
-                DB::raw('SUM(COALESCE(co.ammount, 0) * COALESCE(mcr_co.rate, (SELECT cr.rate FROM "currencyRate" cr WHERE cr.currency = co.currency ORDER BY cr.date DESC LIMIT 1), 1)) as volume'),
+                DB::raw('SUM(COALESCE(co.ammount, 0) * '.$this->rateExpr('createDate').') as volume'),
                 DB::raw('COUNT(DISTINCT co.id)             as cnt'),
                 DB::raw('0                                 as revenue'),
                 DB::raw('0                                 as points'),
@@ -880,10 +870,6 @@ class ProductSalesMatrixController extends Controller
         $defaultDs = (float) \App\Models\SystemSetting::value('commission.default_ds_percent', 100);
 
         $contracts = $base()
-            ->leftJoin('management_currency_rate as mcr_pt', function ($j) {
-                $j->on('mcr_pt.currency', '=', 'co.currency')
-                  ->whereRaw('mcr_pt.date = DATE_TRUNC(\'month\', co."createDate"::date)::date');
-            })
             ->select([
                 'co.product as product_id',
                 'co.program as program_id',
@@ -892,10 +878,7 @@ class ProductSalesMatrixController extends Controller
                 'co.ammount',
                 'co.term',
                 'pg.dsPercent as program_ds',
-                'pg.pointsMethod',
-                'pg.fixedCost',
-                'pg.pointsMin',
-                DB::raw('COALESCE(mcr_pt.rate, (SELECT cr.rate FROM "currencyRate" cr WHERE cr.currency = co.currency ORDER BY cr.date DESC LIMIT 1), 1) as rate'),
+                DB::raw($this->rateExpr('createDate').' as rate'),
             ])
             ->get();
 
@@ -997,10 +980,6 @@ class ProductSalesMatrixController extends Controller
         $defaultDs = (float) \App\Models\SystemSetting::value('commission.default_ds_percent', 100);
 
         $rows = $base()
-            ->leftJoin('management_currency_rate as mcr_fb', function ($j) use ($periodCol) {
-                $j->on('mcr_fb.currency', '=', 'co.currency')
-                  ->whereRaw('mcr_fb.date = DATE_TRUNC(\'month\', co."'.$periodCol.'"::date)::date');
-            })
             ->select([
                 'co.product as product_id',
                 'co.program as program_id',
@@ -1009,9 +988,8 @@ class ProductSalesMatrixController extends Controller
                 'co.ammount',
                 'co.term',
                 'pg.dsPercent as program_ds',
-                'pg.pointsMethod', 'pg.fixedCost', 'pg.pointsMin',
                 DB::raw('co."'.$periodCol.'"::date as cdate'),
-                DB::raw('COALESCE(mcr_fb.rate, (SELECT cr.rate FROM "currencyRate" cr WHERE cr.currency = co.currency ORDER BY cr.date DESC LIMIT 1), 1) as rate'),
+                DB::raw($this->rateExpr($periodCol).' as rate'),
             ])
             ->get();
 
@@ -1530,6 +1508,23 @@ class ProductSalesMatrixController extends Controller
             'suppliers'   => $allSuppliers->values(),
             'products'    => $allProducts->values(),
         ]);
+    }
+
+    /**
+     * SQL-выражение курса RUB из НОВОГО справочника management_currency_rate.
+     * Берём «эффективный» курс: последний с датой ≤ месяца контракта; если для
+     * валюты нет курса до этой даты — самый ранний из имеющихся; иначе 1.
+     * Старый справочник currencyRate здесь НЕ используется. $dateCol — колонка
+     * даты контракта, по месяцу которой берём курс (createDate / openDate).
+     */
+    private function rateExpr(string $dateCol): string
+    {
+        $month = 'DATE_TRUNC(\'month\', co."'.$dateCol.'"::date)::date';
+
+        return '(COALESCE('
+            .'(SELECT m.rate FROM management_currency_rate m WHERE m.currency = co.currency AND m.date <= '.$month.' ORDER BY m.date DESC LIMIT 1),'
+            .'(SELECT m.rate FROM management_currency_rate m WHERE m.currency = co.currency ORDER BY m.date ASC LIMIT 1),'
+            .'1))';
     }
 
     /** Начало месяца, следующего за $ym (исключительная правая граница), 'YYYY-MM-01'. */
