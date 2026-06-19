@@ -1441,15 +1441,15 @@ class ProductSalesMatrixController extends Controller
 
         // Клиенты — distinct (как ФК): один клиент может купить несколько
         // продуктов, поэтому суммировать client_count по ячейкам нельзя —
-        // итоги задвоятся. Считаем уникальных клиентов отдельно.
+        // итоги задвоятся. В factMatrix период — t.dateMonth (не openDate).
         $clMonthlyIdx = [];
-        foreach ($base()->select(['co.product as product_id', $periodExpr, DB::raw('COUNT(DISTINCT co.client) as cl_count')])
-            ->groupBy('co.product', $periodRaw)->get() as $r) {
+        foreach ($base()->select(['co.product as product_id', 't.dateMonth as period_month', DB::raw('COUNT(DISTINCT co.client) as cl_count')])
+            ->groupBy('co.product', 't.dateMonth')->get() as $r) {
             $clMonthlyIdx[$r->product_id][$r->period_month] = (int) $r->cl_count;
         }
         $grandClMonthly = $base()
-            ->select([$periodExpr, DB::raw('COUNT(DISTINCT co.client) as cl_count')])
-            ->groupBy($periodRaw)->get()->pluck('cl_count', 'period_month');
+            ->select(['t.dateMonth as period_month', DB::raw('COUNT(DISTINCT co.client) as cl_count')])
+            ->groupBy('t.dateMonth')->get()->pluck('cl_count', 'period_month');
         $clCounts = $base()
             ->select('co.product as product_id', DB::raw('COUNT(DISTINCT co.client) as cl_count'))
             ->groupBy('co.product')->get()->keyBy('product_id');

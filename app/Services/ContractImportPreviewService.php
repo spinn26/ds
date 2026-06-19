@@ -263,24 +263,28 @@ class ContractImportPreviewService
             ? DB::table('consultant')->where('id', $consultantId)->value('personName')
             : null;
 
+        // Пустые строки → null: PG падает 22007/22P02 на ''-значениях в
+        // timestamp/integer-колонках (closeDate='' и т.п. при импорте).
+        $nn = fn ($v) => ($v === '' || $v === null) ? null : $v;
+
         return [
             'number' => $row['number'],
-            'counterpartyContractId' => $row['counterpartyContractId'] ?? null,
-            'status' => $row['status'] ?? null,
+            'counterpartyContractId' => $nn($row['counterpartyContractId'] ?? null),
+            'status' => $nn($row['status'] ?? null),
             'client' => $row['client'],
             'clientName' => $client->personName,
             'consultant' => $consultantId,
             'consultantName' => $consultantName,
-            'product' => $row['product'] ?? null,
+            'product' => $nn($row['product'] ?? null),
             'productName' => $product?->name,
-            'program' => $row['program'] ?? null,
+            'program' => $nn($row['program'] ?? null),
             'programName' => $program?->name,
-            'riskProfile' => $row['riskProfile'] ?? null,
-            'currency' => $row['currency'] ?? null,
+            'riskProfile' => $nn($row['riskProfile'] ?? null),
+            'currency' => $nn($row['currency'] ?? null),
             'ammount' => $row['ammount'] ?? $row['amount'] ?? 0,
-            'createDate' => $row['createDate'] ?? now()->toDateString(),
-            'openDate' => $row['openDate'] ?? null,
-            'closeDate' => $row['closeDate'] ?? null,
+            'createDate' => $nn($row['createDate'] ?? null) ?? now()->toDateString(),
+            'openDate' => $nn($row['openDate'] ?? null),
+            'closeDate' => $nn($row['closeDate'] ?? null),
             'comment' => $row['comment'] ?? 'Импорт из Sheets',
         ];
     }
