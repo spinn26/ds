@@ -2585,6 +2585,7 @@ class AdminDataController extends Controller
             'riskProfile' => 'nullable|integer|exists:riskProfile,id',
             'setup' => 'nullable|integer|exists:setup,id',
             'type' => 'nullable|string|max:50',
+            'term' => 'nullable|integer|min:0|max:100',
             'comment' => 'nullable|string|max:2000',
             // Обязательно для всех статусов кроме «Активирован» (id=1)
             'activation_forecast' => 'nullable|date',
@@ -2634,6 +2635,7 @@ class AdminDataController extends Controller
                 'riskProfile' => $data['riskProfile'] ?? null,
                 'setup' => $data['setup'] ?? null,
                 'type' => $data['type'] ?? null,
+                'term' => $data['term'] ?? null,
                 'comment' => $data['comment'] ?? null,
                 // Статусы без прогноза (Активирован/Закрыто нереализовано/Лапсирован) — очищаем
                 'activation_forecast' => in_array((int) $data['status'], $noForecastStatuses, true) ? null : ($data['activation_forecast'] ?? null),
@@ -2688,6 +2690,7 @@ class AdminDataController extends Controller
             'riskProfile' => 'nullable|integer|exists:riskProfile,id',
             'setup' => 'nullable|integer|exists:setup,id',
             'type' => 'nullable|string|max:50',
+            'term' => 'nullable|integer|min:0|max:100',
             'comment' => 'nullable|string|max:2000',
             'activation_forecast' => 'nullable|date',
         ]);

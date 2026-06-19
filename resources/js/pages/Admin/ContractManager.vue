@@ -250,6 +250,8 @@
             label="Сетап" variant="outlined" density="comfortable" clearable class="mb-2" />
           <v-select v-model="form.type" :items="typeOptions"
             label="Тип (для страховых)" variant="outlined" density="comfortable" clearable class="mb-2" />
+          <v-text-field v-model.number="form.term" label="Срок контракта (лет)" type="number"
+            min="0" max="100" variant="outlined" density="comfortable" clearable class="mb-2" />
           <v-textarea v-model="form.comment" label="Комментарий"
             variant="outlined" density="comfortable" rows="2" />
 
@@ -504,7 +506,7 @@ const blankForm = () => ({
   openDate: '', closeDate: '',
   activation_forecast: '',
   ammount: 0, currency: null,
-  riskProfile: null, setup: null, type: null, comment: '',
+  riskProfile: null, setup: null, type: null, term: null, comment: '',
 });
 
 const form = ref(blankForm());
@@ -611,6 +613,7 @@ async function openEdit(item) {
       riskProfile: c.riskProfile,
       setup: c.setup,
       type: c.type,
+      term: c.term ?? null,
       comment: c.comment || '',
     };
     if (c.client) {
