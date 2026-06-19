@@ -606,9 +606,9 @@
                   </div>
                 </div>
                 <template v-if="editing && editing.id === item.msg.id">
-                  <textarea v-model="editing.content" class="msg-edit-area" rows="2"
-                    @keydown.enter.exact.prevent="saveEdit"
+                  <textarea v-model="editing.content" class="msg-edit-area" rows="8"
                     @keydown.esc.prevent="cancelEdit"></textarea>
+                  <div class="msg-edit-hint">Enter — перенос строки · Esc — отмена</div>
                   <div class="msg-edit-actions">
                     <button class="msg-edit-btn cancel" @click="cancelEdit">Отмена</button>
                     <button class="msg-edit-btn save" @click="saveEdit">Сохранить</button>
@@ -2304,7 +2304,14 @@ async function toggleReaction(msg, emoji) {
 }
 
 async function send() {
-  const text = msgText.value?.trim() || '';
+  // Vuetify v-textarea (auto-grow, v3.12) дублирует переносы строк при вводе:
+  // один Shift+Enter сохраняется как «\n\n», и длинные сообщения превращаются
+  // в «простыню». Схлопываем кратные переносы обратно — ceil(n/2): \n\n→\n,
+  // \n\n\n\n→\n\n. При n=1 не меняем (safe, если баг исчезнет после апгрейда).
+  const text = (msgText.value || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\n+/g, (m) => '\n'.repeat(Math.ceil(m.length / 2)))
+    .trim();
   const fileItems = files.value.slice();
   if (!text && !fileItems.length) return;
   sending.value = true;
@@ -3054,6 +3061,8 @@ onUnmounted(() => {
   transition: box-shadow 0.2s ease;
 }
 .msg-bubble:hover { box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06); }
+/* При редактировании пузырь расширяем под большое окно правки. */
+.msg-bubble:has(.msg-edit-area) { max-width: 90%; }
 /* iMessage-стиль: фиксированный тёмно-зелёный для mine bubble в обеих
    темах (в dark-theme primary-token переключается на brand mint и
    делает bubble слишком светлым — поэтому жёсткий hex). */
@@ -3102,7 +3111,8 @@ onUnmounted(() => {
 .msg-action { background: none; border: none; cursor: pointer; color: rgba(var(--v-theme-on-surface), 0.6); padding: 4px; border-radius: 6px; }
 .msg-action:hover { background: rgba(var(--v-theme-primary), 0.1); color: rgb(var(--v-theme-primary)); }
 
-.msg-edit-area { width: 100%; border: 1px solid rgba(var(--v-theme-primary), 0.5); border-radius: 8px; padding: 6px 10px; font-size: 13px; background: rgba(var(--v-theme-surface), 1); color: rgb(var(--v-theme-on-surface)); resize: vertical; font-family: inherit; outline: none; }
+.msg-edit-area { width: min(70vw, 640px); max-width: 85vw; min-height: 200px; border: 1px solid rgba(var(--v-theme-primary), 0.5); border-radius: 8px; padding: 10px 12px; font-size: 14px; line-height: 1.5; background: rgba(var(--v-theme-surface), 1); color: rgb(var(--v-theme-on-surface)); resize: vertical; font-family: inherit; outline: none; }
+.msg-edit-hint { font-size: 11px; color: rgba(var(--v-theme-on-surface), 0.55); margin-top: 3px; }
 
 /* Reactions */
 .msg-reactions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
