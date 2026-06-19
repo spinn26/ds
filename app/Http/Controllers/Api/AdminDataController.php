@@ -1550,6 +1550,22 @@ class AdminDataController extends Controller
             $ids = DB::table('consultant')->whereIn('activity', $statuses)->pluck('id')->all();
             $query->whereIn('consultant', $ids ?: [-1]);
         }
+        // Фильтр по приостановке выплат: 'request' — партнёр сам подал запрос на
+        // смену реквизитов (есть pending-запрос), 'manual' — Катя проставила
+        // галочку вручную (приостановлен, но активного запроса нет).
+        if ($request->filled('suspend')) {
+            $pendingIds = DB::table('bank_requisite_change_requests')
+                ->where('status', 'pending')->distinct()->pluck('consultant')->all();
+            if ($request->input('suspend') === 'request') {
+                $query->whereIn('consultant', $pendingIds ?: [-1]);
+            } elseif ($request->input('suspend') === 'manual') {
+                $manualIds = DB::table('consultant')
+                    ->where('payments_suspended', true)
+                    ->when(! empty($pendingIds), fn ($q) => $q->whereNotIn('id', $pendingIds))
+                    ->pluck('id')->all();
+                $query->whereIn('consultant', $manualIds ?: [-1]);
+            }
+        }
         if ($request->filled('search')) {
             $s = trim((string) $request->search);
             $isNumericLike = preg_match('/^\d{4,}$/', $s) === 1;
@@ -1610,6 +1626,11 @@ class AdminDataController extends Controller
         $suspendedMap = $consultantIds->isNotEmpty()
             ? DB::table('consultant')->whereIn('id', $consultantIds)->pluck('payments_suspended', 'id')
             : collect();
+        // Партнёры с активным запросом на смену реквизитов (сами подали).
+        $pendingChangeSet = $consultantIds->isNotEmpty()
+            ? DB::table('bank_requisite_change_requests')->where('status', 'pending')
+                ->whereIn('consultant', $consultantIds)->distinct()->pluck('consultant')->flip()
+            : collect();
 
         // Batch load bank requisites
         $reqIds = $rows->pluck('id')->filter()->unique();
@@ -1617,7 +1638,7 @@ class AdminDataController extends Controller
             ? BankRequisite::whereIn('requisites', $reqIds)->whereNull('deletedAt')->get()->keyBy('requisites')
             : collect();
 
-        $requisites = $rows->map(function ($r) use ($consultantNames, $bankReqs, $suspendedMap) {
+        $requisites = $rows->map(function ($r) use ($consultantNames, $bankReqs, $suspendedMap, $pendingChangeSet) {
                 $bankReq = $bankReqs[$r->id] ?? null;
 
                 // Резолвим verificationStatus для UI: verified / pending / rejected.
@@ -1667,6 +1688,11 @@ class AdminDataController extends Controller
                     'submittedAt' => $submittedAt?->toIso8601String(),
                     'overdue' => $overdue,
                     'paymentsSuspended' => (bool) ($suspendedMap[$r->consultant] ?? false),
+                    // Источник приостановки: 'request' — партнёр сам подал запрос
+                    // на смену; 'manual' — Катя проставила вручную; null — нет.
+                    'suspendSource' => $pendingChangeSet->has($r->consultant)
+                        ? 'request'
+                        : (($suspendedMap[$r->consultant] ?? false) ? 'manual' : null),
                 ];
             });
 

@@ -10,6 +10,8 @@
           clearable hide-details style="max-width:220px" @update:model-value="loadData" />
         <v-select v-model="partnerStatusFilter" :items="partnerStatusOptions" label="Статус партнёра"
           clearable hide-details style="max-width:200px" @update:model-value="loadData" />
+        <v-select v-model="suspendFilter" :items="suspendOptions" label="Приостановка выплат"
+          clearable hide-details style="max-width:220px" @update:model-value="loadData" />
         <v-chip v-if="activeFilterCount > 0" size="small" color="info" variant="tonal" class="ml-1">
           {{ activeFilterCount }} {{ activeFilterCount === 1 ? 'фильтр' : 'фильтра' }}
         </v-chip>
@@ -77,11 +79,17 @@
         </v-chip>
       </template>
       <template #item.suspend="{ item }">
-        <v-checkbox-btn :model-value="item.paymentsSuspended"
-          :disabled="!canEdit('requisites') || item._suspending"
-          color="warning" density="compact"
-          title="Приостановить выплаты (смена реквизитов)"
-          @update:model-value="toggleSuspend(item, $event)" />
+        <div class="d-flex align-center ga-1">
+          <v-checkbox-btn :model-value="item.paymentsSuspended"
+            :disabled="!canEdit('requisites') || item._suspending"
+            color="warning" density="compact"
+            title="Приостановить выплаты (смена реквизитов)"
+            @update:model-value="toggleSuspend(item, $event)" />
+          <v-chip v-if="item.suspendSource === 'request'" size="x-small" color="warning" variant="flat"
+            title="Партнёр сам подал запрос на смену реквизитов">по заявке</v-chip>
+          <v-chip v-else-if="item.suspendSource === 'manual'" size="x-small" color="info" variant="tonal"
+            title="Приостановлено вручную финменеджером">вручную</v-chip>
+        </div>
       </template>
       <template #item.actions="{ item }">
         <v-btn icon="mdi-eye" size="x-small" variant="text" color="primary"
@@ -383,12 +391,18 @@ const loading = ref(false);
 const search = ref('');
 const statusFilter = ref(null);
 const partnerStatusFilter = ref(null);
+const suspendFilter = ref(null);
+const suspendOptions = [
+  { title: 'По заявке партнёра', value: 'request' },
+  { title: 'Вручную (финменеджер)', value: 'manual' },
+];
 
 const activeFilterCount = computed(() => {
   let c = 0;
   if (search.value) c++;
   if (statusFilter.value) c++;
   if (partnerStatusFilter.value) c++;
+  if (suspendFilter.value) c++;
   return c;
 });
 
@@ -396,6 +410,7 @@ function resetFilters() {
   search.value = '';
   statusFilter.value = null;
   partnerStatusFilter.value = null;
+  suspendFilter.value = null;
   loadData();
 }
 const page = ref(1);
@@ -647,8 +662,10 @@ function verifyLabel(s) {
 // Красим строку красным для отклонённых реквизитов (в т.ч. после
 // «Проверить ИНН» с расхождением ФИО — верификация снимается).
 function rowProps({ item }) {
-  // Приостановлены выплаты (смена реквизитов) — жёлтая подсветка, приоритет.
-  if (item?.paymentsSuspended) return { class: 'row-suspended' };
+  // Приостановлены выплаты — приоритет. Визуально разделяем источник:
+  // 'request' (партнёр сам подал) — жёлтая; 'manual' (Катя вручную) — синяя.
+  if (item?.suspendSource === 'request') return { class: 'row-suspended-request' };
+  if (item?.suspendSource === 'manual' || item?.paymentsSuspended) return { class: 'row-suspended-manual' };
   if (item?.verificationStatus === 'rejected') return { class: 'row-rejected' };
   // Просрочка ручной верификации (>1 раб. дня, ещё на проверке) — жёлтая подсветка.
   if (item?.overdue) return { class: 'row-overdue' };
@@ -701,6 +718,7 @@ async function loadData() {
     if (search.value) params.search = search.value;
     if (statusFilter.value) params.status = statusFilter.value;
     if (partnerStatusFilter.value) params.partner_status = partnerStatusFilter.value;
+    if (suspendFilter.value) params.suspend = suspendFilter.value;
     if (sortBy.value) {
       params.sort_by = sortBy.value;
       params.sort_dir = sortDir.value;
@@ -749,12 +767,19 @@ onMounted(loadData);
 :deep(tr.row-overdue td:first-child) {
   box-shadow: inset 3px 0 0 0 rgb(var(--v-theme-warning));
 }
-/* Приостановлены выплаты (смена реквизитов) — жёлтая подсветка строки. */
-:deep(tr.row-suspended td) {
+/* Приостановка по заявке партнёра — жёлтая подсветка строки. */
+:deep(tr.row-suspended-request td) {
   background: rgba(250, 204, 21, 0.18) !important;
 }
-:deep(tr.row-suspended td:first-child) {
+:deep(tr.row-suspended-request td:first-child) {
   box-shadow: inset 3px 0 0 0 #facc15;
+}
+/* Приостановка вручную финменеджером — синяя подсветка строки. */
+:deep(tr.row-suspended-manual td) {
+  background: rgba(var(--v-theme-info), 0.12) !important;
+}
+:deep(tr.row-suspended-manual td:first-child) {
+  box-shadow: inset 3px 0 0 0 rgb(var(--v-theme-info));
 }
 .lightbox-card {
   background: rgba(20, 20, 20, 0.96) !important;
