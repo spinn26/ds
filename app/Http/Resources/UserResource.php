@@ -72,6 +72,12 @@ class UserResource extends JsonResource
             // входе ведёт на /profile и держит баннер до заполнения.
             'profileComplete' => $completeness['complete'],
             'profileMissing' => $completeness['missing'],
+            // Выплаты приостановлены (смена реквизитов) — глобальный баннер.
+            'paymentsSuspended' => (bool) ($consultant?->payments_suspended ?? false),
+            // Есть ли активный запрос на смену банковских реквизитов (для UI профиля).
+            'bankChangePending' => $consultant
+                ? \App\Http\Controllers\Api\BankRequisiteChangeController::pendingForConsultant((int) $consultant->id)
+                : false,
         ];
     }
 }

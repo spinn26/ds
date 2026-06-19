@@ -1602,10 +1602,13 @@ class AdminDataController extends Controller
             ->limit($this->paginationPerPage($request))
             ->get();
 
-        // Batch load consultant names
+        // Batch load consultant names + флаг приостановки выплат (для подсветки)
         $consultantIds = $rows->pluck('consultant')->filter()->unique();
         $consultantNames = $consultantIds->isNotEmpty()
             ? DB::table('consultant')->whereIn('id', $consultantIds)->pluck('personName', 'id')
+            : collect();
+        $suspendedMap = $consultantIds->isNotEmpty()
+            ? DB::table('consultant')->whereIn('id', $consultantIds)->pluck('payments_suspended', 'id')
             : collect();
 
         // Batch load bank requisites
@@ -1614,7 +1617,7 @@ class AdminDataController extends Controller
             ? BankRequisite::whereIn('requisites', $reqIds)->whereNull('deletedAt')->get()->keyBy('requisites')
             : collect();
 
-        $requisites = $rows->map(function ($r) use ($consultantNames, $bankReqs) {
+        $requisites = $rows->map(function ($r) use ($consultantNames, $bankReqs, $suspendedMap) {
                 $bankReq = $bankReqs[$r->id] ?? null;
 
                 // Резолвим verificationStatus для UI: verified / pending / rejected.
@@ -1663,6 +1666,7 @@ class AdminDataController extends Controller
                     'bankVerified' => $bankReq?->verified ?? false,
                     'submittedAt' => $submittedAt?->toIso8601String(),
                     'overdue' => $overdue,
+                    'paymentsSuspended' => (bool) ($suspendedMap[$r->consultant] ?? false),
                 ];
             });
 

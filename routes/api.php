@@ -265,6 +265,8 @@ Route::prefix('v1')->group(function () {
         Route::post('/profile/avatar', [ProfileController::class, 'uploadAvatar']);
         Route::put('/profile/requisites', [ProfileController::class, 'updateRequisites']);
         Route::put('/profile/bank-requisites', [ProfileController::class, 'updateBankRequisites']);
+        // Смена банковских реквизитов с доп. проверкой (запрос «было/стало»).
+        Route::post('/profile/bank-requisites/change-request', [\App\Http\Controllers\Api\BankRequisiteChangeController::class, 'store']);
         Route::get('/profile/agreement-documents', [ProfileController::class, 'agreementDocuments']);
         Route::post('/profile/accept-offer', [ProfileController::class, 'acceptOffer']);
         Route::get('/profile/cities', [ProfileController::class, 'cities']);
@@ -454,6 +456,11 @@ Route::prefix('v1')->group(function () {
         Route::get('/admin/requisites/{id}/partner', [\App\Http\Controllers\Api\AdminDataController::class, 'requisitePartner'])->whereNumber('id');
         Route::post('/admin/requisites/{id}/check-inn', [\App\Http\Controllers\Api\AdminDataController::class, 'checkRequisiteInn'])->whereNumber('id')->middleware('throttle:60,1');
         Route::post('/admin/requisites/{id}/verify', [\App\Http\Controllers\Api\AdminDataController::class, 'verifyRequisites']);
+        // Смена банковских реквизитов (проверка Катей) + приостановка выплат.
+        Route::get('/admin/bank-change-requests', [\App\Http\Controllers\Api\BankRequisiteChangeController::class, 'index']);
+        Route::post('/admin/bank-change-requests/{id}/accept', [\App\Http\Controllers\Api\BankRequisiteChangeController::class, 'accept'])->whereNumber('id');
+        Route::post('/admin/bank-change-requests/{id}/reject', [\App\Http\Controllers\Api\BankRequisiteChangeController::class, 'reject'])->whereNumber('id');
+        Route::post('/admin/partners/{consultant}/suspend-payments', [\App\Http\Controllers\Api\BankRequisiteChangeController::class, 'suspendPayments'])->whereNumber('consultant');
         Route::get('/admin/acceptance', [\App\Http\Controllers\Api\AdminDataController::class, 'acceptance']);
         Route::get('/admin/contracts', [\App\Http\Controllers\Api\AdminDataController::class, 'contracts']);
         Route::get('/admin/contracts/check-number', [\App\Http\Controllers\Api\AdminDataController::class, 'checkContractNumber']);

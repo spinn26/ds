@@ -287,6 +287,20 @@
           </div>
         </v-alert>
 
+        <!-- Глобальный баннер: выплаты приостановлены в связи со сменой
+             реквизитов (по просьбе партнёра / решению финменеджера). -->
+        <v-alert
+          v-if="showPaymentsSuspendedBanner"
+          type="warning" variant="tonal" density="compact"
+          class="mb-3"
+          icon="mdi-pause-circle-outline"
+        >
+          <div class="text-body-2">
+            <strong>Выплаты приостановлены в связи с вашей просьбой по смене реквизитов.</strong>
+            Они будут возобновлены после проверки новых реквизитов финменеджером.
+          </div>
+        </v-alert>
+
         <!-- Глобальный баннер: профиль активного ФК не заполнен полностью.
              Не закрываемый — напоминание держится, пока партнёр не заполнит
              личные данные. Реквизиты ИП/банк в это требование НЕ входят. -->
@@ -494,6 +508,15 @@ const requisitesRejectionReason = computed(() => auth.user?.requisitesRejectionR
 const showRequisitesRejectedBanner = computed(() => {
   if (auth.isStaff) return false;
   if (auth.user?.requisitesVerificationStatus !== 'rejected') return false;
+  if (isFullBleedRoute.value) return false;
+  return true;
+});
+
+// Выплаты приостановлены в связи со сменой реквизитов (авто при подаче запроса
+// на смену или вручную финменеджером). Баннер на всех страницах партнёра.
+const showPaymentsSuspendedBanner = computed(() => {
+  if (auth.isStaff) return false;
+  if (auth.user?.paymentsSuspended !== true) return false;
   if (isFullBleedRoute.value) return false;
   return true;
 });
@@ -988,6 +1011,7 @@ const menuItems = [
   { label: 'Загрузка контрактов', icon: 'mdi-upload', path: '/manage/contracts/upload', adminSection: 'upload' },
   { label: 'Акцепт документов', icon: 'mdi-check-circle', path: '/manage/acceptance', adminSection: 'acceptance' },
   { label: 'Реквизиты', icon: 'mdi-credit-card', path: '/manage/requisites', adminSection: 'requisites' },
+  { label: 'Смена реквизитов', icon: 'mdi-bank-transfer', path: '/manage/bank-changes', adminSection: 'requisites' },
   { label: 'Перестановки', icon: 'mdi-history', path: '/manage/transfers', adminSection: 'transfers' },
 
   // Финансы

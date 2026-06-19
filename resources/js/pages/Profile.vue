@@ -415,11 +415,18 @@
               </div>
             </div>
             <div class="ds-card__body">
-              <v-alert v-if="profile.bankRequisites?.verificationStatus === 'verified'"
+              <v-alert v-if="bankChangePending"
+                type="info" variant="tonal" density="compact" class="mb-3"
+                icon="mdi-clock-outline">
+                Запрос на смену банковских реквизитов отправлен и проверяется
+                финменеджером. Выплаты временно приостановлены до подтверждения.
+              </v-alert>
+              <v-alert v-else-if="profile.bankRequisites?.verificationStatus === 'verified'"
                 type="success" variant="tonal" density="compact" class="mb-3"
                 icon="mdi-check-circle-outline">
-                Банковские реквизиты подтверждены. Их можно изменить — после
-                сохранения новые реквизиты уйдут на повторную проверку финменеджеру.
+                Банковские реквизиты подтверждены. Чтобы изменить — нажмите
+                «Сменить реквизиты»: новые данные уйдут на проверку финменеджеру,
+                текущие остаются действующими до подтверждения.
               </v-alert>
               <v-alert v-else-if="profile.bankRequisites?.verificationStatus === 'rejected'"
                 type="error" variant="tonal" density="compact" class="mb-3"
@@ -431,9 +438,9 @@
                 icon="mdi-clock-outline">
                 Банковские реквизиты приняты и проверяются финменеджером.
               </v-alert>
-              <!-- Банковские реквизиты редактируемы и после верификации
-                   (по требованию 2026-06-05): партнёр может сменить счёт. -->
-              <v-form>
+              <!-- Для верифицированных реквизитов форма только для чтения —
+                   смена идёт через запрос с доп. проверкой («Сменить реквизиты»). -->
+              <v-form :disabled="isBankVerified">
               <v-row dense>
                 <v-col cols="12" md="6">
                   <v-text-field v-model="bankForm.bankName" label="Наименование банка" />
@@ -457,13 +464,53 @@
               </v-alert>
             </div>
             <div class="ds-card__actions">
-              <v-btn color="primary" :loading="savingBank"
+              <v-btn v-if="isBankVerified" color="primary" variant="flat"
+                prepend-icon="mdi-bank-transfer" :disabled="bankChangePending"
+                @click="openBankChange">
+                Сменить реквизиты
+              </v-btn>
+              <v-btn v-else color="primary" :loading="savingBank"
                 prepend-icon="mdi-content-save" @click="saveBankRequisites">
                 Сохранить
               </v-btn>
             </div>
           </v-card>
         </div>
+
+        <!-- Диалог смены банковских реквизитов (с доп. проверкой). Текущие
+             верифицированные реквизиты остаются действующими до подтверждения. -->
+        <v-dialog v-model="bankChangeDialog" max-width="560">
+          <v-card>
+            <v-card-title class="text-h6">Смена банковских реквизитов</v-card-title>
+            <v-card-text>
+              <v-alert type="info" variant="tonal" density="compact" class="mb-3">
+                Новые реквизиты уйдут на проверку финменеджеру. До подтверждения
+                выплаты будут приостановлены, текущие реквизиты остаются в силе.
+              </v-alert>
+              <v-row dense>
+                <v-col cols="12" md="6">
+                  <v-text-field v-model="bankChangeForm.bankName" label="Наименование банка" />
+                </v-col>
+                <v-col cols="12" md="6">
+                  <v-text-field v-model="bankChangeForm.bankBik" label="БИК" />
+                </v-col>
+                <v-col cols="12" md="6">
+                  <v-text-field v-model="bankChangeForm.accountNumber" label="Расчётный счёт" />
+                </v-col>
+                <v-col cols="12" md="6">
+                  <v-text-field v-model="bankChangeForm.correspondentAccount" label="Корр. счёт" />
+                </v-col>
+              </v-row>
+            </v-card-text>
+            <v-card-actions>
+              <v-spacer />
+              <v-btn variant="text" @click="bankChangeDialog = false">Отмена</v-btn>
+              <v-btn color="primary" variant="flat" :loading="savingBankChange" @click="submitBankChange">
+                Отправить на проверку
+              </v-btn>
+            </v-card-actions>
+          </v-card>
+        </v-dialog>
 
         <!-- ════════════════  БЕЗОПАСНОСТЬ  ════════════════ -->
         <div v-show="tab === 'security'">
@@ -959,6 +1006,39 @@ const missingRequisiteFields = computed(() =>
 const isRequisitesVerified = computed(() =>
   profile.value?.requisites?.verificationStatus === 'verified'
 );
+// Банк подтверждён → смена только через запрос с доп. проверкой.
+const isBankVerified = computed(() =>
+  profile.value?.bankRequisites?.verificationStatus === 'verified'
+);
+const bankChangePending = computed(() => auth.user?.bankChangePending === true);
+
+// Диалог смены банковских реквизитов
+const bankChangeDialog = ref(false);
+const savingBankChange = ref(false);
+const bankChangeForm = ref({ bankName: '', bankBik: '', accountNumber: '', correspondentAccount: '' });
+function openBankChange() {
+  bankChangeForm.value = {
+    bankName: bankForm.value.bankName || '',
+    bankBik: bankForm.value.bankBik || '',
+    accountNumber: bankForm.value.accountNumber || '',
+    correspondentAccount: bankForm.value.correspondentAccount || '',
+  };
+  bankChangeDialog.value = true;
+}
+async function submitBankChange() {
+  savingBankChange.value = true;
+  try {
+    await api.post('/profile/bank-requisites/change-request', bankChangeForm.value);
+    bankChangeDialog.value = false;
+    bankMsg.value = 'Запрос на смену реквизитов отправлен на проверку. Выплаты временно приостановлены.';
+    bankMsgType.value = 'success';
+    await auth.fetchUser();
+  } catch (e) {
+    bankMsg.value = e?.response?.data?.message || 'Не удалось отправить запрос';
+    bankMsgType.value = 'error';
+  }
+  savingBankChange.value = false;
+}
 const initials = computed(() => {
   const u = profile.value.user;
   return `${u?.firstName?.[0] || ''}${u?.lastName?.[0] || ''}`.toUpperCase();

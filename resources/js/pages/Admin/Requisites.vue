@@ -76,6 +76,13 @@
           {{ verifyLabel(item.verificationStatus) }}
         </v-chip>
       </template>
+      <template #item.suspend="{ item }">
+        <v-checkbox-btn :model-value="item.paymentsSuspended"
+          :disabled="!canEdit('requisites') || item._suspending"
+          color="warning" density="compact"
+          title="Приостановить выплаты (смена реквизитов)"
+          @update:model-value="toggleSuspend(item, $event)" />
+      </template>
       <template #item.actions="{ item }">
         <v-btn icon="mdi-eye" size="x-small" variant="text" color="primary"
           title="Просмотреть" @click="openDrawer(item)" />
@@ -358,8 +365,10 @@ import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
 import { useConfirm } from '../../composables/useConfirm';
+import { useSnackbar } from '../../composables/useSnackbar';
 
 const confirm = useConfirm();
+const { showError } = useSnackbar();
 import PageHeader from '../../components/PageHeader.vue';
 import EmptyState from '../../components/EmptyState.vue';
 import StartChatButton from '../../components/StartChatButton.vue';
@@ -616,6 +625,7 @@ const headers = [
   { title: 'Банк реквизиты', key: 'hasBankRequisites', width: 120 },
   { title: 'Поступило', key: 'submittedAt', width: 160 },
   { title: 'Статус', key: 'verificationStatus', width: 130 },
+  { title: 'Выплаты', key: 'suspend', sortable: false, width: 130 },
   { title: 'Действия', key: 'actions', sortable: false, width: 100 },
 ];
 
@@ -637,10 +647,24 @@ function verifyLabel(s) {
 // Красим строку красным для отклонённых реквизитов (в т.ч. после
 // «Проверить ИНН» с расхождением ФИО — верификация снимается).
 function rowProps({ item }) {
+  // Приостановлены выплаты (смена реквизитов) — жёлтая подсветка, приоритет.
+  if (item?.paymentsSuspended) return { class: 'row-suspended' };
   if (item?.verificationStatus === 'rejected') return { class: 'row-rejected' };
   // Просрочка ручной верификации (>1 раб. дня, ещё на проверке) — жёлтая подсветка.
   if (item?.overdue) return { class: 'row-overdue' };
   return {};
+}
+
+// Ручная приостановка/возобновление выплат партнёру (смена реквизитов).
+async function toggleSuspend(item, value) {
+  item._suspending = true;
+  try {
+    await api.post(`/admin/partners/${item.consultantId || item.consultant}/suspend-payments`, { suspended: value });
+    item.paymentsSuspended = value;
+  } catch (e) {
+    showError(e?.response?.data?.message || 'Не удалось изменить статус выплат');
+  }
+  item._suspending = false;
 }
 
 // УСН как ОТДЕЛЬНЫЙ токен: «АУСН» (автоматизированная УСН) НЕ считается УСН,
@@ -724,6 +748,13 @@ onMounted(loadData);
 }
 :deep(tr.row-overdue td:first-child) {
   box-shadow: inset 3px 0 0 0 rgb(var(--v-theme-warning));
+}
+/* Приостановлены выплаты (смена реквизитов) — жёлтая подсветка строки. */
+:deep(tr.row-suspended td) {
+  background: rgba(250, 204, 21, 0.18) !important;
+}
+:deep(tr.row-suspended td:first-child) {
+  box-shadow: inset 3px 0 0 0 #facc15;
 }
 .lightbox-card {
   background: rgba(20, 20, 20, 0.96) !important;
