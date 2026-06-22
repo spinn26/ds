@@ -308,10 +308,11 @@
                 @update:model-value="reload" />
             </template>
 
-            <!-- Прогноз активации (только «В работе») — как в Менеджере контрактов -->
-            <template v-if="reportMode === 'inwork'">
+            <!-- Доп. дата-фильтр: «В работе» → прогноз активации;
+                 «Активировано» → прогноз начисления (оба уходят как fcFrom/fcTo). -->
+            <template v-if="reportMode === 'inwork' || reportMode === 'forecast'">
               <v-divider vertical class="mx-1" style="height:24px;align-self:center" />
-              <SmartRangeFilter label="Прогноз активации" kind="date"
+              <SmartRangeFilter :label="reportMode === 'inwork' ? 'Прогноз активации' : 'Прогноз начисления'" kind="date"
                 v-model:from="faFrom" v-model:to="faTo"
                 @update:from="reload" @update:to="reload" />
             </template>
@@ -666,8 +667,9 @@ async function loadData({ updateOptions = true } = {}) {
     p.set('to',   periodTo.value);
     filterSuppliers.value.forEach(s => p.append('suppliers[]', s));
     filterProducts.value.forEach(id => p.append('products[]', id));
-    // Доп. фильтр по прогнозу активации — только для «В работе» (границы независимы).
-    if (reportMode.value === 'inwork') {
+    // Доп. дата-фильтр (fcFrom/fcTo): «В работе» → прогноз активации,
+    // «Активировано» → прогноз начисления. В «Факт» прогнозов нет.
+    if (reportMode.value === 'inwork' || reportMode.value === 'forecast') {
       if (faFrom.value) p.set('fcFrom', faFrom.value);
       if (faTo.value) p.set('fcTo', faTo.value);
     }
@@ -833,25 +835,31 @@ function fmtClass(val) {
   return (!val || isNaN(n) || n === 0) ? 'val-empty' : '';
 }
 
-// Тултип ячейки: прогноз начисления по месяцам (для обоих разрезов).
-// «В работе» — по месяцу прогноза активации, «Активировано» — по дате
-// активации. Для объёма/кол-ва показываем шт+сумму, для выручки — прогноз
-// выручки, для баллов — прогноз баллов. Суммы — в рублях (по курсу).
+// Тултип ячейки — разбивка-прогноз по месяцам. Источник зависит от разреза:
+//  «В работе»:     объём/кол-во → cell.forecast (прогноз активации),
+//                  выручка/баллы → cell.forecastAccrual (прогноз начислений).
+//  «Активировано»: все 4 метрики → cell.forecast (прогноз начислений по accrual).
+//  «Факт»:         тултипов нет.
 function cellTitle(cell, metricKey) {
-  const fc = cell?.forecast;
+  if (reportMode.value === 'fact') return undefined;
+  if (!['volume', 'count', 'revenue', 'points'].includes(metricKey)) return undefined;
+
+  const inwork = reportMode.value === 'inwork';
+  // В «В работе» деньги/баллы берут отдельную разбивку по прогнозу начислений.
+  const useAccrual = inwork && (metricKey === 'revenue' || metricKey === 'points');
+  const fc = useAccrual ? cell?.forecastAccrual : cell?.forecast;
   if (!fc || !fc.length) return undefined;
+
   let header, valOf;
   if (metricKey === 'volume' || metricKey === 'count') {
-    header = 'Прогноз активации';
+    header = inwork ? 'Прогноз активации' : 'Прогноз начислений';
     valOf = (f) => `${fmt0(f.count)} шт · ${fmtRub(f.volume)}`;
   } else if (metricKey === 'revenue') {
     header = 'Прогноз выручки';
     valOf = (f) => fmtRub(f.revenue);
-  } else if (metricKey === 'points') {
+  } else {
     header = 'Прогноз баллов';
     valOf = (f) => Number(f.points || 0).toLocaleString('ru-RU', { maximumFractionDigits: 2 });
-  } else {
-    return undefined;
   }
   const lines = fc.map((f) => {
     const when = f.month ? fmtMonthHdr(f.month) : 'Без прогноза';

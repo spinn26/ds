@@ -527,10 +527,15 @@ class ProductSalesMatrixController extends Controller
             'products.*'  => 'integer',
             'suppliers'   => 'nullable|array',
             'suppliers.*' => 'string|max:200',
+            // Доп. фильтр по дате ПРОГНОЗА НАЧИСЛЕНИЙ (accrual_forecast).
+            'fcFrom'      => 'nullable|date',
+            'fcTo'        => 'nullable|date',
         ]);
 
         $from   = $params['from'];
         $to     = $params['to'];
+        $fcFrom = $params['fcFrom'] ?? null;
+        $fcTo   = $params['fcTo']   ?? null;
         $months = $this->monthRange($from, $to);
 
         // Вычисляем границы периода по openDate (исключительная правая граница)
@@ -547,6 +552,8 @@ class ProductSalesMatrixController extends Controller
             ->whereRaw('co."deletedAt" IS NULL')
             ->whereRaw('co."openDate"::date >= ?', [$from . '-01'])
             ->whereRaw('co."openDate"::date < ?',  [$toExclusive])
+            ->when($fcFrom, fn ($q) => $q->whereDate('co.accrual_forecast', '>=', $fcFrom))
+            ->when($fcTo, fn ($q) => $q->whereDate('co.accrual_forecast', '<=', $fcTo))
             ->when(! empty($params['suppliers']), fn ($q) =>
                 $q->whereIn(DB::raw('COALESCE(pg."providerName", \'—\')'), $params['suppliers'])
             )
@@ -558,23 +565,12 @@ class ProductSalesMatrixController extends Controller
         $periodExpr = DB::raw('TO_CHAR(DATE_TRUNC(\'month\', co."openDate"::date), \'YYYY-MM\') as period_month');
         $periodRaw  = DB::raw('DATE_TRUNC(\'month\', co."openDate"::date)');
 
-        // Подзапрос: revenue/points из транзакций месяца активации контракта
-        // (только первичный платёж, без ежемесячных взносов рассрочки)
-        $txSub = DB::table('transaction as t')
-            ->whereRaw('t."deletedAt" IS NULL')
-            ->select([
-                't.contract',
-                DB::raw('SUM(COALESCE(t."netRevenueRUB", 0))  as revenue_rub'),
-                DB::raw('SUM(COALESCE(t."personalVolume", 0)) as points_sum'),
-            ])
-            ->groupBy('t.contract');
-
-        // Основная агрегация: продукт × программа × месяц активации.
-        // Конвертация в RUB — по новому справочнику management_currency_rate
-        // (эффективный курс на месяц активации), см. rateExpr().
+        // «Активировано» — по этим контрактам нет транзакций в платформе,
+        // поэтому revenue/points НЕ из транзакций: считаем прогноз из контракта
+        // (injectInWorkPoints по openDate ниже). Здесь revenue/points = 0.
+        // Конвертация в RUB — по management_currency_rate (rateExpr).
         $rows = $base()
             ->join('product as p', 'p.id', '=', 'co.product')
-            ->leftJoinSub($txSub, 'tx', 'tx.contract', '=', 'co.id')
             ->select([
                 'p.id   as product_id',
                 'p.name as product_name',
@@ -583,8 +579,8 @@ class ProductSalesMatrixController extends Controller
                 $periodExpr,
                 DB::raw('SUM(COALESCE(co.ammount, 0) * '.$this->rateExpr('openDate').') as volume'),
                 DB::raw('COUNT(DISTINCT co.id)                              as cnt'),
-                DB::raw('SUM(COALESCE(tx.revenue_rub, 0))                  as revenue'),
-                DB::raw('SUM(COALESCE(tx.points_sum, 0))                   as points'),
+                DB::raw('0                                                  as revenue'),
+                DB::raw('0                                                  as points'),
                 DB::raw('COUNT(DISTINCT co.client)                          as client_count'),
                 DB::raw('COUNT(DISTINCT co.consultant)                      as fc_count'),
             ])
@@ -744,9 +740,14 @@ class ProductSalesMatrixController extends Controller
             'products'    => $allProducts->values(),
         ];
 
-        // Прогноз начисления (тултип): «Активировано» — по месяцу даты активации
-        // (openDate). Ячейки показывают факт, тултип — прогноз из контракта.
-        $this->injectForecastBreakdown($base, $payload, 'openDate', 'openDate');
+        // Выручка/баллы ячеек — прогноз из контракта (транзакций нет), период
+        // — месяц активации (openDate).
+        $this->injectInWorkPoints($base, $payload, 'openDate');
+
+        // Тултипы «Активировано» (объём/кол-во/выручка/баллы) — прогноз по месяцу
+        // ПРОГНОЗА НАЧИСЛЕНИЙ (accrual_forecast). Один breakdown в cell.forecast,
+        // фронт показывает его на всех 4 метриках.
+        $this->injectForecastBreakdown($base, $payload, 'openDate', 'accrual_forecast', 'forecast');
 
         return response()->json($payload);
     }
@@ -838,8 +839,11 @@ class ProductSalesMatrixController extends Controller
         // активации, но для пайплайна «В работе» оцениваем из контракта.
         $this->injectInWorkPoints($base, $assembled);
 
-        // Прогноз начисления (тултип): «В работе» — по месяцу прогноза активации.
-        $this->injectForecastBreakdown($base, $assembled, 'createDate', 'activation_forecast');
+        // Тултипы «В работе»:
+        //  - объём/кол-во → по месяцу ПРОГНОЗА АКТИВАЦИИ (activation_forecast);
+        //  - выручка/баллы → по месяцу ПРОГНОЗА НАЧИСЛЕНИЙ (accrual_forecast).
+        $this->injectForecastBreakdown($base, $assembled, 'createDate', 'activation_forecast', 'forecast');
+        $this->injectForecastBreakdown($base, $assembled, 'createDate', 'accrual_forecast', 'forecastAccrual');
 
         return response()->json($assembled);
     }
@@ -861,7 +865,7 @@ class ProductSalesMatrixController extends Controller
      * последний курс из currencyRate (валютные контракты иначе считались бы
      * по курсу 1), иначе 1.
      */
-    private function injectInWorkPoints(callable $base, array &$assembled): void
+    private function injectInWorkPoints(callable $base, array &$assembled, string $periodCol = 'createDate'): void
     {
         $vatPercent = (float) (DB::table('vat')
             ->where('dateFrom', '<=', now())
@@ -873,12 +877,12 @@ class ProductSalesMatrixController extends Controller
             ->select([
                 'co.product as product_id',
                 'co.program as program_id',
-                DB::raw('TO_CHAR(DATE_TRUNC(\'month\', co."createDate"::date), \'YYYY-MM\') as period_month'),
-                DB::raw('co."createDate"::date as cdate'),
+                DB::raw('TO_CHAR(DATE_TRUNC(\'month\', co."'.$periodCol.'"::date), \'YYYY-MM\') as period_month'),
+                DB::raw('co."'.$periodCol.'"::date as cdate'),
                 'co.ammount',
                 'co.term',
                 'pg.dsPercent as program_ds',
-                DB::raw($this->rateExpr('createDate').' as rate'),
+                DB::raw($this->rateExpr($periodCol).' as rate'),
             ])
             ->get();
 
@@ -973,7 +977,7 @@ class ProductSalesMatrixController extends Controller
      * - «В работе»:      $periodCol = createDate, $bucketCol = activation_forecast
      * - «Активировано»:  $periodCol = openDate,   $bucketCol = openDate (дата активации)
      */
-    private function injectForecastBreakdown(callable $base, array &$payload, string $periodCol, string $bucketCol): void
+    private function injectForecastBreakdown(callable $base, array &$payload, string $periodCol, string $bucketCol, string $targetKey = 'forecast'): void
     {
         $vatPercent = (float) (DB::table('vat')
             ->where('dateFrom', '<=', now())->where('dateTo', '>=', now())->value('value') ?? 0);
@@ -1049,12 +1053,12 @@ class ProductSalesMatrixController extends Controller
         foreach ($payload['rows'] as &$prodRow) {
             $pid = $prodRow['productId'];
             foreach ($prodRow['monthly'] as $cm => &$cell) {
-                $cell['forecast'] = $toList($prod[$pid][$cm] ?? []);
+                $cell[$targetKey] = $toList($prod[$pid][$cm] ?? []);
             }
             unset($cell);
             foreach ($prodRow['programs'] as &$pg) {
                 foreach ($pg['monthly'] as $cm => &$cell) {
-                    $cell['forecast'] = $toList($prog[$pid][$pg['programId']][$cm] ?? []);
+                    $cell[$targetKey] = $toList($prog[$pid][$pg['programId']][$cm] ?? []);
                 }
                 unset($cell);
             }
@@ -1062,7 +1066,7 @@ class ProductSalesMatrixController extends Controller
         }
         unset($prodRow);
         foreach ($payload['grandTotals']['monthly'] as $cm => &$cell) {
-            $cell['forecast'] = $toList($grand[$cm] ?? []);
+            $cell[$targetKey] = $toList($grand[$cm] ?? []);
         }
         unset($cell);
     }
