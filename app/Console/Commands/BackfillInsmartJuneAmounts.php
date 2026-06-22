@@ -31,6 +31,8 @@ class BackfillInsmartJuneAmounts extends Command
             ->whereNull('t.deletedAt')
             ->where('t.dateMonth', '2026-06')
             ->whereRaw('t.date >= ?', ['2026-06-01'])
+            // КВ=0 (amount=0) не трогаем: %ДС=0 → калькулятор берёт тариф/дефолт.
+            ->where('t.amount', '>', 0)
             ->select(['t.id', 't.amount as old_amount', 'co.ammount as premium', 'co.id as contract_id'])
             ->orderBy('t.id')
             ->get();

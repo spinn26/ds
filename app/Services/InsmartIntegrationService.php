@@ -120,13 +120,23 @@ class InsmartIntegrationService
             // калькулятор посчитает доход ДС = premium × %ДС/100 = agentCommission.
             $premium = (float) ($payload['policyAmount'] ?? $payload['price'] ?? 0);
             $commission = (float) ($payload['agentCommission'] ?? 0);
-            $dsPercent = $premium > 0 ? round($commission / $premium * 100, 4) : 0;
+            // КВ=0 (или нет премии) → транзакция без суммы/комиссии. ВАЖНО: нельзя
+            // ставить amount=премия с %ДС=0 — калькулятор трактует %ДС<=0 как
+            // «не задано» и берёт тариф/дефолт (даст ненулевую комиссию). Поэтому
+            // для нулевой КВ оставляем amount=0.
+            if ($commission > 0 && $premium > 0) {
+                $txAmount = $premium;
+                $dsPercent = round($commission / $premium * 100, 4);
+            } else {
+                $txAmount = 0.0;
+                $dsPercent = 0;
+            }
             $txId = LegacyId::next('transaction');
             DB::table('transaction')->insert([
                 'id' => $txId,
                 'contract' => $contractId,
-                'amount' => $premium,
-                'amountRUB' => $premium,       // страховая премия Insmart всегда в RUB
+                'amount' => $txAmount,
+                'amountRUB' => $txAmount,       // страховая премия Insmart всегда в RUB
                 'dsCommissionPercentage' => $dsPercent,
                 'currency' => $this->resolveCurrencyId($payload['currency'] ?? 'RUB'),
                 'currencyRate' => 1,
