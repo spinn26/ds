@@ -1519,6 +1519,239 @@ class ProductSalesMatrixController extends Controller
     }
 
     /**
+     * GET /admin/reports/sales-matrix/total — режим «Итого».
+     *
+     * Строки = продукты (без программ). Каждая ячейка продукта = СУММА трёх
+     * слоёв, каждый со своей группировкой по месяцу:
+     *   - «Факт»          — транзакции по месяцу транзакции (t.dateMonth);
+     *   - «Активировано»  — активированные контракты (status=1, без транзакций)
+     *                       по месяцу активации (openDate);
+     *   - «В работе»      — неактивированные контракты по месяцу создания.
+     * Раскрытие продукта показывает эти 3 слоя (вместо программ).
+     */
+    public function totalMatrix(Request $request): JsonResponse
+    {
+        $params = $request->validate([
+            'from'        => 'required|date_format:Y-m',
+            'to'          => 'required|date_format:Y-m',
+            'products'    => 'nullable|array',
+            'products.*'  => 'integer',
+            'suppliers'   => 'nullable|array',
+            'suppliers.*' => 'string|max:200',
+        ]);
+        $from = $params['from'];
+        $to   = $params['to'];
+        $months = $this->monthRange($from, $to);
+        $toExclusive = $this->monthExclusiveStart($to);
+        $sup = $params['suppliers'] ?? [];
+        $prod = $params['products'] ?? [];
+
+        $applyFilters = function ($q) use ($sup, $prod) {
+            return $q
+                ->when(! empty($sup), fn ($qq) => $qq->whereIn(DB::raw('COALESCE(pg."providerName", \'—\')'), $sup))
+                ->when(! empty($prod), fn ($qq) => $qq->whereIn('co.product', $prod));
+        };
+
+        // Слой «В работе» — неактивированные по дате создания.
+        $inworkBase = fn () => $applyFilters(DB::table('contract as co')
+            ->join('program as pg', 'pg.id', '=', 'co.program')
+            ->whereNotIn('co.status', [1, 6, 8, 10])
+            ->whereRaw('co."deletedAt" IS NULL')
+            ->whereRaw('co."createDate"::date >= ?', [$from.'-01'])
+            ->whereRaw('co."createDate"::date < ?', [$toExclusive]));
+
+        // Слой «Активировано» — status=1, без транзакций, по дате активации.
+        $actBase = fn () => $applyFilters(DB::table('contract as co')
+            ->join('program as pg', 'pg.id', '=', 'co.program')
+            ->where('co.status', 1)
+            ->whereRaw('co."deletedAt" IS NULL')
+            ->whereNotExists(fn ($q) => $q->select(DB::raw(1))->from('transaction as tx')
+                ->whereColumn('tx.contract', 'co.id')->whereNull('tx.deletedAt'))
+            ->whereRaw('co."openDate"::date >= ?', [$from.'-01'])
+            ->whereRaw('co."openDate"::date < ?', [$toExclusive]));
+
+        // Слой «Факт» — транзакции по месяцу транзакции.
+        $factBase = fn () => $applyFilters(DB::table('transaction as t')
+            ->join('contract as co', 'co.id', '=', 't.contract')
+            ->join('program as pg', 'pg.id', '=', 'co.program')
+            ->whereRaw('t."deletedAt" IS NULL')
+            ->where('t.dateMonth', '>=', $from)
+            ->where('t.dateMonth', '<=', $to));
+
+        $inwork = $this->totalLayerForecast($inworkBase, 'createDate');
+        $activated = $this->totalLayerForecast($actBase, 'openDate');
+        $fact = $this->totalLayerFact($factBase);
+
+        // Имена продуктов (объединение всех слоёв).
+        $pids = collect(array_keys($inwork + $activated + $fact));
+        $names = $pids->isNotEmpty()
+            ? DB::table('product')->whereIn('id', $pids)->pluck('name', 'id')
+            : collect();
+
+        $keys = ['volume', 'count', 'revenue', 'points', 'clientCount', 'fcCount'];
+        $zero = array_fill_keys($keys, 0);
+        $layers = [
+            ['key' => 'fact', 'name' => '🟢 Факт', 'map' => $fact],
+            ['key' => 'activated', 'name' => '🔵 Активировано', 'map' => $activated],
+            ['key' => 'inwork', 'name' => '🟡 В работе', 'map' => $inwork],
+        ];
+
+        $result = [];
+        $grand = array_merge($zero, ['monthly' => []]);
+
+        foreach ($pids->sort()->values() as $pid) {
+            $prodRow = array_merge($zero, [
+                'productId' => $pid, 'productName' => $names[$pid] ?? ('#'.$pid),
+                'monthly' => [], 'programs' => [],
+            ]);
+            foreach ($layers as $layer) {
+                $lm = $layer['map'][$pid]['m'] ?? [];
+                $layerRow = array_merge($zero, [
+                    'programId' => $layer['key'], 'programName' => $layer['name'], 'monthly' => [],
+                ]);
+                foreach ($months as $mo) {
+                    $cell = array_merge($zero, $lm[$mo] ?? []);
+                    $cell['avgCheck'] = $cell['count'] > 0 ? round($cell['volume'] / $cell['count'], 2) : 0;
+                    $layerRow['monthly'][$mo] = $cell;
+                    foreach ($keys as $k) {
+                        $layerRow[$k] += $cell[$k];
+                        $prodRow['monthly'][$mo][$k] = ($prodRow['monthly'][$mo][$k] ?? 0) + $cell[$k];
+                        $prodRow[$k] += $cell[$k];
+                        $grand['monthly'][$mo][$k] = ($grand['monthly'][$mo][$k] ?? 0) + $cell[$k];
+                        $grand[$k] += $cell[$k];
+                    }
+                }
+                $layerRow['avgCheck'] = $layerRow['count'] > 0 ? round($layerRow['volume'] / $layerRow['count'], 2) : 0;
+                $prodRow['programs'][] = $layerRow;
+            }
+            foreach ($months as $mo) {
+                $mc = $prodRow['monthly'][$mo] ?? $zero;
+                $prodRow['monthly'][$mo]['avgCheck'] = ($mc['count'] ?? 0) > 0 ? round($mc['volume'] / $mc['count'], 2) : 0;
+            }
+            $prodRow['avgCheck'] = $prodRow['count'] > 0 ? round($prodRow['volume'] / $prodRow['count'], 2) : 0;
+            $result[] = $prodRow;
+        }
+        foreach ($months as $mo) {
+            $gc = $grand['monthly'][$mo] ?? $zero;
+            $grand['monthly'][$mo]['avgCheck'] = ($gc['count'] ?? 0) > 0 ? round($gc['volume'] / $gc['count'], 2) : 0;
+        }
+        $grand['avgCheck'] = $grand['count'] > 0 ? round($grand['volume'] / $grand['count'], 2) : 0;
+
+        // Списки для фильтров (по всем контрактам периода — создание/активация).
+        $filtBase = fn () => $applyFilters(DB::table('contract as co')
+            ->join('program as pg', 'pg.id', '=', 'co.program')
+            ->whereRaw('co."deletedAt" IS NULL')
+            ->whereRaw('COALESCE(co."openDate", co."createDate")::date >= ?', [$from.'-01'])
+            ->whereRaw('COALESCE(co."openDate", co."createDate")::date < ?', [$toExclusive]));
+        $allSuppliers = $filtBase()->whereNotNull('pg.providerName')->distinct()->orderBy('pg.providerName')->pluck('pg.providerName');
+        $allProducts = $filtBase()->join('product as p', 'p.id', '=', 'co.product')
+            ->select('p.id', 'p.name')->distinct()->orderBy('p.name')->get()
+            ->map(fn ($r) => ['id' => $r->id, 'name' => $r->name]);
+
+        return response()->json([
+            'period'      => ['from' => $from, 'to' => $to, 'months' => $months],
+            'rows'        => $result,
+            'grandTotals' => $grand,
+            'suppliers'   => $allSuppliers->values(),
+            'products'    => $allProducts->values(),
+        ]);
+    }
+
+    /** Слой-прогноз (В работе / Активировано): метрики по продукт×месяц.
+     *  volume/count/clients/fc — SQL; revenue/points — прогноз из контракта. */
+    private function totalLayerForecast(callable $base, string $periodCol): array
+    {
+        $periodExpr = 'TO_CHAR(DATE_TRUNC(\'month\', co."'.$periodCol.'"::date), \'YYYY-MM\')';
+        $rows = $base()
+            ->select([
+                'co.product as pid',
+                DB::raw($periodExpr.' as m'),
+                DB::raw('SUM(COALESCE(co.ammount,0) * '.$this->rateExpr($periodCol).') as volume'),
+                DB::raw('COUNT(DISTINCT co.id) as cnt'),
+                DB::raw('COUNT(DISTINCT co.client) as cl'),
+                DB::raw('COUNT(DISTINCT co.consultant) as fc'),
+            ])
+            ->groupBy('co.product', DB::raw('DATE_TRUNC(\'month\', co."'.$periodCol.'"::date)'))
+            ->get();
+
+        $map = [];
+        foreach ($rows as $r) {
+            $map[$r->pid]['m'][$r->m] = [
+                'volume' => round((float) $r->volume, 2), 'count' => (int) $r->cnt,
+                'clientCount' => (int) $r->cl, 'fcCount' => (int) $r->fc,
+                'revenue' => 0, 'points' => 0,
+            ];
+        }
+
+        // Прогноз выручки/баллов из контракта (как injectInWorkPoints).
+        $vat = (float) (DB::table('vat')->where('dateFrom', '<=', now())->where('dateTo', '>=', now())->value('value') ?? 0);
+        $defaultDs = (float) \App\Models\SystemSetting::value('commission.default_ds_percent', 100);
+        $contracts = $base()
+            ->select([
+                'co.product as pid', 'co.program as program_id',
+                DB::raw($periodExpr.' as m'),
+                'co.ammount', 'co.term', 'pg.dsPercent as program_ds',
+                DB::raw('co."'.$periodCol.'"::date as cdate'),
+                DB::raw($this->rateExpr($periodCol).' as rate'),
+            ])
+            ->get();
+        $dsCache = [];
+        foreach ($contracts as $c) {
+            $amountRub = (float) $c->ammount * (float) $c->rate;
+            $amountNoVat = $vat > 0 ? $amountRub / (1 + $vat / 100) : $amountRub;
+            $ds = $c->program_ds !== null ? (float) $c->program_ds : 0.0;
+            if ($ds <= 0) {
+                $key = $c->program_id.'|'.$c->term.'|'.$c->cdate;
+                if (! array_key_exists($key, $dsCache)) {
+                    $dsCache[$key] = \App\Services\CommissionCalculator::resolveLegacyDsCommission(
+                        (int) $c->program_id, $c->term, null, (string) $c->cdate
+                    );
+                }
+                $ds = (float) ($dsCache[$key] ?? 0);
+            }
+            if ($ds <= 0) {
+                $ds = $defaultDs;
+            }
+            $rev = $amountNoVat * $ds / 100;
+            if (isset($map[$c->pid]['m'][$c->m])) {
+                $map[$c->pid]['m'][$c->m]['revenue'] += $rev;
+                $map[$c->pid]['m'][$c->m]['points'] += $rev / 100;
+            }
+        }
+
+        return $map;
+    }
+
+    /** Слой «Факт»: метрики по продукт×месяц транзакции (revenue/points из транзакций). */
+    private function totalLayerFact(callable $base): array
+    {
+        $rows = $base()
+            ->select([
+                'co.product as pid',
+                't.dateMonth as m',
+                DB::raw('SUM(COALESCE(co.ammount,0) * '.$this->rateExpr('createDate').') as volume'),
+                DB::raw('COUNT(DISTINCT t.id) as cnt'),
+                DB::raw('SUM(COALESCE(t."netRevenueRUB",0)) as revenue'),
+                DB::raw('SUM(COALESCE(t."personalVolume",0)) as points'),
+                DB::raw('COUNT(DISTINCT co.client) as cl'),
+                DB::raw('COUNT(DISTINCT co.consultant) as fc'),
+            ])
+            ->groupBy('co.product', 't.dateMonth')
+            ->get();
+
+        $map = [];
+        foreach ($rows as $r) {
+            $map[$r->pid]['m'][$r->m] = [
+                'volume' => round((float) $r->volume, 2), 'count' => (int) $r->cnt,
+                'revenue' => round((float) $r->revenue, 2), 'points' => round((float) $r->points, 2),
+                'clientCount' => (int) $r->cl, 'fcCount' => (int) $r->fc,
+            ];
+        }
+
+        return $map;
+    }
+
+    /**
      * SQL-выражение курса RUB из НОВОГО справочника management_currency_rate.
      * Берём «эффективный» курс: последний с датой ≤ месяца контракта; если для
      * валюты нет курса до этой даты — самый ранний из имеющихся; иначе 1.

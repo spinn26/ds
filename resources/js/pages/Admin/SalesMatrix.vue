@@ -28,7 +28,7 @@
         </v-btn>
         <v-btn value="total" size="small" prepend-icon="mdi-sigma">
           Итого
-          <v-tooltip activator="parent" location="bottom" text="Итого (в разработке)" />
+          <v-tooltip activator="parent" location="bottom" text="Итого = Факт + Активировано + В работе (разверни продукт)" />
         </v-btn>
       </v-btn-toggle>
     </div>
@@ -554,7 +554,7 @@ const reportMode = ref('forecast');
 // Разрезы reportMode: inwork=в работе, forecast=активировано, fact=факт,
 // total=итого (итого/начисление-выручка пока заглушки — «оставить пустыми»).
 const reportType = ref('sales');
-const isStub = computed(() => reportType.value === 'revenue' || reportMode.value === 'total');
+const isStub = computed(() => reportType.value === 'revenue');
 
 // ─── Period ───────────────────────────────────────────────────
 const now = new Date();
@@ -720,7 +720,9 @@ async function loadData({ updateOptions = true } = {}) {
       if (faTo.value) p.set('fcTo', faTo.value);
     }
     const endpoint = reportMode.value === 'inwork' ? 'inwork'
-      : (reportMode.value === 'fact' ? 'fact' : 'period');
+      : reportMode.value === 'fact' ? 'fact'
+      : reportMode.value === 'total' ? 'total'
+      : 'period';
     const { data } = await api.get(`/admin/reports/sales-matrix/${endpoint}?${p}`);
     rows.value        = data.rows           ?? [];
     months.value      = data.period?.months ?? [];
