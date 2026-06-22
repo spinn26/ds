@@ -235,12 +235,19 @@
            наставников + пересчитывает балансы (DELETE /admin/transactions/{id}).
            @click.stop — иначе клик по строке развернёт аккордеон. -->
       <template #item.actions="{ item }">
-        <v-btn v-if="canCalc" icon="mdi-trash-can-outline" size="x-small"
-          variant="text" color="error"
-          :title="item.periodFrozen ? 'Период закрыт — нельзя удалить' : 'Удалить транзакцию со всеми комиссиями (пересчёт цепочки)'"
-          :disabled="item.periodFrozen || deletingTxId === item.id"
-          :loading="deletingTxId === item.id"
-          @click.stop="confirmDeleteTx(item)" />
+        <div class="d-flex">
+          <v-btn v-if="canCalc" icon="mdi-pencil-outline" size="x-small"
+            variant="text" color="primary"
+            :title="item.periodFrozen ? 'Период закрыт — нельзя редактировать' : 'Редактировать транзакцию (сумма / %ДС / дата) с пересчётом комиссий'"
+            :disabled="item.periodFrozen"
+            @click.stop="openEditTx(item)" />
+          <v-btn v-if="canCalc" icon="mdi-trash-can-outline" size="x-small"
+            variant="text" color="error"
+            :title="item.periodFrozen ? 'Период закрыт — нельзя удалить' : 'Удалить транзакцию со всеми комиссиями (пересчёт цепочки)'"
+            :disabled="item.periodFrozen || deletingTxId === item.id"
+            :loading="deletingTxId === item.id"
+            @click.stop="confirmDeleteTx(item)" />
+        </div>
       </template>
 
       <!-- Аккордеон: цепочка выплат -->
@@ -306,6 +313,47 @@
       <template #no-data><EmptyState message="Транзакции не найдены" icon="mdi-receipt-outline" /></template>
     </v-data-table-server>
     </div>
+
+    <!-- Редактирование транзакции (сумма / %ДС / дата / комментарий) с
+         пересчётом комиссий цепочки. Доступно admin/calculations; закрытый
+         период блокируется на бэке. -->
+    <v-dialog v-model="editDialog" max-width="460">
+      <v-card>
+        <v-card-title class="text-h6">Редактирование транзакции #{{ editForm.id }}</v-card-title>
+        <v-card-text>
+          <v-alert type="info" variant="tonal" density="compact" class="mb-3">
+            После сохранения комиссии по цепочке наставников пересчитаются автоматически.
+          </v-alert>
+          <v-row dense>
+            <v-col cols="8">
+              <v-text-field v-model.number="editForm.amount" label="Сумма транзакции" type="number"
+                variant="outlined" density="comfortable" />
+            </v-col>
+            <v-col cols="4">
+              <v-text-field :model-value="editForm.currencySymbol || ''" label="Валюта" disabled
+                variant="outlined" density="comfortable" />
+            </v-col>
+            <v-col cols="6">
+              <v-text-field v-model.number="editForm.dsCommissionPercentage" label="% ДС" type="number"
+                min="0" max="100" suffix="%" variant="outlined" density="comfortable" />
+            </v-col>
+            <v-col cols="6">
+              <v-text-field v-model="editForm.date" label="Дата" type="date"
+                variant="outlined" density="comfortable" />
+            </v-col>
+            <v-col cols="12">
+              <v-textarea v-model="editForm.comment" label="Комментарий" rows="2"
+                variant="outlined" density="comfortable" />
+            </v-col>
+          </v-row>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="editDialog = false">Отмена</v-btn>
+          <v-btn color="primary" variant="flat" :loading="savingEdit" @click="saveEditTx">Сохранить</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
@@ -380,7 +428,7 @@ const headers = [
   { title: 'Комиссия', key: 'partnerCommissionRUB', align: 'end', width: 130 },
   { title: 'Удержание ДС', key: 'dsWithholdingRUB', align: 'end', width: 140 },
   { title: 'Прибыль', key: 'profitRUB', align: 'end', width: 130 },
-  { title: '', key: 'actions', sortable: false, width: 56 },
+  { title: '', key: 'actions', sortable: false, width: 92 },
   { title: '', key: 'data-table-expand', sortable: false, width: 50 },
 ];
 
@@ -555,6 +603,45 @@ async function confirmDeleteTx(item) {
     showError(e.response?.data?.message || 'Не удалось удалить транзакцию');
   }
   deletingTxId.value = null;
+}
+
+// Редактирование транзакции (сумма / %ДС / дата / комментарий). Бэкенд
+// (PUT /admin/transactions/{id}) валидирует, блокирует закрытый период и
+// пересчитывает комиссии цепочки. Только admin/calculations (canCalc).
+const editDialog = ref(false);
+const savingEdit = ref(false);
+const editForm = ref({ id: null, amount: null, dsCommissionPercentage: null, date: '', comment: '', currencySymbol: '' });
+
+function openEditTx(item) {
+  if (item.periodFrozen) return;
+  editForm.value = {
+    id: item.id,
+    amount: item.amount ?? null,
+    dsCommissionPercentage: item.dsCommissionPercentage ?? null,
+    date: (item.date || '').slice(0, 10),
+    comment: item.comment || '',
+    currencySymbol: item.currencySymbol || '',
+  };
+  editDialog.value = true;
+}
+
+async function saveEditTx() {
+  savingEdit.value = true;
+  try {
+    const payload = {
+      amount: editForm.value.amount,
+      dsCommissionPercentage: editForm.value.dsCommissionPercentage,
+      date: editForm.value.date || null,
+      comment: editForm.value.comment,
+    };
+    const { data } = await api.put(`/admin/transactions/${editForm.value.id}`, payload);
+    showSuccess(data?.message || 'Транзакция обновлена');
+    editDialog.value = false;
+    await loadData();
+  } catch (e) {
+    showError(e.response?.data?.message || 'Не удалось сохранить');
+  }
+  savingEdit.value = false;
 }
 
 // Лениво подгружаем цепочку при раскрытии строки.
