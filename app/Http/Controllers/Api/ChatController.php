@@ -144,7 +144,18 @@ class ChatController extends Controller
                 ->pluck('ticket_id')
                 ->all();
 
-            $query->where(function ($q) use ($s, $raw, $clientIds, $userIds, $participantTickets, $senderTickets) {
+            // Поиск по ТЕКСТУ сообщений: staff ищут чат по запомненной фразе из
+            // переписки, а не по теме (темы часто авто-генерятся → раньше поиск
+            // «не находил» нужный чат). Системные сообщения исключаем.
+            $contentTickets = DB::table('chat_messages')
+                ->where('content', 'ilike', $s)
+                ->where('is_system', false)
+                ->distinct()
+                ->limit(2000)
+                ->pluck('ticket_id')
+                ->all();
+
+            $query->where(function ($q) use ($s, $raw, $clientIds, $userIds, $participantTickets, $senderTickets, $contentTickets) {
                 $q->where('subject', 'ilike', $s)
                   ->orWhere('customer_name', 'ilike', $s)
                   ->orWhere('recipient_name', 'ilike', $s);
@@ -158,6 +169,9 @@ class ChatController extends Controller
                 }
                 if (! empty($senderTickets)) {
                     $q->orWhereIn('id', $senderTickets);
+                }
+                if (! empty($contentTickets)) {
+                    $q->orWhereIn('id', $contentTickets);
                 }
                 // chat_tickets.id — integer; ILIKE на integer падает 42883.
                 if (ctype_digit($raw)) {
