@@ -532,7 +532,9 @@ class ProductController extends Controller
         $registeredBefore = $consultant->dateCreated
             && \Illuminate\Support\Carbon::parse($consultant->dateCreated)
                 ->lt(\Illuminate\Support\Carbon::parse($cutoff));
-        if ($registeredBefore) {
+        // Ручной флаг из админки (Пользователи) — открыть продукты без верификации.
+        $manualOverride = (bool) ($consultant->products_access_no_verify ?? false);
+        if ($registeredBefore || $manualOverride) {
             $requisitesSubmitted = true;
             $requisitesVerified = true;
         }

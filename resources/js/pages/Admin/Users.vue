@@ -126,6 +126,35 @@
         <v-col cols="12" sm="6">
           <v-checkbox v-model="editForm.agreement" label="Согласие" density="compact" />
         </v-col>
+
+        <!-- Управление доступом партнёра (ручные переопределения гейтов).
+             Показываем только для существующего партнёрского профиля. -->
+        <template v-if="editForm.id && editForm.hasConsultant">
+          <v-col cols="12" class="pb-0">
+            <v-divider class="mb-2" />
+            <div class="text-subtitle-2 font-weight-bold mb-1">Управление доступом партнёра</div>
+            <div class="text-caption text-medium-emphasis mb-2">
+              Ручные переопределения. Обычно ставятся автоматически (верификация / акцепт /
+              смена реквизитов) — здесь можно проставить вручную.
+            </div>
+          </v-col>
+          <v-col cols="12" sm="6" class="py-0">
+            <v-switch v-model="editForm.productsAccessNoVerify" color="primary" density="compact" hide-details
+              label="Доступ к продуктам без верификации" />
+          </v-col>
+          <v-col cols="12" sm="6" class="py-0">
+            <v-switch v-model="editForm.requisitesVerified" color="success" density="compact" hide-details
+              label="Реквизиты верифицированы" />
+          </v-col>
+          <v-col cols="12" sm="6" class="py-0">
+            <v-switch v-model="editForm.offerAccepted" color="success" density="compact" hide-details
+              label="Оферта принята" />
+          </v-col>
+          <v-col cols="12" sm="6" class="py-0">
+            <v-switch v-model="editForm.paymentsSuspended" color="warning" density="compact" hide-details
+              label="Выплаты приостановлены" />
+          </v-col>
+        </template>
       </v-row>
     </DialogShell>
 
@@ -313,6 +342,8 @@ const {
     firstName: '', lastName: '', patronymic: '', email: '', phone: '',
     role: 'registered', position: '', password: '', gender: '', birthDate: '',
     isBlocked: false, agreement: false,
+    hasConsultant: false, productsAccessNoVerify: false,
+    requisitesVerified: false, offerAccepted: false, paymentsSuspended: false,
   },
   normalise: (d) => ({
     items: d.data ?? d.items ?? [],

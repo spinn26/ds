@@ -84,24 +84,38 @@ class AdminUserController extends Controller
             ->pluck('participantCode', 'webUser');
         $positions = \Illuminate\Support\Facades\DB::table('employee_positions')
             ->whereIn('user_id', $rows->pluck('id'))->pluck('position', 'user_id');
+        // Управляемые админом флаги партнёрского профиля (для формы).
+        $consultants = Consultant::whereIn('webUser', $rows->pluck('id'))
+            ->get(['webUser', 'statusRequisites', 'acceptance', 'payments_suspended', 'products_access_no_verify'])
+            ->keyBy('webUser');
 
-        $users = $rows->map(fn ($u) => [
-            'id' => $u->id,
-            'email' => $u->email,
-            'firstName' => $u->firstName,
-            'lastName' => $u->lastName,
-            'patronymic' => $u->patronymic,
-            'phone' => $u->phone,
-            'role' => $u->role,
-            'position' => $positions[$u->id] ?? null,
-            'gender' => $u->gender,
-            // Y-m-d, иначе datetime-каст сериализует Carbon в UTC и при
-            // app-tz Europe/Moscow дата уезжает на день назад (см. ProfileController).
-            'birthDate' => $u->birthDate?->format('Y-m-d'),
-            'isBlocked' => (bool) $u->isBlocked,
-            'agreement' => (bool) $u->agreement,
-            'participantCode' => $codes[$u->id] ?? null,
-        ]);
+        $users = $rows->map(function ($u) use ($codes, $positions, $consultants) {
+            $c = $consultants[$u->id] ?? null;
+
+            return [
+                'id' => $u->id,
+                'email' => $u->email,
+                'firstName' => $u->firstName,
+                'lastName' => $u->lastName,
+                'patronymic' => $u->patronymic,
+                'phone' => $u->phone,
+                'role' => $u->role,
+                'position' => $positions[$u->id] ?? null,
+                'gender' => $u->gender,
+                // Y-m-d, иначе datetime-каст сериализует Carbon в UTC и при
+                // app-tz Europe/Moscow дата уезжает на день назад (см. ProfileController).
+                'birthDate' => $u->birthDate?->format('Y-m-d'),
+                'isBlocked' => (bool) $u->isBlocked,
+                'agreement' => (bool) $u->agreement,
+                'participantCode' => $codes[$u->id] ?? null,
+                // Партнёрский профиль + управляемые флаги доступа.
+                'hasConsultant' => $c !== null,
+                'productsAccessNoVerify' => (bool) ($c->products_access_no_verify ?? false),
+                'requisitesVerified' => ((int) ($c->statusRequisites ?? 0)) === 3,
+                'offerAccepted' => (bool) ($c->acceptance ?? false),
+                'paymentsSuspended' => (bool) ($c->payments_suspended ?? false),
+            ];
+        });
 
         return response()->json(['data' => $users, 'total' => $total]);
     }
@@ -194,6 +208,34 @@ class AdminUserController extends Controller
                 $code = $request->input('participantCode');
                 $consultant->participantCode = $code === '' ? null : $code;
                 $consultant->saveQuietly();
+            }
+
+            // Управление доступом партнёра — только admin. Ручные переопределения
+            // гейтов, которые иначе ставятся флоу верификации/акцепта/смены реквизитов.
+            if ($isAdmin && $consultant) {
+                $touched = false;
+                if ($request->has('productsAccessNoVerify')) {
+                    $consultant->products_access_no_verify = $request->boolean('productsAccessNoVerify');
+                    $touched = true;
+                }
+                if ($request->has('requisitesVerified')) {
+                    // 3 = верифицирован, 2 = на проверке/не подтверждён.
+                    $consultant->statusRequisites = $request->boolean('requisitesVerified') ? 3 : 2;
+                    $touched = true;
+                }
+                if ($request->has('offerAccepted')) {
+                    $consultant->acceptance = $request->boolean('offerAccepted');
+                    $touched = true;
+                }
+                if ($request->has('paymentsSuspended')) {
+                    $susp = $request->boolean('paymentsSuspended');
+                    $consultant->payments_suspended = $susp;
+                    $consultant->payments_suspended_at = $susp ? now() : null;
+                    $touched = true;
+                }
+                if ($touched) {
+                    $consultant->saveQuietly();
+                }
             }
 
             // Должность (оргструктура / мини-профиль).
