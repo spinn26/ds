@@ -544,12 +544,16 @@ class ProductSalesMatrixController extends Controller
         if ($tm > 12) { $tm = 1; $ty = (int) $ty + 1; }
         $toExclusive = sprintf('%04d-%02d-01', (int) $ty, $tm);
 
-        // Базовый builder: только активированные контракты по дате активации
+        // Базовый builder: только активированные контракты по дате активации.
+        // Контракты, по которым УЖЕ ЕСТЬ транзакция (напр. InSmart), сюда не
+        // попадают — они учитываются в «Факт» (правило Лены 22.06.2026).
         $base = fn () => DB::table('contract as co')
             ->join('program as pg', 'pg.id', '=', 'co.program')
             ->where('co.status', 1)
             ->whereRaw('co."openDate" IS NOT NULL')
             ->whereRaw('co."deletedAt" IS NULL')
+            ->whereNotExists(fn ($q) => $q->select(DB::raw(1))->from('transaction as tx')
+                ->whereColumn('tx.contract', 'co.id')->whereNull('tx.deletedAt'))
             ->whereRaw('co."openDate"::date >= ?', [$from . '-01'])
             ->whereRaw('co."openDate"::date < ?',  [$toExclusive])
             ->when($fcFrom, fn ($q) => $q->whereDate('co.accrual_forecast', '>=', $fcFrom))
