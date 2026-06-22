@@ -49,6 +49,10 @@
         </v-chip>
         <v-btn v-if="activeFilterCount > 0" variant="text" size="small" color="secondary"
           prepend-icon="mdi-filter-off-outline" @click="resetFilters">Сбросить</v-btn>
+        <v-btn size="small" variant="tonal" color="success" prepend-icon="mdi-microsoft-excel"
+          :loading="exporting" @click="exportEmails" title="Выгрузить в Excel (с учётом фильтров)">
+          Экспорт
+        </v-btn>
         <ColumnVisibilityMenu :headers="headers" v-model:visible="columnVisible"
           storage-key="partner-statuses-cols" />
       </div>
@@ -164,7 +168,11 @@ import StatusChip from '../../components/StatusChip.vue';
 import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 import SmartRangeFilter from '../../components/SmartRangeFilter.vue';
 import { fmt, fmtDate, getActivityColor } from '../../composables/useDesign';
+import { exportToXlsx } from '../../composables/useExport';
+import { useSnackbar } from '../../composables/useSnackbar';
 
+const { showSuccess, showError } = useSnackbar();
+const exporting = ref(false);
 const loading = ref(true);
 const summary = ref([]);
 const items = ref([]);
@@ -215,6 +223,7 @@ const activityOptions = computed(() =>
 
 const headers = [
   { title: 'Партнёр', key: 'personName' },
+  { title: 'Email', key: 'email', width: 220 },
   { title: 'Статус', key: 'activityName', width: 150 },
   { title: 'Зарегистрирован', key: 'dateCreated', width: 140 },
   { title: 'Активен с', key: 'dateActivity', width: 130 },
@@ -319,6 +328,47 @@ async function loadData() {
     total.value = data.total || 0;
   } catch {}
   loading.value = false;
+}
+
+// Выгрузка ВСЕХ партнёров (с учётом текущих фильтров) в Excel — постранично,
+// т.к. бэкенд ограничивает per_page. Колонки: ФИО, Email, статус, даты.
+async function exportEmails() {
+  exporting.value = true;
+  try {
+    const base = {};
+    base.sort_by = 'personName';
+    base.sort_dir = 'asc';
+    if (search.value) base.search = search.value;
+    if (activityFilter.value) base.activity = activityFilter.value;
+    Object.entries(dateFilters.value).forEach(([k, v]) => { if (v) base[k] = v; });
+
+    const all = [];
+    let p = 1;
+    let lastPage = 1;
+    do {
+      const { data } = await api.get('/admin/partner-statuses', {
+        params: { ...base, page: p, per_page: 100 },
+      });
+      all.push(...(data.data || []));
+      lastPage = Math.max(1, Math.ceil((data.total || 0) / 100));
+      p++;
+    } while (p <= lastPage && p <= 500);
+
+    if (!all.length) { showError('Нет данных для выгрузки'); return; }
+
+    await exportToXlsx(all, [
+      { title: 'Партнёр', key: 'personName' },
+      { title: 'Email', key: 'email' },
+      { title: 'Статус', key: 'activityName' },
+      { title: 'Зарегистрирован', key: 'dateCreated' },
+      { title: 'Активен с', key: 'dateActivity' },
+    ], 'partner_statuses');
+    showSuccess(`Выгружено партнёров: ${all.length}`);
+  } catch (e) {
+    showError('Ошибка выгрузки');
+  } finally {
+    exporting.value = false;
+  }
 }
 
 onMounted(loadData);

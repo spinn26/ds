@@ -1031,6 +1031,12 @@ class AdminDataController extends Controller
             ? DB::table('directory_of_activities')->whereIn('id', $activityIds)->pluck('name', 'id')
             : collect();
 
+        // Email партнёра: идентичность = WebUser (consultant.webUser → WebUser.email).
+        $webUserIds = $detailRows->pluck('webUser')->filter()->unique();
+        $emailByWebUser = $webUserIds->isNotEmpty()
+            ? DB::table('WebUser')->whereIn('id', $webUserIds)->pluck('email', 'id')
+            : collect();
+
         // Per spec ✅Статусы партнеров §2 col.7: «Сумма ЛП от даты активации
         // (каждый год обнуляется)». Считаем ЛП за текущий годовой цикл,
         // отсчитывая от dateActivity. Один batch-SUM по commission, чтобы
@@ -1061,7 +1067,7 @@ class AdminDataController extends Controller
             }
         }
 
-        $details = $detailRows->map(function ($c) use ($activityNames, $lpFromActivation) {
+        $details = $detailRows->map(function ($c) use ($activityNames, $lpFromActivation, $emailByWebUser) {
                 $activityName = $c->activity ? ($activityNames[$c->activity] ?? '—') : '—';
 
                 // Рассчитать "будет терминирован" для активных
@@ -1073,6 +1079,7 @@ class AdminDataController extends Controller
                 return [
                     'id' => $c->id,
                     'personName' => $c->personName,
+                    'email' => $c->webUser ? ($emailByWebUser[$c->webUser] ?? null) : null,
                     'activityId' => $c->activity,
                     'activityName' => $activityName,
                     'dateCreated' => $c->dateCreated,
