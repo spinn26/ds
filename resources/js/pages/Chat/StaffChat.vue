@@ -46,10 +46,10 @@
       <!-- Search -->
       <div class="px-3 pb-2">
         <v-text-field v-model="filter.search"
-          placeholder="Поиск…"
+          placeholder="Поиск по теме, участникам и тексту сообщений…"
           prepend-inner-icon="mdi-magnify"
           variant="outlined" density="compact" hide-details clearable
-          @input="debouncedLoad"
+          @update:model-value="debouncedLoad"
           @click:clear="filter.search = ''; loadChats()" />
       </div>
 
