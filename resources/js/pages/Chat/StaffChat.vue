@@ -2114,7 +2114,11 @@ function onPaste(e) {
   }
 }
 
-const { debounced: debouncedLoad } = useDebounce(loadChats, 400);
+// ВАЖНО: оборачиваем в стрелку без аргументов. Иначе значение из
+// @update:model-value (строка поиска) прилетало в loadChats(append) как
+// truthy → срабатывал режим дозагрузки (page не сбрасывался, результат
+// мёржился в уже показанный полный список) → поиск «мелькал и пропадал».
+const { debounced: debouncedLoad } = useDebounce(() => loadChats(), 400);
 
 async function loadChats(append = false) {
   if (!append) {
