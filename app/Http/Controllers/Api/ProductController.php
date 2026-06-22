@@ -523,6 +523,20 @@ class ProductController extends Controller
 
         $documentsAccepted = (bool) $consultant->acceptance;
 
+        // «Дедушкина оговорка»: ФК, зарегистрированные ДО даты-отсечки
+        // (по умолчанию 01.06.2026), не верифицировавшие реквизиты, не должны
+        // упираться в блокировку раздела «Продукты». Снимаем именно требование
+        // реквизитов (submitted/verified); акцепт оферты — отдельный гейт, его
+        // не трогаем. Для зарегистрированных после отсечки логика прежняя.
+        $cutoff = (string) \App\Models\SystemSetting::value('products.requisites_gate_cutoff', '2026-06-01');
+        $registeredBefore = $consultant->dateCreated
+            && \Illuminate\Support\Carbon::parse($consultant->dateCreated)
+                ->lt(\Illuminate\Support\Carbon::parse($cutoff));
+        if ($registeredBefore) {
+            $requisitesSubmitted = true;
+            $requisitesVerified = true;
+        }
+
         return [
             'hasAccess' => $isActive,
             'testsPassed' => $testsPassed,
