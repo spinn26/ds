@@ -425,7 +425,8 @@
                   <template v-for="mo in months" :key="`p${prod.productId}-${mo}`">
                     <td v-for="(m, mi) in activeMetrics" :key="m.key"
                       class="td-num" :class="{ 'td-sep': mi === activeMetrics.length - 1, 'td-fc': cellTitle(prod.monthly[mo], m.key) }"
-                      :title="cellTitle(prod.monthly[mo], m.key)">
+                      :title="cellTitle(prod.monthly[mo], m.key)"
+                      @click="openCellDetails(prod.monthly[mo], m.key, prod.productName, mo)">
                       <span :class="fmtClass(prod.monthly[mo]?.[m.key])">
                         {{ fmtCell(prod.monthly[mo]?.[m.key], m) }}
                       </span>
@@ -448,7 +449,8 @@
                     <template v-for="mo in months" :key="`pg${pg.programId}-${mo}`">
                       <td v-for="(m, mi) in activeMetrics" :key="m.key"
                         class="td-num td-dim" :class="{ 'td-sep': mi === activeMetrics.length - 1, 'td-fc': cellTitle(pg.monthly[mo], m.key) }"
-                        :title="cellTitle(pg.monthly[mo], m.key)">
+                        :title="cellTitle(pg.monthly[mo], m.key)"
+                        @click="openCellDetails(pg.monthly[mo], m.key, pg.programName, mo)">
                         <span :class="fmtClass(pg.monthly[mo]?.[m.key])">
                           {{ fmtCell(pg.monthly[mo]?.[m.key], m) }}
                         </span>
@@ -467,7 +469,8 @@
                 <template v-for="mo in months" :key="`g-${mo}`">
                   <td v-for="(m, mi) in activeMetrics" :key="m.key"
                     class="td-num" :class="{ 'td-sep': mi === activeMetrics.length - 1, 'td-fc': cellTitle(grandTotals.monthly[mo], m.key) }"
-                    :title="cellTitle(grandTotals.monthly[mo], m.key)">
+                    :title="cellTitle(grandTotals.monthly[mo], m.key)"
+                    @click="openCellDetails(grandTotals.monthly[mo], m.key, 'ИТОГО', mo)">
                     <strong>{{ fmtCell(grandTotals.monthly[mo]?.[m.key], m) }}</strong>
                   </td>
                 </template>
@@ -487,6 +490,49 @@
         </div>
       </v-card>
     </template>
+
+    <!-- Клик по ячейке → подробная разбивка-прогноз по месяцам (датам). -->
+    <v-dialog v-model="cellDetail.open" max-width="600">
+      <v-card>
+        <v-card-title class="d-flex align-center pb-1">
+          <div>
+            <div class="text-subtitle-1 font-weight-bold">{{ cellDetail.header }}</div>
+            <div class="text-caption text-medium-emphasis">{{ cellDetail.subtitle }}</div>
+          </div>
+          <v-spacer />
+          <v-btn icon="mdi-close" variant="text" size="small" @click="cellDetail.open = false" />
+        </v-card-title>
+        <v-card-text>
+          <v-table density="compact" class="detail-table">
+            <thead>
+              <tr>
+                <th>Месяц</th>
+                <th class="text-right">Кол-во</th>
+                <th class="text-right">Объём</th>
+                <th class="text-right">Выручка</th>
+                <th class="text-right">Баллы</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(f, i) in cellDetail.rows" :key="i">
+                <td>{{ f.month ? fmtMonthHdr(f.month) : 'Без прогноза' }}</td>
+                <td class="text-right">{{ fmt0(f.count) }}</td>
+                <td class="text-right">{{ fmtRub(f.volume) }}</td>
+                <td class="text-right">{{ fmtRub(f.revenue) }}</td>
+                <td class="text-right">{{ Number(f.points || 0).toLocaleString('ru-RU', { maximumFractionDigits: 2 }) }}</td>
+              </tr>
+              <tr v-if="cellDetail.rows.length" class="detail-total">
+                <td><strong>Итого</strong></td>
+                <td class="text-right"><strong>{{ fmt0(detailTotals.count) }}</strong></td>
+                <td class="text-right"><strong>{{ fmtRub(detailTotals.volume) }}</strong></td>
+                <td class="text-right"><strong>{{ fmtRub(detailTotals.revenue) }}</strong></td>
+                <td class="text-right"><strong>{{ Number(detailTotals.points || 0).toLocaleString('ru-RU', { maximumFractionDigits: 2 }) }}</strong></td>
+              </tr>
+            </tbody>
+          </v-table>
+        </v-card-text>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
@@ -868,6 +914,37 @@ function cellTitle(cell, metricKey) {
   return header + '\n' + lines.join('\n');
 }
 
+// Выбор нужной разбивки для ячейки/метрики (та же логика, что в cellTitle).
+function pickBreakdown(cell, metricKey) {
+  if (reportMode.value === 'fact') return null;
+  const useAccrual = reportMode.value === 'inwork' && (metricKey === 'revenue' || metricKey === 'points');
+  return useAccrual ? cell?.forecastAccrual : cell?.forecast;
+}
+
+// Клик по ячейке → попап с подробной разбивкой по месяцам (датам).
+const cellDetail = ref({ open: false, header: '', subtitle: '', rows: [] });
+const detailTotals = computed(() => (cellDetail.value.rows || []).reduce((a, f) => ({
+  count: a.count + (f.count || 0),
+  volume: a.volume + (f.volume || 0),
+  revenue: a.revenue + (f.revenue || 0),
+  points: a.points + (f.points || 0),
+}), { count: 0, volume: 0, revenue: 0, points: 0 }));
+
+function openCellDetails(cell, metricKey, label, month) {
+  const fc = pickBreakdown(cell, metricKey);
+  if (!fc || !fc.length) return;
+  const inwork = reportMode.value === 'inwork';
+  const isMoney = metricKey === 'revenue' || metricKey === 'points';
+  const subtitle = (inwork && !isMoney) ? 'Разбивка по месяцу прогноза активации'
+    : 'Разбивка по месяцу прогноза начислений';
+  cellDetail.value = {
+    open: true,
+    header: `${label} · ${fmtMonthHdr(month)}`,
+    subtitle,
+    rows: fc.slice(),
+  };
+}
+
 onMounted(loadData);
 </script>
 
@@ -1093,6 +1170,10 @@ onMounted(loadData);
   font-size: 14px;
 }
 /* Ячейка с разбивкой по прогнозу активации — подсказка о наведении. */
-.td-fc { cursor: help; }
+.td-fc { cursor: pointer; }
+.td-fc:hover { background: rgba(var(--v-theme-primary), 0.06); }
+.detail-table th { font-weight: 600; font-size: 12px; }
+.detail-table td, .detail-table th { font-variant-numeric: tabular-nums; }
+.detail-total td { border-top: 1px solid rgba(var(--v-theme-on-surface), 0.15); }
 .td-fc span { border-bottom: 1px dotted rgba(var(--v-theme-primary), 0.5); }
 </style>
