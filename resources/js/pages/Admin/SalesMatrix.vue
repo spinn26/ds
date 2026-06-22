@@ -262,7 +262,7 @@
 
     <!-- "Прогноз" (активированные контракты, /period) и "Факт" (транзакции, /fact)
          используют одну таблицу: период + метрики, различается только endpoint -->
-    <template v-if="reportType === 'sales' && (reportMode === 'forecast' || reportMode === 'fact' || reportMode === 'inwork')">
+    <template v-if="reportType === 'sales' && (reportMode === 'forecast' || reportMode === 'fact' || reportMode === 'inwork' || reportMode === 'total')">
       <!-- Filter bar -->
       <v-card class="ds-card mb-3" elevation="0">
         <v-card-text class="pa-2">
