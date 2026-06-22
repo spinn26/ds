@@ -1031,10 +1031,17 @@ class AdminDataController extends Controller
             ? DB::table('directory_of_activities')->whereIn('id', $activityIds)->pluck('name', 'id')
             : collect();
 
-        // Email партнёра: идентичность = WebUser (consultant.webUser → WebUser.email).
+        // Email партнёра: основной источник — WebUser (consultant.webUser →
+        // WebUser.email). У legacy/терминированных webUser часто пуст —
+        // фолбэк на Directual-контакт (consultant.person → person.email).
+        // Покрытие с фолбэком ~97% против ~53% только по WebUser.
         $webUserIds = $detailRows->pluck('webUser')->filter()->unique();
         $emailByWebUser = $webUserIds->isNotEmpty()
             ? DB::table('WebUser')->whereIn('id', $webUserIds)->pluck('email', 'id')
+            : collect();
+        $personIds = $detailRows->pluck('person')->filter()->unique();
+        $emailByPerson = $personIds->isNotEmpty()
+            ? DB::table('person')->whereIn('id', $personIds)->pluck('email', 'id')
             : collect();
 
         // Per spec ✅Статусы партнеров §2 col.7: «Сумма ЛП от даты активации
@@ -1067,7 +1074,7 @@ class AdminDataController extends Controller
             }
         }
 
-        $details = $detailRows->map(function ($c) use ($activityNames, $lpFromActivation, $emailByWebUser) {
+        $details = $detailRows->map(function ($c) use ($activityNames, $lpFromActivation, $emailByWebUser, $emailByPerson) {
                 $activityName = $c->activity ? ($activityNames[$c->activity] ?? '—') : '—';
 
                 // Рассчитать "будет терминирован" для активных
@@ -1079,7 +1086,8 @@ class AdminDataController extends Controller
                 return [
                     'id' => $c->id,
                     'personName' => $c->personName,
-                    'email' => $c->webUser ? ($emailByWebUser[$c->webUser] ?? null) : null,
+                    'email' => ($c->webUser ? ($emailByWebUser[$c->webUser] ?? null) : null)
+                        ?: ($c->person ? ($emailByPerson[$c->person] ?? null) : null) ?: null,
                     'activityId' => $c->activity,
                     'activityName' => $activityName,
                     'dateCreated' => $c->dateCreated,
