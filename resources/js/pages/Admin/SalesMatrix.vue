@@ -268,8 +268,8 @@
         <v-card-text class="pa-2">
           <div class="d-flex ga-1 flex-wrap align-center">
 
-            <!-- Period mode selector -->
-            <v-btn-toggle v-model="periodMode" mandatory density="compact" variant="outlined" color="primary"
+            <!-- Period mode selector (в «Итого» скрыт — только выбор месяца+года) -->
+            <v-btn-toggle v-if="reportMode !== 'total'" v-model="periodMode" mandatory density="compact" variant="outlined" color="primary"
               @update:model-value="onPeriodModeChange">
               <v-btn value="year"    size="x-small">Год</v-btn>
               <v-btn value="quarter" size="x-small">Квартал</v-btn>
@@ -388,7 +388,7 @@
               <!-- Row 1: month groups -->
               <tr>
                 <th class="th-name" rowspan="2">Продукт / Программа</th>
-                <th v-for="mo in months" :key="mo"
+                <th v-for="mo in displayMonths" :key="mo"
                   :colspan="activeMetrics.length" class="th-mgroup">
                   {{ fmtMonthHdr(mo) }}
                 </th>
@@ -398,7 +398,7 @@
               </tr>
               <!-- Row 2: metric sub-labels -->
               <tr>
-                <template v-for="mo in months" :key="`sh-${mo}`">
+                <template v-for="mo in displayMonths" :key="`sh-${mo}`">
                   <th v-for="(m, mi) in activeMetrics" :key="m.key"
                     class="th-sub" :class="{ 'th-sub-last': mi === activeMetrics.length - 1 }">
                     {{ m.short }}
@@ -422,7 +422,7 @@
                       <span class="prog-pill">{{ prod.programs.length }}</span>
                     </div>
                   </td>
-                  <template v-for="mo in months" :key="`p${prod.productId}-${mo}`">
+                  <template v-for="mo in displayMonths" :key="`p${prod.productId}-${mo}`">
                     <td v-for="(m, mi) in activeMetrics" :key="m.key"
                       class="td-num" :class="{ 'td-sep': mi === activeMetrics.length - 1, 'td-fc': cellTitle(prod.monthly[mo], m.key) }"
                       :title="cellTitle(prod.monthly[mo], m.key)"
@@ -446,7 +446,7 @@
                         <span class="label-prog">{{ pg.programName }}</span>
                       </div>
                     </td>
-                    <template v-for="mo in months" :key="`pg${pg.programId}-${mo}`">
+                    <template v-for="mo in displayMonths" :key="`pg${pg.programId}-${mo}`">
                       <td v-for="(m, mi) in activeMetrics" :key="m.key"
                         class="td-num td-dim" :class="{ 'td-sep': mi === activeMetrics.length - 1, 'td-fc': cellTitle(pg.monthly[mo], m.key) }"
                         :title="cellTitle(pg.monthly[mo], m.key)"
@@ -466,7 +466,7 @@
               <!-- Grand totals -->
               <tr v-if="grandTotals && rows.length" class="tr-grand">
                 <td class="td-name"><strong>ИТОГО</strong></td>
-                <template v-for="mo in months" :key="`g-${mo}`">
+                <template v-for="mo in displayMonths" :key="`g-${mo}`">
                   <td v-for="(m, mi) in activeMetrics" :key="m.key"
                     class="td-num" :class="{ 'td-sep': mi === activeMetrics.length - 1, 'td-fc': cellTitle(grandTotals.monthly[mo], m.key) }"
                     :title="cellTitle(grandTotals.monthly[mo], m.key)"
@@ -480,7 +480,7 @@
               </tr>
 
               <tr v-if="!rows.length && !loading">
-                <td :colspan="1 + months.length * activeMetrics.length + activeMetrics.length" class="td-empty">
+                <td :colspan="1 + displayMonths.length * activeMetrics.length + activeMetrics.length" class="td-empty">
                   <v-icon class="mb-2 d-block mx-auto" size="36" color="grey-lighten-1">mdi-table-off</v-icon>
                   Нет данных за {{ periodLabel }}
                 </td>
@@ -648,6 +648,8 @@ const loading          = ref(false);
 const rows             = ref([]);
 const grandTotals      = ref(null);
 const months           = ref([]);
+// «Итого» — без помесячной разбивки: показываем только итоговые колонки метрик.
+const displayMonths     = computed(() => reportMode.value === 'total' ? [] : months.value);
 const supplierOptions  = ref([]);
 const filterSuppliers  = ref(
   _loadSaved(SUPPLIERS_KEY, v => Array.isArray(v) && v.every(s => typeof s === 'string')) ?? []
@@ -682,8 +684,10 @@ function reload() { loadData(); }
 function onPeriodModeChange() { reload(); }
 
 watch([reportMode, reportType], () => {
-  // Заглушки (Начисление выручки / Итого) данные не грузят — логика будет
-  // описана отдельно, пока показываем пустой плейсхолдер.
+  // «Итого» — без разбивки по месяцам, период = один месяц (выбор месяца+года).
+  if (reportMode.value === 'total' && periodMode.value !== 'month') {
+    periodMode.value = 'month';
+  }
   if (isStub.value) return;
   // inwork (по дате создания) / forecast (активированные) / fact (транзакции) —
   // все через loadData, различается endpoint.
