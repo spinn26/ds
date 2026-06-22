@@ -112,21 +112,29 @@ class InsmartIntegrationService
                 'changedAt' => now(),
             ]);
 
-            // 5) Транзакция на сумму агентской комиссии
+            // 5) Транзакция на сумму СТРАХОВОЙ ПРЕМИИ (взноса), а не комиссии.
+            // Раньше amount = agentCommission (комиссия), из-за чего в отчёте
+            // «сумма транзакции» показывала нашу КВ, а не взнос (правка по
+            // фидбеку Лены 22.06.2026). Комиссию ДС сохраняем через %ДС:
+            // dsCommissionPercentage = agentCommission / premium × 100, тогда
+            // калькулятор посчитает доход ДС = premium × %ДС/100 = agentCommission.
+            $premium = (float) ($payload['policyAmount'] ?? $payload['price'] ?? 0);
             $commission = (float) ($payload['agentCommission'] ?? 0);
+            $dsPercent = $premium > 0 ? round($commission / $premium * 100, 4) : 0;
             $txId = LegacyId::next('transaction');
             DB::table('transaction')->insert([
                 'id' => $txId,
                 'contract' => $contractId,
-                'amount' => $commission,
-                'amountRUB' => $commission,    // комиссия Insmart всегда в RUB
+                'amount' => $premium,
+                'amountRUB' => $premium,       // страховая премия Insmart всегда в RUB
+                'dsCommissionPercentage' => $dsPercent,
                 'currency' => $this->resolveCurrencyId($payload['currency'] ?? 'RUB'),
                 'currencyRate' => 1,
                 'date' => now(),
                 // dateMonth: 'YYYY-MM' (как остальные транзакции и фильтры).
                 'dateMonth' => now()->format('Y-m'),
                 'dateYear' => now()->format('Y'),
-                'comment' => 'Insmart agent commission',
+                'comment' => 'Insmart: страховая премия (КВ '.number_format($commission, 2, ',', ' ').' ₽)',
                 'dateCreated' => now(),
                 'changedAt' => now(),
             ]);
