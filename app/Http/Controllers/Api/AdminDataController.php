@@ -465,6 +465,14 @@ class AdminDataController extends Controller
             }
 
             $consultant->save();
+
+            // Каскад смены ФИО в видимые денорм-копии имени консультанта, чтобы
+            // оно поменялось ВЕЗДЕ: пригласитель у приглашённых, консультант в
+            // контрактах и клиентах. Внутренние calc-денормы (баланс/qualLog)
+            // не трогаем — их переписывают раннеры, часть заморожена cutoff'ом.
+            if ($consultant->wasChanged('personName')) {
+                $this->propagateConsultantName($consultant->id, $consultant->personName);
+            }
         });
 
         // В audit_log пишем только если действительно что-то поменялось,
@@ -476,6 +484,25 @@ class AdminDataController extends Controller
         }
 
         return response()->json(['message' => 'Обновлён', 'id' => $consultant->id]);
+    }
+
+    /**
+     * Распространить новое ФИО консультанта по всем видимым денорм-копиям,
+     * чтобы имя поменялось ВЕЗДЕ за один заход:
+     *   - inviterName у всех, кого этот консультант пригласил;
+     *   - consultantName во всех его контрактах;
+     *   - consultantName во всех его клиентских карточках.
+     * Логи изменений (changeConsultant*Log) и calc-денормы (баланс/qualLog)
+     * намеренно не трогаем — первые историчны, вторые переписывают раннеры.
+     */
+    private function propagateConsultantName(int $consultantId, ?string $newName): void
+    {
+        DB::table('consultant')->where('inviter', $consultantId)
+            ->update(['inviterName' => $newName]);
+        DB::table('contract')->where('consultant', $consultantId)
+            ->update(['consultantName' => $newName]);
+        DB::table('client')->where('consultant', $consultantId)
+            ->update(['consultantName' => $newName]);
     }
 
     /**
