@@ -87,6 +87,15 @@ class InsmartIntegrationService
                 ? DB::table('program')->where('id', $programId)->value('name')
                 : null;
 
+            // Дата оплаты из payload (paidAt → createdAt → now). Контракт и
+            // транзакцию датируем ЕЮ, а не временем приёма постбека — иначе всё
+            // падает в дату вебхука и не видно в отчётах за период оплаты
+            // (фидбек InSmart 23.06.2026). Приводим к таймзоне приложения.
+            $paidRaw = $payload['paidAt'] ?? $payload['createdAt'] ?? null;
+            $paidAt = $paidRaw
+                ? \Illuminate\Support\Carbon::parse($paidRaw)->setTimezone(config('app.timezone', 'Europe/Moscow'))
+                : now();
+
             // 4) Контракт «Активирован»
             $contractNumber = strtoupper(substr($externalId ?? uniqid('', true), 0, 8));
             $contractId = LegacyId::next('contract');
@@ -105,8 +114,9 @@ class InsmartIntegrationService
                 'programName' => $programName,
                 'currency' => $this->resolveCurrencyId($payload['currency'] ?? 'RUB'),
                 'ammount' => $payload['policyAmount'] ?? $payload['price'] ?? 0,
-                'createDate' => now(),
-                'openDate' => now(),
+                'createDate' => $paidAt,
+                'openDate' => $paidAt,
+                'activated_at' => $paidAt->toDateString(),
                 'comment' => 'Заказ из Insmart',
                 'createdAt' => now(),
                 'changedAt' => now(),
@@ -140,10 +150,10 @@ class InsmartIntegrationService
                 'dsCommissionPercentage' => $dsPercent,
                 'currency' => $this->resolveCurrencyId($payload['currency'] ?? 'RUB'),
                 'currencyRate' => 1,
-                'date' => now(),
+                'date' => $paidAt,
                 // dateMonth: 'YYYY-MM' (как остальные транзакции и фильтры).
-                'dateMonth' => now()->format('Y-m'),
-                'dateYear' => now()->format('Y'),
+                'dateMonth' => $paidAt->format('Y-m'),
+                'dateYear' => $paidAt->format('Y'),
                 'comment' => 'Insmart: страховая премия (КВ '.number_format($commission, 2, ',', ' ').' ₽)',
                 'dateCreated' => now(),
                 'changedAt' => now(),
