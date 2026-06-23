@@ -675,7 +675,7 @@ class TransactionImportController extends Controller
             'dsCommissionPercentage' => 'nullable|numeric|min:0|max:100',
         ]);
 
-        $update = ['dateChanged' => now()];
+        $update = ['changedAt' => now()];
         if (array_key_exists('amount', $data)) $update['amount'] = $data['amount'];
         if (array_key_exists('comment', $data)) $update['comment'] = $data['comment'];
         if (array_key_exists('date', $data)) {
