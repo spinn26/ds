@@ -413,6 +413,11 @@ class AdminDataController extends Controller
             }
             if (array_key_exists('inviter', $data)) {
                 $consultant->inviter = $data['inviter'] ?: null;
+                // Денорм-имя пригласителя держим в синхроне с FK — иначе
+                // мини-профиль/списки показывают старого пригласителя.
+                $consultant->inviterName = $data['inviter']
+                    ? DB::table('consultant')->where('id', $data['inviter'])->value('personName')
+                    : null;
             }
 
             // --- WebUser columns ---
@@ -528,6 +533,8 @@ class AdminDataController extends Controller
                             throw new \InvalidArgumentException('Нельзя назначить самого себя');
                         }
                         $c->inviter = $data['inviter'];
+                        $c->inviterName = DB::table('consultant')
+                            ->where('id', $data['inviter'])->value('personName');
                         $c->save();
                         $ok++;
                         break;
