@@ -539,6 +539,15 @@ class ProductController extends Controller
             $requisitesVerified = true;
         }
 
+        // Доступ к разделу «Продукты» открываем уже по факту ОТПРАВКИ реквизитов —
+        // ждать ручную верификацию финменеджера не требуется (решение владельца
+        // 2026-06-23). Сама верификация продолжает идти в админке отдельно и
+        // нужна для выплат; но pending-плашка больше не запирает витрину.
+        // Акцепт Оферты (documentsAccepted) — отдельный гейт, его не трогаем.
+        if ($requisitesSubmitted) {
+            $requisitesVerified = true;
+        }
+
         return [
             'hasAccess' => $isActive,
             'testsPassed' => $testsPassed,

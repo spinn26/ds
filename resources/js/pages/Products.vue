@@ -417,16 +417,12 @@ async function saveRequisites() {
       fioMatched: innMatch.value === true,
     });
     access.value.requisitesSubmitted = true;
-    access.value.requisitesVerified = data?.verified === true;
+    // Доступ открываем сразу по факту отправки — ручную верификацию
+    // финменеджера ждать не нужно (решение владельца 2026-06-23). Дальше —
+    // только акцепт Оферты (глобальная OfferAcceptanceDialog в MainLayout).
+    access.value.requisitesVerified = true;
     reqDialog.value = false;
     if (data?.message) showSuccess(data.message);
-    // Auto-verify отключён (2026-05-27) — после сохранения всегда
-    // ведём в pending-плашку. Когда финменеджер верифицирует реквизиты,
-    // глобальная OfferAcceptanceDialog (MainLayout) попросит подписать
-    // Оферту.
-    if (!access.value.requisitesVerified) {
-      pendingDialog.value = true;
-    }
   } catch (e) {
     showError(e.response?.data?.message || 'Не удалось сохранить реквизиты');
   }
