@@ -16,22 +16,37 @@
       <v-btn-toggle v-model="reportMode" density="compact" variant="outlined" mandatory color="primary">
         <v-btn value="inwork" size="small" prepend-icon="mdi-progress-clock">
           В работе
-          <v-tooltip activator="parent" location="bottom" text="Контракты в работе (прогноз активации)" />
+          <v-tooltip activator="parent" location="bottom" open-delay="100" max-width="360">
+            <span>{{ MODE_HINTS.inwork }}</span>
+          </v-tooltip>
         </v-btn>
         <v-btn value="forecast" size="small" prepend-icon="mdi-chart-timeline-variant">
           Активировано
-          <v-tooltip activator="parent" location="bottom" text="Активированные контракты" />
+          <v-tooltip activator="parent" location="bottom" open-delay="100" max-width="360">
+            <span>{{ MODE_HINTS.forecast }}</span>
+          </v-tooltip>
         </v-btn>
         <v-btn value="fact" size="small" prepend-icon="mdi-check-circle-outline">
           Факт
-          <v-tooltip activator="parent" location="bottom" text="Финансовый факт: Транзакции и пополнения" />
+          <v-tooltip activator="parent" location="bottom" open-delay="100" max-width="360">
+            <span>{{ MODE_HINTS.fact }}</span>
+          </v-tooltip>
         </v-btn>
         <v-btn value="total" size="small" prepend-icon="mdi-sigma">
           Итого
-          <v-tooltip activator="parent" location="bottom" text="Итого = Факт + Активировано + В работе (разверни продукт)" />
+          <v-tooltip activator="parent" location="bottom" open-delay="100" max-width="360">
+            <span>{{ MODE_HINTS.total }}</span>
+          </v-tooltip>
         </v-btn>
       </v-btn-toggle>
     </div>
+
+    <!-- Всегда видимая подсказка по выбранному разрезу (тултипы на кнопках
+         видны только при наведении — эта строка дублирует их постоянно). -->
+    <v-alert v-if="!isStub" type="info" variant="tonal" density="compact"
+      icon="mdi-information-outline" class="mb-3 mode-hint">
+      <span class="font-weight-medium">{{ modeLabel }}.</span> {{ modeHint }}
+    </v-alert>
 
     <!-- Заглушка для неопределённых разрезов: Начисление выручки (весь отчёт)
          и Итого (в любом отчёте). По указанию Лены — «оставить пустыми», пока
@@ -583,6 +598,18 @@ const reportMode = ref('forecast');
 // total=итого (итого/начисление-выручка пока заглушки — «оставить пустыми»).
 const reportType = ref('sales');
 const isStub = computed(() => reportType.value === 'revenue');
+
+// Всегда видимое пояснение к выбранному разрезу (дублирует тултипы на
+// кнопках — тултип виден только при наведении, эта строка — постоянно).
+const MODE_HINTS = {
+  inwork: 'По дате создания контракта: контракты, созданные в периоде и ещё не активированные (без статуса «Активирован»). Напр. в мае — все контракты с датой создания в мае без активации.',
+  forecast: 'По дате активации контракта: контракты в статусе «Активирован», по которым ещё нет транзакции (факта). Напр. контракт активирован в мае без транзакции — он здесь, в мае.',
+  fact: 'По дате создания транзакции: все транзакции по контрактам в периоде — даже если контракт создан/активирован раньше. Как только по контракту прошла транзакция, он уходит из «Активировано» в «Факт».',
+  total: 'Сумма всех трёх разрезов; в каждом периоде каждая цифра по своей дате: «В работе» — дата создания контракта, «Активировано» — дата активации, «Факт» — дата транзакции. Разверните продукт для разбивки.',
+};
+const modeHint = computed(() => MODE_HINTS[reportMode.value] || '');
+const MODE_LABELS = { inwork: 'В работе', forecast: 'Активировано', fact: 'Факт', total: 'Итого' };
+const modeLabel = computed(() => MODE_LABELS[reportMode.value] || '');
 
 // ─── Period ───────────────────────────────────────────────────
 const now = new Date();
