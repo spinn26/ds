@@ -1005,6 +1005,8 @@ onMounted(loadData);
   position: sticky;
   top: 0;
   z-index: 2;
+  /* Непрозрачная подложка — иначе при скролле строки просвечивают сквозь шапку */
+  background: rgb(var(--v-theme-surface));
 }
 
 /* Name column header (spans 2 rows) */
@@ -1021,7 +1023,7 @@ onMounted(loadData);
   text-transform: uppercase;
   letter-spacing: 0.07em;
   color: rgba(var(--v-theme-on-surface), 0.45);
-  background: rgba(var(--v-theme-surface-variant), 0.9);
+  background: rgb(var(--v-theme-surface-variant));
   border-right: 1px solid rgba(var(--v-theme-on-surface), 0.1);
   border-bottom: 2px solid rgba(var(--v-theme-on-surface), 0.12) !important;
   vertical-align: middle;
@@ -1034,14 +1036,14 @@ onMounted(loadData);
   font-size: 11px;
   font-weight: 600;
   color: rgba(var(--v-theme-on-surface), 0.75);
-  background: rgba(var(--v-theme-surface-variant), 0.9);
+  background: rgb(var(--v-theme-surface-variant));
   border-right: 1px solid rgba(var(--v-theme-on-surface), 0.08);
   border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.06) !important;
 }
 
 /* Total column group header */
 .th-total-hd {
-  background: rgba(var(--v-theme-primary), 0.07) !important;
+  background: linear-gradient(rgba(var(--v-theme-primary), 0.07), rgba(var(--v-theme-primary), 0.07)), rgb(var(--v-theme-surface-variant)) !important;
   color: rgb(var(--v-theme-primary)) !important;
   border-left: 2px solid rgba(var(--v-theme-primary), 0.2);
 }
@@ -1055,13 +1057,13 @@ onMounted(loadData);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: rgba(var(--v-theme-on-surface), 0.45);
-  background: rgba(var(--v-theme-surface-variant), 0.9);
+  background: rgb(var(--v-theme-surface-variant));
   min-width: 72px;
   border-bottom: 2px solid rgba(var(--v-theme-on-surface), 0.12) !important;
 }
 .th-sub-last { border-right: 1px solid rgba(var(--v-theme-on-surface), 0.08); }
 .th-sub-total {
-  background: rgba(var(--v-theme-primary), 0.06) !important;
+  background: linear-gradient(rgba(var(--v-theme-primary), 0.06), rgba(var(--v-theme-primary), 0.06)), rgb(var(--v-theme-surface-variant)) !important;
   color: rgb(var(--v-theme-primary)) !important;
   border-left: 2px solid rgba(var(--v-theme-primary), 0.18);
 }
