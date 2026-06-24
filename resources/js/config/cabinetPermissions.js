@@ -44,6 +44,8 @@ export const cabinetPermissions = {
   // Спека ✅Кабинет-сотрудника-БЭК-офиса.md
   backoffice: {
     workspace:                  VIEW,   // личный staff-дашборд
+    tasks:                      FULL,   // общая доска задач/проектов (staff)
+    'org-structure':            FULL,   // оргструктура компании (staff)
     calculator:                 FULL,   // полный режим расчётов
     structure:                  VIEW,
     contracts:                  EDIT,   // спека: ручное добавление + редактирование, без удаления
@@ -70,6 +72,8 @@ export const cabinetPermissions = {
   // Спека ✅Кабинет-Техподдержки.md
   support: {
     workspace:                  VIEW,   // личный staff-дашборд
+    tasks:                      FULL,   // общая доска задач/проектов (staff)
+    'org-structure':            FULL,   // оргструктура компании (staff)
     partners:                   VIEW,   // Read-Only
     structure:                  VIEW,
     statuses:                   VIEW,
@@ -89,6 +93,8 @@ export const cabinetPermissions = {
   // 2026-05-14: убрать возможность менять и вносить данные у этой роли).
   head: {
     workspace:                  VIEW,   // личный staff-дашборд
+    tasks:                      FULL,   // общая доска задач/проектов (staff)
+    'org-structure':            FULL,   // оргструктура компании (staff)
     calculator:                 VIEW,
     structure:                  VIEW,
     contests:                   VIEW,
@@ -118,6 +124,8 @@ export const cabinetPermissions = {
   // Спека ✅Кабинет-фин.менеджера-по-выплатам.md
   finance: {
     workspace:                  VIEW,   // личный staff-дашборд
+    tasks:                      FULL,   // общая доска задач/проектов (staff)
+    'org-structure':            FULL,   // оргструктура компании (staff)
     calculator:                 FULL,   // спека §1: полный доступ к пользовательскому функционалу расчёта
     payments:                   FULL,   // Реестр выплат — основной раздел
     charges:                    FULL,   // Прочие начисления
@@ -128,6 +136,8 @@ export const cabinetPermissions = {
   // Спека ✅Кабинет-Руководителя-по-расчетам-(Богданова-Е.).md
   calculations: {
     workspace:                  VIEW,   // личный staff-дашборд
+    tasks:                      FULL,   // общая доска задач/проектов (staff)
+    'org-structure':            FULL,   // оргструктура компании (staff)
     calculator:                 FULL,
     structure:                  VIEW,
     import:                     FULL,   // Импорт транзакций
@@ -161,6 +171,8 @@ export const cabinetPermissions = {
   // там полный CRUD; на бизнес-разделы — VIEW для контекста.
   corrections: {
     workspace:                  VIEW,   // личный staff-дашборд
+    tasks:                      FULL,   // общая доска задач/проектов (staff)
+    'org-structure':            FULL,   // оргструктура компании (staff)
     calculator:                 VIEW,
     clients:                    VIEW,
     contracts:                  VIEW,
@@ -172,6 +184,8 @@ export const cabinetPermissions = {
   // Спека ✅Сотрудник-отдела-обучения.md
   education: {
     workspace:                  VIEW,   // личный staff-дашборд
+    tasks:                      FULL,   // общая доска задач/проектов (staff)
+    'org-structure':            FULL,   // оргструктура компании (staff)
     education:                  FULL,   // конструктор LMS
     homework:                   FULL,   // проверка домашних заданий
     'education-categories':     FULL,   // категории курсов

@@ -45,6 +45,8 @@ return [
         ['key' => 'homework',                'label' => 'Проверка домашек'],
         ['key' => 'kb',                      'label' => 'База знаний'],
         ['key' => 'workspace',               'label' => 'Рабочий стол staff'],
+        ['key' => 'tasks',                   'label' => 'Задачи и проекты'],
+        ['key' => 'org-structure',           'label' => 'Структура компании'],
         ['key' => 'partner-questionnaires',  'label' => 'Анкеты партнёров'],
         ['key' => 'communication',           'label' => 'Чат / Тикеты'],
         ['key' => 'support-desk',            'label' => 'Тех. поддержка (desk)'],

@@ -944,7 +944,7 @@ const menuItems = [
   // Shown to everyone (partner and staff) — leads to Workspace
   { label: 'Главная', icon: 'mdi-home-outline', path: '/' },
   // Задачи и проекты — только для сотрудников (admin/staff), не для партнёров.
-  { label: 'Задачи', icon: 'mdi-checkbox-marked-outline', path: '/tasks', staffOnly: true },
+  { label: 'Задачи', icon: 'mdi-checkbox-marked-outline', path: '/tasks', adminSection: 'tasks' },
 
   { group: 'Обзор', partner: true },
   { label: 'Дашборд', icon: 'mdi-view-dashboard-outline', path: '/dashboard', partner: true },
@@ -999,8 +999,8 @@ const menuItems = [
   // пункта путало админов. Сам роут оставлен на случай старых букмарков.
 
   // Компания (оргструктура) — всем staff
-  { group: 'Компания', staffOnly: true },
-  { label: 'Структура компании', icon: 'mdi-sitemap-outline', path: '/manage/org-structure', staffOnly: true },
+  { group: 'Компания', adminSection: 'org-structure' },
+  { label: 'Структура компании', icon: 'mdi-sitemap-outline', path: '/manage/org-structure', adminSection: 'org-structure' },
 
   // Данные
   { group: 'Данные', adminSection: 'partners' },

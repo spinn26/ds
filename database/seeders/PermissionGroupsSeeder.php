@@ -180,6 +180,17 @@ class PermissionGroupsSeeder extends Seeder
             ],
         ];
 
+        // Задачи и Оргструктура — staff-wide модули (раньше staffOnly в меню,
+        // теперь управляются через матрицу прав). Выдаём всем не-admin staff-
+        // группам, чтобы сохранить прежнее «видно всем staff». admin использует
+        // строковый sentinel — его union не трогает (получает full через config).
+        foreach ($groups as &$g) {
+            if (is_array($g['permissions'])) {
+                $g['permissions'] += ['tasks' => 'full', 'org-structure' => 'full'];
+            }
+        }
+        unset($g);
+
         foreach ($groups as $g) {
             $permissionsJson = $g['permissions'] === '__ALL_FULL__'
                 ? '{}'
