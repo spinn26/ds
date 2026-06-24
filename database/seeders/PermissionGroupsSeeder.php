@@ -49,6 +49,7 @@ class PermissionGroupsSeeder extends Seeder
                     'pool' => 'view',
                     'partner-questionnaires' => 'view',
                     'requisites' => 'view',
+                    'bank-changes' => 'view',
                     'instructions' => 'view',
                 ],
             ],
@@ -94,6 +95,8 @@ class PermissionGroupsSeeder extends Seeder
                     'pool' => 'view',
                     'partner-questionnaires' => 'view',
                     'owner-dashboard' => 'full',
+                    'sales-matrix' => 'full',
+                    'management-currencies' => 'full',
                     'reconciliation' => 'full',
                     'anomalies' => 'full',
                     'funnel' => 'full',
@@ -112,6 +115,7 @@ class PermissionGroupsSeeder extends Seeder
                     'charges' => 'full',
                     'reports' => 'edit',            // спека: формирование + выгрузка, без публикации
                     'requisites' => 'view',
+                    'bank-changes' => 'view',
                     'pool' => 'view',
                     'communication' => 'edit',
                 ],
@@ -134,6 +138,7 @@ class PermissionGroupsSeeder extends Seeder
                     'reports-access' => 'full',     // публикация, закрытие периода, принудительный пересчёт
                     'partners' => 'edit',
                     'requisites' => 'edit',
+                    'bank-changes' => 'edit',
                     'statuses' => 'full',
                     'acceptance' => 'view',
                     'transfers' => 'view',
@@ -164,6 +169,7 @@ class PermissionGroupsSeeder extends Seeder
                 'is_system' => true,
                 'permissions' => [
                     'education' => 'full',
+                    'homework' => 'full',
                     'education-analytics' => 'full',
                     'partner-questionnaires' => 'full',
                     'partners' => 'view',

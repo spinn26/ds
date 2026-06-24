@@ -1011,7 +1011,7 @@ const menuItems = [
   { label: 'Загрузка контрактов', icon: 'mdi-upload', path: '/manage/contracts/upload', adminSection: 'upload' },
   { label: 'Акцепт документов', icon: 'mdi-check-circle', path: '/manage/acceptance', adminSection: 'acceptance' },
   { label: 'Реквизиты', icon: 'mdi-credit-card', path: '/manage/requisites', adminSection: 'requisites' },
-  { label: 'Смена реквизитов', icon: 'mdi-bank-transfer', path: '/manage/bank-changes', adminSection: 'requisites' },
+  { label: 'Смена реквизитов', icon: 'mdi-bank-transfer', path: '/manage/bank-changes', adminSection: 'bank-changes' },
   { label: 'Перестановки', icon: 'mdi-history', path: '/manage/transfers', adminSection: 'transfers' },
 
   // Финансы
@@ -1035,7 +1035,7 @@ const menuItems = [
   { group: 'Обучение', adminSection: 'education' },
   { label: 'Конструктор курсов', icon: 'mdi-school', path: '/manage/education', adminSection: 'education' },
   { label: 'База знаний', icon: 'mdi-book-open-variant', path: '/manage/kb', adminSection: 'kb' },
-  { label: 'Проверка домашек', icon: 'mdi-clipboard-edit-outline', path: '/manage/homework', adminSection: 'education' },
+  { label: 'Проверка домашек', icon: 'mdi-clipboard-edit-outline', path: '/manage/homework', adminSection: 'homework' },
   { label: 'Категории курсов', icon: 'mdi-folder-multiple', path: '/manage/education/categories', adminSection: 'education-categories' },
   { label: 'Статистика обучения', icon: 'mdi-chart-line', path: '/manage/education/analytics', adminSection: 'education-analytics' },
   { label: 'Анкеты партнёров', icon: 'mdi-clipboard-account', path: '/manage/partner-questionnaires', adminSection: 'partner-questionnaires' },
@@ -1068,8 +1068,8 @@ const menuItems = [
   // Аналитика — для руководителя / админа
   { group: 'Аналитика', adminSection: 'owner-dashboard' },
   { label: 'Дашборд руководителя', icon: 'mdi-crown', path: '/manage/owner-dashboard', adminSection: 'owner-dashboard' },
-  { label: 'Матрица продаж', icon: 'mdi-table-large', path: '/manage/reports/sales-matrix', adminSection: 'owner-dashboard' },
-  { label: 'Курсы для отчётов', icon: 'mdi-currency-rub', path: '/manage/management-currencies', adminSection: 'owner-dashboard' },
+  { label: 'Матрица продаж', icon: 'mdi-table-large', path: '/manage/reports/sales-matrix', adminSection: 'sales-matrix' },
+  { label: 'Курсы для отчётов', icon: 'mdi-currency-rub', path: '/manage/management-currencies', adminSection: 'management-currencies' },
   { label: 'Сверка балансов', icon: 'mdi-scale-balance', path: '/manage/reconciliation', adminSection: 'reconciliation' },
   { label: 'Аномалии', icon: 'mdi-alert-decagram', path: '/manage/anomalies', adminSection: 'anomalies' },
   { label: 'Когорты', icon: 'mdi-chart-line', path: '/manage/cohorts', adminSection: 'cohorts' },

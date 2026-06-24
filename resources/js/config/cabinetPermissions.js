@@ -62,6 +62,7 @@ export const cabinetPermissions = {
     pool:                       VIEW,
     'partner-questionnaires':   VIEW,
     requisites:                 VIEW,
+    'bank-changes':             VIEW,
     instructions:               VIEW,
   },
 
@@ -105,6 +106,8 @@ export const cabinetPermissions = {
     pool:                       VIEW,
     'partner-questionnaires':   VIEW,
     'owner-dashboard':          VIEW,
+    'sales-matrix':             VIEW,
+    'management-currencies':    VIEW,
     reconciliation:             VIEW,
     anomalies:                  VIEW,
     cohorts:                    VIEW,
@@ -137,6 +140,7 @@ export const cabinetPermissions = {
     'reports-access':           FULL,   // публикация, закрытие периода, принудительный пересчёт
     partners:                   EDIT,   // редактирование карточек
     requisites:                 EDIT,   // изменение статуса верификации
+    'bank-changes':             EDIT,   // заявки на смену банковских реквизитов
     statuses:                   FULL,   // ручная смена статуса
     acceptance:                 VIEW,
     transfers:                  VIEW,
@@ -169,6 +173,7 @@ export const cabinetPermissions = {
   education: {
     workspace:                  VIEW,   // личный staff-дашборд
     education:                  FULL,   // конструктор LMS
+    homework:                   FULL,   // проверка домашних заданий
     'education-categories':     FULL,   // категории курсов
     'education-analytics':      FULL,   // статистика обучения
     'partner-questionnaires':   FULL,   // работа с анкетами
