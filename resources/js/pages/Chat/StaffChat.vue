@@ -2475,7 +2475,8 @@ function insertQuickReply(q) {
 const STAFF_ROLES_RE = /admin|backoffice|support|head|finance|calculations|corrections|education/i;
 const isStaffUser = computed(() => STAFF_ROLES_RE.test(auth.user?.role || ''));
 function canEditQuickReply(q) {
-  return !!q.is_own || (q.is_shared && isStaffUser.value);
+  // Staff правит/удаляет любой шаблон (общий командный пул), не только свой.
+  return isStaffUser.value || !!q.is_own;
 }
 
 const qrDialog = ref(false);

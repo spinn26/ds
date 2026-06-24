@@ -773,7 +773,7 @@ class TransactionImportController extends Controller
                 ->update(['deletedAt' => now()]);
             DB::table('transaction')
                 ->where('id', $id)
-                ->update(['deletedAt' => now(), 'dateChanged' => now()]);
+                ->update(['deletedAt' => now(), 'changedAt' => now()]);
 
             foreach ($affected as $p) {
                 if (! $p->consultant || ! $p->dateMonth) continue;

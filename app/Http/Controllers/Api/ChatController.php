@@ -1454,13 +1454,17 @@ class ChatController extends Controller
      */
     public function quickReplies(Request $request): JsonResponse
     {
-        $userId = $request->user()?->id;
-        $rows = DB::table('chat_quick_replies')
-            ->where(function ($q) use ($userId) {
+        $user = $request->user();
+        $userId = $user?->id;
+        $query = DB::table('chat_quick_replies');
+        // Staff видят весь командный пул шаблонов (общий инструмент поддержки),
+        // не только свои. Не-staff (если эндпоинт когда-то вызовут) — свои + общие.
+        if (! ($user && $user->isStaff())) {
+            $query->where(function ($q) use ($userId) {
                 $q->whereNull('created_by')->orWhere('created_by', $userId);
-            })
-            ->orderBy('category')->orderBy('title')
-            ->get();
+            });
+        }
+        $rows = $query->orderBy('category')->orderBy('title')->get();
 
         $rows = $rows->map(function ($r) use ($userId) {
             $r->is_shared = $r->created_by === null;
@@ -1526,8 +1530,9 @@ class ChatController extends Controller
     private function ensureCanEditQuickReply(Request $request, $row): void
     {
         $user = $request->user();
+        // Staff правят/удаляют любой шаблон — это общий командный пул.
+        if ($user->isStaff()) return;
         if ($row->created_by !== null && (int) $row->created_by === (int) $user->id) return;
-        if ($row->created_by === null && $user->isStaff()) return;
         abort(403, 'Нельзя редактировать чужой шаблон');
     }
 
