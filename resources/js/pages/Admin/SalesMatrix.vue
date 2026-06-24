@@ -269,7 +269,7 @@
           <div class="d-flex ga-1 flex-wrap align-center">
 
             <!-- Period mode selector (в «Итого» скрыт — только выбор месяца+года) -->
-            <v-btn-toggle v-if="reportMode !== 'total'" v-model="periodMode" mandatory density="compact" variant="outlined" color="primary"
+            <v-btn-toggle v-model="periodMode" mandatory density="compact" variant="outlined" color="primary"
               @update:model-value="onPeriodModeChange">
               <v-btn value="year"    size="x-small">Год</v-btn>
               <v-btn value="quarter" size="x-small">Квартал</v-btn>
@@ -648,8 +648,9 @@ const loading          = ref(false);
 const rows             = ref([]);
 const grandTotals      = ref(null);
 const months           = ref([]);
-// «Итого» — без помесячной разбивки: показываем только итоговые колонки метрик.
-const displayMonths     = computed(() => reportMode.value === 'total' ? [] : months.value);
+// Помесячная разбивка во всех режимах, включая «Итого» (период-фильтры
+// единые с остальными отчётами — решение владельца 24.06.2026).
+const displayMonths     = computed(() => months.value);
 const supplierOptions  = ref([]);
 const filterSuppliers  = ref(
   _loadSaved(SUPPLIERS_KEY, v => Array.isArray(v) && v.every(s => typeof s === 'string')) ?? []
@@ -684,10 +685,6 @@ function reload() { loadData(); }
 function onPeriodModeChange() { reload(); }
 
 watch([reportMode, reportType], () => {
-  // «Итого» — без разбивки по месяцам, период = один месяц (выбор месяца+года).
-  if (reportMode.value === 'total' && periodMode.value !== 'month') {
-    periodMode.value = 'month';
-  }
   if (isStub.value) return;
   // inwork (по дате создания) / forecast (активированные) / fact (транзакции) —
   // все через loadData, различается endpoint.

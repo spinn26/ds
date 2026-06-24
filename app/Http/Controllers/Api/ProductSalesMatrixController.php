@@ -1637,6 +1637,38 @@ class ProductSalesMatrixController extends Controller
         }
         $grand['avgCheck'] = $grand['count'] > 0 ? round($grand['volume'] / $grand['count'], 2) : 0;
 
+        // Перезаписываем fcCount/clientCount УНИКАЛЬНЫМИ (union по слоям/месяцам).
+        // В основном цикле они суммировались (как объём/кол-во) — для ФК/клиентов
+        // это задвоение. Месячные ячейки СЛОЯ оставляем (там distinct в пределах
+        // слой×продукт×месяц); перезаписываем итоги слоя, продукта, месяца, гранда
+        // и продукт×месяц (union по слоям).
+        $dc  = $this->totalDistinctCounts($inworkBase, $actBase, $factBase);
+        $cnt = fn ($set) => is_array($set) ? count($set) : 0;
+        foreach ($result as &$prodRow) {
+            $pid = $prodRow['productId'];
+            $prodRow['fcCount']     = $cnt($dc['p'][$pid]['fc'] ?? null);
+            $prodRow['clientCount'] = $cnt($dc['p'][$pid]['cl'] ?? null);
+            foreach ($prodRow['monthly'] as $m => &$mc) {
+                $mc['fcCount']     = $cnt($dc['pm'][$pid][$m]['fc'] ?? null);
+                $mc['clientCount'] = $cnt($dc['pm'][$pid][$m]['cl'] ?? null);
+            }
+            unset($mc);
+            foreach ($prodRow['programs'] as &$layerRow) {
+                $lk = $layerRow['programId']; // fact | activated | inwork
+                $layerRow['fcCount']     = $cnt($dc['pl'][$pid][$lk]['fc'] ?? null);
+                $layerRow['clientCount'] = $cnt($dc['pl'][$pid][$lk]['cl'] ?? null);
+            }
+            unset($layerRow);
+        }
+        unset($prodRow);
+        $grand['fcCount']     = $cnt($dc['g']['fc'] ?? null);
+        $grand['clientCount'] = $cnt($dc['g']['cl'] ?? null);
+        foreach ($grand['monthly'] as $m => &$gm) {
+            $gm['fcCount']     = $cnt($dc['mo'][$m]['fc'] ?? null);
+            $gm['clientCount'] = $cnt($dc['mo'][$m]['cl'] ?? null);
+        }
+        unset($gm);
+
         // Списки для фильтров (по всем контрактам периода — создание/активация).
         $filtBase = fn () => $applyFilters(DB::table('contract as co')
             ->join('program as pg', 'pg.id', '=', 'co.program')
@@ -1749,6 +1781,46 @@ class ProductSalesMatrixController extends Controller
         }
 
         return $map;
+    }
+
+    /**
+     * DISTINCT ФК/клиентов для «Итого» — union по 3 слоям.
+     * Суммировать fc/client по слоям и месяцам нельзя: один ФК/клиент бывает
+     * и в «Активировано», и в «Факт», и в нескольких месяцах → задвоение.
+     * Тянем «события» (продукт, месяц, ФК, клиент) из всех слоёв и считаем
+     * уникальных на каждом уровне (продукт×месяц / продукт / месяц / гранд /
+     * продукт×слой). Возвращает наборы id (для подсчёта через count()).
+     */
+    private function totalDistinctCounts(callable $inworkBase, callable $actBase, callable $factBase): array
+    {
+        $pm = []; $p = []; $mo = []; $g = ['fc' => [], 'cl' => []]; $pl = [];
+        $add = function ($pid, $m, $layer, $fc, $cl) use (&$pm, &$p, &$mo, &$g, &$pl) {
+            foreach (['fc' => $fc, 'cl' => $cl] as $f => $id) {
+                if ($id === null) continue;
+                $pm[$pid][$m][$f][$id] = 1;
+                $p[$pid][$f][$id] = 1;
+                $mo[$m][$f][$id] = 1;
+                $g[$f][$id] = 1;
+                $pl[$pid][$layer][$f][$id] = 1;
+            }
+        };
+        $pull = function (callable $base, string $periodSql, string $layer) use ($add) {
+            foreach ($base()->select([
+                'co.product as pid',
+                DB::raw($periodSql.' as m'),
+                'co.consultant as fc',
+                'co.client as cl',
+            ])->get() as $r) {
+                $add($r->pid, $r->m, $layer, $r->fc, $r->cl);
+            }
+        };
+        $pull($inworkBase, 'TO_CHAR(DATE_TRUNC(\'month\', co."createDate"::date), \'YYYY-MM\')', 'inwork');
+        $pull($actBase,    'TO_CHAR(DATE_TRUNC(\'month\', co."openDate"::date), \'YYYY-MM\')', 'activated');
+        foreach ($factBase()->select(['co.product as pid', 't.dateMonth as m', 'co.consultant as fc', 'co.client as cl'])->get() as $r) {
+            $add($r->pid, $r->m, 'fact', $r->fc, $r->cl);
+        }
+
+        return compact('pm', 'p', 'mo', 'g', 'pl');
     }
 
     /**
