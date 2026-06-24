@@ -423,12 +423,9 @@ const NO_FORECAST_STATUSES = [1, 6, 10];
 const items = ref([]);
 const total = ref(0);
 // Сумма по контрактам (по текущим фильтрам) — для сверки заливки из «Паруса».
-const amountSums = ref([]);
-const amountSumLabel = computed(() =>
-  amountSums.value.length
-    ? amountSums.value.map(s => `${fmt(s.total)} ${s.symbol}`).join(' · ')
-    : '—'
-);
+// Просто сумма по колонке, без разбивки/конвертации по курсу.
+const amountSum = ref(0);
+const amountSumLabel = computed(() => fmt(amountSum.value || 0));
 const loading = ref(false);
 const search = ref('');
 const statusFilter = ref([]);
@@ -861,7 +858,7 @@ async function loadData() {
     const { data } = await api.get('/admin/contracts', { params });
     items.value = data.data;
     total.value = data.total;
-    amountSums.value = data.amountSums || [];
+    amountSum.value = data.amountSum || 0;
   } catch {}
   loading.value = false;
 }
