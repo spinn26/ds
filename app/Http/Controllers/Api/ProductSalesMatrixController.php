@@ -1355,7 +1355,7 @@ class ProductSalesMatrixController extends Controller
                 'pg.name as program_name',
                 't.dateMonth as period_month',
                 DB::raw('SUM(COALESCE(t."amountRUB", 0))      as volume'),
-                DB::raw('COUNT(DISTINCT co.id)                as cnt'),
+                DB::raw('COUNT(DISTINCT t.id)                 as cnt'),
                 DB::raw('SUM(COALESCE(t."netRevenueRUB", 0))  as revenue'),
                 DB::raw('SUM(COALESCE(t."personalVolume", 0)) as points'),
                 DB::raw('COUNT(DISTINCT co.client)            as client_count'),
