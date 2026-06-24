@@ -432,8 +432,22 @@
                       </span>
                     </td>
                   </template>
-                  <td v-for="m in activeMetrics" :key="`pt-${m.key}`" class="td-num td-total">
+                  <td v-for="m in activeMetrics" :key="`pt-${m.key}`" class="td-num td-total"
+                    :class="{ 'td-fc': reportMode === 'fact' && prod.factDetail?.length }">
                     {{ fmtCell(prod[m.key], m) }}
+                    <v-tooltip v-if="reportMode === 'fact' && prod.factDetail?.length"
+                      activator="parent" location="start" max-width="480">
+                      <div class="fact-detail">
+                        <div class="fact-detail-hd">{{ prod.productName }} · транзакций: {{ prod.factDetail.length }}</div>
+                        <div v-for="(f, i) in prod.factDetail.slice(0, 60)" :key="i" class="fact-detail-row">
+                          <span class="fd-num">№{{ f.contractNumber || '—' }}</span>
+                          <span class="fd-tx">tx#{{ f.txId }}</span>
+                          <span class="fd-cli">{{ f.clientName || '' }}</span>
+                          <span class="fd-amt">{{ fmtRub(f.amount) }}</span>
+                        </div>
+                        <div v-if="prod.factDetail.length > 60" class="fact-detail-more">…ещё {{ prod.factDetail.length - 60 }}</div>
+                      </div>
+                    </v-tooltip>
                   </td>
                 </tr>
 
@@ -474,8 +488,22 @@
                     <strong>{{ fmtCell(grandTotals.monthly[mo]?.[m.key], m) }}</strong>
                   </td>
                 </template>
-                <td v-for="m in activeMetrics" :key="`gt-${m.key}`" class="td-num td-total">
+                <td v-for="m in activeMetrics" :key="`gt-${m.key}`" class="td-num td-total"
+                  :class="{ 'td-fc': reportMode === 'fact' && grandTotals.factDetail?.length }">
                   <strong>{{ fmtCell(grandTotals[m.key], m) }}</strong>
+                  <v-tooltip v-if="reportMode === 'fact' && grandTotals.factDetail?.length"
+                    activator="parent" location="start" max-width="480">
+                    <div class="fact-detail">
+                      <div class="fact-detail-hd">ИТОГО · транзакций: {{ grandTotals.factDetail.length }}</div>
+                      <div v-for="(f, i) in grandTotals.factDetail.slice(0, 60)" :key="i" class="fact-detail-row">
+                        <span class="fd-num">№{{ f.contractNumber || '—' }}</span>
+                        <span class="fd-tx">tx#{{ f.txId }}</span>
+                        <span class="fd-cli">{{ f.clientName || '' }}</span>
+                        <span class="fd-amt">{{ fmtRub(f.amount) }}</span>
+                      </div>
+                      <div v-if="grandTotals.factDetail.length > 60" class="fact-detail-more">…ещё {{ grandTotals.factDetail.length - 60 }}</div>
+                    </div>
+                  </v-tooltip>
                 </td>
               </tr>
 
@@ -1179,4 +1207,14 @@ onMounted(loadData);
 .detail-table td, .detail-table th { font-variant-numeric: tabular-nums; }
 .detail-total td { border-top: 1px solid rgba(var(--v-theme-on-surface), 0.15); }
 .td-fc span { border-bottom: 1px dotted rgba(var(--v-theme-primary), 0.5); }
+
+/* Тултип «Факт»: детальная выборка по транзакциям (№ контракта + tx) */
+.fact-detail { max-height: 420px; overflow-y: auto; font-size: 11px; }
+.fact-detail-hd { font-weight: 700; margin-bottom: 4px; white-space: nowrap; }
+.fact-detail-row { display: flex; gap: 8px; align-items: baseline; padding: 1px 0; white-space: nowrap; }
+.fact-detail-row .fd-num { min-width: 84px; font-variant-numeric: tabular-nums; }
+.fact-detail-row .fd-tx  { min-width: 70px; opacity: 0.75; }
+.fact-detail-row .fd-cli { flex: 1; overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
+.fact-detail-row .fd-amt { margin-left: auto; font-variant-numeric: tabular-nums; }
+.fact-detail-more { margin-top: 4px; opacity: 0.7; font-style: italic; }
 </style>

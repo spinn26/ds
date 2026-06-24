@@ -1509,6 +1509,38 @@ class ProductSalesMatrixController extends Controller
             ->get()
             ->map(fn ($r) => ['id' => $r->id, 'name' => $r->name]);
 
+        // Детализация для тултипа столбца «Итого» в режиме «Факт»: список
+        // транзакций (№ контракта + id транзакции + сумма + месяц + клиент)
+        // по каждому продукту и общий — Лена сверяет «Факт» по конкретике.
+        $detailByProduct = [];
+        $allDetail = [];
+        foreach ($base()
+            ->select([
+                'co.product as pid',
+                'co.number as contract_number',
+                't.id as tx_id',
+                DB::raw('COALESCE(t."amountRUB", 0) as amount'),
+                't.dateMonth as month',
+                'co.clientName as client_name',
+            ])
+            ->orderBy('co.product')->orderBy('t.dateMonth')->orderBy('t.id')
+            ->get() as $d) {
+            $row = [
+                'contractNumber' => $d->contract_number,
+                'txId'           => (int) $d->tx_id,
+                'amount'         => round((float) $d->amount, 2),
+                'month'          => $d->month,
+                'clientName'     => $d->client_name,
+            ];
+            $detailByProduct[$d->pid][] = $row;
+            $allDetail[] = $row;
+        }
+        foreach ($result as &$prodRow) {
+            $prodRow['factDetail'] = $detailByProduct[$prodRow['productId']] ?? [];
+        }
+        unset($prodRow);
+        $grand['factDetail'] = $allDetail;
+
         return response()->json([
             'period'      => ['from' => $from, 'to' => $to, 'months' => $months],
             'rows'        => $result,
