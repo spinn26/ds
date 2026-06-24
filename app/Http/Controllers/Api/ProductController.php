@@ -529,8 +529,11 @@ class ProductController extends Controller
         // реквизитов (submitted/verified); акцепт оферты — отдельный гейт, его
         // не трогаем. Для зарегистрированных после отсечки логика прежняя.
         $cutoff = (string) \App\Models\SystemSetting::value('products.requisites_gate_cutoff', '2026-06-01');
-        $registeredBefore = $consultant->dateCreated
-            && \Illuminate\Support\Carbon::parse($consultant->dateCreated)
+        // Пустая dateCreated = легаси/существующий ФК (импортирован до запуска
+        // фичи реквизитов) → считаем «зарегистрирован до отсечки». Иначе ~70
+        // действующих партнёров без даты упирались в окно ИП.
+        $registeredBefore = ! $consultant->dateCreated
+            || \Illuminate\Support\Carbon::parse($consultant->dateCreated)
                 ->lt(\Illuminate\Support\Carbon::parse($cutoff));
         // Ручной флаг из админки (Пользователи) — открыть продукты без верификации.
         $manualOverride = (bool) ($consultant->products_access_no_verify ?? false);
