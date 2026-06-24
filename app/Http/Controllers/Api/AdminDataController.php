@@ -2300,6 +2300,20 @@ class AdminDataController extends Controller
         if ($request->filled('forecast_to')) $query->where('c.activation_forecast', '<=', $request->forecast_to);
 
         $total = $query->count();
+
+        // Итоговая сумма по контрактам (по текущим фильтрам, до пагинации) —
+        // Алла сверяет ею корректность заливки из «Паруса». Группируем по
+        // валюте: контракты бывают в RUB/USD/…, складывать их в одно число
+        // нельзя. clone — чтобы groupBy/select не задели основной запрос.
+        $sumRows = (clone $query)
+            ->leftJoin('currency as cur', 'c.currency', '=', 'cur.id')
+            ->groupBy('cur.symbol')
+            ->selectRaw('cur.symbol as symbol, COALESCE(SUM(c.ammount), 0) as total')
+            ->get();
+        $amountSums = $sumRows
+            ->map(fn ($r) => ['symbol' => $r->symbol ?: '—', 'total' => (float) $r->total])
+            ->values();
+
         $this->applySorting($query, $request, [
             'number' => 'c.number',
             'clientName' => 'c."clientName"',
@@ -2360,7 +2374,7 @@ class AdminDataController extends Controller
                 'activationForecast' => $c->activation_forecast ? substr((string) $c->activation_forecast, 0, 10) : null,
             ]);
 
-        return response()->json(['data' => $contracts, 'total' => $total]);
+        return response()->json(['data' => $contracts, 'total' => $total, 'amountSums' => $amountSums]);
     }
 
     /**

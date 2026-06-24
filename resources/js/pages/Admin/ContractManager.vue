@@ -101,6 +101,12 @@
       </v-col>
     </FilterBar>
 
+    <div class="d-flex align-center ga-2 px-2 py-2 mb-1">
+      <v-icon size="18" color="primary">mdi-sigma</v-icon>
+      <span class="text-body-2 text-medium-emphasis">Сумма по контрактам (с учётом фильтров):</span>
+      <span class="text-body-1 font-weight-bold" style="font-variant-numeric: tabular-nums">{{ amountSumLabel }}</span>
+    </div>
+
     <v-data-table-server :items="items" :items-length="total" :loading="loading"
       :headers="visibleHeaders" :items-per-page="perPage"
       :items-per-page-options="[25, 50, 100, 200]" @update:options="onOptions">
@@ -416,6 +422,13 @@ const NO_FORECAST_STATUSES = [1, 6, 10];
 
 const items = ref([]);
 const total = ref(0);
+// Сумма по контрактам (по текущим фильтрам) — для сверки заливки из «Паруса».
+const amountSums = ref([]);
+const amountSumLabel = computed(() =>
+  amountSums.value.length
+    ? amountSums.value.map(s => `${fmt(s.total)} ${s.symbol}`).join(' · ')
+    : '—'
+);
 const loading = ref(false);
 const search = ref('');
 const statusFilter = ref([]);
@@ -848,6 +861,7 @@ async function loadData() {
     const { data } = await api.get('/admin/contracts', { params });
     items.value = data.data;
     total.value = data.total;
+    amountSums.value = data.amountSums || [];
   } catch {}
   loading.value = false;
 }
