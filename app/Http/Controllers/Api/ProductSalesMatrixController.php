@@ -1339,9 +1339,6 @@ class ProductSalesMatrixController extends Controller
             ->whereNotNull('co.openDate')
             ->whereNull('co.deletedAt')
             ->whereNull('t.deletedAt')
-            // Нулевые транзакции (напр. InSmart-полис с КВ=0 → amount=0) не
-            // считаем фактом продажи — иначе кол-во завышается (34 vs 33).
-            ->whereRaw('(COALESCE(t."amountRUB", 0) <> 0 OR COALESCE(t.amount, 0) <> 0)')
             ->when(! empty($params['suppliers']), fn ($q) =>
                 $q->whereIn(DB::raw('COALESCE(pg."providerName", \'—\')'), $params['suppliers'])
             )
@@ -1610,7 +1607,6 @@ class ProductSalesMatrixController extends Controller
             ->join('contract as co', 'co.id', '=', 't.contract')
             ->join('program as pg', 'pg.id', '=', 'co.program')
             ->whereRaw('t."deletedAt" IS NULL')
-            ->whereRaw('(COALESCE(t."amountRUB", 0) <> 0 OR COALESCE(t.amount, 0) <> 0)')
             ->where('t.dateMonth', '>=', $from)
             ->where('t.dateMonth', '<=', $to));
 
