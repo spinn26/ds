@@ -350,14 +350,12 @@ const programsDialog = ref(false);
 const selectedProduct = ref(null);
 
 function openProduct(product) {
-  // Воронка доступа (решение от 2026-05-27):
-  //   1) реквизиты не заполнены ни разу → блок-диалог с формой ИНН/банка
-  //   2) реквизиты заполнены, но не верифицированы Катей → pending-плашка
-  //   3) верифицированы, но Оферта не принята → её показывает глобальная
-  //      OfferAcceptanceDialog из MainLayout (persistent поверх UI).
-  if (!access.value.requisitesSubmitted) { reqDialog.value = true; return; }
-  if (!access.value.requisitesVerified)  { pendingDialog.value = true; return; }
-  if (!access.value.documentsAccepted)   { return; }
+  // Реквизиты/верификация больше НЕ блокируют открытие продукта (решение
+  // владельца 24.06.2026). Окно «Шаг 1: Юридические реквизиты» осталось лишь
+  // подсказкой для сбора ИП (нужно для выплат) — показывается один раз при
+  // входе и закрывается, но клик «Открыть продукт» теперь всегда открывает
+  // продукт, а не возвращает форму. Акцепт Оферты живёт в глобальной
+  // OfferAcceptanceDialog (MainLayout) и здесь не проверяется.
   // Internal route (openProductUrl начинается с «/») — открываем
   // во SPA через router.push. Используется, например, для InSmart-виджета.
   if (product.url && /^\/(?!\/)/.test(product.url)) {
