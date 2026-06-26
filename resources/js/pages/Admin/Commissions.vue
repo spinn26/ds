@@ -674,12 +674,17 @@ onMounted(() => {
 
 <style scoped>
 .commissions-chain :deep(td) { vertical-align: middle; }
-/* Tighter rows so the expanded chain fits without scrolling. */
+/* Таблица цепочки — по ширине контента, а не на всю строку: иначе 7 колонок
+   разъезжались по краям с большими пропусками. Теперь ветки идут вплотную
+   слева. + максимально плотные строки. */
+.commissions-chain { width: auto !important; display: inline-block; }
+.commissions-chain :deep(table) { width: auto !important; }
 .commissions-chain :deep(td),
 .commissions-chain :deep(th) {
-  height: 26px !important;
-  padding-top: 1px !important;
-  padding-bottom: 1px !important;
+  height: 22px !important;
+  padding: 0 10px !important;
+  font-size: 12px;
+  white-space: nowrap;
 }
 .commissions-chain :deep(th) {
   background: rgba(var(--v-theme-surface-variant), 0.5);
