@@ -162,10 +162,22 @@ class AdminPaymentRegistryController extends Controller
                 ->toArray();
         }
 
+        // Partners with suspended payouts — their requisites must NOT surface in
+        // the registry (popup blocked, payment blocked), so the payout operator
+        // doesn't have to cross-check the suspension flag manually.
+        $suspended = [];
+        if ($consultantIds) {
+            $suspended = DB::table('consultant')
+                ->whereIn('id', $consultantIds)
+                ->where('payments_suspended', true)
+                ->pluck('id', 'id')
+                ->toArray();
+        }
+
         // Activity name lookup for partner-status filter UI.
         $activityNames = DB::table('directory_of_activities')->pluck('name', 'id');
 
-        $items = $rows->map(function ($r) use ($verified, $activityNames, $extraByCons, $incomingByCons) {
+        $items = $rows->map(function ($r) use ($verified, $suspended, $activityNames, $extraByCons, $incomingByCons) {
             // Только снимок (без live-пересчёта). Обновляется кнопкой пересчёта.
             $accrued = (float) ($r->accruedTransactional ?? 0);
             $pool = (float) ($r->accruedPool ?? 0);
@@ -199,6 +211,7 @@ class AdminPaymentRegistryController extends Controller
                 'withheldForGap' => (float) ($r->withheldForGap ?? 0),
                 'withheldForCommissions' => (float) ($r->withheldForCommissions ?? 0),
                 'verifiedRequisites' => isset($verified[$r->consultant]),
+                'paymentsSuspended' => isset($suspended[$r->consultant]),
             ];
         });
 
@@ -234,6 +247,14 @@ class AdminPaymentRegistryController extends Controller
         $balance = DB::table('consultantBalance')->where('id', $id)->first();
         if (! $balance) {
             return response()->json(['message' => 'Запись не найдена'], 404);
+        }
+
+        // Suspended partner → hide requisites entirely (server-side gate).
+        if (DB::table('consultant')->where('id', $balance->consultant)->value('payments_suspended')) {
+            return response()->json([
+                'message' => 'Выплаты по партнёру приостановлены — реквизиты скрыты',
+                'suspended' => true,
+            ], 403);
         }
 
         $req = DB::table('requisites')
@@ -382,6 +403,14 @@ class AdminPaymentRegistryController extends Controller
         $balance = DB::table('consultantBalance')->where('id', $id)->first();
         if (! $balance) {
             return response()->json(['message' => 'Запись не найдена'], 404);
+        }
+
+        // Hard gate: no payouts while the partner is suspended (UI also hides the
+        // button, but block here too so the API can't be called around it).
+        if (DB::table('consultant')->where('id', $balance->consultant)->value('payments_suspended')) {
+            return response()->json([
+                'message' => 'Выплаты по партнёру приостановлены — снимите приостановку перед оплатой',
+            ], 422);
         }
 
         DB::transaction(function () use ($id, $balance, $data, $request) {

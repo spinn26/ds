@@ -87,7 +87,11 @@
       >
         <template #item.personName="{ item }">
           <div class="d-flex align-center ga-2">
-            <v-btn :icon="item.verifiedRequisites ? 'mdi-checkbox-marked' : 'mdi-close-octagon'"
+            <v-btn v-if="item.paymentsSuspended"
+              icon="mdi-cancel" size="x-small" variant="text" color="warning"
+              title="Выплаты приостановлены — реквизиты скрыты, выплата заблокирована"
+              @click="notifySuspended()" />
+            <v-btn v-else :icon="item.verifiedRequisites ? 'mdi-checkbox-marked' : 'mdi-close-octagon'"
               size="x-small" variant="text"
               :color="item.verifiedRequisites ? 'success' : 'error'"
               :title="item.verifiedRequisites ? 'Реквизиты верифицированы — открыть' : 'Реквизиты не верифицированы — выплата невозможна'"
@@ -321,6 +325,8 @@ function activityColor(id) {
 }
 
 function canAddPayment(item) {
+  // Suspension is a hard block for everyone — to pay, the flag must be removed first.
+  if (item.paymentsSuspended) return false;
   if (canOverridePaymentBlock.value) return true;
   if (!item.verifiedRequisites) return false;
   if (!ACTIVE_ACTIVITY_IDS.has(item.activityId)) return false;
@@ -328,6 +334,7 @@ function canAddPayment(item) {
 }
 
 function paymentBlockedReason(item) {
+  if (item.paymentsSuspended) return 'Выплаты приостановлены';
   if (canOverridePaymentBlock.value) return null;
   if (!item.verifiedRequisites) return 'Реквизиты не верифицированы';
   if (!ACTIVE_ACTIVITY_IDS.has(item.activityId)) {
@@ -352,7 +359,12 @@ const reqRows = computed(() => {
   ];
 });
 
+function notifySuspended() {
+  showError('Выплаты по партнёру приостановлены — реквизиты скрыты');
+}
+
 async function openRequisitesPopup(item) {
+  if (item.paymentsSuspended) { notifySuspended(); return; }
   reqData.value = null;
   reqDialog.value = true;
   try {
