@@ -125,6 +125,7 @@ class AdminFinanceController extends Controller
                 SUM(t."amountRUB") AS amount_rub,
                 SUM(t."commissionsAmountRUB") AS commissions_rub,
                 SUM(t."commissionsAmountUSD") AS commissions_usd,
+                SUM(COALESCE(t."amountRUB", 0) * COALESCE(t."dsCommissionPercentage", 0) / 100) AS commissions_gross_rub,
                 SUM(t."netRevenueRUB") AS net_rub,
                 SUM(t."netRevenueUSD") AS net_usd,
                 SUM(t."profitRUB") AS profit_rub
@@ -343,6 +344,13 @@ class AdminFinanceController extends Controller
                 'productHasYearKv' => $flags ? (bool) $flags->has_year_kv : true,
                 'dsCommissionPercentage' => $t->dsCommissionPercentage !== null
                     ? round((float) $t->dsCommissionPercentage, 2) : null,
+                // «Доход ДС без НДС» — commissionsAmountRUB считается калькулятором
+                // от суммы без НДС (amountNoVat × %ДС). «Доход ДС» (до удержания НДС) =
+                // от суммы с НДС = amountRUB × %ДС/100 (= без_НДС × (1+НДС)). Считаем из
+                // полей самой транзакции, чтобы значение не зависело от истории ставки НДС.
+                'commissionsAmountGrossRUB' => $t->dsCommissionPercentage !== null
+                    ? round((float) ($t->amountRUB ?? 0) * (float) $t->dsCommissionPercentage / 100, 2)
+                    : round((float) ($t->commissionsAmountRUB ?? 0), 2),
                 'commissionsAmountRUB' => round((float) ($t->commissionsAmountRUB ?? 0), 2),
                 'commissionsAmountUSD' => round((float) ($t->commissionsAmountUSD ?? 0), 2),
                 'netRevenueRUB' => round((float) ($t->netRevenueRUB ?? 0), 2),
@@ -371,6 +379,7 @@ class AdminFinanceController extends Controller
             'total' => $total,
             'aggregates' => [
                 'amountRUB' => round((float) ($aggregates->amount_rub ?? 0), 2),
+                'commissionsAmountGrossRUB' => round((float) ($aggregates->commissions_gross_rub ?? 0), 2),
                 'commissionsAmountRUB' => round((float) ($aggregates->commissions_rub ?? 0), 2),
                 'commissionsAmountUSD' => round((float) ($aggregates->commissions_usd ?? 0), 2),
                 'netRevenueRUB' => round((float) ($aggregates->net_rub ?? 0), 2),

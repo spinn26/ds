@@ -116,6 +116,9 @@
             <template v-else-if="col.key === 'amountRUB'">
               <strong>{{ fmt(aggregates.amountRUB) }} ₽</strong>
             </template>
+            <template v-else-if="col.key === 'commissionsAmountGrossRUB'">
+              <strong>{{ fmt(aggregates.commissionsAmountGrossRUB) }} ₽</strong>
+            </template>
             <template v-else-if="col.key === 'commissionsAmountRUB'">
               <strong>{{ fmt(aggregates.commissionsAmountRUB) }} ₽</strong>
             </template>
@@ -193,6 +196,9 @@
       <template #item.dsCommissionPercentage="{ value }">
         <span v-if="value != null" class="text-no-wrap">{{ value }}%</span>
         <span v-else class="text-medium-emphasis">—</span>
+      </template>
+      <template #item.commissionsAmountGrossRUB="{ value }">
+        <span class="text-no-wrap">{{ fmt(value) }} ₽</span>
       </template>
       <template #item.commissionsAmountRUB="{ value }">
         <span class="text-no-wrap">{{ fmt(value) }} ₽</span>
@@ -418,7 +424,8 @@ const headers = [
   { title: 'Транзакция', key: 'amount', align: 'end', width: 130 },
   { title: 'В РУБ', key: 'amountRUB', align: 'end', width: 130 },
   { title: '% ДС', key: 'dsCommissionPercentage', align: 'end', width: 80 },
-  { title: 'Доход DS RUB', key: 'commissionsAmountRUB', align: 'end', width: 140 },
+  { title: 'Доход ДС', key: 'commissionsAmountGrossRUB', align: 'end', width: 140 },
+  { title: 'Доход ДС без НДС', key: 'commissionsAmountRUB', align: 'end', width: 150 },
   { title: 'Доход DS USD', key: 'commissionsAmountUSD', align: 'end', width: 140 },
   { title: 'Остаток ДС RUB', key: 'netRevenueRUB', align: 'end', width: 130 },
   { title: 'Остаток ДС USD', key: 'netRevenueUSD', align: 'end', width: 130 },
