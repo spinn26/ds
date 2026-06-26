@@ -97,7 +97,11 @@
                     <strong>{{ s.structureName }}</strong>
                   </td>
                   <td v-for="m in activeMetrics" :key="m.key" class="text-end pm-num">
-                    {{ cellVal(s, m, null) }}
+                    <template v-if="m.key === 'revenue'">
+                      <div>{{ fmtRub(s.revenue) }}</div>
+                      <div class="pm-sub">{{ revenueSub(s, null) }}</div>
+                    </template>
+                    <template v-else>{{ cellVal(s, m) }}</template>
                   </td>
                 </tr>
 
@@ -110,7 +114,11 @@
                         {{ f.fcName }}
                       </td>
                       <td v-for="m in activeMetrics" :key="m.key" class="text-end pm-num">
-                        {{ cellVal(f, m, s) }}
+                        <template v-if="m.key === 'revenue'">
+                          <div>{{ fmtRub(f.revenue) }}</div>
+                          <div class="pm-sub">{{ revenueSub(f, s) }}</div>
+                        </template>
+                        <template v-else>{{ cellVal(f, m) }}</template>
                       </td>
                     </tr>
 
@@ -119,7 +127,7 @@
                       <tr v-for="p in f.products" :key="`p${f.fcId}-${p.productId}`" class="pm-row pm-l3">
                         <td class="pm-name pm-prod" style="padding-left: 52px">{{ p.productName }}</td>
                         <td v-for="m in activeMetrics" :key="m.key" class="text-end pm-num pm-prod-num">
-                          {{ cellVal(p, m, f) }}
+                          {{ cellVal(p, m) }}
                         </td>
                       </tr>
                     </template>
@@ -131,7 +139,11 @@
               <tr class="pm-row pm-total">
                 <td class="pm-name"><strong>ИТОГО ПО СЕТИ</strong></td>
                 <td v-for="m in activeMetrics" :key="m.key" class="text-end pm-num">
-                  <strong>{{ cellVal(grand, m, null, true) }}</strong>
+                  <template v-if="m.key === 'revenue'">
+                    <strong>{{ fmtRub(grand.revenue) }}</strong>
+                    <div class="pm-sub">{{ revenueSub(grand, null) }}</div>
+                  </template>
+                  <strong v-else>{{ cellVal(grand, m) }}</strong>
                 </td>
               </tr>
             </template>
@@ -201,12 +213,12 @@ const allMetrics = [
   { key: 'ballyLP', short: 'Баллы ЛП', label: 'Баллы ЛП', fmt: 'num' },
   { key: 'fcCount', short: 'ФК', label: 'Кол-во ФК', fmt: 'int' },
   { key: 'clientCount', short: 'Клиенты', label: 'Кол-во клиентов', fmt: 'int' },
-  { key: 'pctTeam', short: '% команды', label: '% выручки от команды', fmt: 'pct' },
-  { key: 'pctCompany', short: '% компании', label: '% выручки от компании', fmt: 'pct' },
+  // % выручки от команды/компании показываем НЕ отдельными колонками, а
+  // подписью под значением «Выручка» (как в макете) — см. revenueSub().
 ];
-const METRICS_KEY = 'partnerMatrix:metrics';
+const METRICS_KEY = 'partnerMatrix:metrics2';
 const _saved = (() => { try { const s = JSON.parse(localStorage.getItem(METRICS_KEY)); return Array.isArray(s) && s.length ? s : null; } catch { return null; } })();
-const selectedMetricKeys = ref(_saved ?? ['volume', 'revenue', 'bally', 'ballyLP', 'fcCount', 'clientCount', 'pctCompany']);
+const selectedMetricKeys = ref(_saved ?? ['volume', 'count', 'avgCheck', 'revenue', 'bally', 'ballyLP', 'fcCount', 'clientCount']);
 const activeMetrics = computed(() => allMetrics.filter(m => selectedMetricKeys.value.includes(m.key)));
 function toggleMetric(key) {
   const i = selectedMetricKeys.value.indexOf(key);
@@ -262,24 +274,29 @@ function fmtNum(v) { return new Intl.NumberFormat('ru-RU', { maximumFractionDigi
  * для %команды нужна выручка команды, для %компании — grand.
  * level === 'team' (parent null & не grand) — % команды показываем прочерком.
  */
-function cellVal(node, m, parent, isGrand = false) {
-  if (m.key === 'pctTeam') {
-    // только на строке ФК (parent = структура)
-    if (!parent || isGrand || node.structureId !== undefined || node.productId !== undefined) return '—';
-    const base = parent.revenue || 0;
-    return base > 0 ? (node.revenue / base * 100).toFixed(1) + '%' : '—';
-  }
-  if (m.key === 'pctCompany') {
-    if (node.productId !== undefined) return '—'; // только ФК и команда
-    const base = grand.value?.revenue || 0;
-    return base > 0 ? (node.revenue / base * 100).toFixed(1) + '%' : '—';
-  }
-  // ЛП на уровне команды — прочерк (считается снизу вверх)
+function cellVal(node, m) {
+  // ЛП на уровне команды — прочерк (считается снизу вверх, как в ТЗ).
   if (m.key === 'ballyLP' && node.structureId !== undefined) return '—';
   const v = node[m.key] ?? 0;
   if (m.fmt === 'rub') return fmtRub(v);
   if (m.fmt === 'int') return fmtInt(v);
   return fmtNum(v);
+}
+
+/**
+ * Подпись под значением «Выручка» (как в макете):
+ *  - продукт — пусто;
+ *  - ФК — «Км: <%команды> / Кл: <%компании>»;
+ *  - команда/итого — «Доля компании: <%компании>».
+ */
+function revenueSub(node, parent) {
+  if (node.productId !== undefined) return '';
+  const comp = grand.value?.revenue ? (node.revenue / grand.value.revenue * 100) : 0;
+  if (node.fcId !== undefined) {
+    const team = parent?.revenue ? (node.revenue / parent.revenue * 100) : 0;
+    return `Км: ${team.toFixed(1)}% / Кл: ${comp.toFixed(1)}%`;
+  }
+  return `Доля компании: ${comp.toFixed(1)}%`;
 }
 
 // ─── Загрузка ───
@@ -340,6 +357,7 @@ onMounted(() => { loadLookups(); loadSuppliers(); loadData(); });
 .pm-name-col { min-width: 320px; }
 .pm-grid td { padding: 7px 12px; border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.05); font-size: 13px; }
 .pm-num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pm-sub { font-size: 10.5px; color: rgba(var(--v-theme-on-surface), 0.55); line-height: 1.1; margin-top: 1px; }
 .pm-row.pm-l1 { cursor: pointer; background: rgba(var(--v-theme-primary), 0.06); }
 .pm-row.pm-l1:hover { background: rgba(var(--v-theme-primary), 0.1); }
 .pm-row.pm-l2 { cursor: pointer; }
