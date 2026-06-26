@@ -97,7 +97,7 @@
       :headers="visibleHeaders" :items-per-page="perPage"
       :items-per-page-options="[25, 50, 100, 200]"
       v-model:expanded="expanded" item-value="id" show-expand
-      hover class="commissions-table"
+      density="compact" hover class="commissions-table"
       @click:row="onRowClick"
       @update:options="onOptions">
 
@@ -163,20 +163,24 @@
       </template>
       <template #item.contractOpenDate="{ value }">{{ value ? fmtDate(value) : '—' }}</template>
       <template #item.clientName="{ value }">
-        <span class="text-no-wrap">{{ value || '—' }}</span>
+        <span class="cell-clamp" :title="value || ''">{{ value || '—' }}</span>
       </template>
-      <template #item.providerName="{ value }">{{ value || '—' }}</template>
+      <template #item.providerName="{ value }">
+        <span class="cell-clamp" :title="value || ''">{{ value || '—' }}</span>
+      </template>
       <template #item.productName="{ value }">
-        <span class="text-no-wrap">{{ value || '—' }}</span>
+        <span class="cell-clamp" :title="value || ''">{{ value || '—' }}</span>
       </template>
       <template #item.programName="{ value }">
-        <span class="text-no-wrap">{{ value || '—' }}</span>
+        <span class="cell-clamp" :title="value || ''">{{ value || '—' }}</span>
       </template>
       <template #item.consultantName="{ value }">
-        <span class="text-no-wrap">{{ value || '—' }}</span>
+        <span class="cell-clamp" :title="value || ''">{{ value || '—' }}</span>
       </template>
       <template #item.date="{ value }">{{ fmtDate(value) }}</template>
-      <template #item.comment="{ value }">{{ value || '—' }}</template>
+      <template #item.comment="{ value }">
+        <span class="cell-clamp cell-clamp--wide" :title="value || ''">{{ value || '—' }}</span>
+      </template>
       <template #item.propertyTitle="{ value }">{{ value || '—' }}</template>
       <template #item.contractTerm="{ value }">{{ value || '—' }}</template>
       <template #item.yearKV="{ value }">{{ value || '—' }}</template>
@@ -397,31 +401,31 @@ const filters = ref({
 // применяется поверх через columnOrder (ColumnVisibilityMenu + DnD).
 const headers = [
   { title: '', key: 'period', width: 30, sortable: false },
-  { title: '№ контракта', key: 'contractNumber', width: 130 },
-  { title: 'Открыт', key: 'contractOpenDate', width: 110 },
-  { title: 'Клиент', key: 'clientName' },
-  { title: 'Партнёр', key: 'consultantName' },
-  { title: 'Поставщик', key: 'providerName', width: 140 },
-  { title: 'Продукт', key: 'productName', width: 160 },
-  { title: 'Программа', key: 'programName', width: 160 },
-  { title: 'Дата', key: 'date', width: 110 },
+  { title: '№ контракта', key: 'contractNumber', width: 110 },
+  { title: 'Открыт', key: 'contractOpenDate', width: 96 },
+  { title: 'Клиент', key: 'clientName', width: 150 },
+  { title: 'Партнёр', key: 'consultantName', width: 150 },
+  { title: 'Поставщик', key: 'providerName', width: 120 },
+  { title: 'Продукт', key: 'productName', width: 140 },
+  { title: 'Программа', key: 'programName', width: 140 },
+  { title: 'Дата', key: 'date', width: 96 },
   { title: 'Комментарий', key: 'comment' },
   { title: 'Свойство', key: 'propertyTitle', width: 120 },
   { title: 'Срок', key: 'contractTerm', width: 80, align: 'end' },
   { title: 'Год КВ', key: 'yearKV', width: 80, align: 'end' },
-  { title: 'Транзакция', key: 'amount', align: 'end', width: 130 },
-  { title: 'В РУБ', key: 'amountRUB', align: 'end', width: 130 },
-  { title: '% ДС', key: 'dsCommissionPercentage', align: 'end', width: 80 },
-  { title: 'Доход ДС', key: 'commissionsAmountGrossRUB', align: 'end', width: 140 },
-  { title: 'Доход ДС без НДС', key: 'commissionsAmountRUB', align: 'end', width: 150 },
-  { title: 'Доход DS USD', key: 'commissionsAmountUSD', align: 'end', width: 140 },
-  { title: 'ЛП', key: 'partnerPV', align: 'end', width: 90 },
-  { title: 'ГП', key: 'partnerGV', align: 'end', width: 90 },
-  { title: 'Баллы', key: 'partnerBonus', align: 'end', width: 90 },
-  { title: 'Комиссия', key: 'partnerCommissionRUB', align: 'end', width: 130 },
-  { title: 'Удержание ДС', key: 'dsWithholdingRUB', align: 'end', width: 140 },
-  { title: 'Прибыль', key: 'profitRUB', align: 'end', width: 130 },
-  { title: '', key: 'actions', sortable: false, width: 92 },
+  { title: 'Транзакция', key: 'amount', align: 'end', width: 106 },
+  { title: 'В РУБ', key: 'amountRUB', align: 'end', width: 106 },
+  { title: '% ДС', key: 'dsCommissionPercentage', align: 'end', width: 70 },
+  { title: 'Доход ДС', key: 'commissionsAmountGrossRUB', align: 'end', width: 116 },
+  { title: 'Доход ДС без НДС', key: 'commissionsAmountRUB', align: 'end', width: 124 },
+  { title: 'Доход DS USD', key: 'commissionsAmountUSD', align: 'end', width: 116 },
+  { title: 'ЛП', key: 'partnerPV', align: 'end', width: 80 },
+  { title: 'ГП', key: 'partnerGV', align: 'end', width: 80 },
+  { title: 'Баллы', key: 'partnerBonus', align: 'end', width: 80 },
+  { title: 'Комиссия', key: 'partnerCommissionRUB', align: 'end', width: 110 },
+  { title: 'Удержание ДС', key: 'dsWithholdingRUB', align: 'end', width: 120 },
+  { title: 'Прибыль', key: 'profitRUB', align: 'end', width: 110 },
+  { title: '', key: 'actions', sortable: false, width: 80 },
   { title: '', key: 'data-table-expand', sortable: false, width: 50 },
 ];
 
@@ -728,5 +732,38 @@ onMounted(() => {
 }
 .commissions-table :deep(thead th.sortable:hover) {
   background: rgba(var(--v-theme-on-surface), 0.04);
+}
+
+/* === Компактный режим (по запросу: «слишком большое, ближе/компактнее») ===
+   density="compact" уже срезает высоту строк; дополнительно ужимаем шрифт и
+   паддинги, чтобы влезало больше колонок без горизонтального скролла. */
+.commissions-table :deep(tbody td),
+.commissions-table :deep(thead th) {
+  font-size: 12px;
+  padding-inline: 8px !important;
+}
+.commissions-table :deep(tbody td) {
+  padding-block: 3px !important;
+  height: auto !important;
+}
+.commissions-table :deep(thead th) {
+  font-size: 11px;
+}
+/* Текстовые колонки (ФИО/продукт/программа/поставщик) — не тянуть ширину и
+   не разрастаться по высоте: максимум 2 строки + многоточие, полный текст в
+   title-подсказке. Раньше длинные ФИО (nowrap) тянули ширину, а «Комментарий»/
+   «Программа» рвались на 3 строки и раздували высоту. */
+.commissions-table :deep(td .cell-clamp) {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  max-width: 150px;
+  white-space: normal;
+  line-height: 1.2;
+  word-break: break-word;
+}
+.commissions-table :deep(td .cell-clamp--wide) {
+  max-width: 200px;
 }
 </style>
