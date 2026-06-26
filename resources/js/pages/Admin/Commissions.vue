@@ -125,12 +125,6 @@
             <template v-else-if="col.key === 'commissionsAmountUSD'">
               <strong>{{ fmt(aggregates.commissionsAmountUSD) }} $</strong>
             </template>
-            <template v-else-if="col.key === 'netRevenueRUB'">
-              <strong>{{ fmt(aggregates.netRevenueRUB) }} ₽</strong>
-            </template>
-            <template v-else-if="col.key === 'netRevenueUSD'">
-              <strong>{{ fmt(aggregates.netRevenueUSD) }} $</strong>
-            </template>
             <template v-else-if="col.key === 'partnerCommissionRUB'">
               <strong>{{ fmt(aggregates.partnerCommissionRUB) }} ₽</strong>
             </template>
@@ -206,13 +200,6 @@
       <template #item.commissionsAmountUSD="{ value }">
         <span class="text-no-wrap">{{ fmt(value) }} $</span>
       </template>
-      <template #item.netRevenueRUB="{ value }">
-        <span class="text-no-wrap">{{ fmt(value) }} ₽</span>
-      </template>
-      <template #item.netRevenueUSD="{ value }">
-        <span class="text-no-wrap">{{ fmt(value) }} $</span>
-      </template>
-
       <template #item.partnerPV="{ value }">
         <span v-if="value != null" class="text-no-wrap">{{ fmt(value) }}</span>
         <span v-else class="text-medium-emphasis">—</span>
@@ -427,8 +414,6 @@ const headers = [
   { title: 'Доход ДС', key: 'commissionsAmountGrossRUB', align: 'end', width: 140 },
   { title: 'Доход ДС без НДС', key: 'commissionsAmountRUB', align: 'end', width: 150 },
   { title: 'Доход DS USD', key: 'commissionsAmountUSD', align: 'end', width: 140 },
-  { title: 'Остаток ДС RUB', key: 'netRevenueRUB', align: 'end', width: 130 },
-  { title: 'Остаток ДС USD', key: 'netRevenueUSD', align: 'end', width: 130 },
   { title: 'ЛП', key: 'partnerPV', align: 'end', width: 90 },
   { title: 'ГП', key: 'partnerGV', align: 'end', width: 90 },
   { title: 'Баллы', key: 'partnerBonus', align: 'end', width: 90 },
@@ -444,7 +429,6 @@ const columnVisible = ref({
   propertyTitle: false,
   contractTerm: false,
   yearKV: false,
-  netRevenueUSD: false,
   commissionsAmountUSD: false,
   dsWithholdingRUB: false, // дубль «Комиссии» — по умолчанию скрыт
 });
