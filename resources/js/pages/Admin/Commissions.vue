@@ -246,13 +246,13 @@
       <!-- Аккордеон: цепочка выплат -->
       <template #expanded-row="{ columns, item }">
         <tr>
-          <td :colspan="columns.length" class="pa-3" style="background: rgba(var(--v-theme-surface-variant), 0.3)">
+          <td :colspan="columns.length" class="pa-2" style="background: rgba(var(--v-theme-surface-variant), 0.3)">
             <div v-if="!chainCache[item.id]" class="d-flex align-center pa-2">
               <v-progress-circular indeterminate size="20" class="me-2" />
               Загружаю цепочку…
             </div>
             <template v-else>
-              <div class="text-subtitle-2 mb-2 d-flex align-center ga-2">
+              <div class="text-body-2 mb-1 d-flex align-center ga-2">
                 <v-icon size="18" color="primary">mdi-account-tree</v-icon>
                 Цепочка выплат · Прибыль ДС:
                 <strong class="ms-1" :class="chainCache[item.id].profitDS >= 0 ? 'text-success' : 'text-error'">
@@ -281,7 +281,7 @@
                       </v-chip>
                       <span v-else class="text-medium-emphasis">—</span>
                     </td>
-                    <td class="text-end">{{ row.percent }}%</td>
+                    <td class="text-end">{{ row.levelPercent }}%</td>
                     <td class="text-end">{{ fmt(row.personalVolume) }}</td>
                     <td class="text-end">{{ fmt(row.groupVolume) }}</td>
                     <td class="text-end">{{ fmt(row.groupBonus) }}</td>
@@ -294,8 +294,9 @@
                   </tr>
                 </tbody>
               </v-table>
-              <div class="text-caption text-medium-emphasis mt-2">
+              <div class="text-caption text-medium-emphasis mt-1">
                 Полужирным — прямой партнёр (получатель транзакции).
+                «% кв.» — полный процент уровня квалификации.
                 Прибыль ДС = Доход без НДС − Σ комиссии цепочки.
               </div>
             </template>
@@ -669,6 +670,13 @@ onMounted(() => {
 
 <style scoped>
 .commissions-chain :deep(td) { vertical-align: middle; }
+/* Tighter rows so the expanded chain fits without scrolling. */
+.commissions-chain :deep(td),
+.commissions-chain :deep(th) {
+  height: 26px !important;
+  padding-top: 1px !important;
+  padding-bottom: 1px !important;
+}
 .commissions-chain :deep(th) {
   background: rgba(var(--v-theme-surface-variant), 0.5);
   font-size: 11px;

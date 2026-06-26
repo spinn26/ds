@@ -681,6 +681,7 @@ class AdminFinanceController extends Controller
                 'cm.personalVolume', 'cm.groupVolume',
                 'cm.groupBonus', 'cm.amountRUB',
                 'sl.title as levelTitle', 'sl.level as levelNum',
+                'sl.percent as levelPercent',
             ])
             ->get()
             ->unique(fn ($r) => $r->consultant . '-' . ($r->chainOrder ?? 0))
@@ -698,6 +699,10 @@ class AdminFinanceController extends Controller
                 'consultantName' => $r->consultantName,
                 'chainOrder' => (int) ($r->chainOrder ?? 0),
                 'percent' => (float) ($r->percent ?? 0),
+                // Полный % квалификации уровня (из матрицы), а не маржинальная
+                // разница, что хранится в cm.percent для вышестоящих. Для строк
+                // без уровня (стартовый %) уровня нет — фолбэк на cm.percent.
+                'levelPercent' => (float) ($r->levelPercent ?? $r->percent ?? 0),
                 'levelTitle' => $r->levelTitle,
                 'levelNum' => $r->levelNum,
                 'personalVolume' => round((float) ($r->personalVolume ?? 0), 2),
