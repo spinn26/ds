@@ -47,7 +47,7 @@ class AdminProductCatalogController extends Controller
     {
         $q = DB::table('products_catalog as p')
             ->leftJoin('programs_catalog as g', 'g.product_id', '=', 'p.id')
-            ->groupBy('p.id', 'p.name', 'p.type', 'p.open_product_url', 'p.active', 'p.created_at',
+            ->groupBy('p.id', 'p.name', 'p.type', 'p.provider_name', 'p.open_product_url', 'p.active', 'p.created_at',
                 'p.image_url', 'p.hero_image', 'p.description', 'p.legacy_product_id',
                 'p.visible_to_resident', 'p.visible_to_calculator', 'p.is_primary',
                 'p.accrual_forecast_months')
@@ -55,6 +55,7 @@ class AdminProductCatalogController extends Controller
                 'p.id',
                 'p.name',
                 'p.type',
+                'p.provider_name',
                 'p.open_product_url',
                 'p.active',
                 'p.created_at',
@@ -127,13 +128,13 @@ class AdminProductCatalogController extends Controller
     {
         $r = DB::table('products_catalog as p')
             ->leftJoin('programs_catalog as g', 'g.product_id', '=', 'p.id')
-            ->groupBy('p.id', 'p.name', 'p.type', 'p.open_product_url', 'p.active', 'p.created_at',
+            ->groupBy('p.id', 'p.name', 'p.type', 'p.provider_name', 'p.open_product_url', 'p.active', 'p.created_at',
                 'p.image_url', 'p.hero_image', 'p.description', 'p.legacy_product_id',
                 'p.visible_to_resident', 'p.visible_to_calculator', 'p.is_primary',
                 'p.accrual_forecast_months')
             ->where('p.id', $id)
             ->select([
-                'p.id', 'p.name', 'p.type', 'p.open_product_url', 'p.active', 'p.created_at',
+                'p.id', 'p.name', 'p.type', 'p.provider_name', 'p.open_product_url', 'p.active', 'p.created_at',
                 'p.image_url', 'p.hero_image', 'p.description', 'p.legacy_product_id',
                 'p.visible_to_resident', 'p.visible_to_calculator', 'p.is_primary',
                 'p.accrual_forecast_months',
@@ -178,6 +179,7 @@ class AdminProductCatalogController extends Controller
         $payload = $request->validate([
             'name'           => 'required|string|max:255',
             'type'           => 'nullable|string|max:255',
+            'providerName'   => 'nullable|string|max:255',
             'active'         => 'nullable|boolean',
             'openProductUrl' => 'nullable|string|max:1000',
             'description'    => 'nullable|string|max:4000',
@@ -191,6 +193,7 @@ class AdminProductCatalogController extends Controller
         $id = DB::table('products_catalog')->insertGetId([
             'name'             => $payload['name'],
             'type'             => $payload['type'] ?? null,
+            'provider_name'    => $payload['providerName'] ?? null,
             'open_product_url' => $payload['openProductUrl'] ?? null,
             'description'      => $payload['description'] ?? null,
             'image_url'        => $payload['imageUrl'] ?? null,
@@ -213,6 +216,7 @@ class AdminProductCatalogController extends Controller
         $payload = $request->validate([
             'name'                => 'sometimes|string|max:255',
             'type'                => 'nullable|string|max:255',
+            'providerName'        => 'nullable|string|max:255',
             'active'              => 'nullable|boolean',
             'openProductUrl'      => 'nullable|string|max:1000',
             'description'         => 'nullable|string|max:4000',
@@ -235,6 +239,7 @@ class AdminProductCatalogController extends Controller
         $update = ['updated_at' => now()];
         if ($request->has('name'))                $update['name']                  = $payload['name'];
         if ($request->has('type'))                $update['type']                  = $payload['type'];
+        if ($request->has('providerName'))        $update['provider_name']         = $payload['providerName'];
         if ($request->has('active'))              $update['active']                = $payload['active'];
         if ($request->has('openProductUrl'))      $update['open_product_url']      = $payload['openProductUrl'];
         if ($request->has('description'))         $update['description']           = $payload['description'];
@@ -249,11 +254,47 @@ class AdminProductCatalogController extends Controller
 
         $this->syncToLegacyProduct($id);
 
+        // Поставщик с продукта проставляем всем его программам, чтобы отчёты
+        // («Комиссии», «Матрица продаж») его подхватили (они читают legacy
+        // program.providerName). Только при непустом значении — иначе очистка
+        // поля случайно обнулила бы поставщика у всех программ.
+        if ($request->has('providerName')) {
+            $provider = trim((string) ($payload['providerName'] ?? ''));
+            if ($provider !== '') {
+                $this->propagateProviderToPrograms($id, $provider);
+            }
+        }
+
         // Калькулятор кэширует матрицу продуктов на 10 минут — без инвалидации
         // снятая галка появится в дропдауне только через эти 10 минут.
         \Illuminate\Support\Facades\Cache::forget('calculator:product-matrix:v2');
 
         return $this->showProduct($id);
+    }
+
+    /**
+     * Проставить поставщика всем программам продукта.
+     *  - programs_catalog.vendor — чтобы редактор программы показывал то же;
+     *  - legacy program.providerName — чтобы отчёты/комиссии подхватили.
+     */
+    private function propagateProviderToPrograms(int $catalogProductId, string $provider): void
+    {
+        $programs = DB::table('programs_catalog')
+            ->where('product_id', $catalogProductId)
+            ->get(['id', 'legacy_program_id']);
+
+        if ($programs->isEmpty()) return;
+
+        DB::table('programs_catalog')
+            ->where('product_id', $catalogProductId)
+            ->update(['vendor' => $provider, 'updated_at' => now()]);
+
+        $legacyIds = $programs->pluck('legacy_program_id')->filter()->all();
+        if (! empty($legacyIds)) {
+            DB::table('program')
+                ->whereIn('id', $legacyIds)
+                ->update(['providerName' => $provider]);
+        }
     }
 
     /** DELETE /admin/products-catalog/{id} — soft-delete (active=false) to match page wording. */
@@ -393,6 +434,9 @@ class AdminProductCatalogController extends Controller
             'type'                 => $r->type,
             'typeName'             => $r->type,
             'productType'          => null,
+            // Поставщик на уровне продукта (migration 2026_06_26_000010).
+            // На list-запросе колонка может не выбираться → guard.
+            'providerName'         => property_exists($r, 'provider_name') ? $r->provider_name : null,
             // Поля из расширения каталога (migration 2026_05_28_000010):
             // description / image_url / hero_image / legacy_product_id.
             'description'          => $r->description ?? null,

@@ -183,6 +183,17 @@
                 prepend-inner-icon="mdi-shape" />
             </v-col>
             <v-col cols="12" md="6">
+              <!-- Поставщик на уровне продукта (migration 2026_06_26_000010).
+                   Combobox = выбрать из известных ИЛИ ввести нового. При
+                   сохранении проставляется всем программам продукта (бэкенд),
+                   чтобы отчёты «Комиссии»/«Матрица продаж» его подхватили. -->
+              <v-combobox v-model="editProduct.providerName" :items="supplierOptions"
+                label="Поставщик" clearable
+                prepend-inner-icon="mdi-domain"
+                hint="Выберите из списка или введите нового. Проставится всем программам продукта."
+                persistent-hint />
+            </v-col>
+            <v-col cols="12" md="6">
               <!-- Основной / дополнительный: в каталоге ФК основные выводятся
                    первыми, дополнительные — после. -->
               <v-select v-model="editProduct.isPrimary" :items="primaryItems"
@@ -723,7 +734,7 @@ async function togglePublish(product) {
 function openCreateProduct() {
   editProduct.value = {
     name: '', description: '', imageUrl: '', heroImage: '',
-    type: null, productType: null, educationCourseId: null,
+    type: null, providerName: null, productType: null, educationCourseId: null,
     educationUrl: '', instructionUrl: '', openProductUrl: '',
     active: true, noComission: false, visibleToResident: true, visibleToCalculator: true,
     hasProperty: false, hasTerm: false, hasYearKv: false,
@@ -928,10 +939,21 @@ async function loadProductReferences() {
   } catch {}
 }
 
+// Список известных поставщиков для селектора «Поставщик» в форме продукта.
+// Тот же источник, что в фильтрах «Комиссий» (distinct program.providerName).
+const supplierOptions = ref([]);
+async function loadSuppliers() {
+  try {
+    const { data } = await api.get('/admin/manual-tx/lookups');
+    supplierOptions.value = data.suppliers || [];
+  } catch {}
+}
+
 onMounted(() => {
   loadProducts();
   loadCurrencies();
   loadProductReferences();
+  loadSuppliers();
 });
 </script>
 
