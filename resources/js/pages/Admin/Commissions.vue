@@ -105,7 +105,7 @@
            но вместо заголовков показываем суммы по всему фильтру.
            Отдельная карточка сверху не давала выравнивания с колонками —
            глазами сверять сложно, поэтому переехало внутрь thead. -->
-      <template #thead="{ columns }">
+      <template #headers="{ columns }">
         <tr v-if="aggregates && total > 0" class="commissions-totals">
           <th v-for="col in columns" :key="`tot-${col.key || col.title}`"
               :class="['text-' + (col.align || 'start'), 'commissions-totals__cell']">
@@ -509,7 +509,7 @@ function onOptions(opts) {
   page.value = opts.page;
   if (opts.itemsPerPage) perPage.value = opts.itemsPerPage;
   // sortBy от v-data-table-server здесь не используем — мы полностью
-  // переопределили #thead (для totals-строки сверху), поэтому
+  // переопределили #headers (для totals-строки сверху), поэтому
   // сортировка идёт через onHeaderClick. Иначе клик по заголовку
   // не доходит до Vuetify-обработчика.
   loadData();
