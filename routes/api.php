@@ -421,6 +421,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/admin/dashboard', [\App\Http\Controllers\Api\AdminDashboardController::class, 'index']);
         Route::get('/admin/export/{type}', [\App\Http\Controllers\Api\ExportController::class, 'export'])->middleware('throttle:10,1');
         Route::get('/admin/users', [AdminUserController::class, 'index']);
+        Route::get('/admin/users/export', [AdminUserController::class, 'export']);
         Route::post('/admin/users', [AdminUserController::class, 'store']);
         Route::put('/admin/users/{id}', [AdminUserController::class, 'update']);
         Route::delete('/admin/users/{id}', [AdminUserController::class, 'destroy']);
@@ -668,6 +669,13 @@ Route::prefix('v1')->group(function () {
         Route::get('/admin/reports/sales-matrix/fact', [\App\Http\Controllers\Api\ProductSalesMatrixController::class, 'factMatrix']);
         Route::get('/admin/reports/sales-matrix/total', [\App\Http\Controllers\Api\ProductSalesMatrixController::class, 'totalMatrix']);
         Route::get('/admin/reports/sales-matrix/monthly', [\App\Http\Controllers\Api\ProductSalesMatrixController::class, 'monthly']);
+
+        // Admin — Reports: Partner (ФК) Sales Matrix — иерархия Структура→ФК→Продукт
+        Route::get('/admin/reports/partner-matrix/fact', [\App\Http\Controllers\Api\PartnerSalesMatrixController::class, 'factMatrix']);
+        Route::get('/admin/reports/partner-matrix/inwork', [\App\Http\Controllers\Api\PartnerSalesMatrixController::class, 'inWorkMatrix']);
+        Route::get('/admin/reports/partner-matrix/forecast', [\App\Http\Controllers\Api\PartnerSalesMatrixController::class, 'forecastMatrix']);
+        Route::get('/admin/reports/partner-matrix/total', [\App\Http\Controllers\Api\PartnerSalesMatrixController::class, 'totalMatrix']);
+        Route::get('/admin/reports/partner-matrix/lookups', [\App\Http\Controllers\Api\PartnerSalesMatrixController::class, 'lookups']);
 
         // Admin — Payment registry (spec ✅Реестр выплат.md)
         Route::get('/admin/payment-registry', [\App\Http\Controllers\Api\AdminPaymentRegistryController::class, 'index']);

@@ -2,13 +2,19 @@
   <div>
     <!-- Header + mode toggle -->
     <div class="d-flex align-center mb-4 ga-3 flex-wrap">
-      <PageHeader :title="reportType === 'revenue' ? 'Начисление выручки по продуктам' : 'Продажи по продуктам'"
+      <PageHeader :title="viewMode === 'partner' ? 'Продажи по партнёрам (ФК)' : (reportType === 'revenue' ? 'Начисление выручки по продуктам' : 'Продажи по продуктам')"
         icon="mdi-table-large" class="flex-grow-1 mb-0" />
       <v-btn size="small" variant="tonal" prepend-icon="mdi-currency-rub"
         to="/manage/management-currencies" title="Курсы валют для отчётов">
         Курсы
       </v-btn>
+      <!-- Разрез отчёта: по продуктам / по партнёрам (ФК). -->
+      <v-btn-toggle v-model="viewMode" density="compact" variant="outlined" mandatory color="primary">
+        <v-btn value="product" size="small" prepend-icon="mdi-package-variant-closed">По продуктам</v-btn>
+        <v-btn value="partner" size="small" prepend-icon="mdi-account-group">По партнёрам</v-btn>
+      </v-btn-toggle>
       <!-- Тип отчёта (Part 3, Lena): Продажи / Начисление выручки -->
+      <template v-if="viewMode === 'product'">
       <v-btn-toggle v-model="reportType" density="compact" variant="outlined" mandatory color="secondary">
         <v-btn value="sales" size="small">Продажи</v-btn>
         <v-btn value="revenue" size="small">Начисление выручки</v-btn>
@@ -39,7 +45,11 @@
           </v-tooltip>
         </v-btn>
       </v-btn-toggle>
+      </template>
     </div>
+
+    <PartnerMatrixView v-if="viewMode === 'partner'" />
+    <template v-if="viewMode === 'product'">
 
     <!-- Всегда видимая подсказка по выбранному разрезу (тултипы на кнопках
          видны только при наведении — эта строка дублирует их постоянно). -->
@@ -576,6 +586,7 @@
         </v-card-text>
       </v-card>
     </v-dialog>
+    </template>
   </div>
 </template>
 
@@ -584,6 +595,10 @@ import { ref, computed, watch, onMounted, nextTick } from 'vue';
 import api from '../../api';
 import PageHeader from '../../components/PageHeader.vue';
 import SmartRangeFilter from '../../components/SmartRangeFilter.vue';
+import PartnerMatrixView from './PartnerMatrixView.vue';
+
+// ─── Разрез отчёта: по продуктам / по партнёрам (ФК) ───────────
+const viewMode = ref('product');
 
 // ─── Report mode ──────────────────────────────────────────────
 // inwork  — контракты в работе (pipeline, /forecast)
