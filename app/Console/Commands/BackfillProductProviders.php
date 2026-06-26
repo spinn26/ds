@@ -24,7 +24,8 @@ class BackfillProductProviders extends Command
 {
     protected $signature = 'products:backfill-providers
         {--apply : Persist (otherwise dry-run preview only)}
-        {--force : Overwrite even non-empty provider_name}';
+        {--force : Overwrite even non-empty provider_name}
+        {--propagate : Также заполнить ПУСТОЙ program.providerName/vendor поставщиком продукта (чтобы «Ручной ввод» и отчёты показали поставщика; не затирает уже заданные)}';
 
     protected $description = 'Заполнить products_catalog.provider_name поставщиком из данных БД (legacy program.providerName / Insmart)';
 
@@ -70,6 +71,16 @@ class BackfillProductProviders extends Command
             $this->line('  … ещё ' . (count($planned) - 80));
         }
 
+        // Фаза 2 (опц.): проброс поставщика продукта в ПУСТЫЕ программы, чтобы
+        // «Ручной ввод»/«Комиссии»/«Матрица продаж» (читают program.providerName)
+        // показали поставщика. Не затираем уже заданные.
+        $propagate = (bool) $this->option('propagate');
+        $propPlan = $propagate ? $this->planPropagation($products, $planned, $force) : null;
+        if ($propagate) {
+            $this->info(sprintf('Программ с пустым поставщиком к заполнению: %d (legacy) / %d (catalog)%s',
+                $propPlan['legacy'], $propPlan['catalog'], $apply ? '' : ' (dry-run)'));
+        }
+
         if (! $apply) {
             $this->warn('Dry-run. Запустите с --apply, чтобы записать.');
             return self::SUCCESS;
@@ -83,9 +94,64 @@ class BackfillProductProviders extends Command
             ]);
             $n++;
         }
-        $this->info("Проставлено: $n");
+        $this->info("Проставлено продуктов: $n");
+
+        if ($propagate) {
+            $filled = $this->applyPropagation();
+            $this->info(sprintf('Заполнено пустых программ: %d (legacy) / %d (catalog)', $filled['legacy'], $filled['catalog']));
+        }
 
         return self::SUCCESS;
+    }
+
+    /** Превью: сколько пустых программ будет заполнено поставщиком продукта. */
+    private function planPropagation($products, array $planned, bool $force): array
+    {
+        // Эффективный поставщик продукта = текущее значение, либо планируемое.
+        $plannedTo = [];
+        foreach ($planned as $row) $plannedTo[$row['id']] = $row['to'];
+
+        $legacy = 0; $catalog = 0;
+        foreach ($products as $p) {
+            $provider = trim((string) ($p->provider_name ?? '')) ?: ($plannedTo[$p->id] ?? '');
+            if ($provider === '') continue;
+
+            $catalog += DB::table('programs_catalog')->where('product_id', $p->id)
+                ->where(fn ($w) => $w->whereNull('vendor')->orWhere('vendor', ''))->count();
+
+            if ($p->legacy_product_id) {
+                $legacy += DB::table('program')->where('product', $p->legacy_product_id)
+                    ->whereNull('dateDeleted')
+                    ->where(fn ($w) => $w->whereNull('providerName')->orWhere('providerName', ''))->count();
+            }
+        }
+        return ['legacy' => $legacy, 'catalog' => $catalog];
+    }
+
+    /** Применение: заполнить пустой program.providerName / programs_catalog.vendor. */
+    private function applyPropagation(): array
+    {
+        $legacy = 0; $catalog = 0;
+        $products = DB::table('products_catalog')
+            ->whereNotNull('provider_name')->where('provider_name', '<>', '')
+            ->get(['id', 'legacy_product_id', 'provider_name']);
+
+        foreach ($products as $p) {
+            $provider = trim((string) $p->provider_name);
+            if ($provider === '') continue;
+
+            $catalog += DB::table('programs_catalog')->where('product_id', $p->id)
+                ->where(fn ($w) => $w->whereNull('vendor')->orWhere('vendor', ''))
+                ->update(['vendor' => $provider, 'updated_at' => now()]);
+
+            if ($p->legacy_product_id) {
+                $legacy += DB::table('program')->where('product', $p->legacy_product_id)
+                    ->whereNull('dateDeleted')
+                    ->where(fn ($w) => $w->whereNull('providerName')->orWhere('providerName', ''))
+                    ->update(['providerName' => $provider]);
+            }
+        }
+        return ['legacy' => $legacy, 'catalog' => $catalog];
     }
 
     /** Доминирующий поставщик продукта по данным БД. */
