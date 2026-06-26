@@ -738,9 +738,9 @@
                         <v-chip v-if="q.is_own" size="x-small" color="primary" variant="tonal">мой</v-chip>
                         <v-chip v-else-if="q.is_shared" size="x-small" color="grey" variant="tonal">общий</v-chip>
                       </div>
-                      <div class="text-caption text-medium-emphasis" style="white-space: pre-wrap">{{ q.content }}</div>
+                      <div class="text-caption text-medium-emphasis" style="white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word">{{ q.content }}</div>
                     </div>
-                    <div class="d-flex flex-column ga-1">
+                    <div class="d-flex flex-column ga-1 flex-shrink-0">
                       <v-btn v-if="canEditQuickReply(q)" icon="mdi-pencil" size="x-small"
                         variant="text" title="Редактировать"
                         @click.stop="openQuickReplyEditor(q)" />
