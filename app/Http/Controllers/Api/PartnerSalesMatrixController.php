@@ -73,19 +73,15 @@ class PartnerSalesMatrixController extends Controller
     {
         [$from, $to] = [$params['from'], $params['to']];
 
-        // Дедуп commission chainOrder=1 на транзакцию (последняя версия по id) —
-        // источник «Баллы»(groupBonus) и «Баллы ЛП»(personalVolume) у продавшего ФК.
-        $cmSub = '(SELECT DISTINCT ON (cm.transaction) cm.transaction, cm."groupBonus", cm."personalVolume"
-                   FROM commission cm
-                   WHERE cm."chainOrder" = 1 AND cm."deletedAt" IS NULL
-                   ORDER BY cm.transaction, cm.id DESC) as cmx';
-
+        // «Баллы» берём из самой транзакции (t.personalVolume) — как в
+        // продуктовом отчёте. Раньше тянули из commission(chainOrder=1), но для
+        // свежих транзакций commission-строк может не быть → недосчёт баллов.
+        // «Баллы ЛП (комиссия)» = Баллы × %уровня — считается в assemblePartnerTree.
         return DB::table('transaction as t')
             ->join('contract as co', 'co.id', '=', 't.contract')
             ->join('consultant as cons', 'cons.id', '=', 'co.consultant')
             ->join('product as p', 'p.id', '=', 'co.product')
             ->join('program as pg', 'pg.id', '=', 'co.program')
-            ->leftJoin(DB::raw($cmSub), 'cmx.transaction', '=', 't.id')
             ->whereBetween('t.dateMonth', [$from, $to])
             ->whereNotNull('co.openDate')
             ->whereNull('co.deletedAt')
@@ -105,8 +101,8 @@ class PartnerSalesMatrixController extends Controller
                 DB::raw('SUM(COALESCE(t."amountRUB", 0))      as volume'),
                 DB::raw('COUNT(DISTINCT t.id)                 as cnt'),
                 DB::raw('SUM(COALESCE(t."netRevenueRUB", 0))  as revenue'),
-                DB::raw('SUM(COALESCE(cmx."groupBonus", 0))   as bally'),
-                DB::raw('SUM(COALESCE(cmx."personalVolume", 0)) as bally_lp'),
+                DB::raw('SUM(COALESCE(t."personalVolume", 0)) as bally'),
+                DB::raw('0                                    as bally_lp'),
                 DB::raw('COUNT(DISTINCT co.client)            as client_count'),
             ])
             ->groupBy('co.consultant', 'cons.personName', 'p.id', 'p.name', 't.dateMonth')
@@ -372,8 +368,9 @@ class PartnerSalesMatrixController extends Controller
             }
             $P = &$F['products'][$pid];
 
-            // Накопление на 3 уровнях + grand + помесячно.
-            foreach (['volume', 'count', 'revenue', 'bally', 'ballyLP', 'clientCount'] as $k) {
+            // Накопление на 3 уровнях + grand + помесячно. ballyLP считается
+            // отдельным пост-проходом (= Баллы × %уровня ФК), здесь не копим.
+            foreach (['volume', 'count', 'revenue', 'bally', 'clientCount'] as $k) {
                 $P[$k] += $vals[$k];
                 $F[$k] += $vals[$k];
                 $S[$k] += $vals[$k];
@@ -385,6 +382,38 @@ class PartnerSalesMatrixController extends Controller
             }
             unset($S, $F, $P);
         }
+
+        // ── Пост-расчёт «Баллы ЛП (комиссия)» = Баллы × %уровня квалификации ФК.
+        // Процент берём по ФК и месяцу (закрытая квалификация за период), снизу
+        // вверх: продукт/ФК → структура → итого. Процент свой у каждого ФК,
+        // поэтому на уровне структуры это СУММА ЛП-комиссий её ФК.
+        $pctMap = $this->qualPercentMap($fcIds, $months); // [fcId][YYYY-MM] => percent(0..100)
+        foreach ($structures as &$S) {
+            foreach ($S['fcs'] as $fid => &$F) {
+                $fcPct = $pctMap[$fid] ?? [];
+                foreach ($F['products'] as &$P) {
+                    foreach ($P['monthly'] as $mo => &$pm) {
+                        $lp = round(($pm['bally'] ?? 0) * (($fcPct[$mo] ?? 0) / 100), 2);
+                        $pm['ballyLP'] = $lp;
+                        $P['ballyLP'] += $lp;
+                    }
+                    unset($pm);
+                }
+                unset($P);
+                foreach ($F['monthly'] as $mo => &$fm) {
+                    $lp = round(($fm['bally'] ?? 0) * (($fcPct[$mo] ?? 0) / 100), 2);
+                    $fm['ballyLP'] = $lp;
+                    $F['ballyLP'] += $lp;
+                    $S['monthly'][$mo]['ballyLP'] = ($S['monthly'][$mo]['ballyLP'] ?? 0) + $lp;
+                    $grand['monthly'][$mo]['ballyLP'] = ($grand['monthly'][$mo]['ballyLP'] ?? 0) + $lp;
+                }
+                unset($fm);
+                $S['ballyLP'] += $F['ballyLP'];
+                $grand['ballyLP'] += $F['ballyLP'];
+            }
+            unset($F);
+        }
+        unset($S);
 
         // Финализация: avgCheck, fcCount (distinct), список продуктов/ФК.
         $structOut = [];
@@ -436,5 +465,51 @@ class PartnerSalesMatrixController extends Controller
             foreach ($S['fcSet'] as $id => $_) $set[$id] = true;
         }
         return count($set);
+    }
+
+    /**
+     * Карта %уровня квалификации по ФК и месяцу для заданного периода.
+     * Уровень = max(nominalLevel, calculationLevel) из qualificationLog за месяц,
+     * процент — status_levels.percent (целые 15..55). Используется для расчёта
+     * «Баллы ЛП (комиссия)» = Баллы × %/100.
+     *
+     * @param array<int> $fcIds
+     * @param array<string> $months  (YYYY-MM)
+     * @return array<int, array<string, float>>  [fcId][YYYY-MM] => percent(0..100)
+     */
+    private function qualPercentMap(array $fcIds, array $months): array
+    {
+        if (empty($fcIds) || empty($months)) return [];
+
+        $levels = DB::table('status_levels')->get(['id', 'level', 'percent'])->keyBy('id');
+
+        $rows = DB::table('qualificationLog')
+            ->whereIn('consultant', array_map('intval', array_unique($fcIds)))
+            ->whereNull('dateDeleted')
+            ->whereRaw("TO_CHAR(date, 'YYYY-MM') = ANY(?)", ['{' . implode(',', $months) . '}'])
+            ->get(['consultant', 'date', 'nominalLevel', 'calculationLevel', 'id']);
+
+        // На один (ФК, месяц) может быть несколько строк — берём максимальный
+        // уровень и при равенстве последнюю по id (как qualificationHistory).
+        $map = [];
+        $bestId = [];
+        foreach ($rows as $r) {
+            $mo = substr((string) $r->date, 0, 7);
+            $a = $r->nominalLevel ? ($levels[$r->nominalLevel] ?? null) : null;
+            $b = $r->calculationLevel ? ($levels[$r->calculationLevel] ?? null) : null;
+            $lvl = (! $a) ? $b : ((! $b) ? $a : (($a->level >= $b->level) ? $a : $b));
+            if (! $lvl) continue;
+            $cid = (int) $r->consultant;
+            $key = $cid . '|' . $mo;
+            // приоритет: выше уровень, при равенстве — больший id
+            $prev = $map[$cid][$mo] ?? null;
+            if ($prev === null
+                || (float) $lvl->percent > $prev
+                || ((float) $lvl->percent === $prev && (int) $r->id > ($bestId[$key] ?? 0))) {
+                $map[$cid][$mo] = (float) $lvl->percent;
+                $bestId[$key] = (int) $r->id;
+            }
+        }
+        return $map;
     }
 }

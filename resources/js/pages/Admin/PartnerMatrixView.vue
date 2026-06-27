@@ -84,7 +84,21 @@
     <v-card>
       <div class="pm-wrap">
         <table class="pm-grid">
-          <thead>
+          <thead v-if="showMonths">
+            <tr>
+              <th class="pm-name-col" rowspan="2">Иерархия (Команда ▸ ФК ▸ Продукт)</th>
+              <th v-for="mo in displayMonths" :key="mo" :colspan="activeMetrics.length" class="pm-mgroup">{{ fmtMonthHdr(mo) }}</th>
+              <th :colspan="activeMetrics.length" class="pm-mgroup pm-total-hd">Итого</th>
+            </tr>
+            <tr>
+              <template v-for="mo in displayMonths" :key="`h-${mo}`">
+                <th v-for="(m, mi) in activeMetrics" :key="`h-${mo}-${m.key}`" class="text-end pm-sub-th"
+                  :class="{ 'pm-sep': mi === activeMetrics.length - 1 }">{{ m.short }}</th>
+              </template>
+              <th v-for="m in activeMetrics" :key="`ht-${m.key}`" class="text-end pm-sub-th pm-total-th">{{ m.short }}</th>
+            </tr>
+          </thead>
+          <thead v-else>
             <tr>
               <th class="pm-name-col">Иерархия (Команда ▸ ФК ▸ Продукт)</th>
               <th v-for="m in activeMetrics" :key="m.key" class="text-end">{{ m.short }}</th>
@@ -99,7 +113,11 @@
                     <v-icon size="16">{{ expandedStructs.has(s.structureId) ? 'mdi-menu-down' : 'mdi-menu-right' }}</v-icon>
                     <strong>{{ s.structureName }}</strong>
                   </td>
-                  <td v-for="m in activeMetrics" :key="m.key" class="text-end pm-num">
+                  <template v-for="mo in displayMonths" v-if="showMonths" :key="`sm-${s.structureId}-${mo}`">
+                    <td v-for="(m, mi) in activeMetrics" :key="m.key" class="text-end pm-num pm-month"
+                      :class="{ 'pm-sep': mi === activeMetrics.length - 1 }">{{ monthCell(s, mo, m) }}</td>
+                  </template>
+                  <td v-for="m in activeMetrics" :key="`st-${m.key}`" class="text-end pm-num" :class="{ 'pm-total-cell': showMonths }">
                     <template v-if="m.key === 'revenue'">
                       <div>{{ fmtRub(s.revenue) }}</div>
                       <div class="pm-sub" :title="revenueSubTitle(s)">{{ revenueSub(s, null) }}</div>
@@ -116,7 +134,11 @@
                         <v-icon size="14">{{ isFcExpanded(s.structureId, f.fcId) ? 'mdi-menu-down' : 'mdi-menu-right' }}</v-icon>
                         {{ f.fcName }}
                       </td>
-                      <td v-for="m in activeMetrics" :key="m.key" class="text-end pm-num">
+                      <template v-for="mo in displayMonths" v-if="showMonths" :key="`fm-${f.fcId}-${mo}`">
+                        <td v-for="(m, mi) in activeMetrics" :key="m.key" class="text-end pm-num pm-month"
+                          :class="{ 'pm-sep': mi === activeMetrics.length - 1 }">{{ monthCell(f, mo, m) }}</td>
+                      </template>
+                      <td v-for="m in activeMetrics" :key="`ft-${m.key}`" class="text-end pm-num" :class="{ 'pm-total-cell': showMonths }">
                         <template v-if="m.key === 'revenue'">
                           <div>{{ fmtRub(f.revenue) }}</div>
                           <div class="pm-sub" :title="revenueSubTitle(f)">{{ revenueSub(f, s) }}</div>
@@ -129,7 +151,11 @@
                     <template v-if="isFcExpanded(s.structureId, f.fcId)">
                       <tr v-for="p in f.products" :key="`p${f.fcId}-${p.productId}`" class="pm-row pm-l3">
                         <td class="pm-name pm-prod" style="padding-left: 52px">{{ p.productName }}</td>
-                        <td v-for="m in activeMetrics" :key="m.key" class="text-end pm-num pm-prod-num">
+                        <template v-for="mo in displayMonths" v-if="showMonths" :key="`pm-${p.productId}-${mo}`">
+                          <td v-for="(m, mi) in activeMetrics" :key="m.key" class="text-end pm-num pm-prod-num pm-month"
+                            :class="{ 'pm-sep': mi === activeMetrics.length - 1 }">{{ monthCell(p, mo, m) }}</td>
+                        </template>
+                        <td v-for="m in activeMetrics" :key="`pt-${m.key}`" class="text-end pm-num pm-prod-num" :class="{ 'pm-total-cell': showMonths }">
                           {{ cellVal(p, m) }}
                         </td>
                       </tr>
@@ -141,7 +167,11 @@
               <!-- Итого по сети -->
               <tr class="pm-row pm-total">
                 <td class="pm-name"><strong>ИТОГО ПО СЕТИ</strong></td>
-                <td v-for="m in activeMetrics" :key="m.key" class="text-end pm-num">
+                <template v-for="mo in displayMonths" v-if="showMonths" :key="`gm-${mo}`">
+                  <td v-for="(m, mi) in activeMetrics" :key="m.key" class="text-end pm-num pm-month"
+                    :class="{ 'pm-sep': mi === activeMetrics.length - 1 }"><strong>{{ monthCell(grand, mo, m) }}</strong></td>
+                </template>
+                <td v-for="m in activeMetrics" :key="`gt-${m.key}`" class="text-end pm-num" :class="{ 'pm-total-cell': showMonths }">
                   <template v-if="m.key === 'revenue'">
                     <strong>{{ fmtRub(grand.revenue) }}</strong>
                     <div class="pm-sub" :title="revenueSubTitle(grand)">{{ revenueSub(grand, null) }}</div>
@@ -280,9 +310,22 @@ function fmtNum(v) { return new Intl.NumberFormat('ru-RU', { maximumFractionDigi
  * level === 'team' (parent null & не grand) — % команды показываем прочерком.
  */
 function cellVal(node, m) {
-  // ЛП на уровне команды — прочерк (считается снизу вверх, как в ТЗ).
-  if (m.key === 'ballyLP' && node.structureId !== undefined) return '—';
   const v = node[m.key] ?? 0;
+  if (m.fmt === 'rub') return fmtRub(v);
+  if (m.fmt === 'int') return fmtInt(v);
+  return fmtNum(v);
+}
+
+// ─── Помесячная разбивка ───
+const displayMonths = computed(() => data.value.months || []);
+const showMonths = computed(() => displayMonths.value.length > 1);
+const monthShort = ['', 'Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'];
+function fmtMonthHdr(mo) {
+  const [y, m] = String(mo).split('-');
+  return `${monthShort[parseInt(m, 10)] || mo} '${String(y).slice(2)}`;
+}
+function monthCell(node, mo, m) {
+  const v = node.monthly?.[mo]?.[m.key] ?? 0;
   if (m.fmt === 'rub') return fmtRub(v);
   if (m.fmt === 'int') return fmtInt(v);
   return fmtNum(v);
@@ -384,4 +427,19 @@ onMounted(() => { loadLookups(); loadSuppliers(); loadData(); });
 .pm-l3 .pm-name { display: block; }
 .pm-total { background: rgba(var(--v-theme-on-surface), 0.04); border-top: 2px solid rgba(var(--v-theme-on-surface), 0.12); }
 .pm-total td { border-bottom: none; }
+
+/* Помесячные группы колонок */
+.pm-grid thead th.pm-mgroup {
+  text-align: center; font-size: 11px;
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  border-left: 1px solid rgba(var(--v-theme-on-surface), 0.06);
+}
+.pm-grid thead th.pm-total-hd { color: rgb(var(--v-theme-primary)); }
+.pm-grid thead th.pm-sub-th {
+  font-size: 10px; padding: 4px 8px; text-align: right;
+}
+.pm-grid thead th.pm-total-th { color: rgb(var(--v-theme-primary)); }
+.pm-sep { border-right: 1px solid rgba(var(--v-theme-on-surface), 0.1); }
+.pm-month { font-size: 12px; color: rgba(var(--v-theme-on-surface), 0.78); }
+.pm-total-cell { background: rgba(var(--v-theme-primary), 0.04); font-weight: 500; }
 </style>
