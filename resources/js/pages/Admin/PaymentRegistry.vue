@@ -84,6 +84,7 @@
         item-value="id"
         show-select
         :items-per-page="50"
+        :row-props="rowProps"
       >
         <template #item.personName="{ item }">
           <div class="d-flex align-center ga-2">
@@ -539,6 +540,13 @@ function statusColor(s) {
   return 'info';
 }
 
+// Подсветка всей строки цветом значка статуса реквизитов:
+//   приостановлено → warning, не верифицировано → error, верифицировано → success.
+function rowProps({ item }) {
+  if (item.paymentsSuspended) return { class: 'pr-row--suspended' };
+  return { class: item.verifiedRequisites ? 'pr-row--verified' : 'pr-row--unverified' };
+}
+
 async function load() {
   loading.value = true;
   try {
@@ -589,3 +597,14 @@ async function savePayment() {
 
 onMounted(load);
 </script>
+
+<style scoped>
+/* Подсветка всей строки цветом значка статуса реквизитов. Тон мягкий, чтобы
+   текст и цифры оставались читаемыми; hover чуть усиливает. */
+.v-data-table :deep(tr.pr-row--unverified > td) { background: rgba(var(--v-theme-error), 0.09) !important; }
+.v-data-table :deep(tr.pr-row--suspended > td)  { background: rgba(var(--v-theme-warning), 0.10) !important; }
+.v-data-table :deep(tr.pr-row--verified > td)   { background: rgba(var(--v-theme-success), 0.06) !important; }
+.v-data-table :deep(tr.pr-row--unverified:hover > td) { background: rgba(var(--v-theme-error), 0.14) !important; }
+.v-data-table :deep(tr.pr-row--suspended:hover > td)  { background: rgba(var(--v-theme-warning), 0.16) !important; }
+.v-data-table :deep(tr.pr-row--verified:hover > td)   { background: rgba(var(--v-theme-success), 0.10) !important; }
+</style>
