@@ -100,7 +100,7 @@
               title="Открыть отчёт начислений и выплат"
               :href="`/finance/report?consultant=${item.consultantId}&month=${String(filters.year).padStart(4,'0')}-${String(filters.month).padStart(2,'0')}`"
               target="_blank" />
-            <span>{{ item.personName }}</span>
+            <span :class="{ 'text-error font-weight-medium': !item.verifiedRequisites && !item.paymentsSuspended }">{{ item.personName }}</span>
             <v-chip v-if="item.activityName" size="x-small" variant="tonal"
               :color="activityColor(item.activityId)">{{ item.activityName }}</v-chip>
           </div>
