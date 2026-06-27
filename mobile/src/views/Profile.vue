@@ -94,7 +94,7 @@ const user = computed(() => auth.user);
 const userName = computed(() => {
   const u = auth.user;
   if (!u) return 'Партнёр';
-  return [u.lastName, u.firstName].filter(Boolean).join(' ') || 'Партнёр';
+  return [u.lastName, u.firstName, u.patronymic].filter(Boolean).join(' ') || 'Партнёр';
 });
 const initials = computed(() => {
   const u = auth.user;
