@@ -63,6 +63,9 @@
         <v-autocomplete v-model="filterSuppliers" :items="supplierOptions"
           placeholder="Поставщик" density="compact" variant="outlined" hide-details multiple chips closable-chips
           prepend-inner-icon="mdi-domain" style="min-width: 180px; max-width: 280px" />
+        <v-autocomplete v-model="filterProducts" :items="productOptions" item-title="name" item-value="id"
+          placeholder="Продукт" density="compact" variant="outlined" hide-details multiple chips closable-chips
+          prepend-inner-icon="mdi-package-variant" style="min-width: 180px; max-width: 280px" />
 
         <v-spacer />
         <v-btn size="small" variant="text" prepend-icon="mdi-unfold-more-horizontal" @click="expandAll">Развернуть</v-btn>
@@ -99,7 +102,7 @@
                   <td v-for="m in activeMetrics" :key="m.key" class="text-end pm-num">
                     <template v-if="m.key === 'revenue'">
                       <div>{{ fmtRub(s.revenue) }}</div>
-                      <div class="pm-sub">{{ revenueSub(s, null) }}</div>
+                      <div class="pm-sub" :title="revenueSubTitle(s)">{{ revenueSub(s, null) }}</div>
                     </template>
                     <template v-else>{{ cellVal(s, m) }}</template>
                   </td>
@@ -116,7 +119,7 @@
                       <td v-for="m in activeMetrics" :key="m.key" class="text-end pm-num">
                         <template v-if="m.key === 'revenue'">
                           <div>{{ fmtRub(f.revenue) }}</div>
-                          <div class="pm-sub">{{ revenueSub(f, s) }}</div>
+                          <div class="pm-sub" :title="revenueSubTitle(f)">{{ revenueSub(f, s) }}</div>
                         </template>
                         <template v-else>{{ cellVal(f, m) }}</template>
                       </td>
@@ -141,7 +144,7 @@
                 <td v-for="m in activeMetrics" :key="m.key" class="text-end pm-num">
                   <template v-if="m.key === 'revenue'">
                     <strong>{{ fmtRub(grand.revenue) }}</strong>
-                    <div class="pm-sub">{{ revenueSub(grand, null) }}</div>
+                    <div class="pm-sub" :title="revenueSubTitle(grand)">{{ revenueSub(grand, null) }}</div>
                   </template>
                   <strong v-else>{{ cellVal(grand, m) }}</strong>
                 </td>
@@ -210,7 +213,7 @@ const allMetrics = [
   { key: 'avgCheck', short: 'Ср.чек', label: 'Средний чек (₽)', fmt: 'rub' },
   { key: 'revenue', short: 'Выручка', label: 'Выручка (₽)', fmt: 'rub' },
   { key: 'bally', short: 'Баллы', label: 'Баллы', fmt: 'num' },
-  { key: 'ballyLP', short: 'Баллы ЛП', label: 'Баллы ЛП', fmt: 'num' },
+  { key: 'ballyLP', short: 'Баллы ЛП (комиссия)', label: 'Баллы ЛП (комиссия)', fmt: 'num' },
   { key: 'fcCount', short: 'ФК', label: 'Кол-во ФК', fmt: 'int' },
   { key: 'clientCount', short: 'Клиенты', label: 'Кол-во клиентов', fmt: 'int' },
   // % выручки от команды/компании показываем НЕ отдельными колонками, а
@@ -231,9 +234,11 @@ function toggleMetric(key) {
 const filterStructures = ref([]);
 const filterFcs = ref([]);
 const filterSuppliers = ref([]);
+const filterProducts = ref([]);
 const structureOptions = ref([]);
 const fcOptions = ref([]);
 const supplierOptions = ref([]);
+const productOptions = ref([]);
 
 // ─── Данные ───
 const loading = ref(false);
@@ -299,6 +304,16 @@ function revenueSub(node, parent) {
   return `Доля компании: ${comp.toFixed(1)}%`;
 }
 
+/** Расшифровка КМ/КЛ при наведении на подпись под «Выручкой». */
+function revenueSubTitle(node) {
+  if (node.productId !== undefined) return '';
+  if (node.fcId !== undefined) {
+    return 'КМ — доля выручки ФК в его команде (выручка ФК ÷ выручка команды). '
+      + 'КЛ — доля выручки ФК во всей компании (выручка ФК ÷ выручка компании).';
+  }
+  return 'Доля компании — % выручки этой строки от выручки всей компании.';
+}
+
 // ─── Загрузка ───
 async function loadData() {
   loading.value = true;
@@ -307,6 +322,7 @@ async function loadData() {
     if (filterStructures.value.length) params.structures = filterStructures.value;
     if (filterFcs.value.length) params.fcs = filterFcs.value;
     if (filterSuppliers.value.length) params.suppliers = filterSuppliers.value;
+    if (filterProducts.value.length) params.products = filterProducts.value;
     const { data: res } = await api.get(`/admin/reports/partner-matrix/${reportMode.value}`, { params });
     data.value = { months: res.months || [], structures: res.structures || [], grand: res.grand || null };
     // авто-раскрытие первого уровня
@@ -323,6 +339,7 @@ async function loadLookups() {
     const { data: res } = await api.get('/admin/reports/partner-matrix/lookups', { params });
     structureOptions.value = res.structures || [];
     fcOptions.value = res.fcs || [];
+    productOptions.value = res.products || [];
   } catch {}
 }
 async function loadSuppliers() {
@@ -337,7 +354,7 @@ watch(filterStructures, () => { loadLookups(); });
 // Перезагрузка данных на смену состояния/периода/фильтров.
 watch([reportMode, periodMode, periodYear, periodQuarter, periodMonth,
   rangeFromYear, rangeFromMonth, rangeToYear, rangeToMonth,
-  filterStructures, filterFcs, filterSuppliers], () => loadData());
+  filterStructures, filterFcs, filterSuppliers, filterProducts], () => loadData());
 
 onMounted(() => { loadLookups(); loadSuppliers(); loadData(); });
 </script>

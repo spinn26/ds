@@ -217,7 +217,18 @@ class PartnerSalesMatrixController extends Controller
         }
         $fcs = $fcQuery->orderBy('personName')->limit(3000)->get(['id', 'personName as name']);
 
-        return response()->json(['structures' => $structures, 'fcs' => $fcs]);
+        // Продукты для фильтра — те, по которым есть контракты (distinct).
+        $products = DB::table('contract as co')
+            ->join('product as p', 'p.id', '=', 'co.product')
+            ->whereNull('co.deletedAt')
+            ->whereNotNull('co.openDate')
+            ->select('p.id', 'p.name')
+            ->distinct()
+            ->orderBy('p.name')
+            ->get()
+            ->map(fn ($r) => ['id' => $r->id, 'name' => $r->name]);
+
+        return response()->json(['structures' => $structures, 'fcs' => $fcs, 'products' => $products]);
     }
 
     // ---- helpers ----
