@@ -33,7 +33,7 @@ class CalculatorController extends Controller
      */
     public function productMatrix(): JsonResponse
     {
-        $payload = Cache::remember('calculator:product-matrix:v2', now()->addMinutes(10), function () {
+        $payload = Cache::remember('calculator:product-matrix:v3', now()->addMinutes(10), function () {
             // Видим программу в калькуляторе только если ОБА уровня
             // (продукт-зонтик + программа) имеют visible_to_calculator=true.
             // Колонки добавлены миграциями 2026_05_28_000020 (programs) и
@@ -110,8 +110,12 @@ class CalculatorController extends Controller
                 ->unique(fn ($p) => mb_strtolower($p))
                 ->sort()->values()
                 ->map(fn ($p) => ['id' => $p, 'title' => $p]);
-            $terms      = collect(array_keys($globalTerms))->sort()->values()
-                ->map(fn ($t) => ['id' => $t, 'term' => $t]);
+            // Сортируем по первому числу (диапазон "15-20" встаёт между 14 и 5/6
+            // по своему первому числу, а не лексикографически). id/term — строка.
+            $terms      = collect(array_keys($globalTerms))
+                ->sortBy(fn ($t) => (int) (preg_match('/(\d+)/', (string) $t, $m) ? $m[1] : 0))
+                ->values()
+                ->map(fn ($t) => ['id' => (string) $t, 'term' => (string) $t]);
 
             $levels = DB::table('status_levels')->orderBy('level')->get()
                 ->map(fn ($l) => ['id' => $l->id, 'level' => $l->level, 'title' => $l->title, 'percent' => $l->percent]);
@@ -153,7 +157,7 @@ class CalculatorController extends Controller
             'program'       => 'required|integer',
             // property / term / kvPayoutYear — строки/числа, не FK.
             'calcProperty'  => 'nullable|string',
-            'termContract'  => 'nullable|numeric',
+            'termContract'  => 'nullable|string',  // может быть диапазоном ("15-20")
             'kvPayoutYear'  => 'nullable|integer',
             'amount'        => 'required|numeric|min:0.01',
             'currency'      => 'required|integer',
@@ -391,13 +395,20 @@ class CalculatorController extends Controller
         return $s === '' ? null : $s;
     }
 
-    private static function normTerm($v): ?int
+    /**
+     * Канонический срок контракта как СТРОКА — сохраняем диапазоны ("15-20").
+     * Одиночное число нормализуем к int-строке ("10.0"/10 → "10"), диапазон —
+     * убираем пробелы вокруг дефиса ("15 - 20" → "15-20"). И построение
+     * выпадашки, и матчинг тарифа используют эту функцию → значения совпадают.
+     */
+    private static function normTerm($v): ?string
     {
         if ($v === null || $v === '') return null;
-        // term может быть числом или строкой ("10", "15-20"). Берём первое число.
-        if (is_numeric($v)) return (int) $v;
-        if (preg_match('/(\d+)/', (string) $v, $m)) return (int) $m[1];
-        return null;
+        $s = trim((string) $v);
+        if ($s === '') return null;
+        if (is_numeric($s)) return (string) (int) $s;       // "10" / 10 / "10.0" → "10"
+        $s = preg_replace('/\s*-\s*/', '-', $s);            // "15 - 20" → "15-20"
+        return $s !== '' ? $s : null;
     }
 
     private static function normYear($v): ?int

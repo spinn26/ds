@@ -215,14 +215,21 @@ const filteredProperties = computed(() => {
 const filteredTerms = computed(() => {
   if (selectedProduct.value && selectedProduct.value.hasTerm === false) return [];
   if (!programVariants.value.length) return [];
-  const labelize = (t) => ({ ...t, label: t.term + (t.term > 4 ? ' лет' : t.term > 1 ? ' года' : ' год') });
+  // Срок может быть диапазоном ("15-20"). Суффикс берём по ПЕРВОМУ числу,
+  // сам лейбл — как есть (включая диапазон). Матчинг — по строке (не Number,
+  // иначе "15-20" → NaN и все диапазоны схлопываются).
+  const labelize = (t) => {
+    const n = parseInt(String(t.term), 10) || 0;
+    const suffix = n > 4 ? ' лет' : n > 1 ? ' года' : ' год';
+    return { ...t, label: String(t.term) + suffix };
+  };
   const ids = new Set();
   for (const v of programVariants.value) {
-    if (v.termContractId != null) ids.add(Number(v.termContractId));
-    for (const tid of (v.availableTerms || [])) ids.add(Number(tid));
+    if (v.termContractId != null) ids.add(String(v.termContractId));
+    for (const tid of (v.availableTerms || [])) ids.add(String(tid));
   }
   if (!ids.size) return [];
-  return matrix.terms.filter(t => ids.has(Number(t.id))).map(labelize);
+  return matrix.terms.filter(t => ids.has(String(t.id))).map(labelize);
 });
 
 // Подобрать program.id из вариантов по (termContract, kvPayoutYear) —
@@ -233,8 +240,9 @@ const resolvedProgramId = computed(() => {
     let score = 0;
     let viable = true;
     if (form.termContract) {
-      const hasTerm = v.termContractId == form.termContract
-        || (v.availableTerms || []).includes(Number(form.termContract));
+      const ft = String(form.termContract);
+      const hasTerm = (v.termContractId != null && String(v.termContractId) === ft)
+        || (v.availableTerms || []).some(tid => String(tid) === ft);
       if (hasTerm) score += 2;
       else if (v.termContractId || (v.availableTerms || []).length) viable = false;
     }
