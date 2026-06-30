@@ -82,6 +82,24 @@ class SystemStatusController extends Controller
             DB::table('system_incidents')->where('id', $id)->update($patch);
         });
         Audit::log('incident_update_post', 'system_incident', $id, $data);
+
+        // Telegram: уведомление об изменении (апдейте) по инциденту/тех. работам —
+        // всем пользователям с привязанным telegram_chat_id.
+        $incident = DB::table('system_incidents')->where('id', $id)->first(['title', 'severity']);
+        if ($incident) {
+            [$emoji] = $this->incidentSeverityMeta($incident->severity ?? 'minor');
+            $isClose = in_array($data['status'], ['resolved', 'completed'], true);
+            $head = $isClose ? '✅' : $emoji;
+            $sent = \App\Support\Telegram::broadcastAll(
+                "{$head} <b>" . e($incident->title) . "</b>\n"
+                . 'Обновление: <b>' . e($this->incidentStatusLabel($data['status'])) . "</b>\n"
+                . e($data['message'])
+            );
+            \Illuminate\Support\Facades\Log::info('telegram incident update broadcast', [
+                'incident_id' => $id, 'status' => $data['status'], 'sent' => $sent,
+            ]);
+        }
+
         return response()->json(['message' => 'Апдейт добавлен'], 201);
     }
 
@@ -155,22 +173,19 @@ class SystemStatusController extends Controller
             'title' => $data['title'], 'severity' => $data['severity'] ?? 'minor', 'status' => $status,
         ]);
 
-        // Telegram-рассылка по admin/head на «серьёзные» инциденты —
-        // major и critical (minor/maintenance не шлём, чтобы не спамить).
+        // Telegram-рассылка статуса платформы / тех. работ — всем пользователям
+        // с привязанным telegram_chat_id (как баннер в шапке SPA).
         $sev = $data['severity'] ?? 'minor';
-        if (in_array($sev, ['major', 'critical'], true)) {
-            $emoji = $sev === 'critical' ? '🔴' : '🟠';
-            $sevLabel = $sev === 'critical' ? 'Критический инцидент' : 'Серьёзный инцидент';
-            $sent = \App\Support\Telegram::broadcastToRoles(['admin', 'head'],
-                "{$emoji} <b>{$sevLabel}</b>\n"
-                . "<b>" . e($data['title']) . "</b>\n"
-                . (! empty($data['description']) ? e($data['description']) . "\n" : '')
-                . "Статус: " . e($status)
-            );
-            \Illuminate\Support\Facades\Log::info('telegram incident broadcast', [
-                'incident_id' => $id, 'severity' => $sev, 'sent' => $sent,
-            ]);
-        }
+        [$emoji, $sevLabel] = $this->incidentSeverityMeta($sev);
+        $sent = \App\Support\Telegram::broadcastAll(
+            "{$emoji} <b>{$sevLabel}</b>\n"
+            . '<b>' . e($data['title']) . "</b>\n"
+            . (! empty($data['description']) ? e($data['description']) . "\n" : '')
+            . 'Статус: ' . e($this->incidentStatusLabel($status))
+        );
+        \Illuminate\Support\Facades\Log::info('telegram incident broadcast', [
+            'incident_id' => $id, 'severity' => $sev, 'sent' => $sent,
+        ]);
 
         return response()->json(['id' => $id], 201);
     }
@@ -198,6 +213,22 @@ class SystemStatusController extends Controller
         $data['updated_at'] = now();
         DB::table('system_incidents')->where('id', $id)->update($data);
         Audit::log('incident_update', 'system_incident', $id, $data);
+
+        // Telegram: уведомление о закрытии инцидента/тех. работ при переходе
+        // в resolved/completed (напр. кнопкой «Решён» в шапке).
+        if (isset($data['status']) && in_array($data['status'], ['resolved', 'completed'], true)) {
+            $incident = DB::table('system_incidents')->where('id', $id)->first(['title', 'severity']);
+            if ($incident) {
+                $sent = \App\Support\Telegram::broadcastAll(
+                    '✅ <b>' . e($incident->title) . "</b>\n"
+                    . 'Статус: <b>' . e($this->incidentStatusLabel($data['status'])) . '</b>'
+                );
+                \Illuminate\Support\Facades\Log::info('telegram incident close broadcast', [
+                    'incident_id' => $id, 'status' => $data['status'], 'sent' => $sent,
+                ]);
+            }
+        }
+
         return response()->json(['message' => 'Обновлено']);
     }
 
@@ -243,6 +274,32 @@ class SystemStatusController extends Controller
             'partial_outage' => 'Частичный сбой',
             'major_outage' => 'Серьёзный сбой',
             default => $s,
+        };
+    }
+
+    /** Эмодзи + подпись по severity инцидента (для Telegram). */
+    private function incidentSeverityMeta(string $severity): array
+    {
+        return match ($severity) {
+            'critical' => ['🔴', 'Критический инцидент'],
+            'major' => ['🟠', 'Серьёзный инцидент'],
+            'maintenance' => ['🔧', 'Технические работы'],
+            default => ['🟡', 'Инцидент'],
+        };
+    }
+
+    /** Человекочитаемая подпись статуса инцидента (для Telegram). */
+    private function incidentStatusLabel(string $status): string
+    {
+        return match ($status) {
+            'investigating' => 'Изучаем проблему',
+            'identified' => 'Причина определена',
+            'monitoring' => 'Наблюдаем',
+            'resolved' => 'Решено',
+            'scheduled' => 'Запланировано',
+            'in_progress' => 'В процессе',
+            'completed' => 'Завершено',
+            default => $status,
         };
     }
 
