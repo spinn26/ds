@@ -76,6 +76,8 @@
         <ActionsCell @edit="openEdit(item)" @delete="confirmDelete(item)">
           <v-btn v-if="item.dateDeleted" icon="mdi-backup-restore" size="x-small" variant="text" color="success"
             title="Восстановить аккаунт" :loading="restoringId === item.id" @click.stop="restoreUser(item)" />
+          <v-btn v-if="item.dateDeleted" icon="mdi-delete-forever" size="x-small" variant="text" color="error"
+            title="Удалить физически (с переносом сущностей)" @click.stop="openForceDelete(item)" />
           <v-btn icon="mdi-history" size="x-small" variant="text" color="secondary"
             title="История входа" @click.stop="openLoginHistory(item)" />
           <v-btn icon="mdi-login" size="x-small" variant="text" color="secondary"
@@ -192,6 +194,66 @@
     <!-- История входов. Гео — ip-api.com с кэшем `ip_geo_cache` (ttl 30д).
          Флаги — emoji из ISO-2 (regional indicator symbols), иконки браузера
          и ОС берутся из user-agent через uaParse(). -->
+    <!-- Физическое удаление аккаунта с переносом связанных сущностей -->
+    <v-dialog v-model="forceDialog" max-width="620" scrollable>
+      <v-card v-if="forceTarget">
+        <v-card-title class="d-flex align-center ga-2 pa-4">
+          <v-avatar color="error" variant="tonal" size="40"><v-icon>mdi-delete-forever</v-icon></v-avatar>
+          <div class="d-flex flex-column">
+            <span class="text-h6">Физическое удаление</span>
+            <span class="text-caption text-medium-emphasis">
+              {{ forceTarget.lastName }} {{ forceTarget.firstName }}
+              <template v-if="forceTarget.email"> · {{ forceTarget.email }}</template>
+              · id {{ forceTarget.id }}
+            </span>
+          </div>
+          <v-spacer />
+          <v-btn icon="mdi-close" variant="text" size="small" @click="forceDialog = false" />
+        </v-card-title>
+        <v-divider />
+        <v-card-text class="pa-4">
+          <div v-if="forceLoading" class="d-flex justify-center pa-6">
+            <v-progress-circular indeterminate size="32" />
+          </div>
+          <template v-else>
+            <v-alert type="error" variant="tonal" density="compact" class="mb-3" icon="mdi-alert">
+              Действие необратимо: строка WebUser удаляется полностью.
+            </v-alert>
+
+            <div v-if="forceRefs.length" class="mb-3">
+              <div class="text-body-2 mb-2">
+                На аккаунте есть связанные сущности — выберите аккаунт, <b>на который их перенести</b>:
+              </div>
+              <v-table density="compact" class="mb-3 force-refs">
+                <thead><tr><th>Сущность</th><th class="text-end">Кол-во</th></tr></thead>
+                <tbody>
+                  <tr v-for="r in forceRefs" :key="r.table + r.column">
+                    <td>{{ entityLabel(r.table) }} <span class="text-caption text-medium-emphasis">({{ r.table }}.{{ r.column }})</span></td>
+                    <td class="text-end font-weight-medium">{{ r.count }}</td>
+                  </tr>
+                  <tr v-if="forceTokens"><td>Активные сессии (токены)</td><td class="text-end">{{ forceTokens }} · будут удалены</td></tr>
+                </tbody>
+              </v-table>
+              <UserPicker v-model="forceReassignTo" label="Перенести сущности на аккаунт"
+                placeholder="Имя или email живого аккаунта" />
+            </div>
+
+            <v-alert v-else type="success" variant="tonal" density="compact" icon="mdi-check">
+              Связанных сущностей нет — аккаунт можно удалить без переноса.
+            </v-alert>
+          </template>
+        </v-card-text>
+        <v-divider />
+        <v-card-actions class="pa-3">
+          <v-spacer />
+          <v-btn variant="text" @click="forceDialog = false">Отмена</v-btn>
+          <v-btn color="error" variant="flat" :loading="forceDeleting"
+            :disabled="forceLoading || (forceRefs.length > 0 && !forceReassignTo)"
+            @click="doForceDelete">Удалить физически</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <v-dialog v-model="loginHistoryDialog" max-width="980" scrollable>
       <v-card>
         <v-card-title class="d-flex align-center ga-2 pa-4">
@@ -295,6 +357,7 @@ import {
   PageHeader, FilterBar, DataTableWrapper, StatusChip, BooleanCell, ActionsCell,
   DialogShell, FormErrors, ColumnVisibilityMenu, EmptyState,
 } from '../../components';
+import UserPicker from '../../components/UserPicker.vue';
 import { useCrud } from '../../composables/useCrud';
 import { exportToXlsx } from '../../composables/useExport';
 import { useSnackbar } from '../../composables/useSnackbar';
@@ -442,6 +505,61 @@ async function restoreUser(user) {
     showError(e.response?.data?.message || 'Не удалось восстановить');
   } finally {
     restoringId.value = null;
+  }
+}
+
+// === Физическое удаление с переносом сущностей ===
+const forceDialog = ref(false);
+const forceTarget = ref(null);
+const forceLoading = ref(false);
+const forceDeleting = ref(false);
+const forceRefs = ref([]);
+const forceTokens = ref(0);
+const forceReassignTo = ref(null);
+
+// Человекочитаемые ярлыки для самых частых legacy-таблиц; остальное —
+// сырое имя таблицы (в скобках показываем table.column в любом случае).
+const ENTITY_LABELS = {
+  client: 'Клиенты', consultant: 'Партнёрские профили', contract: 'Контракты',
+  commission: 'Комиссии', consultantBalance: 'Балансы', consultantPayment: 'Выплаты',
+  requisites: 'Реквизиты', bankrequisites: 'Банк. реквизиты', criterion: 'Критерии',
+  clientGoal: 'Цели клиентов', documentlogs: 'Логи документов', WebUser: 'Связь WebUser',
+};
+function entityLabel(t) { return ENTITY_LABELS[t] || t; }
+
+async function openForceDelete(user) {
+  forceTarget.value = user;
+  forceReassignTo.value = null;
+  forceRefs.value = [];
+  forceTokens.value = 0;
+  forceDialog.value = true;
+  forceLoading.value = true;
+  try {
+    const { data } = await api.get(`/admin/users/${user.id}/references`);
+    forceRefs.value = data.entities || [];
+    forceTokens.value = data.tokens || 0;
+  } catch (e) {
+    showError(e.response?.data?.message || 'Не удалось получить связи аккаунта');
+    forceDialog.value = false;
+  } finally {
+    forceLoading.value = false;
+  }
+}
+
+async function doForceDelete() {
+  if (!forceTarget.value) return;
+  forceDeleting.value = true;
+  try {
+    await api.delete(`/admin/users/${forceTarget.value.id}/force`, {
+      data: forceReassignTo.value ? { reassign_to: forceReassignTo.value } : {},
+    });
+    showSuccess('Аккаунт удалён физически');
+    forceDialog.value = false;
+    await load();
+  } catch (e) {
+    showError(e.response?.data?.message || 'Не удалось удалить');
+  } finally {
+    forceDeleting.value = false;
   }
 }
 

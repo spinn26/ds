@@ -353,6 +353,133 @@ class AdminUserController extends Controller
     }
 
     /**
+     * FK-колонки, ссылающиеся на "WebUser" (из information_schema). ~50 штук
+     * в legacy Directual-схеме. Используется references()/forceDelete() для
+     * показа связанных сущностей и переноса их на другой аккаунт.
+     */
+    private function webUserReferencingColumns(): array
+    {
+        $rows = DB::select(
+            "SELECT tc.table_name AS t, kcu.column_name AS c
+             FROM information_schema.table_constraints tc
+             JOIN information_schema.key_column_usage kcu
+               ON tc.constraint_name = kcu.constraint_name
+             JOIN information_schema.constraint_column_usage ccu
+               ON tc.constraint_name = ccu.constraint_name
+             WHERE tc.constraint_type = 'FOREIGN KEY' AND ccu.table_name = 'WebUser'"
+        );
+
+        return array_map(fn ($r) => [$r->t, $r->c], $rows);
+    }
+
+    /**
+     * GET /admin/users/{id}/references — какие сущности завязаны на аккаунт.
+     * Нужно для диалога физического удаления: показать, что будет перенесено,
+     * и потребовать выбор целевого аккаунта, если связи есть.
+     */
+    public function references(int $id): JsonResponse
+    {
+        User::findOrFail($id);
+
+        $entities = [];
+        foreach ($this->webUserReferencingColumns() as [$table, $column]) {
+            $count = (int) DB::table($table)->where($column, $id)->count();
+            if ($count > 0) {
+                $entities[] = ['table' => $table, 'column' => $column, 'count' => $count];
+            }
+        }
+        usort($entities, fn ($a, $b) => $b['count'] <=> $a['count']);
+
+        $tokens = (int) DB::table('personal_access_tokens')
+            ->where('tokenable_type', User::class)
+            ->where('tokenable_id', $id)
+            ->count();
+
+        return response()->json(['entities' => $entities, 'tokens' => $tokens]);
+    }
+
+    /**
+     * DELETE /admin/users/{id}/force — ФИЗИЧЕСКОЕ удаление аккаунта.
+     * WebUser завязан на ~50 FK-таблиц, поэтому:
+     *   1) если на аккаунте есть связанные сущности — обязателен reassign_to
+     *      (другой живой WebUser), на который они переносятся;
+     *   2) переносим все FK-ссылки, удаляем токены, удаляем строку — в одной
+     *      транзакции. При конфликте уникальных индексов транзакция
+     *      откатывается и возвращаем понятную ошибку.
+     * Только admin, нельзя себя, только уже мягко-удалённые (защита от случайного
+     * необратимого удаления живого аккаунта).
+     */
+    public function forceDelete(Request $request, int $id): JsonResponse
+    {
+        if (! $request->user()->hasAnyRole(['admin'])) {
+            return response()->json(['message' => 'Только администратор'], 403);
+        }
+        if ($id === (int) $request->user()->id) {
+            return response()->json(['message' => 'Нельзя удалить свой аккаунт'], 422);
+        }
+
+        $user = User::findOrFail($id);
+        if ($user->dateDeleted === null) {
+            return response()->json(['message' => 'Сначала мягко удалите аккаунт, потом удаляйте физически'], 422);
+        }
+
+        $reassignTo = $request->filled('reassign_to') ? (int) $request->input('reassign_to') : null;
+
+        // Собираем реальные ссылки.
+        $refs = [];
+        foreach ($this->webUserReferencingColumns() as [$table, $column]) {
+            $count = (int) DB::table($table)->where($column, $id)->count();
+            if ($count > 0) $refs[] = [$table, $column, $count];
+        }
+
+        if (! empty($refs) && ! $reassignTo) {
+            return response()->json([
+                'message' => 'На аккаунте есть связанные сущности — укажите аккаунт для переноса',
+            ], 422);
+        }
+        if ($reassignTo !== null) {
+            if ($reassignTo === $id) {
+                return response()->json(['message' => 'Нельзя перенести на тот же аккаунт'], 422);
+            }
+            $target = User::find($reassignTo);
+            if (! $target) {
+                return response()->json(['message' => 'Аккаунт для переноса не найден'], 404);
+            }
+            if ($target->dateDeleted !== null) {
+                return response()->json(['message' => 'Аккаунт для переноса сам удалён'], 422);
+            }
+        }
+
+        $moved = 0;
+        try {
+            DB::transaction(function () use ($id, $reassignTo, $refs, &$moved) {
+                foreach ($refs as [$table, $column, $count]) {
+                    DB::table($table)->where($column, $id)->update([$column => $reassignTo]);
+                    $moved += $count;
+                }
+                DB::table('personal_access_tokens')
+                    ->where('tokenable_type', User::class)
+                    ->where('tokenable_id', $id)
+                    ->delete();
+                DB::table('WebUser')->where('id', $id)->delete();
+            });
+        } catch (\Illuminate\Database\QueryException $e) {
+            // Чаще всего — конфликт уникального индекса при переносе (у целевого
+            // аккаунта уже есть строка с тем же ключом). Транзакция откатилась.
+            return response()->json([
+                'message' => 'Перенос упёрся в конфликт данных у целевого аккаунта — удаление отменено. '
+                    . 'Проверьте дубли (напр. один и тот же период/контракт на обоих аккаунтах).',
+            ], 409);
+        }
+
+        return response()->json([
+            'message' => 'Аккаунт удалён физически',
+            'moved' => $moved,
+            'reassignedTo' => $reassignTo,
+        ]);
+    }
+
+    /**
      * История входов пользователя: audit_log (action='login') + гео-резолв
      * по IP через IpGeoService (кэш в `ip_geo_cache`).
      *
