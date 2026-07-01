@@ -91,6 +91,30 @@ class Telegram
         return $sent;
     }
 
+    /**
+     * Персонализированная рассылка всем с привязанным chat_id.
+     * $builder получает строку WebUser (id, firstName, patronymic, ...) и
+     * возвращает готовый текст сообщения — или null/'' чтобы пропустить.
+     */
+    public static function broadcastAllPersonalized(callable $builder): int
+    {
+        if (! self::enabled()) return 0;
+        $sent = 0;
+        DB::table('WebUser')
+            ->whereNull('dateDeleted')
+            ->whereNotNull('telegram_chat_id')
+            ->where('telegram_chat_id', '!=', '')
+            ->orderBy('id')
+            ->chunk(500, function ($users) use ($builder, &$sent) {
+                foreach ($users as $u) {
+                    $text = $builder($u);
+                    if ($text === null || $text === '') continue;
+                    if (self::raw((string) $u->telegram_chat_id, $text)) $sent++;
+                }
+            });
+        return $sent;
+    }
+
     /** Рассылка по ролям всем у кого привязан chat_id. */
     public static function broadcastToRoles(array $roles, string $text): int
     {

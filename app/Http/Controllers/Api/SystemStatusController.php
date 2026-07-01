@@ -10,6 +10,16 @@ use Illuminate\Support\Facades\DB;
 
 class SystemStatusController extends Controller
 {
+    /** Визуальный разделитель для Telegram-сообщений. */
+    private const TG_DIVIDER = '━━━━━━━━━━━━━━';
+
+    /** Персональное обращение по имени-отчеству (с фолбэком). */
+    private function tgGreeting($user): string
+    {
+        $name = trim(($user->firstName ?? '') . ' ' . ($user->patronymic ?? ''));
+        return $name !== '' ? 'Здравствуйте, ' . e($name) . '!' : 'Здравствуйте!';
+    }
+
     /**
      * Публичная сводка для страницы /status:
      *  - компоненты с текущим статусом
@@ -84,16 +94,21 @@ class SystemStatusController extends Controller
         Audit::log('incident_update_post', 'system_incident', $id, $data);
 
         // Telegram: уведомление об изменении (апдейте) по инциденту/тех. работам —
-        // всем пользователям с привязанным telegram_chat_id.
+        // всем пользователям с привязанным telegram_chat_id, с обращением по имени.
         $incident = DB::table('system_incidents')->where('id', $id)->first(['title', 'severity']);
         if ($incident) {
             [$emoji] = $this->incidentSeverityMeta($incident->severity ?? 'minor');
             $isClose = in_array($data['status'], ['resolved', 'completed'], true);
             $head = $isClose ? '✅' : $emoji;
-            $sent = \App\Support\Telegram::broadcastAll(
-                "{$head} <b>" . e($incident->title) . "</b>\n"
-                . 'Обновление: <b>' . e($this->incidentStatusLabel($data['status'])) . "</b>\n"
-                . e($data['message'])
+            $title = $incident->title;
+            $statusLabel = $this->incidentStatusLabel($data['status']);
+            $message = $data['message'];
+            $sent = \App\Support\Telegram::broadcastAllPersonalized(
+                fn ($u) => "{$head} <b>" . e($title) . "</b>\n"
+                    . self::TG_DIVIDER . "\n"
+                    . $this->tgGreeting($u) . "\n\n"
+                    . '🔄 Обновление статуса: <b>' . e($statusLabel) . "</b>\n\n"
+                    . e($message)
             );
             \Illuminate\Support\Facades\Log::info('telegram incident update broadcast', [
                 'incident_id' => $id, 'status' => $data['status'], 'sent' => $sent,
@@ -174,14 +189,20 @@ class SystemStatusController extends Controller
         ]);
 
         // Telegram-рассылка статуса платформы / тех. работ — всем пользователям
-        // с привязанным telegram_chat_id (как баннер в шапке SPA).
+        // с привязанным telegram_chat_id (как баннер в шапке SPA), с обращением
+        // по имени-отчеству.
         $sev = $data['severity'] ?? 'minor';
         [$emoji, $sevLabel] = $this->incidentSeverityMeta($sev);
-        $sent = \App\Support\Telegram::broadcastAll(
-            "{$emoji} <b>{$sevLabel}</b>\n"
-            . '<b>' . e($data['title']) . "</b>\n"
-            . (! empty($data['description']) ? e($data['description']) . "\n" : '')
-            . 'Статус: ' . e($this->incidentStatusLabel($status))
+        $title = $data['title'];
+        $desc = $data['description'] ?? null;
+        $statusLabel = $this->incidentStatusLabel($status);
+        $sent = \App\Support\Telegram::broadcastAllPersonalized(
+            fn ($u) => "{$emoji} <b>" . e($sevLabel) . "</b>\n"
+                . self::TG_DIVIDER . "\n"
+                . $this->tgGreeting($u) . "\n\n"
+                . '<b>' . e($title) . "</b>\n"
+                . ($desc ? "\n" . e($desc) . "\n" : '')
+                . "\n📊 Статус: <b>" . e($statusLabel) . '</b>'
         );
         \Illuminate\Support\Facades\Log::info('telegram incident broadcast', [
             'incident_id' => $id, 'severity' => $sev, 'sent' => $sent,
@@ -219,9 +240,15 @@ class SystemStatusController extends Controller
         if (isset($data['status']) && in_array($data['status'], ['resolved', 'completed'], true)) {
             $incident = DB::table('system_incidents')->where('id', $id)->first(['title', 'severity']);
             if ($incident) {
-                $sent = \App\Support\Telegram::broadcastAll(
-                    '✅ <b>' . e($incident->title) . "</b>\n"
-                    . 'Статус: <b>' . e($this->incidentStatusLabel($data['status'])) . '</b>'
+                $title = $incident->title;
+                $statusLabel = $this->incidentStatusLabel($data['status']);
+                $sent = \App\Support\Telegram::broadcastAllPersonalized(
+                    fn ($u) => '✅ <b>' . e($title) . "</b>\n"
+                        . self::TG_DIVIDER . "\n"
+                        . $this->tgGreeting($u) . "\n\n"
+                        . "Работы завершены, платформа работает в штатном режиме.\n"
+                        . 'Статус: <b>' . e($statusLabel) . "</b>\n\n"
+                        . 'Спасибо за ожидание! 🙌'
                 );
                 \Illuminate\Support\Facades\Log::info('telegram incident close broadcast', [
                     'incident_id' => $id, 'status' => $data['status'], 'sent' => $sent,
