@@ -14,6 +14,8 @@
       в следующей фазе.
     </v-alert>
 
+    <MaintenanceControl class="mb-4" />
+
     <v-card>
       <v-tabs v-model="tab" color="primary" show-arrows>
         <v-tab v-for="g in groups" :key="g.category" :value="g.category">
@@ -69,6 +71,7 @@
 import { ref, reactive, onMounted } from 'vue';
 import api from '../../api';
 import { PageHeader, EmptyState } from '../../components';
+import MaintenanceControl from '../../components/MaintenanceControl.vue';
 
 const groups = ref([]);
 const form = reactive({});
@@ -85,7 +88,8 @@ async function load() {
   loading.value = true;
   try {
     const { data } = await api.get('/admin/settings');
-    groups.value = data.groups || [];
+    // Категория «maintenance» управляется отдельной карточкой сверху — прячем из вкладок.
+    groups.value = (data.groups || []).filter((g) => g.category !== 'maintenance');
     for (const g of groups.value) {
       for (const item of g.items) {
         form[item.key] = item.value;

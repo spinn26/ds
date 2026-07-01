@@ -70,6 +70,11 @@ Route::prefix('v1')->group(function () {
     Route::get('/i18n/overrides', [\App\Http\Controllers\Api\TranslationController::class, 'overrides'])
         ->middleware('throttle:60,1');
 
+    // Статус режима обслуживания — ПУБЛИЧНО (страница /maintenance читает отсчёт
+    // и сама впускает обратно, когда админ выключит). Без auth и без maintenance-гарда.
+    Route::get('/maintenance', [\App\Http\Controllers\Api\MaintenanceController::class, 'status'])
+        ->middleware('throttle:60,1');
+
     Route::middleware(['auth:sanctum', 'maintenance'])->group(function () {
         // Контент-страница по slug + активные фиче-флаги (доступны всем auth).
         Route::get('/page/{slug}', [\App\Http\Controllers\Api\ContentPageController::class, 'show']);
@@ -334,6 +339,10 @@ Route::prefix('v1')->group(function () {
             // Раздел «Настройки» (system_settings) — только admin.
             Route::get('/admin/settings', [\App\Http\Controllers\Api\AdminSettingsController::class, 'index']);
             Route::put('/admin/settings', [\App\Http\Controllers\Api\AdminSettingsController::class, 'update']);
+
+            // Режим обслуживания — кнопка «закрыть доступ» + отсчёт. Только admin;
+            // админ проходит maintenance-гард, поэтому может выключить режим обратно.
+            Route::post('/admin/maintenance', [\App\Http\Controllers\Api\MaintenanceController::class, 'update']);
 
             // Раздел «Дизайн» (шаблоны логотипа/палитр/CSS) — только admin.
             Route::get('/admin/design/themes', [\App\Http\Controllers\Api\AdminDesignController::class, 'index']);

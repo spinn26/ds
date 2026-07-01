@@ -25,9 +25,12 @@ class EnsureNotInMaintenance
             return $next($request);
         }
 
+        $endsAt = SystemSetting::value('maintenance.ends_at');
+
         return response()->json([
             'maintenance' => true,
             'message' => SystemSetting::value('maintenance.message', 'Идут технические работы.'),
+            'ends_at' => $endsAt !== '' ? $endsAt : null,
         ], 503);
     }
 }
