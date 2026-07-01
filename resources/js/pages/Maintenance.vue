@@ -26,10 +26,16 @@
         Завершаем последние шаги…
       </div>
 
-      <v-btn class="mt-8" size="large" variant="flat" color="primary"
-        prepend-icon="mdi-refresh" @click="retry">
-        Обновить
-      </v-btn>
+      <div class="maint-actions mt-8">
+        <v-btn size="large" variant="flat" color="primary"
+          prepend-icon="mdi-refresh" @click="retry">
+          Обновить
+        </v-btn>
+        <v-btn v-if="loggedIn" size="large" variant="text"
+          prepend-icon="mdi-logout" @click="logout">
+          Выйти
+        </v-btn>
+      </div>
     </div>
   </div>
 </template>
@@ -38,6 +44,11 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import api from '../api';
 import BrandWaves from '../components/BrandWaves.vue';
+import { useAuthStore } from '../stores/auth';
+
+const auth = useAuthStore();
+const loggedIn = computed(() => !!(auth.token || auth.user));
+function logout() { auth.logout(); window.location.href = '/login'; }
 
 const message = ref('');
 try { message.value = sessionStorage.getItem('maintenance_message') || 'Идут технические работы. Скоро вернёмся.'; } catch { message.value = 'Идут технические работы.'; }
@@ -163,6 +174,7 @@ onBeforeUnmount(() => {
   margin: 0 auto;
   white-space: pre-line;
 }
+.maint-actions { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
 .countdown { display: flex; flex-direction: column; align-items: center; }
 .cd-label {
   text-transform: uppercase;
