@@ -112,7 +112,7 @@ class User extends Authenticatable
     /** Any staff role — sees company-wide data. */
     public function isStaff(): bool
     {
-        return $this->hasAnyRole(['admin', 'backoffice', 'support', 'finance', 'head', 'calculations', 'corrections', 'education']);
+        return $this->hasAnyRole(['admin', 'backoffice', 'support', 'finance', 'head', 'calculations', 'corrections', 'education', 'invest']);
     }
 
     /** Linked consultant record (null for pure staff accounts). */

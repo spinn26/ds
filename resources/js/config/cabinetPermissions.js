@@ -224,6 +224,9 @@ export function getPermission(userRoles, section) {
       bestLevel = level;
     }
   }
+  // Инвест департамент — просмотр всех разделов. Как базовый VIEW: не понижает
+  // права других ролей (если совмещён), но открывает view там, где их нет.
+  if (!bestLevel && userRoles.includes('invest') && section !== 'permissions') return VIEW;
   return bestLevel;
 }
 
@@ -246,6 +249,8 @@ export function canFull(userRoles, section) {
 export function availableSections(userRoles) {
   if (!userRoles?.length) return new Set();
   if (userRoles.includes('admin')) return new Set(['*']);
+  // Инвест департамент видит все разделы (view-only через getPermission).
+  if (userRoles.includes('invest')) return new Set(['*']);
   const out = new Set();
   for (const role of userRoles) {
     const cabinet = cabinetPermissions[role];

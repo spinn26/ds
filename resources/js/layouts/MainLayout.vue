@@ -900,7 +900,7 @@ const userRoles = computed(() => {
 });
 
 const isStaff = computed(() =>
-  userRoles.value.some(r => ['admin', 'backoffice', 'support', 'finance', 'head', 'calculations', 'corrections', 'education'].includes(r))
+  userRoles.value.some(r => ['admin', 'backoffice', 'support', 'finance', 'head', 'calculations', 'corrections', 'education', 'invest'].includes(r))
 );
 
 // Видимость секций — auth-store.permissions (загружается из БД через
@@ -933,6 +933,7 @@ const cabinetName = computed(() => {
   if (userRoles.value.includes('calculations')) return 'Расчёты';
   if (userRoles.value.includes('corrections')) return 'Правки';
   if (userRoles.value.includes('education')) return 'Куратор обучения';
+  if (userRoles.value.includes('invest')) return 'Инвест департамент';
   return null;
 });
 

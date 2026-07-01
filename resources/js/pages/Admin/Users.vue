@@ -2,6 +2,10 @@
   <div>
     <PageHeader title="Пользователи" icon="mdi-account-multiple">
       <template #actions>
+        <v-btn variant="tonal" prepend-icon="mdi-microsoft-excel" :loading="exporting"
+          :disabled="loading" class="me-2" @click="exportXlsx">
+          Excel{{ activeFilterCount > 0 ? ' (по фильтру)' : '' }}
+        </v-btn>
         <v-btn color="primary" prepend-icon="mdi-plus" @click="openCreate">Добавить</v-btn>
       </template>
     </PageHeader>
@@ -277,6 +281,8 @@ import {
   DialogShell, FormErrors, ColumnVisibilityMenu, EmptyState,
 } from '../../components';
 import { useCrud } from '../../composables/useCrud';
+import { exportToXlsx } from '../../composables/useExport';
+import { useSnackbar } from '../../composables/useSnackbar';
 import { ref, computed } from 'vue';
 
 function roleColor(r) {
@@ -288,6 +294,7 @@ function roleColor(r) {
     finance: 'teal',
     calculations: 'brown',
     corrections: 'amber',
+    invest: 'cyan',
     consultant: 'green',
   }[r]) || 'grey';
 }
@@ -306,6 +313,7 @@ const allRoleOptions = [
   { title: 'Расчёты (Богданова)', value: 'calculations' },
   { title: 'Правки', value: 'corrections' },
   { title: 'Отдел обучения', value: 'education' },
+  { title: 'Инвест департамент', value: 'invest' },
   { title: 'Консультант', value: 'consultant' },
   { title: 'Зарегистрирован-Партнёр', value: 'registered' },
 ];
@@ -470,6 +478,53 @@ function parseUA(ua) {
   else if (/Linux/.test(s))                   { os = 'Linux';       osIcon = 'mdi-linux';              osColor = 'amber-darken-2'; }
 
   return { browser, browserIcon, browserColor, os, osIcon, osColor };
+}
+
+// === Выгрузка в Excel (только строки по текущему фильтру) ===
+const { showError, showSuccess } = useSnackbar();
+const exporting = ref(false);
+
+const exportColumns = [
+  { title: 'ID', key: 'id' },
+  { title: 'Фамилия', key: 'lastName' },
+  { title: 'Имя', key: 'firstName' },
+  { title: 'Отчество', key: 'patronymic' },
+  { title: 'Email', key: 'email' },
+  { title: 'Телефон', key: 'phone' },
+  { title: 'Роли', key: 'role' },
+  { title: 'Должность', key: 'position' },
+  { title: 'Пол', key: 'gender' },
+  { title: 'Дата рождения', key: 'birthDate' },
+  { title: 'Заблокирован', key: 'isBlocked' },
+  { title: 'Согласие', key: 'agreement' },
+  { title: 'Реферальный код', key: 'participantCode' },
+];
+
+async function exportXlsx() {
+  exporting.value = true;
+  try {
+    // Те же фильтры/сортировка, что в таблице — но без пагинации (бэкенд
+    // отдаёт все подходящие строки на /admin/users/export).
+    const params = {};
+    for (const k of Object.keys(filters)) {
+      const v = filters[k];
+      if (v === '' || v === null || v === undefined) continue;
+      params[k] = v;
+    }
+    if (sortBy.value.length) {
+      params.sort_by = sortBy.value[0]?.key;
+      params.sort_dir = sortBy.value[0]?.order;
+    }
+    const { data } = await api.get('/admin/users/export', { params });
+    const rows = data.data || [];
+    if (!rows.length) { showError('Нет строк для выгрузки'); return; }
+    await exportToXlsx(rows, exportColumns, 'users');
+    showSuccess(`Выгружено строк: ${rows.length}`);
+  } catch (e) {
+    showError(e.response?.data?.message || 'Не удалось выгрузить');
+  } finally {
+    exporting.value = false;
+  }
 }
 
 onMounted(load);

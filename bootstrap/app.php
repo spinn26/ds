@@ -27,6 +27,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'restrict.head' => \App\Http\Middleware\RestrictHeadWrites::class,
             'restrict.support' => \App\Http\Middleware\RestrictSupportWrites::class,
             'restrict.corrections' => \App\Http\Middleware\RestrictCorrectionsWrites::class,
+            'restrict.invest' => \App\Http\Middleware\RestrictInvestWrites::class,
             'maintenance' => \App\Http\Middleware\EnsureNotInMaintenance::class,
         ]);
     })

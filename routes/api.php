@@ -154,7 +154,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/menu/published', [\App\Http\Controllers\Api\AdminMenuController::class, 'published']);
 
         // ───────── Модуль «Задачи и Проекты» (только admin + staff) ─────────
-        Route::middleware('role:admin,backoffice,support,finance,head,calculations,corrections,education')->group(function () {
+        Route::middleware(['role:admin,backoffice,support,finance,head,calculations,corrections,education,invest', 'restrict.invest'])->group(function () {
         Route::get('/projects', [\App\Http\Controllers\Api\ProjectController::class, 'index']);
         Route::post('/projects', [\App\Http\Controllers\Api\ProjectController::class, 'store']);
         Route::get('/projects/{id}', [\App\Http\Controllers\Api\ProjectController::class, 'show'])->whereNumber('id');
@@ -432,7 +432,7 @@ Route::prefix('v1')->group(function () {
             Route::delete('/admin/media', [\App\Http\Controllers\Api\AdminMediaController::class, 'destroy']);
         });
 
-        Route::middleware(['role:admin,backoffice,support,finance,head,calculations,corrections,education', 'restrict.education', 'restrict.head', 'restrict.support', 'restrict.corrections', 'throttle:2400,1'])->group(function () {
+        Route::middleware(['role:admin,backoffice,support,finance,head,calculations,corrections,education,invest', 'restrict.education', 'restrict.head', 'restrict.support', 'restrict.corrections', 'restrict.invest', 'throttle:2400,1'])->group(function () {
         Route::get('/admin/dashboard', [\App\Http\Controllers\Api\AdminDashboardController::class, 'index']);
         Route::get('/admin/export/{type}', [\App\Http\Controllers\Api\ExportController::class, 'export'])->middleware('throttle:10,1');
         Route::get('/admin/users', [AdminUserController::class, 'index']);

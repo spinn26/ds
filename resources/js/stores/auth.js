@@ -24,7 +24,7 @@ export const useAuthStore = defineStore('auth', {
         },
         isStaff: (state) => {
             const roles = (state.user?.role || '').split(',').map(r => r.trim());
-            return roles.some(r => ['admin', 'backoffice', 'support', 'finance', 'head', 'calculations', 'corrections', 'education'].includes(r));
+            return roles.some(r => ['admin', 'backoffice', 'support', 'finance', 'head', 'calculations', 'corrections', 'education', 'invest'].includes(r));
         },
         // Чистый education-куратор: спрятать write-кнопки на чужих доменах.
         // Если у пользователя есть admin или другая staff-write-роль — гард не активен.
