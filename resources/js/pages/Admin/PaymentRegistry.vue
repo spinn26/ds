@@ -534,8 +534,10 @@ function resetFilters() {
 function statusColor(s) {
   if (!s) return 'grey';
   const l = String(s).toLowerCase();
+  // «Частично оплачено» содержит подстроку «оплачено», поэтому проверяем
+  // «частич» ПЕРВЫМ — иначе строка ловится веткой success и красится зелёным.
+  if (l.includes('частич')) return 'warning'; // жёлтый
   if (l.includes('полност') || l.includes('оплачено')) return 'success';
-  if (l.includes('частич')) return 'warning';
   if (l.includes('отказ') || l.includes('возврат')) return 'error';
   return 'info';
 }
