@@ -25,13 +25,30 @@ class AuthController extends Controller
 {
     public function login(LoginRequest $request): JsonResponse
     {
-        $user = User::where('email', $request->input('email'))->first();
+        // Часть email задублирована на несколько строк WebUser (артефакты
+        // Directual soft-delete + пара «живых» дублей). Рабочий аккаунт — тот,
+        // что привязан к консультанту; дубль-сирота консультанта не имеет и
+        // роняет все consultant-scoped эндпоинты («Консультант не найден» —
+        // инцидент Булка Л.А. 2026-07-01). Резолвим неоднозначность
+        // детерминированно: сначала строки с консультантом, затем не удалённые
+        // (dateDeleted IS NULL), затем по id. Пароль проверяем в этом же порядке
+        // и берём первую подходящую строку.
+        $candidates = User::where('email', $request->input('email'))->get();
+
+        $withConsultant = $candidates->isEmpty()
+            ? collect()
+            : Consultant::whereIn('webUser', $candidates->pluck('id'))->pluck('webUser')->flip();
+
+        $user = $candidates
+            ->sortBy(fn (User $u) => sprintf(
+                '%d%d%012d',
+                $withConsultant->has($u->id) ? 0 : 1,
+                $u->dateDeleted === null ? 0 : 1,
+                (int) $u->id,
+            ))
+            ->first(fn (User $u) => $u->validatePassword($request->input('password')));
 
         if (! $user) {
-            return response()->json(['message' => 'Неверный email или пароль'], 401);
-        }
-
-        if (! $user->validatePassword($request->input('password'))) {
             return response()->json(['message' => 'Неверный email или пароль'], 401);
         }
 
