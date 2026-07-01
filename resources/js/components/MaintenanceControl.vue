@@ -35,8 +35,32 @@
       <template v-else>
         <v-textarea v-model="message" label="Сообщение для пользователей" rows="2" auto-grow
           variant="outlined" density="comfortable" class="mb-3" hide-details="auto" />
-        <v-select v-model="minutes" :items="durationOptions" label="Ожидаемая длительность"
-          variant="outlined" density="comfortable" class="mb-4" style="max-width: 280px" hide-details />
+
+        <div class="text-body-2 font-weight-medium mb-1">Ожидаемое завершение</div>
+        <div class="d-flex flex-wrap align-center mb-2" style="gap: 8px">
+          <v-btn v-for="p in presets" :key="p.value" size="small" variant="tonal"
+            @click="setPreset(p.value)">{{ p.title }}</v-btn>
+          <v-btn size="small" variant="text" @click="clearEnd">Без отсчёта</v-btn>
+        </div>
+        <v-menu v-model="menu" :close-on-content-click="false" location="bottom start">
+          <template #activator="{ props }">
+            <v-text-field v-bind="props" :model-value="endLabel" readonly label="Дата и время"
+              variant="outlined" density="comfortable" prepend-inner-icon="mdi-calendar-clock"
+              style="max-width: 320px" class="mb-4" hide-details />
+          </template>
+          <v-card min-width="300">
+            <v-date-picker v-model="endDate" :min="minDate" color="primary" show-adjacent-months hide-header />
+            <div class="px-4 pb-2">
+              <v-text-field v-model="endTime" type="time" label="Время" variant="outlined"
+                density="compact" hide-details />
+            </div>
+            <v-card-actions>
+              <v-spacer />
+              <v-btn variant="text" @click="menu = false">Готово</v-btn>
+            </v-card-actions>
+          </v-card>
+        </v-menu>
+
         <v-btn color="error" size="large" prepend-icon="mdi-lock"
           :loading="saving" @click="enable">
           Закрыть доступ (техработы)
@@ -57,17 +81,42 @@ import api from '../api';
 
 const status = reactive({ enabled: false, message: '', ends_at: null, server_time: null });
 const message = ref('Идут технические работы. Скоро вернёмся.');
-const minutes = ref(30);
 const saving = ref(false);
 const snack = ref({ open: false, color: 'success', text: '' });
 
-const durationOptions = [
-  { title: '15 минут', value: 15 },
-  { title: '30 минут', value: 30 },
-  { title: '1 час', value: 60 },
-  { title: '2 часа', value: 120 },
-  { title: 'Без обратного отсчёта', value: 0 },
+// Выбор времени завершения: календарь (дата) + время. Пресеты быстро заполняют.
+const menu = ref(false);
+const endDate = ref(null);   // Date
+const endTime = ref('');     // 'HH:MM'
+const minDate = new Date();
+const presets = [
+  { title: '+15 мин', value: 15 },
+  { title: '+30 мин', value: 30 },
+  { title: '+1 час', value: 60 },
+  { title: '+2 часа', value: 120 },
 ];
+
+function pad(n) { return String(n).padStart(2, '0'); }
+function setPreset(min) {
+  const d = new Date(Date.now() + min * 60000);
+  endDate.value = d;
+  endTime.value = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+function clearEnd() { endDate.value = null; endTime.value = ''; }
+
+const endLabel = computed(() => {
+  if (!endDate.value) return 'Без обратного отсчёта';
+  const d = new Date(endDate.value);
+  return d.toLocaleDateString('ru-RU') + (endTime.value ? ` ${endTime.value}` : '');
+});
+
+function endsAtIso() {
+  if (!endDate.value) return null;
+  const d = new Date(endDate.value);
+  const [hh, mm] = (endTime.value || '00:00').split(':');
+  d.setHours(parseInt(hh || '0', 10), parseInt(mm || '0', 10), 0, 0);
+  return d.toISOString();
+}
 
 // Живой отсчёт (синхронизирован с серверными часами).
 const serverOffset = ref(0);
@@ -103,7 +152,7 @@ async function enable() {
   try {
     const { data } = await api.post('/admin/maintenance', {
       enabled: true,
-      minutes: minutes.value || null,
+      ends_at: endsAtIso(),
       message: message.value || null,
     });
     apply(data);
@@ -123,6 +172,7 @@ async function disable() {
 }
 
 onMounted(() => {
+  setPreset(30); // разумный дефолт — через 30 минут
   load();
   tickTimer = setInterval(() => { nowTick.value = Date.now(); }, 1000);
 });
