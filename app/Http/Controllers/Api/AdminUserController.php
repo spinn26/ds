@@ -19,6 +19,40 @@ class AdminUserController extends Controller
 
     public function index(Request $request): JsonResponse
     {
+        $query = $this->buildUserQuery($request);
+
+        $total = $query->count();
+
+        $this->applyUserSorting($query, $request);
+
+        $rows = $query
+            ->offset($this->paginationOffset($request))
+            ->limit($this->paginationPerPage($request))
+            ->get();
+
+        return response()->json(['data' => $this->mapUsers($rows), 'total' => $total]);
+    }
+
+    /**
+     * GET /admin/users/export — все строки по текущим фильтрам (без пагинации)
+     * для выгрузки в Excel. XLSX собирается на клиенте (useExport), здесь —
+     * только данные. Те же фильтры/сортировка, что и в index().
+     */
+    public function export(Request $request): JsonResponse
+    {
+        $query = $this->buildUserQuery($request);
+        $this->applyUserSorting($query, $request);
+
+        // Жёсткий потолок, чтобы случайный «выгрузить всё без фильтра» не
+        // вытянул всю таблицу в память. ~1030 реальных WebUser — 20000 с запасом.
+        $rows = $query->limit(20000)->get();
+
+        return response()->json(['data' => $this->mapUsers($rows)]);
+    }
+
+    /** Общий конструктор запроса с фильтрами (search / role / blocked / soft-delete). */
+    private function buildUserQuery(Request $request)
+    {
         // Hide soft-deleted users unless the caller explicitly asks for them.
         $query = User::query();
         if (! $request->boolean('with_deleted')) {
@@ -61,10 +95,14 @@ class AdminUserController extends Controller
             $query->where('isBlocked', $request->blocked === 'true');
         }
 
-        $total = $query->count();
+        return $query;
+    }
 
-        // Сортировка по клику на заголовок. Колонки WebUser в camelCase —
-        // Postgres folds unquoted identifiers to lowercase, поэтому в кавычках.
+    /** Сортировка по клику на заголовок (общая для списка и выгрузки). */
+    private function applyUserSorting($query, Request $request): void
+    {
+        // Колонки WebUser в camelCase — Postgres folds unquoted identifiers to
+        // lowercase, поэтому в кавычках.
         $this->applySorting($query, $request, [
             'id'         => 'id',
             'lastName'   => '"lastName"',
@@ -74,12 +112,11 @@ class AdminUserController extends Controller
             'role'       => 'role',
             'isBlocked'  => '"isBlocked"',
         ], 'id', 'desc');
+    }
 
-        $rows = $query
-            ->offset($this->paginationOffset($request))
-            ->limit($this->paginationPerPage($request))
-            ->get();
-
+    /** Батч-обогащение строк (реф-коды, должности, флаги партнёрского профиля). */
+    private function mapUsers($rows)
+    {
         $codes = Consultant::whereIn('webUser', $rows->pluck('id'))
             ->pluck('participantCode', 'webUser');
         $positions = \Illuminate\Support\Facades\DB::table('employee_positions')
@@ -89,7 +126,7 @@ class AdminUserController extends Controller
             ->get(['webUser', 'statusRequisites', 'acceptance', 'payments_suspended', 'products_access_no_verify'])
             ->keyBy('webUser');
 
-        $users = $rows->map(function ($u) use ($codes, $positions, $consultants) {
+        return $rows->map(function ($u) use ($codes, $positions, $consultants) {
             $c = $consultants[$u->id] ?? null;
 
             return [
@@ -106,6 +143,9 @@ class AdminUserController extends Controller
                 // app-tz Europe/Moscow дата уезжает на день назад (см. ProfileController).
                 'birthDate' => $u->birthDate?->format('Y-m-d'),
                 'isBlocked' => (bool) $u->isBlocked,
+                // Метка мягкого удаления — фронт показывает удалённые строки
+                // (фильтр with_deleted) и рисует чип «Удалён».
+                'dateDeleted' => $u->dateDeleted?->format('Y-m-d H:i'),
                 'agreement' => (bool) $u->agreement,
                 'participantCode' => $codes[$u->id] ?? null,
                 // Партнёрский профиль + управляемые флаги доступа.
@@ -116,8 +156,6 @@ class AdminUserController extends Controller
                 'paymentsSuspended' => (bool) ($c->payments_suspended ?? false),
             ];
         });
-
-        return response()->json(['data' => $users, 'total' => $total]);
     }
 
     public function store(Request $request): JsonResponse
@@ -125,7 +163,13 @@ class AdminUserController extends Controller
         // Strict: только роль admin (не backoffice).
         $isAdmin = $request->user()->hasAnyRole(['admin']);
         $request->validate([
-            'email' => 'required|email|unique:WebUser,email',
+            // Дубль только среди живых строк — soft-deleted Directual-сироты
+            // по email не должны блокировать создание (см. update()).
+            'email' => [
+                'required', 'email',
+                \Illuminate\Validation\Rule::unique('WebUser', 'email')
+                    ->whereNull('dateDeleted'),
+            ],
             'password' => ['required', 'string', \Illuminate\Validation\Rules\Password::min(8)->letters()->numbers()],
             'firstName' => 'required|string',
             'lastName' => 'required|string',
@@ -157,7 +201,17 @@ class AdminUserController extends Controller
         $isAdmin = $request->user()->hasAnyRole(['admin']);
 
         $request->validate([
-            'email' => "required|email|unique:WebUser,email,{$id}",
+            // Уникальность email считаем ТОЛЬКО среди живых строк WebUser.
+            // Directual-экспорт оставил soft-deleted дубли по одному email
+            // (напр. Булка Л.А.: активная 394 + удалённая 409) — без
+            // whereNull('dateDeleted') правило спотыкается о сироту и не даёт
+            // сохранить живую запись («Этот email уже зарегистрирован»).
+            'email' => [
+                'required', 'email',
+                \Illuminate\Validation\Rule::unique('WebUser', 'email')
+                    ->ignore($id)
+                    ->whereNull('dateDeleted'),
+            ],
             'password' => ['sometimes', 'nullable', 'string',
                 \Illuminate\Validation\Rules\Password::min(8)->letters()->numbers(),
             ],
@@ -277,6 +331,25 @@ class AdminUserController extends Controller
         });
 
         return response()->json(['message' => 'Удалён']);
+    }
+
+    /**
+     * Восстановление мягко-удалённого аккаунта: снимаем dateDeleted и разблок.
+     * Зеркалит destroy(). Consultant-строки НЕ трогаем автоматически — их
+     * dateDeleted мог быть выставлен раньше и по другим причинам; при
+     * необходимости партнёрский профиль восстанавливается отдельно.
+     */
+    public function restore(int $id): JsonResponse
+    {
+        $user = User::findOrFail($id);
+        if ($user->dateDeleted === null) {
+            return response()->json(['message' => 'Аккаунт не был удалён'], 422);
+        }
+        $user->dateDeleted = null;
+        $user->isBlocked = false;
+        $user->saveQuietly();
+
+        return response()->json(['message' => 'Восстановлен']);
     }
 
     /**

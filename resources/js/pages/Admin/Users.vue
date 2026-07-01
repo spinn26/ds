@@ -26,6 +26,12 @@
         <v-select v-model="filters.blocked" label="Заблокирован" :items="blockedOptions"
           variant="outlined" density="comfortable" clearable hide-details />
       </v-col>
+      <v-col cols="12" md="2" class="d-flex align-center">
+        <!-- true-value/false-value=null: выкл → фильтр отбрасывается в useCrud
+             (buildFilterParams), не считается активным и не шлётся на бэк. -->
+        <v-switch v-model="filters.with_deleted" :true-value="true" :false-value="null"
+          color="error" density="compact" hide-details label="Показать удалённых" />
+      </v-col>
       <v-col v-if="activeFilterCount > 0" cols="auto" class="d-flex align-center">
         <v-chip size="small" color="info" variant="tonal">
           {{ activeFilterCount }} {{ activeFilterCount === 1 ? 'фильтр' : 'фильтра' }}
@@ -49,6 +55,13 @@
       @update:page="page = $event; load()"
       @update:options="onTableOptions"
     >
+      <template #item.lastName="{ item }">
+        <span :class="{ 'text-medium-emphasis text-decoration-line-through': item.dateDeleted }">
+          {{ item.lastName }}
+        </span>
+        <v-chip v-if="item.dateDeleted" size="x-small" color="error" variant="tonal" class="ms-1"
+          :title="`Мягко удалён: ${item.dateDeleted}`">Удалён</v-chip>
+      </template>
       <template #item.role="{ item }">
         <StatusChip v-for="r in (item.role || '').split(',')" :key="r" size="x-small" class="mr-1"
           :color="roleColor(r.trim())" :text="r.trim()" />
@@ -61,6 +74,8 @@
       </template>
       <template #item.actions="{ item }">
         <ActionsCell @edit="openEdit(item)" @delete="confirmDelete(item)">
+          <v-btn v-if="item.dateDeleted" icon="mdi-backup-restore" size="x-small" variant="text" color="success"
+            title="Восстановить аккаунт" :loading="restoringId === item.id" @click.stop="restoreUser(item)" />
           <v-btn icon="mdi-history" size="x-small" variant="text" color="secondary"
             title="История входа" @click.stop="openLoginHistory(item)" />
           <v-btn icon="mdi-login" size="x-small" variant="text" color="secondary"
@@ -345,7 +360,7 @@ const {
   load, resetFilters,
   openCreate: _openCreate, openEdit: _openEdit, save, confirmDelete, remove,
 } = useCrud('admin/users', {
-  filters: { search: '', role: null, blocked: null },
+  filters: { search: '', role: null, blocked: null, with_deleted: null },
   defaults: {
     firstName: '', lastName: '', patronymic: '', email: '', phone: '',
     role: 'registered', position: '', password: '', gender: '', birthDate: '',
@@ -413,6 +428,21 @@ async function impersonate(user) {
     auth.user = data.user;
     router.push('/');
   } catch {}
+}
+
+// === Восстановление мягко-удалённого аккаунта ===
+const restoringId = ref(null);
+async function restoreUser(user) {
+  restoringId.value = user.id;
+  try {
+    await api.post(`/admin/users/${user.id}/restore`);
+    showSuccess('Аккаунт восстановлен');
+    await load();
+  } catch (e) {
+    showError(e.response?.data?.message || 'Не удалось восстановить');
+  } finally {
+    restoringId.value = null;
+  }
 }
 
 // === История входа ===
