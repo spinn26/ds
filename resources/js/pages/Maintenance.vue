@@ -31,7 +31,7 @@
           prepend-icon="mdi-refresh" @click="retry">
           Обновить
         </v-btn>
-        <v-btn v-if="loggedIn" size="large" variant="text"
+        <v-btn size="large" variant="text"
           prepend-icon="mdi-logout" @click="logout">
           Выйти
         </v-btn>
@@ -47,7 +47,6 @@ import BrandWaves from '../components/BrandWaves.vue';
 import { useAuthStore } from '../stores/auth';
 
 const auth = useAuthStore();
-const loggedIn = computed(() => !!(auth.token || auth.user));
 function logout() { auth.logout(); window.location.href = '/login'; }
 
 const message = ref('');
