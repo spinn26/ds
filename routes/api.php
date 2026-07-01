@@ -22,9 +22,15 @@ Route::prefix('v1')->group(function () {
     // Публичный роадмап — без auth, читается /roadmap-страницей.
     Route::get('/roadmap', [\App\Http\Controllers\Api\RoadmapController::class, 'publicIndex']);
 
-    // Auth routes with rate limiting (5 attempts per minute)
-    Route::middleware('throttle:5,1')->group(function () {
+    // Login: троттлинг по УЧЁТКЕ (email), не по IP — см. named limiter
+    // 'login' в AppServiceProvider::boot (5/мин на аккаунт + бэкстоп 30/мин
+    // на IP). Общий NAT/VPN больше не выедает лимит между пользователями.
+    Route::middleware('throttle:login')->group(function () {
         Route::post('/auth/login', [AuthController::class, 'login']);
+    });
+
+    // Остальные auth-эндпоинты — прежний per-IP лимит (5 попыток/мин)
+    Route::middleware('throttle:5,1')->group(function () {
         Route::post('/auth/register', [AuthController::class, 'register']);
         // Восстановление пароля: ссылка на email + сброс по токену.
         // Password broker внутри сам троттлит повторные отправки

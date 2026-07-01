@@ -7,10 +7,14 @@ use App\Listeners\RecordMailLog;
 use App\Services\MailSettingsService;
 use Illuminate\Mail\Events\MessageSending;
 use Illuminate\Mail\Events\MessageSent;
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Str;
 use Spatie\Health\Checks\Checks\CacheCheck;
 use Spatie\Health\Checks\Checks\DatabaseCheck;
 use Spatie\Health\Checks\Checks\DatabaseConnectionCountCheck;
@@ -34,6 +38,21 @@ class AppServiceProvider extends ServiceProvider
     {
         Auth::provider('legacy', function ($app, array $config) {
             return new LegacyUserProvider($app['hash'], $config['model']);
+        });
+
+        // Login-троттлинг по УЧЁТКЕ, а не по IP: несколько сотрудников за
+        // одним офисным NAT/VPN больше не выедают лимит друг другу. Основной
+        // ключ — email (5 попыток/мин на аккаунт); дополнительно мягкий
+        // бэкстоп по IP (30/мин), чтобы один адрес не мог перебирать много
+        // чужих логинов без ограничений. Применяется через `throttle:login`
+        // на POST /api/v1/auth/login (routes/api.php).
+        RateLimiter::for('login', function (Request $request) {
+            $email = Str::lower(trim((string) $request->input('email')));
+
+            return [
+                Limit::perMinute(5)->by('login:email:' . $email),
+                Limit::perMinute(30)->by('login:ip:' . $request->ip()),
+            ];
         });
 
         // Mail deliverability logging: каждое уходящее письмо проходит
