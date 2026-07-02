@@ -36,24 +36,14 @@ class PermissionResolverService
 
         if (empty($roles)) return [];
 
-        $merged = [];
-
-        // Инвест департамент — просмотр всех разделов: базовый 'view' на все
-        // известные секции. Не понижает права других ролей (ниже DB-группы
-        // перекрывают более высоким уровнем через max-merge).
-        if (in_array('invest', $roles, true)) {
-            // 'permissions' (управление группами и правами) — админ-функция, не даём.
-            $adminOnly = ['permissions'];
-            foreach (config('permissions.sections', []) as $s) {
-                if (in_array($s['key'], $adminOnly, true)) continue;
-                $merged[$s['key']] = 'view';
-            }
-        }
-
+        // invest и прочие роли берут права из permission_groups (сетка «Группы и
+        // права»). invest засеян миграцией как view на все секции (кроме
+        // управления правами) — уровни редактируются в сетке.
         $rows = DB::table('permission_groups')
             ->whereIn('key', $roles)
             ->get();
 
+        $merged = [];
         foreach ($rows as $row) {
             $perms = is_string($row->permissions)
                 ? (json_decode($row->permissions, true) ?? [])
