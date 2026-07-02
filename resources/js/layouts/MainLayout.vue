@@ -961,6 +961,7 @@ const menuItems = [
 
   { group: 'Развитие', partner: true },
   { label: 'Обучение', icon: 'mdi-school-outline', path: '/education', partner: true },
+  { label: 'База знаний', icon: 'mdi-book-education-outline', path: '/education/kb', partner: true },
   { label: 'Инструкции', icon: 'mdi-book-open-variant', path: '/instructions', partner: true },
   { label: 'Статус системы', icon: 'mdi-monitor-dashboard', path: '/status', partner: true },
   { label: 'Продукты', icon: 'mdi-package-variant-closed', path: '/products', partner: true },
