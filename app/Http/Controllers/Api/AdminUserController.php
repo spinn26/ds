@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\Concerns\PaginatesRequests;
 use App\Http\Controllers\Controller;
 use App\Models\Consultant;
 use App\Models\User;
+use App\Support\Audit;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -143,6 +144,8 @@ class AdminUserController extends Controller
                 // app-tz Europe/Moscow дата уезжает на день назад (см. ProfileController).
                 'birthDate' => $u->birthDate?->format('Y-m-d'),
                 'isBlocked' => (bool) $u->isBlocked,
+                // Включена ли 2FA — фронт показывает кнопку «Отключить 2ФА» (только админу).
+                'twoFactorEnabled' => (bool) $u->two_factor_enabled,
                 // Метка мягкого удаления — фронт показывает удалённые строки
                 // (фильтр with_deleted) и рисует чип «Удалён».
                 'dateDeleted' => $u->dateDeleted?->format('Y-m-d H:i'),
@@ -350,6 +353,28 @@ class AdminUserController extends Controller
         $user->saveQuietly();
 
         return response()->json(['message' => 'Восстановлен']);
+    }
+
+    /**
+     * POST /admin/users/{id}/disable-2fa — админ снимает 2FA пользователю
+     * (например, тот потерял доступ к приложению-аутентификатору). В отличие
+     * от самостоятельного отключения (TwoFactorController::disable) пароль не
+     * требуется — действие под ролью admin и логируется в аудит.
+     */
+    public function disable2fa(int $id): JsonResponse
+    {
+        $user = User::findOrFail($id);
+        if (! $user->two_factor_enabled && ! $user->two_factor_secret) {
+            return response()->json(['message' => 'У пользователя 2FA не включена'], 422);
+        }
+        $user->two_factor_secret = null;
+        $user->two_factor_enabled = false;
+        $user->two_factor_confirmed_at = null;
+        $user->saveQuietly();
+
+        Audit::log('2fa_disabled_by_admin', 'WebUser', $user->id);
+
+        return response()->json(['message' => '2FA отключена']);
     }
 
     /**

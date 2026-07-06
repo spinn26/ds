@@ -441,6 +441,8 @@ Route::prefix('v1')->group(function () {
         Route::put('/admin/users/{id}', [AdminUserController::class, 'update']);
         Route::delete('/admin/users/{id}', [AdminUserController::class, 'destroy']);
         Route::post('/admin/users/{id}/restore', [AdminUserController::class, 'restore'])->whereNumber('id');
+        // Сброс 2FA пользователю — только админ (чувствительное действие).
+        Route::post('/admin/users/{id}/disable-2fa', [AdminUserController::class, 'disable2fa'])->whereNumber('id')->middleware('role:admin');
         Route::get('/admin/users/{id}/references', [AdminUserController::class, 'references'])->whereNumber('id');
         Route::delete('/admin/users/{id}/force', [AdminUserController::class, 'forceDelete'])->whereNumber('id');
         Route::get('/admin/users/{id}/login-history', [AdminUserController::class, 'loginHistory'])->whereNumber('id');

@@ -78,6 +78,8 @@
             title="Восстановить аккаунт" :loading="restoringId === item.id" @click.stop="restoreUser(item)" />
           <v-btn v-if="item.dateDeleted" icon="mdi-delete-forever" size="x-small" variant="text" color="error"
             title="Удалить физически (с переносом сущностей)" @click.stop="openForceDelete(item)" />
+          <v-btn v-if="item.twoFactorEnabled && auth.isAdmin" icon="mdi-lock-reset" size="x-small" variant="text" color="warning"
+            title="Отключить 2ФА" :loading="disabling2faId === item.id" @click.stop="disable2fa(item)" />
           <v-btn icon="mdi-history" size="x-small" variant="text" color="secondary"
             title="История входа" @click.stop="openLoginHistory(item)" />
           <v-btn icon="mdi-login" size="x-small" variant="text" color="secondary"
@@ -505,6 +507,23 @@ async function restoreUser(user) {
     showError(e.response?.data?.message || 'Не удалось восстановить');
   } finally {
     restoringId.value = null;
+  }
+}
+
+// === Сброс 2FA админом ===
+const disabling2faId = ref(null);
+async function disable2fa(user) {
+  const fio = `${user.lastName || ''} ${user.firstName || ''}`.trim() || user.email;
+  if (!window.confirm(`Отключить двухфакторную аутентификацию у «${fio}»? Пользователь сможет войти без кода и заново настроить 2FA.`)) return;
+  disabling2faId.value = user.id;
+  try {
+    await api.post(`/admin/users/${user.id}/disable-2fa`);
+    showSuccess('2FA отключена');
+    await load();
+  } catch (e) {
+    showError(e.response?.data?.message || 'Не удалось отключить 2FA');
+  } finally {
+    disabling2faId.value = null;
   }
 }
 
