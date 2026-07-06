@@ -150,6 +150,20 @@
           <v-checkbox v-model="editForm.agreement" label="Согласие" density="compact" />
         </v-col>
 
+        <!-- Двухфакторная аутентификация: статус + сброс админом (напр. юзер
+             потерял доступ к приложению-аутентификатору). -->
+        <v-col v-if="editForm.id && auth.isAdmin" cols="12">
+          <v-alert :type="editForm.twoFactorEnabled ? 'warning' : 'info'" variant="tonal" density="compact">
+            <div class="d-flex align-center justify-space-between flex-wrap ga-2">
+              <span>Двухфакторная аутентификация:
+                <strong>{{ editForm.twoFactorEnabled ? 'включена' : 'выключена' }}</strong></span>
+              <v-btn v-if="editForm.twoFactorEnabled" size="small" color="warning" variant="flat"
+                prepend-icon="mdi-lock-reset" :loading="disabling2faId === editForm.id"
+                @click="disable2fa(editForm)">Отключить 2ФА</v-btn>
+            </div>
+          </v-alert>
+        </v-col>
+
         <!-- Управление доступом партнёра (ручные переопределения гейтов).
              Показываем только для существующего партнёрского профиля. -->
         <template v-if="editForm.id && editForm.hasConsultant">
@@ -518,6 +532,7 @@ async function disable2fa(user) {
   disabling2faId.value = user.id;
   try {
     await api.post(`/admin/users/${user.id}/disable-2fa`);
+    user.twoFactorEnabled = false; // мгновенно отразить в диалоге/строке
     showSuccess('2FA отключена');
     await load();
   } catch (e) {
