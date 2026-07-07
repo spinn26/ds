@@ -3020,14 +3020,19 @@ class AdminDataController extends Controller
             ]);
         });
 
-        return response()->json(['message' => 'Перестановка внесена и записана в историю']);
+        // Пересчёт комиссионной цепочки за открытые периоды (даунлайн партнёра):
+        // смена наставника меняет аплайн у всех транзакций поддерева.
+        \App\Jobs\RecomputeTransferChainJob::dispatch('partner', (int) $consultant->id);
+
+        return response()->json(['message' => 'Перестановка внесена, записана в историю; пересчёт комиссий за открытые периоды запущен']);
     }
 
     /**
      * Ручное перезакрепление клиента на другого консультанта + запись
      * в changeConsultantClientLog (тем же форматом, что авто-перестановки).
-     * NB: денорм client.consultantName обновляется; пересчёт комиссий не
-     * запускается (расчёты — только по кнопкам, см. HISTORICAL_CUTOFF-политику).
+     * NB: денорм client.consultantName обновляется; по коммиту диспатчится
+     * RecomputeTransferChainJob (открытые периоды). Комиссия идёт по
+     * contract.consultant, а не client.consultant — см. оговорку в job.
      */
     private function createClientTransfer(Request $request): JsonResponse
     {
@@ -3071,14 +3076,19 @@ class AdminDataController extends Controller
             ]);
         });
 
-        return response()->json(['message' => 'Клиент перезакреплён и записан в историю']);
+        // Пересчёт комиссий контрактов клиента за открытые периоды. NB: комиссия
+        // идёт по contract.consultant, а не client.consultant, поэтому реальное
+        // изменение цепочки будет только если контракты клиента переназначены.
+        \App\Jobs\RecomputeTransferChainJob::dispatch('client', (int) $client->id);
+
+        return response()->json(['message' => 'Клиент перезакреплён и записан в историю; пересчёт комиссий за открытые периоды запущен']);
     }
 
     /**
      * Ручное перезакрепление контракта на другого консультанта + запись
-     * в changeConsultantContractLog. NB: обновляется только владелец
-     * (contract.consultant + денорм consultantName); цепочка наставников
-     * (consultantsChain/Levels) и комиссии не пересчитываются здесь.
+     * в changeConsultantContractLog. Обновляется владелец (contract.consultant
+     * + денорм consultantName), по коммиту диспатчится RecomputeTransferChainJob
+     * — пересчёт комиссий этого контракта за открытые периоды.
      */
     private function createContractTransfer(Request $request): JsonResponse
     {
@@ -3122,7 +3132,11 @@ class AdminDataController extends Controller
             ]);
         });
 
-        return response()->json(['message' => 'Контракт перезакреплён и записан в историю']);
+        // Пересчёт комиссий этого контракта за открытые периоды: сменился
+        // прямой партнёр (chainOrder=1) → перестраивается вся цепочка.
+        \App\Jobs\RecomputeTransferChainJob::dispatch('contract', (int) $contract->id);
+
+        return response()->json(['message' => 'Контракт перезакреплён и записан в историю; пересчёт комиссий за открытые периоды запущен']);
     }
 
     /**
