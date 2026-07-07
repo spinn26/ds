@@ -69,7 +69,7 @@ class TerminatePartnersFromFile extends Command
                 continue;
             }
             $c = $matches->first();
-            $act = (int) $c->activity;
+            $act = $c->activity instanceof PartnerActivity ? $c->activity->value : (int) $c->activity;
             if (in_array($act, [PartnerActivity::Active->value, PartnerActivity::Registered->value], true)) {
                 $toTerminate[] = $c;
             } elseif ($act === PartnerActivity::Excluded->value) {
