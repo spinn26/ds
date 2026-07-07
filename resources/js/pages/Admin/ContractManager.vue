@@ -11,6 +11,14 @@
       </template>
     </PageHeader>
 
+    <v-tabs v-model="contractsTab" color="primary" class="mb-3" density="compact">
+      <v-tab value="list" prepend-icon="mdi-file-document">Контракты</v-tab>
+      <v-tab value="history" prepend-icon="mdi-history">История перестановок</v-tab>
+    </v-tabs>
+
+    <v-window v-model="contractsTab">
+      <v-window-item value="list">
+
     <FilterBar
       :show-reset="activeFilterCount > 0"
       @reset="resetFilters"
@@ -153,6 +161,12 @@
       </template>
       <template #no-data><EmptyState /></template>
     </v-data-table-server>
+
+      </v-window-item>
+      <v-window-item value="history">
+        <ReassignmentPanel subject="contract" />
+      </v-window-item>
+    </v-window>
 
     <!-- Модалка создания/редактирования (per spec ✅Менеджер контрактов §3).
          Для read-only роли (calculations) drawer работает в view-only режиме:
@@ -403,6 +417,7 @@ import EmptyState from '../../components/EmptyState.vue';
 import StartChatButton from '../../components/StartChatButton.vue';
 import StatusChip from '../../components/StatusChip.vue';
 import FilterBar from '../../components/FilterBar.vue';
+import ReassignmentPanel from '../../components/ReassignmentPanel.vue';
 import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 import SmartRangeFilter from '../../components/SmartRangeFilter.vue';
 import { fmt, fmtDate, getContractStatusColor } from '../../composables/useDesign';
@@ -412,6 +427,8 @@ import { usePermissions } from '../../composables/usePermissions';
 const auth = useAuthStore();
 const route = useRoute();
 const { canEdit } = usePermissions();
+
+const contractsTab = ref('list');
 // Read-only режим для всех view-ролей секции contracts (calculations,
 // support, head, corrections). Прячет «Новый контракт», «Удалить»,
 // меняет drawer на view-only.

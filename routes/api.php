@@ -520,6 +520,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/admin/contract-import/{id}/rollback', [\App\Http\Controllers\Api\ContractImportController::class, 'rollback'])->whereNumber('id')->middleware('throttle:30,1');
         Route::get('/admin/transfers', [\App\Http\Controllers\Api\AdminDataController::class, 'transfers']);
         Route::get('/admin/transfers/consultants', [\App\Http\Controllers\Api\AdminDataController::class, 'transferConsultants']);
+        Route::get('/admin/transfers/subjects', [\App\Http\Controllers\Api\AdminDataController::class, 'transferSubjects']);
         Route::post('/admin/transfers', [\App\Http\Controllers\Api\AdminDataController::class, 'createTransfer'])->middleware('throttle:60,1');
 
         // Permission groups — управление правами кабинетов через UI

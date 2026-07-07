@@ -2923,11 +2923,62 @@ class AdminDataController extends Controller
     }
 
     /**
+     * Поиск субъекта перестановки для диалога «Перезакрепить …».
+     * type=client → клиенты по ФИО; type=contract → контракты по номеру.
+     * Отдаёт {id, name}.
+     */
+    public function transferSubjects(Request $request): JsonResponse
+    {
+        $type = (string) $request->input('type');
+        $q = trim((string) $request->input('search', ''));
+
+        if ($type === 'client') {
+            $query = DB::table('client')->whereNull('dateDeleted')->select('id', 'personName');
+            if (mb_strlen($q) >= 2) {
+                $query->where('personName', 'ilike', '%' . $q . '%');
+            }
+            $rows = $query->orderBy('personName')->limit(30)->get()
+                ->map(fn ($c) => ['id' => $c->id, 'name' => $c->personName ?: ('Клиент #' . $c->id)]);
+
+            return response()->json(['data' => $rows]);
+        }
+
+        if ($type === 'contract') {
+            $query = DB::table('contract')->whereNull('deletedAt')->select('id', 'number', 'clientName');
+            if (mb_strlen($q) >= 2) {
+                $query->where('number', 'ilike', '%' . $q . '%');
+            }
+            $rows = $query->orderByDesc('id')->limit(30)->get()
+                ->map(fn ($c) => [
+                    'id' => $c->id,
+                    'name' => trim(($c->number ?: ('#' . $c->id)) . ($c->clientName ? ' — ' . $c->clientName : '')),
+                ]);
+
+            return response()->json(['data' => $rows]);
+        }
+
+        return response()->json(['data' => []]);
+    }
+
+    /**
      * Внести перестановку наставника вручную (кнопка в «Истории перестановок»).
      * Меняет consultant.inviter (+денорм inviterName) и пишет запись-событие в
      * changeConsultantInviterLog тем же форматом, что и авто-перестановки.
      */
     public function createTransfer(Request $request): JsonResponse
+    {
+        return match ($request->input('subject', 'partner')) {
+            'partner'  => $this->createPartnerTransfer($request),
+            'client'   => $this->createClientTransfer($request),
+            'contract' => $this->createContractTransfer($request),
+            default    => response()->json(['message' => 'Неизвестный тип перестановки'], 422),
+        };
+    }
+
+    /**
+     * Ручная смена наставника ФК (партнёр) + запись в changeConsultantInviterLog.
+     */
+    private function createPartnerTransfer(Request $request): JsonResponse
     {
         $data = $request->validate([
             'consultant' => ['required', 'integer'],
@@ -2970,6 +3021,108 @@ class AdminDataController extends Controller
         });
 
         return response()->json(['message' => 'Перестановка внесена и записана в историю']);
+    }
+
+    /**
+     * Ручное перезакрепление клиента на другого консультанта + запись
+     * в changeConsultantClientLog (тем же форматом, что авто-перестановки).
+     * NB: денорм client.consultantName обновляется; пересчёт комиссий не
+     * запускается (расчёты — только по кнопкам, см. HISTORICAL_CUTOFF-политику).
+     */
+    private function createClientTransfer(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'subject_id'     => ['required', 'integer'],
+            'new_consultant' => ['required', 'integer'],
+        ]);
+
+        $client  = DB::table('client')->where('id', $data['subject_id'])->whereNull('dateDeleted')->first();
+        $newCons = DB::table('consultant')->where('id', $data['new_consultant'])->whereNull('dateDeleted')->first();
+        if (! $client) {
+            return response()->json(['message' => 'Клиент не найден'], 422);
+        }
+        if (! $newCons) {
+            return response()->json(['message' => 'Новый консультант не найден'], 422);
+        }
+        if ((int) $newCons->activity === \App\Enums\PartnerActivity::Terminated->value) {
+            return response()->json(['message' => 'Нельзя закрепить клиента за терминированным ФК'], 422);
+        }
+        if ((int) $client->consultant === (int) $newCons->id) {
+            return response()->json(['message' => 'Клиент уже закреплён за этим консультантом'], 422);
+        }
+
+        DB::transaction(function () use ($client, $newCons, $request) {
+            DB::table('client')->where('id', $client->id)->update([
+                'consultant'     => $newCons->id,
+                'consultantName' => $newCons->personName,
+            ]);
+
+            DB::table('changeConsultantClientLog')->insert([
+                'id'                => LegacyId::next('changeConsultantClientLog'),
+                'dateCreated'       => now(),
+                'webUser'           => $request->user()?->id,
+                'client'            => $client->id,
+                'clientName'        => $client->personName,
+                'consultantOld'     => $client->consultant,
+                'consultantOldName' => $client->consultantName,
+                'consultantNew'     => $newCons->id,
+                'consultantNewName' => $newCons->personName,
+                'triggeredBy'       => 'Внесено вручную',
+            ]);
+        });
+
+        return response()->json(['message' => 'Клиент перезакреплён и записан в историю']);
+    }
+
+    /**
+     * Ручное перезакрепление контракта на другого консультанта + запись
+     * в changeConsultantContractLog. NB: обновляется только владелец
+     * (contract.consultant + денорм consultantName); цепочка наставников
+     * (consultantsChain/Levels) и комиссии не пересчитываются здесь.
+     */
+    private function createContractTransfer(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'subject_id'     => ['required', 'integer'],
+            'new_consultant' => ['required', 'integer'],
+        ]);
+
+        $contract = DB::table('contract')->where('id', $data['subject_id'])->whereNull('deletedAt')->first();
+        $newCons  = DB::table('consultant')->where('id', $data['new_consultant'])->whereNull('dateDeleted')->first();
+        if (! $contract) {
+            return response()->json(['message' => 'Контракт не найден'], 422);
+        }
+        if (! $newCons) {
+            return response()->json(['message' => 'Новый консультант не найден'], 422);
+        }
+        if ((int) $newCons->activity === \App\Enums\PartnerActivity::Terminated->value) {
+            return response()->json(['message' => 'Нельзя закрепить контракт за терминированным ФК'], 422);
+        }
+        if ((int) $contract->consultant === (int) $newCons->id) {
+            return response()->json(['message' => 'Контракт уже закреплён за этим консультантом'], 422);
+        }
+
+        DB::transaction(function () use ($contract, $newCons, $request) {
+            DB::table('contract')->where('id', $contract->id)->update([
+                'consultant'     => $newCons->id,
+                'consultantName' => $newCons->personName,
+            ]);
+
+            DB::table('changeConsultantContractLog')->insert([
+                'id'                => LegacyId::next('changeConsultantContractLog'),
+                'dateCreated'       => now(),
+                'webUser'           => $request->user()?->id,
+                'contract'          => $contract->id,
+                'contractNumber'    => $contract->number,
+                'consultantOld'     => $contract->consultant,
+                'consultantOldName' => $contract->consultantName,
+                'consultantNew'     => $newCons->id,
+                'consultantNewName' => $newCons->personName,
+                'triggeredBy'       => 'Внесено вручную',
+            ]);
+        });
+
+        return response()->json(['message' => 'Контракт перезакреплён и записан в историю']);
     }
 
     /**

@@ -8,6 +8,14 @@
       </template>
     </PageHeader>
 
+    <v-tabs v-model="clientsTab" color="primary" class="mb-3" density="compact">
+      <v-tab value="list" prepend-icon="mdi-account-group">Клиенты</v-tab>
+      <v-tab value="history" prepend-icon="mdi-history">История перестановок</v-tab>
+    </v-tabs>
+
+    <v-window v-model="clientsTab">
+      <v-window-item value="list">
+
     <!-- Компактный layout фильтров: основные поля в одной flex-строке,
          диапазон дат — за тогглом «Ещё». Без floating-label на полях
          типа date — на узких экранах (Mac Air ~1366px) лейбл резал
@@ -95,6 +103,12 @@
       </template>
       <template #no-data><EmptyState /></template>
     </v-data-table-server>
+
+      </v-window-item>
+      <v-window-item value="history">
+        <ReassignmentPanel subject="client" />
+      </v-window-item>
+    </v-window>
 
     <DialogShell
       v-model="deleteDialogOpen"
@@ -278,6 +292,7 @@ import StartChatButton from '../../components/StartChatButton.vue';
 import DialogShell from '../../components/DialogShell.vue';
 import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 import SmartRangeFilter from '../../components/SmartRangeFilter.vue';
+import ReassignmentPanel from '../../components/ReassignmentPanel.vue';
 
 const columnVisible = ref({});
 const visibleHeaders = computed(() => headers.filter(h => columnVisible.value[h.key] !== false));
@@ -287,6 +302,8 @@ import { usePermissions } from '../../composables/usePermissions';
 import { cyrillicRequiredRules, cyrillicOptionalRules, emailRules } from '../../composables/useFormRules';
 
 const { canEdit, canFull } = usePermissions();
+
+const clientsTab = ref('list');
 
 const route = useRoute();
 const router = useRouter();

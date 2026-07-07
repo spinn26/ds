@@ -3,7 +3,7 @@
     <PageHeader title="История перестановок" icon="mdi-history" :count="total">
       <template #actions>
         <v-btn color="primary" size="small" prepend-icon="mdi-account-switch"
-          class="me-2" @click="openDialog">Внести перестановку</v-btn>
+          class="me-2" @click="openDialog">{{ reassignCta }}</v-btn>
         <ColumnVisibilityMenu
           :headers="headers"
           v-model:visible="columnVisible"
@@ -13,28 +13,25 @@
 
     <v-dialog v-model="showDialog" max-width="520">
       <v-card>
-        <v-card-title class="text-h6">Внести перестановку</v-card-title>
+        <v-card-title class="text-h6">{{ reassignCta }}</v-card-title>
         <v-card-text>
-          <p class="text-body-2 text-medium-emphasis mb-4">
-            Выберите ФК и его нового наставника. Наставник партнёра будет изменён,
-            а событие записано в историю перестановок.
-          </p>
-          <v-autocomplete v-model="form.consultant" :items="fkItems" :loading="fkLoading"
-            item-title="name" item-value="id" label="ФК (партнёр)" no-filter clearable
-            density="comfortable" variant="outlined" prepend-inner-icon="mdi-account"
+          <p class="text-body-2 text-medium-emphasis mb-4">{{ reassignHint }}</p>
+          <v-autocomplete v-model="form.subject" :items="subjectItems" :loading="subjLoading"
+            item-title="name" item-value="id" :label="subjectLabel" no-filter clearable
+            density="comfortable" variant="outlined" :prepend-inner-icon="subjectIcon"
             :return-object="true" hide-details class="mb-4"
-            @update:search="s => searchConsultants(s, 'fk')" />
-          <v-autocomplete v-model="form.newInviter" :items="inviterItems" :loading="invLoading"
-            item-title="name" item-value="id" label="Новый наставник" no-filter clearable
+            @update:search="searchSubject" />
+          <v-autocomplete v-model="form.newOwner" :items="ownerItems" :loading="ownerLoading"
+            item-title="name" item-value="id" :label="newOwnerLabel" no-filter clearable
             density="comfortable" variant="outlined" prepend-inner-icon="mdi-account-supervisor"
             :return-object="true" hide-details
-            @update:search="s => searchConsultants(s, 'inv')" />
+            @update:search="searchOwner" />
         </v-card-text>
         <v-card-actions>
           <v-spacer />
           <v-btn variant="text" @click="showDialog = false">Отмена</v-btn>
           <v-btn color="primary" :loading="saving"
-            :disabled="!form.consultant || !form.newInviter || form.consultant.id === form.newInviter.id"
+            :disabled="!form.subject || !form.newOwner || form.subject.id === form.newOwner.id"
             @click="saveTransfer">Сохранить</v-btn>
         </v-card-actions>
       </v-card>
@@ -198,46 +195,71 @@ async function loadData() {
 
 onMounted(loadData);
 
-// --- Внести перестановку (ручная смена наставника + запись в историю) ---
+// --- Перестановка (ручная смена владельца + запись в историю) ---
+// Диалог контекстный по активной вкладке: партнёр → смена наставника ФК,
+// клиент/контракт → перезакрепление на другого консультанта.
 const showDialog = ref(false);
 const saving = ref(false);
-const form = ref({ consultant: null, newInviter: null });
-const fkItems = ref([]);
-const inviterItems = ref([]);
-const fkLoading = ref(false);
-const invLoading = ref(false);
+const form = ref({ subject: null, newOwner: null });
+const subjectItems = ref([]);
+const ownerItems = ref([]);
+const subjLoading = ref(false);
+const ownerLoading = ref(false);
+
+const reassignCta = computed(() => ({
+  partner: 'Внести перестановку',
+  contract: 'Перезакрепить контракт',
+  client: 'Перезакрепить клиента',
+})[tab.value]);
+const reassignHint = computed(() => ({
+  partner: 'Выберите ФК и его нового наставника. Наставник партнёра будет изменён, а событие записано в историю перестановок.',
+  contract: 'Выберите контракт и нового консультанта. Контракт будет перезакреплён, а событие записано в историю перестановок.',
+  client: 'Выберите клиента и нового консультанта. Клиент будет перезакреплён, а событие записано в историю перестановок.',
+})[tab.value]);
+const subjectLabel = computed(() => ({
+  partner: 'ФК (партнёр)', contract: 'Контракт', client: 'Клиент',
+})[tab.value]);
+const subjectIcon = computed(() => (tab.value === 'contract' ? 'mdi-file-document' : 'mdi-account'));
+const newOwnerLabel = computed(() => (tab.value === 'partner' ? 'Новый наставник' : 'Новый консультант'));
 
 function openDialog() {
-  form.value = { consultant: null, newInviter: null };
-  fkItems.value = [];
-  inviterItems.value = [];
+  form.value = { subject: null, newOwner: null };
+  subjectItems.value = [];
+  ownerItems.value = [];
   showDialog.value = true;
 }
 
-async function doSearch(s, which) {
-  const load = which === 'fk' ? fkLoading : invLoading;
-  const list = which === 'fk' ? fkItems : inviterItems;
-  load.value = true;
+// Субъект: партнёр — из /consultants, клиент/контракт — из /subjects.
+async function doSubjectSearch(s) {
+  subjLoading.value = true;
+  try {
+    const { data } = tab.value === 'partner'
+      ? await api.get('/admin/transfers/consultants', { params: { search: s || undefined } })
+      : await api.get('/admin/transfers/subjects', { params: { type: tab.value, search: s || undefined } });
+    subjectItems.value = data.data || [];
+  } catch { /* ignore */ } finally { subjLoading.value = false; }
+}
+async function doOwnerSearch(s) {
+  ownerLoading.value = true;
   try {
     const { data } = await api.get('/admin/transfers/consultants', { params: { search: s || undefined } });
-    list.value = data.data || [];
-  } catch { /* ignore */ } finally { load.value = false; }
+    ownerItems.value = data.data || [];
+  } catch { /* ignore */ } finally { ownerLoading.value = false; }
 }
-
-const { debounced: debFk } = useDebounce((s) => doSearch(s, 'fk'), 300);
-const { debounced: debInv } = useDebounce((s) => doSearch(s, 'inv'), 300);
-function searchConsultants(s, which) { (which === 'fk' ? debFk : debInv)(s || ''); }
+const { debounced: debSubj } = useDebounce(doSubjectSearch, 300);
+const { debounced: debOwner } = useDebounce(doOwnerSearch, 300);
+function searchSubject(s) { debSubj(s || ''); }
+function searchOwner(s) { debOwner(s || ''); }
 
 async function saveTransfer() {
   saving.value = true;
   try {
-    const { data } = await api.post('/admin/transfers', {
-      consultant: form.value.consultant?.id,
-      newInviter: form.value.newInviter?.id,
-    });
+    const payload = tab.value === 'partner'
+      ? { consultant: form.value.subject?.id, newInviter: form.value.newOwner?.id }
+      : { subject: tab.value, subject_id: form.value.subject?.id, new_consultant: form.value.newOwner?.id };
+    const { data } = await api.post('/admin/transfers', payload);
     showSuccess(data.message || 'Перестановка внесена');
     showDialog.value = false;
-    tab.value = 'partner';
     page.value = 1;
     loadData();
   } catch (e) {
