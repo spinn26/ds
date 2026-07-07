@@ -14,12 +14,14 @@ use Illuminate\Support\Facades\DB;
  * Доступ: только admin (проверяется в каждом методе вручную, потому
  * что Policy/Gate система пока не настроена для этого ресурса).
  *
- * Семантика см. database/migrations/2026_05_08_000010_create_permission_groups.php
- * + resources/js/config/cabinetPermissions.js (fallback для фронта).
+ * Семантика см. database/migrations/2026_05_08_000010_create_permission_groups.php.
+ * Список секций (колонки матрицы) — config/permissions.php. Единый источник
+ * прав — эта таблица; фронт читает её через /auth/me/permissions (кэш в
+ * localStorage). Статического дубля на фронте больше нет.
  */
 class AdminPermissionsController extends Controller
 {
-    /** Допустимые уровни — должны совпадать с фронтом (cabinetPermissions.js). */
+    /** Допустимые уровни (view < edit < full). Дублируются в config/permissions.php. */
     private const LEVELS = ['view', 'edit', 'full'];
 
     /**

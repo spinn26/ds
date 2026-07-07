@@ -415,7 +415,6 @@ import GlobalSearch from '../components/GlobalSearch.vue';
 import SystemStatusChip from '../components/SystemStatusChip.vue';
 import ChatLauncher from '../components/ChatLauncher.vue';
 import { provideConfirm } from '../composables/useConfirm';
-import { availableSections as configAvailableSections } from '../config/cabinetPermissions';
 import { useNotificationSound } from '../composables/useNotificationSound';
 import api from '../api';
 import { useDesignStore } from '../stores/design';
@@ -903,26 +902,11 @@ const isStaff = computed(() =>
   userRoles.value.some(r => ['admin', 'backoffice', 'support', 'finance', 'head', 'calculations', 'corrections', 'education', 'invest'].includes(r))
 );
 
-// Видимость секций — auth-store.permissions (загружается из БД через
-// GET /auth/me/permissions при логине / boot'е). Если БД-данные ещё
-// не пришли — фоллбэкаем на static config/cabinetPermissions.js.
-// admin: sentinel '*' расширяется до всех adminSection из menuItems.
-const availableSections = computed(() => {
-  const dbPerms = auth.permissions;
-  if (dbPerms && Object.keys(dbPerms).length > 0) {
-    return new Set(Object.keys(dbPerms));
-  }
-  // Fallback — пока permissions не пришли из БД.
-  const set = configAvailableSections(userRoles.value);
-  if (set.has('*')) {
-    const all = new Set();
-    for (const it of menuItems) {
-      if (it.adminSection) all.add(it.adminSection);
-    }
-    return all;
-  }
-  return set;
-});
+// Видимость секций — единый источник auth-store.permissions (из БД через
+// GET /auth/me/permissions, кэш в localStorage → доступен и на холодном
+// старте до ответа сервера). admin получает все секции из резолвера
+// (config/permissions.sections → full), поэтому спец-обработка не нужна.
+const availableSections = computed(() => new Set(Object.keys(auth.permissions || {})));
 
 const cabinetName = computed(() => {
   if (userRoles.value.includes('admin')) return 'Администратор';

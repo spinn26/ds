@@ -1,13 +1,11 @@
 /**
  * usePermissions() — хелпер для страниц.
  *
- * Источник прав — auth-store (state.permissions), который загружается
- * через GET /auth/me/permissions при логине / boot'е приложения.
- * Это обновляемый из БД набор: правки в админке /manage/permissions
- * подхватываются автоматически после следующего fetch'а.
- *
- * Если БД-данные не загружены (ещё не залогинились / временно упало)
- * — фоллбэк на статический config/cabinetPermissions.js по ролям.
+ * Единственный источник прав — auth-store.permissions (карта section→level),
+ * загружается из БД через GET /auth/me/permissions и кэшируется в
+ * localStorage (см. stores/auth.js). Правится ТОЛЬКО на странице
+ * «Группы и права» (/admin/permissions → таблица permission_groups).
+ * Статического дубля (config/cabinetPermissions.js) больше нет.
  *
  *   const { canView, canEdit, canFull, isReadOnly, permission } = usePermissions();
  *   <v-btn v-if="canEdit('clients')">Добавить клиента</v-btn>
@@ -16,11 +14,6 @@
  */
 import { computed } from 'vue';
 import { useAuthStore } from '../stores/auth';
-import {
-  getPermission as staticGetPermission,
-} from '../config/cabinetPermissions';
-
-const LEVEL_RANK = { view: 1, edit: 2, full: 3 };
 
 export function usePermissions() {
   const auth = useAuthStore();
@@ -30,16 +23,9 @@ export function usePermissions() {
     return String(role).split(',').map(r => r.trim().toLowerCase()).filter(Boolean);
   });
 
-  // Явный флаг — БД-permissions гарантированно загружены и валидны
-  // (даже если для роли прав нет, флаг true и {} = «реально пусто»).
-  // Раньше использовали Object.keys().length > 0, что для legit-пустой
-  // роли фоллбэкалось на static config — иногда давая больше прав.
-  const dbLoaded = computed(() => auth.permissionsFetched === true);
-
   function permission(section) {
     if (!section) return null;
-    if (dbLoaded.value) return auth.permissions[section] || null;
-    return staticGetPermission(userRoles.value, section);
+    return auth.permissions?.[section] || null;
   }
 
   function canView(section) {

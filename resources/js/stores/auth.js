@@ -3,7 +3,10 @@ import api from '../api';
 
 export const useAuthStore = defineStore('auth', {
     persist: {
-        pick: ['token', 'user'],
+        // permissions кэшируем в localStorage — единый источник прав это БД,
+        // а кэш даёт меню/кнопки на холодном старте до ответа
+        // /auth/me/permissions и переживает кратковременный сбой сети.
+        pick: ['token', 'user', 'permissions'],
     },
     state: () => ({
         user: null,
@@ -61,8 +64,8 @@ export const useAuthStore = defineStore('auth', {
                 const { data } = await api.get('/auth/me');
                 this.user = data;
                 // Параллельно подтягиваем effective permissions из БД.
-                // Не await'им: если упадёт — composable usePermissions
-                // фоллбэкнет на static cabinetPermissions.js.
+                // Не await'им: до ответа используется кэш из localStorage
+                // (persist), при сбое он же остаётся фолбэком.
                 this.fetchPermissions();
             } catch {
                 this.token = null;
@@ -103,7 +106,9 @@ export const useAuthStore = defineStore('auth', {
 
         /**
          * GET /auth/me/permissions — actual rights from БД (permission_groups).
-         * Тихо игнорируем ошибки — фоллбэк на static config работает и без них.
+         * Единственный источник прав. При ошибке НЕ обнуляем — оставляем
+         * последний снимок из localStorage-кэша, чтобы сетевой сбой не
+         * ронял меню/права до нуля.
          */
         async fetchPermissions() {
             if (!this.token) return;
@@ -112,7 +117,6 @@ export const useAuthStore = defineStore('auth', {
                 this.permissions = data?.permissions || {};
                 this.permissionsFetched = true;
             } catch {
-                this.permissions = {};
                 this.permissionsFetched = false;
             }
         },
