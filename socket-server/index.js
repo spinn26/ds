@@ -39,6 +39,18 @@ const IS_PRODUCTION = NODE_ENV === 'production';
 const TOKEN_CACHE_TTL_MS = 60 * 1000; // 1 minute
 const ACCESS_CACHE_TTL_MS = 60 * 1000; // 1 minute
 const CACHE_CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // periodic sweep
+// Устойчивость к кратковременной недоступности Laravel API (например, во
+// время деплоя, когда php-fpm перезагружается). fetch без таймаута может
+// зависнуть; без ретраев/grace один сетевой сбой мгновенно выкидывает всех
+// клиентов в «нет связи с сервером».
+const FETCH_TIMEOUT_MS = 5000;   // одиночный запрос не висит дольше 5 сек
+const FETCH_RETRIES = 2;         // 1 + 2 = 3 попытки суммарно
+// Grace: если валидация НЕ смогла достучаться до API (сетевой сбой, не 401),
+// используем последний успешный результат ещё столько времени — переживаем
+// деплой без разрыва сессий. На реальный отзыв токена это не влияет:
+// Laravel вернул бы 401 (res.ok=false), а не сетевую ошибку.
+const TOKEN_GRACE_MS = 5 * 60 * 1000;
+const ACCESS_GRACE_MS = 5 * 60 * 1000;
 
 if (!EMIT_SECRET) {
   if (IS_PRODUCTION) {
@@ -65,6 +77,26 @@ const accessCache = new Map();
 // userId → { socketId, userName, rooms: Set }
 const onlineUsers = new Map();
 
+/**
+ * fetch с таймаутом и ретраями. Бросает только когда все попытки исчерпаны
+ * (сетевой сбой/таймаут). HTTP-ответ (в т.ч. 401/403/5xx) возвращается как
+ * есть — это не сбой соединения, ретраить не нужно.
+ */
+async function fetchWithRetry(url, opts) {
+  let lastErr;
+  for (let attempt = 0; attempt <= FETCH_RETRIES; attempt++) {
+    try {
+      return await fetch(url, { ...opts, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+    } catch (e) {
+      lastErr = e;
+      if (attempt < FETCH_RETRIES) {
+        await new Promise((r) => setTimeout(r, 200 * (attempt + 1)));
+      }
+    }
+  }
+  throw lastErr;
+}
+
 async function validateToken(token) {
   if (!token) return null;
 
@@ -72,11 +104,9 @@ async function validateToken(token) {
   if (cached && cached.expiresAt > Date.now()) {
     return cached.user;
   }
-  // Истёкший — выкидываем сразу, не ждём sweep.
-  if (cached) tokenCache.delete(token);
 
   try {
-    const res = await fetch(`${LARAVEL_API_URL}/api/v1/auth/me`, {
+    const res = await fetchWithRetry(`${LARAVEL_API_URL}/api/v1/auth/me`, {
       headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
     });
     if (!res.ok) {
@@ -95,10 +125,22 @@ async function validateToken(token) {
       userId: String(u.id),
       userName: fullName || emailHandle || `Пользователь #${u.id}`,
     };
-    tokenCache.set(token, { user, expiresAt: Date.now() + TOKEN_CACHE_TTL_MS });
+    const now = Date.now();
+    tokenCache.set(token, {
+      user,
+      expiresAt: now + TOKEN_CACHE_TTL_MS,
+      graceUntil: now + TOKEN_CACHE_TTL_MS + TOKEN_GRACE_MS,
+    });
     return user;
   } catch (e) {
-    console.error('[!] Token validation error:', e.message);
+    // Сюда попадаем ТОЛЬКО при сетевом сбое/таймауте (API недоступен), а не
+    // при 401. Отдаём последний успешный результат в пределах grace-окна —
+    // клиент переживает деплой без «нет связи». Кэш не перезаписываем, чтобы
+    // grace был жёстко ограничен исходным graceUntil.
+    console.error('[!] Token validation error (network, grace fallback):', e.message);
+    if (cached && cached.graceUntil > Date.now()) {
+      return cached.user;
+    }
     return null;
   }
 }
@@ -118,10 +160,10 @@ function invalidateToken(token) {
 function sweepCaches() {
   const now = Date.now();
   for (const [k, v] of tokenCache) {
-    if (v.expiresAt <= now) tokenCache.delete(k);
+    if ((v.graceUntil ?? v.expiresAt) <= now) tokenCache.delete(k);
   }
   for (const [k, v] of accessCache) {
-    if (v.expiresAt <= now) accessCache.delete(k);
+    if ((v.graceUntil ?? v.expiresAt) <= now) accessCache.delete(k);
   }
 }
 setInterval(sweepCaches, CACHE_CLEANUP_INTERVAL_MS).unref?.();
@@ -139,14 +181,24 @@ async function canAccessTicket(token, ticketId) {
     return cached.allowed;
   }
   try {
-    const res = await fetch(`${LARAVEL_API_URL}/api/v1/chat/tickets/${ticketId}/can-access`, {
+    const res = await fetchWithRetry(`${LARAVEL_API_URL}/api/v1/chat/tickets/${ticketId}/can-access`, {
       headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
     });
     const allowed = res.ok;
-    accessCache.set(key, { allowed, expiresAt: Date.now() + ACCESS_CACHE_TTL_MS });
+    const now = Date.now();
+    accessCache.set(key, {
+      allowed,
+      expiresAt: now + ACCESS_CACHE_TTL_MS,
+      graceUntil: now + ACCESS_CACHE_TTL_MS + ACCESS_GRACE_MS,
+    });
     return allowed;
   } catch (e) {
-    console.error('[!] Access check error:', e.message);
+    // Сетевой сбой (API недоступен) — не рвём доступ у того, кому он уже был
+    // разрешён: отдаём кэшированный результат в пределах grace-окна.
+    console.error('[!] Access check error (network, grace fallback):', e.message);
+    if (cached && cached.graceUntil > Date.now()) {
+      return cached.allowed;
+    }
     return false;
   }
 }
@@ -359,6 +411,14 @@ const apiServer = http.createServer((req, res) => {
   res.end(JSON.stringify({ error: 'Not found' }));
 });
 
+apiServer.on('error', (e) => {
+  console.error('[!] HTTP API server error:', e.message);
+});
+io.engine?.on?.('connection_error', (e) => {
+  // Ошибки рукопожатия/транспорта не должны валить процесс.
+  console.error('[!] Socket engine connection error:', e?.message || e?.code);
+});
+
 apiServer.listen(API_PORT, () => {
   console.log(`\n🚀 DS Socket.IO Server`);
   console.log(`   WebSocket:    ws://0.0.0.0:${PORT}`);
@@ -397,3 +457,16 @@ function shutdown(signal) {
 }
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
+
+// === Защита от крэш-лупа ===
+// Realtime-сервер — это stateless-релей поверх Laravel. Одна случайная
+// ошибка (например, брошенная внутри socket-обработчика или в чужой
+// библиотеке) не должна убивать процесс и разрывать связь у всех клиентов.
+// Логируем и продолжаем работу вместо process.exit → pm2 больше не
+// перезапускает сервер по кругу (была история в 195 рестартов).
+process.on('uncaughtException', (err) => {
+  console.error('[FATAL] uncaughtException (проигнорирован, сервер продолжает работу):', err?.stack || err);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[FATAL] unhandledRejection (проигнорирован):', reason?.stack || reason?.message || reason);
+});
