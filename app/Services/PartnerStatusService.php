@@ -177,6 +177,31 @@ class PartnerStatusService
     }
 
     /**
+     * Принудительно выставить статус «Терминирован» (минуя canBeTerminated).
+     * Нужно для сверки-файла: партнёры, уже помеченные «Исключён» на платформе,
+     * но в эталоне значатся «Терминирован». terminationCount НЕ трогаем
+     * (у исключённого он уже на максимуме). Пишем в лог статусов.
+     */
+    public function forceTerminate(Consultant $consultant, string $reason = ''): void
+    {
+        $previousActivity = $consultant->activity;
+
+        DB::transaction(function () use ($consultant) {
+            $consultant->activity = PartnerActivity::Terminated;
+            $consultant->active = false;
+            $consultant->dateDeactivity = Carbon::now();
+            $consultant->save();
+        });
+
+        $this->logStatusChange(
+            $consultant,
+            $previousActivity,
+            PartnerActivity::Terminated,
+            "Форс-терминация (сверка файла). {$reason}"
+        );
+    }
+
+    /**
      * Исключение вручную (за нарушение правил).
      */
     public function exclude(Consultant $consultant, string $reason = ''): void
