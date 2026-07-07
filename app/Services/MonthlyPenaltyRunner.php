@@ -356,6 +356,11 @@ class MonthlyPenaltyRunner
                     'result' => $this->buildResultLabel($opMult, $gapBranchKey),
                     'calculationLevel' => $consultant->status_and_lvl,
                     'nominalLevel' => $consultant->status_and_lvl,
+                    // Месячный ЛП партнёра (SUM commission chainOrder=1 за месяц,
+                    // пробрасывается из run()). Раньше не писался → снимок
+                    // qualificationLog имел ЛП=NULL, и раздел «Квалификации»
+                    // показывал 0 (инцидент «июнь нули»). Теперь снимок полный.
+                    'personalVolume' => $personalVolume,
                     'groupVolume' => $totalGroupVolume,
                     'groupVolumeCumulative' => $carryCumulative,
                     'consultantPersonName' => $consultant->personName,
