@@ -482,11 +482,12 @@
                 Для срока контракта ({{ rateContext.contractTerm }}) тарифов не найдено —
                 показаны все ставки программы. Проверьте срок контракта.
               </v-alert>
-              <!-- На дату транзакции действующих тарифов нет — показаны все
-                   версии (включая исторические). Возможны дубли по году. -->
-              <v-alert v-else-if="rateRelaxedDate" type="warning" variant="tonal" density="compact" class="mb-2">
-                На дату транзакции действующих тарифов не найдено —
-                показаны все версии ставок (включая исторические).
+              <!-- Показаны ВСЕ версии ставки (включая исторические уровни) —
+                   специалист выбирает нужную. Действующая на дату транзакции
+                   помечена. -->
+              <v-alert v-else type="info" variant="tonal" density="compact" class="mb-2">
+                Показаны все версии ставок. Выберите нужный уровень — версия,
+                действующая на дату транзакции, отмечена.
               </v-alert>
               <v-alert v-if="!productRates.length" type="info" variant="tonal" density="compact">
                 Для программы контракта нет настроенных тарифов в справочнике dsCommission.
@@ -495,10 +496,16 @@
                 <v-radio v-for="r in productRates" :key="r.id" :value="r.id">
                   <template #label>
                     <div>
-                      <div class="font-weight-medium">{{ r.comission }}%</div>
+                      <div class="font-weight-medium">
+                        {{ r.comission }}%
+                        <v-chip v-if="r.activeOnDate" size="x-small" color="success" variant="tonal" class="ms-1">
+                          действует на дату
+                        </v-chip>
+                      </div>
                       <div class="text-caption text-medium-emphasis">
                         {{ r.propertyTitle || r.programName || '—' }}
                         <template v-if="r.termContract"> · срок {{ r.termContract }} лет</template>
+                        <template v-if="ratePeriod(r)"> · {{ ratePeriod(r) }}</template>
                       </div>
                     </div>
                   </template>
@@ -1125,6 +1132,18 @@ async function openRateModal(d) {
     }
   } catch { productRates.value = []; }
   rateModal.value = true;
+}
+
+// Период действия версии тарифа — чтобы различать уровни (напр. 7ур/8ур)
+// при выборе среди всех версий в модалке «Изменить %ДС».
+function ratePeriod(r) {
+  const fmt = (d) => { try { return new Date(d).toLocaleDateString('ru-RU'); } catch { return null; } };
+  const f = r.date ? fmt(r.date) : null;
+  const t = r.dateFinish ? fmt(r.dateFinish) : null;
+  if (f && t) return `с ${f} по ${t}`;
+  if (f) return `с ${f}`;
+  if (t) return `по ${t}`;
+  return '';
 }
 
 async function applyRate() {

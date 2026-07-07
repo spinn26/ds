@@ -385,7 +385,12 @@ class ManualTransactionController extends Controller
             'dc.termContract', 'dc.date', 'dc.dateFinish', 'cp.title as propertyTitle',
         ];
 
-        $build = function (bool $withTerm, bool $withDate) use ($productId, $program, $term, $date, $select) {
+        // Спека ✅Ручной ввод транзакций (п.2.2): для ИТА/Medlife модалка
+        // показывает «список ВСЕХ доступных ставок… например 5.69%, 6.01%» —
+        // специалист выбирает нужный уровень сам. Поэтому по ДАТЕ НЕ фильтруем
+        // (иначе видна лишь одна версия); дата нужна только чтобы пометить
+        // версию, действующую на дату транзакции.
+        $build = function (bool $withTerm) use ($productId, $program, $term, $select) {
             return DB::table('dsCommission as dc')
                 ->leftJoin('commissionCalcProperty as cp', 'cp.id', '=', 'dc.commissionCalcProperty')
                 ->where('dc.product', $productId)
@@ -393,33 +398,31 @@ class ManualTransactionController extends Controller
                 ->whereNull('dc.dateDeleted')
                 ->when($program, fn ($q) => $q->where('dc.program', $program))
                 ->when($withTerm && $term !== null, fn ($q) => $q->where('dc.termContract', $term))
-                ->when($withDate && $date !== null, fn ($q) => $q
-                    ->where(fn ($w) => $w->whereNull('dc.date')->orWhere('dc.date', '<=', $date))
-                    ->where(fn ($w) => $w->whereNull('dc.dateFinish')->orWhere('dc.dateFinish', '>', $date)))
-                // Срок → год выплаты, новейший тариф первым (на случай, если
-                // дату не передали и осталось несколько версий года).
                 ->orderBy('dc.termContract')
                 ->orderBy('dc.commissionCalcProperty')
-                ->orderByDesc('dc.date')
+                ->orderByDesc('dc.date') // новейшая версия сверху
                 ->get($select);
         };
 
-        $relaxedDate = false;
         $relaxedTerm = false;
-        $rates = $build(true, true);
-        if ($rates->isEmpty() && $date !== null) {
-            $relaxedDate = true;
-            $rates = $build(true, false);
-        }
+        $rates = $build(true);
         if ($rates->isEmpty() && $term !== null) {
             $relaxedTerm = true;
-            $rates = $build(false, false);
+            $rates = $build(false);
         }
+
+        // Помечаем версию, действующую на дату транзакции (для подсветки в UI).
+        $rates = $rates->map(function ($r) use ($date) {
+            $r->activeOnDate = $date !== null
+                && ($r->date === null || $r->date <= $date)
+                && ($r->dateFinish === null || $r->dateFinish > $date);
+            return $r;
+        })->values();
 
         return response()->json([
             'rates' => $rates,
             'relaxedTerm' => $relaxedTerm,
-            'relaxedDate' => $relaxedDate,
+            'relaxedDate' => false, // по дате не фильтруем — все версии видны всегда
         ]);
     }
 
