@@ -133,8 +133,20 @@ class FinanceReportService
                 ->keyBy('id')
             : collect();
 
+        // Catalog names (source of truth after 2026-07-06 remap); keyed by the
+        // legacy id that contract.product / contract.program point at. Legacy
+        // denormalized contract.productName/programName kept as fallback.
+        $productCatalogNames = $productIds->isNotEmpty()
+            ? DB::table('products_catalog')->whereIn('legacy_product_id', $productIds)
+                ->pluck('name', 'legacy_product_id')
+            : collect();
+        $programCatalogNames = $programIds->isNotEmpty()
+            ? DB::table('programs_catalog')->whereIn('legacy_program_id', $programIds)
+                ->pluck('name', 'legacy_program_id')
+            : collect();
+
         // Helper to get tx details from pre-loaded data
-        $getTxData = function (?int $transactionId) use ($transactions, $contracts, $programs, $properties, $productFlags): array {
+        $getTxData = function (?int $transactionId) use ($transactions, $contracts, $programs, $properties, $productFlags, $productCatalogNames, $programCatalogNames): array {
             $empty = [
                 'contractNumber' => null, 'clientName' => null, 'productName' => null,
                 'programName' => null, 'amount' => null,
@@ -161,8 +173,11 @@ class FinanceReportService
             return [
                 'contractNumber' => $contract->number ?? null,
                 'clientName' => $contract->clientName ?? null,
-                'productName' => $contract->productName ?? null,
-                'programName' => $contract->programName ?? null,
+                // Catalog name first (post 2026-07-06 remap), legacy denorm fallback.
+                'productName' => ($contract->product ? ($productCatalogNames[$contract->product] ?? null) : null)
+                    ?: ($contract->productName ?? null),
+                'programName' => ($contract->program ? ($programCatalogNames[$contract->program] ?? null) : null)
+                    ?: ($contract->programName ?? null),
                 // «Сумма оплаты» в рублях (amountRUB) — для валютных сделок,
                 // чтобы колонка «₽» в отчёте не показывала сумму в валюте.
                 'amount' => ($tx->amountRUB ?: $tx->amount) ?? null,

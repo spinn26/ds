@@ -21,6 +21,10 @@ class FinrezTransactionsReport extends AbstractReportType
         $rows = DB::table('transaction as t')
             ->leftJoin('contract as c', 'c.id', '=', 't.contract')
             ->leftJoin('program as pr', 'pr.id', '=', 'c.program')
+            // Catalog names (source of truth after 2026-07-06 remap); legacy
+            // denormalized c.productName/c.programName + pr.providerName kept as fallback.
+            ->leftJoin('products_catalog as pc', 'pc.legacy_product_id', '=', 'c.product')
+            ->leftJoin('programs_catalog as prc', 'prc.legacy_program_id', '=', 'c.program')
             ->leftJoin('currency as cur', 'cur.id', '=', 't.currency')
             ->leftJoin('consultant as cn', 'cn.id', '=', 'c.consultant')
             ->whereNull('t.deletedAt')
@@ -28,8 +32,10 @@ class FinrezTransactionsReport extends AbstractReportType
             ->orderByDesc('t.date')
             ->limit(50000)
             ->get([
-                't.id',
-                'c.number', 'pr.providerName', 'c.productName', 'c.programName',
+                't.id', 'c.number',
+                DB::raw('COALESCE(pc.provider_name, pr."providerName") as "providerName"'),
+                DB::raw('COALESCE(pc.name, c."productName") as "productName"'),
+                DB::raw('COALESCE(prc.name, c."programName") as "programName"'),
                 'c.clientName', 't.date', 't.amountRUB', 't.netRevenueRUB',
                 't.dsCommissionPercentage',
                 'cn.personName as partner', 't.commissionsAmountRUB', 't.profitRUB',

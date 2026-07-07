@@ -71,12 +71,13 @@ class ManualTransactionController extends Controller
         }
         if ($request->filled('search')) {
             $term = '%' . $request->search . '%';
+            // Picker search = contract number + party names only.
+            // productName/programName caused false hits on letter-combos — drop
+            // them (they have dedicated `product`/`program` filters).
             $q->where(function ($w) use ($term) {
                 $w->where('c.number', 'ilike', $term)
-                  ->orWhere('c.clientName', 'ilike', $term)
                   ->orWhere('c.consultantName', 'ilike', $term)
-                  ->orWhere('c.productName', 'ilike', $term)
-                  ->orWhere('c.programName', 'ilike', $term);
+                  ->orWhere('c.clientName', 'ilike', $term);
             });
         }
 

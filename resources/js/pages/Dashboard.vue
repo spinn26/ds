@@ -453,7 +453,10 @@ const partnerCards = computed(() => {
       link: { path: '/structure' } },
     { label: 'Зарегистрировано', value: p.registered ?? 0, color: 'info', diff: (p.registered ?? 0) - (pp.registered ?? 0),
       link: { path: '/structure', query: { status: 'registered' } } },
-    { label: 'Активных', value: p.active ?? 0, color: 'success', diff: (p.active ?? 0) - (pp.active ?? 0),
+    { label: 'Активных', value: p.active ?? 0, color: 'success',
+      // Real Registered→Activated count for the period (by dateActivity),
+      // not a diff of the live activity snapshot which lost transitions.
+      diff: data.value.activatedInPeriod ?? 0,
       link: { path: '/structure', query: { status: 'active' } } },
     { label: 'Терминированных', value: p.terminated ?? 0, color: 'error', diff: (p.terminated ?? 0) - (pp.terminated ?? 0),
       link: { path: '/structure', query: { status: 'terminated' } } },

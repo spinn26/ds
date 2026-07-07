@@ -172,6 +172,14 @@ class DashboardService
         // Previous period partner counts for comparison
         $prevPartnerCounts = $this->consultantService->getPrevPartnerCounts($consultant->id, $teamConsultantIds, $prevPeriodEnd);
 
+        // Registered → Activated transitions INSIDE the selected period, keyed on
+        // the real activation event (dateActivity). This is the honest metric the
+        // dashboard needs; the old `active - prevActive` diff of the live activity
+        // column silently lost partners that were registered last month.
+        $activatedInPeriod = $this->consultantService->getActivatedInPeriod(
+            $consultant->id, $teamConsultantIds, $periodStart, $periodEnd
+        );
+
         // First-line counts (via inviter chain — matches legacy platform)
         $firstLineAll = DB::table('consultant')
             ->where('inviter', $consultant->id)
@@ -369,6 +377,7 @@ class DashboardService
             ],
             'partners' => $partnerCounts,
             'prevPartners' => $prevPartnerCounts,
+            'activatedInPeriod' => $activatedInPeriod,
             'breakaway' => $breakaway,
             'breakawayRules' => $breakawayRules,
             'mandatoryPlan' => $mandatoryPlan,

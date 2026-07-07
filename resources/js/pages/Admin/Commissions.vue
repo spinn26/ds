@@ -276,7 +276,9 @@
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="row in chainCache[item.id].data" :key="row.id"
+                  <!-- Top mentor first, direct partner (chainOrder=1, bold) last —
+                       mirrors Transactions' chainTopDown() ordering. -->
+                  <tr v-for="row in [...chainCache[item.id].data].reverse()" :key="row.id"
                     :class="{ 'font-weight-bold': row.chainOrder === 1 }">
                     <td>{{ row.consultantName || '—' }}</td>
                     <td>

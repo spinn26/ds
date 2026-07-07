@@ -2222,9 +2222,10 @@ class AdminDataController extends Controller
 
         if ($request->filled('search')) {
             $s = $request->search;
+            // Generic search = partner (consultant) name + contract number.
+            // Client has a dedicated `client_name` filter — keep it out of the OR.
             $query->where(function ($q) use ($s) {
-                $q->where('c.clientName', 'ilike', "%{$s}%")
-                  ->orWhere('c.consultantName', 'ilike', "%{$s}%")
+                $q->where('c.consultantName', 'ilike', "%{$s}%")
                   ->orWhere('c.number', 'ilike', "%{$s}%");
             });
         }

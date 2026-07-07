@@ -35,11 +35,12 @@ class AdminFinanceController extends Controller
 
         if ($request->filled('search')) {
             $term = '%' . $request->search . '%';
+            // Generic search box = partner (consultant) name + contract number.
+            // Client name has its own `client` filter — keep it out of the OR so a
+            // partner surname doesn't leak matches across the client column.
             $query->where(function ($w) use ($term) {
                 $w->where('c.consultantName', 'ilike', $term)
-                  ->orWhere('c.number', 'ilike', $term)
-                  ->orWhere('c.clientName', 'ilike', $term)
-                  ->orWhereRaw('t.id::text ilike ?', [$term]);
+                  ->orWhere('c.number', 'ilike', $term);
             });
         }
         // Дополнительные раздельные фильтры per spec ✅Комиссии §1.1
@@ -256,6 +257,27 @@ class AdminFinanceController extends Controller
                 ->keyBy('id')
             : collect();
 
+        // Актуальные названия продукта / поставщика / программы — из каталога
+        // (products_catalog / programs_catalog), а не из legacy product/program:
+        // после ремапа 2026-07-06 legacy-имена устарели/перемешаны (БКС СЖ / ГГА /
+        // IPO вперемешку), каталог — единственный source of truth. Связь:
+        // contract.product = products_catalog.legacy_product_id,
+        // contract.program = programs_catalog.legacy_program_id.
+        $productCatalog = $productIds->isNotEmpty()
+            ? DB::table('products_catalog')
+                ->whereNotNull('legacy_product_id')
+                ->whereIn('legacy_product_id', $productIds)
+                ->get(['legacy_product_id', 'name', 'provider_name'])
+                ->keyBy('legacy_product_id')
+            : collect();
+        $programCatalog = $programIds->isNotEmpty()
+            ? DB::table('programs_catalog')
+                ->whereNotNull('legacy_program_id')
+                ->whereIn('legacy_program_id', $programIds)
+                ->get(['legacy_program_id', 'name'])
+                ->keyBy('legacy_program_id')
+            : collect();
+
         // Commission-цепочка батчем по transaction. Нужно для колонок:
         //  - Комиссия (сумма commission.amountRUB по всей цепочке)
         //  - ЛП / ГП / Баллы (по строке прямого партнёра chainOrder=1)
@@ -304,12 +326,17 @@ class AdminFinanceController extends Controller
             }
         }
 
-        $data = $rows->map(function ($t) use ($currencies, $properties, $frozenSet, $productFlags, $programMeta, $commissionByTx, $partnerRowByTx) {
+        $data = $rows->map(function ($t) use ($currencies, $properties, $frozenSet, $productFlags, $programMeta, $productCatalog, $programCatalog, $commissionByTx, $partnerRowByTx) {
             $month = (int) substr((string) $t->dateMonth, -2);
             $year = (int) $t->dateYear;
             $isFrozen = $frozenSet->get("$year-$month", false);
             $flags = $t->productId ? ($productFlags[$t->productId] ?? null) : null;
             $prog = $t->programId ? ($programMeta[$t->programId] ?? null) : null;
+            $cat = $t->productId ? ($productCatalog[$t->productId] ?? null) : null;
+            $progCat = $t->programId ? ($programCatalog[$t->programId] ?? null) : null;
+            // Product name / supplier: catalog first, legacy as fallback.
+            $productName = $cat?->name ?? $flags?->name ?? null;
+            $rawProvider = $cat?->provider_name ?? $prog?->providerName ?? $prog?->vendorName ?? null;
             $partnerRow = $partnerRowByTx->get((int) $t->id);
             $totalCommission = (float) $commissionByTx->get((int) $t->id, 0);
             return [
@@ -321,12 +348,11 @@ class AdminFinanceController extends Controller
                 'contractTerm' => $flags && ! $flags->has_term ? null : $t->contractTerm,
                 'clientName' => $t->clientName,
                 'consultantName' => $t->consultantName,
-                'providerName' => \App\Support\SupplierResolver::resolve(
-                    $flags?->name,
-                    $prog?->providerName ?? $prog?->vendorName ?? null,
-                ),
-                'productName' => $flags?->name ?? null,
-                'programName' => $prog?->name ?? null,
+                // SupplierResolver still needed for Insmart-products (provider held
+                // as end-insurer). Feed it the catalog-resolved product name.
+                'providerName' => \App\Support\SupplierResolver::resolve($productName, $rawProvider),
+                'productName' => $productName,
+                'programName' => $progCat?->name ?? $prog?->name ?? null,
                 'amount' => round((float) ($t->amount ?? 0), 2),
                 'amountRUB' => round((float) ($t->amountRUB ?? 0), 2),
                 'amountUSD' => round((float) ($t->amountUSD ?? 0), 2),

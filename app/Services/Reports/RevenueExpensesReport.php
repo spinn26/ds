@@ -14,14 +14,17 @@ class RevenueExpensesReport extends AbstractReportType
     {
         $rows = DB::table('transaction as t')
             ->leftJoin('contract as c', 'c.id', '=', 't.contract')
+            // Catalog name (source of truth after 2026-07-06 remap); legacy
+            // denormalized c.productName kept as fallback.
+            ->leftJoin('products_catalog as pc', 'pc.legacy_product_id', '=', 'c.product')
             ->whereNull('t.deletedAt')
             ->whereBetween('t.date', [$dateFrom, $dateTo])
             ->select(
-                DB::raw('COALESCE(c."productName", \'—\') as product'),
+                DB::raw('COALESCE(pc.name, c."productName", \'—\') as product'),
                 DB::raw('SUM(t."amountRUB") as income'),
                 DB::raw('SUM(t."commissionsAmountRUB") as expense')
             )
-            ->groupBy('c.productName')
+            ->groupBy(DB::raw('COALESCE(pc.name, c."productName", \'—\')'))
             ->orderBy('product')
             ->get();
 

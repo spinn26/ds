@@ -358,6 +358,7 @@ class ConsultantService
     {
         $counts = \App\Models\Consultant::whereIn('id', $teamIds)
             ->where('id', '!=', $consultantId)
+            ->whereNull('dateDeleted')
             ->select('activity', DB::raw('count(*) as cnt'))
             ->groupBy('activity')
             ->pluck('cnt', 'activity')
@@ -374,26 +375,49 @@ class ConsultantService
     }
 
     /**
-     * Get partner counts at end of previous period (for comparison).
+     * Get partner counts as a point-in-time snapshot at the end of the
+     * previous period. "active" = already had a real activation event
+     * (dateActivity) on/before $prevEnd; everyone else created by then is
+     * "registered". Grouping the LIVE `activity` column (as before) made a
+     * partner who was Registered last month but Active now count as Active in
+     * BOTH snapshots, so the Registered→Activated delta silently lost them.
      */
     public function getPrevPartnerCounts(int $consultantId, array $teamIds, \Carbon\Carbon $prevEnd): array
     {
-        $counts = \App\Models\Consultant::whereIn('id', $teamIds)
+        $base = \App\Models\Consultant::whereIn('id', $teamIds)
             ->where('id', '!=', $consultantId)
-            ->where('dateCreated', '<=', $prevEnd)
-            ->select('activity', DB::raw('count(*) as cnt'))
-            ->groupBy('activity')
-            ->pluck('cnt', 'activity')
-            ->toArray();
+            ->whereNull('dateDeleted')
+            ->where('dateCreated', '<=', $prevEnd);
+
+        $active = (clone $base)
+            ->whereNotNull('dateActivity')
+            ->where('dateActivity', '<=', $prevEnd)
+            ->count();
+        $total = (clone $base)->count();
 
         return [
-            'total' => array_sum($counts),
-            'registered' => $counts[\App\Enums\PartnerActivity::Registered->value] ?? 0,
-            'active' => $counts[\App\Enums\PartnerActivity::Active->value] ?? 0,
+            'total' => $total,
+            'registered' => max(0, $total - $active),
+            'active' => $active,
             'inactive' => 0, // Статус удалён
-            'terminated' => $counts[\App\Enums\PartnerActivity::Terminated->value] ?? 0,
-            'excluded' => $counts[\App\Enums\PartnerActivity::Excluded->value] ?? 0,
+            'terminated' => 0,
+            'excluded' => 0,
         ];
+    }
+
+    /**
+     * Count team partners who actually transitioned Registered → Activated
+     * within [periodStart, periodEnd], keyed on the real activation timestamp
+     * consultant."dateActivity" — NOT a diff of the live `activity` column.
+     */
+    public function getActivatedInPeriod(int $consultantId, array $teamIds, \Carbon\Carbon $periodStart, \Carbon\Carbon $periodEnd): int
+    {
+        return \App\Models\Consultant::whereIn('id', $teamIds)
+            ->where('id', '!=', $consultantId)
+            ->whereNull('dateDeleted')
+            ->whereNotNull('dateActivity')
+            ->whereBetween('dateActivity', [$periodStart, $periodEnd])
+            ->count();
     }
 
     /**

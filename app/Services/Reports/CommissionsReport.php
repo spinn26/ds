@@ -23,6 +23,10 @@ class CommissionsReport extends AbstractReportType
             ->leftJoin('contract as c', 'c.id', '=', 't.contract')
             ->leftJoin('product as p', 'p.id', '=', 'c.product')
             ->leftJoin('program as pr', 'pr.id', '=', 'c.program')
+            // Catalog names (source of truth after 2026-07-06 remap); legacy
+            // product/program kept as fallback. See AdminFinanceController::transactions.
+            ->leftJoin('products_catalog as pc', 'pc.legacy_product_id', '=', 'c.product')
+            ->leftJoin('programs_catalog as prc', 'prc.legacy_program_id', '=', 'c.program')
             ->leftJoin('consultant as cn', 'cn.id', '=', 'c.consultant')
             ->whereNull('t.deletedAt')
             ->whereBetween('t.date', [$from, $to])
@@ -30,7 +34,10 @@ class CommissionsReport extends AbstractReportType
             ->limit(50000)
             ->get([
                 't.id',
-                'c.number', 'pr.providerName', 'p.name as productName', 'pr.name as programName',
+                'c.number',
+                DB::raw('COALESCE(pc.provider_name, pr."providerName") as "providerName"'),
+                DB::raw('COALESCE(pc.name, p.name) as "productName"'),
+                DB::raw('COALESCE(prc.name, pr.name) as "programName"'),
                 'c.clientName', 't.date', 't.amountRUB',
                 't.netRevenueRUB', 't.dsCommissionPercentage',
                 't.personalVolume', 'cn.personName as partnerName',
