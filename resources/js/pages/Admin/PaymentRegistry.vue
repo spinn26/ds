@@ -64,7 +64,7 @@
                 <div class="text-caption text-medium-emphasis">{{ t.label }}</div>
                 <div :class="['text-body-1', 'font-weight-medium', t.cls]">
                   <span v-if="t.isCount">{{ t.value }}</span>
-                  <MoneyCell v-else :value="t.value" currency="₽" />
+                  <MoneyCell v-else :value="t.value" currency="₽" :decimals="true" />
                 </div>
               </v-col>
             </v-row>
@@ -108,17 +108,17 @@
         </template>
 
         <template #item.balance="{ value }">
-          <MoneyCell :value="value" currency="₽" :colored="true" />
+          <MoneyCell :value="value" currency="₽" :colored="true" :decimals="true" />
         </template>
-        <template #item.accrued="{ value }"><MoneyCell :value="value" currency="₽" /></template>
-        <template #item.other="{ value }"><MoneyCell :value="value" currency="₽" /></template>
-        <template #item.pool="{ value }"><MoneyCell :value="value" currency="₽" /></template>
-        <template #item.accruedTotal="{ value }"><MoneyCell :value="value" currency="₽" /></template>
+        <template #item.accrued="{ value }"><MoneyCell :value="value" currency="₽" :decimals="true" /></template>
+        <template #item.other="{ value }"><MoneyCell :value="value" currency="₽" :decimals="true" /></template>
+        <template #item.pool="{ value }"><MoneyCell :value="value" currency="₽" :decimals="true" /></template>
+        <template #item.accruedTotal="{ value }"><MoneyCell :value="value" currency="₽" :decimals="true" /></template>
         <template #item.totalPayable="{ value }">
-          <span class="font-weight-medium"><MoneyCell :value="value" currency="₽" /></span>
+          <span class="font-weight-medium"><MoneyCell :value="value" currency="₽" :decimals="true" /></span>
         </template>
-        <template #item.payed="{ value }"><MoneyCell :value="value" currency="₽" /></template>
-        <template #item.remaining="{ value }"><MoneyCell :value="value" currency="₽" :colored="true" /></template>
+        <template #item.payed="{ value }"><MoneyCell :value="value" currency="₽" :decimals="true" /></template>
+        <template #item.remaining="{ value }"><MoneyCell :value="value" currency="₽" :colored="true" :decimals="true" /></template>
 
         <template #item.status="{ value }">
           <v-chip size="x-small" :color="statusColor(value)">{{ value || '—' }}</v-chip>
@@ -176,8 +176,8 @@
       @confirm="savePayment"
     >
       <div class="text-body-2 mb-3">
-        К оплате: <MoneyCell :value="paymentTarget?.totalPayable" currency="₽" />.
-        Уже оплачено: <MoneyCell :value="paymentTarget?.payed" currency="₽" />.
+        К оплате: <MoneyCell :value="paymentTarget?.totalPayable" currency="₽" :decimals="true" />.
+        Уже оплачено: <MoneyCell :value="paymentTarget?.payed" currency="₽" :decimals="true" />.
       </div>
       <v-text-field v-model.number="paymentForm.amount" label="Сумма выплаты, ₽" type="number"
         step="0.01" variant="outlined" density="comfortable" autofocus />
@@ -264,7 +264,7 @@
         <v-card-title>Удалить платёж?</v-card-title>
         <v-card-text>
           Будет удалён платёж на сумму
-          <strong><MoneyCell :value="deleteTarget?.amount" currency="₽" /></strong>
+          <strong><MoneyCell :value="deleteTarget?.amount" currency="₽" :decimals="true" /></strong>
           от {{ fmtPayDate(deleteTarget?.paymentDate) }}.
           Баланс пересчитается автоматически. Действие необратимо.
         </v-card-text>
