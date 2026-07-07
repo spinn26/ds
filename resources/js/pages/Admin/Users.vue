@@ -396,22 +396,31 @@ function roleColor(r) {
 const auth = useAuthStore();
 const router = useRouter();
 
-// Единый список ролей — используется и в фильтре, и в форме редактирования.
-// Источник истины — config/cabinetPermissions.js + партнёрские роли.
-const allRoleOptions = [
-  { title: 'Администратор', value: 'admin' },
-  { title: 'Бэкофис (БЭК)', value: 'backoffice' },
-  { title: 'Техподдержка', value: 'support' },
-  { title: 'Руководитель', value: 'head' },
-  { title: 'Фин. менеджер', value: 'finance' },
-  { title: 'Расчёты (Богданова)', value: 'calculations' },
-  { title: 'Правки', value: 'corrections' },
-  { title: 'Отдел обучения', value: 'education' },
-  { title: 'Инвест департамент', value: 'invest' },
+// Назначаемые роли — используются и в фильтре, и в форме редактирования.
+// ЕДИНЫЙ источник staff-групп — таблица permission_groups, управляется на
+// странице «Группы и права» (/manage/permissions). Здесь мы её только читаем:
+// создали/переименовали группу там → она сразу доступна для назначения тут,
+// без правки этого файла. Партнёрские роли (consultant/registered) —
+// структурные, не входят в permission_groups, добавляем их отдельно.
+const PARTNER_ROLES = [
   { title: 'Консультант', value: 'consultant' },
   { title: 'Зарегистрирован-Партнёр', value: 'registered' },
 ];
+// Стартовое значение = партнёрские роли, чтобы селект не был пустым, пока
+// не подгрузились staff-группы из permission_groups (loadRoleOptions).
+const allRoleOptions = ref([...PARTNER_ROLES]);
 const roleOptions = allRoleOptions;
+
+// Тянем staff-группы из единого источника прав (permission_groups).
+async function loadRoleOptions() {
+  try {
+    const { data } = await api.get('/admin/permissions/groups');
+    const groupRoles = (data.groups || []).map(g => ({ title: g.name, value: g.key }));
+    allRoleOptions.value = [...groupRoles, ...PARTNER_ROLES];
+  } catch {
+    // Фолбэк — оставляем партнёрские роли; staff-группы просто не подгрузились.
+  }
+}
 
 const blockedOptions = [
   { title: 'Да', value: 'true' },
@@ -709,7 +718,7 @@ async function exportXlsx() {
   }
 }
 
-onMounted(load);
+onMounted(() => { load(); loadRoleOptions(); });
 </script>
 
 <style scoped>

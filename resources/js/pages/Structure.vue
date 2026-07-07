@@ -1,6 +1,6 @@
 <template>
   <div>
-    <PageHeader title="Структура моей команды" icon="mdi-sitemap" />
+    <PageHeader :title="auth.isStaff ? 'Структура' : 'Структура моей команды'" icon="mdi-sitemap" />
 
     <v-card class="ds-card mb-3 pa-3" elevation="0">
       <div class="d-flex ga-2 flex-wrap align-center">

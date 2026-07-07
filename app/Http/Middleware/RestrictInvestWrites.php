@@ -9,8 +9,10 @@ use Symfony\Component\HttpFoundation\Response;
 /**
  * Read-only гард для роли «invest» (Инвест департамент).
  *
- * Роль видит все разделы (кроме админки) только на просмотр —
- * cabinetPermissions.js даёт invest уровень VIEW на всё, UI прячет кнопки.
+ * Роль видит все разделы (кроме админки) только на просмотр — группа
+ * invest в permission_groups (см. «Группы и права») даёт уровень VIEW,
+ * UI прячет кнопки на основе effective permissions. Единый источник прав —
+ * таблица permission_groups, статического cabinetPermissions.js больше нет.
  * Этот middleware закрывает серверную дыру: invest не может через
  * DevTools / curl сделать POST/PUT/PATCH/DELETE ни в один staff-эндпоинт.
  *

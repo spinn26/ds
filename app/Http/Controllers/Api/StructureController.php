@@ -29,7 +29,10 @@ class StructureController extends Controller
     {
         $user = $request->user();
         $userRoles = array_map('trim', explode(',', $user->role ?? ''));
-        $isStaff = array_intersect($userRoles, ['admin', 'backoffice', 'support', 'head', 'calculations', 'corrections']);
+        // Канон «кто сотрудник» — User::isStaff() (вкл. invest/finance/education),
+        // а не локальный хардкод-список. Инвестор (напр. Жарков, role=invest)
+        // должен видеть структуру как сотрудник, а не «свою команду».
+        $isStaff = $user->isStaff();
         $consultant = Consultant::where('webUser', $user->id)->first();
         $hasFilters = $this->hasActiveFilters($request);
 
@@ -201,7 +204,8 @@ class StructureController extends Controller
     {
         $user = $request->user();
         $userRoles = array_map('trim', explode(',', $user->role ?? ''));
-        $isStaff = (bool) array_intersect($userRoles, ['admin', 'backoffice', 'support', 'head', 'calculations', 'corrections']);
+        // Канон «кто сотрудник» — User::isStaff() (см. index()).
+        $isStaff = $user->isStaff();
         $consultant = Consultant::where('webUser', $user->id)->first();
         $hasFilters = $this->hasActiveFilters($request);
 
