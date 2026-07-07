@@ -191,6 +191,11 @@ router.beforeEach(async (to) => {
     const auth = useAuthStore();
     if (!auth.initialized) await auth.fetchUser();
 
+    // Освежаем права из БД при навигации (троттл внутри) — чтобы правки
+    // «Группы и права» применялись к активной сессии без релогина. Не
+    // await'им: навигацию не тормозим, до ответа работает текущий снимок.
+    auth.maybeRefreshPermissions();
+
     if (to.meta.auth && !auth.user) return '/login';
     if (to.meta.guest && auth.user) return '/';
     // Send unauthorised users to an explicit 403 instead of bouncing them

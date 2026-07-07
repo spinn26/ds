@@ -19,6 +19,12 @@ export const useAuthStore = defineStore('auth', {
         // и может дать БОЛЬШЕ прав чем БД явно настроила.
         permissions: {},
         permissionsFetched: false,
+        // Момент последнего успешного fetchPermissions (ms). НЕ персистится —
+        // сбрасывается в 0 на перезагрузке, поэтому первая навигация после
+        // холодного старта всегда освежает права. Нужно, чтобы правки сетки
+        // «Группы и права» применялись к активной SPA-сессии без релогина
+        // (иначе fetchPermissions дёргался только на boot).
+        permissionsFetchedAt: 0,
     }),
     getters: {
         isAdmin: (state) => {
@@ -116,9 +122,23 @@ export const useAuthStore = defineStore('auth', {
                 const { data } = await api.get('/auth/me/permissions');
                 this.permissions = data?.permissions || {};
                 this.permissionsFetched = true;
+                this.permissionsFetchedAt = Date.now();
             } catch {
                 this.permissionsFetched = false;
             }
+        },
+
+        /**
+         * Освежает права, если снимок старше maxAgeMs. Вызывается из
+         * router.beforeEach (не await'ится) — так смена прав в админке
+         * применяется к активной сессии в течение ~полминуты навигации,
+         * а не только после полного релогина. Реактивность Pinia сама
+         * перерисует кнопки (canEdit/canFull пересчитаются).
+         */
+        maybeRefreshPermissions(maxAgeMs = 20000) {
+            if (!this.token) return;
+            if (Date.now() - this.permissionsFetchedAt < maxAgeMs) return;
+            this.fetchPermissions();
         },
         logout() {
             api.post('/auth/logout').catch(() => {});
