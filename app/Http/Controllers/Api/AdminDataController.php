@@ -2942,6 +2942,9 @@ class AdminDataController extends Controller
         if (! $newInviter) {
             return response()->json(['message' => 'Новый наставник не найден'], 422);
         }
+        if ((int) $newInviter->activity === \App\Enums\PartnerActivity::Terminated->value) {
+            return response()->json(['message' => 'Нельзя назначить наставником терминированного ФК — у него не может быть активной ветки ниже'], 422);
+        }
         if ((int) $consultant->inviter === (int) $newInviter->id) {
             return response()->json(['message' => 'У этого ФК уже такой наставник'], 422);
         }
