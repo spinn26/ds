@@ -1,6 +1,12 @@
 <template>
   <div>
-    <PageHeader title="Квалификации" icon="mdi-chart-bar" :count="total" />
+    <PageHeader title="Квалификации" icon="mdi-chart-bar" :count="total">
+      <template v-if="canCalc" #actions>
+        <v-btn color="primary" prepend-icon="mdi-calculator-variant" :loading="recomputing"
+          :title="`Пересчитать квалификации/объёмы за ${monthLabel || month}`"
+          @click="recompute">Пересчитать</v-btn>
+      </template>
+    </PageHeader>
 
     <v-card class="mb-3 pa-3">
       <div class="d-flex ga-2 flex-wrap align-center">
@@ -127,6 +133,35 @@ import PageHeader from '../../components/PageHeader.vue';
 import EmptyState from '../../components/EmptyState.vue';
 import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 import { fmt2 as fmt } from '../../composables/useDesign';
+import { usePermissions } from '../../composables/usePermissions';
+import { useSnackbar } from '../../composables/useSnackbar';
+
+// Пересчёт доступен только роли расчётов (calculations) / admin — как и
+// прочие кнопки финализации (Транзакции/Пул/КарточкаПериода).
+const { canCalc } = usePermissions();
+const { showSuccess, showError } = useSnackbar();
+const recomputing = ref(false);
+
+// Запускает финализацию за выбранный месяц (тот же /admin/finalize/apply,
+// что и другие кнопки расчёта): пересчитывает объёмы и пишет снимок
+// qualificationLog (ЛП/ГП/НГП/уровень). Гард historical-cutoff на бэке.
+async function recompute() {
+  const [y, m] = (month.value || '').split('-').map(Number);
+  if (!y || !m) return;
+  recomputing.value = true;
+  try {
+    const { data } = await api.post('/admin/finalize/apply', { year: y, month: m });
+    showSuccess(data?.message || 'Пересчёт выполнен');
+    await loadData();
+  } catch (e) {
+    const d = e.response?.data;
+    showError(d?.frozen
+      ? 'Период закрыт для пересчёта (исторические данные < 2026-06-01 неизменны).'
+      : (d?.message || 'Не удалось пересчитать'));
+  } finally {
+    recomputing.value = false;
+  }
+}
 
 const items = ref([]);
 const total = ref(0);
