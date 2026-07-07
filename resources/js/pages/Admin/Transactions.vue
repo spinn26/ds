@@ -223,7 +223,7 @@
                       <!-- Аналогично «Свойству»: у продуктов без has_year_kv
                            ввод года КВ скрыт. -->
                       <span v-if="d.productHasYearKv === false" class="text-medium-emphasis">—</span>
-                      <v-select v-else :model-value="d.yearKV" :items="yearKVOptions"
+                      <v-select v-else :model-value="d.yearKV" :items="yearOptionsFor(d)"
                         density="compact" hide-details variant="plain" clearable
                         @update:model-value="v => patchField(d, 'yearKV', v)" />
                     </template>
@@ -927,7 +927,22 @@ const totals = computed(() => {
   };
 });
 
+// Фолбэк, если у черновика нет программы/тарифов (legacy без productId).
 const yearKVOptions = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+
+// Годы КВ конкретного продукта берём из его тарифов (availableParameters —
+// строки commissionCalcProperty программы контракта). Для has_year_kv
+// продуктов их title = год: «1 год», …, «5 год», «3, 4, 5 год» → вытаскиваем
+// все числа. Medlife → 1–5, EVO → свой набор, без хардкода per-product.
+function yearOptionsFor(d) {
+  const years = new Set();
+  (d?.availableParameters || []).forEach((p) => {
+    const nums = String(p?.title ?? '').match(/\d+/g);
+    if (nums) nums.forEach((n) => years.add(Number(n)));
+  });
+  const arr = [...years].filter((n) => n >= 1 && n <= 20).sort((a, b) => a - b);
+  return arr.length ? arr : yearKVOptions;
+}
 
 async function loadDrafts() {
   try {
