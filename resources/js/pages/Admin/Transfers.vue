@@ -2,8 +2,6 @@
   <div>
     <PageHeader title="История перестановок" icon="mdi-history" :count="total">
       <template #actions>
-        <v-btn color="primary" size="small" prepend-icon="mdi-account-switch"
-          class="me-2" @click="openDialog">{{ reassignCta }}</v-btn>
         <ColumnVisibilityMenu
           :headers="headers"
           v-model:visible="columnVisible"
@@ -45,6 +43,8 @@
 
     <v-card class="mb-3 pa-3">
       <div class="d-flex ga-2 flex-wrap align-center">
+        <v-btn color="primary" size="small" prepend-icon="mdi-account-switch"
+          @click="openDialog">{{ reassignCta }}</v-btn>
         <v-text-field v-model="search" :placeholder="searchPlaceholder"
           density="compact" variant="outlined" hide-details rounded clearable
           prepend-inner-icon="mdi-magnify"
