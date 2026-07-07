@@ -2904,6 +2904,72 @@ class AdminDataController extends Controller
     }
 
     /**
+     * Поиск консультантов (ФК) для диалога «Внести перестановку».
+     * Отдаёт {id, name} по ilike-совпадению personName.
+     */
+    public function transferConsultants(Request $request): JsonResponse
+    {
+        $q = trim((string) $request->input('search', ''));
+        $query = DB::table('consultant')
+            ->whereNull('dateDeleted')
+            ->select('id', 'personName');
+        if (mb_strlen($q) >= 2) {
+            $query->where('personName', 'ilike', '%' . $q . '%');
+        }
+        $rows = $query->orderBy('personName')->limit(30)->get()
+            ->map(fn ($c) => ['id' => $c->id, 'name' => $c->personName]);
+
+        return response()->json(['data' => $rows]);
+    }
+
+    /**
+     * Внести перестановку наставника вручную (кнопка в «Истории перестановок»).
+     * Меняет consultant.inviter (+денорм inviterName) и пишет запись-событие в
+     * changeConsultantInviterLog тем же форматом, что и авто-перестановки.
+     */
+    public function createTransfer(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'consultant' => ['required', 'integer'],
+            'newInviter' => ['required', 'integer', 'different:consultant'],
+        ]);
+
+        $consultant = DB::table('consultant')->where('id', $data['consultant'])->whereNull('dateDeleted')->first();
+        $newInviter = DB::table('consultant')->where('id', $data['newInviter'])->whereNull('dateDeleted')->first();
+        if (! $consultant) {
+            return response()->json(['message' => 'ФК не найден'], 422);
+        }
+        if (! $newInviter) {
+            return response()->json(['message' => 'Новый наставник не найден'], 422);
+        }
+        if ((int) $consultant->inviter === (int) $newInviter->id) {
+            return response()->json(['message' => 'У этого ФК уже такой наставник'], 422);
+        }
+
+        DB::transaction(function () use ($consultant, $newInviter, $request) {
+            DB::table('consultant')->where('id', $consultant->id)->update([
+                'inviter'     => $newInviter->id,
+                'inviterName' => $newInviter->personName,
+            ]);
+
+            DB::table('changeConsultantInviterLog')->insert([
+                'id'             => LegacyId::next('changeConsultantInviterLog'),
+                'dateCreated'    => now(),
+                'webUser'        => $request->user()?->id,
+                'consultant'     => $consultant->id,
+                'consultantName' => $consultant->personName,
+                'inviterOld'     => $consultant->inviter,
+                'inviterOldName' => $consultant->inviterName,
+                'inviterNew'     => $newInviter->id,
+                'inviterNewName' => $newInviter->personName,
+                'triggeredBy'    => 'Внесено вручную',
+            ]);
+        });
+
+        return response()->json(['message' => 'Перестановка внесена и записана в историю']);
+    }
+
+    /**
      * Массовая верификация / отклонение реквизитов.
      */
     public function bulkRequisites(Request $request): JsonResponse

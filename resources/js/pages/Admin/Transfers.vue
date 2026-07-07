@@ -2,12 +2,43 @@
   <div>
     <PageHeader title="История перестановок" icon="mdi-history" :count="total">
       <template #actions>
+        <v-btn color="primary" size="small" prepend-icon="mdi-account-switch"
+          class="me-2" @click="openDialog">Внести перестановку</v-btn>
         <ColumnVisibilityMenu
           :headers="headers"
           v-model:visible="columnVisible"
           storage-key="transfers-cols" />
       </template>
     </PageHeader>
+
+    <v-dialog v-model="showDialog" max-width="520">
+      <v-card>
+        <v-card-title class="text-h6">Внести перестановку</v-card-title>
+        <v-card-text>
+          <p class="text-body-2 text-medium-emphasis mb-4">
+            Выберите ФК и его нового наставника. Наставник партнёра будет изменён,
+            а событие записано в историю перестановок.
+          </p>
+          <v-autocomplete v-model="form.consultant" :items="fkItems" :loading="fkLoading"
+            item-title="name" item-value="id" label="ФК (партнёр)" no-filter clearable
+            density="comfortable" variant="outlined" prepend-inner-icon="mdi-account"
+            :return-object="false" hide-details class="mb-4"
+            @update:search="s => searchConsultants(s, 'fk')" />
+          <v-autocomplete v-model="form.newInviter" :items="inviterItems" :loading="invLoading"
+            item-title="name" item-value="id" label="Новый наставник" no-filter clearable
+            density="comfortable" variant="outlined" prepend-inner-icon="mdi-account-supervisor"
+            :return-object="false" hide-details
+            @update:search="s => searchConsultants(s, 'inv')" />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="showDialog = false">Отмена</v-btn>
+          <v-btn color="primary" :loading="saving"
+            :disabled="!form.consultant || !form.newInviter || form.consultant === form.newInviter"
+            @click="saveTransfer">Сохранить</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
     <v-tabs v-model="tab" color="primary" class="mb-3" density="compact" @update:model-value="onTabChange">
       <v-tab value="partner" prepend-icon="mdi-account-supervisor">Партнёр</v-tab>
@@ -67,6 +98,9 @@ import PageHeader from '../../components/PageHeader.vue';
 import EmptyState from '../../components/EmptyState.vue';
 import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 import SmartRangeFilter from '../../components/SmartRangeFilter.vue';
+import { useSnackbar } from '../../composables/useSnackbar';
+
+const { showSuccess, showError } = useSnackbar();
 
 const tab = ref('partner');
 const items = ref([]);
@@ -163,6 +197,55 @@ async function loadData() {
 }
 
 onMounted(loadData);
+
+// --- Внести перестановку (ручная смена наставника + запись в историю) ---
+const showDialog = ref(false);
+const saving = ref(false);
+const form = ref({ consultant: null, newInviter: null });
+const fkItems = ref([]);
+const inviterItems = ref([]);
+const fkLoading = ref(false);
+const invLoading = ref(false);
+
+function openDialog() {
+  form.value = { consultant: null, newInviter: null };
+  fkItems.value = [];
+  inviterItems.value = [];
+  showDialog.value = true;
+}
+
+async function doSearch(s, which) {
+  const load = which === 'fk' ? fkLoading : invLoading;
+  const list = which === 'fk' ? fkItems : inviterItems;
+  load.value = true;
+  try {
+    const { data } = await api.get('/admin/transfers/consultants', { params: { search: s || undefined } });
+    list.value = data.data || [];
+  } catch { /* ignore */ } finally { load.value = false; }
+}
+
+const { debounced: debFk } = useDebounce((s) => doSearch(s, 'fk'), 300);
+const { debounced: debInv } = useDebounce((s) => doSearch(s, 'inv'), 300);
+function searchConsultants(s, which) { (which === 'fk' ? debFk : debInv)(s || ''); }
+
+async function saveTransfer() {
+  saving.value = true;
+  try {
+    const { data } = await api.post('/admin/transfers', {
+      consultant: form.value.consultant,
+      newInviter: form.value.newInviter,
+    });
+    showSuccess(data.message || 'Перестановка внесена');
+    showDialog.value = false;
+    tab.value = 'partner';
+    page.value = 1;
+    loadData();
+  } catch (e) {
+    showError(e?.response?.data?.message || 'Не удалось внести перестановку');
+  } finally {
+    saving.value = false;
+  }
+}
 </script>
 
 <style scoped>
