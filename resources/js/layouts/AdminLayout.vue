@@ -166,6 +166,7 @@ const baseMenuItems = [
       { to: '/admin/reconciliation', title: 'Сверка балансов', icon: 'mdi-scale-balance' },
       { to: '/admin/qualification-matrix', title: 'Матрица квалификаций', icon: 'mdi-stairs' },
       { to: '/admin/anomalies', title: 'Аномалии', icon: 'mdi-alert-decagram' },
+      { to: '/admin/hidden-clients', title: 'Скрытые клиенты', icon: 'mdi-account-off' },
       { to: '/admin/cohorts', title: 'Когорты', icon: 'mdi-chart-line' },
     ],
   },

@@ -342,6 +342,9 @@ Route::prefix('v1')->group(function () {
             Route::post('/impersonate/{user}', [ImpersonateController::class, 'impersonate']);
             Route::post('/impersonate/leave', [ImpersonateController::class, 'leave']);
 
+            // Диагностика: скрытые (soft-deleted) клиенты с живыми контрактами — только admin.
+            Route::get('/admin/hidden-clients', [\App\Http\Controllers\Api\AdminHiddenClientController::class, 'index']);
+
             // Раздел «Настройки» (system_settings) — только admin.
             Route::get('/admin/settings', [\App\Http\Controllers\Api\AdminSettingsController::class, 'index']);
             Route::put('/admin/settings', [\App\Http\Controllers\Api\AdminSettingsController::class, 'update']);
