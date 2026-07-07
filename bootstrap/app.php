@@ -23,6 +23,7 @@ return Application::configure(basePath: dirname(__DIR__))
         );
         $middleware->alias([
             'role' => \App\Http\Middleware\CheckRole::class,
+            'permission' => \App\Http\Middleware\CheckPermission::class,
             'restrict.education' => \App\Http\Middleware\RestrictEducationWrites::class,
             'restrict.head' => \App\Http\Middleware\RestrictHeadWrites::class,
             'restrict.support' => \App\Http\Middleware\RestrictSupportWrites::class,

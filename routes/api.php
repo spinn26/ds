@@ -468,15 +468,15 @@ Route::prefix('v1')->group(function () {
         Route::get('/admin/clients', [\App\Http\Controllers\Api\AdminDataController::class, 'clients']);
         Route::get('/admin/clients/check-duplicates', [\App\Http\Controllers\Api\AdminDataController::class, 'checkClientDuplicates']);
         Route::get('/admin/consultants/{id}/chain', [\App\Http\Controllers\Api\AdminDataController::class, 'consultantChain'])->whereNumber('id');
-        Route::post('/admin/clients', [\App\Http\Controllers\Api\AdminDataController::class, 'storeClient']);
-        Route::put('/admin/clients/{id}', [\App\Http\Controllers\Api\AdminDataController::class, 'updateClient'])->whereNumber('id');
-        Route::delete('/admin/clients/{id}', [\App\Http\Controllers\Api\AdminDataController::class, 'deleteClient'])->whereNumber('id');
+        Route::post('/admin/clients', [\App\Http\Controllers\Api\AdminDataController::class, 'storeClient'])->middleware('permission:clients,edit');
+        Route::put('/admin/clients/{id}', [\App\Http\Controllers\Api\AdminDataController::class, 'updateClient'])->whereNumber('id')->middleware('permission:clients,edit');
+        Route::delete('/admin/clients/{id}', [\App\Http\Controllers\Api\AdminDataController::class, 'deleteClient'])->whereNumber('id')->middleware('permission:clients,full');
         Route::get('/admin/requisites', [\App\Http\Controllers\Api\AdminDataController::class, 'requisites']);
-        Route::post('/admin/requisites/bulk', [\App\Http\Controllers\Api\AdminDataController::class, 'bulkRequisites'])->middleware('throttle:10,1');
+        Route::post('/admin/requisites/bulk', [\App\Http\Controllers\Api\AdminDataController::class, 'bulkRequisites'])->middleware(['throttle:10,1', 'permission:requisites,edit']);
         Route::get('/admin/requisites/{id}/documents', [\App\Http\Controllers\Api\AdminDataController::class, 'requisiteDocuments'])->whereNumber('id');
         Route::get('/admin/requisites/{id}/partner', [\App\Http\Controllers\Api\AdminDataController::class, 'requisitePartner'])->whereNumber('id');
         Route::post('/admin/requisites/{id}/check-inn', [\App\Http\Controllers\Api\AdminDataController::class, 'checkRequisiteInn'])->whereNumber('id')->middleware('throttle:60,1');
-        Route::post('/admin/requisites/{id}/verify', [\App\Http\Controllers\Api\AdminDataController::class, 'verifyRequisites']);
+        Route::post('/admin/requisites/{id}/verify', [\App\Http\Controllers\Api\AdminDataController::class, 'verifyRequisites'])->middleware('permission:requisites,edit');
         // Смена банковских реквизитов (проверка Катей) + приостановка выплат.
         Route::get('/admin/bank-change-requests', [\App\Http\Controllers\Api\BankRequisiteChangeController::class, 'index']);
         Route::post('/admin/bank-change-requests/{id}/accept', [\App\Http\Controllers\Api\BankRequisiteChangeController::class, 'accept'])->whereNumber('id');
@@ -487,10 +487,10 @@ Route::prefix('v1')->group(function () {
         Route::get('/admin/contracts/check-number', [\App\Http\Controllers\Api\AdminDataController::class, 'checkContractNumber']);
         Route::get('/admin/contracts/form-data', [\App\Http\Controllers\Api\AdminDataController::class, 'contractFormData']);
         Route::get('/admin/contracts/upload-history', fn () => response()->json([]));
-        Route::post('/admin/contracts', [\App\Http\Controllers\Api\AdminDataController::class, 'storeContract']);
+        Route::post('/admin/contracts', [\App\Http\Controllers\Api\AdminDataController::class, 'storeContract'])->middleware('permission:contracts,edit');
         Route::get('/admin/contracts/{id}', [\App\Http\Controllers\Api\AdminDataController::class, 'contractDetails'])->whereNumber('id');
-        Route::put('/admin/contracts/{id}', [\App\Http\Controllers\Api\AdminDataController::class, 'updateContract'])->whereNumber('id');
-        Route::delete('/admin/contracts/{id}', [\App\Http\Controllers\Api\AdminDataController::class, 'deleteContract'])->whereNumber('id');
+        Route::put('/admin/contracts/{id}', [\App\Http\Controllers\Api\AdminDataController::class, 'updateContract'])->whereNumber('id')->middleware('permission:contracts,edit');
+        Route::delete('/admin/contracts/{id}', [\App\Http\Controllers\Api\AdminDataController::class, 'deleteContract'])->whereNumber('id')->middleware('permission:contracts,edit');
         Route::get('/admin/contracts/{id}/history', [\App\Http\Controllers\Api\AdminDataController::class, 'contractHistory'])->whereNumber('id');
 
         // Shared import progress polling — frontend генерирует tracker id,
@@ -510,14 +510,14 @@ Route::prefix('v1')->group(function () {
         Route::get('/admin/contract-import/client-search', [\App\Http\Controllers\Api\ContractImportController::class, 'clientSearch']);
         Route::get('/admin/contract-import/programs/{productId}', [\App\Http\Controllers\Api\ContractImportController::class, 'programsByProduct'])->whereNumber('productId');
         Route::get('/admin/contract-import/history', [\App\Http\Controllers\Api\ContractImportController::class, 'history']);
-        Route::post('/admin/contract-import/from-sheets', [\App\Http\Controllers\Api\ContractImportController::class, 'importFromSheets'])->middleware('throttle:30,1');
-        Route::post('/admin/contract-import/preview/from-sheets', [\App\Http\Controllers\Api\ContractImportController::class, 'previewFromSheets'])->middleware('throttle:30,1');
+        Route::post('/admin/contract-import/from-sheets', [\App\Http\Controllers\Api\ContractImportController::class, 'importFromSheets'])->middleware(['throttle:30,1', 'permission:upload,full']);
+        Route::post('/admin/contract-import/preview/from-sheets', [\App\Http\Controllers\Api\ContractImportController::class, 'previewFromSheets'])->middleware(['throttle:30,1', 'permission:upload,full']);
         Route::get('/admin/contract-import/preview/{sessionId}', [\App\Http\Controllers\Api\ContractImportController::class, 'previewList']);
-        Route::patch('/admin/contract-import/preview/row/{id}', [\App\Http\Controllers\Api\ContractImportController::class, 'previewUpdate'])->whereNumber('id');
-        Route::delete('/admin/contract-import/preview/row/{id}', [\App\Http\Controllers\Api\ContractImportController::class, 'previewDelete'])->whereNumber('id');
-        Route::delete('/admin/contract-import/preview/{sessionId}', [\App\Http\Controllers\Api\ContractImportController::class, 'previewClear']);
-        Route::post('/admin/contract-import/preview/{sessionId}/finalize', [\App\Http\Controllers\Api\ContractImportController::class, 'previewFinalize'])->middleware('throttle:30,1');
-        Route::post('/admin/contract-import/{id}/rollback', [\App\Http\Controllers\Api\ContractImportController::class, 'rollback'])->whereNumber('id')->middleware('throttle:30,1');
+        Route::patch('/admin/contract-import/preview/row/{id}', [\App\Http\Controllers\Api\ContractImportController::class, 'previewUpdate'])->whereNumber('id')->middleware('permission:upload,full');
+        Route::delete('/admin/contract-import/preview/row/{id}', [\App\Http\Controllers\Api\ContractImportController::class, 'previewDelete'])->whereNumber('id')->middleware('permission:upload,full');
+        Route::delete('/admin/contract-import/preview/{sessionId}', [\App\Http\Controllers\Api\ContractImportController::class, 'previewClear'])->middleware('permission:upload,full');
+        Route::post('/admin/contract-import/preview/{sessionId}/finalize', [\App\Http\Controllers\Api\ContractImportController::class, 'previewFinalize'])->middleware(['throttle:30,1', 'permission:upload,full']);
+        Route::post('/admin/contract-import/{id}/rollback', [\App\Http\Controllers\Api\ContractImportController::class, 'rollback'])->whereNumber('id')->middleware(['throttle:30,1', 'permission:upload,full']);
         Route::get('/admin/transfers', [\App\Http\Controllers\Api\AdminDataController::class, 'transfers']);
         Route::get('/admin/transfers/consultants', [\App\Http\Controllers\Api\AdminDataController::class, 'transferConsultants']);
         Route::get('/admin/transfers/subjects', [\App\Http\Controllers\Api\AdminDataController::class, 'transferSubjects']);
