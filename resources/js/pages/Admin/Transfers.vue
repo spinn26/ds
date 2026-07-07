@@ -22,19 +22,19 @@
           <v-autocomplete v-model="form.consultant" :items="fkItems" :loading="fkLoading"
             item-title="name" item-value="id" label="ФК (партнёр)" no-filter clearable
             density="comfortable" variant="outlined" prepend-inner-icon="mdi-account"
-            :return-object="false" hide-details class="mb-4"
+            :return-object="true" hide-details class="mb-4"
             @update:search="s => searchConsultants(s, 'fk')" />
           <v-autocomplete v-model="form.newInviter" :items="inviterItems" :loading="invLoading"
             item-title="name" item-value="id" label="Новый наставник" no-filter clearable
             density="comfortable" variant="outlined" prepend-inner-icon="mdi-account-supervisor"
-            :return-object="false" hide-details
+            :return-object="true" hide-details
             @update:search="s => searchConsultants(s, 'inv')" />
         </v-card-text>
         <v-card-actions>
           <v-spacer />
           <v-btn variant="text" @click="showDialog = false">Отмена</v-btn>
           <v-btn color="primary" :loading="saving"
-            :disabled="!form.consultant || !form.newInviter || form.consultant === form.newInviter"
+            :disabled="!form.consultant || !form.newInviter || form.consultant.id === form.newInviter.id"
             @click="saveTransfer">Сохранить</v-btn>
         </v-card-actions>
       </v-card>
@@ -232,8 +232,8 @@ async function saveTransfer() {
   saving.value = true;
   try {
     const { data } = await api.post('/admin/transfers', {
-      consultant: form.value.consultant,
-      newInviter: form.value.newInviter,
+      consultant: form.value.consultant?.id,
+      newInviter: form.value.newInviter?.id,
     });
     showSuccess(data.message || 'Перестановка внесена');
     showDialog.value = false;
