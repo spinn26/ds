@@ -85,15 +85,27 @@ class ImportTransactionsJob implements ShouldQueue
             ]);
 
             // === STEP 2: validation (parse + match contract) ===
-            // Курсы валют — раз, не на каждой строке.
-            $currencyRate = 1.0;
-            if ($resolvedCurrency && $resolvedCurrency !== 67) {
-                $rate = DB::table('currencyRate')
-                    ->where('currency', $resolvedCurrency)
-                    ->orderByDesc('date')
-                    ->first();
-                $currencyRate = (float) ($rate->rate ?? 1);
-            }
+            // Курсы валют кэшируем по currencyId (per-row: у Trust/Woodville и
+            // др. валюта задаётся колонкой «Валюта» и различается по строкам —
+            // USD/EUR в одном листе). RUB(67) = 1.0.
+            $rateCache = [];
+            $rateFor = function (?int $cur) use (&$rateCache): float {
+                $cur = $cur ?: 67;
+                if (! array_key_exists($cur, $rateCache)) {
+                    if ($cur === 67) {
+                        $rateCache[$cur] = 1.0;
+                    } else {
+                        $r = DB::table('currencyRate')
+                            ->where('currency', $cur)
+                            ->orderByDesc('date')
+                            ->first();
+                        $rateCache[$cur] = (float) ($r->rate ?? 1);
+                    }
+                }
+                return $rateCache[$cur];
+            };
+            // Курс импорт-уровня (fallback, если у строки нет своей валюты).
+            $currencyRate = $rateFor($resolvedCurrency);
             $usdRate = 1.0;
             $rateUsd = DB::table('currencyRate')->where('currency', 5)->orderByDesc('date')->first();
             if ($rateUsd) $usdRate = (float) $rateUsd->rate;
@@ -132,7 +144,10 @@ class ImportTransactionsJob implements ShouldQueue
             foreach ($rows as $i => $row) {
                 $lineNo = $i + 2;
                 $contractNumber = trim((string) ($row['contract_number'] ?? $row['number'] ?? $row['номер_контракта'] ?? $row['contract'] ?? ''));
-                $amount = (float) str_replace([' ', ','], ['', '.'], (string) ($row['amount'] ?? $row['сумма'] ?? $row['sum'] ?? '0'));
+                // \App\Support\Numbers::decimal снимает НЕразрывные пробелы
+                // (U+00A0 / U+202F) — разделители разрядов из Google Sheets/Excel.
+                // Обычный str_replace их не убирал → «7 754,00» → 7 (инцидент Робо).
+                $amount = \App\Support\Numbers::decimal($row['amount'] ?? $row['сумма'] ?? $row['sum'] ?? null);
                 $date = $row['date'] ?? $row['дата'] ?? $row['payment_date'] ?? null;
 
                 if ($contractNumber === '') {
@@ -202,7 +217,12 @@ class ImportTransactionsJob implements ShouldQueue
                     );
                 }
 
-                $amountRub = $amount * $currencyRate;
+                // Валюта строки: per-row (профили с колонкой «Валюта») либо
+                // валюта импорта. Раньше всегда бралась одна валюта импорта →
+                // Trust (USD/EUR) грузился в RUB, суммы в рублях были неверны.
+                $rowCurrency = ($row['currency'] ?? null) ?: $resolvedCurrency;
+                $rowRate = $rateFor($rowCurrency);
+                $amountRub = $amount * $rowRate;
                 $amountUsd = $usdRate > 0 ? $amountRub / $usdRate : 0;
 
                 // ds_percent: «0,028» (русская локаль Excel) — приходит из
@@ -211,21 +231,30 @@ class ImportTransactionsJob implements ShouldQueue
                 $dsPercentRaw = $row['ds_percent'] ?? $row['процент_дс'] ?? null;
                 $dsPercent = null;
                 if ($dsPercentRaw !== null && $dsPercentRaw !== '') {
-                    $s = str_replace([' ', ','], ['', '.'], (string) $dsPercentRaw);
-                    if (is_numeric($s)) $dsPercent = (float) $s;
+                    $s = \App\Support\Numbers::normalizeString($dsPercentRaw);
+                    if ($s !== '') $dsPercent = (float) $s;
                 }
 
                 // property → commissionCalcProperty.id. Принимаем:
                 //   - числовой id (профиль уже резолвил, напр. IB MF → 9)
                 //   - строку-название («МФ»/«Апфронт»/«5 год») — резолвим
                 //     через commissionCalcProperty.title (case-insensitive).
-                $propertyRaw = $row['property'] ?? $row['свойство'] ?? null;
+                $propertyRaw = $row['property'] ?? $row['свойство'] ?? $row['вид услуги'] ?? null;
                 $propertyId = null;
                 if ($propertyRaw !== null && $propertyRaw !== '') {
                     if (is_numeric($propertyRaw)) {
                         $propertyId = (int) $propertyRaw;
                     } else {
                         $propertyId = $this->resolvePropertyId((string) $propertyRaw);
+                        // Значение свойства есть, но не распознано — не роняем в
+                        // NULL молча (иначе МФ/Апфронт незаметно теряется), а
+                        // предупреждаем оператора с указанием строки и значения.
+                        if ($propertyId === null) {
+                            $warnings[] = sprintf(
+                                'Строка %d: свойство «%s» не распознано (ожидается МФ/Апфронт или id) — импортировано без свойства.',
+                                $lineNo, trim((string) $propertyRaw),
+                            );
+                        }
                     }
                 }
 
@@ -238,6 +267,8 @@ class ImportTransactionsJob implements ShouldQueue
                     'date' => $date,
                     'ds_percent' => $dsPercent,
                     'property' => $propertyId,
+                    'currency' => $rowCurrency,
+                    'currencyRate' => $rowRate,
                 ];
 
                 // Tracker — каждые 200 строк (вместо 50: меньше cache-overhead).
@@ -283,7 +314,7 @@ class ImportTransactionsJob implements ShouldQueue
             try {
                 DB::beginTransaction();
                 foreach (array_chunk($prepared, 500) as $chunk) {
-                    $ids = $this->bulkInsertChunk($chunk, $resolvedCurrency, $currencyRate);
+                    $ids = $this->bulkInsertChunk($chunk, $resolvedCurrency);
                     $createdIds = array_merge($createdIds, $ids);
 
                     $this->putTracker([
@@ -406,18 +437,32 @@ class ImportTransactionsJob implements ShouldQueue
                     : ($this->currencyId ?? 67);
 
                 // commissionCalcProperty: дефолт из профиля (например, IB MF → 9,
-                // IB UP → 10), плюс fallback на колонку «Свойство» / «property»
-                // в самом листе для профилей, где свойство per-row.
+                // IB UP → 10), плюс fallback на per-row колонку свойства в листе.
+                //
+                // Детект по ВХОЖДЕНИЮ (не ===): реальные выгрузки Робо разделяют
+                // МФ/Апфронт колонкой «Вид услуги» / «Свойство продукта», с лишними
+                // пробелами и регистром. Прежнее точное сравнение не срабатывало →
+                // все строки падали в хардкод-дефолт МФ (9), и Апфронт-строки
+                // импортировались с неверным свойством и %ДС. NBSP в заголовке
+                // тоже нормализуем (Sheets отдаёт неразрывные пробелы).
                 $profileProperty = isset($profile['commissionCalcProperty'])
                     ? (int) $profile['commissionCalcProperty'] : null;
                 $propertyHeaderIdx = null;
                 foreach ($headers as $i => $h) {
-                    $hLower = mb_strtolower(trim((string) $h));
-                    if ($hLower === 'свойство' || $hLower === 'property') {
+                    $hLower = preg_replace('/[\pZ\s]+/u', ' ', mb_strtolower(trim((string) $h)));
+                    if (str_contains($hLower, 'свойство') || str_contains($hLower, 'property')
+                        || str_contains($hLower, 'вид услуг')) {
                         $propertyHeaderIdx = $i;
                         break;
                     }
                 }
+
+                // commission_pct_scale: часть профилей (InvestorsTrust) хранит
+                // ставку ДОЛЕЙ («Размер комиссии» 0.055 = 5.5%), а не процентами.
+                // Платформа хранит dsCommissionPercentage в процентах → без ×100
+                // импорт давал «очень маленькие» проценты и доход/100.
+                $pctScale = isset($profile['commission_pct_scale'])
+                    ? (float) $profile['commission_pct_scale'] : 1.0;
 
                 $rows = [];
                 foreach ($rawRows as $row) {
@@ -426,12 +471,27 @@ class ImportTransactionsJob implements ShouldQueue
                     if ($propertyHeaderIdx !== null && ! empty($row[$propertyHeaderIdx])) {
                         $rowProperty = $row[$propertyHeaderIdx];
                     }
+
+                    // Per-row валюта (профили с колонкой «Валюта»: Trust USD/EUR,
+                    // Woodville, Medlife…). null → упадём на currency импорта.
+                    $rowCurrency = null;
+                    if (! empty($a['currency'])) {
+                        $rowCurrency = SheetProfiles::resolveCurrencyId((string) $a['currency'], null);
+                    }
+
+                    $dsPercent = $a['commission_pct'] ?? null;
+                    if ($dsPercent !== null && $dsPercent !== '' && $pctScale !== 1.0) {
+                        $v = \App\Support\Numbers::decimal($dsPercent, 0);
+                        if ($v !== 0.0) $dsPercent = round($v * $pctScale, 6);
+                    }
+
                     $rows[] = [
                         'contract_number' => (string) ($a['contract_number'] ?? ''),
                         'amount' => $a['amount'] ?? ($a['commission'] ?? 0),
                         'date' => $a['date'] ?? null,
-                        'ds_percent' => $a['commission_pct'] ?? null,
+                        'ds_percent' => $dsPercent,
                         'property' => $rowProperty,
+                        'currency' => $rowCurrency,
                     ];
                 }
                 return [$rows, (int) $counterpartyId, (int) $currencyId, $profile];
@@ -475,7 +535,7 @@ class ImportTransactionsJob implements ShouldQueue
                 $headerMap[$i] = 'amount';
             } elseif (str_contains($h, 'дата') || str_contains($h, 'date')) {
                 $headerMap[$i] = 'date';
-            } elseif (str_contains($h, 'свойство') || str_contains($h, 'property')) {
+            } elseif (str_contains($h, 'свойство') || str_contains($h, 'property') || str_contains($h, 'вид услуг')) {
                 $headerMap[$i] = 'property';
             } elseif (str_contains($h, 'процент') || str_contains($h, 'ds_percent') || str_contains($h, 'комисс')) {
                 $headerMap[$i] = 'ds_percent';
@@ -575,7 +635,7 @@ class ImportTransactionsJob implements ShouldQueue
      *
      * 12 колонок × 500 строк = 6000 параметров (Postgres лимит 65535 — ок).
      */
-    private function bulkInsertChunk(array $chunk, ?int $currency, float $currencyRate): array
+    private function bulkInsertChunk(array $chunk, ?int $fallbackCurrency): array
     {
         if (! $chunk) return [];
 
@@ -595,8 +655,9 @@ class ImportTransactionsJob implements ShouldQueue
             $bindings[] = $p['amount'];
             $bindings[] = round($p['amountRub'], 2);
             $bindings[] = round($p['amountUsd'], 2);
-            $bindings[] = $currency;
-            $bindings[] = $currencyRate;
+            // Per-row валюта/курс (Trust USD/EUR). Fallback — валюта импорта.
+            $bindings[] = ($p['currency'] ?? null) ?: $fallbackCurrency;
+            $bindings[] = $p['currencyRate'] ?? 1.0;
             $bindings[] = $ts !== false ? date('Y-m-d\TH:i:s', $ts) : now()->toIso8601String();
             $bindings[] = $ts !== false ? date('Y-m', $ts) : now()->format('Y-m');
             $bindings[] = $ts !== false ? date('Y', $ts) : now()->format('Y');

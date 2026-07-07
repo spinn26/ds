@@ -88,6 +88,11 @@ class SheetProfiles
                 'date'            => 'Дата оплаты',
                 'ds_level'        => 'Уровень ДС',
             ],
+            // «Размер комиссии» хранится долей (0.055 = 5.5%), не процентами;
+            // ×100 приводит к формату dsCommissionPercentage платформы.
+            // Валюта — per-row из колонки «Валюта» (USD/EUR), поэтому top-level
+            // 'currency' НЕ задаём (иначе перебьёт per-row → всё в одну валюту).
+            'commission_pct_scale' => 100,
         ],
         'ГГА' => [
             'counterpartyName' => 'Альянс',
@@ -222,10 +227,18 @@ class SheetProfiles
     public static function resolveCurrencyId(string $code, ?int $default = null): ?int
     {
         $code = mb_strtoupper(trim($code));
+        if ($code === '') return $default;
+
         $row = DB::table('currency')
             ->where(function ($q) use ($code) {
-                $q->where('nameEn', 'ilike', '%' . $code . '%')
+                // Основной матч: currencyName начинается с ISO-кода
+                // («USD Доллар США», «EUR Евро», «GBP Фунт…»). nameEn/symbol
+                // ненадёжны: «US Dollar» не содержит «USD», а symbol «$» общий
+                // для 7+ валют — из-за этого resolveCurrencyId('USD') давал NULL
+                // и Trust грузился в RUB.
+                $q->where('currencyName', 'ilike', $code . '%')
                   ->orWhere('cbrCode', 'ilike', $code)
+                  ->orWhere('nameEn', 'ilike', '%' . $code . '%')
                   ->orWhere('symbol', $code);
             })
             ->orderByDesc('selectable')   // предпочитаем selectable=true
