@@ -532,7 +532,15 @@ class AdminFinanceController extends Controller
             });
 
         if ($request->filled('search')) {
-            $consultantQuery->where('consultantPersonName', 'ilike', '%' . $request->search . '%');
+            // Ищем по ЖИВОМУ имени из consultant (источник истины), а не по
+            // денормализованному qualificationLog.consultantPersonName: у части
+            // legacy-строк (Directual CSV↔платформа id-swap) денорм-имя указывает
+            // на другого человека, чем текущее consultant.personName, которое мы
+            // и показываем. Иначе «поиск X → показан Y» (Березнева→Зеленков и т.п.).
+            $consultantQuery->whereIn('consultant', function ($sub) use ($request) {
+                $sub->select('id')->from('consultant')
+                    ->where('personName', 'ilike', '%' . $request->search . '%');
+            });
         }
 
         // Фильтр по статусу активности — переносим на server-side, чтобы
