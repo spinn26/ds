@@ -40,6 +40,14 @@ class AdminPaymentRegistryController extends Controller
 
         $q = DB::table('consultantBalance as b')
             ->leftJoin('consultant as c', 'c.id', '=', 'b.consultant')
+            // Soft-deleted ФК не участвуют в реестре выплат — единообразно с
+            // экспортным PaymentRegistryReport (whereNull('dateDeleted')) и с
+            // Directual (там служебные аккаунты помечены test=true и исключены).
+            // Без этого удалённый служебный аккаунт (напр. Сидоров, backoffice,
+            // сальдо −1000) тянул свой остаток в «Сальдо» и занижал итог.
+            // Orphan-строки без consultant (c.id IS NULL) сохраняем — у них
+            // dateDeleted тоже NULL, фильтр их не трогает.
+            ->whereNull('c.dateDeleted')
             ->where(function ($q) use ($dm, $year, $month) {
                 $q->where('b.dateMonth', $dm)
                   ->orWhere(function ($qq) use ($year, $month) {
