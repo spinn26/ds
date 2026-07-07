@@ -521,7 +521,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/admin/transfers', [\App\Http\Controllers\Api\AdminDataController::class, 'transfers']);
         Route::get('/admin/transfers/consultants', [\App\Http\Controllers\Api\AdminDataController::class, 'transferConsultants']);
         Route::get('/admin/transfers/subjects', [\App\Http\Controllers\Api\AdminDataController::class, 'transferSubjects']);
-        Route::post('/admin/transfers', [\App\Http\Controllers\Api\AdminDataController::class, 'createTransfer'])->middleware('throttle:60,1');
+        Route::post('/admin/transfers', [\App\Http\Controllers\Api\AdminDataController::class, 'createTransfer'])->middleware(['throttle:60,1', 'permission:transfers,edit']);
 
         // Permission groups — управление правами кабинетов через UI
         Route::get('/admin/permissions/groups',          [\App\Http\Controllers\Api\AdminPermissionsController::class, 'index']);

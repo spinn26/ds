@@ -2,7 +2,7 @@
   <div>
     <!-- Кнопка перезакрепления + фильтры истории -->
     <div class="d-flex ga-2 flex-wrap align-center mb-3">
-      <v-btn color="primary" size="small" prepend-icon="mdi-account-switch" @click="openDialog">
+      <v-btn v-if="canEdit('transfers')" color="primary" size="small" prepend-icon="mdi-account-switch" @click="openDialog">
         {{ cfg.cta }}
       </v-btn>
       <v-text-field v-model="search" :placeholder="cfg.searchPlaceholder"
@@ -70,6 +70,7 @@ import { useTableSort } from '../composables/useTableSort';
 import EmptyState from './EmptyState.vue';
 import SmartRangeFilter from './SmartRangeFilter.vue';
 import { useSnackbar } from '../composables/useSnackbar';
+import { usePermissions } from '../composables/usePermissions';
 
 // subject: 'client' | 'contract' — переиспользуется общим бэкендом /admin/transfers.
 const props = defineProps({
@@ -77,6 +78,9 @@ const props = defineProps({
 });
 
 const { showSuccess, showError } = useSnackbar();
+// Перезакрепление — write-действие (пишет в историю + пересчёт комиссий),
+// поэтому требует edit на разделе «Перестановки». View видит только историю.
+const { canEdit } = usePermissions();
 
 const CONFIG = {
   client: {

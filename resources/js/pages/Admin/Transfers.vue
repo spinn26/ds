@@ -43,7 +43,7 @@
 
     <v-card class="mb-3 pa-3">
       <div class="d-flex ga-2 flex-wrap align-center">
-        <v-btn color="primary" size="small" prepend-icon="mdi-account-switch"
+        <v-btn v-if="canEdit('transfers')" color="primary" size="small" prepend-icon="mdi-account-switch"
           @click="openDialog">{{ reassignCta }}</v-btn>
         <v-text-field v-model="search" :placeholder="searchPlaceholder"
           density="compact" variant="outlined" hide-details rounded clearable
@@ -96,8 +96,11 @@ import EmptyState from '../../components/EmptyState.vue';
 import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 import SmartRangeFilter from '../../components/SmartRangeFilter.vue';
 import { useSnackbar } from '../../composables/useSnackbar';
+import { usePermissions } from '../../composables/usePermissions';
 
 const { showSuccess, showError } = useSnackbar();
+// Перезакрепление требует edit на «Перестановки»; view видит только историю.
+const { canEdit } = usePermissions();
 
 const tab = ref('partner');
 const items = ref([]);
