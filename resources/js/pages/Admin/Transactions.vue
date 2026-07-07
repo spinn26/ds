@@ -269,23 +269,30 @@
                         @click="openRateModal(d)" />
                     </template>
                     <template v-else-if="h.key === 'incomeDS'">
-                      <span v-if="d.preview?.ready"
-                        :title="`Сумма комиссии с НДС ${d.preview.vatPercent || 0}%`">
-                        {{ fmt2(Number(d.preview.incomeDS || 0) * (1 + Number(d.preview.vatPercent || 0) / 100)) }} RUB
-                      </span>
-                      <span v-else class="text-medium-emphasis">—</span>
-                    </template>
-                    <template v-else-if="h.key === 'incomeDsNoVat'">
+                      <!-- «Своя комиссия»: пользователь вводит Доход ДС С НДС
+                           (gross) — так удобнее (сумма из счёта поставщика). В
+                           БД dsCommissionAbsolute хранится БЕЗ НДС (бэкенд так
+                           трактует) — конвертим в setGrossCommission. -->
                       <template v-if="d.customCommission">
-                        <!-- variant=underlined вместо plain — иначе пустой инпут
-                             при variant=plain выглядит как пустое место рядом с
-                             « RUB», и непонятно, куда вводить (баг 2026-05-15). -->
-                        <v-text-field :model-value="d.dsCommissionAbsolute" type="number"
+                        <v-text-field :model-value="grossCommission(d)" type="number"
                           density="compact" hide-details variant="underlined"
                           placeholder="0.00"
                           style="max-width:120px; display:inline-block"
-                          reverse @update:model-value="v => patchField(d, 'dsCommissionAbsolute', v)" />
+                          reverse @update:model-value="v => setGrossCommission(d, v)" />
                         RUB
+                      </template>
+                      <template v-else>
+                        <span v-if="d.preview?.ready"
+                          :title="`Сумма комиссии с НДС ${d.preview.vatPercent || 0}%`">
+                          {{ fmt2(Number(d.preview.incomeDS || 0) * (1 + Number(d.preview.vatPercent || 0) / 100)) }} RUB
+                        </span>
+                        <span v-else class="text-medium-emphasis">—</span>
+                      </template>
+                    </template>
+                    <template v-else-if="h.key === 'incomeDsNoVat'">
+                      <!-- Без НДС — производное от введённого gross (только показ). -->
+                      <template v-if="d.customCommission">
+                        <span class="text-medium-emphasis">{{ d.dsCommissionAbsolute != null && d.dsCommissionAbsolute !== '' ? fmt2(Number(d.dsCommissionAbsolute)) : '—' }} RUB</span>
                       </template>
                       <template v-else>
                         <span v-if="d.preview?.ready">{{ fmt2(d.preview.incomeDS) }} RUB</span>
@@ -897,6 +904,20 @@ function onCustomCommissionToggle(d, v) {
   if (v && (d.dsCommissionAbsolute == null || d.dsCommissionAbsolute === '') && d.preview?.incomeDS != null) {
     patchField(d, 'dsCommissionAbsolute', Math.round(Number(d.preview.incomeDS) * 100) / 100);
   }
+}
+
+// «Своя комиссия»: в UI пользователь оперирует Доходом ДС С НДС (gross), а в
+// БД dsCommissionAbsolute хранится БЕЗ НДС (net) — бэкенд считает %ДС обратно
+// от amountNoVat. Конвертируем на границе UI, не трогая бэкенд/расчёты.
+function vatMul(d) { return 1 + Number(d?.preview?.vatPercent || 0) / 100; }
+function grossCommission(d) {
+  if (d.dsCommissionAbsolute == null || d.dsCommissionAbsolute === '') return null;
+  return Math.round(Number(d.dsCommissionAbsolute) * vatMul(d) * 100) / 100;
+}
+function setGrossCommission(d, gross) {
+  if (gross == null || gross === '') { patchField(d, 'dsCommissionAbsolute', null); return; }
+  const m = vatMul(d);
+  patchField(d, 'dsCommissionAbsolute', m > 0 ? Math.round(Number(gross) / m * 100) / 100 : Number(gross));
 }
 
 function formatYmd(d) {
