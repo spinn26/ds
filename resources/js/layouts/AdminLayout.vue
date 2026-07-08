@@ -217,6 +217,7 @@ const baseMenuItems = [
       { to: '/admin/webhooks', title: 'Вебхуки', icon: 'mdi-webhook' },
       { to: '/admin/menu-builder', title: 'Конструктор меню', icon: 'mdi-menu' },
       { to: '/admin/monitoring', title: 'Мониторинг', icon: 'mdi-pulse' },
+      { to: '/admin/code-quality', title: 'Качество кода', icon: 'mdi-code-tags-check' },
     ],
   },
 ];
