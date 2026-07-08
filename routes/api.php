@@ -534,6 +534,8 @@ Route::prefix('v1')->group(function () {
 
         Route::get('/admin/transactions', [\App\Http\Controllers\Api\AdminFinanceController::class, 'transactions']);
         Route::post('/admin/finalize-month', [\App\Http\Controllers\Api\AdminFinanceController::class, 'finalizeMonth'])->middleware('role:admin,calculations');
+        // Полный перерасчёт комиссий по всем открытым периодам (кнопка). Throttle — защита от повторных запусков.
+        Route::post('/admin/recalculate-all', [\App\Http\Controllers\Api\AdminFinanceController::class, 'recalculateAll'])->middleware(['role:admin,calculations', 'throttle:2,10']);
         Route::get('/admin/commissions', [\App\Http\Controllers\Api\AdminFinanceController::class, 'commissions']);
         Route::get('/admin/commissions/chain/{transactionId}', [\App\Http\Controllers\Api\AdminFinanceController::class, 'commissionChain'])->whereNumber('transactionId');
         Route::get('/admin/pool', [\App\Http\Controllers\Api\AdminFinanceController::class, 'pool']);

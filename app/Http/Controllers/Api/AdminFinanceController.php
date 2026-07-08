@@ -1463,4 +1463,29 @@ class AdminFinanceController extends Controller
         $stats = $runner->applyForMonth((int) $request->year, (int) $request->month);
         return response()->json($stats);
     }
+
+    /**
+     * Полный перерасчёт комиссий по всем транзакциям открытых периодов —
+     * резолвит %ДС из матрицы dsCommission, пересобирает цепочки и балансы.
+     * Тяжёлая операция → уходит в очередь. Роль admin/calculations.
+     */
+    public function recalculateAll(): JsonResponse
+    {
+        $cutoff = \App\Services\CommissionCalculator::HISTORICAL_CUTOFF;
+
+        $count = DB::table('transaction')
+            ->whereNull('deletedAt')
+            ->where(function ($q) use ($cutoff) {
+                $q->where('date', '>=', $cutoff)->orWhereNull('date');
+            })
+            ->count();
+
+        \App\Jobs\RecalculateAllCommissionsJob::dispatch();
+
+        return response()->json([
+            'message' => "Полный перерасчёт запущен: {$count} транзакций открытых периодов (с {$cutoff}). "
+                . 'Идёт в фоне — цифры обновятся по мере обработки.',
+            'count' => $count,
+        ]);
+    }
 }

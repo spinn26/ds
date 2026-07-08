@@ -12,6 +12,15 @@
           @click="recalcCurrentPeriod">
           Пересчитать текущий период
         </v-btn>
+        <!-- Полный пересчёт комиссий по всем открытым периодам: резолвит %ДС из
+             матрицы dsCommission, пересобирает цепочки/балансы. Роль admin/calculations. -->
+        <v-btn v-if="canManagePeriod" size="small" color="warning" variant="flat"
+          prepend-icon="mdi-refresh-auto"
+          :loading="recalcingAll"
+          :disabled="recalcingAll || recalcing"
+          @click="recalcAllPeriods">
+          Полный перерасчёт
+        </v-btn>
       </template>
     </PageHeader>
 
@@ -685,6 +694,33 @@ const { canCalc } = usePermissions();
 // (role:admin,calculations), кнопка просто скрывает её у тех, кто получит 403.
 const canManagePeriod = canCalc;
 const recalcing = ref(false);
+const recalcingAll = ref(false);
+
+// Полный перерасчёт комиссий по всем открытым периодам — резолвит %ДС из матрицы
+// (актуально после импорта/деплоя тарифов), пересобирает цепочки и балансы.
+async function recalcAllPeriods() {
+  if (recalcingAll.value) return;
+  const ok = await confirmDialog.ask({
+    title: 'Полный перерасчёт всех комиссий?',
+    message:
+      'Будут пересчитаны комиссии по ВСЕМ транзакциям открытых периодов ' +
+      '(с 01.06.2026): %ДС из матрицы тарифов, доход ДС, цепочки и балансы. ' +
+      'Исторические и закрытые периоды не затрагиваются. Операция идёт в фоне ' +
+      'и может занять несколько минут. Запустить?',
+    confirmText: 'Запустить перерасчёт',
+    confirmColor: 'warning',
+  });
+  if (!ok) return;
+  recalcingAll.value = true;
+  try {
+    const { data } = await api.post('/admin/recalculate-all');
+    notify(data?.message || 'Полный перерасчёт запущен', 'success');
+  } catch (e) {
+    notify(recalcErrorMessage(e, 'Не удалось запустить перерасчёт'), 'error');
+  } finally {
+    recalcingAll.value = false;
+  }
+}
 
 function recalcErrorMessage(e, fallback) {
   if (e?.response?.status === 429) {
