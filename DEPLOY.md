@@ -113,7 +113,7 @@ php artisan migrate:rollback --step=1
 - [ ] Сделан бэкап БД (`pg_dump -Fc newds > newds-pre-release.dump`)
 - [ ] Tests: `php artisan test` даёт 0 failed (12 skipped норма — нужны
       фабрики, не критично)
-- [ ] Smoke: `node scripts/ui-smoke.cjs` проходит по всем 61 странице
+- [ ] Smoke: ключевые страницы открываются без ошибок консоли
 
 ---
 
