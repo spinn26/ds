@@ -661,16 +661,24 @@ class ManualTransactionController extends Controller
         $directQual = $this->resolveQual($consultantId, $draft->date);
         $directPercent = $directQual['percent'];
 
+        // Терминированного (3) / исключённого (5) прямого партнёра НЕ начисляем —
+        // паритет с CommissionCalculator: его «доля» остаётся у компании, но
+        // проценты/ЛП посчитаны как база для каскада вверх. Иначе превью
+        // показывало комиссию терминированному (кейс Шефер А.П., activity=3).
+        $directRow = DB::table('consultant')->where('id', $consultantId)->first();
+        $directInactive = $this->isInactiveActivity($directRow->activity ?? null);
+
         $chain = [];
         $chain[] = [
             'consultantId' => $consultantId,
-            'name' => DB::table('consultant')->where('id', $consultantId)->value('personName'),
+            'name' => $directRow->personName ?? null,
             'percent' => $directPercent,
             'lp' => round($points, 2),       // ЛП у прямого партнёра
             'gp' => 0,                       // ГП у прямого = 0 (его собственная продажа не ГП)
-            'points' => round($points * $directPercent / 100, 2),
-            'sum' => round($points * $directPercent, 2),
+            'points' => $directInactive ? 0 : round($points * $directPercent / 100, 2),
+            'sum' => $directInactive ? 0 : round($points * $directPercent, 2),
             'isDirect' => true,
+            'inactive' => $directInactive,
         ];
 
         $current = $consultantId;
@@ -688,15 +696,23 @@ class ManualTransactionController extends Controller
             $invQual = $this->resolveQual($inviterId, $draft->date);
             $margin = $invQual['percent'] - $prevPercent;
 
+            // Терминированного/исключённого наставника не начисляем (паритет с
+            // CommissionCalculator): маржа не выплачивается, его «слой»
+            // поглощается компанией. prevPercent всё равно сдвигаем на его % —
+            // следующий активный наставник получает свой обычный инкремент.
+            $invInactive = $this->isInactiveActivity($inviter->activity ?? null);
+            $paid = $margin > 0 && ! $invInactive;
+
             $chain[] = [
                 'consultantId' => $inviterId,
                 'name' => $inviter->personName,
                 'percent' => $invQual['percent'],
                 'lp' => 0,                       // ЛП у наставника = 0 (продажа не его)
                 'gp' => round($points, 2),       // ГП у наставника = объём, поднявшийся снизу
-                'points' => $margin > 0 ? round($points * $margin / 100, 2) : 0,
-                'sum' => $margin > 0 ? round($points * $margin, 2) : 0,
+                'points' => $paid ? round($points * $margin / 100, 2) : 0,
+                'sum' => $paid ? round($points * $margin, 2) : 0,
                 'isDirect' => false,
+                'inactive' => $invInactive,
             ];
 
             $prevPercent = max($prevPercent, $invQual['percent']);
@@ -743,6 +759,19 @@ class ManualTransactionController extends Controller
             'amount_x_dsPercent' => $amountRub * $dsPercent / 10000,
             default => $amountNoVat * $dsPercent / 10000,
         };
+    }
+
+    /**
+     * Терминированный (3) / исключённый (5) партнёр не получает начислений.
+     * Паритет с CommissionCalculator::isInactiveForCommission. null/прочее —
+     * считаем активным (безопаснее начислить, чем ошибочно срезать).
+     */
+    private function isInactiveActivity(int|string|null $activity): bool
+    {
+        return in_array((int) $activity, [
+            \App\Enums\PartnerActivity::Terminated->value,
+            \App\Enums\PartnerActivity::Excluded->value,
+        ], true);
     }
 
     private function resolveQual(int $consultantId, ?string $date): array

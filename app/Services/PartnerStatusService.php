@@ -142,7 +142,7 @@ class PartnerStatusService
         $previousActivity = $consultant->activity;
         $newCount = ($consultant->terminationCount ?? 0) + 1;
 
-        return DB::transaction(function () use ($consultant, $previousActivity, $newCount, $reason) {
+        $result = DB::transaction(function () use ($consultant, $previousActivity, $newCount, $reason) {
             $consultant->terminationCount = $newCount;
             $consultant->active = false;
             $consultant->dateDeactivity = Carbon::now();
@@ -174,6 +174,14 @@ class PartnerStatusService
 
             return PartnerActivity::Terminated;
         });
+
+        // Авто-правило: контракты терминированного/исключённого партнёра
+        // переезжают на ближайшего активного вышестоящего (Directual делал это
+        // заливкой — теперь обязана платформа). Вне транзакции статуса, чтобы
+        // RecomputeTransferChainJob диспатчился по уже зафиксированному статусу.
+        $this->reassignContractsToUpline($consultant, "Авто-перенос при терминации #{$newCount}");
+
+        return $result;
     }
 
     /**
@@ -199,6 +207,8 @@ class PartnerStatusService
             PartnerActivity::Terminated,
             "Форс-терминация (сверка файла). {$reason}"
         );
+
+        $this->reassignContractsToUpline($consultant, 'Авто-перенос при форс-терминации');
     }
 
     /**
@@ -221,6 +231,96 @@ class PartnerStatusService
             PartnerActivity::Excluded,
             "Исключение вручную. {$reason}"
         );
+
+        $this->reassignContractsToUpline($consultant, 'Авто-перенос при исключении');
+    }
+
+    /**
+     * Перенести все контракты партнёра на ближайшего активного вышестоящего
+     * наставника (вверх по inviter, пропуская терминированных/исключённых).
+     * Каждый перенос пишется в changeConsultantContractLog тем же форматом,
+     * что ручное перезакрепление, и диспатчит RecomputeTransferChainJob —
+     * пересчёт комиссий контракта за ОТКРЫТЫЕ периоды (исторические/закрытые
+     * calculateForTransaction пропустит сам).
+     *
+     * Если активного вышестоящего в цепочке нет — контракты не трогаем и
+     * помечаем в результате skippedNoUpline (нужен ручной выбор владельца).
+     *
+     * @return array{moved:int, target:?int, skippedNoUpline:int}
+     */
+    public function reassignContractsToUpline(Consultant $consultant, string $triggeredBy = 'Авто-перенос при терминации'): array
+    {
+        $contracts = DB::table('contract')
+            ->where('consultant', $consultant->id)
+            ->whereNull('deletedAt')
+            ->get(['id', 'number', 'consultant', 'consultantName']);
+
+        if ($contracts->isEmpty()) {
+            return ['moved' => 0, 'target' => null, 'skippedNoUpline' => 0];
+        }
+
+        $targetId = $this->nearestActiveUplineId((int) $consultant->id);
+        if (! $targetId) {
+            return ['moved' => 0, 'target' => null, 'skippedNoUpline' => $contracts->count()];
+        }
+        $newCons = DB::table('consultant')->where('id', $targetId)->first();
+
+        $moved = 0;
+        foreach ($contracts as $c) {
+            DB::transaction(function () use ($c, $newCons, $triggeredBy, &$moved) {
+                DB::table('contract')->where('id', $c->id)->update([
+                    'consultant'     => $newCons->id,
+                    'consultantName' => $newCons->personName,
+                ]);
+                DB::table('changeConsultantContractLog')->insert([
+                    'id'                => LegacyId::next('changeConsultantContractLog'),
+                    'dateCreated'       => now(),
+                    'webUser'           => null,
+                    'contract'          => $c->id,
+                    'contractNumber'    => $c->number,
+                    'consultantOld'     => $c->consultant,
+                    'consultantOldName' => $c->consultantName,
+                    'consultantNew'     => $newCons->id,
+                    'consultantNewName' => $newCons->personName,
+                    'triggeredBy'       => $triggeredBy,
+                ]);
+                $moved++;
+            });
+            \App\Jobs\RecomputeTransferChainJob::dispatch('contract', (int) $c->id);
+        }
+
+        return ['moved' => $moved, 'target' => $targetId, 'skippedNoUpline' => 0];
+    }
+
+    /**
+     * id ближайшего активного (activity ∉ {3,5}) вышестоящего наставника по
+     * цепочке inviter. null — если такого нет (дошли до корня/NULL). Рекурсивный
+     * CTE с лимитом глубины — защита от циклов в legacy-структуре.
+     */
+    private function nearestActiveUplineId(int $consultantId): ?int
+    {
+        $rows = DB::select(
+            'WITH RECURSIVE up AS (
+                SELECT id, inviter, activity, 0 AS depth FROM consultant WHERE id = ?
+                UNION ALL
+                SELECT c.id, c.inviter, c.activity, up.depth + 1
+                FROM consultant c JOIN up ON c.id = up.inviter
+                WHERE up.depth < 25
+             )
+             SELECT id, activity FROM up WHERE depth > 0 ORDER BY depth',
+            [$consultantId]
+        );
+
+        foreach ($rows as $r) {
+            if (! in_array((int) $r->activity, [
+                PartnerActivity::Terminated->value,
+                PartnerActivity::Excluded->value,
+            ], true)) {
+                return (int) $r->id;
+            }
+        }
+
+        return null;
     }
 
     /**

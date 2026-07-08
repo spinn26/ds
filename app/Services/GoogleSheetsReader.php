@@ -127,7 +127,10 @@ class GoogleSheetsReader
             if (str_contains($key, 'контракт') || str_contains($key, 'contract') || str_contains($key, 'номер')) {
                 $normalized['contract_number'] = trim($value ?? '');
             } elseif (str_contains($key, 'сумма') || str_contains($key, 'amount') || str_contains($key, 'sum')) {
-                $normalized['amount'] = str_replace([' ', ','], ['', '.'], $value ?? '0');
+                // Numbers::normalizeString снимает НЕразрывные пробелы (U+00A0/
+                // U+202F) — разделители разрядов из Sheets. str_replace их не брал
+                // → «7 754,00» терялось после (float)-каста ниже по пайплайну.
+                $normalized['amount'] = \App\Support\Numbers::normalizeString($value) ?: '0';
             } elseif (str_contains($key, 'дата') || str_contains($key, 'date')) {
                 $normalized['date'] = $value;
             } elseif (str_contains($key, 'свойство') || str_contains($key, 'property')) {

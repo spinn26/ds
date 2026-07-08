@@ -546,14 +546,31 @@ class WorkspaceController extends Controller
 
         $this->ensureNewsTable();
 
+        $active = $request->boolean('active', true);
         $id = DB::table('news')->insertGetId([
             'title' => $request->title,
             'content' => $request->content,
             'type' => $request->input('type', 'info'),
-            'active' => $request->boolean('active', true),
+            'active' => $active,
             'created_by' => $request->user()->id,
             'created_at' => now(),
         ]);
+
+        // Broadcast active news to all Telegram-linked users (best-effort).
+        if ($active) {
+            try {
+                $body = trim((string) $request->content);
+                if (mb_strlen($body) > 600) {
+                    $body = mb_substr($body, 0, 600) . '…';
+                }
+                $text = "📰 <b>Новая новость</b>\n\n"
+                    . '<b>' . htmlspecialchars($request->title) . '</b>'
+                    . ($body !== '' ? "\n" . htmlspecialchars($body) : '');
+                \App\Support\Telegram::broadcastAll($text);
+            } catch (\Throwable) {
+                // Telegram is best-effort — never let it break news creation.
+            }
+        }
 
         return response()->json(['message' => 'Новость создана', 'id' => $id], 201);
     }

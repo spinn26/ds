@@ -202,6 +202,10 @@
             <span v-if="numberCheck.existing.clientName">клиент {{ numberCheck.existing.clientName }}</span>
             <span v-if="numberCheck.existing.consultantName">, партнёр {{ numberCheck.existing.consultantName }}</span>
             <span v-if="numberCheck.existing.createDate">, создан {{ fmtDate(numberCheck.existing.createDate) }}</span>.
+            <div class="mt-2">
+              <v-btn size="small" color="error" variant="flat" prepend-icon="mdi-open-in-app"
+                @click="openEdit({ id: numberCheck.existing.id })">Открыть контракт</v-btn>
+            </div>
           </v-alert>
           <v-text-field v-model="form.counterpartyContractId" label="Идентификатор контрагента"
             variant="outlined" density="comfortable" class="mb-2" />

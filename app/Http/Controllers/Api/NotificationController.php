@@ -129,6 +129,18 @@ class NotificationController extends Controller
         } catch (\Throwable) {
             // Socket is best-effort — the DB row is the source of truth.
         }
+
+        // Mirror the personal notification to Telegram. No-op unless the user
+        // linked their account (telegram_chat_id) and the bot token is set.
+        try {
+            $tg = '🔔 <b>' . htmlspecialchars($title) . '</b>';
+            if ($message) {
+                $tg .= "\n" . htmlspecialchars($message);
+            }
+            \App\Support\Telegram::send($userId, $tg);
+        } catch (\Throwable) {
+            // Telegram is best-effort — never let it break the notification flow.
+        }
     }
 
     /**

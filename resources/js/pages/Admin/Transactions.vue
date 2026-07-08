@@ -212,7 +212,7 @@
                           :items="d.availableParameters"
                           item-title="title" item-value="id"
                           density="compact" hide-details variant="plain" placeholder="Выберите"
-                          @update:model-value="v => patchField(d, 'parameter', v)" />
+                          @update:model-value="v => patchField(d, 'parameter', v != null ? String(v) : null)" />
                       </template>
                       <template v-else-if="d.availableParameters?.length === 1">
                         <span class="text-medium-emphasis">{{ d.availableParameters[0].title }}</span>
@@ -335,7 +335,12 @@
                             <tbody>
                               <tr v-for="row in chainTopDown(d.preview.chain)" :key="row.consultantId"
                                 :class="{ 'font-weight-bold tx-direct-row': row.isDirect }">
-                                <td>{{ row.name }}</td>
+                                <td>
+                                  {{ row.name }}
+                                  <v-chip v-if="row.inactive" size="x-small" color="error" variant="tonal" class="ms-1">
+                                    терминирован — не начисляется
+                                  </v-chip>
+                                </td>
                                 <td class="text-end">{{ row.percent }}%</td>
                                 <td class="text-end">{{ fmt2(row.lp) }}</td>
                                 <td class="text-end">{{ fmt2(row.gp || 0) }}</td>
