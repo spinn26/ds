@@ -19,16 +19,10 @@ parameters:
 			path: app/Console/Commands/FinalizeMonthPenalties.php
 
 		-
-			message: '#^Right side of && is always true\.$#'
-			identifier: booleanAnd.rightAlwaysTrue
+			message: '#^Offset Illuminate\\Database\\Eloquent\\Model on Illuminate\\Support\\Collection\<\(int\|string\), mixed\> on left side of \?\? does not exist\.$#'
+			identifier: nullCoalesce.offset
 			count: 1
-			path: app/Console/Commands/ImportCsvData.php
-
-		-
-			message: '#^Called ''env'' outside of the config directory which returns null when the config is cached, use ''config''\.$#'
-			identifier: larastan.noEnvCallsOutsideOfConfig
-			count: 2
-			path: app/Console/Commands/PlatformHealthCheck.php
+			path: app/Console/Commands/NotifyOverdueRequisites.php
 
 		-
 			message: '#^Anonymous function has an unused use \$candidates\.$#'
@@ -53,6 +47,12 @@ parameters:
 			identifier: larastan.noEnvCallsOutsideOfConfig
 			count: 2
 			path: app/Console/Commands/SyncProductsFromSheet.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between non\-empty\-string and null will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: app/Console/Commands/SyncSheetCurrencyRates.php
 
 		-
 			message: '#^Offset ''a'' on array\{label\: ''commission…'', a\: float, b\: float, pass\: bool, note\: ''Сумма всех…''\}\|array\{label\: ''consultantBalance\:…'', a\: float, b\: float, pass\: bool, note\: ''Сумма выплаченного…''\}\|array\{label\: ''consultantBalance\:…'', a\: float, b\: float, pass\: true, note\: ''Проверка арифметики…''\}\|array\{label\: ''poolLog\.poolBonus…'', a\: float, b\: float, pass\: bool, note\: ''Сумма пула должна…''\} on left side of \?\? always exists and is not nullable\.$#'
@@ -195,7 +195,7 @@ parameters:
 		-
 			message: '#^Using nullsafe property access "\?\-\>name" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
 			identifier: nullsafe.neverNull
-			count: 2
+			count: 4
 			path: app/Http/Controllers/Api/AdminFinanceController.php
 
 		-
@@ -217,16 +217,16 @@ parameters:
 			path: app/Http/Controllers/Api/AdminFinanceController.php
 
 		-
-			message: '#^Using nullsafe property access "\?\-\>vendorName" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			message: '#^Using nullsafe property access "\?\-\>provider_name" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
 			identifier: nullsafe.neverNull
 			count: 1
 			path: app/Http/Controllers/Api/AdminFinanceController.php
 
 		-
-			message: '#^Called ''env'' outside of the config directory which returns null when the config is cached, use ''config''\.$#'
-			identifier: larastan.noEnvCallsOutsideOfConfig
-			count: 2
-			path: app/Http/Controllers/Api/AdminIntegrationsController.php
+			message: '#^Using nullsafe property access "\?\-\>vendorName" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Api/AdminFinanceController.php
 
 		-
 			message: '#^Property App\\Http\\Controllers\\Api\\AdminMailController\:\:\$renderer is never read, only written\.$#'
@@ -241,6 +241,12 @@ parameters:
 			path: app/Http/Controllers/Api/AdminMailController.php
 
 		-
+			message: '#^Parameter \#2 \$callback of function array_filter expects \(callable\(string\)\: bool\)\|null, ''strlen'' given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Http/Controllers/Api/AdminMonitoringController.php
+
+		-
 			message: '#^Parameter \#1 \$boolean of function abort_unless expects bool, stdClass\|null given\.$#'
 			identifier: argument.type
 			count: 1
@@ -253,22 +259,40 @@ parameters:
 			path: app/Http/Controllers/Api/AdminProductController.php
 
 		-
-			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,App\\Models\\User\>\:\:map\(\) contains unresolvable type\.$#'
-			identifier: argument.unresolvableType
+			message: '#^PHPDoc tag @param references unknown parameter\: \$only$#'
+			identifier: parameter.notFound
 			count: 1
-			path: app/Http/Controllers/Api/AdminUserController.php
+			path: app/Http/Controllers/Api/AdminQuestionnaireController.php
 
 		-
-			message: '#^Called ''env'' outside of the config directory which returns null when the config is cached, use ''config''\.$#'
-			identifier: larastan.noEnvCallsOutsideOfConfig
-			count: 3
-			path: app/Http/Controllers/Api/AuthController.php
+			message: '#^Offset ''change_deadline''\|''change_responsible''\|''change_status''\|''comment''\|''delete''\|''edit''\|''view'' on array\{view\: true, edit\: false, change_status\: false, change_deadline\: false, change_responsible\: false, comment\: true, delete\: false\}\|array\{view\: true, edit\: true, change_status\: true, change_deadline\: bool, change_responsible\: false, comment\: true, delete\: false\}\|array\{view\: true, edit\: true, change_status\: true, change_deadline\: true, change_responsible\: true, comment\: true, delete\: true\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Http/Controllers/Api/AdminTaskPermissionController.php
+
+		-
+			message: '#^Parameter \#1 \$array of function array_intersect expects array, string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Http/Controllers/Api/AnnouncementController.php
 
 		-
 			message: '#^Relation ''person'' is not found in App\\Models\\Client model\.$#'
 			identifier: larastan.relationExistence
 			count: 1
 			path: app/Http/Controllers/Api/AuthController.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between non\-empty\-string\|null and '''' will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 1
+			path: app/Http/Controllers/Api/CalculatorController.php
+
+		-
+			message: '#^Called ''pluck'' on Laravel collection, but could have been retrieved as a query\.$#'
+			identifier: larastan.noUnnecessaryCollectionCall
+			count: 1
+			path: app/Http/Controllers/Api/ChatController.php
 
 		-
 			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,App\\Models\\Client\>\:\:map\(\) contains unresolvable type\.$#'
@@ -313,14 +337,26 @@ parameters:
 			path: app/Http/Controllers/Api/ContractController.php
 
 		-
+			message: '#^Parameter \#1 \$array of function array_intersect expects array, string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Http/Controllers/Api/CustomFieldController.php
+
+		-
 			message: '#^Parameter \#1 \$boolean of function abort_unless expects bool, App\\Models\\Consultant\|null given\.$#'
 			identifier: argument.type
 			count: 1
 			path: app/Http/Controllers/Api/DocumentController.php
 
 		-
-			message: '#^Expression on left side of \?\? is not nullable\.$#'
-			identifier: nullCoalesce.expr
+			message: '#^Parameter \#1 \$array \(array\{0\?\: mixed\}\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: app/Http/Controllers/Api/EducationController.php
+
+		-
+			message: '#^Parameter \#1 \$array \(list\<\(int\|string\)\>\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
 			count: 1
 			path: app/Http/Controllers/Api/ManualTransactionController.php
 
@@ -335,6 +371,66 @@ parameters:
 			identifier: nullsafe.neverNull
 			count: 1
 			path: app/Http/Controllers/Api/ManualTransactionController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>productHasYearKv" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Api/ManualTransactionController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>programId" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Api/ManualTransactionController.php
+
+		-
+			message: '#^Expression on left side of \?\? is not nullable\.$#'
+			identifier: nullCoalesce.expr
+			count: 1
+			path: app/Http/Controllers/Api/MyPaymentsController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>accruedNonTransactional" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Api/MyPaymentsController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>accruedPool" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Api/MyPaymentsController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>accruedTransactional" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Api/MyPaymentsController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>payed" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Api/MyPaymentsController.php
+
+		-
+			message: '#^Call to function unset\(\) contains undefined variable \$F\.$#'
+			identifier: unset.variable
+			count: 1
+			path: app/Http/Controllers/Api/PartnerSalesMatrixController.php
+
+		-
+			message: '#^Empty array passed to foreach\.$#'
+			identifier: foreach.emptyArray
+			count: 2
+			path: app/Http/Controllers/Api/PartnerSalesMatrixController.php
+
+		-
+			message: '#^Offset int on array\{\} in isset\(\) does not exist\.$#'
+			identifier: isset.offset
+			count: 2
+			path: app/Http/Controllers/Api/PartnerSalesMatrixController.php
 
 		-
 			message: '#^If condition is always false\.$#'
@@ -367,22 +463,58 @@ parameters:
 			path: app/Http/Controllers/Api/ProductController.php
 
 		-
+			message: '#^Called ''pluck'' on Laravel collection, but could have been retrieved as a query\.$#'
+			identifier: larastan.noUnnecessaryCollectionCall
+			count: 4
+			path: app/Http/Controllers/Api/ProductSalesMatrixController.php
+
+		-
+			message: '#^Empty array passed to foreach\.$#'
+			identifier: foreach.emptyArray
+			count: 1
+			path: app/Http/Controllers/Api/ProductSalesMatrixController.php
+
+		-
+			message: '#^Parameter \#1 \$array \(list\<array\{productId\: mixed, productName\: mixed, volume\: 0, count\: 0, revenue\: 0, points\: 0, clientCount\: 0, monthly\: array\{\}, \.\.\.\}\>\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: app/Http/Controllers/Api/ProductSalesMatrixController.php
+
+		-
+			message: '#^Parameter \#1 \$array \(list\<array\{programId\: mixed, programName\: mixed, volume\: 0, count\: 0, revenue\: 0, points\: 0, clientCount\: 0, monthly\: array\{\}\}\>\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: app/Http/Controllers/Api/ProductSalesMatrixController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\Api\\ProfileController\:\:requisitesComplete\(\) is unused\.$#'
+			identifier: method.unused
+			count: 1
+			path: app/Http/Controllers/Api/ProfileController.php
+
+		-
 			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,App\\Models\\AgreementDocument\>\:\:map\(\) contains unresolvable type\.$#'
 			identifier: argument.unresolvableType
 			count: 1
 			path: app/Http/Controllers/Api/ProfileController.php
 
 		-
+			message: '#^Offset ''change_deadline''\|''change_responsible''\|''change_status''\|''edit'' on array\{view\: ''Просмотр'', edit\: ''Редактирование'', change_status\: ''Менять статус'', change_deadline\: ''Менять сроки'', change_responsible\: ''Менять исполнителя'', comment\: ''Комментировать'', delete\: ''Удалять''\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Http/Controllers/Api/TaskController.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,Illuminate\\Database\\Eloquent\\Model\>\:\:map\(\) contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Http/Controllers/Api/TaskController.php
+
+		-
 			message: '#^Using nullsafe property access "\?\-\>telegram_chat_id" in empty\(\) is unnecessary\. Use \-\> instead\.$#'
 			identifier: nullsafe.neverNull
 			count: 1
 			path: app/Http/Controllers/Api/TelegramController.php
-
-		-
-			message: '#^Using nullsafe property access "\?\-\>created_at" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
-			identifier: nullsafe.neverNull
-			count: 2
-			path: app/Http/Controllers/Api/TicketController.php
 
 		-
 			message: '#^Called ''env'' outside of the config directory which returns null when the config is cached, use ''config''\.$#'
@@ -401,6 +533,12 @@ parameters:
 			identifier: nullsafe.neverNull
 			count: 1
 			path: app/Http/Controllers/ImpersonateController.php
+
+		-
+			message: '#^Call to function method_exists\(\) with App\\Models\\User and ''hasAnyRole'' will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Http/Middleware/EnsureNotInMaintenance.php
 
 		-
 			message: '#^Access to an undefined property App\\Http\\Resources\\AgreementDocumentResource\:\:\$id\.$#'
@@ -465,7 +603,7 @@ parameters:
 		-
 			message: '#^Access to an undefined property App\\Http\\Resources\\BankRequisiteResource\:\:\$verified\.$#'
 			identifier: property.notFound
-			count: 1
+			count: 2
 			path: app/Http/Resources/BankRequisiteResource.php
 
 		-
@@ -535,7 +673,19 @@ parameters:
 			path: app/Http/Resources/RequisiteResource.php
 
 		-
+			message: '#^Access to an undefined property App\\Http\\Resources\\RequisiteResource\:\:\$rejection_reason\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Http/Resources/RequisiteResource.php
+
+		-
 			message: '#^Access to an undefined property App\\Http\\Resources\\RequisiteResource\:\:\$status\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Resources/RequisiteResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Http\\Resources\\RequisiteResource\:\:\$tax_regime\.$#'
 			identifier: property.notFound
 			count: 1
 			path: app/Http/Resources/RequisiteResource.php
@@ -543,7 +693,7 @@ parameters:
 		-
 			message: '#^Access to an undefined property App\\Http\\Resources\\RequisiteResource\:\:\$verified\.$#'
 			identifier: property.notFound
-			count: 1
+			count: 2
 			path: app/Http/Resources/RequisiteResource.php
 
 		-
@@ -613,7 +763,19 @@ parameters:
 			path: app/Http/Resources/UserResource.php
 
 		-
+			message: '#^Access to an undefined property App\\Models\\Consultant\:\:\$payments_suspended\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Resources/UserResource.php
+
+		-
 			message: '#^Access to an undefined property App\\Models\\Consultant\:\:\$statusRequisites\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Resources/UserResource.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Requisite\:\:\$rejection_reason\.$#'
 			identifier: property.notFound
 			count: 1
 			path: app/Http/Resources/UserResource.php
@@ -631,7 +793,19 @@ parameters:
 			path: app/Http/Resources/UserResource.php
 
 		-
+			message: '#^Ternary operator condition is always true\.$#'
+			identifier: ternary.alwaysTrue
+			count: 1
+			path: app/Http/Resources/UserResource.php
+
+		-
 			message: '#^Using nullsafe property access "\?\-\>acceptance" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Resources/UserResource.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>payments_suspended" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
 			identifier: nullsafe.neverNull
 			count: 1
 			path: app/Http/Resources/UserResource.php
@@ -703,25 +877,19 @@ parameters:
 			path: app/Policies/ContractPolicy.php
 
 		-
-			message: '#^Unreachable statement \- code above always terminates\.$#'
-			identifier: deadCode.unreachable
-			count: 1
-			path: app/Providers/AppServiceProvider.php
-
-		-
 			message: '#^Called ''env'' outside of the config directory which returns null when the config is cached, use ''config''\.$#'
 			identifier: larastan.noEnvCallsOutsideOfConfig
 			count: 2
 			path: app/Services/ApiSettingsService.php
 
 		-
-			message: '#^Offset ''hint'' on array\{group\: ''bubble'', label\: ''Bubble API Token'', hint\: ''Legacy интеграция,…'', secret\: true, envFallback\: ''BUBBLE_API_TOKEN''\}\|array\{group\: ''dadata'', label\: ''DaData API Key'', hint\: ''Для проверки ИНН …'', secret\: true, envFallback\: ''DADATA_API_KEY''\}\|array\{group\: ''dadata'', label\: ''DaData Secret …'', hint\: ''Нужен для /clean/…'', secret\: true, envFallback\: ''DADATA_SECRET_KEY''\}\|array\{group\: ''getcourse'', label\: ''GetCourse API Key'', hint\: '''', secret\: true, envFallback\: ''GETCOURSE_API_KEY''\}\|array\{group\: ''google'', label\: ''Google Sheets API…'', hint\: ''API Key из GCP…'', secret\: true, envFallback\: ''GOOGLE_SHEETS_API…''\}\|array\{group\: ''google'', label\: ''ID таблицы «Импорт…'', hint\: ''Используется как…'', secret\: false, envFallback\: null\}\|array\{group\: ''google'', label\: ''ID таблицы…'', hint\: ''ID из URL таблицы\: …'', secret\: false, envFallback\: null\}\|array\{group\: ''google'', label\: ''ID таблицы…'', hint\: ''Необязательно — для…'', secret\: false, envFallback\: null\}\|array\{group\: ''telegram'', label\: ''Chat ID для staff…'', hint\: ''Дублирование админ…'', secret\: false, envFallback\: null\}\|array\{group\: ''telegram'', label\: ''Chat ID для статуса…'', hint\: ''ID чата/группы,…'', secret\: false, envFallback\: ''TELEGRAM_STATUS…''\}\|array\{group\: ''telegram'', label\: ''Telegram Bot Token'', hint\: ''Выдаётся @BotFather…'', secret\: true, envFallback\: ''TELEGRAM_BOT_TOKEN''\} on left side of \?\? always exists and is not nullable\.$#'
+			message: '#^Offset ''hint'' on array\{group\: ''bubble'', label\: ''Bubble API Token'', hint\: ''Legacy интеграция,…'', secret\: true, envFallback\: ''BUBBLE_API_TOKEN''\}\|array\{group\: ''checko'', label\: ''Checko\.ru API Key'', hint\: ''Налоговый режим …'', secret\: true, envFallback\: ''CHECKO_API_KEY''\}\|array\{group\: ''dadata'', label\: ''DaData API Key'', hint\: ''Для проверки ИНН …'', secret\: true, envFallback\: ''DADATA_API_KEY''\}\|array\{group\: ''dadata'', label\: ''DaData Secret …'', hint\: ''Нужен для /clean/…'', secret\: true, envFallback\: ''DADATA_SECRET_KEY''\}\|array\{group\: ''getcourse'', label\: ''GetCourse API Key'', hint\: '''', secret\: true, envFallback\: ''GETCOURSE_API_KEY''\}\|array\{group\: ''google'', label\: ''Google Places API…'', hint\: ''Ключ GCP с…'', secret\: true, envFallback\: ''GOOGLE_PLACES_API…''\}\|array\{group\: ''google'', label\: ''Google Sheets API…'', hint\: ''API Key из GCP…'', secret\: true, envFallback\: ''GOOGLE_SHEETS_API…''\}\|array\{group\: ''google'', label\: ''ID таблицы «Импорт…'', hint\: ''Используется как…'', secret\: false, envFallback\: null\}\|array\{group\: ''google'', label\: ''ID таблицы…'', hint\: ''ID из URL таблицы\: …'', secret\: false, envFallback\: null\}\|array\{group\: ''google'', label\: ''ID таблицы…'', hint\: ''Необязательно — для…'', secret\: false, envFallback\: null\}\|array\{group\: ''insmart'', label\: ''Insmart API base URL'', hint\: ''База API Insmart,…'', secret\: false, envFallback\: ''INSMART_API_BASE_URL''\}\|array\{group\: ''insmart'', label\: ''Insmart API Key'', hint\: ''Ключ b2b\-кабинета…'', secret\: true, envFallback\: ''INSMART_API_KEY''\}\|array\{group\: ''insmart'', label\: ''Insmart Webhook…'', hint\: ''Shared\-secret…'', secret\: true, envFallback\: ''INSMART_WEBHOOK…''\}\|array\{group\: ''telegram'', label\: ''Chat ID для staff…'', hint\: ''Дублирование админ…'', secret\: false, envFallback\: null\}\|array\{group\: ''telegram'', label\: ''Chat ID для статуса…'', hint\: ''ID чата/группы,…'', secret\: false, envFallback\: ''TELEGRAM_STATUS…''\}\|array\{group\: ''telegram'', label\: ''Telegram Bot Token'', hint\: ''Выдаётся @BotFather…'', secret\: true, envFallback\: ''TELEGRAM_BOT_TOKEN''\} on left side of \?\? always exists and is not nullable\.$#'
 			identifier: nullCoalesce.offset
 			count: 2
 			path: app/Services/ApiSettingsService.php
 
 		-
-			message: '#^Offset ''secret'' on array\{group\: ''bubble'', label\: ''Bubble API Token'', hint\: ''Legacy интеграция,…'', secret\: true, envFallback\: ''BUBBLE_API_TOKEN''\}\|array\{group\: ''dadata'', label\: ''DaData API Key'', hint\: ''Для проверки ИНН …'', secret\: true, envFallback\: ''DADATA_API_KEY''\}\|array\{group\: ''dadata'', label\: ''DaData Secret …'', hint\: ''Нужен для /clean/…'', secret\: true, envFallback\: ''DADATA_SECRET_KEY''\}\|array\{group\: ''getcourse'', label\: ''GetCourse API Key'', hint\: '''', secret\: true, envFallback\: ''GETCOURSE_API_KEY''\}\|array\{group\: ''google'', label\: ''Google Sheets API…'', hint\: ''API Key из GCP…'', secret\: true, envFallback\: ''GOOGLE_SHEETS_API…''\}\|array\{group\: ''google'', label\: ''ID таблицы «Импорт…'', hint\: ''Используется как…'', secret\: false, envFallback\: null\}\|array\{group\: ''google'', label\: ''ID таблицы…'', hint\: ''ID из URL таблицы\: …'', secret\: false, envFallback\: null\}\|array\{group\: ''google'', label\: ''ID таблицы…'', hint\: ''Необязательно — для…'', secret\: false, envFallback\: null\}\|array\{group\: ''telegram'', label\: ''Chat ID для staff…'', hint\: ''Дублирование админ…'', secret\: false, envFallback\: null\}\|array\{group\: ''telegram'', label\: ''Chat ID для статуса…'', hint\: ''ID чата/группы,…'', secret\: false, envFallback\: ''TELEGRAM_STATUS…''\}\|array\{group\: ''telegram'', label\: ''Telegram Bot Token'', hint\: ''Выдаётся @BotFather…'', secret\: true, envFallback\: ''TELEGRAM_BOT_TOKEN''\} on left side of \?\? always exists and is not nullable\.$#'
+			message: '#^Offset ''secret'' on array\{group\: ''bubble'', label\: ''Bubble API Token'', hint\: ''Legacy интеграция,…'', secret\: true, envFallback\: ''BUBBLE_API_TOKEN''\}\|array\{group\: ''checko'', label\: ''Checko\.ru API Key'', hint\: ''Налоговый режим …'', secret\: true, envFallback\: ''CHECKO_API_KEY''\}\|array\{group\: ''dadata'', label\: ''DaData API Key'', hint\: ''Для проверки ИНН …'', secret\: true, envFallback\: ''DADATA_API_KEY''\}\|array\{group\: ''dadata'', label\: ''DaData Secret …'', hint\: ''Нужен для /clean/…'', secret\: true, envFallback\: ''DADATA_SECRET_KEY''\}\|array\{group\: ''getcourse'', label\: ''GetCourse API Key'', hint\: '''', secret\: true, envFallback\: ''GETCOURSE_API_KEY''\}\|array\{group\: ''google'', label\: ''Google Places API…'', hint\: ''Ключ GCP с…'', secret\: true, envFallback\: ''GOOGLE_PLACES_API…''\}\|array\{group\: ''google'', label\: ''Google Sheets API…'', hint\: ''API Key из GCP…'', secret\: true, envFallback\: ''GOOGLE_SHEETS_API…''\}\|array\{group\: ''google'', label\: ''ID таблицы «Импорт…'', hint\: ''Используется как…'', secret\: false, envFallback\: null\}\|array\{group\: ''google'', label\: ''ID таблицы…'', hint\: ''ID из URL таблицы\: …'', secret\: false, envFallback\: null\}\|array\{group\: ''google'', label\: ''ID таблицы…'', hint\: ''Необязательно — для…'', secret\: false, envFallback\: null\}\|array\{group\: ''insmart'', label\: ''Insmart API base URL'', hint\: ''База API Insmart,…'', secret\: false, envFallback\: ''INSMART_API_BASE_URL''\}\|array\{group\: ''insmart'', label\: ''Insmart API Key'', hint\: ''Ключ b2b\-кабинета…'', secret\: true, envFallback\: ''INSMART_API_KEY''\}\|array\{group\: ''insmart'', label\: ''Insmart Webhook…'', hint\: ''Shared\-secret…'', secret\: true, envFallback\: ''INSMART_WEBHOOK…''\}\|array\{group\: ''telegram'', label\: ''Chat ID для staff…'', hint\: ''Дублирование админ…'', secret\: false, envFallback\: null\}\|array\{group\: ''telegram'', label\: ''Chat ID для статуса…'', hint\: ''ID чата/группы,…'', secret\: false, envFallback\: ''TELEGRAM_STATUS…''\}\|array\{group\: ''telegram'', label\: ''Telegram Bot Token'', hint\: ''Выдаётся @BotFather…'', secret\: true, envFallback\: ''TELEGRAM_BOT_TOKEN''\} on left side of \?\? always exists and is not nullable\.$#'
 			identifier: nullCoalesce.offset
 			count: 2
 			path: app/Services/ApiSettingsService.php
@@ -745,6 +913,12 @@ parameters:
 			path: app/Services/ConsultantService.php
 
 		-
+			message: '#^Using nullsafe property access "\?\-\>email" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Services/ConsultantService.php
+
+		-
 			message: '#^Using nullsafe property access "\?\-\>firstName" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
 			identifier: nullsafe.neverNull
 			count: 1
@@ -757,7 +931,19 @@ parameters:
 			path: app/Services/ConsultantService.php
 
 		-
+			message: '#^Using nullsafe property access "\?\-\>nicTG" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Services/ConsultantService.php
+
+		-
 			message: '#^Using nullsafe property access "\?\-\>patronymic" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Services/ConsultantService.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>phone" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
 			identifier: nullsafe.neverNull
 			count: 1
 			path: app/Services/ConsultantService.php
@@ -767,6 +953,12 @@ parameters:
 			identifier: nullsafe.neverNull
 			count: 1
 			path: app/Services/ContractForecastService.php
+
+		-
+			message: '#^Constant App\\Services\\GeoService\:\:CACHE_TTL is unused\.$#'
+			identifier: classConstant.unused
+			count: 1
+			path: app/Services/GeoService.php
 
 		-
 			message: '#^Variable \$lines in empty\(\) always exists and is not falsy\.$#'
@@ -961,16 +1153,16 @@ parameters:
 			path: app/Services/Reports/PaymentRegistryReport.php
 
 		-
-			message: '#^Called ''env'' outside of the config directory which returns null when the config is cached, use ''config''\.$#'
-			identifier: larastan.noEnvCallsOutsideOfConfig
-			count: 3
-			path: app/Services/SocketService.php
-
-		-
 			message: '#^Using nullsafe property access "\?\-\>created_at" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
 			identifier: nullsafe.neverNull
 			count: 1
 			path: app/Services/TicketService.php
+
+		-
+			message: '#^Parameter \#2 \$haystack of function in_array expects array, string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Services/WebhookService.php
 
 		-
 			message: '''

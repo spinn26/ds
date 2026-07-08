@@ -22,7 +22,41 @@ on:
   workflow_dispatch:   # ручной запуск из GitHub UI
 
 jobs:
+  # Гейт перед деплоем: статический анализ. Стиль (Pint) и полный
+  # `artisan test` сюда НЕ включены намеренно:
+  #   - Pint: код ещё не приведён к стилю целиком → red на каждом пуше;
+  #   - artisan test: 286 легаси-таблиц без миграций, feature-тесты по
+  #     "WebUser"/"person" в чистой CI-базе всегда красные.
+  # PHPStan (level 5 + baseline) детерминирован и ловит реальные баги
+  # (тип-ошибки, cast-и, nullsafe) — новые ошибки блокируют деплой,
+  # существующий долг заморожен в phpstan-baseline.neon.
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+          tools: composer:v2
+
+      - name: Cache Composer packages
+        uses: actions/cache@v4
+        with:
+          path: vendor
+          key: composer-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-
+
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: PHPStan (static analysis)
+        run: php -d memory_limit=1G vendor/bin/phpstan analyse --no-progress
+
   deploy:
+    needs: quality
     runs-on: ubuntu-latest
 
     steps:
