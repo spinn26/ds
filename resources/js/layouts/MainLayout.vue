@@ -1034,6 +1034,7 @@ const menuItems = [
   { label: 'Отчёты', icon: 'mdi-file-chart', path: '/manage/reports', adminSection: 'reports' },
   { label: 'Справочники для расчёта', icon: 'mdi-currency-usd', path: '/manage/currencies', adminSection: 'currencies' },
   { label: 'Инструкции', icon: 'mdi-book-edit-outline', path: '/manage/instructions', adminSection: 'instructions' },
+  { label: 'Документация', icon: 'mdi-book-open-page-variant', path: '/manage/documentation', adminSection: 'instructions' },
 
   // Помощь — общая группа для чатов, тех-обращений и статуса системы.
   { group: 'Помощь', adminSection: 'communication' },

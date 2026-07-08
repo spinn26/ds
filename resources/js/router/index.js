@@ -65,6 +65,7 @@ const routes = [
             { path: 'manage/transfers', component: () => import('../pages/Admin/Transfers.vue'), meta: { staff: true } },
             { path: 'manage/permissions', component: () => import('../pages/Admin/Permissions.vue'), meta: { staff: true } },
             { path: 'manage/instructions', component: () => import('../pages/Admin/Instructions.vue'), meta: { staff: true } },
+            { path: 'manage/documentation', component: () => import('../pages/Admin/Documentation.vue'), meta: { staff: true } },
             { path: 'manage/transactions/import', component: () => import('../pages/Admin/TransactionImport.vue'), meta: { staff: true } },
             { path: 'manage/transactions', component: () => import('../pages/Admin/Transactions.vue'), meta: { staff: true } },
             { path: 'manage/commissions', component: () => import('../pages/Admin/Commissions.vue'), meta: { staff: true } },
