@@ -440,7 +440,9 @@ const contractsTab = ref('list');
 const readOnly = computed(() => !canEdit('contracts'));
 
 // Статусы без прогноза активации: 1 Активирован, 6 Закрыто нереализовано, 10 Лапсирован
-const NO_FORECAST_STATUSES = [1, 6, 10];
+// 1 Активирован, 6 Закрыто нереализовано, 8 Закрыто, 9 Возврат, 10 Лапсирован —
+// прогноз активации не требуется (терминальные/активные статусы).
+const NO_FORECAST_STATUSES = [1, 6, 8, 9, 10];
 
 const items = ref([]);
 const total = ref(0);

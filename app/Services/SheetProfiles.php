@@ -28,7 +28,9 @@ class SheetProfiles
      */
     public const PROFILES = [
         'робоэдвайзер' => [
-            'counterpartyName' => 'Тинькофф',
+            // Поставщик листа «робоэдвайзер» — RG.HT (канал), а не Тинькофф.
+            // (RG.HT = counterparty id 8; ранее ошибочно матчился на Тинькофф.)
+            'counterpartyName' => 'RG.HT',
             'productHint' => 'Тинькофф портфель',
             'programHint' => 'Робоэдвайзер',
             'fields' => [
