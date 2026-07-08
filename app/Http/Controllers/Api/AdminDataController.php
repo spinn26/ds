@@ -2610,24 +2610,59 @@ class AdminDataController extends Controller
         ]);
     }
 
+    /**
+     * Если номер контракта уже занят ЖИВЫМ контрактом — вернуть 422 с данными
+     * существующего контракта (id/клиент/партнёр/дата/продукт), чтобы форма
+     * показала его и предложила «Открыть». Единый источник дубль-проверки для
+     * создания и редактирования. $excludeId — сам редактируемый контракт.
+     * null — дубля нет. ILIKE+TRIM: кириллица и legacy trailing-пробел.
+     */
+    private function contractNumberConflict(?string $number, int $excludeId = 0): ?JsonResponse
+    {
+        $number = trim((string) $number);
+        if ($number === '') {
+            return null;
+        }
+        $query = DB::table('contract')
+            ->whereRaw('TRIM("number") ILIKE ?', [$number])
+            ->whereNull('deletedAt');
+        if ($excludeId > 0) {
+            $query->where('id', '!=', $excludeId);
+        }
+        $existing = $query
+            ->select('id', 'number', 'clientName', 'consultantName', 'createDate', 'productName')
+            ->orderBy('id')
+            ->first();
+        if (! $existing) {
+            return null;
+        }
+
+        $msg = "Контракт с номером «{$existing->number}» уже существует в системе";
+
+        return response()->json([
+            'message' => $msg,
+            'errors' => ['number' => [$msg]],
+            'existing' => [
+                'id' => $existing->id,
+                'number' => $existing->number,
+                'clientName' => $existing->clientName,
+                'consultantName' => $existing->consultantName,
+                'createDate' => $existing->createDate,
+                'productName' => $existing->productName,
+            ],
+        ], 422);
+    }
+
     public function storeContract(Request $request): JsonResponse
     {
+        // Жёсткий гард дубля номера ДО остальной валидации: возвращаем сам
+        // существующий контракт, а не только текст (просьба владельца).
+        if ($resp = $this->contractNumberConflict($request->input('number'))) {
+            return $resp;
+        }
+
         $data = $request->validate([
-            'number' => [
-                'required', 'string', 'max:255',
-                // Case-insensitive проверка дубля, игнорируем soft-deleted.
-                // ILIKE + TRIM надёжнее LOWER() для кириллицы и для legacy-
-                // записей с trailing-пробелом ("Ш38 " в БД vs "Ш38" ввод).
-                function ($attribute, $value, $fail) {
-                    $exists = DB::table('contract')
-                        ->whereRaw('TRIM("number") ILIKE ?', [trim((string) $value)])
-                        ->whereNull('deletedAt')
-                        ->exists();
-                    if ($exists) {
-                        $fail("Контракт с номером «{$value}» уже существует");
-                    }
-                },
-            ],
+            'number' => ['required', 'string', 'max:255'],
             'counterpartyContractId' => 'nullable|string|max:255',
             'status' => 'required|integer|exists:contractStatus,id',
             'client' => 'required|integer|exists:client,id',
@@ -2717,22 +2752,14 @@ class AdminDataController extends Controller
         $contract = \App\Models\Contract::find($id);
         if (! $contract) return response()->json(['message' => 'Контракт не найден'], 404);
 
+        // Тот же гард, что при создании: смена номера на уже занятый другим
+        // живым контрактом → 422 с данными этого контракта (исключаем сам $id).
+        if ($request->has('number') && ($resp = $this->contractNumberConflict($request->input('number'), $id))) {
+            return $resp;
+        }
+
         $data = $request->validate([
-            'number' => [
-                'sometimes', 'string', 'max:255',
-                // Тот же case-insensitive дубль-чек, что и в storeContract,
-                // но исключаем сам редактируемый контракт ($id).
-                function ($attribute, $value, $fail) use ($id) {
-                    $exists = DB::table('contract')
-                        ->whereRaw('TRIM("number") ILIKE ?', [trim((string) $value)])
-                        ->where('id', '!=', $id)
-                        ->whereNull('deletedAt')
-                        ->exists();
-                    if ($exists) {
-                        $fail("Контракт с номером «{$value}» уже существует");
-                    }
-                },
-            ],
+            'number' => ['sometimes', 'string', 'max:255'],
             'counterpartyContractId' => 'nullable|string|max:255',
             'status' => 'sometimes|integer|exists:contractStatus,id',
             'client' => 'sometimes|integer|exists:client,id',
