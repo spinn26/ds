@@ -277,8 +277,10 @@
                 </thead>
                 <tbody>
                   <!-- Top mentor first, direct partner (chainOrder=1, bold) last —
-                       mirrors Transactions' chainTopDown() ordering. -->
-                  <tr v-for="row in [...chainCache[item.id].data].reverse()" :key="row.id"
+                       mirrors Transactions' chainTopDown() ordering. При активном
+                       «Без нулевых» скрываем проходных наставников с комиссией 0
+                       (равный уровень — маржа 0), прямого партнёра оставляем. -->
+                  <tr v-for="row in visibleChain(item)" :key="row.id"
                     :class="{ 'font-weight-bold': row.chainOrder === 1 }">
                     <td>{{ row.consultantName || '—' }}</td>
                     <td>
@@ -386,6 +388,17 @@ const sortDir = ref('desc');
 const expanded = ref([]);
 const chainCache = ref({});
 const supplierOptions = ref([]);
+
+// Строки цепочки для отображения. При активном «Без нулевых» скрываем проходных
+// наставников с комиссией 0 (равный уровень — маржа 0 по спеке §4.2), прямого
+// партнёра (chainOrder=1) оставляем как якорь. Порядок: сверху вышестоящий.
+function visibleChain(item) {
+  const data = chainCache.value[item.id]?.data || [];
+  const rows = filters.value.hideZero
+    ? data.filter(r => r.amountRUB > 0 || r.chainOrder === 1)
+    : [...data];
+  return rows.reverse();
+}
 
 const filters = ref({
   partner: '',
