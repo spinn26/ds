@@ -2594,7 +2594,7 @@ class AdminDataController extends Controller
             $query->where('id', '!=', $excludeId);
         }
 
-        $existing = $query->select('id', 'number', 'clientName', 'consultantName', 'createDate')
+        $existing = $query->select('id', 'number', 'clientName', 'consultantName', 'createDate', 'productName')
             ->orderBy('id')
             ->first();
 
@@ -2606,6 +2606,7 @@ class AdminDataController extends Controller
                 'clientName' => $existing->clientName,
                 'consultantName' => $existing->consultantName,
                 'createDate' => $existing->createDate,
+                'productName' => $existing->productName,
             ] : null,
         ]);
     }
@@ -2637,7 +2638,20 @@ class AdminDataController extends Controller
             return null;
         }
 
+        // Текст ошибки включает ФИО клиента и продукт существующего контракта —
+        // оператор сразу видит, что это за контракт, не открывая его (просьба
+        // владельца). Части подставляем только если они заполнены.
         $msg = "Контракт с номером «{$existing->number}» уже существует в системе";
+        $details = [];
+        if (! empty($existing->clientName)) {
+            $details[] = "клиент: {$existing->clientName}";
+        }
+        if (! empty($existing->productName)) {
+            $details[] = "продукт: {$existing->productName}";
+        }
+        if ($details) {
+            $msg .= ' ('.implode(', ', $details).')';
+        }
 
         return response()->json([
             'message' => $msg,

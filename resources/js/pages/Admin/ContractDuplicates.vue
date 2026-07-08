@@ -52,10 +52,12 @@
               <th>Клиент</th>
               <th>Партнёр</th>
               <th>Продукт / программа</th>
+              <th>Статус</th>
               <th class="text-end">Сумма</th>
               <th class="text-center">Транз.</th>
               <th>Создан</th>
               <th style="width:120px" class="text-center">Канонический</th>
+              <th style="width:44px" class="text-center"></th>
             </tr>
           </thead>
           <tbody>
@@ -73,6 +75,10 @@
                 <div>{{ c.productName || '—' }}</div>
                 <div class="text-caption text-medium-emphasis">{{ c.programName || '' }}</div>
               </td>
+              <td>
+                <v-chip v-if="c.statusName" size="x-small" variant="tonal">{{ c.statusName }}</v-chip>
+                <span v-else class="text-medium-emphasis">—</span>
+              </td>
               <td class="text-end" style="font-variant-numeric:tabular-nums">{{ fmtAmt(c.ammount) }}</td>
               <td class="text-center">
                 <v-chip v-if="c.txCount" size="x-small" color="info" variant="tonal">{{ c.txCount }}</v-chip>
@@ -82,6 +88,10 @@
               <td class="text-center">
                 <v-radio :model-value="canonical[groupKey(g)]" :value="c.id"
                   @update:model-value="v => setCanonical(g, c.id)" density="compact" hide-details />
+              </td>
+              <td class="text-center">
+                <v-btn :href="managerBase + '?id=' + c.id" target="_blank" icon="mdi-open-in-new"
+                  size="x-small" variant="text" title="Открыть контракт" />
               </td>
             </tr>
           </tbody>
@@ -108,6 +118,7 @@
 
 <script setup>
 import { ref, computed } from 'vue';
+import { useRoute } from 'vue-router';
 import api from '../../api';
 import PageHeader from '../../components/PageHeader.vue';
 import EmptyState from '../../components/EmptyState.vue';
@@ -116,6 +127,11 @@ import { useConfirm } from '../../composables/useConfirm';
 
 const { showSuccess, showError, showInfo } = useSnackbar();
 const confirmDialog = useConfirm();
+const route = useRoute();
+
+// Базовый путь менеджера контрактов — тот же layout, что и эта страница
+// (/manage/contracts/duplicates → /manage/contracts, /admin/... → /admin/...).
+const managerBase = computed(() => route.path.replace(/\/duplicates\/?$/, ''));
 
 const mode = ref('number');
 const loading = ref(false);
@@ -216,8 +232,22 @@ async function doDelete(g) {
   })) return;
   try {
     const { data } = await api.post('/admin/contracts/duplicates/delete', { ids });
-    if (data.blocked?.length) showInfo(data.message);
-    else showSuccess(data.message || 'Удалено');
+    if (data.blocked?.length) {
+      // Часть контрактов имеет транзакции — по умолчанию их не удаляем, чтобы
+      // не оторвать деньги. Предлагаем осознанное force-удаление (обратимо).
+      const blockedIds = data.blocked.map(b => b.id);
+      showInfo(data.message);
+      if (await confirmDialog.ask({
+        title: 'Удалить контракты с транзакциями?',
+        message: `Контракты ${blockedIds.join(', ')} имеют транзакции и обычно объединяются, а не удаляются. Принудительно пометить их удалёнными? Транзакции останутся привязаны к удалённым контрактам. Действие обратимо.`,
+        confirmText: 'Удалить принудительно', confirmColor: 'error', icon: 'mdi-delete-alert',
+      })) {
+        const { data: forced } = await api.post('/admin/contracts/duplicates/delete', { ids: blockedIds, force: true });
+        showSuccess(forced.message || 'Удалено');
+      }
+    } else {
+      showSuccess(data.message || 'Удалено');
+    }
     await load();
   } catch (e) {
     showError(e.response?.data?.message || 'Ошибка удаления');

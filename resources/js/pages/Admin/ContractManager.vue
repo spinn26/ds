@@ -200,6 +200,7 @@
             Контракт <strong>«{{ numberCheck.existing.number }}»</strong>
             уже существует:
             <span v-if="numberCheck.existing.clientName">клиент {{ numberCheck.existing.clientName }}</span>
+            <span v-if="numberCheck.existing.productName">, продукт {{ numberCheck.existing.productName }}</span>
             <span v-if="numberCheck.existing.consultantName">, партнёр {{ numberCheck.existing.consultantName }}</span>
             <span v-if="numberCheck.existing.createDate">, создан {{ fmtDate(numberCheck.existing.createDate) }}</span>.
             <div class="mt-2">
@@ -927,5 +928,10 @@ onMounted(() => {
   loadData();
   loadStatuses();
   ensureFormData();
+  // Прямая ссылка на карточку контракта (?id=) — напр. переход со страницы
+  // «Дубли контрактов» кнопкой «Открыть». Сразу открываем редактор.
+  if (route.query.id) {
+    openEdit({ id: Number(route.query.id) });
+  }
 });
 </script>
