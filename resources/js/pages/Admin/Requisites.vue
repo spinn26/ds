@@ -533,6 +533,9 @@ async function checkInn() {
 const documentTypeLabels = {
   passportPage1: 'Паспорт (разворот с фото)',
   passportPage2: 'Паспорт (регистрация)',
+  // Per spec ✅Верификация реквизитов §1.4 — третий документ галереи.
+  // Бэкенд отдаёт его (map applicationForPayment), но фронт раньше не рендерил.
+  applicationForPayment: 'Заявление на выплаты третьему лицу',
 };
 
 async function openDrawer(item) {

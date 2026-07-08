@@ -184,6 +184,17 @@ class AuthController extends Controller
      */
     public function register(RegisterRequest $request, PartnerAcceptanceService $acceptance): JsonResponse
     {
+        // Ban-list (per spec ✅Статусная схема §4): контакты ИСКЛЮЧЁННОГО партнёра
+        // (activity=Excluded) не допускаются к повторной регистрации. Совпадение
+        // по email/телефону — жёсткая блокировка; тёзку (только ФИО) пропускаем,
+        // но логируем предупреждение для ручной проверки (см. ниже).
+        if ($this->excludedContactMatch($request->input('email'), $request->input('phone'))) {
+            return response()->json([
+                'message' => 'Регистрация невозможна: указанные контакты числятся в реестре исключённых партнёров. Обратитесь в поддержку.',
+                'errors' => ['email' => ['Контакты в реестре исключённых партнёров']],
+            ], 422);
+        }
+
         $user = DB::transaction(function () use ($request) {
             $user = User::create([
                 'firstName' => $request->input('firstName'),
@@ -243,12 +254,60 @@ class AuthController extends Controller
         // остаётся false до тех пор.
         $acceptance->recordRegistrationConsents($consultant, $request);
 
+        // Тёзка исключённого партнёра (совпадение только по ФИО) — регистрацию
+        // не блокируем (могут быть настоящие однофамильцы), но пишем warning,
+        // чтобы staff мог проверить возможную попытку обхода реестра.
+        $this->alertIfExcludedNamesake($consultant->personName, (int) $consultant->id);
+
         $token = $user->createToken('spa')->plainTextToken;
 
         return response()->json([
             'token' => $token,
             'user' => UserResource::make($user),
         ], 201);
+    }
+
+    /**
+     * Есть ли ИСКЛЮЧЁННЫЙ партнёр (activity=Excluded) с таким email или
+     * телефоном — реестр исключённых (per spec ✅Статусная схема §4). Пустые
+     * значения игнорируем. Контакты живут в WebUser (consultant.webUser FK).
+     */
+    private function excludedContactMatch(?string $email, ?string $phone): bool
+    {
+        $email = $email ? trim($email) : null;
+        $phone = $phone ? trim($phone) : null;
+        if (! $email && ! $phone) {
+            return false;
+        }
+
+        return DB::table('consultant as c')
+            ->join('WebUser as w', 'w.id', '=', 'c.webUser')
+            ->where('c.activity', PartnerActivity::Excluded->value)
+            ->where(function ($q) use ($email, $phone) {
+                if ($email) $q->orWhere('w.email', $email);
+                if ($phone) $q->orWhere('w.phone', $phone);
+            })
+            ->exists();
+    }
+
+    /** Логирует warning, если ФИО совпадает с исключённым партнёром (тёзка). */
+    private function alertIfExcludedNamesake(string $fio, int $newConsultantId): void
+    {
+        $fio = trim($fio);
+        if ($fio === '') {
+            return;
+        }
+        $matchId = DB::table('consultant')
+            ->where('activity', PartnerActivity::Excluded->value)
+            ->whereRaw('lower(btrim("personName")) = ?', [mb_strtolower($fio)])
+            ->value('id');
+        if ($matchId) {
+            \Illuminate\Support\Facades\Log::warning('Registration: namesake of an excluded partner', [
+                'newConsultantId' => $newConsultantId,
+                'excludedConsultantId' => $matchId,
+                'fio' => $fio,
+            ]);
+        }
     }
 
     /**

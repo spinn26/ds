@@ -95,6 +95,12 @@
         </a>
         <span v-else class="text-medium-emphasis">—</span>
       </template>
+      <template #item.isPartner="{ item }">
+        <v-chip :color="item.isPartner ? 'success' : 'default'" size="x-small"
+          :variant="item.isPartner ? 'tonal' : 'text'">
+          {{ item.isPartner ? 'Да' : 'Нет' }}
+        </v-chip>
+      </template>
       <template #item.actions="{ item }">
         <v-btn v-if="canEdit('clients')" icon="mdi-pencil" size="x-small" variant="text" color="primary"
           title="Редактировать" @click.stop="openEditClient(item)" />
@@ -394,6 +400,7 @@ async function loadStatusLevels() {
 
 const headers = [
   { title: 'ID', key: 'id', width: 80 },
+  { title: 'ID DS', key: 'dsId', width: 100 },
   { title: 'ФИО', key: 'personName' },
   { title: 'Email', key: 'email' },
   { title: 'Телефон', key: 'phone' },
@@ -403,6 +410,8 @@ const headers = [
   { title: 'Контракты', key: 'contractCount', width: 110, align: 'end' },
   { title: 'Партнёр', key: 'consultantName' },
   { title: 'Статус партнёра', key: 'consultantStatus', width: 160 },
+  // Per spec ✅Клиенты §2 — признак «клиент сам является партнёром (Да/Нет)».
+  { title: 'Клиент-партнёр', key: 'isPartner', width: 130, align: 'center' },
   { title: 'Комментарий', key: 'comment' },
   { title: 'Продукты', key: 'products', sortable: false },
   { title: '', key: 'chat', sortable: false, width: 50 },

@@ -1073,18 +1073,6 @@ class AdminFinanceController extends Controller
         return response()->json(['data' => $data, 'total' => $total]);
     }
 
-    /** Отчёты */
-    public function reports(): JsonResponse
-    {
-        return response()->json(['data' => [], 'message' => 'В разработке']);
-    }
-
-    /** Доступность отчётов */
-    public function reportAvailability(): JsonResponse
-    {
-        return response()->json(['data' => [], 'message' => 'В разработке']);
-    }
-
     /**
      * Валюты и НДС (per spec ✅Валюты и НДС.md):
      * - currencyRates: помесячные курсы (последние 24 месяца), с периодом
