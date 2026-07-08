@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Services\CommissionCalculator;
+use App\Services\CurrencyRecalculator;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -29,10 +30,31 @@ class RecalculateAllCommissionsJob implements ShouldQueue
     public int $timeout = 7200; // до 2 часов — транзакций может быть тысячи
     public int $tries = 1;
 
-    public function handle(CommissionCalculator $calculator): void
+    public function handle(CommissionCalculator $calculator, CurrencyRecalculator $currency): void
     {
         $cutoff = CommissionCalculator::HISTORICAL_CUTOFF;
 
+        // 1) Переприменяем актуальные курсы валют ко ВСЕМ не-рублёвым курсам
+        // открытых периодов (amountRUB = сумма × новый курс). Иначе пересчёт
+        // комиссий ниже возьмёт устаревший рублёвый эквивалент. recalcForRate
+        // сам пропускает исторические/закрытые месяцы.
+        $rateIds = DB::table('currencyRate')
+            ->where('currency', '!=', 67) // не RUB
+            ->where('date', '>=', $cutoff)
+            ->orderBy('date')
+            ->pluck('id');
+        $ratesApplied = 0;
+        foreach ($rateIds as $rid) {
+            try {
+                $currency->recalcForRate((int) $rid);
+                $ratesApplied++;
+            } catch (\Throwable $e) {
+                Log::warning('RecalculateAllCommissionsJob: курс упал', ['rate' => $rid, 'error' => $e->getMessage()]);
+            }
+        }
+        Log::info('RecalculateAllCommissionsJob: курсы переприменены', ['rates' => $ratesApplied]);
+
+        // 2) Пересчёт комиссий по всем открытым транзакциям.
         $txIds = DB::table('transaction')
             ->whereNull('deletedAt')
             ->where(function ($q) use ($cutoff) {

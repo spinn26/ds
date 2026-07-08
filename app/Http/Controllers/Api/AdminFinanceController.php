@@ -1155,10 +1155,21 @@ class AdminFinanceController extends Controller
 
         DB::table('currencyRate')->where('id', $id)->update(['rate' => $request->rate]);
 
+        // 1) Рублёвые эквиваленты транзакций этого месяца/валюты — сразу.
         $stats = $recalc->recalcForRate($id);
 
+        // 2) Комиссии зависят от amountRUB → пересчитываем автоматически в фоне
+        // (переприменит и все курсы, и комиссии открытых периодов). Раньше
+        // курс менялся, но доход ДС/комиссии оставались по старому эквиваленту.
+        $recompute = ! empty($stats['updated']) || ! empty($stats['commissionsAffected']);
+        if ($recompute) {
+            \App\Jobs\RecalculateAllCommissionsJob::dispatch();
+        }
+
         return response()->json([
-            'message' => 'Курс обновлён',
+            'message' => $recompute
+                ? 'Курс обновлён. Запущен пересчёт комиссий по новому курсу (в фоне).'
+                : 'Курс обновлён.',
             'recalculation' => $stats,
         ]);
     }

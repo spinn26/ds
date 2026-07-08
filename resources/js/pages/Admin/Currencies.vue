@@ -1,6 +1,15 @@
 <template>
   <div>
-    <PageHeader title="Справочники для расчёта транзакций" icon="mdi-currency-usd" />
+    <PageHeader title="Справочники для расчёта транзакций" icon="mdi-currency-usd">
+      <template #actions>
+        <!-- Полный пересчёт транзакций по актуальным курсам: переприменяет
+             курсы (amountRUB) и пересчитывает комиссии открытых периодов. -->
+        <v-btn size="small" color="warning" variant="flat" prepend-icon="mdi-refresh-auto"
+          :loading="recalcing" :disabled="recalcing" @click="recalcWithRates">
+          Пересчитать с новым курсом
+        </v-btn>
+      </template>
+    </PageHeader>
 
     <v-row>
       <!-- Курсы валют -->
@@ -155,6 +164,21 @@ function fmtPeriodDate(d) {
 
 const snack = ref({ open: false, color: 'success', text: '' });
 function notify(text, color = 'success') { snack.value = { open: true, color, text }; }
+
+// Полный пересчёт по актуальным курсам (переприменяет курсы + комиссии).
+const recalcing = ref(false);
+async function recalcWithRates() {
+  if (recalcing.value) return;
+  recalcing.value = true;
+  try {
+    const { data } = await api.post('/admin/recalculate-all');
+    notify(data?.message || 'Пересчёт запущен', 'success');
+  } catch (e) {
+    notify(e.response?.data?.message || 'Не удалось запустить пересчёт', 'error');
+  } finally {
+    recalcing.value = false;
+  }
+}
 
 const editRateOpen = ref(false);
 const editRateTarget = ref(null);
