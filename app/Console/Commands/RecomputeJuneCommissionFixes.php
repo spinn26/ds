@@ -25,6 +25,7 @@ class RecomputeJuneCommissionFixes extends Command
 {
     protected $signature = 'commission:recompute-june-fixes
         {--dry-run : показать before/after без изменений}
+        {--all : пересчитать ВСЕ живые транзакции периода (а не только своя-комиссия/неизв-ФК)}
         {--from=2026-06-01 : начало периода (date >=)}
         {--to=2026-07-01 : конец периода (date <, не включая)}';
 
@@ -36,18 +37,19 @@ class RecomputeJuneCommissionFixes extends Command
         $from = (string) $this->option('from');
         $to = (string) $this->option('to');
 
-        $ids = DB::table('transaction as t')
+        $all = (bool) $this->option('all');
+        $q = DB::table('transaction as t')
             ->join('contract as c', 'c.id', '=', 't.contract')
             ->whereNull('t.deletedAt')
             ->where('t.date', '>=', $from)
-            ->where('t.date', '<', $to)
-            ->where(function ($q) {
-                $q->where('t.customCommission', true)
+            ->where('t.date', '<', $to);
+        if (! $all) {
+            $q->where(function ($w) {
+                $w->where('t.customCommission', true)
                   ->orWhere('c.consultant', CommissionCalculator::UNKNOWN_CONSULTANT_ID);
-            })
-            ->orderBy('t.id')
-            ->pluck('t.id')
-            ->all();
+            });
+        }
+        $ids = $q->orderBy('t.id')->pluck('t.id')->all();
 
         $this->info(($dry ? '[DRY-RUN] ' : '')."Транзакций к пересчёту ({$from}..{$to}): ".count($ids));
         if (! $ids) {
