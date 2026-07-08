@@ -488,6 +488,10 @@ Route::prefix('v1')->group(function () {
         Route::get('/admin/acceptance', [\App\Http\Controllers\Api\AdminDataController::class, 'acceptance']);
         Route::get('/admin/contracts', [\App\Http\Controllers\Api\AdminDataController::class, 'contracts']);
         Route::get('/admin/contracts/check-number', [\App\Http\Controllers\Api\AdminDataController::class, 'checkContractNumber']);
+        // Дубли контрактов: поиск + инструменты (объединить / удалить).
+        Route::get('/admin/contracts/duplicates', [\App\Http\Controllers\Api\AdminDataController::class, 'contractDuplicates']);
+        Route::post('/admin/contracts/duplicates/merge', [\App\Http\Controllers\Api\AdminDataController::class, 'mergeContractDuplicates'])->middleware('permission:contracts,edit');
+        Route::post('/admin/contracts/duplicates/delete', [\App\Http\Controllers\Api\AdminDataController::class, 'deleteContractDuplicates'])->middleware('permission:contracts,edit');
         Route::get('/admin/contracts/form-data', [\App\Http\Controllers\Api\AdminDataController::class, 'contractFormData']);
         Route::get('/admin/contracts/upload-history', fn () => response()->json([]));
         Route::post('/admin/contracts', [\App\Http\Controllers\Api\AdminDataController::class, 'storeContract'])->middleware('permission:contracts,edit');

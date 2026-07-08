@@ -2842,6 +2842,182 @@ class AdminDataController extends Controller
     }
 
     /**
+     * Поиск дублей контрактов по номеру. Группируем ЖИВЫЕ контракты по
+     * нормализованному номеру (lower+btrim) и возвращаем группы size>1.
+     *
+     * mode=number         — группировка только по номеру (ловит и «разные
+     *                       клиенты под одним номером», напр. Inssmart-хэши);
+     * mode=number_client  — по номеру И клиенту (строгие дубли одной сделки).
+     *
+     * Для каждого контракта: клиент/партнёр/продукт/сумма/статус/дата + число
+     * транзакций (txCount — важно перед объединением/удалением). Флаг
+     * sameClient на группе: false → это могут быть РАЗНЫЕ сделки (не удалять
+     * бездумно — кейс Inssmart D7856F60).
+     */
+    public function contractDuplicates(Request $request): JsonResponse
+    {
+        $mode = $request->input('mode') === 'number_client' ? 'number_client' : 'number';
+        $groupExpr = $mode === 'number_client'
+            ? "lower(btrim(number)) || '||' || lower(btrim(coalesce(\"clientName\",'')))"
+            : 'lower(btrim(number))';
+
+        $keys = DB::table('contract')
+            ->whereNull('deletedAt')
+            ->whereRaw("btrim(coalesce(number,'')) <> ''")
+            ->selectRaw("$groupExpr AS gkey")
+            ->groupByRaw($groupExpr)
+            ->havingRaw('count(*) > 1')
+            ->pluck('gkey');
+
+        if ($keys->isEmpty()) {
+            return response()->json(['groups' => [], 'mode' => $mode]);
+        }
+
+        $rows = DB::table('contract as c')
+            ->leftJoin('contractStatus as s', 's.id', '=', 'c.status')
+            ->whereNull('c.deletedAt')
+            ->whereRaw("$groupExpr IN (" . implode(',', array_fill(0, $keys->count(), '?')) . ')', $keys->all())
+            ->orderByRaw("$groupExpr, c.id")
+            ->get([
+                DB::raw("$groupExpr as gkey"),
+                'c.id', 'c.number', 'c.client', 'c.clientName', 'c.consultant', 'c.consultantName',
+                'c.product', 'c.productName', 'c.program', 'c.programName',
+                'c.ammount', 'c.currency', 'c.status', 's.name as statusName',
+                'c.createDate',
+            ]);
+
+        // Число транзакций по каждому контракту одним запросом (без N+1).
+        $ids = $rows->pluck('id')->all();
+        $txCounts = DB::table('transaction')
+            ->whereIn('contract', $ids)
+            ->whereNull('deletedAt')
+            ->selectRaw('contract, count(*) as cnt')
+            ->groupBy('contract')
+            ->pluck('cnt', 'contract');
+
+        $groups = [];
+        foreach ($rows as $r) {
+            $r->txCount = (int) ($txCounts[$r->id] ?? 0);
+            $groups[$r->gkey][] = $r;
+        }
+
+        $result = [];
+        foreach ($groups as $items) {
+            $clients = collect($items)->pluck('client')->unique()->filter()->values();
+            $result[] = [
+                'number' => $items[0]->number,
+                'count' => count($items),
+                'sameClient' => $clients->count() <= 1,
+                'totalTx' => collect($items)->sum('txCount'),
+                'contracts' => $items,
+            ];
+        }
+        // Сначала группы с транзакциями и «разными клиентами» — они рискованнее.
+        usort($result, fn ($a, $b) => ($b['totalTx'] <=> $a['totalTx']) ?: ($a['sameClient'] <=> $b['sameClient']));
+
+        return response()->json(['groups' => $result, 'mode' => $mode]);
+    }
+
+    /**
+     * Массовый soft-delete выбранных дубль-контрактов. Обратимо (deletedAt).
+     * Если у контракта есть живые транзакции — по умолчанию НЕ удаляем (вернём
+     * в blocked), чтобы не оторвать деньги; для таких используйте «Объединить».
+     * force=true — удалить всё равно (осознанное решение оператора).
+     */
+    public function deleteContractDuplicates(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'ids' => ['required', 'array', 'min:1'],
+            'ids.*' => ['integer'],
+            'force' => ['nullable', 'boolean'],
+        ]);
+        $force = (bool) ($data['force'] ?? false);
+
+        $withTx = DB::table('transaction')
+            ->whereIn('contract', $data['ids'])
+            ->whereNull('deletedAt')
+            ->selectRaw('contract, count(*) as cnt')
+            ->groupBy('contract')
+            ->pluck('cnt', 'contract');
+
+        $toDelete = [];
+        $blocked = [];
+        foreach ($data['ids'] as $id) {
+            if (! $force && ($withTx[$id] ?? 0) > 0) {
+                $blocked[] = ['id' => $id, 'txCount' => (int) $withTx[$id]];
+            } else {
+                $toDelete[] = $id;
+            }
+        }
+
+        if ($toDelete) {
+            DB::table('contract')->whereIn('id', $toDelete)->whereNull('deletedAt')
+                ->update(['deletedAt' => now()]);
+        }
+
+        return response()->json([
+            'deleted' => $toDelete,
+            'blocked' => $blocked,
+            'message' => count($toDelete) . ' удалено'
+                . ($blocked ? ', ' . count($blocked) . ' пропущено (есть транзакции — объедините)' : ''),
+        ]);
+    }
+
+    /**
+     * Объединить дубли в канонический контракт: транзакции всех mergeIds
+     * репойнтятся на canonical, сами mergeIds soft-удаляются, запускается
+     * RecomputeTransferChainJob(canonical) — пересчёт комиссий по открытым
+     * периодам (прямой партнёр = canonical.consultant). Историческое/закрытое
+     * calculateForTransaction пропустит сам.
+     */
+    public function mergeContractDuplicates(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'canonical' => ['required', 'integer'],
+            'mergeIds' => ['required', 'array', 'min:1'],
+            'mergeIds.*' => ['integer'],
+        ]);
+        $canonicalId = (int) $data['canonical'];
+        $mergeIds = array_values(array_unique(array_map('intval', $data['mergeIds'])));
+        $mergeIds = array_values(array_filter($mergeIds, fn ($x) => $x !== $canonicalId));
+
+        if (! $mergeIds) {
+            return response()->json(['message' => 'Нечего объединять'], 422);
+        }
+
+        $canonical = DB::table('contract')->where('id', $canonicalId)->whereNull('deletedAt')->first();
+        if (! $canonical) {
+            return response()->json(['message' => 'Канонический контракт не найден'], 422);
+        }
+        $liveMerge = DB::table('contract')->whereIn('id', $mergeIds)->whereNull('deletedAt')->pluck('id')->all();
+        if (! $liveMerge) {
+            return response()->json(['message' => 'Объединяемые контракты не найдены'], 422);
+        }
+
+        $movedTx = DB::transaction(function () use ($canonicalId, $liveMerge) {
+            $moved = DB::table('transaction')
+                ->whereIn('contract', $liveMerge)
+                ->whereNull('deletedAt')
+                ->update(['contract' => $canonicalId, 'changedAt' => now()]);
+
+            DB::table('contract')->whereIn('id', $liveMerge)->update(['deletedAt' => now()]);
+
+            return $moved;
+        });
+
+        // Пересчёт цепочки канонического контракта (открытые периоды).
+        \App\Jobs\RecomputeTransferChainJob::dispatch('contract', $canonicalId);
+
+        return response()->json([
+            'message' => 'Объединено: ' . count($liveMerge) . ' контракт(ов), перенесено транзакций: ' . $movedTx
+                . '. Пересчёт комиссий за открытые периоды запущен.',
+            'canonical' => $canonicalId,
+            'merged' => $liveMerge,
+            'movedTransactions' => $movedTx,
+        ]);
+    }
+
+    /**
      * История перестановок (per spec ✅История перестановок.md).
      * 3 вкладки: partner / contract / client. Колонка «Автор изменений»
      * резолвится через webUser → WebUser.firstName/lastName/patronymic
