@@ -273,6 +273,16 @@ class CommissionCalculator
         // dsCommission — legacy precedence: tx->dsCommissionPercentage →
         // program.dsPercent → legacy dsCommission row → fallback 100%.
         $dsComPercent = (float) ($tx->dsCommissionPercentage ?? 0);
+
+        // «Своя комиссия»: оператор ввёл Доход ДС вручную (dsCommissionAbsolute —
+        // хранится БЕЗ НДС). %ДС выводим обратным расчётом от суммы без НДС,
+        // иначе при dsCommissionPercentage<=0 калькулятор берёт тариф/дефолт 100%
+        // и затирает ручной доход (жалоба «Брокер+ после фиксации всё 100%»,
+        // 2026-07-08). Приоритет — выше тарифа/дефолта.
+        if (! empty($tx->customCommission) && (float) ($tx->dsCommissionAbsolute ?? 0) > 0 && $amountNoVat > 0) {
+            $dsComPercent = round((float) $tx->dsCommissionAbsolute / $amountNoVat * 100, 4);
+        }
+
         if ($dsComPercent <= 0 && $programRow && $programRow->dsPercent !== null) {
             $dsComPercent = (float) $programRow->dsPercent;
         }
@@ -303,7 +313,7 @@ class CommissionCalculator
         // если контракт привязан к плейсхолдер-аккаунту, ставка = 0%
         // и каскад не строится — 100% дохода остаётся компании.
         if ((int) $consultantId === self::UNKNOWN_CONSULTANT_ID) {
-            return $this->writeZeroForUnknownConsultant($transactionId, $consultantId, $personalVolume, $tx);
+            return $this->writeZeroForUnknownConsultant($transactionId, $consultantId, $personalVolume, $tx, $amountNoVat, $dsComPercent);
         }
 
         // Получить квалификацию прямого партнёра на момент транзакции.
@@ -546,11 +556,11 @@ class CommissionCalculator
             case 'fixed':
                 return (float) ($pointsMin ?? 0);
             case 'amount_x_dsPercent':
-                // amount × dsPercent / 10000 — без вычета НДС. Используется
-                // когда баллы партнёра должны идти от дохода ДС (а не от
-                // суммы транзакции). Пример: Axevil — pointsFormula
-                // «Сумма × курс / 100 × 0.03» → math: amountRub × 3 / 10000.
-                return $amountRub * $dsComPercent / 10000;
+                // ЛП = Доход ДС без НДС / 100 = amountNoVat × %ДС / 10000.
+                // Раньше брали amountRub (с НДС) — Axevil расходился с Медлайфом
+                // (default). По правилу проекта ЛП считается от «Дохода ДС без НДС»
+                // для ВСЕХ продуктов (фидбек владельца 2026-07-08).
+                return $amountNoVat * $dsComPercent / 10000;
             case 'amount_times_ds':
             default:
                 return $amountNoVat * $dsComPercent / 10000;
@@ -700,8 +710,16 @@ class CommissionCalculator
      * ставка 0%, цепочки нет, в commission пишется 1 запись с нулём
      * (для аудит-следа), 100% Дохода ДС остаётся компании.
      */
-    private function writeZeroForUnknownConsultant(int $transactionId, int $consultantId, float $personalVolume, object $tx): array
+    private function writeZeroForUnknownConsultant(int $transactionId, int $consultantId, float $personalVolume, object $tx, float $amountNoVat = 0.0, float $dsComPercent = 0.0): array
     {
+        // Доход ДС (без НДС) считаем и для неизвестного ФК — комиссия партнёрам 0,
+        // поэтому весь доход остаётся компанией: прибыль = Доход ДС без НДС
+        // (фидбек владельца 2026-07-08). Раньше эти поля не обновлялись → в
+        // отчётах у неизвестных ФК Доход ДС/прибыль были пустыми/устаревшими.
+        $incomeDsRub = round($amountNoVat * $dsComPercent / 100, 2);
+        $usdRow = DB::table('currencyRate')->where('currency', 5)->orderByDesc('date')->first();
+        $usdRate = (float) ($usdRow->rate ?? 1);
+        $incomeDsUsd = $usdRate > 0 ? round($incomeDsRub / $usdRate, 2) : 0;
         $this->createCommission([
             'transaction' => $transactionId,
             'consultant' => $consultantId,
@@ -725,6 +743,13 @@ class CommissionCalculator
         DB::table('transaction')->where('id', $transactionId)->update([
             'personalVolume' => round($personalVolume, 6),
             'groupVolume' => round($personalVolume, 6),
+            'dsCommissionPercentage' => round($dsComPercent, 4),
+            'commissionsAmountRUB' => $incomeDsRub,      // Доход ДС без НДС
+            'commissionsAmountUSD' => $incomeDsUsd,
+            'netRevenueRUB' => round($amountNoVat, 2),   // остаток (комиссий 0)
+            'profitRUB' => $incomeDsRub,                 // прибыль = Доход ДС без НДС
+            'commissionAmountRubBeforeGapReduction' => 0,
+            'profitRubBeforeGapReduction' => $incomeDsRub,
         ]);
 
         return [

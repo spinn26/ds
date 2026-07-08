@@ -808,10 +808,10 @@ class ManualTransactionController extends Controller
             'cost_div_100' => ($fixed ?? $amountRub) / 100,
             'amount_div_100' => $amountRub / 100,
             'fixed' => (float) ($min ?? 0),
-            // Паритет с CommissionCalculator::computePointsForProgram — без этой
-            // ветки превью показывало ЛП по дефолтной формуле, а факт — по
-            // amount_x_dsPercent (напр. Axevil).
-            'amount_x_dsPercent' => $amountRub * $dsPercent / 10000,
+            // Паритет с CommissionCalculator::computePoints — ЛП от «Дохода ДС
+            // без НДС» (amountNoVat), как и default (Медлайф). Раньше брали
+            // amountRub (с НДС) → Axevil расходился (фидбек владельца 2026-07-08).
+            'amount_x_dsPercent' => $amountNoVat * $dsPercent / 10000,
             default => $amountNoVat * $dsPercent / 10000,
         };
     }
