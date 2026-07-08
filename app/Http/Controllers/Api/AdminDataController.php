@@ -2690,7 +2690,7 @@ class AdminDataController extends Controller
         // activation_forecast обязателен только для статусов вне этого набора
         if (! in_array((int) ($data['status'] ?? 0), $noForecastStatuses, true) && empty($data['activation_forecast'])) {
             return response()->json([
-                'message' => 'Validation failed',
+                'message' => 'Проверьте заполнение полей',
                 'errors' => ['activation_forecast' => ['Укажите прогноз активации контракта']],
             ], 422);
         }
@@ -2787,7 +2787,7 @@ class AdminDataController extends Controller
         if (! in_array((int) $newStatus, $noForecastStatuses, true)
             && array_key_exists('activation_forecast', $data) && empty($data['activation_forecast'])) {
             return response()->json([
-                'message' => 'Validation failed',
+                'message' => 'Проверьте заполнение полей',
                 'errors' => ['activation_forecast' => ['Укажите прогноз активации контракта']],
             ], 422);
         }

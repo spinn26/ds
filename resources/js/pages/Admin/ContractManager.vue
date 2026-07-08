@@ -754,6 +754,19 @@ async function loadChainForClient(clientId) {
   } catch {}
 }
 
+// Разворачиваем ошибки валидации (Laravel 422) в читаемый русский текст.
+// Раньше показывался только общий message («Validation failed»), а конкретные
+// поля из errors игнорировались — пользователь не понимал, что не так.
+function validationMessage(e, fallback) {
+  const errs = e?.response?.data?.errors;
+  if (errs && typeof errs === 'object') {
+    const msgs = Object.values(errs).flat().filter(Boolean);
+    if (msgs.length) return msgs.join('; ');
+  }
+  const m = e?.response?.data?.message;
+  return (m && m !== 'Validation failed') ? m : fallback;
+}
+
 async function saveContract() {
   saving.value = true;
   try {
@@ -768,7 +781,7 @@ async function saveContract() {
     editOpen.value = false;
     await loadData();
   } catch (e) {
-    notify(e.response?.data?.message || 'Ошибка сохранения', 'error');
+    notify(validationMessage(e, 'Не удалось сохранить контракт'), 'error');
   }
   saving.value = false;
 }
