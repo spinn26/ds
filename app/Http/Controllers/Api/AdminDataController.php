@@ -2918,16 +2918,45 @@ class AdminDataController extends Controller
         $result = [];
         foreach ($groups as $items) {
             $clients = collect($items)->pluck('client')->unique()->filter()->values();
+
+            // «Полное совпадение» — это дубли ОДНОЙ сделки: у всех членов группы
+            // совпадают ключевые поля (клиент+продукт+программа+сумма+валюта).
+            // Тогда правило: оставляем контракт с транзакциями, остальные —
+            // схлопываем. Если поля различаются — это РАЗНЫЕ данные/сделки под
+            // одним номером, их НЕ трогаем (оставляем как есть).
+            $identity = collect($items)
+                ->map(fn ($c) => implode('|', [
+                    $c->client, $c->product, $c->program,
+                    // сумму нормализуем в число, чтобы 1000 и 1000.00 совпали
+                    (string) (float) $c->ammount, $c->currency,
+                ]))
+                ->unique()
+                ->values();
+            $fullMatch = $identity->count() === 1;
+
+            // Рекомендуемый канонический для полного совпадения — тот, где есть
+            // транзакции (больше всего), при равенстве — младший id.
+            $withTx = collect($items)->filter(fn ($c) => $c->txCount > 0)->count();
+            $canonical = collect($items)
+                ->sort(fn ($a, $b) => ($b->txCount <=> $a->txCount) ?: ($a->id <=> $b->id))
+                ->first();
+
             $result[] = [
                 'number' => $items[0]->number,
                 'count' => count($items),
                 'sameClient' => $clients->count() <= 1,
+                'fullMatch' => $fullMatch,
+                'withTxCount' => $withTx,
+                'recommendedCanonical' => $canonical?->id,
                 'totalTx' => collect($items)->sum('txCount'),
                 'contracts' => $items,
             ];
         }
-        // Сначала группы с транзакциями и «разными клиентами» — они рискованнее.
-        usort($result, fn ($a, $b) => ($b['totalTx'] <=> $a['totalTx']) ?: ($a['sameClient'] <=> $b['sameClient']));
+        // Сначала «полное совпадение» (можно схлопнуть) — они безопаснее и понятнее,
+        // затем группы с транзакциями/разными клиентами (рискованнее — оставить).
+        usort($result, fn ($a, $b) => ($b['fullMatch'] <=> $a['fullMatch'])
+            ?: ($b['totalTx'] <=> $a['totalTx'])
+            ?: ($a['sameClient'] <=> $b['sameClient']));
 
         return response()->json(['groups' => $result, 'mode' => $mode]);
     }

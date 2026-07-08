@@ -30,7 +30,9 @@
     <div v-else>
       <div class="text-body-2 text-medium-emphasis mb-3">
         Найдено групп: <strong>{{ groups.length }}</strong>,
-        контрактов в дублях: <strong>{{ totalContracts }}</strong>
+        контрактов в дублях: <strong>{{ totalContracts }}</strong>,
+        полных совпадений: <strong>{{ fullMatchCount }}</strong>,
+        разные данные: <strong>{{ groups.length - fullMatchCount }}</strong>
       </div>
 
       <v-card v-for="g in groups" :key="g.number + '_' + g.contracts[0].id" class="mb-4" variant="outlined">
@@ -39,8 +41,14 @@
           <span class="text-body-1 font-weight-medium">№ {{ g.number }}</span>
           <v-chip size="x-small" variant="tonal">{{ g.count }} шт.</v-chip>
           <v-chip v-if="g.totalTx" size="x-small" color="info" variant="tonal">транзакций: {{ g.totalTx }}</v-chip>
+          <v-chip v-if="g.fullMatch" size="x-small" color="success" variant="tonal">
+            <v-icon start size="14">mdi-check-all</v-icon>полное совпадение — оставить с транзакциями
+          </v-chip>
+          <v-chip v-else size="x-small" color="warning" variant="tonal">
+            <v-icon start size="14">mdi-alert</v-icon>разные данные — оставить как есть
+          </v-chip>
           <v-chip v-if="!g.sameClient" size="x-small" color="warning" variant="tonal">
-            <v-icon start size="14">mdi-alert</v-icon>разные клиенты — возможно, РАЗНЫЕ сделки
+            <v-icon start size="14">mdi-account-alert</v-icon>разные клиенты
           </v-chip>
         </v-card-title>
         <v-divider />
@@ -98,17 +106,22 @@
         </v-table>
         <v-divider />
         <v-card-actions class="px-4 py-2 ga-2">
-          <v-btn size="small" color="primary" variant="flat" prepend-icon="mdi-merge"
+          <v-btn size="small" :color="g.fullMatch ? 'primary' : 'default'"
+            :variant="g.fullMatch ? 'flat' : 'outlined'" prepend-icon="mdi-merge"
             :disabled="!canMerge(g)" @click="doMerge(g)">
-            Объединить в канонический
+            {{ g.fullMatch ? 'Оставить одну (с транзакциями)' : 'Объединить в канонический' }}
           </v-btn>
           <v-btn size="small" color="error" variant="tonal" prepend-icon="mdi-delete"
             :disabled="!selectedCount(g)" @click="doDelete(g)">
             Удалить выбранные ({{ selectedCount(g) }})
           </v-btn>
           <v-spacer />
-          <span class="text-caption text-medium-emphasis">
-            Объединение переносит транзакции на канонический и удаляет остальные (обратимо).
+          <span v-if="g.fullMatch" class="text-caption text-medium-emphasis">
+            Полное совпадение: транзакции переносятся на канонический, дубли удаляются (обратимо).
+          </span>
+          <span v-else class="text-caption text-warning">
+            <v-icon size="14">mdi-information</v-icon>
+            Данные контрактов различаются — вероятно, это разные сделки. Рекомендуется оставить как есть.
           </span>
         </v-card-actions>
       </v-card>
@@ -141,6 +154,7 @@ const canonical = ref({});
 const selected = ref({});
 
 const totalContracts = computed(() => groups.value.reduce((s, g) => s + g.count, 0));
+const fullMatchCount = computed(() => groups.value.filter(g => g.fullMatch).length);
 
 function groupKey(g) {
   return g.number + '_' + g.contracts[0].id;
@@ -154,8 +168,11 @@ async function load() {
     // Дефолт: канонический = контракт с наибольшим числом транзакций, иначе младший id.
     const canon = {}; const sel = {};
     for (const g of groups.value) {
+      // Правило: канонический = контракт с транзакциями (рекомендация сервера),
+      // иначе младший id. Для «полного совпадения» это и есть «оставить ту,
+      // где есть транзакции»; «разные данные» не трогаем (merge не по умолчанию).
       const best = [...g.contracts].sort((a, b) => (b.txCount - a.txCount) || (a.id - b.id))[0];
-      canon[groupKey(g)] = best.id;
+      canon[groupKey(g)] = g.recommendedCanonical || best.id;
       sel[groupKey(g)] = [];
     }
     canonical.value = canon;
