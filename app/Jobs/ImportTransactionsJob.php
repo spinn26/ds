@@ -680,7 +680,7 @@ class ImportTransactionsJob implements ShouldQueue
             $bindings[] = $p['ds_percent'];
             $bindings[] = $p['property'];
             // score = «Год КВ» (год выплаты вознаграждения), напр. Trust.
-            $bindings[] = (isset($p['year']) && $p['year'] !== null && $p['year'] !== '')
+            $bindings[] = (isset($p['year']) && $p['year'] !== '')
                 ? (int) $p['year'] : null;
         }
 

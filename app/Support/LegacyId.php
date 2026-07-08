@@ -28,4 +28,24 @@ class LegacyId
         $max = DB::table($table)->max('id');
         return ((int) $max) + 1;
     }
+
+    /**
+     * Выровнять серийный PK-сиквенс таблицы под MAX(id) — защита от
+     * duplicate_pkey, когда insertGetId врезается в существующий id (лаг
+     * сиквенса после restore/relayer). Идемпотентно и дёшево. Для таблиц БЕЗ
+     * сиквенса — no-op. Вызывать перед insertGetId. $table/$column — только
+     * доверенные КОНСТАНТЫ (не пользовательский ввод): идентификаторы нельзя
+     * биндить, поэтому интерполируются в кавычках.
+     */
+    public static function syncSequence(string $table, string $column = 'id'): void
+    {
+        $seq = DB::selectOne('SELECT pg_get_serial_sequence(?, ?) AS s', [$table, $column]);
+        if (! $seq || empty($seq->s)) {
+            return;
+        }
+        DB::statement(
+            'SELECT setval(?, GREATEST((SELECT MAX("' . $column . '") FROM "' . $table . '"), 1))',
+            [$seq->s]
+        );
+    }
 }

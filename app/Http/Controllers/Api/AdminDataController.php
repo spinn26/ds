@@ -1335,6 +1335,7 @@ class AdminDataController extends Controller
             // у клиента нет login-аккаунта, он живёт только в person.
             // Если клиент позже станет партнёром, регистрация заведёт
             // отдельную WebUser-запись.
+            \App\Support\LegacyId::syncSequence('person'); // защита от duplicate person_pkey
             $personId = DB::table('person')->insertGetId([
                 'firstName' => $data['firstName'],
                 'lastName' => $data['lastName'],
@@ -1347,6 +1348,7 @@ class AdminDataController extends Controller
                 'dateCreated' => now()->toIso8601String(),
             ]);
 
+            \App\Support\LegacyId::syncSequence('client');
             return DB::table('client')->insertGetId([
                 'person' => $personId,
                 'personName' => $personName,
@@ -2721,6 +2723,7 @@ class AdminDataController extends Controller
         $program = DB::table('program')->where('id', $data['program'])->first();
 
         $id = DB::transaction(function () use ($data, $client, $consultantId, $consultantName, $product, $program, $request, $noForecastStatuses) {
+            \App\Support\LegacyId::syncSequence('contract'); // защита от duplicate contract_pkey (лаг сиквенса)
             return DB::table('contract')->insertGetId([
                 'number' => $data['number'],
                 'counterpartyContractId' => $data['counterpartyContractId'] ?? null,

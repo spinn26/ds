@@ -250,6 +250,7 @@ class InsmartIntegrationService
             $firstName = $parts[1] ?? '';
             $patronymic = $parts[2] ?? null;
 
+            LegacyId::syncSequence('person'); // защита от duplicate person_pkey
             $personId = DB::table('person')->insertGetId([
                 'firstName' => $firstName,
                 'lastName' => $lastName,
@@ -261,6 +262,7 @@ class InsmartIntegrationService
             ]);
         }
 
+        LegacyId::syncSequence('client');
         return (int) DB::table('client')->insertGetId([
             'person' => $personId,
             'personName' => $fio,
