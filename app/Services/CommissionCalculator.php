@@ -386,38 +386,42 @@ class CommissionCalculator
             // Маржинальная разница — разница процентов между наставником и нижестоящим
             $marginPercent = $inviterPercent - $prevPercent;
 
-            // Терминированного/исключённого наставника пропускаем — он не
-            // получает маржу. prevPercent ниже всё равно сдвигаем на его %:
-            // его «слой» поглощается компанией (без роллапа на следующего),
-            // следующий активный наставник получает свой обычный инкремент.
-            if ($marginPercent > 0 && ! $this->isInactiveForCommission($inviter->activity ?? null)) {
-                $inviterBonus = $personalVolume * $marginPercent / 100;
-                $inviterBonusRub = $inviterBonus * 100;
+            // Бонус начисляем ТОЛЬКО при положительной марже и активном наставнике.
+            // Терминированный/исключённый или нулевая маржа → бонус 0 (его «слой»
+            // поглощается компанией, chainTotalRub не растёт).
+            $paid = $marginPercent > 0 && ! $this->isInactiveForCommission($inviter->activity ?? null);
+            $inviterBonus = $paid ? $personalVolume * $marginPercent / 100 : 0.0;
+            $inviterBonusRub = $inviterBonus * 100;
+            if ($paid) {
                 $chainTotalRub += round($inviterBonusRub, 2);
-
-                $commissions[] = $this->createCommission([
-                    'transaction' => $transactionId,
-                    'consultant' => $inviterId,
-                    'chainOrder' => $chainOrder,
-                    'type' => 'transaction',
-                    'commissionFromOtherConsultant' => $consultantId,
-                    'personalVolume' => 0,
-                    'groupVolume' => round($personalVolume, 6),
-                    'groupBonus' => round($inviterBonus, 6),
-                    'groupBonusRub' => round($inviterBonusRub, 2),
-                    'percent' => $marginPercent,
-                    'amount' => 0,
-                    'amountRUB' => round($inviterBonusRub, 2),
-                    'amountUSD' => 0,
-                    'currency' => $tx->currency ?? 67,
-                    'date' => $tx->date,
-                    'dateMonth' => $tx->dateMonth,
-                    'dateYear' => $tx->dateYear,
-                    'calculationLevel' => $inviterLevel?->id,
-                ]);
-
-                $chainOrder++;
             }
+
+            // Строку цепочки создаём для КАЖДОГО наставника — «Цепочка выплат»
+            // должна показывать ВСЮ цепочку целиком (просьба владельца 2026-07-08),
+            // а не только получателей маржи. Проходной наставник (нулевая маржа /
+            // терминированный) → строка с комиссией 0, но с его ГП (groupVolume).
+            // Деньги (chainTotalRub/прибыль) от этого не меняются.
+            $commissions[] = $this->createCommission([
+                'transaction' => $transactionId,
+                'consultant' => $inviterId,
+                'chainOrder' => $chainOrder,
+                'type' => 'transaction',
+                'commissionFromOtherConsultant' => $consultantId,
+                'personalVolume' => 0,
+                'groupVolume' => round($personalVolume, 6),
+                'groupBonus' => round($inviterBonus, 6),
+                'groupBonusRub' => round($inviterBonusRub, 2),
+                'percent' => $paid ? $marginPercent : 0,
+                'amount' => 0,
+                'amountRUB' => round($inviterBonusRub, 2),
+                'amountUSD' => 0,
+                'currency' => $tx->currency ?? 67,
+                'date' => $tx->date,
+                'dateMonth' => $tx->dateMonth,
+                'dateYear' => $tx->dateYear,
+                'calculationLevel' => $inviterLevel?->id,
+            ]);
+            $chainOrder++;
 
             $prevPercent = max($prevPercent, $inviterPercent);
             $currentConsultantId = $inviterId;
