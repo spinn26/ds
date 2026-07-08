@@ -45,15 +45,19 @@ class CommissionsReport extends AbstractReportType
                 't.commissionAmountRubBeforeGapReduction', 't.profitRubBeforeGapReduction',
             ]);
 
-        // «Доход DS» = сохранённое commissionsAmountRUB (= странице), «Комиссия» =
-        // Σ комиссий цепочки по транзакции (= странице). Раньше «Доход DS» =
-        // netRevenue×1.05, «Комиссия» = commissionsAmountRUB — расходились со страницей.
+        // Per spec commission-spec §: «Доход ДС» = сумма × %ДС (с НДС, gross =
+        // amountRUB × %ДС/100), «Доход ДС без НДС» = commissionsAmountRUB
+        // (калькулятор считает его от amountNoVat × %ДС). Раньше в отчёте «Доход DS»
+        // показывал commissionsAmountRUB (это как раз БЕЗ НДС), а «Без НДС» —
+        // netRevenueRUB (это «остаток ДС», не доход) → оба столбца были неверны.
+        // «Комиссия» = Σ комиссий цепочки; «Прибыль» = profitRUB (остаток ДС).
         $chain = $this->chainCommissionByTx($rows->pluck('id')->all());
 
         return $rows->map(fn ($r) => [
             $r->number, $r->providerName, $r->productName, $r->programName,
             $r->clientName, $r->date, $this->n($r->amountRUB),
-            $this->n($r->commissionsAmountRUB), $this->n($r->netRevenueRUB),
+            $this->n((float) ($r->amountRUB ?? 0) * (float) ($r->dsCommissionPercentage ?? 0) / 100),
+            $this->n($r->commissionsAmountRUB),
             $this->n($r->personalVolume), $r->partnerName,
             $this->n($chain[$r->id] ?? 0), $this->n($r->profitRUB),
             $this->n($r->commissionAmountRubBeforeGapReduction),

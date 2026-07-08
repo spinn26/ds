@@ -774,6 +774,8 @@ async function saveContract() {
   saving.value = true;
   try {
     const payload = { ...form.value };
+    const savedStatus = form.value.status;
+    const wasEditing = !!editingId.value;
     if (editingId.value) {
       await api.put(`/admin/contracts/${editingId.value}`, payload);
       notify('Контракт обновлён');
@@ -783,6 +785,12 @@ async function saveContract() {
     }
     editOpen.value = false;
     await loadData();
+    // Если активен фильтр «Статус» и он не совпадает с новым статусом контракта —
+    // контракт «исчезнет» из текущей выборки (не потеря данных, а фильтр).
+    // Предупреждаем, чтобы оператор не решил, что контракт пропал.
+    if (wasEditing && statusFilter.value && statusFilter.value !== savedStatus) {
+      notify('Контракт сохранён, но скрыт активным фильтром «Статус». Сбросьте фильтр, чтобы увидеть его.', 'warning');
+    }
   } catch (e) {
     notify(validationMessage(e, 'Не удалось сохранить контракт'), 'error');
   }

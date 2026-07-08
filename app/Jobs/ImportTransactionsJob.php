@@ -269,6 +269,7 @@ class ImportTransactionsJob implements ShouldQueue
                     'property' => $propertyId,
                     'currency' => $rowCurrency,
                     'currencyRate' => $rowRate,
+                    'year' => $row['year'] ?? null,
                 ];
 
                 // Tracker — каждые 200 строк (вместо 50: меньше cache-overhead).
@@ -492,6 +493,9 @@ class ImportTransactionsJob implements ShouldQueue
                         'ds_percent' => $dsPercent,
                         'property' => $rowProperty,
                         'currency' => $rowCurrency,
+                        // «Год КВ» (score) — напр. Trust-профиль: колонка «Год».
+                        // Раньше терялась → в транзакции score=NULL, «Год КВ» пустой.
+                        'year' => $a['year'] ?? null,
                     ];
                 }
                 return [$rows, (int) $counterpartyId, (int) $currencyId, $profile];
@@ -641,7 +645,7 @@ class ImportTransactionsJob implements ShouldQueue
 
         $columns = ['contract', 'amount', 'amountRUB', 'amountUSD', 'currency',
             'currencyRate', 'date', 'dateMonth', 'dateYear', 'comment',
-            'dsCommissionPercentage', 'commissionCalcProperty'];
+            'dsCommissionPercentage', 'commissionCalcProperty', 'score'];
         $quotedCols = array_map(fn ($c) => '"' . $c . '"', $columns);
 
         $placeholderRow = '(' . implode(',', array_fill(0, count($columns), '?')) . ')';
@@ -664,6 +668,9 @@ class ImportTransactionsJob implements ShouldQueue
             $bindings[] = $comment;
             $bindings[] = $p['ds_percent'];
             $bindings[] = $p['property'];
+            // score = «Год КВ» (год выплаты вознаграждения), напр. Trust.
+            $bindings[] = (isset($p['year']) && $p['year'] !== null && $p['year'] !== '')
+                ? (int) $p['year'] : null;
         }
 
         $sql = 'INSERT INTO "transaction" (' . implode(',', $quotedCols) . ') VALUES '
