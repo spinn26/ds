@@ -243,10 +243,12 @@ class PartnerStatusService
      * пересчёт комиссий контракта за ОТКРЫТЫЕ периоды (исторические/закрытые
      * calculateForTransaction пропустит сам).
      *
-     * Если активного вышестоящего в цепочке нет — контракты не трогаем и
-     * помечаем в результате skippedNoUpline (нужен ручной выбор владельца).
+     * Если активного вышестоящего в цепочке нет (корневой партнёр / вся ветка
+     * терминирована) — контракты уходят на «Неизвестного консультанта»
+     * (UNKNOWN_CONSULTANT_ID): 0%, без каскада, доля остаётся у компании. Так
+     * контракт никогда не «зависает» на терминированном ФК.
      *
-     * @return array{moved:int, target:?int, skippedNoUpline:int}
+     * @return array{moved:int, target:?int, fallbackUnknown:int}
      */
     public function reassignContractsToUpline(Consultant $consultant, string $triggeredBy = 'Авто-перенос при терминации'): array
     {
@@ -256,12 +258,15 @@ class PartnerStatusService
             ->get(['id', 'number', 'consultant', 'consultantName']);
 
         if ($contracts->isEmpty()) {
-            return ['moved' => 0, 'target' => null, 'skippedNoUpline' => 0];
+            return ['moved' => 0, 'target' => null, 'fallbackUnknown' => 0];
         }
 
         $targetId = $this->nearestActiveUplineId((int) $consultant->id);
+        $usedFallback = false;
         if (! $targetId) {
-            return ['moved' => 0, 'target' => null, 'skippedNoUpline' => $contracts->count()];
+            $targetId = \App\Services\CommissionCalculator::UNKNOWN_CONSULTANT_ID;
+            $usedFallback = true;
+            $triggeredBy .= ' (нет вышестоящего → Неизвестный консультант)';
         }
         $newCons = DB::table('consultant')->where('id', $targetId)->first();
 
@@ -289,7 +294,7 @@ class PartnerStatusService
             \App\Jobs\RecomputeTransferChainJob::dispatch('contract', (int) $c->id);
         }
 
-        return ['moved' => $moved, 'target' => $targetId, 'skippedNoUpline' => 0];
+        return ['moved' => $moved, 'target' => $targetId, 'fallbackUnknown' => $usedFallback ? $moved : 0];
     }
 
     /**
