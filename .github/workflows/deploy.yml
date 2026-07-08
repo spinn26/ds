@@ -32,6 +32,17 @@ jobs:
   # существующий долг заморожен в phpstan-baseline.neon.
   quality:
     runs-on: ubuntu-latest
+    # Приложение бутстрапится и на composer package:discover, и внутри
+    # larastan. Без БД оно должно грузиться вхолостую: sqlite-файл +
+    # эти env дают Schema::hasTable() штатный false (см. SystemSetting::map).
+    env:
+      APP_ENV: testing
+      APP_KEY: base64:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+      DB_CONNECTION: sqlite
+      DB_DATABASE: database/database.sqlite
+      CACHE_STORE: array
+      SESSION_DRIVER: array
+      QUEUE_CONNECTION: sync
     steps:
       - uses: actions/checkout@v4
 
@@ -48,6 +59,12 @@ jobs:
           path: vendor
           key: composer-${{ hashFiles('composer.lock') }}
           restore-keys: composer-
+
+      # Пустой файл БД до composer install: package:discover грузит app,
+      # SystemSetting::map() зовёт Schema::hasTable() — без файла sqlite
+      # драйвер падает ещё до guard'а.
+      - name: Prepare empty sqlite database
+        run: touch database/database.sqlite
 
       - name: Install dependencies
         run: composer install --no-interaction --prefer-dist --no-progress
