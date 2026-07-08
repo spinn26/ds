@@ -482,18 +482,24 @@
                 Для срока контракта ({{ rateContext.contractTerm }}) тарифов не найдено —
                 показаны все ставки программы. Проверьте срок контракта.
               </v-alert>
-              <!-- Показаны ВСЕ версии ставки (включая исторические уровни) —
-                   специалист выбирает нужную. Действующая на дату транзакции
-                   помечена. -->
+              <!-- Ставки отфильтрованы по «Год КВ» черновика; для одного года
+                   могут быть версии по дате — действующая на дату помечена. -->
               <v-alert v-else type="info" variant="tonal" density="compact" class="mb-2">
-                Показаны все версии ставок. Выберите нужный уровень — версия,
-                действующая на дату транзакции, отмечена.
+                <template v-if="Number(rateContext.yearKV)">
+                  Показаны ставки для года КВ <strong>{{ rateContext.yearKV }}</strong>.
+                  Версия, действующая на дату транзакции, отмечена.
+                </template>
+                <template v-else>
+                  Показаны все версии ставок. Версия, действующая на дату транзакции, отмечена.
+                </template>
               </v-alert>
-              <v-alert v-if="!productRates.length" type="info" variant="tonal" density="compact">
-                Для программы контракта нет настроенных тарифов в справочнике dsCommission.
+              <v-alert v-if="!filteredRates.length" type="info" variant="tonal" density="compact">
+                {{ productRates.length
+                  ? `Для года КВ ${rateContext.yearKV} нет настроенных тарифов.`
+                  : 'Для программы контракта нет настроенных тарифов в справочнике dsCommission.' }}
               </v-alert>
               <v-radio-group v-else v-model="rateChoice">
-                <v-radio v-for="r in productRates" :key="r.id" :value="r.id">
+                <v-radio v-for="r in filteredRates" :key="r.id" :value="r.id">
                   <template #label>
                     <div>
                       <div class="font-weight-medium">
@@ -757,6 +763,9 @@ const filters = ref({
 });
 const productList = ref([]);
 const programList = ref([]);
+// Текущий НДС (%) — приходит со списком черновиков, нужен для стабильной
+// конвертации «Своя комиссия» С НДС ↔ без НДС до первого «Рассчитать».
+const vatPercent = ref(0);
 const lookupSuppliers = ref([]);
 const lookupProviders = ref([]);
 const currencyOptions = ref([]);
@@ -916,7 +925,13 @@ function onCustomCommissionToggle(d, v) {
 // «Своя комиссия»: в UI пользователь оперирует Доходом ДС С НДС (gross), а в
 // БД dsCommissionAbsolute хранится БЕЗ НДС (net) — бэкенд считает %ДС обратно
 // от amountNoVat. Конвертируем на границе UI, не трогая бэкенд/расчёты.
-function vatMul(d) { return 1 + Number(d?.preview?.vatPercent || 0) / 100; }
+// vatMul берёт НДС из превью (если посчитано), иначе из глобального vatPercent
+// (загружен со списком черновиков) — иначе при вводе ДО «Рассчитать» множитель
+// был бы 1 и введённая сумма «улетала» в без-НДС.
+function vatMul(d) {
+  const v = d?.preview?.vatPercent ?? vatPercent.value ?? 0;
+  return 1 + Number(v) / 100;
+}
 function grossCommission(d) {
   if (d.dsCommissionAbsolute == null || d.dsCommissionAbsolute === '') return null;
   return Math.round(Number(d.dsCommissionAbsolute) * vatMul(d) * 100) / 100;
@@ -976,6 +991,7 @@ async function loadDrafts() {
   try {
     const { data } = await api.get('/admin/manual-tx/drafts');
     drafts.value = data.data;
+    if (data.vatPercent != null) vatPercent.value = Number(data.vatPercent);
   } catch {}
 }
 
@@ -1133,6 +1149,27 @@ async function openRateModal(d) {
   } catch { productRates.value = []; }
   rateModal.value = true;
 }
+
+// Год(ы) КВ, к которым относится ставка, из title свойства («3 год» → [3],
+// «3, 4, 5 год» → [3,4,5]).
+function rateYears(r) {
+  return String(r?.propertyTitle || '').match(/\d+/g)?.map(Number) || [];
+}
+
+// Ставки, отфильтрованные по выбранному «Год КВ» черновика: показываем только
+// версии для этого года. Если для года есть точечная ставка («N год»), скрываем
+// диапазонные («3, 4, 5 год») — они дублируют её. Все версии по ДАТЕ сохраняем.
+// Для продуктов без года КВ (yearKV пуст) — показываем все ставки как есть.
+const filteredRates = computed(() => {
+  const y = Number(rateContext.value?.yearKV);
+  if (!y || !Number.isFinite(y)) return productRates.value;
+  const forYear = productRates.value.filter(r => {
+    const ys = rateYears(r);
+    return ys.length === 0 || ys.includes(y);
+  });
+  const hasExact = forYear.some(r => { const ys = rateYears(r); return ys.length === 1 && ys[0] === y; });
+  return hasExact ? forYear.filter(r => rateYears(r).length <= 1) : forYear;
+});
 
 // Период действия версии тарифа — чтобы различать уровни (напр. 7ур/8ур)
 // при выборе среди всех версий в модалке «Изменить %ДС».

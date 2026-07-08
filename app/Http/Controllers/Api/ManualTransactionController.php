@@ -192,7 +192,15 @@ class ManualTransactionController extends Controller
 
         $data = $rows->map(fn ($r) => $this->serializeDraft($r, $paramsByProgram));
 
-        return response()->json(['data' => $data]);
+        // Текущий НДС отдаём вместе со списком — фронту он нужен ДО расчёта,
+        // чтобы конвертация «Своя комиссия» (С НДС → без НДС) была стабильной
+        // (иначе при вводе до «Рассчитать» vatPercent=0 и сумма «улетает» в без-НДС).
+        $vat = DB::table('vat')->where('dateFrom', '<=', now())->where('dateTo', '>=', now())->first();
+
+        return response()->json([
+            'data' => $data,
+            'vatPercent' => (float) ($vat->value ?? 0),
+        ]);
     }
 
     /**
