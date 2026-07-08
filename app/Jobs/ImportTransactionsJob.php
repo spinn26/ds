@@ -423,6 +423,17 @@ class ImportTransactionsJob implements ShouldQueue
             $rawRows = array_slice($values, 1);
             $profile = SheetProfiles::profile($this->sourceRef);
 
+            // Лист БЕЗ строки заголовков (напр. IB MF: первая строка пустая,
+            // дальше сразу данные). Если профиль объявляет позиционные заголовки
+            // 'headerless' и фактическая шапка пустая — берём заголовки из
+            // профиля и трактуем ВСЕ строки как данные. Иначе alignRow не мапит
+            // ничего → импорт падает (история: IB MF «0 / 187 ош.»).
+            if ($profile && ! empty($profile['headerless'])
+                && count(array_filter($headers, fn ($h) => trim((string) $h) !== '')) === 0) {
+                $headers = $profile['headerless'];
+                $rawRows = $values;
+            }
+
             if ($profile) {
                 $counterpartyId = SheetProfiles::resolveCounterpartyId($profile['counterpartyName'] ?? '')
                     ?? $this->counterpartyId
