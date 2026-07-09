@@ -102,6 +102,47 @@ class MonthlyPenaltyRunner
         $dateYear = (string) $year;
         $monthEnd = Carbon::create($year, $month, 1)->endOfMonth();
 
+        // Уровень за РАСЧЁТНЫЙ МЕСЯЦ из qualificationLog (та же логика, что в
+        // PoolRunner): берём запись(и) месяца, максимальный уровень по
+        // COALESCE(calculationLevel, nominalLevel). Иначе штрафы за прошлый
+        // месяц считаются по СЕГОДНЯШНЕМУ consultant.status_and_lvl — партнёр,
+        // сменивший уровень, штрафуется по неверному percent/mandatoryGP/otrif.
+        // Переопределяем поля кандидата на уровень месяца, если он есть.
+        // Набор кандидатов не расширяем (текущий level ≥ 3) — партнёр с текущим
+        // уровнем < 3 в penalty-набор не попадает, как и раньше.
+        $monthLevel = DB::table('qualificationLog as ql')
+            ->leftJoin('status_levels as sl_calc', 'sl_calc.id', '=', 'ql.calculationLevel')
+            ->leftJoin('status_levels as sl_nom', 'sl_nom.id', '=', 'ql.nominalLevel')
+            ->whereBetween('ql.date', [sprintf('%04d-%02d-01', $year, $month), $monthEnd->toDateTimeString()])
+            ->whereNull('ql.dateDeleted')
+            ->select([
+                'ql.consultant',
+                DB::raw('COALESCE(sl_calc.id, sl_nom.id) AS level_id'),
+                DB::raw('COALESCE(sl_calc.level, sl_nom.level) AS level'),
+                DB::raw('COALESCE(sl_calc.percent, sl_nom.percent) AS percent'),
+                DB::raw('COALESCE(sl_calc."mandatoryGP", sl_nom."mandatoryGP") AS "mandatoryGP"'),
+                DB::raw('COALESCE(sl_calc.otrif, sl_nom.otrif) AS otrif'),
+            ])
+            ->orderByDesc('ql.date')
+            ->get()
+            ->groupBy('consultant')
+            ->map(fn ($g) => $g->sortByDesc('level')->first());
+
+        $candidates = $candidates->map(function ($c) use ($monthLevel) {
+            $ml = $monthLevel->get($c->id);
+            if ($ml && $ml->level_id) {
+                $c->level = (int) $ml->level;
+                $c->percent = $ml->percent;
+                $c->mandatoryGP = $ml->mandatoryGP;
+                $c->otrif = $ml->otrif;
+                // status_and_lvl уходит в qualificationLog при применении штрафа —
+                // пишем уровень месяца, а не текущий.
+                $c->status_and_lvl = (int) $ml->level_id;
+            }
+
+            return $c;
+        });
+
         // Pre-fetch ЛП партнёров одним запросом — иначе processConsultant
         // делает sum(personalVolume) для каждого из ~1030 партнёров,
         // что даёт ~1030 round-trip-ов на каждом ночном прогоне.
