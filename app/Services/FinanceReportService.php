@@ -148,7 +148,7 @@ class FinanceReportService
         // Helper to get tx details from pre-loaded data
         $getTxData = function (?int $transactionId) use ($transactions, $contracts, $programs, $properties, $productFlags, $productCatalogNames, $programCatalogNames): array {
             $empty = [
-                'contractNumber' => null, 'clientName' => null, 'productName' => null,
+                'contractNumber' => null, 'clientName' => null, 'sellerName' => null, 'productName' => null,
                 'programName' => null, 'amount' => null,
                 'propertyTitle' => null, 'contractTerm' => null, 'yearKV' => null,
                 'productHasProperty' => true, 'productHasTerm' => true, 'productHasYearKv' => true,
@@ -173,6 +173,10 @@ class FinanceReportService
             return [
                 'contractNumber' => $contract->number ?? null,
                 'clientName' => $contract->clientName ?? null,
+                // «Партнёр сделки» = продавец = консультант контракта. У
+                // легаси-комиссий commissionFromOtherConsultant/consultantsChain
+                // не заполнены (NULL у ~99%), поэтому берём отсюда.
+                'sellerName' => $contract->consultantName ?? null,
                 // Catalog name first (post 2026-07-06 remap), legacy denorm fallback.
                 'productName' => ($contract->product ? ($productCatalogNames[$contract->product] ?? null) : null)
                     ?: ($contract->productName ?? null),
@@ -227,9 +231,13 @@ class FinanceReportService
         // Format group sales with partner name
         $groupSalesTable = $groupCommissions->map(function ($c) use ($getTxData, $partnerNames) {
             $txData = $getTxData($c->transaction);
-            $partnerName = $c->commissionFromOtherConsultant
+            // «Партнёр сделки» = продавец. Приоритет: явный
+            // commissionFromOtherConsultant (если задан) → продавец контракта
+            // (consultantName) — иначе колонка пустая (у ~99% легаси-комиссий
+            // commissionFromOtherConsultant = NULL).
+            $partnerName = ($c->commissionFromOtherConsultant
                 ? ($partnerNames[$c->commissionFromOtherConsultant] ?? null)
-                : null;
+                : null) ?: ($txData['sellerName'] ?? null);
             return [
                 'id' => $c->id,
                 'date' => $c->date,
