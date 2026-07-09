@@ -133,6 +133,20 @@ class AdminFinanceController extends Controller
             ')
             ->first();
 
+        // Итог «Комиссия» — дедуп-сумма commission.amountRUB по всей цепочке
+        // за ВСЕ отфильтрованные транзакции, той же логикой (transaction,
+        // consultant, chainOrder), что и per-row колонка. Раньше здесь был
+        // ярлык netRevenueRUB − profitRUB: при рассинхроне netRevenueRUB в
+        // части транзакций (значение «раздуто») он давал абсурдный итог
+        // (напр. 343к вместо 7к). Клон $query берём ДО ->select()/пагинации.
+        $filteredTxIds = (clone $query)->select('t.id');
+        $dedupCommission = DB::table('commission as cm')
+            ->selectRaw('DISTINCT ON (cm.transaction, cm.consultant, cm."chainOrder") cm."amountRUB" AS a')
+            ->whereIn('cm.transaction', $filteredTxIds)
+            ->whereNull('cm.deletedAt')
+            ->orderByRaw('cm.transaction, cm.consultant, cm."chainOrder", cm.id DESC');
+        $commissionTotal = (float) DB::query()->fromSub($dedupCommission, 'd')->sum('d.a');
+
         // Базовый SELECT — фиксируем заранее, чтобы потом можно было
         // addSelect() для commission-полей при сортировке по ним.
         $query->select([
@@ -411,18 +425,11 @@ class AdminFinanceController extends Controller
                 'netRevenueRUB' => round((float) ($aggregates->net_rub ?? 0), 2),
                 'netRevenueUSD' => round((float) ($aggregates->net_usd ?? 0), 2),
                 'profitRUB' => round((float) ($aggregates->profit_rub ?? 0), 2),
-                // «Комиссия» итогом = netRevenueRUB − profitRUB. Это
-                // математически эквивалентно Σ commission.amountRUB при
-                // корректно пересчитанном profitRUB и сильно дешевле, чем
-                // повторный JOIN на commission для всего фильтра.
-                'partnerCommissionRUB' => round(
-                    (float) ($aggregates->net_rub ?? 0) - (float) ($aggregates->profit_rub ?? 0),
-                    2
-                ),
-                'dsWithholdingRUB' => round(
-                    (float) ($aggregates->net_rub ?? 0) - (float) ($aggregates->profit_rub ?? 0),
-                    2
-                ),
+                // «Комиссия» итогом = дедуп-сумма commission по всей цепочке
+                // за отфильтрованные транзакции (совпадает с суммой per-row
+                // колонки). Считается выше в $commissionTotal.
+                'partnerCommissionRUB' => round($commissionTotal, 2),
+                'dsWithholdingRUB' => round($commissionTotal, 2),
             ],
         ]);
     }
