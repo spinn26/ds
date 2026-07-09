@@ -48,13 +48,23 @@ class SystemSetting extends Model
         return self::cast($row['value'], $row['type']);
     }
 
-    /** Записать значение (raw приводится к строке) и сбросить кэш. */
+    /**
+     * Записать значение (raw приводится к строке) и сбросить кэш.
+     * Upsert: если ключа ещё нет — создаём (type='string'), иначе обновляем
+     * value, сохраняя существующий type. Раньше был update() → put() по
+     * несуществующему ключу молча ничего не писал (баг: watermark выгрузки).
+     */
     public static function put(string $key, $value): void
     {
         $raw = is_bool($value) ? ($value ? '1' : '0')
             : (is_array($value) ? json_encode($value, JSON_UNESCAPED_UNICODE) : (string) $value);
 
-        static::query()->where('key', $key)->update(['value' => $raw, 'updated_at' => now()]);
+        $row = static::firstOrNew(['key' => $key]);
+        $row->value = $raw;
+        if (! $row->exists) {
+            $row->type = 'string';
+        }
+        $row->save();
         Cache::forget(self::CACHE_KEY);
     }
 
