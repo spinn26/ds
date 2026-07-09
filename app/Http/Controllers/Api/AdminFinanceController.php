@@ -393,7 +393,16 @@ class AdminFinanceController extends Controller
                     : round((float) ($t->commissionsAmountRUB ?? 0), 2),
                 'commissionsAmountRUB' => round((float) ($t->commissionsAmountRUB ?? 0), 2),
                 'commissionsAmountUSD' => round((float) ($t->commissionsAmountUSD ?? 0), 2),
-                'netRevenueRUB' => round((float) ($t->netRevenueRUB ?? 0), 2),
+                // netRevenueRUB / profitRUB считаем В РЕАЛ-ТАЙМЕ из текущей
+                // цепочки ($totalCommission), а не из denorm-полей транзакции.
+                // Denorm-поля пишутся один раз при расчёте и НЕ обновляются
+                // ночным штрафом отрыва/ОП (тот меняет только commission) —
+                // поэтому «отставали». Live: profit = Доход ДС без НДС − Σ
+                // комиссий; netRevenue = сумма без НДС − Σ комиссий. Цепочка
+                // уже загружена батчем выше — лишних запросов нет.
+                'netRevenueRUB' => (float) ($t->dsCommissionPercentage ?? 0) > 0
+                    ? round((float) ($t->commissionsAmountRUB ?? 0) * 100 / (float) $t->dsCommissionPercentage - $totalCommission, 2)
+                    : round((float) ($t->netRevenueRUB ?? 0), 2),
                 'netRevenueUSD' => round((float) ($t->netRevenueUSD ?? 0), 2),
                 'currencySymbol' => $t->currency ? ($currencies[$t->currency] ?? null) : null,
                 // Поля из commission-цепочки.
@@ -406,7 +415,8 @@ class AdminFinanceController extends Controller
                 'partnerPV' => $partnerRow ? round((float) ($partnerRow->personalVolume ?? 0), 2) : null,
                 'partnerGV' => $partnerRow ? round((float) ($partnerRow->groupVolume ?? 0), 2) : null,
                 'partnerBonus' => $partnerRow ? round((float) ($partnerRow->groupBonus ?? 0), 2) : null,
-                'profitRUB' => round((float) ($t->profitRUB ?? 0), 2),
+                // Live: Доход ДС без НДС − Σ комиссий цепочки (не denorm-поле).
+                'profitRUB' => round((float) ($t->commissionsAmountRUB ?? 0) - $totalCommission, 2),
                 // Удержание ДС на старой платформе = той же сумме «Комиссия»
                 // (отдельного поля «удержания» в БД нет). Возвращаем дублем,
                 // чтобы фронт мог показать колонку без отдельного расчёта.
@@ -424,7 +434,10 @@ class AdminFinanceController extends Controller
                 'commissionsAmountUSD' => round((float) ($aggregates->commissions_usd ?? 0), 2),
                 'netRevenueRUB' => round((float) ($aggregates->net_rub ?? 0), 2),
                 'netRevenueUSD' => round((float) ($aggregates->net_usd ?? 0), 2),
-                'profitRUB' => round((float) ($aggregates->profit_rub ?? 0), 2),
+                // Live итог «Прибыль» = Σ Доход ДС без НДС − Σ комиссий цепочки
+                // (совпадает с суммой per-row live-прибыли; denorm profit_rub
+                // может отставать после ночных штрафов).
+                'profitRUB' => round((float) ($aggregates->commissions_rub ?? 0) - $commissionTotal, 2),
                 // «Комиссия» итогом = дедуп-сумма commission по всей цепочке
                 // за отфильтрованные транзакции (совпадает с суммой per-row
                 // колонки). Считается выше в $commissionTotal.
