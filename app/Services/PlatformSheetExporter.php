@@ -160,13 +160,15 @@ class PlatformSheetExporter
     {
         $this->writer->ensureSheet($spreadsheetId, $tab['title']);
 
-        // Текущее содержимое: карта id → номер строки (1-based) + есть ли шапка.
+        // Текущее содержимое: карта id → номер строки (1-based) + синхронизация шапки.
         $existing = $this->writer->readValues($spreadsheetId, $tab['title']);
-        $hasHeader = isset($existing[0]) && (string) ($existing[0][0] ?? '') === $tab['headers'][0];
-        if (! $hasHeader) {
-            // Пишем шапку в первую строку.
+        // Шапку сравниваем ЦЕЛИКОМ (не только первую ячейку) — иначе добавленные
+        // колонки не попадают в шапку, хотя данные-строки уже расширены.
+        if (! isset($existing[0]) || array_values($existing[0]) !== $tab['headers']) {
             $this->writer->updateValues($spreadsheetId, $tab['title'] . '!A1', [$tab['headers']]);
-            $existing = [$tab['headers']];
+            if (! isset($existing[0])) {
+                $existing = [$tab['headers']];
+            }
         }
         $idToRow = [];
         for ($i = 1; $i < count($existing); $i++) {
