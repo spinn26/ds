@@ -724,13 +724,17 @@ class CommissionCalculator
         $usdRow = DB::table('currencyRate')->where('currency', 5)->orderByDesc('date')->first();
         $usdRate = (float) ($usdRow->rate ?? 1);
         $incomeDsUsd = $usdRate > 0 ? round($incomeDsRub / $usdRate, 2) : 0;
+        // ЛП/ГП у Неизвестного консультанта = 0: это плейсхолдер, реального
+        // партнёра нет — начислять личный/групповой объём (баллы квалификации)
+        // не за кого (фидбек владельца 2026-07-09, робо-импорт). Доход ДС при
+        // этом остаётся (компания удерживает 100%).
         $this->createCommission([
             'transaction' => $transactionId,
             'consultant' => $consultantId,
             'chainOrder' => 1,
             'type' => 'transaction',
-            'personalVolume' => round($personalVolume, 6),
-            'groupVolume' => round($personalVolume, 6),
+            'personalVolume' => 0,
+            'groupVolume' => 0,
             'groupBonus' => 0,
             'groupBonusRub' => 0,
             'percent' => 0,
@@ -745,8 +749,8 @@ class CommissionCalculator
         ]);
 
         DB::table('transaction')->where('id', $transactionId)->update([
-            'personalVolume' => round($personalVolume, 6),
-            'groupVolume' => round($personalVolume, 6),
+            'personalVolume' => 0,
+            'groupVolume' => 0,
             'dsCommissionPercentage' => round($dsComPercent, 4),
             'commissionsAmountRUB' => $incomeDsRub,      // Доход ДС без НДС
             'commissionsAmountUSD' => $incomeDsUsd,
