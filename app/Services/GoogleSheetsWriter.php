@@ -25,8 +25,10 @@ use RuntimeException;
 class GoogleSheetsWriter
 {
     private const TOKEN_URL = 'https://oauth2.googleapis.com/token';
-    private const SCOPE = 'https://www.googleapis.com/auth/spreadsheets';
+    // spreadsheets — чтение/запись значений; drive — создание таблиц и шаринг.
+    private const SCOPE = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive';
     private const API = 'https://sheets.googleapis.com/v4/spreadsheets';
+    private const DRIVE_API = 'https://www.googleapis.com/drive/v3/files';
 
     private ?array $sa = null;
     private ?string $credentialsPath;
@@ -80,7 +82,7 @@ class GoogleSheetsWriter
     private function accessToken(): string
     {
         $sa = $this->sa();
-        $cacheKey = 'gsheets-sa-token:' . md5($sa['client_email']);
+        $cacheKey = 'gsheets-sa-token:' . md5($sa['client_email'] . '|' . self::SCOPE);
 
         return Cache::remember($cacheKey, 3300, function () use ($sa) {
             $now = time();
@@ -130,6 +132,31 @@ class GoogleSheetsWriter
             throw new RuntimeException("Sheets API {$method} error: " . $r->status() . ' ' . mb_substr($r->body(), 0, 500));
         }
         return $r->json();
+    }
+
+    /**
+     * Создать НОВУЮ таблицу с заданными листами. Возвращает spreadsheetId.
+     * Таблица создаётся под сервисным аккаунтом — после создания расшарь её
+     * на нужный email через shareWith().
+     */
+    public function createSpreadsheet(string $title, array $tabTitles): string
+    {
+        $sheets = array_map(fn ($t) => ['properties' => ['title' => $t]], $tabTitles);
+        $data = $this->req('POST', self::API, [
+            'properties' => ['title' => $title],
+            'sheets' => $sheets,
+        ]);
+        return (string) ($data['spreadsheetId'] ?? '');
+    }
+
+    /** Дать доступ email'у к файлу (role: writer/reader/owner). */
+    public function shareWith(string $fileId, string $email, string $role = 'writer'): void
+    {
+        $this->req('POST', self::DRIVE_API . "/{$fileId}/permissions?sendNotificationEmail=false", [
+            'role' => $role,
+            'type' => 'user',
+            'emailAddress' => $email,
+        ]);
     }
 
     /** Метаданные таблицы (список листов). */
