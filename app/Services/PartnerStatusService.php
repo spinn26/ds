@@ -180,6 +180,7 @@ class PartnerStatusService
         // заливкой — теперь обязана платформа). Вне транзакции статуса, чтобы
         // RecomputeTransferChainJob диспатчился по уже зафиксированному статусу.
         $this->reassignContractsToUpline($consultant, "Авто-перенос при терминации #{$newCount}");
+        $this->reassignClientsToUpline($consultant, "Авто-перенос при терминации #{$newCount}");
 
         return $result;
     }
@@ -209,6 +210,7 @@ class PartnerStatusService
         );
 
         $this->reassignContractsToUpline($consultant, 'Авто-перенос при форс-терминации');
+        $this->reassignClientsToUpline($consultant, 'Авто-перенос при форс-терминации');
     }
 
     /**
@@ -233,6 +235,7 @@ class PartnerStatusService
         );
 
         $this->reassignContractsToUpline($consultant, 'Авто-перенос при исключении');
+        $this->reassignClientsToUpline($consultant, 'Авто-перенос при исключении');
     }
 
     /**
@@ -292,6 +295,68 @@ class PartnerStatusService
                 $moved++;
             });
             \App\Jobs\RecomputeTransferChainJob::dispatch('contract', (int) $c->id);
+        }
+
+        return ['moved' => $moved, 'target' => $targetId, 'fallbackUnknown' => $usedFallback ? $moved : 0];
+    }
+
+    /**
+     * Перенести всех клиентов терминированного/исключённого партнёра на
+     * ближайшего активного вышестоящего наставника (тот же резолвинг, что и для
+     * контрактов). Клиент не должен «числиться» за терминированным ФК.
+     *
+     * Пишет историю в changeConsultantClientLog (формат ручного перезакрепления
+     * createClientTransfer) и диспатчит RecomputeTransferChainJob('client') —
+     * пересчёт контрактов клиента за открытые периоды. NB: деньги идут по
+     * contract.consultant, поэтому реальная смена цепочки — только если у клиента
+     * есть контракты (обычно контракты переносятся отдельно reassignContracts...).
+     *
+     * Нет активного вышестоящего → «Неизвестный консультант» (UNKNOWN_CONSULTANT_ID).
+     *
+     * @return array{moved:int, target:?int, fallbackUnknown:int}
+     */
+    public function reassignClientsToUpline(Consultant $consultant, string $triggeredBy = 'Авто-перенос при терминации'): array
+    {
+        $clients = DB::table('client')
+            ->where('consultant', $consultant->id)
+            ->whereNull('dateDeleted')
+            ->get(['id', 'personName', 'consultant', 'consultantName']);
+
+        if ($clients->isEmpty()) {
+            return ['moved' => 0, 'target' => null, 'fallbackUnknown' => 0];
+        }
+
+        $targetId = $this->nearestActiveUplineId((int) $consultant->id);
+        $usedFallback = false;
+        if (! $targetId) {
+            $targetId = \App\Services\CommissionCalculator::UNKNOWN_CONSULTANT_ID;
+            $usedFallback = true;
+            $triggeredBy .= ' (нет вышестоящего → Неизвестный консультант)';
+        }
+        $newCons = DB::table('consultant')->where('id', $targetId)->first();
+
+        $moved = 0;
+        foreach ($clients as $cl) {
+            DB::transaction(function () use ($cl, $newCons, $triggeredBy, &$moved) {
+                DB::table('client')->where('id', $cl->id)->update([
+                    'consultant'     => $newCons->id,
+                    'consultantName' => $newCons->personName,
+                ]);
+                DB::table('changeConsultantClientLog')->insert([
+                    'id'                => LegacyId::next('changeConsultantClientLog'),
+                    'dateCreated'       => now(),
+                    'webUser'           => null,
+                    'client'            => $cl->id,
+                    'clientName'        => $cl->personName,
+                    'consultantOld'     => $cl->consultant,
+                    'consultantOldName' => $cl->consultantName,
+                    'consultantNew'     => $newCons->id,
+                    'consultantNewName' => $newCons->personName,
+                    'triggeredBy'       => $triggeredBy,
+                ]);
+                $moved++;
+            });
+            \App\Jobs\RecomputeTransferChainJob::dispatch('client', (int) $cl->id);
         }
 
         return ['moved' => $moved, 'target' => $targetId, 'fallbackUnknown' => $usedFallback ? $moved : 0];
