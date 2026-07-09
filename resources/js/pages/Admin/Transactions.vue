@@ -240,14 +240,6 @@
                       <v-text-field :model-value="fmtAmt(d.amount)" inputmode="decimal"
                         density="compact" hide-details variant="plain"
                         reverse @update:model-value="v => patchField(d, 'amount', parseAmt(v))" />
-                      <v-tooltip v-if="d.preview?.duplicate" location="top"
-                        :text="`Возможный дубль: транзакция на эту сумму и дату уже есть (#${d.preview.duplicate.id})`">
-                        <template #activator="{ props }">
-                          <div v-bind="props" class="text-caption text-warning d-flex align-center justify-end ga-1">
-                            <v-icon size="14">mdi-content-duplicate</v-icon>дубль #{{ d.preview.duplicate.id }}
-                          </div>
-                        </template>
-                      </v-tooltip>
                     </template>
                     <template v-else-if="h.key === 'currency'">
                       <v-select :model-value="d.currencyId" :items="currencyOptions" item-title="symbol" item-value="id"
@@ -1188,20 +1180,11 @@ async function fixAll() {
   const dateFrom = dates[0];
   const dateTo = dates[dates.length - 1];
 
-  // Анти-дубль: если среди фиксируемых есть возможные дубли (та же сумма+дата
-  // на контракте) — предупреждаем и сохраняем только с явным подтверждением.
-  const dups = drafts.value.filter(d => fixableIds.value.includes(d.id) && d.preview?.duplicate);
-  let force = false;
-  if (dups.length) {
-    force = confirm(
-      `Найдено возможных дублей: ${dups.length}. ` +
-      `Транзакции на такую же сумму и дату уже существуют. Сохранить всё равно?`
-    );
-    if (!force) { fixing.value = false; return; }
-  }
+  // Дубли по сумме+дате в транзакциях допустимы (несколько взносов по одному
+  // контракту) — анти-дубль убран.
 
   try {
-    const { data } = await api.post('/admin/manual-tx/fix', { ids: fixableIds.value, force });
+    const { data } = await api.post('/admin/manual-tx/fix', { ids: fixableIds.value });
     if (data.fixed?.length) {
       const action = dateFrom
         ? { label: 'Открыть в Комиссиях', to: { path: '/manage/commissions', query: { date_from: dateFrom, date_to: dateTo } } }

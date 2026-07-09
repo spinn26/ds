@@ -445,10 +445,7 @@ class ManualTransactionController extends Controller
         $request->validate([
             'ids' => ['required', 'array', 'min:1'],
             'ids.*' => ['integer'],
-            // force=true — сохранить, даже если найден дубль (осознанно оператором).
-            'force' => ['nullable', 'boolean'],
         ]);
-        $force = (bool) $request->boolean('force');
 
         $results = ['fixed' => [], 'errors' => []];
         foreach ($request->ids as $draftId) {
@@ -462,22 +459,8 @@ class ManualTransactionController extends Controller
                 continue;
             }
 
-            // Анти-дубль: не создаём вторую одинаковую транзакцию (контракт+дата+
-            // сумма+валюта) без явного подтверждения. Оператор видит дубль ещё в
-            // превью; при force=true сохраняем всё равно.
-            if (! $force) {
-                $dup = $this->findDuplicateTransaction(
-                    (int) $draft->contract, $draft->date, (float) $draft->amount, $draft->currency
-                );
-                if ($dup) {
-                    $results['errors'][] = [
-                        'id' => $draftId,
-                        'reason' => "Дубль: транзакция на эту сумму и дату уже есть (#{$dup->id}). Подтвердите сохранение, если это не дубль.",
-                        'duplicateOf' => (int) $dup->id,
-                    ];
-                    continue;
-                }
-            }
+            // Дубли по сумме+дате в транзакциях допустимы (несколько взносов по
+            // одному контракту) — анти-дубль убран по требованию.
 
             try {
                 $txId = DB::transaction(function () use ($draft, $request) {
@@ -567,14 +550,6 @@ class ManualTransactionController extends Controller
 
         $contract = DB::table('contract')->where('id', $draft->contract)->first();
         if (! $contract || ! $contract->consultant) return ['ready' => false];
-
-        // Анти-дубль: живая транзакция на тот же контракт+дату+сумму+валюту.
-        // Отдаём в превью, чтобы UI пометил черновик как возможный дубль ДО
-        // фиксации (та же логика применяется гардом в fixDrafts).
-        $dup = $this->findDuplicateTransaction(
-            (int) $draft->contract, $draft->date, (float) $draft->amount, $draft->currency
-        );
-        $duplicateOut = $dup ? ['id' => (int) $dup->id, 'amount' => (float) $dup->amount, 'date' => $dup->date] : null;
 
         $rate = (float) ($draft->currencyRate ?: 1);
         $amountRub = (float) $draft->amount * $rate;
@@ -683,7 +658,6 @@ class ManualTransactionController extends Controller
                     'isUnknown' => true,
                 ]],
                 'unknownConsultant' => true,
-                'duplicate' => $duplicateOut,
             ];
         }
 
@@ -770,33 +744,7 @@ class ManualTransactionController extends Controller
             'partnersTotal' => round($partnersTotal, 2),
             'profitDS' => $profitDS,
             'chain' => $chain,
-            'duplicate' => $duplicateOut,
         ];
-    }
-
-    /**
-     * Живой дубль транзакции: тот же контракт + дата (день) + сумма + валюта.
-     * Возвращает существующую транзакцию (id/amount/date) или null. Основа
-     * анти-дубля ручного ввода: показываем в превью и блокируем в fixDrafts.
-     */
-    private function findDuplicateTransaction(int $contract, ?string $date, ?float $amount, $currency, int $excludeId = 0): ?object
-    {
-        if (! $contract || ! $date || $amount === null) return null;
-
-        $day = \Carbon\Carbon::parse($date)->toDateString();
-        $q = DB::table('transaction')
-            ->where('contract', $contract)
-            ->whereNull('deletedAt')
-            ->whereRaw('date::date = ?', [$day])
-            ->whereRaw('ROUND(amount::numeric, 2) = ?', [round((float) $amount, 2)]);
-        if ($currency !== null) {
-            $q->where('currency', $currency);
-        }
-        if ($excludeId > 0) {
-            $q->where('id', '!=', $excludeId);
-        }
-
-        return $q->select('id', 'amount', 'date')->orderBy('id')->first();
     }
 
     private function computePoints(?object $program, float $amountNoVat, float $amountRub, float $dsPercent): float
