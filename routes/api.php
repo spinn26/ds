@@ -498,10 +498,14 @@ Route::prefix('v1')->group(function () {
         Route::post('/admin/contracts/duplicates/delete', [\App\Http\Controllers\Api\AdminDataController::class, 'deleteContractDuplicates'])->middleware('permission:contracts,edit');
         Route::get('/admin/contracts/form-data', [\App\Http\Controllers\Api\AdminDataController::class, 'contractFormData']);
         Route::get('/admin/contracts/upload-history', fn () => response()->json([]));
+        // Разбор неверных привязок client (наследие дедуп-склеек): список
+        // контрактов, где ФИО в контракте ≠ имени привязанной карточки.
+        Route::get('/admin/contracts/client-mismatches', [\App\Http\Controllers\Api\AdminDataController::class, 'clientMismatches']);
         Route::post('/admin/contracts', [\App\Http\Controllers\Api\AdminDataController::class, 'storeContract'])->middleware('permission:contracts,edit');
         Route::get('/admin/contracts/{id}', [\App\Http\Controllers\Api\AdminDataController::class, 'contractDetails'])->whereNumber('id');
         Route::put('/admin/contracts/{id}', [\App\Http\Controllers\Api\AdminDataController::class, 'updateContract'])->whereNumber('id')->middleware('permission:contracts,edit');
         Route::delete('/admin/contracts/{id}', [\App\Http\Controllers\Api\AdminDataController::class, 'deleteContract'])->whereNumber('id')->middleware('permission:contracts,edit');
+        Route::post('/admin/contracts/{id}/relink-client', [\App\Http\Controllers\Api\AdminDataController::class, 'relinkContractClient'])->whereNumber('id')->middleware('permission:contracts,edit');
         Route::get('/admin/contracts/{id}/history', [\App\Http\Controllers\Api\AdminDataController::class, 'contractHistory'])->whereNumber('id');
 
         // Shared import progress polling — frontend генерирует tracker id,

@@ -127,6 +127,7 @@ const routes = [
             { path: 'hidden-clients', component: () => import('../pages/Admin/HiddenClients.vue') },
             { path: 'contracts', component: () => import('../pages/Admin/ContractManager.vue') },
             { path: 'contracts/duplicates', component: () => import('../pages/Admin/ContractDuplicates.vue') },
+            { path: 'contracts/client-mismatches', component: () => import('../pages/Admin/ClientMismatches.vue') },
             { path: 'code-quality', component: () => import('../pages/Admin/CodeQuality.vue') },
             { path: 'management-review', component: () => import('../pages/Admin/ManagementReview.vue') },
             { path: 'acceptance', component: () => import('../pages/Admin/Acceptance.vue') },

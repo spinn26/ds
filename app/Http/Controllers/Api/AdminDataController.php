@@ -1436,6 +1436,99 @@ class AdminDataController extends Controller
         return response()->json(['message' => 'Клиент обновлён']);
     }
 
+    /**
+     * Контракты с неверной привязкой client: ФИО в контракте (clientName) не
+     * совпадает с именем привязанной ЖИВОЙ карточки (наследие дедуп-склеек,
+     * когда contract.client уехал на чужого). Для каждого — кандидаты: живые
+     * карточки с personName = clientName. Однозначные (ровно 1 кандидат)
+     * перепривязываются в один клик; неоднозначные/без совпадения — вручную.
+     */
+    public function clientMismatches(Request $request): JsonResponse
+    {
+        $rows = DB::table('contract as ct')
+            ->join('client as cur', function ($j) {
+                $j->on('cur.id', '=', 'ct.client')->whereNull('cur.dateDeleted');
+            })
+            ->whereNull('ct.deletedAt')
+            ->whereNotNull('ct.clientName')
+            ->whereRaw("btrim(ct.\"clientName\") <> ''")
+            ->whereRaw('btrim(lower(ct."clientName")) <> btrim(lower(cur."personName"))')
+            ->orderByDesc('ct.id')
+            ->get([
+                'ct.id', 'ct.number', 'ct.clientName', 'ct.consultantName', 'ct.productName',
+                'ct.client as currentClientId', 'cur.personName as currentClientName',
+            ]);
+
+        // Кандидаты батчем: живые карточки с ФИО = clientName (case-insensitive).
+        $names = $rows->pluck('clientName')->map(fn ($n) => mb_strtolower(trim((string) $n)))->unique()->values();
+        $candByName = collect();
+        if ($names->isNotEmpty()) {
+            $ph = implode(',', array_fill(0, $names->count(), '?'));
+            $candidates = DB::table('client')
+                ->whereNull('dateDeleted')
+                ->whereRaw("btrim(lower(\"personName\")) IN ($ph)", $names->all())
+                ->get(['id', 'personName', 'email', 'phone']);
+            $candByName = $candidates->groupBy(fn ($c) => mb_strtolower(trim((string) $c->personName)));
+        }
+
+        $data = $rows->map(function ($r) use ($candByName) {
+            $key = mb_strtolower(trim((string) $r->clientName));
+            $cands = ($candByName->get($key) ?? collect())->map(fn ($c) => [
+                'id' => $c->id, 'personName' => $c->personName,
+                'email' => $c->email, 'phone' => $c->phone,
+            ])->values();
+
+            return [
+                'id' => $r->id,
+                'number' => $r->number,
+                'clientName' => $r->clientName,
+                'consultantName' => $r->consultantName,
+                'productName' => $r->productName,
+                'currentClientId' => $r->currentClientId,
+                'currentClientName' => $r->currentClientName,
+                'candidates' => $cands,
+                'candidateCount' => $cands->count(),
+            ];
+        });
+
+        return response()->json([
+            'data' => $data->values(),
+            'total' => $data->count(),
+            'unique' => $data->where('candidateCount', 1)->count(),
+            'ambiguous' => $data->filter(fn ($d) => $d['candidateCount'] > 1)->count(),
+            'noMatch' => $data->where('candidateCount', 0)->count(),
+        ]);
+    }
+
+    /**
+     * Перепривязать контракт к выбранной живой карточке клиента + выровнять
+     * clientName. Деньги не затрагивает (комиссии по консультанту, не клиенту).
+     */
+    public function relinkContractClient(Request $request, int $id): JsonResponse
+    {
+        $data = $request->validate(['client' => ['required', 'integer']]);
+
+        $contract = DB::table('contract')->where('id', $id)->first();
+        if (! $contract) {
+            return response()->json(['message' => 'Контракт не найден'], 404);
+        }
+        $client = DB::table('client')->where('id', $data['client'])->whereNull('dateDeleted')->first();
+        if (! $client) {
+            return response()->json(['message' => 'Карточка клиента не найдена или удалена'], 422);
+        }
+
+        DB::table('contract')->where('id', $contract->id)->update([
+            'client' => $client->id,
+            'clientName' => $client->personName,
+        ]);
+
+        Audit::log('relink-client', 'contract', $id, [
+            'from' => $contract->client, 'to' => $client->id,
+        ]);
+
+        return response()->json(['message' => 'Контракт перепривязан к клиенту']);
+    }
+
     public function deleteClient(Request $request, int $id): JsonResponse
     {
         $request->validate([

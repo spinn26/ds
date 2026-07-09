@@ -168,6 +168,7 @@ const baseMenuItems = [
       { to: '/admin/anomalies', title: 'Аномалии', icon: 'mdi-alert-decagram' },
       { to: '/admin/hidden-clients', title: 'Скрытые клиенты', icon: 'mdi-account-off' },
       { to: '/admin/contracts/duplicates', title: 'Дубли контрактов', icon: 'mdi-content-duplicate' },
+      { to: '/admin/contracts/client-mismatches', title: 'Разбор привязок клиентов', icon: 'mdi-account-switch' },
       { to: '/admin/cohorts', title: 'Когорты', icon: 'mdi-chart-line' },
     ],
   },
