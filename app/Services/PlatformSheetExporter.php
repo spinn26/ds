@@ -27,14 +27,16 @@ class PlatformSheetExporter
         return [
             'contracts' => [
                 'title' => 'Контракты',
-                'headers' => ['ID', 'Номер контракта', 'Сумма', 'Валюта', 'Название программы',
-                    'Название продукта', 'Название поставщика', 'Свойство', 'Срок контракта',
-                    'Срок выплаты КВ', 'ФИО клиента', 'ФИО консультанта', 'Дата создания',
-                    'Дата открытия', 'Дата закрытия', 'Дата удаления'],
+                'headers' => ['ID', 'Номер контракта', 'ID контрагента', 'Сумма', 'Валюта',
+                    'Название программы', 'Название продукта', 'Название поставщика', 'Свойство',
+                    'Срок контракта', 'Срок выплаты КВ', 'Название статуса', 'Название риск-профиля',
+                    'Страна', 'ФИО клиента', 'ФИО консультанта', 'Дата создания', 'Дата открытия',
+                    'Дата закрытия', 'Дата изменения', 'Дата удаления'],
                 'changedColumn' => 'c."changedAt"',
                 'sql' => <<<'SQL'
                     SELECT c.id,
                         c.number,
+                        c."counterpartyContractId" AS counterparty_id,
                         c.ammount,
                         cur."currencyName" AS currency,
                         COALESCE(prc.name, c."programName") AS program,
@@ -43,14 +45,20 @@ class PlatformSheetExporter
                         prop.title AS property,
                         c.term,
                         tx.score AS kv_year,
+                        cs.name AS status_name,
+                        rp.name AS risk_profile,
+                        ctry."countryNameRu" AS country,
                         c."clientName",
                         c."consultantName",
-                        c."createDate", c."openDate", c."closeDate", c."deletedAt"
+                        c."createDate", c."openDate", c."closeDate", c."changedAt", c."deletedAt"
                     FROM contract c
                     LEFT JOIN currency cur ON cur.id = c.currency
                     LEFT JOIN program pr ON pr.id = c.program
                     LEFT JOIN products_catalog pc ON pc.legacy_product_id = c.product
                     LEFT JOIN programs_catalog prc ON prc.legacy_program_id = c.program
+                    LEFT JOIN "contractStatus" cs ON cs.id = c.status
+                    LEFT JOIN "riskProfile" rp ON rp.id = c."riskProfile"
+                    LEFT JOIN country ctry ON ctry.id = c.country
                     LEFT JOIN LATERAL (
                         SELECT t."commissionCalcProperty", t.score
                         FROM transaction t
@@ -99,6 +107,34 @@ class PlatformSheetExporter
                     LEFT JOIN country ctry ON ctry.id = c.country
                     WHERE (:since::timestamp IS NULL OR c."dateChanged" > :since2::timestamp)
                     ORDER BY c.id
+                    SQL,
+            ],
+            // Клиенты, которых НЕ удалось автоматически выровнять по ФИО:
+            // 0 совпадений person по ФИО или 2+ (неоднозначно). Для ручной сверки.
+            'clients_review' => [
+                'title' => 'Клиенты — на проверку',
+                'headers' => ['Айди', 'ФИО клиента (карточка)', 'Текущая person (привязана)',
+                    'Текущая почта', 'Текущий телефон', 'Совпадений по ФИО'],
+                'changedColumn' => 'cl."dateChanged"',
+                'sql' => <<<'SQL'
+                    WITH pc AS (
+                        SELECT btrim(lower("lastName"||' '||"firstName"||' '||coalesce(patronymic,''))) AS nm,
+                               count(*) AS cnt
+                        FROM person
+                        GROUP BY 1
+                    )
+                    SELECT cl.id,
+                        cl."personName" AS card_name,
+                        p."lastName" || ' ' || p."firstName" AS current_person,
+                        p.email, p.phone,
+                        COALESCE(pcnt.cnt, 0) AS name_matches
+                    FROM client cl
+                    LEFT JOIN person p ON p.id = cl.person
+                    LEFT JOIN pc pcnt ON pcnt.nm = btrim(lower(cl."personName"))
+                    WHERE cl."dateDeleted" IS NULL AND cl."personName" IS NOT NULL
+                      AND COALESCE(pcnt.cnt, 0) <> 1
+                      AND (:since::timestamp IS NULL OR cl."dateChanged" > :since2::timestamp)
+                    ORDER BY cl.id
                     SQL,
             ],
         ];
