@@ -554,9 +554,11 @@ class ManualTransactionController extends Controller
         $rate = (float) ($draft->currencyRate ?: 1);
         $amountRub = (float) $draft->amount * $rate;
 
+        // НДС — по дате самой транзакции (draft.date), не now(): превью должно
+        // совпадать с фактическим начислением по ставке на дату сделки.
         $vat = DB::table('vat')
-            ->where('dateFrom', '<=', now())
-            ->where('dateTo', '>=', now())
+            ->where('dateFrom', '<=', $draft->date)
+            ->where('dateTo', '>=', $draft->date)
             ->first();
         $vatPercent = (float) ($vat->value ?? 0);
         $amountNoVat = $amountRub / (1 + $vatPercent / 100);
@@ -777,23 +779,16 @@ class ManualTransactionController extends Controller
         ], true);
     }
 
+    /**
+     * Уровень + стартовый % для превью — делегируем в CommissionCalculator,
+     * чтобы превью считало ТЕМИ ЖЕ правилами, что и факт (максимум
+     * nominalLevel/calculationLevel + стартовый % из настройки). Раньше здесь
+     * был свой расчёт (nominalLevel ?? calculationLevel, хардкод 15), из-за
+     * чего превью расходилось с начислением.
+     */
     private function resolveQual(int $consultantId, ?string $date): array
     {
-        if (! $date) return ['percent' => 15, 'levelId' => null];
-        $startOfMonth = \Carbon\Carbon::parse($date)->startOfMonth()->toDateString();
-
-        $log = DB::table('qualificationLog')
-            ->where('consultant', $consultantId)
-            ->whereNull('dateDeleted')
-            ->where('date', '<', $startOfMonth)
-            ->orderByDesc('date')
-            ->first();
-
-        $levelId = $log?->nominalLevel ?? $log?->calculationLevel ?? null;
-        if (! $levelId) return ['percent' => 15, 'levelId' => null];
-
-        $level = DB::table('status_levels')->where('id', $levelId)->first();
-        return ['percent' => (float) ($level->percent ?? 15), 'levelId' => $level?->id];
+        return $this->calculator->resolveLevelForPreview($consultantId, $date);
     }
 
     /**

@@ -255,10 +255,14 @@ class CommissionCalculator
         $currencyRate = (float) ($tx->currencyRate ?? 1);
         $amountRub = (float) ($tx->amountRUB ?? ((float) ($tx->amount ?? 0) * $currencyRate));
 
-        // НДС
+        // НДС — по ДАТЕ ТРАНЗАКЦИИ, а не now(). При пересчёте старой сделки
+        // после смены ставки НДС база всех комиссий (amountNoVat) должна
+        // считаться по ставке, действовавшей на дату сделки. Закрытые периоды
+        // при этом не пересчитываются (защита period_closures/HISTORICAL_CUTOFF).
+        $vatDate = $tx->date ?? now();
         $vat = DB::table('vat')
-            ->where('dateFrom', '<=', now())
-            ->where('dateTo', '>=', now())
+            ->where('dateFrom', '<=', $vatDate)
+            ->where('dateTo', '>=', $vatDate)
             ->first();
         $vatPercent = (float) ($vat->value ?? 0);
         $amountNoVat = $amountRub / (1 + $vatPercent / 100);
@@ -629,6 +633,30 @@ class CommissionCalculator
      * "текущая" квалификация, например в отчётах). Это единственный
      * вызов без даты в коде.
      */
+    /**
+     * Уровень + стартовый % для ПРЕВЬЮ ручной транзакции — теми же правилами,
+     * что и факт: максимум nominalLevel/calculationLevel по последнему
+     * qualificationLog до месяца сделки (getQualificationLevel), стартовый % —
+     * из настройки commission.startup_percent. Раньше превью брало
+     * nominalLevel ?? calculationLevel и хардкод 15 — расходилось с фактическим
+     * начислением (пункт «предпросмотр ≠ факт»).
+     *
+     * @return array{percent: float, levelId: ?int}
+     */
+    public function resolveLevelForPreview(int $consultantId, ?string $txDate): array
+    {
+        $startup = (float) \App\Models\SystemSetting::value('commission.startup_percent', 15);
+        if (! $txDate) {
+            return ['percent' => $startup, 'levelId' => null];
+        }
+        $level = $this->getQualificationLevel($consultantId, $txDate);
+
+        return [
+            'percent' => $level ? (float) ($level->percent ?? $startup) : $startup,
+            'levelId' => $level?->id,
+        ];
+    }
+
     private function getQualificationLevel(int $consultantId, ?string $txDate = null): ?object
     {
         if ($txDate) {

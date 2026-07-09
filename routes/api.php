@@ -257,10 +257,14 @@ Route::prefix('v1')->group(function () {
 
         Route::get('/clients', [ClientController::class, 'index']);
 
-        // Комментарии к карточке партнёра (Structure.vue)
-        Route::get('/partner-comments/{consultantId}', [\App\Http\Controllers\Api\PartnerCommentsController::class, 'index'])->whereNumber('consultantId');
-        Route::post('/partner-comments', [\App\Http\Controllers\Api\PartnerCommentsController::class, 'store']);
-        Route::delete('/partner-comments/{id}', [\App\Http\Controllers\Api\PartnerCommentsController::class, 'destroy'])->whereNumber('id');
+        // Комментарии к карточке партнёра (Structure.vue) — служебные заметки
+        // staff о партнёрах. Только для сотрудников: партнёрам/инвесторам
+        // закрыто (приватность; ранее было доступно любому авторизованному).
+        Route::middleware(['role:admin,backoffice,support,finance,head,calculations,corrections,education,invest', 'restrict.invest'])->group(function () {
+            Route::get('/partner-comments/{consultantId}', [\App\Http\Controllers\Api\PartnerCommentsController::class, 'index'])->whereNumber('consultantId');
+            Route::post('/partner-comments', [\App\Http\Controllers\Api\PartnerCommentsController::class, 'store']);
+            Route::delete('/partner-comments/{id}', [\App\Http\Controllers\Api\PartnerCommentsController::class, 'destroy'])->whereNumber('id');
+        });
 
         Route::get('/contracts/my', [ContractController::class, 'myContracts']);
         Route::get('/contracts/team', [ContractController::class, 'teamContracts']);

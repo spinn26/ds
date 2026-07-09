@@ -19,10 +19,14 @@ class RevenueExpensesReport extends AbstractReportType
             ->leftJoin('products_catalog as pc', 'pc.legacy_product_id', '=', 'c.product')
             ->whereNull('t.deletedAt')
             ->whereBetween('t.date', [$dateFrom, $dateTo])
+            // «Доход» компании = Доход ДС (commissionsAmountRUB); «Расход» =
+            // валовый оборот по продукту (amountRUB). Ранее графы стояли
+            // наоборот — выручка компании попадала в «Расход» (подтверждено
+            // руководством 09.07.2026).
             ->select(
                 DB::raw('COALESCE(pc.name, c."productName", \'—\') as product'),
-                DB::raw('SUM(t."amountRUB") as income'),
-                DB::raw('SUM(t."commissionsAmountRUB") as expense')
+                DB::raw('SUM(t."commissionsAmountRUB") as income'),
+                DB::raw('SUM(t."amountRUB") as expense')
             )
             ->groupBy(DB::raw('COALESCE(pc.name, c."productName", \'—\')'))
             ->orderBy('product')
