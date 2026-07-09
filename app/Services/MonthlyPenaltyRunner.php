@@ -389,8 +389,14 @@ class MonthlyPenaltyRunner
                     'date' => $monthEnd,
                     'savingDate' => now(),
                     'gap' => $gapBranchKey !== false,
+                    // Показанный % отрыва — от той же базы, что и РЕШЕНИЕ об
+                    // отрыве (detachmentMultipliers: share = branchVolume / Σ
+                    // веток). База = ГП − ЛП (Σ веток), ЛП исключается — per
+                    // spec «Отрыв» (docs: 70% от ГП − ЛП). Раньше делили на
+                    // totalGroupVolume (с ЛП) → ветка могла быть >70% по
+                    // решению и <70% по показанному.
                     'gapValuePercentage' => $gapBranchKey !== false
-                        ? round($branchVolumes[$gapBranchKey] / max($totalGroupVolume, 0.0001) * 100, 2)
+                        ? round($branchVolumes[$gapBranchKey] / max(array_sum($branchVolumes), 0.0001) * 100, 2)
                         : null,
                     'gapValue' => $gapBranchKey !== false ? $branchVolumes[$gapBranchKey] : null,
                     'branchWithGap' => $gapBranchKey !== false ? $gapBranchKey : null,
