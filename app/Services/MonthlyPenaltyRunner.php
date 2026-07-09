@@ -214,6 +214,13 @@ class MonthlyPenaltyRunner
             }
         }
 
+        // Denorm-поля транзакций (profitRUB/netRevenueRUB) отстают после
+        // штрафов — пересобираем их за месяц из актуальных commission-строк,
+        // чтобы отчёты (они читают denorm) были верны. История не трогается.
+        if ($applyWrite && ! \App\Services\CommissionCalculator::isHistorical($dateMonth)) {
+            $this->recomputeTransactionDerivedFields($dateMonth);
+        }
+
         return [
             'year' => $year,
             'month' => $month,
@@ -223,6 +230,48 @@ class MonthlyPenaltyRunner
             'affected' => $affectedTotal,
             'consultants' => $stats,
         ];
+    }
+
+    /**
+     * Пересобрать denorm-поля транзакций (profitRUB/netRevenueRUB/netRevenueUSD)
+     * за месяц из АКТУАЛЬНЫХ commission-строк. Нужно после применения штрафов:
+     * штраф отрыва/ОП уменьшает commission.amountRUB, но эти поля пишутся один
+     * раз при расчёте (CommissionCalculator) и иначе «отстают». Раздел
+     * транзакций считает их live и не зависит от этого, но отчёты читают
+     * именно denorm. Формула — как в калькуляторе:
+     *   profitRUB     = commissionsAmountRUB (Доход ДС без НДС) − Σ комиссий;
+     *   netRevenueRUB = amountNoVat − Σ комиссий (amountNoVat = Доход ДС × 100/%ДС);
+     *   netRevenueUSD — пропорционально (сохраняем подразумеваемый курс).
+     * Дедуп цепочки по (transaction, consultant, chainOrder) — как в разделе.
+     * Выплаты/commission НЕ трогаем — только производные поля.
+     */
+    private function recomputeTransactionDerivedFields(string $dateMonth): void
+    {
+        DB::statement(<<<'SQL'
+            WITH chain AS (
+                SELECT transaction AS tx, SUM(a) AS chain_sum FROM (
+                    SELECT DISTINCT ON (cm.transaction, cm.consultant, cm."chainOrder")
+                           cm.transaction, cm."amountRUB" AS a
+                    FROM commission cm
+                    WHERE cm."deletedAt" IS NULL
+                      AND cm.transaction IN (
+                          SELECT id FROM transaction WHERE "dateMonth" = ? AND "deletedAt" IS NULL
+                      )
+                    ORDER BY cm.transaction, cm.consultant, cm."chainOrder", cm.id DESC
+                ) d GROUP BY transaction
+            )
+            UPDATE transaction t SET
+                "profitRUB" = round(t."commissionsAmountRUB" - ch.chain_sum, 2),
+                "netRevenueRUB" = CASE WHEN t."dsCommissionPercentage" > 0
+                    THEN round(t."commissionsAmountRUB" * 100.0 / t."dsCommissionPercentage" - ch.chain_sum, 2)
+                    ELSE t."netRevenueRUB" END,
+                "netRevenueUSD" = CASE WHEN t."netRevenueRUB" <> 0 AND t."dsCommissionPercentage" > 0
+                    THEN round((t."commissionsAmountRUB" * 100.0 / t."dsCommissionPercentage" - ch.chain_sum)
+                               * t."netRevenueUSD" / t."netRevenueRUB", 2)
+                    ELSE t."netRevenueUSD" END
+            FROM chain ch
+            WHERE t.id = ch.tx AND t."dateMonth" = ? AND t."deletedAt" IS NULL
+        SQL, [$dateMonth, $dateMonth]);
     }
 
     /**
