@@ -662,6 +662,36 @@
       </v-card>
     </v-dialog>
 
+    <!-- Ошибки фиксации: что именно не удалось и почему. -->
+    <v-dialog v-model="fixErrorsDialog" max-width="640">
+      <v-card>
+        <v-card-title class="d-flex align-center ga-2">
+          <v-icon color="warning">mdi-alert-circle-outline</v-icon>
+          Не зафиксировано: {{ fixErrors.length }}
+          <v-spacer />
+          <v-btn icon="mdi-close" variant="text" size="small" @click="fixErrorsDialog = false" />
+        </v-card-title>
+        <v-card-text>
+          <div class="text-body-2 text-medium-emphasis mb-2">
+            Эти транзакции не сохранились. Исправьте причину и повторите фиксацию.
+          </div>
+          <v-list density="compact" class="pa-0">
+            <v-list-item v-for="err in fixErrors" :key="err.id" class="px-2">
+              <template #prepend>
+                <v-icon color="error" size="small">mdi-close-circle-outline</v-icon>
+              </template>
+              <v-list-item-title class="text-body-2 font-weight-medium">{{ err.label }}</v-list-item-title>
+              <v-list-item-subtitle class="text-error" style="white-space:normal">{{ err.reason }}</v-list-item-subtitle>
+            </v-list-item>
+          </v-list>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn color="primary" variant="flat" @click="fixErrorsDialog = false">Понятно</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <v-snackbar v-model="snack.open" :color="snack.color" :timeout="snack.action ? 12000 : 4000">
       {{ snack.text }}
       <template v-if="snack.action" #actions>
@@ -930,6 +960,21 @@ async function loadContracts() {
 const drafts = ref([]);
 const adding = ref(false);
 const fixing = ref(false);
+// Детали ошибок фиксации (что именно не удалось и почему) — показываем списком
+// в диалоге, а не только счётчиком «Ошибки: N».
+const fixErrors = ref([]);
+const fixErrorsDialog = ref(false);
+
+// Человекочитаемая подпись черновика по id (номер · клиент · сумма).
+function draftLabelById(id) {
+  const d = drafts.value.find(x => x.id === id);
+  if (!d) return `Черновик #${id}`;
+  const parts = [];
+  if (d.number || d.contractNumber) parts.push(d.number || d.contractNumber);
+  if (d.clientName) parts.push(d.clientName);
+  if (d.amount) parts.push(fmtAmt(d.amount));
+  return parts.length ? parts.join(' · ') : `Черновик #${id}`;
+}
 const selectedDraftIds = ref([]);
 
 // Тогглы убраны (per user request) — все колонки видимы по умолчанию.
@@ -1163,7 +1208,16 @@ async function fixAll() {
         : null;
       notify(`Зафиксировано: ${data.fixed.length}`, 'success', action);
     }
-    if (data.errors?.length) notify(`Ошибки: ${data.errors.length}`, 'warning');
+    if (data.errors?.length) {
+      // Показываем ЧТО именно не удалось: строка (номер·клиент·сумма) + причина.
+      fixErrors.value = data.errors.map(e => ({
+        id: e.id,
+        label: draftLabelById(e.id),
+        reason: e.reason || 'Неизвестная ошибка',
+      }));
+      fixErrorsDialog.value = true;
+      notify(`Не зафиксировано: ${data.errors.length}. Смотрите список ошибок.`, 'warning');
+    }
     await loadDrafts();
     if (data.fixed?.length) loadLog();
   } catch (e) {
