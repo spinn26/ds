@@ -86,7 +86,8 @@ class ClientController extends Controller
             ? DB::table('person')->whereIn('id', $personIds)->get()->keyBy('id')
             : collect();
 
-        $cityIds = $persons->pluck('city')->filter()->unique();
+        // City-коды берём и из client (собственные), и из person (фолбэк).
+        $cityIds = $persons->pluck('city')->merge($clientRows->pluck('city'))->filter()->unique();
         $cities = $cityIds->isNotEmpty()
             ? DB::table('city')->whereIn('id', $cityIds)->pluck('cityNameRu', 'id')
             : collect();
@@ -111,17 +112,21 @@ class ClientController extends Controller
 
         $items = $clientRows->map(function ($c) use ($persons, $cities, $productsByClient) {
             $personData = $c->person ? ($persons[$c->person] ?? null) : null;
-            $cityName = ($personData && ($personData->city ?? null))
-                ? ($cities[$personData->city] ?? null)
+            // Клиент владеет своими контактами; person — исторический фолбэк.
+            $cityCode = $c->city ?? ($personData->city ?? null);
+            // Legacy person.city — id города (резолвим через таблицу city),
+            // но форма клиента сохраняет НАЗВАНИЕ (Cyrillic) — тогда берём как есть.
+            $cityName = $cityCode
+                ? (is_numeric($cityCode) ? ($cities[$cityCode] ?? null) : $cityCode)
                 : null;
 
             return [
                 'id' => $c->id,
                 'personName' => $c->personName,
-                'birthDate' => $personData?->birthDate ?? null,
+                'birthDate' => $c->birthDate ?? $personData?->birthDate ?? null,
                 'city' => $cityName,
-                'phone' => $personData?->phone ?? null,
-                'email' => $personData?->email ?? null,
+                'phone' => $c->phone ?? $personData?->phone ?? null,
+                'email' => $c->email ?? $personData?->email ?? null,
                 'active' => (bool) $c->active,
                 'products' => $productsByClient[$c->id] ?? [],
             ];

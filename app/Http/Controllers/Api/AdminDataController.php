@@ -1354,6 +1354,11 @@ class AdminDataController extends Controller
                 'personName' => $personName,
                 'consultant' => $data['consultant'],
                 'comment' => $data['comment'] ?? null,
+                // Клиент владеет своими контактами (не зависит от person-FK).
+                'email' => $data['email'] ?? null,
+                'phone' => $data['phone'] ?? null,
+                'birthDate' => $data['birthDate'] ?? null,
+                'city' => $data['city'] ?? null,
                 'dateCreated' => now(),
             ]);
         });
@@ -1400,6 +1405,12 @@ class AdminDataController extends Controller
                 'personName' => $personName,
                 'consultant' => $data['consultant'],
                 'comment' => $data['comment'] ?? null,
+                // Клиент владеет своими контактами — источник истины карточки.
+                'email' => $data['email'] ?? null,
+                'phone' => $data['phone'] ?? null,
+                'birthDate' => $data['birthDate'] ?? null,
+                'city' => $data['city'] ?? null,
+                'dateChanged' => now(),
             ]);
         });
 
@@ -1550,10 +1561,11 @@ class AdminDataController extends Controller
                     'contractCount' => $contractCounts[$c->id] ?? 0,
                     'isPartner' => $c->person ? isset($personPartners[$c->person]) : false,
                     'comment' => $c->comment,
-                    'email' => $person?->email ?? null,
-                    'phone' => $person?->phone ?? null,
-                    'birthDate' => $person?->birthDate ?? null,
-                    'city' => $person?->city ?? null,
+                    // Клиент владеет контактами; person — историч. фолбэк.
+                    'email' => $c->email ?? $person?->email ?? null,
+                    'phone' => $c->phone ?? $person?->phone ?? null,
+                    'birthDate' => $c->birthDate ?? $person?->birthDate ?? null,
+                    'city' => $c->city ?? $person?->city ?? null,
                 ];
             });
 

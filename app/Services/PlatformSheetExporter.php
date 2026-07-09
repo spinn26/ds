@@ -78,7 +78,9 @@ class PlatformSheetExporter
                 'sql' => <<<'SQL'
                     SELECT cl.id, cl."dateCreated", cl."dateDeleted", cl."dateChanged",
                         cl."personName" AS client_name, cl."consultantName",
-                        p.email, p.phone, cl.source
+                        COALESCE(cl.email, p.email) AS email,
+                        COALESCE(cl.phone, p.phone) AS phone,
+                        cl.source
                     FROM client cl
                     LEFT JOIN person p ON p.id = cl.person
                     WHERE (:since::timestamp IS NULL OR cl."dateChanged" > :since2::timestamp)
