@@ -1412,6 +1412,21 @@ class AdminDataController extends Controller
                 'city' => $data['city'] ?? null,
                 'dateChanged' => now(),
             ]);
+
+            // ФИО клиента денормализовано в contract.clientName (историческая
+            // схема). Без синхронизации исправление опечатки в карточке не
+            // отражается в контрактах — там остаётся старое имя (жалоба Л.Л.).
+            // Обновляем только те контракты, где имя СОВПАДАЛО со старым именем
+            // карточки — это настоящее переименование. Контракты с иным именем
+            // НЕ трогаем: у части клиентов contract.client указывает на чужую
+            // карточку (осколки дедупа), и слепая замена затёрла бы верное имя
+            // чужим. Такие случаи чинятся отдельно (перепривязкой client).
+            if ($personName !== $client->personName) {
+                DB::table('contract')
+                    ->where('client', $client->id)
+                    ->where('clientName', $client->personName)
+                    ->update(['clientName' => $personName]);
+            }
         });
 
         Audit::log('update', 'client', $id, [
