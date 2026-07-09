@@ -12,6 +12,17 @@ use Illuminate\Support\Facades\Schedule;
 // Schedule::command('partners:check-statuses')->dailyAt('02:00');
 // Schedule::command('finalize:apply')->dailyAt('04:00')->withoutOverlapping(60)->runInBackground();
 
+// Постоянная выгрузка платформы в Google-таблицу (Контракты/Клиенты/
+// Консультанты) — инкремент по changedAt (upsert по ID). Это НЕ расчёт, а
+// зеркало данных, поэтому под запрет авто-пересчётов не попадает. Запускается,
+// только если заданы google.sheets.export_id + google.sa.credentials_path
+// (иначе команда просто завершится с ошибкой в логе). withoutOverlapping —
+// чтобы длинный первый full-прогон не наложился на следующий тик.
+Schedule::command('sheets:export-platform')
+    ->everyThirtyMinutes()
+    ->withoutOverlapping(25)
+    ->runInBackground();
+
 // 1-го числа каждого месяца в 00:00 — копирование курсов валют с прошлого
 // месяца как заглушка, чтобы расчёты платформы не падали (per spec
 // ✅Справочники для расчёта транзакций §2.1 шаг 1).

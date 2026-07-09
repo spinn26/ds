@@ -25,6 +25,8 @@ class ApiSettingsService
         'google.sheets.contracts_id'   => ['group' => 'google', 'label' => 'ID таблицы «Импорт контрактов»', 'hint' => 'Используется как дефолт в /manage/contracts/upload', 'secret' => false, 'envFallback' => null],
         'google.sheets.transactions_id' => ['group' => 'google', 'label' => 'ID таблицы «Импорт транзакций»', 'hint' => 'Используется как дефолт в /manage/transactions/import', 'secret' => false, 'envFallback' => null],
         'google.sheets.reference_id'   => ['group' => 'google', 'label' => 'ID таблицы «Справочники»', 'hint' => 'Необязательно — для общих справочников', 'secret' => false, 'envFallback' => null],
+        'google.sheets.export_id'      => ['group' => 'google', 'label' => 'ID таблицы «Выгрузка платформы»', 'hint' => 'Куда выгружаются вкладки Контракты/Клиенты/Консультанты (sheets:export-platform). ID из URL таблицы.', 'secret' => false, 'envFallback' => 'GOOGLE_SHEETS_EXPORT_ID'],
+        'google.sa.credentials_path'   => ['group' => 'google', 'label' => 'Путь к JSON сервис-аккаунта (запись)', 'hint' => 'Абсолютный путь на сервере к ключу service account с правом «Редактор» на таблицу выгрузки. Нужен для ЗАПИСИ.', 'secret' => false, 'envFallback' => 'GOOGLE_SA_CREDENTIALS_PATH'],
         'google.places.api_key'        => ['group' => 'google', 'label' => 'Google Places API Key', 'hint' => 'Ключ GCP с включённым Places API (New) + биллингом. Используется для подсказок городов мира в профиле (POST places:autocomplete, languageCode=ru). Может быть тем же проектом, что и Sheets, но с активированным Places API.', 'secret' => true, 'envFallback' => 'GOOGLE_PLACES_API_KEY'],
 
         // Telegram

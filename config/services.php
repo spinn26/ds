@@ -42,6 +42,10 @@ return [
     'google_sheets' => [
         'spreadsheet_id' => env('GOOGLE_SHEETS_SPREADSHEET_ID'),
         'api_key' => env('GOOGLE_SHEETS_API_KEY'),
+        // Выгрузка платформа→таблица (sheets:export-platform): id целевой
+        // таблицы + путь к JSON сервис-аккаунта с правом записи.
+        'export_id' => env('GOOGLE_SHEETS_EXPORT_ID'),
+        'sa_credentials_path' => env('GOOGLE_SA_CREDENTIALS_PATH'),
     ],
 
     // Insmart integration (per spec ✅Инсмарт.md).
