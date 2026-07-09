@@ -38,19 +38,35 @@ class GoogleSheetsWriter
         $this->credentialsPath = $credentialsPath;
     }
 
-    /** Ленивая загрузка ключа сервисного аккаунта. */
+    /**
+     * Ленивая загрузка ключа сервисного аккаунта. Приоритет:
+     *   1) JSON, вставленный прямо в настройку google.sa.credentials_json (UI);
+     *   2) файл по пути google.sa.credentials_path / конструктору / storage.
+     */
     private function sa(): array
     {
         if ($this->sa !== null) {
             return $this->sa;
         }
+
+        // 1) JSON из настройки (вставлен в /admin/integrations, хранится зашифрованно).
+        $inline = app(ApiSettingsService::class)->get('google.sa.credentials_json');
+        if (is_string($inline) && trim($inline) !== '') {
+            $json = json_decode($inline, true);
+            if (is_array($json) && ! empty($json['client_email']) && ! empty($json['private_key'])) {
+                return $this->sa = $json;
+            }
+            throw new RuntimeException('google.sa.credentials_json задан, но это не валидный service-account JSON (нужны client_email + private_key).');
+        }
+
+        // 2) Файл по пути.
         $path = $this->credentialsPath
             ?: (app(ApiSettingsService::class)->get('google.sa.credentials_path')
                 ?: config('services.google_sheets.sa_credentials_path')
                 ?: storage_path('app/google-sa.json'));
 
         if (! is_file($path)) {
-            throw new RuntimeException("Service-account JSON не найден: {$path}");
+            throw new RuntimeException("Ключ сервис-аккаунта не задан: ни google.sa.credentials_json (вставка JSON в интеграции), ни файл {$path}.");
         }
         $json = json_decode((string) file_get_contents($path), true);
         if (! is_array($json) || empty($json['client_email']) || empty($json['private_key'])) {
