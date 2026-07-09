@@ -774,8 +774,8 @@ async function saveContract() {
   saving.value = true;
   try {
     const payload = { ...form.value };
-    const savedStatus = form.value.status;
     const wasEditing = !!editingId.value;
+    const savedId = editingId.value;
     if (editingId.value) {
       await api.put(`/admin/contracts/${editingId.value}`, payload);
       notify('Контракт обновлён');
@@ -785,11 +785,14 @@ async function saveContract() {
     }
     editOpen.value = false;
     await loadData();
-    // Если активен фильтр «Статус» и он не совпадает с новым статусом контракта —
-    // контракт «исчезнет» из текущей выборки (не потеря данных, а фильтр).
-    // Предупреждаем, чтобы оператор не решил, что контракт пропал.
-    if (wasEditing && statusFilter.value && statusFilter.value !== savedStatus) {
-      notify('Контракт сохранён, но скрыт активным фильтром «Статус». Сбросьте фильтр, чтобы увидеть его.', 'warning');
+    // Контракт «исчезает» из списка не из-за потери данных, а потому что после
+    // правки он больше не проходит активные фильтры (статус / прогноз активации —
+    // при переводе в «Активирован» прогноз очищается / период). Проверяем прямо:
+    // если сохранённого контракта нет в текущей выборке при активных фильтрах —
+    // предупреждаем, чтобы оператор не решил, что он пропал.
+    if (wasEditing && savedId && activeFilterCount.value > 0
+        && !items.value.some(i => i.id === savedId)) {
+      notify('Контракт сохранён, но скрыт активными фильтрами (статус / прогноз активации / период). Сбросьте фильтры, чтобы увидеть его.', 'warning');
     }
   } catch (e) {
     notify(validationMessage(e, 'Не удалось сохранить контракт'), 'error');
