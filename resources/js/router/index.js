@@ -128,6 +128,7 @@ const routes = [
             { path: 'contracts', component: () => import('../pages/Admin/ContractManager.vue') },
             { path: 'contracts/duplicates', component: () => import('../pages/Admin/ContractDuplicates.vue') },
             { path: 'code-quality', component: () => import('../pages/Admin/CodeQuality.vue') },
+            { path: 'management-review', component: () => import('../pages/Admin/ManagementReview.vue') },
             { path: 'acceptance', component: () => import('../pages/Admin/Acceptance.vue') },
             { path: 'requisites', component: () => import('../pages/Admin/Requisites.vue') },
             { path: 'transfers', component: () => import('../pages/Admin/Transfers.vue') },

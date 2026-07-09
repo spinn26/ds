@@ -1,7 +1,7 @@
 <template>
   <div class="pa-4">
     <PageHeader title="Качество кода"
-      subtitle="Полный аудит прод-кодовой базы (5 подсистем) + статус исправлений. Обновлено 08.07.2026." />
+      subtitle="Полный аудит прод-кодовой базы (5 подсистем) + аудит данных каталога продуктов + статус исправлений. Обновлено 09.07.2026." />
 
     <!-- Сводка -->
     <v-row class="mb-2" dense>
@@ -123,6 +123,7 @@ const catIconMap = {
   'Бизнес-логика (деньги)': 'mdi-calculator-variant', 'Frontend (Vue)': 'mdi-vuejs',
   'БД и модели': 'mdi-database', 'Деньги · ждут финансов': 'mdi-cash-alert',
   'Импорт транзакций': 'mdi-file-import', 'Инфраструктура': 'mdi-cog-sync',
+  'Данные · каталог продуктов': 'mdi-package-variant-closed',
 };
 function catIcon(c) { return catIconMap[c] || 'mdi-file-code'; }
 
@@ -335,6 +336,24 @@ const openFindings = [
     file: 'app/** (Pint)',
     problem: 'Косметика (отступы/пробелы), зашумляет диффы.',
     recommendation: 'Прогнать vendor/bin/pint отдельным коммитом + pint --test в CI.' },
+
+  // Данные — каталог продуктов (аудит БД 09.07.2026)
+  { id: 'DATA-1', severity: 'medium', category: 'Данные · каталог продуктов', title: 'Флаги active/visibility каталога устарели относительно реальности',
+    file: 'products_catalog / programs_catalog',
+    problem: '1352 контракта, созданных в 2026, привязаны к программам с active=false в каталоге; 44 из 65 продуктов помечены неактивными. Каталог заполнили один раз (майский аудит) и он не догоняет жизнь — цифры активности вводят в заблуждение.',
+    recommendation: 'Пересобрать active из фактического использования (есть контракты за последние N месяцев → активно), отдельной командой-синком.' },
+  { id: 'DATA-2', severity: 'medium', category: 'Данные · каталог продуктов', title: '«ИИ ДС»: продукт живых контрактов без legacy-якоря',
+    file: 'contract.productName = «ИИ ДС» (10 контрактов)',
+    problem: 'Имя продукта есть на 10 живых контрактах, но его нет ни в products_catalog, ни в legacy product — бэкфилл каталога его пропускает (нечего привязать). Не фильтруется/не ведётся в UI.',
+    recommendation: 'Решить вручную: к какому legacy-продукту отнести (переименование в контрактах) или завести новый продукт с нуля.' },
+  { id: 'DATA-3', severity: 'low', category: 'Данные · каталог продуктов', title: 'has_red — шумный импортный артефакт, не сигнал деактивации',
+    file: 'programs_catalog.has_red',
+    problem: '36 red-программ активны, 26 red видны резиденту — но среди них ядровые ГГА-линейки (ВИП, Азбука защиты, Защита +, Золотая Пора). Трактовать red как «выключить» (предположение майского аудита) нельзя.',
+    recommendation: 'Не завязывать UI/деактивацию на has_red; переосмыслить флаг как «на ревью» или убрать.' },
+  { id: 'DATA-4', severity: 'low', category: 'Данные · каталог продуктов', title: 'Программы: видимы резиденту, но неактивны',
+    file: 'programs_catalog (visible_to_resident AND NOT active)',
+    problem: '6 программ помечены visible_to_resident=true при active=false — витрина показывает выключенные позиции.',
+    recommendation: 'Синхронизировать: невидимость для выключенных, либо активировать, если реально продаются.' },
 ];
 
 // ── ИСПРАВЛЕНО в этой сессии (08.07.2026) ──
@@ -381,13 +400,16 @@ const fixedFindings = [
   { id: 'FX-14', category: 'БД и модели', title: 'InSmart июнь: перепутанные ФИО клиентов',
     problem: 'Дедуп-по-номеру перезаписал ФИО чужими; 29/45 июньских.',
     recommendation: 'Восстановлено по карте ext→ФИО (repair-june-client-names).' },
+  { id: 'FX-15', category: 'Данные · каталог продуктов', title: 'Каталог не покрывал продаваемые продукты (13 линеек)',
+    problem: '13 линеек на ~1100 живых контрактов (ОСАГО/Медицинское/Ипотека/ВЗР/Имущество/Мини КАСКО Inssmart, ITI Capital, ICN, IPO, СПФК, «Второе мнение», «Резиденство и гражданство», «Юр. сопровождение») были только в legacy product + в contract.productName, но отсутствовали в products_catalog → не управлялись/не фильтровались через UI.',
+    recommendation: 'Заведены в products_catalog с legacy_product_id командой products:backfill-catalog (идемпотентно, дубли legacy схлопнуты, active=true, витрина off). Прогнано на локали и проде. Осталась сирота «ИИ ДС» (DATA-2).' },
 ];
 
 const view = ref('open');
 const filterCategory = ref([]);
 const search = ref('');
 
-const categories = ['Безопасность', 'Контроллеры / API', 'Бизнес-логика (деньги)', 'Frontend (Vue)', 'БД и модели', 'Деньги · ждут финансов', 'Импорт транзакций', 'Инфраструктура'];
+const categories = ['Безопасность', 'Контроллеры / API', 'Бизнес-логика (деньги)', 'Frontend (Vue)', 'БД и модели', 'Деньги · ждут финансов', 'Импорт транзакций', 'Инфраструктура', 'Данные · каталог продуктов'];
 
 const allOpen = openFindings.map(f => ({ ...f, status: 'open' }));
 const allFixed = fixedFindings.map(f => ({ ...f, status: 'fixed', severity: 'low' }));

@@ -218,6 +218,7 @@ const baseMenuItems = [
       { to: '/admin/menu-builder', title: 'Конструктор меню', icon: 'mdi-menu' },
       { to: '/admin/monitoring', title: 'Мониторинг', icon: 'mdi-pulse' },
       { to: '/admin/code-quality', title: 'Качество кода', icon: 'mdi-code-tags-check' },
+      { to: '/admin/management-review', title: 'На согласование', icon: 'mdi-gavel' },
     ],
   },
 ];
