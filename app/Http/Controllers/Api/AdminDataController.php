@@ -1529,6 +1529,83 @@ class AdminDataController extends Controller
         return response()->json(['message' => 'Контракт перепривязан к клиенту']);
     }
 
+    /**
+     * Завести карточку клиента из ФИО контракта и привязать. Для контрактов,
+     * где верного клиента как записи нет вовсе (инвест-сделки Axevil/РАНКС/…
+     * заводились только именем на контракте, а client-FK уехал на чужого).
+     * Переиспользуем существующую person с тем же ФИО (её контакты), иначе
+     * создаём новую. Выравниваем сиквенсы (защита от duplicate _pkey).
+     */
+    public function createClientFromContract(Request $request, int $id): JsonResponse
+    {
+        $contract = DB::table('contract')->where('id', $id)->first();
+        if (! $contract) {
+            return response()->json(['message' => 'Контракт не найден'], 404);
+        }
+        $fio = trim((string) ($contract->clientName ?? ''));
+        if ($fio === '') {
+            return response()->json(['message' => 'У контракта не заполнено ФИО клиента'], 422);
+        }
+        $norm = mb_strtolower($fio);
+
+        // Уже есть живая карточка с таким ФИО — не плодим дубль.
+        $exists = DB::table('client')->whereNull('dateDeleted')
+            ->whereRaw('btrim(lower("personName")) = ?', [$norm])->exists();
+        if ($exists) {
+            return response()->json(['message' => 'Живая карточка с таким ФИО уже есть — используйте перепривязку'], 422);
+        }
+
+        $parts = preg_split('/\s+/', $fio);
+        $lastName = $parts[0] ?? $fio;
+        $firstName = $parts[1] ?? '';
+        $patronymic = count($parts) > 2 ? implode(' ', array_slice($parts, 2)) : null;
+
+        $clientId = DB::transaction(function () use ($contract, $fio, $norm, $lastName, $firstName, $patronymic) {
+            // Переиспользуем person с тем же ФИО (её контакты), если есть.
+            $person = DB::table('person')
+                ->whereRaw(<<<'SQL'
+                    btrim(lower("lastName" || ' ' || coalesce("firstName",'') || ' ' || coalesce(patronymic,''))) = ?
+                SQL, [$norm])
+                ->orderBy('id')->first();
+
+            if ($person) {
+                $personId = $person->id;
+            } else {
+                \App\Support\LegacyId::syncSequence('person');
+                $personId = DB::table('person')->insertGetId([
+                    'firstName' => $firstName ?: $fio,
+                    'lastName' => $lastName,
+                    'patronymic' => $patronymic,
+                    'role' => 'client',
+                    'dateCreated' => now()->toIso8601String(),
+                ]);
+            }
+
+            \App\Support\LegacyId::syncSequence('client');
+            $newClientId = DB::table('client')->insertGetId([
+                'person' => $personId,
+                'personName' => $fio,
+                'consultant' => $contract->consultant,
+                'email' => $person->email ?? null,
+                'phone' => $person->phone ?? null,
+                'birthDate' => $person->birthDate ?? null,
+                'city' => $person->city ?? null,
+                'dateCreated' => now(),
+            ]);
+
+            DB::table('contract')->where('id', $contract->id)->update([
+                'client' => $newClientId,
+                'clientName' => $fio,
+            ]);
+
+            return $newClientId;
+        });
+
+        Audit::log('create-client-from-contract', 'contract', $id, ['client' => $clientId]);
+
+        return response()->json(['message' => 'Карточка клиента заведена и привязана', 'clientId' => $clientId]);
+    }
+
     public function deleteClient(Request $request, int $id): JsonResponse
     {
         $request->validate([

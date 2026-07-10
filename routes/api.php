@@ -506,6 +506,7 @@ Route::prefix('v1')->group(function () {
         Route::put('/admin/contracts/{id}', [\App\Http\Controllers\Api\AdminDataController::class, 'updateContract'])->whereNumber('id')->middleware('permission:contracts,edit');
         Route::delete('/admin/contracts/{id}', [\App\Http\Controllers\Api\AdminDataController::class, 'deleteContract'])->whereNumber('id')->middleware('permission:contracts,edit');
         Route::post('/admin/contracts/{id}/relink-client', [\App\Http\Controllers\Api\AdminDataController::class, 'relinkContractClient'])->whereNumber('id')->middleware('permission:contracts,edit');
+        Route::post('/admin/contracts/{id}/create-client', [\App\Http\Controllers\Api\AdminDataController::class, 'createClientFromContract'])->whereNumber('id')->middleware('permission:contracts,edit');
         Route::get('/admin/contracts/{id}/history', [\App\Http\Controllers\Api\AdminDataController::class, 'contractHistory'])->whereNumber('id');
 
         // Shared import progress polling — frontend генерирует tracker id,

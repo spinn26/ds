@@ -45,6 +45,10 @@
           prepend-icon="mdi-auto-fix" :loading="bulkBusy" @click="relinkAllUnique">
           Перепривязать все однозначные ({{ stats.unique }})
         </v-btn>
+        <v-btn v-if="stats.noMatch > 0" color="primary" size="small" variant="flat"
+          prepend-icon="mdi-account-multiple-plus" :loading="bulkBusy" @click="createAllNoMatch">
+          Завести карточки для всех без карточки ({{ stats.noMatch }})
+        </v-btn>
       </div>
     </v-card>
 
@@ -80,8 +84,12 @@
             <v-btn color="success" size="small" variant="tonal" :disabled="!pick[item.id]"
               :loading="busyId === item.id" icon="mdi-check" @click="relink(item, pick[item.id])" />
           </div>
-          <!-- Нет карточки -->
-          <v-chip v-else size="small" color="grey" variant="tonal">Нет живой карточки</v-chip>
+          <!-- Нет карточки — заводим из ФИО контракта -->
+          <v-btn v-else color="primary" size="small" variant="tonal"
+            :loading="busyId === item.id" prepend-icon="mdi-account-plus"
+            @click="createCard(item)">
+            Завести карточку «{{ item.clientName }}»
+          </v-btn>
         </template>
       </v-data-table>
     </v-card>
@@ -170,6 +178,35 @@ async function relinkAllUnique() {
     } catch { /* пропускаем сбойный, продолжаем */ }
   }
   notify(`Перепривязано ${ok} из ${uniques.length}`, ok ? 'success' : 'warning');
+  bulkBusy.value = false;
+  await load();
+}
+
+async function createCard(item) {
+  busyId.value = item.id;
+  try {
+    await api.post(`/admin/contracts/${item.id}/create-client`, {});
+    notify(`Заведена карточка «${item.clientName}» и привязана`, 'success');
+    rows.value = rows.value.filter(r => r.id !== item.id);
+    stats.value.total--;
+    stats.value.noMatch--;
+  } catch (e) {
+    notify(e?.response?.data?.message || 'Ошибка создания карточки', 'error');
+  }
+  busyId.value = null;
+}
+
+async function createAllNoMatch() {
+  bulkBusy.value = true;
+  const noMatch = rows.value.filter(r => r.candidateCount === 0);
+  let ok = 0;
+  for (const item of noMatch) {
+    try {
+      await api.post(`/admin/contracts/${item.id}/create-client`, {});
+      ok++;
+    } catch { /* пропускаем сбойный, продолжаем */ }
+  }
+  notify(`Заведено карточек ${ok} из ${noMatch.length}`, ok ? 'success' : 'warning');
   bulkBusy.value = false;
   await load();
 }
