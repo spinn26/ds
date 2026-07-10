@@ -676,7 +676,24 @@ class TransactionImportController extends Controller
         ]);
 
         $update = ['changedAt' => now()];
-        if (array_key_exists('amount', $data)) $update['amount'] = $data['amount'];
+        if (array_key_exists('amount', $data)) {
+            $update['amount'] = $data['amount'];
+            // amountRUB/amountUSD — денормализованные производные от amount.
+            // Расчёт Дохода ДС (commissionsAmountRUB) идёт от amountRUB, поэтому
+            // при правке amount их ОБЯЗАТЕЛЬНО пересчитать, иначе доход остаётся
+            // на старой базе (баг: «процент верный, доход не пересчитался»).
+            $rate = (float) ($tx->currencyRate ?: 1);
+            $amountRub = (float) $data['amount'] * $rate;
+            $update['amountRUB'] = round($amountRub, 2);
+            // usdRate: сохранённый в транзакции (историчный) → не переписываем
+            // валютный контекст; при отсутствии — последний из currencyRate.
+            $usdRate = (float) ($tx->usdRate ?: 0);
+            if ($usdRate <= 0) {
+                $usdRow = DB::table('currencyRate')->where('currency', 5)->orderByDesc('date')->first();
+                $usdRate = (float) ($usdRow->rate ?? 0);
+            }
+            $update['amountUSD'] = $usdRate > 0 ? round($amountRub / $usdRate, 2) : 0;
+        }
         if (array_key_exists('comment', $data)) $update['comment'] = $data['comment'];
         if (array_key_exists('date', $data)) {
             $update['date'] = $data['date'];
