@@ -61,8 +61,8 @@ class ApiSettingsService
                 [
                     'group' => $meta['group'],
                     'label' => $meta['label'],
-                    'hint' => $meta['hint'] ?? null,
-                    'secret' => (bool) ($meta['secret'] ?? true),
+                    'hint' => $meta['hint'],
+                    'secret' => (bool) $meta['secret'],
                 ]
             );
         }
@@ -95,8 +95,8 @@ class ApiSettingsService
         if ($meta) {
             $setting->group  = $meta['group'];
             $setting->label  = $meta['label'];
-            $setting->hint   = $meta['hint'] ?? null;
-            $setting->secret = (bool) ($meta['secret'] ?? true);
+            $setting->hint   = $meta['hint'];
+            $setting->secret = (bool) $meta['secret'];
         } elseif (! $setting->exists) {
             // Ключ вне CATALOG: колонка label — NOT NULL без default, поэтому
             // для новой строки задаём fallback, иначе INSERT падает 23502.
