@@ -609,7 +609,10 @@ class AdminDataController extends Controller
         ]);
 
         $result = match ($request->action) {
-            'activate' => $this->statusService->activate($consultant) ? 'Активирован' : 'Не удалось активировать',
+            // Активация из карточки — ручное решение админа: форсируем без
+            // гейта по статусу/ЛП (аудит пишется). Строгий activate() остаётся
+            // для авто-активации по порогу ЛП и bulk-операций.
+            'activate' => $this->statusService->forceActivate($consultant, $request->reason ?? '') ? 'Активирован' : 'Партнёр уже активен',
             'terminate' => $this->statusService->terminate($consultant, $request->reason ?? '')->label(),
             'exclude' => tap('Исключён', fn () => $this->statusService->exclude($consultant, $request->reason ?? '')),
             're-register' => $this->statusService->reRegister($consultant) ? 'Перерегистрирован' : 'Не удалось перерегистрировать',

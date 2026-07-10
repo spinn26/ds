@@ -1204,6 +1204,10 @@ async function changeStatus(action) {
   let reason = '';
   if (action === 'terminate' || action === 'exclude') {
     reason = window.prompt('Причина (необязательно):', '') || '';
+  } else if (action === 'activate') {
+    // Активация из карточки форсируется на бэкенде (в т.ч. из «Терминирован»);
+    // причина уходит в аудит-лог.
+    reason = window.prompt('Причина ручной активации (для аудит-лога, необязательно):', '') || '';
   }
   try {
     const { data } = await api.post(`/admin/partners/${editForm.value.id}/status`, { action, reason });

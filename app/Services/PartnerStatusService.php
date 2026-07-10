@@ -131,6 +131,47 @@ class PartnerStatusService
     }
 
     /**
+     * Принудительная активация администратором из карточки партнёра.
+     *
+     * В отличие от activate(), НЕ проверяет текущий статус и порог ЛП: это
+     * ручное управленческое решение (аналог override, спека «Статусы
+     * партнёров» §3). Разрешает активировать в т.ч. «Терминирован» /
+     * «Исключён». Выставляет тот же набор полей, что и штатная активация
+     * (dateActivity, yearPeriodEnd, participantCode), чтобы вручную
+     * активированный партнёр был неотличим от активного, и пишет запись в
+     * аудит-лог с указанием причины (source=manual).
+     *
+     * Строгий activate() намеренно оставлен для авто-активации по порогу ЛП
+     * и bulk-операций — их гейт не ослабляется.
+     */
+    public function forceActivate(Consultant $consultant, string $comment = ''): bool
+    {
+        if ($consultant->activity === PartnerActivity::Active) {
+            return false; // уже активен — нечего делать
+        }
+
+        $previousActivity = $consultant->activity;
+
+        DB::transaction(function () use ($consultant) {
+            $consultant->activity = PartnerActivity::Active;
+            $consultant->active = true;
+            $consultant->dateActivity = Carbon::now();
+            $consultant->yearPeriodEnd = Carbon::now()->addYear();
+
+            if (empty($consultant->participantCode)) {
+                $consultant->participantCode = $this->generateUniqueCode();
+            }
+
+            $consultant->save();
+        });
+
+        $note = trim('Ручная активация администратором. '.$comment);
+        $this->logStatusChange($consultant, $previousActivity, PartnerActivity::Active, $note, 'manual');
+
+        return true;
+    }
+
+    /**
      * Терминация партнёра. Увеличивает счётчик, при 3-й — исключает.
      */
     public function terminate(Consultant $consultant, string $reason = ''): PartnerActivity
