@@ -287,14 +287,30 @@ class CommissionCalculator
             $dsComPercent = round((float) $tx->dsCommissionAbsolute / $amountNoVat * 100, 4);
         }
 
+        // Property-specific тариф ДОЛЖЕН побеждать scalar program.dsPercent,
+        // когда у транзакции задано свойство (commissionCalcProperty).
+        // program.dsPercent — одно значение (обычно МФ) и не различает свойства:
+        // для IB (МФ 30% vs Апфронт 1.8%) применение program.dsPercent давало
+        // 30% на Апфронт-транзакции. Полный ключ (program × term × свойство ×
+        // окно дат) — в resolveLegacyDsCommission.
+        if ($dsComPercent <= 0 && ($tx->commissionCalcProperty ?? null) !== null && $contract->program) {
+            $byProperty = self::resolveLegacyDsCommission(
+                (int) $contract->program,
+                $contract->term ?? null,
+                $tx->commissionCalcProperty,
+                $tx->date ?? null,
+            );
+            if ($byProperty !== null && $byProperty > 0) {
+                $dsComPercent = (float) $byProperty;
+            }
+        }
         if ($dsComPercent <= 0 && $programRow && $programRow->dsPercent !== null) {
             $dsComPercent = (float) $programRow->dsPercent;
         }
         if ($dsComPercent <= 0 && $contract->program) {
-            // Выбор тарифа по полному ключу program × term × год КВ × окно дат
-            // (см. resolveLegacyDsCommission). Раньше брали «последнюю по id»
-            // без term/года — для программ с несколькими тарифами на год выплаты
-            // (напр. 180: 0.5% год=9 vs 2% год=10) это могло дать не ту ставку.
+            // Fallback без свойства — для программ без property-специфичных тарифов.
+            // Полный ключ program × term × год КВ × окно дат (см.
+            // resolveLegacyDsCommission), не «последняя по id».
             $dsComPercent = (float) (self::resolveLegacyDsCommission(
                 (int) $contract->program,
                 $contract->term ?? null,

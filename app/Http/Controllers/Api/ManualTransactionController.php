@@ -606,13 +606,27 @@ class ManualTransactionController extends Controller
             }
         }
 
+        // Property-specific тариф побеждает scalar program.dsPercent при заданном
+        // свойстве — превью=факт (см. CommissionCalculator::calculateInTransaction).
+        // Иначе Апфронт (IB) получал бы ставку МФ 30% вместо 1.8%.
+        if ($dsPercent <= 0 && $resolvedParameter !== null && $contract->program) {
+            $byProperty = \App\Services\CommissionCalculator::resolveLegacyDsCommission(
+                (int) $contract->program,
+                $contract->term ?? null,
+                $resolvedParameter,
+                $draft->date ?? null,
+            );
+            if ($byProperty !== null && $byProperty > 0) {
+                $dsPercent = (float) $byProperty;
+            }
+        }
         if ($dsPercent <= 0 && $programRow && $programRow->dsPercent !== null) {
             $dsPercent = (float) $programRow->dsPercent;
         }
         if ($dsPercent <= 0 && $contract->program) {
-            // Тот же резолвер, что в каскаде (program × term × год КВ × дата).
-            // $resolvedParameter = commissionCalcProperty.id (для has_year_kv
-            // продуктов он уже выведен автоматически из yearKV выше).
+            // Fallback без свойства. Тот же резолвер, что в каскаде
+            // (program × term × год КВ × дата). $resolvedParameter =
+            // commissionCalcProperty.id (для has_year_kv выведен из yearKV выше).
             $dsPercent = (float) (\App\Services\CommissionCalculator::resolveLegacyDsCommission(
                 (int) $contract->program,
                 $contract->term ?? null,
