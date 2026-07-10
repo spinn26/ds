@@ -81,6 +81,13 @@ class AdminProductCatalogController extends Controller
             $wantsActive = filter_var($request->input('active'), FILTER_VALIDATE_BOOLEAN);
             $q->where('p.active', $wantsActive);
         }
+        // «Искл. из калькулятора» = visible_to_calculator=false. Подбор продуктов
+        // при заведении транзакций/в калькуляторе передаёт visible_to_calculator=1,
+        // чтобы исключённые продукты не выводились. Админ-список продуктов
+        // параметр не передаёт → видит все (для редактирования флага).
+        if ($request->filled('visible_to_calculator')) {
+            $q->where('p.visible_to_calculator', filter_var($request->input('visible_to_calculator'), FILTER_VALIDATE_BOOLEAN));
+        }
 
         $total = DB::table(DB::raw('(' . $q->toSql() . ') as t'))
             ->mergeBindings($q)

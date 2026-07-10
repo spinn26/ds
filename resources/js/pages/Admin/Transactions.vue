@@ -1492,7 +1492,9 @@ onMounted(async () => {
   await Promise.all([loadContracts(), loadDrafts(), loadLog()]);
   try {
     const [products, formData, lookups] = await Promise.all([
-      api.get('/admin/products-catalog', { params: { per_page: 1000, active: true } }).catch(() => ({ data: { data: [] } })),
+      // visible_to_calculator: исключённые из калькулятора продукты («искл.»)
+      // не показываем в подборе при заведении транзакций.
+      api.get('/admin/products-catalog', { params: { per_page: 1000, active: true, visible_to_calculator: true } }).catch(() => ({ data: { data: [] } })),
       api.get('/admin/transaction-import/form-data').catch(() => ({ data: { currencies: [] } })),
       api.get('/admin/manual-tx/lookups').catch(() => ({ data: { suppliers: [], providers: [] } })),
     ]);
