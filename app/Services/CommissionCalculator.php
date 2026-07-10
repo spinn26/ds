@@ -310,7 +310,8 @@ class CommissionCalculator
 
         // ЛП per program.pointsMethod, same switch as CalculatorController::computePoints.
         $personalVolume = $this->computePointsForProgram(
-            $programRow, $amountNoVat, $amountRub, $dsComPercent
+            $programRow, $amountNoVat, $amountRub, $dsComPercent,
+            $contract->term !== null ? (float) $contract->term : null
         );
 
         // Per spec ✅Бизнес-логика «Неизвестного консультанта».md:
@@ -541,8 +542,9 @@ class CommissionCalculator
         float $amountNoVat,
         float $amountRub,
         float $dsComPercent,
+        ?float $term = null,
     ): float {
-        return self::computePoints($program, $amountNoVat, $amountRub, $dsComPercent);
+        return self::computePoints($program, $amountNoVat, $amountRub, $dsComPercent, $term);
     }
 
     /** Публичный расчёт ЛП по методике программы (для отчётов/прогноза). */
@@ -551,6 +553,7 @@ class CommissionCalculator
         float $amountNoVat,
         float $amountRub,
         float $dsComPercent,
+        ?float $term = null,
     ): float {
         $method = $program->pointsMethod ?? null;
         $fixedCost = $program && $program->fixedCost !== null ? (float) $program->fixedCost : null;
@@ -563,6 +566,11 @@ class CommissionCalculator
                 return $amountRub / 100;
             case 'fixed':
                 return (float) ($pointsMin ?? 0);
+            case 'annualized_term':
+                // Vantage Platinum II (Hansard): ЛП = (ежемесячный взнос × 12 ×
+                // срок × %ДС/100) / 100 = amountRub × 12 × срок × %ДС / 10000.
+                // amountRub — взнос в рублях; срок — из контракта.
+                return $amountRub * 12 * (float) ($term ?? 0) * $dsComPercent / 10000;
             case 'amount_x_dsPercent':
                 // ЛП = Доход ДС без НДС / 100 = amountNoVat × %ДС / 10000.
                 // Раньше брали amountRub (с НДС) — Axevil расходился с Медлайфом

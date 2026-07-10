@@ -629,8 +629,9 @@ class ManualTransactionController extends Controller
             $dsPercent = $amountNoVat > 0 ? round($incomeDS / $amountNoVat * 100, 4) : 0;
         }
 
-        // Личный объём (баллы)
-        $points = $this->computePoints($programRow, $amountNoVat, $amountRub, $dsPercent);
+        // Личный объём (баллы). Срок нужен методу annualized_term (Vantage).
+        $points = $this->computePoints($programRow, $amountNoVat, $amountRub, $dsPercent,
+            $contract->term !== null ? (float) $contract->term : null);
 
         // Цепочка наставников: вверх по inviter, маржинальная разница процентов.
         $consultantId = (int) $contract->consultant;
@@ -749,7 +750,7 @@ class ManualTransactionController extends Controller
         ];
     }
 
-    private function computePoints(?object $program, float $amountNoVat, float $amountRub, float $dsPercent): float
+    private function computePoints(?object $program, float $amountNoVat, float $amountRub, float $dsPercent, ?float $term = null): float
     {
         $method = $program->pointsMethod ?? null;
         $fixed = $program?->fixedCost !== null ? (float) $program->fixedCost : null;
@@ -758,6 +759,8 @@ class ManualTransactionController extends Controller
             'cost_div_100' => ($fixed ?? $amountRub) / 100,
             'amount_div_100' => $amountRub / 100,
             'fixed' => (float) ($min ?? 0),
+            // Vantage Platinum II: ЛП = взнос × 12 × срок × %ДС / 10000.
+            'annualized_term' => $amountRub * 12 * (float) ($term ?? 0) * $dsPercent / 10000,
             // Паритет с CommissionCalculator::computePoints — ЛП от «Дохода ДС
             // без НДС» (amountNoVat), как и default (Медлайф). Раньше брали
             // amountRub (с НДС) → Axevil расходился (фидбек владельца 2026-07-08).
