@@ -1445,16 +1445,18 @@ class AdminDataController extends Controller
      */
     public function clientMismatches(Request $request): JsonResponse
     {
-        // Контракт НЕ привязан корректно к живой карточке с тем же ФИО. Ловим
-        // все случаи: (wrong) привязан к живой карточке с другим именем;
-        // (deleted) карточка soft-deleted; (broken) FK на несуществующую;
-        // (none) client = NULL. LEFT JOIN — чтобы поймать NULL/битые.
+        // Контракт НЕ привязан к карточке ПРАВИЛЬНОГО человека. «Правильно» =
+        // привязан к карточке (живой ИЛИ удалённой) с тем же ФИО — тогда это
+        // верный человек, просто карточка в архиве (старые контракты 2020–2025);
+        // это НЕ ошибка привязки, из выборки исключаем. Ловим реальные ошибки:
+        // (wrong) чужая живая карточка; (deleted-diff) удалённая карточка чужого;
+        // (broken) FK на несуществующую; (none) client = NULL.
         $rows = DB::table('contract as ct')
             ->leftJoin('client as cur', 'cur.id', '=', 'ct.client')
             ->whereNull('ct.deletedAt')
             ->whereNotNull('ct.clientName')
             ->whereRaw("btrim(ct.\"clientName\") <> ''")
-            ->whereRaw('NOT (cur.id IS NOT NULL AND cur."dateDeleted" IS NULL AND btrim(lower(ct."clientName")) = btrim(lower(cur."personName")))')
+            ->whereRaw('NOT (cur.id IS NOT NULL AND btrim(lower(ct."clientName")) = btrim(lower(cur."personName")))')
             ->orderByDesc('ct.id')
             ->get([
                 'ct.id', 'ct.number', 'ct.clientName', 'ct.consultantName', 'ct.productName',
