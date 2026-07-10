@@ -101,7 +101,7 @@ class SheetProfiles
             'commission_pct_scale' => 100,
         ],
         'ГГА' => [
-            'counterpartyName' => 'Альянс',
+            'counterpartyName' => 'ГГА',
             'productHint' => 'ГГА',
             'fields' => [
                 'client_name'     => 'Клиент',
