@@ -1445,18 +1445,25 @@ class AdminDataController extends Controller
      */
     public function clientMismatches(Request $request): JsonResponse
     {
+        // Контракт НЕ привязан корректно к живой карточке с тем же ФИО. Ловим
+        // все случаи: (wrong) привязан к живой карточке с другим именем;
+        // (deleted) карточка soft-deleted; (broken) FK на несуществующую;
+        // (none) client = NULL. LEFT JOIN — чтобы поймать NULL/битые.
         $rows = DB::table('contract as ct')
-            ->join('client as cur', function ($j) {
-                $j->on('cur.id', '=', 'ct.client')->whereNull('cur.dateDeleted');
-            })
+            ->leftJoin('client as cur', 'cur.id', '=', 'ct.client')
             ->whereNull('ct.deletedAt')
             ->whereNotNull('ct.clientName')
             ->whereRaw("btrim(ct.\"clientName\") <> ''")
-            ->whereRaw('btrim(lower(ct."clientName")) <> btrim(lower(cur."personName"))')
+            ->whereRaw('NOT (cur.id IS NOT NULL AND cur."dateDeleted" IS NULL AND btrim(lower(ct."clientName")) = btrim(lower(cur."personName")))')
             ->orderByDesc('ct.id')
             ->get([
                 'ct.id', 'ct.number', 'ct.clientName', 'ct.consultantName', 'ct.productName',
                 'ct.client as currentClientId', 'cur.personName as currentClientName',
+                DB::raw('CASE
+                    WHEN ct.client IS NULL THEN \'none\'
+                    WHEN cur.id IS NULL THEN \'broken\'
+                    WHEN cur."dateDeleted" IS NOT NULL THEN \'deleted\'
+                    ELSE \'wrong\' END AS current_status'),
             ]);
 
         // Кандидаты батчем: живые карточки с ФИО = clientName (case-insensitive).
@@ -1486,6 +1493,7 @@ class AdminDataController extends Controller
                 'productName' => $r->productName,
                 'currentClientId' => $r->currentClientId,
                 'currentClientName' => $r->currentClientName,
+                'currentStatus' => $r->current_status,
                 'candidates' => $cands,
                 'candidateCount' => $cands->count(),
             ];

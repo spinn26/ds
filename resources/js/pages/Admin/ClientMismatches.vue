@@ -1,7 +1,7 @@
 <template>
   <div class="pa-4">
     <PageHeader title="Разбор привязок клиентов"
-      subtitle="Контракты, где ФИО в контракте не совпадает с привязанной карточкой (наследие дедуп-склеек). Однозначные — в один клик, спорные — вручную." />
+      subtitle="Контракты без корректной привязки к живой карточке клиента: чужое ФИО, удалённая карточка или клиент не привязан. Однозначные — в клик, спорные — вручную, без карточки — завести." />
 
     <v-row class="mb-2" dense>
       <v-col cols="6" sm="3">
@@ -64,9 +64,24 @@
         </template>
         <template #item.currentClientName="{ item }">
           <div class="d-flex align-center ga-1">
-            <v-icon size="16" color="error">mdi-account-alert</v-icon>
-            <span>{{ item.currentClientName }}</span>
-            <span class="text-caption text-medium-emphasis">#{{ item.currentClientId }}</span>
+            <template v-if="item.currentStatus === 'none'">
+              <v-icon size="16" color="grey">mdi-account-off</v-icon>
+              <span class="text-medium-emphasis">клиент не привязан</span>
+            </template>
+            <template v-else-if="item.currentStatus === 'deleted'">
+              <v-icon size="16" color="warning">mdi-account-cancel</v-icon>
+              <span>{{ item.currentClientName }}</span>
+              <span class="text-caption text-warning">(удалённая карточка #{{ item.currentClientId }})</span>
+            </template>
+            <template v-else-if="item.currentStatus === 'broken'">
+              <v-icon size="16" color="error">mdi-link-off</v-icon>
+              <span class="text-error">битая ссылка #{{ item.currentClientId }}</span>
+            </template>
+            <template v-else>
+              <v-icon size="16" color="error">mdi-account-alert</v-icon>
+              <span>{{ item.currentClientName }}</span>
+              <span class="text-caption text-medium-emphasis">#{{ item.currentClientId }}</span>
+            </template>
           </div>
         </template>
         <template #item.action="{ item }">
