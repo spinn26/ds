@@ -158,6 +158,16 @@ class PartnerStatusService
             $consultant->dateActivity = Carbon::now();
             $consultant->yearPeriodEnd = Carbon::now()->addYear();
 
+            // Активный партнёр не должен нести маркеры терминации. При активации
+            // из «Терминирован»/«Исключён» dateDeactivity уже выставлен, а
+            // dateDeterministic отчёты/фильтры читают как «дату терминации»
+            // (PartnerStatusReport, StructureController, фильтры term_from/to).
+            // Не переписав их, реактивированный партнёр остался бы в выборках
+            // терминаций со старой датой. Чистим дату деактивации и переводим
+            // dateDeterministic в конец годового периода (как ручной override).
+            $consultant->dateDeactivity = null;
+            $consultant->dateDeterministic = Carbon::now()->addYear();
+
             if (empty($consultant->participantCode)) {
                 $consultant->participantCode = $this->generateUniqueCode();
             }
