@@ -2,6 +2,7 @@
 
 namespace App\Services\Reports;
 
+use App\Support\SupplierResolver;
 use Illuminate\Support\Facades\DB;
 
 /** Per spec ✅Отчеты §3.6 — связь партнёра, транзакции и комиссии. */
@@ -37,7 +38,9 @@ class FinrezCommissionsReport extends AbstractReportType
             ->limit(50000)
             ->get([
                 'src.personName as srcPartner', 'recv.personName as recvPartner', 'c.clientName',
-                DB::raw('COALESCE(pc.provider_name, pr."providerName") as "providerName"'),
+                // Поставщик — как в CommissionsReport: приоритет программе,
+                // Insmart мапится через SupplierResolver ниже.
+                DB::raw('COALESCE(pr."providerName", pc.provider_name) as "providerName"'),
                 DB::raw('COALESCE(pc.name, c."productName") as "productName"'),
                 DB::raw('COALESCE(prc.name, c."programName") as "programName"'),
                 'c.number', 'c.id as contractId', 't.date',
@@ -49,17 +52,27 @@ class FinrezCommissionsReport extends AbstractReportType
                 't.profitRUB',
             ]);
 
-        // «Доход DS RUB» = сохранённое commissionsAmountRUB транзакции (= странице),
-        // а не netRevenue×1.05. «Комиссия» здесь построчная (cm.amountRUB) — отчёт
-        // имеет грануляцию «одна строка на commission», это by-design.
+        // Per spec ✅Отчет Финрез комиссии по ФК: «Доход без НДС в RUB — БАЗА для
+        // расчёта выплаты партнёру».
+        //   «Доход DS RUB» = amountRUB × %ДС / 100   (ВАЛОВЫЙ, с НДС)
+        //   «Без НДС RUB»  = commissionsAmountRUB     (доход ДС без НДС = база)
+        // Раньше в «Доход DS RUB» шёл commissionsAmountRUB (это уже БЕЗ НДС), а в
+        // «Без НДС RUB» — netRevenueRUB (это «остаток ДС» после выплат цепочке).
+        // Обе колонки были смещены по смыслу на одну позицию.
+        //
+        // «Комиссия» здесь построчная (cm.amountRUB) — отчёт имеет грануляцию
+        // «одна строка на commission», это by-design. ⚠ «Прибыль» — величина
+        // ТРАНЗАКЦИИ и повторяется в каждой строке цепочки: суммировать этот
+        // столбец нельзя (получится двойной счёт).
         return $rows->map(function ($r) {
             return [
                 $r->srcPartner, $r->recvPartner, $r->clientName,
-                $r->providerName, $r->productName, $r->programName,
+                SupplierResolver::resolve($r->productName, $r->providerName),
+                $r->productName, $r->programName,
                 $r->number, $r->contractId, $r->date,
                 $this->n($r->amount), $r->curSymbol, $this->n($r->amountRUB),
+                $this->n((float) ($r->amountRUB ?? 0) * (float) ($r->dsCommissionPercentage ?? 0) / 100),
                 $this->n($r->commissionsAmountRUB),
-                $this->n($r->netRevenueRUB),
                 $this->n($r->personalVolume),
                 $this->n($r->commissionRub), $this->n($r->profitRUB),
             ];

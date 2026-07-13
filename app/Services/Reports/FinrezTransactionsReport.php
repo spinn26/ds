@@ -2,6 +2,7 @@
 
 namespace App\Services\Reports;
 
+use App\Support\SupplierResolver;
 use Illuminate\Support\Facades\DB;
 
 /** Per spec ✅Отчеты §3.7 — мастер-отчёт транзакций. */
@@ -33,7 +34,9 @@ class FinrezTransactionsReport extends AbstractReportType
             ->limit(50000)
             ->get([
                 't.id', 'c.number',
-                DB::raw('COALESCE(pc.provider_name, pr."providerName") as "providerName"'),
+                // Поставщик — как в CommissionsReport: приоритет программе
+                // (она per-program), Insmart мапится через SupplierResolver ниже.
+                DB::raw('COALESCE(pr."providerName", pc.provider_name) as "providerName"'),
                 DB::raw('COALESCE(pc.name, c."productName") as "productName"'),
                 DB::raw('COALESCE(prc.name, c."programName") as "programName"'),
                 'c.clientName', 't.date', 't.amountRUB', 't.netRevenueRUB',
@@ -43,20 +46,32 @@ class FinrezTransactionsReport extends AbstractReportType
                 'c.term', 'c.openDate',
             ]);
 
-        // «Доход DS» = сохранённое commissionsAmountRUB (как колонка «Доход DS RUB»
-        // на странице «Комиссии»), а «Комиссия» = Σ комиссий цепочки по транзакции
-        // (как одноимённая колонка страницы). Раньше «Доход DS» считался как
-        // netRevenue×1.05 (≠ странице), а «Комиссия» = commissionsAmountRUB (это
-        // доход DS, а не выплаты партнёрам) — обе колонки расходились со страницей.
+        // Per spec ✅Отчеты §Финрез: «Доход DS до вычета НДС» и «Доход без НДС в RUB».
+        //   «Доход DS»    = amountRUB × %ДС / 100        (ВАЛОВЫЙ, с НДС)
+        //   «Без НДС RUB» = commissionsAmountRUB          (доход ДС без НДС)
+        //   «Комиссия»    = Σ комиссий цепочки
+        //   «Прибыль»     = Без НДС − Комиссия
+        // Раньше в «Доход DS» шёл commissionsAmountRUB (это уже БЕЗ НДС), а в
+        // «Без НДС» — netRevenueRUB (это «остаток ДС» после выплат цепочке, а не
+        // доход) → обе колонки были неверны. Тот же баг, что чинили в
+        // CommissionsReport; здесь фикс не был применён.
         $chain = $this->chainCommissionByTx($rows->pluck('id')->all());
 
-        return $rows->map(fn ($r) => [
-            $r->number, $r->providerName, $r->productName, $r->programName,
-            $r->clientName, $r->date, $this->n($r->amountRUB),
-            $this->n($r->commissionsAmountRUB), $this->n($r->netRevenueRUB),
-            $r->partner, $this->n($chain[$r->id] ?? 0), $this->n($r->profitRUB),
-            $this->n($r->amount), $r->curSymbol, $r->score,
-            $r->paymentCount, $r->term, $r->openDate,
-        ])->all();
+        return $rows->map(function ($r) use ($chain) {
+            $noVat = (float) ($r->commissionsAmountRUB ?? 0);
+            $commission = (float) ($chain[$r->id] ?? 0);
+
+            return [
+                $r->number,
+                SupplierResolver::resolve($r->productName, $r->providerName),
+                $r->productName, $r->programName,
+                $r->clientName, $r->date, $this->n($r->amountRUB),
+                $this->n((float) ($r->amountRUB ?? 0) * (float) ($r->dsCommissionPercentage ?? 0) / 100),
+                $this->n($noVat),
+                $r->partner, $this->n($commission), $this->n($noVat - $commission),
+                $this->n($r->amount), $r->curSymbol, $r->score,
+                $r->paymentCount, $r->term, $r->openDate,
+            ];
+        })->all();
     }
 }

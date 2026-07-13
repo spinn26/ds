@@ -328,21 +328,21 @@ class PoolRunner
                 $row->level_id = $row->nominal_level_id;
             }
 
-            // Extras (нет qualificationLog за период ИЛИ есть но ОП не
-            // выполнен с понижением calc < 6) НЕ участвуют в счётчике
-            // фонда — эталон старой платформы делит только на тех, у кого
-            // фактически calc >= 6 в этом месяце. Сняли галочку вручную —
-            // остаются в счётчике (доля не выплачивается, но делитель
-            // не уменьшается).
-            $isExtra = (bool) ($row->isExtra ?? false) || $isOpFailExtra;
+            // Делитель = НОМИНАЛЬНОЕ число партнёров уровня.
+            //
+            // Per spec ✅Расчет пула: «TOP FC 20 человек (из них 4 не подтвердили
+            // квалификацию, 1 попал на отрыв 90%) → 1% / 20 = 50 000 ₽,
+            // 15 партнёров получают, 5 не получают (5 × 50 000 = 250 000
+            // остаётся в компании, НЕ делим на остальных партнеров)» и
+            // «если у партнера снята галочка участия — ОН УЧАСТВУЕТ В
+            // РАСПРЕДЕЛЕНИИ, но деньги не выплачиваются».
+            //
+            // Поэтому в счётчик идут ВСЕ: и неподтвердившие (isExtra /
+            // ОП-не-выполнен), и со снятой галочкой. Дисквалификация влияет
+            // только на выплату — доля форфейтится и остаётся компании.
             $modParticipates = $modByConsId[$consultantId] ?? null;
             $modExcluded = $modParticipates === false; // галка явно снята
-            // Снятая вручную галка ПОЛНОСТЬЮ исключает из делителя
-            // (доля перераспределяется). Дисквалификация по ОП/отрыву —
-            // delitель остаётся, доля forfeited.
-            if (! $isExtra && ! $modExcluded) {
-                $nominalCounts[$level] = ($nominalCounts[$level] ?? 0) + 1;
-            }
+            $nominalCounts[$level] = ($nominalCounts[$level] ?? 0) + 1;
 
             $mandatoryGp = (float) ($row->mandatoryGP ?? 0);
             $groupVolume = (float) ($row->groupVolume ?? 0);
@@ -430,7 +430,11 @@ class PoolRunner
         }, $distribution);
 
         $totalPaid = array_sum(array_column($participants, 'payoutRub'));
-        $fund = $revenue * PoolCalculator::POOL_PERCENT;
+        // Процент пула настраивается (pool.percent) — берём ту же величину, что и
+        // PoolCalculator::shareValues, иначе «фонд» и «остаток в компании» в UI
+        // разъедутся с реально распределёнными долями.
+        $poolPercent = (float) \App\Models\SystemSetting::value('pool.percent', PoolCalculator::POOL_PERCENT);
+        $fund = $revenue * $poolPercent;
         $totalForfeited = max(0.0, ($fund * count($leaderLevelIds)) - $totalPaid);
 
         $written = 0;

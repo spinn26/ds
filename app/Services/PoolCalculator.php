@@ -18,24 +18,25 @@ class PoolCalculator
     public const LEADER_LEVEL_MAX = 10;         // Co-founder DS
 
     /**
-     * Share value per level: fund(1%) / count of leaders at or above the level.
+     * Стоимость доли уровня = фонд(1%) / номинальное число партнёров РОВНО
+     * этого уровня.
      *
-     * Уточнение по спеке (см. бизнес-кейс декабря 2025 / января 2026):
-     * долю уровня L получают ВСЕ партнёры уровня L и выше (через матрёшку),
-     * поэтому фонд этого уровня делится на **общее** число его получателей,
-     * а не только на партнёров ровно уровня L.
+     * Per spec ✅Расчет пула (числовой пример, выручка 100 млн):
+     *   TOP FC (20 чел.)     = 100 000 000 × 1% / 20 = 50 000 ₽
+     *   Silver DS (10 чел.)  = 100 000 000 × 1% / 10 = 100 000 ₽
+     *   Gold DS (5 чел.)     = 100 000 000 × 1% / 5  = 200 000 ₽
+     *   Platinum DS (3 чел.) = 100 000 000 × 1% / 3  = 333 300 ₽
+     *   Co-founder (2 чел.)  = 100 000 000 × 1% / 2  = 500 000 ₽
+     *   Бонус Co-founder (матрёшка) = сумма всех пяти = 1 183 300 ₽
      *
-     *   share(6)  = fund / count(6+) = fund / (n6 + n7 + n8 + n9 + n10)
-     *   share(7)  = fund / count(7+) = fund / (n7 + n8 + n9 + n10)
-     *   share(8)  = fund / count(8+) = fund / (n8 + n9 + n10)
-     *   share(9)  = fund / count(9+) = fund / (n9 + n10)
-     *   share(10) = fund / count(10+) = fund / n10
+     * ⚠ Раньше делили на count(L+) («уровень L и выше») со ссылкой на
+     * «бизнес-кейс декабря 2025», которого нет ни в одном документе. Это
+     * занижало доли лидеров примерно вдвое (июнь 2026: 129 563 ₽ вместо
+     * 268 997 ₽). Восстановлено по спеке 2026-07-13.
      *
-     * Партнёр уровня L получает sum(share(6)..share(L)) — это уже шире, чем
-     * у него «свой» уровень.
-     *
-     * @param array<int,int> $nominalCounts  level => count of partners at that level (qualifying + not)
-     * @return array<int,float> level => share in rubles
+     * @param array<int,int> $nominalCounts  level => номинальное число партнёров этого уровня
+     *                                       (включая неподтвердивших и со снятой галочкой)
+     * @return array<int,float> level => стоимость доли в рублях
      */
     public function shareValues(float $vatExclusiveRevenue, array $nominalCounts): array
     {
@@ -44,11 +45,8 @@ class PoolCalculator
         $fund = $vatExclusiveRevenue * $poolPercent;
         $shares = [];
         for ($level = self::LEADER_LEVEL_MIN; $level <= self::LEADER_LEVEL_MAX; $level++) {
-            $cumulative = 0;
-            for ($l = $level; $l <= self::LEADER_LEVEL_MAX; $l++) {
-                $cumulative += (int) ($nominalCounts[$l] ?? 0);
-            }
-            $shares[$level] = $cumulative > 0 ? $fund / $cumulative : 0.0;
+            $count = (int) ($nominalCounts[$level] ?? 0);
+            $shares[$level] = $count > 0 ? $fund / $count : 0.0;
         }
         return $shares;
     }
