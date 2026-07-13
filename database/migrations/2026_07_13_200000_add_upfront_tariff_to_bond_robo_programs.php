@@ -52,7 +52,12 @@ return new class extends Migration
                 continue;
             }
 
+            // Legacy-таблица из Directual: у id нет сиквенса/дефолта, значение
+            // задаём явно.
+            $nextId = (int) DB::table('dsCommission')->max('id') + 1;
+
             DB::table('dsCommission')->insert([
+                'id' => $nextId,
                 'product' => $mf->product,
                 'program' => $programId,
                 'programName' => $programName,
@@ -64,9 +69,6 @@ return new class extends Migration
                 'active' => true,
             ]);
         }
-
-        // Legacy-таблица наполнялась импортом — сиквенс мог отстать от max(id).
-        DB::statement('SELECT setval(pg_get_serial_sequence(\'"dsCommission"\', \'id\'), (SELECT MAX(id) FROM "dsCommission"))');
     }
 
     public function down(): void
