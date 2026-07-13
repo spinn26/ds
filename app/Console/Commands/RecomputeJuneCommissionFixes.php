@@ -26,6 +26,8 @@ class RecomputeJuneCommissionFixes extends Command
     protected $signature = 'commission:recompute-june-fixes
         {--dry-run : показать before/after без изменений}
         {--all : пересчитать ВСЕ живые транзакции периода (а не только своя-комиссия/неизв-ФК)}
+        {--ids= : пересчитать только перечисленные id транзакций (через запятую)}
+        {--stale-lp : пересчитать только транзакции, где personalVolume разошёлся с доходом ДС без НДС / 100}
         {--from=2026-06-01 : начало периода (date >=)}
         {--to=2026-07-01 : конец периода (date <, не включая)}';
 
@@ -38,12 +40,26 @@ class RecomputeJuneCommissionFixes extends Command
         $to = (string) $this->option('to');
 
         $all = (bool) $this->option('all');
+        $onlyIds = array_values(array_filter(array_map(
+            'intval',
+            preg_split('/\s*,\s*/', (string) $this->option('ids'), -1, PREG_SPLIT_NO_EMPTY) ?: []
+        )));
+        $staleLp = (bool) $this->option('stale-lp');
+
         $q = DB::table('transaction as t')
             ->join('contract as c', 'c.id', '=', 't.contract')
             ->whereNull('t.deletedAt')
             ->where('t.date', '>=', $from)
             ->where('t.date', '<', $to);
-        if (! $all) {
+        if ($onlyIds) {
+            $q->whereIn('t.id', $onlyIds);
+        } elseif ($staleLp) {
+            // ЛП должен равняться «доход ДС без НДС / 100» (спека ✅Калькулятор
+            // объёмов). Расхождение = значение из старого импорта, а не из
+            // калькулятора — такие транзакции и пересчитываем.
+            $q->whereNotNull('t.commissionsAmountRUB')
+              ->whereRaw('ABS(COALESCE(t."personalVolume", 0) - t."commissionsAmountRUB" / 100) > 0.02');
+        } elseif (! $all) {
             $q->where(function ($w) {
                 $w->where('t.customCommission', true)
                   ->orWhere('c.consultant', CommissionCalculator::UNKNOWN_CONSULTANT_ID);
