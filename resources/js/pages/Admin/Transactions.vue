@@ -264,13 +264,6 @@
                         class="d-inline-flex"
                         @update:model-value="v => onCustomCommissionToggle(d, v)" />
                     </template>
-                    <template v-else-if="h.key === 'zeroDsIncome'">
-                      <v-checkbox :model-value="d.zeroDsIncome"
-                        title="Не начислять Доход ДС по этой транзакции"
-                        hide-details density="compact" color="warning"
-                        class="d-inline-flex"
-                        @update:model-value="v => (d.zeroDsIncome = v)" />
-                    </template>
                     <template v-else-if="h.key === 'change'">
                       <v-btn icon="mdi-pencil-outline" size="x-small" variant="text"
                         :disabled="!isRateChangeable(d)"
@@ -903,7 +896,10 @@ const draftHeaders = [
   { title: 'Сумма, RUB', key: 'amountRub', thClass: 'text-end', tdClass: 'text-end text-no-wrap', style: 'min-width:140px' },
   { title: '% ДС', key: 'dsPercent', thClass: 'text-end', tdClass: 'text-end', style: 'min-width:80px' },
   { title: 'Своя комиссия', key: 'customCommission', thClass: 'text-center', tdClass: 'text-center', style: 'width:110px' },
-  { title: 'Нулевой доход ДС', key: 'zeroDsIncome', thClass: 'text-center', tdClass: 'text-center', style: 'width:130px' },
+  // «Нулевой доход ДС» (zeroDsIncome) убран 2026-07-13: чекбокс никуда не
+  // сохранялся — update() его не валидирует — и CommissionCalculator флаг не
+  // читает. Галка не влияла ни на что и вводила оператора в заблуждение.
+  // Возвращать только вместе с поддержкой в калькуляторе.
   { title: 'Изменить', key: 'change', thClass: 'text-center', tdClass: 'text-center', style: 'width:50px' },
   { title: 'Доход ДС', key: 'incomeDS', thClass: 'text-end', tdClass: 'text-end text-no-wrap' },
   { title: 'Доход ДС без НДС', key: 'incomeDsNoVat', thClass: 'text-end', tdClass: 'text-end text-no-wrap', style: 'min-width:140px' },

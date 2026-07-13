@@ -239,9 +239,12 @@
             <v-col cols="6">
               <v-checkbox v-model="editProduct.active" label="Активен" density="compact" />
             </v-col>
-            <v-col cols="6">
-              <v-checkbox v-model="editProduct.noComission" label="Без комиссии" density="compact" />
-            </v-col>
+            <!-- «Без комиссии» (noComission) скрыт 2026-07-13: флаг сохранялся,
+                 но CommissionCalculator его не читает — комиссии начисляются
+                 в любом случае. У продукта «Образовательные продукты» галка
+                 стоит, а по нему выплачено 32,1 млн ₽ по цепочке: подключение
+                 флага «как задумано» обнулило бы их. Что флаг должен означать —
+                 открытый вопрос к владельцу; до решения не показываем. -->
             <v-col cols="6">
               <v-checkbox v-model="editProduct.visibleToResident" label="Виден партнёру" density="compact" />
             </v-col>
