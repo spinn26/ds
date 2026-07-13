@@ -418,13 +418,17 @@ class AdminFinanceController extends Controller
                 'netRevenueUSD' => round((float) ($t->netRevenueUSD ?? 0), 2),
                 'currencySymbol' => $t->currency ? ($currencies[$t->currency] ?? null) : null,
                 // Поля из commission-цепочки.
-                // partnerCommissionRUB — «Комиссия» ПРЯМОГО партнёра
-                // (получателя транзакции, chainOrder=1) = жирная строка в
-                // попапе цепочки. Раньше сюда шла Σ по всей цепочке (прямой +
-                // аплайн-отрыв), но в этой же строке ЛП/ГП/Баллы относятся к
-                // прямому партнёру → и «Комиссия» должна быть его (иначе
-                // колонка ≠ жирной строке цепочки). Полная сумма по цепочке
-                // осталась в dsWithholdingRUB («Удержание ДС»).
+                //
+                // ⚠ Семантика колонок УТВЕРЖДЕНА владельцем 2026-07-13 — не менять
+                // без явного запроса (её уже переигрывали дважды):
+                //   «Комиссия»     = dsWithholdingRUB = Σ по ВСЕЙ цепочке.
+                //                    Так требует спека ✅Комиссии: «Прибыль ДС =
+                //                    Доход без НДС − Σ комиссий цепочки».
+                //   «Комиссия ФК»  = partnerCommissionRUB = только прямой партнёр
+                //                    (chainOrder=1) = жирная строка в попапе цепочки.
+                //                    Скрыта по умолчанию. Разница с «Комиссией» =
+                //                    отрыв вышестоящих наставников.
+                //
                 // partnerPV/GV/Bonus — показатели прямого партнёра
                 // (chainOrder=1). Если цепочки нет — все нули.
                 'partnerCommissionRUB' => $partnerRow ? round((float) ($partnerRow->amountRUB ?? 0), 2) : 0,
@@ -456,11 +460,10 @@ class AdminFinanceController extends Controller
                 // (совпадает с суммой per-row live-прибыли; denorm profit_rub
                 // может отставать после ночных штрафов).
                 'profitRUB' => round((float) ($aggregates->commissions_rub ?? 0) - $commissionTotal, 2),
-                // «Комиссия» итогом = Σ комиссий прямых партнёров (chainOrder=1)
-                // за отфильтрованные транзакции — совпадает с суммой per-row
-                // колонки (которая теперь показывает прямого партнёра).
+                // Итог колонки «Комиссия ФК» = Σ комиссий прямых партнёров
+                // (chainOrder=1) за отфильтрованные транзакции.
                 'partnerCommissionRUB' => round($directCommissionTotal, 2),
-                // «Удержание ДС» итогом = Σ по всей цепочке (прямой + отрыв).
+                // Итог колонки «Комиссия» = Σ по всей цепочке (прямой + отрыв).
                 'dsWithholdingRUB' => round($commissionTotal, 2),
             ],
         ]);
