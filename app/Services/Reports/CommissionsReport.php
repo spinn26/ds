@@ -2,6 +2,7 @@
 
 namespace App\Services\Reports;
 
+use App\Support\SupplierResolver;
 use Illuminate\Support\Facades\DB;
 
 /** Per spec ✅Отчеты §3.5 — детальный по сделкам с аналитикой отрыва. */
@@ -35,7 +36,10 @@ class CommissionsReport extends AbstractReportType
             ->get([
                 't.id',
                 'c.number',
-                DB::raw('COALESCE(pc.provider_name, pr."providerName") as "providerName"'),
+                // program.providerName wins over the catalog: it is per-program
+                // («Решающее приемущество» → ГГА, while the product «Ренессанс»
+                // carries its own provider). Insmart is remapped below.
+                DB::raw('COALESCE(pr."providerName", pc.provider_name) as "providerName"'),
                 DB::raw('COALESCE(pc.name, p.name) as "productName"'),
                 DB::raw('COALESCE(prc.name, pr.name) as "programName"'),
                 'c.clientName', 't.date', 't.amountRUB',
@@ -54,7 +58,9 @@ class CommissionsReport extends AbstractReportType
         $chain = $this->chainCommissionByTx($rows->pluck('id')->all());
 
         return $rows->map(fn ($r) => [
-            $r->number, $r->providerName, $r->productName, $r->programName,
+            $r->number,
+            SupplierResolver::resolve($r->productName, $r->providerName),
+            $r->productName, $r->programName,
             $r->clientName, $r->date, $this->n($r->amountRUB),
             $this->n((float) ($r->amountRUB ?? 0) * (float) ($r->dsCommissionPercentage ?? 0) / 100),
             $this->n($r->commissionsAmountRUB),

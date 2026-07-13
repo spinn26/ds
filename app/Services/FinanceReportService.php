@@ -149,7 +149,7 @@ class FinanceReportService
         $getTxData = function (?int $transactionId) use ($transactions, $contracts, $programs, $properties, $productFlags, $productCatalogNames, $programCatalogNames): array {
             $empty = [
                 'contractNumber' => null, 'clientName' => null, 'sellerName' => null, 'productName' => null,
-                'programName' => null, 'amount' => null,
+                'programName' => null, 'amount' => null, 'amountNoVat' => null,
                 'propertyTitle' => null, 'contractTerm' => null, 'yearKV' => null,
                 'productHasProperty' => true, 'productHasTerm' => true, 'productHasYearKv' => true,
             ];
@@ -161,7 +161,10 @@ class FinanceReportService
             if (! $contract) {
                 // «Сумма оплаты» — в рублях: для валютных сделок (напр. Axevil/USD)
                 // берём amountRUB, иначе колонка «₽» показывала бы сумму в валюте.
-                return array_merge($empty, ['amount' => ($tx->amountRUB ?: $tx->amount) ?? null]);
+                return array_merge($empty, [
+                    'amount' => ($tx->amountRUB ?: $tx->amount) ?? null,
+                    'amountNoVat' => $tx->commissionsAmountRUB ?? null,
+                ]);
             }
             $flags = $contract->product ? ($productFlags[$contract->product] ?? null) : null;
             $hasProperty = $flags ? (bool) $flags->has_property : true;
@@ -185,6 +188,11 @@ class FinanceReportService
                 // «Сумма оплаты» в рублях (amountRUB) — для валютных сделок,
                 // чтобы колонка «₽» в отчёте не показывала сумму в валюте.
                 'amount' => ($tx->amountRUB ?: $tx->amount) ?? null,
+                // «Сумма без НДС» = доход ДС без НДС по сделке. Берём с
+                // транзакции, а не с commission.amount: у аплайн-строк
+                // (chainOrder > 1) commission.amount = 0, из-за чего колонка
+                // в «Групповых продажах» была пустой.
+                'amountNoVat' => $tx->commissionsAmountRUB ?? null,
                 // Гейтим по флагу продукта: если у продукта has_*=false —
                 // отдаём null. Это позволяет UI скрывать ячейку в строках,
                 // где параметр не релевантен этому конкретному продукту.
@@ -252,8 +260,11 @@ class FinanceReportService
                 'productHasProperty' => $txData['productHasProperty'],
                 'productHasTerm' => $txData['productHasTerm'],
                 'productHasYearKv' => $txData['productHasYearKv'],
-                'amountNoVat' => round((float) ($c->amount ?? 0), 2),
-                'personalVolume' => round((float) ($c->personalVolume ?? 0), 2),
+                'amountNoVat' => round((float) ($txData['amountNoVat'] ?? 0), 2),
+                // Колонка «ГП»: commission.personalVolume у чужой продажи всегда
+                // 0 (продал даун, не наставник) — групповой объём лежит в
+                // groupVolume. Тот же источник, что и у карточки «ОП по ГП».
+                'personalVolume' => round((float) ($c->groupVolume ?? 0), 2),
                 'bonus' => round((float) ($c->groupBonus ?? 0), 2),
                 'bonusRub' => round((float) ($c->groupBonusRub ?? 0), 2),
                 'partnerName' => $partnerName,

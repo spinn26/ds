@@ -466,13 +466,15 @@ class PoolRunner
         $from = Carbon::create($year, $month, 1)->startOfMonth();
         $to = $from->copy()->endOfMonth();
 
+        // Per spec ✅Расчет пула: фонд = 1% от «выручки ДС без НДС», т.е. от
+        // ДОХОДА DS (Сумма × %ДС / 105 × 100) — это commissionsAmountRUB.
+        // Раньше здесь брался netRevenueRUB — это платежи клиентов минус НДС
+        // (июнь 2026: 268 млн вместо 10,4 млн дохода ДС), из-за чего фонд был
+        // завышен примерно в 26 раз.
         $sum = DB::selectOne(
             'SELECT COALESCE(
-               SUM(COALESCE("netRevenueRUB",
-                           CASE WHEN "dsCommissionPercentage" > 0
-                                THEN "amountRUB" * "dsCommissionPercentage" / 105
-                                ELSE "amountRUB" / 1.05
-                           END)),
+               SUM(COALESCE("commissionsAmountRUB",
+                           "amountRUB" * COALESCE("dsCommissionPercentage", 0) / 105)),
                0) AS revenue
                FROM transaction
               WHERE date >= ? AND date <= ?

@@ -22,6 +22,15 @@ use Illuminate\Support\Facades\Storage;
  */
 class ReportGenerator
 {
+    /**
+     * Расширить date-only верхнюю границу периода до конца суток, чтобы
+     * сравнение с timestamp-колонками не отрезало последний день.
+     */
+    public static function endOfDay(string $date): string
+    {
+        return str_contains($date, ':') ? $date : $date.' 23:59:59';
+    }
+
     public function __construct(
         private readonly ReportTypeRegistry $registry,
         private readonly XlsxExportService $xlsx,
@@ -55,7 +64,11 @@ class ReportGenerator
         if (! $type) throw new \RuntimeException("Неизвестный тип отчёта: {$row->type}");
 
         $filters = json_decode($row->filters ?: '{}', true);
-        $rows = $type->rows($row->date_from, $row->date_to, $filters);
+        // report_archive.date_to is a DATE ("2026-06-30"), but the columns the
+        // reports filter on (transaction.date, qualificationLog.date, ...) are
+        // TIMESTAMPs. Passing the bare date makes Postgres compare against
+        // midnight, silently dropping the whole last day of the period.
+        $rows = $type->rows($row->date_from, self::endOfDay($row->date_to), $filters);
         $headers = $type->headers();
 
         $path = "reports/{$id}.xlsx";

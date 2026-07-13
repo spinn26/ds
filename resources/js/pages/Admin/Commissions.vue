@@ -426,8 +426,8 @@ const headers = [
   { title: 'ЛП', key: 'partnerPV', align: 'end', width: 80 },
   { title: 'ГП', key: 'partnerGV', align: 'end', width: 80 },
   { title: 'Баллы', key: 'partnerBonus', align: 'end', width: 80 },
-  { title: 'Комиссия', key: 'partnerCommissionRUB', align: 'end', width: 110 },
-  { title: 'Удержание ДС', key: 'dsWithholdingRUB', align: 'end', width: 120 },
+  { title: 'Комиссия', key: 'dsWithholdingRUB', align: 'end', width: 110 },
+  { title: 'Комиссия ФК', key: 'partnerCommissionRUB', align: 'end', width: 120 },
   { title: 'Прибыль', key: 'profitRUB', align: 'end', width: 110 },
   { title: '', key: 'actions', sortable: false, width: 80 },
   { title: '', key: 'data-table-expand', sortable: false, width: 50 },
@@ -439,10 +439,11 @@ const columnVisible = ref({
   contractTerm: false,
   yearKV: false,
   commissionsAmountUSD: false,
-  // «Удержание ДС» = Σ по всей цепочке (прямой партнёр + отрыв наставников).
-  // Показываем по умолчанию: «Комиссия» теперь = только прямой партнёр, и
-  // разница «Удержание − Комиссия» = отрыв вышестоящих (иначе строка не
-  // сходится: Прибыль = Доход − Удержание ДС).
+  // Per spec ✅Комиссии: «Прибыль ДС = Доход без НДС − Σ комиссий цепочки»,
+  // поэтому «Комиссия» = Σ по всей цепочке (прямой партнёр + отрыв наставников).
+  // Комиссия одного лишь прямого партнёра осталась отдельной колонкой
+  // «Комиссия ФК» — скрыта по умолчанию, разница с «Комиссией» = отрыв.
+  partnerCommissionRUB: false,
 });
 
 // Пользовательский порядок колонок. Изначально пустой → используем

@@ -18,7 +18,9 @@ class QualificationsReport extends AbstractReportType
     public function rows(string $from, string $to, array $filters): array
     {
         $prevFrom = (new \DateTime($from))->modify('-1 month')->format('Y-m-01');
-        $prevTo = (new \DateTime($prevFrom))->modify('last day of this month')->format('Y-m-d');
+        // qualificationLog.date is a TIMESTAMP and the monthly closing row is
+        // stamped 23:59:59 — the upper bound must cover the whole last day.
+        $prevTo = (new \DateTime($prevFrom))->modify('last day of this month')->format('Y-m-d').' 23:59:59';
 
         $logs = DB::table('qualificationLog')
             ->whereNull('dateDeleted')
@@ -26,6 +28,10 @@ class QualificationsReport extends AbstractReportType
                 $w->whereBetween('date', [$from, $to])
                   ->orWhereBetween('date', [$prevFrom, $prevTo]);
             })
+            // Within one month a consultant has both an opening row (1st, all
+            // volumes zeroed) and the closing row (last day, 23:59:59). Order by
+            // date so the closing row overwrites the opening one in $byCons.
+            ->orderBy('date')
             ->limit(60000)
             ->get();
 

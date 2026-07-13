@@ -846,7 +846,8 @@ class AdminFinanceController extends Controller
             $legacyQuery->whereRaw('1=0');
         }
         if ($request->filled('date_from')) $legacyQuery->where('cm.date', '>=', $request->date_from);
-        if ($request->filled('date_to')) $legacyQuery->where('cm.date', '<=', $request->date_to);
+        // cm.date is a TIMESTAMP — a bare date would cut off the last day.
+        if ($request->filled('date_to')) $legacyQuery->where('cm.date', '<=', $request->date_to . ' 23:59:59');
         if ($request->filled('year')) $legacyQuery->whereRaw('EXTRACT(YEAR FROM cm.date) = ?', [(int) $request->year]);
         if ($request->filled('month')) $legacyQuery->whereRaw('EXTRACT(MONTH FROM cm.date) = ?', [(int) $request->month]);
 
