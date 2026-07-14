@@ -85,30 +85,14 @@ class ImportTransactionsJob implements ShouldQueue
             ]);
 
             // === STEP 2: validation (parse + match contract) ===
-            // Курсы валют кэшируем по currencyId (per-row: у Trust/Woodville и
-            // др. валюта задаётся колонкой «Валюта» и различается по строкам —
-            // USD/EUR в одном листе). RUB(67) = 1.0.
-            $rateCache = [];
-            $rateFor = function (?int $cur) use (&$rateCache): float {
-                $cur = $cur ?: 67;
-                if (! array_key_exists($cur, $rateCache)) {
-                    if ($cur === 67) {
-                        $rateCache[$cur] = 1.0;
-                    } else {
-                        $r = DB::table('currencyRate')
-                            ->where('currency', $cur)
-                            ->orderByDesc('date')
-                            ->first();
-                        $rateCache[$cur] = (float) ($r->rate ?? 1);
-                    }
-                }
-                return $rateCache[$cur];
-            };
-            // Курс импорт-уровня (fallback, если у строки нет своей валюты).
+            // Курс — ПО ДАТЕ СТРОКИ (валюта тоже per-row: у Trust/Woodville она
+            // задаётся колонкой «Валюта» и различается по строкам). Раньше курс
+            // брался один на всю пачку и «последний в справочнике» — импорт
+            // майских выплат в июле конвертировал их по июльскому курсу.
+            // CurrencyRates сам кэширует по (валюта, месяц).
+            $rateFor = fn (?int $cur, $date = null): float => \App\Support\CurrencyRates::forDate($cur, $date);
+            // Курс импорт-уровня (fallback, если у строки нет ни валюты, ни даты).
             $currencyRate = $rateFor($resolvedCurrency);
-            $usdRate = 1.0;
-            $rateUsd = DB::table('currencyRate')->where('currency', 5)->orderByDesc('date')->first();
-            if ($rateUsd) $usdRate = (float) $rateUsd->rate;
 
             // Batch-загрузка контрактов: 1 SELECT вместо 1267 (раньше каждая
             // строка делала отдельный exact SELECT — горлышко валидации).
@@ -221,9 +205,10 @@ class ImportTransactionsJob implements ShouldQueue
                 // валюта импорта. Раньше всегда бралась одна валюта импорта →
                 // Trust (USD/EUR) грузился в RUB, суммы в рублях были неверны.
                 $rowCurrency = ($row['currency'] ?? null) ?: $resolvedCurrency;
-                $rowRate = $rateFor($rowCurrency);
+                $rowRate = $rateFor($rowCurrency, $date);
                 $amountRub = $amount * $rowRate;
-                $amountUsd = $usdRate > 0 ? $amountRub / $usdRate : 0;
+                $rowUsdRate = \App\Support\CurrencyRates::usdForDate($date);
+                $amountUsd = $rowUsdRate > 0 ? $amountRub / $rowUsdRate : 0;
 
                 // ds_percent: «0,028» (русская локаль Excel) — приходит из
                 // Google Sheets и валит PG bulk INSERT с invalid numeric

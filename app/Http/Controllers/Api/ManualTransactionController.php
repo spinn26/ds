@@ -233,9 +233,20 @@ class ManualTransactionController extends Controller
             'customCommission', 'dsCommissionAbsolute',
         ]);
 
-        if ($request->filled('currency')) {
-            $update['currency'] = (int) $request->currency;
-            $update['currencyRate'] = $this->fetchCurrencyRate((int) $request->currency);
+        // Курс зависит от МЕСЯЦА СДЕЛКИ, поэтому пересчитываем его и при смене
+        // валюты, и при смене даты. Раньше курс фиксировался один раз (при
+        // создании черновика / смене валюты) и при переносе даты на другой месяц
+        // оставался прежним.
+        if ($request->filled('currency') || $request->filled('date')) {
+            $currencyId = $request->filled('currency')
+                ? (int) $request->currency
+                : (int) ($draft->currency ?? \App\Support\CurrencyRates::RUB_CURRENCY_ID);
+            $effectiveDate = $request->filled('date') ? $request->date : ($draft->date ?? null);
+
+            if ($request->filled('currency')) {
+                $update['currency'] = $currencyId;
+            }
+            $update['currencyRate'] = \App\Support\CurrencyRates::forDate($currencyId, $effectiveDate);
         }
 
         // Любое изменение полей инвалидирует ранее рассчитанное превью.
@@ -477,12 +488,17 @@ class ManualTransactionController extends Controller
 
             try {
                 $txId = DB::transaction(function () use ($draft, $request) {
-                    $rate = (float) ($draft->currencyRate ?: 1);
+                    // Курс берём по дате сделки заново, а не из черновика: он мог
+                    // быть зафиксирован до того, как оператор проставил/переставил
+                    // дату (см. CurrencyRates — курс средневзвешенный ЗА МЕСЯЦ).
+                    $rate = \App\Support\CurrencyRates::forDate(
+                        $draft->currency ? (int) $draft->currency : null,
+                        $draft->date
+                    );
                     $amount = (float) $draft->amount;
                     $amountRub = $amount * $rate;
 
-                    $usdRow = DB::table('currencyRate')->where('currency', 5)->orderByDesc('date')->first();
-                    $usdRate = (float) ($usdRow->rate ?? 1);
+                    $usdRate = \App\Support\CurrencyRates::usdForDate($draft->date);
                     $amountUsd = $usdRate > 0 ? $amountRub / $usdRate : 0;
 
                     $date = \Carbon\Carbon::parse($draft->date);
@@ -567,7 +583,13 @@ class ManualTransactionController extends Controller
         $contract = DB::table('contract')->where('id', $draft->contract)->first();
         if (! $contract || ! $contract->consultant) return ['ready' => false];
 
-        $rate = (float) ($draft->currencyRate ?: 1);
+        // Курс — по дате сделки, тем же резолвером, что и при фиксации: иначе
+        // превью и факт разъедутся (курс в черновике мог быть проставлен до того,
+        // как оператор поставил дату).
+        $rate = \App\Support\CurrencyRates::forDate(
+            $draft->currency ? (int) $draft->currency : null,
+            $draft->date
+        );
         $amountRub = (float) $draft->amount * $rate;
 
         // НДС — по дате самой транзакции (draft.date), не now(): превью должно
@@ -765,8 +787,7 @@ class ManualTransactionController extends Controller
         $partnersTotal = array_sum(array_column($chain, 'sum'));
         $profitDS = round($incomeDS - $partnersTotal, 2);
 
-        $usdRow = DB::table('currencyRate')->where('currency', 5)->orderByDesc('date')->first();
-        $usdRate = (float) ($usdRow->rate ?? 0);
+        $usdRate = \App\Support\CurrencyRates::usdForDate($draft->date);
         $incomeDsUsd = $usdRate > 0 ? round($incomeDS / $usdRate, 2) : 0;
         $amountNoVatUsd = $usdRate > 0 ? round($amountNoVat / $usdRate, 2) : 0;
 
@@ -863,14 +884,13 @@ class ManualTransactionController extends Controller
         return $byProgram;
     }
 
-    private function fetchCurrencyRate(int $currencyId): float
+    /**
+     * Курс на дату сделки. При создании черновика даты ещё нет — берём текущий
+     * месяц; как только оператор проставит дату, курс пересчитается в updateDraft.
+     */
+    private function fetchCurrencyRate(int $currencyId, $date = null): float
     {
-        if ($currencyId === 67) return 1.0; // RUB
-        $row = DB::table('currencyRate')
-            ->where('currency', $currencyId)
-            ->orderByDesc('date')
-            ->first();
-        return (float) ($row->rate ?? 1);
+        return \App\Support\CurrencyRates::forDate($currencyId, $date);
     }
 
     private function loadDraftWithRefs(int $id): ?object

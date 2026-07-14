@@ -686,11 +686,11 @@ class TransactionImportController extends Controller
             $amountRub = (float) $data['amount'] * $rate;
             $update['amountRUB'] = round($amountRub, 2);
             // usdRate: сохранённый в транзакции (историчный) → не переписываем
-            // валютный контекст; при отсутствии — последний из currencyRate.
+            // валютный контекст; при отсутствии — курс МЕСЯЦА СДЕЛКИ (не последний
+            // в справочнике, см. CurrencyRates).
             $usdRate = (float) ($tx->usdRate ?: 0);
             if ($usdRate <= 0) {
-                $usdRow = DB::table('currencyRate')->where('currency', 5)->orderByDesc('date')->first();
-                $usdRate = (float) ($usdRow->rate ?? 0);
+                $usdRate = \App\Support\CurrencyRates::usdForDate($data['date'] ?? $tx->date ?? null);
             }
             $update['amountUSD'] = $usdRate > 0 ? round($amountRub / $usdRate, 2) : 0;
         }

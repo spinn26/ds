@@ -585,12 +585,13 @@ class CommissionCalculator
         //
         // Доход ДС (commissionsAmountRUB) = amountNoVat × %ДС / 100.
         // netRevenueRUB = amountNoVat − Σ комиссии цепочке = «остаток ДС».
-        // USD-зеркала пересчитываем через текущий USD-курс.
+        // USD-зеркала — по курсу МЕСЯЦА СДЕЛКИ (спека «Валюты и НДС»: справочник
+        // хранит средневзвешенный курс за месяц). Раньше брался последний курс
+        // справочника, и пересчёт старой сделки конвертировал её по свежему курсу.
         $incomeDsRub = round($amountNoVat * $dsComPercent / 100, 2);
         $netRevenueRub = round($amountNoVat - $chainTotalRub, 2);
 
-        $usdRow = DB::table('currencyRate')->where('currency', 5)->orderByDesc('date')->first();
-        $usdRate = (float) ($usdRow->rate ?? 1);
+        $usdRate = \App\Support\CurrencyRates::usdForDate($tx->date ?? null);
         $incomeDsUsd = $usdRate > 0 ? round($incomeDsRub / $usdRate, 2) : 0;
         $netRevenueUsd = $usdRate > 0 ? round($netRevenueRub / $usdRate, 2) : 0;
 
@@ -902,8 +903,8 @@ class CommissionCalculator
         // (фидбек владельца 2026-07-08). Раньше эти поля не обновлялись → в
         // отчётах у неизвестных ФК Доход ДС/прибыль были пустыми/устаревшими.
         $incomeDsRub = round($amountNoVat * $dsComPercent / 100, 2);
-        $usdRow = DB::table('currencyRate')->where('currency', 5)->orderByDesc('date')->first();
-        $usdRate = (float) ($usdRow->rate ?? 1);
+        // USD — по курсу месяца сделки (см. CurrencyRates).
+        $usdRate = \App\Support\CurrencyRates::usdForDate($tx->date ?? null);
         $incomeDsUsd = $usdRate > 0 ? round($incomeDsRub / $usdRate, 2) : 0;
         // ЛП/ГП у Неизвестного консультанта = 0: это плейсхолдер, реального
         // партнёра нет — начислять личный/групповой объём (баллы квалификации)

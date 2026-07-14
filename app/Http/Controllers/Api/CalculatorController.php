@@ -8,7 +8,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Schema;
 
 /**
  * Калькулятор объёмов работает напрямую с audit-каталогом
@@ -213,12 +212,11 @@ class CalculatorController extends Controller
         // к процентам, чтобы дальше работала единая формула.
         $dsCommissionPercent = self::tariffDsPercent($tariff);
 
-        // Курс валюты — берём свежий из currencyRate (67 = RUB → 1.0).
-        $currencyRate = 1.0;
-        if ($currencyId !== 67) {
-            $rate = DB::table('currencyRate')->where('currency', $currencyId)->orderByDesc('date')->first();
-            $currencyRate = (float) ($rate->rate ?? 1.0);
-        }
+        // Курс — средневзвешенный за ТЕКУЩИЙ месяц (спека «Валюты и НДС» §2.1:
+        // калькулятор использует курс, относящийся к периоду расчёта). Раньше
+        // брался «последний в справочнике» — то же значение, пока месяц текущий,
+        // но формула теперь одна на всю платформу (см. CurrencyRates).
+        $currencyRate = \App\Support\CurrencyRates::forDate($currencyId);
 
         // НДС из справочника на текущую дату.
         $vat = DB::table('vat')
@@ -241,9 +239,8 @@ class CalculatorController extends Controller
         $groupBonus     = $personalVolume * $qual->percent / 100;
         $groupBonusRub  = $groupBonus * 100;
 
-        // Сохранение в историю. FK на legacy program не нужен — пишем
-        // NULL, а контекст продукта/программы/тарифа кладём в meta_json
-        // (jsonb-колонка добавлена миграцией).
+        // Формула пока читает проверенные legacy-справочники, а результат
+        // сохраняется в каноническую историю v2 без изменения расчёта.
         $historyId = null;
         try {
             $meta = [
@@ -258,23 +255,43 @@ class CalculatorController extends Controller
                 'ds_percent'   => $tariff['ds_pct'] ?? $tariff['ds_percent'] ?? null,
                 'formula'      => $tariff['formula'] ?? null,
             ];
-            $row = [
-                'user_field'    => $request->user()?->id,
-                'qulaification' => $qual->id,  // оригинальный typo в схеме
-                'program'       => null,        // FK на legacy program не используется
-                'calcProperty'  => null,
-                'termContract'  => null,
-                'amount'        => $amount,
-                'currency'      => $currencyId,
-                'peronalVolume' => round($personalVolume, 2),
-                'groupBonus'    => round($groupBonus, 4),
-                'groupBonusRub' => round($groupBonusRub, 2),
-                'createdAt'     => now(),
-            ];
-            if (Schema::hasColumn('volumeCalculator', 'meta_json')) {
-                $row['meta_json'] = json_encode($meta, JSON_UNESCAPED_UNICODE);
-            }
-            $historyId = DB::table('volumeCalculator')->insertGetId($row);
+            $v2 = DB::connection('pgsql_v2');
+            $mappedIds = $v2->table('legacy_mappings')
+                ->where('source_system', 'legacy_pg')
+                ->where(function ($query) use ($product, $program) {
+                    $query->where(function ($item) use ($product) {
+                        $item->where('source_table', 'products_catalog')
+                            ->where('source_key', (string) ($product->id ?? ''))
+                            ->where('target_table', 'products');
+                    })->orWhere(function ($item) use ($program) {
+                        $item->where('source_table', 'programs_catalog')
+                            ->where('source_key', (string) $program->id)
+                            ->where('target_table', 'programs');
+                    });
+                })
+                ->pluck('target_id', 'source_table');
+
+            $historyId = $v2->table('calculator_runs')->insertGetId([
+                'user_id' => $request->user()?->id,
+                'qualification_level_id' => $qual->id,
+                'product_id' => $mappedIds->get('products_catalog'),
+                'program_id' => $mappedIds->get('programs_catalog'),
+                'currency_id' => $currencyId,
+                'amount' => $amount,
+                'personal_volume_points' => round($personalVolume, 2),
+                'group_bonus_points' => round($groupBonus, 4),
+                'group_bonus_rub' => round($groupBonusRub, 2),
+                'inputs' => json_encode($meta, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
+                'result' => json_encode([
+                    'commission' => round($dsIncome, 2),
+                    'amount_rub' => round($amountRub, 2),
+                    'amount_without_vat' => round($amountNoVat, 2),
+                    'ds_commission_percent' => round($dsCommissionPercent, 2),
+                    'vat_percent' => $vatPercent,
+                    'currency_rate' => $currencyRate,
+                ], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
+                'created_at' => now(),
+            ]);
         } catch (\Exception $e) {
             Log::debug('calculator save-to-history skipped', ['exception' => $e->getMessage()]);
         }
@@ -302,25 +319,21 @@ class CalculatorController extends Controller
     {
         $userId = $request->user()->id;
         try {
-            $rows = DB::table('volumeCalculator')
-                ->where('user_field', $userId)
-                ->orderByDesc('createdAt')
+            $rows = DB::connection('pgsql_v2')->table('calculator_runs')
+                ->where('user_id', $userId)
+                ->orderByDesc('created_at')
                 ->limit(50)
                 ->get();
             if ($rows->isEmpty()) return response()->json([]);
 
-            $qualIds = $rows->pluck('qulaification')->filter()->unique();
+            $qualIds = $rows->pluck('qualification_level_id')->filter()->unique();
             $qualifications = $qualIds->isNotEmpty()
-                ? DB::table('status_levels')->whereIn('id', $qualIds)->get()->keyBy('id')
+                ? DB::connection('pgsql_v2')->table('qualification_levels')->whereIn('id', $qualIds)->get()->keyBy('id')
                 : collect();
 
-            $hasMeta = Schema::hasColumn('volumeCalculator', 'meta_json');
-
-            $history = $rows->map(function ($h) use ($qualifications, $hasMeta) {
-                $qual = $h->qulaification ? $qualifications->get($h->qulaification) : null;
-                $meta = $hasMeta && ! empty($h->meta_json)
-                    ? (is_array($h->meta_json) ? $h->meta_json : json_decode((string) $h->meta_json, true))
-                    : [];
+            $history = $rows->map(function ($h) use ($qualifications) {
+                $qual = $h->qualification_level_id ? $qualifications->get($h->qualification_level_id) : null;
+                $meta = is_array($h->inputs) ? $h->inputs : (json_decode((string) $h->inputs, true) ?: []);
 
                 return [
                     'id'              => $h->id,
@@ -331,10 +344,10 @@ class CalculatorController extends Controller
                     'term'            => $meta['term']         ?? null,
                     'kvPayoutYear'    => $meta['year']         ?? null,
                     'amount'          => $h->amount,
-                    'personalVolume'  => $h->peronalVolume ?? 0,
-                    'groupBonus'      => $h->groupBonus ?? 0,
-                    'groupBonusRub'   => $h->groupBonusRub ?? 0,
-                    'createdAt'       => $h->createdAt,
+                    'personalVolume'  => $h->personal_volume_points ?? 0,
+                    'groupBonus'      => $h->group_bonus_points ?? 0,
+                    'groupBonusRub'   => $h->group_bonus_rub ?? 0,
+                    'createdAt'       => $h->created_at,
                 ];
             });
 
@@ -348,7 +361,7 @@ class CalculatorController extends Controller
     public function clearHistory(Request $request): JsonResponse
     {
         try {
-            DB::table('volumeCalculator')->where('user_field', $request->user()->id)->delete();
+            DB::connection('pgsql_v2')->table('calculator_runs')->where('user_id', $request->user()->id)->delete();
         } catch (\Exception $e) {
             Log::error('calculator clearHistory failed', ['user_id' => $request->user()->id, 'exception' => $e->getMessage()]);
             return response()->json(['message' => 'Не удалось очистить историю'], 500);

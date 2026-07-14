@@ -70,59 +70,66 @@ class CurrencyRecalculator
             ->first();
         $usdRate = (float) ($usdRow->rate ?? 0);
 
-        // VAT в этом месяце (для пересчёта netRevenueRUB)
-        $vat = DB::table('vat')
-            ->where('dateFrom', '<=', $monthEnd)
-            ->where('dateTo', '>=', $period)
-            ->first();
-        $vatPercent = (float) ($vat->value ?? 5);
-
+        // НДС здесь больше не нужен: экономику (доход ДС без НДС, прибыль,
+        // комиссии) пересчитывает CommissionCalculator — он берёт ставку НДС по
+        // дате самой сделки.
         $txs = DB::table('transaction')
             ->whereNull('deletedAt')
             ->where('currency', $rate->currency)
             ->where('date', '>=', $period)
             ->where('date', '<=', $monthEnd)
-            ->get(['id', 'amount', 'dsCommissionPercentage']);
+            ->get(['id', 'amount']);
+
+        // Кэш курсов мог остаться с прежним значением этого месяца.
+        \App\Support\CurrencyRates::flush();
 
         $updated = 0;
         foreach ($txs as $tx) {
             $amountRub = (float) $tx->amount * $newRate;
             $amountUsd = $usdRate > 0 ? $amountRub / $usdRate : 0;
-            $dsPercent = (float) ($tx->dsCommissionPercentage ?? 0);
-            // netRevenueRUB сразу пересчитываем если у транзакции есть %DS
-            $netRevenue = $dsPercent > 0
-                ? round(($amountRub * $dsPercent / 100) / (1 + $vatPercent / 100), 2)
-                : null;
 
-            $update = [
+            // Только валютный контекст. netRevenueRUB здесь НЕ трогаем: раньше в
+            // него писали «доход ДС без НДС», хотя калькулятор кладёт туда
+            // «сумма без НДС − комиссии цепочки» — семантика колонки ломалась, и
+            // отчёты, читающие денорм, разъезжались. Всю экономику пересчитывает
+            // CommissionCalculator ниже.
+            DB::table('transaction')->where('id', $tx->id)->update([
                 'currencyRate' => $newRate,
                 'amountRUB' => round($amountRub, 2),
                 'amountUSD' => round($amountUsd, 2),
                 'usdRate' => $usdRate,
-            ];
-            if ($netRevenue !== null) {
-                $update['netRevenueRUB'] = $netRevenue;
-            }
-            DB::table('transaction')->where('id', $tx->id)->update($update);
+            ]);
             $updated++;
         }
 
-        // Считаем commission-строки за период (для пользователя — подсказка
-        // что нужно их перерасчитать через CommissionCalculator).
-        // commission.dateMonth хранит формат 'YYYY-MM' (например, '2026-02'),
-        // а не просто 'MM' — раньше тут было sprintf('%02d', $month) и счётчик
-        // всегда возвращал 0.
-        $dateMonthStr = sprintf('%04d-%02d', $year, $month);
-        $commissionsAffected = DB::table('commission')
-            ->where('dateMonth', $dateMonthStr)
-            ->whereIn('transaction', $txs->pluck('id'))
-            ->whereNull('deletedAt')
-            ->count();
+        // Спека ✅Валюты и НДС §2.1 шаг 3: «Как только сотрудник сохраняет новый
+        // курс, система применяет его ко всем операциям за этот период —
+        // пересчитываются рублёвые эквиваленты И экономика (Доход ДС без НДС и
+        // Прибыль)».
+        //
+        // Раньше пересчёт останавливался на суммах: commissionsAmountRUB,
+        // profitRUB и НИ ОДНА строка commission не обновлялись (их только
+        // подсчитывали «для подсказки»), поэтому комиссии партнёров и база пула
+        // оставались на старом курсе. Теперь гоняем полный каскад — он же
+        // пересобирает consultantBalance.
+        $calc = app(CommissionCalculator::class);
+        $commissionsAffected = 0;
+        $failed = [];
+        foreach ($txs as $tx) {
+            $res = $calc->calculateForTransaction((int) $tx->id);
+            if (isset($res['error'])) {
+                $failed[(int) $tx->id] = $res['error'];
+                continue;
+            }
+            $commissionsAffected += (int) ($res['commissionsCount'] ?? 0);
+        }
 
         Log::info('CurrencyRecalculator applied', [
             'rateId' => $currencyRateId,
             'year' => $year, 'month' => $month,
-            'updated' => $updated, 'commissionsAffected' => $commissionsAffected,
+            'updated' => $updated,
+            'commissionsAffected' => $commissionsAffected,
+            'failed' => count($failed),
         ]);
 
         return [
@@ -130,6 +137,7 @@ class CurrencyRecalculator
             'skipped' => $txs->count() - $updated,
             'frozen' => false,
             'commissionsAffected' => $commissionsAffected,
+            'failed' => count($failed),
         ];
     }
 }
