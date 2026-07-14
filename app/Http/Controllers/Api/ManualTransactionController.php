@@ -447,6 +447,8 @@ class ManualTransactionController extends Controller
             'ids.*' => ['integer'],
         ]);
 
+        $freeze = app(\App\Services\PeriodFreezeService::class);
+
         $results = ['fixed' => [], 'errors' => []];
         foreach ($request->ids as $draftId) {
             $draft = $this->loadDraftWithRefs((int) $draftId);
@@ -461,6 +463,18 @@ class ManualTransactionController extends Controller
 
             // Дубли по сумме+дате в транзакциях допустимы (несколько взносов по
             // одному контракту) — анти-дубль убран по требованию.
+
+            // Заморозка периода — ДО вставки. Раньше строка ложилась в закрытый
+            // месяц, а 422 прилетал уже из калькулятора (он вызывался вне
+            // транзакции) → транзакция оставалась в БД с нулевыми комиссиями.
+            $draftDate = \Carbon\Carbon::parse($draft->date);
+            if ($freeze->isFrozen((int) $draftDate->year, (int) $draftDate->month)) {
+                $results['errors'][] = [
+                    'id' => $draftId,
+                    'reason' => "Период {$draftDate->month}.{$draftDate->year} закрыт — внесение запрещено.",
+                ];
+                continue;
+            }
 
             try {
                 $txId = DB::transaction(function () use ($draft, $request) {
@@ -522,14 +536,17 @@ class ManualTransactionController extends Controller
                         'userChanged' => $request->user()->id,
                     ]);
 
+                    // Расчёт цепочки — в той же транзакции: спека требует
+                    // «частичное создание цепочки откатывает всю операцию».
+                    // Раньше calculateForTransaction() звался снаружи, и при
+                    // его ошибке transaction оставалась висеть без комиссий.
+                    $calcResult = $this->calculator->calculateForTransaction($txId);
+                    if (isset($calcResult['error'])) {
+                        throw new \RuntimeException($calcResult['error']);
+                    }
+
                     return $txId;
                 });
-
-                $calcResult = $this->calculator->calculateForTransaction($txId);
-                if (isset($calcResult['error'])) {
-                    $results['errors'][] = ['id' => $draftId, 'reason' => $calcResult['error']];
-                    continue;
-                }
 
                 DB::table('transaction_draft')->where('id', $draftId)->delete();
                 $results['fixed'][] = $txId;

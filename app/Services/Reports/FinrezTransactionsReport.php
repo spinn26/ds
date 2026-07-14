@@ -28,6 +28,10 @@ class FinrezTransactionsReport extends AbstractReportType
             ->leftJoin('programs_catalog as prc', 'prc.legacy_program_id', '=', 'c.program')
             ->leftJoin('currency as cur', 'cur.id', '=', 't.currency')
             ->leftJoin('consultant as cn', 'cn.id', '=', 'c.consultant')
+            // «Тип выплаты» = свойство расчёта программы (Стандарт / МФ /
+            // Апфронт / n-й год). Раньше сюда шёл t.score — он пуст почти у
+            // всех транзакций, а у единиц хранит год выплаты КВ, а не тип.
+            ->leftJoin('commissionCalcProperty as ccp', 'ccp.id', '=', 'pr.commissionCalcProperty')
             ->whereNull('t.deletedAt')
             ->whereBetween('t.date', [$from, $to])
             ->orderByDesc('t.date')
@@ -42,8 +46,9 @@ class FinrezTransactionsReport extends AbstractReportType
                 'c.clientName', 't.date', 't.amountRUB', 't.netRevenueRUB',
                 't.dsCommissionPercentage',
                 'cn.personName as partner', 't.commissionsAmountRUB', 't.profitRUB',
-                't.amount', 'cur.symbol as curSymbol', 't.score', 'c.paymentCount',
-                'c.term', 'c.openDate',
+                't.amount', 'cur.symbol as curSymbol',
+                DB::raw('ccp.title as "payoutType"'),
+                'c.paymentCount', 'c.term', 'c.openDate',
             ]);
 
         // Per spec ✅Отчеты §Финрез: «Доход DS до вычета НДС» и «Доход без НДС в RUB».
@@ -69,7 +74,7 @@ class FinrezTransactionsReport extends AbstractReportType
                 $this->n((float) ($r->amountRUB ?? 0) * (float) ($r->dsCommissionPercentage ?? 0) / 100),
                 $this->n($noVat),
                 $r->partner, $this->n($commission), $this->n($noVat - $commission),
-                $this->n($r->amount), $r->curSymbol, $r->score,
+                $this->n($r->amount), $r->curSymbol, $r->payoutType,
                 $r->paymentCount, $r->term, $r->openDate,
             ];
         })->all();

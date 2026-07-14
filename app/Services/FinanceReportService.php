@@ -427,19 +427,16 @@ class FinanceReportService
             ];
         }
 
-        // Balance for the period
+        // Balance for the period.
+        //
+        // Никакого фолбэка на «последний найденный» — раньше при отсутствии
+        // строки за выбранный месяц подставлялся баланс ДРУГОГО месяца, и
+        // партнёр видел в отчёте за март пул и выплаты, скажем, за июнь.
+        // Нет строки — значит за этот месяц начислений не было: нули.
         $balance = DB::table('consultantBalance')
             ->where('consultant', $consultant->id)
             ->where('dateMonth', $month)
             ->first();
-
-        // If no balance for this specific month, get latest
-        if (! $balance) {
-            $balance = DB::table('consultantBalance')
-                ->where('consultant', $consultant->id)
-                ->orderByDesc('id')
-                ->first();
-        }
 
         // Payments for the period
         $payments = [];

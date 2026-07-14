@@ -162,9 +162,12 @@ export async function exportFinanceReport(reportData, month) {
   autoSizeColumns(wsGroup, groupHeaders, groupRows);
 
   // Sheet 4: Прочие начисления и выплаты
+  // Рубли берём из amountRUB, а у легаси-строк (ручные удержания) он пустой,
+  // и сумма лежит в amount — иначе удержание −7 500 ₽ уезжало в «Баллы»,
+  // а «Сумма оплаты» показывала 0. Баллы — только из points.
   const otherHeaders = ['Дата', 'Сумма оплаты', 'Баллы', 'Комментарий'];
   const otherRows = (t.otherAccruals || []).map(r => [
-    r.date, r.amountRUB ?? 0, r.amount ?? 0, r.comment ?? '',
+    r.date, r.amountRUB || r.amount || 0, r.points ?? 0, r.comment ?? '',
   ]);
   const wsOther = workbook.addWorksheet('Прочие начисления');
   wsOther.addRow(otherHeaders);
