@@ -49,4 +49,38 @@ class SupplierResolver
     {
         return self::isInsmartProduct($productName) ? $rawProvider : null;
     }
+
+    /**
+     * Фильтр «Поставщик» для списков (Комиссии / Менеджер контрактов / Ручной ввод).
+     *
+     * Фильтр ОБЯЗАН резолвить поставщика тем же выражением, что и колонка своей
+     * страницы, иначе выдача не совпадает с фильтром. Раньше фильтр везде смотрел
+     * в legacy program.providerName/vendorName, а колонка «Комиссий» — в
+     * products_catalog: после ремапа продуктов источники разъехались, и по
+     * фильтру «ГГА» приезжали строки, показывающие «Ренессанс».
+     *
+     * Единого выражения тут быть не может — страницы исторически считают
+     * «поставщика» по-разному (каталог-первым / vendor-первым / только provider),
+     * поэтому SQL-выражения передаёт вызывающий, а общим остаётся правило Insmart:
+     * у Insmart-продуктов в providerName лежит конечный страховщик, а поставщик —
+     * сам канал.
+     *
+     * @param \Illuminate\Database\Query\Builder $query
+     * @param string $nameExpr     SQL-выражение имени продукта (для Insmart-детекта)
+     * @param string $providerExpr SQL-выражение поставщика — как в колонке страницы
+     */
+    public static function applyFilter($query, string $supplier, string $nameExpr, string $providerExpr): void
+    {
+        $query->where(function ($w) use ($supplier, $nameExpr, $providerExpr) {
+            if (self::isInsmartProduct($supplier)) {
+                $w->whereRaw("COALESCE($nameExpr, '') ILIKE '%insmart%'")
+                  ->orWhereRaw("COALESCE($nameExpr, '') ILIKE '%inssmart%'");
+                return;
+            }
+
+            $w->whereRaw("COALESCE($nameExpr, '') NOT ILIKE '%insmart%'")
+              ->whereRaw("COALESCE($nameExpr, '') NOT ILIKE '%inssmart%'")
+              ->whereRaw("$providerExpr ILIKE ?", ['%' . $supplier . '%']);
+        });
+    }
 }

@@ -2488,19 +2488,14 @@ class AdminDataController extends Controller
         }
         if ($request->filled('setup')) $query->where('c.setup', $request->setup);
         if ($request->filled('supplier')) {
-            $sup = '%' . $request->supplier . '%';
-            // Для Insmart-договоров program.providerName хранит страховщика-
-            // партнёра (Зетта/Пари/...), а UI отдаёт «Insmart». Чтобы фильтр
-            // «Поставщик = Insmart» работал, дополнительно матчим по
-            // contract.productName на ins+mart (см. SupplierResolver).
-            $query->where(function ($w) use ($sup, $request) {
-                $w->where('pr.providerName', 'ilike', $sup)
-                  ->orWhere('pr.vendorName', 'ilike', $sup);
-                if (preg_match('/ins+mart/i', (string) $request->supplier)) {
-                    $w->orWhere('c.productName', 'ilike', '%insmart%')
-                      ->orWhere('c.productName', 'ilike', '%inssmart%');
-                }
-            });
+            // Выражение поставщика — ровно то, которым ниже собирается колонка
+            // «Поставщик» этой страницы (vendor-first, без каталога).
+            \App\Support\SupplierResolver::applyFilter(
+                $query,
+                (string) $request->supplier,
+                'c."productName"',
+                'COALESCE(NULLIF(pr."vendorName", \'\'), pr."providerName")'
+            );
         }
         if ($request->filled('created_from')) $query->where('c.createDate', '>=', $request->created_from);
         if ($request->filled('created_to')) $query->where('c.createDate', '<=', $request->created_to . ' 23:59:59');
@@ -2659,6 +2654,24 @@ class AdminDataController extends Controller
             ->distinct()
             ->pluck('vendor')
             ->each(fn ($v) => $supSet[$v] = true);
+
+        // Источник 3: products_catalog.provider_name — ИМЕННО его показывает
+        // колонка «Поставщик» (catalog-first, см. SupplierResolver::resolve).
+        // Без него в списке были поставщики только из legacy, и пользователь мог
+        // выбрать значение, которого в выдаче не существует, — либо наоборот, не
+        // найти в списке того, кого видит в колонке.
+        DB::table('products_catalog')
+            ->whereNotNull('provider_name')
+            ->where('provider_name', '!=', '')
+            ->distinct()
+            ->pluck('provider_name')
+            ->each(function ($v) use (&$supSet, &$hasInsmart) {
+                if (preg_match('/ins+mart/i', (string) $v)) {
+                    $hasInsmart = true;
+                    return;
+                }
+                $supSet[$v] = true;
+            });
 
         $suppliers = array_keys($supSet);
         sort($suppliers, SORT_NATURAL | SORT_FLAG_CASE);

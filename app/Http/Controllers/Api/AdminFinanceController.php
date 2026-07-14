@@ -54,21 +54,17 @@ class AdminFinanceController extends Controller
             $query->where('t.comment', 'ilike', '%' . $request->comment . '%');
         }
         if ($request->filled('supplier')) {
-            // supplier — это program.providerName / vendorName на legacy. Делаем
-            // join один раз, без N+1.
-            // Insmart-канал не лежит в providerName (там страховщик-партнёр) —
-            // дополнительно матчим по contract.productName для запроса
-            // «Insmart» (см. SupplierResolver).
-            $query->join('program as pr', 'pr.id', '=', 'c.program')
-                  ->where(function ($w) use ($request) {
-                      $sup = '%' . $request->supplier . '%';
-                      $w->where('pr.providerName', 'ilike', $sup)
-                        ->orWhere('pr.vendorName', 'ilike', $sup);
-                      if (preg_match('/ins+mart/i', (string) $request->supplier)) {
-                          $w->orWhere('c.productName', 'ilike', '%insmart%')
-                            ->orWhere('c.productName', 'ilike', '%inssmart%');
-                      }
-                  });
+            // Выражения — ровно те, которыми колонка «Поставщик» собирается ниже
+            // по файлу (catalog-first, legacy как фолбэк).
+            $query->leftJoin('program as pr', 'pr.id', '=', 'c.program')
+                  ->leftJoin('products_catalog as pcf', 'pcf.legacy_product_id', '=', 'c.product')
+                  ->leftJoin('product as prodf', 'prodf.id', '=', 'c.product');
+            \App\Support\SupplierResolver::applyFilter(
+                $query,
+                (string) $request->supplier,
+                'COALESCE(pcf.name, prodf.name)',
+                'COALESCE(pcf.provider_name, pr."providerName", pr."vendorName")'
+            );
         }
         if ($request->filled('date_from')) {
             $query->where('t.date', '>=', $request->date_from);

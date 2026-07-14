@@ -53,18 +53,14 @@ class ManualTransactionController extends Controller
             $q->where('c.program', $request->program);
         }
         if ($request->filled('supplier')) {
-            // Insmart-канал не лежит в providerName (там конечный страховщик) —
-            // для запроса «Insmart» дополнительно матчим по productName
-            // (продукты названы «… Inssmart», см. SupplierResolver).
-            $q->where(function ($w) use ($request) {
-                $sup = '%' . $request->supplier . '%';
-                $w->where('pr.providerName', 'ilike', $sup)
-                  ->orWhere('pr.vendorName', 'ilike', $sup);
-                if (preg_match('/ins+mart/i', (string) $request->supplier)) {
-                    $w->orWhere('c.productName', 'ilike', '%insmart%')
-                      ->orWhere('c.productName', 'ilike', '%inssmart%');
-                }
-            });
+            // Выражение поставщика — то же, которым ниже собирается колонка
+            // (legacy program.providerName + правило Insmart).
+            \App\Support\SupplierResolver::applyFilter(
+                $q,
+                (string) $request->supplier,
+                'c."productName"',
+                'pr."providerName"'
+            );
         }
         if ($request->filled('provider')) {
             $q->where('pr.vendorName', 'ilike', '%' . $request->provider . '%');
