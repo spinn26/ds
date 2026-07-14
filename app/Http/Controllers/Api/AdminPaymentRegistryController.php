@@ -182,10 +182,36 @@ class AdminPaymentRegistryController extends Controller
                 ->toArray();
         }
 
+        // Удержания месяца — ТОЛЬКО из commission (построчно), а не из
+        // consultantBalance.withheldForGap: эту колонку не пишет ни один раннер,
+        // она всегда 0. Из-за этого «Начислено до отрыва» было тождественно равно
+        // «Начислено за транзакции» (обе колонки показывали ПОСТ-штрафную сумму) и
+        // расходилось с отчётом «Комиссии» ровно на сумму удержаний.
+        //
+        // Оба раннера затирают commission.amountRUB уже урезанным значением, а
+        // accruedTransactional набирается из него, поэтому «до удержаний» =
+        // accrued + withheldForGap + withheldForCommission.
+        $withheldByCons = [];
+        if ($consultantIds) {
+            $withheldByCons = DB::table('commission')
+                ->whereIn('consultant', $consultantIds)
+                ->where('dateMonth', $dm)
+                ->whereNull('deletedAt')
+                ->selectRaw('consultant,
+                    COALESCE(SUM("withheldForGap"), 0)        AS gap,
+                    COALESCE(SUM("withheldForCommission"), 0) AS op')
+                ->groupBy('consultant')
+                ->get()
+                ->keyBy('consultant');
+        }
+
         // Activity name lookup for partner-status filter UI.
         $activityNames = DB::table('directory_of_activities')->pluck('name', 'id');
 
-        $items = $rows->map(function ($r) use ($verified, $suspended, $activityNames, $extraByCons, $incomingByCons) {
+        $items = $rows->map(function ($r) use ($verified, $suspended, $activityNames, $extraByCons, $incomingByCons, $withheldByCons) {
+            $wh = $withheldByCons[$r->consultant] ?? null;
+            $withheldGap = (float) ($wh->gap ?? 0);
+            $withheldOp = (float) ($wh->op ?? 0);
             // Только снимок (без live-пересчёта). Обновляется кнопкой пересчёта.
             $accrued = (float) ($r->accruedTransactional ?? 0);
             $pool = (float) ($r->accruedPool ?? 0);
@@ -216,8 +242,12 @@ class AdminPaymentRegistryController extends Controller
                 'totalPayable' => $totalPayable,
                 'payed' => $payed,
                 'remaining' => $remaining,
-                'withheldForGap' => (float) ($r->withheldForGap ?? 0),
-                'withheldForCommissions' => (float) ($r->withheldForCommissions ?? 0),
+                'withheldForGap' => $withheldGap,
+                'withheldForCommissions' => $withheldOp,
+                // «Начислено до удержаний» = начислено + отрыв + ОП. Именно эту
+                // величину показывает колонка «Комиссия до отрыва» в отчёте
+                // «Комиссии» (transaction.commissionAmountRubBeforeGapReduction).
+                'accruedBeforeGap' => $accrued + $withheldGap + $withheldOp,
                 'verifiedRequisites' => isset($verified[$r->consultant]),
                 'paymentsSuspended' => isset($suspended[$r->consultant]),
             ];
@@ -228,7 +258,7 @@ class AdminPaymentRegistryController extends Controller
         $totals = [
             'rows' => $items->count(),
             'balance' => (float) $items->sum('balance'),
-            'accruedBeforeGap' => (float) $items->sum('accrued') + (float) $rows->sum('withheldForGap'),
+            'accruedBeforeGap' => (float) $items->sum('accruedBeforeGap'),
             'accruedTransactional' => (float) $items->sum('accrued'),
             'accruedNonTransactional' => (float) $items->sum('other'),
             'accruedPool' => (float) $items->sum('pool'),
@@ -236,8 +266,8 @@ class AdminPaymentRegistryController extends Controller
             'totalPayable' => (float) $items->sum('totalPayable'),
             'payed' => (float) $items->sum('payed'),
             'remaining' => (float) $items->sum('remaining'),
-            'withheldForGap' => (float) $rows->sum('withheldForGap'),
-            'withheldForCommissions' => (float) $rows->sum('withheldForCommissions'),
+            'withheldForGap' => (float) $items->sum('withheldForGap'),
+            'withheldForCommissions' => (float) $items->sum('withheldForCommissions'),
         ];
 
         return response()->json([

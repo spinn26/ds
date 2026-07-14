@@ -388,45 +388,18 @@ function isCountable(p) {
   return p && p.participates !== false && Number(p.payoutRub || 0) > 0;
 }
 
-// Cumulative count активных партнёров уровня L+ (level >= L && participates).
-// Используется и для перераспределения share[L], и для строки ИТОГО.
-function activeCountAtLevel(lvl) {
-  if (!result.value) return 0;
-  let n = 0;
-  for (const p of result.value.participants || []) {
-    if (isCountable(p) && p.level >= lvl && p.level <= 10) n++;
-  }
-  return n;
-}
-
-// Динамические share[L]. Snapshot хранит share как «делилось среди тех
-// кто получил выплату на момент фиксации Directual», но если оператор
-// снимает галку — фонд должен перераздаться на оставшихся
-// (1% × выручка ÷ count(L+ активных)).
+// Доля уровня — ТОЛЬКО из ответа бэкенда.
 //
-// Условие применения — есть fund (revenue × POOL_PERCENT) и
-// detected как matryoshka layout (есть хоть один shareValues[L] > 0
-// ИЛИ это live-период). Нерегулярные snapshot (Apr-Aug 2025 с
-// прорейтом Архангельского) уже frozen — там toggleParticipates
-// заблокирован, эта computed не вызывается с другими цифрами.
+// Здесь раньше жил клиентский пересчёт: фонд делился на число платящихся
+// партнёров «уровня L И ВЫШЕ», а форфейт снятых галкой перераздавался
+// оставшимся. Обе вещи противоречат бэкенду и спеке §6.2/§6.5: делитель —
+// НОМИНАЛЬНОЕ число партнёров РОВНО этого уровня (включая тех, кто выплату не
+// получает), а форфейт остаётся компании и не перераздаётся. Из-за этой второй
+// копии формулы раздел «Пул» показывал ~414 тыс. там, где реально начислено
+// ~269 тыс., и расходился с Реестром выплат.
 //
-// Возвращает null если перераздача невозможна (нет fund) — тогда
-// упадём на статический shareValues из бэка.
-const effectiveShares = computed(() => {
-  if (!result.value) return null;
-  const fund = Number(result.value.fund || 0);
-  if (fund <= 0) return null;
-  const out = {};
-  for (const lvl of [6, 7, 8, 9, 10]) {
-    const cnt = activeCountAtLevel(lvl);
-    out[lvl] = cnt > 0 ? fund / cnt : 0;
-  }
-  return out;
-});
-
-// Берём dynamic shares если рассчитались, иначе статика из бэка.
+// Пересчёт при снятии галки делает бэкенд: toggleParticipates -> /admin/pool/preview.
 function shareForLevel(lvl) {
-  if (effectiveShares.value) return Number(effectiveShares.value[lvl] || 0);
   return Number(result.value?.shareValues?.[lvl] || 0);
 }
 
@@ -444,28 +417,16 @@ const activeLevels = computed(() => {
   return [6, 7, 8, 9, 10].filter(lvl => shareForLevel(lvl) > 0);
 });
 
-// Если effectiveShares рассчитались (есть fund > 0), всегда идём по
-// матрёшке через них — даже если бэк пометил снапшот как irregular.
-// Это критично: при моде «оператор снимает галку» мы должны
-// перераздавать фонд, а не показывать static payoutRub из poolLog.
-// Static-fallback (через payoutRub) остаётся только когда fund
-// неизвестен — тогда back-derive невозможен.
-const useDynamicShares = computed(() => effectiveShares.value !== null);
-
-// Ячейка уровня в строке ИТОГО.
-//   useDynamic (любой период с известным fund): share(L) × count(L+).
-//   Иначе (только legacy фолбек): сумма payoutRub partners уровня L.
+// Ячейка уровня в строке ИТОГО = сколько реально начислено по этому слою
+// матрёшки: доля уровня × число ПОЛУЧАТЕЛЕЙ, которым этот слой достался
+// (партнёры уровня >= L из тех, кому пул выплачен). Считаем по фактическим
+// выплатам, а не по номинальным счётчикам, — иначе итог не сойдётся с суммой
+// строк и с Реестром выплат.
 function totalCellForLevel(lvl) {
   if (!result.value) return 0;
-  if (useDynamicShares.value) {
-    const share = shareForLevel(lvl);
-    if (share <= 0) return 0;
-    return share * activeCountAtLevel(lvl);
-  }
-  // Fallback — fund неизвестен. Идём по статике payoutRub.
   let s = 0;
-  for (const p of result.value.participants || []) {
-    if (p.level === lvl && isCountable(p)) s += Number(p.payoutRub);
+  for (const row of payoutRows.value) {
+    s += Number(row.byLevel?.[lvl] || 0);
   }
   return s;
 }
@@ -475,25 +436,24 @@ function totalCellForLevel(lvl) {
 //     payoutRub = sum byLevel[6..level] — пересчитывается на лету при
 //     изменении галок.
 //   Fallback: berём static payoutRub из poolLog как одну ячейку.
+// Строки партнёров. payoutRub — ТОЛЬКО из бэка (PoolRunner уже применил
+// матрёшку, дисквалификации и модерацию). byLevel — разложение этой же выплаты
+// по слоям для наглядности: слои 6..level с долями бэкенда.
 const payoutRows = computed(() => {
   if (!result.value) return [];
-  const dynamic = useDynamicShares.value;
   const revenue = result.value.revenue === null || result.value.revenue === undefined
     ? null : Number(result.value.revenue);
   return (result.value.participants || [])
     .filter(p => p.participates && Number(p.payoutRub || 0) > 0)
     .map(p => {
       const byLevel = { 6: 0, 7: 0, 8: 0, 9: 0, 10: 0 };
-      let payout = 0;
-      if (dynamic) {
-        for (let lvl = 6; lvl <= p.level; lvl++) {
-          const s = shareForLevel(lvl);
-          byLevel[lvl] = s;
-          payout += s;
-        }
-      } else if (p.level >= 6 && p.level <= 10) {
+      for (let lvl = 6; lvl <= p.level && lvl <= 10; lvl++) {
+        byLevel[lvl] = shareForLevel(lvl);
+      }
+      // Нерегулярные снапшоты (доли неизвестны) — показываем выплату одной ячейкой.
+      const layered = Object.values(byLevel).reduce((s, v) => s + v, 0);
+      if (layered <= 0 && p.level >= 6 && p.level <= 10) {
         byLevel[p.level] = Number(p.payoutRub);
-        payout = Number(p.payoutRub);
       }
       return {
         id: p.id,
@@ -501,20 +461,17 @@ const payoutRows = computed(() => {
         level: p.level,
         levelName: p.levelName,
         byLevel,
-        payoutRub: payout,
+        payoutRub: Number(p.payoutRub),
         groupBonusRub: revenue,
       };
     });
 });
 
-// Сумма строки ИТОГО — total row sum, согласованный с payoutRows.
-const totalRowSum = computed(() => {
-  if (!result.value) return 0;
-  if (isHistoricalView.value) {
-    return payoutRows.value.reduce((s, p) => s + Number(p.payoutRub || 0), 0);
-  }
-  return Number(result.value.fund || 0) * activeLevels.value.length;
-});
+// ИТОГО = сумма фактических выплат. Раньше здесь было fund × число уровней —
+// величина, не равная ни сумме строк, ни начисленному в Реестре выплат.
+const totalRowSum = computed(
+  () => payoutRows.value.reduce((s, p) => s + Number(p.payoutRub || 0), 0),
+);
 
 function resetFilters() {
   search.value = '';
