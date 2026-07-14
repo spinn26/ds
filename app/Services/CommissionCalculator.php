@@ -135,6 +135,56 @@ class CommissionCalculator
         $this->rebuildBalance($consultantId, $dateMonth, $dateYear ?? substr($dateMonth, 0, 4));
     }
 
+    /**
+     * Записать начисленный лидерский пул в баланс месяца и пересобрать итоги.
+     *
+     * До этого пул жил только в `poolLog`: rebuildBalance() бережно сохранял
+     * `accruedPool`, ожидая, что его кто-то проставит, но не проставлял никто —
+     * и весь посчитанный пул не доезжал ни до «Итого начислено», ни до реестра
+     * выплат. Формула баланса намеренно остаётся здесь, в одном месте.
+     *
+     * Зовётся из PoolRunner::persist() после записи poolLog. $poolRub = 0
+     * означает «в этом месяце пула у партнёра больше нет» (пересчёт после
+     * снятия галочки участия) — строку надо занулить, а не пропустить.
+     */
+    public function applyPoolToBalance(int $consultantId, string $dateMonth, string $dateYear, float $poolRub): void
+    {
+        if (self::isHistorical($dateMonth)) {
+            return;
+        }
+
+        $row = DB::table('consultantBalance')
+            ->where('consultant', $consultantId)
+            ->where('dateMonth', $dateMonth)
+            ->first();
+
+        // Строки за месяц может не быть вовсе: лидер мог не иметь ни одной
+        // собственной комиссии и получать только пул.
+        if (! $row) {
+            $this->rebuildBalance($consultantId, $dateMonth, $dateYear);
+            $row = DB::table('consultantBalance')
+                ->where('consultant', $consultantId)
+                ->where('dateMonth', $dateMonth)
+                ->first();
+            if (! $row) {
+                return;
+            }
+        }
+
+        $poolRub = round($poolRub, 2);
+        $accruedTotal = (float) ($row->accruedTransactional ?? 0)
+            + (float) ($row->accruedNonTransactional ?? 0)
+            + $poolRub;
+        $totalPayable = (float) ($row->balance ?? 0) + $accruedTotal;
+
+        DB::table('consultantBalance')->where('id', $row->id)->update([
+            'accruedPool' => $poolRub,
+            'accruedTotal' => $accruedTotal,
+            'totalPayable' => $totalPayable,
+            'remaining' => $totalPayable - (float) ($row->payed ?? 0),
+        ]);
+    }
+
     private function rebuildBalance(int $consultantId, string $dateMonth, string $dateYear): void
     {
         // Исторический баланс (< HISTORICAL_CUTOFF) неизменен — не перезаписываем.

@@ -904,16 +904,20 @@ class PoolRunner
     {
         $from = Carbon::create($year, $month, 1)->startOfMonth();
         $to = $from->copy()->endOfMonth();
+        $dateMonth = $from->format('Y-m');
+        $dateYear = (string) $year;
 
-        DB::transaction(function () use ($participants, $from, $to) {
+        DB::transaction(function () use ($participants, $from, $to, $dateMonth, $dateYear) {
             // Wipe the previous calc for the same month.
             DB::table('poolLog')
                 ->whereBetween('date', [$from, $to])
                 ->delete();
 
             $rows = [];
+            $payouts = [];
             foreach ($participants as $p) {
                 if ($p['payoutRub'] <= 0) continue;
+                $payouts[(int) $p['id']] = (float) $p['payoutRub'];
                 $rows[] = [
                     'consultant' => $p['id'],
                     'poolBonus' => $p['payoutRub'],
@@ -924,6 +928,27 @@ class PoolRunner
             }
             if ($rows) {
                 DB::table('poolLog')->insert($rows);
+            }
+
+            // Пул — в баланс. Без этого он оставался только в poolLog и не
+            // попадал ни в «Итого начислено», ни в реестр выплат.
+            $calc = app(CommissionCalculator::class);
+
+            // Сначала зануляем тех, у кого пул за этот месяц был, а теперь его
+            // нет (снятая галочка участия / провал ОП при пересчёте).
+            $stale = DB::table('consultantBalance')
+                ->where('dateMonth', $dateMonth)
+                ->where('accruedPool', '<>', 0)
+                ->get(['consultant']);
+            foreach ($stale as $s) {
+                $cid = (int) $s->consultant;
+                if (! isset($payouts[$cid])) {
+                    $calc->applyPoolToBalance($cid, $dateMonth, $dateYear, 0.0);
+                }
+            }
+
+            foreach ($payouts as $cid => $amount) {
+                $calc->applyPoolToBalance($cid, $dateMonth, $dateYear, $amount);
             }
         });
 
