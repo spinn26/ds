@@ -55,7 +55,7 @@ class MonthlyPenaltyRunner
                 'processed' => 0,
                 'affected' => 0,
                 'consultants' => [],
-                'error' => "Период {$month}.{$year} — исторический (< " . CommissionCalculator::HISTORICAL_CUTOFF . "), финализация не применяется",
+                'error' => "Период {$month}.{$year} — исторический (< " . CommissionCalculator::HISTORICAL_CUTOFF . '), финализация не применяется',
             ];
         }
 
@@ -194,6 +194,18 @@ class MonthlyPenaltyRunner
             }
         }
 
+        // Месячный снимок для партнёров ВНЕ набора штрафов (уровень < 3).
+        // Штрафы к ним неприменимы, но снимок квалификации нужен: без него их
+        // НГП не растёт, а отчёт «Квалификации» показывает пустые ЛП/ГП/НГП.
+        // Уровень < 3 => в «Расчёт пула» (лидеры 6+) эти строки не попадают,
+        // делитель пула не меняется.
+        if ($applyWrite) {
+            $this->writeBaselineSnapshots(
+                $year, $month, $dateYear, $dateMonth, $monthEnd,
+                $candidates->pluck('id')->map(fn ($v) => (int) $v)->all(),
+            );
+        }
+
         // Пересчёт consultantBalance для затронутых партнёров —
         // commission.amountRUB снижены штрафами, но snapshot в
         // consultantBalance.accruedTransactional остаётся старым,
@@ -217,7 +229,7 @@ class MonthlyPenaltyRunner
         // Denorm-поля транзакций (profitRUB/netRevenueRUB) отстают после
         // штрафов — пересобираем их за месяц из актуальных commission-строк,
         // чтобы отчёты (они читают denorm) были верны. История не трогается.
-        if ($applyWrite && ! \App\Services\CommissionCalculator::isHistorical($dateMonth)) {
+        if ($applyWrite && ! CommissionCalculator::isHistorical($dateMonth)) {
             $this->recomputeTransactionDerivedFields($dateMonth);
         }
 
@@ -230,6 +242,181 @@ class MonthlyPenaltyRunner
             'affected' => $affectedTotal,
             'consultants' => $stats,
         ];
+    }
+
+    /**
+     * Пересобрать месячные снимки qualificationLog за один месяц БЕЗ пересчёта
+     * комиссий и штрафов (см. partners:rebuild-ngp). Нужно для бэкфилла: с июня
+     * 2026 НГП замер, потому что penalty-строка переносила cumulative без
+     * прибавки ГП, а партнёрам уровня < 3 снимок вообще не писался.
+     *
+     *  1) существующим строкам на конец месяца чиним ТОЛЬКО groupVolumeCumulative
+     *     (gap/result/withheld* — итоги штрафов — не трогаем);
+     *  2) партнёрам вне penalty-набора (уровень < 3) пишем недостающий снимок.
+     *
+     * Месяцы обязаны обрабатываться по возрастанию — каждый следующий берёт
+     * базу из уже исправленного предыдущего.
+     *
+     * @return array{updated:int, inserted:int}
+     */
+    public function rebuildMonthlySnapshots(int $year, int $month): array
+    {
+        $monthEnd = Carbon::create($year, $month, 1)->endOfMonth();
+        $monthStart = Carbon::create($year, $month, 1)->startOfMonth()->toDateTimeString();
+
+        // 1) Существующие строки на конец месяца: НГП = база до месяца + ГП строки.
+        // Подзапрос читает snapshot до начала UPDATE, но он и так смотрит только
+        // на строки date < monthStart, которые этот UPDATE не трогает.
+        $updated = DB::update(<<<'SQL'
+            UPDATE "qualificationLog" q
+            SET "groupVolumeCumulative" = COALESCE((
+                    SELECT p."groupVolumeCumulative"
+                    FROM "qualificationLog" p
+                    WHERE p.consultant = q.consultant
+                      AND p."dateDeleted" IS NULL
+                      AND p."groupVolumeCumulative" IS NOT NULL
+                      AND p.date < ?
+                    ORDER BY p.date DESC
+                    LIMIT 1
+                ), 0) + COALESCE(q."groupVolume", 0),
+                "changedAt" = NOW()
+            WHERE q.date = ?
+              AND q."dateDeleted" IS NULL
+            SQL, [$monthStart, $monthEnd->toDateTimeString()]);
+
+        // 2) Недостающие снимки. Пропускаем тех, у кого строка уже есть (п.1), и
+        // тех, кто относится к penalty-набору (уровень ≥ 3): пустая строка у
+        // лидера 6+ добавила бы его в делитель пула — это уже деньги.
+        $skip = DB::table('qualificationLog')
+            ->where('date', $monthEnd->toDateTimeString())
+            ->whereNull('dateDeleted')
+            ->pluck('consultant')
+            ->merge(
+                DB::table('consultant as c')
+                    ->join('status_levels as sl', 'sl.id', '=', 'c.status_and_lvl')
+                    ->where('sl.level', '>=', 3)
+                    ->pluck('c.id')
+            )
+            ->filter()
+            ->map(fn ($v) => (int) $v)
+            ->unique()
+            ->values()
+            ->all();
+
+        $before = DB::table('qualificationLog')
+            ->where('date', $monthEnd->toDateTimeString())
+            ->count();
+
+        $this->writeBaselineSnapshots(
+            $year, $month, (string) $year, sprintf('%04d-%02d', $year, $month), $monthEnd, $skip,
+        );
+
+        $after = DB::table('qualificationLog')
+            ->where('date', $monthEnd->toDateTimeString())
+            ->count();
+
+        return ['updated' => $updated, 'inserted' => max(0, $after - $before)];
+    }
+
+    /**
+     * Месячный снимок qualificationLog для партнёров, которых не обрабатывает
+     * penalty-проход (уровень < 3 — им нечего штрафовать). Пишем те же поля,
+     * что и penalty-строка: уровень месяца, ЛП, ГП и накопительный НГП.
+     *
+     * НГП = последний НЕ-NULL cumulative СТРОГО до начала месяца + ГП месяца
+     * (та же формула, что в processConsultant).
+     *
+     * Идемпотентно: строки на monthEnd для этих партнёров удаляются и пишутся
+     * заново, как в penalty-проходе.
+     *
+     * @param  list<int>  $candidateIds  партнёры, которым строку уже написал penalty-проход
+     */
+    private function writeBaselineSnapshots(
+        int $year,
+        int $month,
+        string $dateYear,
+        string $dateMonth,
+        Carbon $monthEnd,
+        array $candidateIds,
+    ): void {
+        $monthStart = Carbon::create($year, $month, 1)->startOfMonth()->toDateTimeString();
+
+        $consultants = DB::table('consultant')
+            ->whereNull('dateDeleted')
+            ->when($candidateIds, fn ($q) => $q->whereNotIn('id', $candidateIds))
+            ->get(['id', 'personName', 'status_and_lvl']);
+
+        if ($consultants->isEmpty()) {
+            return;
+        }
+
+        $ids = $consultants->pluck('id')->map(fn ($v) => (int) $v)->all();
+
+        // ЛП = Σ personalVolume по chainOrder=1; ГП = ЛП + Σ groupVolume по
+        // chainOrder ≥ 2 (per spec ✅Бизнес-логика §1 — та же формула, что в
+        // processConsultant). Оба — одним групповым запросом на всех.
+        $personal = DB::table('commission')
+            ->where('chainOrder', 1)
+            ->where('dateYear', $dateYear)
+            ->where('dateMonth', $dateMonth)
+            ->whereNull('deletedAt')
+            ->whereIn('consultant', $ids)
+            ->selectRaw('consultant, SUM("personalVolume") AS v')
+            ->groupBy('consultant')
+            ->pluck('v', 'consultant');
+
+        $downline = DB::table('commission')
+            ->where('chainOrder', '>=', 2)
+            ->where('dateYear', $dateYear)
+            ->where('dateMonth', $dateMonth)
+            ->whereNull('deletedAt')
+            ->whereIn('consultant', $ids)
+            ->selectRaw('consultant, SUM("groupVolume") AS v')
+            ->groupBy('consultant')
+            ->pluck('v', 'consultant');
+
+        // Последний НЕ-NULL НГП строго до начала месяца — по всем сразу.
+        $carry = DB::table('qualificationLog')
+            ->selectRaw('DISTINCT ON (consultant) consultant, "groupVolumeCumulative" AS cum')
+            ->whereIn('consultant', $ids)
+            ->whereNull('dateDeleted')
+            ->whereNotNull('groupVolumeCumulative')
+            ->where('date', '<', $monthStart)
+            ->orderBy('consultant')
+            ->orderByDesc('date')
+            ->pluck('cum', 'consultant');
+
+        $now = now();
+        $rows = [];
+        foreach ($consultants as $c) {
+            $lp = (float) ($personal[$c->id] ?? 0);
+            $gp = $lp + (float) ($downline[$c->id] ?? 0);
+
+            $rows[] = [
+                'consultant' => (int) $c->id,
+                'date' => $monthEnd->toDateTimeString(),
+                'savingDate' => $now,
+                'gap' => false,
+                'result' => 'newEntry',
+                'calculationLevel' => $c->status_and_lvl,
+                'nominalLevel' => $c->status_and_lvl,
+                'personalVolume' => $lp,
+                'groupVolume' => $gp,
+                'groupVolumeCumulative' => (float) ($carry[$c->id] ?? 0) + $gp,
+                'consultantPersonName' => $c->personName,
+                'createdAt' => $now,
+                'changedAt' => $now,
+            ];
+        }
+
+        DB::table('qualificationLog')
+            ->whereIn('consultant', $ids)
+            ->where('date', $monthEnd->toDateTimeString())
+            ->delete();
+
+        foreach (array_chunk($rows, 500) as $chunk) {
+            DB::table('qualificationLog')->insert($chunk);
+        }
     }
 
     /**
@@ -275,7 +462,7 @@ class MonthlyPenaltyRunner
     }
 
     /**
-     * @param array<int,?int> $inviters  consultantId → inviterId
+     * @param  array<int,?int>  $inviters  consultantId → inviterId
      */
     private function processConsultant(
         object $consultant,
@@ -321,6 +508,7 @@ class MonthlyPenaltyRunner
                 : null;
             if ($branchKey === null) {
                 $unassigned[] = $c;
+
                 continue;
             }
             $byBranch[$branchKey][] = $c;
@@ -330,7 +518,7 @@ class MonthlyPenaltyRunner
 
         // Detachment: only level ≥ 6 (otrif > 0).
         $otrif = (float) ($consultant->otrif ?? 0);
-        $detachMults = ($otrif > 0 && !empty($branchVolumes))
+        $detachMults = ($otrif > 0 && ! empty($branchVolumes))
             ? $this->finaliser->detachmentMultipliers($branchVolumes)
             : array_fill_keys(array_keys($branchVolumes), 1.0);
 
@@ -341,7 +529,9 @@ class MonthlyPenaltyRunner
         // (битый branch) тоже добавляем — они часть месячного ГП.
         $mandatoryGp = (float) ($consultant->mandatoryGP ?? 0);
         $totalGroupVolume = $personalVolume + array_sum($branchVolumes);
-        foreach ($unassigned as $u) $totalGroupVolume += (float) $u->groupVolume;
+        foreach ($unassigned as $u) {
+            $totalGroupVolume += (float) $u->groupVolume;
+        }
         $opMult = $mandatoryGp > 0
             ? $this->finaliser->opMultiplier($totalGroupVolume, $mandatoryGp)
             : 1.0;
@@ -361,8 +551,12 @@ class MonthlyPenaltyRunner
 
         $applyToRow = function ($c, float $dm) use (&$affected, &$withheldTotal, &$updates, $opMult, $applyWrite) {
             $totalMult = $dm * $opMult;
-            if ($totalMult >= 1.0) return;
-            if ((bool) ($c->reduction ?? false)) return; // idempotent
+            if ($totalMult >= 1.0) {
+                return;
+            }
+            if ((bool) ($c->reduction ?? false)) {
+                return;
+            } // idempotent
 
             $originalRub = (float) $c->groupBonusRub;
             $newRub = $originalRub * $totalMult;
@@ -397,10 +591,14 @@ class MonthlyPenaltyRunner
         // Branched rows — detachment multiplier applies per branch.
         foreach ($byBranch as $branchKey => $rows) {
             $dm = $detachMults[$branchKey] ?? 1.0;
-            foreach ($rows as $c) $applyToRow($c, $dm);
+            foreach ($rows as $c) {
+                $applyToRow($c, $dm);
+            }
         }
         // Unassigned rows — no branch detach, just OP.
-        foreach ($unassigned as $c) $applyToRow($c, 1.0);
+        foreach ($unassigned as $c) {
+            $applyToRow($c, 1.0);
+        }
 
         $gapBranchKey = array_search(0.5, $detachMults, true);
         if ($applyWrite) {
@@ -420,52 +618,60 @@ class MonthlyPenaltyRunner
             // ВЫПОЛНИВШИЙ ОП, в qualificationLog не попадал, и пул показывал
             // ему «ОП не выполнен».
             //
-            // Перенос накопительного ГП: строка не добавляет объём, поэтому
-            // cumulative = последний НЕ-NULL до monthEnd (НГП не инфлейтим;
-            // см. project-ngp-cumulative-fix). Без этого свежая строка с NULL
-            // ломала бы НГП на дашборде.
-            {
-                $carryCumulative = DB::table('qualificationLog')
-                    ->where('consultant', $consultant->id)
-                    ->whereNull('dateDeleted')
-                    ->whereNotNull('groupVolumeCumulative')
-                    ->where('date', '<', $monthEnd)
-                    ->orderByDesc('date')
-                    ->value('groupVolumeCumulative');
+            // НГП (накопительный ГП) за месяц = НГП на конец ПРЕДЫДУЩЕГО месяца
+            // + ГП текущего месяца. Раньше строка просто переносила последний
+            // cumulative без прибавки ГП — это работало, пока месячный снимок
+            // с приростом писал Directual. Заливок больше нет (см. memory
+            // project-directual-imports-stopped), поэтому НГП замер с июня 2026
+            // у всех партнёров. База берётся строго ДО начала месяца: внутри
+            // месяца может лежать легаси-строка Directual (1-е число), которая
+            // уже содержит частичный ГП этого же месяца — иначе двойной счёт.
 
-                DB::table('qualificationLog')->insert([
-                    'consultant' => $consultant->id,
-                    'date' => $monthEnd,
-                    'savingDate' => now(),
-                    'gap' => $gapBranchKey !== false,
-                    // Показанный % отрыва — от той же базы, что и РЕШЕНИЕ об
-                    // отрыве (detachmentMultipliers: share = branchVolume / Σ
-                    // веток). База = ГП − ЛП (Σ веток), ЛП исключается — per
-                    // spec «Отрыв» (docs: 70% от ГП − ЛП). Раньше делили на
-                    // totalGroupVolume (с ЛП) → ветка могла быть >70% по
-                    // решению и <70% по показанному.
-                    'gapValuePercentage' => $gapBranchKey !== false
-                        ? round($branchVolumes[$gapBranchKey] / max(array_sum($branchVolumes), 0.0001) * 100, 2)
-                        : null,
-                    'gapValue' => $gapBranchKey !== false ? $branchVolumes[$gapBranchKey] : null,
-                    'branchWithGap' => $gapBranchKey !== false ? $gapBranchKey : null,
-                    'result' => $this->buildResultLabel($opMult, $gapBranchKey),
-                    'calculationLevel' => $consultant->status_and_lvl,
-                    'nominalLevel' => $consultant->status_and_lvl,
-                    // Месячный ЛП партнёра (SUM commission chainOrder=1 за месяц,
-                    // пробрасывается из run()). Раньше не писался → снимок
-                    // qualificationLog имел ЛП=NULL, и раздел «Квалификации»
-                    // показывал 0 (инцидент «июнь нули»). Теперь снимок полный.
-                    'personalVolume' => $personalVolume,
-                    'groupVolume' => $totalGroupVolume,
-                    'groupVolumeCumulative' => $carryCumulative,
-                    'consultantPersonName' => $consultant->personName,
-                    'commissionsToReduceCounter' => $affected,
-                    'commissionsToReduceAmount' => (int) round($withheldTotal),
-                    'createdAt' => now(),
-                    'changedAt' => now(),
-                ]);
-            }
+            $monthStart = Carbon::create($year, $month, 1)->startOfMonth();
+
+            $carryCumulative = DB::table('qualificationLog')
+                ->where('consultant', $consultant->id)
+                ->whereNull('dateDeleted')
+                ->whereNotNull('groupVolumeCumulative')
+                ->where('date', '<', $monthStart->toDateTimeString())
+                ->orderByDesc('date')
+                ->value('groupVolumeCumulative');
+
+            $cumulative = (float) ($carryCumulative ?? 0) + $totalGroupVolume;
+
+            DB::table('qualificationLog')->insert([
+                'consultant' => $consultant->id,
+                'date' => $monthEnd,
+                'savingDate' => now(),
+                'gap' => $gapBranchKey !== false,
+                // Показанный % отрыва — от той же базы, что и РЕШЕНИЕ об
+                // отрыве (detachmentMultipliers: share = branchVolume / Σ
+                // веток). База = ГП − ЛП (Σ веток), ЛП исключается — per
+                // spec «Отрыв» (docs: 70% от ГП − ЛП). Раньше делили на
+                // totalGroupVolume (с ЛП) → ветка могла быть >70% по
+                // решению и <70% по показанному.
+                'gapValuePercentage' => $gapBranchKey !== false
+                    ? round($branchVolumes[$gapBranchKey] / max(array_sum($branchVolumes), 0.0001) * 100, 2)
+                    : null,
+                'gapValue' => $gapBranchKey !== false ? $branchVolumes[$gapBranchKey] : null,
+                'branchWithGap' => $gapBranchKey !== false ? $gapBranchKey : null,
+                'result' => $this->buildResultLabel($opMult, $gapBranchKey),
+                'calculationLevel' => $consultant->status_and_lvl,
+                'nominalLevel' => $consultant->status_and_lvl,
+                // Месячный ЛП партнёра (SUM commission chainOrder=1 за месяц,
+                // пробрасывается из run()). Раньше не писался → снимок
+                // qualificationLog имел ЛП=NULL, и раздел «Квалификации»
+                // показывал 0 (инцидент «июнь нули»). Теперь снимок полный.
+                'personalVolume' => $personalVolume,
+                'groupVolume' => $totalGroupVolume,
+                'groupVolumeCumulative' => $cumulative,
+                'consultantPersonName' => $consultant->personName,
+                'commissionsToReduceCounter' => $affected,
+                'commissionsToReduceAmount' => (int) round($withheldTotal),
+                'createdAt' => now(),
+                'changedAt' => now(),
+            ]);
+
         }
 
         return [
@@ -492,16 +698,20 @@ class MonthlyPenaltyRunner
      * subtree (shouldn't happen for legit commission rows, but we guard
      * against broken inviter chains).
      *
-     * @param array<int,?int> $inviters
+     * @param  array<int,?int>  $inviters
      */
     private function firstLineBranchUnder(?int $sellerId, int $mentorId, array $inviters): ?int
     {
-        if (!$sellerId) return null;
-        if ($sellerId === $mentorId) return null;
+        if (! $sellerId) {
+            return null;
+        }
+        if ($sellerId === $mentorId) {
+            return null;
+        }
 
         $current = $sellerId;
         $visited = [];
-        while ($current !== null && !isset($visited[$current])) {
+        while ($current !== null && ! isset($visited[$current])) {
             $visited[$current] = true;
             $parent = $inviters[$current] ?? null;
             if ($parent === $mentorId) {
@@ -509,14 +719,20 @@ class MonthlyPenaltyRunner
             }
             $current = $parent;
         }
+
         return null;
     }
 
     private function buildResultLabel(float $opMult, int|false $gapBranchKey): string
     {
         $parts = [];
-        if ($gapBranchKey !== false) $parts[] = 'Отрыв >70%';
-        if ($opMult < 1.0) $parts[] = 'Недобор ОП';
+        if ($gapBranchKey !== false) {
+            $parts[] = 'Отрыв >70%';
+        }
+        if ($opMult < 1.0) {
+            $parts[] = 'Недобор ОП';
+        }
+
         return empty($parts) ? 'OK' : implode(' + ', $parts);
     }
 

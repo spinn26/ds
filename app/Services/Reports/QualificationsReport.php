@@ -21,11 +21,15 @@ class QualificationsReport extends AbstractReportType
         // qualificationLog.date is a TIMESTAMP and the monthly closing row is
         // stamped 23:59:59 — the upper bound must cover the whole last day.
         $prevTo = (new \DateTime($prevFrom))->modify('last day of this month')->format('Y-m-d').' 23:59:59';
+        // Same for the current month: a date-only $to ("2026-06-30") cut off the
+        // closing row and the report fell back to the legacy Directual row dated
+        // the 1st — showing last month's НГП as if it were the current one.
+        $toEnd = strlen($to) <= 10 ? $to.' 23:59:59' : $to;
 
         $logs = DB::table('qualificationLog')
             ->whereNull('dateDeleted')
-            ->where(function ($w) use ($from, $to, $prevFrom, $prevTo) {
-                $w->whereBetween('date', [$from, $to])
+            ->where(function ($w) use ($from, $toEnd, $prevFrom, $prevTo) {
+                $w->whereBetween('date', [$from, $toEnd])
                   ->orWhereBetween('date', [$prevFrom, $prevTo]);
             })
             // Within one month a consultant has both an opening row (1st, all
@@ -52,7 +56,7 @@ class QualificationsReport extends AbstractReportType
 
         $byCons = [];
         foreach ($logs as $l) {
-            $isCurrent = $l->date >= $from && $l->date <= $to;
+            $isCurrent = $l->date >= $from && $l->date <= $toEnd;
             $bucket = $isCurrent ? 'current' : 'previous';
             $level = $resolveLevel($l->nominalLevel, $l->calculationLevel);
             $byCons[$l->consultant][$bucket] = [
