@@ -237,8 +237,12 @@
                         @update:model-value="v => patchField(d, 'yearKV', v)" />
                     </template>
                     <template v-else-if="h.key === 'amount'">
+                      <!-- Отрицательная сумма = СТОРНО (возврат): подсвечиваем, чтобы
+                           оператор не зафиксировал минус по ошибке, не заметив знак. -->
                       <v-text-field :model-value="fmtAmt(d.amount)" inputmode="decimal"
                         density="compact" hide-details variant="plain"
+                        :class="Number(d.amount) < 0 ? 'tx-amount-negative' : ''"
+                        :title="Number(d.amount) < 0 ? 'Сторно: доход ДС, баллы и комиссии всей цепочки уйдут в минус' : ''"
                         reverse @update:model-value="v => patchField(d, 'amount', parseAmt(v))" />
                     </template>
                     <template v-else-if="h.key === 'currency'">
@@ -1540,6 +1544,8 @@ onMounted(async () => {
 .manual-tx-table :deep(input[type="number"]::-webkit-inner-spin-button),
 .manual-tx-table :deep(input[type="number"]::-webkit-outer-spin-button) { -webkit-appearance: none; margin: 0; }
 .manual-tx-table :deep(input[type="number"]) { -moz-appearance: textfield; }
+/* Сторно (отрицательная сумма) — видно с одного взгляда. */
+.tx-amount-negative :deep(input) { color: rgb(var(--v-theme-error)); font-weight: 600; }
 .manual-tx-table :deep(table) { border-collapse: separate; border-spacing: 0; }
 .manual-tx-table :deep(td) { vertical-align: middle; }
 .manual-tx-table :deep(th) {

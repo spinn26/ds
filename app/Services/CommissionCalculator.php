@@ -404,7 +404,14 @@ class CommissionCalculator
         // иначе при dsCommissionPercentage<=0 калькулятор берёт тариф/дефолт 100%
         // и затирает ручной доход (жалоба «Брокер+ после фиксации всё 100%»,
         // 2026-07-08). Приоритет — выше тарифа/дефолта.
-        if (! empty($tx->customCommission) && (float) ($tx->dsCommissionAbsolute ?? 0) > 0 && $amountNoVat > 0) {
+        // Сравнение с 0, а не «> 0»: у СТОРНО (возврат) и сумма, и доход ДС
+        // отрицательные. Прежнее условие на таких сделках не срабатывало, ручной
+        // доход ДС затирался тарифом. %ДС при этом остаётся положительным
+        // (минус на минус), что и правильно — знак несёт сумма.
+        if (! empty($tx->customCommission)
+            && abs((float) ($tx->dsCommissionAbsolute ?? 0)) > 0.000001
+            && abs($amountNoVat) > 0.000001
+        ) {
             $dsComPercent = round((float) $tx->dsCommissionAbsolute / $amountNoVat * 100, 4);
         }
 

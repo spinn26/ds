@@ -210,7 +210,12 @@ class ManualTransactionController extends Controller
     public function updateDraft(Request $request, int $id): JsonResponse
     {
         $request->validate([
-            'amount' => ['nullable', 'numeric', 'min:0'],
+            // Отрицательная сумма — это СТОРНО (возврат клиента, отмена взноса).
+            // Движок такие сделки считает корректно: доход ДС, ЛП и вся цепочка
+            // комиссий уходят в минус, т.е. ранее начисленное вычитается (в базе
+            // уже есть 52 такие сделки из легаси). Ноль по-прежнему бессмыслен и
+            // отсекается ниже (! $draft->amount).
+            'amount' => ['nullable', 'numeric'],
             'currency' => ['nullable', 'integer'],
             'date' => ['nullable', 'date'],
             'comment' => ['nullable', 'string', 'max:1000'],
@@ -219,7 +224,9 @@ class ManualTransactionController extends Controller
             'dsCommissionPercentage' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'commissionOverride' => ['nullable', 'boolean'],
             'customCommission' => ['nullable', 'boolean'],
-            'dsCommissionAbsolute' => ['nullable', 'numeric', 'min:0'],
+            // У сторно доход ДС тоже отрицательный — «своя комиссия» должна это
+            // позволять, иначе возврат нельзя завести с ручным доходом ДС.
+            'dsCommissionAbsolute' => ['nullable', 'numeric'],
         ]);
 
         $draft = DB::table('transaction_draft')->where('id', $id)->first();
@@ -673,10 +680,12 @@ class ManualTransactionController extends Controller
             ) ?? 0);
         }
         // Своя комиссия: пользователь сам ввёл сумму ДохДС → %ДС обратным расчётом.
+        // Сравнение с нулём по модулю: у сторно и сумма, и доход ДС отрицательные
+        // (см. тот же гард в CommissionCalculator) — иначе превью показывало бы 0%.
         $incomeDS = $amountNoVat * $dsPercent / 100;
-        if ($draft->customCommission && $draft->dsCommissionAbsolute) {
+        if ($draft->customCommission && abs((float) $draft->dsCommissionAbsolute) > 0.000001) {
             $incomeDS = (float) $draft->dsCommissionAbsolute;
-            $dsPercent = $amountNoVat > 0 ? round($incomeDS / $amountNoVat * 100, 4) : 0;
+            $dsPercent = abs($amountNoVat) > 0.000001 ? round($incomeDS / $amountNoVat * 100, 4) : 0;
         }
 
         // Тариф не найден ни в одном источнике (и «своя комиссия» его не заменила).
