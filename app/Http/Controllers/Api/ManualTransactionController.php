@@ -650,14 +650,20 @@ class ManualTransactionController extends Controller
                 $draft->date ?? null,
             ) ?? 0);
         }
-        if ($dsPercent <= 0) $dsPercent = 100;
-
         // Своя комиссия: пользователь сам ввёл сумму ДохДС → %ДС обратным расчётом.
         $incomeDS = $amountNoVat * $dsPercent / 100;
         if ($draft->customCommission && $draft->dsCommissionAbsolute) {
             $incomeDS = (float) $draft->dsCommissionAbsolute;
             $dsPercent = $amountNoVat > 0 ? round($incomeDS / $amountNoVat * 100, 4) : 0;
         }
+
+        // Тариф не найден ни в одном источнике (и «своя комиссия» его не заменила).
+        // Раньше здесь подставлялись 100%: превью показывало красивый расчёт, а при
+        // фиксации доход ДС становился равен всей сумме без НДС — завышение в 10-30
+        // раз (кейс «Брокер+»). Теперь калькулятор в такой ситуации возвращает
+        // ошибку, и превью обязано показать то же самое: нули и явный признак,
+        // а не выдуманную ставку.
+        $tariffMissing = $dsPercent <= 0;
 
         // Личный объём (баллы). Срок нужен методу annualized_term (Vantage).
         $points = $this->computePoints($programRow, $amountNoVat, $amountRub, $dsPercent,
@@ -670,6 +676,7 @@ class ManualTransactionController extends Controller
         if ($consultantId === \App\Services\CommissionCalculator::UNKNOWN_CONSULTANT_ID) {
             return [
                 'ready' => true,
+                'tariffMissing' => $tariffMissing,
                 'amountRUB' => round($amountRub, 2),
                 'amountNoVat' => round($amountNoVat, 2),
                 'vat' => round($amountRub - $amountNoVat, 2),
@@ -765,6 +772,7 @@ class ManualTransactionController extends Controller
 
         return [
             'ready' => true,
+            'tariffMissing' => $tariffMissing,
             'amountRUB' => round($amountRub, 2),
             'amountNoVat' => round($amountNoVat, 2),
             'amountNoVatUSD' => $amountNoVatUsd,

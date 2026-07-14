@@ -441,8 +441,16 @@ class CommissionCalculator
         }
 
         if ($dsComPercent <= 0) {
-            // Fallback %ДС — настраивается (commission.default_ds_percent, фолбэк 100).
-            $dsComPercent = (float) \App\Models\SystemSetting::value('commission.default_ds_percent', 100);
+            // Тариф не найден НИ В ОДНОМ источнике (своя комиссия -> тариф по
+            // свойству -> program.dsPercent -> legacy dsCommission).
+            //
+            // Раньше здесь стоял фолбэк 100% (commission.default_ds_percent): весь
+            // доход без НДС объявлялся доходом ДС, и комиссии цепочки платились с
+            // полной суммы контракта — завышение в 10-30 раз (кейс «Брокер+»).
+            // 100% не является правдоподобной ставкой ни для одного продукта, так
+            // что отсутствие тарифа — это ошибка данных, и она должна быть видна,
+            // а не молча оплачена.
+            return ['error' => 'Не найден тариф %ДС (программа/свойство/срок). Заведите тариф — расчёт по умолчанию 100% отключён.'];
         }
 
         // ЛП per program.pointsMethod, same switch as CalculatorController::computePoints.

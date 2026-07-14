@@ -254,7 +254,15 @@
                       <span v-else class="text-medium-emphasis">—</span>
                     </template>
                     <template v-else-if="h.key === 'dsPercent'">
-                      <span v-if="d.preview?.ready">{{ fmt2(d.preview.dsCommissionPercentage) }}%</span>
+                      <!-- Тариф не найден: раньше молча подставлялись 100% и доход ДС
+                           взлетал до всей суммы без НДС. Теперь фиксация такой строки
+                           вернёт ошибку — предупреждаем заранее. -->
+                      <v-chip v-if="d.preview?.ready && d.preview?.tariffMissing"
+                        size="x-small" color="error" variant="tonal"
+                        title="Не найден тариф %ДС (программа/свойство/срок). Заведите тариф — иначе фиксация не пройдёт.">
+                        нет тарифа
+                      </v-chip>
+                      <span v-else-if="d.preview?.ready">{{ fmt2(d.preview.dsCommissionPercentage) }}%</span>
                       <span v-else class="text-medium-emphasis">—</span>
                     </template>
                     <template v-else-if="h.key === 'customCommission'">
