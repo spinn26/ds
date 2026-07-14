@@ -54,8 +54,6 @@ class AdminFinanceController extends Controller
             $query->where('t.comment', 'ilike', '%' . $request->comment . '%');
         }
         if ($request->filled('supplier')) {
-            // Выражения — ровно те, которыми колонка «Поставщик» собирается ниже
-            // по файлу (catalog-first, legacy как фолбэк).
             $query->leftJoin('program as pr', 'pr.id', '=', 'c.program')
                   ->leftJoin('products_catalog as pcf', 'pcf.legacy_product_id', '=', 'c.product')
                   ->leftJoin('product as prodf', 'prodf.id', '=', 'c.product');
@@ -63,7 +61,7 @@ class AdminFinanceController extends Controller
                 $query,
                 (string) $request->supplier,
                 'COALESCE(pcf.name, prodf.name)',
-                'COALESCE(pcf.provider_name, pr."providerName", pr."vendorName")'
+                \App\Support\SupplierResolver::sqlProviderExpr('pr', 'pcf')
             );
         }
         if ($request->filled('date_from')) {
@@ -356,9 +354,15 @@ class AdminFinanceController extends Controller
             $prog = $t->programId ? ($programMeta[$t->programId] ?? null) : null;
             $cat = $t->productId ? ($productCatalog[$t->productId] ?? null) : null;
             $progCat = $t->programId ? ($programCatalog[$t->programId] ?? null) : null;
-            // Product name / supplier: catalog first, legacy as fallback.
+            // Имя продукта — каталог первым (после ремапа 2026-07-06 это источник истины).
             $productName = $cat?->name ?? $flags?->name ?? null;
-            $rawProvider = $cat?->provider_name ?? $prog?->providerName ?? $prog?->vendorName ?? null;
+            // Поставщик — канонический порядок (см. SupplierResolver::sqlProviderExpr):
+            // vendorName -> providerName -> каталог. Каталожный provider_name у части
+            // продуктов хранит конечного страховщика («Ренессанс»), а поставщик — канал
+            // («ГГА»), поэтому catalog-first здесь давал неверное значение.
+            $rawProvider = ($prog?->vendorName ?: null)
+                ?? ($prog?->providerName ?: null)
+                ?? ($cat?->provider_name ?: null);
             $partnerRow = $partnerRowByTx->get((int) $t->id);
             $totalCommission = (float) $commissionByTx->get((int) $t->id, 0);
             return [

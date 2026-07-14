@@ -59,7 +59,7 @@ class ManualTransactionController extends Controller
                 $q,
                 (string) $request->supplier,
                 'c."productName"',
-                'pr."providerName"'
+                \App\Support\SupplierResolver::sqlProviderExpr('pr', null)
             );
         }
         if ($request->filled('provider')) {
@@ -83,7 +83,10 @@ class ManualTransactionController extends Controller
             ->limit($this->paginationPerPage($request))
             ->get([
                 'c.*',
-                'pr.providerName as joinedSupplier',
+                // Поставщик — канонический порядок (vendorName -> providerName),
+                // как в остальных списках. Раньше здесь был только providerName,
+                // и «Ручной ввод» показывал поставщика иначе, чем «Контракты».
+                DB::raw(\App\Support\SupplierResolver::sqlProviderExpr('pr', null) . ' as "joinedSupplier"'),
                 'pr.vendorName as joinedProvider',
             ]);
 

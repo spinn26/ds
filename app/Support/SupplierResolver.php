@@ -51,6 +51,33 @@ class SupplierResolver
     }
 
     /**
+     * КАНОНИЧЕСКОЕ SQL-выражение «Поставщика» — одно на все списки и отчёты.
+     *
+     * Порядок: vendorName (канал дистрибуции: ГГА, RG.HT) → providerName →
+     * products_catalog.provider_name (последний фолбэк).
+     *
+     * Каталожный provider_name НЕ может быть первым: у части продуктов он хранит
+     * конечного страховщика («Ренессанс»), а поставщик — канал («ГГА»). Раньше
+     * страницы резолвили поставщика по-разному (catalog-first в «Комиссиях»,
+     * vendor-first в «Контрактах», только providerName в «Ручном вводе»), и один
+     * и тот же контракт показывался с разными поставщиками. Владелец подтвердил
+     * 2026-07-14: верен «ГГА», т.е. канал.
+     *
+     * @param string|null $catalog алиас products_catalog; null — если не приджойнен
+     */
+    public static function sqlProviderExpr(string $program = 'pr', ?string $catalog = 'pc'): string
+    {
+        $parts = [
+            "NULLIF($program.\"vendorName\", '')",
+            "NULLIF($program.\"providerName\", '')",
+        ];
+        if ($catalog !== null) {
+            $parts[] = "NULLIF($catalog.provider_name, '')";
+        }
+        return 'COALESCE(' . implode(', ', $parts) . ')';
+    }
+
+    /**
      * Фильтр «Поставщик» для списков (Комиссии / Менеджер контрактов / Ручной ввод).
      *
      * Фильтр ОБЯЗАН резолвить поставщика тем же выражением, что и колонка своей

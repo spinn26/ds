@@ -2488,13 +2488,12 @@ class AdminDataController extends Controller
         }
         if ($request->filled('setup')) $query->where('c.setup', $request->setup);
         if ($request->filled('supplier')) {
-            // Выражение поставщика — ровно то, которым ниже собирается колонка
-            // «Поставщик» этой страницы (vendor-first, без каталога).
+            // Каноническое выражение — то же, которым ниже собирается колонка.
             \App\Support\SupplierResolver::applyFilter(
                 $query,
                 (string) $request->supplier,
                 'c."productName"',
-                'COALESCE(NULLIF(pr."vendorName", \'\'), pr."providerName")'
+                \App\Support\SupplierResolver::sqlProviderExpr('pr', null)
             );
         }
         if ($request->filled('created_from')) $query->where('c.createDate', '>=', $request->created_from);
@@ -2537,7 +2536,7 @@ class AdminDataController extends Controller
                 'c.productName', 'c.programName', 'c.status', 'c.ammount', 'c.currency',
                 'c.openDate', 'c.createDate', 'c.createdAt', 'c.comment',
                 'c.counterpartyContractId', 'c.activation_forecast',
-                DB::raw('COALESCE(NULLIF(pr."vendorName",\'\'), pr."providerName") as "supplierName"'),
+                DB::raw(\App\Support\SupplierResolver::sqlProviderExpr('pr', null) . ' as "supplierName"'),
             ])
             ->get();
 
@@ -2655,23 +2654,11 @@ class AdminDataController extends Controller
             ->pluck('vendor')
             ->each(fn ($v) => $supSet[$v] = true);
 
-        // Источник 3: products_catalog.provider_name — ИМЕННО его показывает
-        // колонка «Поставщик» (catalog-first, см. SupplierResolver::resolve).
-        // Без него в списке были поставщики только из legacy, и пользователь мог
-        // выбрать значение, которого в выдаче не существует, — либо наоборот, не
-        // найти в списке того, кого видит в колонке.
-        DB::table('products_catalog')
-            ->whereNotNull('provider_name')
-            ->where('provider_name', '!=', '')
-            ->distinct()
-            ->pluck('provider_name')
-            ->each(function ($v) use (&$supSet, &$hasInsmart) {
-                if (preg_match('/ins+mart/i', (string) $v)) {
-                    $hasInsmart = true;
-                    return;
-                }
-                $supSet[$v] = true;
-            });
+        // products_catalog.provider_name в список НЕ добавляем: у части продуктов
+        // там лежит конечный страховщик («Ренессанс»), а поставщик — канал («ГГА»).
+        // В каноническом резолве (SupplierResolver::sqlProviderExpr) каталог —
+        // последний фолбэк, поэтому такие значения в выдаче не появляются, и
+        // предлагать их в фильтре нельзя: выбор вернул бы пустой список.
 
         $suppliers = array_keys($supSet);
         sort($suppliers, SORT_NATURAL | SORT_FLAG_CASE);

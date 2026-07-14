@@ -39,7 +39,7 @@ class CommissionsReport extends AbstractReportType
                 // program.providerName wins over the catalog: it is per-program
                 // («Решающее приемущество» → ГГА, while the product «Ренессанс»
                 // carries its own provider). Insmart is remapped below.
-                DB::raw('COALESCE(pr."providerName", pc.provider_name) as "providerName"'),
+                DB::raw(SupplierResolver::sqlProviderExpr('pr', 'pc') . ' as "providerName"'),
                 DB::raw('COALESCE(pc.name, p.name) as "productName"'),
                 DB::raw('COALESCE(prc.name, pr.name) as "programName"'),
                 'c.clientName', 't.date', 't.amountRUB',

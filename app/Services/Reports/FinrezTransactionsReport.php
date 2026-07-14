@@ -40,7 +40,7 @@ class FinrezTransactionsReport extends AbstractReportType
                 't.id', 'c.number',
                 // Поставщик — как в CommissionsReport: приоритет программе
                 // (она per-program), Insmart мапится через SupplierResolver ниже.
-                DB::raw('COALESCE(pr."providerName", pc.provider_name) as "providerName"'),
+                DB::raw(SupplierResolver::sqlProviderExpr('pr', 'pc') . ' as "providerName"'),
                 DB::raw('COALESCE(pc.name, c."productName") as "productName"'),
                 DB::raw('COALESCE(prc.name, c."programName") as "programName"'),
                 'c.clientName', 't.date', 't.amountRUB', 't.netRevenueRUB',
