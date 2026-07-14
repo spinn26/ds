@@ -104,9 +104,11 @@ class User extends Authenticatable
         return false;
     }
 
+    /** Strictly the admin role. Backoffice is staff, not admin — it must never
+     *  pass gates that guard privilege escalation (e.g. permission_groups CRUD). */
     public function isAdmin(): bool
     {
-        return $this->hasAnyRole(['admin', 'backoffice']);
+        return $this->hasAnyRole(['admin']);
     }
 
     /** Any staff role — sees company-wide data. */

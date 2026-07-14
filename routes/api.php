@@ -467,10 +467,12 @@ Route::prefix('v1')->group(function () {
         Route::get('/admin/partners/{id}', [\App\Http\Controllers\Api\AdminDataController::class, 'showPartner'])->whereNumber('id');
         Route::put('/admin/partners/{id}', [\App\Http\Controllers\Api\AdminDataController::class, 'updatePartner'])->whereNumber('id');
         Route::post('/admin/partners/{id}/status', [\App\Http\Controllers\Api\AdminDataController::class, 'changePartnerStatus'])->whereNumber('id');
-        Route::post('/admin/partners/{id}/status-override', [\App\Http\Controllers\Api\AdminDataController::class, 'overridePartnerStatus'])->whereNumber('id');
+        // status-override минует PartnerStatusService и при «Исключён» пишет
+        // dateDeleted (soft-delete) — партнёр выпадает из расчётов. Только admin.
+        Route::post('/admin/partners/{id}/status-override', [\App\Http\Controllers\Api\AdminDataController::class, 'overridePartnerStatus'])->whereNumber('id')->middleware('role:admin');
         Route::get('/admin/partners/{id}/status-history', [\App\Http\Controllers\Api\AdminDataController::class, 'partnerStatusHistory'])->whereNumber('id');
         Route::get('/admin/partners/{id}/change-log', [\App\Http\Controllers\Api\AdminDataController::class, 'partnerChangeLog'])->whereNumber('id');
-        Route::delete('/admin/partners/{id}', [\App\Http\Controllers\Api\AdminDataController::class, 'deletePartner'])->whereNumber('id');
+        Route::delete('/admin/partners/{id}', [\App\Http\Controllers\Api\AdminDataController::class, 'deletePartner'])->whereNumber('id')->middleware('role:admin');
         Route::get('/admin/partner-statuses', [\App\Http\Controllers\Api\AdminDataController::class, 'partnerStatuses']);
         Route::get('/admin/clients', [\App\Http\Controllers\Api\AdminDataController::class, 'clients']);
         Route::get('/admin/clients/check-duplicates', [\App\Http\Controllers\Api\AdminDataController::class, 'checkClientDuplicates']);
@@ -485,10 +487,11 @@ Route::prefix('v1')->group(function () {
         Route::post('/admin/requisites/{id}/check-inn', [\App\Http\Controllers\Api\AdminDataController::class, 'checkRequisiteInn'])->whereNumber('id')->middleware('throttle:60,1');
         Route::post('/admin/requisites/{id}/verify', [\App\Http\Controllers\Api\AdminDataController::class, 'verifyRequisites'])->middleware('permission:requisites,edit');
         // Смена банковских реквизитов (проверка Катей) + приостановка выплат.
+        // Подтверждение смены счёта — вектор payout-fraud, гейт обязателен.
         Route::get('/admin/bank-change-requests', [\App\Http\Controllers\Api\BankRequisiteChangeController::class, 'index']);
-        Route::post('/admin/bank-change-requests/{id}/accept', [\App\Http\Controllers\Api\BankRequisiteChangeController::class, 'accept'])->whereNumber('id');
-        Route::post('/admin/bank-change-requests/{id}/reject', [\App\Http\Controllers\Api\BankRequisiteChangeController::class, 'reject'])->whereNumber('id');
-        Route::post('/admin/partners/{consultant}/suspend-payments', [\App\Http\Controllers\Api\BankRequisiteChangeController::class, 'suspendPayments'])->whereNumber('consultant');
+        Route::post('/admin/bank-change-requests/{id}/accept', [\App\Http\Controllers\Api\BankRequisiteChangeController::class, 'accept'])->whereNumber('id')->middleware('role:admin,finance');
+        Route::post('/admin/bank-change-requests/{id}/reject', [\App\Http\Controllers\Api\BankRequisiteChangeController::class, 'reject'])->whereNumber('id')->middleware('role:admin,finance');
+        Route::post('/admin/partners/{consultant}/suspend-payments', [\App\Http\Controllers\Api\BankRequisiteChangeController::class, 'suspendPayments'])->whereNumber('consultant')->middleware('role:admin,finance');
         Route::get('/admin/acceptance', [\App\Http\Controllers\Api\AdminDataController::class, 'acceptance']);
         Route::get('/admin/contracts', [\App\Http\Controllers\Api\AdminDataController::class, 'contracts']);
         Route::get('/admin/contracts/check-number', [\App\Http\Controllers\Api\AdminDataController::class, 'checkContractNumber']);
@@ -539,11 +542,15 @@ Route::prefix('v1')->group(function () {
         Route::get('/admin/transfers/subjects', [\App\Http\Controllers\Api\AdminDataController::class, 'transferSubjects']);
         Route::post('/admin/transfers', [\App\Http\Controllers\Api\AdminDataController::class, 'createTransfer'])->middleware(['throttle:60,1', 'permission:transfers,edit']);
 
-        // Permission groups — управление правами кабинетов через UI
-        Route::get('/admin/permissions/groups',          [\App\Http\Controllers\Api\AdminPermissionsController::class, 'index']);
-        Route::post('/admin/permissions/groups',         [\App\Http\Controllers\Api\AdminPermissionsController::class, 'store']);
-        Route::patch('/admin/permissions/groups/{id}',   [\App\Http\Controllers\Api\AdminPermissionsController::class, 'update'])->whereNumber('id');
-        Route::delete('/admin/permissions/groups/{id}',  [\App\Http\Controllers\Api\AdminPermissionsController::class, 'destroy'])->whereNumber('id');
+        // Permission groups — управление правами кабинетов через UI.
+        // role:admin на роутах — второй барьер к authorizeAdmin() в контроллере:
+        // кто правит эту таблицу, тот может выдать себе любые права.
+        Route::middleware('role:admin')->group(function () {
+            Route::get('/admin/permissions/groups',          [\App\Http\Controllers\Api\AdminPermissionsController::class, 'index']);
+            Route::post('/admin/permissions/groups',         [\App\Http\Controllers\Api\AdminPermissionsController::class, 'store']);
+            Route::patch('/admin/permissions/groups/{id}',   [\App\Http\Controllers\Api\AdminPermissionsController::class, 'update'])->whereNumber('id');
+            Route::delete('/admin/permissions/groups/{id}',  [\App\Http\Controllers\Api\AdminPermissionsController::class, 'destroy'])->whereNumber('id');
+        });
 
         Route::get('/admin/transactions', [\App\Http\Controllers\Api\AdminFinanceController::class, 'transactions']);
         Route::post('/admin/finalize-month', [\App\Http\Controllers\Api\AdminFinanceController::class, 'finalizeMonth'])->middleware('role:admin,calculations');
@@ -555,16 +562,18 @@ Route::prefix('v1')->group(function () {
         Route::get('/admin/qualifications', [\App\Http\Controllers\Api\AdminFinanceController::class, 'qualifications']);
         Route::get('/admin/qualifications/history/{id}', [\App\Http\Controllers\Api\AdminFinanceController::class, 'qualificationHistory'])->whereNumber('id');
         Route::get('/admin/charges', [\App\Http\Controllers\Api\AdminFinanceController::class, 'charges']);
-        Route::post('/admin/charges', [\App\Http\Controllers\Api\AdminFinanceController::class, 'storeCharge']);
-        Route::put('/admin/charges/{id}', [\App\Http\Controllers\Api\AdminFinanceController::class, 'updateCharge'])->whereNumber('id');
-        Route::delete('/admin/charges/{id}', [\App\Http\Controllers\Api\AdminFinanceController::class, 'deleteCharge'])->whereNumber('id');
+        // Начисление/правка «Прочих» — это прямая запись денег партнёру.
+        Route::post('/admin/charges', [\App\Http\Controllers\Api\AdminFinanceController::class, 'storeCharge'])->middleware('role:admin,finance,calculations');
+        Route::put('/admin/charges/{id}', [\App\Http\Controllers\Api\AdminFinanceController::class, 'updateCharge'])->whereNumber('id')->middleware('role:admin,finance,calculations');
+        Route::delete('/admin/charges/{id}', [\App\Http\Controllers\Api\AdminFinanceController::class, 'deleteCharge'])->whereNumber('id')->middleware('role:admin,finance,calculations');
         Route::get('/admin/payments', [\App\Http\Controllers\Api\AdminFinanceController::class, 'payments']);
         Route::get('/admin/reports/archive', [\App\Http\Controllers\Api\AdminFinanceController::class, 'reportArchive']);
         Route::post('/admin/reports/generate', [\App\Http\Controllers\Api\AdminFinanceController::class, 'generateReport'])->middleware('throttle:30,1');
         Route::get('/admin/reports/{id}/download', [\App\Http\Controllers\Api\AdminFinanceController::class, 'downloadReport'])->whereNumber('id');
         Route::get('/admin/currencies', [\App\Http\Controllers\Api\AdminFinanceController::class, 'currencies']);
         Route::patch('/admin/currencies/rates/{id}', [\App\Http\Controllers\Api\AdminFinanceController::class, 'updateCurrencyRate'])->whereNumber('id')->middleware('role:admin,calculations');
-        Route::post('/admin/currencies/vat', [\App\Http\Controllers\Api\AdminFinanceController::class, 'addVatRate']);
+        // Ставка НДС входит в расчёт комиссий — та же планка, что у курсов.
+        Route::post('/admin/currencies/vat', [\App\Http\Controllers\Api\AdminFinanceController::class, 'addVatRate'])->middleware('role:admin,calculations');
         // Второй справочник курсов — для отчётов руководителей (нет пересчёта транзакций)
         Route::get('/admin/currencies/management-rates', [\App\Http\Controllers\Api\AdminFinanceController::class, 'managementCurrencies']);
         Route::post('/admin/currencies/management-rates', [\App\Http\Controllers\Api\AdminFinanceController::class, 'storeManagementCurrencyRate'])->middleware('role:admin,calculations');
@@ -572,8 +581,10 @@ Route::prefix('v1')->group(function () {
         Route::post('/admin/currencies/management-rates/copy-from-main', [\App\Http\Controllers\Api\AdminFinanceController::class, 'copyManagementRatesFromMain'])->middleware('role:admin,calculations');
         Route::get('/admin/transaction-import/form-data', [\App\Http\Controllers\Api\TransactionImportController::class, 'formData']);
         Route::get('/admin/transaction-import/sheet-names', [\App\Http\Controllers\Api\TransactionImportController::class, 'sheetNames']);
-        Route::post('/admin/transaction-import', [\App\Http\Controllers\Api\TransactionImportController::class, 'import'])->middleware('throttle:30,1');
-        Route::post('/admin/transaction-import/from-sheets', [\App\Http\Controllers\Api\TransactionImportController::class, 'importFromSheets'])->middleware('throttle:30,1');
+        // Запуск импорта — та же роль, что откат/пересчёт ниже: кто заливает
+        // транзакции, тот должен уметь пересчитать и откатить результат.
+        Route::post('/admin/transaction-import', [\App\Http\Controllers\Api\TransactionImportController::class, 'import'])->middleware(['role:admin,calculations', 'throttle:30,1']);
+        Route::post('/admin/transaction-import/from-sheets', [\App\Http\Controllers\Api\TransactionImportController::class, 'importFromSheets'])->middleware(['role:admin,calculations', 'throttle:30,1']);
 
         // News CRUD (admin)
         Route::get('/admin/news', [\App\Http\Controllers\Api\WorkspaceController::class, 'newsList']);
@@ -720,18 +731,20 @@ Route::prefix('v1')->group(function () {
         Route::get('/admin/payment-registry', [\App\Http\Controllers\Api\AdminPaymentRegistryController::class, 'index']);
         Route::get('/admin/payment-registry/{id}/requisites', [\App\Http\Controllers\Api\AdminPaymentRegistryController::class, 'requisites'])->whereNumber('id');
         Route::get('/admin/payment-registry/{id}/payments', [\App\Http\Controllers\Api\AdminPaymentRegistryController::class, 'listPayments'])->whereNumber('id');
-        Route::post('/admin/payment-registry/{id}/payments', [\App\Http\Controllers\Api\AdminPaymentRegistryController::class, 'addPayment'])->whereNumber('id');
-        Route::patch('/admin/payment-registry/payments/{paymentId}', [\App\Http\Controllers\Api\AdminPaymentRegistryController::class, 'updatePayment'])->whereNumber('paymentId');
-        Route::delete('/admin/payment-registry/payments/{paymentId}', [\App\Http\Controllers\Api\AdminPaymentRegistryController::class, 'deletePayment'])->whereNumber('paymentId');
+        // Проведение/правка/отмена выплаты — только финблок и расчёты.
+        Route::post('/admin/payment-registry/{id}/payments', [\App\Http\Controllers\Api\AdminPaymentRegistryController::class, 'addPayment'])->whereNumber('id')->middleware('role:admin,finance,calculations');
+        Route::patch('/admin/payment-registry/payments/{paymentId}', [\App\Http\Controllers\Api\AdminPaymentRegistryController::class, 'updatePayment'])->whereNumber('paymentId')->middleware('role:admin,finance,calculations');
+        Route::delete('/admin/payment-registry/payments/{paymentId}', [\App\Http\Controllers\Api\AdminPaymentRegistryController::class, 'deletePayment'])->whereNumber('paymentId')->middleware('role:admin,finance,calculations');
 
         // Admin — Period freeze (close/reopen reporting months)
         Route::get('/admin/periods', [\App\Http\Controllers\Api\AdminPeriodController::class, 'index']);
-        // Admin-only (role + canFull('reports-access')). Троттл здесь — анти-
+        // Закрытие/переоткрытие месяца и публикация отчётов — admin + calculations.
+        // Контроллер сам роль не проверяет, гейт только здесь. Троттл — анти-
         // runaway, не анти-пользователь: при работе с 24 периодами прежние
         // лимиты (10/30 в минуту) ловили 429 у легитимного финменеджера.
-        Route::post('/admin/periods/close', [\App\Http\Controllers\Api\AdminPeriodController::class, 'close'])->middleware('throttle:60,1');
-        Route::post('/admin/periods/reopen', [\App\Http\Controllers\Api\AdminPeriodController::class, 'reopen'])->middleware('throttle:60,1');
-        Route::post('/admin/periods/visibility', [\App\Http\Controllers\Api\AdminPeriodController::class, 'setVisibility'])->middleware('throttle:120,1');
+        Route::post('/admin/periods/close', [\App\Http\Controllers\Api\AdminPeriodController::class, 'close'])->middleware(['role:admin,calculations', 'throttle:60,1']);
+        Route::post('/admin/periods/reopen', [\App\Http\Controllers\Api\AdminPeriodController::class, 'reopen'])->middleware(['role:admin,calculations', 'throttle:60,1']);
+        Route::post('/admin/periods/visibility', [\App\Http\Controllers\Api\AdminPeriodController::class, 'setVisibility'])->middleware(['role:admin,calculations', 'throttle:120,1']);
         Route::get('/admin/periods/{year}/{month}', [\App\Http\Controllers\Api\AdminPeriodController::class, 'check'])->whereNumber(['year', 'month']);
 
         // Admin References (generic CRUD for small reference tables)

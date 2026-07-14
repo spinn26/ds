@@ -51,12 +51,22 @@ class InstructionController extends Controller
         ]);
     }
 
-    public function show(string $slug): JsonResponse
+    /**
+     * Карточка инструкции. Партнёру видны только partner|both — иначе слug
+     * (генерится из заголовка, т.е. подбирается) открывал бы ему бэк-офисные
+     * инструкции: закрытие периодов, модерация реквизитов, реестры транзакций.
+     */
+    public function show(Request $request, string $slug): JsonResponse
     {
-        $row = DB::table('instructions')
+        $q = DB::table('instructions')
             ->where('slug', $slug)
-            ->where('publish_status', 'published')
-            ->first();
+            ->where('publish_status', 'published');
+
+        if (! $request->user()?->isStaff()) {
+            $q->whereIn('audience', ['partner', 'both']);
+        }
+
+        $row = $q->first();
         if (! $row) return response()->json(['message' => 'Инструкция не найдена'], 404);
 
         return response()->json([
