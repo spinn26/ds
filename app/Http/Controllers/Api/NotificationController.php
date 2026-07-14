@@ -214,7 +214,7 @@ class NotificationController extends Controller
     public static function notifyStaff(string $type, string $title, ?string $message = null, ?string $link = null): int
     {
         return self::notifyRoles(
-            ['admin', 'backoffice', 'finance', 'support', 'head', 'calculations', 'corrections'],
+            ['admin', 'backoffice', 'finance', 'support', 'head', 'calculations', 'corrections', 'invest'],
             $type, $title, $message, $link
         );
     }

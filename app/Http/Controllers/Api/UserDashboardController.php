@@ -128,7 +128,7 @@ class UserDashboardController extends Controller
             ->whereNotNull('last_seen_at')
             ->where('last_seen_at', '>=', $now->copy()->subMinutes(10))
             ->where(function ($q) {
-                foreach (['admin', 'backoffice', 'support', 'head', 'finance', 'calculations', 'corrections', 'education'] as $r) {
+                foreach (['admin', 'backoffice', 'support', 'head', 'finance', 'calculations', 'corrections', 'education', 'invest'] as $r) {
                     $q->orWhere('role', 'ilike', "%{$r}%");
                 }
             })

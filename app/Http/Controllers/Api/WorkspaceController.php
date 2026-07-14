@@ -19,7 +19,7 @@ class WorkspaceController extends Controller
         $user = $request->user();
         $userRoles = array_map('trim', explode(',', $user->role ?? ''));
         $isConsultant = in_array('consultant', $userRoles);
-        $isStaff = array_intersect($userRoles, ['admin', 'backoffice', 'support', 'finance', 'head', 'calculations', 'corrections']);
+        $isStaff = array_intersect($userRoles, ['admin', 'backoffice', 'support', 'finance', 'head', 'calculations', 'corrections', 'invest']);
 
         $consultant = Consultant::where('webUser', $user->id)->first();
 
