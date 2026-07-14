@@ -184,8 +184,16 @@ class InsmartIntegrationService
     }
 
     /**
-     * Если клиент сам является зарегистрированным партнёром (ФК) —
-     * контракт не может быть на него же. Переключаем на его инвайтера.
+     * САМОПОКУПКА: партнёр купил полис сам себе — контракт не может висеть на нём
+     * же, он уходит его наставнику (спека ✅Инсмарт §2: «Если Партнер купил
+     * страховку сам себе … система назначает автором сделки его наставника»).
+     *
+     * Ключевое условие — клиент и есть ПРОДАВЕЦ. Раньше проверки на это не было:
+     * искали любого партнёра по контактам клиента и отдавали контракт ЕГО
+     * инвайтеру, игнорируя продавца из payload. В MLM ситуация «ФК A продал
+     * полис человеку, который сам ФК B» — обычная, и сделка вместе с клиентом и
+     * всей цепочкой комиссий уезжала в чужую ветку.
+     *
      * Проверяем по email и phone (надёжнее, чем ФИО).
      */
     private function redirectIfClientIsPartner(array $payload, int $consultantId): int
@@ -205,12 +213,18 @@ class InsmartIntegrationService
         $clientConsultant = DB::table('consultant')->where('webUser', $webUser->id)->first();
         if (! $clientConsultant) return $consultantId;
 
-        // Клиент — ФК. Контракт идёт его инвайтеру.
+        // Клиент — партнёр, но НЕ продавец: обычная продажа другому ФК.
+        // Сделка остаётся у продавца.
+        if ((int) $clientConsultant->id !== $consultantId) {
+            return $consultantId;
+        }
+
+        // Самопокупка: контракт идёт наставнику продавца.
         $inviterId = $clientConsultant->inviter
             ? (int) $clientConsultant->inviter
             : CommissionCalculator::UNKNOWN_CONSULTANT_ID;
 
-        Log::info('InsmartIntegrationService: client is a partner (ФК), redirect contract to inviter', [
+        Log::info('InsmartIntegrationService: self-purchase, redirect contract to inviter', [
             'clientWebUserId'   => $webUser->id,
             'clientConsultantId' => $clientConsultant->id,
             'originalConsultantId' => $consultantId,

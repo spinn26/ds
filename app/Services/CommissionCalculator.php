@@ -136,6 +136,68 @@ class CommissionCalculator
     }
 
     /**
+     * Самопокупка: клиент контракта — тот же человек, что и продавец.
+     *
+     * Возвращает id наставника (или «Неизвестного консультанта», если наставника
+     * нет), на которого надо переписать сделку. null — обычная продажа.
+     *
+     * Спека (✅Инсмарт §2): «ФИО И мейл клиента совпадает с ФИО и мейлом Партнёра».
+     * Оба условия обязательны. Только по контактам сверять НЕЛЬЗЯ: родственники
+     * делят телефон/почту (Трунов А.В. -> клиент Трунова Н.В., Горелова Д.А. ->
+     * клиент Горелова Н.С.), а продажа жене или сестре — обычная сделка, и снимать
+     * за неё комиссию нельзя. Только по ФИО — тоже нельзя: тёзки.
+     */
+    private function resolveSelfPurchaseUpline(int $consultantId, ?int $clientId): ?int
+    {
+        if (! $clientId) {
+            return null;
+        }
+
+        $client = DB::table('client')->where('id', $clientId)->first(['personName', 'email', 'phone']);
+        if (! $client) {
+            return null;
+        }
+
+        $seller = DB::table('consultant as cs')
+            ->leftJoin('WebUser as wu', 'wu.id', '=', 'cs.webUser')
+            ->where('cs.id', $consultantId)
+            ->first(['cs.inviter', 'cs.personName', 'wu.email', 'wu.phone']);
+        if (! $seller) {
+            return null;
+        }
+
+        $normName = fn (?string $v) => ($v = preg_replace('/\s+/u', ' ', trim((string) $v))) === ''
+            ? null
+            : mb_strtolower(str_replace('ё', 'е', $v));
+        $normEmail = fn (?string $v) => ($v = trim((string) $v)) === '' ? null : mb_strtolower($v);
+        $normPhone = fn (?string $v) => ($v = preg_replace('/\D/', '', (string) $v)) === '' ? null : $v;
+
+        // ФИО — обязательное условие.
+        $clientName = $normName($client->personName);
+        $sellerName = $normName($seller->personName);
+        if ($clientName === null || $clientName !== $sellerName) {
+            return null;
+        }
+
+        // Плюс контакт: почта или (достаточно длинный) телефон.
+        $clientEmail = $normEmail($client->email);
+        $sellerEmail = $normEmail($seller->email);
+        $emailMatch = $clientEmail !== null && $clientEmail === $sellerEmail;
+
+        $clientPhone = $normPhone($client->phone);
+        $sellerPhone = $normPhone($seller->phone);
+        $phoneMatch = $clientPhone !== null
+            && strlen($clientPhone) >= 10
+            && $clientPhone === $sellerPhone;
+
+        if (! $emailMatch && ! $phoneMatch) {
+            return null;
+        }
+
+        return $seller->inviter ? (int) $seller->inviter : self::UNKNOWN_CONSULTANT_ID;
+    }
+
+    /**
      * Записать начисленный лидерский пул в баланс месяца и пересобрать итоги.
      *
      * До этого пул жил только в `poolLog`: rebuildBalance() бережно сохранял
@@ -297,6 +359,15 @@ class CommissionCalculator
 
         $consultantId = $contract->consultant;
         if (! $consultantId) return ['error' => 'Консультант не привязан'];
+
+        // САМОПОКУПКА: партнёр — сам себе клиент. По спеке он в этой сделке клиент
+        // ВЫШЕСТОЯЩЕГО: продавцом (chainOrder=1) становится наставник, ему же идут
+        // ЛП. Сам себе партнёр комиссию не генерирует — иначе он мог бы и
+        // «наактивить» себе 500 ЛП собственной покупкой.
+        $selfPurchaseUpline = $this->resolveSelfPurchaseUpline((int) $consultantId, $contract->client ? (int) $contract->client : null);
+        if ($selfPurchaseUpline !== null) {
+            $consultantId = $selfPurchaseUpline;
+        }
 
         $consultant = DB::table('consultant')->where('id', $consultantId)->whereNull('dateDeleted')->first();
         if (! $consultant) return ['error' => 'Консультант не найден или удалён'];
