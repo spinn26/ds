@@ -821,13 +821,24 @@ class CommissionCalculator
     private function getQualificationLevel(int $consultantId, ?string $txDate = null): ?object
     {
         if ($txDate) {
-            $startOfTxMonth = \Carbon\Carbon::parse($txDate)->startOfMonth()->toDateString();
+            // Уровень для сделок месяца M = ВХОДНОЙ уровень месяца: открывающая
+            // строка qualificationLog, датированная 1-м числом M (Directual писал
+            // её на начало месяца, отражая уровень, с которым партнёр ВХОДИТ в
+            // месяц; сдвиг МСК даёт ей время 03:00).
+            //
+            // Прежняя граница `date < M-01` отсекала эту строку (03:00 > 00:00) и
+            // брала уровень ПРЕДЫДУЩЕГО месяца — после повышения партнёр считался
+            // на уровень ниже (в карточке ФК, а комиссии по Эксперту). Граница —
+            // конец 1-го дня месяца: включает открывающую строку M, но исключает
+            // закрывающую строку M (23:59:59 последнего дня — это ИТОГ месяца,
+            // для сделок этого же месяца её брать нельзя, иначе циклично).
+            $boundary = \Carbon\Carbon::parse($txDate)->startOfMonth()->addDay()->toDateTimeString();
 
             $qLog = DB::table('qualificationLog')
                 ->where('consultant', $consultantId)
                 ->whereNull('dateDeleted')
-                ->where('date', '<', $startOfTxMonth)
-                ->orderByDesc('date')
+                ->whereRaw('date::timestamp < ?::timestamp', [$boundary])
+                ->orderByRaw('date::timestamp DESC')
                 ->first();
 
             // «Единая квалификация» (spec ✅Квалификации.md §2): у партнёра в месяц
