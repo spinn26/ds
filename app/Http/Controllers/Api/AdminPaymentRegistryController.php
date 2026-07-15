@@ -106,9 +106,12 @@ class AdminPaymentRegistryController extends Controller
         // последние делают seq-scan по всему commission (533k строк).
         $dm = sprintf('%04d-%02d', $year, $month);
         if (! empty($params['withDetachment'])) {
+            // Именно ОТРЫВ (withheldForGap > 0), а не любое удержание: раньше
+            // фильтр брал reduction > 0 и попадал сюда партнёр только с ОП-штрафом
+            // (без отрыва). withheldForGap заполняется финализацией корректно.
             $q->whereIn('b.consultant', function ($sub) use ($dm) {
                 $sub->select('consultant')->from('commission')
-                    ->where('reduction', '>', 0)
+                    ->where('withheldForGap', '>', 0)
                     ->whereNull('deletedAt')
                     ->where('dateMonth', $dm);
             });

@@ -158,6 +158,14 @@ class MonthlyPenaltyRunner
             ->map(fn ($v) => (float) $v)
             ->toArray();
 
+        // Ручные баллы из «Прочих» (спека §3) прибавляются к ЛП — иначе ОП/отрыв
+        // считаются без них, и партнёр, которому баллы начислили ради статуса,
+        // всё равно штрафуется.
+        $manualPoints = \App\Support\ManualPoints::byMonth($candidates->pluck('id')->all(), $dateMonth);
+        foreach ($manualPoints as $cid => $pts) {
+            $personalVolumes[$cid] = ($personalVolumes[$cid] ?? 0) + $pts;
+        }
+
         $stats = [];
         $affectedTotal = 0;
 
@@ -233,6 +241,15 @@ class MonthlyPenaltyRunner
             $this->recomputeTransactionDerivedFields($dateMonth);
         }
 
+        // НГП накопительный — производный от ГП: пересчёт ГП за этот месяц сдвигает
+        // НГП и во ВСЕХ последующих. Строка самого месяца уже записана верно выше,
+        // поэтому докатываем цепочку вперёд, до текущего месяца включительно.
+        // Иначе после повторной финализации июня июль остался бы со старой базой.
+        $ngpRebuilt = [];
+        if ($applyWrite) {
+            $ngpRebuilt = $this->cascadeNgpForward($year, $month);
+        }
+
         return [
             'year' => $year,
             'month' => $month,
@@ -241,7 +258,36 @@ class MonthlyPenaltyRunner
             'processed' => $candidates->count(),
             'affected' => $affectedTotal,
             'consultants' => $stats,
+            'ngpRebuilt' => $ngpRebuilt,
         ];
+    }
+
+    /**
+     * Пересобрать НГП за месяцы ПОСЛЕ расчётного, по возрастанию — каждый берёт
+     * базу из уже исправленного предыдущего. Комиссии/штрафы/балансы не трогаем.
+     *
+     * @return list<string> пересобранные месяцы, YYYY-MM
+     */
+    private function cascadeNgpForward(int $year, int $month): array
+    {
+        $done = [];
+        $cursor = Carbon::create($year, $month, 1)->startOfMonth()->addMonth();
+        $last = Carbon::now()->startOfMonth();
+
+        while ($cursor->lte($last)) {
+            $ym = $cursor->format('Y-m');
+            try {
+                $this->rebuildMonthlySnapshots($cursor->year, $cursor->month);
+                $done[] = $ym;
+            } catch (\Throwable $e) {
+                // НГП — производная величина; её сбой не должен ронять уже
+                // применённые штрафы. Логируем и идём дальше.
+                \Log::warning('НГП cascade failed', ['month' => $ym, 'error' => $e->getMessage()]);
+            }
+            $cursor->addMonth();
+        }
+
+        return $done;
     }
 
     /**
@@ -386,10 +432,13 @@ class MonthlyPenaltyRunner
             ->orderByDesc('date')
             ->pluck('cum', 'consultant');
 
+        // Ручные баллы из «Прочих» (спека §3) — часть ЛП, а значит и ГП/НГП.
+        $manualPoints = \App\Support\ManualPoints::byMonth($ids, $dateMonth);
+
         $now = now();
         $rows = [];
         foreach ($consultants as $c) {
-            $lp = (float) ($personal[$c->id] ?? 0);
+            $lp = (float) ($personal[$c->id] ?? 0) + (float) ($manualPoints[$c->id] ?? 0);
             $gp = $lp + (float) ($downline[$c->id] ?? 0);
 
             $rows[] = [

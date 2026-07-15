@@ -469,8 +469,10 @@ class FinanceReportService
             ])
             ->values();
 
-        // Summary cards
-        $personalSalesPoints = $personalCommissions->sum(fn ($c) => (float) ($c->personalVolume ?? 0));
+        // Summary cards. ЛП включает ручные баллы из «Прочих» (спека §3): они
+        // часть личного объёма, а значит и ГП (gp = lp + downline ниже).
+        $personalSalesPoints = $personalCommissions->sum(fn ($c) => (float) ($c->personalVolume ?? 0))
+            + \App\Support\ManualPoints::forMonth((int) $consultant->id, $month);
         $personalSalesBonus = $personalCommissions->sum(fn ($c) => (float) ($c->groupBonus ?? 0));
         $personalSalesBonusRub = $personalCommissions->sum(fn ($c) => (float) ($c->groupBonusRub ?? 0));
         $personalSalesClientPayments = $personalCommissions->sum(fn ($c) => (float) ($c->amount ?? 0));

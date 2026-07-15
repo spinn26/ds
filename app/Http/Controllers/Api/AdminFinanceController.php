@@ -789,7 +789,8 @@ class AdminFinanceController extends Controller
         }
         $allNodes = array_keys($rootsByNode);
 
-        // ЛП каждого узла = Σ personalVolume его commission за месяц.
+        // ЛП каждого узла = Σ personalVolume его commission за месяц +
+        // ручные баллы из «Прочих» (спека §3 — часть ЛП, а значит и ГП/НГП).
         $lpByNode = DB::table('commission')
             ->whereIn('consultant', $allNodes)
             ->where('dateMonth', $month)
@@ -797,6 +798,9 @@ class AdminFinanceController extends Controller
             ->selectRaw('consultant, COALESCE(SUM("personalVolume"),0) lp')
             ->groupBy('consultant')
             ->pluck('lp', 'consultant');
+        foreach (\App\Support\ManualPoints::byMonth($allNodes, $month) as $node => $pts) {
+            $lpByNode[$node] = (float) ($lpByNode[$node] ?? 0) + $pts;
+        }
 
         // База НГП: последний снимок cumulative строго ДО начала месяца.
         $baseNgp = [];
