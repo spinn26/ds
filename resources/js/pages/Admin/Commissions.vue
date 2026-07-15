@@ -433,15 +433,35 @@ async function runWithholding() {
       showError(`Период ${label} закрыт — удержания недоступны`);
       return;
     }
-    const ok = await confirmDialog.ask({
-      title: `Рассчитать удержания за ${label}?`,
-      message:
-        `Будет затронуто ${preview?.affected ?? 0} комиссий у ${preview?.processed ?? 0} партнёров. ` +
-        `Отрыв (×0.5) и ОП (×0.8) по §5, снимок квалификаций фиксируется. Записывается в комиссии.`,
-      confirmText: 'Рассчитать',
-      confirmColor: 'error',
-    });
-    if (!ok) return;
+    const affected = preview?.affected ?? 0;
+    const alreadyCnt = preview?.alreadyWithheldCount ?? 0;
+    const alreadySum = preview?.alreadyWithheldSum ?? 0;
+    const rub = (v) => Number(v).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    // Уже удержано и новых нет → повторный запуск ничего не изменит.
+    if (affected === 0 && alreadyCnt > 0) {
+      const ok = await confirmDialog.ask({
+        title: `Удержания за ${label} уже рассчитаны`,
+        message:
+          `Уже удержано: ${alreadyCnt} комиссий на ${rub(alreadySum)} ₽ (отрыв + ОП). ` +
+          `Новых удержаний нет — повторный запуск ничего не изменит (защита от двойного удержания). ` +
+          `Перезапуск нужен только если менялись данные июня.`,
+        confirmText: 'Всё равно запустить',
+        confirmColor: 'error',
+      });
+      if (!ok) return;
+    } else {
+      const already = alreadyCnt > 0 ? ` Ранее уже удержано ${alreadyCnt} комиссий на ${rub(alreadySum)} ₽.` : '';
+      const ok = await confirmDialog.ask({
+        title: `Рассчитать удержания за ${label}?`,
+        message:
+          `Будет удержано по ${affected} комиссиям у ${preview?.processed ?? 0} партнёров. ` +
+          `Отрыв (×0.5) и ОП (×0.8) по §5, снимок квалификаций фиксируется.${already}`,
+        confirmText: 'Рассчитать',
+        confirmColor: 'error',
+      });
+      if (!ok) return;
+    }
     try {
       const { data } = await api.post('/admin/finalize/apply', { year: y, month: m });
       showSuccess(data?.message || `Удержания за ${label} рассчитаны`);

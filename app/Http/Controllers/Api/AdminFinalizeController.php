@@ -7,6 +7,7 @@ use App\Services\MonthlyPenaltyRunner;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Api\NotificationController;
 
 /**
@@ -26,6 +27,22 @@ class AdminFinalizeController extends Controller
         }
         $data = $this->validatedPeriod($request);
         $result = $this->runner->run($data['year'], $data['month'], applyWrite: false);
+
+        // Уже удержанное за месяц (reduction=true). affected показывает только
+        // НОВЫЕ удержания — при повторном запуске он 0 (идемпотентность), и без
+        // этой цифры «0 комиссий» читается как «нечего удерживать», хотя удержания
+        // уже применены. Отдаём сумму/количество уже удержанного для UI.
+        $dm = sprintf('%04d-%02d', $data['year'], $data['month']);
+        $already = DB::table('commission')
+            ->where('dateMonth', $dm)
+            ->whereNull('deletedAt')
+            ->where('reduction', true)
+            ->selectRaw('COUNT(*) cnt,
+                COALESCE(SUM("withheldForGap"), 0) + COALESCE(SUM("withheldForCommission"), 0) AS sum')
+            ->first();
+        $result['alreadyWithheldCount'] = (int) ($already->cnt ?? 0);
+        $result['alreadyWithheldSum'] = (float) ($already->sum ?? 0);
+
         return response()->json($result);
     }
 
