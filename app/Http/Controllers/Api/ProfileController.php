@@ -63,15 +63,15 @@ class ProfileController extends Controller
 
         $referralInfo = $consultant ? $this->getReferralInfo($consultant) : null;
 
-        // Текущий остаток по комиссионным для верхней строки кабинета —
-        // `remaining` последней (по id) строки леджера consultantBalance.
-        // Та же величина, что в шапке отчёта начислений (FinanceController).
+        // Текущий остаток по комиссионным = СУММА непогашенных остатков по всем
+        // месяцам (Σ remaining), а не remaining последней строки: входящее сальдо
+        // в снимок не переносится, поэтому последний месяц не видит невыплаченные
+        // прошлые. Та же величина, что в шапке отчёта начислений (FinanceController).
         // Положительное → к выплате партнёру, отрицательное → переплата/долг.
         $commissionBalance = $consultant
-            ? round((float) (DB::table('consultantBalance')
+            ? round((float) DB::table('consultantBalance')
                 ->where('consultant', $consultant->id)
-                ->orderByDesc('id')
-                ->value('remaining') ?? 0), 2)
+                ->sum('remaining'), 2)
             : null;
 
         return response()->json([

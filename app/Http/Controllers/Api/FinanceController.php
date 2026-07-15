@@ -78,12 +78,17 @@ class FinanceController extends Controller
      */
     private function currentCommissionBalance(Consultant $consultant): float
     {
+        // Running-остаток = СУММА непогашенных остатков по всем месяцам, а не
+        // remaining последней строки. Входящее сальдо в снимок consultantBalance
+        // не переносится (новая строка месяца создаётся с balance=0), поэтому
+        // remaining последнего месяца НЕ включает невыплаченные прошлые месяцы
+        // (напр. июль 617,77 не видел неоплаченный июнь 180 706 → баланс занижался).
+        // Σ remaining = Σначислено − Σвыплачено = чистый непогашенный долг.
         $remaining = DB::table('consultantBalance')
             ->where('consultant', $consultant->id)
-            ->orderByDesc('id')
-            ->value('remaining');
+            ->sum('remaining');
 
-        return round((float) ($remaining ?? 0), 2);
+        return round((float) $remaining, 2);
     }
 
     /**
