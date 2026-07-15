@@ -76,7 +76,11 @@ class AdminPaymentRegistryController extends Controller
 
         if ($params['search'] ?? false) {
             $s = '%' . mb_strtolower($params['search']) . '%';
-            $q->whereRaw('LOWER(b."consultantPersonName") LIKE ?', [$s]);
+            // Ищем по ЖИВОМУ имени consultant (источник истины). Денорм
+            // consultantBalance.consultantPersonName у части строк битый (склейка
+            // из Directual id-swap, напр. «Бикбулатов А А Бикбулатов Артур…»),
+            // фолбэк на него — только если живого имени нет.
+            $q->whereRaw('LOWER(COALESCE(c."personName", b."consultantPersonName")) LIKE ?', [$s]);
         }
         if ($params['status'] ?? false) {
             $q->where('b.status', $params['status']);
@@ -230,7 +234,10 @@ class AdminPaymentRegistryController extends Controller
             return [
                 'id' => $r->id,
                 'consultantId' => $r->consultant,
-                'personName' => $r->consultantPersonName ?? $r->personName ?? '—',
+                // Живое имя consultant первым — денорм consultantPersonName у
+                // части строк битый (Directual id-swap); фолбэк только если
+                // живого нет.
+                'personName' => $r->personName ?? $r->consultantPersonName ?? '—',
                 'activityId' => $r->activityId,
                 'activityName' => $r->activityId ? ($activityNames[$r->activityId] ?? null) : null,
                 'status' => $r->status,
