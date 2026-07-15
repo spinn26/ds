@@ -6,11 +6,12 @@
              Видна только admin + calculations (reports-access FULL) —
              эта же ролёвая гарда стоит на /admin/finalize/apply. -->
         <v-btn v-if="canManagePeriod" size="small" color="error" variant="flat"
-          prepend-icon="mdi-calculator-variant"
+          prepend-icon="mdi-cash-minus"
           :loading="recalcing"
           :disabled="recalcing"
+          title="Расчёт удержаний по Отрыву (×0.5) и невыполнению ОП (×0.8) за текущий месяц"
           @click="recalcCurrentPeriod">
-          Пересчитать текущий период
+          Рассчитать удержания (отрыв + ОП)
         </v-btn>
         <!-- Полный пересчёт комиссий по всем открытым периодам: резолвит %ДС из
              матрицы dsCommission, пересобирает цепочки/балансы. Роль admin/calculations. -->

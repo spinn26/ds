@@ -2,12 +2,40 @@
   <div>
     <PageHeader title="Комиссии" icon="mdi-receipt" :count="total">
       <template #actions>
+        <v-btn v-if="canCalc" size="small" color="error" variant="flat"
+          prepend-icon="mdi-cash-minus"
+          title="Расчёт удержаний по Отрыву (×0.5) и невыполнению ОП (×0.8) за выбранный месяц"
+          @click="withholdDialog = true">
+          Рассчитать удержания (отрыв + ОП)
+        </v-btn>
         <ColumnVisibilityMenu :headers="headers"
           v-model:visible="columnVisible"
           v-model:order="columnOrder"
           storage-key="commissions-cols" />
       </template>
     </PageHeader>
+
+    <!-- Удержания по Отрыву и ОП (спека «Открытый период», Часть 2: одна общая
+         кнопка). Выбор месяца → превью (сколько затронуто) → применение. -->
+    <v-dialog v-model="withholdDialog" max-width="460">
+      <v-card>
+        <v-card-title>Рассчитать удержания (отрыв + ОП)</v-card-title>
+        <v-card-text>
+          <p class="text-body-2 text-medium-emphasis mb-3">
+            Массовый расчёт по всем ФК: Отрыв (×0.5) и удержание за невыполнение ОП (×0.8).
+            Одновременно фиксирует снимок квалификаций месяца.
+          </p>
+          <v-text-field v-model="withholdMonth" type="month" label="Месяц"
+            density="comfortable" variant="outlined" hide-details />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="withholdDialog = false">Отмена</v-btn>
+          <v-btn color="error" variant="flat" :loading="withholdBusy"
+            :disabled="!withholdMonth" @click="runWithholding">Рассчитать</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
     <!-- Компактный layout (как в Контрактах/Клиентах): основные поля в одной
          flex-строке, диапазон дат + редкие фильтры — за тогглом «Ещё». -->
@@ -376,6 +404,56 @@ const confirmDialog = useConfirm();
 const { showSuccess, showError, showInfo } = useSnackbar();
 // Удаление транзакции/комиссии — только у руководителя расчётов (canCalc).
 const { canCalc } = usePermissions();
+
+// Удержания (отрыв + ОП) — по кнопке. По умолчанию предыдущий месяц (обычно
+// закрывают прошедший период). Формат YYYY-MM для input type=month.
+const withholdDialog = ref(false);
+const withholdBusy = ref(false);
+const withholdMonth = ref((() => {
+  const d = new Date();
+  d.setDate(1);
+  d.setMonth(d.getMonth() - 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+})());
+
+async function runWithholding() {
+  if (withholdBusy.value || !withholdMonth.value) return;
+  const [y, m] = withholdMonth.value.split('-').map(Number);
+  const label = new Date(y, m - 1, 1).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
+  withholdBusy.value = true;
+  try {
+    let preview;
+    try {
+      preview = (await api.post('/admin/finalize/preview', { year: y, month: m })).data;
+    } catch (e) {
+      showError(e?.response?.data?.message || 'Не удалось получить превью');
+      return;
+    }
+    if (preview?.frozen) {
+      showError(`Период ${label} закрыт — удержания недоступны`);
+      return;
+    }
+    const ok = await confirmDialog.ask({
+      title: `Рассчитать удержания за ${label}?`,
+      message:
+        `Будет затронуто ${preview?.affected ?? 0} комиссий у ${preview?.processed ?? 0} партнёров. ` +
+        `Отрыв (×0.5) и ОП (×0.8) по §5, снимок квалификаций фиксируется. Записывается в комиссии.`,
+      confirmText: 'Рассчитать',
+      confirmColor: 'error',
+    });
+    if (!ok) return;
+    try {
+      const { data } = await api.post('/admin/finalize/apply', { year: y, month: m });
+      showSuccess(data?.message || `Удержания за ${label} рассчитаны`);
+      withholdDialog.value = false;
+      loadData();
+    } catch (e) {
+      showError(e?.response?.data?.message || 'Не удалось применить удержания');
+    }
+  } finally {
+    withholdBusy.value = false;
+  }
+}
 
 const items = ref([]);
 const total = ref(0);

@@ -2,9 +2,9 @@
   <div>
     <PageHeader title="Квалификации" icon="mdi-chart-bar" :count="total">
       <template v-if="canCalc" #actions>
-        <v-btn color="primary" prepend-icon="mdi-calculator-variant" :loading="recomputing"
-          :title="`Пересчитать квалификации/объёмы за ${monthLabel || month}`"
-          @click="recompute">Пересчитать</v-btn>
+        <v-btn color="error" prepend-icon="mdi-cash-minus" :loading="recomputing"
+          :title="`Расчёт удержаний по Отрыву (×0.5) и ОП (×0.8) + фиксация квалификаций за ${monthLabel || month}`"
+          @click="recompute">Рассчитать удержания (отрыв + ОП)</v-btn>
       </template>
     </PageHeader>
 
