@@ -1084,39 +1084,71 @@ async function loadCustomMenu() {
   } catch { customMenuItems.value = []; }
 }
 
+// Спец-действия для пунктов из конструктора: to='action:<ключ>' — пункты,
+// которые открывают диалог, а не переходят по маршруту.
+const CUSTOM_MENU_ACTIONS = {
+  'action:founder-message': () => openQuickMsg('Сообщение ген.директору', 'mdi-email-edit-outline'),
+};
+
+function customToNode(it, flag) {
+  const action = CUSTOM_MENU_ACTIONS[it.to]
+    || (it.external && it.to
+      ? () => window.open(it.to, '_blank', 'noopener')
+      : null);
+  return {
+    label: it.title,
+    icon: it.icon || 'mdi-circle-small',
+    path: action ? '' : (it.to || ''),
+    ...flag,
+    ...(action ? { action } : {}),
+  };
+}
+
 const menuItems = computed(() => {
   if (!customMenuItems.value.length) return baseMenuItems;
-  const list = [...baseMenuItems];
-  for (const it of customMenuItems.value) {
-    const isPartnerArea = it._area === 'partner';
-    const flag = isPartnerArea ? { partner: true } : { staffOnly: true };
-    const node = {
-      label: it.title,
-      icon: it.icon || 'mdi-circle-small',
-      path: it.external ? '' : (it.to || ''),
-      ...flag,
-      ...(it.external && it.to
-        ? { action: () => window.open(it.to, '_blank', 'noopener') }
-        : {}),
-    };
+
+  const partnerCustom = customMenuItems.value.filter((i) => i._area === 'partner');
+  const staffCustom = customMenuItems.value.filter((i) => i._area === 'staff');
+
+  // ПАРТНЁРСКОЕ МЕНЮ: если в конструкторе есть хоть один пункт area=partner
+  // (штатно — всегда, после сида 2026-07-16), кабинет строится ИЗ БД:
+  // статические partner-пункты выкидываются, вместо них — пункты
+  // конструктора в его порядке (заголовок группы вставляется при смене
+  // group_title). Пустая БД / ошибка загрузки → статический фолбэк.
+  let list = partnerCustom.length
+    ? baseMenuItems.filter((x) => !x.partner)
+    : [...baseMenuItems];
+
+  if (partnerCustom.length) {
+    const nodes = [];
+    let prevGroup = null;
+    for (const it of partnerCustom) {
+      if (it.group_title && it.group_title !== prevGroup) {
+        nodes.push({ group: it.group_title, partner: true });
+      }
+      prevGroup = it.group_title || null;
+      nodes.push(customToNode(it, { partner: true }));
+    }
+    // Партнёрский блок — сразу после «Главной» (первый элемент без группы),
+    // до staff-секций.
+    list.splice(1, 0, ...nodes);
+  }
+
+  // STAFF: additive-мёрж поверх статики (как в AdminLayout) — с группой в
+  // конец одноимённой группы (или новая группа), без группы — в конец.
+  for (const it of staffCustom) {
+    const node = customToNode(it, { staffOnly: true });
     if (it.group_title) {
-      const gi = list.findIndex((x) => x.group === it.group_title
-        && (isPartnerArea ? x.partner : !x.partner));
+      const gi = list.findIndex((x) => x.group === it.group_title && !x.partner);
       if (gi === -1) {
-        // Группы нет — создаём новую в конце соответствующей области.
-        list.push({ group: it.group_title, ...flag }, node);
+        list.push({ group: it.group_title, staffOnly: true }, node);
         continue;
       }
-      // Вставляем в конец группы: перед следующим заголовком после gi.
       let insertAt = list.length;
       for (let j = gi + 1; j < list.length; j++) {
         if (list[j].group) { insertAt = j; break; }
       }
       list.splice(insertAt, 0, node);
-    } else if (isPartnerArea) {
-      // Отдельный партнёрский пункт — сразу после «Главной», до первой группы.
-      const firstGroup = list.findIndex((x) => x.group);
-      list.splice(firstGroup === -1 ? list.length : firstGroup, 0, node);
     } else {
       list.push(node);
     }
