@@ -172,7 +172,7 @@
                  + общий totalPaid. Так список ФК сходится с цифрой ИТОГО. -->
           <tr class="pool-total-row">
             <td colspan="3" class="font-weight-bold text-success">
-              {{ isHistoricalView ? 'ИТОГО (выплачено по snapshot)' : 'ИТОГО (фонд × #активных уровней)' }}
+              {{ isHistoricalView ? 'ИТОГО (выплачено по snapshot)' : 'ИТОГО (фонд уровня / выплачено)' }}
             </td>
             <!-- В историческом режиме revenue из poolLog неизвестен —
                  показываем «—» вместо живого пересчёта. -->
@@ -428,8 +428,11 @@ function totalCellForLevel(lvl) {
   if (!isHistoricalView.value && result.value.fund) {
     return shareForLevel(lvl) > 0 ? Number(result.value.fund) : 0;
   }
+  // Исторический snapshot: суммируем только реально ВЫПЛАЧЕННЫЕ слои
+  // (byLevel у неоплаченных строк — справочная матрёшка, не деньги).
   let s = 0;
   for (const row of payoutRows.value) {
+    if (Number(row.payoutRub || 0) <= 0) continue;
     s += Number(row.byLevel?.[lvl] || 0);
   }
   return s;
@@ -445,16 +448,16 @@ function totalCellForLevel(lvl) {
 // по слоям для наглядности: слои 6..level с долями бэкенда.
 const payoutRows = computed(() => {
   if (!result.value) return [];
-  // Per spec ✅Пул: в детализации видны ВСЕ участники — кому пул не положен
-  // (ОП/отрыв/галочка), строка остаётся с нулями во всех колонках уровней.
+  // По эталонной таблице бизнеса: в детализации видны ВСЕ участники, доли
+  // уровней (матрёшка 6..level) показываются у КАЖДОЙ строки — это
+  // «сколько причиталось бы». Фактическая выплата — только в колонке
+  // «Комиссия пула» (0 у дисквалифицированных: ОП/отрыв/галочка).
   return (result.value.participants || [])
     .map(p => {
       const paid = Number(p.payoutRub || 0) > 0;
       const byLevel = { 6: 0, 7: 0, 8: 0, 9: 0, 10: 0 };
-      if (paid) {
-        for (let lvl = 6; lvl <= p.level && lvl <= 10; lvl++) {
-          byLevel[lvl] = shareForLevel(lvl);
-        }
+      for (let lvl = 6; lvl <= p.level && lvl <= 10; lvl++) {
+        byLevel[lvl] = shareForLevel(lvl);
       }
       // Нерегулярные снапшоты (доли неизвестны) — показываем выплату одной ячейкой.
       const layered = Object.values(byLevel).reduce((s, v) => s + v, 0);
@@ -477,11 +480,11 @@ const payoutRows = computed(() => {
     });
 });
 
-// Итоговая «Комиссия пула» в строке ИТОГО = сумма ячеек уровней:
-// live — сгенерированный пул (фонд × активные уровни, per spec ✅Пул),
-// исторический snapshot — фактически выплаченное.
+// Итоговая «Комиссия пула» в строке ИТОГО = ВЫПЛАЧЕНО (по эталонной
+// таблице бизнеса: «Итого 129 566,09» = сумма выплат получателям).
+// Ячейки уровней при этом показывают сгенерированный фонд уровня.
 const totalRowSum = computed(() =>
-  [6, 7, 8, 9, 10].reduce((s, lvl) => s + totalCellForLevel(lvl), 0),
+  payoutRows.value.reduce((s, p) => s + Number(p.payoutRub || 0), 0),
 );
 
 function resetFilters() {
