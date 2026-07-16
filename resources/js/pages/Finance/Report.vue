@@ -3,16 +3,8 @@
     <PageHeader :title="reportTitle" icon="mdi-bank">
       <template #actions>
         <div class="d-flex align-center ga-3 flex-wrap">
-          <!-- Текущий накопленный остаток по комиссионным (running balance,
-               не зависит от выбранного месяца). Зелёный — к выплате партнёру,
-               красный — переплата/долг. -->
-          <div v-if="commissionBalance != null" class="commission-balance text-right">
-            <div class="text-caption text-medium-emphasis" style="line-height:1">Баланс по комиссионным</div>
-            <div class="text-h6 font-weight-bold" style="white-space:nowrap"
-              :class="commissionBalance < 0 ? 'text-error' : 'text-success'">
-              {{ fmt2(commissionBalance) }} ₽
-            </div>
-          </div>
+          <!-- «Баланс по комиссионным» убран из шапки по запросу 2026-07-16
+               (вместе с чипом в topbar MainLayout). -->
           <v-btn variant="flat" color="primary" size="small" prepend-icon="mdi-download"
             :loading="exporting" :disabled="locked" @click="downloadXlsx">
             Скачать XLSX
@@ -331,9 +323,6 @@ import { fmt, fmt2, fmtDate as fmtShortDate } from '../../composables/useDesign'
 const route = useRoute();
 const loading = ref(true);
 const exporting = ref(false);
-// Текущий остаток по комиссионным (приходит и в обычном, и в locked-ответе).
-// Держим отдельным ref-ом, чтобы не сбрасывался при смене месяца / locked.
-const commissionBalance = ref(null);
 
 // Подсветка KPI пришедшего по deep-link с дашборда (?metric=lp|ngp).
 // Скроллит к нужной карточке после загрузки и применяет
@@ -508,14 +497,11 @@ async function loadData() {
     const { data: d } = await api.get('/finance/report', { params });
     if (myTag !== loadDataTag || month.value !== requestedMonth) return;
     data.value = d;
-    if (d.commissionBalance != null) commissionBalance.value = d.commissionBalance;
   } catch (e) {
     if (myTag !== loadDataTag) return;
     if (e?.response?.status === 423) {
       locked.value = true;
       lockedMessage.value = e.response.data?.message || 'Отчёт за этот период ещё не опубликован';
-      // Баланс приходит и в locked-ответе — сохраняем для шапки.
-      if (e.response.data?.commissionBalance != null) commissionBalance.value = e.response.data.commissionBalance;
       data.value = {};
     } else {
       data.value = {};

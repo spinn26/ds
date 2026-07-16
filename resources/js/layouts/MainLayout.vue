@@ -87,18 +87,8 @@
         </template>
       </v-chip>
 
-      <!-- Баланс по комиссионным — в верхней строке рядом со статусом.
-           Зелёный — к выплате партнёру, красный — переплата/долг. Клик ведёт
-           в отчёт начислений. Только для consultant'ов на desktop. -->
-      <v-chip v-if="!mobile && isConsultant && statusInfo?.commissionBalance != null"
-        size="small" variant="tonal"
-        :color="statusInfo.commissionBalance >= 0 ? 'success' : 'error'"
-        class="ml-2 balance-topbar-chip" to="/finance/report"
-        title="Текущий баланс по комиссионным. Зелёный — к выплате, красный — переплата/долг.">
-        <v-icon start size="14">mdi-wallet-outline</v-icon>
-        <span class="text-medium-emphasis me-1">Баланс:</span>
-        <span class="font-weight-medium">{{ fmtMoney(statusInfo.commissionBalance) }}</span>
-      </v-chip>
+      <!-- Чип «Баланс по комиссионным» убран из topbar по запросу 2026-07-16
+           (вместе с блоком в шапке отчёта начислений). -->
 
       <v-spacer />
 
@@ -466,12 +456,6 @@ function fmtShortDate(d) {
   return new Date(d).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
-// Деньги для topbar-чипа баланса: «1 234 ₽» (без копеек, разряды по-русски).
-function fmtMoney(v) {
-  const n = Number(v) || 0;
-  return n.toLocaleString('ru-RU', { maximumFractionDigits: 0 }) + ' ₽';
-}
-
 const auth = useAuthStore();
 const route = useRoute();
 const router = useRouter();
@@ -651,7 +635,6 @@ onMounted(async () => {
       referralCode: data.referral?.referralCode,
       referralLink: data.referral?.referralLink,
       canInvite: data.referral?.canInvite,
-      commissionBalance: data.commissionBalance,
     };
     // Prefill identity fields for the onboarding questionnaire
     const u = data.user || {};
