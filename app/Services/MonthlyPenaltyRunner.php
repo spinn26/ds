@@ -565,22 +565,22 @@ class MonthlyPenaltyRunner
                 + (float) $c->groupVolume;
         }
 
-        // Detachment: only level ≥ 6 (otrif > 0).
-        $otrif = (float) ($consultant->otrif ?? 0);
-        $detachMults = ($otrif > 0 && ! empty($branchVolumes))
-            ? $this->finaliser->detachmentMultipliers($branchVolumes)
-            : array_fill_keys(array_keys($branchVolumes), 1.0);
-
-        // OP: only when mandatoryGP > 0. Per spec ✅Бизнес-логика §1:
-        // ГП = ЛП + объёмы downline. ОП = минимальный ГП. Поэтому в
-        // totalGroupVolume включаем и personalVolume самого партнёра
-        // (chainOrder=1), и downline (chainOrder>=2). Unassigned-строки
-        // (битый branch) тоже добавляем — они часть месячного ГП.
+        // Полный ГП партнёра (ЛП + баллы + downline + unassigned) — база и для
+        // ОП, и для ОТРЫВА. Считаем ДО множителей отрыва, чтобы доля ветки
+        // считалась от полного ГП, а не от суммы одних веток.
+        // Per spec ✅Бизнес-логика §1: ГП = ЛП + объёмы downline.
         $mandatoryGp = (float) ($consultant->mandatoryGP ?? 0);
         $totalGroupVolume = $personalVolume + array_sum($branchVolumes);
         foreach ($unassigned as $u) {
             $totalGroupVolume += (float) $u->groupVolume;
         }
+
+        // Detachment: only level ≥ 6 (otrif > 0). База доли — полный ГП.
+        $otrif = (float) ($consultant->otrif ?? 0);
+        $detachMults = ($otrif > 0 && ! empty($branchVolumes))
+            ? $this->finaliser->detachmentMultipliers($branchVolumes, $totalGroupVolume)
+            : array_fill_keys(array_keys($branchVolumes), 1.0);
+
         $opMult = $mandatoryGp > 0
             ? $this->finaliser->opMultiplier($totalGroupVolume, $mandatoryGp)
             : 1.0;
@@ -693,14 +693,14 @@ class MonthlyPenaltyRunner
                 'date' => $monthEnd,
                 'savingDate' => now(),
                 'gap' => $gapBranchKey !== false,
-                // Показанный % отрыва — от той же базы, что и РЕШЕНИЕ об
-                // отрыве (detachmentMultipliers: share = branchVolume / Σ
-                // веток). База = ГП − ЛП (Σ веток), ЛП исключается — per
-                // spec «Отрыв» (docs: 70% от ГП − ЛП). Раньше делили на
-                // totalGroupVolume (с ЛП) → ветка могла быть >70% по
-                // решению и <70% по показанному.
+                // Показанный % отрыва — от той же базы, что и РЕШЕНИЕ об отрыве
+                // (detachmentMultipliers): доля = branchVolume / ПОЛНЫЙ ГП (ЛП +
+                // баллы + downline). Так добавленные партнёру баллы (в ЛП)
+                // корректно снижают долю и «уводят» отрыв. Раньше делили на Σ
+                // веток (без ЛП) → плашка показывала завышенный % и баллы не
+                // помогали.
                 'gapValuePercentage' => $gapBranchKey !== false
-                    ? round($branchVolumes[$gapBranchKey] / max(array_sum($branchVolumes), 0.0001) * 100, 2)
+                    ? round($branchVolumes[$gapBranchKey] / max($totalGroupVolume, 0.0001) * 100, 2)
                     : null,
                 'gapValue' => $gapBranchKey !== false ? $branchVolumes[$gapBranchKey] : null,
                 'branchWithGap' => $gapBranchKey !== false ? $gapBranchKey : null,

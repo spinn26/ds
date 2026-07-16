@@ -32,9 +32,19 @@ class MonthlyFinaliser
      * @param array<int,float> $branchVolumes  branchKey => group volume in points
      * @return array<int,float> branchKey => multiplier (1.0 or 0.5)
      */
-    public function detachmentMultipliers(array $branchVolumes): array
+    /**
+     * Множители отрыва по веткам.
+     *
+     * Доля ветки считается от ПОЛНОГО ГП партнёра (ЛП + баллы + downline), а не
+     * от суммы одних веток. Раньше базой была array_sum($branchVolumes) (без ЛП) —
+     * знаменатель занижен, отрыв срабатывал чаще, и добавленные партнёру баллы (в
+     * ЛП) не могли «увести» отрыв, хотя должны (спека «ветка > 70% от ГП»).
+     *
+     * @param  float|null  $groupVolumeBase  полный ГП; null → сумма веток (legacy)
+     */
+    public function detachmentMultipliers(array $branchVolumes, ?float $groupVolumeBase = null): array
     {
-        $total = array_sum($branchVolumes);
+        $total = $groupVolumeBase !== null ? $groupVolumeBase : array_sum($branchVolumes);
         if ($total <= 0) {
             return array_fill_keys(array_keys($branchVolumes), 1.0);
         }
