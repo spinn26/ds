@@ -1120,14 +1120,22 @@ const menuItems = computed(() => {
     : [...baseMenuItems];
 
   if (partnerCustom.length) {
-    const nodes = [];
-    let prevGroup = null;
+    // Бакетируем по группе (порядок групп — по первому вхождению, внутри —
+    // серверный sort_order). Прямой проход «заголовок при смене группы»
+    // давал дубли заголовков, когда стрелками в конструкторе пункт одной
+    // группы оказывался между пунктами другой.
+    const standalone = [];
+    const groupOrder = [];
+    const byGroup = new Map();
     for (const it of partnerCustom) {
-      if (it.group_title && it.group_title !== prevGroup) {
-        nodes.push({ group: it.group_title, partner: true });
-      }
-      prevGroup = it.group_title || null;
-      nodes.push(customToNode(it, { partner: true }));
+      if (!it.group_title) { standalone.push(it); continue; }
+      if (!byGroup.has(it.group_title)) { byGroup.set(it.group_title, []); groupOrder.push(it.group_title); }
+      byGroup.get(it.group_title).push(it);
+    }
+    const nodes = standalone.map((it) => customToNode(it, { partner: true }));
+    for (const g of groupOrder) {
+      nodes.push({ group: g, partner: true });
+      for (const it of byGroup.get(g)) nodes.push(customToNode(it, { partner: true }));
     }
     // Партнёрский блок — сразу после «Главной» (первый элемент без группы),
     // до staff-секций.
