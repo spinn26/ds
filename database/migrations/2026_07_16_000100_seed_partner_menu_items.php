@@ -52,15 +52,24 @@ return new class extends Migration
         if (! Schema::hasTable('menu_items')) {
             return;
         }
-        // Идемпотентность: если админ уже завёл партнёрские пункты — не дублируем.
-        if (DB::table('menu_items')->where('area', 'partner')->exists()) {
-            return;
-        }
+        // Идемпотентность ПО-ПУНКТНО: пропускаем пункты, которые уже есть
+        // (title+to). Гард «есть хоть один партнёрский → выйти» был ошибкой:
+        // на проде уже лежал один ручной пункт («Банк Кейсов»), сид
+        // пропустился целиком и партнёрское меню схлопнулось бы до него.
+        $existing = DB::table('menu_items')
+            ->where('area', 'partner')
+            ->get(['title', 'to'])
+            ->map(fn ($r) => $r->title.'|'.$r->to)
+            ->flip();
 
         $now = now();
         $rows = [];
         $sort = 10;
         foreach ($this->items() as $i) {
+            if (isset($existing[$i['title'].'|'.$i['to']])) {
+                $sort += 10;
+                continue;
+            }
             $rows[] = [
                 'area' => 'partner',
                 'group_title' => $i['group'],
@@ -76,7 +85,9 @@ return new class extends Migration
             ];
             $sort += 10;
         }
-        DB::table('menu_items')->insert($rows);
+        if ($rows) {
+            DB::table('menu_items')->insert($rows);
+        }
     }
 
     public function down(): void
