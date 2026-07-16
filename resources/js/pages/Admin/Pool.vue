@@ -443,16 +443,20 @@ const payoutRows = computed(() => {
   if (!result.value) return [];
   const revenue = result.value.revenue === null || result.value.revenue === undefined
     ? null : Number(result.value.revenue);
+  // Per spec ✅Пул: в детализации видны ВСЕ участники — кому пул не положен
+  // (ОП/отрыв/галочка), строка остаётся с нулями во всех колонках уровней.
   return (result.value.participants || [])
-    .filter(p => p.participates && Number(p.payoutRub || 0) > 0)
     .map(p => {
+      const paid = Number(p.payoutRub || 0) > 0;
       const byLevel = { 6: 0, 7: 0, 8: 0, 9: 0, 10: 0 };
-      for (let lvl = 6; lvl <= p.level && lvl <= 10; lvl++) {
-        byLevel[lvl] = shareForLevel(lvl);
+      if (paid) {
+        for (let lvl = 6; lvl <= p.level && lvl <= 10; lvl++) {
+          byLevel[lvl] = shareForLevel(lvl);
+        }
       }
       // Нерегулярные снапшоты (доли неизвестны) — показываем выплату одной ячейкой.
       const layered = Object.values(byLevel).reduce((s, v) => s + v, 0);
-      if (layered <= 0 && p.level >= 6 && p.level <= 10) {
+      if (paid && layered <= 0 && p.level >= 6 && p.level <= 10) {
         byLevel[p.level] = Number(p.payoutRub);
       }
       return {
