@@ -417,13 +417,17 @@ const activeLevels = computed(() => {
   return [6, 7, 8, 9, 10].filter(lvl => shareForLevel(lvl) > 0);
 });
 
-// Ячейка уровня в строке ИТОГО = сколько реально начислено по этому слою
-// матрёшки: доля уровня × число ПОЛУЧАТЕЛЕЙ, которым этот слой достался
-// (партнёры уровня >= L из тех, кому пул выплачен). Считаем по фактическим
-// выплатам, а не по номинальным счётчикам, — иначе итог не сойдётся с суммой
-// строк и с Реестром выплат.
+// Ячейка уровня в строке ИТОГО.
+// Per spec ✅Пул: «строка Итого показывает общую сумму СГЕНЕРИРОВАННОГО
+// пула по каждому уровню» — т.е. фонд уровня (1% выручки), а не
+// выплаченное. Выплачено/осталось ДС показано отдельной строкой над
+// таблицей. Для исторических snapshot (fund неизвестен) — сумма
+// фактических выплат по слою.
 function totalCellForLevel(lvl) {
   if (!result.value) return 0;
+  if (!isHistoricalView.value && result.value.fund) {
+    return shareForLevel(lvl) > 0 ? Number(result.value.fund) : 0;
+  }
   let s = 0;
   for (const row of payoutRows.value) {
     s += Number(row.byLevel?.[lvl] || 0);
@@ -473,10 +477,11 @@ const payoutRows = computed(() => {
     });
 });
 
-// ИТОГО = сумма фактических выплат. Раньше здесь было fund × число уровней —
-// величина, не равная ни сумме строк, ни начисленному в Реестре выплат.
-const totalRowSum = computed(
-  () => payoutRows.value.reduce((s, p) => s + Number(p.payoutRub || 0), 0),
+// Итоговая «Комиссия пула» в строке ИТОГО = сумма ячеек уровней:
+// live — сгенерированный пул (фонд × активные уровни, per spec ✅Пул),
+// исторический snapshot — фактически выплаченное.
+const totalRowSum = computed(() =>
+  [6, 7, 8, 9, 10].reduce((s, lvl) => s + totalCellForLevel(lvl), 0),
 );
 
 function resetFilters() {
