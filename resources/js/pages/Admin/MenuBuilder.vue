@@ -156,7 +156,18 @@ function notify(text, color = 'success') { snack.value = { open: true, color, te
 const filtered = computed(() => items.value.filter((i) => i.area === area.value));
 // Группы предлагаем по области ФОРМЫ (form.area), а не активной вкладки —
 // диалог редактирования может быть открыт для пункта другой области.
-const groupSuggestions = computed(() => GROUPS_BY_AREA[form.area] || []);
+// Сначала — реальные группы из существующих пунктов области (для партнёра
+// это ровно категории меню ФК: партнёрское меню полностью в БД), затем
+// дефолты статической навигации, которых ещё нет в БД.
+const groupSuggestions = computed(() => {
+  const fromItems = [...new Set(
+    items.value
+      .filter((i) => i.area === form.area && i.group_title)
+      .map((i) => i.group_title),
+  )];
+  const defaults = (GROUPS_BY_AREA[form.area] || []).filter((g) => !fromItems.includes(g));
+  return [...fromItems, ...defaults];
+});
 
 async function load() {
   loading.value = true;
