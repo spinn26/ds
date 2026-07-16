@@ -441,8 +441,6 @@ function totalCellForLevel(lvl) {
 // по слоям для наглядности: слои 6..level с долями бэкенда.
 const payoutRows = computed(() => {
   if (!result.value) return [];
-  const revenue = result.value.revenue === null || result.value.revenue === undefined
-    ? null : Number(result.value.revenue);
   // Per spec ✅Пул: в детализации видны ВСЕ участники — кому пул не положен
   // (ОП/отрыв/галочка), строка остаётся с нулями во всех колонках уровней.
   return (result.value.participants || [])
@@ -466,7 +464,11 @@ const payoutRows = computed(() => {
         levelName: p.levelName,
         byLevel,
         payoutRub: Number(p.payoutRub),
-        groupBonusRub: revenue,
+        // Per spec ✅Пул: «Групповой бонус — сумма группового бонуса
+        // ПАРТНЁРА в рублях» (бэкенд: Σ commission.groupBonus × 100 за
+        // месяц). Раньше сюда подставлялась выручка ДС целиком — у каждой
+        // строки красовалось 10,3 млн. Выручка осталась в строке ИТОГО.
+        groupBonusRub: Number(p.groupBonusRub || 0),
       };
     });
 });
