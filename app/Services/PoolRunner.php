@@ -121,15 +121,17 @@ class PoolRunner
             return $this->emptyResult($year, $month, $revenue);
         }
 
-        // Snapshot из poolLog для заморожённого периода (после фиксации).
-        // Live-расчёт обходим только для frozen — иначе оператор должен
-        // видеть актуальные числа.
-        if (! $applyWrite && $this->periodFreeze->isFrozen($year, $month)) {
-            $logged = $this->participantsFromPoolLog($year, $month, $revenue);
-            if ($logged !== null) {
-                return $logged;
-            }
-        }
+        // Заморожённый live-период (июнь 2026+ или размороженный/перефиксированный):
+        // НЕ возвращаем усечённый snapshot из poolLog — persist() пишет туда
+        // только строки с выплатой > 0, и оператор видел бы лишь получателей
+        // (баг: «за июнь отображается пул только по выполнившим»). Вместо этого
+        // прогоняем обычный live-расчёт: входные данные (transaction,
+        // qualificationLog, commission) заморожены PeriodFreezeService::guard,
+        // поэтому список участников/доли детерминированно совпадают с моментом
+        // фиксации. Авторитетные СУММЫ выплат затем накладываются из poolLog
+        // (см. overlay ниже) — модерация могла щёлкаться после заморозки, и
+        // live-eligibility не должна менять уже выплаченные деньги.
+        $overlayPaidFromLog = ! $applyWrite && $this->periodFreeze->isFrozen($year, $month);
 
         // ИСТОЧНИК ПРАВДЫ ДЛЯ УРОВНЯ — qualificationLog за расчётный месяц.
         // Раньше брали current consultant.status_and_lvl, что давало неверные
@@ -230,9 +232,9 @@ class PoolRunner
         // Конвертируем в формат perPartnerLevel и доливаем. У этих
         // консультантов нет ОП-данных за период, поэтому groupVolume=0,
         // gapValuePercentage=0 → они автоматически попадут в "ОП не выполнен".
-        // Помечаем флагом isExtra=true: в эталоне старой платформы такие
-        // партнёры видны в верхней таблице, но НЕ участвуют в счётчике
-        // долей (фонд делится только на тех, у кого есть qualificationLog).
+        // Помечаем флагом isExtra=true: партнёр виден в верхней таблице,
+        // сидит в делителе (номинальный счётчик — см. комментарий у
+        // $nominalCounts ниже), но выплату не получает.
         foreach ($extraConsultants as $row) {
             $perPartnerLevel[$row->consultant] = (object) [
                 'consultant' => $row->consultant,
@@ -270,15 +272,12 @@ class PoolRunner
             ->whereIn('consultant', $consIds ?: [-1])
             ->pluck('participates', 'consultant');
 
-        // Considered = active + level ≥ 6 + has qualificationLog за период.
-        // Per spec ✅Расчет пула §6.4 + правка от 2026-05-06:
-        // пул делится на участников с УЧЁТОМ модерации:
-        //   • Дисквалификация ОП/отрыв → доля forfeited (остаётся в компании,
-        //     делитель не уменьшается).
-        //   • Снята галочка «Участвует» вручную → ПОЛНОСТЬЮ исключаем
-        //     из делителя; доля перераспределяется между остальными.
-        //   Раньше делитель был общим — оператор снимал галку и пул
-        //   уменьшался для всех (а ожидание было — увеличивался).
+        // Considered = active + level ≥ 6 (qualificationLog за период либо
+        // extra-добор). Per spec ✅Расчет пула: делитель НОМИНАЛЬНЫЙ — в него
+        // идут ВСЕ партнёры уровня, включая не выполнивших ОП, с отрывом
+        // >90% и со снятой галочкой «Участвует». Дисквалификация влияет
+        // только на выплату: доля forfeited остаётся в компании и НЕ
+        // перераспределяется между остальными.
         $considered = [];
         $nominalCounts = array_fill_keys(array_keys($leaderLevelIds), 0);
         $rowsForUi = [];
@@ -428,6 +427,55 @@ class PoolRunner
                 'groupBonusRub' => $meta?->groupBonusRub ?? 0,
             ];
         }, $distribution);
+
+        // Overlay для заморожённого периода: реально выплаченные суммы из
+        // poolLog авторитетнее live-расчёта (модерация могла измениться после
+        // фиксации). Список/доли — live (детерминированы, входные данные
+        // заморожены), деньги — из snapshot. Если poolLog за период пуст
+        // (закрыли без фиксации пула), показываем live-числа как раньше.
+        if ($overlayPaidFromLog) {
+            $paidByCons = DB::table('poolLog')
+                ->whereBetween('date', [$start, $end])
+                ->pluck('poolBonus', 'consultant');
+            if ($paidByCons->isNotEmpty()) {
+                foreach ($participants as &$p) {
+                    $p['payoutRub'] = round((float) ($paidByCons[$p['id']] ?? 0), 2);
+                }
+                unset($p);
+
+                // Получатели из poolLog, выпавшие из live-набора (данные
+                // разошлись со снимком) — доливаем тенью, чтобы выплата
+                // не пропала из таблицы.
+                $haveIds = array_flip(array_column($participants, 'id'));
+                $missing = $paidByCons->keys()
+                    ->map(fn ($k) => (int) $k)
+                    ->reject(fn ($id) => isset($haveIds[$id]));
+                if ($missing->isNotEmpty()) {
+                    $shadow = DB::table('consultant as c')
+                        ->leftJoin('status_levels as sl', 'sl.id', '=', 'c.status_and_lvl')
+                        ->whereIn('c.id', $missing->all())
+                        ->get(['c.id', 'c.personName', 'sl.level', 'sl.title']);
+                    foreach ($shadow as $s) {
+                        $participants[] = [
+                            'id' => (int) $s->id,
+                            'level' => (int) ($s->level ?? 0),
+                            'levelName' => $s->title ?? '',
+                            'personName' => $s->personName ?? '—',
+                            'participates' => true,
+                            'eligible' => true,
+                            'opOk' => true,
+                            'gapOk' => true,
+                            'mandatoryGP' => 0,
+                            'groupVolume' => 0,
+                            'gapValuePercentage' => 0,
+                            'disqualifyReason' => null,
+                            'payoutRub' => round((float) $paidByCons[$s->id], 2),
+                            'groupBonusRub' => 0,
+                        ];
+                    }
+                }
+            }
+        }
 
         $totalPaid = array_sum(array_column($participants, 'payoutRub'));
         // Процент пула настраивается (pool.percent) — берём ту же величину, что и
