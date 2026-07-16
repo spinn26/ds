@@ -643,6 +643,7 @@ async function onQuestionnaireCompleted() {
 // Load status info for TopBar
 onMounted(async () => {
   loadAnnouncements();
+  loadCustomMenu();
   try {
     const { data } = await api.get('/profile');
     statusInfo.value = {
@@ -924,7 +925,7 @@ const cabinetName = computed(() => {
 // === MENU ITEMS ===
 // Partner menu — exact per spec (role: consultant)
 // Staff sections — grouped per spec, no education editing
-const menuItems = [
+const baseMenuItems = [
   // ---- Partner menu (consultant) ----
   // Shown to everyone (partner and staff) — leads to Workspace
   { label: 'Главная', icon: 'mdi-home-outline', path: '/' },
@@ -1065,6 +1066,64 @@ const menuItems = [
 
 const isConsultant = computed(() => userRoles.value.includes('consultant'));
 
+// Кастомные пункты меню (Конструктор меню, /admin/menu-builder).
+// Загружаются с сервера (уже отфильтрованы по роли) и мёржатся в статику:
+// пункт с group_title вставляется в конец одноимённой группы, без группы —
+// партнёрский становится отдельным пунктом после «Главной», staff — в конце.
+// Ошибка загрузки / пустой набор → меню как раньше.
+const customMenuItems = ref([]);
+async function loadCustomMenu() {
+  try {
+    const areas = isStaff.value ? ['staff', 'partner'] : ['partner'];
+    const results = await Promise.all(
+      areas.map((a) => api.get('/menu/published', { params: { area: a } })),
+    );
+    customMenuItems.value = results.flatMap((r, i) =>
+      (r.data.items || []).map((it) => ({ ...it, _area: areas[i] })),
+    );
+  } catch { customMenuItems.value = []; }
+}
+
+const menuItems = computed(() => {
+  if (!customMenuItems.value.length) return baseMenuItems;
+  const list = [...baseMenuItems];
+  for (const it of customMenuItems.value) {
+    const isPartnerArea = it._area === 'partner';
+    const flag = isPartnerArea ? { partner: true } : { staffOnly: true };
+    const node = {
+      label: it.title,
+      icon: it.icon || 'mdi-circle-small',
+      path: it.external ? '' : (it.to || ''),
+      ...flag,
+      ...(it.external && it.to
+        ? { action: () => window.open(it.to, '_blank', 'noopener') }
+        : {}),
+    };
+    if (it.group_title) {
+      const gi = list.findIndex((x) => x.group === it.group_title
+        && (isPartnerArea ? x.partner : !x.partner));
+      if (gi === -1) {
+        // Группы нет — создаём новую в конце соответствующей области.
+        list.push({ group: it.group_title, ...flag }, node);
+        continue;
+      }
+      // Вставляем в конец группы: перед следующим заголовком после gi.
+      let insertAt = list.length;
+      for (let j = gi + 1; j < list.length; j++) {
+        if (list[j].group) { insertAt = j; break; }
+      }
+      list.splice(insertAt, 0, node);
+    } else if (isPartnerArea) {
+      // Отдельный партнёрский пункт — сразу после «Главной», до первой группы.
+      const firstGroup = list.findIndex((x) => x.group);
+      list.splice(firstGroup === -1 ? list.length : firstGroup, 0, node);
+    } else {
+      list.push(node);
+    }
+  }
+  return list;
+});
+
 // Mobile bottom navigation
 const bottomNavItems = computed(() => {
   if (isConsultant.value) {
@@ -1089,7 +1148,7 @@ const activeBottomNav = computed(() => {
   return bottomNavItems.value.find(i => i.path && route.path === i.path)?.path || '';
 });
 
-const visibleMenu = computed(() => menuItems.filter((item) => {
+const visibleMenu = computed(() => menuItems.value.filter((item) => {
   if (item.adminOnly) return auth.isAdmin;
   if (item.staffOnly) return isStaff.value;
   if (item.adminSection) return isStaff.value && availableSections.value.has(item.adminSection);

@@ -55,7 +55,17 @@
         <v-card-text>
           <v-row dense>
             <v-col cols="12" sm="6"><v-text-field v-model="form.title" label="Название *" density="compact" :error-messages="errs.title" /></v-col>
-            <v-col cols="12" sm="6"><v-text-field v-model="form.icon" label="Иконка (mdi-...)" density="compact" placeholder="mdi-star" /></v-col>
+            <v-col cols="12" sm="6">
+              <v-combobox v-model="form.icon" :items="iconOptions" label="Иконка" density="compact"
+                clearable placeholder="mdi-star">
+                <template #prepend-inner>
+                  <v-icon size="18">{{ form.icon || 'mdi-circle-small' }}</v-icon>
+                </template>
+                <template #item="{ props: itemProps, item }">
+                  <v-list-item v-bind="itemProps" :prepend-icon="item.raw" :title="item.raw" />
+                </template>
+              </v-combobox>
+            </v-col>
             <v-col cols="12"><v-text-field v-model="form.to" label="Ссылка / маршрут" density="compact" :error-messages="errs.to" placeholder="/admin/... или https://..." /></v-col>
             <v-col cols="12" sm="6">
               <v-combobox v-model="form.group_title" :items="groupSuggestions" label="Группа (категория)"
@@ -95,12 +105,40 @@ const headers = [
   { title: '', key: 'actions', sortable: false, width: 180, align: 'end' },
 ];
 
-// Подсказки групп для админки (совпадают с верхнеуровневыми категориями меню).
-const ADMIN_GROUPS = [
-  'Рабочий стол', 'Пользователи и клиенты', 'Контент и продукты', 'Финансы и контроль',
-  'Операции', 'Маркетинг и уведомления', 'Справочники', 'Настройки',
+// Подсказки групп — совпадают с реальными категориями меню каждой области
+// (admin → AdminLayout, staff/partner → MainLayout). Можно ввести и свою:
+// несуществующая группа будет создана в конце меню.
+const GROUPS_BY_AREA = {
+  admin: [
+    'Рабочий стол', 'Пользователи и клиенты', 'Контент и продукты', 'Финансы и контроль',
+    'Операции', 'Маркетинг и уведомления', 'Справочники', 'Настройки',
+  ],
+  staff: [
+    'Инструменты', 'Компания', 'Данные', 'Финансы', 'Выплаты',
+    'Обучение', 'Прочее', 'Помощь', 'Аналитика',
+  ],
+  partner: ['Обзор', 'Работа', 'Развитие', 'Связь'],
+};
+// Роль партнёра в WebUser.role — `consultant` (не «partner»).
+const roleSuggestions = ['admin', 'calculations', 'head', 'support', 'education', 'backoffice', 'finance', 'corrections', 'invest', 'consultant'];
+
+// Курируемый набор MDI-иконок для выбора (можно ввести и свою mdi-...).
+const iconOptions = [
+  'mdi-star', 'mdi-star-outline', 'mdi-home', 'mdi-view-dashboard', 'mdi-chart-bar',
+  'mdi-chart-line', 'mdi-chart-pie', 'mdi-finance', 'mdi-cash', 'mdi-cash-multiple',
+  'mdi-currency-usd', 'mdi-bank', 'mdi-credit-card', 'mdi-receipt', 'mdi-calculator',
+  'mdi-account', 'mdi-account-group', 'mdi-account-multiple', 'mdi-account-search',
+  'mdi-account-tie', 'mdi-sitemap', 'mdi-file-document', 'mdi-file-chart',
+  'mdi-folder', 'mdi-folder-open', 'mdi-clipboard-text', 'mdi-clipboard-check',
+  'mdi-book-open-variant', 'mdi-school', 'mdi-lightbulb', 'mdi-rocket-launch',
+  'mdi-trophy', 'mdi-medal', 'mdi-gift', 'mdi-calendar', 'mdi-calendar-check',
+  'mdi-clock-outline', 'mdi-bell', 'mdi-email', 'mdi-chat', 'mdi-phone',
+  'mdi-help-circle', 'mdi-information', 'mdi-alert', 'mdi-shield-check',
+  'mdi-cog', 'mdi-tools', 'mdi-wrench', 'mdi-link-variant', 'mdi-open-in-new',
+  'mdi-web', 'mdi-cloud', 'mdi-download', 'mdi-upload', 'mdi-magnify',
+  'mdi-heart', 'mdi-fire', 'mdi-flash', 'mdi-target', 'mdi-map-marker',
+  'mdi-package-variant-closed', 'mdi-tag', 'mdi-percent', 'mdi-handshake',
 ];
-const roleSuggestions = ['admin', 'calculations', 'head', 'support', 'education', 'backoffice', 'finance', 'corrections', 'partner'];
 
 const items = ref([]);
 const area = ref('admin');
@@ -115,7 +153,9 @@ function emptyForm() { return { id: null, area: 'admin', group_title: null, titl
 function notify(text, color = 'success') { snack.value = { open: true, color, text }; }
 
 const filtered = computed(() => items.value.filter((i) => i.area === area.value));
-const groupSuggestions = computed(() => (area.value === 'admin' ? ADMIN_GROUPS : []));
+// Группы предлагаем по области ФОРМЫ (form.area), а не активной вкладки —
+// диалог редактирования может быть открыт для пункта другой области.
+const groupSuggestions = computed(() => GROUPS_BY_AREA[form.area] || []);
 
 async function load() {
   loading.value = true;

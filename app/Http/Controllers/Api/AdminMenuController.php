@@ -78,13 +78,19 @@ class AdminMenuController extends Controller
         if (! in_array($area, MenuItem::AREAS, true)) {
             $area = 'admin';
         }
-        $role = $request->user()?->role;
+        // WebUser.role — CSV-строка («admin,head»); сравнение целой строкой
+        // ломало фильтр для мульти-ролевых пользователей. Партнёры имеют
+        // роль `consultant`.
+        $userRoles = array_values(array_filter(array_map(
+            'trim',
+            explode(',', (string) $request->user()?->role),
+        )));
 
         $items = MenuItem::query()
             ->where('area', $area)->where('active', true)
             ->orderBy('sort_order')->orderBy('id')
             ->get(['id', 'group_title', 'title', 'icon', 'to', 'external', 'roles'])
-            ->filter(fn ($i) => empty($i->roles) || ($role && in_array($role, $i->roles, true)))
+            ->filter(fn ($i) => empty($i->roles) || array_intersect($i->roles, $userRoles))
             ->values();
 
         return response()->json(['items' => $items]);
