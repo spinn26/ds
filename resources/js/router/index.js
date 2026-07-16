@@ -170,7 +170,6 @@ const routes = [
             { path: 'feature-flags', component: () => import('../pages/Admin/FeatureFlags.vue') },
             { path: 'content-pages', component: () => import('../pages/Admin/ContentPages.vue') },
             { path: 'system', component: () => import('../pages/Admin/SystemOps.vue') },
-            { path: 'database-structure', component: () => import('../pages/Admin/DatabaseStructure.vue') },
             { path: 'media', component: () => import('../pages/Admin/MediaLibrary.vue') },
             { path: 'export-center', component: () => import('../pages/Admin/ExportCenter.vue') },
             { path: 'login-log', component: () => import('../pages/Admin/LoginLog.vue') },
