@@ -9,18 +9,39 @@ use Illuminate\Support\Facades\Schema;
  * Per spec ✅Доступность отчётов §2.
  *
  * Управляет видимостью отчётов партнёрам для конкретного месяца.
- * Это НЕ заморозка — закрытый период всё ещё может быть скрыт от
- * партнёров (и наоборот, открытый можно временно закрыть для правок).
  *
  * Правило по умолчанию: текущий месяц скрыт от партнёров (идёт сбор
  * транзакций); прошлые месяцы — видимы. Запись в `period_visibility`
  * означает явное переопределение этого дефолта.
+ *
+ * ⚠ ЗАКРЫТЫЙ (зафиксированный) период ВСЕГДА виден партнёру: фиксация =
+ * финальная сверка, отчёт неизменен, скрывать нечего. Заморозка
+ * перекрывает и дефолт, и УСТАРЕВШУЮ явную запись is_visible=false,
+ * проставленную ДО закрытия (кейс апр/май 2026: админ скрыл их на время
+ * пересчёта 3–5 июня, закрыл 1 июля — записи `false` протухли и прятали
+ * закрытые отчёты от ФК). Если админ скрывает период уже ПОСЛЕ закрытия
+ * (запись видимости новее closed_at) — его решение уважается.
  */
 class PeriodVisibilityService
 {
     public function isVisible(int $year, int $month): bool
     {
         $row = $this->row($year, $month);
+        $closedAt = $this->closedAt($year, $month);
+
+        // Закрытый период виден, если явная запись видимости не новее
+        // момента закрытия (иначе — админ осознанно скрыл уже закрытый).
+        if ($closedAt !== null) {
+            $hiddenAfterClose = $row !== null
+                && ! (bool) $row->is_visible
+                && $row->changed_at !== null
+                && strtotime((string) $row->changed_at) > strtotime((string) $closedAt);
+            if (! $hiddenAfterClose) {
+                return true;
+            }
+            return false;
+        }
+
         if ($row !== null) {
             return (bool) $row->is_visible;
         }
@@ -31,6 +52,21 @@ class PeriodVisibilityService
         $isPast = $year < (int) $now->format('Y')
             || ($year === (int) $now->format('Y') && $month < (int) $now->format('n'));
         return $isPast;
+    }
+
+    /** Момент закрытия периода (null — если не закрыт / был разморожен). */
+    private function closedAt(int $year, int $month): ?string
+    {
+        if (! Schema::hasTable('period_closures')) {
+            return null;
+        }
+        $row = DB::table('period_closures')
+            ->where('year', $year)
+            ->where('month', $month)
+            ->whereNull('reopened_at')
+            ->first(['closed_at']);
+
+        return $row?->closed_at;
     }
 
     public function setVisibility(int $year, int $month, bool $visible, ?int $userId = null): void
