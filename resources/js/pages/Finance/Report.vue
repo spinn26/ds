@@ -5,7 +5,7 @@
         <div class="d-flex align-center ga-3 flex-wrap">
           <!-- «Баланс по комиссионным» убран из шапки по запросу 2026-07-16
                (вместе с чипом в topbar MainLayout). -->
-          <v-btn variant="flat" color="primary" size="small" prepend-icon="mdi-download"
+          <v-btn v-if="canDownload" variant="flat" color="primary" size="small" prepend-icon="mdi-download"
             :loading="exporting" :disabled="locked" @click="downloadXlsx">
             Скачать XLSX
           </v-btn>
@@ -356,6 +356,12 @@ function monthFromQuery() {
 }
 
 const month = ref(monthFromQuery());
+// Скачивание отчёта доступно только с июня 2026 (первый live-период
+// платформы). Для до-июньских периодов данные — историческая выгрузка
+// Directual, XLSX по ним не отдаём. month всегда 'YYYY-MM' (zero-padded),
+// поэтому строковое сравнение совпадает с хронологическим.
+const EXPORT_AVAILABLE_FROM = '2026-06';
+const canDownload = computed(() => month.value >= EXPORT_AVAILABLE_FROM);
 // Staff может смотреть отчёт конкретного партнёра — ID идёт в query.
 // Партнёру backend всё равно подсунет его собственный consultant.
 const consultantId = ref(route.query.consultant || null);
