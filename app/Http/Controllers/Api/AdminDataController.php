@@ -1005,6 +1005,45 @@ class AdminDataController extends Controller
             ];
         });
 
+        // Смена партнёра пишется напрямую в changeConsultantContractLog (в обход
+        // Eloquent-модели, поэтому её нет в activity_log). Вливаем эти события в
+        // единое окно истории — per spec §4 «все изменения контракта».
+        $transfers = DB::table('changeConsultantContractLog')
+            ->where('contract', $id)
+            ->orderByDesc('dateCreated')
+            ->limit(200)
+            ->get();
+
+        if ($transfers->isNotEmpty()) {
+            $tUserIds = $transfers->pluck('webUser')->filter()->unique();
+            $tUsers = $tUserIds->isNotEmpty()
+                ? DB::table('WebUser')->whereIn('id', $tUserIds)->select(['id', 'firstName', 'lastName', 'patronymic'])->get()->keyBy('id')
+                : collect();
+
+            $transferRows = $transfers->map(function ($t) use ($tUsers) {
+                $u = $t->webUser ? ($tUsers[$t->webUser] ?? null) : null;
+                $author = $u
+                    ? trim("{$u->lastName} {$u->firstName} {$u->patronymic}")
+                    : 'Система';
+
+                return [
+                    'id' => 'transfer-' . $t->id,
+                    'createdAt' => $t->dateCreated,
+                    'description' => 'Смена партнёра',
+                    'event' => 'reassign',
+                    'author' => $author,
+                    'changes' => [[
+                        'field' => 'consultant',
+                        'fieldLabel' => 'Партнёр',
+                        'old' => $t->consultantOldName,
+                        'new' => $t->consultantNewName,
+                    ]],
+                ];
+            });
+
+            $data = $data->concat($transferRows)->sortByDesc('createdAt')->values();
+        }
+
         return response()->json(['data' => $data]);
     }
 
@@ -2972,13 +3011,14 @@ class AdminDataController extends Controller
         return response()->json(['message' => 'Контракт создан', 'id' => $id], 201);
     }
 
-    /** Поля контракта, от которых зависит расчёт комиссий по его транзакциям. */
-    private const CONTRACT_MONEY_FIELDS = [
-        'ammount', 'currency', 'product', 'program', 'term', 'client', 'setup',
-    ];
-
     /**
-     * Обновить контракт. Закрытые периоды защищены через freeze.
+     * Обновить контракт.
+     *
+     * Контракты — открытый реестр: правка НЕ блокируется закрытыми периодами
+     * (требование бизнеса «контракты всегда редактируемы»). Уже посчитанные
+     * комиссии закрытых месяцев при этом не меняются — CommissionCalculator
+     * сам отказывается пересчитывать frozen/historical периоды, а updateContract
+     * пересчёт комиссий не запускает вовсе (только AccrualForecastService).
      */
     public function updateContract(Request $request, int $id): JsonResponse
     {
@@ -2989,11 +3029,6 @@ class AdminDataController extends Controller
         // живым контрактом → 422 с данными этого контракта (исключаем сам $id).
         if ($request->has('number') && ($resp = $this->contractNumberConflict($request->input('number'), $id))) {
             return $resp;
-        }
-
-        // Денежные поля закрытого месяца — под замок. Комментарий/прогноз править можно.
-        if ($request->hasAny(self::CONTRACT_MONEY_FIELDS)) {
-            $this->guardContractFrozenPeriods($id);
         }
 
         $data = $request->validate([
@@ -3076,34 +3111,10 @@ class AdminDataController extends Controller
         $row = DB::table('contract')->where('id', $id)->first();
         if (! $row) return response()->json(['message' => 'Контракт не найден'], 404);
 
-        $this->guardContractFrozenPeriods($id);
-
+        // Контракты редактируемы/удаляемы всегда — закрытые периоды их не держат
+        // (требование бизнеса). Комиссии закрытых месяцев остаются нетронутыми.
         DB::table('contract')->where('id', $id)->update(['deletedAt' => now()]);
         return response()->json(['message' => 'Контракт удалён']);
-    }
-
-    /**
-     * Запретить правку/удаление контракта, если по нему есть живые транзакции
-     * в закрытом месяце.
-     *
-     * Комиссии за закрытый период уже не пересчитываются (кнопочные раннеры
-     * такие месяцы пропускают), поэтому смена суммы/продукта/программы задним
-     * числом молча расходит первичку и реестр. Правка «нейтральных» полей
-     * (комментарий, прогноз) закрытым периодом не блокируется.
-     */
-    private function guardContractFrozenPeriods(int $contractId): void
-    {
-        $months = DB::table('transaction')
-            ->where('contract', $contractId)
-            ->whereNull('deletedAt')
-            ->whereNotNull('date')
-            ->selectRaw('DISTINCT EXTRACT(YEAR FROM date)::int as y, EXTRACT(MONTH FROM date)::int as m')
-            ->get();
-
-        $freeze = app(\App\Services\PeriodFreezeService::class);
-        foreach ($months as $p) {
-            $freeze->guard((int) $p->y, (int) $p->m);
-        }
     }
 
     /**
