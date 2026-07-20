@@ -2028,4 +2028,108 @@ class ProductSalesMatrixController extends Controller
         }
         return $months;
     }
+
+    /**
+     * Drill-down: список контрактов конкретной ячейки матрицы (продукт × месяц ×
+     * режим), чтобы из клика по «Объёму» открыть контракты. Фильтры каждого
+     * режима повторяют базовые builder-ы соответствующих методов матрицы:
+     *   - inwork   → неактивированные по дате создания (createDate);
+     *   - forecast → «Активировано»: status=1, без транзакций, по openDate;
+     *   - fact     → контракты, у которых есть транзакция в месяце (t.dateMonth);
+     *   - total    → объединение трёх слоёв (distinct по contract.id).
+     */
+    public function cellContracts(Request $request): JsonResponse
+    {
+        $params = $request->validate([
+            'mode'        => 'required|in:inwork,forecast,fact,total',
+            'month'       => 'required|date_format:Y-m',
+            'product'     => 'required|integer',
+            'program'     => 'nullable|integer',
+            'suppliers'   => 'nullable|array',
+            'suppliers.*' => 'string|max:200',
+        ]);
+
+        $mode      = $params['mode'];
+        $month     = $params['month'];
+        $productId = (int) $params['product'];
+        $programId = $params['program'] ?? null;
+        $suppliers = $params['suppliers'] ?? [];
+        $monthStart     = $month.'-01';
+        $monthExclusive = $this->monthExclusiveStart($month);
+
+        // Общие фильтры ячейки: пригвождаем продукт (+опц. программу) и поставщика.
+        $common = function ($q) use ($suppliers, $productId, $programId) {
+            return $q
+                ->where('co.product', $productId)
+                ->when($programId, fn ($qq) => $qq->where('co.program', $programId))
+                ->when(! empty($suppliers), fn ($qq) =>
+                    $qq->whereIn(DB::raw('COALESCE(pg."providerName", \'—\')'), $suppliers));
+        };
+
+        $inworkQ = fn () => $common(DB::table('contract as co')
+            ->join('program as pg', 'pg.id', '=', 'co.program')
+            ->whereNotIn('co.status', [1, 6, 8, 10])
+            ->whereRaw('co."deletedAt" IS NULL')
+            ->whereRaw('co."createDate"::date >= ?', [$monthStart])
+            ->whereRaw('co."createDate"::date < ?',  [$monthExclusive]));
+
+        $actQ = fn () => $common(DB::table('contract as co')
+            ->join('program as pg', 'pg.id', '=', 'co.program')
+            ->where('co.status', 1)
+            ->whereRaw('co."deletedAt" IS NULL')
+            ->whereNotExists(fn ($q) => $q->select(DB::raw(1))->from('transaction as tx')
+                ->whereColumn('tx.contract', 'co.id')->whereNull('tx.deletedAt'))
+            ->whereRaw('co."openDate"::date >= ?', [$monthStart])
+            ->whereRaw('co."openDate"::date < ?',  [$monthExclusive]));
+
+        $factQ = fn () => $common(DB::table('transaction as t')
+            ->join('contract as co', 'co.id', '=', 't.contract')
+            ->join('program as pg', 'pg.id', '=', 'co.program')
+            ->whereNull('t.deletedAt')
+            ->whereNull('co.deletedAt')
+            ->whereNotNull('co.openDate')
+            ->where('t.dateMonth', $month));
+
+        $queries = match ($mode) {
+            'inwork'   => [$inworkQ],
+            'forecast' => [$actQ],
+            'fact'     => [$factQ],
+            'total'    => [$inworkQ, $actQ, $factQ],
+        };
+
+        $byId = [];
+        foreach ($queries as $q) {
+            $rows = $q()
+                ->leftJoin('currency as cur', 'cur.id', '=', 'co.currency')
+                ->leftJoin('consultant as cons', 'cons.id', '=', 'co.consultant')
+                ->leftJoin('contractStatus as st', 'st.id', '=', 'co.status')
+                ->distinct()
+                ->select([
+                    'co.id', 'co.number', 'co.clientName',
+                    DB::raw('cons."personName" as "consultantName"'),
+                    DB::raw('COALESCE(co.ammount, 0) as amount'),
+                    'cur.symbol as currency',
+                    'st.name as status',
+                ])
+                ->orderBy('co.number')
+                ->limit(2000)
+                ->get();
+            foreach ($rows as $r) {
+                $byId[$r->id] = [
+                    'id'         => (int) $r->id,
+                    'number'     => $r->number,
+                    'clientName' => $r->clientName,
+                    'consultant' => $r->consultantName,
+                    'amount'     => round((float) $r->amount, 2),
+                    'currency'   => $r->currency,
+                    'status'     => $r->status,
+                ];
+            }
+        }
+
+        $contracts = array_values($byId);
+        usort($contracts, fn ($a, $b) => strnatcasecmp((string) $a['number'], (string) $b['number']));
+
+        return response()->json(['contracts' => $contracts, 'count' => count($contracts)]);
+    }
 }

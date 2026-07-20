@@ -723,6 +723,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/admin/reports/sales-matrix/fact', [\App\Http\Controllers\Api\ProductSalesMatrixController::class, 'factMatrix']);
         Route::get('/admin/reports/sales-matrix/total', [\App\Http\Controllers\Api\ProductSalesMatrixController::class, 'totalMatrix']);
         Route::get('/admin/reports/sales-matrix/monthly', [\App\Http\Controllers\Api\ProductSalesMatrixController::class, 'monthly']);
+        Route::get('/admin/reports/sales-matrix/cell-contracts', [\App\Http\Controllers\Api\ProductSalesMatrixController::class, 'cellContracts']);
 
         // Admin — Reports: Partner (ФК) Sales Matrix — иерархия Структура→ФК→Продукт
         Route::get('/admin/reports/partner-matrix/fact', [\App\Http\Controllers\Api\PartnerSalesMatrixController::class, 'factMatrix']);

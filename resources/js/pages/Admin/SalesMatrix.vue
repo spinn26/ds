@@ -449,9 +449,9 @@
                   </td>
                   <template v-for="mo in displayMonths" :key="`p${prod.productId}-${mo}`">
                     <td v-for="(m, mi) in activeMetrics" :key="m.key"
-                      class="td-num" :class="{ 'td-sep': mi === activeMetrics.length - 1, 'td-fc': cellTitle(prod.monthly[mo], m.key) }"
+                      class="td-num" :class="{ 'td-sep': mi === activeMetrics.length - 1, 'td-fc': cellTitle(prod.monthly[mo], m.key), 'cell-clickable': m.key === 'volume' && prod.monthly[mo]?.volume }"
                       :title="cellTitle(prod.monthly[mo], m.key)"
-                      @click="openCellDetails(prod.monthly[mo], m.key, prod.productName, mo)">
+                      @click="onCellClick(prod.monthly[mo], m.key, prod.productName, mo, prod.productId, null)">
                       <span :class="fmtClass(prod.monthly[mo]?.[m.key])">
                         {{ fmtCell(prod.monthly[mo]?.[m.key], m) }}
                       </span>
@@ -487,9 +487,9 @@
                     </td>
                     <template v-for="mo in displayMonths" :key="`pg${pg.programId}-${mo}`">
                       <td v-for="(m, mi) in activeMetrics" :key="m.key"
-                        class="td-num td-dim" :class="{ 'td-sep': mi === activeMetrics.length - 1, 'td-fc': cellTitle(pg.monthly[mo], m.key) }"
+                        class="td-num td-dim" :class="{ 'td-sep': mi === activeMetrics.length - 1, 'td-fc': cellTitle(pg.monthly[mo], m.key), 'cell-clickable': m.key === 'volume' && pg.monthly[mo]?.volume }"
                         :title="cellTitle(pg.monthly[mo], m.key)"
-                        @click="openCellDetails(pg.monthly[mo], m.key, pg.programName, mo)">
+                        @click="onCellClick(pg.monthly[mo], m.key, pg.programName, mo, prod.productId, pg.programId)">
                         <span :class="fmtClass(pg.monthly[mo]?.[m.key])">
                           {{ fmtCell(pg.monthly[mo]?.[m.key], m) }}
                         </span>
@@ -586,12 +586,57 @@
         </v-card-text>
       </v-card>
     </v-dialog>
+
+    <!-- Контракты ячейки: drill-down по клику на «Объём». Номер — ссылка на карточку. -->
+    <v-dialog v-model="cellContracts.open" max-width="760" scrollable>
+      <v-card>
+        <v-card-title class="d-flex align-center pb-1">
+          <div>
+            <div class="text-subtitle-1 font-weight-bold">{{ cellContracts.header }}</div>
+            <div class="text-caption text-medium-emphasis">Контракты ячейки · {{ cellContracts.count }} шт.</div>
+          </div>
+          <v-spacer />
+          <v-btn icon="mdi-close" variant="text" size="small" @click="cellContracts.open = false" />
+        </v-card-title>
+        <v-card-text style="max-height: 62vh">
+          <div v-if="cellContracts.loading" class="py-8 text-center">
+            <v-progress-circular indeterminate color="primary" size="28" />
+          </div>
+          <v-alert v-else-if="!cellContracts.rows.length" type="info" variant="tonal" density="compact">
+            Контрактов не найдено.
+          </v-alert>
+          <v-table v-else density="compact" class="detail-table">
+            <thead>
+              <tr>
+                <th>Номер</th>
+                <th>Клиент</th>
+                <th>Партнёр</th>
+                <th class="text-right">Сумма</th>
+                <th>Статус</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="c in cellContracts.rows" :key="c.id">
+                <td>
+                  <a class="contract-link" @click="goContract(c.id)">{{ c.number || ('#' + c.id) }}</a>
+                </td>
+                <td>{{ c.clientName || '—' }}</td>
+                <td>{{ c.consultant || '—' }}</td>
+                <td class="text-right">{{ fmt0(c.amount) }} {{ c.currency || '' }}</td>
+                <td>{{ c.status || '—' }}</td>
+              </tr>
+            </tbody>
+          </v-table>
+        </v-card-text>
+      </v-card>
+    </v-dialog>
     </template>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, watch, onMounted, nextTick } from 'vue';
+import { useRouter } from 'vue-router';
 import api from '../../api';
 import PageHeader from '../../components/PageHeader.vue';
 import SmartRangeFilter from '../../components/SmartRangeFilter.vue';
@@ -1018,6 +1063,58 @@ function openCellDetails(cell, metricKey, label, month) {
   };
 }
 
+// ─── Drill-down: контракты ячейки по клику на «Объём» ──────────
+const router = useRouter();
+const cellContracts = ref({ open: false, loading: false, header: '', rows: [], count: 0 });
+
+// Backend-параметр mode по текущему режиму отчёта (или по слою в «Итого»,
+// где строки-слои несут строковый programId = layer key).
+function cellMode(programId) {
+  const layerMap = { inwork: 'inwork', activated: 'forecast', fact: 'fact' };
+  if (typeof programId === 'string' && layerMap[programId]) return layerMap[programId];
+  const map = { inwork: 'inwork', forecast: 'forecast', fact: 'fact', total: 'total' };
+  return map[reportMode.value] || 'total';
+}
+
+// Открыть карточку контракта (ContractManager поддерживает deep-link ?id=).
+// В новой вкладке, чтобы не терять матрицу.
+function goContract(id) {
+  const url = router.resolve({ path: '/manage/contracts', query: { id } }).href;
+  window.open(url, '_blank');
+}
+
+async function openCellContracts({ productId, programId, month, label }) {
+  const mode = cellMode(programId);
+  const realProgram = (typeof programId === 'number') ? programId : null;
+  cellContracts.value = { open: true, loading: true,
+    header: `${label} · ${fmtMonthHdr(month)}`, rows: [], count: 0 };
+  try {
+    const p = new URLSearchParams();
+    p.set('mode', mode);
+    p.set('month', month);
+    p.set('product', productId);
+    if (realProgram) p.set('program', realProgram);
+    filterSuppliers.value.forEach(s => p.append('suppliers[]', s));
+    const { data } = await api.get(`/admin/reports/sales-matrix/cell-contracts?${p}`);
+    cellContracts.value.rows = data.contracts ?? [];
+    cellContracts.value.count = data.count ?? 0;
+  } catch (e) {
+    console.error('cell contracts load failed', e);
+    cellContracts.value.rows = [];
+  }
+  cellContracts.value.loading = false;
+}
+
+// Клик по ячейке: «Объём» → контракты ячейки; прочие метрики → прежняя разбивка.
+function onCellClick(cell, metricKey, label, month, productId, programId) {
+  if (metricKey === 'volume') {
+    if (!cell || !cell.volume || !productId) return;
+    openCellContracts({ productId, programId, month, label });
+  } else {
+    openCellDetails(cell, metricKey, label, month);
+  }
+}
+
 onMounted(loadData);
 </script>
 
@@ -1261,4 +1358,16 @@ onMounted(loadData);
 .fact-detail-row .fd-cli { flex: 1; overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
 .fact-detail-row .fd-amt { margin-left: auto; font-variant-numeric: tabular-nums; }
 .fact-detail-more { margin-top: 4px; opacity: 0.7; font-style: italic; }
+
+/* Кликабельная ячейка «Объём» → контракты */
+.cell-clickable { cursor: pointer; }
+.cell-clickable:hover span { text-decoration: underline; text-decoration-style: dotted; }
+/* Номер контракта в диалоге — ссылка */
+.contract-link {
+  color: rgb(var(--v-theme-primary));
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+  text-decoration: none;
+}
+.contract-link:hover { text-decoration: underline; }
 </style>
