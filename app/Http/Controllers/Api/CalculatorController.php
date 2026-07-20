@@ -33,7 +33,7 @@ class CalculatorController extends Controller
      */
     public function productMatrix(): JsonResponse
     {
-        $payload = Cache::remember('calculator:product-matrix:v3', now()->addMinutes(10), function () {
+        $payload = Cache::remember('calculator:product-matrix:v4', now()->addMinutes(10), function () {
             // Видим программу в калькуляторе только если ОБА уровня
             // (продукт-зонтик + программа) имеют visible_to_calculator=true.
             // Колонки добавлены миграциями 2026_05_28_000020 (programs) и
@@ -61,6 +61,10 @@ class CalculatorController extends Controller
                 $availProps = $availTerms = [];
                 $maxYear = 0;
                 foreach ($tariffs as $t) {
+                    // «Искл.» (is_red) — строка по старым контрактам, в калькуляторе
+                    // не показывается (per админ-подпись Products.vue). Пропускаем,
+                    // чтобы её свойство/срок/год не попали в списки калькулятора.
+                    if (! empty($t['is_red'])) continue;
                     $p = self::normProperty($t['property'] ?? null);
                     $tm = self::normTerm($t['term'] ?? null);
                     // Новый audit-формат хранит год выплаты КВ в `year_kv`,
@@ -188,6 +192,8 @@ class CalculatorController extends Controller
         $tariffs = self::decodeTariffs($program->tariffs);
         $tariff = null;
         foreach ($tariffs as $t) {
+            // Исключённые (is_red) тарифы в калькуляторе не участвуют.
+            if (! empty($t['is_red'])) continue;
             $tp = self::normProperty($t['property'] ?? null);
             $tt = self::normTerm($t['term'] ?? null);
             $ty = self::normYear($t['year_kv'] ?? $t['year'] ?? null);
@@ -199,9 +205,11 @@ class CalculatorController extends Controller
             break;
         }
         if (! $tariff) {
-            // Фоллбэк — первый тариф в массиве (если programs_catalog не
+            // Фоллбэк — первый НЕ исключённый тариф (если programs_catalog не
             // развёрнута по property/term/year, тарифы плоские).
-            $tariff = $tariffs[0] ?? null;
+            foreach ($tariffs as $t) {
+                if (empty($t['is_red'])) { $tariff = $t; break; }
+            }
         }
         if (! $tariff) {
             return response()->json(['error' => 'У программы нет ни одного тарифа'], 422);

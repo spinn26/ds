@@ -349,7 +349,7 @@ class AdminOpsController extends Controller
         \Illuminate\Support\Facades\Artisan::call($map[$target]);
         // Доп. сброс известных in-memory карт (на случай иного стора).
         if ($target === 'app') {
-            Cache::forget('calculator:product-matrix:v2');
+            Cache::forget('calculator:product-matrix:v4');
             Cache::forget('system_settings:map');
             Cache::forget('feature_flags:map');
         }

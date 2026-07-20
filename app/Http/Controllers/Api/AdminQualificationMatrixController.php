@@ -50,7 +50,7 @@ class AdminQualificationMatrixController extends Controller
         });
 
         // Сбросить кэш матрицы калькулятора (если используется).
-        Cache::forget('calculator:product-matrix:v2');
+        Cache::forget('calculator:product-matrix:v4');
 
         return response()->json(['message' => 'Матрица квалификаций сохранена']);
     }

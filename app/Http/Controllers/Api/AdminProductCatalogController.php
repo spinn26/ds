@@ -274,7 +274,7 @@ class AdminProductCatalogController extends Controller
 
         // Калькулятор кэширует матрицу продуктов на 10 минут — без инвалидации
         // снятая галка появится в дропдауне только через эти 10 минут.
-        \Illuminate\Support\Facades\Cache::forget('calculator:product-matrix:v2');
+        \Illuminate\Support\Facades\Cache::forget('calculator:product-matrix:v4');
 
         return $this->showProduct($id);
     }
@@ -314,7 +314,7 @@ class AdminProductCatalogController extends Controller
         $this->syncToLegacyProduct($id);
         // Иначе деактивированный продукт висит в кэше калькулятора до 10 мин,
         // и его программу можно выбрать → «Программа не найдена или неактивна».
-        \Illuminate\Support\Facades\Cache::forget('calculator:product-matrix:v2');
+        \Illuminate\Support\Facades\Cache::forget('calculator:product-matrix:v4');
         return response()->json(['status' => 'deactivated']);
     }
 
@@ -329,7 +329,7 @@ class AdminProductCatalogController extends Controller
             'updated_at' => now(),
         ]);
         $this->syncToLegacyProduct($id);
-        \Illuminate\Support\Facades\Cache::forget('calculator:product-matrix:v2');
+        \Illuminate\Support\Facades\Cache::forget('calculator:product-matrix:v4');
         return response()->json(['publishStatus' => $next ? 'published' : 'draft']);
     }
 
@@ -377,7 +377,7 @@ class AdminProductCatalogController extends Controller
             'updated_at'     => now(),
         ]));
         $this->syncToLegacyProgram($newId);
-        \Illuminate\Support\Facades\Cache::forget('calculator:product-matrix:v2');
+        \Illuminate\Support\Facades\Cache::forget('calculator:product-matrix:v4');
         return $this->showSingleProgram($newId);
     }
 
@@ -391,7 +391,7 @@ class AdminProductCatalogController extends Controller
             ->where('product_id', $productId)
             ->update($payload);
         $this->syncToLegacyProgram($programId);
-        \Illuminate\Support\Facades\Cache::forget('calculator:product-matrix:v2');
+        \Illuminate\Support\Facades\Cache::forget('calculator:product-matrix:v4');
         return $this->showSingleProgram($programId);
     }
 
@@ -403,7 +403,7 @@ class AdminProductCatalogController extends Controller
             ->where('product_id', $productId)
             ->update(['active' => false, 'updated_at' => now()]);
         $this->syncToLegacyProgram($programId);
-        \Illuminate\Support\Facades\Cache::forget('calculator:product-matrix:v2');
+        \Illuminate\Support\Facades\Cache::forget('calculator:product-matrix:v4');
         return response()->json(['status' => 'deactivated']);
     }
 
