@@ -169,6 +169,7 @@ const routes = [
             { path: 'announcements', component: () => import('../pages/Admin/Announcements.vue') },
             { path: 'feature-flags', component: () => import('../pages/Admin/FeatureFlags.vue') },
             { path: 'content-pages', component: () => import('../pages/Admin/ContentPages.vue') },
+            { path: 'partner-guide', component: () => import('../pages/Admin/PartnerGuide.vue') },
             { path: 'system', component: () => import('../pages/Admin/SystemOps.vue') },
             { path: 'media', component: () => import('../pages/Admin/MediaLibrary.vue') },
             { path: 'export-center', component: () => import('../pages/Admin/ExportCenter.vue') },

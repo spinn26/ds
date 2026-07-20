@@ -395,6 +395,10 @@ Route::prefix('v1')->group(function () {
             Route::put('/admin/content-pages/{id}', [\App\Http\Controllers\Api\AdminContentPageController::class, 'update'])->whereNumber('id');
             Route::delete('/admin/content-pages/{id}', [\App\Http\Controllers\Api\AdminContentPageController::class, 'destroy'])->whereNumber('id');
 
+            // Редактируемые markdown-документы (напр. инструкция партнёра).
+            Route::get('/admin/doc-pages/{slug}', [\App\Http\Controllers\Api\AdminDocPageController::class, 'show'])->where('slug', '[a-z0-9\-]+');
+            Route::put('/admin/doc-pages/{slug}', [\App\Http\Controllers\Api\AdminDocPageController::class, 'update'])->where('slug', '[a-z0-9\-]+');
+
             // Рассылка in-app уведомлений (всем / по ролям).
             Route::post('/admin/notifications/broadcast', [\App\Http\Controllers\Api\NotificationController::class, 'broadcast'])->middleware('throttle:20,1');
 
