@@ -789,7 +789,7 @@ class ProductSalesMatrixController extends Controller
         $fcFrom = $params['fcFrom'] ?? null;
         $fcTo   = $params['fcTo']   ?? null;
 
-        $EXCLUDED = [1, 6, 8, 10]; // Активирован, Закрыто нереализ., Закрыто, Лапсирован
+        $EXCLUDED = [1, 6, 8, 9, 10]; // Активирован, Закрыто нереализ., Закрыто, Возврат, Лапсирован
 
         // Базовый builder: контракты «в работе» по дате создания.
         $base = fn () => DB::table('contract as co')
@@ -1587,7 +1587,7 @@ class ProductSalesMatrixController extends Controller
         // Слой «В работе» — неактивированные по дате создания.
         $inworkBase = fn () => $applyFilters(DB::table('contract as co')
             ->join('program as pg', 'pg.id', '=', 'co.program')
-            ->whereNotIn('co.status', [1, 6, 8, 10])
+            ->whereNotIn('co.status', [1, 6, 8, 9, 10])
             ->whereRaw('co."deletedAt" IS NULL')
             ->whereRaw('co."createDate"::date >= ?', [$from.'-01'])
             ->whereRaw('co."createDate"::date < ?', [$toExclusive]));
@@ -2068,7 +2068,7 @@ class ProductSalesMatrixController extends Controller
 
         $inworkQ = fn () => $common(DB::table('contract as co')
             ->join('program as pg', 'pg.id', '=', 'co.program')
-            ->whereNotIn('co.status', [1, 6, 8, 10])
+            ->whereNotIn('co.status', [1, 6, 8, 9, 10])
             ->whereRaw('co."deletedAt" IS NULL')
             ->whereRaw('co."createDate"::date >= ?', [$monthStart])
             ->whereRaw('co."createDate"::date < ?',  [$monthExclusive]));
