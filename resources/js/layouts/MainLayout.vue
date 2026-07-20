@@ -27,14 +27,19 @@
       <v-divider />
 
       <v-list density="compact" nav class="main-nav-list">
-        <template v-for="(item, i) in visibleMenu" :key="i">
+        <template v-for="(item, i) in navMenu" :key="i">
+          <!-- Заголовок раздела — кликабельный, сворачивает/разворачивает группу. -->
           <v-list-subheader v-if="item.group && !rail"
-            :class="[item.adminSection ? 'text-medium-emphasis font-weight-bold' : '', 'menu-group-header mt-2']">
-            {{ item.group }}
+            :class="[item.adminSection ? 'text-medium-emphasis font-weight-bold' : '', 'menu-group-header menu-group-toggle mt-2']"
+            @click="toggleGroup(item.group)">
+            <span>{{ item.group }}</span>
+            <v-icon size="16" class="menu-group-chevron">
+              {{ isGroupCollapsed(item.group) ? 'mdi-chevron-right' : 'mdi-chevron-down' }}
+            </v-icon>
           </v-list-subheader>
           <v-divider v-else-if="item.group && rail" class="my-1" />
           <!-- Regular item -->
-          <v-list-item v-if="!item.group" :to="item.path || null" :prepend-icon="item.icon"
+          <v-list-item v-if="!item.group && (rail || !isGroupCollapsed(item._groupKey))" :to="item.path || null" :prepend-icon="item.icon"
             :active="isActivePath(item.path)"
             :color="item.adminSection ? 'brand' : 'primary'"
             :title="item.label"
@@ -1178,6 +1183,34 @@ const visibleMenu = computed(() => menuItems.value.filter((item) => {
   if (item.partner) return isConsultant.value;
   return true;
 }));
+
+// Сворачиваемые разделы бокового меню. По умолчанию все РАЗВЁРНУТЫ (пустое
+// множество свёрнутых); выбор пользователя сохраняется в localStorage.
+// В rail-режиме (узкий сайдбар) сворачивание не применяется — там нет
+// заголовков-кнопок, только иконки-пункты.
+const collapsedGroups = ref(new Set(
+  (() => { try { return JSON.parse(localStorage.getItem('main-nav-collapsed') || '[]'); } catch { return []; } })()
+));
+function isGroupCollapsed(name) {
+  return name != null && collapsedGroups.value.has(name);
+}
+function toggleGroup(name) {
+  const next = new Set(collapsedGroups.value);
+  next.has(name) ? next.delete(name) : next.add(name);
+  collapsedGroups.value = next;
+  localStorage.setItem('main-nav-collapsed', JSON.stringify([...next]));
+}
+
+// Плоский список меню с проставленным _groupKey у каждого обычного пункта —
+// по последнему предшествующему заголовку. Пункты свёрнутого раздела в
+// шаблоне скрываются по _groupKey.
+const navMenu = computed(() => {
+  let currentGroup = null;
+  return visibleMenu.value.map((item) => {
+    if (item.group) { currentGroup = item.group; return item; }
+    return { ...item, _groupKey: currentGroup };
+  });
+});
 </script>
 
 <style scoped>
@@ -1306,6 +1339,24 @@ const visibleMenu = computed(() => menuItems.value.filter((item) => {
   font-size: 0.7rem;
   text-transform: uppercase;
   opacity: 0.7;
+}
+
+/* Кликабельный заголовок раздела: метка слева, шеврон справа. */
+.main-nav-list :deep(.v-list-subheader.menu-group-toggle) {
+  cursor: pointer;
+  user-select: none;
+}
+.main-nav-list :deep(.menu-group-toggle .v-list-subheader__text) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+.main-nav-list :deep(.menu-group-toggle:hover .v-list-subheader__text) {
+  color: rgb(var(--v-theme-primary));
+}
+.menu-group-chevron {
+  opacity: 0.55;
 }
 
 /* Mobile bottom navigation */
