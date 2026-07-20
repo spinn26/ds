@@ -48,7 +48,9 @@ class FinrezCommissionsReport extends AbstractReportType
                 't.netRevenueRUB', 't.dsCommissionPercentage',
                 't.commissionsAmountRUB',
                 'cm.personalVolume',
-                DB::raw('COALESCE(cm."amountRUB", cm.amount, 0) as commissionRub'),
+                // Алиас закавычен: без кавычек PG свернёт его в lowercase
+                // (commissionrub) → $r->commissionRub стал бы undefined.
+                DB::raw('COALESCE(cm."amountRUB", cm.amount, 0) as "commissionRub"'),
                 't.profitRUB',
             ]);
 
