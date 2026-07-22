@@ -279,7 +279,9 @@ class ManualTransactionController extends Controller
         $results = ['calculated' => 0, 'skipped' => 0];
         foreach ($allIds as $id) {
             $draft = $this->loadDraftWithRefs((int) $id);
-            if (! $draft || ! $draft->amount || ! $draft->date) {
+            // Ноль — валидная сумма (нулевая транзакция), поэтому проверяем
+            // именно незаполненность, а не falsy: 0 не должен отсекаться.
+            if (! $draft || $draft->amount === null || $draft->amount === '' || ! $draft->date) {
                 $results['skipped']++;
                 continue;
             }
@@ -473,7 +475,8 @@ class ManualTransactionController extends Controller
                 $results['errors'][] = ['id' => $draftId, 'reason' => 'Не найден'];
                 continue;
             }
-            if (! $draft->amount || ! $draft->date) {
+            // Ноль допустим — требуем лишь заполненности суммы и даты.
+            if ($draft->amount === null || $draft->amount === '' || ! $draft->date) {
                 $results['errors'][] = ['id' => $draftId, 'reason' => 'Заполните дату и сумму'];
                 continue;
             }
@@ -583,7 +586,7 @@ class ManualTransactionController extends Controller
     /** Превью-расчёт (без записи). Дублирует ключевые шаги CommissionCalculator. */
     private function computePreview(object $draft): array
     {
-        if (! $draft->amount || ! $draft->date || ! $draft->contract) {
+        if ($draft->amount === null || $draft->amount === '' || ! $draft->date || ! $draft->contract) {
             return ['ready' => false];
         }
 

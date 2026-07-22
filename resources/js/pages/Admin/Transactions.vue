@@ -1219,7 +1219,9 @@ async function fixAll() {
 }
 
 const cl = computed(() => ({
-  amounts: drafts.value.length > 0 && drafts.value.every(d => Number(d.amount) > 0),
+  // Сумма должна быть заполнена, но 0 и минус (сторно) допустимы.
+  amounts: drafts.value.length > 0 && drafts.value.every(
+    d => d.amount !== null && d.amount !== '' && d.amount !== undefined && Number.isFinite(Number(d.amount))),
   dates: drafts.value.length > 0 && drafts.value.every(d => !!d.date),
   calculated: drafts.value.length > 0 && drafts.value.every(d => d.preview?.ready),
 }));

@@ -18,50 +18,66 @@ class CopyMonthlyManagementCurrencyRates extends Command
 
     public function handle(): int
     {
-        $now = now();
-        $thisMonthStart = $now->copy()->startOfMonth()->toDateString();
-        $prevMonthStart = $now->copy()->subMonth()->startOfMonth()->toDateString();
-        $prevMonthEnd   = $now->copy()->subMonth()->endOfMonth()->toDateString();
+        $thisMonthStart = now()->startOfMonth();
 
-        $prev = DB::table('management_currency_rate')
-            ->whereBetween('date', [$prevMonthStart, $prevMonthEnd])
-            ->orderByDesc('date')
-            ->get();
-
-        if ($prev->isEmpty()) {
-            $this->warn('Нет курсов за прошлый месяц в management_currency_rate — копировать нечего');
+        // Идём от последнего известного месяца до текущего и добиваем ВСЕ
+        // пропуски, а не только «прошлый месяц». Иначе один пропущенный месяц
+        // (напр. справочник заведён в середине месяца) навсегда рвёт цепочку:
+        // следующий запуск не находит источник и печатает «копировать нечего».
+        $maxDate = DB::table('management_currency_rate')->max('date');
+        if (! $maxDate) {
+            $this->warn('management_currency_rate пуст — копировать нечего '
+                .'(заполните первый месяц вручную или через copy-from-main)');
             return self::SUCCESS;
         }
 
-        $latestPerCurrency = [];
-        foreach ($prev as $row) {
-            if (! isset($latestPerCurrency[$row->currency])) {
-                $latestPerCurrency[$row->currency] = $row;
-            }
-        }
-
-        $copied = 0;
+        $cursor  = \Carbon\Carbon::parse($maxDate)->startOfMonth();
+        $copied  = 0;
         $skipped = 0;
-        foreach ($latestPerCurrency as $currencyId => $row) {
-            $exists = DB::table('management_currency_rate')
-                ->where('currency', $currencyId)
-                ->whereDate('date', $thisMonthStart)
-                ->exists();
-            if ($exists) {
-                $skipped++;
-                continue;
+        $months  = 0;
+
+        while ($cursor->lt($thisMonthStart)) {
+            $srcStart = $cursor->copy();
+            $srcEnd   = $cursor->copy()->endOfMonth();
+            $target   = $cursor->copy()->addMonth()->toDateString();
+
+            $rows = DB::table('management_currency_rate')
+                ->whereBetween('date', [$srcStart->toDateString(), $srcEnd->toDateString()])
+                ->orderByDesc('date')
+                ->get();
+
+            $latestPerCurrency = [];
+            foreach ($rows as $row) {
+                if (! isset($latestPerCurrency[$row->currency])) {
+                    $latestPerCurrency[$row->currency] = $row;
+                }
             }
-            DB::table('management_currency_rate')->insert([
-                'currency'   => $currencyId,
-                'rate'       => $row->rate,
-                'date'       => $thisMonthStart,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
-            $copied++;
+
+            foreach ($latestPerCurrency as $currencyId => $row) {
+                $exists = DB::table('management_currency_rate')
+                    ->where('currency', $currencyId)
+                    ->whereDate('date', $target)
+                    ->exists();
+                if ($exists) {
+                    $skipped++;
+                    continue;
+                }
+                DB::table('management_currency_rate')->insert([
+                    'currency'   => $currencyId,
+                    'rate'       => $row->rate,
+                    'date'       => $target,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+                $copied++;
+            }
+
+            $months++;
+            $cursor->addMonth();
         }
 
-        $this->info("Management rates: скопировано {$copied}, пропущено (уже есть) {$skipped}");
+        $this->info("Management rates: месяцев обработано {$months}, "
+            ."скопировано {$copied}, пропущено (уже есть) {$skipped}");
         return self::SUCCESS;
     }
 }
