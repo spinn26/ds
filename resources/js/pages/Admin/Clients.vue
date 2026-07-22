@@ -299,7 +299,9 @@ import DialogShell from '../../components/DialogShell.vue';
 import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 import SmartRangeFilter from '../../components/SmartRangeFilter.vue';
 import ReassignmentPanel from '../../components/ReassignmentPanel.vue';
+import { useConfirm } from '../../composables/useConfirm';
 
+const confirm = useConfirm();
 const columnVisible = ref({});
 const visibleHeaders = computed(() => headers.filter(h => columnVisible.value[h.key] !== false));
 import { useSnackbar } from '../../composables/useSnackbar';
@@ -627,6 +629,30 @@ async function saveNewClient() {
     addOpen.value = false;
     await loadData();
   } catch (e) {
+    // Сервер блокирует создание клиента с уже существующим ФИО. Это может быть
+    // настоящий однофамилец — показываем найденные карточки и даём подтвердить.
+    if (e.response?.status === 422 && e.response?.data?.code === 'duplicate_client') {
+      const found = (e.response.data.existing || [])
+        .map(c => `#${c.id} — ${c.consultantName || 'без партнёра'}${c.phone ? ', ' + c.phone : ''}`)
+        .join('\n');
+      const ok = await confirm.ask({
+        title: 'Клиент с таким ФИО уже есть',
+        message: `Найдено:\n${found}\n\nЕсли это тот же человек — закройте окно и работайте с существующей карточкой. Создавать вторую стоит только для настоящего однофамильца.`,
+        confirmText: 'Всё равно создать', confirmColor: 'warning', icon: 'mdi-account-multiple',
+      });
+      if (ok) {
+        try {
+          await api.post('/admin/clients', { ...addForm.value, force: true });
+          showSuccess('Клиент создан');
+          addOpen.value = false;
+          await loadData();
+        } catch (e2) {
+          addError.value = e2.response?.data?.message || 'Ошибка сохранения';
+        }
+      }
+      addSaving.value = false;
+      return;
+    }
     addError.value = e.response?.data?.message || 'Ошибка сохранения';
   }
   addSaving.value = false;

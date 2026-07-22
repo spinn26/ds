@@ -985,6 +985,7 @@ const baseMenuItems = [
   { label: 'Менеджер контрактов', icon: 'mdi-file-document-edit', path: '/manage/contracts', adminSection: 'contracts' },
   { label: 'Загрузка контрактов', icon: 'mdi-upload', path: '/manage/contracts/upload', adminSection: 'upload' },
   { label: 'Дубли контрактов', icon: 'mdi-content-duplicate', path: '/manage/contracts/duplicates', adminSection: 'contracts' },
+  { label: 'Дубли клиентов', icon: 'mdi-account-multiple-remove', path: '/manage/clients/duplicates', adminSection: 'clients' },
   { label: 'Акцепт документов', icon: 'mdi-check-circle', path: '/manage/acceptance', adminSection: 'acceptance' },
   { label: 'Реквизиты', icon: 'mdi-credit-card', path: '/manage/requisites', adminSection: 'requisites' },
   { label: 'Смена реквизитов', icon: 'mdi-bank-transfer', path: '/manage/bank-changes', adminSection: 'bank-changes' },

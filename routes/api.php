@@ -500,6 +500,9 @@ Route::prefix('v1')->group(function () {
         Route::get('/admin/contracts', [\App\Http\Controllers\Api\AdminDataController::class, 'contracts']);
         Route::get('/admin/contracts/check-number', [\App\Http\Controllers\Api\AdminDataController::class, 'checkContractNumber']);
         // Дубли контрактов: поиск + инструменты (объединить / удалить).
+        Route::get('/admin/clients/duplicates', [\App\Http\Controllers\Api\AdminDataController::class, 'clientDuplicates']);
+        Route::post('/admin/clients/duplicates/merge', [\App\Http\Controllers\Api\AdminDataController::class, 'mergeClientDuplicates'])->middleware('permission:clients,full');
+        Route::post('/admin/clients/duplicates/ignore', [\App\Http\Controllers\Api\AdminDataController::class, 'ignoreClientDuplicates'])->middleware('permission:clients,edit');
         Route::get('/admin/contracts/duplicates', [\App\Http\Controllers\Api\AdminDataController::class, 'contractDuplicates']);
         Route::post('/admin/contracts/duplicates/merge', [\App\Http\Controllers\Api\AdminDataController::class, 'mergeContractDuplicates'])->middleware('permission:contracts,edit');
         Route::post('/admin/contracts/duplicates/delete', [\App\Http\Controllers\Api\AdminDataController::class, 'deleteContractDuplicates'])->middleware('permission:contracts,edit');

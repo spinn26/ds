@@ -1362,14 +1362,28 @@ class AdminDataController extends Controller
 
     /**
      * POST /admin/clients — создать клиента per spec ✅Клиенты §3.
-     * Двухшаг (антидубль) делается на фронте, эндпоинт принимает уже
-     * подтверждённую новую персону.
+     *
+     * Антидубль-подсказка есть на фронте, но она была только предупреждением —
+     * сервер создавал карточку в любом случае, отсюда часть дублей. Теперь
+     * совпадение по ФИО блокируется, а осознанное создание однофамильца
+     * требует явного `force` (фронт спрашивает подтверждение).
      */
     public function storeClient(Request $request): JsonResponse
     {
         $data = $request->validate(self::clientValidationRules(), self::clientValidationMessages());
 
         $personName = trim("{$data['lastName']} {$data['firstName']}" . (! empty($data['patronymic']) ? ' ' . $data['patronymic'] : ''));
+
+        if (! $request->boolean('force')) {
+            $existing = $this->findLiveClientsByName($personName);
+            if ($existing->isNotEmpty()) {
+                return response()->json([
+                    'message' => 'Клиент с таким ФИО уже есть. Откройте существующую карточку или подтвердите создание однофамильца.',
+                    'code' => 'duplicate_client',
+                    'existing' => $existing,
+                ], 422);
+            }
+        }
 
         $clientId = DB::transaction(function () use ($data, $personName) {
             // Клиент — это legacy person-запись (Directual). client.person →
@@ -3320,6 +3334,264 @@ class AdminDataController extends Controller
             'merged' => $liveMerge,
             'movedTransactions' => $movedTx,
         ]);
+    }
+
+    /**
+     * Все таблицы, ссылающиеся на client (FK), — при слиянии переносим ВСЕ.
+     * Список получен из information_schema, менять только вместе со схемой.
+     * Плюральные имена колонок (consultant.clients, exportLogClients.clients) —
+     * легаси, это обычные одиночные FK.
+     */
+    private const CLIENT_FK_MAP = [
+        'WebUser' => 'client',
+        'changeConsultantClientLog' => 'client',
+        'clientFamily' => 'client',
+        'clientGoal' => 'client',
+        'clientsCapital' => 'client',
+        'clientsIndicators' => 'client',
+        'consultant' => 'clients',
+        'contract' => 'client',
+        'dataPermutationTrigger' => 'client',
+        'exportLogClients' => 'clients',
+        'getInsmartOrderWebHookData' => 'client',
+        'indicatorsHistory' => 'client',
+        'meeting' => 'client',
+        'notification' => 'client',
+    ];
+
+    /**
+     * Живые клиенты с таким же ФИО. Нормализуем регистр и схлопываем двойные
+     * пробелы с обеих сторон — иначе «Масс Анна  Вячеславовна» и
+     * «Масс Анна Вячеславовна» считаются разными людьми (реальный случай).
+     */
+    private function findLiveClientsByName(string $personName)
+    {
+        $norm = mb_strtolower(trim(preg_replace('/\s+/u', ' ', $personName)));
+        if ($norm === '') {
+            return collect();
+        }
+
+        return DB::table('client as c')
+            ->leftJoin('consultant as cn', 'cn.id', '=', 'c.consultant')
+            ->whereNull('c.dateDeleted')
+            ->whereRaw("btrim(lower(regexp_replace(c.\"personName\", '\\s+', ' ', 'g'))) = ?", [$norm])
+            ->select(['c.id', 'c.personName', 'c.email', 'c.phone', 'cn.personName as consultantName'])
+            ->orderBy('c.id')
+            ->limit(10)
+            ->get();
+    }
+
+    /** Ключ группы дублей — отсортированные id через дефис. */
+    private function dupGroupKey(array $ids): string
+    {
+        $ids = array_values(array_unique(array_map('intval', $ids)));
+        sort($ids);
+        return implode('-', $ids);
+    }
+
+    /**
+     * Дубли клиентов: группы живых клиентов с совпадающим ФИО / email / телефоном.
+     *
+     * Уверенность считаем по данным, а не на глаз:
+     *  - общий person + совпадающие контакты → «слить»;
+     *  - вторая карточка заведена самим партнёром (consultant = клиент) → «на себя»;
+     *  - разные person без общих контактов → «проверить».
+     * Группы, помеченные оператором как «не дубли», не показываются.
+     */
+    public function clientDuplicates(Request $request): JsonResponse
+    {
+        $by = $request->input('by', 'name'); // name | email | phone
+        $expr = match ($by) {
+            'email' => "lower(btrim(c.email))",
+            'phone' => "regexp_replace(coalesce(c.phone,''), '[^0-9]', '', 'g')",
+            default => "lower(btrim(c.\"personName\"))",
+        };
+        // Пустые значения не группируем: иначе все безконтактные слипнутся в одну «группу».
+        $minLen = $by === 'phone' ? 10 : 3;
+
+        $rows = DB::table('client as c')
+            ->leftJoin('consultant as cn', 'cn.id', '=', 'c.consultant')
+            ->whereNull('c.dateDeleted')
+            ->whereRaw("length($expr) >= ?", [$minLen])
+            ->whereRaw("$expr IN (
+                SELECT $expr FROM client c
+                WHERE c.\"dateDeleted\" IS NULL AND length($expr) >= ?
+                GROUP BY 1 HAVING count(*) > 1
+            )", [$minLen])
+            ->selectRaw("$expr as grp")
+            ->addSelect([
+                'c.id', 'c.personName', 'c.person', 'c.email', 'c.phone',
+                'c.dateCreated', 'c.consultant',
+                'cn.personName as consultantName',
+            ])
+            ->orderByRaw("$expr, c.id")
+            ->get();
+
+        if ($rows->isEmpty()) {
+            return response()->json(['groups' => [], 'total' => 0]);
+        }
+
+        // Контракты одним батчем (иначе N+1 на сотне клиентов).
+        $counts = DB::table('contract')
+            ->whereIn('client', $rows->pluck('id'))
+            ->whereNull('deletedAt')
+            ->selectRaw('client, count(*) as n')
+            ->groupBy('client')
+            ->pluck('n', 'client');
+
+        $ignored = DB::table('client_duplicate_ignores')->pluck('group_key')->flip();
+
+        $groups = [];
+        foreach ($rows->groupBy('grp') as $items) {
+            $ids = $items->pluck('id')->map(fn ($i) => (int) $i)->all();
+            $key = $this->dupGroupKey($ids);
+            if ($ignored->has($key)) continue;
+
+            $clients = $items->map(fn ($r) => [
+                'id' => (int) $r->id,
+                'name' => $r->personName,
+                'person' => $r->person ? (int) $r->person : null,
+                'consultantName' => $r->consultantName,
+                'contracts' => (int) ($counts[$r->id] ?? 0),
+                'email' => $r->email,
+                'phone' => $r->phone,
+                'createdAt' => $r->dateCreated,
+                // Партнёр завёл карточку на самого себя.
+                'self' => $r->consultantName
+                    && mb_strtolower(trim($r->consultantName)) === mb_strtolower(trim((string) $r->personName)),
+            ])->values()->all();
+
+            $persons = array_values(array_unique(array_filter(array_column($clients, 'person'))));
+            $emails = array_values(array_filter(array_map(fn ($c) => mb_strtolower(trim((string) $c['email'])), $clients)));
+            $phones = array_values(array_filter(array_map(fn ($c) => preg_replace('/[^0-9]/', '', (string) $c['phone']), $clients)));
+            $sharedPerson = count($persons) === 1 && count($clients) > 1;
+            $sharedContact = (count($emails) > 1 && count(array_unique($emails)) === 1)
+                || (count($phones) > 1 && count(array_unique($phones)) === 1);
+
+            $confidence = 'check';
+            if ($sharedPerson && $sharedContact) $confidence = 'merge';
+            elseif ($sharedPerson) $confidence = 'merge';
+            elseif (array_filter(array_column($clients, 'self'))) $confidence = 'self';
+
+            // Кандидат «оставить» — больше всего контрактов, при равенстве самый старый.
+            usort($clients, fn ($a, $b) => [$b['contracts'], -$a['id']] <=> [$a['contracts'], -$b['id']]);
+            $suggested = $clients[0]['id'];
+
+            $groups[] = [
+                'key' => $key,
+                'name' => $items->first()->personName,
+                'confidence' => $confidence,
+                'sharedPerson' => $sharedPerson,
+                'sharedContact' => $sharedContact,
+                'suggestedKeep' => $suggested,
+                'clients' => $clients,
+            ];
+        }
+
+        // Сначала самые «дорогие» группы: где больше контрактов на кону.
+        usort($groups, fn ($a, $b) => array_sum(array_column($b['clients'], 'contracts'))
+            <=> array_sum(array_column($a['clients'], 'contracts')));
+
+        return response()->json(['groups' => $groups, 'total' => count($groups)]);
+    }
+
+    /**
+     * Слияние дублей клиентов: переносим ВСЕ FK-ссылки на канонического клиента
+     * и мягко удаляем остальные карточки. Контракты переезжают вместе со всем
+     * остальным, поэтому операция необратима в один клик — фронт спрашивает
+     * подтверждение и показывает, сколько контрактов переедет.
+     */
+    public function mergeClientDuplicates(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'canonical' => ['required', 'integer'],
+            'mergeIds' => ['required', 'array', 'min:1'],
+            'mergeIds.*' => ['integer'],
+        ]);
+
+        $canonicalId = (int) $data['canonical'];
+        $mergeIds = array_values(array_filter(
+            array_unique(array_map('intval', $data['mergeIds'])),
+            fn ($x) => $x !== $canonicalId
+        ));
+        if (! $mergeIds) {
+            return response()->json(['message' => 'Нечего объединять'], 422);
+        }
+
+        $canonical = DB::table('client')->where('id', $canonicalId)->whereNull('dateDeleted')->first();
+        if (! $canonical) {
+            return response()->json(['message' => 'Основной клиент не найден или удалён'], 422);
+        }
+        $live = DB::table('client')->whereIn('id', $mergeIds)->whereNull('dateDeleted')->pluck('id')
+            ->map(fn ($i) => (int) $i)->all();
+        if (! $live) {
+            return response()->json(['message' => 'Объединяемые клиенты не найдены'], 422);
+        }
+
+        $moved = DB::transaction(function () use ($canonicalId, $live, $canonical) {
+            $stats = [];
+            foreach (self::CLIENT_FK_MAP as $table => $column) {
+                // consultant.clients — денормализованная ссылка, её тоже чиним.
+                $n = DB::table($table)->whereIn($column, $live)->update([$column => $canonicalId]);
+                if ($n > 0) $stats[$table] = $n;
+            }
+
+            // Контакты: если у канонической карточки поле пустое — подтягиваем из дубля,
+            // чтобы слияние не теряло почту/телефон.
+            $donor = DB::table('client')->whereIn('id', $live)
+                ->where(function ($q) { $q->whereNotNull('email')->orWhereNotNull('phone'); })
+                ->orderBy('id')->first();
+            if ($donor) {
+                $patch = [];
+                foreach (['email', 'phone', 'birthDate', 'city', 'person'] as $f) {
+                    if (empty($canonical->$f) && ! empty($donor->$f)) $patch[$f] = $donor->$f;
+                }
+                if ($patch) DB::table('client')->where('id', $canonicalId)->update($patch);
+            }
+
+            DB::table('client')->whereIn('id', $live)->update(['dateDeleted' => now()]);
+
+            return $stats;
+        });
+
+        \App\Support\Audit::log('client_duplicates_merge', 'client', (string) $canonicalId, [
+            'merged' => $live,
+            'moved' => $moved,
+        ]);
+
+        $movedContracts = $moved['contract'] ?? 0;
+
+        return response()->json([
+            'message' => 'Объединено карточек: ' . count($live)
+                . ($movedContracts ? ', перенесено контрактов: ' . $movedContracts : ''),
+            'canonical' => $canonicalId,
+            'merged' => $live,
+            'moved' => $moved,
+        ]);
+    }
+
+    /** Пометить группу как «не дубли» — больше не показывать (однофамильцы). */
+    public function ignoreClientDuplicates(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'ids' => ['required', 'array', 'min:2'],
+            'ids.*' => ['integer'],
+            'reason' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $key = $this->dupGroupKey($data['ids']);
+        DB::table('client_duplicate_ignores')->updateOrInsert(
+            ['group_key' => $key],
+            [
+                'client_ids' => implode(',', $data['ids']),
+                'reason' => $data['reason'] ?? null,
+                'created_by' => $request->user()?->id,
+                'updated_at' => now(),
+                'created_at' => now(),
+            ]
+        );
+
+        return response()->json(['message' => 'Группа помечена как «не дубли»', 'key' => $key]);
     }
 
     /**

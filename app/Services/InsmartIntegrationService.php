@@ -253,8 +253,24 @@ class InsmartIntegrationService
             $personId = DB::table('person')->where('phone', $phone)->value('id');
         }
         if ($personId) {
-            $existingClient = DB::table('client')->where('person', $personId)->value('id');
+            // Только живая карточка: удалённая вернула бы «призрака», и контракт
+            // повис бы на soft-deleted клиенте.
+            $existingClient = DB::table('client')->where('person', $personId)
+                ->whereNull('dateDeleted')->value('id');
             if ($existingClient) return (int) $existingClient;
+        }
+
+        // Ни по email, ни по телефону не нашли — пробуем по ФИО, иначе интеграция
+        // молча плодит вторую карточку на того же человека (частая причина дублей).
+        $normFio = mb_strtolower(trim(preg_replace('/\s+/u', ' ', $fio)));
+        if ($normFio !== '' && $normFio !== 'insmart client') {
+            $byName = DB::table('client')
+                ->whereNull('dateDeleted')
+                ->whereRaw("btrim(lower(regexp_replace(\"personName\", '\\s+', ' ', 'g'))) = ?", [$normFio])
+                ->orderByRaw('CASE WHEN consultant = ? THEN 0 ELSE 1 END', [$consultantId]) // свой партнёр важнее
+                ->orderBy('id')
+                ->value('id');
+            if ($byName) return (int) $byName;
         }
 
         // Создаём новые person + client.
