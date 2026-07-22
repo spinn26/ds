@@ -804,6 +804,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/admin/instructions', [\App\Http\Controllers\Api\InstructionController::class, 'adminStore']);
         Route::put('/admin/instructions/{id}', [\App\Http\Controllers\Api\InstructionController::class, 'adminUpdate'])->whereNumber('id');
         Route::delete('/admin/instructions/{id}', [\App\Http\Controllers\Api\InstructionController::class, 'adminDestroy'])->whereNumber('id');
+        Route::post('/admin/instructions/upload', [\App\Http\Controllers\Api\InstructionController::class, 'adminUpload'])->middleware('throttle:60,1');
 
         // Анкеты партнёров (для куратора обучения и общего ознакомления)
         Route::get('/admin/partners/questionnaires', [\App\Http\Controllers\Api\AdminQuestionnaireController::class, 'index']);

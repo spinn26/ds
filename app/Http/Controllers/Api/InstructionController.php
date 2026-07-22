@@ -21,6 +21,7 @@ use Illuminate\Support\Str;
  *   POST /admin/instructions        — создать
  *   PUT  /admin/instructions/{id}   — обновить
  *   DELETE /admin/instructions/{id} — удалить
+ *   POST /admin/instructions/upload — загрузка фото/картинок/видео в тело
  */
 class InstructionController extends Controller
 {
@@ -177,5 +178,36 @@ class InstructionController extends Controller
     {
         DB::table('instructions')->where('id', $id)->delete();
         return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Загрузка медиа для тела инструкции: фото/картинки (вставляются в markdown
+     * редактором) и видео-файлы (кладутся в поле video_url).
+     *
+     * Диск `public` + Storage::url — тот же паттерн, что у education/design.
+     * SVG намеренно не допускаем (stored-XSS), как и в медиа-библиотеке.
+     */
+    public function adminUpload(Request $request): JsonResponse
+    {
+        $request->validate([
+            'file' => [
+                'required', 'file', 'max:51200', // 50 MB — видео не влезает в 10
+                'mimes:png,jpg,jpeg,webp,gif,mp4,webm,mov',
+            ],
+        ]);
+
+        $file = $request->file('file');
+        $ext  = strtolower($file->getClientOriginalExtension());
+        $name = Str::slug(pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME), '-');
+        $name = mb_substr($name ?: 'file', 0, 40).'-'.Str::random(6).'.'.$ext;
+
+        $path = $file->storeAs('instructions/'.now()->format('Y-m'), $name, 'public');
+
+        return response()->json([
+            'url'     => \Illuminate\Support\Facades\Storage::url($path),
+            'path'    => $path,
+            'name'    => $file->getClientOriginalName(),
+            'isVideo' => in_array($ext, ['mp4', 'webm', 'mov'], true),
+        ]);
     }
 }

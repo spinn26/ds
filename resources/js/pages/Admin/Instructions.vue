@@ -67,14 +67,26 @@
                 label="Порядок" variant="outlined" density="comfortable" />
             </v-col>
             <v-col cols="12">
-              <v-text-field v-model="form.video_url" label="Видео URL (YouTube/Vimeo, опционально)"
-                variant="outlined" density="comfortable" prepend-inner-icon="mdi-play-circle" />
+              <div class="d-flex ga-2 align-start">
+                <v-text-field v-model="form.video_url"
+                  label="Видео: ссылка YouTube/Vimeo или загруженный файл"
+                  variant="outlined" density="comfortable"
+                  prepend-inner-icon="mdi-play-circle" class="flex-grow-1" clearable />
+                <v-btn :loading="uploadingVideo" prepend-icon="mdi-upload" variant="tonal"
+                  class="mt-1" @click="pickVideo">Загрузить видео</v-btn>
+                <input ref="videoInput" type="file" hidden
+                  accept="video/mp4,video/webm,video/quicktime" @change="onVideoPicked">
+              </div>
             </v-col>
             <v-col cols="12">
-              <v-textarea v-model="form.body_md" label="Текст (markdown)"
-                variant="outlined" density="comfortable" rows="14"
-                hint="Используй ## и ### для заголовков (TOC сгенерится автоматически), - для списков"
-                persistent-hint />
+              <div class="text-caption text-medium-emphasis mb-1">
+                Текст (markdown). Заголовки ## и ### попадают в оглавление.
+                Картинки и фото можно перетащить прямо в редактор или вставить из буфера —
+                они загрузятся на сервер автоматически.
+              </div>
+              <MdEditor v-model="form.body_md" :theme="editorTheme"
+                language="en-US" :toolbars-exclude="['github', 'save']"
+                :on-upload-img="onUploadImg" style="height: 440px" />
             </v-col>
           </v-row>
         </v-card-text>
@@ -92,6 +104,9 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
+import { useTheme } from 'vuetify';
+import { MdEditor } from 'md-editor-v3';
+import 'md-editor-v3/lib/style.css';
 import api from '../../api';
 import PageHeader from '../../components/PageHeader.vue';
 import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
@@ -140,6 +155,50 @@ const canSave = computed(() => form.value.title && form.value.category && form.v
 
 const snack = ref({ open: false, color: 'success', text: '' });
 function notify(text, color = 'success') { snack.value = { open: true, color, text }; }
+
+// ─── Медиа: фото/картинки в теле + видео-файл ─────────────────
+const vTheme = useTheme();
+const editorTheme = computed(() => (vTheme.global.current.value.dark ? 'dark' : 'light'));
+const uploadingVideo = ref(false);
+const videoInput = ref(null);
+
+async function uploadFile(file) {
+  const fd = new FormData();
+  fd.append('file', file);
+  const { data } = await api.post('/admin/instructions/upload', fd, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return data;
+}
+
+// Хук md-editor-v3: грузим картинки на сервер и отдаём редактору их URL,
+// он сам вставит markdown-разметку ![](url).
+async function onUploadImg(files, callback) {
+  try {
+    const uploaded = await Promise.all(Array.from(files).map(f => uploadFile(f)));
+    callback(uploaded.map(u => u.url));
+  } catch (e) {
+    notify(e.response?.data?.message || 'Не удалось загрузить изображение', 'error');
+    callback([]);
+  }
+}
+
+function pickVideo() { videoInput.value?.click(); }
+
+async function onVideoPicked(e) {
+  const file = e.target.files?.[0];
+  e.target.value = '';
+  if (!file) return;
+  uploadingVideo.value = true;
+  try {
+    const r = await uploadFile(file);
+    form.value.video_url = r.url;
+    notify('Видео загружено');
+  } catch (err) {
+    notify(err.response?.data?.message || 'Не удалось загрузить видео', 'error');
+  }
+  uploadingVideo.value = false;
+}
 
 function audienceLabel(v) {
   return { partner: 'Партнёр', staff: 'Сотрудник', both: 'Все' }[v] || v;

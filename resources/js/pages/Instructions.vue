@@ -69,13 +69,17 @@
             </ul>
           </v-card>
 
-          <!-- Видео -->
+          <!-- Видео: загруженный файл или эмбед YouTube/Vimeo -->
           <div v-if="selectedInstruction.video_url" class="mb-4 video-wrapper">
-            <iframe :src="embedUrl(selectedInstruction.video_url)" allowfullscreen frameborder="0" />
+            <video v-if="isFileVideo(selectedInstruction.video_url)"
+              :src="selectedInstruction.video_url" controls playsinline />
+            <iframe v-else :src="embedUrl(selectedInstruction.video_url)" allowfullscreen frameborder="0" />
           </div>
 
-          <!-- Контент markdown → html -->
-          <div class="instruction-body" v-html="renderedHtml" />
+          <!-- Контент markdown: полноценный рендер (картинки, таблицы, ссылки, код) -->
+          <MdPreview class="instruction-body" :id="previewId"
+            :model-value="selectedInstruction.body_md || ''"
+            :theme="previewTheme" preview-theme="github" :md-heading-id="headingId" />
         </v-card-text>
 
         <v-btn icon="mdi-arrow-up" size="large" color="primary" class="back-to-top" @click="scrollToTop">
@@ -88,6 +92,9 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
+import { useTheme } from 'vuetify';
+import { MdPreview } from 'md-editor-v3';
+import 'md-editor-v3/lib/style.css';
 import api from '../api';
 import { useDebounce } from '../composables/useDebounce';
 import PageHeader from '../components/PageHeader.vue';
@@ -98,7 +105,29 @@ const categories = ref({});
 const activeCategory = ref(null);
 const readerOpen = ref(false);
 const selectedInstruction = ref(null);
-const toc = ref([]);
+
+const vTheme = useTheme();
+const previewTheme = computed(() => (vTheme.global.current.value.dark ? 'dark' : 'light'));
+const previewId = 'instruction-preview';
+
+// Якорь заголовка — одна функция и для оглавления, и для рендера. Иначе TOC
+// не находит элемент: на бэке Str::slug транслитерирует кириллицу, а тут нет.
+function headingId(text) { return slugify(String(text)); }
+
+// Оглавление считаем из markdown на фронте — так якоря гарантированно
+// совпадают с id, которые проставит MdPreview.
+const toc = computed(() => {
+  const md = selectedInstruction.value?.body_md || '';
+  const out = [];
+  for (const line of md.split(/\r?\n/)) {
+    const m = line.match(/^(#{2,3})\s+(.+?)\s*$/);
+    if (m) out.push({ level: m[1].length, title: m[2], anchor: slugify(m[2]) });
+  }
+  return out;
+});
+
+// Загруженный видео-файл показываем плеером, ссылку YouTube/Vimeo — эмбедом.
+function isFileVideo(u) { return /\.(mp4|webm|mov)(\?|$)/i.test(u || ''); }
 
 const { debounced: debouncedLoad } = useDebounce(loadList, 400);
 
@@ -118,48 +147,10 @@ async function openInstruction(item) {
   try {
     const { data } = await api.get('/instructions/' + item.slug);
     selectedInstruction.value = data.instruction;
-    toc.value = data.toc || [];
     readerOpen.value = true;
   } catch {}
 }
 
-// Простой markdown → html (без внешней либы): заголовки, списки, abzац, code.
-const renderedHtml = computed(() => {
-  if (!selectedInstruction.value?.body_md) return '<p class="text-medium-emphasis">Текст ещё не заполнен.</p>';
-  return mdToHtml(selectedInstruction.value.body_md);
-});
-
-function mdToHtml(md) {
-  const lines = md.split(/\r?\n/);
-  let html = '';
-  let inList = false;
-  for (const line of lines) {
-    const h2 = line.match(/^##\s+(.+?)\s*$/);
-    const h3 = line.match(/^###\s+(.+?)\s*$/);
-    const li = line.match(/^[-*]\s+(.+)$/);
-    if (h2) {
-      if (inList) { html += '</ul>'; inList = false; }
-      html += `<h2 id="${slugify(h2[1])}">${escape(h2[1])}</h2>`;
-    } else if (h3) {
-      if (inList) { html += '</ul>'; inList = false; }
-      html += `<h3 id="${slugify(h3[1])}">${escape(h3[1])}</h3>`;
-    } else if (li) {
-      if (!inList) { html += '<ul>'; inList = true; }
-      html += `<li>${escape(li[1])}</li>`;
-    } else if (line.trim() === '') {
-      if (inList) { html += '</ul>'; inList = false; }
-    } else {
-      if (inList) { html += '</ul>'; inList = false; }
-      html += `<p>${escape(line)}</p>`;
-    }
-  }
-  if (inList) html += '</ul>';
-  return html;
-}
-
-function escape(s) {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
 function slugify(s) {
   return s.toLowerCase().replace(/[^a-zа-яё0-9]+/gi, '-').replace(/^-|-$/g, '');
 }
@@ -188,10 +179,12 @@ onMounted(loadList);
   padding-bottom: 56.25%;
   height: 0;
 }
-.video-wrapper iframe {
+.video-wrapper iframe,
+.video-wrapper video {
   position: absolute;
   top: 0; left: 0;
   width: 100%; height: 100%;
+  background: #000;
 }
 .back-to-top {
   position: fixed;
@@ -201,6 +194,12 @@ onMounted(loadList);
 .instruction-body :deep(h3) { margin-top: 18px; margin-bottom: 8px; }
 .instruction-body :deep(p) { margin-bottom: 8px; }
 .instruction-body :deep(ul) { margin-bottom: 12px; padding-left: 24px; }
+/* MdPreview рисует свой фон/отступы — гасим, чтобы вписался в карточку. */
+.instruction-body { background: transparent !important; }
+.instruction-body :deep(.md-editor-preview-wrapper) { padding: 0; }
+/* Картинки и таблицы не должны ломать ширину читалки. */
+.instruction-body :deep(img) { max-width: 100%; height: auto; border-radius: 8px; }
+.instruction-body :deep(table) { display: block; overflow-x: auto; max-width: 100%; }
 .instructions-empty {
   border-radius: var(--ds-radius-xl, 16px);
   border: 1px solid var(--ds-outline-variant, rgba(0, 0, 0, 0.06));
