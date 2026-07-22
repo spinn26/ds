@@ -973,7 +973,7 @@ function draftLabelById(id) {
   const parts = [];
   if (d.number || d.contractNumber) parts.push(d.number || d.contractNumber);
   if (d.clientName) parts.push(d.clientName);
-  if (d.amount) parts.push(fmtAmt(d.amount));
+  if (hasAmount(d)) parts.push(fmtAmt(d.amount));
   return parts.length ? parts.join(' · ') : `Черновик #${id}`;
 }
 const selectedDraftIds = ref([]);
@@ -1151,14 +1151,19 @@ function targetDrafts() {
   }
   return drafts.value;
 }
+// Сумма считается заполненной, если она задана — 0 и минус (сторно) валидны.
+function hasAmount(d) {
+  return d.amount !== null && d.amount !== '' && d.amount !== undefined
+    && Number.isFinite(Number(d.amount));
+}
 const calculableIds = computed(() =>
-  targetDrafts().filter(d => d.amount && d.date).map(d => d.id)
+  targetDrafts().filter(d => hasAmount(d) && d.date).map(d => d.id)
 );
 const fixableIds = computed(() =>
-  targetDrafts().filter(d => d.amount && d.date && d.preview?.ready).map(d => d.id)
+  targetDrafts().filter(d => hasAmount(d) && d.date && d.preview?.ready).map(d => d.id)
 );
 const dirtyCount = computed(() =>
-  targetDrafts().filter(d => d.amount && d.date && !d.preview?.ready).length
+  targetDrafts().filter(d => hasAmount(d) && d.date && !d.preview?.ready).length
 );
 
 const calculating = ref(false);
@@ -1220,8 +1225,7 @@ async function fixAll() {
 
 const cl = computed(() => ({
   // Сумма должна быть заполнена, но 0 и минус (сторно) допустимы.
-  amounts: drafts.value.length > 0 && drafts.value.every(
-    d => d.amount !== null && d.amount !== '' && d.amount !== undefined && Number.isFinite(Number(d.amount))),
+  amounts: drafts.value.length > 0 && drafts.value.every(hasAmount),
   dates: drafts.value.length > 0 && drafts.value.every(d => !!d.date),
   calculated: drafts.value.length > 0 && drafts.value.every(d => d.preview?.ready),
 }));
