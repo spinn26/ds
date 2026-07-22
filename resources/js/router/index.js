@@ -126,6 +126,7 @@ const routes = [
             { path: 'partners', component: () => import('../pages/Admin/Partners.vue') },
             { path: 'partners/statuses', component: () => import('../pages/Admin/PartnerStatuses.vue') },
             { path: 'clients', component: () => import('../pages/Admin/Clients.vue') },
+            { path: 'clients/duplicates', component: () => import('../pages/Admin/ClientDuplicates.vue') },
             { path: 'hidden-clients', component: () => import('../pages/Admin/HiddenClients.vue') },
             { path: 'contracts', component: () => import('../pages/Admin/ContractManager.vue') },
             { path: 'contracts/duplicates', component: () => import('../pages/Admin/ContractDuplicates.vue') },
