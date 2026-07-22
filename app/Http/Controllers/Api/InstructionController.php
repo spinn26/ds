@@ -25,12 +25,22 @@ use Illuminate\Support\Str;
  */
 class InstructionController extends Controller
 {
-    /** Партнёрский каталог: только published + partner|both. */
+    /**
+     * Каталог для чтения. Партнёру — только partner|both; staff видит и
+     * сотруднические (надмножество прежнего поведения). Плюс таргетинг
+     * по ролям: пустой `roles` = всем, иначе нужна пересекающаяся роль.
+     */
     public function partnerList(Request $request): JsonResponse
     {
+        $user = $request->user();
+
         $q = DB::table('instructions')
             ->where('publish_status', 'published')
-            ->whereIn('audience', ['partner', 'both']);
+            ->whereIn('audience', $user?->isStaff()
+                ? ['partner', 'staff', 'both']
+                : ['partner', 'both']);
+
+        $this->applyRoleTargeting($q, $user);
 
         if ($request->filled('search')) {
             $term = '%' . $request->search . '%';
@@ -53,6 +63,26 @@ class InstructionController extends Controller
     }
 
     /**
+     * Таргетинг по ролям: пустой/NULL `roles` = видно всем, иначе роль
+     * читателя должна входить в список. Роли в WebUser.role лежат CSV,
+     * поэтому берём их через getRolesArray() (он же нормализует регистр).
+     *
+     * Матчим jsonb-оператором через whereJsonContains, а не подстрочным
+     * ilike — иначе `consultant` ложно совпал бы с `business_consultant`.
+     */
+    private function applyRoleTargeting($q, $user): void
+    {
+        $roles = $user ? $user->getRolesArray() : [];
+
+        $q->where(function ($w) use ($roles) {
+            $w->whereNull('roles')->orWhereRaw("roles = '[]'::jsonb");
+            foreach ($roles as $role) {
+                $w->orWhereJsonContains('roles', $role);
+            }
+        });
+    }
+
+    /**
      * Карточка инструкции. Партнёру видны только partner|both — иначе слug
      * (генерится из заголовка, т.е. подбирается) открывал бы ему бэк-офисные
      * инструкции: закрытие периодов, модерация реквизитов, реестры транзакций.
@@ -66,6 +96,7 @@ class InstructionController extends Controller
         if (! $request->user()?->isStaff()) {
             $q->whereIn('audience', ['partner', 'both']);
         }
+        $this->applyRoleTargeting($q, $request->user());
 
         $row = $q->first();
         if (! $row) return response()->json(['message' => 'Инструкция не найдена'], 404);
@@ -112,7 +143,13 @@ class InstructionController extends Controller
             $q->where('publish_status', $request->publish_status);
         }
 
-        $rows = $q->orderBy('category')->orderBy('order_index')->get();
+        $rows = $q->orderBy('category')->orderBy('order_index')->get()
+            ->map(function ($r) {
+                // jsonb приходит строкой (raw query) — отдаём фронту массивом.
+                $r->roles = $r->roles ? (json_decode($r->roles, true) ?: []) : [];
+                return $r;
+            });
+
         return response()->json(['data' => $rows]);
     }
 
@@ -122,6 +159,8 @@ class InstructionController extends Controller
             'title' => 'required|string|max:300',
             'category' => 'required|string|max:100',
             'audience' => 'required|in:partner,staff,both',
+            'roles' => 'nullable|array',
+            'roles.*' => 'string|max:50',
             'body_md' => 'nullable|string',
             'video_url' => 'nullable|string|max:500',
             'publish_status' => 'required|in:draft,published',
@@ -142,6 +181,8 @@ class InstructionController extends Controller
             'title' => $data['title'],
             'category' => $data['category'],
             'audience' => $data['audience'],
+            // Пустой список ролей храним как NULL = «видно всем».
+            'roles' => ! empty($data['roles']) ? json_encode(array_values($data['roles'])) : null,
             'body_md' => $data['body_md'] ?? null,
             'video_url' => $data['video_url'] ?? null,
             'publish_status' => $data['publish_status'],
@@ -163,11 +204,19 @@ class InstructionController extends Controller
             'title' => 'sometimes|string|max:300',
             'category' => 'sometimes|string|max:100',
             'audience' => 'sometimes|in:partner,staff,both',
+            'roles' => 'nullable|array',
+            'roles.*' => 'string|max:50',
             'body_md' => 'nullable|string',
             'video_url' => 'nullable|string|max:500',
             'publish_status' => 'sometimes|in:draft,published',
             'order_index' => 'nullable|integer',
         ]);
+
+        // Пустой список ролей = NULL («видно всем»). Ключ приходит всегда,
+        // поэтому обрабатываем и явную очистку.
+        if ($request->exists('roles')) {
+            $data['roles'] = ! empty($data['roles']) ? json_encode(array_values($data['roles'])) : null;
+        }
         $data['updated_at'] = now();
 
         DB::table('instructions')->where('id', $id)->update($data);
@@ -178,6 +227,28 @@ class InstructionController extends Controller
     {
         DB::table('instructions')->where('id', $id)->delete();
         return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Справочник ролей для таргетинга инструкций.
+     *
+     * Источник правды тот же, что у назначения ролей пользователю —
+     * `permission_groups` (создали группу на /manage/permissions → она сразу
+     * доступна здесь). Партнёрские роли структурные, в группах их нет.
+     *
+     * Отдельный эндпоинт нужен потому, что /admin/permissions/groups admin-only,
+     * а инструкции ведут и не-админы (permission instructions:edit).
+     */
+    public function adminRoles(): JsonResponse
+    {
+        $roles = DB::table('permission_groups')->orderBy('name')->get(['key', 'name'])
+            ->map(fn ($g) => ['value' => $g->key, 'title' => $g->name])
+            ->all();
+
+        $roles[] = ['value' => 'consultant', 'title' => 'Консультант (партнёр)'];
+        $roles[] = ['value' => 'registered', 'title' => 'Зарегистрирован-Партнёр'];
+
+        return response()->json(['roles' => $roles]);
     }
 
     /**

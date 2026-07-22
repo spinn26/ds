@@ -29,6 +29,14 @@
       <template #item.audience="{ value }">
         <v-chip size="x-small" variant="tonal">{{ audienceLabel(value) }}</v-chip>
       </template>
+      <template #item.roles="{ value }">
+        <span v-if="!value || !value.length" class="text-medium-emphasis text-caption">Всем</span>
+        <template v-else>
+          <v-chip v-for="r in value" :key="r" size="x-small" variant="tonal" color="primary" class="mr-1 mb-1">
+            {{ roleTitle(r) }}
+          </v-chip>
+        </template>
+      </template>
       <template #item.publish_status="{ value }">
         <v-chip size="x-small" :color="value === 'published' ? 'success' : 'grey'" variant="tonal">
           {{ value === 'published' ? 'Опубликовано' : 'Черновик' }}
@@ -65,6 +73,13 @@
             <v-col cols="12" sm="4">
               <v-text-field v-model.number="form.order_index" type="number"
                 label="Порядок" variant="outlined" density="comfortable" />
+            </v-col>
+            <v-col cols="12">
+              <v-select v-model="form.roles" :items="roleOptions" label="Роли"
+                multiple chips closable-chips variant="outlined" density="comfortable"
+                prepend-inner-icon="mdi-account-key"
+                hint="Пусто — видно всем в выбранной аудитории. Иначе только указанным ролям."
+                persistent-hint />
             </v-col>
             <v-col cols="12">
               <div class="d-flex ga-2 align-start">
@@ -138,6 +153,7 @@ const headers = [
   { title: 'Заголовок', key: 'title' },
   { title: 'Категория', key: 'category', width: 180 },
   { title: 'Аудитория', key: 'audience', width: 130 },
+  { title: 'Роли', key: 'roles', width: 220, sortable: false },
   { title: 'Статус', key: 'publish_status', width: 140 },
   { title: 'Порядок', key: 'order_index', width: 90, align: 'end' },
   { title: '', key: 'actions', sortable: false, width: 90 },
@@ -148,8 +164,21 @@ const visibleHeaders = computed(() =>
   headers.filter(h => columnVisible.value[h.key] !== false)
 );
 
-const blank = () => ({ title: '', category: '', audience: 'both', publish_status: 'draft', body_md: '', video_url: '', order_index: 0 });
+const blank = () => ({ title: '', category: '', audience: 'both', roles: [], publish_status: 'draft', body_md: '', video_url: '', order_index: 0 });
 const form = ref(blank());
+
+// Роли для таргетинга. Единый источник — permission_groups (как при
+// назначении роли пользователю), + структурные партнёрские роли.
+const roleOptions = ref([]);
+async function loadRoleOptions() {
+  try {
+    const { data } = await api.get('/admin/instructions/roles');
+    roleOptions.value = data.roles || [];
+  } catch { /* селект просто останется пустым — таргетинг необязателен */ }
+}
+function roleTitle(v) {
+  return roleOptions.value.find(r => r.value === v)?.title || v;
+}
 
 const canSave = computed(() => form.value.title && form.value.category && form.value.audience && form.value.publish_status);
 
@@ -223,7 +252,7 @@ function openCreate() {
 
 function openEdit(item) {
   editingId.value = item.id;
-  form.value = { ...item };
+  form.value = { ...item, roles: Array.isArray(item.roles) ? [...item.roles] : [] };
   editOpen.value = true;
 }
 
@@ -260,5 +289,5 @@ async function confirmDelete(item) {
   }
 }
 
-onMounted(loadData);
+onMounted(() => { loadData(); loadRoleOptions(); });
 </script>
