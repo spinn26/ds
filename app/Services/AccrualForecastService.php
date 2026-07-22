@@ -49,8 +49,12 @@ class AccrualForecastService
                     SELECT MIN(t.date)::date FROM "transaction" t
                     WHERE t.contract = c.id AND t."deletedAt" IS NULL
                 )
-                WHEN c.activated_at IS NOT NULL THEN (
-                    date_trunc('month', c.activated_at::timestamp)
+                WHEN COALESCE(c.activated_at, c."openDate") IS NOT NULL THEN (
+                    -- Якорь — дата активации. activated_at проставляют только форма
+                    -- создания и редактирования контракта, поэтому у загруженных
+                    -- пачкой он пуст, и прогноз не считался вообще (5112 контрактов
+                    -- на 22.07.2026). openDate — та же дата активации и заполнена.
+                    date_trunc('month', COALESCE(c.activated_at, c."openDate")::timestamp)
                     + (COALESCE(
                         (SELECT pc.accrual_forecast_months FROM products_catalog pc
                           WHERE pc.legacy_product_id = c.product LIMIT 1),
