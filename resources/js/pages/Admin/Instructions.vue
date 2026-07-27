@@ -84,7 +84,7 @@
             <v-col cols="12">
               <div class="d-flex ga-2 align-start">
                 <v-text-field v-model="form.video_url"
-                  label="Видео: ссылка YouTube/Vimeo или загруженный файл"
+                  label="Видео: ссылка (Kinescope / Rutube / YouTube / Vimeo / VK), embed-код или загруженный файл"
                   variant="outlined" density="comfortable"
                   prepend-inner-icon="mdi-play-circle" class="flex-grow-1" clearable />
                 <v-btn :loading="uploadingVideo" prepend-icon="mdi-upload" variant="tonal"
@@ -122,6 +122,7 @@ import { ref, computed, onMounted } from 'vue';
 import { useTheme } from 'vuetify';
 import { MdEditor } from 'md-editor-v3';
 import 'md-editor-v3/lib/style.css';
+import { normalizeVideoInput } from '../../utils/videoEmbed';
 import api from '../../api';
 import PageHeader from '../../components/PageHeader.vue';
 import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
@@ -258,6 +259,9 @@ function openEdit(item) {
 
 async function save() {
   saving.value = true;
+  // Хостинги дают «код для вставки» блоком <div><iframe src="..."></iframe></div>.
+  // Оператору естественно вставить его целиком — вытаскиваем адрес сами.
+  form.value.video_url = normalizeVideoInput(form.value.video_url);
   try {
     if (editingId.value) {
       await api.put('/admin/instructions/' + editingId.value, form.value);

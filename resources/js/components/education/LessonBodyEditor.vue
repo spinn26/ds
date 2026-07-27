@@ -149,8 +149,8 @@
         />
         <v-text-field
           v-model="block.value"
-          label="URL видео (Rutube / YouTube / Vimeo)"
-          placeholder="https://rutube.ru/video/..."
+          label="URL видео (Kinescope / Rutube / YouTube / Vimeo / VK) или embed-код"
+          placeholder="https://kinescope.io/... либо вставьте код <iframe …>"
           variant="outlined" density="comfortable" hide-details
         />
       </template>
