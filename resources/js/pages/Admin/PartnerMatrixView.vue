@@ -23,6 +23,7 @@
               </v-icon>
             </template>
             <v-list-item-title>{{ m.label }}</v-list-item-title>
+            <v-list-item-subtitle class="pm-metric-hint">{{ m.hint }}</v-list-item-subtitle>
           </v-list-item>
         </v-list>
       </v-menu>
@@ -93,15 +94,27 @@
             <tr>
               <template v-for="mo in displayMonths" :key="`h-${mo}`">
                 <th v-for="(m, mi) in activeMetrics" :key="`h-${mo}-${m.key}`" class="text-end pm-sub-th"
+                  :title="`${m.label} — ${m.hint}`"
                   :class="{ 'pm-sep': mi === activeMetrics.length - 1 }">{{ m.short }}</th>
               </template>
-              <th v-for="m in activeMetrics" :key="`ht-${m.key}`" class="text-end pm-sub-th pm-total-th">{{ m.short }}</th>
+              <th v-for="m in activeMetrics" :key="`ht-${m.key}`" class="text-end pm-sub-th pm-total-th"
+                :title="`${m.label} — ${m.hint}`">{{ m.short }}</th>
             </tr>
           </thead>
           <thead v-else>
             <tr>
               <th class="pm-name-col">Иерархия (Команда ▸ ФК ▸ Продукт)</th>
-              <th v-for="m in activeMetrics" :key="m.key" class="text-end">{{ m.short }}</th>
+              <th v-for="m in activeMetrics" :key="m.key" class="text-end">
+                <span class="pm-th-lbl">
+                  {{ m.short }}
+                  <v-tooltip location="top" max-width="320" open-delay="100">
+                    <template #activator="{ props }">
+                      <v-icon v-bind="props" size="13" class="pm-th-i">mdi-information-outline</v-icon>
+                    </template>
+                    <span>{{ m.hint }}</span>
+                  </v-tooltip>
+                </span>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -239,14 +252,24 @@ const reportMode = ref('fact');
 
 // ─── Метрики ───
 const allMetrics = [
-  { key: 'volume', short: 'Объём', label: 'Объём (₽)', fmt: 'rub' },
-  { key: 'count', short: 'Кол-во', label: 'Кол-во (шт)', fmt: 'int' },
-  { key: 'avgCheck', short: 'Ср.чек', label: 'Средний чек (₽)', fmt: 'rub' },
-  { key: 'revenue', short: 'Выручка', label: 'Выручка (₽)', fmt: 'rub' },
-  { key: 'bally', short: 'Баллы', label: 'Баллы', fmt: 'num' },
-  { key: 'ballyLP', short: 'Баллы ЛП (комиссия)', label: 'Баллы ЛП (комиссия)', fmt: 'num' },
-  { key: 'fcCount', short: 'ФК', label: 'Кол-во ФК', fmt: 'int' },
-  { key: 'clientCount', short: 'Клиенты', label: 'Кол-во клиентов', fmt: 'int' },
+  { key: 'volume', short: 'Объём', label: 'Объём (₽)', fmt: 'rub',
+    hint: 'Сумма контрактов (в работе / активировано) или транзакций (факт) в рублях по курсу.' },
+  { key: 'count', short: 'Кол-во', label: 'Кол-во (шт)', fmt: 'int',
+    hint: 'Количество контрактов / транзакций, шт.' },
+  { key: 'avgCheck', short: 'Ср.чек', label: 'Средний чек (₽)', fmt: 'rub',
+    hint: 'Средний чек = Объём ÷ Кол-во.' },
+  { key: 'revenue', short: 'Выручка', label: 'Выручка (₽)', fmt: 'rub',
+    hint: 'Доход ДС. «В работе» / «Активировано» — прогноз: сумма без НДС × %ДС. «Факт» — из транзакций. '
+        + 'Под значением: КМ — доля выручки ФК в его команде; КЛ — доля выручки ФК во всей компании.' },
+  { key: 'bally', short: 'Баллы', label: 'Баллы', fmt: 'num',
+    hint: 'Мотивационные баллы = Выручка ÷ 100.' },
+  { key: 'ballyLP', short: 'Баллы ЛП (комиссия)', label: 'Баллы ЛП (комиссия)', fmt: 'num',
+    hint: 'Баллы в зачёт личной квалификации ФК = Баллы × %уровня ФК. '
+        + 'На уровне команды — сумма ЛП её ФК. Если месяц не закрыт, берётся последний известный уровень.' },
+  { key: 'fcCount', short: 'ФК', label: 'Кол-во ФК', fmt: 'int',
+    hint: 'Число уникальных ФК с продажами. На строке ФК/продукта = 1, на команде — количество разных ФК.' },
+  { key: 'clientCount', short: 'Клиенты', label: 'Кол-во клиентов', fmt: 'int',
+    hint: 'Число уникальных клиентов.' },
   // % выручки от команды/компании показываем НЕ отдельными колонками, а
   // подписью под значением «Выручка» (как в макете) — см. revenueSub().
 ];
@@ -418,7 +441,13 @@ onMounted(() => { loadLookups(); loadSuppliers(); loadData(); });
 .pm-name-col { min-width: 320px; }
 .pm-grid td { padding: 7px 12px; border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.05); font-size: 13px; }
 .pm-num { font-variant-numeric: tabular-nums; white-space: nowrap; }
-.pm-sub { font-size: 10.5px; color: rgba(var(--v-theme-on-surface), 0.55); line-height: 1.1; margin-top: 1px; }
+.pm-sub { font-size: 10.5px; color: rgba(var(--v-theme-on-surface), 0.55); line-height: 1.1; margin-top: 1px;
+  cursor: help; border-bottom: 1px dotted rgba(var(--v-theme-on-surface), 0.35); display: inline-block; }
+.pm-th-lbl { display: inline-flex; align-items: center; gap: 3px; }
+.pm-th-i { color: rgba(var(--v-theme-on-surface), 0.4); cursor: help; }
+.pm-th-i:hover { color: rgb(var(--v-theme-primary)); }
+.pm-sub-th[title] { cursor: help; }
+.pm-metric-hint { font-size: 11px; white-space: normal; max-width: 340px; line-height: 1.25; }
 .pm-row.pm-l1 { cursor: pointer; background: rgba(var(--v-theme-primary), 0.06); }
 .pm-row.pm-l1:hover { background: rgba(var(--v-theme-primary), 0.1); }
 .pm-row.pm-l2 { cursor: pointer; }
