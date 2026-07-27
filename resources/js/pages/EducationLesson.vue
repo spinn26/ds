@@ -134,7 +134,7 @@
                   <iframe
                     :src="toEmbed(v.url)"
                     frameborder="0"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    :allow="VIDEO_IFRAME_ALLOW"
                     allowfullscreen
                   />
                 </div>
@@ -276,6 +276,7 @@ import { useRoute, useRouter } from 'vue-router';
 import api from '../api';
 import CourseTreeNode from '../components/education/CourseTreeNode.vue';
 import LessonBlockRenderer from '../components/education/LessonBlockRenderer.vue';
+import { toEmbedUrl, VIDEO_IFRAME_ALLOW } from '../utils/videoEmbed';
 import { useEducationStore } from '../stores/education';
 
 const edu = useEducationStore();
@@ -529,35 +530,11 @@ async function markViewed() {
   } finally { marking.value = false; }
 }
 
-function toEmbed(url) {
-  if (!url) return null;
-  try {
-    const u = new URL(url);
-    const host = u.hostname.replace(/^www\./, '');
-    if (host === 'rutube.ru') {
-      if (u.pathname.startsWith('/play/embed/')) return url;
-      const m = u.pathname.match(/\/video\/(?:private\/)?([a-f0-9]+)/i);
-      if (m) {
-        const p = u.searchParams.get('p');
-        return `https://rutube.ru/play/embed/${m[1]}` + (p ? `?p=${encodeURIComponent(p)}` : '');
-      }
-    }
-    if (host === 'youtube.com' || host === 'm.youtube.com') {
-      const v = u.searchParams.get('v');
-      if (v) return `https://www.youtube.com/embed/${v}`;
-      if (u.pathname.startsWith('/embed/')) return url;
-    }
-    if (host === 'youtu.be') {
-      const id = u.pathname.slice(1).split('/')[0];
-      if (id) return `https://www.youtube.com/embed/${id}`;
-    }
-    if (host === 'vimeo.com') {
-      const id = u.pathname.slice(1).split('/')[0];
-      if (/^\d+$/.test(id)) return `https://player.vimeo.com/video/${id}`;
-    }
-  } catch {}
-  return null;
-}
+// Общий резолвер (utils/videoEmbed.js): Kinescope, Rutube, YouTube, Vimeo,
+// VK Video + разбор вставленного embed-кода. Раньше здесь жила локальная
+// копия без Kinescope/VK и со старым regex [a-f0-9]+ — ссылка Kinescope
+// проваливалась в fallback «Открыть видео».
+const toEmbed = toEmbedUrl;
 
 function docIcon(url) {
   const u = (url || '').toLowerCase();
