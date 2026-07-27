@@ -2095,6 +2095,9 @@ class ProductSalesMatrixController extends Controller
             'forecast' => [$actQ],
             'fact'     => [$factQ],
             'total'    => [$inworkQ, $actQ, $factQ],
+            // Недостижимо: mode валидирован in:inwork,forecast,fact,total выше.
+            // Ветка нужна PHPStan — validate() возвращает mixed.
+            default    => abort(422, 'Некорректный режим'),
         };
 
         $byId = [];
