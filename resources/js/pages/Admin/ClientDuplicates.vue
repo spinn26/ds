@@ -64,7 +64,8 @@
                 </v-radio-group>
               </td>
               <td>
-                <a class="text-primary" :href="`/manage/clients?id=${c.id}`" target="_blank">#{{ c.id }}</a>
+                <a class="text-primary" :href="`/manage/clients?id=${c.id}`" target="_blank">{{ c.name || ('#' + c.id) }}</a>
+                <span class="text-caption text-medium-emphasis ml-1">#{{ c.id }}</span>
                 <v-chip v-if="c.self" size="x-small" variant="tonal" color="success" class="ml-2">на себя</v-chip>
               </td>
               <td class="text-end tnum">{{ c.contracts }}</td>
