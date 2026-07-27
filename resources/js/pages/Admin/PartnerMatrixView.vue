@@ -111,6 +111,7 @@
                 <tr class="pm-row pm-l1" @click="toggleStruct(s.structureId)">
                   <td class="pm-name">
                     <v-icon size="16">{{ expandedStructs.has(s.structureId) ? 'mdi-menu-down' : 'mdi-menu-right' }}</v-icon>
+                    <span class="pm-team-tag">Команда</span>
                     <strong>{{ s.structureName }}</strong>
                   </td>
                   <template v-for="mo in displayMonths" v-if="showMonths" :key="`sm-${s.structureId}-${mo}`">
@@ -424,6 +425,19 @@ onMounted(() => { loadLookups(); loadSuppliers(); loadData(); });
 .pm-row.pm-l2:hover { background: rgba(var(--v-theme-on-surface), 0.03); }
 .pm-prod, .pm-prod-num { color: rgba(var(--v-theme-on-surface), 0.65); font-style: italic; }
 .pm-name { display: flex; align-items: center; gap: 4px; }
+/* Тег «Команда» перед именем структуры — отличает агрегат команды от строки
+   самого ФК (у главы совпадает ФИО). */
+.pm-team-tag {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: rgba(var(--v-theme-primary), 0.16);
+  color: rgb(var(--v-theme-primary));
+  flex-shrink: 0;
+}
 .pm-l3 .pm-name { display: block; }
 .pm-total { background: rgba(var(--v-theme-on-surface), 0.04); border-top: 2px solid rgba(var(--v-theme-on-surface), 0.12); }
 .pm-total td { border-bottom: none; }
