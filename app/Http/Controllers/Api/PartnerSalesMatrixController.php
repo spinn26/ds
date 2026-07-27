@@ -43,7 +43,9 @@ class PartnerSalesMatrixController extends Controller
     {
         $params = $this->validateParams($request);
         $months = $this->monthRange($params['from'], $params['to']);
-        return response()->json($this->assemblePartnerTree($this->contractRows($params, 'inwork'), $months, $params));
+        $rows = $this->contractRows($params, 'inwork');
+        $this->injectContractForecast($rows, $params, 'inwork');
+        return response()->json($this->assemblePartnerTree($rows, $months, $params));
     }
 
     /** GET /admin/reports/partner-matrix/forecast — «Активировано»: контракты статус 2/3 по activation_forecast. */
@@ -51,7 +53,9 @@ class PartnerSalesMatrixController extends Controller
     {
         $params = $this->validateParams($request);
         $months = $this->monthRange($params['from'], $params['to']);
-        return response()->json($this->assemblePartnerTree($this->contractRows($params, 'forecast'), $months, $params));
+        $rows = $this->contractRows($params, 'forecast');
+        $this->injectContractForecast($rows, $params, 'forecast');
+        return response()->json($this->assemblePartnerTree($rows, $months, $params));
     }
 
     /** GET /admin/reports/partner-matrix/total — «Итого»: сумма трёх разрезов. */
@@ -62,9 +66,11 @@ class PartnerSalesMatrixController extends Controller
         // Конкатенация плоских строк трёх состояний — assemblePartnerTree суммирует
         // их по (структура, ФК, продукт, месяц). ФК-distinct сохраняется (fcSet),
         // клиенты/кол-во суммируются между разрезами (как в продуктовом «Итого»).
-        $rows = collect($this->factRows($params))
-            ->concat($this->contractRows($params, 'inwork'))
-            ->concat($this->contractRows($params, 'forecast'));
+        $inwork = $this->contractRows($params, 'inwork');
+        $this->injectContractForecast($inwork, $params, 'inwork');
+        $forecast = $this->contractRows($params, 'forecast');
+        $this->injectContractForecast($forecast, $params, 'forecast');
+        $rows = collect($this->factRows($params))->concat($inwork)->concat($forecast);
         return response()->json($this->assemblePartnerTree($rows, $months, $params));
     }
 
@@ -166,6 +172,91 @@ class PartnerSalesMatrixController extends Controller
             ])
             ->groupBy('co.consultant', 'cons.personName', 'p.id', 'p.name', $periodTrunc)
             ->get();
+    }
+
+    /**
+     * Прогнозные выручка и баллы для «В работе»/«Активировано» — транзакций
+     * ещё нет, поэтому считаем из контракта (та же формула, что в продуктовой
+     * матрице injectInWorkPoints): выручка ДС = amountNoVat × %ДС / 100,
+     * баллы = выручка / 100. %ДС: program.dsPercent → тарифная сетка
+     * (resolveLegacyDsCommission) → дефолт. Проставляем revenue/bally прямо в
+     * строки (по fc_id + product_id + period_month).
+     */
+    private function injectContractForecast($rows, array $params, string $mode): void
+    {
+        if ($rows->isEmpty()) return;
+
+        $dateCol  = $mode === 'inwork' ? 'createDate' : 'activation_forecast';
+        $statusFn = $mode === 'inwork'
+            ? fn ($q) => $q->whereNotIn('co.status', [1, 6, 8, 10])
+            : fn ($q) => $q->whereIn('co.status', [2, 3]);
+        [$from, $to] = [$params['from'], $params['to']];
+        $toExclusive = $this->monthExclusiveStart($to);
+
+        $vatPercent = (float) (DB::table('vat')
+            ->where('dateFrom', '<=', now())->where('dateTo', '>=', now())
+            ->value('value') ?? 0);
+        $defaultDs = (float) \App\Models\SystemSetting::value('commission.default_ds_percent', 100);
+
+        $contracts = DB::table('contract as co')
+            ->join('program as pg', 'pg.id', '=', 'co.program')
+            ->whereNull('co.deletedAt')
+            ->whereRaw("co.\"$dateCol\" IS NOT NULL")
+            ->whereRaw("co.\"$dateCol\"::date >= ?", [$from . '-01'])
+            ->whereRaw("co.\"$dateCol\"::date < ?", [$toExclusive])
+            ->where($statusFn)
+            ->when(! empty($params['suppliers']), fn ($q) =>
+                $q->whereIn(DB::raw('COALESCE(pg."providerName", \'—\')'), $params['suppliers']))
+            ->when(! empty($params['products']), fn ($q) =>
+                $q->whereIn('co.product', $params['products']))
+            ->when(! empty($params['structures']), fn ($q) =>
+                $q->whereIn('co.consultant', $this->subtreeIds($params['structures'])))
+            ->when(! empty($params['fcs']), fn ($q) =>
+                $q->whereIn('co.consultant', $params['fcs']))
+            ->select([
+                'co.consultant as fc_id',
+                'co.product as product_id',
+                'co.program as program_id',
+                DB::raw("TO_CHAR(DATE_TRUNC('month', co.\"$dateCol\"::date), 'YYYY-MM') as period_month"),
+                DB::raw("co.\"$dateCol\"::date as cdate"),
+                'co.ammount',
+                'co.term',
+                'pg.dsPercent as program_ds',
+                DB::raw($this->rateExpr($dateCol) . ' as rate'),
+            ])
+            ->get();
+
+        $dsCache = [];
+        $agg = []; // [fcId][productId][month] => ['revenue'=>, 'points'=>]
+        foreach ($contracts as $r) {
+            $amountRub   = (float) $r->ammount * (float) $r->rate;
+            $amountNoVat = $vatPercent > 0 ? $amountRub / (1 + $vatPercent / 100) : $amountRub;
+
+            $ds = $r->program_ds !== null ? (float) $r->program_ds : 0.0;
+            if ($ds <= 0) {
+                $key = $r->program_id . '|' . $r->term . '|' . $r->cdate;
+                if (! array_key_exists($key, $dsCache)) {
+                    $dsCache[$key] = \App\Services\CommissionCalculator::resolveLegacyDsCommission(
+                        (int) $r->program_id, $r->term, null, (string) $r->cdate
+                    );
+                }
+                $ds = (float) ($dsCache[$key] ?? 0);
+            }
+            if ($ds <= 0) $ds = $defaultDs;
+
+            $rev = $amountNoVat * $ds / 100;
+            $fcId = (int) $r->fc_id; $pid = (int) $r->product_id; $mo = $r->period_month;
+            $agg[$fcId][$pid][$mo]['revenue'] = ($agg[$fcId][$pid][$mo]['revenue'] ?? 0) + $rev;
+            $agg[$fcId][$pid][$mo]['points']  = ($agg[$fcId][$pid][$mo]['points'] ?? 0) + $rev / 100;
+        }
+
+        foreach ($rows as $r) {
+            $f = $agg[(int) $r->fc_id][(int) $r->product_id][$r->period_month] ?? null;
+            if ($f) {
+                $r->revenue = round($f['revenue'], 2);
+                $r->bally   = round($f['points'], 2);
+            }
+        }
     }
 
     /** Корреляционное курсовое выражение (как в продуктовом отчёте). */
