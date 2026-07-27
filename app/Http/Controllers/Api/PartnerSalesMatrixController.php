@@ -90,6 +90,8 @@ class PartnerSalesMatrixController extends Controller
                 $q->whereIn(DB::raw('COALESCE(pg."providerName", \'—\')'), $params['suppliers']))
             ->when(! empty($params['products']), fn ($q) =>
                 $q->whereIn('co.product', $params['products']))
+            ->when(! empty($params['structures']), fn ($q) =>
+                $q->whereIn('co.consultant', $this->subtreeIds($params['structures'])))
             ->when(! empty($params['fcs']), fn ($q) =>
                 $q->whereIn('co.consultant', $params['fcs']))
             ->select([
@@ -145,6 +147,8 @@ class PartnerSalesMatrixController extends Controller
                 $q->whereIn(DB::raw('COALESCE(pg."providerName", \'—\')'), $params['suppliers']))
             ->when(! empty($params['products']), fn ($q) =>
                 $q->whereIn('co.product', $params['products']))
+            ->when(! empty($params['structures']), fn ($q) =>
+                $q->whereIn('co.consultant', $this->subtreeIds($params['structures'])))
             ->when(! empty($params['fcs']), fn ($q) =>
                 $q->whereIn('co.consultant', $params['fcs']))
             ->select([
@@ -189,12 +193,15 @@ class PartnerSalesMatrixController extends Controller
      */
     public function lookups(Request $request): JsonResponse
     {
-        $structures = DB::table('consultant')
-            ->whereNull('dateDeleted')
-            ->where(fn ($q) => $q->whereNull('inviter')->orWhere('inviter', 0))
-            ->where('activity', '!=', 3) // не терминированные
-            ->orderBy('personName')
-            ->get(['id', 'personName as name']);
+        // «Структура» = любой ФК, у которого есть хотя бы один нижестоящий (не
+        // только корни сети). Так можно выбрать структуру из середины дерева.
+        $structures = DB::table('consultant as c')
+            ->whereNull('c.dateDeleted')
+            ->where('c.activity', '!=', 3) // не терминированные
+            ->whereExists(fn ($q) => $q->select(DB::raw(1))->from('consultant as ch')
+                ->whereColumn('ch.inviter', 'c.id')->whereNull('ch.dateDeleted'))
+            ->orderBy('c.personName')
+            ->get(['c.id', 'c.personName as name']);
 
         $structureIds = array_filter(array_map('intval', (array) $request->input('structures', [])));
 
@@ -261,6 +268,77 @@ class PartnerSalesMatrixController extends Controller
     }
 
     /**
+     * Все ФК поддерева выбранных структур: сами структуры + все нижестоящие
+     * (рекурсивно вниз по inviter). Пусто → пустой список.
+     *
+     * @param  array<int>  $structureIds
+     * @return array<int>
+     */
+    private function subtreeIds(array $structureIds): array
+    {
+        $ids = array_filter(array_map('intval', $structureIds));
+        if (empty($ids)) return [];
+        $list = implode(',', array_unique($ids));
+
+        $rows = DB::select("
+            WITH RECURSIVE tree AS (
+                SELECT id FROM consultant WHERE id IN ($list) AND \"dateDeleted\" IS NULL
+                UNION ALL
+                SELECT c.id FROM consultant c JOIN tree ON c.inviter = tree.id
+                WHERE c.\"dateDeleted\" IS NULL
+            )
+            SELECT id FROM tree
+        ");
+        return array_map(fn ($r) => (int) $r->id, $rows);
+    }
+
+    /**
+     * Карта fcId => ['rootId', 'rootName'] — под какую СТРУКТУРУ отнести ФК.
+     *  - структуры выбраны: ближайший выбранный предок-или-сам (глава структуры
+     *    входит в неё уровнем 0). ФК вне выбранных структур в карте отсутствует
+     *    (значит, отфильтрован);
+     *  - не выбраны: корень сети (structureRootMap) — прежнее поведение.
+     *
+     * @param  array<int>  $fcIds
+     * @param  array<int>|null  $selected
+     * @return array<int, array{rootId:int, rootName:?string}>
+     */
+    private function structureAssignMap(array $fcIds, ?array $selected): array
+    {
+        if (empty($fcIds)) return [];
+        if (empty($selected)) {
+            return $this->structureRootMap($fcIds);
+        }
+        $ids = implode(',', array_map('intval', array_unique($fcIds)));
+        $sel = implode(',', array_map('intval', array_unique($selected)));
+
+        $rows = DB::select("
+            WITH RECURSIVE chain AS (
+                SELECT id AS node, id AS cur, inviter, 0 AS depth
+                FROM consultant WHERE id IN ($ids)
+                UNION ALL
+                SELECT ch.node, c.id, c.inviter, ch.depth + 1
+                FROM chain ch JOIN consultant c ON c.id = ch.inviter
+                WHERE ch.inviter IS NOT NULL AND ch.inviter <> 0 AND ch.depth < 50
+            )
+            SELECT DISTINCT ON (ch.node) ch.node AS consultant_id, ch.cur AS root_id,
+                   c.\"personName\" AS root_name
+            FROM chain ch JOIN consultant c ON c.id = ch.cur
+            WHERE ch.cur IN ($sel)
+            ORDER BY ch.node, ch.depth ASC
+        ");
+
+        $map = [];
+        foreach ($rows as $r) {
+            $map[(int) $r->consultant_id] = [
+                'rootId' => (int) $r->root_id,
+                'rootName' => $r->root_name,
+            ];
+        }
+        return $map;
+    }
+
+    /**
      * Карта consultant_id => ['rootId'=>, 'rootName'=>] (корень структуры) для
      * заданных ФК — рекурсивным подъёмом по inviter.
      *
@@ -313,21 +391,22 @@ class PartnerSalesMatrixController extends Controller
     private function assemblePartnerTree($rows, array $months, array $params): array
     {
         $fcIds = collect($rows)->pluck('fc_id')->unique()->map(fn ($x) => (int) $x)->all();
-        $rootMap = $this->structureRootMap($fcIds);
 
-        // Фильтр по структуре — оставляем только ФК выбранных корней.
-        $structFilter = ! empty($params['structures'])
-            ? array_map('intval', $params['structures'])
-            : null;
+        // Структуры выбраны → группируем ФК под ближайшую выбранную структуру
+        // (глава входит уровнем 0). Не выбраны → под корень сети.
+        $selected = ! empty($params['structures']) ? array_map('intval', $params['structures']) : null;
+        $rootMap = $this->structureAssignMap($fcIds, $selected);
 
         $structures = []; // rootId => node
         $grand = $this->emptyAgg();
 
         foreach ($rows as $r) {
             $fcId = (int) $r->fc_id;
-            $root = $rootMap[$fcId] ?? ['rootId' => $fcId, 'rootName' => $r->fc_name];
+            // Структуры выбраны, а ФК не входит ни в одну → отбрасываем.
+            // Без выбора structureAssignMap всегда возвращает запись (корень/сам).
+            $root = $rootMap[$fcId] ?? ($selected !== null ? null : ['rootId' => $fcId, 'rootName' => $r->fc_name]);
+            if ($root === null) continue;
             $rid = $root['rootId'];
-            if ($structFilter !== null && ! in_array($rid, $structFilter, true)) continue;
 
             $pid = (int) $r->product_id;
             $mo  = $r->period_month;
