@@ -449,7 +449,7 @@
                   </td>
                   <template v-for="mo in displayMonths" :key="`p${prod.productId}-${mo}`">
                     <td v-for="(m, mi) in activeMetrics" :key="m.key"
-                      class="td-num" :class="{ 'td-sep': mi === activeMetrics.length - 1, 'td-fc': cellTitle(prod.monthly[mo], m.key), 'cell-clickable': m.key === 'volume' && prod.monthly[mo]?.volume }"
+                      class="td-num" :class="{ 'td-sep': mi === activeMetrics.length - 1, 'td-fc': cellTitle(prod.monthly[mo], m.key), 'cell-clickable': (m.key === 'volume' || m.key === 'count') && (prod.monthly[mo]?.volume || prod.monthly[mo]?.count) }"
                       :title="cellTitle(prod.monthly[mo], m.key)"
                       @click="onCellClick(prod.monthly[mo], m.key, prod.productName, mo, prod.productId, null)">
                       <span :class="fmtClass(prod.monthly[mo]?.[m.key])">
@@ -487,7 +487,7 @@
                     </td>
                     <template v-for="mo in displayMonths" :key="`pg${pg.programId}-${mo}`">
                       <td v-for="(m, mi) in activeMetrics" :key="m.key"
-                        class="td-num td-dim" :class="{ 'td-sep': mi === activeMetrics.length - 1, 'td-fc': cellTitle(pg.monthly[mo], m.key), 'cell-clickable': m.key === 'volume' && pg.monthly[mo]?.volume }"
+                        class="td-num td-dim" :class="{ 'td-sep': mi === activeMetrics.length - 1, 'td-fc': cellTitle(pg.monthly[mo], m.key), 'cell-clickable': (m.key === 'volume' || m.key === 'count') && (pg.monthly[mo]?.volume || pg.monthly[mo]?.count) }"
                         :title="cellTitle(pg.monthly[mo], m.key)"
                         @click="onCellClick(pg.monthly[mo], m.key, pg.programName, mo, prod.productId, pg.programId)">
                         <span :class="fmtClass(pg.monthly[mo]?.[m.key])">
@@ -1105,10 +1105,12 @@ async function openCellContracts({ productId, programId, month, label }) {
   cellContracts.value.loading = false;
 }
 
-// Клик по ячейке: «Объём» → контракты ячейки; прочие метрики → прежняя разбивка.
+// Клик по ячейке: «Объём»/«Кол-во» → контракты ячейки (открываем и при нулевом
+// объёме, если есть контракты — так опознаются контракты с суммой 0, напр.
+// бесплатные образовательные). Прочие метрики → прежняя разбивка.
 function onCellClick(cell, metricKey, label, month, productId, programId) {
-  if (metricKey === 'volume') {
-    if (!cell || !cell.volume || !productId) return;
+  if (metricKey === 'volume' || metricKey === 'count') {
+    if (!cell || !productId || !(cell.volume || cell.count)) return;
     openCellContracts({ productId, programId, month, label });
   } else {
     openCellDetails(cell, metricKey, label, month);
