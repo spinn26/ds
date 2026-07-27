@@ -286,6 +286,23 @@ class FinanceReportService
         $extraSum = round((float) $extraAccruals->sum('amount'), 2);
         $extraPointsSum = round((float) $extraAccruals->sum('points'), 2);
 
+        // Ручные баллы (other_accruals) нижестоящей структуры за месяц. Входят
+        // в ГП партнёра наравне с downline-объёмом (как в финализации,
+        // MonthlyPenaltyRunner). Без этого карточка «ОП по ГП» (живой agregat из
+        // commission) занижена относительно блока «Отрыв», который читает
+        // groupVolume из qualificationLog (уже с баллами). Инцидент Морозов 2026-06.
+        $downlineManualPoints = (float) (DB::selectOne(<<<'SQL'
+            WITH RECURSIVE sub AS (
+                SELECT id FROM consultant WHERE inviter = ? AND "dateDeleted" IS NULL
+                UNION ALL
+                SELECT c.id FROM consultant c JOIN sub ON c.inviter = sub.id
+                WHERE c."dateDeleted" IS NULL
+            )
+            SELECT COALESCE(SUM(oa.points), 0) AS pts
+            FROM other_accruals oa JOIN sub ON sub.id = oa.consultant
+            WHERE oa.accrual_date >= ? AND oa.accrual_date <= ?
+        SQL, [$consultant->id, $periodStart, $periodEnd])->pts ?? 0);
+
         $otherAccrualsTable = $otherAccruals->map(fn ($c) => [
             'id' => $c->id,
             'date' => $c->date,
@@ -518,7 +535,7 @@ class FinanceReportService
                 //
                 // НГП оставляем из qualificationLog — это накопительный
                 // показатель уровня квалификации, его пересчитывает финализ.
-                'volumes' => (function () use ($ngpCumulative, $personalSalesPoints, $groupSalesPoints) {
+                'volumes' => (function () use ($ngpCumulative, $personalSalesPoints, $groupSalesPoints, $extraPointsSum, $downlineManualPoints) {
                     // Per spec ✅Бизнес-логика §1:
                     //   ГП = личные объёмы партнёра + объёмы всей нижестоящей структуры
                     //       (ЛП + downline). «ОП по ГП» из ✅Отчет начислений §виджет —
@@ -527,9 +544,13 @@ class FinanceReportService
                     //       продажами и слабой группой ОП ошибочно «не выполнен»:
                     //       они выполняют план своими продажами, но виджет/проверка
                     //       это не учитывали.
+                    // ЛП = личные объёмы + собственные ручные баллы; ГП = ЛП +
+                    // downline commission + ручные баллы нижестоящих — та же
+                    // формула, что в финализации, чтобы карточка сходилась с
+                    // блоком «Отрыв» (qualificationLog).
                     return [
-                        'lp' => round((float) $personalSalesPoints, 2),
-                        'gp' => round((float) ($personalSalesPoints + $groupSalesPoints), 2),
+                        'lp' => round((float) ($personalSalesPoints + $extraPointsSum), 2),
+                        'gp' => round((float) ($personalSalesPoints + $groupSalesPoints + $extraPointsSum + $downlineManualPoints), 2),
                         'ngp' => round($ngpCumulative, 2),
                     ];
                 })(),
