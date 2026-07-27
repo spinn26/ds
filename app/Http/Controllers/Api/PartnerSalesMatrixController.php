@@ -653,31 +653,41 @@ class PartnerSalesMatrixController extends Controller
 
         $levels = DB::table('status_levels')->get(['id', 'level', 'percent'])->keyBy('id');
 
+        // Тянем всю историю квалификаций до конца последнего запрошенного месяца.
+        // Для прогнозных разрезов («В работе»/«Активировано») текущий месяц ещё
+        // не закрыт — у части ФК нет снимка за него. Берём ПОСЛЕДНИЙ известный
+        // уровень (дата ≤ конца месяца), иначе ЛП обнуляется у незакрытых ФК.
+        $upper = $this->monthExclusiveStart(max($months)); // первое число месяца после последнего
+
         $rows = DB::table('qualificationLog')
             ->whereIn('consultant', array_map('intval', array_unique($fcIds)))
             ->whereNull('dateDeleted')
-            ->whereRaw("TO_CHAR(date, 'YYYY-MM') = ANY(?)", ['{' . implode(',', $months) . '}'])
+            ->whereRaw('date < ?', [$upper])
+            ->orderBy('consultant')->orderBy('date')->orderBy('id')
             ->get(['consultant', 'date', 'nominalLevel', 'calculationLevel', 'id']);
 
-        // На один (ФК, месяц) может быть несколько строк — берём максимальный
-        // уровень и при равенстве последнюю по id (как qualificationHistory).
-        $map = [];
-        $bestId = [];
+        // История уровней по ФК (по возрастанию даты): [fc] => [ [Y-m-d, percent], ... ].
+        $hist = [];
         foreach ($rows as $r) {
-            $mo = substr((string) $r->date, 0, 7);
             $a = $r->nominalLevel ? ($levels[$r->nominalLevel] ?? null) : null;
             $b = $r->calculationLevel ? ($levels[$r->calculationLevel] ?? null) : null;
             $lvl = (! $a) ? $b : ((! $b) ? $a : (($a->level >= $b->level) ? $a : $b));
             if (! $lvl) continue;
-            $cid = (int) $r->consultant;
-            $key = $cid . '|' . $mo;
-            // приоритет: выше уровень, при равенстве — больший id
-            $prev = $map[$cid][$mo] ?? null;
-            if ($prev === null
-                || (float) $lvl->percent > $prev
-                || ((float) $lvl->percent === $prev && (int) $r->id > ($bestId[$key] ?? 0))) {
-                $map[$cid][$mo] = (float) $lvl->percent;
-                $bestId[$key] = (int) $r->id;
+            $hist[(int) $r->consultant][] = [substr((string) $r->date, 0, 10), (float) $lvl->percent];
+        }
+
+        // Для каждого (ФК, месяц) — последний уровень с датой ≤ конца месяца.
+        $map = [];
+        foreach (array_unique(array_map('intval', $fcIds)) as $fid) {
+            $h = $hist[$fid] ?? null;
+            if (! $h) continue;
+            foreach ($months as $mo) {
+                $end = $this->monthExclusiveStart($mo); // первое число следующего месяца
+                $pct = null;
+                foreach ($h as [$d, $p]) {
+                    if ($d < $end) $pct = $p; else break;
+                }
+                if ($pct !== null) $map[$fid][$mo] = $pct;
             }
         }
         return $map;
