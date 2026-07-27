@@ -73,7 +73,8 @@
           <div v-if="selectedInstruction.video_url" class="mb-4 video-wrapper">
             <video v-if="isFileVideo(selectedInstruction.video_url)"
               :src="selectedInstruction.video_url" controls playsinline />
-            <iframe v-else :src="embedUrl(selectedInstruction.video_url)" allowfullscreen frameborder="0" />
+            <iframe v-else :src="embedUrl(selectedInstruction.video_url)"
+              :allow="VIDEO_IFRAME_ALLOW" allowfullscreen frameborder="0" />
           </div>
 
           <!-- Контент markdown: полноценный рендер (картинки, таблицы, ссылки, код) -->
@@ -95,6 +96,7 @@ import { ref, computed, onMounted } from 'vue';
 import { useTheme } from 'vuetify';
 import { MdPreview } from 'md-editor-v3';
 import 'md-editor-v3/lib/style.css';
+import { toEmbedUrl, isFileVideo as isFileVideoUrl, VIDEO_IFRAME_ALLOW } from '../utils/videoEmbed';
 import api from '../api';
 import { useDebounce } from '../composables/useDebounce';
 import PageHeader from '../components/PageHeader.vue';
@@ -126,8 +128,8 @@ const toc = computed(() => {
   return out;
 });
 
-// Загруженный видео-файл показываем плеером, ссылку YouTube/Vimeo — эмбедом.
-function isFileVideo(u) { return /\.(mp4|webm|mov)(\?|$)/i.test(u || ''); }
+// Загруженный видео-файл показываем плеером, ссылку на хостинг — эмбедом.
+const isFileVideo = isFileVideoUrl;
 
 const { debounced: debouncedLoad } = useDebounce(loadList, 400);
 
@@ -160,14 +162,11 @@ function scrollToAnchor(a) {
 }
 function scrollToTop() { window.scrollTo({ top: 0, behavior: 'smooth' }); }
 
+// Общий резолвер (utils/videoEmbed.js): Kinescope, Rutube, YouTube, Vimeo,
+// VK Video. Раньше здесь знали только YouTube и Vimeo — ссылка на любой
+// другой хостинг подставлялась в iframe как есть и не проигрывалась.
 function embedUrl(url) {
-  if (!url) return '';
-  // YouTube
-  let m = url.match(/youtube\.com\/watch\?v=([\w-]+)/) || url.match(/youtu\.be\/([\w-]+)/);
-  if (m) return `https://www.youtube.com/embed/${m[1]}`;
-  m = url.match(/vimeo\.com\/(\d+)/);
-  if (m) return `https://player.vimeo.com/video/${m[1]}`;
-  return url;
+  return toEmbedUrl(url) || String(url || '');
 }
 
 onMounted(loadList);

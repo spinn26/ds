@@ -143,6 +143,7 @@
 <script setup>
 import { ref, computed } from 'vue';
 import api from '../../api';
+import { toEmbedUrl } from '../../utils/videoEmbed';
 
 const props = defineProps({
   course: { type: Object, required: true },
@@ -156,57 +157,8 @@ const testResult = ref(null);
 // activeVideo[lessonId] = индекс активного видео в табах. Дефолт 0.
 const activeVideo = ref({});
 
-/**
- * Конвертирует публичный URL видеохостинга в embed-форму для iframe.
- * Поддержка: Rutube, YouTube, Vimeo, VK Video. Если URL не опознан —
- * возвращает null, и вызывающий код показывает fallback-кнопку.
- */
-function toEmbedUrl(url) {
-  if (!url) return null;
-  try {
-    const u = new URL(url);
-    const host = u.hostname.replace(/^www\./, '');
-
-    // Rutube. Форматы:
-    //   https://rutube.ru/video/<hash>/
-    //   https://rutube.ru/play/embed/<hash>
-    //   https://rutube.ru/video/private/<hash>?p=<key>
-    if (host === 'rutube.ru') {
-      if (u.pathname.startsWith('/play/embed/')) return url;
-      const m = u.pathname.match(/\/video\/(?:private\/)?([a-f0-9]+)\/?/i);
-      if (m) {
-        const p = u.searchParams.get('p');
-        return `https://rutube.ru/play/embed/${m[1]}` + (p ? `?p=${encodeURIComponent(p)}` : '');
-      }
-    }
-
-    // YouTube
-    if (host === 'youtube.com' || host === 'm.youtube.com') {
-      const v = u.searchParams.get('v');
-      if (v) return `https://www.youtube.com/embed/${v}`;
-      const m = u.pathname.match(/^\/embed\/([\w-]+)/);
-      if (m) return url;
-    }
-    if (host === 'youtu.be') {
-      const id = u.pathname.replace(/^\//, '').split('/')[0];
-      if (id) return `https://www.youtube.com/embed/${id}`;
-    }
-
-    // Vimeo
-    if (host === 'vimeo.com') {
-      const id = u.pathname.replace(/^\//, '').split('/')[0];
-      if (/^\d+$/.test(id)) return `https://player.vimeo.com/video/${id}`;
-    }
-    if (host === 'player.vimeo.com') return url;
-
-    // VK Video — пример: https://vk.com/video123_456 или https://vkvideo.ru/video123_456
-    if (host === 'vk.com' || host === 'vkvideo.ru') {
-      const m = u.pathname.match(/\/video(-?\d+)_(\d+)/);
-      if (m) return `https://vk.com/video_ext.php?oid=${m[1]}&id=${m[2]}&hd=2`;
-    }
-  } catch {}
-  return null;
-}
+// Резолвер видео — общий для всей платформы (utils/videoEmbed.js).
+// Поддержка: Kinescope, Rutube, YouTube, Vimeo, VK Video.
 
 /** Иконка для кнопки-вложения по расширению/типу URL. */
 function docIcon(url) {

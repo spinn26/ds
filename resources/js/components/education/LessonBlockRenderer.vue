@@ -10,6 +10,7 @@
 
 <script setup>
 import { computed, h } from 'vue';
+import { toEmbedUrl } from '../../utils/videoEmbed';
 
 const props = defineProps({
   blocks: { type: [Array, String, null], default: () => [] },
@@ -25,42 +26,9 @@ const normalizedBlocks = computed(() => {
   } catch { return []; }
 });
 
-function toEmbed(url) {
-  if (!url) return null;
-  try {
-    const u = new URL(url);
-    const host = u.hostname.replace(/^www\./, '');
-    if (host === 'rutube.ru') {
-      if (u.pathname.startsWith('/play/embed/')) return url;
-      // Рутубовый id может быть любым alphanumeric (не только hex).
-      // Раньше регекс [a-f0-9]+ срабатывал для старых hash, но новые
-      // короткие id с буквами не попадали → fallback на «Открыть видео».
-      const m = u.pathname.match(/\/video\/(?:private\/)?([a-zA-Z0-9]+)/);
-      if (m) {
-        const p = u.searchParams.get('p');
-        return `https://rutube.ru/play/embed/${m[1]}` + (p ? `?p=${encodeURIComponent(p)}` : '');
-      }
-    }
-    if (host === 'youtube.com' || host === 'm.youtube.com') {
-      const v = u.searchParams.get('v');
-      if (v) return `https://www.youtube.com/embed/${v}`;
-      if (u.pathname.startsWith('/embed/')) return url;
-    }
-    if (host === 'youtu.be') {
-      const id = u.pathname.slice(1).split('/')[0];
-      if (id) return `https://www.youtube.com/embed/${id}`;
-    }
-    if (host === 'vimeo.com') {
-      const id = u.pathname.slice(1).split('/')[0];
-      if (/^\d+$/.test(id)) return `https://player.vimeo.com/video/${id}`;
-    }
-    if (host === 'vk.com' || host === 'vkvideo.ru') {
-      const m = u.pathname.match(/\/video(-?\d+)_(\d+)/);
-      if (m) return `https://vk.com/video_ext.php?oid=${m[1]}&id=${m[2]}&hd=2`;
-    }
-  } catch {}
-  return null;
-}
+// Резолвер видео — общий (utils/videoEmbed.js): Kinescope, Rutube, YouTube,
+// Vimeo, VK Video + разбор вставленного embed-кода.
+const toEmbed = toEmbedUrl;
 
 function fileIcon(url) {
   const u = (url || '').toLowerCase();
