@@ -1258,7 +1258,10 @@ onMounted(loadData);
 
 /* Program row */
 .tr-prog td                { background: rgba(var(--v-theme-surface), 1); }
-.tr-prog:hover .td-name   { background: rgba(var(--v-theme-on-surface), 0.015); }
+/* Липкая колонка имени ДОЛЖНА оставаться непрозрачной при наведении: иначе
+   прокрученные под ней цифры просвечивают и «наезжают» на первый столбец.
+   Полупрозрачную подсветку кладём поверх сплошного surface градиентом. */
+.tr-prog:hover .td-name   { background: linear-gradient(rgba(var(--v-theme-on-surface), 0.015), rgba(var(--v-theme-on-surface), 0.015)), rgb(var(--v-theme-surface)); }
 .tr-prog:hover td          { background: rgba(var(--v-theme-on-surface), 0.015); }
 .tr-prog .td-name          { background: rgba(var(--v-theme-surface), 1); }
 
