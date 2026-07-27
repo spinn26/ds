@@ -166,6 +166,45 @@ class MonthlyPenaltyRunner
             $personalVolumes[$cid] = ($personalVolumes[$cid] ?? 0) + $pts;
         }
 
+        // Ручные баллы (other_accruals) нижестоящих должны подниматься по цепочке
+        // наставников в ГП и в объём ветки отрыва аплайна — как обычный объём.
+        // Собственные баллы партнёра уже в $personalVolumes (выше). Раньше
+        // downline-баллы наверх НЕ шли: аплайн собирал ветки только из commission,
+        // и его ГП/отрыв занижались (инцидент Морозов, июнь 2026). Берём баллы
+        // ВСЕХ партнёров, не только candidates, — получатель может быть уровнем
+        // ниже penalty-набора.
+        $allManualPoints = DB::table('other_accruals')
+            ->whereRaw("to_char(accrual_date, 'YYYY-MM') = ?", [$dateMonth])
+            ->where('points', '<>', 0)
+            ->groupBy('consultant')
+            ->selectRaw('consultant, SUM(points) AS pts')
+            ->pluck('pts', 'consultant');
+
+        // [mentorId][firstLineChildId] => баллы нижестоящих в этой ветке.
+        // Ключ ветки = прямой ребёнок ментора на пути к получателю — совпадает
+        // с firstLineBranchUnder(), которым бакетируются commission.
+        $downlineManualByBranch = [];
+        foreach ($allManualPoints as $recipient => $pts) {
+            $pts = (float) $pts;
+            if ($pts === 0.0) {
+                continue;
+            }
+            $child = (int) $recipient;
+            $ancestor = $inviterMap[$child] ?? null;
+            $guard = 0;
+            while ($ancestor !== null && $guard++ < 200) {
+                $downlineManualByBranch[$ancestor][$child]
+                    = ($downlineManualByBranch[$ancestor][$child] ?? 0.0) + $pts;
+                $child = $ancestor;
+                $ancestor = $inviterMap[$ancestor] ?? null;
+            }
+        }
+        // Итог downline-баллов по ментору — для baseline-снимков (там веток нет).
+        $downlineManualTotal = [];
+        foreach ($downlineManualByBranch as $mentor => $branches) {
+            $downlineManualTotal[$mentor] = array_sum($branches);
+        }
+
         $stats = [];
         $affectedTotal = 0;
 
@@ -191,6 +230,7 @@ class MonthlyPenaltyRunner
                 inviters: $inviterMap,
                 applyWrite: $applyWrite,
                 personalVolume: (float) ($personalVolumes[$cons->id] ?? 0),
+                downlineManualBranches: $downlineManualByBranch[(int) $cons->id] ?? [],
             );
             $result = $applyWrite ? DB::transaction($run) : $run();
             if ($result['affectedCommissions'] > 0) {
@@ -211,6 +251,7 @@ class MonthlyPenaltyRunner
             $this->writeBaselineSnapshots(
                 $year, $month, $dateYear, $dateMonth, $monthEnd,
                 $candidates->pluck('id')->map(fn ($v) => (int) $v)->all(),
+                $downlineManualTotal,
             );
         }
 
@@ -384,6 +425,7 @@ class MonthlyPenaltyRunner
         string $dateMonth,
         Carbon $monthEnd,
         array $candidateIds,
+        array $downlineManualTotal = [],
     ): void {
         $monthStart = Carbon::create($year, $month, 1)->startOfMonth()->toDateTimeString();
 
@@ -439,7 +481,8 @@ class MonthlyPenaltyRunner
         $rows = [];
         foreach ($consultants as $c) {
             $lp = (float) ($personal[$c->id] ?? 0) + (float) ($manualPoints[$c->id] ?? 0);
-            $gp = $lp + (float) ($downline[$c->id] ?? 0);
+            // ГП = ЛП + downline commission + ручные баллы нижестоящих (по цепочке).
+            $gp = $lp + (float) ($downline[$c->id] ?? 0) + (float) ($downlineManualTotal[$c->id] ?? 0);
 
             $rows[] = [
                 'consultant' => (int) $c->id,
@@ -523,6 +566,7 @@ class MonthlyPenaltyRunner
         array $inviters,
         bool $applyWrite,
         float $personalVolume = 0.0,
+        array $downlineManualBranches = [],
     ): array {
         // Group commissions for this mentor in the target month.
         $commissions = DB::table('commission')
@@ -538,7 +582,7 @@ class MonthlyPenaltyRunner
         // ГП = ЛП + downline. ЛП не участвует в per-branch отрыве
         // (у себя нет «ветки»), но обязан попасть в totalGroupVolume.
 
-        if ($commissions->isEmpty() && $personalVolume <= 0) {
+        if ($commissions->isEmpty() && $personalVolume <= 0 && empty($downlineManualBranches)) {
             return $this->emptyResult($consultant);
         }
 
@@ -563,6 +607,17 @@ class MonthlyPenaltyRunner
             $byBranch[$branchKey][] = $c;
             $branchVolumes[$branchKey] = ($branchVolumes[$branchKey] ?? 0.0)
                 + (float) $c->groupVolume;
+        }
+
+        // Ручные баллы нижестоящих (other_accruals) — в объём соответствующей
+        // ветки первой линии, наравне с commission-объёмом. Ключ уже совпадает
+        // с firstLineBranchUnder(). Ветка может быть чисто «балльной» (у ребёнка
+        // нет commission) — тогда она появится здесь впервые: это корректно,
+        // объём ветки для отрыва должен её учитывать. Собственные баллы партнёра
+        // сюда не входят (они в $personalVolume).
+        foreach ($downlineManualBranches as $branchChild => $manualPts) {
+            $branchVolumes[(int) $branchChild] = ($branchVolumes[(int) $branchChild] ?? 0.0)
+                + (float) $manualPts;
         }
 
         // Полный ГП партнёра (ЛП + баллы + downline + unassigned) — база и для
