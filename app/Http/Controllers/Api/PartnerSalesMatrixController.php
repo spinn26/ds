@@ -13,11 +13,12 @@ use Illuminate\Support\Facades\DB;
  * Та же логика дат/состояний, что в ProductSalesMatrixController, но строки
  * группируются по иерархии: Структура (корень-предок ФК) → ФК → Продукт.
  *
- * Состояния (как в продуктовом отчёте):
+ * Состояния (свод с продуктовым отчётом, реш. Лены 2026-07-28):
  *   fact     — по дате создания транзакции (transaction.dateMonth)
- *   forecast — «Активировано»: контракты в статусах 2/3 по activation_forecast
- *   inwork   — «В работе»: контракты по createDate (суммы контракта)
- *   total    — сумма трёх разрезов (на стороне фронта/отдельным методом)
+ *   forecast — «Активировано»: активированные контракты (статус 1) по openDate,
+ *              по которым ещё НЕТ транзакции
+ *   inwork   — «В работе»: контракты по createDate, статус NOT IN (1,6,8,9,10)
+ *   total    — сумма трёх разрезов
  *
  * Метрики: Объём, Кол-во, Ср.чек, Выручка, Баллы (commission.groupBonus),
  * Баллы ЛП (commission.personalVolume, chainOrder=1), Кол-во ФК, Клиенты.
@@ -48,7 +49,7 @@ class PartnerSalesMatrixController extends Controller
         return response()->json($this->assemblePartnerTree($rows, $months, $params));
     }
 
-    /** GET /admin/reports/partner-matrix/forecast — «Активировано»: контракты статус 2/3 по activation_forecast. */
+    /** GET /admin/reports/partner-matrix/forecast — «Активировано»: активированные контракты (статус 1) по openDate, без транзакции. */
     public function forecastMatrix(Request $request): JsonResponse
     {
         $params = $this->validateParams($request);
@@ -114,6 +115,7 @@ class PartnerSalesMatrixController extends Controller
                 DB::raw('SUM(COALESCE(t."personalVolume", 0)) as bally'),
                 DB::raw('0                                    as bally_lp'),
                 DB::raw('COUNT(DISTINCT co.client)            as client_count'),
+                DB::raw("string_agg(DISTINCT co.client::text, ',') as client_ids"),
                 DB::raw("'fact'                               as state"),
             ])
             ->groupBy('co.consultant', 'cons.personName', 'p.id', 'p.name', 't.dateMonth')
@@ -132,11 +134,20 @@ class PartnerSalesMatrixController extends Controller
         $toExclusive = $this->monthExclusiveStart($to);
 
         if ($mode === 'inwork') {
+            // «В работе»: по дате создания, ещё не активированные. Исключаем
+            // те же статусы, что продуктовый отчёт: Активирован(1), Закрыто
+            // нереализ.(6), Закрыто(8), Возврат(9), Лапсирован(10).
             $dateCol  = 'createDate';
-            $statusFn = fn ($q) => $q->whereNotIn('co.status', [1, 6, 8, 10]);
-        } else { // forecast
-            $dateCol  = 'activation_forecast';
-            $statusFn = fn ($q) => $q->whereIn('co.status', [2, 3]);
+            $statusFn = fn ($q) => $q->whereNotIn('co.status', [1, 6, 8, 9, 10]);
+        } else { // forecast = «Активировано»
+            // Свод с продуктовым отчётом (реш. Лены 2026-07-28): активированные
+            // контракты (статус 1) по дате активации openDate, по которым ещё
+            // НЕТ транзакции (иначе это «Факт»). Раньше тут был пайплайн 2/3 по
+            // activation_forecast — расходилось с продуктовым в 5-7 раз.
+            $dateCol  = 'openDate';
+            $statusFn = fn ($q) => $q->where('co.status', 1)
+                ->whereNotExists(fn ($sub) => $sub->select(DB::raw(1))->from('transaction as tx')
+                    ->whereColumn('tx.contract', 'co.id')->whereNull('tx.deletedAt'));
         }
 
         $periodExpr = DB::raw("TO_CHAR(DATE_TRUNC('month', co.\"$dateCol\"::date), 'YYYY-MM') as period_month");
@@ -172,6 +183,7 @@ class PartnerSalesMatrixController extends Controller
                 DB::raw('0                                as bally'),
                 DB::raw('0                                as bally_lp'),
                 DB::raw('COUNT(DISTINCT co.client)        as client_count'),
+                DB::raw("string_agg(DISTINCT co.client::text, ',') as client_ids"),
                 DB::raw("'{$mode}'                        as state"),
             ])
             ->groupBy('co.consultant', 'cons.personName', 'p.id', 'p.name', $periodTrunc)
@@ -190,10 +202,12 @@ class PartnerSalesMatrixController extends Controller
     {
         if ($rows->isEmpty()) return;
 
-        $dateCol  = $mode === 'inwork' ? 'createDate' : 'activation_forecast';
+        $dateCol  = $mode === 'inwork' ? 'createDate' : 'openDate';
         $statusFn = $mode === 'inwork'
-            ? fn ($q) => $q->whereNotIn('co.status', [1, 6, 8, 10])
-            : fn ($q) => $q->whereIn('co.status', [2, 3]);
+            ? fn ($q) => $q->whereNotIn('co.status', [1, 6, 8, 9, 10])
+            : fn ($q) => $q->where('co.status', 1)
+                ->whereNotExists(fn ($sub) => $sub->select(DB::raw(1))->from('transaction as tx')
+                    ->whereColumn('tx.contract', 'co.id')->whereNull('tx.deletedAt'));
         [$from, $to] = [$params['from'], $params['to']];
         $toExclusive = $this->monthExclusiveStart($to);
 
@@ -519,8 +533,9 @@ class PartnerSalesMatrixController extends Controller
                 'revenue'     => round((float) $r->revenue, 2),
                 'bally'       => round((float) $r->bally, 2),
                 'ballyLP'     => round((float) $r->bally_lp, 2),
-                'clientCount' => (int) $r->client_count,
             ];
+            // id клиентов ячейки — для distinct-подсчёта (см. emptyAgg/finalizeNode).
+            $cids = ($r->client_ids ?? '') !== '' ? explode(',', (string) $r->client_ids) : [];
 
             if (! isset($structures[$rid])) {
                 $structures[$rid] = array_merge($this->emptyAgg(), [
@@ -560,7 +575,7 @@ class PartnerSalesMatrixController extends Controller
 
             // Накопление на 3 уровнях + grand + помесячно. ballyLP считается
             // отдельным пост-проходом (= Баллы × %уровня ФК), здесь не копим.
-            foreach (['volume', 'count', 'revenue', 'bally', 'clientCount'] as $k) {
+            foreach (['volume', 'count', 'revenue', 'bally'] as $k) {
                 $P[$k] += $vals[$k];
                 $F[$k] += $vals[$k];
                 $S[$k] += $vals[$k];
@@ -569,6 +584,13 @@ class PartnerSalesMatrixController extends Controller
                 $F['monthly'][$mo][$k] = ($F['monthly'][$mo][$k] ?? 0) + $vals[$k];
                 $S['monthly'][$mo][$k] = ($S['monthly'][$mo][$k] ?? 0) + $vals[$k];
                 $grand['monthly'][$mo][$k] = ($grand['monthly'][$mo][$k] ?? 0) + $vals[$k];
+            }
+            // Клиенты — в distinct-множества на всех уровнях (за период + по месяцу).
+            foreach ($cids as $cid) {
+                $P['clientSet'][$cid] = true; $P['monthlyClients'][$mo][$cid] = true;
+                $F['clientSet'][$cid] = true; $F['monthlyClients'][$mo][$cid] = true;
+                $S['clientSet'][$cid] = true; $S['monthlyClients'][$mo][$cid] = true;
+                $grand['clientSet'][$cid] = true; $grand['monthlyClients'][$mo][$cid] = true;
             }
             unset($S, $F, $P);
         }
@@ -637,19 +659,26 @@ class PartnerSalesMatrixController extends Controller
         return [
             'volume' => 0, 'count' => 0, 'revenue' => 0,
             'bally' => 0, 'ballyLP' => 0, 'clientCount' => 0, 'monthly' => [],
+            // Клиенты считаем через distinct-множества (id клиентов), а не
+            // суммой по ячейкам — иначе клиент, купивший в нескольких
+            // продуктах/месяцах/ФК, задваивается. clientSet — за весь период,
+            // monthlyClients — по месяцам. Разворачиваются в число в finalizeNode.
+            'clientSet' => [], 'monthlyClients' => [],
         ];
     }
 
-    /** Доп. поля узла: средний чек + кол-во ФК (передаётся явно). */
+    /** Доп. поля узла: средний чек + кол-во ФК (явно) + distinct-клиенты. */
     private function finalizeNode(array $node, int $fcCount): array
     {
         $node['avgCheck'] = $node['count'] > 0 ? round($node['volume'] / $node['count'], 2) : 0;
         $node['fcCount'] = $fcCount;
+        $node['clientCount'] = count($node['clientSet'] ?? []);
         foreach ($node['monthly'] as $mo => $m) {
             $node['monthly'][$mo]['avgCheck'] = ($m['count'] ?? 0) > 0
                 ? round($m['volume'] / $m['count'], 2) : 0;
+            $node['monthly'][$mo]['clientCount'] = count($node['monthlyClients'][$mo] ?? []);
         }
-        unset($node['fcSet']);
+        unset($node['fcSet'], $node['clientSet'], $node['monthlyClients']);
         return $node;
     }
 
