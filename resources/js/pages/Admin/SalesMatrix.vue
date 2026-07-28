@@ -412,7 +412,10 @@
             <thead>
               <!-- Row 1: month groups -->
               <tr>
-                <th class="th-name" rowspan="2">Продукт / Программа</th>
+                <th class="th-name mx-sortable" rowspan="2" @click="setSort('name')">
+                  Продукт / Программа
+                  <v-icon v-if="sortArrow('name')" size="13" class="mx-sort-i">{{ sortArrow('name') }}</v-icon>
+                </th>
                 <th v-for="mo in displayMonths" :key="mo"
                   :colspan="activeMetrics.length" class="th-mgroup">
                   {{ fmtMonthHdr(mo) }}
@@ -429,13 +432,14 @@
                     {{ m.short }}
                   </th>
                 </template>
-                <th v-for="m in activeMetrics" :key="`tot-${m.key}`" class="th-sub th-sub-total">
-                  {{ m.short }}
+                <th v-for="m in activeMetrics" :key="`tot-${m.key}`" class="th-sub th-sub-total mx-sortable"
+                  :title="`Сортировать по «${m.label}»`" @click="setSort(m.key)">
+                  <v-icon v-if="sortArrow(m.key)" size="12" class="mx-sort-i">{{ sortArrow(m.key) }}</v-icon>{{ m.short }}
                 </th>
               </tr>
             </thead>
             <tbody>
-              <template v-for="prod in rows" :key="prod.productId">
+              <template v-for="prod in sortedRows" :key="prod.productId">
                 <!-- Product -->
                 <tr class="tr-prod" @click="toggleProduct(prod.productId)">
                   <td class="td-name">
@@ -749,6 +753,37 @@ function toggleMetric(key) {
   else selectedMetricKeys.value.push(key);
   localStorage.setItem(METRICS_KEY, JSON.stringify(selectedMetricKeys.value));
 }
+
+// ─── Сортировка колонок ───
+// Сортируем строки продуктов по итоговому значению выбранной метрики (и
+// программы внутри продукта). 'name' — по алфавиту. sortKey=null — исходный
+// порядок с бэкенда.
+const sortKey = ref(null);
+const sortDir = ref('desc'); // 'asc' | 'desc'
+function setSort(key) {
+  if (sortKey.value === key) sortDir.value = sortDir.value === 'desc' ? 'asc' : 'desc';
+  else { sortKey.value = key; sortDir.value = key === 'name' ? 'asc' : 'desc'; }
+}
+function sortArrow(key) {
+  if (sortKey.value !== key) return '';
+  return sortDir.value === 'desc' ? 'mdi-arrow-down' : 'mdi-arrow-up';
+}
+function _cmp(a, b) {
+  const dir = sortDir.value === 'desc' ? -1 : 1;
+  if (sortKey.value === 'name') return dir * String(a).localeCompare(String(b), 'ru');
+  return dir * ((Number(a) || 0) - (Number(b) || 0));
+}
+const sortedRows = computed(() => {
+  if (!sortKey.value) return rows.value;
+  const k = sortKey.value;
+  const byName = k === 'name';
+  const sortArr = (arr, nameOf) => [...arr].sort((x, y) =>
+    byName ? _cmp(nameOf(x), nameOf(y)) : _cmp(x[k], y[k]));
+  return sortArr(rows.value, r => r.productName).map(p => ({
+    ...p,
+    programs: sortArr(p.programs, pg => pg.programName),
+  }));
+});
 
 // ─── Filters persistence ──────────────────────────────────────
 const SUPPLIERS_KEY = 'salesMatrix:suppliers';
@@ -1208,6 +1243,11 @@ onMounted(loadData);
   color: rgb(var(--v-theme-primary)) !important;
   border-left: 2px solid rgba(var(--v-theme-primary), 0.18);
 }
+
+/* Сортируемые заголовки */
+.mx-sortable { cursor: pointer; user-select: none; }
+.mx-sortable:hover { color: rgb(var(--v-theme-primary)) !important; }
+.mx-sort-i { color: rgb(var(--v-theme-primary)); margin-right: 2px; vertical-align: middle; }
 
 /* ─── ROWS ─── */
 
