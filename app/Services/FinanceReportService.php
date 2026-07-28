@@ -535,22 +535,25 @@ class FinanceReportService
                 //
                 // НГП оставляем из qualificationLog — это накопительный
                 // показатель уровня квалификации, его пересчитывает финализ.
-                'volumes' => (function () use ($ngpCumulative, $personalSalesPoints, $groupSalesPoints, $extraPointsSum, $downlineManualPoints) {
+                'volumes' => (function () use ($ngpCumulative, $personalSalesPoints, $groupSalesPoints, $downlineManualPoints) {
                     // Per spec ✅Бизнес-логика §1:
                     //   ГП = личные объёмы партнёра + объёмы всей нижестоящей структуры
                     //       (ЛП + downline). «ОП по ГП» из ✅Отчет начислений §виджет —
-                    //       это именно ГП. Раньше тут лежал только groupSalesPoints
-                    //       (chainOrder>1), из-за чего у партнёров с большими личными
-                    //       продажами и слабой группой ОП ошибочно «не выполнен»:
-                    //       они выполняют план своими продажами, но виджет/проверка
-                    //       это не учитывали.
+                    //       это именно ГП.
                     // ЛП = личные объёмы + собственные ручные баллы; ГП = ЛП +
-                    // downline commission + ручные баллы нижестоящих — та же
-                    // формула, что в финализации, чтобы карточка сходилась с
-                    // блоком «Отрыв» (qualificationLog).
+                    // downline commission + ручные баллы нижестоящих.
+                    //
+                    // ⚠ Собственные ручные баллы (other_accruals.points) УЖЕ входят
+                    // в $personalSalesPoints через ManualPoints::forMonth (см. выше).
+                    // Раньше сюда ДОПОЛНИТЕЛЬНО прибавлялся $extraPointsSum (= та же
+                    // сумма own other_accruals.points) → собственные ручные баллы
+                    // учитывались ДВАЖДЫ: карточки ЛП/ОП были завышены и расходились
+                    // с блоком «Отрыв» (там groupVolume из qualificationLog не
+                    // задваивается). Убрано. Ручные баллы НИЖЕСТОЯЩИХ — отдельно,
+                    // через $downlineManualPoints.
                     return [
-                        'lp' => round((float) ($personalSalesPoints + $extraPointsSum), 2),
-                        'gp' => round((float) ($personalSalesPoints + $groupSalesPoints + $extraPointsSum + $downlineManualPoints), 2),
+                        'lp' => round((float) $personalSalesPoints, 2),
+                        'gp' => round((float) ($personalSalesPoints + $groupSalesPoints + $downlineManualPoints), 2),
                         'ngp' => round($ngpCumulative, 2),
                     ];
                 })(),
