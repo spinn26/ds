@@ -87,7 +87,10 @@
         <table class="pm-grid">
           <thead v-if="showMonths">
             <tr>
-              <th class="pm-name-col" rowspan="2">Иерархия (Команда ▸ ФК ▸ Продукт)</th>
+              <th class="pm-name-col pm-sortable" rowspan="2" @click="setSort('name')">
+                Иерархия (Команда ▸ ФК ▸ Продукт)
+                <v-icon v-if="sortArrow('name')" size="13" class="pm-sort-i">{{ sortArrow('name') }}</v-icon>
+              </th>
               <th v-for="mo in displayMonths" :key="mo" :colspan="activeMetrics.length" class="pm-mgroup">{{ fmtMonthHdr(mo) }}</th>
               <th :colspan="activeMetrics.length" class="pm-mgroup pm-total-hd">Итого</th>
             </tr>
@@ -97,19 +100,25 @@
                   :title="`${m.label} — ${m.hint}`"
                   :class="{ 'pm-sep': mi === activeMetrics.length - 1 }">{{ m.short }}</th>
               </template>
-              <th v-for="m in activeMetrics" :key="`ht-${m.key}`" class="text-end pm-sub-th pm-total-th"
-                :title="`${m.label} — ${m.hint}`">{{ m.short }}</th>
+              <th v-for="m in activeMetrics" :key="`ht-${m.key}`" class="text-end pm-sub-th pm-total-th pm-sortable"
+                :title="`${m.label} — ${m.hint}. Клик — сортировка`" @click="setSort(m.key)">
+                <v-icon v-if="sortArrow(m.key)" size="12" class="pm-sort-i">{{ sortArrow(m.key) }}</v-icon>{{ m.short }}
+              </th>
             </tr>
           </thead>
           <thead v-else>
             <tr>
-              <th class="pm-name-col">Иерархия (Команда ▸ ФК ▸ Продукт)</th>
-              <th v-for="m in activeMetrics" :key="m.key" class="text-end">
+              <th class="pm-name-col pm-sortable" @click="setSort('name')">
+                Иерархия (Команда ▸ ФК ▸ Продукт)
+                <v-icon v-if="sortArrow('name')" size="13" class="pm-sort-i">{{ sortArrow('name') }}</v-icon>
+              </th>
+              <th v-for="m in activeMetrics" :key="m.key" class="text-end pm-sortable" @click="setSort(m.key)">
                 <span class="pm-th-lbl">
+                  <v-icon v-if="sortArrow(m.key)" size="13" class="pm-sort-i">{{ sortArrow(m.key) }}</v-icon>
                   {{ m.short }}
                   <v-tooltip location="top" max-width="320" open-delay="100">
                     <template #activator="{ props }">
-                      <v-icon v-bind="props" size="13" class="pm-th-i">mdi-information-outline</v-icon>
+                      <v-icon v-bind="props" size="13" class="pm-th-i" @click.stop>mdi-information-outline</v-icon>
                     </template>
                     <span>{{ m.hint }}</span>
                   </v-tooltip>
@@ -119,7 +128,7 @@
           </thead>
           <tbody>
             <template v-if="!loading && data.structures.length">
-              <template v-for="s in data.structures" :key="`s${s.structureId}`">
+              <template v-for="s in sortedStructures" :key="`s${s.structureId}`">
                 <!-- Уровень 1: Структура -->
                 <tr class="pm-row pm-l1" @click="toggleStruct(s.structureId)">
                   <td class="pm-name">
@@ -161,15 +170,20 @@
                       </td>
                     </tr>
 
-                    <!-- Уровень 3: Продукты -->
+                    <!-- Уровень 3: Продукты, либо (в «Итого») состояния В работе/Активировано/Факт -->
                     <template v-if="isFcExpanded(s.structureId, f.fcId)">
-                      <tr v-for="p in f.products" :key="`p${f.fcId}-${p.productId}`" class="pm-row pm-l3">
-                        <td class="pm-name pm-prod" style="padding-left: 52px">{{ p.productName }}</td>
+                      <tr v-for="p in f.products" :key="`p${f.fcId}-${p.productId}`" class="pm-row pm-l3"
+                        :class="{ 'pm-state-row': p.state }">
+                        <td class="pm-name" :class="p.state ? 'pm-state-name' : 'pm-prod'" style="padding-left: 52px">
+                          <span v-if="p.state" class="pm-state-tag" :class="`pm-state-${p.state}`">{{ p.productName }}</span>
+                          <template v-else>{{ p.productName }}</template>
+                        </td>
                         <template v-for="mo in displayMonths" v-if="showMonths" :key="`pm-${p.productId}-${mo}`">
-                          <td v-for="(m, mi) in activeMetrics" :key="m.key" class="text-end pm-num pm-prod-num pm-month"
-                            :class="{ 'pm-sep': mi === activeMetrics.length - 1 }">{{ monthCell(p, mo, m) }}</td>
+                          <td v-for="(m, mi) in activeMetrics" :key="m.key" class="text-end pm-num pm-month"
+                            :class="[{ 'pm-sep': mi === activeMetrics.length - 1 }, p.state ? '' : 'pm-prod-num']">{{ monthCell(p, mo, m) }}</td>
                         </template>
-                        <td v-for="m in activeMetrics" :key="`pt-${m.key}`" class="text-end pm-num pm-prod-num" :class="{ 'pm-total-cell': showMonths }">
+                        <td v-for="m in activeMetrics" :key="`pt-${m.key}`" class="text-end pm-num"
+                          :class="[{ 'pm-total-cell': showMonths }, p.state ? '' : 'pm-prod-num']">
                           {{ cellVal(p, m) }}
                         </td>
                       </tr>
@@ -263,7 +277,7 @@ const allMetrics = [
         + 'Под значением: КМ — доля выручки ФК в его команде; КЛ — доля выручки ФК во всей компании.' },
   { key: 'bally', short: 'Баллы', label: 'Баллы', fmt: 'num',
     hint: 'Мотивационные баллы = Выручка ÷ 100.' },
-  { key: 'ballyLP', short: 'Баллы ЛП (комиссия)', label: 'Баллы ЛП (комиссия)', fmt: 'num',
+  { key: 'ballyLP', short: 'Баллы ЛП', label: 'Баллы ЛП (комиссия)', fmt: 'num',
     hint: 'Баллы в зачёт личной квалификации ФК = Баллы × %уровня ФК. '
         + 'На уровне команды — сумма ЛП её ФК. Если месяц не закрыт, берётся последний известный уровень.' },
   { key: 'fcCount', short: 'ФК', label: 'Кол-во ФК', fmt: 'int',
@@ -283,6 +297,42 @@ function toggleMetric(key) {
   else selectedMetricKeys.value.push(key);
   localStorage.setItem(METRICS_KEY, JSON.stringify(selectedMetricKeys.value));
 }
+
+// ─── Сортировка колонок ───
+// Иерархию сортируем внутри каждого уровня (структуры → ФК → продукты) по
+// выбранной метрике. 'name' — по алфавиту. По умолчанию — как с бэкенда
+// (выручка убыв.), чтобы первый вид не менялся.
+const sortKey = ref('revenue');
+const sortDir = ref('desc'); // 'asc' | 'desc'
+function setSort(key) {
+  if (sortKey.value === key) sortDir.value = sortDir.value === 'desc' ? 'asc' : 'desc';
+  else { sortKey.value = key; sortDir.value = key === 'name' ? 'asc' : 'desc'; }
+}
+function sortArrow(key) {
+  if (sortKey.value !== key) return '';
+  return sortDir.value === 'desc' ? 'mdi-arrow-down' : 'mdi-arrow-up';
+}
+function cmpBy(a, b) {
+  const dir = sortDir.value === 'desc' ? -1 : 1;
+  if (sortKey.value === 'name') return dir * String(a).localeCompare(String(b), 'ru');
+  return dir * ((Number(a) || 0) - (Number(b) || 0));
+}
+const sortedStructures = computed(() => {
+  const k = sortKey.value;
+  const byName = k === 'name';
+  const nodeName = (n) => n.structureName ?? n.fcName ?? n.productName ?? '';
+  const sortNodes = (arr) => [...arr].sort((x, y) =>
+    byName ? cmpBy(nodeName(x), nodeName(y)) : cmpBy(x[k], y[k]));
+  return sortNodes(data.value.structures).map(s => ({
+    ...s,
+    fcs: sortNodes(s.fcs).map(f => ({
+      ...f,
+      // В «Итого» дети ФК — состояния (В работе/Активировано/Факт): сохраняем
+      // их фиксированный порядок с бэкенда, а не сортируем по метрике.
+      products: f.products[0]?.state ? f.products : sortNodes(f.products),
+    })),
+  }));
+});
 
 // ─── Фильтры ───
 const filterStructures = ref([]);
@@ -434,12 +484,12 @@ onMounted(() => { loadLookups(); loadSuppliers(); loadData(); });
   background: rgb(var(--v-theme-surface));
   font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px;
   color: rgba(var(--v-theme-on-surface), 0.7);
-  padding: 8px 12px; border-bottom: 2px solid rgba(var(--v-theme-on-surface), 0.08);
+  padding: 7px 7px; border-bottom: 2px solid rgba(var(--v-theme-on-surface), 0.08);
   white-space: nowrap; text-align: left;
 }
 .pm-grid thead th.text-end { text-align: right; }
-.pm-name-col { min-width: 320px; }
-.pm-grid td { padding: 7px 12px; border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.05); font-size: 13px; }
+.pm-name-col { min-width: 240px; }
+.pm-grid td { padding: 6px 7px; border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.05); font-size: 12.5px; }
 .pm-num { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .pm-sub { font-size: 10.5px; color: rgba(var(--v-theme-on-surface), 0.55); line-height: 1.1; margin-top: 1px;
   cursor: help; border-bottom: 1px dotted rgba(var(--v-theme-on-surface), 0.35); display: inline-block; }
@@ -447,6 +497,9 @@ onMounted(() => { loadLookups(); loadSuppliers(); loadData(); });
 .pm-th-i { color: rgba(var(--v-theme-on-surface), 0.4); cursor: help; }
 .pm-th-i:hover { color: rgb(var(--v-theme-primary)); }
 .pm-sub-th[title] { cursor: help; }
+.pm-sortable { cursor: pointer; user-select: none; }
+.pm-sortable:hover { color: rgb(var(--v-theme-primary)); }
+.pm-sort-i { color: rgb(var(--v-theme-primary)); margin-right: 2px; vertical-align: middle; }
 .pm-metric-hint { font-size: 11px; white-space: normal; max-width: 340px; line-height: 1.25; }
 .pm-row.pm-l1 { cursor: pointer; background: rgba(var(--v-theme-primary), 0.06); }
 .pm-row.pm-l1:hover { background: rgba(var(--v-theme-primary), 0.1); }
@@ -468,6 +521,15 @@ onMounted(() => { loadLookups(); loadSuppliers(); loadData(); });
   flex-shrink: 0;
 }
 .pm-l3 .pm-name { display: block; }
+/* Строки-состояния в «Итого» (В работе / Активировано / Факт) */
+.pm-state-name { font-style: normal; }
+.pm-state-tag {
+  display: inline-block; font-size: 11px; font-weight: 600;
+  padding: 1px 8px; border-radius: 6px; letter-spacing: 0.02em;
+}
+.pm-state-inwork   { background: rgba(var(--v-theme-warning), 0.16);   color: rgb(var(--v-theme-warning)); }
+.pm-state-forecast { background: rgba(var(--v-theme-info), 0.16);      color: rgb(var(--v-theme-info)); }
+.pm-state-fact     { background: rgba(var(--v-theme-success), 0.18);   color: rgb(var(--v-theme-success)); }
 .pm-total { background: rgba(var(--v-theme-on-surface), 0.04); border-top: 2px solid rgba(var(--v-theme-on-surface), 0.12); }
 .pm-total td { border-bottom: none; }
 

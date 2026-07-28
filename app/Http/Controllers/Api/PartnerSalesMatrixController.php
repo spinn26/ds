@@ -71,7 +71,9 @@ class PartnerSalesMatrixController extends Controller
         $forecast = $this->contractRows($params, 'forecast');
         $this->injectContractForecast($forecast, $params, 'forecast');
         $rows = collect($this->factRows($params))->concat($inwork)->concat($forecast);
-        return response()->json($this->assemblePartnerTree($rows, $months, $params));
+        // byState=true: на 3-м уровне (под ФК) — не продукты, а разбивка по
+        // состояниям «В работе / Активировано / Факт» (см. assemblePartnerTree).
+        return response()->json($this->assemblePartnerTree($rows, $months, $params, true));
     }
 
     /** Плоские строки состояния «Факт» (по транзакциям). */
@@ -112,6 +114,7 @@ class PartnerSalesMatrixController extends Controller
                 DB::raw('SUM(COALESCE(t."personalVolume", 0)) as bally'),
                 DB::raw('0                                    as bally_lp'),
                 DB::raw('COUNT(DISTINCT co.client)            as client_count'),
+                DB::raw("'fact'                               as state"),
             ])
             ->groupBy('co.consultant', 'cons.personName', 'p.id', 'p.name', 't.dateMonth')
             ->get();
@@ -169,6 +172,7 @@ class PartnerSalesMatrixController extends Controller
                 DB::raw('0                                as bally'),
                 DB::raw('0                                as bally_lp'),
                 DB::raw('COUNT(DISTINCT co.client)        as client_count'),
+                DB::raw("'{$mode}'                        as state"),
             ])
             ->groupBy('co.consultant', 'cons.personName', 'p.id', 'p.name', $periodTrunc)
             ->get();
@@ -479,7 +483,15 @@ class PartnerSalesMatrixController extends Controller
      * (fc_id, fc_name, product_id, product_name, period_month, volume, cnt,
      *  revenue, bally, bally_lp, client_count).
      */
-    private function assemblePartnerTree($rows, array $months, array $params): array
+    /** Порядок и подписи состояний для разбивки «Итого» (byState). */
+    private const STATE_LABELS = ['inwork' => 'В работе', 'forecast' => 'Активировано', 'fact' => 'Факт'];
+    private const STATE_ORDER  = ['inwork' => 0, 'forecast' => 1, 'fact' => 2];
+
+    /**
+     * @param bool $byState В режиме «Итого» 3-й уровень (под ФК) — не продукты,
+     *   а разбивка по состояниям «В работе / Активировано / Факт».
+     */
+    private function assemblePartnerTree($rows, array $months, array $params, bool $byState = false): array
     {
         $fcIds = collect($rows)->pluck('fc_id')->unique()->map(fn ($x) => (int) $x)->all();
 
@@ -530,13 +542,21 @@ class PartnerSalesMatrixController extends Controller
             }
             $F = &$S['fcs'][$fcId];
 
-            if (! isset($F['products'][$pid])) {
-                $F['products'][$pid] = array_merge($this->emptyAgg(), [
-                    'productId' => $pid,
-                    'productName' => $r->product_name,
-                ]);
+            // 3-й уровень: продукты (обычные разрезы) или состояния (Итого).
+            // Ключ держим целочисленным (состояния → 0/1/2), чтобы не плодить
+            // строковые оффсеты на shaped-array; подпись/порядок — через 'state'.
+            if ($byState) {
+                $st = $r->state ?? 'fact';
+                $ckey = self::STATE_ORDER[$st] ?? 9;
+                $childInit = ['productId' => $ckey, 'productName' => self::STATE_LABELS[$st] ?? $st, 'state' => $st];
+            } else {
+                $ckey = $pid;
+                $childInit = ['productId' => $pid, 'productName' => $r->product_name];
             }
-            $P = &$F['products'][$pid];
+            if (! isset($F['products'][$ckey])) {
+                $F['products'][$ckey] = array_merge($this->emptyAgg(), $childInit);
+            }
+            $P = &$F['products'][$ckey];
 
             // Накопление на 3 уровнях + grand + помесячно. ballyLP считается
             // отдельным пост-проходом (= Баллы × %уровня ФК), здесь не копим.
@@ -592,6 +612,11 @@ class PartnerSalesMatrixController extends Controller
             $fcsOut = [];
             foreach ($S['fcs'] as $F) {
                 $prodsOut = array_values(array_map(fn ($P) => $this->finalizeNode($P, 1), $F['products']));
+                if ($byState) {
+                    // Стабильный порядок состояний вместо сортировки по метрике.
+                    usort($prodsOut, fn ($a, $b) =>
+                        (self::STATE_ORDER[$a['state'] ?? ''] ?? 9) <=> (self::STATE_ORDER[$b['state'] ?? ''] ?? 9));
+                }
                 $fcsOut[] = array_merge($this->finalizeNode($F, 1), ['products' => $prodsOut]);
             }
             // сортировка ФК по выручке убыв.
