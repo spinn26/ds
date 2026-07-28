@@ -477,7 +477,9 @@ onMounted(() => { loadLookups(); loadSuppliers(); loadData(); });
 </script>
 
 <style scoped>
-.pm-wrap { overflow-x: auto; }
+/* Внутренний скролл включает заморозку: шапка липнет к верху, первый
+   столбец (имя) — к левому краю при прокрутке. */
+.pm-wrap { overflow: auto; max-height: calc(100vh - 300px); }
 .pm-grid { width: 100%; border-collapse: separate; border-spacing: 0; }
 .pm-grid thead th {
   position: sticky; top: 0; z-index: 2;
@@ -489,6 +491,22 @@ onMounted(() => { loadLookups(); loadSuppliers(); loadData(); });
 }
 .pm-grid thead th.text-end { text-align: right; }
 .pm-name-col { min-width: 240px; }
+
+/* Липкий первый столбец (имя). Угол (th.pm-name-col) поверх всех. */
+.pm-grid thead th.pm-name-col { left: 0; z-index: 4; }
+.pm-name {
+  position: sticky; left: 0; z-index: 1;
+  background: rgb(var(--v-theme-surface));
+  border-right: 1px solid rgba(var(--v-theme-on-surface), 0.09);
+}
+.pm-grid thead th.pm-name-col { border-right: 1px solid rgba(var(--v-theme-on-surface), 0.09); }
+/* Тонированные строки: непрозрачный фон под липкой ячейкой имени. */
+.pm-row.pm-l1 .pm-name {
+  background: linear-gradient(rgba(var(--v-theme-primary), 0.06), rgba(var(--v-theme-primary), 0.06)), rgb(var(--v-theme-surface));
+}
+.pm-row.pm-total .pm-name {
+  background: linear-gradient(rgba(var(--v-theme-on-surface), 0.04), rgba(var(--v-theme-on-surface), 0.04)), rgb(var(--v-theme-surface));
+}
 .pm-grid td { padding: 6px 7px; border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.05); font-size: 12.5px; }
 .pm-num { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .pm-sub { font-size: 10.5px; color: rgba(var(--v-theme-on-surface), 0.55); line-height: 1.1; margin-top: 1px;
