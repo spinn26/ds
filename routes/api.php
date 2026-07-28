@@ -725,6 +725,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/admin/reports/sales-matrix/forecast', [\App\Http\Controllers\Api\ProductSalesMatrixController::class, 'forecastMatrix']);
         Route::get('/admin/reports/sales-matrix/fact', [\App\Http\Controllers\Api\ProductSalesMatrixController::class, 'factMatrix']);
         Route::get('/admin/reports/sales-matrix/total', [\App\Http\Controllers\Api\ProductSalesMatrixController::class, 'totalMatrix']);
+        Route::get('/admin/reports/sales-matrix/lookups', [\App\Http\Controllers\Api\ProductSalesMatrixController::class, 'lookups']);
         Route::get('/admin/reports/sales-matrix/monthly', [\App\Http\Controllers\Api\ProductSalesMatrixController::class, 'monthly']);
         Route::get('/admin/reports/sales-matrix/cell-contracts', [\App\Http\Controllers\Api\ProductSalesMatrixController::class, 'cellContracts']);
 

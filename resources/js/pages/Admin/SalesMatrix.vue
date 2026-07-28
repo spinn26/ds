@@ -878,12 +878,22 @@ async function loadData({ updateOptions = true } = {}) {
     rows.value        = data.rows           ?? [];
     months.value      = data.period?.months ?? [];
     grandTotals.value = data.grandTotals    ?? null;
-    if (updateOptions) {
-      supplierOptions.value = data.suppliers ?? [];
-      productOptions.value  = data.products  ?? [];
-    }
+    // Опции фильтров грузим отдельно (loadMatrixLookups) — полный справочник
+    // по всем контрактам, а не только продукты/поставщики текущего периода.
   } catch (e) { console.error('matrix load failed', e); }
   loading.value = false;
+}
+
+// Полные справочники поставщиков/продуктов для фильтров — независимо от
+// периода и состояния (иначе часть продуктов/поставщиков не отображалась).
+async function loadMatrixLookups() {
+  try {
+    const { data } = await api.get('/admin/reports/sales-matrix/lookups');
+    supplierOptions.value   = data.suppliers ?? [];
+    productOptions.value    = data.products  ?? [];
+    fcSupplierOptions.value = data.suppliers ?? [];
+    fcProductOptions.value  = data.products  ?? [];
+  } catch (e) { console.error('matrix lookups failed', e); }
 }
 
 // ─── Forecast state ───────────────────────────────────────────
@@ -995,10 +1005,7 @@ async function loadForecast({ updateOptions = true } = {}) {
     fcMonths.value      = data.months      ?? [];
     fcNullKey.value     = data.nullKey     ?? '__no_date__';
     fcNoDateCount.value = data.noDateCount ?? 0;
-    if (updateOptions) {
-      fcSupplierOptions.value = data.suppliers ?? [];
-      fcProductOptions.value  = data.products  ?? [];
-    }
+    // Опции фильтров — из loadMatrixLookups (полный справочник), не из отчёта.
   } catch (e) { console.error('forecast load failed', e); }
   fcLoading.value = false;
 }
@@ -1152,7 +1159,7 @@ function onCellClick(cell, metricKey, label, month, productId, programId) {
   }
 }
 
-onMounted(loadData);
+onMounted(() => { loadMatrixLookups(); loadData(); });
 </script>
 
 <style scoped>

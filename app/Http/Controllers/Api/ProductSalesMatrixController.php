@@ -239,6 +239,42 @@ class ProductSalesMatrixController extends Controller
     }
 
     /**
+     * GET /admin/reports/sales-matrix/lookups
+     *
+     * Полные справочники поставщиков и продуктов для фильтров — по ВСЕМ
+     * контрактам (любой период/состояние), а не только по транзакциям
+     * текущего года. Раньше опции строились из ответа отчёта (transaction +
+     * dateYear), поэтому продукты/поставщики без транзакций в выбранном
+     * периоде (например «В работе»/«Активировано») в фильтре не появлялись.
+     */
+    public function lookups(): JsonResponse
+    {
+        $suppliers = DB::table('contract as co')
+            ->join('program as pg', 'pg.id', '=', 'co.program')
+            ->whereNull('co.deletedAt')
+            ->whereNotNull('pg.providerName')
+            ->distinct()
+            ->orderBy('pg.providerName')
+            ->pluck('pg.providerName')
+            ->values();
+
+        $products = DB::table('contract as co')
+            ->join('product as p', 'p.id', '=', 'co.product')
+            ->whereNull('co.deletedAt')
+            ->select('p.id', 'p.name')
+            ->distinct()
+            ->orderBy('p.name')
+            ->get()
+            ->map(fn ($r) => ['id' => $r->id, 'name' => $r->name])
+            ->values();
+
+        return response()->json([
+            'suppliers' => $suppliers,
+            'products'  => $products,
+        ]);
+    }
+
+    /**
      * GET /admin/reports/sales-matrix/monthly
      *
      * То же, что index, но с разбивкой по месяцам внутри каждой программы.
