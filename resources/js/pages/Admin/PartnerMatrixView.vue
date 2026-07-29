@@ -132,9 +132,11 @@
                 <!-- Уровень 1: Структура -->
                 <tr class="pm-row pm-l1" @click="toggleStruct(s.structureId)">
                   <td class="pm-name">
-                    <v-icon size="16">{{ expandedStructs.has(s.structureId) ? 'mdi-menu-down' : 'mdi-menu-right' }}</v-icon>
-                    <span class="pm-team-tag">Команда</span>
-                    <strong>{{ s.structureName }}</strong>
+                    <span class="pm-name-inner">
+                      <v-icon size="16">{{ expandedStructs.has(s.structureId) ? 'mdi-menu-down' : 'mdi-menu-right' }}</v-icon>
+                      <span class="pm-team-tag">Команда</span>
+                      <strong>{{ s.structureName }}</strong>
+                    </span>
                   </td>
                   <template v-for="mo in displayMonths" v-if="showMonths" :key="`sm-${s.structureId}-${mo}`">
                     <td v-for="(m, mi) in activeMetrics" :key="m.key" class="text-end pm-num pm-month"
@@ -154,8 +156,10 @@
                     <!-- Уровень 2: ФК -->
                     <tr class="pm-row pm-l2" @click="toggleFc(s.structureId, f.fcId)">
                       <td class="pm-name" style="padding-left: 28px">
-                        <v-icon size="14">{{ isFcExpanded(s.structureId, f.fcId) ? 'mdi-menu-down' : 'mdi-menu-right' }}</v-icon>
-                        {{ f.fcName }}
+                        <span class="pm-name-inner">
+                          <v-icon size="14">{{ isFcExpanded(s.structureId, f.fcId) ? 'mdi-menu-down' : 'mdi-menu-right' }}</v-icon>
+                          {{ f.fcName }}
+                        </span>
                       </td>
                       <template v-for="mo in displayMonths" v-if="showMonths" :key="`fm-${f.fcId}-${mo}`">
                         <td v-for="(m, mi) in activeMetrics" :key="m.key" class="text-end pm-num pm-month"
@@ -507,7 +511,7 @@ onMounted(() => { loadLookups(); loadSuppliers(); loadData(); });
 .pm-row.pm-total .pm-name {
   background: linear-gradient(rgba(var(--v-theme-on-surface), 0.04), rgba(var(--v-theme-on-surface), 0.04)), rgb(var(--v-theme-surface));
 }
-.pm-grid td { padding: 6px 7px; border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.05); font-size: 12.5px; }
+.pm-grid td { padding: 6px 7px; border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.05); font-size: 12.5px; vertical-align: middle; }
 .pm-num { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .pm-sub { font-size: 10.5px; color: rgba(var(--v-theme-on-surface), 0.55); line-height: 1.1; margin-top: 1px;
   cursor: help; border-bottom: 1px dotted rgba(var(--v-theme-on-surface), 0.35); display: inline-block; }
@@ -524,7 +528,12 @@ onMounted(() => { loadLookups(); loadSuppliers(); loadData(); });
 .pm-row.pm-l2 { cursor: pointer; }
 .pm-row.pm-l2:hover { background: rgba(var(--v-theme-on-surface), 0.03); }
 .pm-prod, .pm-prod-num { color: rgba(var(--v-theme-on-surface), 0.65); font-style: italic; }
-.pm-name { display: flex; align-items: center; gap: 4px; }
+/* ⚠ НЕ ставить display:flex на сам <td> — в Safari/Chrome на mac flex-ячейка
+   не тянется на высоту строки, и при двухстрочной «Выручке» имя уезжает вверх
+   («едут строки»). Ячейка — обычная (vertical-align:middle), flex — во
+   внутреннем .pm-name-inner. */
+.pm-name { vertical-align: middle; }
+.pm-name-inner { display: inline-flex; align-items: center; gap: 4px; vertical-align: middle; }
 /* Тег «Команда» перед именем структуры — отличает агрегат команды от строки
    самого ФК (у главы совпадает ФИО). */
 .pm-team-tag {
