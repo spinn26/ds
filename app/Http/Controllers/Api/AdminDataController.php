@@ -3401,9 +3401,15 @@ class AdminDataController extends Controller
     public function clientDuplicates(Request $request): JsonResponse
     {
         $by = $request->input('by', 'name'); // name | email | phone
+        // Контакты клиента могут лежать не на самой карточке `client`, а на его
+        // `person` (client.person). Раньше дубли читали только c.email/c.phone —
+        // у части клиентов там пусто, и Почта/Телефон показывались «—», хотя на
+        // карточке клиента (из person) они есть. Берём с фолбэком на person.
+        $emailExpr = "lower(btrim(coalesce(nullif(c.email, ''), p.email)))";
+        $phoneExpr = "regexp_replace(coalesce(nullif(c.phone, ''), p.phone, ''), '[^0-9]', '', 'g')";
         $expr = match ($by) {
-            'email' => "lower(btrim(c.email))",
-            'phone' => "regexp_replace(coalesce(c.phone,''), '[^0-9]', '', 'g')",
+            'email' => $emailExpr,
+            'phone' => $phoneExpr,
             default => "lower(btrim(c.\"personName\"))",
         };
         // Пустые значения не группируем: иначе все безконтактные слипнутся в одну «группу».
@@ -3411,19 +3417,23 @@ class AdminDataController extends Controller
 
         $rows = DB::table('client as c')
             ->leftJoin('consultant as cn', 'cn.id', '=', 'c.consultant')
+            ->leftJoin('person as p', 'p.id', '=', 'c.person')
             ->whereNull('c.dateDeleted')
             ->whereRaw("length($expr) >= ?", [$minLen])
             ->whereRaw("$expr IN (
                 SELECT $expr FROM client c
+                LEFT JOIN person p ON p.id = c.person
                 WHERE c.\"dateDeleted\" IS NULL AND length($expr) >= ?
                 GROUP BY 1 HAVING count(*) > 1
             )", [$minLen])
             ->selectRaw("$expr as grp")
             ->addSelect([
-                'c.id', 'c.personName', 'c.person', 'c.email', 'c.phone',
+                'c.id', 'c.personName', 'c.person',
                 'c.dateCreated', 'c.consultant',
                 'cn.personName as consultantName',
             ])
+            ->selectRaw("coalesce(nullif(c.email, ''), p.email) as email")
+            ->selectRaw("coalesce(nullif(c.phone, ''), p.phone) as phone")
             ->orderByRaw("$expr, c.id")
             ->get();
 
