@@ -348,7 +348,7 @@
     </v-bottom-navigation>
 
     <!-- Per spec ✅Написать ген.директору: форма с чекбоксом «анонимно»,
-         сообщение уходит в Telegram-группу через POST /api/v1/founder-message. -->
+         сообщение уходит в платформенный чат собственнику (POST /api/v1/founder-message). -->
     <v-dialog v-model="quickMsg.open" max-width="560" :persistent="quickMsg.sending">
       <v-card>
         <v-card-title class="d-flex align-center ga-2">
@@ -846,7 +846,8 @@ function onMenuClick(item) {
 }
 
 // Quick-message dialog «Написать собственику» per spec ✅Написать собственику.
-// Отправляется в Telegram-группу через POST /founder-message с флагом anonymous.
+// POST /founder-message создаёт тикет в платформенном чате собственнику (Ламакин),
+// категория «Собственнику»; флаг anonymous скрывает имя отправителя.
 const { showSuccess, showError } = useSnackbar();
 const quickMsg = ref({ open: false, subject: '', icon: 'mdi-email-edit', message: '', anonymous: false, sending: false });
 

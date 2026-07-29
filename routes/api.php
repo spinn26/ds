@@ -142,7 +142,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/staff/online', [\App\Http\Controllers\Api\UserDashboardController::class, 'whoOnline']);
         Route::get('/my-day', [\App\Http\Controllers\Api\UserDashboardController::class, 'myDay']);
 
-        // Per spec ✅Написать собственику — отправка в Telegram-группу
+        // Per spec ✅Написать собственику — тикет в платформенный чат собственнику (Ламакин)
         Route::post('/founder-message', [\App\Http\Controllers\Api\FounderMessageController::class, 'send'])
             ->middleware('throttle:5,1'); // антиспам: 5 сообщений в минуту с пользователя
         Route::get('/notifications', [\App\Http\Controllers\Api\NotificationController::class, 'index']);
