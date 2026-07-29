@@ -89,9 +89,12 @@ let timer = null;
 const totalUnread = computed(() => chats.value.reduce((s, t) => s + (t.unread || 0), 0));
 
 // Не показываем виджет на самой странице чата — там полноценный UI.
+// Также скрыт в отчёте «Продажи по продуктам/партнёрам» — там иконка чата
+// перекрывает нижний-правый угол таблицы (по запросу 2026-07-29).
 const hiddenOnRoute = computed(() => {
   const p = route.path || '';
-  return p.startsWith('/manage/chat') || p.startsWith('/chat');
+  return p.startsWith('/manage/chat') || p.startsWith('/chat')
+    || p.startsWith('/manage/reports/sales-matrix');
 });
 
 async function load() {
