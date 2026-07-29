@@ -34,47 +34,92 @@ class PartnerSalesMatrixController extends Controller
      */
     public function factMatrix(Request $request): JsonResponse
     {
-        $params = $this->validateParams($request);
-        $months = $this->monthRange($params['from'], $params['to']);
-        return response()->json($this->assemblePartnerTree($this->factRows($params), $months, $params));
+        return response()->json($this->buildResponse($this->validateParams($request), 'fact'));
     }
 
     /** GET /admin/reports/partner-matrix/inwork — «В работе»: контракты по createDate. */
     public function inWorkMatrix(Request $request): JsonResponse
     {
-        $params = $this->validateParams($request);
-        $months = $this->monthRange($params['from'], $params['to']);
-        $rows = $this->contractRows($params, 'inwork');
-        $this->injectContractForecast($rows, $params, 'inwork');
-        return response()->json($this->assemblePartnerTree($rows, $months, $params));
+        return response()->json($this->buildResponse($this->validateParams($request), 'inwork'));
     }
 
     /** GET /admin/reports/partner-matrix/forecast — «Активировано»: активированные контракты (статус 1) по openDate, без транзакции. */
     public function forecastMatrix(Request $request): JsonResponse
     {
-        $params = $this->validateParams($request);
-        $months = $this->monthRange($params['from'], $params['to']);
-        $rows = $this->contractRows($params, 'forecast');
-        $this->injectContractForecast($rows, $params, 'forecast');
-        return response()->json($this->assemblePartnerTree($rows, $months, $params));
+        return response()->json($this->buildResponse($this->validateParams($request), 'forecast'));
     }
 
     /** GET /admin/reports/partner-matrix/total — «Итого»: сумма трёх разрезов. */
     public function totalMatrix(Request $request): JsonResponse
     {
-        $params = $this->validateParams($request);
+        return response()->json($this->buildResponse($this->validateParams($request), 'total'));
+    }
+
+    /**
+     * Сборка ответа отчёта: дерево + «знаменатели» для долей КМ/КЛ.
+     *
+     * Доли «от команды»/«от компании» в подписи под «Выручкой» должны считаться
+     * от ПОЛНОЙ команды/компании, а не от отфильтрованной выдачи — иначе при
+     * фильтре по 1 ФК/структуре доля выходила 100%. Поэтому, когда применён
+     * фильтр по ФК или структуре, отдельным проходом (без этих фильтров, но с
+     * тем же периодом/продуктом/поставщиком) считаем истинные выручки компании
+     * и каждой команды. Фронт делит на них (см. revenueSub).
+     */
+    private function buildResponse(array $params, string $mode): array
+    {
         $months = $this->monthRange($params['from'], $params['to']);
-        // Конкатенация плоских строк трёх состояний — assemblePartnerTree суммирует
-        // их по (структура, ФК, продукт, месяц). ФК-distinct сохраняется (fcSet),
-        // клиенты/кол-во суммируются между разрезами (как в продуктовом «Итого»).
+        $result = $this->assemblePartnerTree($this->rowsForMode($params, $mode), $months, $params, $mode === 'total');
+        $result['denominators'] = $this->denominators($params, $mode, $months);
+
+        return $result;
+    }
+
+    /** Плоские строки для режима (fact / inwork / forecast / total). */
+    private function rowsForMode(array $params, string $mode)
+    {
+        if ($mode === 'fact') {
+            return collect($this->factRows($params));
+        }
+        if ($mode === 'inwork' || $mode === 'forecast') {
+            $rows = $this->contractRows($params, $mode);
+            $this->injectContractForecast($rows, $params, $mode);
+
+            return $rows;
+        }
+        // total = сумма трёх разрезов (fact + inwork + forecast).
         $inwork = $this->contractRows($params, 'inwork');
         $this->injectContractForecast($inwork, $params, 'inwork');
         $forecast = $this->contractRows($params, 'forecast');
         $this->injectContractForecast($forecast, $params, 'forecast');
-        $rows = collect($this->factRows($params))->concat($inwork)->concat($forecast);
-        // byState=true: на 3-м уровне (под ФК) — не продукты, а разбивка по
-        // состояниям «В работе / Активировано / Факт» (см. assemblePartnerTree).
-        return response()->json($this->assemblePartnerTree($rows, $months, $params, true));
+
+        return collect($this->factRows($params))->concat($inwork)->concat($forecast);
+    }
+
+    /**
+     * Истинные выручки компании и команд (без фильтра по ФК/структуре) для
+     * знаменателей долей. Возвращает null, когда фильтр по ФК/структуре не
+     * применён — там grand/структуры дерева и так = компания/команды.
+     *
+     * @return array{company: float, teams: array<string, float>}|null
+     */
+    private function denominators(array $params, string $mode, array $months): ?array
+    {
+        if (empty($params['fcs']) && empty($params['structures'])) {
+            return null;
+        }
+        $base = $params;
+        unset($base['fcs'], $base['structures']);
+        $tree = $this->assemblePartnerTree($this->rowsForMode($base, $mode), $months, $base);
+
+        $teams = [];
+        foreach ($tree['structures'] as $s) {
+            $teams[(string) $s['structureId']] = $s['revenue'];
+        }
+
+        return [
+            'company' => (float) ($tree['grand']['revenue'] ?? 0),
+            'teams' => $teams,
+        ];
     }
 
     /**
@@ -604,6 +649,11 @@ class PartnerSalesMatrixController extends Controller
                 $S['clientSet'][$cid] = true; $S['monthlyClients'][$mo][$cid] = true;
                 $grand['clientSet'][$cid] = true; $grand['monthlyClients'][$mo][$cid] = true;
             }
+            // ФК по месяцам — distinct id ФК (для колонки «ФК» в помесячном виде).
+            $P['monthlyFcs'][$mo][$fcId] = true;
+            $F['monthlyFcs'][$mo][$fcId] = true;
+            $S['monthlyFcs'][$mo][$fcId] = true;
+            $grand['monthlyFcs'][$mo][$fcId] = true;
             unset($S, $F, $P);
         }
 
@@ -676,6 +726,10 @@ class PartnerSalesMatrixController extends Controller
             // продуктах/месяцах/ФК, задваивается. clientSet — за весь период,
             // monthlyClients — по месяцам. Разворачиваются в число в finalizeNode.
             'clientSet' => [], 'monthlyClients' => [],
+            // ФК по месяцам — distinct id ФК. Нужно для колонки «ФК» в
+            // ПОМЕСЯЧНОМ виде (год/квартал/диапазон): раньше monthly.fcCount не
+            // заполнялся → ФК показывался 0. Итоговый fcCount берётся из fcSet.
+            'monthlyFcs' => [],
         ];
     }
 
@@ -689,8 +743,9 @@ class PartnerSalesMatrixController extends Controller
             $node['monthly'][$mo]['avgCheck'] = ($m['count'] ?? 0) > 0
                 ? round($m['volume'] / $m['count'], 2) : 0;
             $node['monthly'][$mo]['clientCount'] = count($node['monthlyClients'][$mo] ?? []);
+            $node['monthly'][$mo]['fcCount'] = count($node['monthlyFcs'][$mo] ?? []);
         }
-        unset($node['fcSet'], $node['clientSet'], $node['monthlyClients']);
+        unset($node['fcSet'], $node['clientSet'], $node['monthlyClients'], $node['monthlyFcs']);
         return $node;
     }
 

@@ -417,9 +417,15 @@ function monthCell(node, mo, m) {
  */
 function revenueSub(node, parent) {
   if (node.productId !== undefined) return '';
-  const comp = grand.value?.revenue ? (node.revenue / grand.value.revenue * 100) : 0;
+  // Знаменатели долей — из denominators (полная компания/команда без фильтра по
+  // ФК/структуре), иначе фолбэк на grand/parent. Иначе при фильтре по 1 ФК/
+  // структуре доля выходила 100%.
+  const d = data.value.denominators;
+  const companyRev = d?.company || grand.value?.revenue || 0;
+  const comp = companyRev ? (node.revenue / companyRev * 100) : 0;
   if (node.fcId !== undefined) {
-    const team = parent?.revenue ? (node.revenue / parent.revenue * 100) : 0;
+    const teamRev = d?.teams?.[parent?.structureId] || parent?.revenue || 0;
+    const team = teamRev ? (node.revenue / teamRev * 100) : 0;
     return `Км: ${team.toFixed(1)}% / Кл: ${comp.toFixed(1)}%`;
   }
   return `Доля компании: ${comp.toFixed(1)}%`;
@@ -445,7 +451,7 @@ async function loadData() {
     if (filterSuppliers.value.length) params.suppliers = filterSuppliers.value;
     if (filterProducts.value.length) params.products = filterProducts.value;
     const { data: res } = await api.get(`/admin/reports/partner-matrix/${reportMode.value}`, { params });
-    data.value = { months: res.months || [], structures: res.structures || [], grand: res.grand || null };
+    data.value = { months: res.months || [], structures: res.structures || [], grand: res.grand || null, denominators: res.denominators || null };
     // авто-раскрытие первого уровня
     expandedStructs.value = new Set(data.value.structures.map(s => s.structureId));
   } catch {
