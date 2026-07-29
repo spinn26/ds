@@ -106,6 +106,22 @@ class FounderMessageController extends Controller
             Log::warning('founder-message socket emit failed', ['ticket_id' => $ticketId, 'exception' => $e->getMessage()]);
         }
 
+        // Персональное уведомление собственнику: колокольчик (notifications) +
+        // сокет-пуш + личное Telegram-зеркало (если привязал аккаунт). Так он
+        // не пропустит обращение, даже когда не сидит в разделе чатов.
+        try {
+            $preview = mb_substr($message, 0, 120) . (mb_strlen($message) > 120 ? '…' : '');
+            NotificationController::create(
+                $recipientId,
+                'chat',
+                'Новое сообщение собственнику',
+                $senderName . ': ' . $preview,
+                "/manage/chat?open={$ticketId}",
+            );
+        } catch (\Throwable $e) {
+            Log::warning('founder-message notify failed', ['ticket_id' => $ticketId, 'exception' => $e->getMessage()]);
+        }
+
         return response()->json(['message' => 'Сообщение отправлено собственнику']);
     }
 }
