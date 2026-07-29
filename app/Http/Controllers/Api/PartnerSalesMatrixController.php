@@ -77,6 +77,18 @@ class PartnerSalesMatrixController extends Controller
         return response()->json($this->assemblePartnerTree($rows, $months, $params, true));
     }
 
+    /**
+     * Канонический SQL «Поставщика»: Insmart-продукты (product.name ~ ins+mart)
+     * → «Insmart», остальные → program.providerName. То же выражение, что в
+     * продуктовом отчёте и в списке фильтра (manual-tx lookups), иначе выбор
+     * «Insmart» не совпадает с выдачей. Требует алиасы co (contract), pg (program).
+     */
+    private function resolvedSupplierSql(): string
+    {
+        return "CASE WHEN (SELECT pr.name FROM product pr WHERE pr.id = co.product) ~* 'ins+mart'"
+            . " THEN 'Insmart' ELSE COALESCE(pg.\"providerName\", '—') END";
+    }
+
     /** Плоские строки состояния «Факт» (по транзакциям). */
     private function factRows(array $params)
     {
@@ -96,7 +108,7 @@ class PartnerSalesMatrixController extends Controller
             ->whereNull('co.deletedAt')
             ->whereNull('t.deletedAt')
             ->when(! empty($params['suppliers']), fn ($q) =>
-                $q->whereIn(DB::raw('COALESCE(pg."providerName", \'—\')'), $params['suppliers']))
+                $q->whereIn(DB::raw($this->resolvedSupplierSql()), $params['suppliers']))
             ->when(! empty($params['products']), fn ($q) =>
                 $q->whereIn('co.product', $params['products']))
             ->when(! empty($params['structures']), fn ($q) =>
@@ -164,7 +176,7 @@ class PartnerSalesMatrixController extends Controller
             ->whereRaw("co.\"$dateCol\"::date < ?", [$toExclusive])
             ->where($statusFn)
             ->when(! empty($params['suppliers']), fn ($q) =>
-                $q->whereIn(DB::raw('COALESCE(pg."providerName", \'—\')'), $params['suppliers']))
+                $q->whereIn(DB::raw($this->resolvedSupplierSql()), $params['suppliers']))
             ->when(! empty($params['products']), fn ($q) =>
                 $q->whereIn('co.product', $params['products']))
             ->when(! empty($params['structures']), fn ($q) =>
@@ -224,7 +236,7 @@ class PartnerSalesMatrixController extends Controller
             ->whereRaw("co.\"$dateCol\"::date < ?", [$toExclusive])
             ->where($statusFn)
             ->when(! empty($params['suppliers']), fn ($q) =>
-                $q->whereIn(DB::raw('COALESCE(pg."providerName", \'—\')'), $params['suppliers']))
+                $q->whereIn(DB::raw($this->resolvedSupplierSql()), $params['suppliers']))
             ->when(! empty($params['products']), fn ($q) =>
                 $q->whereIn('co.product', $params['products']))
             ->when(! empty($params['structures']), fn ($q) =>

@@ -65,7 +65,7 @@ class ProductSalesMatrixController extends Controller
 
         // Фильтр по поставщику
         if (! empty($params['suppliers'])) {
-            $q->whereIn(DB::raw('COALESCE(pg."providerName", \'—\')'), $params['suppliers']);
+            $q->whereIn(DB::raw($this->resolvedSupplierSql()), $params['suppliers']);
         }
         // Фильтр по продукту
         if (! empty($params['products'])) {
@@ -155,7 +155,7 @@ class ProductSalesMatrixController extends Controller
             ->whereNull('t.deletedAt');
 
         if (! empty($params['suppliers'])) {
-            $totalsQ->whereIn(DB::raw('COALESCE(pg."providerName", \'—\')'), $params['suppliers']);
+            $totalsQ->whereIn(DB::raw($this->resolvedSupplierSql()), $params['suppliers']);
         }
         if (! empty($params['products'])) {
             $totalsQ->whereIn('co.product', $params['products']);
@@ -239,6 +239,19 @@ class ProductSalesMatrixController extends Controller
     }
 
     /**
+     * Канонический SQL «Поставщика» для sales-matrix: Insmart-продукты
+     * (product.name ~ ins+mart) сворачиваются в «Insmart», у остальных —
+     * program.providerName. Одно выражение для фильтра И для списка (lookups),
+     * иначе выбранное значение не совпадает с выдачей. Требует алиасы co
+     * (contract) и pg (program) в запросе.
+     */
+    private function resolvedSupplierSql(): string
+    {
+        return "CASE WHEN (SELECT pr.name FROM product pr WHERE pr.id = co.product) ~* 'ins+mart'"
+            . " THEN 'Insmart' ELSE COALESCE(pg.\"providerName\", '—') END";
+    }
+
+    /**
      * GET /admin/reports/sales-matrix/lookups
      *
      * Полные справочники поставщиков и продуктов для фильтров — по ВСЕМ
@@ -249,13 +262,16 @@ class ProductSalesMatrixController extends Controller
      */
     public function lookups(): JsonResponse
     {
+        // Резолвнутый поставщик (Insmart + реальные providerName), тот же, что
+        // применяется в фильтре. Плейсхолдер «—» (нет поставщика) не показываем.
         $suppliers = DB::table('contract as co')
             ->join('program as pg', 'pg.id', '=', 'co.program')
             ->whereNull('co.deletedAt')
-            ->whereNotNull('pg.providerName')
+            ->selectRaw($this->resolvedSupplierSql() . ' as supplier')
             ->distinct()
-            ->orderBy('pg.providerName')
-            ->pluck('pg.providerName')
+            ->orderBy('supplier')
+            ->pluck('supplier')
+            ->filter(fn ($s) => $s !== null && $s !== '—')
             ->values();
 
         $products = DB::table('contract as co')
@@ -315,7 +331,7 @@ class ProductSalesMatrixController extends Controller
             ->orderBy('p.id')->orderBy('pg.id')->orderBy('t.dateMonth');
 
         if (! empty($params['suppliers'])) {
-            $q->whereIn(DB::raw('COALESCE(pg."providerName", \'—\')'), $params['suppliers']);
+            $q->whereIn(DB::raw($this->resolvedSupplierSql()), $params['suppliers']);
         }
         if (! empty($params['products'])) {
             $q->whereIn('p.id', $params['products']);
@@ -595,7 +611,7 @@ class ProductSalesMatrixController extends Controller
             ->when($fcFrom, fn ($q) => $q->whereDate('co.accrual_forecast', '>=', $fcFrom))
             ->when($fcTo, fn ($q) => $q->whereDate('co.accrual_forecast', '<=', $fcTo))
             ->when(! empty($params['suppliers']), fn ($q) =>
-                $q->whereIn(DB::raw('COALESCE(pg."providerName", \'—\')'), $params['suppliers'])
+                $q->whereIn(DB::raw($this->resolvedSupplierSql()), $params['suppliers'])
             )
             ->when(! empty($params['products']), fn ($q) =>
                 $q->whereIn('co.product', $params['products'])
@@ -838,7 +854,7 @@ class ProductSalesMatrixController extends Controller
             ->when($fcFrom, fn ($q) => $q->whereDate('co.activation_forecast', '>=', $fcFrom))
             ->when($fcTo, fn ($q) => $q->whereDate('co.activation_forecast', '<=', $fcTo))
             ->when(! empty($params['suppliers']), fn ($q) =>
-                $q->whereIn(DB::raw('COALESCE(pg."providerName", \'—\')'), $params['suppliers'])
+                $q->whereIn(DB::raw($this->resolvedSupplierSql()), $params['suppliers'])
             )
             ->when(! empty($params['products']), fn ($q) =>
                 $q->whereIn('co.product', $params['products'])
@@ -1170,7 +1186,7 @@ class ProductSalesMatrixController extends Controller
                 })
             )
             ->when(! empty($params['suppliers']), fn ($q) =>
-                $q->whereIn(DB::raw('COALESCE(pg."providerName", \'—\')'), $params['suppliers'])
+                $q->whereIn(DB::raw($this->resolvedSupplierSql()), $params['suppliers'])
             )
             ->when(! empty($params['products']), fn ($q) =>
                 $q->whereIn('co.product', $params['products'])
@@ -1376,7 +1392,7 @@ class ProductSalesMatrixController extends Controller
             ->whereNull('co.deletedAt')
             ->whereNull('t.deletedAt')
             ->when(! empty($params['suppliers']), fn ($q) =>
-                $q->whereIn(DB::raw('COALESCE(pg."providerName", \'—\')'), $params['suppliers'])
+                $q->whereIn(DB::raw($this->resolvedSupplierSql()), $params['suppliers'])
             )
             ->when(! empty($params['products']), fn ($q) =>
                 $q->whereIn('co.product', $params['products'])
@@ -1616,7 +1632,7 @@ class ProductSalesMatrixController extends Controller
 
         $applyFilters = function ($q) use ($sup, $prod) {
             return $q
-                ->when(! empty($sup), fn ($qq) => $qq->whereIn(DB::raw('COALESCE(pg."providerName", \'—\')'), $sup))
+                ->when(! empty($sup), fn ($qq) => $qq->whereIn(DB::raw($this->resolvedSupplierSql()), $sup))
                 ->when(! empty($prod), fn ($qq) => $qq->whereIn('co.product', $prod));
         };
 
@@ -2099,7 +2115,7 @@ class ProductSalesMatrixController extends Controller
                 ->where('co.product', $productId)
                 ->when($programId, fn ($qq) => $qq->where('co.program', $programId))
                 ->when(! empty($suppliers), fn ($qq) =>
-                    $qq->whereIn(DB::raw('COALESCE(pg."providerName", \'—\')'), $suppliers));
+                    $qq->whereIn(DB::raw($this->resolvedSupplierSql()), $suppliers));
         };
 
         $inworkQ = fn () => $common(DB::table('contract as co')
