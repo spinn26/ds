@@ -1845,7 +1845,12 @@ class ProductSalesMatrixController extends Controller
             ->select([
                 'co.product as pid',
                 't.dateMonth as m',
-                DB::raw('SUM(COALESCE(co.ammount,0) * '.$this->rateExpr('createDate').') as volume'),
+                // Объём факта = сумма транзакций (t.amountRUB). Раньше тут был
+                // co.ammount×rate на запросе с грануляцией по ТРАНЗАКЦИЯМ → сумма
+                // контракта задваивалась на число его транзакций (объём ×~2.7,
+                // расходился с партнёрским отчётом). Кол-во/выручка/баллы — уже
+                // per-transaction, поэтому совпадали.
+                DB::raw('SUM(COALESCE(t."amountRUB",0)) as volume'),
                 DB::raw('COUNT(DISTINCT t.id) as cnt'),
                 DB::raw('SUM(COALESCE(t."netRevenueRUB",0)) as revenue'),
                 DB::raw('SUM(COALESCE(t."personalVolume",0)) as points'),
