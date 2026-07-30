@@ -75,14 +75,16 @@ async function load() {
 async function save() {
   saving.value = true;
   try {
-    await api.put('/admin/qualification-matrix', {
+    const { data } = await api.put('/admin/qualification-matrix', {
       levels: levels.value.map(l => ({
         id: l.id, title: l.title, percent: l.percent,
         groupVolumeCumulative: l.groupVolumeCumulative, mandatoryGP: l.mandatoryGP, otrif: l.otrif,
       })),
     });
     dirty.value = false;
-    notify('Сохранено');
+    // Бэкенд после сохранения авто-переоценивает уровни партнёров по НГП —
+    // сообщение содержит число повышенных.
+    notify(data?.message || 'Сохранено');
   } catch (e) { notify(e.response?.data?.message || 'Ошибка сохранения', 'error'); }
   saving.value = false;
 }
