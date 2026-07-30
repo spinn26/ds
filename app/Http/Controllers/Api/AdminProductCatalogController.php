@@ -214,6 +214,10 @@ class AdminProductCatalogController extends Controller
 
         $this->syncToLegacyProduct($id);
 
+        // Новый продукт должен сразу появиться в калькуляторе (матрица кэшируется
+        // на 10 мин) — как и при update/toggle. Раньше сброса тут не было.
+        \Illuminate\Support\Facades\Cache::forget('calculator:product-matrix:v4');
+
         return $this->showProduct($id);
     }
 
