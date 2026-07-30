@@ -3,7 +3,6 @@
 namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\DB;
 
 /**
  * Промоут-онли переоценка уровня квалификации по НГП.
@@ -37,32 +36,7 @@ class ReevalQualifications extends Command
     public function handle(): int
     {
         $apply = (bool) $this->option('apply');
-
-        // Кандидаты: у последнего снимка лога уровень ниже target =
-        // max(уровень_по_НГП, status_and_lvl). cur >= 1 — не трогаем NULL/0.
-        $ngpLevelExpr = '(SELECT max(sl.level) FROM status_levels sl'
-            . ' WHERE sl."groupVolumeCumulative" <= COALESCE(l.ngp, 0))';
-
-        $rows = DB::select(<<<SQL
-            WITH latest AS (
-                SELECT DISTINCT ON (consultant) id AS ql_id, consultant,
-                    "groupVolumeCumulative" AS ngp,
-                    GREATEST(COALESCE("nominalLevel", 0), COALESCE("calculationLevel", 0)) AS cur_lvl
-                FROM "qualificationLog"
-                WHERE "dateDeleted" IS NULL
-                ORDER BY consultant, date DESC
-            )
-            SELECT l.ql_id, l.consultant, c."personName" AS name,
-                   round(l.ngp::numeric, 0) AS ngp, l.cur_lvl,
-                   COALESCE(c.status_and_lvl, 0) AS legacy_lvl,
-                   $ngpLevelExpr AS ngp_lvl,
-                   GREATEST($ngpLevelExpr, COALESCE(c.status_and_lvl, 0)) AS target
-            FROM latest l
-            JOIN consultant c ON c.id = l.consultant AND c."dateDeleted" IS NULL
-            WHERE l.cur_lvl >= 1
-              AND GREATEST($ngpLevelExpr, COALESCE(c.status_and_lvl, 0)) > l.cur_lvl
-            ORDER BY target DESC, l.ngp DESC
-        SQL);
+        $rows = \App\Services\QualificationReeval::candidates();
 
         if (empty($rows)) {
             $this->info('Нет партнёров к повышению — все уровни соответствуют НГП.');
@@ -85,25 +59,7 @@ class ReevalQualifications extends Command
             return self::SUCCESS;
         }
 
-        $n = DB::transaction(function () use ($rows) {
-            $count = 0;
-            foreach ($rows as $r) {
-                DB::table('qualificationLog')
-                    ->where('id', $r->ql_id)
-                    ->update(['nominalLevel' => $r->target, 'calculationLevel' => $r->target]);
-                DB::table('consultant')
-                    ->where('id', $r->consultant)
-                    ->where(function ($q) use ($r) {
-                        // promote-only: не понижаем существующий status_and_lvl
-                        $q->whereNull('status_and_lvl')->orWhere('status_and_lvl', '<', $r->target);
-                    })
-                    ->update(['status_and_lvl' => $r->target]);
-                $count++;
-            }
-
-            return $count;
-        });
-
+        $n = \App\Services\QualificationReeval::apply($rows);
         $this->info("Применено: {$n} повышений. Новый % действует со следующего месяца.");
 
         return self::SUCCESS;

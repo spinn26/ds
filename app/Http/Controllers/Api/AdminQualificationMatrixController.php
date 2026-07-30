@@ -52,6 +52,17 @@ class AdminQualificationMatrixController extends Controller
         // Сбросить кэш матрицы калькулятора (если используется).
         Cache::forget('calculator:product-matrix:v4');
 
-        return response()->json(['message' => 'Матрица квалификаций сохранена']);
+        // Изменение порогов НГП должно сразу разойтись по уровням партнёров —
+        // иначе правка «не обновляется везде». Промоут-онли переоценка (после
+        // коммита новых порогов): снижение порога → повышает подходящих;
+        // повышение порога → грандфазер (демоушенов нет). Уровни/снимки лога
+        // обновляются, отчёты/дашборды читают их живьём.
+        $promoted = \App\Services\QualificationReeval::run(true)['promoted'];
+
+        return response()->json([
+            'message' => 'Матрица квалификаций сохранена'
+                . ($promoted > 0 ? " · повышено партнёров по НГП: {$promoted}" : ''),
+            'promoted' => $promoted,
+        ]);
     }
 }
