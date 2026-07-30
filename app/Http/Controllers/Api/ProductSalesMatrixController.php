@@ -1654,11 +1654,16 @@ class ProductSalesMatrixController extends Controller
             ->whereRaw('co."openDate"::date >= ?', [$from.'-01'])
             ->whereRaw('co."openDate"::date < ?', [$toExclusive]));
 
-        // Слой «Факт» — транзакции по месяцу транзакции.
+        // Слой «Факт» — транзакции по месяцу транзакции. Фильтры контракта
+        // (deletedAt/openDate) — как в отдельном режиме «Факт» (factMatrix) и
+        // партнёрском отчёте; без них «Итого» захватывал транзакции удалённых/
+        // без openDate контрактов и слегка расходился с отдельными режимами.
         $factBase = fn () => $applyFilters(DB::table('transaction as t')
             ->join('contract as co', 'co.id', '=', 't.contract')
             ->join('program as pg', 'pg.id', '=', 'co.program')
             ->whereRaw('t."deletedAt" IS NULL')
+            ->whereRaw('co."deletedAt" IS NULL')
+            ->whereRaw('co."openDate" IS NOT NULL')
             ->where('t.dateMonth', '>=', $from)
             ->where('t.dateMonth', '<=', $to));
 
