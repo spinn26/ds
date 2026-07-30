@@ -49,6 +49,12 @@ class ChatController extends Controller
                     $q->orWhereIn('id', $participantTicketIds);
                 }
             });
+            // «Написать собственнику» (department=owner) — исходящий канал к
+            // собственнику (как раньше Telegram), а НЕ тикет, который ФК ведёт у
+            // себя. У партнёра в «Мои обращения»/бейдже не показываем: собственник
+            // работает с ними в /manage/chat. Иначе ответ собственника создавал
+            // «фантомный» непрочитанный у ФК (тикет 1084 и т.п.).
+            $query->where(fn ($q) => $q->where('department', '!=', 'owner')->orWhereNull('department'));
         } else {
             // Staff: видимость по своим категориям + личное участие.
             $roles = array_map('trim', explode(',', $user->role ?? ''));
@@ -2400,6 +2406,9 @@ class ChatController extends Controller
                     $q->orWhereIn('id', $participantTicketIds);
                 }
             });
+            // owner-тикеты («Написать собственнику») у партнёра не считаем —
+            // это исходящий канал к собственнику, не его тикет (см. index()).
+            $query->where(fn ($q) => $q->where('department', '!=', 'owner')->orWhereNull('department'));
         } else {
             $roles = array_map('trim', explode(',', $user->role ?? ''));
             $allowed = TicketService::visibleCategoriesForRoles($roles);
