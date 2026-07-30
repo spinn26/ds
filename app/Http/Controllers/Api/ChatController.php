@@ -42,6 +42,10 @@ class ChatController extends Controller
 
         if (! $isStaff) {
             // Партнёр видит только свои (автор / получатель) + где приглашён.
+            // «Написать собственнику» (department=owner) — двусторонний канал:
+            // партнёр видит тикет в «Мои обращения» под «Собственнику» и получает
+            // ответ собственника как обычное сообщение (собственник отвечает из
+            // /manage/chat). Спец-исключения owner для партнёра НЕТ.
             $query->where(function ($q) use ($user, $participantTicketIds) {
                 $q->where('created_by', $user->id)
                   ->orWhere('recipient_id', $user->id);
@@ -49,12 +53,6 @@ class ChatController extends Controller
                     $q->orWhereIn('id', $participantTicketIds);
                 }
             });
-            // «Написать собственнику» (department=owner) — исходящий канал к
-            // собственнику (как раньше Telegram), а НЕ тикет, который ФК ведёт у
-            // себя. У партнёра в «Мои обращения»/бейдже не показываем: собственник
-            // работает с ними в /manage/chat. Иначе ответ собственника создавал
-            // «фантомный» непрочитанный у ФК (тикет 1084 и т.п.).
-            $query->where(fn ($q) => $q->where('department', '!=', 'owner')->orWhereNull('department'));
         } else {
             // Staff: видимость по своим категориям + личное участие.
             $roles = array_map('trim', explode(',', $user->role ?? ''));
