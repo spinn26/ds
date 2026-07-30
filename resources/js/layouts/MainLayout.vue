@@ -663,6 +663,10 @@ onMounted(async () => {
   loadNotifications();
   loadChatUnread();
 
+  // Мгновенное обновление бейджа при прочтении/решении тикета в чат-странице
+  // (она эмитит window-событие) — чтобы «1» не залипал до следующего опроса.
+  window.addEventListener('chat:unread-refresh', loadChatUnread);
+
   // Polling с учётом visibility — если вкладка скрыта/свёрнута, таймер
   // не работает. При возврате в видимое состояние — сразу дёргаем
   // свежие данные и перезапускаем интервал. Это фиксит зависание UI
@@ -799,6 +803,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   if (unreadInterval) clearInterval(unreadInterval);
+  window.removeEventListener('chat:unread-refresh', loadChatUnread);
 });
 
 const statusColor = computed(() => {

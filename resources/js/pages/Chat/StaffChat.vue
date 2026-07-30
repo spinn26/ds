@@ -2220,6 +2220,9 @@ async function openChat(t) {
     otherLastReadAt.value = data.otherLastReadAt || null;
     partnerContext.value = data.partnerContext || null;
     currentTags.value = parseTags(t.tags);
+    // Тикет прочитан на сервере → сразу обновляем глобальный бейдж чата,
+    // не дожидаясь опроса (иначе счётчик залипает после прочтения).
+    window.dispatchEvent(new Event('chat:unread-refresh'));
     scrollDown(true);
   } catch (e) {
     showError(e?.response?.data?.message || 'Не удалось загрузить чат');

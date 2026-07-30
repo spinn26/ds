@@ -945,6 +945,10 @@ async function openChat(t) {
       activeChat.value.csat_comment = data.ticket.csat_comment ?? null;
     }
     if (t.unread > 0) { t.unread = 0; }
+    // Тикет прочитан на сервере (show ставит read-marker) → сразу обновляем
+    // глобальный бейдж «Мои обращения», не дожидаясь 15-сек опроса. Иначе
+    // «1» залипает после прочтения.
+    window.dispatchEvent(new Event('chat:unread-refresh'));
     scrollDown(true);
   } catch {}
 
