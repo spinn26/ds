@@ -28,13 +28,13 @@
             </template>
             <v-list-item-title class="d-flex align-center ga-2">
               <span class="font-weight-medium">{{ msg.category || 'Без категории' }}</span>
-              <v-chip v-if="msg.direction === 'ds2p' && !msg.readAt" size="x-small" color="error">Новое</v-chip>
+              <v-chip v-if="msg.direction === 'ds2p' && !msg.read" size="x-small" color="error">Новое</v-chip>
               <span class="text-caption text-medium-emphasis ml-auto">{{ msg.createdAt }}</span>
             </v-list-item-title>
             <v-list-item-subtitle class="mt-1" style="white-space: pre-line">{{ msg.message }}</v-list-item-subtitle>
             <template #append>
               <div class="d-flex flex-column ga-1">
-                <v-btn v-if="msg.direction === 'ds2p' && !msg.readAt" size="x-small" variant="outlined" color="primary"
+                <v-btn v-if="msg.direction === 'ds2p' && !msg.read" size="x-small" variant="outlined" color="primary"
                   prepend-icon="mdi-check" @click="markRead(msg)">Прочитано</v-btn>
                 <v-btn v-if="msg.direction === 'ds2p'" size="x-small" variant="outlined"
                   prepend-icon="mdi-reply" @click="openReply(msg)">Ответить</v-btn>
@@ -124,7 +124,9 @@ async function loadCategories() {
 async function markRead(msg) {
   try {
     await api.post(`/communication/${msg.id}/read`);
-    msg.readAt = new Date().toISOString();
+    // Бэкенд отдаёт поле `read` (boolean), не `readAt` — обновляем его, иначе
+    // «Новое»/«Прочитано» не сбрасывались визуально после отметки.
+    msg.read = true;
     loadUnreadCount();
   } catch {}
 }
