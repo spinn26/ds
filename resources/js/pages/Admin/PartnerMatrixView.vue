@@ -205,7 +205,7 @@
                 </template>
                 <td v-for="m in activeMetrics" :key="`gt-${m.key}`" class="text-end pm-num" :class="{ 'pm-total-cell': showMonths }">
                   <template v-if="m.key === 'revenue'">
-                    <strong>{{ fmtRub(grand.revenue) }}</strong>
+                    <div><strong>{{ fmtRub(grand.revenue) }}</strong></div>
                     <div class="pm-sub" :title="revenueSubTitle(grand)">{{ revenueSub(grand, null) }}</div>
                   </template>
                   <strong v-else>{{ cellVal(grand, m) }}</strong>
