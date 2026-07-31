@@ -56,7 +56,7 @@ class ProductSalesMatrixController extends Controller
                 DB::raw('COALESCE(pg."providerName", \'—\') as supplier'),
                 DB::raw('SUM(COALESCE(t."amountRUB", 0))      as volume'),
                 DB::raw('COUNT(DISTINCT co.id)                as contract_count'),
-                DB::raw('SUM(COALESCE(t."netRevenueRUB", 0))  as revenue'),
+                DB::raw('SUM(COALESCE(t."commissionsAmountRUB", 0))  as revenue'),
                 DB::raw('SUM(COALESCE(t."personalVolume", 0)) as points'),
                 DB::raw('COUNT(DISTINCT co.consultant)         as fc_count'),
                 DB::raw('COUNT(DISTINCT co.client)             as client_count'),
@@ -164,7 +164,7 @@ class ProductSalesMatrixController extends Controller
         $totalsRow = $totalsQ->selectRaw('
             SUM(COALESCE(t."amountRUB", 0))      as volume,
             COUNT(DISTINCT co.id)                as contract_count,
-            SUM(COALESCE(t."netRevenueRUB", 0))  as revenue,
+            SUM(COALESCE(t."commissionsAmountRUB", 0))  as revenue,
             SUM(COALESCE(t."personalVolume", 0)) as points,
             COUNT(DISTINCT co.consultant)         as fc_count,
             COUNT(DISTINCT co.client)             as client_count
@@ -343,7 +343,7 @@ class ProductSalesMatrixController extends Controller
                 't.dateMonth',
                 DB::raw('SUM(COALESCE(t."amountRUB", 0))      as volume'),
                 DB::raw('COUNT(DISTINCT co.id)                as contract_count'),
-                DB::raw('SUM(COALESCE(t."netRevenueRUB", 0))  as revenue'),
+                DB::raw('SUM(COALESCE(t."commissionsAmountRUB", 0))  as revenue'),
                 DB::raw('SUM(COALESCE(t."personalVolume", 0)) as points'),
                 DB::raw('COUNT(DISTINCT co.consultant)         as fc_count'),
                 DB::raw('COUNT(DISTINCT co.client)             as client_count'),
@@ -431,7 +431,7 @@ class ProductSalesMatrixController extends Controller
                 't.dateMonth',
                 DB::raw('SUM(COALESCE(t."amountRUB",     0))           as volume'),
                 DB::raw('COUNT(DISTINCT co.id)                          as cnt'),
-                DB::raw('SUM(COALESCE(t."netRevenueRUB", 0))           as revenue'),
+                DB::raw('SUM(COALESCE(t."commissionsAmountRUB", 0))           as revenue'),
                 DB::raw('SUM(COALESCE(t."personalVolume",0))           as points'),
                 DB::raw('COUNT(DISTINCT co.client)                      as client_count'),
             ])
@@ -1429,7 +1429,7 @@ class ProductSalesMatrixController extends Controller
                 't.dateMonth as period_month',
                 DB::raw('SUM(COALESCE(t."amountRUB", 0))      as volume'),
                 DB::raw('COUNT(DISTINCT t.id)                 as cnt'),
-                DB::raw('SUM(COALESCE(t."netRevenueRUB", 0))  as revenue'),
+                DB::raw('SUM(COALESCE(t."commissionsAmountRUB", 0))  as revenue'),
                 DB::raw('SUM(COALESCE(t."personalVolume", 0)) as points'),
                 DB::raw('COUNT(DISTINCT co.client)            as client_count'),
                 DB::raw('COUNT(DISTINCT co.consultant)        as fc_count'),
@@ -1878,7 +1878,7 @@ class ProductSalesMatrixController extends Controller
                 // per-transaction, поэтому совпадали.
                 DB::raw('SUM(COALESCE(t."amountRUB",0)) as volume'),
                 DB::raw('COUNT(DISTINCT t.id) as cnt'),
-                DB::raw('SUM(COALESCE(t."netRevenueRUB",0)) as revenue'),
+                DB::raw('SUM(COALESCE(t."commissionsAmountRUB",0)) as revenue'),
                 DB::raw('SUM(COALESCE(t."personalVolume",0)) as points'),
                 DB::raw('COUNT(DISTINCT co.client) as cl'),
                 DB::raw('COUNT(DISTINCT co.consultant) as fc'),

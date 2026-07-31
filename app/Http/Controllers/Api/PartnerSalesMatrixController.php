@@ -20,8 +20,10 @@ use Illuminate\Support\Facades\DB;
  *   inwork   — «В работе»: контракты по createDate, статус NOT IN (1,6,8,9,10)
  *   total    — сумма трёх разрезов
  *
- * Метрики: Объём, Кол-во, Ср.чек, Выручка, Баллы (commission.groupBonus),
- * Баллы ЛП (commission.personalVolume, chainOrder=1), Кол-во ФК, Клиенты.
+ * Метрики (реш. Лены 2026-07-31): Выручка = доход ДС без НДС
+ *   («Факт» — transaction.commissionsAmountRUB как есть; «В работе»/«Активировано»
+ *   — прогноз Сумма×%ДС/105×100). Баллы = Выручка÷100. Баллы ЛП (личные) =
+ *   personalVolume из транзакций, Продукт→ФК, на команде — прочерк.
  *
  * Структура ФК = верхний предок по consultant.inviter (как на странице
  * «Структура»). Имя структуры = personName корня.
@@ -168,9 +170,13 @@ class PartnerSalesMatrixController extends Controller
                 't.dateMonth as period_month',
                 DB::raw('SUM(COALESCE(t."amountRUB", 0))      as volume'),
                 DB::raw('COUNT(DISTINCT t.id)                 as cnt'),
-                DB::raw('SUM(COALESCE(t."netRevenueRUB", 0))  as revenue'),
+                // Выручка «Факт» = доход ДС без НДС из транзакции (commissionsAmountRUB),
+                // берём как есть — «чистый факт» (реш. Лены 2026-07-31). Раньше тут был
+                // netRevenueRUB (сумма без НДС клиента) — это НЕ доход ДС, завышало в ~14×.
+                DB::raw('SUM(COALESCE(t."commissionsAmountRUB", 0)) as revenue'),
+                // Баллы ЛП (личные) = personalVolume из транзакций (= доход ДС ÷ 100).
                 DB::raw('SUM(COALESCE(t."personalVolume", 0)) as bally'),
-                DB::raw('0                                    as bally_lp'),
+                DB::raw('SUM(COALESCE(t."personalVolume", 0)) as bally_lp'),
                 DB::raw('COUNT(DISTINCT co.client)            as client_count'),
                 DB::raw("string_agg(DISTINCT co.client::text, ',') as client_ids"),
                 DB::raw("'fact'                               as state"),
@@ -328,8 +334,9 @@ class PartnerSalesMatrixController extends Controller
         foreach ($rows as $r) {
             $f = $agg[(int) $r->fc_id][(int) $r->product_id][$r->period_month] ?? null;
             if ($f) {
-                $r->revenue = round($f['revenue'], 2);
-                $r->bally   = round($f['points'], 2);
+                $r->revenue  = round($f['revenue'], 2);
+                $r->bally    = round($f['points'], 2);
+                $r->bally_lp = round($f['points'], 2); // прогнозные личные баллы
             }
         }
     }
@@ -630,9 +637,10 @@ class PartnerSalesMatrixController extends Controller
             }
             $P = &$F['products'][$ckey];
 
-            // Накопление на 3 уровнях + grand + помесячно. ballyLP считается
-            // отдельным пост-проходом (= Баллы × %уровня ФК), здесь не копим.
-            foreach (['volume', 'count', 'revenue', 'bally'] as $k) {
+            // Накопление на 3 уровнях + grand + помесячно. ballyLP (личные баллы,
+            // = personalVolume) копим наравне с остальным; на уровне «команды»
+            // фронт показывает прочерк (личная квалификация не суммируется).
+            foreach (['volume', 'count', 'revenue', 'bally', 'ballyLP'] as $k) {
                 $P[$k] += $vals[$k];
                 $F[$k] += $vals[$k];
                 $S[$k] += $vals[$k];
@@ -656,38 +664,6 @@ class PartnerSalesMatrixController extends Controller
             $grand['monthlyFcs'][$mo][$fcId] = true;
             unset($S, $F, $P);
         }
-
-        // ── Пост-расчёт «Баллы ЛП (комиссия)» = Баллы × %уровня квалификации ФК.
-        // Процент берём по ФК и месяцу (закрытая квалификация за период), снизу
-        // вверх: продукт/ФК → структура → итого. Процент свой у каждого ФК,
-        // поэтому на уровне структуры это СУММА ЛП-комиссий её ФК.
-        $pctMap = $this->qualPercentMap($fcIds, $months); // [fcId][YYYY-MM] => percent(0..100)
-        foreach ($structures as &$S) {
-            foreach ($S['fcs'] as $fid => &$F) {
-                $fcPct = $pctMap[$fid] ?? [];
-                foreach ($F['products'] as &$P) {
-                    foreach ($P['monthly'] as $mo => &$pm) {
-                        $lp = round(($pm['bally'] ?? 0) * (($fcPct[$mo] ?? 0) / 100), 2);
-                        $pm['ballyLP'] = $lp;
-                        $P['ballyLP'] += $lp;
-                    }
-                    unset($pm);
-                }
-                unset($P);
-                foreach ($F['monthly'] as $mo => &$fm) {
-                    $lp = round(($fm['bally'] ?? 0) * (($fcPct[$mo] ?? 0) / 100), 2);
-                    $fm['ballyLP'] = $lp;
-                    $F['ballyLP'] += $lp;
-                    $S['monthly'][$mo]['ballyLP'] = ($S['monthly'][$mo]['ballyLP'] ?? 0) + $lp;
-                    $grand['monthly'][$mo]['ballyLP'] = ($grand['monthly'][$mo]['ballyLP'] ?? 0) + $lp;
-                }
-                unset($fm);
-                $S['ballyLP'] += $F['ballyLP'];
-                $grand['ballyLP'] += $F['ballyLP'];
-            }
-            unset($F);
-        }
-        unset($S);
 
         // Финализация: avgCheck, fcCount (distinct), список продуктов/ФК.
         $structOut = [];
@@ -745,14 +721,14 @@ class PartnerSalesMatrixController extends Controller
         $node['avgCheck'] = $node['count'] > 0 ? round($node['volume'] / $node['count'], 2) : 0;
         $node['fcCount'] = $fcCount;
         $node['clientCount'] = count($node['clientSet'] ?? []);
-        // Отдельная метрика «Баллы (Выручка/100)» — прогнозная оценка баллов.
-        // В «Факт» отличается от «Баллы» (там реальные из транзакций); в
-        // «В работе»/«Активировано» совпадает.
-        $node['ballyRev'] = round(($node['revenue'] ?? 0) / 100, 2);
+        // «Баллы» = Выручка ÷ 100 на всех уровнях (реш. Лены 2026-07-31). В
+        // «Факт» совпадает с суммой personalVolume (доход ДС ÷ 100); держим
+        // единую формулу, чтобы Баллы всегда были согласованы с Выручкой.
+        $node['bally'] = round(($node['revenue'] ?? 0) / 100, 2);
         foreach ($node['monthly'] as $mo => $m) {
             $node['monthly'][$mo]['avgCheck'] = ($m['count'] ?? 0) > 0
                 ? round($m['volume'] / $m['count'], 2) : 0;
-            $node['monthly'][$mo]['ballyRev'] = round(($m['revenue'] ?? 0) / 100, 2);
+            $node['monthly'][$mo]['bally'] = round(($m['revenue'] ?? 0) / 100, 2);
             $node['monthly'][$mo]['clientCount'] = count($node['monthlyClients'][$mo] ?? []);
             $node['monthly'][$mo]['fcCount'] = count($node['monthlyFcs'][$mo] ?? []);
         }
@@ -769,59 +745,4 @@ class PartnerSalesMatrixController extends Controller
         return count($set);
     }
 
-    /**
-     * Карта %уровня квалификации по ФК и месяцу для заданного периода.
-     * Уровень = max(nominalLevel, calculationLevel) из qualificationLog за месяц,
-     * процент — status_levels.percent (целые 15..55). Используется для расчёта
-     * «Баллы ЛП (комиссия)» = Баллы × %/100.
-     *
-     * @param array<int> $fcIds
-     * @param array<string> $months  (YYYY-MM)
-     * @return array<int, array<string, float>>  [fcId][YYYY-MM] => percent(0..100)
-     */
-    private function qualPercentMap(array $fcIds, array $months): array
-    {
-        if (empty($fcIds) || empty($months)) return [];
-
-        $levels = DB::table('status_levels')->get(['id', 'level', 'percent'])->keyBy('id');
-
-        // Тянем всю историю квалификаций до конца последнего запрошенного месяца.
-        // Для прогнозных разрезов («В работе»/«Активировано») текущий месяц ещё
-        // не закрыт — у части ФК нет снимка за него. Берём ПОСЛЕДНИЙ известный
-        // уровень (дата ≤ конца месяца), иначе ЛП обнуляется у незакрытых ФК.
-        $upper = $this->monthExclusiveStart(max($months)); // первое число месяца после последнего
-
-        $rows = DB::table('qualificationLog')
-            ->whereIn('consultant', array_map('intval', array_unique($fcIds)))
-            ->whereNull('dateDeleted')
-            ->whereRaw('date < ?', [$upper])
-            ->orderBy('consultant')->orderBy('date')->orderBy('id')
-            ->get(['consultant', 'date', 'nominalLevel', 'calculationLevel', 'id']);
-
-        // История уровней по ФК (по возрастанию даты): [fc] => [ [Y-m-d, percent], ... ].
-        $hist = [];
-        foreach ($rows as $r) {
-            $a = $r->nominalLevel ? ($levels[$r->nominalLevel] ?? null) : null;
-            $b = $r->calculationLevel ? ($levels[$r->calculationLevel] ?? null) : null;
-            $lvl = (! $a) ? $b : ((! $b) ? $a : (($a->level >= $b->level) ? $a : $b));
-            if (! $lvl) continue;
-            $hist[(int) $r->consultant][] = [substr((string) $r->date, 0, 10), (float) $lvl->percent];
-        }
-
-        // Для каждого (ФК, месяц) — последний уровень с датой ≤ конца месяца.
-        $map = [];
-        foreach (array_unique(array_map('intval', $fcIds)) as $fid) {
-            $h = $hist[$fid] ?? null;
-            if (! $h) continue;
-            foreach ($months as $mo) {
-                $end = $this->monthExclusiveStart($mo); // первое число следующего месяца
-                $pct = null;
-                foreach ($h as [$d, $p]) {
-                    if ($d < $end) $pct = $p; else break;
-                }
-                if ($pct !== null) $map[$fid][$mo] = $pct;
-            }
-        }
-        return $map;
-    }
 }

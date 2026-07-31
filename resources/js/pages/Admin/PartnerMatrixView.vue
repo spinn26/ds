@@ -277,15 +277,12 @@ const allMetrics = [
   { key: 'avgCheck', short: 'Ср.чек', label: 'Средний чек (₽)', fmt: 'rub',
     hint: 'Средний чек = Объём ÷ Кол-во.' },
   { key: 'revenue', short: 'Выручка', label: 'Выручка (₽)', fmt: 'rub',
-    hint: 'Доход ДС. «В работе» / «Активировано» — прогноз: сумма без НДС × %ДС. «Факт» — из транзакций. '
+    hint: 'Доход ДС без НДС. «В работе» / «Активировано» — прогноз: Сумма × %ДС ÷ 105 × 100 (× курс). «Факт» — из транзакции как есть (доход ДС без НДС). '
         + 'Под значением: КМ — доля выручки ФК в его команде; КЛ — доля выручки ФК во всей компании.' },
-  { key: 'bally', short: 'Баллы', label: 'Баллы (реальные / ЛП)', fmt: 'num',
-    hint: 'Реальные баллы (ЛП). В «Факт» — из транзакций (personalVolume), совпадают с «Отчётом начислений» и дашбордом партнёра. В «В работе»/«Активировано» — прогноз Выручка÷100 (транзакций ещё нет). Обычно меньше, чем Выручка÷100.' },
-  { key: 'ballyRev', short: 'Баллы (В/100)', label: 'Баллы по выручке (Выручка÷100)', fmt: 'num',
-    hint: 'Прогнозная оценка баллов = Выручка ÷ 100. В «В работе»/«Активировано» совпадает с «Баллы»; в «Факт» отличается (там «Баллы» = реальные из транзакций).' },
-  { key: 'ballyLP', short: 'Баллы ЛП', label: 'Баллы ЛП (комиссия)', fmt: 'num',
-    hint: 'Баллы в зачёт личной квалификации ФК = Баллы × %уровня ФК. '
-        + 'На уровне команды — сумма ЛП её ФК. Если месяц не закрыт, берётся последний известный уровень.' },
+  { key: 'bally', short: 'Баллы', label: 'Баллы (Выручка÷100)', fmt: 'num',
+    hint: 'Баллы = Выручка ÷ 100 на всех уровнях. В «Факт» совпадают с суммой personalVolume из транзакций.' },
+  { key: 'ballyLP', short: 'Баллы ЛП', label: 'Баллы ЛП (личные продажи)', fmt: 'num',
+    hint: 'Личные баллы ФК в зачёт личной квалификации = personalVolume из транзакций (Продукт → ФК). На уровне команды — прочерк (личная квалификация не суммируется).' },
   { key: 'fcCount', short: 'ФК', label: 'Кол-во ФК', fmt: 'int',
     hint: 'Число уникальных ФК с продажами. На строке ФК/продукта = 1, на команде — количество разных ФК.' },
   { key: 'clientCount', short: 'Клиенты', label: 'Кол-во клиентов', fmt: 'int',
@@ -293,9 +290,9 @@ const allMetrics = [
   // % выручки от команды/компании показываем НЕ отдельными колонками, а
   // подписью под значением «Выручка» (как в макете) — см. revenueSub().
 ];
-const METRICS_KEY = 'partnerMatrix:metrics2';
+const METRICS_KEY = 'partnerMatrix:metrics3';
 const _saved = (() => { try { const s = JSON.parse(localStorage.getItem(METRICS_KEY)); return Array.isArray(s) && s.length ? s : null; } catch { return null; } })();
-const selectedMetricKeys = ref(_saved ?? ['volume', 'count', 'avgCheck', 'revenue', 'bally', 'ballyRev', 'ballyLP', 'fcCount', 'clientCount']);
+const selectedMetricKeys = ref(_saved ?? ['volume', 'count', 'avgCheck', 'revenue', 'bally', 'ballyLP', 'fcCount', 'clientCount']);
 const activeMetrics = computed(() => allMetrics.filter(m => selectedMetricKeys.value.includes(m.key)));
 function toggleMetric(key) {
   const i = selectedMetricKeys.value.indexOf(key);
@@ -389,7 +386,12 @@ function fmtNum(v) { return new Intl.NumberFormat('ru-RU', { maximumFractionDigi
  * для %команды нужна выручка команды, для %компании — grand.
  * level === 'team' (parent null & не grand) — % команды показываем прочерком.
  */
+// Узел «команды» (структура/итого) — нет fcId и productId. У продукта есть
+// productId, у ФК — fcId. «Баллы ЛП» (личная квалификация) на команде — прочерк.
+function isTeamLevel(node) { return node.fcId === undefined && node.productId === undefined; }
+
 function cellVal(node, m) {
+  if (m.key === 'ballyLP' && isTeamLevel(node)) return '—';
   const v = node[m.key] ?? 0;
   if (m.fmt === 'rub') return fmtRub(v);
   if (m.fmt === 'int') return fmtInt(v);
@@ -405,6 +407,7 @@ function fmtMonthHdr(mo) {
   return `${monthShort[parseInt(m, 10)] || mo} '${String(y).slice(2)}`;
 }
 function monthCell(node, mo, m) {
+  if (m.key === 'ballyLP' && isTeamLevel(node)) return '—';
   const v = node.monthly?.[mo]?.[m.key] ?? 0;
   if (m.fmt === 'rub') return fmtRub(v);
   if (m.fmt === 'int') return fmtInt(v);
