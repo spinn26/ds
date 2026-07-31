@@ -709,8 +709,14 @@ class PartnerSalesMatrixController extends Controller
         }
         usort($structOut, fn ($a, $b) => $b['revenue'] <=> $a['revenue']);
 
+        // Показываем только месяцы с данными: у grand.monthly запись есть лишь
+        // для месяцев, где были продажи. Так год-вид не тащит пустые будущие
+        // месяцы (авг–дек) колонками из нулей. Если данных нет вовсе — оставляем
+        // исходный список (фронт всё равно покажет «Нет данных»).
+        $activeMonths = array_values(array_filter($months, fn ($mo) => isset($grand['monthly'][$mo])));
+
         return [
-            'months' => $months,
+            'months' => $activeMonths ?: $months,
             'structures' => $structOut,
             'grand' => $this->finalizeNode($grand, $this->grandFcCount($structures)),
         ];
