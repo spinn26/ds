@@ -252,6 +252,21 @@ class ProductSalesMatrixController extends Controller
     }
 
     /**
+     * Оставить только месяцы с данными (у grand.monthly есть запись). Иначе
+     * год/квартал/диапазон тянут пустые будущие месяцы колонками из нулей.
+     *
+     * @param array<string> $months
+     * @param array<string, mixed> $grand
+     * @return array<string>
+     */
+    private function nonEmptyMonths(array $months, array $grand): array
+    {
+        $active = array_values(array_filter($months, fn ($mo) => isset($grand['monthly'][$mo])));
+
+        return $active ?: $months;
+    }
+
+    /**
      * GET /admin/reports/sales-matrix/lookups
      *
      * Полные справочники поставщиков и продуктов для фильтров — по ВСЕМ
@@ -555,7 +570,7 @@ class ProductSalesMatrixController extends Controller
             ->map(fn ($r) => ['id' => $r->id, 'name' => $r->name]);
 
         return response()->json([
-            'period'      => ['from' => $from, 'to' => $to, 'months' => $months],
+            'period'      => ['from' => $from, 'to' => $to, 'months' => $this->nonEmptyMonths($months, $grand)],
             'rows'        => $result,
             'grandTotals' => $grand,
             'products'    => $allProducts->values(),
@@ -789,7 +804,7 @@ class ProductSalesMatrixController extends Controller
             ->map(fn ($r) => ['id' => $r->id, 'name' => $r->name]);
 
         $payload = [
-            'period'      => ['from' => $from, 'to' => $to, 'months' => $months],
+            'period'      => ['from' => $from, 'to' => $to, 'months' => $this->nonEmptyMonths($months, $grand)],
             'rows'        => $result,
             'grandTotals' => $grand,
             'suppliers'   => $allSuppliers->values(),
@@ -1594,7 +1609,7 @@ class ProductSalesMatrixController extends Controller
         $grand['factDetail'] = $allDetail;
 
         return response()->json([
-            'period'      => ['from' => $from, 'to' => $to, 'months' => $months],
+            'period'      => ['from' => $from, 'to' => $to, 'months' => $this->nonEmptyMonths($months, $grand)],
             'rows'        => $result,
             'grandTotals' => $grand,
             'suppliers'   => $allSuppliers->values(),
@@ -1770,7 +1785,7 @@ class ProductSalesMatrixController extends Controller
             ->map(fn ($r) => ['id' => $r->id, 'name' => $r->name]);
 
         return response()->json([
-            'period'      => ['from' => $from, 'to' => $to, 'months' => $months],
+            'period'      => ['from' => $from, 'to' => $to, 'months' => $this->nonEmptyMonths($months, $grand)],
             'rows'        => $result,
             'grandTotals' => $grand,
             'suppliers'   => $allSuppliers->values(),
@@ -2069,7 +2084,7 @@ class ProductSalesMatrixController extends Controller
             ->map(fn ($r) => ['id' => $r->id, 'name' => $r->name]);
 
         return [
-            'period'      => ['from' => $from, 'to' => $to, 'months' => $months],
+            'period'      => ['from' => $from, 'to' => $to, 'months' => $this->nonEmptyMonths($months, $grand)],
             'rows'        => $result,
             'grandTotals' => $grand,
             'suppliers'   => $allSuppliers->values(),
