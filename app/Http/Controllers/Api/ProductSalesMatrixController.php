@@ -261,7 +261,13 @@ class ProductSalesMatrixController extends Controller
      */
     private function nonEmptyMonths(array $months, array $grand): array
     {
-        $active = array_values(array_filter($months, fn ($mo) => isset($grand['monthly'][$mo])));
+        // grand.monthly может быть предзаполнен нулями для всех месяцев (цикл
+        // avgCheck), поэтому проверяем ненулевые данные, а не только isset.
+        $active = array_values(array_filter($months, function ($mo) use ($grand) {
+            $m = $grand['monthly'][$mo] ?? null;
+
+            return $m !== null && (($m['revenue'] ?? 0) != 0 || ($m['volume'] ?? 0) != 0 || ($m['count'] ?? 0) != 0);
+        }));
 
         return $active ?: $months;
     }
