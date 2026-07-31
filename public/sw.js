@@ -1,7 +1,7 @@
-// v3 — bump this string on every deploy to evict stale JS/CSS caches on iOS Safari.
+// v4 — bump this string on every deploy to evict stale JS/CSS caches on iOS Safari.
 // iOS Safari не убивает старый SW пока открыта хотя бы одна вкладка; новый CACHE_NAME
 // гарантирует что activate-фаза удалит весь старый кэш при переходе на новую версию.
-const CACHE_NAME = 'ds-platform-v3';
+const CACHE_NAME = 'ds-platform-v4';
 
 // Кэшируем только HTML-оболочку (для офлайн-fallback).
 // JS/CSS-чанки имеют content-hash в имени — браузерный HTTP-кэш обрабатывает их сам.
