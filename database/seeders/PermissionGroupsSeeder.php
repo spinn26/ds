@@ -143,6 +143,7 @@ class PermissionGroupsSeeder extends Seeder
                     'acceptance' => 'view',
                     'transfers' => 'view',
                     'currencies' => 'full',
+                    'management-currencies' => 'full', // курсы для отчётов (раньше через role:calculations)
                     'payments' => 'full',
                     'products' => 'full',
                     'contracts' => 'view',

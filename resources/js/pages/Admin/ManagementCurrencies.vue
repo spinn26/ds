@@ -17,11 +17,11 @@
         Курсы валют (управленческий справочник)
         <v-chip size="x-small" color="primary" variant="tonal">{{ rates.length }}</v-chip>
         <v-spacer />
-        <v-btn v-if="canEdit('currencies')" variant="outlined" color="secondary" size="small"
+        <v-btn v-if="canEdit('management-currencies')" variant="outlined" color="secondary" size="small"
           prepend-icon="mdi-content-copy" class="mr-2" @click="copyDialogOpen = true">
           Скопировать из основного
         </v-btn>
-        <v-btn v-if="canEdit('currencies')" color="primary" size="small"
+        <v-btn v-if="canEdit('management-currencies')" color="primary" size="small"
           prepend-icon="mdi-plus" @click="openAdd">Добавить курс</v-btn>
       </v-card-title>
 

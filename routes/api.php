@@ -583,9 +583,9 @@ Route::prefix('v1')->group(function () {
         Route::post('/admin/currencies/vat', [\App\Http\Controllers\Api\AdminFinanceController::class, 'addVatRate'])->middleware('role:admin,calculations');
         // Второй справочник курсов — для отчётов руководителей (нет пересчёта транзакций)
         Route::get('/admin/currencies/management-rates', [\App\Http\Controllers\Api\AdminFinanceController::class, 'managementCurrencies']);
-        Route::post('/admin/currencies/management-rates', [\App\Http\Controllers\Api\AdminFinanceController::class, 'storeManagementCurrencyRate'])->middleware('role:admin,calculations');
-        Route::patch('/admin/currencies/management-rates/{id}', [\App\Http\Controllers\Api\AdminFinanceController::class, 'updateManagementCurrencyRate'])->whereNumber('id')->middleware('role:admin,calculations');
-        Route::post('/admin/currencies/management-rates/copy-from-main', [\App\Http\Controllers\Api\AdminFinanceController::class, 'copyManagementRatesFromMain'])->middleware('role:admin,calculations');
+        Route::post('/admin/currencies/management-rates', [\App\Http\Controllers\Api\AdminFinanceController::class, 'storeManagementCurrencyRate'])->middleware('permission:management-currencies,edit');
+        Route::patch('/admin/currencies/management-rates/{id}', [\App\Http\Controllers\Api\AdminFinanceController::class, 'updateManagementCurrencyRate'])->whereNumber('id')->middleware('permission:management-currencies,edit');
+        Route::post('/admin/currencies/management-rates/copy-from-main', [\App\Http\Controllers\Api\AdminFinanceController::class, 'copyManagementRatesFromMain'])->middleware('permission:management-currencies,edit');
         Route::get('/admin/transaction-import/form-data', [\App\Http\Controllers\Api\TransactionImportController::class, 'formData']);
         Route::get('/admin/transaction-import/sheet-names', [\App\Http\Controllers\Api\TransactionImportController::class, 'sheetNames']);
         // Запуск импорта — та же роль, что откат/пересчёт ниже: кто заливает
