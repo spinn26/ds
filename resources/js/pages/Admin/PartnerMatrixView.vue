@@ -279,8 +279,10 @@ const allMetrics = [
   { key: 'revenue', short: 'Выручка', label: 'Выручка (₽)', fmt: 'rub',
     hint: 'Доход ДС. «В работе» / «Активировано» — прогноз: сумма без НДС × %ДС. «Факт» — из транзакций. '
         + 'Под значением: КМ — доля выручки ФК в его команде; КЛ — доля выручки ФК во всей компании.' },
-  { key: 'bally', short: 'Баллы', label: 'Баллы', fmt: 'num',
-    hint: 'Мотивационные баллы = Выручка ÷ 100.' },
+  { key: 'bally', short: 'Баллы', label: 'Баллы (реальные / ЛП)', fmt: 'num',
+    hint: 'Реальные баллы (ЛП). В «Факт» — из транзакций (personalVolume), совпадают с «Отчётом начислений» и дашбордом партнёра. В «В работе»/«Активировано» — прогноз Выручка÷100 (транзакций ещё нет). Обычно меньше, чем Выручка÷100.' },
+  { key: 'ballyRev', short: 'Баллы (В/100)', label: 'Баллы по выручке (Выручка÷100)', fmt: 'num',
+    hint: 'Прогнозная оценка баллов = Выручка ÷ 100. В «В работе»/«Активировано» совпадает с «Баллы»; в «Факт» отличается (там «Баллы» = реальные из транзакций).' },
   { key: 'ballyLP', short: 'Баллы ЛП', label: 'Баллы ЛП (комиссия)', fmt: 'num',
     hint: 'Баллы в зачёт личной квалификации ФК = Баллы × %уровня ФК. '
         + 'На уровне команды — сумма ЛП её ФК. Если месяц не закрыт, берётся последний известный уровень.' },
@@ -293,7 +295,7 @@ const allMetrics = [
 ];
 const METRICS_KEY = 'partnerMatrix:metrics2';
 const _saved = (() => { try { const s = JSON.parse(localStorage.getItem(METRICS_KEY)); return Array.isArray(s) && s.length ? s : null; } catch { return null; } })();
-const selectedMetricKeys = ref(_saved ?? ['volume', 'count', 'avgCheck', 'revenue', 'bally', 'ballyLP', 'fcCount', 'clientCount']);
+const selectedMetricKeys = ref(_saved ?? ['volume', 'count', 'avgCheck', 'revenue', 'bally', 'ballyRev', 'ballyLP', 'fcCount', 'clientCount']);
 const activeMetrics = computed(() => allMetrics.filter(m => selectedMetricKeys.value.includes(m.key)));
 function toggleMetric(key) {
   const i = selectedMetricKeys.value.indexOf(key);

@@ -739,9 +739,14 @@ class PartnerSalesMatrixController extends Controller
         $node['avgCheck'] = $node['count'] > 0 ? round($node['volume'] / $node['count'], 2) : 0;
         $node['fcCount'] = $fcCount;
         $node['clientCount'] = count($node['clientSet'] ?? []);
+        // Отдельная метрика «Баллы (Выручка/100)» — прогнозная оценка баллов.
+        // В «Факт» отличается от «Баллы» (там реальные из транзакций); в
+        // «В работе»/«Активировано» совпадает.
+        $node['ballyRev'] = round(($node['revenue'] ?? 0) / 100, 2);
         foreach ($node['monthly'] as $mo => $m) {
             $node['monthly'][$mo]['avgCheck'] = ($m['count'] ?? 0) > 0
                 ? round($m['volume'] / $m['count'], 2) : 0;
+            $node['monthly'][$mo]['ballyRev'] = round(($m['revenue'] ?? 0) / 100, 2);
             $node['monthly'][$mo]['clientCount'] = count($node['monthlyClients'][$mo] ?? []);
             $node['monthly'][$mo]['fcCount'] = count($node['monthlyFcs'][$mo] ?? []);
         }
