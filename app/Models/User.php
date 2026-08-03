@@ -29,7 +29,9 @@ class User extends Authenticatable
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()
-            ->logOnly(['firstName', 'lastName', 'email', 'phone', 'role'])
+            // nicTG/birthDate/city тоже пишем в лог: их молчаливое затирание
+            // через профиль было невозможно расследовать (кейс WebUser 1092).
+            ->logOnly(['firstName', 'lastName', 'email', 'phone', 'nicTG', 'birthDate', 'city', 'role'])
             ->logOnlyDirty()
             ->setDescriptionForEvent(fn (string $eventName) => "User {$eventName}");
     }

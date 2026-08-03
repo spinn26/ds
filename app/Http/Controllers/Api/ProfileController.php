@@ -139,10 +139,14 @@ class ProfileController extends Controller
                 'lastName' => $request->input('lastName', $user->lastName),
                 'patronymic' => $request->input('patronymic', $user->patronymic),
                 'email' => $request->input('email', $user->email),
-                'phone' => $request->input('phone', $user->phone),
-                'nicTG' => $request->input('telegram', $request->input('nicTG', $user->nicTG)),
-                'gender' => $request->input('gender', $user->gender),
-                'birthDate' => $request->input('birthDate', $user->birthDate),
+                // Пустое значение = «не менять» (см. присвоение ниже), поэтому
+                // и в проверке резолвим его в текущее, а не в null.
+                'phone' => $request->filled('phone') ? $request->input('phone') : $user->phone,
+                'nicTG' => $request->filled('telegram') || $request->filled('nicTG')
+                    ? $request->input('telegram', $request->input('nicTG'))
+                    : $user->nicTG,
+                'gender' => $request->filled('gender') ? $request->input('gender') : $user->gender,
+                'birthDate' => $request->filled('birthDate') ? $request->input('birthDate') : $user->birthDate,
                 'city' => $request->has('city') ? $request->input('city') : $user->city,
                 'country' => $request->has('country') ? $request->input('country') : $user->taxResidency,
             ];
@@ -159,38 +163,49 @@ class ProfileController extends Controller
             }
         }
 
-        $user->phone = $request->input('phone', $user->phone);
-        $user->nicTG = $request->input('telegram', $request->input('nicTG', $user->nicTG));
-        $user->gender = $request->input('gender', $user->gender);
-        $user->birthDate = $request->input('birthDate', $user->birthDate);
+        // ⚠ НЕ обнулять уже заполненные поля. `input($k, $default)` подставляет
+        // default только если ключа НЕТ в запросе, а фронт шлёт phone/telegram/
+        // birthDate всегда — при пустой форме (например GET /profile упал и
+        // форма осталась пустой) сюда приходили null и молча затирали данные
+        // регистрации (кейс WebUser 1092, 2026-06). Эти поля обязательны при
+        // регистрации, поэтому пустое значение здесь трактуем как «не менять».
+        if ($request->filled('phone')) {
+            $user->phone = $request->input('phone');
+        }
+        $tg = $request->input('telegram', $request->input('nicTG'));
+        if ($tg !== null && $tg !== '') {
+            $user->nicTG = $tg;
+        }
+        if ($request->filled('gender')) {
+            $user->gender = $request->input('gender');
+        }
+        if ($request->filled('birthDate')) {
+            $user->birthDate = $request->input('birthDate');
+        }
 
         if ($request->filled('email')) {
             $user->email = $request->input('email');
         }
 
-        if ($request->has('country')) {
-            $countryName = $request->input('country');
-            $user->taxResidency = $countryName
-                ? DB::table('country')->where('countryNameRu', $countryName)->value('id')
-                : null;
+        // Страну/город, как и контакты выше, пустым значением не затираем.
+        if ($request->filled('country')) {
+            $user->taxResidency = DB::table('country')
+                ->where('countryNameRu', $request->input('country'))
+                ->value('id');
         }
 
-        if ($request->has('city')) {
+        if ($request->filled('city')) {
             $cityName = $request->input('city');
-            if ($cityName) {
-                $cityId = DB::table('city')->where('cityNameRu', $cityName)->value('id');
-                if (! $cityId) {
-                    // Legacy city без серийного id — генерим вручную.
-                    $cityId = DB::transaction(function () use ($cityName) {
-                        $id = LegacyId::next('city');
-                        DB::table('city')->insert(['id' => $id, 'cityNameRu' => $cityName]);
-                        return $id;
-                    });
-                }
-                $user->city = $cityId;
-            } else {
-                $user->city = null;
+            $cityId = DB::table('city')->where('cityNameRu', $cityName)->value('id');
+            if (! $cityId) {
+                // Legacy city без серийного id — генерим вручную.
+                $cityId = DB::transaction(function () use ($cityName) {
+                    $id = LegacyId::next('city');
+                    DB::table('city')->insert(['id' => $id, 'cityNameRu' => $cityName]);
+                    return $id;
+                });
             }
+            $user->city = $cityId;
         }
 
         // Сотрудник может редактировать ФИО + Должность.
@@ -201,7 +216,9 @@ class ProfileController extends Controller
             if ($request->has('position'))      $user->position   = $request->input('position');
         }
 
-        $user->saveQuietly();
+        // Обычный save(), НЕ saveQuietly: правки профиля должны попадать в
+        // activity_log (иначе потерю данных нечем расследовать).
+        $user->save();
 
         return response()->json(['message' => 'Профиль обновлён']);
     }

@@ -1137,6 +1137,10 @@ function verificationLabel(status) {
   return 'На проверке';
 }
 
+// Профиль реально загружен? Пока false — сохранять НЕЛЬЗЯ: форма пустая, и
+// PUT затёр бы телефон/telegram/ДР (кейс WebUser 1092, 2026-06).
+const profileLoaded = ref(false);
+
 async function loadProfile() {
   loading.value = true;
   try {
@@ -1165,11 +1169,21 @@ async function loadProfile() {
       accountNumber: b.accountNumber || '', correspondentAccount: b.correspondentAccount || '',
       beneficiaryName: b.beneficiaryName || '',
     };
-  } catch {}
+    profileLoaded.value = true;
+  } catch (e) {
+    profileLoaded.value = false;
+    saveMsg.value = 'Не удалось загрузить профиль. Обновите страницу — сохранение отключено, чтобы не потерять данные.';
+    saveMsgType.value = 'error';
+  }
   loading.value = false;
 }
 
 async function saveProfile() {
+  if (!profileLoaded.value) {
+    saveMsg.value = 'Профиль ещё не загружен — сохранение отменено. Обновите страницу.';
+    saveMsgType.value = 'error';
+    return;
+  }
   saving.value = true;
   saveMsg.value = '';
   try {
