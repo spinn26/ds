@@ -566,6 +566,7 @@ class AdminDataController extends Controller
         $ok = 0;
         $fail = 0;
         $errors = [];
+        $transferredIds = []; // для пересчёта цепочек после смены наставника
 
         foreach ($data['ids'] as $cid) {
             try {
@@ -594,10 +595,29 @@ class AdminDataController extends Controller
                         if ((int) $data['inviter'] === $cid) {
                             throw new \InvalidArgumentException('Нельзя назначить самого себя');
                         }
+                        $prevInvId = $c->inviter;
+                        $prevInvName = $c->inviterName;
                         $c->inviter = $data['inviter'];
                         $c->inviterName = DB::table('consultant')
                             ->where('id', $data['inviter'])->value('personName');
                         $c->save();
+                        // Массовая смена наставника = перестановка: пишем в
+                        // Историю перестановок + пересчёт (как createTransfer/форма).
+                        if ((int) $prevInvId !== (int) $data['inviter']) {
+                            DB::table('changeConsultantInviterLog')->insert([
+                                'id'             => LegacyId::next('changeConsultantInviterLog'),
+                                'dateCreated'    => now(),
+                                'webUser'        => $request->user()?->id,
+                                'consultant'     => $c->id,
+                                'consultantName' => $c->personName,
+                                'inviterOld'     => $prevInvId,
+                                'inviterOldName' => $prevInvName,
+                                'inviterNew'     => (int) $data['inviter'],
+                                'inviterNewName' => $c->inviterName,
+                                'triggeredBy'    => 'Массовое действие',
+                            ]);
+                            $transferredIds[] = $c->id;
+                        }
                         $ok++;
                         break;
                     case 'block':
@@ -619,6 +639,10 @@ class AdminDataController extends Controller
                 $fail++;
                 $errors[] = "ID {$cid}: " . $e->getMessage();
             }
+        }
+
+        foreach ($transferredIds as $tid) {
+            \App\Jobs\RecomputeTransferChainJob::dispatch('partner', (int) $tid);
         }
 
         return response()->json([
