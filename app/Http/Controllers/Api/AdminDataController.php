@@ -396,8 +396,10 @@ class AdminDataController extends Controller
         // «История изменений» в карточке партнёра. Старые значения
         // снимаем ДО апдейта, новые — после нормализации.
         $diff = [];
+        $inviterTransfer = null;
+        $authorId = $request->user()?->id;
 
-        DB::transaction(function () use ($consultant, $data, &$diff) {
+        DB::transaction(function () use ($consultant, $data, &$diff, &$inviterTransfer, $authorId) {
             // --- consultant columns ---
             $consultantFields = ['participantCode', 'inviter'];
             foreach ($consultantFields as $col) {
@@ -412,12 +414,24 @@ class AdminDataController extends Controller
                 $consultant->participantCode = $data['participantCode'] ?: null;
             }
             if (array_key_exists('inviter', $data)) {
-                $consultant->inviter = $data['inviter'] ?: null;
+                $prevInviterId = $consultant->inviter;
+                $prevInviterName = $consultant->inviterName;
+                $newInviterId = $data['inviter'] ?: null;
+                $consultant->inviter = $newInviterId;
                 // Денорм-имя пригласителя держим в синхроне с FK — иначе
                 // мини-профиль/списки показывают старого пригласителя.
-                $consultant->inviterName = $data['inviter']
-                    ? DB::table('consultant')->where('id', $data['inviter'])->value('personName')
+                $consultant->inviterName = $newInviterId
+                    ? DB::table('consultant')->where('id', $newInviterId)->value('personName')
                     : null;
+                // Смена наставника через форму = перестановка. Фиксируем, чтобы
+                // ниже записать в Историю перестановок и запустить пересчёт —
+                // иначе перевод «теряется» (инцидент Салькова 2026-08).
+                if ((int) $prevInviterId !== (int) $newInviterId) {
+                    $inviterTransfer = [
+                        'oldId' => $prevInviterId, 'oldName' => $prevInviterName,
+                        'newId' => $newInviterId, 'newName' => $consultant->inviterName,
+                    ];
+                }
             }
 
             // --- WebUser columns ---
@@ -473,7 +487,28 @@ class AdminDataController extends Controller
             if ($consultant->wasChanged('personName')) {
                 $this->propagateConsultantName($consultant->id, $consultant->personName);
             }
+
+            // Смена наставника → запись в Историю перестановок (формат createTransfer).
+            if ($inviterTransfer) {
+                DB::table('changeConsultantInviterLog')->insert([
+                    'id'             => LegacyId::next('changeConsultantInviterLog'),
+                    'dateCreated'    => now(),
+                    'webUser'        => $authorId,
+                    'consultant'     => $consultant->id,
+                    'consultantName' => $consultant->personName,
+                    'inviterOld'     => $inviterTransfer['oldId'],
+                    'inviterOldName' => $inviterTransfer['oldName'],
+                    'inviterNew'     => $inviterTransfer['newId'],
+                    'inviterNewName' => $inviterTransfer['newName'],
+                    'triggeredBy'    => 'Форма партнёра',
+                ]);
+            }
         });
+
+        // Пересчёт комиссионной цепочки за открытые периоды (как в createTransfer).
+        if ($inviterTransfer) {
+            \App\Jobs\RecomputeTransferChainJob::dispatch('partner', (int) $consultant->id);
+        }
 
         // В audit_log пишем только если действительно что-то поменялось,
         // иначе «История изменений» забивалась бы пустыми «нажал Сохранить».
