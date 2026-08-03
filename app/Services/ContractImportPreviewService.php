@@ -80,18 +80,17 @@ class ContractImportPreviewService
         // живут FK contract/dsCommission/etc.), потом fallback в
         // `products_catalog.legacy_product_id` (новые продукты, которые
         // ещё не имеют legacy-копии).
+        // ТОЧНОЕ совпадение имени в приоритете, подстрока — фолбэк (та же защита,
+        // что и для программы: чтобы «X» не цепляло «X-МАКС»/«X плюс» и т.п.).
         if (! empty($row['product']) && ! is_numeric($row['product'])) {
             $name = trim($row['product']);
-            $found = DB::table('product')
-                ->where('name', 'ilike', '%' . $name . '%')
-                ->where('active', true)
-                ->value('id');
+            $found = DB::table('product')->whereRaw('LOWER(name) = LOWER(?)', [$name])->where('active', true)->value('id')
+                ?? DB::table('product')->where('name', 'ilike', '%' . $name . '%')->where('active', true)->value('id');
             if (! $found && Schema::hasTable('products_catalog')) {
-                $found = DB::table('products_catalog')
-                    ->where('name', 'ilike', '%' . $name . '%')
-                    ->where('active', true)
-                    ->whereNotNull('legacy_product_id')
-                    ->value('legacy_product_id');
+                $found = DB::table('products_catalog')->whereRaw('LOWER(name) = LOWER(?)', [$name])
+                        ->where('active', true)->whereNotNull('legacy_product_id')->value('legacy_product_id')
+                    ?? DB::table('products_catalog')->where('name', 'ilike', '%' . $name . '%')
+                        ->where('active', true)->whereNotNull('legacy_product_id')->value('legacy_product_id');
             }
             if ($found) $row['product'] = (int) $found;
         }
