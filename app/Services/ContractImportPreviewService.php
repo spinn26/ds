@@ -96,15 +96,21 @@ class ContractImportPreviewService
             if ($found) $row['product'] = (int) $found;
         }
 
-        // 3. Program: по name внутри выбранного product
+        // 3. Program: по name внутри выбранного product.
+        // ⚠ ТОЧНОЕ совпадение имени в приоритете, подстрока — только фолбэк.
+        // Иначе «Парус» подстрочно матчит «Парус-МАКС» (то содержит «Парус»)
+        // и 75 контрактов уехали на неверную программу (кейс 2026-08).
         if (! empty($row['program']) && ! is_numeric($row['program'])) {
-            $progQ = DB::table('program')
-                ->where('name', 'ilike', '%' . trim($row['program']) . '%')
-                ->whereNull('dateDeleted');
-            if (! empty($row['product']) && is_numeric($row['product'])) {
-                $progQ->where('product', (int) $row['product']);
-            }
-            $found = $progQ->value('id');
+            $pname = trim($row['program']);
+            $scoped = function () use ($row) {
+                $q = DB::table('program')->whereNull('dateDeleted');
+                if (! empty($row['product']) && is_numeric($row['product'])) {
+                    $q->where('product', (int) $row['product']);
+                }
+                return $q;
+            };
+            $found = $scoped()->whereRaw('LOWER(name) = LOWER(?)', [$pname])->value('id')
+                ?? $scoped()->where('name', 'ilike', '%' . $pname . '%')->value('id');
             if ($found) $row['program'] = (int) $found;
         }
 
