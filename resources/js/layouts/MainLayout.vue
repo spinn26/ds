@@ -382,6 +382,7 @@
       v-model="showQuestionnaire"
       :identity-name="questionnaireIdentity.name"
       :identity-city="questionnaireIdentity.city"
+      :identity-telegram="questionnaireIdentity.telegram"
       @completed="onQuestionnaireCompleted"
     />
 
@@ -620,7 +621,7 @@ const initials = computed(() =>
 // Onboarding questionnaire — shown to consultants who haven't filled it yet.
 // Block navigation via router guard below (persistent dialog already blocks UI).
 const showQuestionnaire = ref(false);
-const questionnaireIdentity = ref({ name: '', city: '' });
+const questionnaireIdentity = ref({ name: '', city: '', telegram: '' });
 
 async function onQuestionnaireCompleted() {
   if (auth.user) auth.user.questionnaireCompleted = true;
@@ -647,6 +648,7 @@ onMounted(async () => {
     questionnaireIdentity.value = {
       name: fullName,
       city: data.location?.city || '',
+      telegram: u.telegram || '',
     };
     // Show the onboarding dialog for any non-staff user without a filled questionnaire.
     // This covers both 'registered' (right after sign-up) and 'consultant' roles.

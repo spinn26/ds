@@ -44,8 +44,13 @@
             <strong>{{ identityName || '—' }}</strong>
             <span v-if="identityCity"> · {{ identityCity }}</span>
           </div>
-          <div class="text-caption text-medium-emphasis">
-            ФИО и город подставлены из вашего профиля.
+          <div class="text-body-2 mt-1 d-flex align-center ga-1">
+            <v-icon size="15">mdi-send</v-icon>
+            <span v-if="identityTelegram">{{ identityTelegram }}</span>
+            <span v-else class="text-medium-emphasis">Telegram не указан — добавьте в профиле</span>
+          </div>
+          <div class="text-caption text-medium-emphasis mt-1">
+            ФИО, город и Telegram подставлены из вашего профиля.
           </div>
         </v-alert>
 
@@ -240,6 +245,7 @@ const props = defineProps({
   modelValue: { type: Boolean, default: false },
   identityName: { type: String, default: '' },
   identityCity: { type: String, default: '' },
+  identityTelegram: { type: String, default: '' },
 });
 const emit = defineEmits(['update:modelValue', 'completed']);
 
