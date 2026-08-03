@@ -391,6 +391,19 @@ class InsmartIntegrationService
     private function resolveCurrencyId(string $code): int
     {
         $map = ['RUB' => 67, 'USD' => 5, 'EUR' => 17, 'GBP' => 10];
-        return $map[strtoupper($code)] ?? 67;
+        $upper = strtoupper(trim($code));
+        if (isset($map[$upper])) {
+            return $map[$upper];
+        }
+        // Неизвестный код — не молчим (иначе платёж уедет как RUB незаметно).
+        // Пробуем справочник по символу/коду, иначе логируем и RUB-фолбэк.
+        $id = DB::table('currency')
+            ->where('symbol', $upper)->orWhere('nameEn', $upper)->orWhere('currencyName', $upper)
+            ->value('id');
+        if ($id) {
+            return (int) $id;
+        }
+        \Illuminate\Support\Facades\Log::warning("InSmart: неизвестная валюта «{$code}» — по умолчанию RUB, проверьте вручную");
+        return 67;
     }
 }
