@@ -2505,6 +2505,10 @@ class ChatController extends Controller
     /** Staff list for assignment */
     public function staffList(): JsonResponse
     {
+        // Только staff — иначе партнёр вытянет email/роли всех сотрудников.
+        if (! request()->user()?->isStaff()) {
+            abort(403);
+        }
         $staff = DB::table('WebUser')
             ->where(function ($q) {
                 foreach (self::$staffRoles as $role) {

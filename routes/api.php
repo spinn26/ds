@@ -466,10 +466,11 @@ Route::prefix('v1')->group(function () {
 
         Route::get('/admin/partners', [\App\Http\Controllers\Api\AdminDataController::class, 'partners']);
         Route::get('/admin/partners/lookup', [\App\Http\Controllers\Api\AdminDataController::class, 'partnerLookup']);
-        Route::post('/admin/partners', [\App\Http\Controllers\Api\AdminDataController::class, 'storePartner']);
+        Route::post('/admin/partners', [\App\Http\Controllers\Api\AdminDataController::class, 'storePartner'])->middleware('permission:partners,edit');
         Route::post('/admin/partners/bulk', [\App\Http\Controllers\Api\AdminDataController::class, 'bulkPartners'])->middleware('throttle:10,1');
         Route::get('/admin/partners/{id}', [\App\Http\Controllers\Api\AdminDataController::class, 'showPartner'])->whereNumber('id');
-        Route::put('/admin/partners/{id}', [\App\Http\Controllers\Api\AdminDataController::class, 'updatePartner'])->whereNumber('id');
+        // permission:partners,edit — смена inviter двигает комиссии (как у clients/contracts).
+        Route::put('/admin/partners/{id}', [\App\Http\Controllers\Api\AdminDataController::class, 'updatePartner'])->whereNumber('id')->middleware('permission:partners,edit');
         Route::post('/admin/partners/{id}/status', [\App\Http\Controllers\Api\AdminDataController::class, 'changePartnerStatus'])->whereNumber('id');
         // status-override минует PartnerStatusService и при «Исключён» пишет
         // dateDeleted (soft-delete) — партнёр выпадает из расчётов. Только admin.
@@ -536,7 +537,10 @@ Route::prefix('v1')->group(function () {
         Route::get('/admin/contract-import/client-search', [\App\Http\Controllers\Api\ContractImportController::class, 'clientSearch']);
         Route::get('/admin/contract-import/programs/{productId}', [\App\Http\Controllers\Api\ContractImportController::class, 'programsByProduct'])->whereNumber('productId');
         Route::get('/admin/contract-import/history', [\App\Http\Controllers\Api\ContractImportController::class, 'history']);
-        Route::post('/admin/contract-import/from-sheets', [\App\Http\Controllers\Api\ContractImportController::class, 'importFromSheets'])->middleware(['throttle:30,1', 'permission:upload,full']);
+        // Legacy прямой импорт (importFromSheets/processRows) ОТКЛЮЧЁН (2026-08):
+        // матчил программу/продукт по подстроке (баг «Парус») и создавал контракты
+        // с NULL denorm-именами. Единственный путь — preview/from-sheets ниже
+        // (точный матч + денорм-имена), его и использует ContractUpload.vue.
         Route::post('/admin/contract-import/preview/from-sheets', [\App\Http\Controllers\Api\ContractImportController::class, 'previewFromSheets'])->middleware(['throttle:30,1', 'permission:upload,full']);
         Route::get('/admin/contract-import/preview/{sessionId}', [\App\Http\Controllers\Api\ContractImportController::class, 'previewList']);
         Route::patch('/admin/contract-import/preview/row/{id}', [\App\Http\Controllers\Api\ContractImportController::class, 'previewUpdate'])->whereNumber('id')->middleware('permission:upload,full');
@@ -560,7 +564,10 @@ Route::prefix('v1')->group(function () {
         });
 
         Route::get('/admin/transactions', [\App\Http\Controllers\Api\AdminFinanceController::class, 'transactions']);
-        Route::post('/admin/finalize-month', [\App\Http\Controllers\Api\AdminFinanceController::class, 'finalizeMonth'])->middleware('role:admin,calculations');
+        // /admin/finalize-month (MonthlyFinalisationRunner) ОТКЛЮЧЁН (2026-08):
+        // второй движок Отрыв/ОП с иным ключом идемпотентности (риск двойного
+        // применения/отката) и заниженной базой доли ветки. Канон — MonthlyPenaltyRunner
+        // через /admin/finalize/apply (его зовёт UI). Фронт finalize-month не вызывал.
         // Полный перерасчёт комиссий по всем открытым периодам (кнопка). Throttle — защита от повторных запусков.
         Route::post('/admin/recalculate-all', [\App\Http\Controllers\Api\AdminFinanceController::class, 'recalculateAll'])->middleware(['role:admin,calculations', 'throttle:2,10']);
         Route::get('/admin/commissions', [\App\Http\Controllers\Api\AdminFinanceController::class, 'commissions']);
