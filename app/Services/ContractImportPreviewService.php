@@ -223,23 +223,35 @@ class ContractImportPreviewService
             return ['written' => 0, 'message' => 'Нет валидных строк для сохранения'];
         }
 
-        $written = DB::transaction(function () use ($rows) {
+        $result = DB::transaction(function () use ($rows) {
             // Выравниваем PK-сиквенс: после Directual-восстановления он отстаёт,
             // и авто-id врезается в существующие строки (duplicate contract_pkey).
             DB::statement("SELECT setval(pg_get_serial_sequence('contract', 'id'), GREATEST((SELECT MAX(id) FROM contract), 1))");
 
             $count = 0;
+            $skipped = 0;
+            $seen = [];
             foreach ($rows as $r) {
                 $data = json_decode($r->row_data, true) ?: [];
                 $resolved = $this->resolveDenormalizedFields($data);
                 if (! $resolved) continue;
+                $number = (string) $resolved['number'];
+                // Гард уникальности номера — не плодим дубли контрактов ни внутри
+                // сессии, ни против БД (проверка в validate() не ловит дубли внутри
+                // одной сессии и гонку preview→finalize).
+                if ($number !== '' && (isset($seen[$number])
+                    || DB::table('contract')->where('number', $number)->whereNull('deletedAt')->exists())) {
+                    $skipped++;
+                    continue;
+                }
+                $seen[$number] = true;
                 DB::table('contract')->insert(array_merge($resolved, [
                     'createdAt' => now(),
                     'changedAt' => now(),
                 ]));
                 $count++;
             }
-            return $count;
+            return ['count' => $count, 'skipped' => $skipped];
         });
 
         DB::table('contract_import_preview')
@@ -247,7 +259,12 @@ class ContractImportPreviewService
             ->where('status', 'valid')
             ->delete();
 
-        return ['written' => $written, 'message' => "Сохранено: {$written} контрактов"];
+        $message = "Сохранено: {$result['count']} контрактов";
+        if ($result['skipped'] > 0) {
+            $message .= "; пропущено дублей по номеру: {$result['skipped']}";
+        }
+
+        return ['written' => $result['count'], 'skipped' => $result['skipped'], 'message' => $message];
     }
 
     /** Обогатить row_data именами по FK + убрать UI-only поля. */

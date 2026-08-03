@@ -39,6 +39,7 @@ class InsmartIntegrationService
 {
     public function __construct(
         private readonly CommissionCalculator $calculator,
+        private readonly \App\Services\PeriodFreezeService $periodFreeze,
     ) {}
 
     /**
@@ -159,14 +160,26 @@ class InsmartIntegrationService
                 'changedAt' => now(),
             ]);
 
-            // 6) Каскадные комиссии
-            $this->calculator->calculateForTransaction($txId);
+            // 6) Каскадные комиссии — НО не в закрытый (финализированный) период:
+            // платёж с paidAt в закрытом месяце не должен пересчитывать задним
+            // числом (пул/удержания уже применены). Транзакцию всё равно
+            // сохраняем (не теряем платёж), комиссии считает оператор вручную.
+            $frozen = $this->periodFreeze->isFrozen((int) $paidAt->year, (int) $paidAt->month);
+            if ($frozen) {
+                \Illuminate\Support\Facades\Log::warning(
+                    "InSmart: платёж в ЗАКРЫТЫЙ период {$paidAt->format('Y-m')} — комиссии НЕ пересчитаны автоматически, нужна ручная обработка",
+                    ['externalId' => $externalId, 'transactionId' => $txId, 'contractId' => $contractId]
+                );
+            } else {
+                $this->calculator->calculateForTransaction($txId);
+            }
 
             return [
-                'status' => 'created',
+                'status' => $frozen ? 'created_frozen_period' : 'created',
                 'contractId' => $contractId,
                 'transactionId' => $txId,
                 'consultantId' => $consultantId,
+                'frozenPeriod' => $frozen,
             ];
         });
     }
