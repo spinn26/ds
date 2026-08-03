@@ -381,6 +381,7 @@ class AdminProductCatalogController extends Controller
             'updated_at'     => now(),
         ]));
         $this->syncToLegacyProgram($newId);
+        $this->pushTariffsToDsCommission($newId);
         \Illuminate\Support\Facades\Cache::forget('calculator:product-matrix:v4');
         return $this->showSingleProgram($newId);
     }
@@ -395,6 +396,7 @@ class AdminProductCatalogController extends Controller
             ->where('product_id', $productId)
             ->update($payload);
         $this->syncToLegacyProgram($programId);
+        $this->pushTariffsToDsCommission($programId);
         \Illuminate\Support\Facades\Cache::forget('calculator:product-matrix:v4');
         return $this->showSingleProgram($programId);
     }
@@ -625,6 +627,30 @@ class AdminProductCatalogController extends Controller
 
         DB::table('programs_catalog')->where('id', $catalogProgramId)
             ->update(['legacy_program_id' => $newId]);
+    }
+
+    /**
+     * После сохранения тарифов в каталоге — пробрасываем %ДС в legacy-таблицу
+     * `dsCommission` (по ней считаются комиссии транзакций). Только текущее окно
+     * дат, только не-is_red строки, только value-update однозначных совпадений —
+     * см. DsCommissionSync. Ошибка синка НЕ должна валить сохранение.
+     */
+    private function pushTariffsToDsCommission(int $catalogProgramId): void
+    {
+        $row = DB::table('programs_catalog')->where('id', $catalogProgramId)
+            ->first(['legacy_program_id', 'tariffs']);
+        if (! $row || ! $row->legacy_program_id) {
+            return;
+        }
+        $tariffs = json_decode((string) $row->tariffs, true);
+        if (! is_array($tariffs) || ! $tariffs) {
+            return;
+        }
+        try {
+            \App\Services\DsCommissionSync::syncFromTariffs((int) $row->legacy_program_id, $tariffs, true);
+        } catch (\Throwable $e) {
+            report($e);
+        }
     }
 
     /** Subset of incoming program payload that maps onto programs_catalog columns. */
