@@ -63,7 +63,7 @@ class SyncDsCommissionFromCatalog extends Command
                 ->where('program', $pr->legacy_program_id)
                 ->where('active', true)
                 ->whereNull('dateDeleted')
-                ->get(['id', 'termContract', 'commissionCalcProperty', 'comission']);
+                ->get(['id', 'termContract', 'commissionCalcProperty', 'comission', 'date', 'dateFinish']);
 
             foreach ($tariffs as $t) {
                 $pct = $this->parsePct($t);
@@ -101,6 +101,16 @@ class SyncDsCommissionFromCatalog extends Command
                 // Программа без свойства/года и с единственной строкой — сопоставляем её.
                 if ($ccpId === null && $match->count() > 1 && $rows->count() === 1) {
                     $match = $rows;
+                }
+
+                // Несколько строк по одному ключу = разные окна дат. Берём текущее
+                // (date ≤ сегодня ≤ dateFinish) — именно его использует движок расчёта.
+                if ($match->count() > 1) {
+                    $today = now()->toDateTimeString();
+                    $current = $match->filter(fn ($r) => (string) $r->date <= $today && (string) $r->dateFinish >= $today);
+                    if ($current->count() === 1) {
+                        $match = $current;
+                    }
                 }
 
                 if ($match->count() !== 1) {
