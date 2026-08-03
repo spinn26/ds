@@ -76,9 +76,6 @@ class RefreshCatalogFromDsCommission extends Command
 
             // 1) Обновляем существующие (не is_red) строки каталога.
             foreach ($tariffs as $i => $row) {
-                if (! empty($row['is_red'])) {
-                    continue;
-                }
                 $ccpId = $this->rowCcp($row, $ccpByTitle);
                 $term = isset($row['term']) && $row['term'] !== '' ? (int) $row['term'] : '';
 
@@ -89,7 +86,12 @@ class RefreshCatalogFromDsCommission extends Command
                 if ($key === null || ! isset($dsByKey[$key])) {
                     continue;
                 }
+                // Помечаем ключ занятым даже для is_red — чтобы блок ADD не создал дубль.
                 $dsByKey[$key]['used'] = true;
+                // Историческую (is_red) ставку не трогаем.
+                if (! empty($row['is_red'])) {
+                    continue;
+                }
                 $cur = $this->parsePct($row);
                 $target = round($dsByKey[$key]['pct'], 2);
                 if ($cur === null || round($cur, 2) !== $target) {
