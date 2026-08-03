@@ -351,8 +351,8 @@
         <!-- Кто сейчас онлайн из коллег (только staff) -->
         <WhosOnlineWidget v-if="isStaff" class="mb-4" />
 
-        <!-- Личные задачи: TODO-чек-лист с inline-формой добавления -->
-        <MyTasksWidget class="mb-4" />
+        <!-- Личные задачи: TODO-чек-лист (staff-only модуль — у ФК скрыт) -->
+        <MyTasksWidget v-if="isStaff" class="mb-4" />
 
         <!-- Заметка-scratchpad с автосохранением -->
         <MyNoteWidget class="mb-4" />
@@ -372,7 +372,7 @@
             <v-btn v-if="isConsultant" to="/clients" variant="tonal" prepend-icon="mdi-account-group" block class="justify-start">
               Мои клиенты
             </v-btn>
-            <v-btn to="/communication" variant="tonal" prepend-icon="mdi-chat" block class="justify-start">
+            <v-btn v-if="!isConsultant" to="/communication" variant="tonal" prepend-icon="mdi-chat" block class="justify-start">
               Обратная связь
               <v-badge v-if="data.unreadCount" :content="data.unreadCount" color="error" inline class="ml-2" />
             </v-btn>
