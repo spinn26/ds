@@ -265,6 +265,12 @@ class AdminProductCatalogController extends Controller
 
         $this->syncToLegacyProduct($id);
 
+        // Переименование продукта → каскад в денорм-копии имени, иначе менеджер
+        // контрактов/отчёты показывают старое имя (читают contract.productName напрямую).
+        if ($request->has('name')) {
+            $this->propagateProductName($id, $payload['name']);
+        }
+
         // Поставщик с продукта проставляем всем его программам, чтобы отчёты
         // («Комиссии», «Матрица продаж») его подхватили (они читают legacy
         // program.providerName). Только при непустом значении — иначе очистка
@@ -288,6 +294,30 @@ class AdminProductCatalogController extends Controller
      *  - programs_catalog.vendor — чтобы редактор программы показывал то же;
      *  - legacy program.providerName — чтобы отчёты/комиссии подхватили.
      */
+    /**
+     * Каскад нового имени ПРОДУКТА в денорм-копии по legacy-FK:
+     *   contract.productName, dsCommission.productName.
+     */
+    private function propagateProductName(int $catalogProductId, ?string $name): void
+    {
+        $legacyId = DB::table('products_catalog')->where('id', $catalogProductId)->value('legacy_product_id');
+        if (! $legacyId) return;
+        DB::table('contract')->where('product', $legacyId)->update(['productName' => $name]);
+        DB::table('dsCommission')->where('product', $legacyId)->update(['productName' => $name]);
+    }
+
+    /**
+     * Каскад нового имени ПРОГРАММЫ в денорм-копии по legacy-FK:
+     *   contract.programName, dsCommission.programName.
+     */
+    private function propagateProgramName(int $catalogProgramId, ?string $name): void
+    {
+        $legacyId = DB::table('programs_catalog')->where('id', $catalogProgramId)->value('legacy_program_id');
+        if (! $legacyId) return;
+        DB::table('contract')->where('program', $legacyId)->update(['programName' => $name]);
+        DB::table('dsCommission')->where('program', $legacyId)->update(['programName' => $name]);
+    }
+
     private function propagateProviderToPrograms(int $catalogProductId, string $provider): void
     {
         $programs = DB::table('programs_catalog')
@@ -397,6 +427,10 @@ class AdminProductCatalogController extends Controller
             ->update($payload);
         $this->syncToLegacyProgram($programId);
         $this->pushTariffsToDsCommission($programId);
+        // Переименование программы → каскад в contract.programName / dsCommission.programName.
+        if ($request->has('name')) {
+            $this->propagateProgramName($programId, $request->input('name'));
+        }
         \Illuminate\Support\Facades\Cache::forget('calculator:product-matrix:v4');
         return $this->showSingleProgram($programId);
     }
@@ -612,6 +646,9 @@ class AdminProductCatalogController extends Controller
             'name'    => $prog->name,
             'product' => $legacyProductId,
             'active'  => (bool) $prog->active,
+            // Поставщик программы → legacy program.providerName (его читают
+            // отчёты «Комиссии» и матрицы продаж). Раньше не копировался.
+            'providerName' => $prog->vendor,
         ];
 
         if ($prog->legacy_program_id) {
