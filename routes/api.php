@@ -773,15 +773,12 @@ Route::prefix('v1')->group(function () {
         // Admin Products CRUD
         Route::get('/admin/products/references', [\App\Http\Controllers\Api\AdminProductController::class, 'references']);
         Route::get('/admin/products', [\App\Http\Controllers\Api\AdminProductController::class, 'index']);
-        Route::post('/admin/products', [\App\Http\Controllers\Api\AdminProductController::class, 'store']);
-        Route::put('/admin/products/{id}', [\App\Http\Controllers\Api\AdminProductController::class, 'update']);
-        Route::delete('/admin/products/{id}', [\App\Http\Controllers\Api\AdminProductController::class, 'destroy']);
-        Route::post('/admin/products/{id}/toggle-publish', [\App\Http\Controllers\Api\AdminProductController::class, 'togglePublish'])->whereNumber('id');
-        Route::post('/admin/products/{id}/image', [\App\Http\Controllers\Api\AdminProductController::class, 'uploadImage'])->whereNumber('id');
+        // Legacy WRITE-эндпоинты продуктов/программ ОТКЛЮЧЕНЫ (2026-08): правили
+        // legacy product/program напрямую, в обход каскадов имён и синка в каталог
+        // → расхождения (имя/провайдер/тарифы). Единственный путь записи —
+        // /admin/products-catalog/* ниже (его и использует Products.vue).
+        // Read-роуты оставлены на случай внешних читателей.
         Route::get('/admin/products/{id}/programs', [\App\Http\Controllers\Api\AdminProductController::class, 'programs']);
-        Route::post('/admin/products/{id}/programs', [\App\Http\Controllers\Api\AdminProductController::class, 'storeProgram']);
-        Route::put('/admin/products/{id}/programs/{programId}', [\App\Http\Controllers\Api\AdminProductController::class, 'updateProgram']);
-        Route::delete('/admin/products/{id}/programs/{programId}', [\App\Http\Controllers\Api\AdminProductController::class, 'destroyProgram']);
 
         // Audit-driven catalog (products_catalog + programs_catalog) — drop-in
         // replacement for the legacy /admin/products endpoints used by
