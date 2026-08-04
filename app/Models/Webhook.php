@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Webhook extends Model
 {
+    protected $connection = 'pgsql_v2';
     protected $table = 'webhooks';
     protected $guarded = [];
 

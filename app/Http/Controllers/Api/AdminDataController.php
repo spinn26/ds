@@ -653,19 +653,35 @@ class AdminDataController extends Controller
         ]);
     }
 
-    /** Смена статуса активности партнёра — только для роли admin. */
+    /**
+     * Смена статуса активности партнёра.
+     *
+     * Гейт — `permission:statuses,full` на роуте (см. routes/api.php): раньше
+     * стоял жёсткий hasAnyRole(['admin']), из-за чего руководитель по расчётам
+     * со statuses=full в своей группе кнопку видел, а получал 403. admin
+     * получает full на все секции через PermissionResolverService, так что
+     * прежний доступ не сузился.
+     */
     public function changePartnerStatus(Request $request, int $id): JsonResponse
     {
-        if (! $request->user()->hasAnyRole(['admin'])) {
-            return response()->json(['message' => 'Недостаточно прав'], 403);
-        }
-
         $consultant = Consultant::findOrFail($id);
 
         $request->validate([
-            'action' => 'required|in:activate,terminate,exclude,re-register',
+            'action' => 'required|in:activate,terminate,exclude,re-register,restore-termination',
             'reason' => 'nullable|string|max:500',
         ]);
+
+        // Отмена ошибочной терминации отдаёт сводку по возвращённому портфелю.
+        if ($request->action === 'restore-termination') {
+            $res = $this->statusService->restoreFromTermination($consultant, $request->reason ?? '');
+            $msg = sprintf('Статус: %s. Возвращено контрактов: %d, клиентов: %d.',
+                $res['status'], $res['contracts'], $res['clients']);
+            if ($res['skipped']) {
+                $msg .= ' Требуют ручной проверки: '.count($res['skipped']).'.';
+            }
+
+            return response()->json(['message' => $msg, 'details' => $res]);
+        }
 
         $result = match ($request->action) {
             // Активация из карточки — ручное решение админа: форсируем без

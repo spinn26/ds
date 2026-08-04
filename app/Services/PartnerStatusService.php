@@ -445,6 +445,202 @@ class PartnerStatusService
     }
 
     /**
+     * ОТМЕНА ошибочной терминации/исключения: статус возвращается к тому, что
+     * был ДО неё, а контракты и клиенты — прежнему владельцу.
+     *
+     * Терминация — операция с побочными эффектами: contracts/clients уезжают
+     * на ближайшего активного вышестоящего (reassignContractsToUpline/
+     * reassignClientsToUpline). Простая «активация обратно» статус чинит, а
+     * портфель оставляет у наставника — поэтому и нужен отдельный откат.
+     *
+     * Что откатываем:
+     *  - статус → from_status последней записи терминации/исключения в
+     *    chageConsultanStatusLog (Активен/Зарегистрирован), а не жёстко
+     *    «Активен»: партнёр мог быть терминирован из «Зарегистрирован»;
+     *  - terminationCount −1 (ошибочная терминация не должна приближать
+     *    партнёра к исключению на 3-й);
+     *  - контракты и клиенты, уехавшие СИСТЕМНЫМ переносом (triggeredBy ≠
+     *    'manual') начиная с момента терминации.
+     *
+     * Чего НЕ трогаем осознанно:
+     *  - структуру нижестоящих: терминация не переписывает inviter, ветка
+     *    остаётся на партнёре и возвращается вместе со статусом;
+     *  - контракт/клиента, которого ПОСЛЕ терминации перевели куда-то ещё
+     *    (сейчас он не у того, кому его отдала терминация) — это уже чужое
+     *    решение, откат вернул бы его вслепую. Такие позиции возвращаются
+     *    в `skipped` для ручного разбора.
+     *
+     * @return array{status:string, contracts:int, clients:int, skipped:list<string>}
+     */
+    public function restoreFromTermination(Consultant $consultant, string $comment = ''): array
+    {
+        if (! in_array($consultant->activity, [PartnerActivity::Terminated, PartnerActivity::Excluded], true)) {
+            return ['status' => 'Партнёр не терминирован', 'contracts' => 0, 'clients' => 0, 'skipped' => []];
+        }
+
+        $event = $this->lastTerminationEvent((int) $consultant->id);
+        // Момент терминации. Небольшой люфт назад: статус и перенос пишутся
+        // разными транзакциями, и перенос может опередить лог на доли секунды.
+        $since = ($event?->dateCreated ? Carbon::parse($event->dateCreated) : ($consultant->dateDeactivity
+            ? Carbon::parse($consultant->dateDeactivity)
+            : Carbon::now()->subYears(5)))->subMinutes(5);
+
+        $target = $this->activityFromLabel($event->from_status ?? null) ?? PartnerActivity::Active;
+
+        $skipped = [];
+        $contracts = $this->restoreTransfers('contract', $consultant, $since, $skipped);
+        $clients = $this->restoreTransfers('client', $consultant, $since, $skipped);
+
+        $previousActivity = $consultant->activity;
+
+        DB::transaction(function () use ($consultant, $target) {
+            $consultant->activity = $target;
+            $consultant->active = $target === PartnerActivity::Active;
+            $consultant->dateDeactivity = null;
+            // Счётчик терминаций откатываем: ошибочная не считается.
+            $consultant->terminationCount = max(0, (int) ($consultant->terminationCount ?? 0) - 1);
+
+            if ($target === PartnerActivity::Active) {
+                $consultant->dateActivity = Carbon::now();
+                $consultant->yearPeriodEnd = Carbon::now()->addYear();
+                // dateDeterministic отчёты/фильтры читают как дату терминации —
+                // без сброса партнёр остался бы в выборках терминаций.
+                $consultant->dateDeterministic = Carbon::now()->addYear();
+                if (empty($consultant->participantCode)) {
+                    $consultant->participantCode = $this->generateUniqueCode();
+                }
+            }
+
+            $consultant->save();
+        });
+
+        $note = trim('Отмена ошибочной терминации: статус и портфель возвращены. '.$comment);
+        $this->logStatusChange($consultant, $previousActivity, $target, $note, 'manual');
+
+        return [
+            'status' => $target->label(),
+            'contracts' => $contracts,
+            'clients' => $clients,
+            'skipped' => $skipped,
+        ];
+    }
+
+    /**
+     * Вернуть контракты/клиентов, уехавших при терминации, прежнему владельцу.
+     * Обратный перенос пишется в тот же лог (обычной строкой со своим
+     * triggeredBy) и диспатчит RecomputeTransferChainJob — комиссии по
+     * открытым периодам пересчитаются на восстановленную цепочку.
+     *
+     * @param 'contract'|'client' $kind
+     * @param list<string> $skipped
+     */
+    private function restoreTransfers(string $kind, Consultant $consultant, Carbon $since, array &$skipped): int
+    {
+        $map = [
+            'contract' => [
+                'log' => 'changeConsultantContractLog',
+                'table' => 'contract',
+                'fk' => 'contract',
+                'nameCol' => 'contractNumber',
+                'entityName' => 'number',
+                'label' => 'Контракт',
+            ],
+            'client' => [
+                'log' => 'changeConsultantClientLog',
+                'table' => 'client',
+                'fk' => 'client',
+                'nameCol' => 'clientName',
+                'entityName' => 'personName',
+                'label' => 'Клиент',
+            ],
+        ][$kind];
+
+        $rows = DB::table($map['log'])
+            ->where('consultantOld', $consultant->id)
+            ->where('dateCreated', '>=', $since)
+            // Ручные перезакрепления — не наша операция, их не откатываем.
+            ->where(function ($q) {
+                $q->whereNull('triggeredBy')->orWhere('triggeredBy', '!=', 'manual');
+            })
+            ->orderBy('id')
+            ->get();
+
+        $restored = 0;
+        foreach ($rows as $r) {
+            $entityId = (int) $r->{$map['fk']};
+            if (! $entityId) {
+                continue;
+            }
+
+            $current = DB::table($map['table'])->where('id', $entityId)->first();
+            if (! $current) {
+                continue;
+            }
+            if ((int) $current->consultant === (int) $consultant->id) {
+                continue; // уже вернули (напр. повторный запуск отката)
+            }
+            if ((int) $current->consultant !== (int) $r->consultantNew) {
+                // После терминации сущность увели дальше — вслепую не возвращаем.
+                $skipped[] = sprintf('%s %s — сейчас у #%d, а терминация отдала #%d',
+                    $map['label'], $current->{$map['entityName']} ?? $entityId,
+                    (int) $current->consultant, (int) $r->consultantNew);
+                continue;
+            }
+
+            DB::transaction(function () use ($map, $entityId, $current, $consultant, &$restored) {
+                DB::table($map['table'])->where('id', $entityId)->update([
+                    'consultant' => $consultant->id,
+                    'consultantName' => $consultant->personName,
+                ]);
+                DB::table($map['log'])->insert([
+                    'id'                => LegacyId::next($map['log']),
+                    'dateCreated'       => now(),
+                    'webUser'           => auth()->id(),
+                    $map['fk']          => $entityId,
+                    $map['nameCol']     => $current->{$map['entityName']} ?? null,
+                    'consultantOld'     => $current->consultant,
+                    'consultantOldName' => $current->consultantName,
+                    'consultantNew'     => $consultant->id,
+                    'consultantNewName' => $consultant->personName,
+                    'triggeredBy'       => 'Отмена ошибочной терминации (возврат к прежнему владельцу)',
+                ]);
+                $restored++;
+            });
+
+            \App\Jobs\RecomputeTransferChainJob::dispatch($kind, $entityId);
+        }
+
+        return $restored;
+    }
+
+    /** Последняя запись перевода в «Терминирован»/«Исключён» из лога статусов. */
+    private function lastTerminationEvent(int $consultantId): ?object
+    {
+        $rows = DB::table('chageConsultanStatusLog')
+            ->where('consultant', $consultantId)
+            ->whereIn('to_status', [PartnerActivity::Terminated->label(), PartnerActivity::Excluded->label()])
+            ->orderByDesc('dateCreated')
+            ->limit(1)
+            ->get(['dateCreated', 'from_status', 'to_status']);
+
+        return $rows->first();
+    }
+
+    /** Метка статуса из лога → enum. */
+    private function activityFromLabel(?string $label): ?PartnerActivity
+    {
+        if (! $label) {
+            return null;
+        }
+        foreach ([PartnerActivity::Active, PartnerActivity::Registered] as $case) {
+            if ($case->label() === $label) {
+                return $case;
+            }
+        }
+        return null;
+    }
+
+    /**
      * Повторная регистрация терминированного партнёра.
      * Обнуляет баллы, ставит статус «Зарегистрирован».
      */

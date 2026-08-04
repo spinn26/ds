@@ -108,6 +108,7 @@ class PartnersBootstrapOnboarding extends Command
 
     private function markTestsPassed(bool $dry): void
     {
+        $educationDb = DB::connection('pgsql_v2');
         $this->info('--- 2. Все тесты считаются сданными ---');
 
         // ProductController::index определяет «продукт доступен» через
@@ -115,7 +116,7 @@ class PartnersBootstrapOnboarding extends Command
         // быть запись (user_id, course_id). Засеваем completion для всех
         // активных партнёров × всех активных курсов.
 
-        $courseIds = DB::table('education_courses')
+        $courseIds = $educationDb->table('education_courses')
             ->where('active', true)
             ->pluck('id')
             ->all();
@@ -128,17 +129,17 @@ class PartnersBootstrapOnboarding extends Command
         $this->line('  Активных курсов: ' . count($courseIds));
 
         // Берём webUser ID активных партнёров (completion привязан к user_id).
-        $userIds = DB::table('consultant')
-            ->whereNull('dateDeleted')
-            ->whereNotIn('activity', [3, 5])
-            ->whereNotNull('webUser')
-            ->pluck('webUser')
+        $userIds = $educationDb->table('partners')
+            ->whereNull('deleted_at')
+            ->whereNotIn('activity_state', ['terminated', 'excluded'])
+            ->whereNotNull('user_id')
+            ->pluck('user_id')
             ->all();
 
         $this->line('  Партнёров с webUser: ' . count($userIds));
 
         // Уже существующие пары (user_id, course_id) — пропускаем.
-        $existing = DB::table('education_course_completions')
+        $existing = $educationDb->table('education_course_completions')
             ->whereIn('user_id', $userIds)
             ->whereIn('course_id', $courseIds)
             ->select('user_id', 'course_id')
@@ -170,7 +171,7 @@ class PartnersBootstrapOnboarding extends Command
         if ($batch) {
             // Chunk по 1000 для безопасности.
             foreach (array_chunk($batch, 1000) as $chunk) {
-                DB::table('education_course_completions')->insert($chunk);
+                $educationDb->table('education_course_completions')->insert($chunk);
             }
         }
         $this->info('  ✓ Вставлено completion-записей: ' . count($batch));

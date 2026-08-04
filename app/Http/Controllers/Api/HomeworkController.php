@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use Illuminate\Database\ConnectionInterface;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -23,9 +24,14 @@ class HomeworkController extends Controller
 {
     public function __construct()
     {
-        if (! Schema::hasTable('education_homework_submissions')) {
+        if (! Schema::connection('pgsql_v2')->hasTable('education_homework_submissions')) {
             abort(503, 'Таблица homework не создана — нужна миграция 2026_05_25_000020');
         }
+    }
+
+    private function db(): ConnectionInterface
+    {
+        return DB::connection('pgsql_v2');
     }
 
     /** POST /education/lessons/{lessonId}/homework — partner submits */
@@ -38,13 +44,13 @@ class HomeworkController extends Controller
             'attachments.*.url' => 'required_with:attachments|string|max:1000',
         ]);
 
-        $lesson = DB::table('education_lessons')->where('id', $lessonId)->first();
+        $lesson = $this->db()->table('education_lessons')->where('id', $lessonId)->first();
         if (! $lesson) return response()->json(['message' => 'Урок не найден'], 404);
 
         $userId = (int) $request->user()->id;
 
         // Если уже есть pending-ответ — обновляем (не плодим дубли).
-        $existing = DB::table('education_homework_submissions')
+        $existing = $this->db()->table('education_homework_submissions')
             ->where('lesson_id', $lessonId)
             ->where('user_id', $userId)
             ->where('status', 'pending')
@@ -61,12 +67,12 @@ class HomeworkController extends Controller
         ];
 
         if ($existing) {
-            DB::table('education_homework_submissions')
+            $this->db()->table('education_homework_submissions')
                 ->where('id', $existing->id)->update($payload);
             $id = $existing->id;
         } else {
             $payload['created_at'] = now();
-            $id = DB::table('education_homework_submissions')->insertGetId($payload);
+            $id = $this->db()->table('education_homework_submissions')->insertGetId($payload);
         }
 
         return response()->json([
@@ -79,7 +85,7 @@ class HomeworkController extends Controller
     public function my(Request $request): JsonResponse
     {
         $userId = (int) $request->user()->id;
-        $rows = DB::table('education_homework_submissions as h')
+        $rows = $this->db()->table('education_homework_submissions as h')
             ->leftJoin('education_lessons as l', 'l.id', '=', 'h.lesson_id')
             ->where('h.user_id', $userId)
             ->orderByDesc('h.id')
@@ -105,10 +111,10 @@ class HomeworkController extends Controller
     public function queue(Request $request): JsonResponse
     {
         $status = $request->query('status', 'pending');
-        $rows = DB::table('education_homework_submissions as h')
+        $rows = $this->db()->table('education_homework_submissions as h')
             ->leftJoin('education_lessons as l', 'l.id', '=', 'h.lesson_id')
             ->leftJoin('education_courses as c', 'c.id', '=', 'l.course_id')
-            ->leftJoin('WebUser as u', 'u.id', '=', 'h.user_id')
+            ->leftJoin('users as u', 'u.id', '=', 'h.user_id')
             ->when($status !== 'all', fn ($q) => $q->where('h.status', $status))
             ->orderByDesc('h.created_at')
             ->limit(500)
@@ -118,7 +124,7 @@ class HomeworkController extends Controller
                 'h.created_at', 'h.reviewed_at',
                 'l.title as lesson_title', 'c.title as course_title',
                 'c.id as course_id',
-                DB::raw('TRIM(CONCAT(u."firstName", \' \', u."lastName")) as user_name'),
+                DB::raw("TRIM(CONCAT(u.first_name, ' ', u.last_name)) as user_name"),
             ]);
         return response()->json(['items' => $rows->map(fn ($r) => [
             'id' => $r->id, 'lessonId' => $r->lesson_id,
@@ -142,10 +148,10 @@ class HomeworkController extends Controller
             'comment' => 'nullable|string|max:5000',
         ]);
 
-        $hw = DB::table('education_homework_submissions')->where('id', $id)->first();
+        $hw = $this->db()->table('education_homework_submissions')->where('id', $id)->first();
         if (! $hw) return response()->json(['message' => 'Не найдено'], 404);
 
-        DB::table('education_homework_submissions')->where('id', $id)->update([
+        $this->db()->table('education_homework_submissions')->where('id', $id)->update([
             'status' => $data['status'],
             'reviewer_comment' => $data['comment'] ?? null,
             'reviewer_id' => (int) $request->user()->id,
@@ -156,15 +162,19 @@ class HomeworkController extends Controller
         // Если approved + есть lesson — отметим как просмотренный
         // (чтобы прогресс курса автоматически продвинулся).
         if ($data['status'] === 'approved') {
-            $exists = DB::table('education_lesson_views')
+            $exists = $this->db()->table('education_lesson_views')
                 ->where('lesson_id', $hw->lesson_id)
                 ->where('user_id', $hw->user_id)
                 ->exists();
             if (! $exists) {
-                DB::table('education_lesson_views')->insert([
+                $this->db()->table('education_lesson_views')->insert([
                     'lesson_id' => $hw->lesson_id,
                     'user_id' => $hw->user_id,
-                    'viewed_at' => now(),
+                    'first_viewed_at' => now(),
+                    'last_viewed_at' => now(),
+                    'completed_at' => now(),
+                    'created_at' => now(),
+                    'updated_at' => now(),
                 ]);
             }
         }

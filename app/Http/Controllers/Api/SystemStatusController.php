@@ -4,12 +4,17 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Support\Audit;
+use Illuminate\Database\ConnectionInterface;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class SystemStatusController extends Controller
 {
+    private function v2(): ConnectionInterface
+    {
+        return DB::connection('pgsql_v2');
+    }
     /** Визуальный разделитель для Telegram-сообщений. */
     private const TG_DIVIDER = '━━━━━━━━━━━━━━';
 
@@ -49,18 +54,18 @@ class SystemStatusController extends Controller
      */
     public function index(): JsonResponse
     {
-        $components = DB::table('system_components')
+        $components = $this->v2()->table('system_components')
             ->where('active', true)
             ->orderBy('sort_order')->orderBy('id')
             ->get(['id', 'name', 'description', 'status']);
 
-        $active = DB::table('system_incidents')
+        $active = $this->v2()->table('system_incidents')
             ->whereNotIn('status', ['resolved', 'completed'])
             ->orderByDesc('started_at')
             ->limit(50)
             ->get();
 
-        $history = DB::table('system_incidents')
+        $history = $this->v2()->table('system_incidents')
             ->whereIn('status', ['resolved', 'completed'])
             ->orderByDesc('resolved_at')->orderByDesc('id')
             ->limit(30)
@@ -69,7 +74,7 @@ class SystemStatusController extends Controller
         // Batch-load updates timeline для активных и истории.
         $incidentIds = collect($active)->pluck('id')->merge(collect($history)->pluck('id'))->all();
         $updates = $incidentIds
-            ? DB::table('system_incident_updates')
+            ? $this->v2()->table('system_incident_updates')
                 ->whereIn('incident_id', $incidentIds)
                 ->orderBy('created_at')
                 ->get()->groupBy('incident_id')
@@ -97,11 +102,11 @@ class SystemStatusController extends Controller
         ]);
         $now = now();
         DB::transaction(function () use ($id, $data, $request, $now) {
-            DB::table('system_incident_updates')->insert([
+            $this->v2()->table('system_incident_updates')->insert([
                 'incident_id' => $id,
                 'status' => $data['status'],
                 'message' => $data['message'],
-                'created_by' => $request->user()?->id,
+                'created_by_user_id' => $request->user()?->id,
                 'created_at' => $now,
             ]);
             // Синхронизируем актуальный статус инцидента.
@@ -109,13 +114,13 @@ class SystemStatusController extends Controller
             if (in_array($data['status'], ['resolved', 'completed'], true)) {
                 $patch['resolved_at'] = $now;
             }
-            DB::table('system_incidents')->where('id', $id)->update($patch);
+            $this->v2()->table('system_incidents')->where('id', $id)->update($patch);
         });
         Audit::log('incident_update_post', 'system_incident', $id, $data);
 
         // Telegram: уведомление об изменении (апдейте) по инциденту/тех. работам —
         // всем пользователям с привязанным telegram_chat_id, с обращением по имени.
-        $incident = DB::table('system_incidents')->where('id', $id)->first(['title', 'severity']);
+        $incident = $this->v2()->table('system_incidents')->where('id', $id)->first(['title', 'severity']);
         if ($incident) {
             [$emoji] = $this->incidentSeverityMeta($incident->severity ?? 'minor');
             $isClose = in_array($data['status'], ['resolved', 'completed'], true);
@@ -150,7 +155,7 @@ class SystemStatusController extends Controller
             'sort_order' => 'nullable|integer',
             'active' => 'nullable|boolean',
         ]);
-        $id = DB::table('system_components')->insertGetId([
+        $id = $this->v2()->table('system_components')->insertGetId([
             'name' => $data['name'],
             'description' => $data['description'] ?? null,
             'status' => $data['status'] ?? 'operational',
@@ -172,14 +177,14 @@ class SystemStatusController extends Controller
             'active' => 'sometimes|boolean',
         ]);
         $data['updated_at'] = now();
-        DB::table('system_components')->where('id', $id)->update($data);
+        $this->v2()->table('system_components')->where('id', $id)->update($data);
         return response()->json(['message' => 'Обновлено']);
     }
 
     public function destroyComponent(Request $request, int $id): JsonResponse
     {
         $this->ensureAdmin($request);
-        DB::table('system_components')->where('id', $id)->delete();
+        $this->v2()->table('system_components')->where('id', $id)->delete();
         return response()->json(['message' => 'Удалено']);
     }
 
@@ -191,11 +196,11 @@ class SystemStatusController extends Controller
             'description' => 'nullable|string|max:5000',
             'status' => 'nullable|in:investigating,identified,monitoring,resolved,scheduled,in_progress,completed',
             'severity' => 'nullable|in:minor,major,critical,maintenance',
-            'component_id' => 'nullable|integer|exists:system_components,id',
+            'component_id' => 'nullable|integer|exists:pgsql_v2.system_components,id',
             'started_at' => 'nullable|date',
         ]);
         $status = $data['status'] ?? 'investigating';
-        $id = DB::table('system_incidents')->insertGetId([
+        $id = $this->v2()->table('system_incidents')->insertGetId([
             'title' => $data['title'],
             'description' => $data['description'] ?? null,
             'status' => $status,
@@ -203,7 +208,7 @@ class SystemStatusController extends Controller
             'component_id' => $data['component_id'] ?? null,
             'started_at' => $data['started_at'] ?? now(),
             'resolved_at' => in_array($status, ['resolved', 'completed'], true) ? now() : null,
-            'created_by' => $request->user()?->id,
+            'created_by_user_id' => $request->user()?->id,
             'created_at' => now(), 'updated_at' => now(),
         ]);
         Audit::log('incident_create', 'system_incident', $id, [
@@ -243,7 +248,7 @@ class SystemStatusController extends Controller
             'description' => 'sometimes|nullable|string|max:5000',
             'status' => 'sometimes|in:investigating,identified,monitoring,resolved,scheduled,in_progress,completed',
             'severity' => 'sometimes|in:minor,major,critical,maintenance',
-            'component_id' => 'sometimes|nullable|integer|exists:system_components,id',
+            'component_id' => 'sometimes|nullable|integer|exists:pgsql_v2.system_components,id',
             'started_at' => 'sometimes|date',
             'resolved_at' => 'sometimes|nullable|date',
         ]);
@@ -252,17 +257,17 @@ class SystemStatusController extends Controller
             && in_array($data['status'], ['resolved', 'completed'], true)
             && empty($data['resolved_at'])
         ) {
-            $current = DB::table('system_incidents')->where('id', $id)->value('resolved_at');
+            $current = $this->v2()->table('system_incidents')->where('id', $id)->value('resolved_at');
             if (! $current) $data['resolved_at'] = now();
         }
         $data['updated_at'] = now();
-        DB::table('system_incidents')->where('id', $id)->update($data);
+        $this->v2()->table('system_incidents')->where('id', $id)->update($data);
         Audit::log('incident_update', 'system_incident', $id, $data);
 
         // Telegram: уведомление о закрытии инцидента/тех. работ при переходе
         // в resolved/completed (напр. кнопкой «Решён» в шапке).
         if (isset($data['status']) && in_array($data['status'], ['resolved', 'completed'], true)) {
-            $incident = DB::table('system_incidents')->where('id', $id)->first(['title', 'severity']);
+            $incident = $this->v2()->table('system_incidents')->where('id', $id)->first(['title', 'severity']);
             if ($incident) {
                 $title = $incident->title;
                 $statusLabel = $this->incidentStatusLabel($data['status']);
@@ -287,7 +292,7 @@ class SystemStatusController extends Controller
     public function destroyIncident(Request $request, int $id): JsonResponse
     {
         $this->ensureAdmin($request);
-        DB::table('system_incidents')->where('id', $id)->delete();
+        $this->v2()->table('system_incidents')->where('id', $id)->delete();
         Audit::log('incident_delete', 'system_incident', $id);
         return response()->json(['message' => 'Удалено']);
     }

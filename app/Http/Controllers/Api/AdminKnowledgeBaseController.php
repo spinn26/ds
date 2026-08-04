@@ -3,97 +3,88 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use Illuminate\Database\ConnectionInterface;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 
-/**
- * Админ-CRUD для базы знаний (Раздел → Подраздел → Материал).
- *
- * Используется новым конструктором /manage/kb (роль education).
- * Партнёрский просмотр идёт через EducationController::kbTree / kbSection /
- * kbArticle — для оператора нужны write-методы, отдельный namespace.
- */
 class AdminKnowledgeBaseController extends Controller
 {
     public function __construct()
     {
-        if (! Schema::hasTable('education_kb_sections')
-            || ! Schema::hasTable('education_kb_articles')) {
-            abort(503, 'Таблицы базы знаний не созданы — нужна миграция 2026_05_25_000010');
+        if (! Schema::connection('pgsql_v2')->hasTable('education_kb_sections')
+            || ! Schema::connection('pgsql_v2')->hasTable('education_kb_articles')) {
+            abort(503, 'Таблицы базы знаний ds_v2 не созданы');
         }
     }
 
-    /** Дерево разделов (для левой панели конструктора). */
+    private function db(): ConnectionInterface
+    {
+        return DB::connection('pgsql_v2');
+    }
+
     public function tree(): JsonResponse
     {
-        $rows = DB::table('education_kb_sections')
-            ->whereNull('deleted_at')
-            ->orderBy('sort_order')
-            ->orderBy('id')
-            ->get();
-
-        $counts = DB::table('education_kb_articles')
-            ->whereNull('deleted_at')
-            ->select('section_id', DB::raw('COUNT(*) as cnt'))
-            ->groupBy('section_id')
-            ->pluck('cnt', 'section_id');
+        $rows = $this->db()->table('education_kb_sections')
+            ->whereNull('deleted_at')->orderBy('sort_order')->orderBy('id')->get();
+        $counts = $this->db()->table('education_kb_articles')
+            ->whereNull('deleted_at')->select('section_id', DB::raw('COUNT(*) as cnt'))
+            ->groupBy('section_id')->pluck('cnt', 'section_id');
 
         $byParent = [];
-        foreach ($rows as $r) {
-            $byParent[$r->parent_id ?? 0][] = [
-                'id' => $r->id, 'title' => $r->title,
-                'parent_id' => $r->parent_id ? (int) $r->parent_id : null,
-                'slug' => $r->slug, 'icon' => $r->icon,
-                'description' => $r->description, 'coverUrl' => $r->cover_url,
-                'sortOrder' => $r->sort_order,
-                'articleCount' => (int) ($counts[$r->id] ?? 0),
+        foreach ($rows as $row) {
+            $byParent[$row->parent_id ?? 0][] = [
+                'id' => $row->id,
+                'title' => $row->title,
+                'parent_id' => $row->parent_id ? (int) $row->parent_id : null,
+                'slug' => $row->slug,
+                'icon' => $row->icon,
+                'description' => $row->description,
+                'coverUrl' => $row->cover_url,
+                'sortOrder' => (int) $row->sort_order,
+                'articleCount' => (int) ($counts[$row->id] ?? 0),
                 'children' => [],
             ];
         }
-        $build = function (int $p) use (&$build, &$byParent) {
-            $out = $byParent[$p] ?? [];
-            foreach ($out as &$n) $n['children'] = $build($n['id']);
-            return $out;
+        $build = function (int $parentId) use (&$build, &$byParent): array {
+            $nodes = $byParent[$parentId] ?? [];
+            foreach ($nodes as &$node) {
+                $node['children'] = $build((int) $node['id']);
+            }
+            return $nodes;
         };
+
         return response()->json(['tree' => $build(0)]);
     }
 
-    /** CRUD разделов */
     public function storeSection(Request $request): JsonResponse
     {
-        $data = $request->validate([
-            'title' => 'required|string|max:200',
-            'parent_id' => 'nullable|integer|exists:education_kb_sections,id',
-            'icon' => 'nullable|string|max:80',
-            'description' => 'nullable|string|max:2000',
-            'sort_order' => 'nullable|integer',
-        ]);
-        $id = DB::table('education_kb_sections')->insertGetId([
+        $data = $this->sectionValidate($request);
+        $id = $this->db()->table('education_kb_sections')->insertGetId([
             'title' => $data['title'],
+            'slug' => $this->uniqueSlug('education_kb_sections', $data['title']),
             'parent_id' => $data['parent_id'] ?? null,
             'icon' => $data['icon'] ?? null,
             'description' => $data['description'] ?? null,
             'sort_order' => $data['sort_order'] ?? 0,
-            'created_at' => now(), 'updated_at' => now(),
+            'active' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
         ]);
+
         return response()->json(['id' => $id, 'message' => 'Раздел создан'], 201);
     }
 
     public function updateSection(Request $request, int $id): JsonResponse
     {
-        $data = $request->validate([
-            'title' => 'required|string|max:200',
-            'parent_id' => 'nullable|integer|exists:education_kb_sections,id',
-            'icon' => 'nullable|string|max:80',
-            'description' => 'nullable|string|max:2000',
-            'sort_order' => 'nullable|integer',
-        ]);
-        if (! empty($data['parent_id']) && $this->isDescendant((int) $data['parent_id'], $id)) {
+        $data = $this->sectionValidate($request);
+        if (! empty($data['parent_id'])
+            && ((int) $data['parent_id'] === $id || $this->isDescendant((int) $data['parent_id'], $id))) {
             return response()->json(['message' => 'Нельзя поместить раздел в собственное поддерево'], 422);
         }
-        DB::table('education_kb_sections')->where('id', $id)->update([
+        $this->db()->table('education_kb_sections')->where('id', $id)->whereNull('deleted_at')->update([
             'title' => $data['title'],
             'parent_id' => $data['parent_id'] ?? null,
             'icon' => $data['icon'] ?? null,
@@ -101,147 +92,192 @@ class AdminKnowledgeBaseController extends Controller
             'sort_order' => $data['sort_order'] ?? 0,
             'updated_at' => now(),
         ]);
+
         return response()->json(['message' => 'Раздел обновлён']);
     }
 
     public function destroySection(int $id): JsonResponse
     {
-        DB::transaction(function () use ($id) {
-            // Каскадно soft-delete все подразделы и материалы.
-            $ids = $this->collectDescendants($id);
-            $ids[] = $id;
-            DB::table('education_kb_articles')
-                ->whereIn('section_id', $ids)
-                ->update(['deleted_at' => now()]);
-            DB::table('education_kb_sections')
-                ->whereIn('id', $ids)
-                ->update(['deleted_at' => now()]);
+        $this->db()->transaction(function () use ($id): void {
+            $ids = [...$this->collectDescendants($id), $id];
+            $now = now();
+            $this->db()->table('education_kb_articles')->whereIn('section_id', $ids)
+                ->update(['deleted_at' => $now, 'updated_at' => $now]);
+            $this->db()->table('education_kb_sections')->whereIn('id', $ids)
+                ->update(['deleted_at' => $now, 'updated_at' => $now]);
         });
+
         return response()->json(['message' => 'Раздел и его содержимое удалены']);
     }
 
     public function moveSection(Request $request, int $id): JsonResponse
     {
         $data = $request->validate([
-            'parent_id' => 'nullable|integer|exists:education_kb_sections,id',
+            'parent_id' => 'nullable|integer|exists:pgsql_v2.education_kb_sections,id',
             'sort_order' => 'required|integer|min:0',
         ]);
-        if (! empty($data['parent_id']) && $this->isDescendant((int) $data['parent_id'], $id)) {
+        if (! empty($data['parent_id'])
+            && ((int) $data['parent_id'] === $id || $this->isDescendant((int) $data['parent_id'], $id))) {
             return response()->json(['message' => 'Нельзя переместить раздел в собственное поддерево'], 422);
         }
-        DB::table('education_kb_sections')->where('id', $id)->update([
+        $this->db()->table('education_kb_sections')->where('id', $id)->whereNull('deleted_at')->update([
             'parent_id' => $data['parent_id'] ?? null,
             'sort_order' => $data['sort_order'],
             'updated_at' => now(),
         ]);
+
         return response()->json(['message' => 'Перемещено']);
     }
 
-    /** Список материалов раздела (для редактора). */
     public function articles(int $sectionId): JsonResponse
     {
-        $rows = DB::table('education_kb_articles')
-            ->where('section_id', $sectionId)
-            ->whereNull('deleted_at')
-            ->orderBy('sort_order')
-            ->orderBy('id')
-            ->get();
-        return response()->json(['articles' => $rows->map(fn ($a) => [
-            'id' => $a->id, 'title' => $a->title, 'description' => $a->description,
-            'body' => $a->body ? (is_string($a->body) ? json_decode($a->body, true) : $a->body) : [],
-            'tags' => $a->tags ? (is_string($a->tags) ? json_decode($a->tags, true) : $a->tags) : [],
-            'published' => (bool) $a->published,
-            'sortOrder' => $a->sort_order,
-        ])]);
+        $rows = $this->db()->table('education_kb_articles')->where('section_id', $sectionId)
+            ->whereNull('deleted_at')->orderBy('sort_order')->orderBy('id')->get();
+
+        return response()->json(['articles' => $rows->map(fn ($article) => $this->articleShape($article))]);
     }
 
-    /** Один материал. */
     public function showArticle(int $id): JsonResponse
     {
-        $a = DB::table('education_kb_articles')->where('id', $id)->whereNull('deleted_at')->first();
-        if (! $a) return response()->json(['message' => 'Не найдено'], 404);
-        return response()->json([
-            'id' => $a->id, 'sectionId' => $a->section_id,
-            'title' => $a->title, 'description' => $a->description,
-            'body' => $a->body ? (is_string($a->body) ? json_decode($a->body, true) : $a->body) : [],
-            'tags' => $a->tags ? (is_string($a->tags) ? json_decode($a->tags, true) : $a->tags) : [],
-            'published' => (bool) $a->published,
-        ]);
+        $article = $this->db()->table('education_kb_articles')->where('id', $id)->whereNull('deleted_at')->first();
+        if (! $article) {
+            return response()->json(['message' => 'Не найдено'], 404);
+        }
+
+        return response()->json($this->articleShape($article) + ['sectionId' => $article->section_id]);
     }
 
     public function storeArticle(Request $request): JsonResponse
     {
         $data = $this->articleValidate($request);
-        $id = DB::table('education_kb_articles')->insertGetId([
+        $published = (bool) ($data['published'] ?? true);
+        $now = now();
+        $id = $this->db()->table('education_kb_articles')->insertGetId([
             'section_id' => $data['section_id'],
             'title' => $data['title'],
-            'description' => $data['description'] ?? null,
-            'body' => isset($data['body']) ? json_encode($data['body'], JSON_UNESCAPED_UNICODE) : null,
-            'tags' => isset($data['tags']) ? json_encode($data['tags'], JSON_UNESCAPED_UNICODE) : null,
-            'published' => $data['published'] ?? true,
+            'slug' => $this->uniqueSlug('education_kb_articles', $data['title']),
+            'summary' => $data['description'] ?? null,
+            'body' => json_encode($data['body'] ?? [], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
+            'tags' => isset($data['tags']) ? json_encode($data['tags'], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR) : null,
+            'status' => $published ? 'published' : 'draft',
+            'published_at' => $published ? $now : null,
             'sort_order' => $data['sort_order'] ?? 0,
-            'created_at' => now(), 'updated_at' => now(),
+            'created_at' => $now,
+            'updated_at' => $now,
         ]);
+
         return response()->json(['id' => $id, 'message' => 'Материал создан'], 201);
     }
 
     public function updateArticle(Request $request, int $id): JsonResponse
     {
         $data = $this->articleValidate($request);
-        DB::table('education_kb_articles')->where('id', $id)->update([
+        $article = $this->db()->table('education_kb_articles')->where('id', $id)->whereNull('deleted_at')->first();
+        if (! $article) {
+            return response()->json(['message' => 'Не найдено'], 404);
+        }
+        $published = (bool) ($data['published'] ?? true);
+        $this->db()->table('education_kb_articles')->where('id', $id)->update([
             'section_id' => $data['section_id'],
             'title' => $data['title'],
-            'description' => $data['description'] ?? null,
-            'body' => isset($data['body']) ? json_encode($data['body'], JSON_UNESCAPED_UNICODE) : null,
-            'tags' => isset($data['tags']) ? json_encode($data['tags'], JSON_UNESCAPED_UNICODE) : null,
-            'published' => $data['published'] ?? true,
+            'summary' => $data['description'] ?? null,
+            'body' => json_encode($data['body'] ?? [], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
+            'tags' => isset($data['tags']) ? json_encode($data['tags'], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR) : null,
+            'status' => $published ? 'published' : 'draft',
+            'published_at' => $published ? ($article->published_at ?? now()) : null,
             'sort_order' => $data['sort_order'] ?? 0,
             'updated_at' => now(),
         ]);
+
         return response()->json(['message' => 'Материал обновлён']);
     }
 
     public function destroyArticle(int $id): JsonResponse
     {
-        DB::table('education_kb_articles')->where('id', $id)->update([
-            'deleted_at' => now(), 'updated_at' => now(),
-        ]);
+        $this->db()->table('education_kb_articles')->where('id', $id)
+            ->update(['deleted_at' => now(), 'updated_at' => now()]);
+
         return response()->json(['message' => 'Удалён']);
+    }
+
+    private function sectionValidate(Request $request): array
+    {
+        return $request->validate([
+            'title' => 'required|string|max:200',
+            'parent_id' => 'nullable|integer|exists:pgsql_v2.education_kb_sections,id',
+            'icon' => 'nullable|string|max:80',
+            'description' => 'nullable|string|max:2000',
+            'sort_order' => 'nullable|integer|min:0',
+        ]);
     }
 
     private function articleValidate(Request $request): array
     {
         return $request->validate([
-            'section_id' => 'required|integer|exists:education_kb_sections,id',
+            'section_id' => 'required|integer|exists:pgsql_v2.education_kb_sections,id',
             'title' => 'required|string|max:300',
             'description' => 'nullable|string|max:2000',
             'body' => 'nullable|array',
             'tags' => 'nullable|array',
             'tags.*' => 'string|max:60',
             'published' => 'nullable|boolean',
-            'sort_order' => 'nullable|integer',
+            'sort_order' => 'nullable|integer|min:0',
         ]);
+    }
+
+    private function articleShape(object $article): array
+    {
+        return [
+            'id' => $article->id,
+            'title' => $article->title,
+            'description' => $article->summary,
+            'body' => $this->jsonArray($article->body),
+            'tags' => $this->jsonArray($article->tags),
+            'published' => $article->status === 'published',
+            'sortOrder' => (int) $article->sort_order,
+        ];
+    }
+
+    private function jsonArray(mixed $value): array
+    {
+        if (is_array($value)) {
+            return $value;
+        }
+        $decoded = $value === null ? null : json_decode((string) $value, true);
+
+        return is_array($decoded) ? $decoded : [];
+    }
+
+    private function uniqueSlug(string $table, string $title): string
+    {
+        $base = Str::slug($title) ?: 'item';
+        do {
+            $slug = $base.'-'.Str::lower(Str::random(8));
+        } while ($this->db()->table($table)->where('slug', $slug)->exists());
+
+        return $slug;
     }
 
     private function isDescendant(int $candidateId, int $rootId): bool
     {
         $visited = [];
         $stack = [$rootId];
-        while ($stack) {
-            $cur = array_pop($stack);
-            $kids = DB::table('education_kb_sections')
-                ->where('parent_id', $cur)
-                ->whereNull('deleted_at')
-                ->pluck('id')
-                ->all();
-            foreach ($kids as $kid) {
-                if ($kid === $candidateId) return true;
-                if (! in_array($kid, $visited, true)) {
-                    $visited[] = $kid;
-                    $stack[] = $kid;
+        while ($stack !== []) {
+            $current = array_pop($stack);
+            $children = $this->db()->table('education_kb_sections')->where('parent_id', $current)
+                ->whereNull('deleted_at')->pluck('id')->all();
+            foreach ($children as $child) {
+                $child = (int) $child;
+                if ($child === $candidateId) {
+                    return true;
+                }
+                if (! in_array($child, $visited, true)) {
+                    $visited[] = $child;
+                    $stack[] = $child;
                 }
             }
         }
+
         return false;
     }
 
@@ -249,15 +285,17 @@ class AdminKnowledgeBaseController extends Controller
     {
         $all = [];
         $stack = [$rootId];
-        while ($stack) {
-            $cur = array_pop($stack);
-            $kids = DB::table('education_kb_sections')
-                ->where('parent_id', $cur)
-                ->whereNull('deleted_at')
-                ->pluck('id')
-                ->all();
-            foreach ($kids as $k) { $all[] = $k; $stack[] = $k; }
+        while ($stack !== []) {
+            $current = array_pop($stack);
+            $children = $this->db()->table('education_kb_sections')->where('parent_id', $current)
+                ->whereNull('deleted_at')->pluck('id')->all();
+            foreach ($children as $child) {
+                $child = (int) $child;
+                $all[] = $child;
+                $stack[] = $child;
+            }
         }
+
         return $all;
     }
 }

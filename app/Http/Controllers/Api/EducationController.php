@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use Illuminate\Database\ConnectionInterface;
+use Illuminate\Database\Schema\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -10,6 +12,16 @@ use Illuminate\Support\Facades\Schema;
 
 class EducationController extends Controller
 {
+    private function db(): ConnectionInterface
+    {
+        return DB::connection('pgsql_v2');
+    }
+
+    private function schema(): Builder
+    {
+        return Schema::connection('pgsql_v2');
+    }
+
     /**
      * GET /education/tree — рекурсивное дерево курсов с прогрессом
      * текущего пользователя (per ТЗ Жосан 25.05.2026: Курс → Модуль →
@@ -46,7 +58,7 @@ class EducationController extends Controller
         if (mb_strlen($q) < $minChars) return response()->json(['items' => []]);
         $like = '%' . mb_strtolower($q) . '%';
 
-        $courses = DB::table('education_courses')
+        $courses = $this->db()->table('education_courses')
             ->where('active', true)
             ->whereRaw('LOWER(title) LIKE ?', [$like])
             ->limit(15)
@@ -56,7 +68,7 @@ class EducationController extends Controller
                 'parent_id' => $c->parent_id,
             ]);
 
-        $lessons = DB::table('education_lessons')
+        $lessons = $this->db()->table('education_lessons')
             ->where('active', true)
             ->whereRaw('LOWER(title) LIKE ?', [$like])
             ->limit(15)
@@ -66,10 +78,10 @@ class EducationController extends Controller
                 'courseId' => $l->course_id,
             ]);
 
-        $kb = Schema::hasTable('education_kb_articles')
-            ? DB::table('education_kb_articles')
+        $kb = Schema::connection('pgsql_v2')->hasTable('education_kb_articles')
+            ? DB::connection('pgsql_v2')->table('education_kb_articles')
                 ->whereNull('deleted_at')
-                ->where('published', true)
+                ->where('status', 'published')
                 ->whereRaw('LOWER(title) LIKE ?', [$like])
                 ->limit(15)
                 ->get(['id', 'title', 'section_id'])
@@ -90,17 +102,18 @@ class EducationController extends Controller
      */
     public function kbTree(): JsonResponse
     {
-        if (! Schema::hasTable('education_kb_sections')) {
+        if (! Schema::connection('pgsql_v2')->hasTable('education_kb_sections')) {
             return response()->json(['sections' => []]);
         }
-        $rows = DB::table('education_kb_sections')
+        $rows = DB::connection('pgsql_v2')->table('education_kb_sections')
             ->whereNull('deleted_at')
+            ->where('active', true)
             ->orderBy('sort_order')
             ->get();
-        $counts = Schema::hasTable('education_kb_articles')
-            ? DB::table('education_kb_articles')
+        $counts = Schema::connection('pgsql_v2')->hasTable('education_kb_articles')
+            ? DB::connection('pgsql_v2')->table('education_kb_articles')
                 ->whereNull('deleted_at')
-                ->where('published', true)
+                ->where('status', 'published')
                 ->select('section_id', DB::raw('COUNT(*) as cnt'))
                 ->groupBy('section_id')
                 ->pluck('cnt', 'section_id')
@@ -131,35 +144,38 @@ class EducationController extends Controller
      */
     public function kbSection(int $id): JsonResponse
     {
-        if (! Schema::hasTable('education_kb_sections')) {
+        if (! Schema::connection('pgsql_v2')->hasTable('education_kb_sections')) {
             return response()->json(['section' => null, 'subsections' => [], 'articles' => [], 'breadcrumbs' => []]);
         }
 
-        $section = DB::table('education_kb_sections')
+        $section = DB::connection('pgsql_v2')->table('education_kb_sections')
             ->where('id', $id)
             ->whereNull('deleted_at')
+            ->where('active', true)
             ->first();
         if (! $section) {
             return response()->json(['message' => 'Раздел не найден'], 404);
         }
 
-        $childSections = DB::table('education_kb_sections')
+        $childSections = DB::connection('pgsql_v2')->table('education_kb_sections')
             ->where('parent_id', $id)
             ->whereNull('deleted_at')
+            ->where('active', true)
             ->orderBy('sort_order')
             ->get();
 
-        $articleCounts = Schema::hasTable('education_kb_articles')
-            ? DB::table('education_kb_articles')
+        $articleCounts = Schema::connection('pgsql_v2')->hasTable('education_kb_articles')
+            ? DB::connection('pgsql_v2')->table('education_kb_articles')
                 ->whereNull('deleted_at')
-                ->where('published', true)
+                ->where('status', 'published')
                 ->select('section_id', DB::raw('COUNT(*) as cnt'))
                 ->groupBy('section_id')
                 ->pluck('cnt', 'section_id')
             : collect();
 
-        $subChildCounts = DB::table('education_kb_sections')
+        $subChildCounts = DB::connection('pgsql_v2')->table('education_kb_sections')
             ->whereNull('deleted_at')
+            ->where('active', true)
             ->whereIn('parent_id', $childSections->pluck('id'))
             ->select('parent_id', DB::raw('COUNT(*) as cnt'))
             ->groupBy('parent_id')
@@ -176,15 +192,15 @@ class EducationController extends Controller
             'childCount' => (int) ($subChildCounts[$s->id] ?? 0),
         ])->values();
 
-        $articles = Schema::hasTable('education_kb_articles')
-            ? DB::table('education_kb_articles')
+        $articles = Schema::connection('pgsql_v2')->hasTable('education_kb_articles')
+            ? DB::connection('pgsql_v2')->table('education_kb_articles')
                 ->where('section_id', $id)
                 ->whereNull('deleted_at')
-                ->where('published', true)
+                ->where('status', 'published')
                 ->orderBy('sort_order')
-                ->get(['id', 'title', 'description', 'tags', 'sort_order'])
+                ->get(['id', 'title', 'summary', 'tags', 'sort_order'])
                 ->map(fn ($a) => [
-                    'id' => $a->id, 'title' => $a->title, 'description' => $a->description,
+                    'id' => $a->id, 'title' => $a->title, 'description' => $a->summary,
                     'tags' => $a->tags ? (is_string($a->tags) ? json_decode($a->tags, true) : $a->tags) : [],
                 ])
             : collect();
@@ -195,9 +211,10 @@ class EducationController extends Controller
         while ($cursor && $guard++ < 16) {
             array_unshift($breadcrumbs, ['id' => $cursor->id, 'title' => $cursor->title]);
             if (! $cursor->parent_id) break;
-            $cursor = DB::table('education_kb_sections')
+            $cursor = DB::connection('pgsql_v2')->table('education_kb_sections')
                 ->where('id', $cursor->parent_id)
                 ->whereNull('deleted_at')
+                ->where('active', true)
                 ->first();
         }
 
@@ -219,18 +236,18 @@ class EducationController extends Controller
      */
     public function kbArticle(int $id): JsonResponse
     {
-        if (! Schema::hasTable('education_kb_articles')) abort(404);
-        $a = DB::table('education_kb_articles')
+        if (! Schema::connection('pgsql_v2')->hasTable('education_kb_articles')) abort(404);
+        $a = DB::connection('pgsql_v2')->table('education_kb_articles')
             ->where('id', $id)
             ->whereNull('deleted_at')
-            ->where('published', true)
+            ->where('status', 'published')
             ->first();
         if (! $a) return response()->json(['message' => 'Материал не найден'], 404);
 
         return response()->json([
             'id' => $a->id,
             'title' => $a->title,
-            'description' => $a->description,
+            'description' => $a->summary,
             'body' => $a->body ? (is_string($a->body) ? json_decode($a->body, true) : $a->body) : null,
             'tags' => $a->tags ? (is_string($a->tags) ? json_decode($a->tags, true) : $a->tags) : [],
             'sectionId' => $a->section_id,
@@ -246,7 +263,7 @@ class EducationController extends Controller
     {
         $userId = $request->user()->id;
 
-        $courses = DB::table('education_courses')
+        $courses = $this->db()->table('education_courses')
             ->where('active', true)
             ->orderBy('sort_order')
             ->get();
@@ -257,14 +274,14 @@ class EducationController extends Controller
 
         $courseIds = $courses->pluck('id')->all();
 
-        $lessonTotals = DB::table('education_lessons')
+        $lessonTotals = $this->db()->table('education_lessons')
             ->select('course_id', DB::raw('COUNT(*) AS total'))
             ->where('active', true)
             ->whereIn('course_id', $courseIds)
             ->groupBy('course_id')
             ->pluck('total', 'course_id');
 
-        $lessonViewed = DB::table('education_lesson_views AS v')
+        $lessonViewed = $this->db()->table('education_lesson_views AS v')
             ->join('education_lessons AS l', 'l.id', '=', 'v.lesson_id')
             ->select('l.course_id', DB::raw('COUNT(*) AS viewed'))
             ->where('v.user_id', $userId)
@@ -273,7 +290,7 @@ class EducationController extends Controller
             ->groupBy('l.course_id')
             ->pluck('viewed', 'course_id');
 
-        $completions = DB::table('education_course_completions')
+        $completions = $this->db()->table('education_course_completions')
             ->where('user_id', $userId)
             ->whereIn('course_id', $courseIds)
             ->get()
@@ -281,9 +298,9 @@ class EducationController extends Controller
 
         // Категории (миграция 2026_05_21_000020) — отдаём id+name, чтобы
         // витрина группировала курсы по ним вместо легаси-блоков.
-        $hasCategory = Schema::hasColumn('education_courses', 'category_id');
-        $categories = $hasCategory && Schema::hasTable('education_course_categories')
-            ? DB::table('education_course_categories')
+        $hasCategory = $this->schema()->hasColumn('education_courses', 'category_id');
+        $categories = $hasCategory && $this->schema()->hasTable('education_course_categories')
+            ? $this->db()->table('education_course_categories')
                 ->whereNull('deleted_at')
                 ->where('active', true)
                 ->orderBy('sort_order')
@@ -292,7 +309,15 @@ class EducationController extends Controller
             : collect();
         $categoryNameById = $categories->pluck('name', 'id');
 
-        $data = $courses->map(function ($c) use ($lessonTotals, $lessonViewed, $completions, $hasCategory, $categoryNameById) {
+        $primaryProducts = $this->db()->table('education_course_product')
+            ->whereIn('course_id', $courseIds)
+            ->orderByDesc('is_primary')
+            ->orderBy('product_id')
+            ->get(['course_id', 'product_id'])
+            ->unique('course_id')
+            ->pluck('product_id', 'course_id');
+
+        $data = $courses->map(function ($c) use ($lessonTotals, $lessonViewed, $completions, $hasCategory, $categoryNameById, $primaryProducts) {
             $total = (int) ($lessonTotals[$c->id] ?? 0);
             $viewed = (int) ($lessonViewed[$c->id] ?? 0);
             $completion = $completions[$c->id] ?? null;
@@ -304,7 +329,7 @@ class EducationController extends Controller
                 'id' => $c->id,
                 'title' => $c->title,
                 'description' => $c->description,
-                'product_id' => $c->product_id,
+                'product_id' => $primaryProducts[$c->id] ?? null,
                 // Per spec ✅Обучение §3 — 9 блоков + 0 «База знаний». Оставлен
                 // для бакауорд-совместимости (фронт fallback'ит сюда, если
                 // ни одной категории нет).
@@ -342,18 +367,18 @@ class EducationController extends Controller
     {
         $userId = $request->user()->id;
 
-        $course = DB::table('education_courses')->where('id', $id)->where('active', true)->first();
+        $course = $this->db()->table('education_courses')->where('id', $id)->where('active', true)->first();
         if (! $course) {
             return response()->json(['message' => 'Курс не найден'], 404);
         }
 
-        $lessons = DB::table('education_lessons')
+        $lessons = $this->db()->table('education_lessons')
             ->where('course_id', $id)
             ->where('active', true)
             ->orderBy('sort_order')
             ->get();
 
-        $viewedIds = DB::table('education_lesson_views')
+        $viewedIds = $this->db()->table('education_lesson_views')
             ->where('user_id', $userId)
             ->whereIn('lesson_id', $lessons->pluck('id'))
             ->pluck('lesson_id')
@@ -362,7 +387,7 @@ class EducationController extends Controller
 
         // Drip availability — batch to avoid N+1.
         // Only run per-lesson checks when the course actually uses drip/stop config.
-        $hasDrip = Schema::hasColumn('education_lessons', 'drip_open_at')
+        $hasDrip = $this->schema()->hasColumn('education_lessons', 'drip_open_at')
             && $lessons->contains(fn ($l) =>
                 ! empty($l->drip_open_at)
                 || (! empty($l->drip_delay_hours) && (int) $l->drip_delay_hours > 0)
@@ -376,7 +401,7 @@ class EducationController extends Controller
             }
         }
 
-        $tests = DB::table('education_tests')
+        $tests = $this->db()->table('education_tests')
             ->where('course_id', $id)
             ->orderBy('sort_order')
             ->get()
@@ -386,7 +411,7 @@ class EducationController extends Controller
                 'answers' => json_decode($t->answers, true) ?: [],
             ]);
 
-        $completion = DB::table('education_course_completions')
+        $completion = $this->db()->table('education_course_completions')
             ->where('user_id', $userId)
             ->where('course_id', $id)
             ->first();
@@ -395,12 +420,13 @@ class EducationController extends Controller
         // продукты, program_ids — конкретные программы (пусто = все программы
         // привязанных продуктов). Гейт пока не enforce, но фронт/витрина читают
         // полный набор. product_id (scalar) оставлен для бэкуорд-совместимости.
-        $productIds = Schema::hasTable('education_course_product')
-            ? DB::table('education_course_product')->where('course_id', $id)->orderBy('id')
+        $productIds = $this->schema()->hasTable('education_course_product')
+            ? $this->db()->table('education_course_product')->where('course_id', $id)
+                ->orderByDesc('is_primary')->orderBy('product_id')
                 ->pluck('product_id')->map(fn ($v) => (int) $v)->all()
-            : array_values(array_filter([$course->product_id]));
-        $programIds = Schema::hasTable('education_course_program')
-            ? DB::table('education_course_program')->where('course_id', $id)->orderBy('id')
+            : [];
+        $programIds = $this->schema()->hasTable('education_course_program')
+            ? $this->db()->table('education_course_program')->where('course_id', $id)->orderBy('program_id')
                 ->pluck('program_id')->map(fn ($v) => (int) $v)->all()
             : [];
 
@@ -409,12 +435,12 @@ class EducationController extends Controller
                 'id' => $course->id,
                 'title' => $course->title,
                 'description' => $course->description,
-                'product_id' => $course->product_id,
+                'product_id' => $productIds[0] ?? null,
                 'product_ids' => $productIds,
                 'program_ids' => $programIds,
             ],
             'lessons' => $lessons->map(function ($l) use ($viewedSet, $hasDrip, $availabilityMap) {
-                $hasArrays = Schema::hasColumn('education_lessons', 'video_urls');
+                $hasArrays = $this->schema()->hasColumn('education_lessons', 'video_urls');
                 $videos = $this->expandUrlArray($hasArrays ? ($l->video_urls ?? null) : null, $l->video_url ?? null);
                 $docs = $this->expandUrlArray($hasArrays ? ($l->document_urls ?? null) : null, $l->document_url ?? null);
                 $av = $hasDrip ? ($availabilityMap[$l->id] ?? ['open' => true, 'reason' => null]) : ['open' => true, 'reason' => null];
@@ -483,14 +509,14 @@ class EducationController extends Controller
     {
         $userId = $request->user()->id;
 
-        $lesson = DB::table('education_lessons')->where('id', $id)->where('active', true)->first();
+        $lesson = $this->db()->table('education_lessons')->where('id', $id)->where('active', true)->first();
         if (! $lesson) {
             return response()->json(['message' => 'Урок не найден'], 404);
         }
 
         // Drip-feed: если урок ещё не открыт по расписанию — не даём
         // его «изученным», иначе релейтив-таймер становится бесполезным.
-        $course = DB::table('education_courses')->where('id', $lesson->course_id)->first();
+        $course = $this->db()->table('education_courses')->where('id', $lesson->course_id)->first();
         if ($course) {
             $av = app(\App\Services\DripScheduleService::class)
                 ->lessonAvailability($lesson, (int) $userId, $course);
@@ -505,16 +531,18 @@ class EducationController extends Controller
                 ->markCourseStarted((int) $userId, (int) $lesson->course_id);
         }
 
-        DB::table('education_lesson_views')->upsert(
+        $this->db()->table('education_lesson_views')->upsert(
             [[
                 'user_id' => $userId,
                 'lesson_id' => $id,
-                'viewed_at' => now(),
+                'first_viewed_at' => now(),
+                'last_viewed_at' => now(),
+                'completed_at' => now(),
                 'created_at' => now(),
                 'updated_at' => now(),
             ]],
             ['user_id', 'lesson_id'],
-            ['viewed_at', 'updated_at']
+            ['last_viewed_at', 'completed_at', 'updated_at']
         );
 
         return response()->json(['viewed' => true]);
@@ -529,7 +557,7 @@ class EducationController extends Controller
     {
         $userId = $request->user()->id;
 
-        $course = DB::table('education_courses')->where('id', $id)->where('active', true)->first();
+        $course = $this->db()->table('education_courses')->where('id', $id)->where('active', true)->first();
         if (! $course) {
             return response()->json(['message' => 'Курс не найден'], 404);
         }
@@ -539,7 +567,7 @@ class EducationController extends Controller
             'answers.*' => ['nullable', 'integer'],
         ])['answers'];
 
-        $questions = DB::table('education_tests')
+        $questions = $this->db()->table('education_tests')
             ->where('course_id', $id)
             ->orderBy('sort_order')
             ->get();
@@ -552,7 +580,10 @@ class EducationController extends Controller
         $correct = 0;
         foreach ($questions as $q) {
             $userAnswer = $answers[$q->id] ?? null;
-            if ($userAnswer !== null && (int) $userAnswer === (int) $q->correct_answer) {
+            $correctAnswers = is_array($q->correct_answers)
+                ? $q->correct_answers
+                : json_decode((string) $q->correct_answers, true);
+            if ($userAnswer !== null && in_array((int) $userAnswer, array_map('intval', $correctAnswers ?: []), true)) {
                 $correct++;
             }
         }
@@ -565,22 +596,24 @@ class EducationController extends Controller
         // он анализирует на каких вопросах партнёры спотыкаются и
         // сколько раз пробуют до успеха. Completion-таблица остаётся
         // источником «прошёл/не прошёл», attempts — историческим логом.
-        DB::table('education_test_attempts')->insert([
+        $attemptId = $this->db()->table('education_test_attempts')->insertGetId([
             'user_id' => $userId,
             'course_id' => $id,
             'score' => $correct,
-            'total' => $total,
+            'max_score' => $total,
             'passed' => $passed,
-            'attempted_at' => now(),
+            'answers' => json_encode($answers, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
+            'completed_at' => now(),
             'created_at' => now(),
             'updated_at' => now(),
         ]);
 
         if ($passed) {
-            DB::table('education_course_completions')->upsert(
+            $this->db()->table('education_course_completions')->upsert(
                 [[
                     'user_id' => $userId,
                     'course_id' => $id,
+                    'test_attempt_id' => $attemptId,
                     'score' => $correct,
                     'total' => $total,
                     'completed_at' => now(),
@@ -588,20 +621,22 @@ class EducationController extends Controller
                     'updated_at' => now(),
                 ]],
                 ['user_id', 'course_id'],
-                ['score', 'total', 'completed_at', 'updated_at']
+                ['test_attempt_id', 'score', 'total', 'completed_at', 'updated_at']
             );
 
             // Сдача теста = урок-тест пройден: помечаем урок(и) is_test
             // изученными, иначе в списке «Уроки курса» тест висит «не изучен»
             // и прогресс не доходит до 100% (изучено 4 из 5), хотя тест сдан.
-            if (Schema::hasColumn('education_lessons', 'is_test')) {
-                $testLessonIds = DB::table('education_lessons')
+            if ($this->schema()->hasColumn('education_lessons', 'is_test')) {
+                $testLessonIds = $this->db()->table('education_lessons')
                     ->where('course_id', $id)->where('is_test', true)->pluck('id');
                 foreach ($testLessonIds as $lessonId) {
-                    DB::table('education_lesson_views')->insertOrIgnore([
+                    $this->db()->table('education_lesson_views')->insertOrIgnore([
                         'user_id' => $userId,
                         'lesson_id' => $lessonId,
-                        'viewed_at' => now(),
+                        'first_viewed_at' => now(),
+                        'last_viewed_at' => now(),
+                        'completed_at' => now(),
                         'created_at' => now(),
                         'updated_at' => now(),
                     ]);
@@ -611,7 +646,7 @@ class EducationController extends Controller
 
         // Номер/количество попыток и процент правильных — для экрана результата
         // (партнёр видит «попытка №N» и «X% правильных»).
-        $attempts = DB::table('education_test_attempts')
+        $attempts = $this->db()->table('education_test_attempts')
             ->where('user_id', $userId)->where('course_id', $id)->count();
         $percent = $total > 0 ? (int) round($correct * 100 / $total) : 0;
 

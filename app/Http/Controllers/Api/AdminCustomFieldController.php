@@ -52,7 +52,7 @@ class AdminCustomFieldController extends Controller
         $data = $request->validate([
             'key' => [
                 'required', 'string', 'max:64', 'alpha_dash',
-                Rule::unique('custom_fields', 'key')->ignore($id),
+                Rule::unique('pgsql_v2.custom_fields', 'key')->ignore($id),
             ],
             'label' => ['required', 'string', 'max:255'],
             'type' => ['required', Rule::in(self::TYPES)],

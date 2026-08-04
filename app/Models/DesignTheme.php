@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Model;
  */
 class DesignTheme extends Model
 {
+    protected $connection = 'pgsql_v2';
     protected $table = 'design_themes';
     protected $guarded = [];
 

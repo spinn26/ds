@@ -78,7 +78,7 @@ class AdminDesignController extends Controller
     public function activate(int $id): JsonResponse
     {
         $theme = DesignTheme::findOrFail($id);
-        DB::transaction(function () use ($theme) {
+        DB::connection('pgsql_v2')->transaction(function () use ($theme) {
             DesignTheme::query()->where('is_active', true)->update(['is_active' => false]);
             $theme->update(['is_active' => true]);
         });

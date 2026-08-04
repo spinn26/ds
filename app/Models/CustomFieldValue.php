@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Model;
  */
 class CustomFieldValue extends Model
 {
+    protected $connection = 'pgsql_v2';
     protected $table = 'custom_field_values';
     protected $guarded = [];
 }

@@ -315,7 +315,11 @@
               </v-row>
             </template>
 
-            <template v-if="auth.isAdmin">
+            <!-- Блок «Смена статуса» — по праву statuses=full (admin получает
+                 full на все секции). Раньше был жёстко auth.isAdmin, из-за чего
+                 руководитель по расчётам блок не видел. Бэкенд гейтит тем же
+                 правом: permission:statuses,full на /admin/partners/{id}/status. -->
+            <template v-if="canFull('statuses')">
               <v-divider class="my-4" />
               <div class="d-flex align-center mb-2 ga-2">
                 <div class="text-subtitle-2 font-weight-bold">Смена статуса</div>
@@ -366,6 +370,12 @@
                   @click="changeStatus('exclude')">Исключить</v-btn>
                 <v-btn size="small" variant="tonal" color="info" prepend-icon="mdi-account-reactivate"
                   @click="changeStatus('re-register')">Перерегистрировать</v-btn>
+                <!-- Отмена ошибочной терминации: в отличие от «Активировать»
+                     возвращает и портфель (контракты/клиенты), уехавший вверх
+                     по структуре в момент терминации. -->
+                <v-btn v-if="editForm.activityId === 3 || editForm.activityId === 5"
+                  size="small" variant="tonal" color="primary" prepend-icon="mdi-undo-variant"
+                  @click="changeStatus('restore-termination')">Отменить терминацию (вернуть портфель)</v-btn>
               </div>
               <v-alert v-if="statusMsg" :type="statusMsgType" density="compact" class="mt-3" closable @click:close="statusMsg = ''">
                 {{ statusMsg }}
@@ -552,7 +562,7 @@ import {
 } from '../../composables/useFormRules';
 
 const auth = useAuthStore();
-const { canEdit } = usePermissions();
+const { canEdit, canFull } = usePermissions();
 
 // Валидация форм редактирования/добавления партнёра (строгий формат
 // по запросу заказчика 2026-05-13). Edit-форма мягче — поля sometimes,
@@ -1208,6 +1218,15 @@ async function changeStatus(action) {
     // Активация из карточки форсируется на бэкенде (в т.ч. из «Терминирован»);
     // причина уходит в аудит-лог.
     reason = window.prompt('Причина ручной активации (для аудит-лога, необязательно):', '') || '';
+  } else if (action === 'restore-termination') {
+    if (!await confirm.ask({
+      title: 'Отменить терминацию?',
+      message: 'Статус вернётся к тому, что был до терминации, а контракты и клиенты — этому партнёру '
+        + '(только те, что уехали автоматически при терминации и с тех пор не переводились дальше). '
+        + 'Счётчик терминаций уменьшится на 1. Комиссии по открытым периодам пересчитаются.',
+      confirmText: 'Отменить терминацию', confirmColor: 'primary',
+    })) return;
+    reason = window.prompt('Причина отмены (для аудит-лога, необязательно):', '') || '';
   }
   try {
     const { data } = await api.post(`/admin/partners/${editForm.value.id}/status`, { action, reason });

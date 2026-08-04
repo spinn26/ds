@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class WebhookDelivery extends Model
 {
+    protected $connection = 'pgsql_v2';
     protected $table = 'webhook_deliveries';
     public $timestamps = false;
     protected $guarded = [];

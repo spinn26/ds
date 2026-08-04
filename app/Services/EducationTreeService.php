@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use Illuminate\Support\Collection;
+use Illuminate\Database\ConnectionInterface;
+use Illuminate\Database\Schema\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -16,6 +18,16 @@ use Illuminate\Support\Facades\Schema;
  */
 class EducationTreeService
 {
+    private function db(): ConnectionInterface
+    {
+        return DB::connection('pgsql_v2');
+    }
+
+    private function schema(): Builder
+    {
+        return Schema::connection('pgsql_v2');
+    }
+
     /**
      * Полное дерево всех курсов с прогрессом конкретного пользователя.
      *
@@ -24,10 +36,10 @@ class EducationTreeService
      */
     public function fullTree(?int $userId): array
     {
-        $courses = DB::table('education_courses')
+        $courses = $this->db()->table('education_courses')
             ->where('active', true)
             ->select([
-                'id', 'title', 'description', 'parent_id', 'product_id',
+                'id', 'title', 'description', 'parent_id',
                 'category_id', 'block', 'sort_order', 'is_container',
                 'cover_url', 'slug',
             ])
@@ -35,6 +47,14 @@ class EducationTreeService
             ->orderBy('sort_order')
             ->orderBy('id')
             ->get();
+
+        $primaryProducts = $this->db()->table('education_course_product')
+            ->whereIn('course_id', $courses->pluck('id'))
+            ->orderByDesc('is_primary')
+            ->orderBy('product_id')
+            ->get(['course_id', 'product_id'])
+            ->unique('course_id')
+            ->pluck('product_id', 'course_id');
 
         $lessonCounts = $this->lessonCountsByCourse();
         $viewedCounts = $userId ? $this->viewedCountsByCourse($userId) : collect();
@@ -46,10 +66,10 @@ class EducationTreeService
         // эти данные дублируют /education/courses/{id}/full и просто не
         // используются (партнёр получает уроки отдельным запросом).
         $cols = ['id', 'course_id', 'title', 'sort_order'];
-        if (Schema::hasColumn('education_lessons', 'is_test')) {
+        if ($this->schema()->hasColumn('education_lessons', 'is_test')) {
             $cols[] = 'is_test';
         }
-        $lessonsByCourse = DB::table('education_lessons')
+        $lessonsByCourse = $this->db()->table('education_lessons')
             ->where('active', true)
             ->orderBy('course_id')
             ->orderBy('sort_order')
@@ -70,7 +90,7 @@ class EducationTreeService
                 'title' => $c->title,
                 'description' => $c->description,
                 'parent_id' => $c->parent_id ? (int) $c->parent_id : null,
-                'product_id' => $c->product_id,
+                'product_id' => $primaryProducts[$c->id] ?? null,
                 'category_id' => $c->category_id,
                 'block' => $c->block,
                 'sortOrder' => $c->sort_order,
@@ -101,13 +121,13 @@ class EducationTreeService
     /** Один курс с полной структурой уроков и блоков. */
     public function courseDetails(int $courseId, ?int $userId): ?array
     {
-        $course = DB::table('education_courses')
+        $course = $this->db()->table('education_courses')
             ->where('id', $courseId)
             ->where('active', true)
             ->first();
         if (! $course) return null;
 
-        $lessons = DB::table('education_lessons')
+        $lessons = $this->db()->table('education_lessons')
             ->where('course_id', $courseId)
             ->where('active', true)
             ->orderBy('sort_order')
@@ -115,7 +135,7 @@ class EducationTreeService
             ->get();
 
         $viewedSet = $userId
-            ? array_flip(DB::table('education_lesson_views')
+            ? array_flip($this->db()->table('education_lesson_views')
                 ->where('user_id', $userId)
                 ->whereIn('lesson_id', $lessons->pluck('id'))
                 ->pluck('lesson_id')->all())
@@ -129,22 +149,23 @@ class EducationTreeService
 
         // Продукты для разблокировки: many-to-many через education_course_product.
         // productId оставлен для бэкуорд-совместимости (= первый/«основной»).
-        $productIds = \Illuminate\Support\Facades\Schema::hasTable('education_course_product')
-            ? DB::table('education_course_product')
+        $productIds = $this->schema()->hasTable('education_course_product')
+            ? $this->db()->table('education_course_product')
                 ->where('course_id', $courseId)
-                ->orderBy('id')
+                ->orderByDesc('is_primary')
+                ->orderBy('product_id')
                 ->pluck('product_id')
                 ->map(fn ($v) => (int) $v)
                 ->all()
-            : array_filter([$course->product_id]);
+            : [];
 
         // Программы для разблокировки: many-to-many через education_course_program.
         // Пусто = «все программы привязанных продуктов» (см. миграцию). program_id
         // = programs_catalog.id.
-        $programIds = \Illuminate\Support\Facades\Schema::hasTable('education_course_program')
-            ? DB::table('education_course_program')
+        $programIds = $this->schema()->hasTable('education_course_program')
+            ? $this->db()->table('education_course_program')
                 ->where('course_id', $courseId)
-                ->orderBy('id')
+                ->orderBy('program_id')
                 ->pluck('program_id')
                 ->map(fn ($v) => (int) $v)
                 ->all()
@@ -157,7 +178,7 @@ class EducationTreeService
             'parent_id' => $course->parent_id ? (int) $course->parent_id : null,
             'isContainer' => (bool) $course->is_container,
             'coverUrl' => $course->cover_url,
-            'productId' => $course->product_id,
+            'productId' => $productIds[0] ?? null,
             'productIds' => $productIds,
             'programIds' => $programIds,
             'lessons' => $lessons->map(function ($l) use ($viewedSet, $drip, $userId, $course) {
@@ -205,7 +226,7 @@ class EducationTreeService
         for ($i = 0; $i < 6; $i++) {
             if (in_array($currentId, $visited, true)) break;
             $visited[] = $currentId;
-            $row = DB::table('education_courses')
+            $row = $this->db()->table('education_courses')
                 ->where('id', $currentId)
                 ->select('id', 'title', 'parent_id')->first();
             if (! $row) break;
@@ -218,7 +239,7 @@ class EducationTreeService
 
     private function lessonCountsByCourse(): Collection
     {
-        return DB::table('education_lessons')
+        return $this->db()->table('education_lessons')
             ->where('active', true)
             ->select('course_id', DB::raw('COUNT(*) as cnt'))
             ->groupBy('course_id')
@@ -227,7 +248,7 @@ class EducationTreeService
 
     private function viewedCountsByCourse(int $userId): Collection
     {
-        return DB::table('education_lesson_views as v')
+        return $this->db()->table('education_lesson_views as v')
             ->join('education_lessons as l', 'l.id', '=', 'v.lesson_id')
             ->where('v.user_id', $userId)
             ->where('l.active', true)
@@ -238,7 +259,7 @@ class EducationTreeService
 
     private function hasTestByCourse(): Collection
     {
-        return DB::table('education_tests')
+        return $this->db()->table('education_tests')
             ->select('course_id', DB::raw('COUNT(*) as cnt'))
             ->groupBy('course_id')
             ->pluck('cnt', 'course_id');
@@ -246,7 +267,7 @@ class EducationTreeService
 
     private function testStatusesByCourse(int $userId): Collection
     {
-        return DB::table('education_course_completions')
+        return $this->db()->table('education_course_completions')
             ->where('user_id', $userId)
             ->pluck('course_id', 'course_id');
     }

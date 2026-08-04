@@ -471,7 +471,11 @@ Route::prefix('v1')->group(function () {
         Route::get('/admin/partners/{id}', [\App\Http\Controllers\Api\AdminDataController::class, 'showPartner'])->whereNumber('id');
         // permission:partners,edit — смена inviter двигает комиссии (как у clients/contracts).
         Route::put('/admin/partners/{id}', [\App\Http\Controllers\Api\AdminDataController::class, 'updatePartner'])->whereNumber('id')->middleware('permission:partners,edit');
-        Route::post('/admin/partners/{id}/status', [\App\Http\Controllers\Api\AdminDataController::class, 'changePartnerStatus'])->whereNumber('id');
+        // permission:statuses,full — смена статуса двигает деньги и портфель
+        // (терминация уносит контракты/клиентов вверх). Раньше в контроллере
+        // стоял жёсткий admin-гейт: группы со statuses=full (расчёты) получали
+        // 403. admin имеет full на все секции, поэтому доступ не сузился.
+        Route::post('/admin/partners/{id}/status', [\App\Http\Controllers\Api\AdminDataController::class, 'changePartnerStatus'])->whereNumber('id')->middleware('permission:statuses,full');
         // status-override минует PartnerStatusService и при «Исключён» пишет
         // dateDeleted (soft-delete) — партнёр выпадает из расчётов. Только admin.
         Route::post('/admin/partners/{id}/status-override', [\App\Http\Controllers\Api\AdminDataController::class, 'overridePartnerStatus'])->whereNumber('id')->middleware('role:admin');

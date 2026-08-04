@@ -44,7 +44,7 @@ class AdminFeatureFlagController extends Controller
     private function validateData(Request $request, ?int $id = null): array
     {
         $data = $request->validate([
-            'key' => ['required', 'string', 'max:64', 'alpha_dash', Rule::unique('feature_flags', 'key')->ignore($id)],
+            'key' => ['required', 'string', 'max:64', 'alpha_dash', Rule::unique('pgsql_v2.feature_flags', 'key')->ignore($id)],
             'label' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string', 'max:1000'],
             'enabled' => ['boolean'],
