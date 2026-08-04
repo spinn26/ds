@@ -182,6 +182,7 @@ class AdminReferenceController extends Controller
     public function store(Request $request, string $catalog): JsonResponse
     {
         $cfg = $this->catalog($catalog);
+        $this->guardSensitiveWrite($catalog);
         $payload = $this->validated($request, $cfg);
 
         // Все 12 справочников — legacy Directual без серийного id.
@@ -198,6 +199,7 @@ class AdminReferenceController extends Controller
     public function update(Request $request, string $catalog, int $id): JsonResponse
     {
         $cfg = $this->catalog($catalog);
+        $this->guardSensitiveWrite($catalog);
         $exists = DB::table($cfg['table'])->where('id', $id)->exists();
         if (! $exists) {
             return response()->json(['message' => 'Not found'], 404);
@@ -212,6 +214,7 @@ class AdminReferenceController extends Controller
     public function destroy(string $catalog, int $id): JsonResponse
     {
         $cfg = $this->catalog($catalog);
+        $this->guardSensitiveWrite($catalog);
         $deleted = DB::table($cfg['table'])->where('id', $id)->delete();
         if (! $deleted) {
             return response()->json(['message' => 'Not found'], 404);
@@ -226,6 +229,19 @@ class AdminReferenceController extends Controller
             abort(404, "Unknown catalog: {$key}");
         }
         return self::CATALOGS[$key];
+    }
+
+    /**
+     * Валюты/статусы кормят расчёты и отчёты — их правит только admin/calculations,
+     * а не любой staff из admin-группы. Прочие справочники (категории и т.п.) — без ограничений.
+     */
+    private function guardSensitiveWrite(string $catalog): void
+    {
+        $sensitive = ['currency', 'contractStatus', 'status'];
+        if (in_array($catalog, $sensitive, true)
+            && ! request()->user()?->hasAnyRole(['admin', 'calculations'])) {
+            abort(403, 'Изменение этого справочника доступно только admin/calculations');
+        }
     }
 
     /**

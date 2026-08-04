@@ -282,6 +282,12 @@ class AdminProductCatalogController extends Controller
             }
         }
 
+        // Смена «месяцев прогноза начисления» → пересчёт contract.accrual_forecast
+        // по всем контрактам (иначе прогноз остаётся со старым числом месяцев).
+        if ($request->has('accrualForecastMonths')) {
+            app(\App\Services\AccrualForecastService::class)->recomputeAll();
+        }
+
         // Калькулятор кэширует матрицу продуктов на 10 минут — без инвалидации
         // снятая галка появится в дропдауне только через эти 10 минут.
         \Illuminate\Support\Facades\Cache::forget('calculator:product-matrix:v4');
