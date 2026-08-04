@@ -16,6 +16,13 @@ class FinanceReportService
         $periodStart = \Carbon\Carbon::parse($month . '-01')->startOfMonth();
         $periodEnd = $periodStart->copy()->endOfMonth();
 
+        // Период-осведомлённость: для закрытого месяца исключаем из downline тех,
+        // кого перевели в структуру субъекта ПОЗЖЕ конца периода (иначе перестановка
+        // меняет исторический отчёт задним числом — инцидент Салькова).
+        $excludeIds = $this->subtreeExcludeIds((int) $consultant->id, $periodEnd->toDateTimeString());
+        $exclSeedId = $this->exclFragment($excludeIds, 'consultant'); // для «WHERE inviter=? ... consultant.id»
+        $exclC = $this->exclFragment($excludeIds, 'c');
+
         $qLogCurrent = DB::table('qualificationLog')
             ->where('consultant', $consultant->id)
             ->whereNull('dateDeleted')
@@ -291,17 +298,17 @@ class FinanceReportService
         // MonthlyPenaltyRunner). Без этого карточка «ОП по ГП» (живой agregat из
         // commission) занижена относительно блока «Отрыв», который читает
         // groupVolume из qualificationLog (уже с баллами). Инцидент Морозов 2026-06.
-        $downlineManualPoints = (float) (DB::selectOne(<<<'SQL'
+        $downlineManualPoints = (float) (DB::selectOne('
             WITH RECURSIVE sub AS (
-                SELECT id FROM consultant WHERE inviter = ? AND "dateDeleted" IS NULL
+                SELECT id FROM consultant WHERE inviter = ? AND "dateDeleted" IS NULL' . $exclSeedId . '
                 UNION ALL
                 SELECT c.id FROM consultant c JOIN sub ON c.inviter = sub.id
-                WHERE c."dateDeleted" IS NULL
+                WHERE c."dateDeleted" IS NULL' . $exclC . '
             )
             SELECT COALESCE(SUM(oa.points), 0) AS pts
             FROM other_accruals oa JOIN sub ON sub.id = oa.consultant
             WHERE oa.accrual_date >= ? AND oa.accrual_date <= ?
-        SQL, [$consultant->id, $periodStart, $periodEnd])->pts ?? 0);
+        ', [$consultant->id, $periodStart, $periodEnd])->pts ?? 0);
 
         $otherAccrualsTable = $otherAccruals->map(fn ($c) => [
             'id' => $c->id,
@@ -375,6 +382,7 @@ class FinanceReportService
                 $top = DB::table('qualificationLog as ql')
                     ->join('consultant as c', 'c.id', '=', 'ql.consultant')
                     ->where('c.inviter', $consultant->id)
+                    ->when($excludeIds, fn ($q) => $q->whereNotIn('c.id', $excludeIds))
                     ->whereNull('c.dateDeleted')
                     ->whereNull('ql.dateDeleted')
                     ->where('ql.date', '>=', $monthStart)
@@ -389,11 +397,11 @@ class FinanceReportService
                     $top = DB::selectOne('
                         WITH RECURSIVE descendants AS (
                             SELECT id FROM consultant
-                            WHERE inviter = ? AND "dateDeleted" IS NULL
+                            WHERE inviter = ? AND "dateDeleted" IS NULL' . $exclSeedId . '
                             UNION ALL
                             SELECT c.id FROM consultant c
                             JOIN descendants d ON c.inviter = d.id
-                            WHERE c."dateDeleted" IS NULL
+                            WHERE c."dateDeleted" IS NULL' . $exclC . '
                         )
                         SELECT c.id, c."personName", ql."groupVolume" AS gv
                         FROM descendants d
@@ -628,7 +636,7 @@ class FinanceReportService
                 // ветка отдельной строкой, отсортировано по убыванию доли.
                 // Терминированные (activity=3) исключаются — они не должны
                 // фигурировать в рассчёте отрыва.
-                'breakaway' => $this->buildBranchTable($consultant, $month, $qLogCurrent),
+                'breakaway' => $this->buildBranchTable($consultant, $month, $qLogCurrent, $excludeIds),
                 'payments' => $payments,
             ],
             'currencyRates' => $currencyRates,
@@ -656,7 +664,49 @@ class FinanceReportService
      *
      * @param  object|null  $qLogCurrent  qualificationLog консультанта за месяц
      */
-    private function buildBranchTable(Consultant $consultant, string $month, $qLogCurrent): array
+    /**
+     * Исключения для downline ЗАКРЫТОГО месяца: id консультантов, чей наставник
+     * В ЭТОМ месяце НЕ равен $subjectId, потому что их перевели в структуру
+     * субъекта ПОЗЖЕ конца периода (лог changeConsultantInviterLog). Их поддерево
+     * не должно попадать в исторический отчёт субъекта задним числом (инцидент
+     * Салькова 2026-08: top-level ФК переведён под Архангельского 24.07 → в июне
+     * он ещё не в его структуре). Живой рекурсивный обход берёт текущее дерево;
+     * здесь мы вырезаем тех, кто в периоде был под ДРУГИМ наставником.
+     *
+     * @return array<int>
+     */
+    private function subtreeExcludeIds(int $subjectId, string $periodEnd): array
+    {
+        $rows = DB::table('changeConsultantInviterLog')
+            ->whereRaw('"dateCreated" > ?', [$periodEnd])
+            ->orderBy('consultant')->orderBy('dateCreated')->orderBy('id')
+            ->get(['consultant', 'inviterOld']);
+
+        $eff = []; // самая ранняя перестановка ПОСЛЕ периода → наставник в периоде
+        foreach ($rows as $r) {
+            $cid = (int) $r->consultant;
+            if (! array_key_exists($cid, $eff)) {
+                $eff[$cid] = $r->inviterOld !== null ? (int) $r->inviterOld : null;
+            }
+        }
+        $exclude = [];
+        foreach ($eff as $cid => $periodInviter) {
+            if ($periodInviter !== $subjectId) {
+                $exclude[] = $cid;
+            }
+        }
+        return $exclude;
+    }
+
+    /** Фрагмент SQL «AND {alias}.id NOT IN (...)» из списка id (int-безопасно). */
+    private function exclFragment(array $excludeIds, string $alias): string
+    {
+        return $excludeIds
+            ? ' AND ' . $alias . '.id NOT IN (' . implode(',', array_map('intval', $excludeIds)) . ')'
+            : '';
+    }
+
+    private function buildBranchTable(Consultant $consultant, string $month, $qLogCurrent, array $excludeIds = []): array
     {
         // Отрыв считается на МЕСЯЧНОМ ГП, а не на накопительном (НГП).
         // Раньше тут стоял groupVolumeCumulative — для неактивных в текущем
@@ -688,7 +738,7 @@ class FinanceReportService
             ) ql_last ON TRUE
             WHERE c.inviter = ?
               AND c."dateDeleted" IS NULL
-              AND c.activity <> ?
+              AND c.activity <> ?' . $this->exclFragment($excludeIds, 'c') . '
             ',
             [
                 $monthStart,
