@@ -1156,16 +1156,19 @@ async function bulkRun(action) {
   };
   const colors = { activate: 'success', terminate: 'warning', exclude: 'error',
     're-register': 'primary', block: 'error', unblock: 'success' };
-  if (!await confirm.ask({
+  // Терминация/исключение пачкой — причина обязательна (та же логика, что в
+  // карточке: она уходит в историю статусов каждому партнёру).
+  const needsReason = action === 'terminate' || action === 'exclude';
+  const res = await confirm.ask({
     title: `Массовое действие: ${labels[action]}`,
     message: `${ids.length} партнёр(ов) будут переведены в статус "${labels[action]}". Действие применится сразу.`,
     confirmText: labels[action], confirmColor: colors[action] || 'primary',
-  })) return;
-
-  let reason = '';
-  if (action === 'terminate' || action === 'exclude') {
-    reason = window.prompt('Причина (необязательно):', '') || '';
-  }
+    maxWidth: needsReason ? 520 : 420,
+    ...(needsReason ? { input: { label: 'Причина *', required: true, rows: 3,
+      placeholder: 'Попадёт в историю статусов каждого партнёра' } } : {}),
+  });
+  if (needsReason ? !res?.confirmed : !res) return;
+  const reason = needsReason ? res.value : '';
 
   try {
     const { data } = await api.post('/admin/partners/bulk', { ids, action, reason });
@@ -1209,24 +1212,62 @@ async function bulkSetInviter() {
   }
 }
 
+// Действия, где причина ОБЯЗАТЕЛЬНА: они меняют деньги и портфель партнёра,
+// и через полгода «почему его терминировали» отвечает только этот комментарий.
+// Он уходит в chageConsultanStatusLog + activity_log и виден в попапе
+// «История смены статуса» рядом с кнопками.
+const STATUS_ACTION_PROMPTS = {
+  terminate: {
+    title: 'Терминировать партнёра?',
+    message: 'Контракты и клиенты автоматически перейдут ближайшему активному вышестоящему, '
+      + 'счётчик терминаций увеличится на 1. Причина попадёт в историю статусов.',
+    confirmText: 'Терминировать', confirmColor: 'warning',
+    label: 'Причина терминации *',
+    placeholder: 'Например: не выполнен план периода (ЛП 320 из 500)',
+    required: true,
+  },
+  exclude: {
+    title: 'Исключить партнёра?',
+    message: 'Партнёр теряет доступ в кабинет, контракты и клиенты перейдут вышестоящему. '
+      + 'Причина попадёт в историю статусов.',
+    confirmText: 'Исключить', confirmColor: 'error',
+    label: 'Причина исключения *',
+    placeholder: 'Например: нарушение правил (п. 4.2), решение комитета от 01.08',
+    required: true,
+  },
+  'restore-termination': {
+    title: 'Отменить терминацию?',
+    message: 'Статус вернётся к тому, что был до терминации, а контракты и клиенты — этому партнёру '
+      + '(только те, что уехали автоматически при терминации и с тех пор не переводились дальше). '
+      + 'Счётчик терминаций уменьшится на 1. Комиссии по открытым периодам пересчитаются.',
+    confirmText: 'Отменить терминацию', confirmColor: 'primary',
+    label: 'Причина отмены *',
+    placeholder: 'Например: терминирован ошибочно — баллы за июль не были учтены',
+    required: true,
+  },
+  activate: {
+    title: 'Активировать партнёра?',
+    message: 'Ручная активация в обход порога ЛП. Причина попадёт в историю статусов.',
+    confirmText: 'Активировать', confirmColor: 'success',
+    label: 'Причина активации *',
+    placeholder: 'Например: активация по решению руководителя, договорённость от 01.08',
+    required: true,
+  },
+};
+
 async function changeStatus(action) {
   if (!editForm.value) return;
   let reason = '';
-  if (action === 'terminate' || action === 'exclude') {
-    reason = window.prompt('Причина (необязательно):', '') || '';
-  } else if (action === 'activate') {
-    // Активация из карточки форсируется на бэкенде (в т.ч. из «Терминирован»);
-    // причина уходит в аудит-лог.
-    reason = window.prompt('Причина ручной активации (для аудит-лога, необязательно):', '') || '';
-  } else if (action === 'restore-termination') {
-    if (!await confirm.ask({
-      title: 'Отменить терминацию?',
-      message: 'Статус вернётся к тому, что был до терминации, а контракты и клиенты — этому партнёру '
-        + '(только те, что уехали автоматически при терминации и с тех пор не переводились дальше). '
-        + 'Счётчик терминаций уменьшится на 1. Комиссии по открытым периодам пересчитаются.',
-      confirmText: 'Отменить терминацию', confirmColor: 'primary',
-    })) return;
-    reason = window.prompt('Причина отмены (для аудит-лога, необязательно):', '') || '';
+  const p = STATUS_ACTION_PROMPTS[action];
+  if (p) {
+    const res = await confirm.ask({
+      title: p.title, message: p.message,
+      confirmText: p.confirmText, confirmColor: p.confirmColor,
+      maxWidth: 520,
+      input: { label: p.label, placeholder: p.placeholder, required: p.required, rows: 3 },
+    });
+    if (!res?.confirmed) return;
+    reason = res.value;
   }
   try {
     const { data } = await api.post(`/admin/partners/${editForm.value.id}/status`, { action, reason });

@@ -559,7 +559,14 @@ class AdminDataController extends Controller
             'ids' => ['required', 'array', 'min:1'],
             'ids.*' => ['integer'],
             'action' => ['required', 'string', 'in:activate,terminate,exclude,re-register,set-inviter,block,unblock'],
-            'reason' => ['nullable', 'string', 'max:500'],
+            // Как и в карточке: пачкой терминировать/исключать без причины
+            // нельзя — иначе массовое действие остаётся дырой в обход гарда.
+            'reason' => [
+                \Illuminate\Validation\Rule::requiredIf(fn () => in_array(
+                    $request->input('action'), ['terminate', 'exclude'], true
+                )),
+                'nullable', 'string', 'min:3', 'max:500',
+            ],
             'inviter' => ['nullable', 'integer', 'exists:consultant,id'],
         ]);
 
@@ -668,7 +675,22 @@ class AdminDataController extends Controller
 
         $request->validate([
             'action' => 'required|in:activate,terminate,exclude,re-register,restore-termination',
-            'reason' => 'nullable|string|max:500',
+            // Причина ОБЯЗАТЕЛЬНА для решений, которые двигают деньги и портфель
+            // (терминация/исключение/ручная активация/отмена терминации): через
+            // полгода на вопрос «почему его терминировали» отвечает только этот
+            // комментарий в chageConsultanStatusLog. Гард дублирует UI —
+            // прямой POST без причины тоже не пройдёт.
+            'reason' => [
+                \Illuminate\Validation\Rule::requiredIf(fn () => in_array(
+                    $request->input('action'),
+                    ['activate', 'terminate', 'exclude', 'restore-termination'],
+                    true
+                )),
+                'nullable', 'string', 'min:3', 'max:500',
+            ],
+        ], [
+            'reason.required' => 'Укажите причину — она попадёт в историю статусов партнёра.',
+            'reason.min' => 'Причина слишком короткая — опишите решение по существу.',
         ]);
 
         // Отмена ошибочной терминации отдаёт сводку по возвращённому портфелю.
@@ -938,10 +960,42 @@ class AdminDataController extends Controller
         };
 
         $history = [];
+        // Одна смена статуса пишется ДВУМЯ строками: `partner_status` (from/to
+        // + причина, см. PartnerStatusService::logStatusChange) и модельная
+        // `Consultant updated` (attributes.activity, БЕЗ причины). Раньше
+        // читалась только вторая — комментарий сотрудника в попап не попадал.
+        // Теперь берём обе формы, а модельный дубль той же смены отбрасываем.
+        $statusEvents = [];
+        foreach ($rows as $r) {
+            if ($r->log_name === 'partner_status') {
+                $p = json_decode($r->properties ?: '{}', true);
+                $statusEvents[] = [
+                    'ts' => strtotime((string) $r->created_at),
+                    'from' => $p['from'] ?? null,
+                    'to' => $p['to'] ?? null,
+                ];
+            }
+        }
+
         foreach ($rows as $r) {
             $props = json_decode($r->properties ?: '{}', true);
-            $oldA = $props['old']['activity'] ?? null;
-            $newA = $props['attributes']['activity'] ?? null;
+
+            if ($r->log_name === 'partner_status') {
+                $oldA = $props['from'] ?? null;
+                $newA = $props['to'] ?? null;
+            } else {
+                $oldA = $props['old']['activity'] ?? null;
+                $newA = $props['attributes']['activity'] ?? null;
+                // Дубль события, у которого уже есть строка с причиной.
+                $ts = strtotime((string) $r->created_at);
+                foreach ($statusEvents as $ev) {
+                    if ((int) $ev['from'] === (int) $oldA && (int) $ev['to'] === (int) $newA
+                        && abs($ev['ts'] - $ts) <= 5) {
+                        continue 2;
+                    }
+                }
+            }
+
             // Берём только события, где реально менялась activity.
             if ($oldA === null && $newA === null) continue;
             if ($oldA === $newA) continue;
