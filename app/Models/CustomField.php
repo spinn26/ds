@@ -10,7 +10,6 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  */
 class CustomField extends Model
 {
-    protected $connection = 'pgsql_v2';
     protected $table = 'custom_fields';
     protected $guarded = [];
 

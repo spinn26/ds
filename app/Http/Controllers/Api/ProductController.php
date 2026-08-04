@@ -88,35 +88,20 @@ class ProductController extends Controller
         $legacyIds = $productRows->pluck('legacy_product_id')->filter()->values();
 
         // Education courses → legacy product.id (FK пока на legacy).
-        $educationDb = DB::connection('pgsql_v2');
-        $canonicalByCatalog = $educationDb->table('legacy_mappings')
-            ->where('source_table', 'products_catalog')
-            ->where('target_table', 'products')
-            ->whereIn('source_key', $productRows->pluck('id')->map(fn ($id) => (string) $id))
-            ->pluck('target_id', 'source_key');
-        $canonicalByLegacy = $legacyIds->isNotEmpty()
-            ? $educationDb->table('legacy_mappings')
-                ->where('source_table', 'product')
-                ->where('target_table', 'products')
-                ->whereIn('source_key', $legacyIds->map(fn ($id) => (string) $id))
-                ->pluck('target_id', 'source_key')
-            : collect();
-        $canonicalProductIds = $canonicalByCatalog->values()
-            ->concat($canonicalByLegacy->values())->unique()->values();
-        $coursesByCanonical = collect();
+        $coursesByLegacy = collect();
         $completedSet = [];
-        if ($canonicalProductIds->isNotEmpty()) {
-            $courseLinks = $educationDb->table('education_course_product as link')
-                ->join('education_courses as course', 'course.id', '=', 'link.course_id')
-                ->where('course.active', true)
-                ->whereIn('link.product_id', $canonicalProductIds)
-                ->get(['course.id', 'course.title', 'link.product_id']);
-            $coursesByCanonical = $courseLinks->groupBy('product_id');
+        if (Schema::hasTable('education_courses') && $legacyIds->isNotEmpty()) {
+            $coursesByLegacy = DB::table('education_courses')
+                ->where('active', true)
+                ->whereNotNull('product_id')
+                ->whereIn('product_id', $legacyIds)
+                ->get()
+                ->groupBy('product_id');
 
-            if ($courseLinks->isNotEmpty()) {
-                $completedCourseIds = $educationDb->table('education_course_completions')
+            if (Schema::hasTable('education_course_completions') && $coursesByLegacy->isNotEmpty()) {
+                $completedCourseIds = DB::table('education_course_completions')
                     ->where('user_id', $user->id)
-                    ->whereIn('course_id', $courseLinks->pluck('id'))
+                    ->whereIn('course_id', $coursesByLegacy->flatten(1)->pluck('id'))
                     ->pluck('course_id')
                     ->all();
                 $completedSet = array_flip($completedCourseIds);
@@ -155,14 +140,10 @@ class ProductController extends Controller
             ->get(['id', 'nameRu', 'nameEn', 'symbol'])
             ->keyBy('id');
 
-        $products = $productRows->map(function ($p) use ($consultant, $hasAccess, $includeDrafts, $canonicalByCatalog, $canonicalByLegacy, $coursesByCanonical, $completedSet, $legacyPrograms, $catalogProgs, $currencyMap, $typeToId) {
+        $products = $productRows->map(function ($p) use ($consultant, $hasAccess, $includeDrafts, $coursesByLegacy, $completedSet, $legacyPrograms, $catalogProgs, $currencyMap, $typeToId) {
             $legacyId = $p->legacy_product_id ? (int) $p->legacy_product_id : null;
 
-            $canonicalProductId = $canonicalByCatalog[(string) $p->id]
-                ?? ($legacyId ? ($canonicalByLegacy[(string) $legacyId] ?? null) : null);
-            $linkedCourses = $canonicalProductId
-                ? ($coursesByCanonical[(int) $canonicalProductId] ?? collect())
-                : collect();
+            $linkedCourses = $legacyId ? ($coursesByLegacy[$legacyId] ?? collect()) : collect();
 
             // «Тест пройден» = все курсы продукта пройдены (тот же источник,
             // что и `available` — education_course_completions). Раньше брали

@@ -9,36 +9,56 @@ use Illuminate\Support\Facades\DB;
 
 class ContestController extends Controller
 {
+    // status_contest: 1=Черновик, 2=Опубликован, 3=Завершён.
+    // Публичная страница показывает только активные (Опубликован).
     private const ACTIVE_STATUS = 2;
 
+    /**
+     * Список активных конкурсов и событий.
+     */
     public function index(Request $request): JsonResponse
     {
-        $db = DB::connection('pgsql_v2');
-        $query = $db->table('contests as c')
-            ->leftJoin('contest_types as ct', 'ct.id', '=', 'c.type_id')
-            ->where('c.status_id', self::ACTIVE_STATUS)
-            ->orderByDesc('c.starts_on');
+        $query = DB::table('Contest')
+            ->where('status', self::ACTIVE_STATUS)
+            ->orderByDesc('start');
 
+        // Фильтр по типу
         if ($request->filled('type')) {
-            $query->where('c.type_id', $request->integer('type'));
+            $query->where('type', $request->type);
         }
 
-        $contests = $query->get(['c.*', 'ct.name as type_name'])->map(fn ($contest) => [
-            'id' => $contest->id,
-            'name' => $contest->name,
-            'description' => $contest->description,
-            'typeName' => $contest->type_name,
-            'status' => (int) $contest->status_id,
-            'statusLabel' => 'Активный',
-            'start' => $contest->starts_on,
-            'end' => $contest->ends_on,
-            'numberOfWinners' => $contest->winner_count,
-            'resultsPublicationDate' => $contest->results_published_on,
-            'presentation' => $contest->presentation_url,
+        $rows = $query->get();
+        $typeNames = DB::table('type_contest')
+            ->whereIn('id', $rows->pluck('type')->filter()->unique()->values())
+            ->pluck('type', 'id');
+
+        $contests = $rows->map(function ($c) use ($typeNames) {
+            $typeName = $c->type ? ($typeNames[$c->type] ?? null) : null;
+
+            return [
+                'id' => $c->id,
+                'name' => $c->name,
+                'description' => $c->description,
+                'typeName' => $typeName,
+                'status' => (int) $c->status,
+                'statusLabel' => 'Активный',
+                'start' => $c->start,
+                'end' => $c->end,
+                'numberOfWinners' => $c->numberOfWinners,
+                'resultsPublicationDate' => $c->resultsPublicationDate,
+                'presentation' => $c->presentation,
+            ];
+        });
+
+        // Типы конкурсов для фильтра
+        $types = DB::table('type_contest')
+            ->orderBy('type')
+            ->get()
+            ->map(fn ($t) => ['id' => $t->id, 'name' => $t->type]);
+
+        return response()->json([
+            'contests' => $contests,
+            'types' => $types,
         ]);
-
-        $types = $db->table('contest_types')->where('active', true)->orderBy('name')->get(['id', 'name']);
-
-        return response()->json(['contests' => $contests, 'types' => $types]);
     }
 }

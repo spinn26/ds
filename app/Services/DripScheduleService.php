@@ -3,8 +3,6 @@
 namespace App\Services;
 
 use Carbon\Carbon;
-use Illuminate\Database\ConnectionInterface;
-use Illuminate\Database\Schema\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -24,16 +22,6 @@ use Illuminate\Support\Facades\Schema;
  */
 class DripScheduleService
 {
-    private function db(): ConnectionInterface
-    {
-        return DB::connection('pgsql_v2');
-    }
-
-    private function schema(): Builder
-    {
-        return Schema::connection('pgsql_v2');
-    }
-
     /**
      * Решить — открыт ли урок для пользователя СЕЙЧАС.
      * Возвращает массив:
@@ -41,7 +29,7 @@ class DripScheduleService
      */
     public function lessonAvailability(object $lesson, ?int $userId, ?object $course = null): array
     {
-        if (! $this->schema()->hasColumn('education_lessons', 'drip_open_at')) {
+        if (! Schema::hasColumn('education_lessons', 'drip_open_at')) {
             return ['open' => true, 'reason' => null, 'unlockAt' => null];
         }
 
@@ -74,8 +62,8 @@ class DripScheduleService
 
         // 3) Стоп-урок: если в курсе есть более ранний стоп-урок, который
         //    не пройден — закрываем.
-        if ($userId && $this->schema()->hasColumn('education_lessons', 'is_stop_lesson')) {
-            $earlierStop = $this->db()->table('education_lessons as l')
+        if ($userId && Schema::hasColumn('education_lessons', 'is_stop_lesson')) {
+            $earlierStop = DB::table('education_lessons as l')
                 ->where('l.course_id', $lesson->course_id ?? null)
                 ->where('l.is_stop_lesson', true)
                 ->where('l.sort_order', '<', $lesson->sort_order ?? 0)
@@ -101,8 +89,8 @@ class DripScheduleService
     /** Получить anchor-время для relative-drip. */
     private function anchorTime(object $course, int $userId): ?Carbon
     {
-        if (! $this->schema()->hasTable('education_course_enrollments')) return null;
-        $enroll = $this->db()->table('education_course_enrollments')
+        if (! Schema::hasTable('education_course_enrollments')) return null;
+        $enroll = DB::table('education_course_enrollments')
             ->where('user_id', $userId)
             ->where('course_id', $course->id)
             ->first();
@@ -121,16 +109,16 @@ class DripScheduleService
      */
     public function markCourseStarted(int $userId, int $courseId): void
     {
-        if (! $this->schema()->hasTable('education_course_enrollments')) return;
+        if (! Schema::hasTable('education_course_enrollments')) return;
         $now = now();
-        $this->db()->table('education_course_enrollments')->upsert([
+        DB::table('education_course_enrollments')->upsert([
             ['user_id' => $userId, 'course_id' => $courseId,
              'granted_at' => $now, 'started_at' => $now,
              'created_at' => $now, 'updated_at' => $now],
         ], ['user_id', 'course_id'], ['updated_at']);
         // Если started_at NULL — выставим сейчас. upsert update игнорирует
         // not-modified, поэтому отдельный UPDATE:
-        $this->db()->table('education_course_enrollments')
+        DB::table('education_course_enrollments')
             ->where('user_id', $userId)
             ->where('course_id', $courseId)
             ->whereNull('started_at')

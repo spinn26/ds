@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Database\ConnectionInterface;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -21,28 +20,23 @@ use Illuminate\Support\Facades\Schema;
  */
 class CertificateController extends Controller
 {
-    private function db(): ConnectionInterface
-    {
-        return DB::connection('pgsql_v2');
-    }
-
     public function show(Request $request, int $courseId)
     {
         $userId = (int) $request->user()->id;
 
-        $course = $this->db()->table('education_courses')->where('id', $courseId)->first();
+        $course = DB::table('education_courses')->where('id', $courseId)->first();
         if (! $course) abort(404, 'Курс не найден');
 
         // Проверка: тест курса сдан и/или все уроки просмотрены.
-        $completion = $this->db()->table('education_course_completions')
+        $completion = DB::table('education_course_completions')
             ->where('user_id', $userId)
             ->where('course_id', $courseId)
             ->first();
-        $totalLessons = $this->db()->table('education_lessons')
+        $totalLessons = DB::table('education_lessons')
             ->where('course_id', $courseId)
             ->where('active', true)
             ->count();
-        $viewedLessons = $this->db()->table('education_lesson_views as v')
+        $viewedLessons = DB::table('education_lesson_views as v')
             ->join('education_lessons as l', 'l.id', '=', 'v.lesson_id')
             ->where('l.course_id', $courseId)
             ->where('v.user_id', $userId)
@@ -54,14 +48,14 @@ class CertificateController extends Controller
 
         // Получить/выдать номер сертификата (idempotent).
         $certNo = null;
-        if (Schema::connection('pgsql_v2')->hasTable('education_course_certificates')) {
-            $existing = $this->db()->table('education_course_certificates')
+        if (Schema::hasTable('education_course_certificates')) {
+            $existing = DB::table('education_course_certificates')
                 ->where('user_id', $userId)->where('course_id', $courseId)->first();
             if ($existing) {
                 $certNo = $existing->certificate_no;
             } else {
                 $certNo = sprintf('DS-%d-%d-%s', $courseId, $userId, date('ymd'));
-                $this->db()->table('education_course_certificates')->insertOrIgnore([
+                DB::table('education_course_certificates')->insertOrIgnore([
                     'user_id' => $userId,
                     'course_id' => $courseId,
                     'certificate_no' => $certNo,

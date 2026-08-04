@@ -11,7 +11,6 @@ use Illuminate\Support\Facades\Schema;
  */
 class FeatureFlag extends Model
 {
-    protected $connection = 'pgsql_v2';
     protected $table = 'feature_flags';
     protected $guarded = [];
 
@@ -24,7 +23,7 @@ class FeatureFlag extends Model
 
     public static function map(): array
     {
-        if (! Schema::connection('pgsql_v2')->hasTable('feature_flags')) return [];
+        if (! Schema::hasTable('feature_flags')) return [];
         return Cache::rememberForever(self::CACHE_KEY, fn () => static::all()->keyBy('key')
             ->map(fn ($f) => ['enabled' => (bool) $f->enabled, 'roles' => $f->roles])->all());
     }

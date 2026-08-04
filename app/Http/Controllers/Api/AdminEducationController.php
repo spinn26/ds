@@ -4,29 +4,16 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Services\XlsxExportService;
-use Illuminate\Database\ConnectionInterface;
-use Illuminate\Database\Schema\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Str;
 
 class AdminEducationController extends Controller
 {
     public function __construct()
     {
         $this->ensureTablesExist();
-    }
-
-    private function db(): ConnectionInterface
-    {
-        return DB::connection('pgsql_v2');
-    }
-
-    private function schema(): Builder
-    {
-        return Schema::connection('pgsql_v2');
     }
 
     /**
@@ -46,42 +33,41 @@ class AdminEducationController extends Controller
         $per = min(100, max(10, (int) $request->input('per', 25)));
 
         // База — все WebUser с ролью consultant (потенциальные обучающиеся).
-        $usersQuery = $this->db()->table('users as u')
-            ->join('partners as p', 'p.user_id', '=', 'u.id')
-            ->whereNull('u.deleted_at')
-            ->whereNull('p.deleted_at');
+        $usersQuery = DB::table('WebUser')
+            ->where('role', 'like', '%consultant%')
+            ->whereNull('dateDeleted');
         if ($search !== '') {
             $usersQuery->where(function ($q) use ($search) {
-                $q->where('u.last_name', 'ilike', "%{$search}%")
-                  ->orWhere('u.first_name', 'ilike', "%{$search}%")
-                  ->orWhere('u.email', 'ilike', "%{$search}%");
+                $q->where('lastName', 'ilike', "%{$search}%")
+                  ->orWhere('firstName', 'ilike', "%{$search}%")
+                  ->orWhere('email', 'ilike', "%{$search}%");
             });
         }
         $total = (clone $usersQuery)->count();
         $users = $usersQuery
-            ->orderBy('u.last_name')->orderBy('u.first_name')
+            ->orderBy('lastName')->orderBy('firstName')
             ->forPage($page, $per)
-            ->get(['u.id', 'u.last_name', 'u.first_name', 'u.email']);
+            ->get(['id', 'lastName', 'firstName', 'email']);
         if ($users->isEmpty()) {
             return response()->json(['data' => [], 'total' => $total]);
         }
 
         $userIds = $users->pluck('id');
         $totalCourses = $courseId > 0 ? 1
-            : (int) $this->db()->table('education_courses')->where('active', true)->count();
+            : (int) DB::table('education_courses')->where('active', true)->count();
 
         // Просмотренные уроки.
-        $viewQ = $this->db()->table('education_lesson_views as v')
+        $viewQ = DB::table('education_lesson_views as v')
             ->join('education_lessons as l', 'l.id', '=', 'v.lesson_id')
             ->whereIn('v.user_id', $userIds);
         if ($courseId > 0) $viewQ->where('l.course_id', $courseId);
         $views = $viewQ
-            ->select('v.user_id', DB::raw('COUNT(*) as cnt'), DB::raw('MAX(v.last_viewed_at) as last_viewed'))
+            ->select('v.user_id', DB::raw('COUNT(*) as cnt'), DB::raw('MAX(v.viewed_at) as last_viewed'))
             ->groupBy('v.user_id')
             ->get()->keyBy('user_id');
 
         // Пройденные курсы.
-        $compQ = $this->db()->table('education_course_completions')
+        $compQ = DB::table('education_course_completions')
             ->whereIn('user_id', $userIds);
         if ($courseId > 0) $compQ->where('course_id', $courseId);
         $completions = $compQ
@@ -94,8 +80,8 @@ class AdminEducationController extends Controller
 
         // История попыток (все, включая неудачные).
         $attempts = collect();
-        if ($this->schema()->hasTable('education_test_attempts')) {
-            $attemptQ = $this->db()->table('education_test_attempts')
+        if (Schema::hasTable('education_test_attempts')) {
+            $attemptQ = DB::table('education_test_attempts')
                 ->whereIn('user_id', $userIds);
             if ($courseId > 0) $attemptQ->where('course_id', $courseId);
             $attempts = $attemptQ
@@ -116,7 +102,7 @@ class AdminEducationController extends Controller
             );
             return [
                 'user_id' => $u->id,
-                'name' => trim(($u->last_name ?? '') . ' ' . ($u->first_name ?? '')) ?: ($u->email ?? '—'),
+                'name' => trim(($u->lastName ?? '') . ' ' . ($u->firstName ?? '')) ?: ($u->email ?? '—'),
                 'email' => $u->email,
                 'lessons_viewed' => (int) ($v->cnt ?? 0),
                 'courses_completed' => (int) ($c->cnt ?? 0),
@@ -173,7 +159,7 @@ class AdminEducationController extends Controller
     /** Список курсов */
     public function courses(Request $request): JsonResponse
     {
-        $query = $this->db()->table('education_courses');
+        $query = DB::table('education_courses');
 
         if ($request->filled('search')) {
             $query->where('title', 'ilike', '%' . $request->search . '%');
@@ -192,13 +178,13 @@ class AdminEducationController extends Controller
         // Batch-load counts and product names (was N+1: three lookups per row).
         $courseIds = $rows->pluck('id');
 
-        $lessonCounts = $this->db()->table('education_lessons')
+        $lessonCounts = DB::table('education_lessons')
             ->whereIn('course_id', $courseIds)
             ->select('course_id', DB::raw('count(*) as cnt'))
             ->groupBy('course_id')
             ->pluck('cnt', 'course_id');
 
-        $testCounts = $this->db()->table('education_tests')
+        $testCounts = DB::table('education_tests')
             ->whereIn('course_id', $courseIds)
             ->select('course_id', DB::raw('count(*) as cnt'))
             ->groupBy('course_id')
@@ -206,12 +192,12 @@ class AdminEducationController extends Controller
 
         // Products (multi): pivot education_course_product хранит catalog id
         // (миграция 2026_06_02_000030) → имена из products_catalog.
-        $pivotRows = $this->db()->table('education_course_product')
+        $pivotRows = DB::table('education_course_product')
             ->whereIn('course_id', $courseIds)
             ->get(['course_id', 'product_id']);
         $catalogProductIds = $pivotRows->pluck('product_id')->filter()->unique();
-        $catalogNames = $catalogProductIds->isNotEmpty() && $this->schema()->hasTable('products')
-            ? $this->db()->table('products')->whereIn('id', $catalogProductIds)->pluck('name', 'id')
+        $catalogNames = $catalogProductIds->isNotEmpty() && Schema::hasTable('products_catalog')
+            ? DB::table('products_catalog')->whereIn('id', $catalogProductIds)->pluck('name', 'id')
             : collect();
         $productsByCourse = $pivotRows->groupBy('course_id')->map(
             fn ($g) => $g->map(fn ($r) => [
@@ -222,15 +208,20 @@ class AdminEducationController extends Controller
 
         // Scalar education_courses.product_id остаётся LEGACY id (витрина +
         // обратная привязка) → его имя берём из legacy `product`.
+        $legacyScalarIds = $rows->pluck('product_id')->filter()->unique();
+        $legacyNames = $legacyScalarIds->isNotEmpty()
+            ? DB::table('product')->whereIn('id', $legacyScalarIds)->pluck('name', 'id')
+            : collect();
+
         // Programs: many-to-many via education_course_program (pivot at the
         // program granularity). program_id references programs_catalog(id).
-        $programPivot = $this->schema()->hasTable('education_course_program')
-            ? $this->db()->table('education_course_program')
+        $programPivot = Schema::hasTable('education_course_program')
+            ? DB::table('education_course_program')
                 ->whereIn('course_id', $courseIds)
                 ->get(['course_id', 'program_id'])
             : collect();
-        $programNames = $programPivot->isNotEmpty() && $this->schema()->hasTable('programs')
-            ? $this->db()->table('programs')->whereIn('id', $programPivot->pluck('program_id')->unique())->pluck('name', 'id')
+        $programNames = $programPivot->isNotEmpty() && Schema::hasTable('programs_catalog')
+            ? DB::table('programs_catalog')->whereIn('id', $programPivot->pluck('program_id')->unique())->pluck('name', 'id')
             : collect();
         $programsByCourse = $programPivot->groupBy('course_id')->map(
             fn ($g) => $g->map(fn ($r) => [
@@ -241,17 +232,17 @@ class AdminEducationController extends Controller
 
         // category_id появилась в миграции 2026_05_21_000020 — проверяем
         // через hasColumn, чтобы старая БД без миграции не отдавала 500.
-        $hasCategory = $this->schema()->hasColumn('education_courses', 'category_id');
-        $categoryNames = $hasCategory && $this->schema()->hasTable('education_course_categories')
-            ? $this->db()->table('education_course_categories')->whereNull('deleted_at')->pluck('name', 'id')
+        $hasCategory = Schema::hasColumn('education_courses', 'category_id');
+        $categoryNames = $hasCategory && Schema::hasTable('education_course_categories')
+            ? DB::table('education_course_categories')->pluck('name', 'id')
             : collect();
 
         $courses = $rows->map(fn ($c) => [
             'id' => $c->id,
             'title' => $c->title,
             'description' => $c->description,
-            'product_id' => ($productsByCourse[$c->id] ?? collect())->first()['id'] ?? null,
-            'productName' => ($productsByCourse[$c->id] ?? collect())->first()['name'] ?? null,
+            'product_id' => $c->product_id,
+            'productName' => $c->product_id ? ($legacyNames[$c->product_id] ?? null) : null,
             'products' => ($productsByCourse[$c->id] ?? collect())->all(),
             'product_ids' => ($productsByCourse[$c->id] ?? collect())->pluck('id')->all(),
             'programs' => ($programsByCourse[$c->id] ?? collect())->all(),
@@ -272,8 +263,8 @@ class AdminEducationController extends Controller
     {
         $request->validate([
             'title' => 'required|string|max:255',
-            'category_id' => 'nullable|integer|exists:pgsql_v2.education_course_categories,id',
-            'parent_id' => 'nullable|integer|exists:pgsql_v2.education_courses,id',
+            'category_id' => 'nullable|integer|exists:education_course_categories,id',
+            'parent_id' => 'nullable|integer|exists:education_courses,id',
             'is_container' => 'nullable|boolean',
         ]);
 
@@ -282,7 +273,7 @@ class AdminEducationController extends Controller
             'created_at' => now(),
         ];
 
-        $id = $this->db()->table('education_courses')->insertGetId($attrs);
+        $id = DB::table('education_courses')->insertGetId($attrs);
 
         if ($request->has('product_ids')) {
             $this->syncCourseProducts($id, $request->input('product_ids'));
@@ -299,8 +290,8 @@ class AdminEducationController extends Controller
     {
         $request->validate([
             'title' => 'required|string|max:255',
-            'category_id' => 'nullable|integer|exists:pgsql_v2.education_course_categories,id',
-            'parent_id' => 'nullable|integer|exists:pgsql_v2.education_courses,id',
+            'category_id' => 'nullable|integer|exists:education_course_categories,id',
+            'parent_id' => 'nullable|integer|exists:education_courses,id',
             'is_container' => 'nullable|boolean',
         ]);
 
@@ -320,7 +311,7 @@ class AdminEducationController extends Controller
             'updated_at' => now(),
         ];
 
-        $this->db()->table('education_courses')->where('id', $id)->update($attrs);
+        DB::table('education_courses')->where('id', $id)->update($attrs);
 
         if ($request->has('product_ids')) {
             $this->syncCourseProducts($id, $request->input('product_ids'));
@@ -351,20 +342,18 @@ class AdminEducationController extends Controller
     {
         $ids = $this->normalizeProductIds($raw);
 
-        $this->db()->transaction(function () use ($courseId, $ids) {
-            $this->db()->table('education_course_product')
+        DB::transaction(function () use ($courseId, $ids) {
+            DB::table('education_course_product')
                 ->where('course_id', $courseId)
                 ->when(! empty($ids), fn ($q) => $q->whereNotIn('product_id', $ids))
                 ->delete();
 
-            foreach ($ids as $index => $pid) {
-                $this->db()->table('education_course_product')->upsert([[
+            foreach ($ids as $pid) {
+                DB::table('education_course_product')->insertOrIgnore([
                     'course_id' => $courseId,
                     'product_id' => $pid,
-                    'is_primary' => $index === 0,
                     'created_at' => now(),
-                    'updated_at' => now(),
-                ]], ['course_id', 'product_id'], ['is_primary', 'updated_at']);
+                ]);
             }
         });
     }
@@ -379,18 +368,17 @@ class AdminEducationController extends Controller
     {
         $ids = $this->normalizeProductIds($raw); // generic: уникальные положительные int
 
-        $this->db()->transaction(function () use ($courseId, $ids) {
-            $this->db()->table('education_course_program')
+        DB::transaction(function () use ($courseId, $ids) {
+            DB::table('education_course_program')
                 ->where('course_id', $courseId)
                 ->when(! empty($ids), fn ($q) => $q->whereNotIn('program_id', $ids))
                 ->delete();
 
             foreach ($ids as $pid) {
-                $this->db()->table('education_course_program')->insertOrIgnore([
+                DB::table('education_course_program')->insertOrIgnore([
                     'course_id' => $courseId,
                     'program_id' => $pid,
                     'created_at' => now(),
-                    'updated_at' => now(),
                 ]);
             }
         });
@@ -409,17 +397,17 @@ class AdminEducationController extends Controller
         // product_id, поэтому отдаём legacy id (+ name) только тех продуктов,
         // чья каталог-карточка активна. Иначе Оля видела бы продукты, которые
         // деактивированы в каталоге (legacy product.active с ним не синхронен).
-        if ($this->schema()->hasTable('products')) {
+        if (Schema::hasTable('products_catalog')) {
             // value = products_catalog.id (его хранит pivot после миграции
             // 2026_06_02_000030), label = каталожное имя. Берём ВСЕ активные
             // витринные продукты — включая каталог-нативные без legacy-анкера
             // (напр. Investors Trust / БРОКЕР+), которых раньше не было в списке.
-            $q = $this->db()->table('products as c')->where('c.active', true)->whereNull('c.deleted_at');
+            $q = DB::table('products_catalog as c')->where('c.active', true);
 
             // Только витрина: тот же критерий, что у партнёрского /products
             // (ProductController) — visible_to_resident=true.
-            if ($this->schema()->hasColumn('products', 'partner_visible')) {
-                $q->where('c.partner_visible', true);
+            if (Schema::hasColumn('products_catalog', 'visible_to_resident')) {
+                $q->where('c.visible_to_resident', true);
             }
 
             $rows = $q->orderBy('c.name')->get(['c.id as id', 'c.name as name']);
@@ -428,15 +416,15 @@ class AdminEducationController extends Controller
         }
 
         // Фоллбэк на средах без каталога — прежняя логика по legacy product.active.
-        $query = $this->db()->table('products')
+        $query = DB::table('product')
             ->where('active', true)
             ->orderBy('name');
 
         // Только опубликованные. publish_status может отсутствовать/быть NULL
         // на старых строках — трактуем NULL как «published» (легаси-дефолт).
-        if ($this->schema()->hasColumn('products', 'published')) {
+        if (Schema::hasColumn('product', 'publish_status')) {
             $query->where(function ($q) {
-                $q->where('published', true)->orWhereNull('published');
+                $q->where('publish_status', 'published')->orWhereNull('publish_status');
             });
         }
 
@@ -453,25 +441,23 @@ class AdminEducationController extends Controller
      */
     public function programOptions(): JsonResponse
     {
-        if (! $this->schema()->hasTable('programs')) {
+        if (! Schema::hasTable('programs_catalog')) {
             return response()->json(['data' => []]);
         }
 
-        $q = $this->db()->table('programs as g')
-            ->join('products as c', 'c.id', '=', 'g.product_id')
+        $q = DB::table('programs_catalog as g')
+            ->join('products_catalog as c', 'c.id', '=', 'g.product_id')
             ->where('g.active', true)
-            ->where('c.active', true)
-            ->whereNull('g.deleted_at')
-            ->whereNull('c.deleted_at');
+            ->where('c.active', true);
 
         // Только витрина: программа видна, лишь если ОБА уровня (продукт И
         // программа) имеют visible_to_resident=true — тот же критерий, что у
         // партнёрского /products (ProductController).
-        if ($this->schema()->hasColumn('programs', 'partner_visible')) {
-            $q->where('g.partner_visible', true);
+        if (Schema::hasColumn('programs_catalog', 'visible_to_resident')) {
+            $q->where('g.visible_to_resident', true);
         }
-        if ($this->schema()->hasColumn('products', 'partner_visible')) {
-            $q->where('c.partner_visible', true);
+        if (Schema::hasColumn('products_catalog', 'visible_to_resident')) {
+            $q->where('c.visible_to_resident', true);
         }
 
         // product_id = products_catalog.id — тот же id-space, что хранит pivot
@@ -497,7 +483,7 @@ class AdminEducationController extends Controller
     public function moveCourse(Request $request, int $id): JsonResponse
     {
         $data = $request->validate([
-            'parent_id' => 'nullable|integer|exists:pgsql_v2.education_courses,id',
+            'parent_id' => 'nullable|integer|exists:education_courses,id',
             'sort_order' => 'required|integer|min:0',
         ]);
 
@@ -510,7 +496,7 @@ class AdminEducationController extends Controller
             }
         }
 
-        $this->db()->table('education_courses')->where('id', $id)->update([
+        DB::table('education_courses')->where('id', $id)->update([
             'parent_id' => $data['parent_id'] ?? null,
             'sort_order' => $data['sort_order'],
             'updated_at' => now(),
@@ -526,13 +512,22 @@ class AdminEducationController extends Controller
         // для витрины + обратной привязки: маппим первый выбранный catalog →
         // его legacy_product_id (null для каталог-нативных без анкера — витрина
         // их по scalar и не показывала).
+        $primaryProductId = $request->product_id;
+        if ($request->has('product_ids')) {
+            $firstCatalogId = $this->normalizeProductIds($request->input('product_ids'))[0] ?? null;
+            $primaryProductId = $firstCatalogId
+                ? (DB::table('products_catalog')->where('id', $firstCatalogId)->value('legacy_product_id') ?: null)
+                : null;
+        }
+
         $payload = [
             'title' => $request->title,
             'description' => $request->description,
+            'product_id' => $primaryProductId,
             'sort_order' => $request->input('sort_order', 0),
         ];
         foreach (['category_id', 'parent_id', 'is_container', 'cover_url', 'slug'] as $field) {
-            if (! $this->schema()->hasColumn('education_courses', $field)) continue;
+            if (! Schema::hasColumn('education_courses', $field)) continue;
             if ($field === 'is_container') {
                 $payload[$field] = $request->boolean($field);
             } else {
@@ -549,7 +544,7 @@ class AdminEducationController extends Controller
         $stack = [$rootId];
         while ($stack) {
             $cur = array_pop($stack);
-            $children = $this->db()->table('education_courses')
+            $children = DB::table('education_courses')
                 ->where('parent_id', $cur)
                 ->where('active', true)
                 ->pluck('id')
@@ -568,7 +563,7 @@ class AdminEducationController extends Controller
     /** Удалить курс */
     public function destroyCourse(int $id): JsonResponse
     {
-        $exists = $this->db()->table('education_courses')->where('id', $id)->exists();
+        $exists = DB::table('education_courses')->where('id', $id)->exists();
         if (! $exists) {
             return response()->json(['message' => 'Курс не найден'], 404);
         }
@@ -576,22 +571,22 @@ class AdminEducationController extends Controller
         // FK между education_* отсутствуют — каскад делаем руками.
         // Порядок: сначала views (через lesson_id), потом lessons/tests
         // и результаты прохождений, потом сам курс.
-        $this->db()->transaction(function () use ($id) {
-            $lessonIds = $this->db()->table('education_lessons')
+        DB::transaction(function () use ($id) {
+            $lessonIds = DB::table('education_lessons')
                 ->where('course_id', $id)
                 ->pluck('id');
             if ($lessonIds->isNotEmpty()) {
-                $this->db()->table('education_lesson_views')
+                DB::table('education_lesson_views')
                     ->whereIn('lesson_id', $lessonIds)
                     ->delete();
             }
-            $this->db()->table('education_lessons')->where('course_id', $id)->delete();
-            $this->db()->table('education_tests')->where('course_id', $id)->delete();
-            if ($this->schema()->hasTable('education_test_attempts')) {
-                $this->db()->table('education_test_attempts')->where('course_id', $id)->delete();
+            DB::table('education_lessons')->where('course_id', $id)->delete();
+            DB::table('education_tests')->where('course_id', $id)->delete();
+            if (Schema::hasTable('education_test_attempts')) {
+                DB::table('education_test_attempts')->where('course_id', $id)->delete();
             }
-            $this->db()->table('education_course_completions')->where('course_id', $id)->delete();
-            $this->db()->table('education_courses')->where('id', $id)->delete();
+            DB::table('education_course_completions')->where('course_id', $id)->delete();
+            DB::table('education_courses')->where('id', $id)->delete();
         });
 
         return response()->json(['message' => 'Курс удалён']);
@@ -600,9 +595,9 @@ class AdminEducationController extends Controller
     /** Уроки курса */
     public function lessons(int $courseId): JsonResponse
     {
-        $hasArrays = $this->schema()->hasColumn('education_lessons', 'video_urls');
+        $hasArrays = Schema::hasColumn('education_lessons', 'video_urls');
 
-        $lessons = $this->db()->table('education_lessons')
+        $lessons = DB::table('education_lessons')
             ->where('course_id', $courseId)
             ->orderBy('sort_order')
             ->get()
@@ -687,7 +682,7 @@ class AdminEducationController extends Controller
             'sort_order' => $request->input('sort_order', 0),
         ];
 
-        if ($this->schema()->hasColumn('education_lessons', 'video_urls')) {
+        if (Schema::hasColumn('education_lessons', 'video_urls')) {
             $payload['video_urls'] = $videoItems ? json_encode(array_values($videoItems), JSON_UNESCAPED_UNICODE) : null;
             $payload['document_urls'] = $documentItems ? json_encode(array_values($documentItems), JSON_UNESCAPED_UNICODE) : null;
         }
@@ -697,7 +692,7 @@ class AdminEducationController extends Controller
         // Per ТЗ Жосан §6: «урок не должен быть жёстким шаблоном, нужен
         // конструктор блоков». Старые video_urls/document_urls оставляем
         // для legacy-уроков — рендерер на фронте поддерживает оба формата.
-        if ($this->schema()->hasColumn('education_lessons', 'body')) {
+        if (Schema::hasColumn('education_lessons', 'body')) {
             $bodyInput = $request->input('body');
             if ($bodyInput === null || $bodyInput === '') {
                 $payload['body'] = null;
@@ -712,7 +707,7 @@ class AdminEducationController extends Controller
         // is_test (миграция 2026_05_25_000030): урок-тест — отдельный тип
         // урока без блоков, при открытии партнёром предлагает пройти тест
         // курса. Конструктор скрывает блоки и подсказку для таких уроков.
-        if ($this->schema()->hasColumn('education_lessons', 'is_test')) {
+        if (Schema::hasColumn('education_lessons', 'is_test')) {
             $payload['is_test'] = $request->boolean('is_test');
         }
 
@@ -721,7 +716,7 @@ class AdminEducationController extends Controller
         // блокирует следующие уроки до прохождения этого.
         foreach (['drip_delay_hours', 'drip_open_at', 'is_stop_lesson',
             'requires_homework', 'homework_instructions'] as $field) {
-            if (! $this->schema()->hasColumn('education_lessons', $field)) continue;
+            if (! Schema::hasColumn('education_lessons', $field)) continue;
             if (in_array($field, ['is_stop_lesson', 'requires_homework'], true)) {
                 $payload[$field] = $request->boolean($field);
             } else {
@@ -782,7 +777,7 @@ class AdminEducationController extends Controller
             'created_at' => now(),
         ]);
 
-        $id = $this->db()->table('education_lessons')->insertGetId($attrs);
+        $id = DB::table('education_lessons')->insertGetId($attrs);
 
         return response()->json(['message' => 'Урок создан', 'id' => $id], 201);
     }
@@ -800,7 +795,7 @@ class AdminEducationController extends Controller
             'updated_at' => now(),
         ]);
 
-        $this->db()->table('education_lessons')->where('id', $lessonId)->where('course_id', $courseId)->update($attrs);
+        DB::table('education_lessons')->where('id', $lessonId)->update($attrs);
 
         return response()->json(['message' => 'Урок обновлён']);
     }
@@ -809,7 +804,7 @@ class AdminEducationController extends Controller
     {
         // Scope by course_id so the URL {courseId} actually matters —
         // otherwise a lesson under course A could be deleted via course B's URL.
-        $deleted = $this->db()->table('education_lessons')
+        $deleted = DB::table('education_lessons')
             ->where('id', $lessonId)
             ->where('course_id', $courseId)
             ->delete();
@@ -824,7 +819,7 @@ class AdminEducationController extends Controller
     /** Тесты курса */
     public function tests(int $courseId): JsonResponse
     {
-        $tests = $this->db()->table('education_tests')
+        $tests = DB::table('education_tests')
             ->where('course_id', $courseId)
             ->orderBy('sort_order')
             ->get()
@@ -832,8 +827,7 @@ class AdminEducationController extends Controller
                 'id' => $t->id,
                 'question' => $t->question,
                 'answers' => json_decode($t->answers, true), // ["answer1", "answer2", ...]
-                'correct_answer' => $this->firstCorrectAnswer($t->correct_answers), // legacy API contract
-                'correct_answers' => $this->decodeJsonArray($t->correct_answers),
+                'correct_answer' => $t->correct_answer, // index of correct answer
                 'sort_order' => $t->sort_order,
             ]);
 
@@ -855,17 +849,17 @@ class AdminEducationController extends Controller
         // порядке. Это и был баг «вопросы идут не по порядку».
         $sortOrder = $request->input('sort_order');
         if ($sortOrder === null) {
-            $maxOrder = (int) $this->db()->table('education_tests')
+            $maxOrder = (int) DB::table('education_tests')
                 ->where('course_id', $courseId)
                 ->max('sort_order');
             $sortOrder = $maxOrder + 10;
         }
 
-        $id = $this->db()->table('education_tests')->insertGetId([
+        $id = DB::table('education_tests')->insertGetId([
             'course_id' => $courseId,
             'question' => $request->question,
             'answers' => json_encode($request->answers),
-            'correct_answers' => json_encode([(int) $request->correct_answer], JSON_THROW_ON_ERROR),
+            'correct_answer' => $request->correct_answer,
             'sort_order' => $sortOrder,
             'created_at' => now(),
         ]);
@@ -888,9 +882,9 @@ class AdminEducationController extends Controller
         ]);
         $ids = $request->input('ids', []);
 
-        $this->db()->transaction(function () use ($courseId, $ids) {
+        DB::transaction(function () use ($courseId, $ids) {
             foreach ($ids as $idx => $testId) {
-                $this->db()->table('education_tests')
+                DB::table('education_tests')
                     ->where('id', $testId)
                     ->where('course_id', $courseId) // защита от cross-course
                     ->update([
@@ -911,21 +905,21 @@ class AdminEducationController extends Controller
         $payload = [
             'question' => $request->question,
             'answers' => json_encode($request->answers),
-            'correct_answers' => json_encode([(int) $request->correct_answer], JSON_THROW_ON_ERROR),
+            'correct_answer' => $request->correct_answer,
             'updated_at' => now(),
         ];
         if ($request->has('sort_order')) {
             $payload['sort_order'] = (int) $request->input('sort_order');
         }
 
-        $this->db()->table('education_tests')->where('id', $testId)->where('course_id', $courseId)->update($payload);
+        DB::table('education_tests')->where('id', $testId)->update($payload);
 
         return response()->json(['message' => 'Вопрос обновлён']);
     }
 
     public function destroyTest(int $courseId, int $testId): JsonResponse
     {
-        $deleted = $this->db()->table('education_tests')
+        $deleted = DB::table('education_tests')
             ->where('id', $testId)
             ->where('course_id', $courseId)
             ->delete();
@@ -943,31 +937,13 @@ class AdminEducationController extends Controller
     // блоки. Курсы без category_id показываются в группе «Без категории».
 
     /** GET /admin/education/categories — список (для админ-CRUD и селектов). */
-    private function decodeJsonArray(mixed $value): array
-    {
-        if (is_array($value)) {
-            return $value;
-        }
-
-        $decoded = $value === null ? null : json_decode((string) $value, true);
-
-        return is_array($decoded) ? $decoded : [];
-    }
-
-    private function firstCorrectAnswer(mixed $value): ?int
-    {
-        $answers = $this->decodeJsonArray($value);
-
-        return isset($answers[0]) ? (int) $answers[0] : null;
-    }
-
     public function categories(Request $request): JsonResponse
     {
-        if (! $this->schema()->hasTable('education_course_categories')) {
+        if (! Schema::hasTable('education_course_categories')) {
             return response()->json(['data' => [], 'total' => 0]);
         }
 
-        $q = $this->db()->table('education_course_categories')->whereNull('deleted_at');
+        $q = DB::table('education_course_categories')->whereNull('deleted_at');
         if ($request->boolean('only_active')) {
             $q->where('active', true);
         }
@@ -978,8 +954,8 @@ class AdminEducationController extends Controller
         $rows = $q->orderBy('sort_order')->orderBy('name')->get();
 
         // Курсов в категории — для столбца «Курсов» в админке.
-        $courseCounts = $this->schema()->hasColumn('education_courses', 'category_id')
-            ? $this->db()->table('education_courses')
+        $courseCounts = Schema::hasColumn('education_courses', 'category_id')
+            ? DB::table('education_courses')
                 ->whereNotNull('category_id')
                 ->select('category_id', DB::raw('count(*) as cnt'))
                 ->groupBy('category_id')
@@ -1004,9 +980,8 @@ class AdminEducationController extends Controller
             'sort_order' => 'nullable|integer',
         ]);
 
-        $id = $this->db()->table('education_course_categories')->insertGetId([
+        $id = DB::table('education_course_categories')->insertGetId([
             'name' => $request->name,
-            'slug' => $this->uniqueCategorySlug((string) $request->name),
             'sort_order' => (int) $request->input('sort_order', 0),
             'active' => $request->boolean('active', true),
             'created_at' => now(),
@@ -1023,7 +998,7 @@ class AdminEducationController extends Controller
             'sort_order' => 'nullable|integer',
         ]);
 
-        $affected = $this->db()->table('education_course_categories')
+        $affected = DB::table('education_course_categories')
             ->where('id', $id)
             ->whereNull('deleted_at')
             ->update([
@@ -1043,7 +1018,7 @@ class AdminEducationController extends Controller
     {
         // Soft-delete (через deleted_at), привязанные курсы НЕ отвязываем —
         // category_id у них останется, восстановление вернёт связку как было.
-        $this->db()->table('education_course_categories')
+        DB::table('education_course_categories')
             ->where('id', $id)
             ->update(['deleted_at' => now(), 'active' => false]);
         return response()->json(['message' => 'Категория удалена']);
@@ -1052,14 +1027,8 @@ class AdminEducationController extends Controller
     /** Создать таблицы если их нет */
     private function ensureTablesExist(): void
     {
-        foreach (['education_courses', 'education_lessons', 'education_tests', 'education_course_product', 'education_course_program'] as $table) {
-            if (! $this->schema()->hasTable($table)) {
-                abort(503, "Таблица {$table} отсутствует в ds_v2");
-            }
-        }
-
-        if (! $this->schema()->hasTable('education_courses')) {
-            $this->db()->statement('CREATE TABLE education_courses (
+        if (! Schema::hasTable('education_courses')) {
+            DB::statement('CREATE TABLE education_courses (
                 id BIGSERIAL PRIMARY KEY,
                 title TEXT NOT NULL,
                 description TEXT,
@@ -1071,8 +1040,8 @@ class AdminEducationController extends Controller
             )');
         }
 
-        if (! $this->schema()->hasTable('education_lessons')) {
-            $this->db()->statement('CREATE TABLE education_lessons (
+        if (! Schema::hasTable('education_lessons')) {
+            DB::statement('CREATE TABLE education_lessons (
                 id BIGSERIAL PRIMARY KEY,
                 course_id BIGINT NOT NULL,
                 title TEXT NOT NULL,
@@ -1087,8 +1056,8 @@ class AdminEducationController extends Controller
             )');
         }
 
-        if (! $this->schema()->hasTable('education_tests')) {
-            $this->db()->statement('CREATE TABLE education_tests (
+        if (! Schema::hasTable('education_tests')) {
+            DB::statement('CREATE TABLE education_tests (
                 id BIGSERIAL PRIMARY KEY,
                 course_id BIGINT NOT NULL,
                 question TEXT NOT NULL,
@@ -1100,39 +1069,29 @@ class AdminEducationController extends Controller
             )');
         }
 
-        if (! $this->schema()->hasTable('education_course_product')) {
-            $this->db()->statement('CREATE TABLE education_course_product (
+        if (! Schema::hasTable('education_course_product')) {
+            DB::statement('CREATE TABLE education_course_product (
                 id BIGSERIAL PRIMARY KEY,
                 course_id BIGINT NOT NULL REFERENCES education_courses(id) ON DELETE CASCADE,
                 product_id BIGINT NOT NULL,
                 created_at TIMESTAMP,
                 UNIQUE (course_id, product_id)
             )');
-            $this->db()->statement('CREATE INDEX education_course_product_product_idx ON education_course_product (product_id)');
+            DB::statement('CREATE INDEX education_course_product_product_idx ON education_course_product (product_id)');
             // NB: без backfill из education_courses.product_id — тот scalar
             // остаётся legacy id, а pivot теперь хранит products_catalog.id
             // (разные id-spaces). На свежих средах pivot наполняется через UI.
         }
 
-        if (! $this->schema()->hasTable('education_course_program')) {
-            $this->db()->statement('CREATE TABLE education_course_program (
+        if (! Schema::hasTable('education_course_program')) {
+            DB::statement('CREATE TABLE education_course_program (
                 id BIGSERIAL PRIMARY KEY,
                 course_id BIGINT NOT NULL REFERENCES education_courses(id) ON DELETE CASCADE,
                 program_id BIGINT NOT NULL,
                 created_at TIMESTAMP,
                 UNIQUE (course_id, program_id)
             )');
-            $this->db()->statement('CREATE INDEX education_course_program_program_idx ON education_course_program (program_id)');
+            DB::statement('CREATE INDEX education_course_program_program_idx ON education_course_program (program_id)');
         }
-    }
-
-    private function uniqueCategorySlug(string $name): string
-    {
-        $base = Str::slug($name) ?: 'category';
-        do {
-            $slug = $base.'-'.Str::lower(Str::random(8));
-        } while ($this->db()->table('education_course_categories')->where('slug', $slug)->exists());
-
-        return $slug;
     }
 }

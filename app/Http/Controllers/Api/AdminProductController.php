@@ -7,7 +7,6 @@ use App\Http\Controllers\Controller;
 use App\Models\Product;
 use App\Models\Program;
 use App\Support\LegacyId;
-use Illuminate\Database\ConnectionInterface;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -16,11 +15,6 @@ use Illuminate\Support\Facades\Schema;
 class AdminProductController extends Controller
 {
     use PaginatesRequests;
-
-    private function v2(): ConnectionInterface
-    {
-        return DB::connection('pgsql_v2');
-    }
 
     /**
      * Справочники для формы редактирования продукта — productType с
@@ -37,10 +31,10 @@ class AdminProductController extends Controller
             ->orderBy('productTypeName')
             ->get(['id', 'productTypeName as name', 'productTypeCategory as categoryId']);
 
-        $courses = $this->v2()->table('education_courses')
+        $courses = DB::table('education_courses')
             ->where('active', true)
             ->orderBy('title')
-            ->get(['id', 'title']);
+            ->get(['id', 'title', 'product_id']);
 
         return response()->json([
             'categories' => $categories,
@@ -70,21 +64,9 @@ class AdminProductController extends Controller
         // Batch: привязанные education_courses (FK на стороне курса)
         // и количество программ — чтобы не плодить N+1 в .map().
         $productIds = $rows->pluck('id');
-        $canonicalByLegacy = $this->v2()->table('legacy_mappings')
-            ->where('source_table', 'product')
-            ->where('target_table', 'products')
-            ->whereIn('source_key', $productIds->map(fn ($id) => (string) $id))
-            ->pluck('target_id', 'source_key');
-        $legacyByCanonical = $canonicalByLegacy->mapWithKeys(
-            fn ($targetId, $sourceKey) => [(int) $targetId => (int) $sourceKey]
-        );
-        $courseByProduct = $this->v2()->table('education_course_product')
-            ->whereIn('product_id', $canonicalByLegacy->values())
-            ->orderByDesc('is_primary')
-            ->get(['course_id', 'product_id'])
-            ->mapWithKeys(fn ($link) => [
-                $legacyByCanonical[(int) $link->product_id] => (int) $link->course_id,
-            ]);
+        $courseByProduct = DB::table('education_courses')
+            ->whereIn('product_id', $productIds)
+            ->pluck('id', 'product_id');
         $programCountByProduct = DB::table('program')
             ->whereIn('product', $productIds)
             ->select('product', DB::raw('count(*) as cnt'))
@@ -127,7 +109,7 @@ class AdminProductController extends Controller
         $request->validate([
             'name' => 'required|string|max:255',
             'productType' => 'nullable|integer|exists:productType,id',
-            'educationCourseId' => 'nullable|integer|exists:pgsql_v2.education_courses,id',
+            'educationCourseId' => 'nullable|integer|exists:education_courses,id',
         ]);
 
         $status = $request->input('publishStatus', 'draft');
@@ -172,29 +154,22 @@ class AdminProductController extends Controller
      */
     private function syncEducationCourse(int $productId, $courseId): void
     {
-        $canonicalProductId = $this->v2()->table('legacy_mappings')
-            ->where('source_table', 'product')
-            ->where('source_key', (string) $productId)
-            ->where('target_table', 'products')
-            ->value('target_id');
-        if (! $canonicalProductId) {
-            return;
-        }
-
         // Снять product_id со всех курсов, привязанных к этому продукту.
+        DB::table('education_courses')->where('product_id', $productId)->update(['product_id' => null]);
+        if ($courseId) {
+            DB::table('education_courses')->where('id', (int) $courseId)->update(['product_id' => $productId]);
+        }
 
         // Зеркалим в pivot education_course_product, чтобы конструктор курсов
         // видел привязку, сделанную со стороны продукта (связь 1:1 на стороне
         // продукта: один продукт → один курс).
-        if (Schema::connection('pgsql_v2')->hasTable('education_course_product')) {
-            $this->v2()->table('education_course_product')->where('product_id', $canonicalProductId)->delete();
+        if (Schema::hasTable('education_course_product')) {
+            DB::table('education_course_product')->where('product_id', $productId)->delete();
             if ($courseId) {
-                $this->v2()->table('education_course_product')->insertOrIgnore([
+                DB::table('education_course_product')->insertOrIgnore([
                     'course_id' => (int) $courseId,
-                    'product_id' => (int) $canonicalProductId,
-                    'is_primary' => true,
+                    'product_id' => $productId,
                     'created_at' => now(),
-                    'updated_at' => now(),
                 ]);
             }
         }
@@ -208,7 +183,7 @@ class AdminProductController extends Controller
         $request->validate([
             'name' => 'required|string|max:255',
             'productType' => 'nullable|integer|exists:productType,id',
-            'educationCourseId' => 'nullable|integer|exists:pgsql_v2.education_courses,id',
+            'educationCourseId' => 'nullable|integer|exists:education_courses,id',
         ]);
 
         $product->name = $request->name;

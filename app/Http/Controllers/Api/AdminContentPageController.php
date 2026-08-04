@@ -41,7 +41,7 @@ class AdminContentPageController extends Controller
     private function validateData(Request $request, ?int $id = null): array
     {
         $data = $request->validate([
-            'slug' => ['required', 'string', 'max:120', 'alpha_dash', Rule::unique('pgsql_v2.content_pages', 'slug')->ignore($id)],
+            'slug' => ['required', 'string', 'max:120', 'alpha_dash', Rule::unique('content_pages', 'slug')->ignore($id)],
             'title' => ['required', 'string', 'max:255'],
             'body' => ['nullable', 'string', 'max:100000'],
             'active' => ['boolean'],
