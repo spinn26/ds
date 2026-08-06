@@ -3168,6 +3168,11 @@ class AdminDataController extends Controller
         $contract = \App\Models\Contract::find($id);
         if (! $contract) return response()->json(['message' => 'Контракт не найден'], 404);
 
+        // Прямой партнёр до правки — смена клиента ниже может сменить владельца
+        // (data['consultant'] = client.consultant), а это двигает комиссионную
+        // цепочку. Запоминаем, чтобы пересчитать её за открытые периоды.
+        $oldConsultant = (int) $contract->consultant;
+
         // Тот же гард, что при создании: смена номера на уже занятый другим
         // живым контрактом → 422 с данными этого контракта (исключаем сам $id).
         if ($request->has('number') && ($resp = $this->contractNumberConflict($request->input('number'), $id))) {
@@ -3242,6 +3247,15 @@ class AdminDataController extends Controller
 
         // Прогноз начисления — системное поле, пересчитываем после смены статуса.
         app(\App\Services\AccrualForecastService::class)->recomputeForContract($contract->id);
+
+        // Сменился прямой партнёр (через смену клиента) → перестраиваем
+        // комиссионную цепочку за ОТКРЫТЫЕ периоды, как в модуле перестановок
+        // (createContractTransfer). Закрытые/исторические месяцы
+        // calculateForTransaction пропустит сам. Без этого правка ФК в
+        // редакторе контракта оставляла цепочку на старом партнёре.
+        if ((int) $contract->consultant !== $oldConsultant) {
+            \App\Jobs\RecomputeTransferChainJob::dispatch('contract', (int) $contract->id);
+        }
 
         return response()->json(['message' => 'Контракт обновлён']);
     }
