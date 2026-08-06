@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Курс валюты на дату операции.
@@ -73,14 +74,38 @@ class CurrencyRates
         self::$cache = [];
     }
 
-    /** 'YYYY-MM' операции. */
+    /**
+     * 'YYYY-MM' операции.
+     *
+     * ⚠ Раньше строку резали `substr($date, 0, 7)` — это верно ТОЛЬКО для ISO
+     * 'YYYY-MM-DD'. Импорт отдаёт дату так, как она лежит в листе поставщика:
+     * у Investor Trust «Дата оплаты» = '31.07.2026', и substr давал '31.07.2',
+     * а дальше в SQL уходило '31.07.2-01'::timestamp → SQLSTATE[22008]
+     * «date/time field value out of range» и импорт падал целиком.
+     * Поэтому неISO-формат разбираем через strtotime (он понимает и
+     * DD.MM.YYYY, и DD/MM/YYYY, и 'YYYY-MM-DD HH:MM:SS').
+     */
     private static function monthOf($date): string
     {
         if ($date instanceof \DateTimeInterface) {
             return $date->format('Y-m');
         }
-        if (is_string($date) && $date !== '') {
-            return substr($date, 0, 7);
+        if (is_string($date) && trim($date) !== '') {
+            $raw = trim($date);
+            // Быстрый путь: ISO (в т.ч. с временем) — как и было.
+            if (preg_match('/^(\d{4})-(\d{2})/', $raw, $m)) {
+                return $m[1] . '-' . $m[2];
+            }
+            $ts = strtotime($raw);
+            if ($ts !== false) {
+                return date('Y-m', $ts);
+            }
+            // Не распарсили — берём текущий месяц (курс всё равно нужен),
+            // но оставляем след: молча взятый не тот курс тянет за собой
+            // amountRUB -> доход ДС -> ЛП -> комиссии всей цепочки.
+            Log::warning('CurrencyRates: не удалось разобрать дату операции, взят курс текущего месяца', [
+                'date' => $raw,
+            ]);
         }
         return now()->format('Y-m');
     }
