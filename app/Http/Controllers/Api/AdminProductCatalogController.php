@@ -675,8 +675,10 @@ class AdminProductCatalogController extends Controller
     /**
      * После сохранения тарифов в каталоге — пробрасываем %ДС в legacy-таблицу
      * `dsCommission` (по ней считаются комиссии транзакций). Только текущее окно
-     * дат, только не-is_red строки, только value-update однозначных совпадений —
-     * см. DsCommissionSync. Ошибка синка НЕ должна валить сохранение.
+     * дат, только не-is_red строки; однозначные совпадения обновляются, а
+     * отсутствующие строки создаются (иначе у новой программы %ДС не доезжает до
+     * калькулятора) — см. DsCommissionSync. Ошибка синка НЕ должна валить
+     * сохранение.
      */
     private function pushTariffsToDsCommission(int $catalogProgramId): void
     {
