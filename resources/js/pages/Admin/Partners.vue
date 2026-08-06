@@ -376,6 +376,19 @@
                 <v-btn v-if="editForm.activityId === 3 || editForm.activityId === 5"
                   size="small" variant="tonal" color="primary" prepend-icon="mdi-undo-variant"
                   @click="changeStatus('restore-termination')">Отменить терминацию (вернуть портфель)</v-btn>
+                <!-- Самовосстановление: партнёр возвращается сам из окна при
+                     входе. Запрет статус не меняет — только закрывает эту дверь. -->
+                <v-btn size="small" variant="tonal"
+                  :color="editForm.reinstateBlocked ? 'success' : 'warning'"
+                  :prepend-icon="editForm.reinstateBlocked ? 'mdi-lock-open-variant' : 'mdi-lock'"
+                  @click="changeStatus(editForm.reinstateBlocked ? 'unblock-reinstate' : 'block-reinstate')">
+                  {{ editForm.reinstateBlocked ? 'Разрешить самовосстановление' : 'Запретить самовосстановление' }}
+                </v-btn>
+              </div>
+              <div class="text-caption text-medium-emphasis mt-2">
+                Самовосстановлений использовано:
+                {{ editForm.reinstatementCount ?? 0 }} из {{ editForm.reinstateLimit ?? 3 }}
+                <template v-if="editForm.reinstateBlocked"> · запрещено администратором</template>
               </div>
               <v-alert v-if="statusMsg" :type="statusMsgType" density="compact" class="mt-3" closable @click:close="statusMsg = ''">
                 {{ statusMsg }}
@@ -1074,6 +1087,10 @@ async function openEdit(item) {
       inviterName: c.inviterName,
       activityId: c.activityId,
       activityName: c.activityName,
+      terminationCount: c.terminationCount ?? 0,
+      reinstatementCount: c.reinstatementCount ?? 0,
+      reinstateLimit: c.reinstateLimit ?? 3,
+      reinstateBlocked: !!c.reinstateBlocked,
       firstName: u.firstName || '',
       lastName: u.lastName || '',
       patronymic: u.patronymic || '',
@@ -1245,6 +1262,23 @@ const STATUS_ACTION_PROMPTS = {
     placeholder: 'Например: терминирован ошибочно — баллы за июль не были учтены',
     required: true,
   },
+  'block-reinstate': {
+    title: 'Запретить самовосстановление?',
+    message: 'Партнёр больше не сможет вернуться в работу сам из окна при входе. Текущий статус '
+      + 'не меняется. Следующая терминация переведёт его в «Исключён».',
+    confirmText: 'Запретить', confirmColor: 'warning',
+    label: 'Причина запрета *',
+    placeholder: 'Например: разбирательство по жалобе от 05.08',
+    required: true,
+  },
+  'unblock-reinstate': {
+    title: 'Разрешить самовосстановление?',
+    message: 'Партнёр снова сможет восстановиться сам, если попытки не исчерпаны.',
+    confirmText: 'Разрешить', confirmColor: 'success',
+    label: 'Комментарий',
+    placeholder: 'Например: разбирательство закрыто',
+    required: false,
+  },
   activate: {
     title: 'Активировать партнёра?',
     message: 'Ручная активация в обход порога ЛП. Причина попадёт в историю статусов.',
@@ -1277,6 +1311,9 @@ async function changeStatus(action) {
     const { data: fresh } = await api.get(`/admin/partners/${editForm.value.id}`);
     editForm.value.activityId = fresh.consultant.activityId;
     editForm.value.activityName = fresh.consultant.activityName;
+    editForm.value.reinstatementCount = fresh.consultant.reinstatementCount;
+    editForm.value.reinstateLimit = fresh.consultant.reinstateLimit;
+    editForm.value.reinstateBlocked = fresh.consultant.reinstateBlocked;
     loadStatusHistory(editForm.value.id);
     loadChangeLog(editForm.value.id);
     loadData();

@@ -334,6 +334,13 @@
          верифицировал реквизиты ИП, а Оферта ещё не подписана. -->
     <OfferAcceptanceDialog :open="showOfferDialog" @accepted="onOfferAccepted" />
 
+    <!-- Блокирующее окно восстановления после терминации. Показывается
+         терминированному/исключённому партнёру при входе. -->
+    <ReinstateDialog :open="showReinstateDialog" :info="terminationInfo"
+      :required-points="statusInfo?.activationPoints || 500"
+      :window-days="reinstateWindowDays"
+      @reinstated="onReinstated" @logout="logout" />
+
     <!-- Mobile bottom navigation -->
     <v-bottom-navigation v-if="mobile" :model-value="activeBottomNav" grow class="mobile-bottom-nav">
       <v-btn v-for="item in bottomNavItems" :key="item.key || item.path"
@@ -407,6 +414,7 @@ import OnboardingQuestionnaire from '../components/OnboardingQuestionnaire.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import GlobalSnackbar from '../components/GlobalSnackbar.vue';
 import OfferAcceptanceDialog from '../components/OfferAcceptanceDialog.vue';
+import ReinstateDialog from '../components/ReinstateDialog.vue';
 import GlobalSearch from '../components/GlobalSearch.vue';
 import SystemStatusChip from '../components/SystemStatusChip.vue';
 import ChatLauncher from '../components/ChatLauncher.vue';
@@ -518,6 +526,33 @@ const showOfferDialog = computed(() => {
   if (auth.isStaff) return false;
   return auth.user?.offerAccepted === false;
 });
+
+// Блокирующее окно восстановления после терминации (2026-08-06). Показывается
+// партнёру в статусе «Терминирован»/«Исключён»; исключённому — без кнопки, со
+// ссылкой в поддержку. Скрыто для staff.
+const terminationInfo = computed(() => auth.user?.termination || {});
+const showReinstateDialog = computed(() => {
+  if (auth.isStaff) return false;
+  return terminationInfo.value?.terminated === true;
+});
+// Окно активации: /profile отдаёт дедлайн, а не длину окна, поэтому берём
+// значение из настроек через statusInfo, иначе дефолт устава.
+const reinstateWindowDays = computed(() => statusInfo.value?.windowDays || 90);
+
+async function onReinstated() {
+  // Перечитываем профиль и пользователя: статус станет «Зарегистрирован»,
+  // termination.terminated → false, окно закроется само.
+  try {
+    await auth.fetchUser();
+    const { data } = await api.get('/profile');
+    statusInfo.value = { ...statusInfo.value, ...data.statusInfo };
+  } catch {}
+}
+
+function logout() {
+  auth.logout();
+  router.push('/login');
+}
 
 async function onOfferAccepted() {
   // Перечитываем профиль, чтобы offerAccepted переключился в true и

@@ -31,6 +31,7 @@ class Consultant extends Model
                 'personName', 'activity', 'status', 'active', 'acceptance',
                 'participantCode', 'inviter', 'webUser', 'person',
                 'activationDeadline', 'yearPeriodEnd', 'terminationCount',
+                'reinstatement_count', 'reinstate_blocked',
                 'dateActivity', 'dateDeactivity', 'dateDeleted',
                 'status_and_lvl', 'qualificationLocked',
             ])
@@ -56,6 +57,9 @@ class Consultant extends Model
             'activationDeadline' => 'datetime',
             'yearPeriodEnd' => 'datetime',
             'terminationCount' => 'integer',
+            'reinstatement_count' => 'integer',
+            'reinstate_blocked' => 'boolean',
+            'last_reinstate_at' => 'datetime',
         ];
     }
 
@@ -146,5 +150,45 @@ class Consultant extends Model
     public function hasReachedMaxTerminations(): bool
     {
         return ($this->terminationCount ?? 0) >= PartnerActivity::maxTerminations();
+    }
+
+    /** Сколько самовосстановлений осталось партнёру (не меньше нуля). */
+    public function reinstatementsLeft(): int
+    {
+        return max(0, PartnerActivity::selfReinstateLimit() - (int) ($this->reinstatement_count ?? 0));
+    }
+
+    /**
+     * Может ли партнёр восстановиться САМ прямо сейчас.
+     *
+     * Возвращает причину отказа (или null, если можно) — её показывает окно
+     * восстановления при входе, поэтому формулировки партнёрские.
+     * Из «Исключён» самовосстановления нет: этот статус ставится либо вручную
+     * за нарушение, либо терминацией с исчерпанными попытками.
+     */
+    public function selfReinstateBlockReason(): ?string
+    {
+        if (! PartnerActivity::selfReinstateEnabled()) {
+            return 'Самовосстановление временно недоступно. Обратитесь в поддержку.';
+        }
+        if ($this->activity === PartnerActivity::Excluded) {
+            return 'Статус «Исключён» снимается только через поддержку.';
+        }
+        if ($this->activity !== PartnerActivity::Terminated) {
+            return 'Восстановление доступно только из статуса «Терминирован».';
+        }
+        if ($this->reinstate_blocked) {
+            return 'Восстановление по вашему аккаунту приостановлено. Обратитесь в поддержку.';
+        }
+        if ($this->reinstatementsLeft() < 1) {
+            return 'Лимит восстановлений исчерпан. Обратитесь в поддержку.';
+        }
+
+        return null;
+    }
+
+    public function canSelfReinstate(): bool
+    {
+        return $this->selfReinstateBlockReason() === null;
     }
 }

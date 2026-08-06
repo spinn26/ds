@@ -64,6 +64,10 @@ class UserResource extends JsonResource
             // Партнёр уже подписал Оферту? Используется фронтом для показа
             // блокирующей модалки акцепта после верификации реквизитов.
             'offerAccepted' => (bool) ($consultant?->acceptance ?? false),
+            // Терминация и самовосстановление: фронт по этому блоку показывает
+            // блокирующее окно возврата при входе. null для пользователей без
+            // консультанта.
+            'termination' => self::terminationBlock($consultant, $activityValue),
             // Применим ли к пользователю гейт «заполни профиль» (только
             // активный ФК). Нужен фронту, чтобы показывать «всё ок» только
             // тем, к кому требование относится.
@@ -78,6 +82,33 @@ class UserResource extends JsonResource
             'bankChangePending' => $consultant
                 ? \App\Http\Controllers\Api\BankRequisiteChangeController::pendingForConsultant((int) $consultant->id)
                 : false,
+        ];
+    }
+
+    /**
+     * Блок терминации/самовосстановления для фронта: по нему MainLayout решает,
+     * показывать ли блокирующее окно возврата и активна ли в нём кнопка.
+     *
+     * @return array<string,mixed>|null
+     */
+    private static function terminationBlock(?Consultant $consultant, mixed $activityValue): ?array
+    {
+        if ($consultant === null) {
+            return null;
+        }
+
+        $value = (int) $activityValue;
+
+        return [
+            'terminated' => in_array($value, [
+                \App\Enums\PartnerActivity::Terminated->value,
+                \App\Enums\PartnerActivity::Excluded->value,
+            ], true),
+            'excluded' => $value === \App\Enums\PartnerActivity::Excluded->value,
+            'canReinstate' => $consultant->canSelfReinstate(),
+            'attemptsLeft' => $consultant->reinstatementsLeft(),
+            'limit' => \App\Enums\PartnerActivity::selfReinstateLimit(),
+            'blockedReason' => $consultant->selfReinstateBlockReason(),
         ];
     }
 }

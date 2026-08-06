@@ -284,6 +284,11 @@ Route::prefix('v1')->group(function () {
         Route::post('/profile/bank-requisites/change-request', [\App\Http\Controllers\Api\BankRequisiteChangeController::class, 'store']);
         Route::get('/profile/agreement-documents', [ProfileController::class, 'agreementDocuments']);
         Route::post('/profile/accept-offer', [ProfileController::class, 'acceptOffer']);
+        // Самовосстановление после терминации. Throttle — чтобы кнопкой из
+        // блокирующего окна нельзя было молотить (гарды и лимит попыток — в
+        // PartnerStatusService::selfReinstate).
+        Route::post('/profile/reinstate', [ProfileController::class, 'reinstate'])
+            ->middleware('throttle:5,60');
         Route::get('/profile/cities', [ProfileController::class, 'cities']);
         Route::get('/profile/countries', [ProfileController::class, 'countries']);
 

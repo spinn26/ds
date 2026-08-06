@@ -48,6 +48,7 @@ enum PartnerActivity: int
     public const MAX_TERMINATIONS = 3;
     public const ACTIVATION_DAYS = 90;
     public const ACTIVATION_POINTS = 500;
+    public const SELF_REINSTATE_LIMIT = 3;
 
     /** Порог ЛП для активации (настройка activation.min_lp, фолбэк 500). */
     public static function activationPoints(): int
@@ -61,9 +62,28 @@ enum PartnerActivity: int
         return (int) \App\Models\SystemSetting::value('activation.window_days', self::ACTIVATION_DAYS);
     }
 
-    /** Макс. число терминаций до исключения (activation.max_terminations, фолбэк 3). */
+    /**
+     * Жёсткий потолок терминаций (activation.max_terminations, фолбэк 3).
+     *
+     * Со введением самовосстановления (2026-08-06) основной триггер исключения —
+     * терминация при исчерпанных восстановлениях, см.
+     * PartnerStatusService::terminate(). Этот потолок остаётся как backstop:
+     * столько терминаций партнёр не переживёт ни при каких условиях.
+     */
     public static function maxTerminations(): int
     {
         return (int) \App\Models\SystemSetting::value('activation.max_terminations', self::MAX_TERMINATIONS);
+    }
+
+    /** Включено ли самовосстановление (activation.self_reinstate_enabled, фолбэк да). */
+    public static function selfReinstateEnabled(): bool
+    {
+        return (bool) \App\Models\SystemSetting::value('activation.self_reinstate_enabled', true);
+    }
+
+    /** Сколько раз партнёр может восстановиться сам (activation.self_reinstate_limit, фолбэк 3). */
+    public static function selfReinstateLimit(): int
+    {
+        return (int) \App\Models\SystemSetting::value('activation.self_reinstate_limit', self::SELF_REINSTATE_LIMIT);
     }
 }

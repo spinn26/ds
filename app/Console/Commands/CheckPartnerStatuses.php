@@ -150,27 +150,42 @@ class CheckPartnerStatuses extends Command
     }
 
     /**
-     * Проверить 3-ю терминацию → исключить.
+     * Подмести тех, кто должен быть исключён, но остался «Терминирован».
+     *
+     * С 2026-08-06 терминированный партнёр может восстановиться сам, поэтому
+     * подметать по одному лишь terminationCount нельзя — иначе выметет тех,
+     * у кого попытки ещё есть, и они не увидят окно восстановления. Исключаем
+     * только исчерпавших восстановления (или упёршихся в жёсткий потолок
+     * терминаций) — тот же критерий, что в PartnerStatusService::terminate().
      */
     private function checkTripleTerminations(): void
     {
-        $count = DB::table('consultant')
+        $limit = PartnerActivity::selfReinstateLimit();
+        $selfEnabled = PartnerActivity::selfReinstateEnabled();
+
+        $query = DB::table('consultant')
             ->where('activity', PartnerActivity::Terminated->value)
-            ->where('terminationCount', '>=', PartnerActivity::maxTerminations())
             ->whereNull('dateDeleted')
-            ->count();
+            ->where(function ($q) use ($limit, $selfEnabled) {
+                $q->where('terminationCount', '>=', PartnerActivity::maxTerminations());
+                if ($selfEnabled) {
+                    // Терминирован и попытки восстановления исчерпаны.
+                    // reinstate_blocked сюда НЕ входит: админский запрет —
+                    // это «не пускать обратно самому», а не «исключить».
+                    $q->orWhere('reinstatement_count', '>=', $limit);
+                }
+            });
 
-        if ($count > 0) {
-            DB::table('consultant')
-                ->where('activity', PartnerActivity::Terminated->value)
-                ->where('terminationCount', '>=', PartnerActivity::maxTerminations())
-                ->whereNull('dateDeleted')
-                ->update([
-                    'activity' => PartnerActivity::Excluded->value,
-                    'active' => false,
-                ]);
-
-            $this->info("Исключено после 3-х терминаций: {$count}");
+        $ids = $query->pluck('id');
+        if ($ids->isEmpty()) {
+            return;
         }
+
+        DB::table('consultant')->whereIn('id', $ids)->update([
+            'activity' => PartnerActivity::Excluded->value,
+            'active' => false,
+        ]);
+
+        $this->info('Исключено (восстановления исчерпаны / потолок терминаций): ' . $ids->count());
     }
 }

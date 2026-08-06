@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\NotificationController;
 use App\Models\Consultant;
 use App\Support\LegacyId;
 use Carbon\Carbon;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -182,7 +183,13 @@ class PartnerStatusService
     }
 
     /**
-     * Терминация партнёра. Увеличивает счётчик, при 3-й — исключает.
+     * Терминация партнёра. Увеличивает счётчик; если восстанавливаться больше
+     * нечем — исключает.
+     *
+     * Триггер исключения (2026-08-06): терминация при ИСЧЕРПАННЫХ
+     * самовосстановлениях, а не «терминаций стало N». Иначе последняя попытка
+     * восстановления недостижима — партнёр уходил бы в «Исключён» раньше, чем
+     * успел ею воспользоваться. maxTerminations остаётся жёстким потолком.
      */
     public function terminate(Consultant $consultant, string $reason = ''): PartnerActivity
     {
@@ -192,22 +199,30 @@ class PartnerStatusService
 
         $previousActivity = $consultant->activity;
         $newCount = ($consultant->terminationCount ?? 0) + 1;
+        $reinstatementsLeft = $consultant->reinstatementsLeft();
 
-        $result = DB::transaction(function () use ($consultant, $previousActivity, $newCount, $reason) {
+        $result = DB::transaction(function () use ($consultant, $previousActivity, $newCount, $reinstatementsLeft, $reason) {
             $consultant->terminationCount = $newCount;
             $consultant->active = false;
             $consultant->dateDeactivity = Carbon::now();
 
-            if ($newCount >= PartnerActivity::maxTerminations()) {
-                // 3-я терминация → Исключен
+            // Фича выключена → legacy-правило «N терминаций → исключение».
+            // Иначе исключаем того, кому возвращаться уже нечем.
+            $noWayBack = PartnerActivity::selfReinstateEnabled()
+                && ($reinstatementsLeft < 1 || $consultant->reinstate_blocked);
+
+            if ($noWayBack || $newCount >= PartnerActivity::maxTerminations()) {
                 $consultant->activity = PartnerActivity::Excluded;
                 $consultant->save();
 
+                $why = $noWayBack
+                    ? 'восстановления исчерпаны'
+                    : 'достигнут потолок терминаций';
                 $this->logStatusChange(
                     $consultant,
                     $previousActivity,
                     PartnerActivity::Excluded,
-                    "Исключение после {$newCount} терминаций. {$reason}"
+                    "Исключение: {$why} (терминация #{$newCount}). {$reason}"
                 );
 
                 return PartnerActivity::Excluded;
@@ -677,6 +692,102 @@ class PartnerStatusService
     }
 
     /**
+     * САМОвосстановление партнёра после терминации (2026-08-06).
+     *
+     * Партнёр сам, из блокирующего окна при входе, возвращается в работу — до
+     * activation.self_reinstate_limit раз. Механика та же, что у reRegister():
+     * статус «Зарегистрирован», ЛП/ГП обнуляются, даётся новое окно активации.
+     *
+     * Портфель НЕ возвращается: контракты и клиенты уехали к наставнику при
+     * терминации, комиссии по ним уже пересчитаны на новую цепочку. Возврат
+     * означал бы, что партнёр может двигать деньги, уходя в терминацию и
+     * возвращаясь. Возврат портфеля остаётся админской операцией
+     * (restoreFromTermination — отмена ОШИБОЧНОЙ терминации).
+     *
+     * Счётчик отдельный от terminationCount: тот уменьшается при отмене
+     * ошибочной терминации, и лимит попыток не должен от этого зависеть.
+     *
+     * @return array{ok:bool, message:string, attemptsLeft:int}
+     */
+    public function selfReinstate(Consultant $consultant, ?Request $request = null): array
+    {
+        // Блокировка строки: два параллельных запроса (двойной клик, ретрай
+        // сети) иначе прошли бы гард оба и сожгли две попытки.
+        return DB::transaction(function () use ($consultant, $request) {
+            /** @var Consultant|null $fresh */
+            $fresh = Consultant::whereKey($consultant->id)->lockForUpdate()->first();
+            if (! $fresh) {
+                return ['ok' => false, 'message' => 'Партнёр не найден', 'attemptsLeft' => 0];
+            }
+
+            $reason = $fresh->selfReinstateBlockReason();
+            if ($reason !== null) {
+                return ['ok' => false, 'message' => $reason, 'attemptsLeft' => $fresh->reinstatementsLeft()];
+            }
+
+            $attemptNo = (int) ($fresh->reinstatement_count ?? 0) + 1;
+            $limit = PartnerActivity::selfReinstateLimit();
+            $previousActivity = $fresh->activity;
+
+            $fresh->activity = PartnerActivity::Registered;
+            $fresh->personalVolume = 0;
+            $fresh->groupVolume = 0;
+            $fresh->groupVolumeCumulative = 0;
+            $fresh->activationDeadline = Carbon::now()->addDays(PartnerActivity::activationDays());
+            $fresh->yearPeriodEnd = null;
+            $fresh->dateDeactivity = null;
+            $fresh->reinstatement_count = $attemptNo;
+            $fresh->last_reinstate_at = Carbon::now();
+            $fresh->save();
+
+            $trace = $request
+                ? sprintf(' IP %s, UA %s.', $request->ip(), substr((string) $request->userAgent(), 0, 200))
+                : '';
+            $this->logStatusChange(
+                $fresh,
+                $previousActivity,
+                PartnerActivity::Registered,
+                "Самовосстановление {$attemptNo}/{$limit} (терминаций: {$fresh->terminationCount}). "
+                    . 'Портфель остался у наставника, баллы обнулены.' . $trace,
+                'self'
+            );
+
+            $this->notifyInviterAboutReinstate($fresh);
+
+            return [
+                'ok' => true,
+                'message' => 'Участие восстановлено. Статус — «Зарегистрирован», на активацию снова '
+                    . PartnerActivity::activationDays() . ' дней.',
+                'attemptsLeft' => $fresh->reinstatementsLeft(),
+            ];
+        });
+    }
+
+    /**
+     * Уведомить наставника, что нижестоящий вернулся: портфель партнёра остался
+     * у наставника, поэтому возврат — значимое для него событие.
+     */
+    private function notifyInviterAboutReinstate(Consultant $consultant): void
+    {
+        if (! $consultant->inviter) {
+            return;
+        }
+        $inviterWebUser = DB::table('consultant')->where('id', $consultant->inviter)->value('webUser');
+        if (! $inviterWebUser) {
+            return;
+        }
+
+        NotificationController::create(
+            (int) $inviterWebUser,
+            'status',
+            'Партнёр восстановил участие',
+            "{$consultant->personName} вернулся в работу после терминации. Контракты и клиенты, перешедшие "
+                . 'к вам при терминации, остаются за вами.',
+            '/structure'
+        );
+    }
+
+    /**
      * Проверка просроченных дед��айнов — вызывается по крону.
      * Терминирует зарегистрированных, у которых истёк 90-дневный период.
      */
@@ -740,6 +851,19 @@ class PartnerStatusService
             'canInvite' => $activity->canInvite(),
             'terminationCount' => $consultant->terminationCount ?? 0,
             'maxTerminations' => PartnerActivity::maxTerminations(),
+            // Пороги активации — нужны и вне статусов Registered/Active
+            // (окно восстановления объясняет условия терминированному).
+            'activationPoints' => PartnerActivity::activationPoints(),
+            'windowDays' => PartnerActivity::activationDays(),
+            // Самовосстановление: этим блоком фронт решает, показывать ли
+            // блокирующее окно при входе и активна ли в нём кнопка.
+            'reinstate' => [
+                'available' => $consultant->canSelfReinstate(),
+                'attemptsLeft' => $consultant->reinstatementsLeft(),
+                'limit' => PartnerActivity::selfReinstateLimit(),
+                'used' => (int) ($consultant->reinstatement_count ?? 0),
+                'blockedReason' => $consultant->selfReinstateBlockReason(),
+            ],
         ];
 
         // Обратный отсчёт
@@ -855,6 +979,10 @@ class PartnerStatusService
             PartnerActivity::Registered => [
                 'Статус: Зарегистрирован',
                 $comment ?: 'Статус возвращён к «Зарегистрирован».',
+            ],
+            PartnerActivity::Inactive => [
+                'Статус обновлён',
+                $comment ?: 'Статус партнёрского аккаунта изменён.',
             ],
         };
 

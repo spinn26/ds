@@ -207,6 +207,11 @@ class AdminDataController extends Controller
                     'createdAt' => $c->dateCreated?->format('d.m.Y'),
                     'statusChangeDate' => $statusChangeDate,
                     'terminationCount' => $c->terminationCount ?? 0,
+                    // Самовосстановления партнёра: сколько потрачено из лимита
+                    // и не запрещено ли ему возвращаться самому.
+                    'reinstatementCount' => (int) ($c->reinstatement_count ?? 0),
+                    'reinstateLimit' => \App\Enums\PartnerActivity::selfReinstateLimit(),
+                    'reinstateBlocked' => (bool) ($c->reinstate_blocked ?? false),
                     'email' => $personData?->email ?? null,
                     'phone' => $personData?->phone ?? null,
                     'birthDate' => $personData?->birthDate ?? null,
@@ -240,6 +245,12 @@ class AdminDataController extends Controller
                 'activityId' => $consultant->activity?->value,
                 'activityName' => $consultant->activityLabel(),
                 'active' => $consultant->active,
+                'terminationCount' => (int) ($consultant->terminationCount ?? 0),
+                // Самовосстановление: сколько попыток потрачено и не закрыта ли
+                // дверь администратором (кнопки в карточке партнёра).
+                'reinstatementCount' => (int) ($consultant->reinstatement_count ?? 0),
+                'reinstateLimit' => \App\Enums\PartnerActivity::selfReinstateLimit(),
+                'reinstateBlocked' => (bool) ($consultant->reinstate_blocked ?? false),
             ],
             'webUser' => $webUser ? [
                 'id' => $webUser->id,
@@ -674,7 +685,7 @@ class AdminDataController extends Controller
         $consultant = Consultant::findOrFail($id);
 
         $request->validate([
-            'action' => 'required|in:activate,terminate,exclude,re-register,restore-termination',
+            'action' => 'required|in:activate,terminate,exclude,re-register,restore-termination,block-reinstate,unblock-reinstate',
             // Причина ОБЯЗАТЕЛЬНА для решений, которые двигают деньги и портфель
             // (терминация/исключение/ручная активация/отмена терминации): через
             // полгода на вопрос «почему его терминировали» отвечает только этот
@@ -683,7 +694,7 @@ class AdminDataController extends Controller
             'reason' => [
                 \Illuminate\Validation\Rule::requiredIf(fn () => in_array(
                     $request->input('action'),
-                    ['activate', 'terminate', 'exclude', 'restore-termination'],
+                    ['activate', 'terminate', 'exclude', 'restore-termination', 'block-reinstate'],
                     true
                 )),
                 'nullable', 'string', 'min:3', 'max:500',
@@ -713,6 +724,25 @@ class AdminDataController extends Controller
             'terminate' => $this->statusService->terminate($consultant, $request->reason ?? '')->label(),
             'exclude' => tap('Исключён', fn () => $this->statusService->exclude($consultant, $request->reason ?? '')),
             're-register' => $this->statusService->reRegister($consultant) ? 'Перерегистрирован' : 'Не удалось перерегистрировать',
+            // Запрет/разрешение САМОвосстановления. Статус партнёра не трогаем:
+            // это про то, может ли он вернуться сам из окна при входе. Причина
+            // уходит в activity_log вместе с изменением поля.
+            'block-reinstate' => tap('Самовосстановление запрещено', function () use ($consultant, $request) {
+                $consultant->reinstate_blocked = true;
+                $consultant->save();
+                activity('partner_status')->performedOn($consultant)
+                    ->causedBy(auth()->user())
+                    ->withProperties(['reason' => $request->reason])
+                    ->log('Запрет самовосстановления');
+            }),
+            'unblock-reinstate' => tap('Самовосстановление разрешено', function () use ($consultant, $request) {
+                $consultant->reinstate_blocked = false;
+                $consultant->save();
+                activity('partner_status')->performedOn($consultant)
+                    ->causedBy(auth()->user())
+                    ->withProperties(['reason' => $request->reason])
+                    ->log('Снят запрет самовосстановления');
+            }),
         };
 
         return response()->json(['message' => $result]);
@@ -850,6 +880,8 @@ class AdminDataController extends Controller
             'activationDeadline' => 'Дедлайн активации',
             'yearPeriodEnd' => 'Конец годового периода',
             'terminationCount' => 'Кол-во терминаций',
+            'reinstatement_count' => 'Самовосстановлений',
+            'reinstate_blocked' => 'Запрет самовосстановления',
             'dateActivity' => 'Дата активации',
             'dateDeactivity' => 'Дата деактивации',
             'dateDeleted' => 'Дата удаления (soft)',
@@ -1302,6 +1334,10 @@ class AdminDataController extends Controller
                     'dateDeterministicPlan' => $c->dateDeterministicPlan,
                     'willTerminate' => $willTerminate,
                     'terminationCount' => $c->terminationCount ?? 0,
+                    'reinstatementCount' => (int) ($c->reinstatement_count ?? 0),
+                    'reinstateLimit' => \App\Enums\PartnerActivity::selfReinstateLimit(),
+                    'reinstateBlocked' => (bool) ($c->reinstate_blocked ?? false),
+                    'lastReinstateAt' => $c->last_reinstate_at ?? null,
                     // ЛП «глобальное» из consultant.personalVolume (для совместимости).
                     'personalVolume' => round((float) ($c->personalVolume ?? 0), 2),
                     // ЛП с даты активации, обнуляющееся раз в год — то самое поле из спеки.

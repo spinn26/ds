@@ -613,6 +613,28 @@ class ProfileController extends Controller
     }
 
     /**
+     * Самовосстановление партнёра после терминации — из блокирующего окна при
+     * входе. Все гарды (статус, лимит попыток, админский запрет, гонка двойного
+     * клика) — внутри PartnerStatusService::selfReinstate.
+     *
+     * Роут под throttle: партнёр не должен иметь возможности молотить кнопкой.
+     */
+    public function reinstate(Request $request): JsonResponse
+    {
+        $consultant = Consultant::where('webUser', $request->user()->id)->first();
+        if (! $consultant) {
+            return response()->json(['message' => 'Консультант не найден'], 404);
+        }
+
+        $result = $this->statusService->selfReinstate($consultant, $request);
+
+        return response()->json([
+            'message' => $result['message'],
+            'attemptsLeft' => $result['attemptsLeft'],
+        ], $result['ok'] ? 200 : 422);
+    }
+
+    /**
      * City suggestions for the profile form (plain list of Russian names).
      */
     /**
