@@ -232,6 +232,19 @@ class InsmartIntegrationService
             return $consultantId;
         }
 
+        // ⚠ Совпал только КОНТАКТ (email/phone), но застрахован может быть не
+        // сам партнёр, а его родственник — агент сплошь указывает свой телефон
+        // на полисах родни. Само-покупка только если ЗАСТРАХОВАННЫЙ и есть
+        // партнёр: сверяем ФИО застрахованного с ФИО партнёра. Иначе полис на
+        // родственника ошибочно уезжал наставнику (кейс Смоленский Вадим →
+        // контракт уходил Елисееву). Обычная продажа — остаётся у продавца.
+        $norm = static fn ($s) => mb_strtolower(trim(preg_replace('/\s+/u', ' ', (string) $s)));
+        $insuredFio = $norm($payload['clientFio'] ?? $payload['insurant'] ?? '');
+        $partnerFio = $norm($clientConsultant->personName ?? '');
+        if ($insuredFio === '' || $insuredFio !== $partnerFio) {
+            return $consultantId;
+        }
+
         // Самопокупка: контракт идёт наставнику продавца.
         $inviterId = $clientConsultant->inviter
             ? (int) $clientConsultant->inviter
