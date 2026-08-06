@@ -1,6 +1,13 @@
 <template>
   <div>
-    <PageHeader :title="auth.isStaff ? 'Структура' : 'Структура моей команды'" icon="mdi-sitemap" />
+    <PageHeader :title="auth.isStaff ? 'Структура' : 'Структура моей команды'" icon="mdi-sitemap"
+      :count="activeFilterCount > 0 ? total : undefined" />
+
+    <!-- Выборка упёрлась в потолок — показываем явно, чтобы обрезанный
+         список не читался как полный результат. -->
+    <v-alert v-if="truncated" type="warning" density="compact" variant="tonal" class="mb-3">
+      Показаны не все совпадения — выборка ограничена. Уточните фильтры.
+    </v-alert>
 
     <v-card class="ds-card mb-3 pa-3" elevation="0">
       <div class="d-flex ga-2 flex-wrap align-center">
@@ -529,6 +536,8 @@ function resetFilters() {
 }
 const items = ref([]);
 const total = ref(0);
+// Бэкенд упёрся в потолок flat-выборки — список неполный.
+const truncated = ref(false);
 const page = ref(1);
 const qualificationOptions = ref([]);
 const statusOptions = [
@@ -671,7 +680,8 @@ async function loadData() {
     uidCounter = 0;
     const responseData = data.data || data;
     items.value = enrichRows(responseData);
-    total.value = data.total || responseData.length;
+    total.value = data.total ?? responseData.length;
+    truncated.value = data.truncated === true;
   } catch {}
   loading.value = false;
 }

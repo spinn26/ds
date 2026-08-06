@@ -233,6 +233,15 @@ class AuthController extends Controller
             $consultant->status = 1;
             $consultant->activity = PartnerActivity::Registered;
             $consultant->dateCreated = now();
+            // Дедлайн активации (90 дней на 500 ЛП). Без него партнёр НИКОГДА
+            // не терминируется: checkExpiredRegistrations() отбирает по
+            // whereNotNull('activationDeadline'). Регистрация собирает
+            // Consultant вручную и не зовёт PartnerStatusService::register(),
+            // поэтому поле выставляем здесь — иначе 90-дневный счётчик не идёт
+            // ни по одной платформенной регистрации (найдено 2026-08-06:
+            // у всех 101 зарегистрированного дедлайн был пуст).
+            $consultant->activationDeadline = now()->addDays(PartnerActivity::activationDays());
+            $consultant->terminationCount = 0;
             $consultant->participantCode = null;
             if ($inviter) {
                 $consultant->inviter = $inviter->id;

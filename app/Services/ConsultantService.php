@@ -49,10 +49,13 @@ class ConsultantService
             ? DB::table('qualificationLog')->whereIn('id', $cumulativeLatestIds)->pluck('groupVolumeCumulative', 'consultant')
             : collect();
 
-        // Batch count active clients per consultant
+        // Batch count clients per consultant.
+        // Критерий — НЕ удалён, а не active=true: у 4256 из 8149 клиентов флаг
+        // active пуст (наследие Directual), и по нему колонка «Клиенты» в
+        // структуре занижалась — партнёр с единственным клиентом видел 0.
         $clientCounts = DB::table('client')
             ->whereIn('consultant', $ids)
-            ->where('active', true)
+            ->whereNull('dateDeleted')
             ->select('consultant', DB::raw('count(*) as cnt'))
             ->groupBy('consultant')
             ->pluck('cnt', 'consultant');

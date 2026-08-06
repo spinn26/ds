@@ -15,6 +15,17 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class StructureController extends Controller
 {
+    /**
+     * Потолок flat-выборки. Раньше был 500 и стоял в SQL ДО фильтрации в PHP:
+     * из базы брались первые 500 по алфавиту, и «Статус = Зарегистрирован»
+     * применялся уже к ним — из 101 зарегистрированного на экран попадало 18
+     * (срез обрывался на «Дурниян»). Теперь точные фильтры уходят в SQL
+     * (applySqlPrefilters), а потолок стоит выше размера базы и служит только
+     * защитой от выгрузки всего; при его достижении отдаём truncated=true,
+     * чтобы обрезка не выглядела как правда.
+     */
+    private const MAX_FLAT_ROWS = 5000;
+
     public function __construct(
         private readonly ConsultantService $consultantService,
         private readonly XlsxExportService $xlsx,
@@ -49,13 +60,9 @@ class StructureController extends Controller
                 if ($request->filled('search')) {
                     $query->where('personName', 'ilike', '%' . $request->search . '%');
                 }
-                $this->applyDateRangePrefilter($query, $request);
-                $rows = $query->orderBy('personName')->limit(500)->get();
-                $members = $this->consultantService->formatMembers($rows);
-                $members = $this->consultantService->applyFilters($members, $request->all());
-                $members = $this->applySort($members, $request);
+                $this->applySqlPrefilters($query, $request);
 
-                return response()->json(['data' => $members->values()]);
+                return $this->flatResponse($query, $request);
             }
 
             // Нет фильтров → top-level structure (consultants без inviter).
@@ -88,12 +95,9 @@ class StructureController extends Controller
             $descendantIds = $this->descendantIds($consultant->id);
             $query = Consultant::whereIn('id', $descendantIds)
                 ->whereNull('dateDeleted');
-            $this->applyDateRangePrefilter($query, $request);
-            $rows = $query->orderBy('personName')->limit(500)->get();
-            $members = $this->consultantService->formatMembers($rows);
-            $members = $this->consultantService->applyFilters($members, $request->all());
-            $members = $this->applySort($members, $request);
-            return response()->json(['data' => $members->values()]);
+            $this->applySqlPrefilters($query, $request);
+
+            return $this->flatResponse($query, $request);
         }
 
         // Без фильтров → 1-я линия команды как корень дерева.
@@ -116,6 +120,96 @@ class StructureController extends Controller
      * в dateDeterministic лежат другие значения (срок активации, конец
      * годового цикла), а не дата терминации.
      */
+    /**
+     * Общий ответ flat-режима: добираем оставшиеся (не выразимые в SQL)
+     * фильтры в PHP, сортируем и отдаём вместе с total и признаком обрезки.
+     * total — размер результата ПОСЛЕ всех фильтров, чтобы на экране было
+     * видно, сколько партнёров реально подошло.
+     */
+    private function flatResponse($query, Request $request): JsonResponse
+    {
+        $rows = $query->orderBy('personName')->limit(self::MAX_FLAT_ROWS)->get();
+        $truncated = $rows->count() >= self::MAX_FLAT_ROWS;
+
+        $members = $this->consultantService->formatMembers($rows);
+        $members = $this->consultantService->applyFilters($members, $request->all());
+        $members = $this->applySort($members, $request);
+
+        return response()->json([
+            'data' => $members->values(),
+            'total' => $members->count(),
+            'truncated' => $truncated,
+        ]);
+    }
+
+    /**
+     * SQL-фильтры, применяемые ДО лимита выборки.
+     *
+     * Сюда попадает всё, что выражается через колонки consultant без потерь
+     * (статус) либо расширяюще (ФИО, город) — расширяющий фильтр может отдать
+     * лишнее, его добьёт applyFilters в PHP, но НЕ может потерять совпадение.
+     *
+     * Что осознанно осталось в PHP: ЛП/ГП/НГП и квалификация. В
+     * ConsultantService::formatMembers эти значения берутся из последнего
+     * qualificationLog с фолбэком на колонки consultant, поэтому фильтр по
+     * голой колонке отсекал бы не тех.
+     */
+    private function applySqlPrefilters($query, Request $request): void
+    {
+        // Статус активности — точное соответствие колонке. Именно из-за того,
+        // что этот фильтр работал только в PHP поверх среза, «Зарегистрирован»
+        // показывал 18 из 101.
+        $rawActivity = $request->input('activity', $request->input('status'));
+        if (filled($rawActivity)) {
+            $alias = [
+                'active' => PartnerActivity::Active->value,
+                'registered' => PartnerActivity::Registered->value,
+                'terminated' => PartnerActivity::Terminated->value,
+                'excluded' => PartnerActivity::Excluded->value,
+            ];
+            $raw = is_array($rawActivity) ? $rawActivity : explode(',', (string) $rawActivity);
+            $ids = array_values(array_filter(array_map(
+                fn ($v) => is_numeric($v) ? (int) $v : ($alias[$v] ?? null),
+                $raw
+            ), fn ($v) => $v !== null));
+            if ($ids) {
+                // legacy activity=2 трактуется как «Активен» — иначе фильтр
+                // «Активен» терял импортные строки Directual.
+                if (in_array(PartnerActivity::Active->value, $ids, true)) {
+                    $ids[] = PartnerActivity::Inactive->value;
+                }
+                $query->whereIn('activity', $ids);
+            }
+        }
+
+        // ФИО. Части имени живут в WebUser, а fallback идёт по personName —
+        // покрываем оба источника через OR, чтобы ничего не потерять.
+        foreach (['last_name' => 'lastName', 'first_name' => 'firstName', 'patronymic' => 'patronymic'] as $param => $column) {
+            if (! $request->filled($param)) {
+                continue;
+            }
+            $needle = '%' . $request->input($param) . '%';
+            $query->where(function ($q) use ($needle, $column) {
+                $q->where('personName', 'ilike', $needle)
+                    ->orWhereIn('webUser', function ($sub) use ($needle, $column) {
+                        $sub->from('WebUser')->select('id')->where($column, 'ilike', $needle);
+                    });
+            });
+        }
+
+        // Город хранится в person.city (FK на city) — сужаем по id городов.
+        if ($request->filled('city')) {
+            $needle = '%' . $request->input('city') . '%';
+            $query->whereIn('person', function ($sub) use ($needle) {
+                $sub->from('person')->select('id')->whereIn('city', function ($c) use ($needle) {
+                    $c->from('city')->select('id')->where('cityNameRu', 'ilike', $needle);
+                });
+            });
+        }
+
+        $this->applyDateRangePrefilter($query, $request);
+    }
+
     private function applyDateRangePrefilter($query, Request $request): void
     {
         if (! $request->filled('termination_from') && ! $request->filled('termination_to')) {
