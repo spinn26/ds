@@ -717,6 +717,13 @@ class ManualTransactionController extends Controller
                 'vatPercent' => $vatPercent,
                 'dsCommissionPercentage' => round($dsPercent, 4),
                 'incomeDS' => round($incomeDS, 2),
+                // Доход ДС в валюте — и в ветке неизвестного ФК: сумма та же,
+                // просто вся остаётся компании. Без этих полей колонка
+                // «Доход ДС (валюта)» у таких строк молча пустовала бы.
+                'incomeDSCurrency' => $rate > 0 ? round($incomeDS / $rate, 2) : null,
+                'currencySymbol' => $this->currencyInfo($draft->currency ? (int) $draft->currency : null)['symbol'],
+                'isForeignCurrency' => $this->currencyInfo($draft->currency ? (int) $draft->currency : null)['isForeign'],
+                'currencyRate' => round($rate, 6),
                 'personalVolume' => round($points, 4),
                 'partnersTotal' => 0,
                 'profitDS' => round($incomeDS, 2),
@@ -803,6 +810,13 @@ class ManualTransactionController extends Controller
         $incomeDsUsd = $usdRate > 0 ? round($incomeDS / $usdRate, 2) : 0;
         $amountNoVatUsd = $usdRate > 0 ? round($amountNoVat / $usdRate, 2) : 0;
 
+        // Доход ДС в ВАЛЮТЕ контракта (ТЗ 2026-08-07): оператору по валютным
+        // сделкам нужен доход в долларах/евро, а не рублёвый эквивалент, чтобы
+        // не пересчитывать курс руками. Курс — тот же $rate, которым выше
+        // считали amountRUB, поэтому цифры сходятся обратно.
+        $currencyInfo = $this->currencyInfo($draft->currency ? (int) $draft->currency : null);
+        $incomeDsCurrency = $rate > 0 ? round($incomeDS / $rate, 2) : null;
+
         return [
             'ready' => true,
             'tariffMissing' => $tariffMissing,
@@ -814,10 +828,42 @@ class ManualTransactionController extends Controller
             'dsCommissionPercentage' => round($dsPercent, 4),
             'incomeDS' => round($incomeDS, 2),
             'incomeDSUSD' => $incomeDsUsd,
+            // Доход ДС в валюте контракта + чем его подписать. isForeign=false
+            // для рублёвых — фронт по нему решает, показывать ли колонку.
+            'incomeDSCurrency' => $incomeDsCurrency,
+            'currencySymbol' => $currencyInfo['symbol'],
+            'isForeignCurrency' => $currencyInfo['isForeign'],
+            'currencyRate' => round($rate, 6),
             'personalVolume' => round($points, 4),
             'partnersTotal' => round($partnersTotal, 2),
             'profitDS' => $profitDS,
             'chain' => $chain,
+        ];
+    }
+
+    /**
+     * Символ валюты и признак «иностранная» (не рубль). Нужен превью, чтобы
+     * подписать доход ДС в валюте и решить, показывать ли его вообще.
+     * RUB (id 67) считаем рублём и при пустом значении — импорт Directual
+     * оставлял currency=NULL у части рублёвых строк.
+     *
+     * @return array{symbol:string, isForeign:bool}
+     */
+    private function currencyInfo(?int $currencyId): array
+    {
+        $rubId = \App\Support\CurrencyRates::RUB_CURRENCY_ID;
+        if ($currencyId === null || $currencyId === $rubId) {
+            return ['symbol' => '₽', 'isForeign' => false];
+        }
+
+        static $cache = [];
+        if (! array_key_exists($currencyId, $cache)) {
+            $cache[$currencyId] = DB::table('currency')->where('id', $currencyId)->value('symbol');
+        }
+
+        return [
+            'symbol' => (string) ($cache[$currencyId] ?: ''),
+            'isForeign' => true,
         ];
     }
 

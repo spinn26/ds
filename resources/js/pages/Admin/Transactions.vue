@@ -314,6 +314,17 @@
                         <span v-else class="text-medium-emphasis">—</span>
                       </template>
                     </template>
+                    <template v-else-if="h.key === 'incomeDsCurrency'">
+                      <!-- Доход ДС в валюте контракта. Показываем только по
+                           валютным строкам: у рублёвых он равен рублёвому. -->
+                      <template v-if="d.preview?.ready && d.preview?.isForeignCurrency">
+                        <span class="text-no-wrap"
+                          :title="`По курсу ${fmt2(d.preview.currencyRate)} на месяц сделки`">
+                          {{ fmt2(d.preview.incomeDSCurrency) }} {{ d.preview.currencySymbol }}
+                        </span>
+                      </template>
+                      <span v-else class="text-medium-emphasis">—</span>
+                    </template>
                     <template v-else-if="h.key === 'partner'">
                       <v-menu open-on-hover open-delay="150" close-delay="100" location="bottom start">
                         <template #activator="{ props: pprops }">
@@ -916,6 +927,10 @@ const draftHeaders = [
   { title: 'Изменить', key: 'change', thClass: 'text-center', tdClass: 'text-center', style: 'width:50px' },
   { title: 'Доход ДС', key: 'incomeDS', thClass: 'text-end', tdClass: 'text-end text-no-wrap' },
   { title: 'Доход ДС без НДС', key: 'incomeDsNoVat', thClass: 'text-end', tdClass: 'text-end text-no-wrap', style: 'min-width:140px' },
+  // Доход ДС в валюте контракта: по валютным сделкам (Medlife и др.) отчётность
+  // ведётся в валюте, и оператор пересчитывал курс руками. Для рублёвых строк
+  // в ячейке прочерк — там колонка смысла не несёт.
+  { title: 'Доход ДС (валюта)', key: 'incomeDsCurrency', thClass: 'text-end', tdClass: 'text-end text-no-wrap', style: 'min-width:150px' },
   { title: 'Партнёр', key: 'partner' },
   { title: 'ЛП', key: 'lpPoints', thClass: 'text-end', tdClass: 'text-end text-no-wrap', style: 'min-width:70px' },
   { title: 'Баллы', key: 'pointsCount', thClass: 'text-end', tdClass: 'text-end text-no-wrap', style: 'min-width:80px' },

@@ -232,6 +232,13 @@
       <template #item.commissionsAmountUSD="{ value }">
         <span class="text-no-wrap">{{ fmt(value) }} $</span>
       </template>
+      <template #item.commissionsAmountCurrency="{ item }">
+        <!-- Прочерк у рублёвых сделок и у строк, посчитанных до появления
+             поля: ноль здесь читался бы как «дохода нет». -->
+        <span v-if="item.commissionsAmountCurrency != null && item.currencySymbol && item.currencySymbol !== '₽'"
+          class="text-no-wrap">{{ fmt(item.commissionsAmountCurrency) }} {{ item.currencySymbol }}</span>
+        <span v-else class="text-medium-emphasis">—</span>
+      </template>
       <template #item.partnerPV="{ value }">
         <span v-if="value != null" class="text-no-wrap">{{ fmt(value) }}</span>
         <span v-else class="text-medium-emphasis">—</span>
@@ -521,6 +528,9 @@ const headers = [
   { title: 'Доход ДС', key: 'commissionsAmountGrossRUB', align: 'end', width: 116 },
   { title: 'Доход ДС без НДС', key: 'commissionsAmountRUB', align: 'end', width: 124 },
   { title: 'Доход DS USD', key: 'commissionsAmountUSD', align: 'end', width: 116 },
+  // Доход ДС в валюте самого контракта. В отличие от колонки выше не привязан
+  // к доллару: у евровых сделок там лежал долларовый эквивалент.
+  { title: 'Доход ДС (валюта)', key: 'commissionsAmountCurrency', align: 'end', width: 140 },
   { title: 'ЛП', key: 'partnerPV', align: 'end', width: 80 },
   { title: 'ГП', key: 'partnerGV', align: 'end', width: 80 },
   { title: 'Баллы', key: 'partnerBonus', align: 'end', width: 80 },

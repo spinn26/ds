@@ -602,6 +602,17 @@ class CommissionCalculator
         $incomeDsUsd = $usdRate > 0 ? round($incomeDsRub / $usdRate, 2) : 0;
         $netRevenueUsd = $usdRate > 0 ? round($netRevenueRub / $usdRate, 2) : 0;
 
+        // Доход ДС в ВАЛЮТЕ КОНТРАКТА (ТЗ 2026-08-07). Отдельно от *USD:
+        // то зеркало всегда делит на курс доллара и для евровых сделок
+        // показывает долларовый эквивалент. Курс — валюты транзакции на месяц
+        // сделки, тем же справочником, что и amountRUB, поэтому обратный
+        // пересчёт сходится. Для рублёвых значение равно рублёвому (курс 1).
+        $txRate = \App\Support\CurrencyRates::forDate(
+            $tx->currency !== null ? (int) $tx->currency : null,
+            $tx->date ?? null,
+        );
+        $incomeDsCurrency = $txRate > 0 ? round($incomeDsRub / $txRate, 2) : null;
+
         // Прибыль DS = доход DS - выплаты партнёрам цепочки.
         // *BeforeGapReduction — снимок ДО применения отрыва (на момент
         // создания commission штраф ещё не применён, MonthlyPenaltyRunner
@@ -616,6 +627,7 @@ class CommissionCalculator
             'dsCommissionPercentage' => round($dsComPercent, 4),
             'commissionsAmountRUB' => $incomeDsRub,
             'commissionsAmountUSD' => $incomeDsUsd,
+            'commissionsAmountCurrency' => $incomeDsCurrency,
             'netRevenueRUB' => $netRevenueRub,
             'netRevenueUSD' => $netRevenueUsd,
             'profitRUB' => $profitRub,
@@ -924,6 +936,12 @@ class CommissionCalculator
         // USD — по курсу месяца сделки (см. CurrencyRates).
         $usdRate = \App\Support\CurrencyRates::usdForDate($tx->date ?? null);
         $incomeDsUsd = $usdRate > 0 ? round($incomeDsRub / $usdRate, 2) : 0;
+        // Доход ДС в валюте контракта — как в основной ветке.
+        $txRate = \App\Support\CurrencyRates::forDate(
+            $tx->currency !== null ? (int) $tx->currency : null,
+            $tx->date ?? null,
+        );
+        $incomeDsCurrency = $txRate > 0 ? round($incomeDsRub / $txRate, 2) : null;
         // ЛП/ГП у Неизвестного консультанта = 0: это плейсхолдер, реального
         // партнёра нет — начислять личный/групповой объём (баллы квалификации)
         // не за кого (фидбек владельца 2026-07-09, робо-импорт). Доход ДС при
@@ -954,6 +972,7 @@ class CommissionCalculator
             'dsCommissionPercentage' => round($dsComPercent, 4),
             'commissionsAmountRUB' => $incomeDsRub,      // Доход ДС без НДС
             'commissionsAmountUSD' => $incomeDsUsd,
+            'commissionsAmountCurrency' => $incomeDsCurrency,
             'netRevenueRUB' => round($amountNoVat, 2),   // остаток (комиссий 0)
             'profitRUB' => $incomeDsRub,                 // прибыль = Доход ДС без НДС
             'commissionAmountRubBeforeGapReduction' => 0,

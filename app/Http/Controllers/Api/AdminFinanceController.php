@@ -405,6 +405,11 @@ class AdminFinanceController extends Controller
                     : round((float) ($t->commissionsAmountRUB ?? 0), 2),
                 'commissionsAmountRUB' => round((float) ($t->commissionsAmountRUB ?? 0), 2),
                 'commissionsAmountUSD' => round((float) ($t->commissionsAmountUSD ?? 0), 2),
+                // Доход ДС в валюте контракта (ТЗ 2026-08-07). null у рублёвых
+                // и у старых строк, посчитанных до появления поля — фронт в
+                // этом случае рисует прочерк, а не вводящий в заблуждение ноль.
+                'commissionsAmountCurrency' => $t->commissionsAmountCurrency !== null
+                    ? round((float) $t->commissionsAmountCurrency, 2) : null,
                 // netRevenueRUB / profitRUB считаем В РЕАЛ-ТАЙМЕ из текущей
                 // цепочки ($totalCommission), а не из denorm-полей транзакции.
                 // Denorm-поля пишутся один раз при расчёте и НЕ обновляются
