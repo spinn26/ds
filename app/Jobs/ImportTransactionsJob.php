@@ -39,6 +39,14 @@ class ImportTransactionsJob implements ShouldQueue
     public int $maxExceptions = 1;
 
     /**
+     * Расхождение профиля с фактической шапкой листа (поставщик переименовал
+     * колонку). Заполняется при чтении источника и подмешивается ПЕРВОЙ строкой
+     * в ошибки/предупреждения импорта — иначе оператор видит только «пустой
+     * номер контракта» на каждой строке и не понимает причину.
+     */
+    private ?string $profileWarning = null;
+
+    /**
      * @param string $source 'sheets' | 'csv'
      * @param string $sourceRef имя листа (sheets) или путь к файлу (csv)
      * @param ?int $counterpartyId явный counterparty (для generic-листов и CSV)
@@ -123,7 +131,11 @@ class ImportTransactionsJob implements ShouldQueue
             };
 
             $errors = [];
-            $warnings = [];
+            // Расхождение шапки листа с профилем — предупреждение, а не ошибка:
+            // недостающей может оказаться необязательная колонка, и валить
+            // рабочий импорт из-за неё нельзя. В список ошибок оно попадёт
+            // первым только если импорт и так упал (см. ниже).
+            $warnings = $this->profileWarning ? [$this->profileWarning] : [];
             $prepared = [];
             foreach ($rows as $i => $row) {
                 $lineNo = $i + 2;
@@ -275,8 +287,15 @@ class ImportTransactionsJob implements ShouldQueue
             // Атомарность: если есть ошибки валидации — ничего не вставляем.
             // Закрытые периоды НЕ считаются ошибкой (они в warnings).
             if ($errors) {
+                $count = count($errors);
+                // Импорт всё равно падает — выносим причину наверх списка.
+                // Без этого оператор видит 172 одинаковые строки «пустой номер
+                // контракта» и не понимает, что поставщик переименовал колонку.
+                if ($this->profileWarning) {
+                    array_unshift($errors, $this->profileWarning);
+                }
                 $this->finalizeError(
-                    'Импорт отменён: найдено ' . count($errors) . ' ошибок валидации. Ничего не загружено. См. список ниже.',
+                    'Импорт отменён: найдено ' . $count . ' ошибок валидации. Ничего не загружено. См. список ниже.',
                     $errors,
                     $warnings,
                 );
@@ -465,6 +484,31 @@ class ImportTransactionsJob implements ShouldQueue
                 // импорт давал «очень маленькие» проценты и доход/100.
                 $pctScale = isset($profile['commission_pct_scale'])
                     ? (float) $profile['commission_pct_scale'] : 1.0;
+
+                // Колонки профиля, которых в листе нет. Поставщик переименовал
+                // заголовок — и импорт валится «пустой номер контракта» на всех
+                // строках подряд, не говоря, в чём дело (IB MF, 172 строки:
+                // «ID сделки» стало «Контракт»). Сообщаем прямо, с фактической
+                // шапкой листа, чтобы правка занимала минуту.
+                $missingColumns = [];
+                foreach ($profile['fields'] as $canonical => $headerName) {
+                    if (SheetProfiles::headerIndex($headers, $headerName) === null) {
+                        $missingColumns[] = is_array($headerName)
+                            ? implode(' / ', $headerName)
+                            : (string) $headerName;
+                    }
+                }
+                if ($missingColumns) {
+                    $present = implode(', ', array_filter(array_map(
+                        fn ($h) => trim((string) $h), $headers
+                    )));
+                    $this->profileWarning = sprintf(
+                        'В листе «%s» не найдены колонки профиля: %s. Фактическая шапка: %s.',
+                        $this->sourceRef,
+                        implode('; ', $missingColumns),
+                        $present !== '' ? $present : '(пустая)',
+                    );
+                }
 
                 $rows = [];
                 foreach ($rawRows as $row) {

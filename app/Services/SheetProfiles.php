@@ -20,8 +20,12 @@ class SheetProfiles
     /**
      * sheet name → [
      *   counterpartyName => имя из counterparty.counterpartyName для автоматики
-     *   fields => [canonicalKey => header]
+     *   fields => [canonicalKey => header | [header, ...алиасы]]
      * ]
+     *
+     * Заголовок можно задать списком: поставщики переименовывают колонки в
+     * листе, и профиль должен переживать это без падения всего импорта
+     * (IB MF: «ID сделки» → «Контракт»).
      *
      * canonicalKey из набора: contract_number, client_name, amount,
      * commission, date, currency, productName, programName, service_type.
@@ -56,13 +60,17 @@ class SheetProfiles
             'fields' => [
                 'date'            => 'Дата',
                 'client_name'     => 'Клиент',
-                'contract_number' => 'ID сделки',
+                // Колонку переименовали в листе: было «ID сделки», стало
+                // «Контракт» — импорт падал «пустой номер контракта» на ВСЕХ
+                // строках (172 из 172, 2026-08-06). Держим оба варианта.
+                'contract_number' => ['Контракт', 'ID сделки'],
                 'commission'      => 'Всего комиссии',
             ],
-            // Лист IB MF идёт БЕЗ строки заголовков (первая строка пустая).
-            // Позиционные заголовки — порядок колонок данных: дата, клиент,
-            // № сделки, комиссия. Используются, когда фактическая шапка пуста.
-            'headerless' => ['Дата', 'Клиент', 'ID сделки', 'Всего комиссии'],
+            // Лист IB MF временами приходит БЕЗ строки заголовков (первая
+            // строка пустая). Позиционные заголовки — порядок колонок данных:
+            // дата, клиент, № контракта, комиссия. Используются, только когда
+            // фактическая шапка пуста.
+            'headerless' => ['Дата', 'Клиент', 'Контракт', 'Всего комиссии'],
             'currency' => 'USD',
             // commissionCalcProperty=9 («МФ») — лист содержит только MF-комиссии,
             // профиль сам задаёт свойство, чтобы не возиться с per-row маппингом.
@@ -74,9 +82,13 @@ class SheetProfiles
             'fields' => [
                 'date'            => 'Дата',
                 'client_name'     => 'Клиент',
-                'contract_number' => 'ID сделки',
+                'contract_number' => ['Контракт', 'ID сделки'],
                 'commission'      => 'Сумма вознаграждения',
             ],
+            // Лист IB UP сейчас приходит с ПУСТОЙ строкой заголовков — как и
+            // IB MF. Без позиционных заголовков alignRow не мапил ничего и
+            // импорт падал целиком.
+            'headerless' => ['Дата', 'Клиент', 'Контракт', 'Сумма вознаграждения'],
             'currency' => 'USD',
             // commissionCalcProperty=10 («Апфронт») — апфронт-комиссия по IB.
             'commissionCalcProperty' => 10,
@@ -272,18 +284,32 @@ class SheetProfiles
     {
         $out = [];
         foreach ($profile['fields'] as $canonical => $headerName) {
-            $idx = array_search($headerName, $headers, true);
-            if ($idx === false) {
-                // Попробуем нечёткий поиск — trim + ilike
-                foreach ($headers as $i => $h) {
-                    if (mb_strtolower(trim((string) $h)) === mb_strtolower(trim($headerName))) {
-                        $idx = $i;
-                        break;
-                    }
-                }
-            }
-            $out[$canonical] = $idx !== false ? ($row[$idx] ?? null) : null;
+            $idx = self::headerIndex($headers, $headerName);
+            $out[$canonical] = $idx !== null ? ($row[$idx] ?? null) : null;
         }
         return $out;
+    }
+
+    /**
+     * Индекс колонки по имени заголовка (или по списку алиасов): сначала
+     * точное совпадение, затем без учёта регистра и пробелов по краям.
+     *
+     * @param  string|array<int,string>  $headerName
+     */
+    public static function headerIndex(array $headers, $headerName): ?int
+    {
+        foreach ((array) $headerName as $candidate) {
+            $idx = array_search($candidate, $headers, true);
+            if ($idx !== false) {
+                return (int) $idx;
+            }
+            foreach ($headers as $i => $h) {
+                if (mb_strtolower(trim((string) $h)) === mb_strtolower(trim((string) $candidate))) {
+                    return (int) $i;
+                }
+            }
+        }
+
+        return null;
     }
 }
