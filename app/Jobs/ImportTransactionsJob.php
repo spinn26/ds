@@ -256,6 +256,10 @@ class ImportTransactionsJob implements ShouldQueue
                     'currency' => $rowCurrency,
                     'currencyRate' => $rowRate,
                     'year' => $row['year'] ?? null,
+                    // «Своя комиссия»: доход ДС задан суммой из отчёта
+                    // (профили с custom_commission, напр. ГГА).
+                    'custom_commission' => ! empty($row['custom_commission']),
+                    'commission_abs' => $row['commission_abs'] ?? null,
                 ];
 
                 // Tracker — каждые 200 строк (вместо 50: меньше cache-overhead).
@@ -483,9 +487,36 @@ class ImportTransactionsJob implements ShouldQueue
                         if ($v !== 0.0) $dsPercent = round($v * $pctScale, 6);
                     }
 
+                    // Сумма контракта: основная колонка профиля, при пустом
+                    // значении — запасная (ГГА: «исходник» → «база»).
+                    $rowAmount = $a['amount'] ?? null;
+                    if (($rowAmount === null || $rowAmount === '' || \App\Support\Numbers::decimal($rowAmount, 0) == 0.0)
+                        && ! empty($a['amount_fallback'])) {
+                        $rowAmount = $a['amount_fallback'];
+                    }
+                    $rowAmount ??= ($a['commission'] ?? 0);
+
+                    // «Своя комиссия» (профиль с custom_commission): сумма
+                    // комиссии из отчёта — это доход ДС как есть, а ставка
+                    // выводится из неё, а не берётся из отчёта.
+                    $customCommission = false;
+                    $commissionAbs = null;
+                    if (! empty($profile['custom_commission'])) {
+                        $comm = \App\Support\Numbers::decimal($a['commission'] ?? null, 0);
+                        $base = \App\Support\Numbers::decimal($rowAmount, 0);
+                        if (abs($comm) > 0.000001) {
+                            $customCommission = true;
+                            $commissionAbs = $comm;
+                            // %ДС по ТЗ: (сумма комиссии / сумма контракта) × 100.
+                            $dsPercent = abs($base) > 0.000001
+                                ? round($comm / $base * 100, 6)
+                                : null;
+                        }
+                    }
+
                     $rows[] = [
                         'contract_number' => (string) ($a['contract_number'] ?? ''),
-                        'amount' => $a['amount'] ?? ($a['commission'] ?? 0),
+                        'amount' => $rowAmount,
                         'date' => $a['date'] ?? null,
                         'ds_percent' => $dsPercent,
                         'property' => $rowProperty,
@@ -493,6 +524,8 @@ class ImportTransactionsJob implements ShouldQueue
                         // «Год КВ» (score) — напр. Trust-профиль: колонка «Год».
                         // Раньше терялась → в транзакции score=NULL, «Год КВ» пустой.
                         'year' => $a['year'] ?? null,
+                        'custom_commission' => $customCommission,
+                        'commission_abs' => $commissionAbs,
                     ];
                 }
                 return [$rows, (int) $counterpartyId, (int) $currencyId, $profile];
@@ -642,7 +675,10 @@ class ImportTransactionsJob implements ShouldQueue
 
         $columns = ['contract', 'amount', 'amountRUB', 'amountUSD', 'currency',
             'currencyRate', 'date', 'dateMonth', 'dateYear', 'comment',
-            'dsCommissionPercentage', 'commissionCalcProperty', 'score'];
+            'dsCommissionPercentage', 'commissionCalcProperty', 'score',
+            // «Своя комиссия»: доход ДС берётся из отчёта поставщика, а не
+            // считается по тарифу (профили с custom_commission — ГГА).
+            'customCommission', 'dsCommissionAbsolute'];
         $quotedCols = array_map(fn ($c) => '"' . $c . '"', $columns);
 
         $placeholderRow = '(' . implode(',', array_fill(0, count($columns), '?')) . ')';
@@ -668,6 +704,12 @@ class ImportTransactionsJob implements ShouldQueue
             // score = «Год КВ» (год выплаты вознаграждения), напр. Trust.
             $bindings[] = (isset($p['year']) && $p['year'] !== '')
                 ? (int) $p['year'] : null;
+            $bindings[] = ! empty($p['custom_commission']);
+            // dsCommissionAbsolute хранится БЕЗ НДС — так его читает
+            // CommissionCalculator, выводя %ДС обратным расчётом от суммы без
+            // НДС. Сумма комиссии в отчёте ГГА — это доход ДС, НДС в ней нет,
+            // поэтому пишем как есть.
+            $bindings[] = $p['commission_abs'] ?? null;
         }
 
         $sql = 'INSERT INTO "transaction" (' . implode(',', $quotedCols) . ') VALUES '
