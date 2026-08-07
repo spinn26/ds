@@ -595,6 +595,10 @@ Route::prefix('v1')->group(function () {
         Route::get('/admin/reports/{id}/download', [\App\Http\Controllers\Api\AdminFinanceController::class, 'downloadReport'])->whereNumber('id');
         Route::get('/admin/currencies', [\App\Http\Controllers\Api\AdminFinanceController::class, 'currencies']);
         Route::patch('/admin/currencies/rates/{id}', [\App\Http\Controllers\Api\AdminFinanceController::class, 'updateCurrencyRate'])->whereNumber('id')->middleware('role:admin,calculations');
+        // Завести курсы за месяц из админки. Заменяет прежнее авто-копирование
+        // планировщиком: оно копировало строго прошлый месяц и при его
+        // отсутствии рвало цепочку молча.
+        Route::post('/admin/currencies/rates', [\App\Http\Controllers\Api\AdminFinanceController::class, 'storeCurrencyRates'])->middleware('role:admin,calculations');
         // Ставка НДС входит в расчёт комиссий — та же планка, что у курсов.
         Route::post('/admin/currencies/vat', [\App\Http\Controllers\Api\AdminFinanceController::class, 'addVatRate'])->middleware('role:admin,calculations');
         // Второй справочник курсов — для отчётов руководителей (нет пересчёта транзакций)

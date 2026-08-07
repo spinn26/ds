@@ -60,6 +60,13 @@ class CopyMonthlyCurrencyRates extends Command
                 continue;
             }
             DB::table('currencyRate')->insert([
+                // У currencyRate НЕТ сиквенса на id (legacy-таблица Directual):
+                // вставка без него падала с 23502 not-null на КАЖДОМ запуске,
+                // а вывод крона уходил в /dev/null — поэтому курсы за новые
+                // месяцы молча не появлялись. Планировщик с 2026-08-06 снят
+                // (курсы заводятся кнопкой в /admin/currencies), команда
+                // остаётся для ручного запуска.
+                'id' => \App\Support\LegacyId::next('currencyRate'),
                 'currency' => $currencyId,
                 'rate' => $row->rate,
                 'date' => $thisMonthStart,

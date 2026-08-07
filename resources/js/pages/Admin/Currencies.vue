@@ -24,6 +24,10 @@
               :headers="rateHeaders"
               v-model:visible="rateColumnVisible"
               storage-key="currencies-rates-cols" />
+            <!-- Курсы за новый месяц заводятся здесь: авто-копирование
+                 планировщиком отключено (рвалось на первом же пропуске). -->
+            <v-btn v-if="canEdit('currencies')" color="primary" size="small" prepend-icon="mdi-plus"
+              @click="openAddRates">Добавить курсы</v-btn>
           </v-card-title>
           <v-data-table :items="rates" :headers="visibleRateHeaders" density="compact"
             :items-per-page="20" :loading="loading">
@@ -84,6 +88,45 @@
           <v-spacer />
           <v-btn @click="editRateOpen = false">Отмена</v-btn>
           <v-btn color="primary" :loading="saving" @click="saveRate">Сохранить</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Add rates modal: месяц + курс по каждой валюте, предзаполненный
+         последним известным значением. -->
+    <v-dialog v-model="addRatesOpen" max-width="480">
+      <v-card>
+        <v-card-title>Добавить курсы за месяц</v-card-title>
+        <v-card-text>
+          <v-text-field v-model="addRatesForm.period" type="month"
+            label="Месяц *" variant="outlined" density="comfortable" class="mb-3"
+            hint="Курс действует на весь месяц" persistent-hint />
+
+          <div v-for="row in addRatesForm.rates" :key="row.currencyId"
+            class="d-flex align-center ga-3 mb-2">
+            <v-chip size="small" variant="tonal" class="flex-shrink-0" style="min-width: 56px">
+              {{ row.symbol || row.currencyId }}
+            </v-chip>
+            <v-text-field v-model.number="row.rate" type="number" step="0.0001"
+              :label="row.currencyName || 'Курс к рублю'"
+              variant="outlined" density="compact" hide-details />
+          </div>
+
+          <v-alert v-if="existingPeriod" type="info" variant="tonal" density="compact" class="mt-3">
+            За {{ formatPeriod(addRatesForm.period) }} курсы уже заведены — существующие
+            строки не перезапишутся. Правьте их карандашом в таблице.
+          </v-alert>
+          <v-alert v-else type="info" variant="tonal" density="compact" class="mt-3">
+            Значения подставлены из последнего заведённого месяца
+            <template v-if="lastKnownPeriod">({{ formatPeriod(lastKnownPeriod) }})</template>.
+            Проставьте фактические средневзвешенные курсы.
+          </v-alert>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="addRatesOpen = false">Отмена</v-btn>
+          <v-btn color="primary" :loading="saving" :disabled="existingPeriod"
+            @click="saveRates">Добавить</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -197,6 +240,63 @@ async function saveRate() {
     notify('Курс обновлён');
   } catch (e) {
     notify(e.response?.data?.message || 'Ошибка', 'error');
+  }
+  saving.value = false;
+}
+
+// --- Добавление курсов за месяц ---
+// Планировщик, копировавший курсы 1-го числа, отключён: он брал строго
+// предыдущий месяц и на первом же пропуске рвал цепочку молча.
+const addRatesOpen = ref(false);
+const addRatesForm = ref({ period: '', rates: [] });
+
+// Последний заведённый месяц — из него берём значения по умолчанию.
+const lastKnownPeriod = computed(() => {
+  const periods = rates.value.map(r => r.period).filter(Boolean);
+  return periods.length ? periods.slice().sort().pop() : null;
+});
+
+// Месяц уже заведён — добавлять нечего, курс правится карандашом.
+const existingPeriod = computed(() =>
+  !!addRatesForm.value.period
+  && rates.value.some(r => r.period === addRatesForm.value.period)
+);
+
+function openAddRates() {
+  const now = new Date();
+  const period = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+  // По одной строке на валюту, значение — последний известный курс.
+  const byCurrency = new Map();
+  for (const r of rates.value) {
+    const prev = byCurrency.get(r.currencyId);
+    if (!prev || (r.period || '') > (prev.period || '')) byCurrency.set(r.currencyId, r);
+  }
+  const rows = [...byCurrency.values()]
+    .sort((a, b) => a.currencyId - b.currencyId)
+    .map(r => ({
+      currencyId: r.currencyId,
+      symbol: r.symbol,
+      currencyName: r.currencyName,
+      rate: Number(r.rate) || 0,
+    }));
+
+  addRatesForm.value = { period, rates: rows };
+  addRatesOpen.value = true;
+}
+
+async function saveRates() {
+  saving.value = true;
+  try {
+    const { data } = await api.post('/admin/currencies/rates', {
+      period: addRatesForm.value.period,
+      rates: addRatesForm.value.rates.map(r => ({ currencyId: r.currencyId, rate: r.rate })),
+    });
+    addRatesOpen.value = false;
+    await loadData();
+    notify(data?.message || 'Курсы добавлены');
+  } catch (e) {
+    notify(e.response?.data?.message || 'Не удалось добавить курсы', 'error');
   }
   saving.value = false;
 }

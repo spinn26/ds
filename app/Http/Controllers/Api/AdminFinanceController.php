@@ -1346,6 +1346,79 @@ class AdminFinanceController extends Controller
     }
 
     /**
+     * POST /admin/currencies/rates — завести курсы валют за месяц.
+     *
+     * Раньше строки за новый месяц создавал только планировщик
+     * (currencies:copy-monthly-rates), а в админке была лишь правка карандашом.
+     * Планировщик при этом ПАДАЛ на каждом запуске: `currencyRate` — legacy-
+     * таблица Directual без сиквенса на id, а команда вставляла строку без
+     * него → 23502 not-null. Вывод крона уходил в /dev/null, поэтому пропажа
+     * была не видна (на проде так не появились июль и август 2026, а
+     * CurrencyRates::forDate() молча брал последний доступный курс за более
+     * ранний месяц). Теперь месяц заводится кнопкой, id — через LegacyId.
+     *
+     * Идемпотентно: существующие пары (валюта, месяц) не трогаем и возвращаем
+     * в skipped — кнопка не должна затирать уже проставленный курс.
+     */
+    public function storeCurrencyRates(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'period' => 'required|date_format:Y-m',
+            'rates' => 'required|array|min:1',
+            'rates.*.currencyId' => 'required|integer|exists:currency,id',
+            'rates.*.rate' => 'required|numeric|min:0',
+        ], [
+            'period.date_format' => 'Период указывается как ГГГГ-ММ.',
+            'rates.required' => 'Укажите хотя бы один курс.',
+        ]);
+
+        $monthStart = $data['period'] . '-01';
+
+        $existing = DB::table('currencyRate')
+            ->whereRaw("date_trunc('month', date::timestamp) = ?::timestamp", [$monthStart])
+            ->pluck('currency')
+            ->map(fn ($c) => (int) $c)
+            ->all();
+
+        $created = 0;
+        $skipped = [];
+        foreach ($data['rates'] as $row) {
+            $currencyId = (int) $row['currencyId'];
+            if (in_array($currencyId, $existing, true)) {
+                $skipped[] = $currencyId;
+                continue;
+            }
+            DB::table('currencyRate')->insert([
+                // У currencyRate нет сиквенса (наследие Directual) — id явно.
+                'id' => LegacyId::next('currencyRate'),
+                'currency' => $currencyId,
+                'rate' => $row['rate'],
+                'date' => $monthStart,
+            ]);
+            $existing[] = $currencyId;
+            $created++;
+        }
+
+        // Статический кэш курсов живёт в рамках запроса, но джобы пересчёта
+        // могут стартовать из этого же процесса — сбрасываем, чтобы новый курс
+        // не потерялся за уже закэшированным значением прошлого месяца.
+        \App\Support\CurrencyRates::flush();
+
+        $message = $created
+            ? "Добавлено курсов: {$created}"
+            : 'Новых курсов нет — за этот месяц они уже заведены';
+        if ($skipped) {
+            $message .= '. Пропущено (уже были): ' . count($skipped);
+        }
+
+        return response()->json([
+            'message' => $message,
+            'created' => $created,
+            'skipped' => count($skipped),
+        ], $created ? 201 : 200);
+    }
+
+    /**
      * POST /admin/currencies/vat — добавить новую ставку НДС с указанной даты.
      * Закрывает предыдущую ставку (выставляет dateTo в день перед новой dateFrom).
      */
