@@ -717,6 +717,15 @@ class ImportTransactionsJob implements ShouldQueue
     {
         if (! $chunk) return [];
 
+        // Выравниваем PK-сиквенс перед вставкой. Вставляем БЕЗ id, полагаясь на
+        // сиквенс, а он отстаёт всякий раз, когда кто-то пишет id явно (так
+        // делал вебхук Insmart через LegacyId::next). Тогда импорт падал на
+        // «нарушено уникальное ограничение transaction_pkey» и отменялся
+        // целиком — 1195 строк робоэдвайзера, 10.08.2026. setval идемпотентен и
+        // дёшев; источник лага починен отдельно, но защита нужна и здесь:
+        // явные id может проставить любой будущий импорт данных.
+        \App\Support\LegacyId::syncSequence('transaction');
+
         $columns = ['contract', 'amount', 'amountRUB', 'amountUSD', 'currency',
             'currencyRate', 'date', 'dateMonth', 'dateYear', 'comment',
             'dsCommissionPercentage', 'commissionCalcProperty', 'score',

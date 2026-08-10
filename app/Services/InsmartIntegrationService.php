@@ -142,9 +142,15 @@ class InsmartIntegrationService
                 $txAmount = 0.0;
                 $dsPercent = 0;
             }
-            $txId = LegacyId::next('transaction');
-            DB::table('transaction')->insert([
-                'id' => $txId,
+            // У `transaction` СЕРИЙНЫЙ id, и раньше мы писали его явно через
+            // LegacyId::next() — MAX(id)+1 в обход сиквенса. Сиквенс от этого
+            // отставал на каждый вебхук Insmart, и следующий bulk-импорт
+            // (ImportTransactionsJob вставляет БЕЗ id) врезался в занятый id:
+            // «Дубликат: нарушено уникальное ограничение transaction_pkey»,
+            // импорт отменялся целиком (робоэдвайзер, 1195 строк, 10.08.2026).
+            // Выравниваем сиквенс и отдаём выдачу id ему.
+            LegacyId::syncSequence('transaction');
+            $txId = DB::table('transaction')->insertGetId([
                 'contract' => $contractId,
                 'amount' => $txAmount,
                 'amountRUB' => $txAmount,       // страховая премия Insmart всегда в RUB
