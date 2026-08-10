@@ -149,6 +149,14 @@
         <v-col cols="12" sm="6">
           <v-checkbox v-model="editForm.agreement" label="Согласие" density="compact" />
         </v-col>
+        <v-col cols="12">
+          <!-- Обычный сотрудник видит тикеты отдела только пока их никто не
+               взял в работу. Руководителю нужна работа подчинённых целиком. -->
+          <v-checkbox v-model="editForm.chatDepartmentLead" density="compact"
+            label="Руководитель отдела в чатах"
+            hint="Видит все тикеты своих категорий, включая взятые в работу сотрудниками"
+            persistent-hint />
+        </v-col>
 
         <!-- Двухфакторная аутентификация: статус + сброс админом (напр. юзер
              потерял доступ к приложению-аутентификатору). -->
@@ -452,7 +460,7 @@ const {
   defaults: {
     firstName: '', lastName: '', patronymic: '', email: '', phone: '',
     role: 'registered', position: '', password: '', gender: '', birthDate: '',
-    isBlocked: false, agreement: false,
+    isBlocked: false, agreement: false, chatDepartmentLead: false,
     hasConsultant: false, productsAccessNoVerify: false,
     requisitesVerified: false, offerAccepted: false, paymentsSuspended: false,
   },

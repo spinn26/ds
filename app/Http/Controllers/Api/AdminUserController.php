@@ -144,6 +144,10 @@ class AdminUserController extends Controller
                 // app-tz Europe/Moscow дата уезжает на день назад (см. ProfileController).
                 'birthDate' => $u->birthDate?->format('Y-m-d'),
                 'isBlocked' => (bool) $u->isBlocked,
+                // Руководитель отдела в чатах: видит тикеты своих категорий
+                // целиком, включая взятые подчинёнными (claim & hide не
+                // применяется). Ставится галочкой в карточке пользователя.
+                'chatDepartmentLead' => (bool) ($u->chat_department_lead ?? false),
                 // Включена ли 2FA — фронт показывает кнопку «Отключить 2ФА» (только админу).
                 'twoFactorEnabled' => (bool) $u->two_factor_enabled,
                 // Метка мягкого удаления — фронт показывает удалённые строки
@@ -248,6 +252,11 @@ class AdminUserController extends Controller
             if ($isAdmin) {
                 $user->role = $request->input('role', $user->role);
                 $user->isBlocked = $request->boolean('isBlocked');
+                // Право видеть чаты всего своего отдела — управленческое
+                // решение, поэтому рядом с role/isBlocked и только для admin.
+                if ($request->has('chatDepartmentLead')) {
+                    $user->chat_department_lead = $request->boolean('chatDepartmentLead');
+                }
                 if ($request->filled('password')) {
                     $user->password = Hash::make($request->password);
                 }

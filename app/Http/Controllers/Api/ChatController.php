@@ -62,7 +62,11 @@ class ChatController extends Controller
                 if (in_array($modern, $allowed, true)) $expanded[] = $legacy;
             }
             $isAdmin = in_array('admin', $roles, true);
-            $query->where(function ($q) use ($user, $expanded, $participantTicketIds, $isAdmin) {
+            // Руководитель отдела видит ВСЕ тикеты своих категорий, включая
+            // взятые подчинёнными: ему нужна работа отдела целиком, а не
+            // только неразобранное (запрос 2026-08-10 по бэк-офису).
+            $isLead = (bool) ($user->chat_department_lead ?? false);
+            $query->where(function ($q) use ($user, $expanded, $participantTicketIds, $isAdmin, $isLead) {
                 // Claim & hide: тикеты отдела видны staff ТОЛЬКО пока никто
                 // не взял их в работу (assigned_to IS NULL). Как только staff
                 // отправляет первое сообщение — sendMessage() выставляет
@@ -70,9 +74,11 @@ class ChatController extends Controller
                 // сотрудников того же отдела. Свои назначенные / созданные /
                 // recipient / приглашённые продолжают быть видны через OR-ветки.
                 if (! empty($expanded)) {
-                    $q->where(function ($q2) use ($expanded) {
-                        $q2->whereIn('department', $expanded)
-                           ->whereNull('assigned_to');
+                    $q->where(function ($q2) use ($expanded, $isLead) {
+                        $q2->whereIn('department', $expanded);
+                        if (! $isLead) {
+                            $q2->whereNull('assigned_to');
+                        }
                     });
                 }
                 // Admin-override: админы видят ВСЕ тикеты техподдержки
@@ -2415,16 +2421,22 @@ class ChatController extends Controller
                 if (in_array($modern, $allowed, true)) $expanded[] = $legacy;
             }
             $isAdmin = in_array('admin', $roles, true);
-            $query->where(function ($q) use ($userId, $expanded, $participantTicketIds, $isAdmin) {
+            // Тот же признак руководителя отдела, что и в index(): счётчик
+            // непрочитанных обязан считать ровно то, что видно в списке —
+            // иначе вернётся баг «бейдж есть, тикета нет».
+            $isLead = (bool) ($user->chat_department_lead ?? false);
+            $query->where(function ($q) use ($userId, $expanded, $participantTicketIds, $isAdmin, $isLead) {
                 // Claim & hide: видим тикеты отдела только пока никто
                 // не взял их в работу. Раньше тут не было whereNull —
                 // отсюда баг «у меня бейдж 2, а в списке тикетов нет»:
                 // staff из того же отдела уже забрал тикет, в index()
                 // он спрятался, а в unreadCount продолжал считаться.
                 if (! empty($expanded)) {
-                    $q->where(function ($q2) use ($expanded) {
-                        $q2->whereIn('department', $expanded)
-                           ->whereNull('assigned_to');
+                    $q->where(function ($q2) use ($expanded, $isLead) {
+                        $q2->whereIn('department', $expanded);
+                        if (! $isLead) {
+                            $q2->whereNull('assigned_to');
+                        }
                     });
                 }
                 // Admin-override: те же тикеты техподдержки, что и в index().

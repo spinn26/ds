@@ -42,6 +42,14 @@ class ChatTicketPolicy
             return true;
         }
 
+        // Руководитель отдела видит работу подчинённых целиком — claim & hide
+        // на него не распространяется. Зеркалит ту же ветку в
+        // ChatController::index()/unreadCount(); без этого тикет был бы в
+        // списке, но не открывался бы (403).
+        if ((bool) ($user->chat_department_lead ?? false)) {
+            return true;
+        }
+
         // Claim & hide: после того как тикет взят в работу (assigned_to NOT NULL),
         // прочим staff отдела доступ закрыт. Сам assignee видит тикет через
         // более раннюю проверку (assigned_to === user->id). Зеркалит фильтр
