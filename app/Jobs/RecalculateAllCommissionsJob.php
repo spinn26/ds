@@ -9,6 +9,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -29,6 +30,31 @@ class RecalculateAllCommissionsJob implements ShouldQueue
 
     public int $timeout = 7200; // до 2 часов — транзакций может быть тысячи
     public int $tries = 1;
+
+    /**
+     * Флаг «пересчёт идёт». Живёт чуть дольше timeout — если воркера убьют,
+     * ключ протухнет сам и кнопка не залипнет навсегда.
+     */
+    private const RUNNING_KEY = 'commissions:recalc:running';
+
+    /** Идёт ли пересчёт прямо сейчас (ставится диспетчером, снимается в конце). */
+    public static function isRunning(): bool
+    {
+        return (bool) Cache::get(self::RUNNING_KEY);
+    }
+
+    /**
+     * Поставить пересчёт в очередь, пометив его как идущий.
+     *
+     * Отдельно от dispatch(), чтобы флаг ставился ДО попадания в очередь:
+     * иначе между постановкой и стартом джоба кнопка отдавала бы «запущен»
+     * повторно и плодила дубли на тех же транзакциях.
+     */
+    public static function dispatchRecalculation(): void
+    {
+        Cache::put(self::RUNNING_KEY, true, 7500);
+        self::dispatch();
+    }
 
     public function handle(CommissionCalculator $calculator, CurrencyRecalculator $currency): void
     {
@@ -83,8 +109,17 @@ class RecalculateAllCommissionsJob implements ShouldQueue
             }
         }
 
+        Cache::forget(self::RUNNING_KEY);
+
         Log::info('RecalculateAllCommissionsJob завершён', [
             'recomputed' => $recomputed, 'skipped' => $skipped, 'total' => $txIds->count(),
         ]);
+    }
+
+    /** Джоб упал — снимаем флаг, иначе кнопка навсегда отвечала бы «уже идёт». */
+    public function failed(\Throwable $e): void
+    {
+        Cache::forget(self::RUNNING_KEY);
+        Log::error('RecalculateAllCommissionsJob упал', ['error' => $e->getMessage()]);
     }
 }

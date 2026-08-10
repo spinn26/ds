@@ -577,8 +577,13 @@ Route::prefix('v1')->group(function () {
         // второй движок Отрыв/ОП с иным ключом идемпотентности (риск двойного
         // применения/отката) и заниженной базой доли ветки. Канон — MonthlyPenaltyRunner
         // через /admin/finalize/apply (его зовёт UI). Фронт finalize-month не вызывал.
-        // Полный перерасчёт комиссий по всем открытым периодам (кнопка). Throttle — защита от повторных запусков.
-        Route::post('/admin/recalculate-all', [\App\Http\Controllers\Api\AdminFinanceController::class, 'recalculateAll'])->middleware(['role:admin,calculations', 'throttle:2,10']);
+        // Полный перерасчёт комиссий по всем открытым периодам (кнопка).
+        // От повторных запусков защищает флаг «уже идёт» в самом эндпоинте
+        // (RecalculateAllCommissionsJob::isRunning) — он отвечает успехом, а не
+        // ошибкой. Throttle оставлен как грубый предохранитель и поднят с 2/10мин:
+        // прежний лимит выдавал операторам «Слишком много запросов» на обычном
+        // сценарии «завёл курсы → пересчитай», и пересчёт не запускался вообще.
+        Route::post('/admin/recalculate-all', [\App\Http\Controllers\Api\AdminFinanceController::class, 'recalculateAll'])->middleware(['role:admin,calculations', 'throttle:10,10']);
         Route::get('/admin/commissions', [\App\Http\Controllers\Api\AdminFinanceController::class, 'commissions']);
         Route::get('/admin/commissions/chain/{transactionId}', [\App\Http\Controllers\Api\AdminFinanceController::class, 'commissionChain'])->whereNumber('transactionId');
         Route::get('/admin/pool', [\App\Http\Controllers\Api\AdminFinanceController::class, 'pool']);

@@ -1409,17 +1409,32 @@ class AdminFinanceController extends Controller
         // не потерялся за уже закэшированным значением прошлого месяца.
         \App\Support\CurrencyRates::flush();
 
+        // Заведение курса за месяц, в котором уже есть валютные сделки, само
+        // по себе ничего не пересчитывает: amountRUB зафиксирован при импорте
+        // по курсу, который был на тот момент (для июля 2026 — июньский).
+        // Правка курса карандашом пересчёт запускает, а добавление — нет, и
+        // операторы упирались в throttle кнопки «Пересчитать». Ставим сами.
+        $recalcQueued = false;
+        if ($created && ! \App\Jobs\RecalculateAllCommissionsJob::isRunning()) {
+            \App\Jobs\RecalculateAllCommissionsJob::dispatchRecalculation();
+            $recalcQueued = true;
+        }
+
         $message = $created
             ? "Добавлено курсов: {$created}"
             : 'Новых курсов нет — за этот месяц они уже заведены';
         if ($skipped) {
             $message .= '. Пропущено (уже были): ' . count($skipped);
         }
+        if ($recalcQueued) {
+            $message .= '. Запущен пересчёт по новым курсам (в фоне) — жать «Пересчитать» не нужно.';
+        }
 
         return response()->json([
             'message' => $message,
             'created' => $created,
             'skipped' => count($skipped),
+            'recalculationQueued' => $recalcQueued,
         ], $created ? 201 : 200);
     }
 
@@ -1733,6 +1748,16 @@ class AdminFinanceController extends Controller
     {
         $cutoff = \App\Services\CommissionCalculator::HISTORICAL_CUTOFF;
 
+        // Уже идёт — второй такой же джоб не нужен: он бы гонял те же
+        // транзакции параллельно. Отвечаем успехом, а не ошибкой: оператор
+        // нажал кнопку, и пересчёт для него действительно выполняется.
+        if (\App\Jobs\RecalculateAllCommissionsJob::isRunning()) {
+            return response()->json([
+                'message' => 'Полный перерасчёт уже идёт — дождитесь окончания, повторный запуск не требуется.',
+                'alreadyRunning' => true,
+            ]);
+        }
+
         $count = DB::table('transaction')
             ->whereNull('deletedAt')
             ->where(function ($q) use ($cutoff) {
@@ -1740,7 +1765,7 @@ class AdminFinanceController extends Controller
             })
             ->count();
 
-        \App\Jobs\RecalculateAllCommissionsJob::dispatch();
+        \App\Jobs\RecalculateAllCommissionsJob::dispatchRecalculation();
 
         return response()->json([
             'message' => "Полный перерасчёт запущен: {$count} транзакций открытых периодов (с {$cutoff}). "
