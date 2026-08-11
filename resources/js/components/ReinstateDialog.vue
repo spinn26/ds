@@ -9,8 +9,36 @@
       </v-card-title>
 
       <v-card-text style="max-height: 70vh">
+        <!-- Шаг 2: наставник. Показывается сразу после успешного
+             восстановления, ДО окна акцепта документов. -->
+        <template v-if="step === 'mentor'">
+          <v-alert type="success" density="compact" variant="tonal" class="mb-3">
+            Участие восстановлено. Осталось подтвердить наставника — после этого
+            нужно будет принять документы.
+          </v-alert>
+
+          <div class="text-body-2 mb-2">
+            Сейчас вы закреплены за наставником:
+            <strong>{{ currentInviter || 'наставник не назначен' }}</strong>.
+          </div>
+
+          <v-radio-group v-model="mentorChoice" density="compact" hide-details="auto" class="mb-2">
+            <v-radio value="keep" label="Остаться с этим наставником" />
+            <v-radio value="change" label="Выбрать нового наставника" />
+          </v-radio-group>
+
+          <v-text-field v-if="mentorChoice === 'change'" v-model="refCode"
+            label="Реферальный код наставника" placeholder="например, gcpc=4bd2a"
+            variant="outlined" density="comfortable" hide-details="auto"
+            prepend-inner-icon="mdi-tag-outline" @keyup.enter="submitMentor" />
+
+          <v-alert v-if="error" type="error" density="compact" class="mt-2">
+            {{ error }}
+          </v-alert>
+        </template>
+
         <!-- Исключён: возврата через кабинет нет, только поддержка. -->
-        <template v-if="excluded">
+        <template v-else-if="excluded">
           <p class="text-body-2 mb-3">
             Ваш партнёрский аккаунт переведён в статус «Исключён». Восстановление
             через личный кабинет недоступно.
@@ -60,7 +88,12 @@
       <v-card-actions class="pa-3">
         <v-btn variant="text" @click="emit('logout')">Выйти</v-btn>
         <v-spacer />
-        <v-btn v-if="!excluded" color="primary" :disabled="!confirmed || !info.canReinstate"
+        <v-btn v-if="step === 'mentor'" color="primary" :loading="submitting"
+          :disabled="mentorChoice === 'change' && !refCode.trim()"
+          prepend-icon="mdi-check" @click="submitMentor">
+          {{ mentorChoice === 'change' ? 'Сменить наставника' : 'Остаться' }}
+        </v-btn>
+        <v-btn v-else-if="!excluded" color="primary" :disabled="!confirmed || !info.canReinstate"
           :loading="submitting" prepend-icon="mdi-restart" @click="submit">
           Восстановить участие
         </v-btn>
@@ -87,6 +120,13 @@ const confirmed = ref(false);
 const submitting = ref(false);
 const error = ref('');
 
+// Шаги окна: сначала само восстановление, потом наставник. Акцепт документов
+// идёт третьим и живёт в отдельном окне — оно ждёт, пока это закроется.
+const step = ref('reinstate');
+const mentorChoice = ref('keep');
+const refCode = ref('');
+const currentInviter = ref('');
+
 // Исключённому кнопку не показываем: этот статус снимает только поддержка.
 const excluded = computed(() => props.info?.excluded === true);
 
@@ -94,10 +134,31 @@ async function submit() {
   error.value = '';
   submitting.value = true;
   try {
-    await api.post('/profile/reinstate');
-    emit('reinstated');
+    const { data } = await api.post('/profile/reinstate');
+    currentInviter.value = data?.inviterName || '';
+    // Статус уже восстановлен — окно не закрываем, переводим на шаг
+    // «наставник», иначе следом сразу выскочит акцепт документов.
+    step.value = 'mentor';
   } catch (e) {
     error.value = e.response?.data?.message || 'Не удалось восстановить участие. Попробуйте позже.';
+  } finally {
+    submitting.value = false;
+  }
+}
+
+async function submitMentor() {
+  error.value = '';
+  submitting.value = true;
+  try {
+    await api.post('/profile/reinstate/mentor', {
+      action: mentorChoice.value,
+      refCode: mentorChoice.value === 'change' ? refCode.value.trim() : null,
+    });
+    // Только теперь отпускаем флоу: родитель перечитает профиль, окно
+    // закроется, и покажется акцепт документов.
+    emit('reinstated');
+  } catch (e) {
+    error.value = e.response?.data?.message || 'Не удалось сохранить наставника. Попробуйте позже.';
   } finally {
     submitting.value = false;
   }

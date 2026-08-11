@@ -63,12 +63,19 @@ class PartnerAcceptanceService
      * документы считаются подписанными при регистрации. Используется в
      * AuthController::register и при backfill текущих партнёров.
      */
-    public function acceptAllFlowDocuments(Consultant $consultant, Request $request): void
+    /**
+     * @param  bool  $force  подписать ВСЕ документы флоу заново, даже ранее
+     *   подписанные. Нужно, когда акцепт запрашивается повторно — например
+     *   после самовосстановления терминированного партнёра: он возвращается в
+     *   работу и принимает документы заново, и в журнале должна остаться
+     *   новая подпись с актуальной датой и IP, а не старая с прошлого раза.
+     */
+    public function acceptAllFlowDocuments(Consultant $consultant, Request $request, bool $force = false): void
     {
         $flowDocIds = AgreementDocument::inFlow()->pluck('id')->map(fn ($id) => (int) $id)->all();
         // Не дублируем уже подписанные документы (напр. Согласие/Политика с
         // шага регистрации) — пишем только недостающие.
-        $already = DB::table('partnerAcceptance')
+        $already = $force ? [] : DB::table('partnerAcceptance')
             ->where('consultant', $consultant->id)
             ->where('accepted', true)
             ->pluck('documentType')->map(fn ($x) => (int) $x)->all();

@@ -738,6 +738,12 @@ class PartnerStatusService
             $fresh->dateDeactivity = null;
             $fresh->reinstatement_count = $attemptNo;
             $fresh->last_reinstate_at = Carbon::now();
+            // Возврат в работу = новое согласие с документами: сбрасываем
+            // акцепт, чтобы партнёр принял оферту/политику/ПЭП заново и в
+            // журнале осталась свежая подпись. Блокирующее окно акцепта
+            // покажется само (гейт по offerAccepted в MainLayout) — уже ПОСЛЕ
+            // шага выбора наставника, см. ProfileController::reinstateMentor.
+            $fresh->acceptance = false;
             $fresh->save();
 
             $trace = $request

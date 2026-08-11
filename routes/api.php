@@ -289,6 +289,10 @@ Route::prefix('v1')->group(function () {
         // PartnerStatusService::selfReinstate).
         Route::post('/profile/reinstate', [ProfileController::class, 'reinstate'])
             ->middleware('throttle:5,60');
+        // Шаг «наставник» сразу после восстановления: остаться или перейти по
+        // реф-коду. Окно ограничено по времени и состоянию в контроллере.
+        Route::post('/profile/reinstate/mentor', [ProfileController::class, 'reinstateMentor'])
+            ->middleware('throttle:20,60');
         Route::get('/profile/cities', [ProfileController::class, 'cities']);
         Route::get('/profile/countries', [ProfileController::class, 'countries']);
 

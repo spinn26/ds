@@ -252,7 +252,16 @@ class ProfileController extends Controller
             'salesExperience' => ['required', 'string', 'in:none,<1,1-3,3+'],
             'financeExperience' => ['required', 'string', 'max:4000'],
             'hasPotentialClients' => ['required', 'string', 'in:yes,partly,no'],
-            'potentialClientsCount' => ['nullable', 'string', 'in:<10,10-30,30-100,100+'],
+            // Количество клиентов спрашиваем только когда они есть — при «нет»
+            // поле в анкете скрыто и обязано быть пустым. Форма это и так
+            // соблюдала, а валидация принимала пустое значение при «да»:
+            // прямой POST мимо UI сохранял анкету без ответа на вопрос.
+            'potentialClientsCount' => [
+                \Illuminate\Validation\Rule::requiredIf(
+                    fn () => in_array($request->input('hasPotentialClients'), ['yes', 'partly'], true)
+                ),
+                'nullable', 'string', 'in:<10,10-30,30-100,100+',
+            ],
             'currentIncome' => ['required', 'string', 'max:128'],
             'weeklyHours' => ['required', 'string', 'in:<10,10-20,20-40,full-time'],
             'incomeFactors' => ['required', 'string', 'max:4000'],
@@ -604,7 +613,11 @@ class ProfileController extends Controller
             return response()->json(['message' => 'Консультант не найден'], 404);
         }
 
-        $acceptance->acceptAllFlowDocuments($consultant, $request);
+        // force: подписываем ВСЕ документы флоу заново. Окно акцепта
+        // показывается только когда acceptance=false, то есть при первом входе
+        // или после самовосстановления — и во втором случае в журнале должна
+        // остаться новая подпись, а не старая с прошлого раза.
+        $acceptance->acceptAllFlowDocuments($consultant, $request, force: true);
 
         return response()->json([
             'message' => 'Документы приняты',
@@ -627,11 +640,158 @@ class ProfileController extends Controller
         }
 
         $result = $this->statusService->selfReinstate($consultant, $request);
+        $consultant->refresh();
 
         return response()->json([
             'message' => $result['message'],
             'attemptsLeft' => $result['attemptsLeft'],
+            // Для шага «наставник»: показать, за кем партнёр закреплён сейчас.
+            'inviterName' => $consultant->inviterName,
         ], $result['ok'] ? 200 : 422);
+    }
+
+    /**
+     * Шаг «наставник» сразу после самовосстановления: остаться за прежним или
+     * перейти к новому по реферальному коду.
+     *
+     * Окно ограничено по времени и состоянию (см. reinstateMentorWindow):
+     * менять наставника «когда захочется» партнёр не может — смена аплайна
+     * двигает комиссии всей ветки и в обычной жизни делается только staff
+     * через «Перестановки».
+     */
+    public function reinstateMentor(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'action' => ['required', 'in:keep,change'],
+            'refCode' => ['required_if:action,change', 'nullable', 'string', 'max:64'],
+        ], [
+            'refCode.required_if' => 'Введите реферальный код нового наставника.',
+        ]);
+
+        $consultant = Consultant::where('webUser', $request->user()->id)->first();
+        if (! $consultant) {
+            return response()->json(['message' => 'Консультант не найден'], 404);
+        }
+        if (! $this->reinstateMentorWindow($consultant)) {
+            return response()->json([
+                'message' => 'Шаг выбора наставника уже завершён. Смена наставника — через поддержку.',
+            ], 422);
+        }
+
+        if ($data['action'] === 'keep') {
+            return response()->json([
+                'message' => 'Наставник сохранён: ' . ($consultant->inviterName ?: 'без наставника'),
+                'inviterName' => $consultant->inviterName,
+                'changed' => false,
+            ]);
+        }
+
+        // Реф-код резолвим как при регистрации: регистр не важен (в legacy-базе
+        // есть и gcpc=..., и GCPC=...), терминированные/исключённые и удалённые
+        // наставниками быть не могут.
+        $code = mb_strtolower(trim((string) $data['refCode']));
+        $mentor = Consultant::whereRaw('LOWER("participantCode") = ?', [$code])
+            ->whereNull('dateDeleted')
+            ->whereNotIn('activity', [
+                PartnerActivity::Terminated->value,
+                PartnerActivity::Excluded->value,
+            ])
+            ->first();
+
+        if (! $mentor) {
+            return response()->json([
+                'message' => 'Реферальный код не найден или партнёр неактивен.',
+            ], 422);
+        }
+        if ((int) $mentor->id === (int) $consultant->id) {
+            return response()->json(['message' => 'Нельзя выбрать наставником самого себя.'], 422);
+        }
+        if ((int) ($consultant->inviter ?? 0) === (int) $mentor->id) {
+            return response()->json([
+                'message' => 'Это ваш текущий наставник — выберите «Остаться», если менять не нужно.',
+            ], 422);
+        }
+        // Цикл в структуре: нельзя уйти под собственного нижестоящего — иначе
+        // ветка замкнётся сама на себя и рекурсивные обходы (НГП, каскад
+        // комиссий, структура) уйдут в петлю.
+        if ($this->isDescendantOf((int) $mentor->id, (int) $consultant->id)) {
+            return response()->json([
+                'message' => 'Этот партнёр находится в вашей структуре — его нельзя выбрать наставником.',
+            ], 422);
+        }
+
+        $oldInviter = $consultant->inviter;
+        $oldInviterName = $consultant->inviterName;
+
+        DB::transaction(function () use ($consultant, $mentor, $request, $oldInviter, $oldInviterName) {
+            DB::table('consultant')->where('id', $consultant->id)->update([
+                'inviter' => $mentor->id,
+                'inviterName' => $mentor->personName,
+            ]);
+            // Тот же формат, что у ручных перестановок и авто-переносов —
+            // иначе смена «теряется» в Истории перестановок (кейс Сальковой).
+            DB::table('changeConsultantInviterLog')->insert([
+                'id'             => LegacyId::next('changeConsultantInviterLog'),
+                'dateCreated'    => now(),
+                'webUser'        => $request->user()?->id,
+                'consultant'     => $consultant->id,
+                'consultantName' => $consultant->personName,
+                'inviterOld'     => $oldInviter,
+                'inviterOldName' => $oldInviterName,
+                'inviterNew'     => $mentor->id,
+                'inviterNewName' => $mentor->personName,
+                'triggeredBy'    => 'Выбор наставника при самовосстановлении',
+            ]);
+        });
+
+        // Смена аплайна меняет цепочку у всего поддерева — пересчёт открытых
+        // периодов, как в ручной перестановке.
+        \App\Jobs\RecomputeTransferChainJob::dispatch('partner', (int) $consultant->id);
+
+        return response()->json([
+            'message' => 'Наставник изменён: ' . $mentor->personName,
+            'inviterName' => $mentor->personName,
+            'changed' => true,
+        ]);
+    }
+
+    /**
+     * Открыт ли шаг выбора наставника: партнёр только что восстановился
+     * (status Зарегистрирован, документы ещё не приняты) и с момента
+     * восстановления прошло не больше часа. Час — запас на «отвлёкся, вернулся
+     * дочитать документы», но не бессрочное право менять аплайн.
+     */
+    private function reinstateMentorWindow(Consultant $consultant): bool
+    {
+        if ($consultant->acceptance) {
+            return false; // документы уже приняты — флоу восстановления завершён
+        }
+        if (! $consultant->last_reinstate_at) {
+            return false;
+        }
+
+        return $consultant->last_reinstate_at->gt(now()->subHour());
+    }
+
+    /**
+     * Является ли $candidateId потомком $rootId в структуре (рекурсивный CTE
+     * с ограничением глубины — защита от уже существующих циклов в legacy).
+     */
+    private function isDescendantOf(int $candidateId, int $rootId): bool
+    {
+        $rows = DB::select(
+            'WITH RECURSIVE down AS (
+                SELECT id, 0 AS depth FROM consultant WHERE inviter = ? AND "dateDeleted" IS NULL
+                UNION ALL
+                SELECT c.id, d.depth + 1
+                FROM consultant c JOIN down d ON c.inviter = d.id
+                WHERE c."dateDeleted" IS NULL AND d.depth < 25
+             )
+             SELECT 1 FROM down WHERE id = ? LIMIT 1',
+            [$rootId, $candidateId]
+        );
+
+        return ! empty($rows);
     }
 
     /**

@@ -524,6 +524,10 @@ const showPaymentsSuspendedBanner = computed(() => {
 // все документы. Скрыто для staff.
 const showOfferDialog = computed(() => {
   if (auth.isStaff) return false;
+  // Восстановление сбрасывает акцепт, поэтому у терминированного оба окна
+  // готовы показаться разом. Акцепт ждёт: сначала возврат и выбор наставника,
+  // потом документы (порядок из ТЗ 2026-08-10).
+  if (showReinstateDialog.value) return false;
   return auth.user?.offerAccepted === false;
 });
 
