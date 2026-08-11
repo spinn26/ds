@@ -537,7 +537,11 @@ const showOfferDialog = computed(() => {
 const terminationInfo = computed(() => auth.user?.termination || {});
 const showReinstateDialog = computed(() => {
   if (auth.isStaff) return false;
-  return terminationInfo.value?.terminated === true;
+  // Терминированный — окно возврата; уже восстановившийся, но не ответивший
+  // про наставника — то же окно сразу на шаге «наставник». Выбор обязателен,
+  // поэтому закрытая вкладка его не пропускает.
+  return terminationInfo.value?.terminated === true
+    || terminationInfo.value?.mentorPending === true;
 });
 // Окно активации: /profile отдаёт дедлайн, а не длину окна, поэтому берём
 // значение из настроек через statusInfo, иначе дефолт устава.

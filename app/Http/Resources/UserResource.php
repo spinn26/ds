@@ -109,6 +109,13 @@ class UserResource extends JsonResource
             'attemptsLeft' => $consultant->reinstatementsLeft(),
             'limit' => \App\Enums\PartnerActivity::selfReinstateLimit(),
             'blockedReason' => $consultant->selfReinstateBlockReason(),
+            // Незакрытый шаг «наставник» после восстановления. Пока true, окно
+            // показывается при каждом входе, а акцепт документов ждёт: выбор
+            // обязателен, закрытая вкладка его не пропускает.
+            'mentorPending' => (bool) ($consultant->reinstate_mentor_pending ?? false),
+            // getAttribute, а не ->inviterName: larastan не видит legacy-колонок
+            // Directual, которых нет в casts() (см. reference_static_analysis).
+            'inviterName' => $consultant->getAttribute('inviterName'),
         ];
     }
 }

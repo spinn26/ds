@@ -679,6 +679,9 @@ class ProfileController extends Controller
         }
 
         if ($data['action'] === 'keep') {
+            $consultant->reinstate_mentor_pending = false;
+            $consultant->save();
+
             return response()->json([
                 'message' => 'Наставник сохранён: ' . ($consultant->inviterName ?: 'без наставника'),
                 'inviterName' => $consultant->inviterName,
@@ -727,6 +730,8 @@ class ProfileController extends Controller
             DB::table('consultant')->where('id', $consultant->id)->update([
                 'inviter' => $mentor->id,
                 'inviterName' => $mentor->personName,
+                // Ответ получен — шаг закрыт.
+                'reinstate_mentor_pending' => false,
             ]);
             // Тот же формат, что у ручных перестановок и авто-переносов —
             // иначе смена «теряется» в Истории перестановок (кейс Сальковой).
@@ -756,21 +761,17 @@ class ProfileController extends Controller
     }
 
     /**
-     * Открыт ли шаг выбора наставника: партнёр только что восстановился
-     * (status Зарегистрирован, документы ещё не приняты) и с момента
-     * восстановления прошло не больше часа. Час — запас на «отвлёкся, вернулся
-     * дочитать документы», но не бессрочное право менять аплайн.
+     * Открыт ли шаг выбора наставника.
+     *
+     * Единственный признак — серверный флаг, поставленный восстановлением и
+     * снимаемый ОТВЕТОМ партнёра. По времени шаг не истекает: выбор обязателен,
+     * и пока ответа нет, окно показывается при каждом входе. Права менять
+     * аплайн «когда захочется» это не даёт — вне восстановления флаг снят, и
+     * эндпоинт отвечает отказом.
      */
     private function reinstateMentorWindow(Consultant $consultant): bool
     {
-        if ($consultant->acceptance) {
-            return false; // документы уже приняты — флоу восстановления завершён
-        }
-        if (! $consultant->last_reinstate_at) {
-            return false;
-        }
-
-        return $consultant->last_reinstate_at->gt(now()->subHour());
+        return (bool) ($consultant->reinstate_mentor_pending ?? false);
     }
 
     /**

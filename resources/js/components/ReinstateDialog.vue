@@ -2,10 +2,8 @@
   <v-dialog :model-value="open" max-width="620" persistent scrollable>
     <v-card>
       <v-card-title class="d-flex align-center ga-2">
-        <v-icon :color="excluded ? 'error' : 'warning'">
-          {{ excluded ? 'mdi-account-cancel' : 'mdi-account-clock' }}
-        </v-icon>
-        <span>{{ excluded ? 'Статус: Исключён' : 'Участие приостановлено' }}</span>
+        <v-icon :color="titleColor">{{ titleIcon }}</v-icon>
+        <span>{{ title }}</span>
       </v-card-title>
 
       <v-card-text style="max-height: 70vh">
@@ -103,7 +101,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import api from '../api';
 
 const props = defineProps({
@@ -127,8 +125,30 @@ const mentorChoice = ref('keep');
 const refCode = ref('');
 const currentInviter = ref('');
 
+// Партнёр уже восстановился, но про наставника не ответил (закрыл вкладку,
+// перезашёл) — открываем окно сразу на этом шаге.
+watch(() => props.info, (info) => {
+  if (info?.mentorPending) {
+    step.value = 'mentor';
+    if (! currentInviter.value) currentInviter.value = info.inviterName || '';
+  }
+}, { immediate: true, deep: true });
+
 // Исключённому кнопку не показываем: этот статус снимает только поддержка.
 const excluded = computed(() => props.info?.excluded === true);
+
+const title = computed(() => {
+  if (step.value === 'mentor') return 'Выбор наставника';
+  return excluded.value ? 'Статус: Исключён' : 'Участие приостановлено';
+});
+const titleIcon = computed(() => {
+  if (step.value === 'mentor') return 'mdi-account-supervisor';
+  return excluded.value ? 'mdi-account-cancel' : 'mdi-account-clock';
+});
+const titleColor = computed(() => {
+  if (step.value === 'mentor') return 'primary';
+  return excluded.value ? 'error' : 'warning';
+});
 
 async function submit() {
   error.value = '';

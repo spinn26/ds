@@ -744,6 +744,10 @@ class PartnerStatusService
             // покажется само (гейт по offerAccepted в MainLayout) — уже ПОСЛЕ
             // шага выбора наставника, см. ProfileController::reinstateMentor.
             $fresh->acceptance = false;
+            // Шаг «наставник» обязателен: флаг снимет только ответ партнёра
+            // («остаться» / «сменить»), поэтому закрытая вкладка шаг не
+            // пропускает — окно вернётся при следующем входе.
+            $fresh->reinstate_mentor_pending = true;
             $fresh->save();
 
             $trace = $request

@@ -59,6 +59,7 @@ class Consultant extends Model
             'terminationCount' => 'integer',
             'reinstatement_count' => 'integer',
             'reinstate_blocked' => 'boolean',
+            'reinstate_mentor_pending' => 'boolean',
             'last_reinstate_at' => 'datetime',
         ];
     }
