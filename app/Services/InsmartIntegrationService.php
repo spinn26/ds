@@ -314,23 +314,41 @@ class InsmartIntegrationService
                 ->update(['phone' => $phone]);
         }
 
+        $normFio = mb_strtolower(trim(preg_replace('/\s+/u', ' ', $fio)));
+        $fioKnown = $normFio !== '' && $normFio !== 'insmart client';
+
         if ($personIds) {
-            // Только живая карточка: удалённая вернула бы «призрака», и контракт
-            // повис бы на soft-deleted клиенте. Среди нескольких — карточка
-            // текущего партнёра важнее (не перевешиваем клиента в чужую ветку).
-            $existingClient = DB::table('client')->whereIn('person', $personIds)
+            // ⚠ Одна запись person может держать карточки РАЗНЫХ людей (drift
+            // привязок: person 7464 → «Орлов Олег» и «Мусиенко Алина»). Поэтому
+            // мало найти живую карточку — надо не отдать полис чужой:
+            // берём её, только если совпало ФИО застрахованного ИЛИ карточка
+            // принадлежит текущему партнёру (у своего клиента могла смениться
+            // фамилия). Иначе — заводим отдельные person+client.
+            $candidates = DB::table('client')->whereIn('person', $personIds)
                 ->whereNull('dateDeleted')
-                ->orderByRaw('CASE WHEN consultant = ? THEN 0 ELSE 1 END', [$consultantId])
+                ->select('id', 'consultant', 'personName')
                 ->orderBy('id')
-                ->value('id');
-            if ($existingClient) return (int) $existingClient;
+                ->get();
+
+            $sameFio = static fn ($c) => $fioKnown
+                && mb_strtolower(trim(preg_replace('/\s+/u', ' ', (string) $c->personName))) === $normFio;
+
+            // Приоритет: своё ФИО у своего партнёра → своё ФИО → карточка своего партнёра.
+            $pick = $candidates->first(fn ($c) => $sameFio($c) && (int) $c->consultant === $consultantId)
+                ?? $candidates->first($sameFio)
+                ?? $candidates->first(fn ($c) => (int) $c->consultant === $consultantId);
+
+            if ($pick) return (int) $pick->id;
+
+            // Нашли контакт, но все карточки на нём — другие люди: не переиспользуем
+            // и сам person, иначе drift разрастается ещё на одного человека.
+            if ($candidates->isNotEmpty()) $personIds = [];
         }
         $personId = $personIds[0] ?? null;
 
         // Ни по email, ни по телефону не нашли — пробуем по ФИО, иначе интеграция
         // молча плодит вторую карточку на того же человека (частая причина дублей).
-        $normFio = mb_strtolower(trim(preg_replace('/\s+/u', ' ', $fio)));
-        if ($normFio !== '' && $normFio !== 'insmart client') {
+        if ($fioKnown) {
             $byName = DB::table('client')
                 ->whereNull('dateDeleted')
                 ->whereRaw("btrim(lower(regexp_replace(\"personName\", '\\s+', ' ', 'g'))) = ?", [$normFio])
