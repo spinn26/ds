@@ -124,7 +124,7 @@ class AdminQuestionnaireController extends Controller
             ->orderBy('w.lastName')
             ->get();
 
-        $headers = ['ФИО', 'E-mail', 'Телефон', 'Город', 'Заполнено', 'Статус'];
+        $headers = ['ФИО', 'E-mail', 'Телефон', 'Телеграм', 'Город', 'Заполнено', 'Статус'];
         foreach (self::FIELDS as $label) $headers[] = $label;
 
         $cityIds = $dbRows->pluck('city')->filter()->unique()->values()->all();
@@ -138,6 +138,7 @@ class AdminQuestionnaireController extends Controller
                 trim(($r->lastName ?? '') . ' ' . ($r->firstName ?? '') . ' ' . ($r->patronymic ?? '')),
                 $r->email ?? '',
                 $r->phone ?? '',
+                $r->nicTG ?? '',
                 $cityName,
                 $r->questionnaireCompletedAt ?? '',
                 $this->statusLabel($r->partnerActivity ?? null),
@@ -154,7 +155,9 @@ class AdminQuestionnaireController extends Controller
             'Анкеты партнёров',
             $headers,
             $rows,
-            ['dateColumns' => [5]]
+            // 1-based индекс колонки «Заполнено»: сдвинулся с 5 на 6 после
+            // добавления «Телеграм» третьей колонкой.
+            ['dateColumns' => [6]]
         );
     }
 
@@ -217,6 +220,9 @@ class AdminQuestionnaireController extends Controller
             'name' => trim(($r->lastName ?? '') . ' ' . ($r->firstName ?? '') . ' ' . ($r->patronymic ?? '')),
             'email' => $r->email,
             'phone' => $r->phone,
+            // Телеграм — основной канал связи куратора с партнёром, поэтому
+            // рядом с телефоном (запрос 2026-08-11).
+            'telegram' => $r->nicTG,
             'city' => $r->city ? ($cities[$r->city] ?? $r->city) : null,
             'completed_at' => $r->questionnaireCompletedAt,
             'status' => $this->statusLabel($r->partnerActivity ?? null),

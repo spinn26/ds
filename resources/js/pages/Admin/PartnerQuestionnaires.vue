@@ -36,6 +36,17 @@
       <v-data-table-server v-model:items-per-page="perPage" v-model:page="page"
         :items="rows" :headers="headers" :items-length="total" :loading="loading"
         density="comfortable" hover @update:options="loadServer">
+        <!-- Телеграм — рабочий канал куратора, поэтому сразу ссылкой на диалог.
+             В базе ник лежит по-разному: «@nick», «nick», ссылкой — нормализуем. -->
+        <template #item.telegram="{ item }">
+          <a v-if="tgLink(item.telegram)" :href="tgLink(item.telegram)" target="_blank"
+            rel="noopener" class="text-primary text-decoration-underline text-no-wrap">
+            {{ tgHandle(item.telegram) }}
+          </a>
+          <span v-else-if="item.telegram" :title="item.telegram">{{ item.telegram }}</span>
+          <span v-else class="text-medium-emphasis">—</span>
+        </template>
+
         <template #item.status="{ item }">
           <v-chip v-if="item.status" size="x-small" variant="tonal"
             :color="statusColor(item.status)">
@@ -132,10 +143,33 @@ const current = ref(null);
 const snack = ref({ open: false, color: 'success', text: '' });
 function notify(text, color = 'success') { snack.value = { open: true, color, text }; }
 
+// Ник телеграма в базе встречается как «@nick», «nick» и ссылкой
+// (t.me/nick, https://t.me/nick) — приводим к одному виду.
+function tgNick(raw) {
+  return String(raw ?? '').trim()
+    .replace(/^https?:\/\//i, '')
+    .replace(/^t\.me\//i, '')
+    .replace(/^@/, '')
+    .trim();
+}
+function tgHandle(raw) {
+  const nick = tgNick(raw);
+  return nick ? `@${nick}` : '';
+}
+// Ссылку даём только на то, что реально может быть ником телеграма
+// (буквы/цифры/подчёркивание, 5–32 символа). В поле встречается мусор —
+// напр. почта «Volmoldom40.ru@yandex.ru»; её показываем текстом, чтобы
+// куратор видел, что записано, но не кликал в заведомо битую ссылку.
+function tgLink(raw) {
+  const nick = tgNick(raw);
+  return /^[A-Za-z0-9_]{5,32}$/.test(nick) ? `https://t.me/${nick}` : '';
+}
+
 const headers = [
   { title: 'Партнёр', key: 'name', sortable: false },
   { title: 'E-mail', key: 'email', sortable: false },
   { title: 'Телефон', key: 'phone', sortable: false, width: 160 },
+  { title: 'Телеграм', key: 'telegram', sortable: false, width: 150 },
   { title: 'Город', key: 'city', sortable: false, width: 140 },
   { title: 'Статус', key: 'status', sortable: false, width: 150 },
   { title: 'Заполнено', key: 'completed_at', sortable: false, width: 170 },
