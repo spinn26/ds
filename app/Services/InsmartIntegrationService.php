@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Services\CommissionCalculator;
 use App\Support\LegacyId;
+use App\Support\Phone;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -222,10 +223,15 @@ class InsmartIntegrationService
 
         $webUser = null;
         if ($email) {
-            $webUser = DB::table('WebUser')->where('email', $email)->whereNull('dateDeleted')->first();
+            $webUser = DB::table('WebUser')
+                ->whereRaw('lower(btrim(email)) = ?', [mb_strtolower(trim((string) $email))])
+                ->whereNull('dateDeleted')->first();
         }
-        if (! $webUser && $phone) {
-            $webUser = DB::table('WebUser')->where('phone', $phone)->whereNull('dateDeleted')->first();
+        // Телефон — нормализованно (см. Phone): «+7 904 …» и «7904…» это один номер.
+        if (! $webUser && ($normPhone = Phone::norm($phone))) {
+            $webUser = DB::table('WebUser')
+                ->whereRaw(Phone::sql('phone').' = ?', [$normPhone])
+                ->whereNull('dateDeleted')->first();
         }
         if (! $webUser) return $consultantId;
 
@@ -269,6 +275,14 @@ class InsmartIntegrationService
     /**
      * client.person → person.id, поиск по email/phone — в person.
      * Если не нашли — создаём person (личные данные) + client (карточка).
+     *
+     * ⚠ Телефон сверяем НОРМАЛИЗОВАННО (последние 10 цифр, App\Support\Phone):
+     * в базе один номер лежит и как «+7 904 390 46 79», и как «79043904679» —
+     * сравнение строк давало «не найдено» и вебхук создавал дубль карточки.
+     * ⚠ И берём ВСЕХ кандидатов-person сразу (по почте + по телефону), а не
+     * первого: у человека с двумя почтами и одним телефоном живая карточка
+     * может висеть на «втором» person, а поиск по одному id её не видел
+     * (реальный кейс дубля, 11.08.2026).
      */
     private function resolveClient(array $payload, int $consultantId): int
     {
@@ -276,21 +290,42 @@ class InsmartIntegrationService
         $phone = $payload['clientPhone'] ?? $payload['phone'] ?? null;
         $fio = (string) ($payload['clientFio'] ?? $payload['insurant'] ?? 'Insmart Client');
 
-        // Поиск в person → найти client по этому person.
-        $personId = null;
+        // Поиск в person → найти client по этим person.
+        $personIds = [];
         if ($email) {
-            $personId = DB::table('person')->where('email', $email)->value('id');
+            $personIds = DB::table('person')
+                ->whereRaw('lower(btrim(email)) = ?', [mb_strtolower(trim((string) $email))])
+                ->pluck('id')->all();
         }
-        if (! $personId && $phone) {
-            $personId = DB::table('person')->where('phone', $phone)->value('id');
+        if ($normPhone = Phone::norm($phone)) {
+            $byPhone = DB::table('person')
+                ->whereRaw(Phone::sql('phone').' = ?', [$normPhone])
+                ->pluck('id')->all();
+            $personIds = array_merge($personIds, $byPhone);
         }
-        if ($personId) {
+        $personIds = array_values(array_unique(array_map('intval', $personIds)));
+
+        // Нашли человека по почте, а телефона у него не записано — дописываем.
+        // Иначе следующий полис с другой почтой того же клиента снова не найдёт
+        // совпадения и создаст дубль.
+        if ($personIds && $normPhone) {
+            DB::table('person')->whereIn('id', $personIds)
+                ->where(fn ($q) => $q->whereNull('phone')->orWhere('phone', ''))
+                ->update(['phone' => $phone]);
+        }
+
+        if ($personIds) {
             // Только живая карточка: удалённая вернула бы «призрака», и контракт
-            // повис бы на soft-deleted клиенте.
-            $existingClient = DB::table('client')->where('person', $personId)
-                ->whereNull('dateDeleted')->value('id');
+            // повис бы на soft-deleted клиенте. Среди нескольких — карточка
+            // текущего партнёра важнее (не перевешиваем клиента в чужую ветку).
+            $existingClient = DB::table('client')->whereIn('person', $personIds)
+                ->whereNull('dateDeleted')
+                ->orderByRaw('CASE WHEN consultant = ? THEN 0 ELSE 1 END', [$consultantId])
+                ->orderBy('id')
+                ->value('id');
             if ($existingClient) return (int) $existingClient;
         }
+        $personId = $personIds[0] ?? null;
 
         // Ни по email, ни по телефону не нашли — пробуем по ФИО, иначе интеграция
         // молча плодит вторую карточку на того же человека (частая причина дублей).
