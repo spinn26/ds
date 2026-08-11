@@ -3585,7 +3585,9 @@ class AdminDataController extends Controller
         // у части клиентов там пусто, и Почта/Телефон показывались «—», хотя на
         // карточке клиента (из person) они есть. Берём с фолбэком на person.
         $emailExpr = "lower(btrim(coalesce(nullif(c.email, ''), p.email)))";
-        $phoneExpr = "regexp_replace(coalesce(nullif(c.phone, ''), p.phone, ''), '[^0-9]', '', 'g')";
+        // Телефон — ПОСЛЕДНИЕ 10 ЦИФР (канон App\Support\Phone): иначе «+7 904…»
+        // и «8 904…» это разные группы, и половина дублей по номеру не видна.
+        $phoneExpr = "right(regexp_replace(coalesce(nullif(c.phone, ''), p.phone, ''), '[^0-9]', '', 'g'), 10)";
         $expr = match ($by) {
             'email' => $emailExpr,
             'phone' => $phoneExpr,
