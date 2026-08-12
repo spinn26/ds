@@ -1952,10 +1952,6 @@ class AdminDataController extends Controller
             ->limit($this->paginationPerPage($request))
             ->get();
 
-        // person сам по себе больше не нужен — контакты берём из карточки.
-        // Ids оставляем: по ним считается флаг «клиент является партнёром».
-        $personIds = $rows->pluck('person')->filter()->unique();
-
         // Batch count contracts per client
         $clientIds = $rows->pluck('id')->filter()->unique();
         $contractCounts = $clientIds->isNotEmpty()
@@ -1965,10 +1961,16 @@ class AdminDataController extends Controller
                 ->pluck('cnt', 'client')
             : collect();
 
-        // Batch check which persons are also partners
-        $personPartners = $personIds->isNotEmpty()
-            ? DB::table('consultant')->whereIn('person', $personIds)->whereNull('dateDeleted')
-                ->pluck('person')->unique()->flip()
+        // Признак «клиент является партнёром» — по явной связи
+        // client.partner_consultant_id (заполняет clients:link-partners).
+        // Прежний способ — совпадение client.person = consultant.person —
+        // снят: id person разошлись при консолидации Directual, часть пар вела
+        // на другого человека, а у большинства партнёров person пуст и признак
+        // не определялся вовсе. Живость партнёра всё равно проверяем.
+        $partnerIds = $rows->pluck('partner_consultant_id')->filter()->unique();
+        $livePartners = $partnerIds->isNotEmpty()
+            ? DB::table('consultant')->whereIn('id', $partnerIds)->whereNull('dateDeleted')
+                ->pluck('id')->flip()
             : collect();
 
         // Batch load consultant names + статус (квалификация) — оператору
@@ -1982,7 +1984,7 @@ class AdminDataController extends Controller
                 ->get()->keyBy('id')
             : collect();
 
-        $clients = $rows->map(function ($c) use ($contractCounts, $personPartners, $consultantInfo) {
+        $clients = $rows->map(function ($c) use ($contractCounts, $livePartners, $consultantInfo) {
                 $cInfo = $c->consultant ? ($consultantInfo[$c->consultant] ?? null) : null;
 
                 return [
@@ -1999,7 +2001,10 @@ class AdminDataController extends Controller
                     'dateCreated' => $c->dateCreated,
                     'workSince' => $c->workSince,
                     'contractCount' => $contractCounts[$c->id] ?? 0,
-                    'isPartner' => $c->person ? isset($personPartners[$c->person]) : false,
+                    'isPartner' => $c->partner_consultant_id
+                        ? isset($livePartners[$c->partner_consultant_id])
+                        : false,
+                    'partnerConsultantId' => $c->partner_consultant_id,
                     'comment' => $c->comment,
                     // Клиент ВЛАДЕЕТ контактами — фолбэк на person убран
                     // (2026-08-12). Он подставлял чужие почту/телефон, когда
