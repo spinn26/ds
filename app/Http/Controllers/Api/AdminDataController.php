@@ -1925,11 +1925,9 @@ class AdminDataController extends Controller
             ->limit($this->paginationPerPage($request))
             ->get();
 
-        // Batch load person data
+        // person сам по себе больше не нужен — контакты берём из карточки.
+        // Ids оставляем: по ним считается флаг «клиент является партнёром».
         $personIds = $rows->pluck('person')->filter()->unique();
-        $persons = $personIds->isNotEmpty()
-            ? DB::table('person')->whereIn('id', $personIds)->get()->keyBy('id')
-            : collect();
 
         // Batch count contracts per client
         $clientIds = $rows->pluck('id')->filter()->unique();
@@ -1957,8 +1955,7 @@ class AdminDataController extends Controller
                 ->get()->keyBy('id')
             : collect();
 
-        $clients = $rows->map(function ($c) use ($persons, $contractCounts, $personPartners, $consultantInfo) {
-                $person = $c->person ? ($persons[$c->person] ?? null) : null;
+        $clients = $rows->map(function ($c) use ($contractCounts, $personPartners, $consultantInfo) {
                 $cInfo = $c->consultant ? ($consultantInfo[$c->consultant] ?? null) : null;
 
                 return [
@@ -1977,11 +1974,20 @@ class AdminDataController extends Controller
                     'contractCount' => $contractCounts[$c->id] ?? 0,
                     'isPartner' => $c->person ? isset($personPartners[$c->person]) : false,
                     'comment' => $c->comment,
-                    // Клиент владеет контактами; person — историч. фолбэк.
-                    'email' => $c->email ?? $person?->email ?? null,
-                    'phone' => $c->phone ?? $person?->phone ?? null,
-                    'birthDate' => $c->birthDate ?? $person?->birthDate ?? null,
-                    'city' => $c->city ?? $person?->city ?? null,
+                    // Клиент ВЛАДЕЕТ контактами — фолбэк на person убран
+                    // (2026-08-12). Он подставлял чужие почту/телефон, когда
+                    // client.person указывал на другого человека: после
+                    // переномерации person при консолидации Directual таких
+                    // карточек было 176, и оператор видел в карточке партнёра
+                    // контакты постороннего клиента.
+                    // Перед снятием контакты перенесены в сами карточки
+                    // (135 из Directual + 127 из корректно привязанных person);
+                    // на фолбэке оставались только 12 карточек, и все — с чужой
+                    // привязкой, то есть показывали заведомо не те данные.
+                    'email' => $c->email ?? null,
+                    'phone' => $c->phone ?? null,
+                    'birthDate' => $c->birthDate ?? null,
+                    'city' => $c->city ?? null,
                 ];
             });
 
