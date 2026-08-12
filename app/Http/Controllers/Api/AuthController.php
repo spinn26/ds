@@ -13,6 +13,7 @@ use App\Models\Client;
 use App\Models\Consultant;
 use App\Models\User;
 use App\Services\PartnerAcceptanceService;
+use App\Support\Phone;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -105,17 +106,45 @@ class AuthController extends Controller
             }
         }
 
+        // Телефон сверяем по ПОСЛЕДНИМ 10 ЦИФРАМ (App\Support\Phone) — тот же
+        // канон, что в интеграции Insmart. Прежний вариант чистил цифры только
+        // у ВВОДА и искал их LIKE-ом в сырой колонке, где номер лежит
+        // отформатированным («+7 937 286 03 66»), — совпадения не было никогда,
+        // и проверка молча пропускала любой дубль. Так завелись два Булюхиных:
+        // один телефон, две почты, опечатка в имени (26.06 и 29.06.2026).
         if ($request->filled('phone')) {
-            $phone = preg_replace('/[^0-9]/', '', $request->input('phone'));
-            if ($phone) {
-                $existingByPhone = User::where('phone', 'like', "%{$phone}%")->first();
-                if ($existingByPhone && $existingByPhone->id !== ($existingUser->id ?? null)) {
+            $normPhone = Phone::norm($request->input('phone'));
+            if ($normPhone) {
+                $existingByPhone = User::whereRaw(Phone::sql('phone') . ' = ?', [$normPhone])
+                    ->when($existingUser, fn ($q) => $q->where('id', '!=', $existingUser->id))
+                    ->first();
+                if ($existingByPhone) {
                     return response()->json([
                         'duplicate' => true,
                         'type' => 'phone',
                         'message' => 'Пользователь с таким номером телефона уже существует.',
                     ]);
                 }
+            }
+        }
+
+        // ФИО не проверялось вовсе: опечатка в имени («Аоександр») обходила и
+        // его. Полного совпадения достаточно — однофамильцы с разными именами
+        // сюда не попадают, а решение всё равно за человеком: это подсказка на
+        // шаге «Далее», регистрацию она не блокирует.
+        $fio = trim(implode(' ', array_filter([
+            $request->input('lastName'), $request->input('firstName'), $request->input('patronymic'),
+        ])));
+        if ($fio !== '') {
+            $existingByFio = Consultant::whereRaw('btrim(lower("personName")) = ?', [mb_strtolower($fio)])
+                ->whereNull('dateDeleted')
+                ->first(['id', 'personName']);
+            if ($existingByFio) {
+                return response()->json([
+                    'duplicate' => true,
+                    'type' => 'fio',
+                    'message' => 'Партнёр с таким ФИО уже зарегистрирован. Если это вы — войдите в кабинет; если однофамилец — обратитесь в поддержку.',
+                ]);
             }
         }
 

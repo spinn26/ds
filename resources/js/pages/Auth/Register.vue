@@ -350,7 +350,14 @@ async function nextStep() {
   }
   loading.value = true;
   try {
-    const { data } = await api.post('/auth/check-duplicates', { email: form.value.email, phone: form.value.phone });
+    // ФИО шлём вместе с почтой и телефоном: дубль ловится по любому из трёх.
+    const { data } = await api.post('/auth/check-duplicates', {
+      email: form.value.email,
+      phone: form.value.phone,
+      lastName: form.value.lastName,
+      firstName: form.value.firstName,
+      patronymic: form.value.patronymic,
+    });
     if (data.duplicate) { error.value = data.message; return; }
     step.value = 2;
   } catch (e) {

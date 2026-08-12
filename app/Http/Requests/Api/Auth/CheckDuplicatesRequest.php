@@ -17,6 +17,11 @@ class CheckDuplicatesRequest extends FormRequest
             'email' => ['required', 'email'],
             'phone' => ['nullable', 'string'],
             'refCode' => ['nullable', 'string'],
+            // ФИО — для сверки «партнёр с таким именем уже есть». Необязательные:
+            // эндпоинт зовут и до заполнения имени.
+            'lastName' => ['nullable', 'string', 'max:255'],
+            'firstName' => ['nullable', 'string', 'max:255'],
+            'patronymic' => ['nullable', 'string', 'max:255'],
         ];
     }
 }
