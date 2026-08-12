@@ -25,6 +25,20 @@ class RestrictHeadWrites
     /** Роли, при которых head-гард не активен — права от другой staff-роли. */
     private const STAFF_OVERRIDES = ['admin', 'backoffice', 'finance', 'calculations', 'corrections'];
 
+    /**
+     * Секции, где право на запись выдаётся точечно через «Группы и права» и
+     * этот гард не должен мешать. Общий read-only для head сохраняется: сюда
+     * попадает только то, что осознанно открыли руководителю.
+     *
+     * Работает в связке с `permission:<section>,<level>` на самом маршруте —
+     * гард пропускает запрос, а уровень доступа проверяет CheckPermission.
+     */
+    private const SECTION_EXCEPTIONS = ['news'];
+
+    public function __construct(private \App\Services\PermissionResolverService $resolver)
+    {
+    }
+
     public function handle(Request $request, Closure $next): Response
     {
         $user = $request->user();
@@ -45,8 +59,42 @@ class RestrictHeadWrites
             return $next($request);
         }
 
+        // Исключение: маршрут закрыт секционным правом из SECTION_EXCEPTIONS и
+        // право у ролей есть — значит доступ выдан осознанно в «Группах и
+        // правах». Уровень (edit/full) дальше проверит CheckPermission.
+        if ($this->hasSectionException($request, $roles)) {
+            return $next($request);
+        }
+
         return response()->json([
             'message' => 'У роли «Руководитель» нет прав на изменение данных — только просмотр.',
         ], 403);
+    }
+
+    /**
+     * На маршруте висит `permission:<section>,<level>` с секцией-исключением,
+     * и роли пользователя дают нужный уровень.
+     *
+     * @param array<string> $roles
+     */
+    private function hasSectionException(Request $request, array $roles): bool
+    {
+        foreach ($request->route()?->gatherMiddleware() ?? [] as $middleware) {
+            if (! is_string($middleware) || ! str_starts_with($middleware, 'permission:')) {
+                continue;
+            }
+            [$section, $level] = array_pad(
+                explode(',', substr($middleware, strlen('permission:'))), 2, 'edit'
+            );
+            if (! in_array($section, self::SECTION_EXCEPTIONS, true)) {
+                continue;
+            }
+            $ok = $level === 'full'
+                ? $this->resolver->canFull($roles, $section)
+                : $this->resolver->canEdit($roles, $section);
+            if ($ok) return true;
+        }
+
+        return false;
     }
 }

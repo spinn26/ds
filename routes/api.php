@@ -622,12 +622,6 @@ Route::prefix('v1')->group(function () {
         Route::post('/admin/transaction-import', [\App\Http\Controllers\Api\TransactionImportController::class, 'import'])->middleware(['role:admin,calculations', 'throttle:30,1']);
         Route::post('/admin/transaction-import/from-sheets', [\App\Http\Controllers\Api\TransactionImportController::class, 'importFromSheets'])->middleware(['role:admin,calculations', 'throttle:30,1']);
 
-        // News CRUD (admin)
-        Route::get('/admin/news', [\App\Http\Controllers\Api\WorkspaceController::class, 'newsList']);
-        Route::post('/admin/news', [\App\Http\Controllers\Api\WorkspaceController::class, 'createNews']);
-        Route::put('/admin/news/{id}', [\App\Http\Controllers\Api\WorkspaceController::class, 'updateNews']);
-        Route::delete('/admin/news/{id}', [\App\Http\Controllers\Api\WorkspaceController::class, 'deleteNews']);
-
         // Roadmap CRUD (admin) — публичный list лежит в начале файла без auth.
         Route::get('/admin/roadmap', [\App\Http\Controllers\Api\RoadmapController::class, 'adminIndex']);
         Route::post('/admin/roadmap', [\App\Http\Controllers\Api\RoadmapController::class, 'store']);
@@ -791,6 +785,16 @@ Route::prefix('v1')->group(function () {
         Route::post('/admin/references/{catalog}', [\App\Http\Controllers\Api\AdminReferenceController::class, 'store']);
         Route::put('/admin/references/{catalog}/{id}', [\App\Http\Controllers\Api\AdminReferenceController::class, 'update']);
         Route::delete('/admin/references/{catalog}/{id}', [\App\Http\Controllers\Api\AdminReferenceController::class, 'destroy']);
+
+        // News CRUD — секция прав «Новости и объявления» (config/permissions.php).
+        // Раньше писать могли только роли с общим write-доступом: у чистого
+        // head любой POST резал RestrictHeadWrites. Теперь право выдаётся
+        // точечно в «Группах и правах», а гард пропускает запись при явном
+        // permission-мидлваре (см. RestrictHeadWrites::SECTION_EXCEPTIONS).
+        Route::get('/admin/news', [\App\Http\Controllers\Api\WorkspaceController::class, 'newsList']);
+        Route::post('/admin/news', [\App\Http\Controllers\Api\WorkspaceController::class, 'createNews'])->middleware('permission:news,edit');
+        Route::put('/admin/news/{id}', [\App\Http\Controllers\Api\WorkspaceController::class, 'updateNews'])->middleware('permission:news,edit');
+        Route::delete('/admin/news/{id}', [\App\Http\Controllers\Api\WorkspaceController::class, 'deleteNews'])->middleware('permission:news,full');
 
         // Admin Contests CRUD
         Route::get('/admin/contests', [\App\Http\Controllers\Api\AdminContestController::class, 'index']);

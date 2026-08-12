@@ -2,7 +2,7 @@
   <div>
     <PageHeader title="Новости и объявления" icon="mdi-newspaper">
       <template #actions>
-        <v-btn color="primary" prepend-icon="mdi-plus" @click="openCreate">Добавить</v-btn>
+        <v-btn v-if="canEdit('news')" color="primary" prepend-icon="mdi-plus" @click="openCreate">Добавить</v-btn>
       </template>
     </PageHeader>
 
@@ -26,7 +26,8 @@
           <span class="text-body-2">{{ value?.length > 80 ? value.slice(0, 80) + '...' : value }}</span>
         </template>
         <template #item.actions="{ item }">
-          <ActionsCell @edit="openEdit(item)" @delete="confirmDelete(item)" />
+          <ActionsCell :editable="canEdit('news')" :deletable="canFull('news')"
+                       @edit="openEdit(item)" @delete="confirmDelete(item)" />
         </template>
         <template #no-data>
           <EmptyState message="Нет новостей" icon="mdi-newspaper-variant-outline" />
@@ -72,6 +73,7 @@ import {
   PageHeader, DialogShell, StatusChip, BooleanCell, ActionsCell, FormErrors, RichTextEditor, ColumnVisibilityMenu, EmptyState,
 } from '../../components';
 import { useCrud } from '../../composables/useCrud';
+import { usePermissions } from '../../composables/usePermissions';
 import { fmtDate } from '../../composables/useDesign';
 
 const {
@@ -107,6 +109,8 @@ const headers = [
   { title: 'Дата', key: 'created_at', width: 120 },
   { title: '', key: 'actions', sortable: false, width: 80 },
 ];
+
+const { canEdit, canFull } = usePermissions();
 
 const columnVisible = ref({});
 const visibleHeaders = computed(() => headers.filter(h => columnVisible.value[h.key] !== false));

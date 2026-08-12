@@ -55,6 +55,7 @@ return [
         ['key' => 'reports-access',          'label' => 'Доступность отчётов'],
         ['key' => 'instructions',            'label' => 'Инструкции / База знаний'],
         ['key' => 'contests',                'label' => 'Конкурсы и события'],
+        ['key' => 'news',                    'label' => 'Новости и объявления'],
         ['key' => 'permissions',             'label' => 'Группы и права'],
         ['key' => 'owner-dashboard',         'label' => 'Дашборд руководителя'],
         ['key' => 'sales-matrix',            'label' => 'Матрица продаж'],

@@ -106,6 +106,9 @@ const routes = [
             { path: 'manage/funnel', redirect: '/manage/owner-dashboard' },
             { path: 'manage/cohorts', component: () => import('../pages/Admin/Cohorts.vue'), meta: { staff: true } },
             { path: 'manage/contests', component: () => import('../pages/Admin/Contests.vue'), meta: { staff: true } },
+            // Новости — тот же компонент, что в /admin/news: /admin закрыт ролью
+            // admin, а редактором новостей может быть любой staff с правом.
+            { path: 'manage/news', component: () => import('../pages/Admin/News.vue'), meta: { staff: true } },
             { path: 'status', component: () => import('../pages/SystemStatus.vue') },
             { path: 'manage/system-status', component: () => import('../pages/Admin/SystemStatus.vue'), meta: { staff: true, admin: true } },
             { path: 'forbidden', component: () => import('../pages/Forbidden.vue') },

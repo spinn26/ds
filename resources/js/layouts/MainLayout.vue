@@ -1072,6 +1072,7 @@ const baseMenuItems = [
   { group: 'Прочее', adminSection: 'products' },
   { label: 'Продукты', icon: 'mdi-package-variant-closed', path: '/manage/products', adminSection: 'products' },
   { label: 'Конкурсы и события', icon: 'mdi-trophy', path: '/manage/contests', adminSection: 'contests' },
+  { label: 'Новости', icon: 'mdi-newspaper', path: '/manage/news', adminSection: 'news' },
   { label: 'Аналитика чата', icon: 'mdi-chart-box-outline', path: '/manage/chat/analytics', adminSection: 'chat-analytics' },
   { label: 'Отчёты', icon: 'mdi-file-chart', path: '/manage/reports', adminSection: 'reports' },
   { label: 'Справочники для расчёта', icon: 'mdi-currency-usd', path: '/manage/currencies', adminSection: 'currencies' },

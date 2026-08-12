@@ -397,6 +397,7 @@ function roleColor(r) {
     calculations: 'brown',
     corrections: 'amber',
     invest: 'cyan',
+    content: 'indigo',
     consultant: 'green',
   }[r]) || 'grey';
 }
