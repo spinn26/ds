@@ -20,7 +20,9 @@ use Illuminate\Support\Facades\DB;
  */
 class RealignClientPerson extends Command
 {
-    protected $signature = 'clients:realign-person {--dry-run : показать план без изменений}';
+    protected $signature = 'clients:realign-person
+        {--dry-run : показать план без изменений}
+        {--with-duplicates : брать и случаи с несколькими кандидатами по ФИО, если все они — ДУБЛИ одного человека}';
 
     protected $description = 'Выровнять client.person по ФИО (контакты клиентов сейчас чужие)';
 
@@ -47,12 +49,61 @@ class RealignClientPerson extends Command
            OR m.cur_person <> m.new_person
         SQL;
 
+    /**
+     * Расширенный случай (--with-duplicates): по ФИО нашлось НЕСКОЛЬКО person,
+     * но все они — дубли одного человека, то есть сходятся по почте и телефону
+     * (после нормализации: регистр, пробелы, только цифры в номере). Тогда
+     * выбор между ними не влияет на контакты клиента.
+     *
+     * Тёзок (разные почты/телефоны) НЕ трогаем — там нужен человек.
+     * Из дублей берём «самого заполненного»: сначала с почтой, потом с
+     * телефоном, при равенстве — меньший id (он же старший, на него обычно
+     * ссылается партнёрская запись).
+     */
+    private const DUPLICATE_CANDIDATES_SQL = <<<'SQL'
+        WITH cand AS (
+            SELECT cl.id AS client_id, cl.person AS cur_person, p.id AS person_id,
+                   lower(btrim(coalesce(p.email,''))) AS norm_email,
+                   regexp_replace(coalesce(p.phone,''), '\D', '', 'g') AS norm_phone,
+                   (nullif(btrim(coalesce(p.email,'')),'') IS NOT NULL)::int AS has_email,
+                   (nullif(btrim(coalesce(p.phone,'')),'') IS NOT NULL)::int AS has_phone
+            FROM client cl
+            JOIN person p
+              ON btrim(lower(p."lastName" || ' ' || p."firstName" || ' ' || coalesce(p.patronymic,'')))
+               = btrim(lower(cl."personName"))
+            WHERE cl."dateDeleted" IS NULL AND cl."personName" IS NOT NULL
+        ), grouped AS (
+            SELECT client_id, cur_person,
+                   count(*) AS cnt,
+                   count(DISTINCT nullif(norm_email,'')) AS emails,
+                   count(DISTINCT nullif(norm_phone,'')) AS phones
+            FROM cand GROUP BY client_id, cur_person
+        ), same_person AS (
+            SELECT client_id, cur_person FROM grouped
+            WHERE cnt > 1 AND emails <= 1 AND phones <= 1
+        ), best AS (
+            SELECT DISTINCT ON (c.client_id) c.client_id, c.cur_person, c.person_id AS new_person
+            FROM cand c JOIN same_person s ON s.client_id = c.client_id
+            ORDER BY c.client_id, c.has_email DESC, c.has_phone DESC, c.person_id
+        )
+        SELECT client_id, cur_person, new_person FROM best
+        WHERE cur_person IS NULL OR cur_person <> new_person
+        SQL;
+
     public function handle(): int
     {
         $dry = (bool) $this->option('dry-run');
 
+        $withDuplicates = (bool) $this->option('with-duplicates');
+
         $rows = DB::select(self::CANDIDATES_SQL);
         $this->info(($dry ? '[DRY-RUN] ' : '') . 'Клиентов к перепривязке (ровно 1 совпадение по ФИО): ' . count($rows));
+
+        $dupRows = [];
+        if ($withDuplicates) {
+            $dupRows = DB::select(self::DUPLICATE_CANDIDATES_SQL);
+            $this->info('  + несколько кандидатов, но все — дубли одного человека: ' . count($dupRows));
+        }
 
         // Диагностика по остальным.
         $stats = DB::selectOne(<<<'SQL'
@@ -68,7 +119,11 @@ class RealignClientPerson extends Command
             SQL);
         $this->line("  не трогаю: без совпадения ФИО — {$stats->no_match}, неоднозначных (2+) — {$stats->ambiguous}");
 
-        if ($dry || ! $rows) {
+        if ($withDuplicates) {
+            $this->line('  из «неоднозначных» останутся нетронутыми только настоящие тёзки (разные почта/телефон).');
+        }
+
+        if ($dry || (! $rows && ! $dupRows)) {
             return self::SUCCESS;
         }
 
@@ -93,6 +148,17 @@ class RealignClientPerson extends Command
             ) m
             WHERE cl.id = m.client_id
             SQL);
+
+        // Дубли — точечным UPDATE по посчитанному плану: пересчитывать тот же
+        // тяжёлый CTE второй раз незачем, а список уже на руках.
+        $affectedDup = 0;
+        foreach ($dupRows as $r) {
+            $affectedDup += DB::table('client')->where('id', $r->client_id)
+                ->update(['person' => $r->new_person, 'dateChanged' => now()]);
+        }
+        if ($withDuplicates) {
+            $this->info("Перепривязано по дублям одного человека: {$affectedDup}.");
+        }
 
         $this->info("Готово. Перепривязано клиентов: {$affected}.");
         $this->warn('⚠ Если выгрузка в Google Sheets включена — прогони sheets:export-platform для обновления контактов.');
