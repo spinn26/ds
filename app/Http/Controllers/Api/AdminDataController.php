@@ -1609,8 +1609,28 @@ class AdminDataController extends Controller
 
         $personName = trim("{$data['lastName']} {$data['firstName']}" . (! empty($data['patronymic']) ? ' ' . $data['patronymic'] : ''));
 
-        DB::transaction(function () use ($client, $data, $personName) {
-            if ($client->person) {
+        // Инвариант: пишем в person ТОЛЬКО если это person того же человека.
+        // У 176 карточек client.person указывает на постороннего (переномерация
+        // person при консолидации Directual), и запись «как раньше» затирала
+        // чужую карточку контакта: сохранил клиента — испортил данные другого
+        // человека, в т.ч. того, на кого смотрит партнёрская запись.
+        // Карточка при этом сохраняется как обычно — оператора не блокируем,
+        // он всё равно не может починить привязку из этой формы.
+        $personIsForeign = false;
+        if ($client->person) {
+            $linked = DB::table('person')->where('id', $client->person)
+                ->first(['lastName', 'firstName', 'patronymic']);
+            $linkedFio = $linked ? trim(mb_strtolower(trim(
+                ($linked->lastName ?? '') . ' ' . ($linked->firstName ?? '') . ' ' . ($linked->patronymic ?? '')
+            ))) : null;
+            // Сверяем со СТАРЫМ именем карточки: при переименовании (исправление
+            // опечатки) person обязан поехать следом, это своя запись.
+            $cardFio = mb_strtolower(trim((string) $client->personName));
+            $personIsForeign = $linkedFio !== null && $linkedFio !== '' && $linkedFio !== $cardFio;
+        }
+
+        DB::transaction(function () use ($client, $data, $personName, $personIsForeign) {
+            if ($client->person && ! $personIsForeign) {
                 DB::table('person')->where('id', $client->person)->update([
                     'firstName' => $data['firstName'],
                     'lastName' => $data['lastName'],
@@ -1652,9 +1672,16 @@ class AdminDataController extends Controller
 
         Audit::log('update', 'client', $id, [
             'consultant' => $data['consultant'],
+            // Видно в истории: карточка сохранена, но связанная person не
+            // тронута, потому что принадлежит другому человеку.
+            'person_skipped_foreign' => $personIsForeign ?: null,
         ]);
 
-        return response()->json(['message' => 'Клиент обновлён']);
+        return response()->json([
+            'message' => $personIsForeign
+                ? 'Клиент обновлён. Карточка привязана к контакту другого человека — связка не тронута, данные сохранены только в карточке.'
+                : 'Клиент обновлён',
+        ]);
     }
 
     /**
