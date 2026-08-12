@@ -516,6 +516,13 @@ Route::prefix('v1')->group(function () {
         // Дубли контрактов: поиск + инструменты (объединить / удалить).
         Route::get('/admin/clients/duplicates', [\App\Http\Controllers\Api\AdminDataController::class, 'clientDuplicates']);
         Route::post('/admin/clients/duplicates/merge', [\App\Http\Controllers\Api\AdminDataController::class, 'mergeClientDuplicates'])->middleware('permission:clients,full');
+
+        // Ручной разбор дублей и кривых связок (/admin/duplicates). Слияние
+        // партнёров двигает контракты и балансы, поэтому уровень full.
+        Route::get('/admin/duplicates/partners', [\App\Http\Controllers\Api\AdminDuplicatesController::class, 'partners'])->middleware('permission:partners,view');
+        Route::post('/admin/duplicates/partners/merge', [\App\Http\Controllers\Api\AdminDuplicatesController::class, 'mergePartners'])->middleware('permission:partners,full');
+        Route::get('/admin/duplicates/clients', [\App\Http\Controllers\Api\AdminDuplicatesController::class, 'clients'])->middleware('permission:clients,view');
+        Route::post('/admin/duplicates/clients/relink', [\App\Http\Controllers\Api\AdminDuplicatesController::class, 'relinkClient'])->middleware('permission:clients,edit');
         Route::post('/admin/clients/duplicates/ignore', [\App\Http\Controllers\Api\AdminDataController::class, 'ignoreClientDuplicates'])->middleware('permission:clients,edit');
         Route::get('/admin/contracts/duplicates', [\App\Http\Controllers\Api\AdminDataController::class, 'contractDuplicates']);
         Route::post('/admin/contracts/duplicates/merge', [\App\Http\Controllers\Api\AdminDataController::class, 'mergeContractDuplicates'])->middleware('permission:contracts,edit');
