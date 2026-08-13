@@ -2,13 +2,9 @@
   <div>
     <PageHeader title="Дубли и связки" icon="mdi-account-multiple-remove" />
 
-    <v-tabs v-model="tab" class="mb-3">
-      <v-tab value="partners">Партнёры<v-chip v-if="partnerGroups.length" size="x-small" class="ms-2" variant="tonal">{{ partnerGroups.length }}</v-chip></v-tab>
-      <v-tab value="clients">Клиенты<v-chip v-if="clientRows.length" size="x-small" class="ms-2" variant="tonal">{{ clientRows.length }}</v-chip></v-tab>
-    </v-tabs>
 
     <!-- ПАРТНЁРЫ -->
-    <div v-if="tab === 'partners'">
+    <div>
       <v-card class="ds-card mb-3 pa-3" elevation="0">
         <div class="d-flex ga-3 align-center flex-wrap">
           <v-btn-toggle v-model="partnerBy" density="compact" color="primary" mandatory
@@ -73,61 +69,6 @@
       </v-card>
     </div>
 
-    <!-- КЛИЕНТЫ -->
-    <div v-else>
-      <v-card class="ds-card mb-3 pa-3" elevation="0">
-        <div class="d-flex ga-3 align-center flex-wrap">
-          <v-text-field v-model="clientSearch" placeholder="ФИО клиента…" density="compact"
-            hide-details variant="outlined" style="max-width:320px"
-            prepend-inner-icon="mdi-magnify" @keyup.enter="loadClients" />
-          <v-btn size="small" variant="tonal" @click="loadClients">Найти</v-btn>
-          <div class="text-caption text-medium-emphasis">
-            Карточка привязана к контакту другого человека. Контакты самой карточки
-            это не затрагивает — только связку.
-          </div>
-        </div>
-      </v-card>
-
-      <v-alert v-if="!loading && !clientRows.length" type="success" variant="tonal" density="compact">
-        Кривых связок не найдено.
-      </v-alert>
-
-      <v-card v-if="clientRows.length" class="ds-card" elevation="0">
-        <v-table density="compact">
-          <thead>
-            <tr>
-              <th>Карточка</th><th>Партнёр</th><th>Контакты карточки</th>
-              <th>Привязана к контакту</th><th>Правильный контакт</th><th></th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="r in clientRows" :key="r.id">
-              <td>{{ r.personName || '—' }}<div class="text-caption text-medium-emphasis">id {{ r.id }}</div></td>
-              <td class="text-caption">{{ r.consultantName || '—' }}</td>
-              <td class="text-caption">{{ r.email || '—' }}<br>{{ r.phone || '—' }}</td>
-              <td class="text-caption">
-                <span class="text-error">{{ r.personName2 }}</span>
-                <div class="text-medium-emphasis">{{ r.personEmail || '—' }}</div>
-              </td>
-              <td style="min-width:240px">
-                <v-select v-if="r.candidates.length" v-model="chosen[r.id]" :items="r.candidates"
-                  item-value="id" density="compact" hide-details variant="outlined"
-                  :item-title="c => `${c.name} · ${c.email || 'без почты'}`"
-                  placeholder="выберите контакт" />
-                <span v-else class="text-caption text-medium-emphasis">кандидатов нет</span>
-              </td>
-              <td class="text-end text-no-wrap">
-                <v-btn size="x-small" variant="tonal" color="primary" class="me-1"
-                  :disabled="!chosen[r.id]" @click="relink(r, chosen[r.id])">Привязать</v-btn>
-                <v-btn size="x-small" variant="text" color="warning"
-                  @click="relink(r, null)">Отвязать</v-btn>
-              </td>
-            </tr>
-          </tbody>
-        </v-table>
-      </v-card>
-    </div>
-
     <!-- Подтверждение слияния -->
     <v-dialog v-model="mergeOpen" max-width="560" persistent>
       <v-card v-if="mergePlan">
@@ -166,13 +107,9 @@ import api from '../../api';
 import PageHeader from '../../components/PageHeader.vue';
 import StatusChip from '../../components/StatusChip.vue';
 
-const tab = ref('partners');
 const loading = ref(false);
 const partnerBy = ref('fio');
 const partnerGroups = ref([]);
-const clientRows = ref([]);
-const clientSearch = ref('');
-const chosen = ref({});
 
 const snack = ref({ open: false, color: 'success', text: '' });
 const notify = (text, color = 'success') => { snack.value = { open: true, color, text }; };
@@ -192,17 +129,6 @@ async function loadPartners() {
     partnerGroups.value = data.data || [];
   } catch (e) {
     notify(e.response?.data?.message || 'Не удалось загрузить дубли партнёров', 'error');
-  }
-  loading.value = false;
-}
-
-async function loadClients() {
-  loading.value = true;
-  try {
-    const { data } = await api.get('/admin/duplicates/clients', { params: { search: clientSearch.value } });
-    clientRows.value = data.data || [];
-  } catch (e) {
-    notify(e.response?.data?.message || 'Не удалось загрузить связки клиентов', 'error');
   }
   loading.value = false;
 }
@@ -246,16 +172,5 @@ async function doMerge() {
   merging.value = false;
 }
 
-async function relink(row, personId) {
-  try {
-    const { data } = await api.post('/admin/duplicates/clients/relink',
-      { clientId: row.id, personId });
-    notify(data.message);
-    clientRows.value = clientRows.value.filter(r => r.id !== row.id);
-  } catch (e) {
-    notify(e.response?.data?.message || 'Не удалось изменить связку', 'error');
-  }
-}
-
-onMounted(() => { loadPartners(); loadClients(); });
+onMounted(() => { loadPartners(); });
 </script>
