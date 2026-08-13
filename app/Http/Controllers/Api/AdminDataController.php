@@ -110,14 +110,14 @@ class AdminDataController extends Controller
             $query->where('inviterName', 'ilike', '%' . $request->inviter_name . '%');
         }
         if ($request->filled('email')) {
-            // Email/Phone лежат на WebUser/person — фильтруем через подзапрос.
+            // Контакты живут на WebUser (у кого есть логин) и в собственных
+            // колонках партнёра — person из поиска убран (2026-08-12): часть
+            // указателей вела на другого человека, и фильтр находил чужих.
             $emailLike = '%' . $request->email . '%';
             $query->where(function ($q) use ($emailLike) {
                 $q->whereIn('webUser', function ($sub) use ($emailLike) {
                     $sub->select('id')->from('WebUser')->where('email', 'ilike', $emailLike);
-                })->orWhereIn('person', function ($sub) use ($emailLike) {
-                    $sub->select('id')->from('person')->where('email', 'ilike', $emailLike);
-                });
+                })->orWhere('email', 'ilike', $emailLike);
             });
         }
         if ($request->filled('phone')) {
@@ -125,9 +125,7 @@ class AdminDataController extends Controller
             $query->where(function ($q) use ($phoneLike) {
                 $q->whereIn('webUser', function ($sub) use ($phoneLike) {
                     $sub->select('id')->from('WebUser')->where('phone', 'ilike', $phoneLike);
-                })->orWhereIn('person', function ($sub) use ($phoneLike) {
-                    $sub->select('id')->from('person')->where('phone', 'ilike', $phoneLike);
-                });
+                })->orWhereRaw("regexp_replace(coalesce(phone,''), '\\D', '', 'g') ilike ?", [$phoneLike]);
             });
         }
 
@@ -158,15 +156,14 @@ class AdminDataController extends Controller
             ? DB::table('WebUser')->whereIn('id', $webUserIds)->get()->keyBy('id')
             : collect();
 
-        // Batch load person data
-        $personIds = $rows->pluck('person')->filter()->unique();
-        $persons = $personIds->isNotEmpty()
-            ? DB::table('person')->whereIn('id', $personIds)->get()->keyBy('id')
-            : collect();
-
-        // Batch check which persons are also clients
-        $personClients = $personIds->isNotEmpty()
-            ? DB::table('client')->whereIn('person', $personIds)->pluck('person')->unique()->flip()
+        // Признак «партнёр является и клиентом» — по явной связи
+        // client.partner_consultant_id (заполняет clients:link-partners).
+        // Прежде считался через общий person: связь оказалась неверной у 30 пар
+        // и не определялась вовсе у партнёров без person.
+        $partnerClients = $rows->isNotEmpty()
+            ? DB::table('client')->whereIn('partner_consultant_id', $rows->pluck('id'))
+                ->whereNull('dateDeleted')
+                ->pluck('partner_consultant_id')->unique()->flip()
             : collect();
 
         // Batch load status titles
@@ -175,10 +172,9 @@ class AdminDataController extends Controller
             ? DB::table('status')->whereIn('id', $statusIds)->pluck('title', 'id')
             : collect();
 
-        $partners = $rows->map(function ($c) use ($webUsers, $persons, $personClients, $statusTitles) {
+        $partners = $rows->map(function ($c) use ($webUsers, $partnerClients, $statusTitles) {
                 $webUser = $c->webUser ? ($webUsers[$c->webUser] ?? null) : null;
-                $personData = $c->person ? ($persons[$c->person] ?? null) : $webUser;
-                $isClient = $c->person ? isset($personClients[$c->person]) : false;
+                $isClient = isset($partnerClients[$c->id]);
                 $platformAccess = $webUser && ! ($webUser->isBlocked ?? false);
 
                 // «Дата смены статуса» (per spec ✅Партнеры §1.2):
@@ -212,9 +208,13 @@ class AdminDataController extends Controller
                     'reinstatementCount' => (int) ($c->reinstatement_count ?? 0),
                     'reinstateLimit' => \App\Enums\PartnerActivity::selfReinstateLimit(),
                     'reinstateBlocked' => (bool) ($c->reinstate_blocked ?? false),
-                    'email' => $personData?->email ?? null,
-                    'phone' => $personData?->phone ?? null,
-                    'birthDate' => $personData?->birthDate ?? null,
+                    // WebUser важнее: он канон для владельцев логина и меняется,
+                    // когда партнёр правит профиль. Собственные колонки — для
+                    // 897 импортированных ФК без логина (перенесены из person
+                    // командой partners:backfill-contacts).
+                    'email' => $webUser?->email ?? $c->email ?? null,
+                    'phone' => $webUser?->phone ?? $c->phone ?? null,
+                    'birthDate' => $webUser?->birthDate ?? $c->birthDate ?? null,
                     'inviterName' => $c->inviterName,
                     'inviterId' => $c->inviter,
                     'isClient' => $isClient,

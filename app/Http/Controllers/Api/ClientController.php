@@ -44,28 +44,29 @@ class ClientController extends Controller
             }
         }
 
-        $hasPersonFilter = $request->filled('email')
-            || $request->filled('birth_date_from')
-            || $request->filled('birth_date_to')
-            || $request->filled('city');
-
-        if ($hasPersonFilter) {
-            $personQuery = DB::table('person')->select('person.id');
-            if ($request->filled('email')) {
-                $personQuery->where('email', 'ilike', '%' . $request->input('email') . '%');
-            }
-            if ($request->filled('birth_date_from')) {
-                $personQuery->where('birthDate', '>=', $request->input('birth_date_from'));
-            }
-            if ($request->filled('birth_date_to')) {
-                $personQuery->where('birthDate', '<=', $request->input('birth_date_to'));
-            }
-            if ($request->filled('city')) {
-                // person.city is text (legacy Directual), city.id is integer — cast on FK side
-                $personQuery->join('city', DB::raw('"city"."id"::text'), '=', 'person.city')
-                    ->where('city.cityNameRu', 'ilike', '%' . $request->input('city') . '%');
-            }
-            $query->whereIn('person', $personQuery->pluck('person.id'));
+        // Фильтры — по СОБСТВЕННЫМ полям карточки. Раньше искали через person,
+        // и партнёр получал в выдаче чужие контакты: указатель мог вести на
+        // другого человека (инцидент 2026-08-12, в админке фолбэк уже снят).
+        if ($request->filled('email')) {
+            $query->where('email', 'ilike', '%' . $request->input('email') . '%');
+        }
+        if ($request->filled('birth_date_from')) {
+            $query->where('birthDate', '>=', $request->input('birth_date_from'));
+        }
+        if ($request->filled('birth_date_to')) {
+            $query->where('birthDate', '<=', $request->input('birth_date_to'));
+        }
+        if ($request->filled('city')) {
+            // client.city хранит и название (форма клиента), и legacy-id города,
+            // поэтому ищем по обоим: по тексту напрямую и по коду через city.
+            $cityLike = '%' . $request->input('city') . '%';
+            $query->where(function ($q) use ($cityLike) {
+                $q->where('city', 'ilike', $cityLike)
+                    ->orWhereIn('city', function ($sub) use ($cityLike) {
+                        $sub->from('city')->select(DB::raw('"id"::text'))
+                            ->where('cityNameRu', 'ilike', $cityLike);
+                    });
+            });
         }
 
         $total = $query->count();
@@ -80,14 +81,7 @@ class ClientController extends Controller
             ->limit($this->paginationPerPage($request))
             ->get();
 
-        // Batch load person data
-        $personIds = $clientRows->pluck('person')->filter()->unique();
-        $persons = $personIds->isNotEmpty()
-            ? DB::table('person')->whereIn('id', $personIds)->get()->keyBy('id')
-            : collect();
-
-        // City-коды берём и из client (собственные), и из person (фолбэк).
-        $cityIds = $persons->pluck('city')->merge($clientRows->pluck('city'))->filter()->unique();
+        $cityIds = $clientRows->pluck('city')->filter()->unique();
         $cities = $cityIds->isNotEmpty()
             ? DB::table('city')->whereIn('id', $cityIds)->pluck('cityNameRu', 'id')
             : collect();
@@ -110,12 +104,11 @@ class ClientController extends Controller
             }
         }
 
-        $items = $clientRows->map(function ($c) use ($persons, $cities, $productsByClient) {
-            $personData = $c->person ? ($persons[$c->person] ?? null) : null;
-            // Клиент владеет своими контактами; person — исторический фолбэк.
-            $cityCode = $c->city ?? ($personData->city ?? null);
-            // Legacy person.city — id города (резолвим через таблицу city),
-            // но форма клиента сохраняет НАЗВАНИЕ (Cyrillic) — тогда берём как есть.
+        $items = $clientRows->map(function ($c) use ($cities, $productsByClient) {
+            // Клиент владеет своими контактами, фолбэк на person снят.
+            $cityCode = $c->city;
+            // Legacy-код города резолвим через таблицу city, но форма клиента
+            // сохраняет НАЗВАНИЕ (Cyrillic) — тогда берём как есть.
             $cityName = $cityCode
                 ? (is_numeric($cityCode) ? ($cities[$cityCode] ?? null) : $cityCode)
                 : null;
@@ -123,10 +116,10 @@ class ClientController extends Controller
             return [
                 'id' => $c->id,
                 'personName' => $c->personName,
-                'birthDate' => $c->birthDate ?? $personData?->birthDate ?? null,
+                'birthDate' => $c->birthDate ?? null,
                 'city' => $cityName,
-                'phone' => $c->phone ?? $personData?->phone ?? null,
-                'email' => $c->email ?? $personData?->email ?? null,
+                'phone' => $c->phone ?? null,
+                'email' => $c->email ?? null,
                 'active' => (bool) $c->active,
                 'products' => $productsByClient[$c->id] ?? [],
             ];
