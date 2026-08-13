@@ -229,8 +229,12 @@ class AdminDuplicatesController extends Controller
             'key' => (string) $key,
             // Один ли это человек: при группировке по контакту ФИО могут
             // разойтись — тогда это семья, а не дубль.
+            // ⚠ Нормализация та же, что у ключа группы в SQL: без схлопывания
+            // повторных пробелов «Николай  Михайлович» и «Николай Михайлович»
+            // попадали в одну группу «по ФИО» и тут же получали ярлык
+            // «ФИО разные» (13.08.2026).
             'sameName' => $items->pluck('personName')
-                ->map(fn ($n) => mb_strtolower(trim((string) $n)))->unique()->count() === 1,
+                ->map(fn ($n) => self::normName((string) $n))->unique()->count() === 1,
             'records' => $items->map(fn ($r) => [
                 'id' => $r->id,
                 'personName' => $r->personName,
@@ -290,6 +294,12 @@ class AdminDuplicatesController extends Controller
         }
 
         return $out;
+    }
+
+    /** ФИО в сравнимый вид: как ключ группы в SQL — регистр, края, кратные пробелы. */
+    private static function normName(string $name): string
+    {
+        return mb_strtolower(trim(preg_replace('/\s+/u', ' ', str_replace("\xC2\xA0", ' ', $name)) ?? ''));
     }
 
     /** Ключ группы для списка «не дубли»: id по возрастанию через дефис. */
