@@ -51,11 +51,15 @@ class BackfillClientContacts extends Command
         // Массовый UPDATE. Без --overwrite заполняем только пустые client-поля
         // (COALESCE(cl.col, p.col)); с --overwrite — берём person как истину.
         $set = $overwrite
-            ? 'email = p.email, phone = p.phone, "birthDate" = p."birthDate", city = p.city'
+            ? 'email = p.email, phone = p.phone, "birthDate" = p."birthDate", city = p.city,
+               "nicTG" = p."nicTG", gender = p.gender, "taxResidency" = p."taxResidency"'
             : 'email = COALESCE(cl.email, p.email),
                phone = COALESCE(cl.phone, p.phone),
                "birthDate" = COALESCE(cl."birthDate", p."birthDate"),
-               city = COALESCE(cl.city, p.city)';
+               city = COALESCE(cl.city, p.city),
+               "nicTG" = COALESCE(cl."nicTG", p."nicTG"),
+               gender = COALESCE(cl.gender, p.gender),
+               "taxResidency" = COALESCE(cl."taxResidency", p."taxResidency")';
 
         $affected = DB::update(<<<SQL
             UPDATE client cl

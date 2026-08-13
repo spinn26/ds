@@ -1609,27 +1609,11 @@ class AdminDataController extends Controller
         }
 
         $clientId = DB::transaction(function () use ($data, $personName) {
-            // Клиент — это legacy person-запись (Directual). client.person →
-            // person.id (своя id-namespace, не WebUser). WebUser не создаём:
-            // у клиента нет login-аккаунта, он живёт только в person.
-            // Если клиент позже станет партнёром, регистрация заведёт
-            // отдельную WebUser-запись.
-            \App\Support\LegacyId::syncSequence('person'); // защита от duplicate person_pkey
-            $personId = DB::table('person')->insertGetId([
-                'firstName' => $data['firstName'],
-                'lastName' => $data['lastName'],
-                'patronymic' => $data['patronymic'] ?? null,
-                'email' => $data['email'] ?? null,
-                'phone' => $data['phone'] ?? null,
-                'birthDate' => $data['birthDate'] ?? null,
-                'city' => $data['city'] ?? null,
-                'role' => 'client',
-                'dateCreated' => now()->toIso8601String(),
-            ]);
-
+            // person больше не заводим (13.08.2026): карточка владеет своими
+            // данными, а лишняя запись-контакт только плодила расхождения —
+            // именно из-за них клиент показывал чужие почту и телефон.
             \App\Support\LegacyId::syncSequence('client');
             return DB::table('client')->insertGetId([
-                'person' => $personId,
                 'personName' => $personName,
                 'consultant' => $data['consultant'],
                 'comment' => $data['comment'] ?? null,
@@ -1667,39 +1651,12 @@ class AdminDataController extends Controller
 
         $personName = trim("{$data['lastName']} {$data['firstName']}" . (! empty($data['patronymic']) ? ' ' . $data['patronymic'] : ''));
 
-        // Инвариант: пишем в person ТОЛЬКО если это person того же человека.
-        // У 176 карточек client.person указывает на постороннего (переномерация
-        // person при консолидации Directual), и запись «как раньше» затирала
-        // чужую карточку контакта: сохранил клиента — испортил данные другого
-        // человека, в т.ч. того, на кого смотрит партнёрская запись.
-        // Карточка при этом сохраняется как обычно — оператора не блокируем,
-        // он всё равно не может починить привязку из этой формы.
-        $personIsForeign = false;
-        if ($client->person) {
-            $linked = DB::table('person')->where('id', $client->person)
-                ->first(['lastName', 'firstName', 'patronymic']);
-            $linkedFio = $linked ? trim(mb_strtolower(trim(
-                ($linked->lastName ?? '') . ' ' . ($linked->firstName ?? '') . ' ' . ($linked->patronymic ?? '')
-            ))) : null;
-            // Сверяем со СТАРЫМ именем карточки: при переименовании (исправление
-            // опечатки) person обязан поехать следом, это своя запись.
-            $cardFio = mb_strtolower(trim((string) $client->personName));
-            $personIsForeign = $linkedFio !== null && $linkedFio !== '' && $linkedFio !== $cardFio;
-        }
-
-        DB::transaction(function () use ($client, $data, $personName, $personIsForeign) {
-            if ($client->person && ! $personIsForeign) {
-                DB::table('person')->where('id', $client->person)->update([
-                    'firstName' => $data['firstName'],
-                    'lastName' => $data['lastName'],
-                    'patronymic' => $data['patronymic'] ?? null,
-                    'email' => $data['email'] ?? null,
-                    'phone' => $data['phone'] ?? null,
-                    'birthDate' => $data['birthDate'] ?? null,
-                    'city' => $data['city'] ?? null,
-                ]);
-            }
-
+        // В person больше не пишем (13.08.2026): данные перенесены в карточку,
+        // и запись во вторую копию только плодила расхождения. До этого правка
+        // клиента могла затереть контакт ДРУГОГО человека — у части карточек
+        // client.person указывает на постороннего после переномерации person
+        // при консолидации Directual.
+        DB::transaction(function () use ($client, $data, $personName) {
             DB::table('client')->where('id', $client->id)->update([
                 'personName' => $personName,
                 'consultant' => $data['consultant'],
@@ -1730,16 +1687,9 @@ class AdminDataController extends Controller
 
         Audit::log('update', 'client', $id, [
             'consultant' => $data['consultant'],
-            // Видно в истории: карточка сохранена, но связанная person не
-            // тронута, потому что принадлежит другому человеку.
-            'person_skipped_foreign' => $personIsForeign ?: null,
         ]);
 
-        return response()->json([
-            'message' => $personIsForeign
-                ? 'Клиент обновлён. Карточка привязана к контакту другого человека — связка не тронута, данные сохранены только в карточке.'
-                : 'Клиент обновлён',
-        ]);
+        return response()->json(['message' => 'Клиент обновлён']);
     }
 
     /**
