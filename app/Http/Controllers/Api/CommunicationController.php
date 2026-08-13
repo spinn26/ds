@@ -88,7 +88,9 @@ class CommunicationController extends Controller
             'category' => $request->input('category'),
             'message' => $request->input('message'),
             'date' => now(),
-            'author' => $consultant->person,
+            // Автор — WebUser: раньше сюда клали id архивной person, которая
+            // удалена вместе с таблицей (13.08.2026).
+            'author' => $consultant->webUser,
             'direction' => 'p2ds',
             'read' => false,
             'WebUser' => $request->user()->id,

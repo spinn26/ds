@@ -78,11 +78,9 @@ class PlatformSheetExporter
                 'sql' => <<<'SQL'
                     SELECT cl.id, cl."dateCreated", cl."dateDeleted", cl."dateChanged",
                         cl."personName" AS client_name, cl."consultantName",
-                        COALESCE(cl.email, p.email) AS email,
-                        COALESCE(cl.phone, p.phone) AS phone,
+                        cl.email, cl.phone,
                         cl.source
                     FROM client cl
-                    LEFT JOIN person p ON p.id = cl.person
                     WHERE (:since::timestamp IS NULL OR cl."dateChanged" > :since2::timestamp)
                     ORDER BY cl.id
                     SQL,
@@ -96,47 +94,18 @@ class PlatformSheetExporter
                     SELECT c.id,
                         act.name AS status,
                         c."personName", c."inviterName", c."participantCode",
-                        COALESCE(wu.email, p.email) AS email,
-                        COALESCE(wu.phone, p.phone) AS phone,
-                        COALESCE(wu.telegram_username, wu."nicTG", p."nicTG") AS tg,
-                        COALESCE(wu."birthDate"::text, p."birthDate"::text) AS birth_date,
+                        COALESCE(wu.email, c.email) AS email,
+                        COALESCE(wu.phone, c.phone) AS phone,
+                        COALESCE(wu.telegram_username, wu."nicTG", c."nicTG") AS tg,
+                        COALESCE(wu."birthDate"::text, c."birthDate") AS birth_date,
                         ctry."countryNameRu" AS country,
-                        p.city AS city
+                        c.city AS city
                     FROM consultant c
-                    LEFT JOIN person p ON p.id = c.person
                     LEFT JOIN "WebUser" wu ON wu.id = c."webUser"
                     LEFT JOIN directory_of_activities act ON act.id = c.activity
                     LEFT JOIN country ctry ON ctry.id = c.country
                     WHERE (:since::timestamp IS NULL OR c."dateChanged" > :since2::timestamp)
                     ORDER BY c.id
-                    SQL,
-            ],
-            // Клиенты, которых НЕ удалось автоматически выровнять по ФИО:
-            // 0 совпадений person по ФИО или 2+ (неоднозначно). Для ручной сверки.
-            'clients_review' => [
-                'title' => 'Клиенты — на проверку',
-                'headers' => ['Айди', 'ФИО клиента (карточка)', 'Текущая person (привязана)',
-                    'Текущая почта', 'Текущий телефон', 'Совпадений по ФИО'],
-                'changedColumn' => 'cl."dateChanged"',
-                'sql' => <<<'SQL'
-                    WITH pc AS (
-                        SELECT btrim(lower("lastName"||' '||"firstName"||' '||coalesce(patronymic,''))) AS nm,
-                               count(*) AS cnt
-                        FROM person
-                        GROUP BY 1
-                    )
-                    SELECT cl.id,
-                        cl."personName" AS card_name,
-                        p."lastName" || ' ' || p."firstName" AS current_person,
-                        p.email, p.phone,
-                        COALESCE(pcnt.cnt, 0) AS name_matches
-                    FROM client cl
-                    LEFT JOIN person p ON p.id = cl.person
-                    LEFT JOIN pc pcnt ON pcnt.nm = btrim(lower(cl."personName"))
-                    WHERE cl."dateDeleted" IS NULL AND cl."personName" IS NOT NULL
-                      AND COALESCE(pcnt.cnt, 0) <> 1
-                      AND (:since::timestamp IS NULL OR cl."dateChanged" > :since2::timestamp)
-                    ORDER BY cl.id
                     SQL,
             ],
         ];

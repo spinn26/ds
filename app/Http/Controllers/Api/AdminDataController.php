@@ -198,7 +198,6 @@ class AdminDataController extends Controller
 
                 return [
                     'id' => $c->id,
-                    'personId' => $c->person,
                     'personName' => $c->personName,
                     'active' => $c->active,
                     'activityName' => $c->activityLabel(),
@@ -934,7 +933,7 @@ class AdminDataController extends Controller
             'participantCode' => 'Реф. код', 'inviter' => 'Пригласивший',
             'activity' => 'Статус активности', 'status' => 'Квалификация',
             'active' => 'Активен', 'acceptance' => 'Согласие',
-            'webUser' => 'WebUser', 'person' => 'Person',
+            'webUser' => 'WebUser',
             'activationDeadline' => 'Дедлайн активации',
             'yearPeriodEnd' => 'Конец годового периода',
             'terminationCount' => 'Кол-во терминаций',
@@ -1973,7 +1972,6 @@ class AdminDataController extends Controller
                 return [
                     'id' => $c->id,
                     'dsId' => $c->idDs,
-                    'personId' => $c->person,
                     'personName' => $c->personName,
                     'active' => (bool) $c->active,
                     'consultantId' => $c->consultant,

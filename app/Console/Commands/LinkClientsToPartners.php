@@ -31,8 +31,8 @@ class LinkClientsToPartners extends Command
 
     /**
      * Кандидаты: живой клиент и живой партнёр с ОДИНАКОВЫМ ФИО, сошедшиеся
-     * хотя бы по одному признаку — общий person, телефон (последние 10 цифр)
-     * или почта. source нужен только для отчёта, на выбор он не влияет.
+     * хотя бы по одному признаку — телефон (последние 10 цифр) или почта.
+     * source нужен только для отчёта, на выбор он не влияет.
      */
     private function candidatesSql(): string
     {
@@ -44,7 +44,6 @@ class LinkClientsToPartners extends Command
                 SELECT cl.id AS client_id,
                        c.id  AS consultant_id,
                        CASE
-                           WHEN c.person IS NOT NULL AND c.person = cl.person THEN 'person'
                            WHEN {$clientPhone} IS NOT NULL AND {$clientPhone} = {$userPhone} THEN 'phone'
                            ELSE 'email'
                        END AS source
@@ -56,8 +55,7 @@ class LinkClientsToPartners extends Command
                 WHERE cl."dateDeleted" IS NULL
                   AND nullif(btrim(coalesce(cl."personName", '')), '') IS NOT NULL
                   AND (
-                        (c.person IS NOT NULL AND c.person = cl.person)
-                     OR ({$clientPhone} IS NOT NULL AND {$clientPhone} = {$userPhone})
+                        ({$clientPhone} IS NOT NULL AND {$clientPhone} = {$userPhone})
                      OR (nullif(btrim(lower(coalesce(cl.email, ''))), '') IS NOT NULL
                          AND btrim(lower(cl.email)) = btrim(lower(coalesce(w.email, ''))))
                   )

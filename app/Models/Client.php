@@ -20,7 +20,7 @@ class Client extends Model
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()
-            ->logOnly(['personName', 'consultant', 'active', 'leadDs', 'person'])
+            ->logOnly(['personName', 'consultant', 'active', 'leadDs'])
             ->logOnlyDirty()
             ->setDescriptionForEvent(fn (string $eventName) => "Client {$eventName}");
     }

@@ -29,7 +29,7 @@ class Consultant extends Model
         return LogOptions::defaults()
             ->logOnly([
                 'personName', 'activity', 'status', 'active', 'acceptance',
-                'participantCode', 'inviter', 'webUser', 'person',
+                'participantCode', 'inviter', 'webUser',
                 'activationDeadline', 'yearPeriodEnd', 'terminationCount',
                 'reinstatement_count', 'reinstate_blocked',
                 'dateActivity', 'dateDeactivity', 'dateDeleted',
@@ -65,11 +65,6 @@ class Consultant extends Model
     }
 
     // --- Relationships ---
-
-    public function person(): BelongsTo
-    {
-        return $this->belongsTo(User::class, 'person');
-    }
 
     public function statusRelation(): BelongsTo
     {
