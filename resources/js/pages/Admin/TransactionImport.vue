@@ -259,7 +259,10 @@
       :tracker="progressTracker"
       :result="progressResult"
       :finished="progressFinished"
-      title="Импорт транзакций"
+      :title="progressLabels.title"
+      :success-label="progressLabels.successLabel"
+      :running-text="progressLabels.runningText"
+      :done-message="progressLabels.doneMessage"
       @finish="onImportFinish"
     />
   </div>
@@ -286,6 +289,11 @@ const progressOpen = ref(false);
 const progressTracker = ref(null);
 const progressResult = ref(null);
 const progressFinished = ref(false);
+// Один прогресс-диалог обслуживает и импорт, и откат — подписи по режиму.
+const progressMode = ref('import');
+const progressLabels = computed(() => progressMode.value === 'rollback'
+  ? { title: 'Откат импорта', successLabel: 'Удалено', runningText: 'Идёт откат…', doneMessage: 'Откат завершён' }
+  : { title: 'Импорт транзакций', successLabel: 'Создано', runningText: 'Идёт импорт…', doneMessage: 'Импорт завершён' });
 const selectedSheet = computed(() => {
   if (!form.value.sheet) return null;
   return sheetNames.value.find(s => (s.name || s) === form.value.sheet) || null;
@@ -387,6 +395,7 @@ async function runSheetsImport() {
   result.value = null;
   progressResult.value = null;
   progressFinished.value = false;
+  progressMode.value = 'import';
   progressTracker.value = 'tx-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
   progressOpen.value = true;
 
@@ -430,6 +439,7 @@ async function runImport() {
   result.value = null;
   progressResult.value = null;
   progressFinished.value = false;
+  progressMode.value = 'import';
   progressTracker.value = 'tx-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
   progressOpen.value = true;
 
@@ -463,6 +473,7 @@ function onImportFinish(payload) {
   progressFinished.value = true;
   importing.value = false;
   calculatingId.value = null;
+  rolling.value = false;
   loadHistory();
 }
 
@@ -487,10 +498,24 @@ async function loadHistory() {
 function confirmRollback(item) { rollbackTarget.value = item; rollbackDialog.value = true; }
 
 async function doRollback() {
+  // Откат async через очередь: 1195 транзакций × удаление комиссий и
+  // каскад = минуты, axios timeout 30s раньше падал как «Нет связи с
+  // сервером» (а откат на бэке при этом продолжался). Бэк отдаёт 202 +
+  // tracker, прогресс — через ImportProgressDialog.
   rolling.value = true;
+  progressResult.value = null;
+  progressFinished.value = false;
   try {
-    await api.post(`/admin/transaction-import/${rollbackTarget.value.id}/rollback`);
+    const { data } = await api.post(`/admin/transaction-import/${rollbackTarget.value.id}/rollback`);
     rollbackDialog.value = false;
+    if (data?.tracker) {
+      progressMode.value = 'rollback';
+      progressTracker.value = data.tracker;
+      progressOpen.value = true;
+      // rolling сбросится в onImportFinish (когда диалог финализируется).
+      return;
+    }
+    // Старый sync-режим (на случай отката бэка).
     loadHistory();
   } catch {}
   rolling.value = false;
@@ -506,6 +531,7 @@ async function runCalculation(item) {
   try {
     const { data } = await api.post(`/admin/transaction-import/${item.id}/calculate`);
     if (data?.tracker) {
+      progressMode.value = 'import';
       progressTracker.value = data.tracker;
       progressOpen.value = true;
       // calculatingId сбросится в onImportFinish (когда диалог финализируется).

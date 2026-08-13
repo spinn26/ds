@@ -28,7 +28,7 @@
           />
           <v-row dense class="mt-3">
             <v-col :cols="hasUpdateSkipped ? 3 : 6">
-              <div class="text-caption text-medium-emphasis">Создано</div>
+              <div class="text-caption text-medium-emphasis">{{ successLabel }}</div>
               <div class="text-h6 text-success">{{ progress.success || 0 }}</div>
             </v-col>
             <v-col v-if="hasUpdateSkipped" cols="3">
@@ -57,7 +57,7 @@
           >
             <div class="font-weight-medium">{{ result?.message }}</div>
             <div class="text-body-2 mt-1">
-              Создано: <b>{{ result?.success ?? 0 }}</b>
+              {{ successLabel }}: <b>{{ result?.success ?? 0 }}</b>
               <template v-if="result?.updated != null"> · Обновлено: <b>{{ result.updated }}</b></template>
               <template v-if="result?.skipped != null"> · Без изменений: <b>{{ result.skipped }}</b></template>
               · Ошибок: <b>{{ result?.errors ?? 0 }}</b>
@@ -82,7 +82,7 @@
       <v-divider />
       <v-card-actions class="pa-3">
         <v-spacer />
-        <v-btn v-if="!finished" variant="text" disabled>Идёт импорт…</v-btn>
+        <v-btn v-if="!finished" variant="text" disabled>{{ runningText }}</v-btn>
         <v-btn v-else variant="flat" color="primary" @click="$emit('update:modelValue', false)">
           Закрыть
         </v-btn>
@@ -101,6 +101,11 @@ const props = defineProps({
   title: { type: String, default: 'Импорт' },
   result: { type: Object, default: null },
   finished: { type: Boolean, default: false },
+  // Диалог переиспользуется не только импортом (ещё откат импорта) —
+  // подписи счётчика и кнопки задаёт вызывающая страница.
+  successLabel: { type: String, default: 'Создано' },
+  runningText: { type: String, default: 'Идёт импорт…' },
+  doneMessage: { type: String, default: 'Импорт завершён' },
 });
 
 const emit = defineEmits(['update:modelValue', 'finish']);
@@ -157,7 +162,7 @@ function startPolling() {
       if (doneByStatus || stalledTicks >= 5) {
         stopPolling();
         emit('finish', {
-          message: data.message || (data.errors > 0 ? 'Импорт завершён с ошибками' : 'Импорт завершён'),
+          message: data.message || (data.errors > 0 ? `${props.doneMessage} с ошибками` : props.doneMessage),
           success: data.success ?? 0,
           updated: data.updated,
           skipped: data.skipped,
