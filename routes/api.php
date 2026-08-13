@@ -524,6 +524,8 @@ Route::prefix('v1')->group(function () {
         // права `partners` есть у бэкофиса, а такое решение принимает владелец.
         Route::get('/admin/duplicates/partners', [\App\Http\Controllers\Api\AdminDuplicatesController::class, 'partners'])->middleware('role:admin');
         Route::post('/admin/duplicates/partners/merge', [\App\Http\Controllers\Api\AdminDuplicatesController::class, 'mergePartners'])->middleware('role:admin');
+        Route::get('/admin/duplicates/clients', [\App\Http\Controllers\Api\AdminDuplicatesController::class, 'clients'])->middleware('role:admin');
+        Route::post('/admin/duplicates/clients/merge', [\App\Http\Controllers\Api\AdminDuplicatesController::class, 'mergeClients'])->middleware('role:admin');
         Route::post('/admin/clients/duplicates/ignore', [\App\Http\Controllers\Api\AdminDataController::class, 'ignoreClientDuplicates'])->middleware('permission:clients,edit');
         Route::get('/admin/contracts/duplicates', [\App\Http\Controllers\Api\AdminDataController::class, 'contractDuplicates']);
         Route::post('/admin/contracts/duplicates/merge', [\App\Http\Controllers\Api\AdminDataController::class, 'mergeContractDuplicates'])->middleware('permission:contracts,edit');

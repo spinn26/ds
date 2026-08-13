@@ -2,9 +2,13 @@
   <div>
     <PageHeader title="Дубли и связки" icon="mdi-account-multiple-remove" />
 
+    <v-tabs v-model="tab" class="mb-3">
+      <v-tab value="partners">Партнёры<v-chip v-if="partnerGroups.length" size="x-small" class="ms-2" variant="tonal">{{ partnerGroups.length }}</v-chip></v-tab>
+      <v-tab value="clients">Клиенты<v-chip v-if="visibleClientGroups.length" size="x-small" class="ms-2" variant="tonal">{{ visibleClientGroups.length }}</v-chip></v-tab>
+    </v-tabs>
 
     <!-- ПАРТНЁРЫ -->
-    <div>
+    <div v-if="tab === 'partners'">
       <v-card class="ds-card mb-3 pa-3" elevation="0">
         <div class="d-flex ga-3 align-center flex-wrap">
           <v-btn-toggle v-model="partnerBy" density="compact" color="primary" mandatory
@@ -125,6 +129,122 @@
       </v-card>
     </div>
 
+
+    <!-- КЛИЕНТЫ -->
+    <div v-else>
+      <v-card class="ds-card mb-3 pa-3" elevation="0">
+        <div class="d-flex ga-3 align-center flex-wrap">
+          <v-btn-toggle v-model="clientBy" density="compact" color="primary" mandatory
+            @update:model-value="loadClients">
+            <v-btn value="fio" size="small">По ФИО</v-btn>
+            <v-btn value="phone" size="small">По телефону</v-btn>
+            <v-btn value="email" size="small">По почте</v-btn>
+          </v-btn-toggle>
+          <v-checkbox-btn v-model="onlySameName" label="только с одинаковым ФИО"
+            density="compact" hide-details class="flex-grow-0" />
+          <div class="text-caption text-medium-emphasis" style="max-width:520px">
+            Один телефон и одна почта сплошь общие у семьи — родитель оформляет полисы
+            на детей. Группа по контакту это сигнал посмотреть, а не команда сливать.
+          </div>
+        </div>
+      </v-card>
+
+      <v-alert v-if="!loading && !visibleClientGroups.length" type="success" variant="tonal" density="compact">
+        Дублей не найдено.
+      </v-alert>
+
+      <v-card v-for="g in visibleClientGroups" :key="g.key" class="ds-card mb-3" elevation="0">
+        <div class="ds-card__head d-flex align-center ga-2">
+          <v-icon size="18" :color="g.sameName ? 'warning' : 'error'">mdi-account-multiple</v-icon>
+          <span class="ds-title-l">{{ g.key }}</span>
+          <v-chip v-if="!g.sameName" size="x-small" color="error" variant="tonal">ФИО разные — вероятно, семья</v-chip>
+        </div>
+        <v-table density="compact">
+          <thead>
+            <tr>
+              <th>Карточка</th><th>Партнёр</th><th>Контакты</th>
+              <th class="text-end">Контракты</th><th class="text-end">Деньги</th><th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="r in g.records" :key="r.id">
+              <td>
+                <div class="d-flex align-center ga-1">
+                  <span class="font-weight-bold">{{ r.id }}</span>
+                  <v-chip v-if="r.isPartner" size="x-small" variant="tonal">ещё и партнёр</v-chip>
+                </div>
+                <div>{{ r.personName || '—' }}</div>
+                <div class="text-caption text-medium-emphasis">
+                  заведена {{ d(r.dateCreated) }}
+                  <template v-if="r.birthDate"> · ДР {{ d(r.birthDate) }}</template>
+                </div>
+              </td>
+              <td class="text-caption">
+                {{ r.consultantName || '— без наставника' }}
+                <div v-if="r.city" class="text-medium-emphasis">{{ r.city }}</div>
+              </td>
+              <td class="text-caption">
+                {{ r.email || '—' }}<br>{{ r.phone || '—' }}
+              </td>
+              <td class="text-end text-caption">
+                {{ r.contracts }}
+                <div class="text-medium-emphasis">
+                  <template v-if="r.lastContractAt">последний {{ d(r.lastContractAt) }}</template>
+                  <template v-else>нет</template>
+                </div>
+              </td>
+              <td class="text-end text-caption">
+                сумма {{ fmt(r.contractsSum) }} ₽
+                <div :class="r.dsIncome ? 'font-weight-bold' : 'text-medium-emphasis'">
+                  доход ДС {{ fmt(r.dsIncome) }} ₽
+                </div>
+                <div class="text-medium-emphasis">транзакций {{ r.transactions }}</div>
+              </td>
+              <td class="text-end">
+                <v-btn size="x-small" variant="tonal" color="primary"
+                  :disabled="g.records.length !== 2"
+                  @click="openClientMerge(g, r)">Оставить эту</v-btn>
+              </td>
+            </tr>
+          </tbody>
+        </v-table>
+        <div v-if="g.records.length !== 2" class="pa-2 text-caption text-medium-emphasis">
+          В группе больше двух карточек — сливайте по одной паре.
+        </div>
+      </v-card>
+    </div>
+
+    <!-- Подтверждение слияния клиентов -->
+    <v-dialog v-model="clientMergeOpen" max-width="560" persistent>
+      <v-card v-if="clientPlan">
+        <v-card-title>Слить карточки клиента?</v-card-title>
+        <v-card-text>
+          <div class="text-body-2 mb-2">
+            Остаётся <strong>id {{ clientPlan.to }}</strong>, удаляется
+            <strong>id {{ clientPlan.from }}</strong>. Контракты, сделки и связи
+            удаляемой карточки перейдут на остающуюся, пустые контакты дозаполнятся.
+          </div>
+          <v-alert v-if="clientPlan.differentNames" type="warning" variant="tonal" density="compact" class="mb-2">
+            У карточек РАЗНОЕ ФИО. Убедитесь, что это один человек, а не родственники
+            с общим телефоном или почтой.
+          </v-alert>
+          <v-alert type="info" variant="tonal" density="compact" class="mb-2">
+            {{ clientPreview?.message }}
+          </v-alert>
+          <div v-if="clientPreview?.moved" class="text-caption">
+            Переносим: {{ describe(clientPreview.moved) }}
+          </div>
+          <v-alert v-if="clientMergeError" type="error" density="compact" class="mt-2">{{ clientMergeError }}</v-alert>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="clientMergeOpen = false">Отмена</v-btn>
+          <v-btn color="primary" :loading="clientMerging" :disabled="!clientPreview?.ok"
+            @click="doClientMerge">Слить</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- Подтверждение слияния -->
     <v-dialog v-model="mergeOpen" max-width="560" persistent>
       <v-card v-if="mergePlan">
@@ -158,14 +278,23 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import api from '../../api';
 import PageHeader from '../../components/PageHeader.vue';
 import StatusChip from '../../components/StatusChip.vue';
 
 const loading = ref(false);
+const tab = ref('partners');
 const partnerBy = ref('fio');
 const partnerGroups = ref([]);
+const clientBy = ref('fio');
+const clientGroups = ref([]);
+// По умолчанию прячем группы с разным ФИО: по телефону и почте это семьи,
+// и без фильтра список тонет в них.
+const onlySameName = ref(true);
+const visibleClientGroups = computed(() => (onlySameName.value
+  ? clientGroups.value.filter(g => g.sameName)
+  : clientGroups.value));
 
 const snack = ref({ open: false, color: 'success', text: '' });
 const notify = (text, color = 'success') => { snack.value = { open: true, color, text }; };
@@ -189,6 +318,55 @@ async function loadPartners() {
     notify(e.response?.data?.message || 'Не удалось загрузить дубли партнёров', 'error');
   }
   loading.value = false;
+}
+
+async function loadClients() {
+  loading.value = true;
+  try {
+    const { data } = await api.get('/admin/duplicates/clients', { params: { by: clientBy.value } });
+    clientGroups.value = data.data || [];
+  } catch (e) {
+    notify(e.response?.data?.message || 'Не удалось загрузить дубли клиентов', 'error');
+  }
+  loading.value = false;
+}
+
+// --- слияние клиентов ---
+const clientMergeOpen = ref(false);
+const clientMerging = ref(false);
+const clientPlan = ref(null);
+const clientPreview = ref(null);
+const clientMergeError = ref('');
+
+async function openClientMerge(group, keep) {
+  const other = group.records.find(r => r.id !== keep.id);
+  clientPlan.value = { from: other.id, to: keep.id, differentNames: !group.sameName };
+  clientPreview.value = null;
+  clientMergeError.value = '';
+  clientMergeOpen.value = true;
+  try {
+    const { data } = await api.post('/admin/duplicates/clients/merge',
+      { from: other.id, to: keep.id, apply: false });
+    clientPreview.value = data;
+  } catch (e) {
+    clientPreview.value = { ok: false };
+    clientMergeError.value = e.response?.data?.message || 'Не удалось построить план слияния';
+  }
+}
+
+async function doClientMerge() {
+  clientMerging.value = true;
+  clientMergeError.value = '';
+  try {
+    const { data } = await api.post('/admin/duplicates/clients/merge',
+      { from: clientPlan.value.from, to: clientPlan.value.to, apply: true });
+    clientMergeOpen.value = false;
+    notify(data.message);
+    await loadClients();
+  } catch (e) {
+    clientMergeError.value = e.response?.data?.message || 'Слияние не удалось';
+  }
+  clientMerging.value = false;
 }
 
 // --- слияние партнёров ---
@@ -230,5 +408,5 @@ async function doMerge() {
   merging.value = false;
 }
 
-onMounted(() => { loadPartners(); });
+onMounted(() => { loadPartners(); loadClients(); });
 </script>

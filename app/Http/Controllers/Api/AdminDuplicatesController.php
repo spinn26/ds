@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\ClientMergeService;
 use App\Services\PartnerMergeService;
 use App\Support\Audit;
 use Illuminate\Http\JsonResponse;
@@ -18,7 +19,10 @@ use Illuminate\Support\Facades\DB;
  */
 class AdminDuplicatesController extends Controller
 {
-    public function __construct(private readonly PartnerMergeService $merge) {}
+    public function __construct(
+        private readonly PartnerMergeService $merge,
+        private readonly ClientMergeService $clientMerge,
+    ) {}
 
     /**
      * Группы дублей партнёров: по точному ФИО и по телефону (последние 10 цифр,
@@ -165,6 +169,132 @@ class AdminDuplicatesController extends Controller
         ]);
 
         $res = $this->merge->merge((int) $data['from'], (int) $data['to'], (bool) ($data['apply'] ?? false));
+
+        return response()->json($res, $res['ok'] ? 200 : 422);
+    }
+
+    /**
+     * Группы дублей КЛИЕНТОВ: по точному ФИО, телефону (последние 10 цифр) или
+     * почте. По каждой карточке — чем она отличается от соседней: партнёр,
+     * контакты, контракты и деньги по ним, дата заведения.
+     *
+     * ⚠ Группировка по телефону и почте — сигнал «посмотрите», а не список к
+     * слиянию: один номер и одна почта сплошь общие у семьи (родитель
+     * оформляет полисы на детей). Из 239 таких групп настоящими дублями в
+     * августе оказались семь.
+     */
+    public function clients(Request $request): JsonResponse
+    {
+        $by = in_array($request->input('by'), ['phone', 'email'], true) ? $request->input('by') : 'fio';
+
+        // Разные алиасы во внешнем запросе и в подзапросе: одинаковые сделали бы
+        // подзапрос коррелирующим, и `having count(*) > 1` стало бы истиной для
+        // всех (грабля с партнёрами, 12.08.2026).
+        $expr = fn (string $a) => match ($by) {
+            'phone' => "right(regexp_replace(coalesce({$a}.phone,''), '[^0-9]', '', 'g'), 10)",
+            'email' => "btrim(lower({$a}.email))",
+            default => "btrim(lower(regexp_replace({$a}.\"personName\", '\s+', ' ', 'g')))",
+        };
+        $groupExpr = $expr('cl');
+        $subExpr = $expr('cl2');
+        $minLen = $by === 'phone' ? 10 : 3;
+
+        $rows = DB::table('client as cl')
+            ->leftJoin('consultant as c', 'c.id', '=', 'cl.consultant')
+            ->whereNull('cl.dateDeleted')
+            ->whereRaw("length(coalesce({$groupExpr}, '')) >= ?", [$minLen])
+            ->whereRaw("{$groupExpr} in (
+                select {$subExpr} from client as cl2
+                where cl2.\"dateDeleted\" is null and length(coalesce({$subExpr}, '')) >= ?
+                group by 1 having count(*) > 1
+            )", [$minLen])
+            ->selectRaw("{$groupExpr} as grp, cl.id, cl.\"personName\", cl.email, cl.phone,
+                cl.\"birthDate\", cl.city, cl.\"dateCreated\", cl.comment,
+                cl.partner_consultant_id, cl.consultant as consultant_id,
+                c.\"personName\" as consultant_name")
+            ->orderByRaw("{$groupExpr}, cl.id")
+            ->limit(1000)
+            ->get();
+
+        $metrics = $this->clientMetrics($rows->pluck('id')->all());
+
+        $groups = $rows->groupBy('grp')->map(fn ($items, $key) => [
+            'key' => (string) $key,
+            // Один ли это человек: при группировке по контакту ФИО могут
+            // разойтись — тогда это семья, а не дубль.
+            'sameName' => $items->pluck('personName')
+                ->map(fn ($n) => mb_strtolower(trim((string) $n)))->unique()->count() === 1,
+            'records' => $items->map(fn ($r) => [
+                'id' => $r->id,
+                'personName' => $r->personName,
+                'email' => $r->email,
+                'phone' => $r->phone,
+                'birthDate' => $r->birthDate,
+                'city' => $r->city,
+                'comment' => $r->comment,
+                'dateCreated' => $r->dateCreated,
+                'consultantId' => $r->consultant_id,
+                'consultantName' => $r->consultant_name,
+                'isPartner' => $r->partner_consultant_id !== null,
+            ] + ($metrics[$r->id] ?? self::EMPTY_CLIENT_METRICS))->values(),
+        ])->values();
+
+        return response()->json(['data' => $groups, 'total' => $groups->count()]);
+    }
+
+    private const EMPTY_CLIENT_METRICS = [
+        'contracts' => 0, 'contractsSum' => 0.0, 'transactions' => 0,
+        'dsIncome' => 0.0, 'lastContractAt' => null,
+    ];
+
+    /** @param list<int> $ids @return array<int,array<string,mixed>> */
+    private function clientMetrics(array $ids): array
+    {
+        if (! $ids) {
+            return [];
+        }
+
+        $contracts = DB::table('contract')->whereIn('client', $ids)->whereNull('deletedAt')
+            ->select('client', DB::raw('count(*) as cnt'), DB::raw('max("createDate") as last_at'))
+            ->groupBy('client')->get()->keyBy('client');
+
+        // Деньги по контрактам карточки: сумма транзакций и доход ДС. По ним
+        // видно, какая из карточек «настоящая», а какая пустышка.
+        $money = DB::table('transaction as t')
+            ->join('contract as c', 'c.id', '=', 't.contract')
+            ->whereIn('c.client', $ids)->whereNull('c.deletedAt')
+            ->select('c.client',
+                DB::raw('count(*) as cnt'),
+                DB::raw('sum(coalesce(t."amountRUB",0)) as amount'),
+                DB::raw('sum(coalesce(t."commissionsAmountRUB",0)) as ds'))
+            ->groupBy('c.client')->get()->keyBy('client');
+
+        $out = [];
+        foreach ($ids as $id) {
+            $c = $contracts[$id] ?? null;
+            $m = $money[$id] ?? null;
+            $out[$id] = [
+                'contracts' => (int) ($c->cnt ?? 0),
+                'lastContractAt' => $c->last_at ?? null,
+                'transactions' => (int) ($m->cnt ?? 0),
+                'contractsSum' => round((float) ($m->amount ?? 0), 2),
+                'dsIncome' => round((float) ($m->ds ?? 0), 2),
+            ];
+        }
+
+        return $out;
+    }
+
+    /** Слияние карточек клиента: from → to. Без apply — предпросмотр. */
+    public function mergeClients(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'from' => ['required', 'integer', 'exists:client,id'],
+            'to' => ['required', 'integer', 'exists:client,id', 'different:from'],
+            'apply' => ['nullable', 'boolean'],
+        ]);
+
+        $res = $this->clientMerge->merge((int) $data['from'], (int) $data['to'], (bool) ($data['apply'] ?? false));
 
         return response()->json($res, $res['ok'] ? 200 : 422);
     }
