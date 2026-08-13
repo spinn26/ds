@@ -394,7 +394,9 @@ class ProfileController extends Controller
             // отказа (плашка «отказано» погаснет, статус снова «на проверке»).
             'rejection_reason' => null,
             'dateChange' => now(),
-            'person' => $user->id,
+            // requisites.person — legacy-колонка Directual, куда клали тот же
+            // id, что и в webUser. Таблицы person больше нет (13.08.2026),
+            // имя вводит в заблуждение — пишем только webUser.
             'webUser' => $user->id,
         ];
 

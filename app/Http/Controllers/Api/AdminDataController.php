@@ -3752,7 +3752,7 @@ class AdminDataController extends Controller
                 ->orderBy('id')->first();
             if ($donor) {
                 $patch = [];
-                foreach (['email', 'phone', 'birthDate', 'city', 'person'] as $f) {
+                foreach (['email', 'phone', 'birthDate', 'city'] as $f) {
                     if (empty($canonical->$f) && ! empty($donor->$f)) $patch[$f] = $donor->$f;
                 }
                 if ($patch) DB::table('client')->where('id', $canonicalId)->update($patch);

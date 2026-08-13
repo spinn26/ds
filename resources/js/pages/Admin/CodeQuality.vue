@@ -196,7 +196,7 @@ const openFindings = [
   // Бизнес-логика (деньги)
   { id: 'BIZ-1', severity: 'high', category: 'Бизнес-логика (деньги)', title: 'InSmart: contract/transaction без выравнивания сиквенса',
     file: 'InsmartIntegrationService.php:101,144',
-    problem: 'contract/transaction вставляются через LegacyId::next() (MAX+1), но у таблиц есть serial-сиквенс. Ручная генерация НЕ двигает сиквенс → следующий serial-INSERT (bulk-импорт) врежется в занятый id → duplicate _pkey. (Для person/client уже добавлен syncSequence, для contract/transaction здесь — нет.)',
+    problem: 'contract/transaction вставляются через LegacyId::next() (MAX+1), но у таблиц есть serial-сиквенс. Ручная генерация НЕ двигает сиквенс → следующий serial-INSERT (bulk-импорт) врежется в занятый id → duplicate _pkey. (Для client уже добавлен syncSequence, для contract/transaction здесь — нет.)',
     recommendation: 'Вставлять через insertGetId или вызвать LegacyId::syncSequence(contract/transaction).' },
   { id: 'BIZ-2', severity: 'high', category: 'Бизнес-логика (деньги)', title: 'НДС берётся по now(), а не по дате транзакции',
     file: 'CommissionCalculator.php:259-262, ManualTransactionController.php:582-585',
@@ -274,10 +274,6 @@ const openFindings = [
     file: 'deletedAt (Contract/Transaction/Commission) vs dateDeleted (Client/Consultant/WebUser/QualificationLog)',
     problem: 'При join между этими таблицами легко подставить не ту колонку и молча получить удалённые строки.',
     recommendation: 'Централизовать (scope, кодирующий верную колонку) + карта таблица→колонка.' },
-  { id: 'DB-3', severity: 'medium', category: 'БД и модели', title: 'Consultant::person() → WebUser (чужое id-пространство)',
-    file: 'Models/Consultant.php:64-67',
-    problem: 'belongsTo(User, "person") связывает consultant.person (id-пространство person) с WebUser (другое пространство) → вернёт чужой WebUser. Сейчас в коде не используется — латентная ловушка.',
-    recommendation: 'Убрать отношение или завести модель Person на таблицу person.' },
   { id: 'DB-4', severity: 'medium', category: 'БД и модели', title: '$guarded=[id] на денежных моделях + нет deletedAt-каста у Commission',
     file: 'Models/{Contract,Transaction,Commission,Client,Consultant}.php',
     problem: '$guarded=[id] открывает mass-assignment всех денежных колонок (сейчас пишут через DB::table(), но любой будущий create($request->all()) пишет суммы). Commission без deletedAt-каста/scope.',
@@ -358,6 +354,12 @@ const openFindings = [
 
 // ── ИСПРАВЛЕНО в этой сессии (08.07.2026) ──
 const fixedFindings = [
+  { id: 'FX-P1', category: 'БД и модели', title: 'Таблица person удалена — данные живут в карточках',
+    problem: 'Контакты клиента и партнёра лежали в отдельной legacy-таблице person из Directual. Указатель client.person мог вести на ДРУГОГО человека (id разошлись при консолидации), и карточка показывала чужие почту и телефон; у партнёров person был заполнен лишь у половины.',
+    recommendation: 'Данные перенесены в client и consultant (контакты, ДР, город, телеграм, пол, резидентство, пометки), признак «клиент = партнёр» — в явную связь client.partner_consultant_id. Чтения и записи сняты, внешний ключ снят, таблица удалена 13.08.2026. Соответствие карточка→запись сохранено в person_legacy_map, полный дамп снят до работ.' },
+  { id: 'FX-P2', category: 'БД и модели', title: 'Consultant::person() → WebUser (чужое id-пространство)',
+    problem: 'belongsTo(User, "person") связывал consultant.person с WebUser — разные id-пространства, отношение вернуло бы чужого пользователя. Латентная ловушка, в коде не использовалась.',
+    recommendation: 'Отношение убрано вместе с колонкой при удалении таблицы person.' },
   { id: 'FX-1', category: 'Бизнес-логика (деньги)', title: 'Брокер+: своя комиссия слетала в 100% после фиксации',
     problem: 'calculateForTransaction не учитывал dsCommissionAbsolute и падал на тариф/100%.',
     recommendation: 'Калькулятор выводит %ДС из dsCommissionAbsolute. Пересчёт июня: Доход ДС 30,4М→144К.' },
@@ -371,7 +373,7 @@ const fixedFindings = [
     problem: 'Каскад создавал строку только при марже>0 → одноуровневые наставники (маржа 0) пропадали из «Цепочки выплат».',
     recommendation: 'Строка создаётся для каждого наставника (маржа 0 → комиссия 0, ГП учтён). Деньги не изменились.' },
   { id: 'FX-5', category: 'БД и модели', title: 'Рекуррентные duplicate_pkey (лаг сиквенсов)',
-    problem: 'insertGetId contract/person/client врезался в существующий id после restore.',
+    problem: 'insertGetId contract/client врезался в существующий id после restore.',
     recommendation: 'LegacyId::syncSequence() перед вставкой в storeContract/createClient + выравнивание на проде.' },
   { id: 'FX-6', category: 'Безопасность', title: 'Ban-list исключённых при регистрации',
     problem: 'register() не проверял контакты исключённого партнёра.',

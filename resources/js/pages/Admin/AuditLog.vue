@@ -98,7 +98,7 @@ const ACTION_COLORS = {
   export: 'info', import: 'info', impersonate: 'warning', block: 'error', unblock: 'success',
 };
 const ENTITY_LABELS = {
-  WebUser: 'Пользователь', person: 'Контакт', contract: 'Контракт', client: 'Клиент',
+  WebUser: 'Пользователь', person: 'Контакт (архив Directual)', contract: 'Контракт', client: 'Клиент',
   transaction: 'Транзакция', commission: 'Комиссия', requisites: 'Реквизиты',
   chat_ticket: 'Тикет', product: 'Продукт', system_setting: 'Настройка', webhook: 'Вебхук',
   announcement: 'Объявление', course: 'Курс', test: 'Тест',
