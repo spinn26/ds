@@ -1650,13 +1650,14 @@ class ChatController extends Controller
                 break;
 
             case 'Клиент':
+                // Контакты — из самой карточки: таблица person удалена
+                // 13.08.2026, данные перенесены в client.
                 $r = DB::table('client as cl')
-                    ->leftJoin('person as pe', 'pe.id', '=', 'cl.person')
                     ->leftJoin('consultant as co', 'co.id', '=', 'cl.consultant')
                     ->where('cl.id', $idInt)
                     ->select([
                         'cl.id', 'cl.personName',
-                        'pe.email', 'pe.phone', 'pe.birthDate',
+                        'cl.email', 'cl.phone', 'cl.birthDate',
                         'co.personName as consultantName',
                     ])
                     ->first();
