@@ -410,16 +410,25 @@ class AdminProductCatalogController extends Controller
     public function storeProgram(int $productId, Request $request): JsonResponse
     {
         $payload = self::extractProgramPayload($request);
-        $newId = DB::table('programs_catalog')->insertGetId(array_merge($payload, [
-            'product_id'     => $productId,
-            'imported_from'  => 'admin-ui',
-            'created_at'     => now(),
-            'updated_at'     => now(),
-        ]));
-        $this->syncToLegacyProgram($newId);
-        $this->pushTariffsToDsCommission($newId);
+
+        // Карточка, legacy-строка и тарифы %ДС — одной транзакцией: иначе
+        // программа сохранялась, а тариф до расчёта не доезжал, и узнавали об
+        // этом по ошибке «Не найден тариф %ДС» при расчёте комиссий.
+        [$newId, $sync] = DB::transaction(function () use ($payload, $productId) {
+            $id = DB::table('programs_catalog')->insertGetId(array_merge($payload, [
+                'product_id'     => $productId,
+                'imported_from'  => 'admin-ui',
+                'created_at'     => now(),
+                'updated_at'     => now(),
+            ]));
+            $this->syncToLegacyProgram($id);
+
+            return [$id, $this->pushTariffsToDsCommission($id)];
+        });
+
         \Illuminate\Support\Facades\Cache::forget('calculator:product-matrix:v4');
-        return $this->showSingleProgram($newId);
+
+        return $this->withSyncInfo($this->showSingleProgram($newId), $sync);
     }
 
     /** PUT /admin/products-catalog/{productId}/programs/{programId} */
@@ -427,18 +436,26 @@ class AdminProductCatalogController extends Controller
     {
         $payload = self::extractProgramPayload($request);
         $payload['updated_at'] = now();
-        DB::table('programs_catalog')
-            ->where('id', $programId)
-            ->where('product_id', $productId)
-            ->update($payload);
-        $this->syncToLegacyProgram($programId);
-        $this->pushTariffsToDsCommission($programId);
-        // Переименование программы → каскад в contract.programName / dsCommission.programName.
-        if ($request->has('name')) {
-            $this->propagateProgramName($programId, $request->input('name'));
-        }
+
+        $sync = DB::transaction(function () use ($payload, $programId, $productId, $request) {
+            DB::table('programs_catalog')
+                ->where('id', $programId)
+                ->where('product_id', $productId)
+                ->update($payload);
+            $this->syncToLegacyProgram($programId);
+            $result = $this->pushTariffsToDsCommission($programId);
+
+            // Переименование программы → каскад в contract.programName / dsCommission.programName.
+            if ($request->has('name')) {
+                $this->propagateProgramName($programId, $request->input('name'));
+            }
+
+            return $result;
+        });
+
         \Illuminate\Support\Facades\Cache::forget('calculator:product-matrix:v4');
-        return $this->showSingleProgram($programId);
+
+        return $this->withSyncInfo($this->showSingleProgram($programId), $sync);
     }
 
     /** DELETE /admin/products-catalog/{productId}/programs/{programId} — soft via active=false. */
@@ -673,29 +690,59 @@ class AdminProductCatalogController extends Controller
     }
 
     /**
-     * После сохранения тарифов в каталоге — пробрасываем %ДС в legacy-таблицу
-     * `dsCommission` (по ней считаются комиссии транзакций). Только текущее окно
-     * дат, только не-is_red строки; однозначные совпадения обновляются, а
-     * отсутствующие строки создаются (иначе у новой программы %ДС не доезжает до
-     * калькулятора) — см. DsCommissionSync. Ошибка синка НЕ должна валить
-     * сохранение.
+     * После сохранения тарифов в каталоге — пробрасываем %ДС в `dsCommission`
+     * (по ней считаются комиссии транзакций). Только текущее окно дат, только
+     * не-is_red строки; однозначные совпадения обновляются, отсутствующие
+     * создаются — см. DsCommissionSync.
+     *
+     * ⚠ Раньше ошибка синка глушилась report() и сохранение проходило: тариф в
+     * карточке есть, в расчёте нет, и расхождение всплывало через недели —
+     * ошибкой «Не найден тариф %ДС» или заниженной комиссией. Теперь исключение
+     * летит наружу и откатывает всю транзакцию: лучше не сохранить программу,
+     * чем сохранить её с тарифом, который не считается.
+     *
+     * @return array{synced:bool, reason?:string, result?:array<string,mixed>}
      */
-    private function pushTariffsToDsCommission(int $catalogProgramId): void
+    private function pushTariffsToDsCommission(int $catalogProgramId): array
     {
         $row = DB::table('programs_catalog')->where('id', $catalogProgramId)
             ->first(['legacy_program_id', 'tariffs']);
-        if (! $row || ! $row->legacy_program_id) {
-            return;
+        if (! $row) {
+            return ['synced' => false, 'reason' => 'Программа не найдена'];
         }
+        if (! $row->legacy_program_id) {
+            return ['synced' => false, 'reason' => 'У программы нет связки с расчётной таблицей — %ДС не обновлён'];
+        }
+
         $tariffs = json_decode((string) $row->tariffs, true);
         if (! is_array($tariffs) || ! $tariffs) {
-            return;
+            return ['synced' => false, 'reason' => 'Тарифы не заданы — обновлять нечего'];
         }
-        try {
-            \App\Services\DsCommissionSync::syncFromTariffs((int) $row->legacy_program_id, $tariffs, true);
-        } catch (\Throwable $e) {
-            report($e);
-        }
+
+        // fillGaps=true: оператор ЗАВЁЛ тариф руками — значит недостающую строку
+        // расчёта надо создать, а не пропустить. Без этого сохранение молча
+        // ничего не меняло для комиссий («нет строки — создание только с
+        // --fill-gaps»), и тариф жил только в витрине.
+        $result = \App\Services\DsCommissionSync::syncFromTariffs(
+            (int) $row->legacy_program_id, $tariffs, true, true
+        );
+
+        return ['synced' => true, 'result' => $result];
+    }
+
+    /**
+     * Добавляем к ответу итог синка тарифов, чтобы оператор видел его сразу, а
+     * не узнавал о расхождении при расчёте комиссий.
+     *
+     * @param  array{synced:bool, reason?:string, result?:array<string,mixed>}  $sync
+     */
+    private function withSyncInfo(JsonResponse $response, array $sync): JsonResponse
+    {
+        $data = $response->getData(true);
+        $data = is_array($data) ? $data : ['data' => $data];
+        $data['dsCommissionSync'] = $sync;
+
+        return response()->json($data, $response->getStatusCode());
     }
 
     /** Subset of incoming program payload that maps onto programs_catalog columns. */

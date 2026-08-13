@@ -504,6 +504,7 @@
             </v-col>
           </v-row>
           <v-alert v-if="programError" type="error" density="compact" class="mt-2">{{ programError }}</v-alert>
+          <v-alert v-if="tariffSync" :type="tariffSync.type" density="compact" class="mt-2">{{ tariffSync.text }}</v-alert>
         </v-card-text>
         <v-card-actions>
           <v-spacer />
@@ -668,6 +669,8 @@ async function uploadImage(kind) {
 // Program dialog
 const programDialog = ref(false);
 const programError = ref('');
+// Итог синка тарифов после сохранения программы (см. reportTariffSync).
+const tariffSync = ref(null);
 const editProgram = ref({});
 const editProgramProductId = ref(null);
 
@@ -897,13 +900,15 @@ async function saveProgram() {
   }
   saving.value = true;
   programError.value = '';
+  tariffSync.value = null;
   const productId = editProgramProductId.value;
   try {
-    if (editProgram.value.id) {
-      await api.put(`/admin/products-catalog/${productId}/programs/${editProgram.value.id}`, editProgram.value);
-    } else {
-      await api.post(`/admin/products-catalog/${productId}/programs`, editProgram.value);
-    }
+    // Ответ несёт итог проброса тарифов в расчётную таблицу: оператор должен
+    // видеть его сразу, а не узнавать о расхождении при расчёте комиссий.
+    const { data } = editProgram.value.id
+      ? await api.put(`/admin/products-catalog/${productId}/programs/${editProgram.value.id}`, editProgram.value)
+      : await api.post(`/admin/products-catalog/${productId}/programs`, editProgram.value);
+    reportTariffSync(data?.dsCommissionSync);
     programDialog.value = false;
     loadPrograms(productId);
     loadProducts();
@@ -911,6 +916,29 @@ async function saveProgram() {
     programError.value = e.response?.data?.message || 'Ошибка сохранения';
   }
   saving.value = false;
+}
+
+// Итог проброса тарифов в расчётную таблицу — человеческим языком.
+// Показываем ВСЕГДА: молчание здесь и приводило к расхождению витрины с
+// расчётом, которое всплывало через недели ошибкой «Не найден тариф %ДС».
+function reportTariffSync(sync) {
+  tariffSync.value = null;
+  if (!sync) return;
+
+  if (!sync.synced) {
+    tariffSync.value = { type: 'warning', text: `Тарифы сохранены, но %ДС не обновлён: ${sync.reason}` };
+    return;
+  }
+
+  const r = sync.result || {};
+  const parts = [];
+  if (r.updated) parts.push(`обновлено строк ${r.updated}`);
+  if (r.created) parts.push(`создано ${r.created}`);
+  if (r.skips?.length) parts.push(`пропущено ${r.skips.length}`);
+
+  tariffSync.value = parts.length
+    ? { type: r.skips?.length ? 'warning' : 'success', text: `%ДС в расчёте: ${parts.join(', ')}` }
+    : { type: 'info', text: 'Сохранено, расчётные тарифы не изменились' };
 }
 
 function confirmDeleteProgram(product, program) {
