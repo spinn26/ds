@@ -108,8 +108,16 @@ class PartnerMergeService
      * Пустые строки приёмника, которые иначе задвоятся с данными источника:
      * баланс по периодам, логи квалификации и баллы с нулевыми объёмами.
      *
-     * ⚠ Порядок важен: calculationConsultantPoints ссылается на
-     * qualificationLog внешним ключом, поэтому баллы удаляем ПЕРВЫМИ.
+     * ⚠ На qualificationLog и consultantBalance смотрят 28 внешних ключей из
+     * доброго десятка legacy-таблиц (комиссии, выплаты, документы, триггеры
+     * отчётов). Слепое удаление «пустой» строки падало на первой же ссылке:
+     * consultantBalance ссылается на qualificationLog, и лог сносился раньше
+     * баланса (Виноградов 510 → 1713, 13.08.2026). Поэтому теперь перед
+     * удалением каждый id проверяется на входящие ссылки ПО ВСЕМ таблицам, а
+     * порядок обратный зависимостям: баллы → баланс → логи.
+     *
+     * Строка, на которую кто-то ссылается, остаётся жить. Дубль периода в
+     * выдаче — меньшее зло, чем разрыв ссылки в расчётных таблицах.
      *
      * @return array<string,int>
      */
@@ -127,33 +135,87 @@ class PartnerMergeService
                 if ($doomedLogs) {
                     $q->orWhereIn('qualificationLog', $doomedLogs);
                 }
-            });
-        $pointsCount = $points->count();
+            })->pluck('id')->all();
 
         $balance = DB::table('consultantBalance')->where('consultant', $toId)
             ->whereRaw('coalesce("accruedTotal",0) = 0')
             ->whereRaw('coalesce("totalPayable",0) = 0')
             ->whereRaw('coalesce(payed,0) = 0')
-            ->whereRaw('coalesce(remaining,0) = 0');
-        $balanceCount = $balance->count();
+            ->whereRaw('coalesce(remaining,0) = 0')
+            ->pluck('id')->all();
 
-        if ($apply) {
-            if ($pointsCount) {
-                $points->delete();
-            }
-            if ($doomedLogs) {
-                DB::table('qualificationLog')->whereIn('id', $doomedLogs)->delete();
-            }
-            if ($balanceCount) {
-                $balance->delete();
-            }
+        // Баллы удаляем первыми: на них никто не ссылается, зато они держат логи.
+        $points = $this->unreferenced('calculationConsultantPoints', $points, []);
+        if ($apply && $points) {
+            DB::table('calculationConsultantPoints')->whereIn('id', $points)->delete();
+        }
+
+        // Баланс — вторым: он сам ссылается на логи, а на него смотрят выплаты
+        // и документы.
+        $balance = $this->unreferenced('consultantBalance', $balance, []);
+        if ($apply && $balance) {
+            DB::table('consultantBalance')->whereIn('id', $balance)->delete();
+        }
+
+        // Логи — последними, уже без учёта строк, удалённых выше.
+        $doomedLogs = $this->unreferenced('qualificationLog', $doomedLogs, [
+            'calculationConsultantPoints' => $points,
+            'consultantBalance' => $balance,
+        ]);
+        if ($apply && $doomedLogs) {
+            DB::table('qualificationLog')->whereIn('id', $doomedLogs)->delete();
         }
 
         return array_filter([
-            'consultantBalance' => $balanceCount,
+            'consultantBalance' => count($balance),
             'qualificationLog' => count($doomedLogs),
-            'calculationConsultantPoints' => $pointsCount,
+            'calculationConsultantPoints' => count($points),
         ]);
+    }
+
+    /**
+     * Оставить из $ids только те, на которые НИКТО не ссылается.
+     *
+     * Список ссылающихся таблиц берём из самой базы (pg_constraint), а не
+     * зашиваем: legacy-схема Directual держит на qualificationLog 20+ ссылок,
+     * и любой зашитый список устареет молча — падением на проде.
+     *
+     * $ignore — строки, которые в этой же операции уже удалены (в незакрытой
+     * транзакции они ещё видны запросу).
+     *
+     * @param  list<int>  $ids
+     * @param  array<string, list<int>>  $ignore
+     * @return list<int>
+     */
+    private function unreferenced(string $table, array $ids, array $ignore): array
+    {
+        if (! $ids) {
+            return [];
+        }
+
+        $refs = DB::select(<<<'SQL'
+            SELECT src.relname AS tablica, a.attname AS kolonka
+            FROM pg_constraint con
+            JOIN pg_class src ON src.oid = con.conrelid
+            JOIN pg_attribute a ON a.attrelid = con.conrelid AND a.attnum = con.conkey[1]
+            WHERE con.contype = 'f' AND con.confrelid = to_regclass(?)
+            SQL, ['"'.$table.'"']);
+
+        foreach ($refs as $ref) {
+            if (! $ids) {
+                break;
+            }
+            $q = DB::table($ref->tablica)->whereIn($ref->kolonka, $ids);
+            if (! empty($ignore[$ref->tablica])) {
+                $q->whereNotIn('id', $ignore[$ref->tablica]);
+            }
+            $busy = $q->pluck($ref->kolonka)->map(fn ($v) => (int) $v)->all();
+            if ($busy) {
+                $ids = array_values(array_diff($ids, $busy));
+            }
+        }
+
+        return $ids;
     }
 
     /** Контрольные цифры приёмника — оператор сверяет их до и после. */
