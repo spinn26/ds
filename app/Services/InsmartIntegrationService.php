@@ -18,7 +18,7 @@ use Illuminate\Support\Facades\Log;
  * Сервис умеет:
  *   - принять payload с фактической оплатой страхового продукта
  *     (статус = «Оплачен»);
- *   - найти/создать Client по ФИО+phone+email (через person);
+ *   - найти/создать Client по ФИО+phone+email (по контактам самой карточки);
  *   - найти/создать Product / Program «на лету» если такого ещё нет
  *     в нашей БД (per spec §3 «Авто-наполнение каталога»);
  *   - определить получателя комиссии:
@@ -30,9 +30,10 @@ use Illuminate\Support\Facades\Log;
  *   - создать transaction на сумму агентской комиссии;
  *   - запустить CommissionCalculator на этой транзакции.
  *
- * Legacy-схема: person и client — две разные таблицы (person.id — реальный
- * контакт, client.id — карточка-связка с консультантом). client колонок
- * email/phone/createDate не имеет — почта/телефон хранятся в person.
+ * Legacy-схема: person — наследство Directual, отдельная таблица контактов.
+ * Карточка клиента владеет контактами сама (email/phone в client), поэтому
+ * интеграция person больше не читает и не создаёт: связь через неё оказалась
+ * ненадёжной — одна запись держала карточки разных людей.
  * product и program не имеют identity sequence — id генерится через
  * LegacyId::next под advisory_xact_lock.
  */
@@ -273,16 +274,20 @@ class InsmartIntegrationService
     }
 
     /**
-     * client.person → person.id, поиск по email/phone — в person.
-     * Если не нашли — создаём person (личные данные) + client (карточка).
+     * Поиск карточки клиента по её СОБСТВЕННЫМ контактам; не нашли — создаём.
+     *
+     * Раньше искали через person (client.person → person.email/phone). Связь
+     * ненадёжна: одна person держала карточки разных людей, id разошлись при
+     * консолидации Directual. Карточка владеет контактами сама (2026-08-12,
+     * контакты перенесены командой clients:backfill-contacts), поэтому ищем
+     * прямо в client — и новых person больше не заводим.
      *
      * ⚠ Телефон сверяем НОРМАЛИЗОВАННО (последние 10 цифр, App\Support\Phone):
      * в базе один номер лежит и как «+7 904 390 46 79», и как «79043904679» —
      * сравнение строк давало «не найдено» и вебхук создавал дубль карточки.
-     * ⚠ И берём ВСЕХ кандидатов-person сразу (по почте + по телефону), а не
-     * первого: у человека с двумя почтами и одним телефоном живая карточка
-     * может висеть на «втором» person, а поиск по одному id её не видел
-     * (реальный кейс дубля, 11.08.2026).
+     * ⚠ Совпадения по почте и телефону берём ВМЕСТЕ, а не по очереди: у
+     * человека с двумя почтами и одним телефоном живая карточка может найтись
+     * только по второму признаку (реальный кейс дубля, 11.08.2026).
      */
     private function resolveClient(array $payload, int $consultantId): int
     {
@@ -290,46 +295,30 @@ class InsmartIntegrationService
         $phone = $payload['clientPhone'] ?? $payload['phone'] ?? null;
         $fio = (string) ($payload['clientFio'] ?? $payload['insurant'] ?? 'Insmart Client');
 
-        // Поиск в person → найти client по этим person.
-        $personIds = [];
-        if ($email) {
-            $personIds = DB::table('person')
-                ->whereRaw('lower(btrim(email)) = ?', [mb_strtolower(trim((string) $email))])
-                ->pluck('id')->all();
-        }
-        if ($normPhone = Phone::norm($phone)) {
-            $byPhone = DB::table('person')
-                ->whereRaw(Phone::sql('phone').' = ?', [$normPhone])
-                ->pluck('id')->all();
-            $personIds = array_merge($personIds, $byPhone);
-        }
-        $personIds = array_values(array_unique(array_map('intval', $personIds)));
-
-        // Нашли человека по почте, а телефона у него не записано — дописываем.
-        // Иначе следующий полис с другой почтой того же клиента снова не найдёт
-        // совпадения и создаст дубль.
-        if ($personIds && $normPhone) {
-            DB::table('person')->whereIn('id', $personIds)
-                ->where(fn ($q) => $q->whereNull('phone')->orWhere('phone', ''))
-                ->update(['phone' => $phone]);
-        }
-
+        $normEmail = $email ? mb_strtolower(trim((string) $email)) : null;
+        $normPhone = Phone::norm($phone);
         $normFio = mb_strtolower(trim(preg_replace('/\s+/u', ' ', $fio)));
         $fioKnown = $normFio !== '' && $normFio !== 'insmart client';
 
-        if ($personIds) {
-            // ⚠ Одна запись person может держать карточки РАЗНЫХ людей (drift
-            // привязок: person 7464 → «Орлов Олег» и «Мусиенко Алина»). Поэтому
-            // мало найти живую карточку — надо не отдать полис чужой:
-            // берём её, только если совпало ФИО застрахованного ИЛИ карточка
-            // принадлежит текущему партнёру (у своего клиента могла смениться
-            // фамилия). Иначе — заводим отдельные person+client.
-            $candidates = DB::table('client')->whereIn('person', $personIds)
+        if ($normEmail || $normPhone) {
+            $candidates = DB::table('client')
                 ->whereNull('dateDeleted')
-                ->select('id', 'consultant', 'personName')
+                ->where(function ($w) use ($normEmail, $normPhone) {
+                    if ($normEmail) {
+                        $w->orWhereRaw('lower(btrim(email)) = ?', [$normEmail]);
+                    }
+                    if ($normPhone) {
+                        $w->orWhereRaw(Phone::sql('phone').' = ?', [$normPhone]);
+                    }
+                })
+                ->select('id', 'consultant', 'personName', 'phone')
                 ->orderBy('id')
                 ->get();
 
+            // ⚠ Телефон в семье общий — родитель оформляет полис на детей со
+            // своим номером. Поэтому мало совпадения контакта: берём карточку,
+            // только если совпало ФИО застрахованного ИЛИ она принадлежит
+            // текущему партнёру (у своего клиента могла смениться фамилия).
             $sameFio = static fn ($c) => $fioKnown
                 && mb_strtolower(trim(preg_replace('/\s+/u', ' ', (string) $c->personName))) === $normFio;
 
@@ -338,13 +327,16 @@ class InsmartIntegrationService
                 ?? $candidates->first($sameFio)
                 ?? $candidates->first(fn ($c) => (int) $c->consultant === $consultantId);
 
-            if ($pick) return (int) $pick->id;
+            if ($pick) {
+                // Нашли по почте, а телефона в карточке нет — дописываем: иначе
+                // следующий полис с другой почтой снова не найдёт совпадения.
+                if ($normPhone && trim((string) $pick->phone) === '') {
+                    DB::table('client')->where('id', $pick->id)->update(['phone' => $phone]);
+                }
 
-            // Нашли контакт, но все карточки на нём — другие люди: не переиспользуем
-            // и сам person, иначе drift разрастается ещё на одного человека.
-            if ($candidates->isNotEmpty()) $personIds = [];
+                return (int) $pick->id;
+            }
         }
-        $personId = $personIds[0] ?? null;
 
         // Ни по email, ни по телефону не нашли — пробуем по ФИО, иначе интеграция
         // молча плодит вторую карточку на того же человека (частая причина дублей).
@@ -358,29 +350,11 @@ class InsmartIntegrationService
             if ($byName) return (int) $byName;
         }
 
-        // Создаём новые person + client.
-        if (! $personId) {
-            $parts = preg_split('/\s+/u', trim($fio));
-            $lastName = $parts[0] ?? $fio;
-            $firstName = $parts[1] ?? '';
-            $patronymic = $parts[2] ?? null;
-
-            LegacyId::syncSequence('person'); // защита от duplicate person_pkey
-            $personId = DB::table('person')->insertGetId([
-                'firstName' => $firstName,
-                'lastName' => $lastName,
-                'patronymic' => $patronymic,
-                'email' => $email,
-                'phone' => $phone,
-                'role' => 'client',
-                'dateCreated' => now()->toIso8601String(),
-            ]);
-        }
-
         LegacyId::syncSequence('client');
         return (int) DB::table('client')->insertGetId([
-            'person' => $personId,
             'personName' => $fio,
+            'email' => $email,
+            'phone' => $phone,
             'consultant' => $consultantId,
             'dateCreated' => now(),
         ]);
