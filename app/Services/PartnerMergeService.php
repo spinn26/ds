@@ -30,6 +30,9 @@ class PartnerMergeService
         'contestrating' => 'consultant',
         'calculationConsultantPoints' => 'consultant',
         'consultantProgramsData' => 'consultant',
+        // Явная связка «клиент = партнёр» (13.08.2026): без неё слияние
+        // обнуляло признак, который сама же платформа и проставила.
+        'client_partner' => 'partner_consultant_id',
     ];
 
     /**
@@ -59,25 +62,37 @@ class PartnerMergeService
             return $this->fail("У записи-источника {$downline} нижестоящих — сначала перенесите их через «Перестановки».");
         }
 
-        $result = DB::transaction(function () use ($from, $fromId, $toId, $apply) {
+        $result = DB::transaction(function () use ($from, $to, $fromId, $toId, $apply) {
             $deleted = $this->deleteEmptyRows($toId, $apply);
             $moved = [];
             foreach (self::REPOINT as $table => $column) {
+                // Псевдоключ client_partner — вторая колонка той же таблицы
+                // client (наставник и признак «партнёр» живут порознь).
+                $table = $table === 'client_partner' ? 'client' : $table;
                 $q = DB::table($table)->where($column, $fromId);
                 $count = $q->count();
                 if ($count === 0) {
                     continue;
                 }
-                $moved[$table] = $count;
+                $moved[$table.'.'.$column] = $count;
                 if ($apply) {
                     DB::table($table)->where($column, $fromId)->update([$column => $toId]);
                 }
             }
 
             if ($apply) {
+                // Логин переезжает на остающуюся запись, если своего у неё
+                // нет: иначе партнёр после слияния входит в кабинет и попадает
+                // на опустошённую удалённую запись — модель Consultant не
+                // отфильтровывает мягко удалённых.
+                if ($from->webUser && ! $to->webUser) {
+                    DB::table('consultant')->where('id', $toId)->update(['webUser' => $from->webUser]);
+                }
+
                 DB::table('consultant')->where('id', $fromId)->update([
                     'dateDeleted' => now(),
                     'active' => false,
+                    'webUser' => $from->webUser && ! $to->webUser ? null : $from->webUser,
                     // Реф-код освобождаем: у клонов он дублировал код приёмника,
                     // а живая ссылка должна вести на одну запись.
                     'participantCode' => null,

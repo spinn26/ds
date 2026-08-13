@@ -113,10 +113,13 @@
               </td>
 
               <td class="text-end">
+                <!-- Блокирует нижестоящий у ВТОРОЙ записи: сервер отказывает,
+                     когда нижестоящие есть у УДАЛЯЕМОЙ. Прежний гард смотрел на
+                     оставляемую и запрещал ровно ту пару, которая сливается. -->
                 <v-btn size="x-small" variant="tonal" color="primary"
-                  :disabled="g.records.length !== 2 || r.downline > 0"
+                  :disabled="g.records.length !== 2 || otherHasDownline(g, r)"
                   @click="openMerge(g, r)">Оставить эту</v-btn>
-                <div v-if="r.downline > 0" class="text-caption text-warning mt-1" style="max-width:150px">
+                <div v-if="otherHasDownline(g, r)" class="text-caption text-warning mt-1" style="max-width:150px">
                   у второй записи есть нижестоящие — сначала «Перестановки»
                 </div>
               </td>
@@ -395,6 +398,13 @@ const merging = ref(false);
 const mergePlan = ref(null);
 const mergePreview = ref(null);
 const mergeError = ref('');
+
+// У записи, которая уйдёт в удаление, есть нижестоящие? Сервер такую пару
+// отклоняет: перевешивание структуры делается через «Перестановки».
+function otherHasDownline(group, keep) {
+  const other = group.records.find(r => r.id !== keep.id);
+  return !!other && other.downline > 0;
+}
 
 async function openMerge(group, keep) {
   const other = group.records.find(r => r.id !== keep.id);

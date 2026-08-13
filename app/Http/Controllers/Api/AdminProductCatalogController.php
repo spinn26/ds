@@ -310,10 +310,11 @@ class AdminProductCatalogController extends Controller
      */
     private function propagateProductName(int $catalogProductId, ?string $name): void
     {
-        $legacyId = DB::table('products_catalog')->where('id', $catalogProductId)->value('legacy_product_id');
-        if (! $legacyId) return;
-        DB::table('contract')->where('product', $legacyId)->update(['productName' => $name]);
-        DB::table('dsCommission')->where('product', $legacyId)->update(['productName' => $name]);
+        // ⚠ Ключ — id карточки: после слияния каталогов id каталога РАВЕН
+        // прежнему legacy id, а у карточек, заведённых позже, legacy_product_id
+        // пуст. Проверка на него молча обрывала каскад переименования.
+        DB::table('contract')->where('product', $catalogProductId)->update(['productName' => $name]);
+        DB::table('dsCommission')->where('product', $catalogProductId)->update(['productName' => $name]);
     }
 
     /**
@@ -322,10 +323,8 @@ class AdminProductCatalogController extends Controller
      */
     private function propagateProgramName(int $catalogProgramId, ?string $name): void
     {
-        $legacyId = DB::table('programs_catalog')->where('id', $catalogProgramId)->value('legacy_program_id');
-        if (! $legacyId) return;
-        DB::table('contract')->where('program', $legacyId)->update(['programName' => $name]);
-        DB::table('dsCommission')->where('program', $legacyId)->update(['programName' => $name]);
+        DB::table('contract')->where('program', $catalogProgramId)->update(['programName' => $name]);
+        DB::table('dsCommission')->where('program', $catalogProgramId)->update(['programName' => $name]);
     }
 
     private function propagateProviderToPrograms(int $catalogProductId, string $provider): void
@@ -340,12 +339,11 @@ class AdminProductCatalogController extends Controller
             ->where('product_id', $catalogProductId)
             ->update(['vendor' => $provider, 'updated_at' => now()]);
 
-        $legacyIds = $programs->pluck('legacy_program_id')->filter()->all();
-        if (! empty($legacyIds)) {
-            DB::table('program')
-                ->whereIn('id', $legacyIds)
-                ->update(['providerName' => $provider]);
-        }
+        // Поставщик хранится в самом каталоге; отдельная запись в legacy
+        // больше не нужна — program стала представлением поверх каталога.
+        DB::table('programs_catalog')
+            ->where('product_id', $catalogProductId)
+            ->update(['provider_name' => $provider]);
     }
 
     /** DELETE /admin/products-catalog/{id} — soft-delete (active=false) to match page wording. */
@@ -692,13 +690,16 @@ class AdminProductCatalogController extends Controller
     private function pushTariffsToDsCommission(int $catalogProgramId): array
     {
         $row = DB::table('programs_catalog')->where('id', $catalogProgramId)
-            ->first(['legacy_program_id', 'tariffs']);
+            ->first(['id', 'legacy_program_id', 'tariffs']);
         if (! $row) {
             return ['synced' => false, 'reason' => 'Программа не найдена'];
         }
-        if (! $row->legacy_program_id) {
-            return ['synced' => false, 'reason' => 'У программы нет связки с расчётной таблицей — %ДС не обновлён'];
-        }
+
+        // ⚠ Ключ расчётной таблицы — id программы, а не legacy_program_id: после
+        // слияния каталогов (13.08.2026) id каталога РАВЕН прежнему legacy id, а
+        // у программ, заведённых после слияния, legacy_program_id пуст. Проверка
+        // на него молча оставляла новые программы без %ДС в расчёте.
+        $programId = (int) $row->id;
 
         $tariffs = json_decode((string) $row->tariffs, true);
         if (! is_array($tariffs) || ! $tariffs) {
@@ -709,9 +710,7 @@ class AdminProductCatalogController extends Controller
         // расчёта надо создать, а не пропустить. Без этого сохранение молча
         // ничего не меняло для комиссий («нет строки — создание только с
         // --fill-gaps»), и тариф жил только в витрине.
-        $result = \App\Services\DsCommissionSync::syncFromTariffs(
-            (int) $row->legacy_program_id, $tariffs, true, true
-        );
+        $result = \App\Services\DsCommissionSync::syncFromTariffs($programId, $tariffs, true, true);
 
         return ['synced' => true, 'result' => $result];
     }

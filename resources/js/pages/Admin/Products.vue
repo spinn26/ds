@@ -9,6 +9,12 @@
       </template>
     </PageHeader>
 
+    <!-- Итог проброса тарифов в расчёт. Стоит НА СТРАНИЦЕ, а не в диалоге:
+         диалог закрывается сразу после сохранения, и сообщение внутри него
+         не успевало показаться. -->
+    <v-alert v-if="tariffSync" :type="tariffSync.type" density="compact" closable
+      class="mb-3" @click:close="tariffSync = null">{{ tariffSync.text }}</v-alert>
+
     <FilterBar
       :search="filters.search"
       search-placeholder="Поиск по названию"
@@ -550,7 +556,6 @@
             </v-col>
           </v-row>
           <v-alert v-if="programError" type="error" density="compact" class="mt-2">{{ programError }}</v-alert>
-          <v-alert v-if="tariffSync" :type="tariffSync.type" density="compact" class="mt-2">{{ tariffSync.text }}</v-alert>
         </v-card-text>
         <v-card-actions>
           <v-spacer />
@@ -968,8 +973,11 @@ async function saveProgram() {
     const { data } = editProgram.value.id
       ? await api.put(`/admin/products-catalog/${productId}/programs/${editProgram.value.id}`, editProgram.value)
       : await api.post(`/admin/products-catalog/${productId}/programs`, editProgram.value);
-    reportTariffSync(data?.dsCommissionSync);
+    // Диалог закрываем ПЕРЕД показом итога: иначе его закрытие сбрасывало
+    // состояние формы вместе с сообщением, и предупреждение о %ДС не
+    // показывалось никогда.
     programDialog.value = false;
+    reportTariffSync(data?.dsCommissionSync);
     loadPrograms(productId);
     loadProducts();
   } catch (e) {

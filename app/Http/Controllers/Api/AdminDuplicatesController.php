@@ -37,8 +37,11 @@ class AdminDuplicatesController extends Controller
         // но с РАЗНЫМИ алиасами: иначе подзапрос коррелирует с внешней строкой
         // и `having count(*) > 1` становится истиной для всех (ловил 1955
         // «групп» вместо 11).
+        // ⚠ Телефон берём и из логина, и из самой карточки: у 893 партнёров
+        // логина нет вовсе, и клоны без входа — как раз тот случай, ради
+        // которого страница делалась, — в группировку не попадали.
         $expr = fn (string $c, string $w) => $by === 'phone'
-            ? "right(regexp_replace(coalesce({$w}.phone,''), '[^0-9]', '', 'g'), 10)"
+            ? "right(regexp_replace(coalesce(nullif(btrim({$w}.phone),''), {$c}.phone, ''), '[^0-9]', '', 'g'), 10)"
             : "btrim(lower({$c}.\"personName\"))";
         $groupExpr = $expr('c', 'w');
         $subExpr = $expr('c2', 'w2');
@@ -213,7 +216,6 @@ class AdminDuplicatesController extends Controller
                 cl.partner_consultant_id, cl.consultant as consultant_id,
                 c.\"personName\" as consultant_name")
             ->orderByRaw("{$groupExpr}, cl.id")
-            ->limit(1000)
             ->get();
 
         $metrics = $this->clientMetrics($rows->pluck('id')->all());
@@ -330,7 +332,8 @@ class AdminDuplicatesController extends Controller
                 'reason' => $data['reason'] ?? null,
                 'created_by' => $request->user()?->id,
                 'updated_at' => now(),
-                'created_at' => now(),
+                // created_at НЕ трогаем: повторная отметка не должна стирать
+                // дату первоначального решения оператора.
             ]
         );
 

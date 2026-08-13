@@ -406,9 +406,14 @@ class AdminDataController extends Controller
             'firstName' => ['sometimes', 'nullable', 'string', 'max:255', 'regex:' . $cyrillicRegex],
             'lastName' => ['sometimes', 'nullable', 'string', 'max:255', 'regex:' . $cyrillicRegex],
             'patronymic' => ['sometimes', 'nullable', 'string', 'max:255', 'regex:' . $cyrillicRegex],
-            'email' => ['sometimes', 'nullable', 'email', 'max:255',
-                ($consultant->webUser ? "unique:WebUser,email,{$consultant->webUser},id" : 'unique:WebUser,email'),
-            ],
+            // Уникальность по WebUser проверяем ТОЛЬКО у партнёров с логином:
+            // у остальных почта лежит в собственной колонке consultant, и
+            // правило запрещало сохранить карточку, если такая почта есть у
+            // чьего-то логина, — блокируя ровно те записи без входа, ради
+            // которых колонку и заводили.
+            'email' => array_filter(['sometimes', 'nullable', 'email', 'max:255',
+                $consultant->webUser ? "unique:WebUser,email,{$consultant->webUser},id" : null,
+            ]),
             'phone' => ['sometimes', 'nullable', 'string', 'max:64'],
             'nicTG' => ['sometimes', 'nullable', 'string', 'max:128'],
             'gender' => ['sometimes', 'nullable', 'in:male,female'],

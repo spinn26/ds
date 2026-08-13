@@ -44,18 +44,25 @@ class LinkClientsToPartners extends Command
                 SELECT cl.id AS client_id,
                        c.id  AS consultant_id,
                        CASE
-                           WHEN {$clientPhone} IS NOT NULL AND {$clientPhone} = {$userPhone} THEN 'phone'
+                           WHEN length({$clientPhone}) = 10 AND {$clientPhone} = {$userPhone} THEN 'phone'
                            ELSE 'email'
                        END AS source
                 FROM client cl
                 JOIN consultant c
                   ON c."dateDeleted" IS NULL
                  AND btrim(lower(c."personName")) = btrim(lower(cl."personName"))
-                LEFT JOIN "webUser" w ON w.id = c."webUser"
+                -- ⚠ Именно "WebUser": рядом лежит legacy-дамп Directual
+                -- "webUser" (1030 строк) с теми же колонками. Джойн не той
+                -- таблицы молча не находит контакты живых партнёров.
+                LEFT JOIN "WebUser" w ON w.id = c."webUser"
                 WHERE cl."dateDeleted" IS NULL
                   AND nullif(btrim(coalesce(cl."personName", '')), '') IS NOT NULL
                   AND (
-                        ({$clientPhone} IS NOT NULL AND {$clientPhone} = {$userPhone})
+                        -- ⚠ length(...) = 10, а не IS NOT NULL: Phone::sql
+                        -- отдаёт пустую строку для коротких номеров, и два
+                        -- пустых телефона считались совпадением — пара
+                        -- связывалась по одному ФИО.
+                        (length({$clientPhone}) = 10 AND {$clientPhone} = {$userPhone})
                      OR (nullif(btrim(lower(coalesce(cl.email, ''))), '') IS NOT NULL
                          AND btrim(lower(cl.email)) = btrim(lower(coalesce(w.email, ''))))
                   )

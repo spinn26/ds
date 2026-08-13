@@ -475,8 +475,12 @@ class AuthController extends Controller
             $consultant = Consultant::where('webUser', $user->id)->first();
             if ($consultant) {
                 $consultant->dateActivity = now();
-                $consultant->dateDeterministic = now()->addDays(90);
-                $consultant->dateDeterministicPlan = now()->addDays(90);
+                // Окно активации — настройка activation.window_days (с
+                // 13.08.2026 это 120 дней). Зашитые 90 расходились с реальным
+                // дедлайном, и отчёт по статусам показывал дату на месяц раньше.
+                $window = PartnerActivity::activationDays();
+                $consultant->dateDeterministic = now()->addDays($window);
+                $consultant->dateDeterministicPlan = now()->addDays($window);
                 $consultant->save();
             }
         });
