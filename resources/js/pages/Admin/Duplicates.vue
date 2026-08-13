@@ -158,6 +158,9 @@
           <v-icon size="18" :color="g.sameName ? 'warning' : 'error'">mdi-account-multiple</v-icon>
           <span class="ds-title-l">{{ g.key }}</span>
           <v-chip v-if="!g.sameName" size="x-small" color="error" variant="tonal">ФИО разные — вероятно, семья</v-chip>
+          <v-spacer />
+          <v-btn size="x-small" variant="text" color="warning" prepend-icon="mdi-account-off-outline"
+            :loading="ignoring === g.key" @click="markNotDuplicate(g)">Не дубли</v-btn>
         </div>
         <v-table density="compact">
           <thead>
@@ -329,6 +332,23 @@ async function loadClients() {
     notify(e.response?.data?.message || 'Не удалось загрузить дубли клиентов', 'error');
   }
   loading.value = false;
+}
+
+// Отметка «не дубли»: однофамильцы и родня с общим контактом. Ключ группы —
+// id карточек по возрастанию, тот же формат, что копила прежняя страница.
+const ignoring = ref('');
+
+async function markNotDuplicate(group) {
+  ignoring.value = group.key;
+  try {
+    const { data } = await api.post('/admin/duplicates/clients/ignore',
+      { ids: group.records.map(r => r.id) });
+    notify(data.message);
+    clientGroups.value = clientGroups.value.filter(g => g.key !== group.key);
+  } catch (e) {
+    notify(e.response?.data?.message || 'Не удалось отметить группу', 'error');
+  }
+  ignoring.value = '';
 }
 
 // --- слияние клиентов ---

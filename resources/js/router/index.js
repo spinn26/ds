@@ -58,7 +58,6 @@ const routes = [
             { path: 'manage/contracts', component: () => import('../pages/Admin/ContractManager.vue'), meta: { staff: true } },
             { path: 'manage/contracts/upload', component: () => import('../pages/Admin/ContractUpload.vue'), meta: { staff: true } },
             { path: 'manage/contracts/duplicates', component: () => import('../pages/Admin/ContractDuplicates.vue'), meta: { staff: true } },
-            { path: 'manage/clients/duplicates', component: () => import('../pages/Admin/ClientDuplicates.vue'), meta: { staff: true } },
             // Слияние дублей партнёров двигает контракты и деньги — только админ.
             { path: 'manage/duplicates', component: () => import('../pages/Admin/Duplicates.vue'), meta: { admin: true } },
             { path: 'manage/partners', component: () => import('../pages/Admin/Partners.vue'), meta: { staff: true } },
@@ -131,7 +130,6 @@ const routes = [
             { path: 'partners', component: () => import('../pages/Admin/Partners.vue') },
             { path: 'partners/statuses', component: () => import('../pages/Admin/PartnerStatuses.vue') },
             { path: 'clients', component: () => import('../pages/Admin/Clients.vue') },
-            { path: 'clients/duplicates', component: () => import('../pages/Admin/ClientDuplicates.vue') },
             { path: 'duplicates', component: () => import('../pages/Admin/Duplicates.vue'), meta: { admin: true } },
             { path: 'hidden-clients', component: () => import('../pages/Admin/HiddenClients.vue') },
             { path: 'contracts', component: () => import('../pages/Admin/ContractManager.vue') },

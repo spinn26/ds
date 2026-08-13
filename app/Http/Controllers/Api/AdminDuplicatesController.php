@@ -218,7 +218,14 @@ class AdminDuplicatesController extends Controller
 
         $metrics = $this->clientMetrics($rows->pluck('id')->all());
 
-        $groups = $rows->groupBy('grp')->map(fn ($items, $key) => [
+        // Пары, отмеченные оператором как «не дубли» (однофамильцы, семья).
+        // Ключ тот же, что копила прежняя страница «Дубли клиентов», — её 29
+        // отметок продолжают действовать здесь.
+        $ignored = DB::table('client_duplicate_ignores')->pluck('group_key')->flip();
+
+        $groups = $rows->groupBy('grp')
+            ->reject(fn ($items) => $ignored->has(self::ignoreKey($items->pluck('id')->all())))
+            ->map(fn ($items, $key) => [
             'key' => (string) $key,
             // Один ли это человек: при группировке по контакту ФИО могут
             // разойтись — тогда это семья, а не дубль.
@@ -283,6 +290,41 @@ class AdminDuplicatesController extends Controller
         }
 
         return $out;
+    }
+
+    /** Ключ группы для списка «не дубли»: id по возрастанию через дефис. */
+    private static function ignoreKey(array $ids): string
+    {
+        $ids = array_map('intval', $ids);
+        sort($ids);
+
+        return implode('-', $ids);
+    }
+
+    /**
+     * Отметить группу как «не дубли» — однофамильцы или родня с общим
+     * контактом. Больше в списке не появится.
+     */
+    public function ignoreClients(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'ids' => ['required', 'array', 'min:2'],
+            'ids.*' => ['integer'],
+            'reason' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        DB::table('client_duplicate_ignores')->updateOrInsert(
+            ['group_key' => self::ignoreKey($data['ids'])],
+            [
+                'client_ids' => implode(',', $data['ids']),
+                'reason' => $data['reason'] ?? null,
+                'created_by' => $request->user()?->id,
+                'updated_at' => now(),
+                'created_at' => now(),
+            ]
+        );
+
+        return response()->json(['message' => 'Отмечено как «не дубли» — группа скрыта.']);
     }
 
     /** Слияние карточек клиента: from → to. Без apply — предпросмотр. */

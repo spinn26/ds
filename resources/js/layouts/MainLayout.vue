@@ -1036,7 +1036,6 @@ const baseMenuItems = [
   { label: 'Менеджер контрактов', icon: 'mdi-file-document-edit', path: '/manage/contracts', adminSection: 'contracts' },
   { label: 'Загрузка контрактов', icon: 'mdi-upload', path: '/manage/contracts/upload', adminSection: 'upload' },
   { label: 'Дубли контрактов', icon: 'mdi-content-duplicate', path: '/manage/contracts/duplicates', adminSection: 'contracts' },
-  { label: 'Дубли клиентов', icon: 'mdi-account-multiple-remove', path: '/manage/clients/duplicates', adminSection: 'clients' },
   // Ручной разбор: дубли партнёров и карточки, привязанные к чужому контакту.
   { label: 'Дубли и связки', icon: 'mdi-vector-link', path: '/manage/duplicates', adminSection: 'partners', adminOnly: true },
   { label: 'Акцепт документов', icon: 'mdi-check-circle', path: '/manage/acceptance', adminSection: 'acceptance' },
