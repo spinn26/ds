@@ -242,6 +242,8 @@ class AdminDataController extends Controller
         $webUser = $consultant->webUser
             ? DB::table('WebUser')->where('id', $consultant->webUser)->first()
             : null;
+        // Без логина части ФИО брать неоткуда, кроме денорм-имени.
+        $nameParts = preg_split('/\s+/u', trim((string) $consultant->personName)) ?: [];
 
         return response()->json([
             'consultant' => [
@@ -275,7 +277,25 @@ class AdminDataController extends Controller
                 'birthDate' => $webUser->birthDate ? substr((string) $webUser->birthDate, 0, 10) : null,
                 'role' => $webUser->role,
                 'isBlocked' => (bool) ($webUser->isBlocked ?? false),
-            ] : null,
+            ] : [
+                // Партнёр без логина (893 импортированных ФК): WebUser'а нет,
+                // контакты живут в собственных колонках consultant. Отдаём их
+                // в том же ключе, иначе форма показывает пустые поля и
+                // сохранение молча ничего не меняет.
+                'id' => null,
+                'firstName' => $nameParts[1] ?? null,
+                'lastName' => $nameParts[0] ?? null,
+                'patronymic' => $nameParts[2] ?? null,
+                'email' => $consultant->email,
+                'phone' => $consultant->phone,
+                'nicTG' => null,
+                'gender' => null,
+                'birthDate' => $consultant->birthDate
+                    ? substr((string) $consultant->birthDate, 0, 10)
+                    : null,
+                'role' => null,
+                'isBlocked' => false,
+            ],
         ]);
     }
 
@@ -494,6 +514,36 @@ class AdminDataController extends Controller
                 if (isset($userUpdates['firstName']) || isset($userUpdates['lastName']) || isset($userUpdates['patronymic'])) {
                     $u = DB::table('WebUser')->where('id', $consultant->webUser)->first();
                     $consultant->personName = trim("{$u->lastName} {$u->firstName} {$u->patronymic}");
+                }
+            } else {
+                // Партнёр без логина: WebUser'а, куда писать контакты, нет —
+                // ведём их в собственных колонках. Раньше вся эта ветка
+                // отсутствовала, и правка карточки такого партнёра молча
+                // не сохранялась (893 импортированных ФК).
+                foreach (['email', 'phone', 'birthDate'] as $col) {
+                    if (! array_key_exists($col, $data)) continue;
+                    $new = $data[$col] ?: null;
+                    $old = $consultant->{$col};
+                    if ((string) $old !== (string) $new) {
+                        $diff[$col] = ['from' => $old, 'to' => $new];
+                    }
+                    $consultant->{$col} = $new;
+                }
+
+                $hasNameEdit = array_key_exists('lastName', $data)
+                    || array_key_exists('firstName', $data)
+                    || array_key_exists('patronymic', $data);
+                if ($hasNameEdit) {
+                    $parts = preg_split('/\s+/u', trim((string) $consultant->personName)) ?: [];
+                    $name = trim(implode(' ', array_filter([
+                        $data['lastName'] ?? ($parts[0] ?? null),
+                        $data['firstName'] ?? ($parts[1] ?? null),
+                        $data['patronymic'] ?? ($parts[2] ?? null),
+                    ])));
+                    if ($name !== '' && $name !== (string) $consultant->personName) {
+                        $diff['personName'] = ['from' => $consultant->personName, 'to' => $name];
+                        $consultant->personName = $name;
+                    }
                 }
             }
 
