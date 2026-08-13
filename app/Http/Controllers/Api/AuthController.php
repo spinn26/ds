@@ -149,10 +149,12 @@ class AuthController extends Controller
         }
 
         if ($request->filled('refCode')) {
+            // Почту ищем в самой карточке: person из поиска убран (13.08.2026),
+            // её указатель мог вести на другого человека — и регистрацию
+            // тормозило «вы клиент партнёра N» с чужой привязки.
             $client = Client::where('personName', 'like', '%' . $request->input('email') . '%')
-                ->orWhereHas('person', function ($q) use ($request) {
-                    $q->where('email', $request->input('email'));
-                })->first();
+                ->orWhereRaw('lower(btrim(email)) = ?', [mb_strtolower(trim((string) $request->input('email')))])
+                ->first();
 
             if ($client && $client->consultant) {
                 $assignedConsultant = Consultant::find($client->consultant);

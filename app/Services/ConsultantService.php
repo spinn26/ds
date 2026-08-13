@@ -82,11 +82,6 @@ class ConsultantService
             ? DB::table('directory_of_activities')->whereIn('id', $activityIds)->pluck('name', 'id')
             : collect();
 
-        // Batch load person data
-        $personIds = $consultants->pluck('person')->filter()->unique();
-        $persons = $personIds->isNotEmpty()
-            ? DB::table('person')->whereIn('id', $personIds)->get()->keyBy('id')
-            : collect();
 
         // Batch: накопленный ЛП с даты активации (chainOrder=1 = личная комиссия)
         // Возвращаем одним запросом все комиссии ветки и суммируем в PHP
@@ -126,8 +121,9 @@ class ConsultantService
                 ->keyBy('id')
             : collect();
 
-        // Batch load cities
-        $cityIds = $persons->pluck('city')->filter()->unique();
+        // Город — собственная колонка партнёра (перенесена из person
+        // 13.08.2026); хранит и legacy-код справочника, и название.
+        $cityIds = $consultants->pluck('city')->filter()->unique();
         $cities = $cityIds->isNotEmpty()
             ? DB::table('city')->whereIn('id', $cityIds)->pluck('cityNameRu', 'id')
             : collect();
@@ -135,7 +131,7 @@ class ConsultantService
         // Index status_levels by level number for qualificationLog fallback
         $statusLevelsByLevel = $statusLevels->keyBy('level');
 
-        return $consultants->map(function ($c) use ($statusLevels, $statusLevelsByLevel, $qLogs, $cumulativeByConsultant, $clientCounts, $contractCounts, $subCounts, $activityNames, $persons, $cities, $webUsers, $cumulativeLpByConsultant) {
+        return $consultants->map(function ($c) use ($statusLevels, $statusLevelsByLevel, $qLogs, $cumulativeByConsultant, $clientCounts, $contractCounts, $subCounts, $activityNames, $cities, $webUsers, $cumulativeLpByConsultant) {
             $statusLevel = $c->status_and_lvl ? ($statusLevels[$c->status_and_lvl] ?? null) : null;
             $qLog = $qLogs[$c->id] ?? null;
 
@@ -158,9 +154,10 @@ class ConsultantService
                 $activityName = is_object($c->activity) ? $c->activity->label() : ($activityNames[$c->activity] ?? null);
             }
 
-            $person = $c->person ? ($persons[$c->person] ?? null) : null;
-            $birthDate = $person?->birthDate ?? null;
-            $cityName = ($person && ($person->city ?? null)) ? ($cities[$person->city] ?? null) : null;
+            $birthDate = $c->birthDate ?? null;
+            $cityName = $c->city
+                ? (is_numeric($c->city) ? ($cities[$c->city] ?? null) : $c->city)
+                : null;
 
             // Name parts via WebUser (source of truth per project rules)
             $webUser = $c->webUser ? ($webUsers[$c->webUser] ?? null) : null;

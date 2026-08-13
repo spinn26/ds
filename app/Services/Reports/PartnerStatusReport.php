@@ -29,21 +29,17 @@ class PartnerStatusReport extends AbstractReportType
         $names = DB::table('directory_of_activities')->pluck('name', 'id');
 
         // Email: основной источник WebUser (consultant.webUser → WebUser.email),
-        // фолбэк на Directual-контакт (consultant.person → person.email) — у
-        // legacy/терминированных webUser часто пуст.
+        // фолбэк — собственная колонка партнёра (перенесена из person
+        // 13.08.2026): у legacy/терминированных логина часто нет.
         $webIds = $rows->pluck('webUser')->filter()->unique();
         $emailByWeb = $webIds->isNotEmpty()
             ? DB::table('WebUser')->whereIn('id', $webIds)->pluck('email', 'id')
-            : collect();
-        $personIds = $rows->pluck('person')->filter()->unique();
-        $emailByPerson = $personIds->isNotEmpty()
-            ? DB::table('person')->whereIn('id', $personIds)->pluck('email', 'id')
             : collect();
 
         return $rows->map(fn ($c) => [
             $c->personName,
             (($c->webUser ? ($emailByWeb[$c->webUser] ?? null) : null)
-                ?: ($c->person ? ($emailByPerson[$c->person] ?? null) : null)) ?: '',
+                ?: ($c->email ?: null)) ?: '',
             $c->activity ? ($names[$c->activity] ?? '') : '',
             $c->dateActivity ?: $c->dateDeterministic ?: '',
             $c->dateDeterministicPlan ?: '',

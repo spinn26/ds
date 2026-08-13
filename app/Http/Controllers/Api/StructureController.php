@@ -197,13 +197,16 @@ class StructureController extends Controller
             });
         }
 
-        // Город хранится в person.city (FK на city) — сужаем по id городов.
+        // Город — собственная колонка партнёра (перенесена из person 13.08.2026).
+        // Хранит и название, и legacy-код справочника, поэтому ищем по обоим.
         if ($request->filled('city')) {
             $needle = '%' . $request->input('city') . '%';
-            $query->whereIn('person', function ($sub) use ($needle) {
-                $sub->from('person')->select('id')->whereIn('city', function ($c) use ($needle) {
-                    $c->from('city')->select('id')->where('cityNameRu', 'ilike', $needle);
-                });
+            $query->where(function ($q) use ($needle) {
+                $q->where('city', 'ilike', $needle)
+                    ->orWhereIn('city', function ($sub) use ($needle) {
+                        $sub->from('city')->select(DB::raw('"id"::text'))
+                            ->where('cityNameRu', 'ilike', $needle);
+                    });
             });
         }
 

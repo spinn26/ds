@@ -34,7 +34,6 @@
           <v-chip size="x-small" :color="confColor(g.confidence)" variant="tonal">
             {{ confLabel(g.confidence) }}
           </v-chip>
-          <v-chip v-if="g.sharedPerson" size="x-small" variant="tonal">общая person</v-chip>
           <v-chip v-if="g.sharedContact" size="x-small" variant="tonal">контакты совпадают</v-chip>
           <v-spacer />
           <span class="text-caption text-medium-emphasis">
@@ -48,7 +47,6 @@
               <th style="width:110px">Оставить</th>
               <th>Карточка</th>
               <th class="text-end" style="width:110px">Контрактов</th>
-              <th style="width:90px">person</th>
               <th>Партнёр</th>
               <th>Почта</th>
               <th>Телефон</th>
@@ -69,7 +67,6 @@
                 <v-chip v-if="c.self" size="x-small" variant="tonal" color="success" class="ml-2">на себя</v-chip>
               </td>
               <td class="text-end tnum">{{ c.contracts }}</td>
-              <td class="tnum text-medium-emphasis">{{ c.person ?? '—' }}</td>
               <td>{{ c.consultantName || '—' }}</td>
               <td class="text-truncate" style="max-width:200px">{{ c.email || '—' }}</td>
               <td class="tnum">{{ c.phone || '—' }}</td>

@@ -1327,16 +1327,12 @@ class AdminDataController extends Controller
             : collect();
 
         // Email партнёра: основной источник — WebUser (consultant.webUser →
-        // WebUser.email). У legacy/терминированных webUser часто пуст —
-        // фолбэк на Directual-контакт (consultant.person → person.email).
-        // Покрытие с фолбэком ~97% против ~53% только по WebUser.
+        // WebUser.email). У legacy/терминированных логина нет — берём
+        // собственную колонку партнёра (перенесена из person 13.08.2026),
+        // она и держит те же ~97% покрытия, что раньше давал фолбэк.
         $webUserIds = $detailRows->pluck('webUser')->filter()->unique();
         $emailByWebUser = $webUserIds->isNotEmpty()
             ? DB::table('WebUser')->whereIn('id', $webUserIds)->pluck('email', 'id')
-            : collect();
-        $personIds = $detailRows->pluck('person')->filter()->unique();
-        $emailByPerson = $personIds->isNotEmpty()
-            ? DB::table('person')->whereIn('id', $personIds)->pluck('email', 'id')
             : collect();
 
         // Per spec ✅Статусы партнеров §2 col.7: «Сумма ЛП от даты активации
@@ -1369,7 +1365,7 @@ class AdminDataController extends Controller
             }
         }
 
-        $details = $detailRows->map(function ($c) use ($activityNames, $lpFromActivation, $emailByWebUser, $emailByPerson) {
+        $details = $detailRows->map(function ($c) use ($activityNames, $lpFromActivation, $emailByWebUser) {
                 $activityName = $c->activity ? ($activityNames[$c->activity] ?? '—') : '—';
 
                 // Рассчитать "будет терминирован" для активных
@@ -1382,7 +1378,7 @@ class AdminDataController extends Controller
                     'id' => $c->id,
                     'personName' => $c->personName,
                     'email' => ($c->webUser ? ($emailByWebUser[$c->webUser] ?? null) : null)
-                        ?: ($c->person ? ($emailByPerson[$c->person] ?? null) : null) ?: null,
+                        ?: ($c->email ?: null),
                     'activityId' => $c->activity,
                     'activityName' => $activityName,
                     'dateCreated' => $c->dateCreated,
@@ -1519,15 +1515,16 @@ class AdminDataController extends Controller
             return response()->json(['duplicates' => []]);
         }
 
+        // Сверяем по имени самой карточки: person из поиска убрана (13.08.2026).
+        // Части ФИО там больше не ведутся, а её указатель мог вести на другого
+        // человека — подсказка показывала постороннего как «возможный дубль».
         $query = DB::table('client as c')
-            ->leftJoin('person as p', 'p.id', '=', 'c.person')
             ->leftJoin('consultant as cn', 'cn.id', '=', 'c.consultant')
             ->whereNull('c.dateDeleted')
-            ->whereRaw('LOWER(p."firstName") = ?', [$firstName])
-            ->whereRaw('LOWER(p."lastName") = ?', [$lastName])
+            ->whereRaw('lower(btrim("c"."personName")) LIKE ?', [$lastName.' '.$firstName.'%'])
             ->select([
-                'c.id', 'c.personName', 'p.email', 'p.phone', 'p.city',
-                'p.birthDate', 'c.consultant as consultantId',
+                'c.id', 'c.personName', 'c.email', 'c.phone', 'c.city',
+                'c.birthDate', 'c.consultant as consultantId',
                 'cn.personName as consultantName',
                 'c.dateCreated',
             ])
@@ -1826,36 +1823,14 @@ class AdminDataController extends Controller
         $firstName = $parts[1] ?? '';
         $patronymic = count($parts) > 2 ? implode(' ', array_slice($parts, 2)) : null;
 
-        $clientId = DB::transaction(function () use ($contract, $fio, $norm, $lastName, $firstName, $patronymic) {
-            // Переиспользуем person с тем же ФИО (её контакты), если есть.
-            $person = DB::table('person')
-                ->whereRaw(<<<'SQL'
-                    btrim(lower("lastName" || ' ' || coalesce("firstName",'') || ' ' || coalesce(patronymic,''))) = ?
-                SQL, [$norm])
-                ->orderBy('id')->first();
-
-            if ($person) {
-                $personId = $person->id;
-            } else {
-                \App\Support\LegacyId::syncSequence('person');
-                $personId = DB::table('person')->insertGetId([
-                    'firstName' => $firstName ?: $fio,
-                    'lastName' => $lastName,
-                    'patronymic' => $patronymic,
-                    'role' => 'client',
-                    'dateCreated' => now()->toIso8601String(),
-                ]);
-            }
-
+        $clientId = DB::transaction(function () use ($contract, $fio) {
+            // person не заводим и не переиспользуем (13.08.2026): карточка
+            // владеет своими данными. Контакты у контракта взять неоткуда —
+            // оператор заполнит их в карточке.
             \App\Support\LegacyId::syncSequence('client');
             $newClientId = DB::table('client')->insertGetId([
-                'person' => $personId,
                 'personName' => $fio,
                 'consultant' => $contract->consultant,
-                'email' => $person->email ?? null,
-                'phone' => $person->phone ?? null,
-                'birthDate' => $person->birthDate ?? null,
-                'city' => $person->city ?? null,
                 'dateCreated' => now(),
             ]);
 
@@ -3626,14 +3601,13 @@ class AdminDataController extends Controller
     public function clientDuplicates(Request $request): JsonResponse
     {
         $by = $request->input('by', 'name'); // name | email | phone
-        // Контакты клиента могут лежать не на самой карточке `client`, а на его
-        // `person` (client.person). Раньше дубли читали только c.email/c.phone —
-        // у части клиентов там пусто, и Почта/Телефон показывались «—», хотя на
-        // карточке клиента (из person) они есть. Берём с фолбэком на person.
-        $emailExpr = "lower(btrim(coalesce(nullif(c.email, ''), p.email)))";
+        // Контакты — из самой карточки: фолбэк на person снят (13.08.2026),
+        // контакты перенесены в client, а чужая привязка подставляла в группу
+        // номер постороннего и слепляла разных людей в «дубль».
+        $emailExpr = "lower(btrim(coalesce(nullif(c.email, ''), '')))";
         // Телефон — ПОСЛЕДНИЕ 10 ЦИФР (канон App\Support\Phone): иначе «+7 904…»
         // и «8 904…» это разные группы, и половина дублей по номеру не видна.
-        $phoneExpr = "right(regexp_replace(coalesce(nullif(c.phone, ''), p.phone, ''), '[^0-9]', '', 'g'), 10)";
+        $phoneExpr = "right(regexp_replace(coalesce(nullif(c.phone, ''), ''), '[^0-9]', '', 'g'), 10)";
         $expr = match ($by) {
             'email' => $emailExpr,
             'phone' => $phoneExpr,
@@ -3642,25 +3616,26 @@ class AdminDataController extends Controller
         // Пустые значения не группируем: иначе все безконтактные слипнутся в одну «группу».
         $minLen = $by === 'phone' ? 10 : 3;
 
+        // Контакты берём из самой карточки: фолбэк на person снят (13.08.2026),
+        // он подставлял в группировку по телефону чужой номер и слеплял в
+        // «дубли» разных людей.
         $rows = DB::table('client as c')
             ->leftJoin('consultant as cn', 'cn.id', '=', 'c.consultant')
-            ->leftJoin('person as p', 'p.id', '=', 'c.person')
             ->whereNull('c.dateDeleted')
             ->whereRaw("length($expr) >= ?", [$minLen])
             ->whereRaw("$expr IN (
                 SELECT $expr FROM client c
-                LEFT JOIN person p ON p.id = c.person
                 WHERE c.\"dateDeleted\" IS NULL AND length($expr) >= ?
                 GROUP BY 1 HAVING count(*) > 1
             )", [$minLen])
             ->selectRaw("$expr as grp")
             ->addSelect([
-                'c.id', 'c.personName', 'c.person',
+                'c.id', 'c.personName',
                 'c.dateCreated', 'c.consultant',
                 'cn.personName as consultantName',
             ])
-            ->selectRaw("coalesce(nullif(c.email, ''), p.email) as email")
-            ->selectRaw("coalesce(nullif(c.phone, ''), p.phone) as phone")
+            ->selectRaw("nullif(c.email, '') as email")
+            ->selectRaw("nullif(c.phone, '') as phone")
             ->orderByRaw("$expr, c.id")
             ->get();
 
@@ -3687,7 +3662,6 @@ class AdminDataController extends Controller
             $clients = $items->map(fn ($r) => [
                 'id' => (int) $r->id,
                 'name' => $r->personName,
-                'person' => $r->person ? (int) $r->person : null,
                 'consultantName' => $r->consultantName,
                 'contracts' => (int) ($counts[$r->id] ?? 0),
                 'email' => $r->email,
@@ -3698,16 +3672,17 @@ class AdminDataController extends Controller
                     && mb_strtolower(trim($r->consultantName)) === mb_strtolower(trim((string) $r->personName)),
             ])->values()->all();
 
-            $persons = array_values(array_unique(array_filter(array_column($clients, 'person'))));
+            // Признак «общая person» убран (13.08.2026): он считался сильным
+            // доказательством одного человека, а на деле одна запись держала
+            // карточки РАЗНЫХ людей — после переномерации при консолидации
+            // Directual. Остаётся совпадение контактов, оно проверяемо.
             $emails = array_values(array_filter(array_map(fn ($c) => mb_strtolower(trim((string) $c['email'])), $clients)));
             $phones = array_values(array_filter(array_map(fn ($c) => preg_replace('/[^0-9]/', '', (string) $c['phone']), $clients)));
-            $sharedPerson = count($persons) === 1 && count($clients) > 1;
             $sharedContact = (count($emails) > 1 && count(array_unique($emails)) === 1)
                 || (count($phones) > 1 && count(array_unique($phones)) === 1);
 
             $confidence = 'check';
-            if ($sharedPerson && $sharedContact) $confidence = 'merge';
-            elseif ($sharedPerson) $confidence = 'merge';
+            if ($sharedContact) $confidence = 'merge';
             elseif (array_filter(array_column($clients, 'self'))) $confidence = 'self';
 
             // Кандидат «оставить» — больше всего контрактов, при равенстве самый старый.
@@ -3718,7 +3693,6 @@ class AdminDataController extends Controller
                 'key' => $key,
                 'name' => $items->first()->personName,
                 'confidence' => $confidence,
-                'sharedPerson' => $sharedPerson,
                 'sharedContact' => $sharedContact,
                 'suggestedKeep' => $suggested,
                 'clients' => $clients,
