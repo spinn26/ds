@@ -25,18 +25,36 @@ class Telegram
         return ! empty(config('services.telegram.bot_token'));
     }
 
-    public static function send(int $userId, string $text): bool
+    public static function send(int $userId, string $text, string $parseMode = 'HTML'): bool
     {
         $chatId = DB::table('WebUser')->where('id', $userId)->value('telegram_chat_id');
         if (! $chatId || ! self::enabled()) return false;
-        return self::raw((string) $chatId, $text);
+        return self::raw((string) $chatId, $text, null, $parseMode);
+    }
+
+    /**
+     * Экранирование текста под MarkdownV2 — Telegram требует escape для
+     * ВСЕХ спецсимволов, иначе sendMessage отвечает 400 на любой минус
+     * или точку в тексте.
+     */
+    public static function escapeMarkdown(string $text): string
+    {
+        // Обратный слеш — строго первым: str_replace идёт по массиву слева
+        // направо, и если экранировать его последним, он задвоит слеши,
+        // добавленные предыдущими заменами.
+        $special = ['\\', '_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!'];
+
+        return str_replace($special, array_map(fn ($c) => '\\'.$c, $special), $text);
     }
 
     /**
      * Отправка по chat_id напрямую. Опционально reply_markup
      * (keyboard / inline_keyboard / remove_keyboard) — Bot API формат.
+     *
+     * $parseMode: 'HTML' (исторический дефолт — так размечено большинство
+     * наших уведомлений), 'MarkdownV2' или '' для сырого текста.
      */
-    public static function raw(string $chatId, string $text, ?array $replyMarkup = null): bool
+    public static function raw(string $chatId, string $text, ?array $replyMarkup = null, string $parseMode = 'HTML'): bool
     {
         $token = config('services.telegram.bot_token');
         if (! $token) return false;
@@ -44,9 +62,9 @@ class Telegram
             $payload = [
                 'chat_id' => $chatId,
                 'text' => $text,
-                'parse_mode' => 'HTML',
                 'disable_web_page_preview' => true,
             ];
+            if ($parseMode !== '') $payload['parse_mode'] = $parseMode;
             if ($replyMarkup !== null) $payload['reply_markup'] = $replyMarkup;
             $res = Http::timeout(8)->asJson()->post("https://api.telegram.org/bot{$token}/sendMessage", $payload);
             if (! $res->ok()) {
@@ -74,7 +92,7 @@ class Telegram
     }
 
     /** Рассылка всем пользователям с привязанным chat_id (без фильтра по ролям). */
-    public static function broadcastAll(string $text): int
+    public static function broadcastAll(string $text, string $parseMode = 'HTML'): int
     {
         if (! self::enabled()) return 0;
         $sent = 0;
@@ -83,9 +101,9 @@ class Telegram
             ->whereNotNull('telegram_chat_id')
             ->where('telegram_chat_id', '!=', '')
             ->orderBy('id')
-            ->chunk(500, function ($users) use ($text, &$sent) {
+            ->chunk(500, function ($users) use ($text, $parseMode, &$sent) {
                 foreach ($users as $u) {
-                    if (self::raw((string) $u->telegram_chat_id, $text)) $sent++;
+                    if (self::raw((string) $u->telegram_chat_id, $text, null, $parseMode)) $sent++;
                 }
             });
         return $sent;

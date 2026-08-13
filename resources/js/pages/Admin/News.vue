@@ -23,7 +23,8 @@
         </template>
         <template #item.created_at="{ value }">{{ fmtDate(value) }}</template>
         <template #item.content="{ value }">
-          <span class="text-body-2">{{ value?.length > 80 ? value.slice(0, 80) + '...' : value }}</span>
+          <!-- В базе лежит HTML из редактора — в превью показываем только текст. -->
+          <span class="text-body-2">{{ preview(value) }}</span>
         </template>
         <template #item.actions="{ item }">
           <ActionsCell :editable="canEdit('news')" :deletable="canFull('news')"
@@ -75,6 +76,7 @@ import {
 import { useCrud } from '../../composables/useCrud';
 import { usePermissions } from '../../composables/usePermissions';
 import { fmtDate } from '../../composables/useDesign';
+import { htmlToText } from '../../composables/useSafeHtml';
 
 const {
   items, loading,
@@ -109,6 +111,11 @@ const headers = [
   { title: 'Дата', key: 'created_at', width: 120 },
   { title: '', key: 'actions', sortable: false, width: 80 },
 ];
+
+function preview(value) {
+  const text = htmlToText(value);
+  return text.length > 80 ? `${text.slice(0, 80)}...` : text;
+}
 
 const { canEdit, canFull } = usePermissions();
 

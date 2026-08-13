@@ -551,8 +551,8 @@ class WorkspaceController extends Controller
 
         $active = $request->boolean('active', true);
         $id = DB::table('news')->insertGetId([
-            'title' => $request->title,
-            'content' => $request->content,
+            'title' => $request->input('title'),
+            'content' => $request->input('content'),
             'type' => $request->input('type', 'info'),
             'active' => $active,
             'created_by' => $request->user()->id,
@@ -562,14 +562,18 @@ class WorkspaceController extends Controller
         // Broadcast active news to all Telegram-linked users (best-effort).
         if ($active) {
             try {
-                $body = trim((string) $request->content);
+                // Контент из RichTextEditor — это HTML. В Telegram шлём его
+                // разметкой MarkdownV2, поэтому сначала разворачиваем в текст
+                // (иначе в сообщение уезжают сырые <div>/<br>), затем
+                // экранируем — MarkdownV2 требует escape всех спецсимволов.
+                $body = \App\Support\Html::toPlainText((string) $request->input('content'));
                 if (mb_strlen($body) > 600) {
                     $body = mb_substr($body, 0, 600) . '…';
                 }
-                $text = "📰 <b>Новая новость</b>\n\n"
-                    . '<b>' . htmlspecialchars($request->title) . '</b>'
-                    . ($body !== '' ? "\n" . htmlspecialchars($body) : '');
-                \App\Support\Telegram::broadcastAll($text);
+                $text = "📰 *Новая новость*\n\n"
+                    . '*' . \App\Support\Telegram::escapeMarkdown((string) $request->input('title')) . '*'
+                    . ($body !== '' ? "\n" . \App\Support\Telegram::escapeMarkdown($body) : '');
+                \App\Support\Telegram::broadcastAll($text, 'MarkdownV2');
             } catch (\Throwable) {
                 // Telegram is best-effort — never let it break news creation.
             }
@@ -581,8 +585,8 @@ class WorkspaceController extends Controller
     public function updateNews(Request $request, int $id): JsonResponse
     {
         DB::table('news')->where('id', $id)->update([
-            'title' => $request->title,
-            'content' => $request->content,
+            'title' => $request->input('title'),
+            'content' => $request->input('content'),
             'type' => $request->input('type', 'info'),
             'active' => $request->boolean('active'),
             'updated_at' => now(),

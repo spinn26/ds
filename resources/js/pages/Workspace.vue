@@ -314,7 +314,9 @@
                 </div>
                 <div class="text-caption text-medium-emphasis">{{ fmtDate(news.createdAt) }}</div>
               </div>
-              <div class="text-body-2" style="white-space: pre-line">{{ news.content }}</div>
+              <!-- Контент приходит из RichTextEditor как HTML; v-html обязателен,
+                   иначе партнёр видит сырые теги. Санитайз — useSafeHtml. -->
+              <div class="text-body-2 news-body" v-html="safeHtml(news.content)"></div>
             </v-card>
           </div>
         </v-card>
@@ -462,6 +464,7 @@ import TaskCard from './Admin/WorkspaceTaskCard.vue';
 
 const { mobile } = useDisplay();
 import { fmt, fmtDate } from '../composables/useDesign';
+import { safeHtml } from '../composables/useSafeHtml';
 
 const auth = useAuthStore();
 const loading = ref(true);
@@ -592,6 +595,25 @@ onMounted(async () => {
   border-left: 4px solid transparent;
   border-radius: var(--ds-radius-md, 8px);
 }
+/* Тело новости — HTML из RichTextEditor: даём отступам и спискам
+   те же размеры, что в редакторе, чтобы админ видел то же, что партнёр. */
+.news-body :deep(p) { margin: 0 0 0.5em; }
+.news-body :deep(p:last-child) { margin-bottom: 0; }
+.news-body :deep(ul),
+.news-body :deep(ol) { padding-left: 1.4em; margin: 0 0 0.5em; }
+.news-body :deep(h1) { font-size: 1.35em; font-weight: 700; margin: 0.5em 0 0.3em; }
+.news-body :deep(h2) { font-size: 1.2em; font-weight: 700; margin: 0.5em 0 0.3em; }
+.news-body :deep(h3) { font-size: 1.08em; font-weight: 700; margin: 0.5em 0 0.3em; }
+.news-body :deep(blockquote) {
+  border-left: 3px solid rgba(var(--v-theme-primary), 0.6);
+  margin: 0.5em 0;
+  padding: 0.2em 0.9em;
+  background: rgba(var(--v-theme-on-surface), 0.04);
+  border-radius: 0 6px 6px 0;
+}
+.news-body :deep(a) { color: rgb(var(--v-theme-primary)); word-break: break-word; }
+.news-body :deep(hr) { border: none; border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); margin: 0.8em 0; }
+
 .news-warning { border-left-color: rgb(var(--v-theme-warning)); }
 .news-success { border-left-color: rgb(var(--v-theme-success)); }
 .news-info { border-left-color: rgb(var(--v-theme-info)); }
