@@ -28,37 +28,93 @@
           <v-icon size="18" color="warning">mdi-account-alert</v-icon>
           <span class="ds-title-l">{{ g.key }}</span>
         </div>
-        <v-table density="compact">
+        <v-table density="compact" class="dup-table">
           <thead>
             <tr>
-              <th>ID</th><th>Статус</th><th>Логин</th><th>Контакты</th>
-              <th class="text-end">Контракты</th><th class="text-end">Клиенты</th>
-              <th class="text-end">Ниже</th><th class="text-end">Комиссии</th>
-              <th class="text-end">Остаток</th><th></th>
+              <th>Запись</th>
+              <th>Статус</th>
+              <th>Контакты</th>
+              <th>Наставник / код</th>
+              <th class="text-end">Объёмы</th>
+              <th class="text-end">Портфель</th>
+              <th class="text-end">Деньги</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="r in g.records" :key="r.id">
-              <td>{{ r.id }}</td>
-              <td><StatusChip size="x-small" :text="activityName(r.activityId)" :color="activityColor(r.activityId)" /></td>
+              <!-- Кто это: id, вход в кабинет, даты жизни записи -->
               <td>
-                <v-icon v-if="r.hasLogin" size="16" color="success">mdi-check</v-icon>
-                <span v-else class="text-medium-emphasis">—</span>
+                <div class="d-flex align-center ga-1">
+                  <span class="font-weight-bold">{{ r.id }}</span>
+                  <v-chip v-if="r.hasLogin" size="x-small" color="success" variant="tonal">вход есть</v-chip>
+                  <v-chip v-else size="x-small" color="warning" variant="tonal">без входа</v-chip>
+                  <v-chip v-if="r.isClient" size="x-small" variant="tonal">ещё и клиент</v-chip>
+                </div>
+                <div class="text-caption text-medium-emphasis mt-1">
+                  заведён {{ d(r.dateCreated) }}
+                  <template v-if="r.lastSeenAt"> · заходил {{ d(r.lastSeenAt) }}</template>
+                  <template v-else> · не заходил</template>
+                </div>
               </td>
+
+              <!-- Статус, квалификация, акцепт, терминации -->
+              <td>
+                <StatusChip size="x-small" :text="activityName(r.activityId)" :color="activityColor(r.activityId)" />
+                <div class="text-caption text-medium-emphasis mt-1">
+                  {{ r.statusName || 'без квалификации' }}
+                </div>
+                <div class="text-caption">
+                  <span :class="r.acceptance ? 'text-success' : 'text-medium-emphasis'">
+                    {{ r.acceptance ? 'акцепт есть' : 'без акцепта' }}
+                  </span>
+                  <template v-if="r.terminationCount"> · терминаций {{ r.terminationCount }}</template>
+                </div>
+              </td>
+
               <td class="text-caption">
                 {{ r.email || '—' }}<br>{{ r.phone || '—' }}
               </td>
-              <td class="text-end">{{ r.contracts }}</td>
-              <td class="text-end">{{ r.clients }}</td>
-              <td class="text-end">{{ r.downline }}</td>
-              <td class="text-end">{{ r.commissions }}</td>
-              <td class="text-end" :class="r.remaining ? 'font-weight-bold' : 'text-medium-emphasis'">
-                {{ fmt(r.remaining) }} ₽
+
+              <td class="text-caption">
+                {{ r.inviterName || '—' }}
+                <div class="text-medium-emphasis">код {{ r.participantCode || '—' }}</div>
+                <div v-if="r.dateActivity" class="text-medium-emphasis">активен с {{ d(r.dateActivity) }}</div>
               </td>
+
+              <!-- ЛП/ГП и глубина истории расчётов -->
+              <td class="text-end text-caption">
+                ЛП {{ fmt(r.personalVolume) }}<br>
+                ГП {{ fmt(r.groupVolume) }}
+                <div class="text-medium-emphasis">периодов {{ r.qualLogs }}</div>
+              </td>
+
+              <!-- Что на записи висит -->
+              <td class="text-end text-caption">
+                контрактов {{ r.contracts }}<br>
+                клиентов {{ r.clients }}
+                <div :class="r.downline ? 'text-warning font-weight-bold' : 'text-medium-emphasis'">
+                  ниже {{ r.downline }}
+                </div>
+              </td>
+
+              <!-- Деньги: начислено / выплачено / остаток -->
+              <td class="text-end text-caption">
+                начислено {{ fmt(r.accrued) }} ₽<br>
+                выплачено {{ fmt(r.payed) }} ₽
+                <div :class="r.remaining ? 'font-weight-bold text-warning' : 'text-medium-emphasis'">
+                  остаток {{ fmt(r.remaining) }} ₽
+                </div>
+                <div class="text-medium-emphasis">комиссий {{ r.commissions }} на {{ fmt(r.commissionsSum) }} ₽</div>
+              </td>
+
               <td class="text-end">
                 <v-btn size="x-small" variant="tonal" color="primary"
-                  :disabled="g.records.length !== 2"
+                  :disabled="g.records.length !== 2 || r.downline > 0"
                   @click="openMerge(g, r)">Оставить эту</v-btn>
+                <div v-if="r.downline > 0" class="text-caption text-warning mt-1" style="max-width:150px">
+                  у второй записи есть нижестоящие — сначала «Перестановки»
+                </div>
               </td>
             </tr>
           </tbody>
@@ -115,6 +171,8 @@ const snack = ref({ open: false, color: 'success', text: '' });
 const notify = (text, color = 'success') => { snack.value = { open: true, color, text }; };
 
 const fmt = (n) => Number(n || 0).toLocaleString('ru-RU', { minimumFractionDigits: 2 });
+// Дата коротко: в таблице важен год, а не часы.
+const d = (v) => (v ? new Date(v).toLocaleDateString('ru-RU') : '—');
 const describe = (obj) => Object.entries(obj || {}).map(([k, v]) => `${k}: ${v}`).join(', ') || '—';
 
 const ACTIVITY = { 1: ['Активен', 'success'], 2: ['Активен', 'success'], 3: ['Терминирован', 'error'],

@@ -50,8 +50,14 @@ class AdminDuplicatesController extends Controller
                 where c2.\"dateDeleted\" is null and c2.\"personName\" is not null
                 group by 1 having count(*) > 1
             )")
+            ->leftJoin('status_levels as sl', 'sl.id', '=', 'c.status_and_lvl')
             ->selectRaw("$groupExpr as grp, c.id, c.\"personName\", c.activity, c.\"webUser\",
-                c.\"participantCode\", c.\"inviterName\", c.\"dateCreated\", w.email, w.phone")
+                c.\"participantCode\", c.\"inviterName\", c.\"dateCreated\", c.\"dateActivity\",
+                c.\"dateDeactivity\", c.acceptance, c.\"terminationCount\",
+                c.\"personalVolume\", c.\"groupVolumeCumulative\",
+                sl.title as status_title, sl.level as status_level,
+                coalesce(w.email, c.email) as email, coalesce(w.phone, c.phone) as phone,
+                w.last_seen_at")
             ->orderByRaw("$groupExpr, c.id")
             ->get();
 
@@ -70,6 +76,16 @@ class AdminDuplicatesController extends Controller
                 'participantCode' => $r->participantCode,
                 'inviterName' => $r->inviterName,
                 'dateCreated' => $r->dateCreated,
+                'dateActivity' => $r->dateActivity,
+                'dateDeactivity' => $r->dateDeactivity,
+                'lastSeenAt' => $r->last_seen_at,
+                'acceptance' => (bool) $r->acceptance,
+                'terminationCount' => (int) ($r->terminationCount ?? 0),
+                'personalVolume' => round((float) ($r->personalVolume ?? 0), 2),
+                'groupVolume' => round((float) ($r->groupVolumeCumulative ?? 0), 2),
+                'statusName' => $r->status_title
+                    ? $r->status_level.' ['.$r->status_title.']'
+                    : null,
             ] + ($metrics[$r->id] ?? self::EMPTY_METRICS))->values(),
         ])->values();
 
@@ -78,7 +94,8 @@ class AdminDuplicatesController extends Controller
 
     private const EMPTY_METRICS = [
         'contracts' => 0, 'clients' => 0, 'downline' => 0,
-        'commissions' => 0, 'remaining' => 0.0,
+        'commissions' => 0, 'commissionsSum' => 0.0, 'remaining' => 0.0,
+        'accrued' => 0.0, 'payed' => 0.0, 'qualLogs' => 0, 'isClient' => false,
     ];
 
     /** @param list<int> $ids @return array<int,array<string,mixed>> */
@@ -97,17 +114,41 @@ class AdminDuplicatesController extends Controller
         $clients = $count('client', 'consultant', 'dateDeleted');
         $downline = $count('consultant', 'inviter', 'dateDeleted');
         $commissions = $count('commission', 'consultant', 'deletedAt');
-        $remaining = DB::table('consultantBalance')->whereIn('consultant', $ids)
-            ->select('consultant', DB::raw('sum(remaining) as s'))->groupBy('consultant')->pluck('s', 'consultant');
+        // Деньги показываем тремя числами: начислено за всю историю, выплачено
+        // и остаток. Оператору важно видеть не только «есть остаток», но и был
+        // ли по записи оборот вообще — клон без начислений сливается спокойно.
+        $balance = DB::table('consultantBalance')->whereIn('consultant', $ids)
+            ->select('consultant',
+                DB::raw('sum(coalesce("accruedTotal",0)) as accrued'),
+                DB::raw('sum(coalesce(payed,0)) as payed'),
+                DB::raw('sum(coalesce(remaining,0)) as remaining'))
+            ->groupBy('consultant')->get()->keyBy('consultant');
+
+        $commissionsSum = DB::table('commission')->whereIn('consultant', $ids)->whereNull('deletedAt')
+            ->select('consultant', DB::raw('sum(coalesce(amount,0)) as s'))
+            ->groupBy('consultant')->pluck('s', 'consultant');
+
+        // Глубина истории: сколько периодов записи насчитано квалификаций.
+        $qualLogs = $count('qualificationLog', 'consultant', 'dateDeleted');
+
+        // Является ли партнёр ещё и клиентом (явная связь, а не общий person).
+        $asClient = DB::table('client')->whereIn('partner_consultant_id', $ids)
+            ->whereNull('dateDeleted')->pluck('partner_consultant_id')->unique()->flip();
 
         $out = [];
         foreach ($ids as $id) {
+            $b = $balance[$id] ?? null;
             $out[$id] = [
                 'contracts' => (int) ($contracts[$id] ?? 0),
                 'clients' => (int) ($clients[$id] ?? 0),
                 'downline' => (int) ($downline[$id] ?? 0),
                 'commissions' => (int) ($commissions[$id] ?? 0),
-                'remaining' => round((float) ($remaining[$id] ?? 0), 2),
+                'commissionsSum' => round((float) ($commissionsSum[$id] ?? 0), 2),
+                'qualLogs' => (int) ($qualLogs[$id] ?? 0),
+                'accrued' => round((float) ($b->accrued ?? 0), 2),
+                'payed' => round((float) ($b->payed ?? 0), 2),
+                'remaining' => round((float) ($b->remaining ?? 0), 2),
+                'isClient' => isset($asClient[$id]),
             ];
         }
 
