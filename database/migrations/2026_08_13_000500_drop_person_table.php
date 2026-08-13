@@ -29,13 +29,15 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('client', function (Blueprint $table) {
-            $table->dropColumn('person');
-        });
+        // Колонок может не быть на чистой установке — legacy-схема приходила
+        // дампом, а не миграциями.
+        if (Schema::hasColumn('client', 'person')) {
+            Schema::table('client', fn (Blueprint $table) => $table->dropColumn('person'));
+        }
 
-        Schema::table('consultant', function (Blueprint $table) {
-            $table->dropColumn('person');
-        });
+        if (Schema::hasColumn('consultant', 'person')) {
+            Schema::table('consultant', fn (Blueprint $table) => $table->dropColumn('person'));
+        }
 
         DB::statement('DROP TABLE IF EXISTS person');
     }

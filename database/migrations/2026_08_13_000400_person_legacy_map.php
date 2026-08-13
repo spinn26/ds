@@ -30,6 +30,12 @@ return new class extends Migration
             $table->timestamp('created_at')->nullable();
         });
 
+        // На чистой установке (миграции с нуля) legacy-таблицы person нет —
+        // карту наполнять не из чего, и это не ошибка.
+        if (! DB::selectOne("SELECT to_regclass('public.person') AS t")->t) {
+            return;
+        }
+
         DB::statement(<<<'SQL'
             INSERT INTO person_legacy_map (person_id, client_id, consultant_id, person_fio, created_at)
             SELECT p.id,
