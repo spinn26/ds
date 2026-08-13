@@ -365,6 +365,51 @@
                 hint="URL для кнопки «Открыть» в модалке «Программы продукта» на витрине партнёра"
                 persistent-hint />
             </v-col>
+
+            <!-- Расчётные поля программы. До слияния каталогов они жили только
+                 в legacy-таблице Directual: тарифы оператор видел, а способ
+                 начисления ЛП или %ДС программы поменять не мог. -->
+            <v-col cols="12">
+              <div class="text-subtitle-2 mt-2 mb-1">Расчёт</div>
+              <div class="text-caption text-medium-emphasis mb-2">
+                Эти поля участвуют в расчёте комиссий и баллов. Пусто — берётся тариф по строкам ниже.
+              </div>
+            </v-col>
+            <v-col cols="12" md="6">
+              <v-select v-model="editProgram.pointsMethod" :items="POINTS_METHODS"
+                label="Способ начисления ЛП" clearable density="comfortable"
+                hint="Как считаются баллы по сделке" persistent-hint />
+            </v-col>
+            <v-col cols="12" md="6">
+              <v-text-field v-model="editProgram.dsPercent" label="%ДС программы" type="number"
+                suffix="%" hint="Общий процент, если не задан построчный тариф" persistent-hint />
+            </v-col>
+            <v-col cols="12" md="6">
+              <v-text-field v-model="editProgram.commissionCalcProperty" label="Свойство расчёта"
+                hint="commissionCalcProperty — по нему тариф выбирается для транзакции" persistent-hint />
+            </v-col>
+            <v-col cols="12" md="6">
+              <v-text-field v-model="editProgram.kvPayoutYear" label="Год выплаты КВ" />
+            </v-col>
+            <v-col cols="12" md="4">
+              <v-text-field v-model="editProgram.fixedCost" label="Фиксированная стоимость" type="number" />
+            </v-col>
+            <v-col cols="12" md="4">
+              <v-text-field v-model="editProgram.pointsMin" label="ЛП минимум" type="number" />
+            </v-col>
+            <v-col cols="12" md="4">
+              <v-text-field v-model="editProgram.pointsMax" label="ЛП максимум" type="number" />
+            </v-col>
+            <v-col cols="12">
+              <v-text-field v-model="editProgram.pointsFormula" label="Формула ЛП"
+                hint="Используется, когда способ начисления — «по формуле»" persistent-hint />
+            </v-col>
+            <v-col cols="12" md="6">
+              <v-text-field v-model="editProgram.termContract" label="Срок договора" />
+            </v-col>
+            <v-col cols="12" md="6">
+              <v-text-field v-model="editProgram.categoryName" label="Категория (расчёт)" />
+            </v-col>
             <v-col cols="12">
               <!-- Срок/Год КВ/Валюта теперь живут ПОСТРОЧНО в тарифах ниже
                    (у свойств может быть разная валюта). Здесь — только сводка
@@ -501,6 +546,7 @@
             </v-col>
             <v-col cols="12" sm="4">
               <v-checkbox v-model="editProgram.visibleToCalculator" label="В калькуляторе" density="compact" hide-details />
+              <v-checkbox v-model="editProgram.noCommission" label="Без комиссии" density="compact" hide-details />
             </v-col>
           </v-row>
           <v-alert v-if="programError" type="error" density="compact" class="mt-2">{{ programError }}</v-alert>
@@ -669,6 +715,13 @@ async function uploadImage(kind) {
 // Program dialog
 const programDialog = ref(false);
 const programError = ref('');
+// Способы начисления ЛП — те же ключи, что читает калькулятор (pointsMethod).
+const POINTS_METHODS = [
+  { title: 'Сумма без НДС × %ДС', value: 'amount_x_dsPercent' },
+  { title: 'Сумма ÷ 100', value: 'amount_div_100' },
+  { title: 'Фиксированные баллы', value: 'fixed' },
+  { title: 'По формуле', value: 'formula' },
+];
 // Итог синка тарифов после сохранения программы (см. reportTariffSync).
 const tariffSync = ref(null);
 const editProgram = ref({});
@@ -881,7 +934,14 @@ function generateYearRows() {
 
 function openCreateProgram(product) {
   editProgramProductId.value = product.id;
-  editProgram.value = { name: '', term: '', currency: null, active: true, visibleToResident: true, visibleToCalculator: true, tariffs: [] };
+  editProgram.value = {
+    name: '', term: '', currency: null, active: true,
+    visibleToResident: true, visibleToCalculator: true, noCommission: false,
+    pointsMethod: null, pointsFormula: null, pointsMin: null, pointsMax: null,
+    dsPercent: null, commissionCalcProperty: null, kvPayoutYear: null,
+    fixedCost: null, termContract: null, categoryName: null,
+    tariffs: [],
+  };
   programError.value = '';
   programDialog.value = true;
 }

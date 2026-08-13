@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Схема продуктов DS</title>
+<style>
+  :root {
+    --bg: #f6f7f5;
+    --surface: #ffffff;
+    --surface-2: #eef1ed;
+    --ink: #1b201c;
+    --muted: #667064;
+    --line: #d7ddd5;
+    --catalog: #1f6f5c;
+    --catalog-soft: #e2efea;
+    --legacy: #9a6a1f;
+    --legacy-soft: #f5ecdb;
+    --danger: #a33a2c;
+    --radius: 10px;
+  }
+  :root:not([data-theme="light"]) {
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #12150f;
+      --surface: #1a1e18;
+      --surface-2: #212619;
+      --ink: #e8ece3;
+      --muted: #9aa394;
+      --line: #333a2e;
+      --catalog: #6ec2a6;
+      --catalog-soft: #1d2c26;
+      --legacy: #d3a75a;
+      --legacy-soft: #2a2418;
+      --danger: #e0866f;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #12150f;
+    --surface: #1a1e18;
+    --surface-2: #212619;
+    --ink: #e8ece3;
+    --muted: #9aa394;
+    --line: #333a2e;
+    --catalog: #6ec2a6;
+    --catalog-soft: #1d2c26;
+    --legacy: #d3a75a;
+    --legacy-soft: #2a2418;
+    --danger: #e0866f;
+  }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 40px 20px 72px; }
+  header { border-bottom: 2px solid var(--ink); padding-bottom: 18px; margin-bottom: 34px; }
+  .eyebrow {
+    font-size: 12px; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--muted); margin: 0 0 8px;
+  }
+  h1 {
+    font-family: Georgia, "Iowan Old Style", serif;
+    font-size: clamp(30px, 5vw, 42px); line-height: 1.15; margin: 0 0 10px;
+    text-wrap: balance; font-weight: 600;
+  }
+  .lede { margin: 0; color: var(--muted); max-width: 62ch; }
+  h2 {
+    font-family: Georgia, "Iowan Old Style", serif;
+    font-size: 25px; margin: 46px 0 6px; font-weight: 600; text-wrap: balance;
+  }
+  h2 + p { margin-top: 0; color: var(--muted); max-width: 64ch; }
+  p { max-width: 66ch; }
+  code, .mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: .92em; }
+
+  .figure { margin: 26px 0 8px; }
+  .figure-scroll { overflow-x: auto; }
+  figure { margin: 0; }
+  svg { display: block; max-width: 100%; height: auto; color: var(--ink); }
+  figcaption { color: var(--muted); font-size: 14px; margin-top: 10px; max-width: 66ch; }
+
+  .grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); margin: 22px 0; }
+  .card {
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 16px 18px;
+  }
+  .card h3 { margin: 0 0 4px; font-size: 15px; font-family: ui-monospace, Consolas, monospace; }
+  .card .n { font-size: 26px; font-variant-numeric: tabular-nums; font-weight: 600; }
+  .card p { margin: 4px 0 0; font-size: 13.5px; color: var(--muted); }
+  .card.keep { border-left: 4px solid var(--catalog); }
+  .card.legacy { border-left: 4px solid var(--legacy); }
+  .card.gone { border-left: 4px solid var(--danger); }
+
+  table { width: 100%; border-collapse: collapse; margin: 18px 0; font-size: 14.5px; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); }
+  th { font-size: 12px; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.name { font-family: ui-monospace, Consolas, monospace; font-size: 13.5px; }
+  .tag {
+    display: inline-block; font-size: 11.5px; padding: 1px 8px; border-radius: 999px;
+    border: 1px solid var(--line); color: var(--muted); white-space: nowrap;
+  }
+  .tag.keep { color: var(--catalog); border-color: var(--catalog); background: var(--catalog-soft); }
+  .tag.legacy { color: var(--legacy); border-color: var(--legacy); background: var(--legacy-soft); }
+  .tag.gone { color: var(--danger); border-color: var(--danger); }
+  .table-scroll { overflow-x: auto; }
+
+  .note {
+    background: var(--surface-2); border-radius: var(--radius); padding: 14px 18px;
+    margin: 22px 0; font-size: 15px;
+  }
+  .note strong { color: var(--catalog); }
+  footer { margin-top: 54px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13.5px; }
+</style>
+</head>
+<body>
+
+
+<div class="wrap">
+  <header>
+    <p class="eyebrow">База newds · 13 августа 2026</p>
+    <h1>Продукты: что где лежит</h1>
+    <p class="lede">Шестнадцать таблиц вокруг продуктов на проде — и во что они складываются
+      после слияния каталогов, проверенного на локальной копии.</p>
+  </header>
+
+  <h2>Сейчас на проде</h2>
+  <p>Продукт живёт в двух местах: витрина <code>products_catalog</code>, которую видит оператор,
+    и legacy-таблица <code>product</code> из Directual, на которую ссылаются контракты.</p>
+
+  <div class="figure figure-scroll">
+    <figure>
+      <svg viewBox="0 0 840 300" role="img"
+        aria-label="Контракты и тарифы ссылаются на legacy-таблицы product и program, а оператор правит отдельный каталог; между ними синхронизация">
+        <defs>
+          <marker id="a-ink" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor" />
+          </marker>
+          <marker id="a-warn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="#9a6a1f" />
+          </marker>
+        </defs>
+
+        <text x="0" y="16" font-size="12" fill="currentColor" opacity=".65">ДАННЫЕ ПЛАТФОРМЫ</text>
+        <rect x="0" y="28" width="170" height="52" rx="8" fill="none" stroke="currentColor" />
+        <text x="14" y="50" font-size="13">contract</text>
+        <text x="14" y="68" font-size="11.5" opacity=".65">18 756 строк</text>
+
+        <rect x="0" y="98" width="170" height="52" rx="8" fill="none" stroke="currentColor" />
+        <text x="14" y="120" font-size="13">dsCommission</text>
+        <text x="14" y="138" font-size="11.5" opacity=".65">4 451 тариф %ДС</text>
+
+        <text x="330" y="16" font-size="12" fill="#9a6a1f">LEGACY DIRECTUAL</text>
+        <rect x="330" y="28" width="180" height="52" rx="8" fill="none" stroke="#9a6a1f" />
+        <text x="344" y="50" font-size="13" fill="#9a6a1f">product</text>
+        <text x="344" y="68" font-size="11.5" fill="#9a6a1f" opacity=".8">104 записи</text>
+
+        <rect x="330" y="98" width="180" height="52" rx="8" fill="none" stroke="#9a6a1f" />
+        <text x="344" y="120" font-size="13" fill="#9a6a1f">program</text>
+        <text x="344" y="138" font-size="11.5" fill="#9a6a1f" opacity=".8">1 655 записей</text>
+
+        <text x="640" y="16" font-size="12" fill="#1f6f5c">ВИТРИНА</text>
+        <rect x="640" y="28" width="190" height="52" rx="8" fill="none" stroke="#1f6f5c" />
+        <text x="654" y="50" font-size="13" fill="#1f6f5c">products_catalog</text>
+        <text x="654" y="68" font-size="11.5" fill="#1f6f5c" opacity=".8">102 карточки</text>
+
+        <rect x="640" y="98" width="190" height="52" rx="8" fill="none" stroke="#1f6f5c" />
+        <text x="654" y="120" font-size="13" fill="#1f6f5c">programs_catalog</text>
+        <text x="654" y="138" font-size="11.5" fill="#1f6f5c" opacity=".8">691 карточка</text>
+
+        <line x1="170" y1="54" x2="322" y2="54" stroke="currentColor" marker-end="url(#a-ink)" />
+        <text x="196" y="46" font-size="11.5">ссылается</text>
+        <line x1="170" y1="124" x2="322" y2="124" stroke="currentColor" marker-end="url(#a-ink)" />
+        <text x="196" y="116" font-size="11.5">ссылается</text>
+
+        <line x1="632" y1="54" x2="518" y2="54" stroke="#9a6a1f" stroke-dasharray="5 4" marker-end="url(#a-warn)" />
+        <line x1="632" y1="124" x2="518" y2="124" stroke="#9a6a1f" stroke-dasharray="5 4" marker-end="url(#a-warn)" />
+        <text x="528" y="94" font-size="11.5" fill="#9a6a1f">синхронизация</text>
+
+        <rect x="640" y="196" width="190" height="46" rx="8" fill="none" stroke="#1f6f5c" />
+        <text x="654" y="224" font-size="13" fill="#1f6f5c">оператор правит здесь</text>
+        <line x1="735" y1="196" x2="735" y2="158" stroke="#1f6f5c" marker-end="url(#a-ink)" />
+
+        <text x="0" y="212" font-size="12.5" fill="#9a6a1f">Расчётные поля программы —</text>
+        <text x="0" y="230" font-size="12.5" fill="#9a6a1f">способ ЛП, %ДС, свойство расчёта —</text>
+        <text x="0" y="248" font-size="12.5" fill="#9a6a1f">есть только в legacy: из интерфейса</text>
+        <text x="0" y="266" font-size="12.5" fill="#9a6a1f">их не поменять.</text>
+      </svg>
+      <figcaption>Два источника данных об одном продукте. Контракты смотрят в legacy, оператор
+        правит витрину, между ними синхронизация — и именно на ней терялись тарифы.</figcaption>
+    </figure>
+  </div>
+
+  <h2>После слияния</h2>
+  <p>Каталог перенумерован в id legacy, поэтому контракты и тарифы не сдвинулись ни на строку —
+    они просто стали указывать на каталог. Старые имена остались как представления.</p>
+
+  <div class="figure figure-scroll">
+    <figure>
+      <svg viewBox="0 0 840 260" role="img"
+        aria-label="После слияния контракты и тарифы ссылаются прямо на каталог, а legacy product и program стали представлениями поверх него">
+        <defs>
+          <marker id="b-ink" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor" />
+          </marker>
+          <marker id="b-cat" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="#1f6f5c" />
+          </marker>
+        </defs>
+
+        <text x="0" y="16" font-size="12" fill="currentColor" opacity=".65">ДАННЫЕ ПЛАТФОРМЫ</text>
+        <rect x="0" y="28" width="170" height="52" rx="8" fill="none" stroke="currentColor" />
+        <text x="14" y="50" font-size="13">contract</text>
+        <text x="14" y="68" font-size="11.5" opacity=".65">те же id продуктов</text>
+
+        <rect x="0" y="98" width="170" height="52" rx="8" fill="none" stroke="currentColor" />
+        <text x="14" y="120" font-size="13">dsCommission</text>
+        <text x="14" y="138" font-size="11.5" opacity=".65">не тронут</text>
+
+        <text x="360" y="16" font-size="12" fill="#1f6f5c">ЕДИНЫЙ КАТАЛОГ</text>
+        <rect x="360" y="28" width="220" height="52" rx="8" fill="none" stroke="#1f6f5c" stroke-width="2" />
+        <text x="376" y="50" font-size="13" fill="#1f6f5c">products_catalog</text>
+        <text x="376" y="68" font-size="11.5" fill="#1f6f5c" opacity=".8">102 · id = прежние id legacy</text>
+
+        <rect x="360" y="98" width="220" height="52" rx="8" fill="none" stroke="#1f6f5c" stroke-width="2" />
+        <text x="376" y="120" font-size="13" fill="#1f6f5c">programs_catalog</text>
+        <text x="376" y="138" font-size="11.5" fill="#1f6f5c" opacity=".8">690 · + 13 расчётных полей</text>
+
+        <line x1="170" y1="54" x2="352" y2="54" stroke="currentColor" marker-end="url(#b-ink)" />
+        <text x="206" y="46" font-size="11.5">ссылается</text>
+        <line x1="170" y1="124" x2="352" y2="124" stroke="currentColor" marker-end="url(#b-ink)" />
+        <text x="206" y="116" font-size="11.5">ссылается</text>
+
+        <rect x="660" y="28" width="170" height="52" rx="8" fill="none" stroke="currentColor" stroke-dasharray="6 4" opacity=".75" />
+        <text x="674" y="50" font-size="13" opacity=".8">product</text>
+        <text x="674" y="68" font-size="11.5" opacity=".55">представление</text>
+
+        <rect x="660" y="98" width="170" height="52" rx="8" fill="none" stroke="currentColor" stroke-dasharray="6 4" opacity=".75" />
+        <text x="674" y="120" font-size="13" opacity=".8">program</text>
+        <text x="674" y="138" font-size="11.5" opacity=".55">представление</text>
+
+        <line x1="588" y1="54" x2="652" y2="54" stroke="currentColor" stroke-dasharray="5 4" opacity=".7" marker-end="url(#b-ink)" />
+        <line x1="588" y1="124" x2="652" y2="124" stroke="currentColor" stroke-dasharray="5 4" opacity=".7" marker-end="url(#b-ink)" />
+        <text x="596" y="176" font-size="11.5" opacity=".7">старые имена колонок —</text>
+        <text x="596" y="192" font-size="11.5" opacity=".7">55 мест в коде читают как раньше</text>
+
+        <rect x="360" y="196" width="220" height="44" rx="8" fill="none" stroke="#1f6f5c" />
+        <text x="376" y="223" font-size="13" fill="#1f6f5c">правится только здесь</text>
+        <line x1="470" y1="196" x2="470" y2="158" stroke="#1f6f5c" marker-end="url(#b-cat)" />
+      </svg>
+      <figcaption>Один источник данных. Пересчёт комиссий на контрольных транзакциях после
+        слияния совпал: 20 из 20, копейка в копейку.</figcaption>
+    </figure>
+  </div>
+
+  <div class="note">
+    <strong>Почему перенумеровали каталог, а не контракты.</strong> Тариф %ДС ищется по паре
+    продукт × программа. Переписать 18 756 контрактов на новые id значило рисковать деньгами:
+    ошибка вылезла бы месяцы спустя заниженной комиссией. Каталог — 792 строки, его сдвинуть
+    безопасно.
+  </div>
+
+  <h2>Все шестнадцать таблиц</h2>
+  <p>Что есть на проде сегодня и что с этим делать.</p>
+
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr><th>Таблица</th><th>Строк</th><th>Назначение</th><th>Судьба</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="name">products_catalog</td><td class="num">102</td><td>Продукты витрины</td><td><span class="tag keep">остаётся</span></td></tr>
+        <tr><td class="name">programs_catalog</td><td class="num">691</td><td>Программы витрины</td><td><span class="tag keep">остаётся</span></td></tr>
+        <tr><td class="name">dsCommission</td><td class="num">4 451</td><td>Тарифы %ДС для расчёта</td><td><span class="tag keep">остаётся</span></td></tr>
+        <tr><td class="name">productType</td><td class="num">18</td><td>Справочник типов</td><td><span class="tag keep">остаётся</span></td></tr>
+        <tr><td class="name">productCategory</td><td class="num">8</td><td>Справочник категорий</td><td><span class="tag keep">остаётся</span></td></tr>
+        <tr><td class="name">consultantProgramsData</td><td class="num">37 024</td><td>Расчётные данные партнёра по программам</td><td><span class="tag keep">остаётся</span></td></tr>
+        <tr><td class="name">education_course_product</td><td class="num">23</td><td>Курс ↔ продукт</td><td><span class="tag keep">остаётся</span></td></tr>
+        <tr><td class="name">education_course_program</td><td class="num">16</td><td>Курс ↔ программа</td><td><span class="tag keep">остаётся</span></td></tr>
+        <tr><td class="name">product</td><td class="num">104</td><td>Продукты Directual</td><td><span class="tag legacy">станет представлением</span></td></tr>
+        <tr><td class="name">program</td><td class="num">1 655</td><td>Программы Directual</td><td><span class="tag legacy">станет представлением</span></td></tr>
+        <tr><td class="name">productTags</td><td class="num">1</td><td>Пустой справочник тегов</td><td><span class="tag gone">под снос</span></td></tr>
+        <tr><td class="name">insmartProduct</td><td class="num">8</td><td>След импорта Insmart</td><td><span class="tag gone">проверить и снести</span></td></tr>
+        <tr><td class="name">legacy_products</td><td class="num">28</td><td>След импорта</td><td><span class="tag gone">проверить и снести</span></td></tr>
+        <tr><td class="name">program_collapse_backup_2026_05_27</td><td class="num">5 735</td><td>Бэкап майской склейки программ</td><td><span class="tag gone">снести после закрытия периодов</span></td></tr>
+        <tr><td class="name">product_resync_backup_2026_05_06</td><td class="num">94</td><td>Бэкап ресинка</td><td><span class="tag gone">снести после закрытия периодов</span></td></tr>
+        <tr><td class="name">product_flags_backup_20260604</td><td class="num">89</td><td>Бэкап флагов</td><td><span class="tag gone">снести после закрытия периодов</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Счёт</h2>
+  <div class="grid">
+    <div class="card legacy">
+      <h3>сейчас на проде</h3>
+      <div class="n">16</div>
+      <p>таблиц про продукты, из них 5 — бэкапы и следы импортов</p>
+    </div>
+    <div class="card keep">
+      <h3>после слияния</h3>
+      <div class="n">8</div>
+      <p>рабочих таблиц плюс два представления со старыми именами</p>
+    </div>
+    <div class="card keep">
+      <h3>правится в одном месте</h3>
+      <div class="n">1</div>
+      <p>каталог: карточка продукта и страница «Программы»</p>
+    </div>
+  </div>
+
+  <footer>
+    Данные сняты с прода 13.08.2026. Слияние проверено на локальной копии:
+    битых ссылок ноль, пересчёт комиссий совпал на всех контрольных транзакциях.
+  </footer>
+</div>
+
+</body>
+</html>

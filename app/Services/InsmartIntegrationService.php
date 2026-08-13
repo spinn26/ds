@@ -360,6 +360,24 @@ class InsmartIntegrationService
         ]);
     }
 
+    /**
+     * Имя, не конфликтующее с уникальным индексом каталога: у продуктов имя
+     * уникально глобально, у программ — в пределах продукта. Вебхук не должен
+     * падать из-за тёзки, поэтому при совпадении добавляем различитель.
+     */
+    private function uniqueCatalogName(string $table, string $name, ?int $productId = null): string
+    {
+        $q = DB::table($table)->whereRaw('btrim(lower(name)) = ?', [mb_strtolower(trim($name))]);
+        if ($productId !== null) {
+            $q->where('product_id', $productId);
+        }
+        if (! $q->exists()) {
+            return $name;
+        }
+
+        return $name.' ('.now()->format('d.m.Y').')';
+    }
+
     private function resolveProductAndProgram(array $payload): array
     {
         $typeCode     = isset($payload['type']) ? (int) $payload['type'] : null;
@@ -387,32 +405,44 @@ class InsmartIntegrationService
                 ->value('product_id') ?? 0) ?: null;
         }
         if (! $productId) {
-            $productId = LegacyId::next('product');
-            DB::table('product')->insert([
-                'id'                 => $productId,
-                'name'               => $name,
-                'active'             => true,
-                'visibleToCalculator' => false,
-                'visibleToResident'  => false,
-                'noComission'        => false,
-                'publish_status'     => 'draft',
+            // Пишем в КАТАЛОГ: legacy product/program с 13.08.2026 — всего лишь
+            // представления над ним, вставка туда невозможна и не нужна.
+            // Заводим выключенным: продукт из вебхука ещё не оформлен
+            // оператором, показывать его партнёру рано.
+            $productId = DB::table('products_catalog')->insertGetId([
+                'name'                  => $this->uniqueCatalogName('products_catalog', $name),
+                'active'                => false,
+                'visible_to_calculator' => false,
+                'visible_to_resident'   => false,
+                'no_commission'         => false,
+                'is_primary'            => true,
+                'accrual_forecast_months' => 0,
+                'imported_from'         => 'insmart',
+                'created_at'            => now(),
+                'updated_at'            => now(),
             ]);
         }
 
         // Find or create program: match by product + company alias (providerName).
-        $programId = DB::table('program')
-            ->where('product', $productId)
-            ->where('providerName', $providerName)
+        $programId = DB::table('programs_catalog')
+            ->where('product_id', $productId)
+            ->where('provider_name', $providerName)
             ->value('id');
         if (! $programId) {
-            $programId = LegacyId::next('program');
-            DB::table('program')->insert([
-                'id'           => $programId,
-                'product'      => $productId,
-                'name'         => $name . ($providerName ? " ({$providerName})" : ''),
-                'productName'  => $name,
-                'providerName' => $providerName,
-                'active'       => true,
+            $programName = $name.($providerName ? " ({$providerName})" : '');
+            $programId = DB::table('programs_catalog')->insertGetId([
+                'product_id'    => $productId,
+                'name'          => $this->uniqueCatalogName('programs_catalog', $programName, $productId),
+                'provider_name' => $providerName,
+                'active'        => false,
+                'has_red'       => false,
+                'rate_lines'    => 0,
+                'tariffs'       => '[]',
+                'visible_to_resident'   => false,
+                'visible_to_calculator' => false,
+                'imported_from' => 'insmart',
+                'created_at'    => now(),
+                'updated_at'    => now(),
             ]);
         }
 

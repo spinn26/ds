@@ -828,6 +828,9 @@ Route::prefix('v1')->group(function () {
         // changes.
         Route::get('/admin/products-catalog/types',          [\App\Http\Controllers\Api\AdminProductCatalogController::class, 'types']);
         Route::get('/admin/products-catalog/references',     [\App\Http\Controllers\Api\AdminProductCatalogController::class, 'references']);
+        // Все программы одним списком — до маршрута с {id}, иначе «programs»
+        // будет принят за идентификатор продукта.
+        Route::get('/admin/products-catalog/programs',       [\App\Http\Controllers\Api\AdminProductCatalogController::class, 'programsAll']);
         Route::get('/admin/products-catalog',                [\App\Http\Controllers\Api\AdminProductCatalogController::class, 'indexProducts']);
         Route::post('/admin/products-catalog',               [\App\Http\Controllers\Api\AdminProductCatalogController::class, 'storeProduct']);
         Route::get('/admin/products-catalog/{id}',           [\App\Http\Controllers\Api\AdminProductCatalogController::class, 'showProduct'])->whereNumber('id');

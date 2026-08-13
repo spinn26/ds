@@ -989,6 +989,7 @@ const baseMenuItems = [
   { label: 'Инструкции', icon: 'mdi-book-open-variant', path: '/instructions', partner: true },
   { label: 'Статус системы', icon: 'mdi-monitor-dashboard', path: '/status', partner: true },
   { label: 'Продукты', icon: 'mdi-package-variant-closed', path: '/products', partner: true },
+  { label: 'Программы', icon: 'mdi-format-list-bulleted-type', path: '/manage/products/programs', adminSection: 'products' },
   // Внешний сервис «ФинРывок» — открывается в новой вкладке.
   { label: 'ФинРывок', icon: 'mdi-rocket-launch-outline', path: '', partner: true,
     action: () => window.open('https://ds.igron.games/auth/login', '_blank', 'noopener') },

@@ -24,6 +24,14 @@ use Illuminate\Support\Facades\DB;
  * surfaced as null so the form renders without errors but the audit-driven
  * catalog stays minimal.
  */
+/**
+ * Каталог продуктов и программ — ЕДИНСТВЕННОЕ место, где они правятся.
+ *
+ * До слияния каталогов (13.08.2026) карточка зеркалилась в legacy-таблицы
+ * product/program: часть полей жила только там, и способ начисления ЛП или %ДС
+ * программы из интерфейса поменять было нельзя. Теперь legacy — представления
+ * поверх каталога, зеркалирование убрано, правится всё здесь.
+ */
 class AdminProductCatalogController extends Controller
 {
     use PaginatesRequests;
@@ -212,8 +220,6 @@ class AdminProductCatalogController extends Controller
             'updated_at'       => now(),
         ]);
 
-        $this->syncToLegacyProduct($id);
-
         // Новый продукт должен сразу появиться в калькуляторе (матрица кэшируется
         // на 10 мин) — как и при update/toggle. Раньше сброса тут не было.
         \Illuminate\Support\Facades\Cache::forget('calculator:product-matrix:v4');
@@ -262,8 +268,6 @@ class AdminProductCatalogController extends Controller
         if ($request->has('accrualForecastMonths')) $update['accrual_forecast_months'] = (int) ($payload['accrualForecastMonths'] ?? 0);
 
         DB::table('products_catalog')->where('id', $id)->update($update);
-
-        $this->syncToLegacyProduct($id);
 
         // Переименование продукта → каскад в денорм-копии имени, иначе менеджер
         // контрактов/отчёты показывают старое имя (читают contract.productName напрямую).
@@ -351,7 +355,6 @@ class AdminProductCatalogController extends Controller
             'active'     => false,
             'updated_at' => now(),
         ]);
-        $this->syncToLegacyProduct($id);
         // Иначе деактивированный продукт висит в кэше калькулятора до 10 мин,
         // и его программу можно выбрать → «Программа не найдена или неактивна».
         \Illuminate\Support\Facades\Cache::forget('calculator:product-matrix:v4');
@@ -368,7 +371,6 @@ class AdminProductCatalogController extends Controller
             'active'     => $next,
             'updated_at' => now(),
         ]);
-        $this->syncToLegacyProduct($id);
         \Illuminate\Support\Facades\Cache::forget('calculator:product-matrix:v4');
         return response()->json(['publishStatus' => $next ? 'published' : 'draft']);
     }
@@ -406,6 +408,62 @@ class AdminProductCatalogController extends Controller
         return response()->json(['url' => $url, 'kind' => $request->kind]);
     }
 
+    /**
+     * GET /admin/products-catalog/programs — ВСЕ программы одним списком.
+     *
+     * Раньше программу можно было увидеть, только открыв карточку её продукта:
+     * 690 программ по сотне продуктов, и чтобы сравнить %ДС или способ
+     * начисления ЛП у соседних программ, приходилось лазить по карточкам.
+     * Здесь они все сразу, со всеми расчётными параметрами и фильтрами.
+     */
+    public function programsAll(Request $request): JsonResponse
+    {
+        $q = DB::table('programs_catalog as pg')
+            ->leftJoin('products_catalog as pc', 'pc.id', '=', 'pg.product_id');
+
+        if ($request->filled('search')) {
+            $like = '%'.$request->input('search').'%';
+            $q->where(function ($w) use ($like) {
+                $w->where('pg.name', 'ilike', $like)
+                    ->orWhere('pc.name', 'ilike', $like)
+                    ->orWhere('pg.provider_name', 'ilike', $like);
+            });
+        }
+        if ($request->filled('product_id')) {
+            $q->where('pg.product_id', (int) $request->input('product_id'));
+        }
+        if ($request->filled('active')) {
+            $q->where('pg.active', $request->boolean('active'));
+        }
+        // «Без расчётных параметров» — программы, по которым калькулятор не
+        // знает ни способа ЛП, ни %ДС: их и надо дозаполнить в первую очередь.
+        if ($request->boolean('needs_setup')) {
+            $q->whereNull('pg.points_method')->whereNull('pg.ds_percent');
+        }
+
+        $total = $q->count();
+
+        $rows = $q->orderBy('pc.name')->orderBy('pg.name')
+            ->offset($this->paginationOffset($request))
+            ->limit($this->paginationPerPage($request))
+            ->get([
+                'pg.*',
+                'pc.name as product_name',
+                'pc.active as product_active',
+            ]);
+
+        $data = $rows->map(function ($r) {
+            $row = self::programRow($r);
+            $row['productName'] = $r->product_name;
+            $row['productActive'] = (bool) $r->product_active;
+            $row['tariffCount'] = is_array($row['tariffs']) ? count($row['tariffs']) : 0;
+
+            return $row;
+        });
+
+        return response()->json(['data' => $data, 'total' => $total]);
+    }
+
     /** POST /admin/products-catalog/{id}/programs */
     public function storeProgram(int $productId, Request $request): JsonResponse
     {
@@ -421,7 +479,6 @@ class AdminProductCatalogController extends Controller
                 'created_at'     => now(),
                 'updated_at'     => now(),
             ]));
-            $this->syncToLegacyProgram($id);
 
             return [$id, $this->pushTariffsToDsCommission($id)];
         });
@@ -442,7 +499,6 @@ class AdminProductCatalogController extends Controller
                 ->where('id', $programId)
                 ->where('product_id', $productId)
                 ->update($payload);
-            $this->syncToLegacyProgram($programId);
             $result = $this->pushTariffsToDsCommission($programId);
 
             // Переименование программы → каскад в contract.programName / dsCommission.programName.
@@ -465,7 +521,6 @@ class AdminProductCatalogController extends Controller
             ->where('id', $programId)
             ->where('product_id', $productId)
             ->update(['active' => false, 'updated_at' => now()]);
-        $this->syncToLegacyProgram($programId);
         \Illuminate\Support\Facades\Cache::forget('calculator:product-matrix:v4');
         return response()->json(['status' => 'deactivated']);
     }
@@ -583,23 +638,29 @@ class AdminProductCatalogController extends Controller
             'id'                   => (int) $r->id,
             'name'                 => $r->name,
             'productId'            => (int) $r->product_id,
-            'providerName'         => $r->vendor,
+            'providerName'         => $r->provider_name ?? $r->vendor,
             'vendorName'           => $r->category,
+            'categoryName'         => $r->category_name ?? null,
             'currencyName'         => $r->currency,
             'currency'             => null,
             'formLink'             => $r->form_link ?? null,
             'term'                 => $term,
+            'termContract'         => $r->term_contract ?? null,
             'termsSummary'         => $r->terms_summary,
             'yearsSummary'         => $r->years_summary,
-            // Два формата ключей: ds_percent/fixed_cost (старый sync-from-sheet)
-            // и ds_pct/price (новый products:audit-20260529). Читаем оба.
-            'dsPercent'            => $first['ds_percent'] ?? $first['ds_pct'] ?? null,
-            'fixedCost'            => $first['fixed_cost'] ?? $first['price'] ?? null,
-            'pointsMethod'         => null,
-            'pointsFormula'        => $first['formula'] ?? null,
-            'pointsMin'            => $first['points'] ?? null,
-            'pointsMax'            => $first['points_max'] ?? null,
-            'kvPayoutYear'         => $first['year_kv'] ?? null,
+            // Приоритет у собственных колонок каталога — они и участвуют в
+            // расчёте. Тарифная строка осталась фолбэком для карточек, куда
+            // расчётные поля ещё не заполнены: два формата ключей,
+            // ds_percent/fixed_cost (sync-from-sheet) и ds_pct/price (аудит).
+            'dsPercent'            => $r->ds_percent ?? $first['ds_percent'] ?? $first['ds_pct'] ?? null,
+            'fixedCost'            => $r->fixed_cost ?? $first['fixed_cost'] ?? $first['price'] ?? null,
+            'pointsMethod'         => $r->points_method ?? null,
+            'pointsFormula'        => $r->points_formula ?? $first['formula'] ?? null,
+            'pointsMin'            => $r->points_min ?? $first['points'] ?? null,
+            'pointsMax'            => $r->points_max ?? $first['points_max'] ?? null,
+            'kvPayoutYear'         => $r->kv_payout_year ?? $first['year_kv'] ?? null,
+            'commissionCalcProperty' => $r->commission_calc_property ?? null,
+            'noCommission'         => (bool) ($r->no_commission ?? false),
             'calcComment'          => $r->comment_snippets ?? $first['comment'] ?? null,
             'active'               => $active,
             'visibleToResident'    => $visibleToResident,
@@ -612,82 +673,7 @@ class AdminProductCatalogController extends Controller
         ];
     }
 
-    /**
-     * Keep the legacy `product` row in sync with its catalog counterpart.
-     *
-     * Called after every write to products_catalog. If no legacy row exists
-     * yet (new catalog product), one is created and legacy_product_id is
-     * written back so all downstream FK constraints can reference it.
-     */
-    private function syncToLegacyProduct(int $catalogId): void
-    {
-        $cat = DB::table('products_catalog')->where('id', $catalogId)->first();
-        if (! $cat) return;
 
-        $legacyData = [
-            'name'                => $cat->name,
-            'active'              => (bool) $cat->active,
-            'publish_status'      => $cat->active ? 'published' : 'draft',
-            'visibleToResident'   => (bool) ($cat->visible_to_resident ?? false),
-            'visibleToCalculator' => (bool) ($cat->visible_to_calculator ?? false),
-        ];
-
-        if ($cat->legacy_product_id) {
-            DB::table('product')->where('id', $cat->legacy_product_id)->update($legacyData);
-            return;
-        }
-
-        // New catalog product — create a legacy row and write back the FK.
-        $newId = DB::transaction(function () use ($legacyData) {
-            $nextId = (DB::table('product')->max('id') ?? 0) + 1;
-            DB::table('product')->insert(array_merge($legacyData, ['id' => $nextId]));
-            return $nextId;
-        });
-
-        DB::table('products_catalog')->where('id', $catalogId)
-            ->update(['legacy_product_id' => $newId]);
-    }
-
-    /**
-     * Keep the legacy `program` row in sync with its catalog counterpart.
-     *
-     * Called after every write to programs_catalog. Creates a legacy row
-     * the first time so contract FKs can reference it.
-     */
-    private function syncToLegacyProgram(int $catalogProgramId): void
-    {
-        $prog = DB::table('programs_catalog')->where('id', $catalogProgramId)->first();
-        if (! $prog) return;
-
-        $legacyProductId = DB::table('products_catalog')
-            ->where('id', $prog->product_id)
-            ->value('legacy_product_id');
-
-        if (! $legacyProductId) return; // product not yet synced — caller should sync product first
-
-        $legacyData = [
-            'name'    => $prog->name,
-            'product' => $legacyProductId,
-            'active'  => (bool) $prog->active,
-            // Поставщик программы → legacy program.providerName (его читают
-            // отчёты «Комиссии» и матрицы продаж). Раньше не копировался.
-            'providerName' => $prog->vendor,
-        ];
-
-        if ($prog->legacy_program_id) {
-            DB::table('program')->where('id', $prog->legacy_program_id)->update($legacyData);
-            return;
-        }
-
-        $newId = DB::transaction(function () use ($legacyData) {
-            $nextId = (DB::table('program')->max('id') ?? 0) + 1;
-            DB::table('program')->insert(array_merge($legacyData, ['id' => $nextId]));
-            return $nextId;
-        });
-
-        DB::table('programs_catalog')->where('id', $catalogProgramId)
-            ->update(['legacy_program_id' => $newId]);
-    }
 
     /**
      * После сохранения тарифов в каталоге — пробрасываем %ДС в `dsCommission`
@@ -759,6 +745,21 @@ class AdminProductCatalogController extends Controller
             'visibleToResident'   => 'nullable|boolean',
             'visibleToCalculator' => 'nullable|boolean',
             'formLink'            => 'nullable|string|max:1000',
+            'categoryName'        => 'nullable|string|max:255',
+            // Расчётные поля программы. Раньше правились только в legacy-таблице
+            // Directual, куда доступа из интерфейса не было: оператор видел
+            // тарифы, но не мог поменять способ начисления ЛП или %ДС
+            // программы. После слияния каталогов правится всё здесь.
+            'pointsMethod'           => 'nullable|string|max:64',
+            'pointsFormula'          => 'nullable|string|max:1000',
+            'pointsMin'              => 'nullable|numeric',
+            'pointsMax'              => 'nullable|numeric',
+            'dsPercent'              => 'nullable|numeric',
+            'commissionCalcProperty' => 'nullable|string|max:255',
+            'kvPayoutYear'           => 'nullable|string|max:64',
+            'fixedCost'              => 'nullable|numeric',
+            'termContract'           => 'nullable|string|max:64',
+            'noCommission'           => 'nullable|boolean',
             // Тарифные строки — источник «Свойств»/%ДС для калькулятора.
             'tariffs'             => 'nullable|array',
             'tariffs.*.property'  => 'nullable|string|max:255',
@@ -795,6 +796,34 @@ class AdminProductCatalogController extends Controller
         // can clear the field by sending null explicitly.
         if ($request->has('formLink')) {
             $out['form_link'] = $data['formLink'];
+        }
+
+        // Расчётные поля: пишем ТОЛЬКО присланные ключи (has()), иначе
+        // частичное сохранение формы обнулило бы способ начисления ЛП или %ДС.
+        $calcMap = [
+            'pointsMethod'           => 'points_method',
+            'pointsFormula'          => 'points_formula',
+            'pointsMin'              => 'points_min',
+            'pointsMax'              => 'points_max',
+            'dsPercent'              => 'ds_percent',
+            'commissionCalcProperty' => 'commission_calc_property',
+            'kvPayoutYear'           => 'kv_payout_year',
+            'fixedCost'              => 'fixed_cost',
+            'termContract'           => 'term_contract',
+            'categoryName'           => 'category_name',
+        ];
+        foreach ($calcMap as $in => $col) {
+            if ($request->has($in)) {
+                $out[$col] = $data[$in] ?? null;
+            }
+        }
+        if ($request->has('noCommission')) {
+            $out['no_commission'] = (bool) ($data['noCommission'] ?? false);
+        }
+        // Поставщик программы: в каталоге это provider_name, а vendor держит
+        // прежнее назначение поля из формы.
+        if ($request->has('providerName')) {
+            $out['provider_name'] = $data['providerName'] ?? null;
         }
         // Тарифы — источник «Свойств»/%ДС для калькулятора. Пишем только если
         // прислали ключ (через has()), чтобы частичный апдейт их не затирал.

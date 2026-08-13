@@ -86,6 +86,9 @@ const routes = [
             { path: 'manage/currencies', component: () => import('../pages/Admin/Currencies.vue'), meta: { staff: true } },
             { path: 'manage/management-currencies', component: () => import('../pages/Admin/ManagementCurrencies.vue'), meta: { staff: true } },
             { path: 'manage/products', component: () => import('../pages/Admin/Products.vue'), meta: { staff: true } },
+            // Все программы одним списком: раньше их можно было увидеть только
+            // внутри карточки продукта.
+            { path: 'manage/products/programs', component: () => import('../pages/Admin/Programs.vue'), meta: { staff: true } },
             { path: 'manage/products-preview', component: () => import('../pages/Admin/ProductsPreview.vue'), meta: { staff: true } },
             { path: 'manage/education', component: () => import('../pages/Admin/EducationConstructor.vue'), meta: { staff: true } },
             { path: 'manage/education-legacy', component: () => import('../pages/Admin/Education.vue'), meta: { staff: true } },
