@@ -545,7 +545,7 @@ const showReinstateDialog = computed(() => {
 });
 // Окно активации: /profile отдаёт дедлайн, а не длину окна, поэтому берём
 // значение из настроек через statusInfo, иначе дефолт устава.
-const reinstateWindowDays = computed(() => statusInfo.value?.windowDays || 90);
+const reinstateWindowDays = computed(() => statusInfo.value?.windowDays || 120);
 
 async function onReinstated() {
   // Перечитываем профиль и пользователя: статус станет «Зарегистрирован»,

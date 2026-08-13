@@ -179,13 +179,21 @@ class AdminDataController extends Controller
 
                 // «Дата смены статуса» (per spec ✅Партнеры §1.2):
                 // - Активен → +12 мес от dateActivity
-                // - Зарегистрирован → +90 дней от dateCreated
+                // - Зарегистрирован → +окно активации от dateCreated
+                //   (настройка activation.window_days, с 13.08.2026 — 120 дней)
                 $statusChangeDate = null;
                 $activityValue = $c->activity?->value;
                 if ($activityValue == 1 && $c->dateActivity) { // Active
                     $statusChangeDate = \Carbon\Carbon::parse($c->dateActivity)->addYear()->format('Y-m-d');
-                } elseif ($activityValue == 4 && $c->dateCreated) { // Registered
-                    $statusChangeDate = \Carbon\Carbon::parse($c->dateCreated)->addDays(90)->format('Y-m-d');
+                } elseif ($activityValue == 4) { // Registered
+                    // Реальный дедлайн лежит в activationDeadline (его могли
+                    // продлить), расчёт от даты регистрации — только фолбэк.
+                    $statusChangeDate = $c->activationDeadline
+                        ? \Carbon\Carbon::parse($c->activationDeadline)->format('Y-m-d')
+                        : ($c->dateCreated
+                            ? \Carbon\Carbon::parse($c->dateCreated)
+                                ->addDays(\App\Enums\PartnerActivity::activationDays())->format('Y-m-d')
+                            : null);
                 }
 
                 return [

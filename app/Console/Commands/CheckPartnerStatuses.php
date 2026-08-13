@@ -24,9 +24,10 @@ class CheckPartnerStatuses extends Command
         $activated = $this->sweepRegisteredToActive($statusService);
         $this->info("Авто-активировано: {$activated}");
 
-        // 1. Зарегистрированные: 90 дней истекло → терминация
+        // 1. Зарегистрированные: окно активации истекло → терминация
         $expiredRegistrations = $statusService->checkExpiredRegistrations();
-        $this->info("Терминировано зарегистрированных (90 дней): {$expiredRegistrations}");
+        $this->info("Терминировано зарегистрированных (окно "
+            . PartnerActivity::activationDays() . " дн.): {$expiredRegistrations}");
 
         // 2. Активные: год истёк, ЛП < 500 → терминация
         $expiredActive = $statusService->checkExpiredActivePeriods();

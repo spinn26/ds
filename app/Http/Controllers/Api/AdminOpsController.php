@@ -112,13 +112,17 @@ class AdminOpsController extends Controller
     /** GET /admin/ops/bulk — список доступных операций + preview-counts. */
     public function bulkList(): JsonResponse
     {
+        // Окно активации — настройка activation.window_days (с 13.08.2026 — 120
+        // дней), а не зашитые 90: иначе счётчик просроченных расходится с тем,
+        // по чему реально терминирует крон.
+        $windowDays = \App\Enums\PartnerActivity::activationDays();
         $expired = (int) DB::scalar(
             "SELECT COUNT(*) FROM consultant
               WHERE \"dateDeleted\" IS NULL
                 AND activity = 4
                 AND (
                     (\"activationDeadline\" IS NOT NULL AND \"activationDeadline\" < now())
-                    OR (\"activationDeadline\" IS NULL AND \"dateCreated\" + interval '90 days' < now())
+                    OR (\"activationDeadline\" IS NULL AND \"dateCreated\" + make_interval(days => {$windowDays}) < now())
                 )"
         );
 
@@ -154,7 +158,8 @@ class AdminOpsController extends Controller
                 $q->whereRaw('"activationDeadline" < now()')
                   ->orWhere(function ($qq) {
                       $qq->whereNull('activationDeadline')
-                         ->whereRaw('"dateCreated" + interval \'90 days\' < now()');
+                         ->whereRaw('"dateCreated" + make_interval(days => ?) < now()',
+                             [\App\Enums\PartnerActivity::activationDays()]);
                   });
             })
             ->pluck('id');
@@ -290,9 +295,10 @@ class AdminOpsController extends Controller
                 'editable' => false,
             ],
             [
-                'key' => 'activation.windowDays',
+                'key' => 'activation.window_days',
                 'label' => 'Окно активации (дни)',
-                'value' => 90, 'source' => 'CheckPartnerStatuses / hardcoded',
+                'value' => \App\Enums\PartnerActivity::activationDays(),
+                'source' => 'system_settings (business)',
                 'editable' => false,
             ],
             [

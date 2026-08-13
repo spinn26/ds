@@ -15,7 +15,7 @@ class PartnerStatusService
 {
     /**
      * Регистрация нового партнёра: ставит статус «Зарегистрирован»
-     * и рассчитывает дедлайн активации (90 дней).
+     * и рассчитывает дедлайн активации (окно activation.window_days).
      */
     public function register(Consultant $consultant): void
     {
@@ -812,7 +812,9 @@ class PartnerStatusService
         foreach ($expired as $consultant) {
             $personalVolume = (float) ($consultant->personalVolume ?? 0);
             if ($personalVolume < PartnerActivity::activationPoints()) {
-                $this->terminate($consultant, 'Не набрал ЛП=500 за 90 дней');
+                $this->terminate($consultant, 'Не набрал ЛП='
+                    . PartnerActivity::activationPoints() . ' за '
+                    . PartnerActivity::activationDays() . ' дней');
                 $count++;
             }
         }

@@ -467,10 +467,16 @@ class TransactionImportController extends Controller
 
     /**
      * Откатить импорт — удалить все транзакции созданные этим импортом
-     * ВМЕСТЕ с рассчитанными по ним комиссиями. Всё в одной транзакции,
-     * чтобы rollback не оставил orphan-комиссии если что-то упадёт посередине.
+     * ВМЕСТЕ с рассчитанными по ним комиссиями.
+     *
+     * Async через очередь (как calculateCommissions): на 1195 транзакциях
+     * удаление комиссий + каскад-триггеры идёт минутами, а axios рвёт
+     * запрос по 30s timeout'у — фронт показывал «Нет связи с сервером».
+     * Здесь остаются только быстрые проверки (существование, заморозка
+     * периода — их оператор должен увидеть синхронно), само удаление —
+     * в RollbackImportJob.
      */
-    public function rollback(int $importId): JsonResponse
+    public function rollback(Request $request, int $importId): JsonResponse
     {
         // Предпочитаем точечный список created_ids (новые импорты). Для
         // старых импортов, где created_ids ещё не заполнялся, fallback
@@ -507,54 +513,22 @@ class TransactionImportController extends Controller
             ], 422);
         }
 
-        // Откат бьём на чанки по 100 id: на legacy-схеме у commission есть
-        // FK-обратные проверки через "transaction.commissions" массив, и
-        // DELETE на 1267 id'шниках разом пробивает statement_timeout PG
-        // (FOR KEY SHARE по transaction × 1267 = серверная отмена).
-        // Снимаем тайм-аут на этой сессии и удаляем порциями.
-        $result = DB::transaction(function () use ($importId, $txIdsFromLog) {
-            // Подняли таймаут на 5 минут (соединение всё равно одноразовое).
-            DB::statement("SET LOCAL statement_timeout = '300s'");
-
-            $txIds = $txIdsFromLog
-                ? collect($txIdsFromLog)->all()
-                : DB::table('transaction')
-                    ->where('comment', 'Импорт #' . $importId)
-                    ->pluck('id')
-                    ->all();
-
-            $deletedCommissions = 0;
-            foreach (array_chunk($txIds, 100) as $chunk) {
-                $deletedCommissions += DB::table('commission')
-                    ->whereIn('transaction', $chunk)
-                    ->delete();
-            }
-
-            $deletedTx = 0;
-            foreach (array_chunk($txIds, 100) as $chunk) {
-                $deletedTx += DB::table('transaction')
-                    ->whereIn('id', $chunk)
-                    ->delete();
-            }
-
-            DB::table('transaction_import_log')
-                ->where('id', $importId)
-                ->update([
-                    'status' => 'rolled_back',
-                    'updated_at' => now(),
-                ]);
-
-            return [
-                'deleted_transactions' => $deletedTx,
-                'deleted_commissions' => $deletedCommissions,
-            ];
-        });
+        $tracker = 'rollback-' . $importId . '-' . uniqid('', true);
+        \Illuminate\Support\Facades\Cache::put(
+            "import:tracker:{$tracker}",
+            ['status' => 'starting', 'total' => 0, 'processed' => 0, 'success' => 0, 'errors' => 0],
+            1800,
+        );
+        \App\Jobs\RollbackImportJob::dispatch(
+            $importId, $tracker, (int) $request->user()->id,
+        );
 
         return response()->json([
-            'message' => "Откат выполнен: удалено {$result['deleted_transactions']} транзакций и {$result['deleted_commissions']} комиссий",
-            'deleted' => $result['deleted_transactions'],
-            'deleted_commissions' => $result['deleted_commissions'],
-        ]);
+            'message' => 'Откат поставлен в очередь',
+            'importId' => $importId,
+            'tracker' => $tracker,
+            'status' => 'queued',
+        ], 202);
     }
 
     /**

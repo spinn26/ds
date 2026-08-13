@@ -458,7 +458,8 @@ class WorkspaceController extends Controller
 
     /**
      * Партнёры в статусе «Зарегистрирован» (consultant.activity=4), чей
-     * 90-дневный срок активации истекает в ближайшие 7 дней.
+     * срок активации истекает в ближайшие 7 дней. Длина окна — настройка
+     * activation.window_days (с 13.08.2026 — 120 дней), не зашитые 90.
      * Предпочитаем поле `activationDeadline`, если оно заполнено.
      */
     private function listActivationExpiring(): array
@@ -474,7 +475,8 @@ class WorkspaceController extends Controller
                 $q->whereBetween('c.activationDeadline', [$now, $in7])
                   ->orWhere(function ($qq) use ($now, $in7) {
                       $qq->whereNull('c.activationDeadline')
-                         ->whereRaw('c."dateCreated" + interval \'90 days\' BETWEEN ? AND ?', [$now, $in7]);
+                         ->whereRaw('c."dateCreated" + make_interval(days => ?) BETWEEN ? AND ?',
+                             [\App\Enums\PartnerActivity::activationDays(), $now, $in7]);
                   });
             })
             ->select('c.id', 'c.personName', 'u.email', 'c.dateCreated', 'c.activationDeadline', 'c.personalVolume')
@@ -489,7 +491,8 @@ class WorkspaceController extends Controller
                 $q->whereBetween('c.activationDeadline', [$now, $in7])
                   ->orWhere(function ($qq) use ($now, $in7) {
                       $qq->whereNull('c.activationDeadline')
-                         ->whereRaw('c."dateCreated" + interval \'90 days\' BETWEEN ? AND ?', [$now, $in7]);
+                         ->whereRaw('c."dateCreated" + make_interval(days => ?) BETWEEN ? AND ?',
+                             [\App\Enums\PartnerActivity::activationDays(), $now, $in7]);
                   });
             })
             ->count();

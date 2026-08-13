@@ -110,7 +110,7 @@ const props = defineProps({
   info: { type: Object, default: () => ({}) },
   // Пороги показываем из настроек статусов (statusInfo), с дефолтами устава.
   requiredPoints: { type: [Number, String], default: 500 },
-  windowDays: { type: [Number, String], default: 90 },
+  windowDays: { type: [Number, String], default: 120 },
 });
 const emit = defineEmits(['reinstated', 'logout']);
 

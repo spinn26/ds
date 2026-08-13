@@ -46,7 +46,8 @@ enum PartnerActivity: int
     // Дефолты статусной схемы. Значения настраиваются из админки
     // (Настройки → Бизнес-правила) через аксессоры ниже; константы — фолбэк.
     public const MAX_TERMINATIONS = 3;
-    public const ACTIVATION_DAYS = 90;
+    // Окно активации: было 90 дней, с 13.08.2026 — 120 (решение владельца).
+    public const ACTIVATION_DAYS = 120;
     public const ACTIVATION_POINTS = 500;
     public const SELF_REINSTATE_LIMIT = 3;
 
@@ -56,7 +57,7 @@ enum PartnerActivity: int
         return (int) \App\Models\SystemSetting::value('activation.min_lp', self::ACTIVATION_POINTS);
     }
 
-    /** Окно активации в днях (activation.window_days, фолбэк 90). */
+    /** Окно активации в днях (activation.window_days, фолбэк 120). */
     public static function activationDays(): int
     {
         return (int) \App\Models\SystemSetting::value('activation.window_days', self::ACTIVATION_DAYS);
