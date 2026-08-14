@@ -45,8 +45,11 @@ class PartnerListingFiltersTest extends TestCase
     {
         $this->assertOnly('activity=1', [self::WITH_LOGIN]);
         $this->assertOnly('activity=4', [self::NO_LOGIN]);
-        // ⚠ active сравнивается со СТРОКОЙ 'true', а не булевым приведением.
+        // ⚠ active сравнивается со СТРОКОЙ 'true', а не булевым приведением:
+        // (bool) 'false' === true, поэтому именно active=false отличает одно
+        // от другого и не даёт «упростить» сравнение.
         $this->assertOnly('active=true', [self::WITH_LOGIN]);
+        $this->assertOnly('active=false', [self::NO_LOGIN]);
     }
 
     #[Test]

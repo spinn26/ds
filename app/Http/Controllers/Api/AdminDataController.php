@@ -11,6 +11,7 @@ use App\Models\Consultant;
 use App\Models\Requisite;
 use App\Support\Audit;
 use App\Support\LegacyId;
+use App\Services\PartnerListingService;
 use App\Services\PartnerStatusService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -49,6 +50,7 @@ class AdminDataController extends Controller
 
     public function __construct(
         private readonly PartnerStatusService $statusService,
+        private readonly PartnerListingService $partnerListing,
     ) {}
 
     /**
@@ -91,56 +93,25 @@ class AdminDataController extends Controller
     /** Партнёры — список с фильтрами */
     public function partners(Request $request): JsonResponse
     {
-        $query = Consultant::query()->whereNull('dateDeleted');
-
-        if ($request->filled('search')) {
-            $query->where('personName', 'ilike', '%' . $request->search . '%');
-        }
-        if ($request->filled('activity')) {
-            $query->where('activity', $request->activity);
-        }
-        if ($request->filled('active')) {
-            $query->where('active', $request->active === 'true');
-        }
-        // Доп. фильтры per spec ✅Партнёры §1.1
-        if ($request->filled('partner_id')) {
-            $query->where('id', (int) $request->partner_id);
-        }
-        if ($request->filled('inviter_name')) {
-            $query->where('inviterName', 'ilike', '%' . $request->inviter_name . '%');
-        }
-        if ($request->filled('email')) {
-            // Контакты живут на WebUser (у кого есть логин) и в собственных
-            // колонках партнёра — person из поиска убран (2026-08-12): часть
-            // указателей вела на другого человека, и фильтр находил чужих.
-            $emailLike = '%' . $request->email . '%';
-            $query->where(function ($q) use ($emailLike) {
-                $q->whereIn('webUser', function ($sub) use ($emailLike) {
-                    $sub->select('id')->from('WebUser')->where('email', 'ilike', $emailLike);
-                })->orWhere('email', 'ilike', $emailLike);
-            });
-        }
-        if ($request->filled('phone')) {
-            // ⚠ Обе ветки сравнивают ЦИФРЫ с ЦИФРАМИ.
-            //
-            // Раньше по собственной колонке партнёра шла нормализация
-            // (regexp_replace), а по WebUser — сырой `phone ilike`. Телефоны в
-            // WebUser хранятся отформатированными («+7 (911) 111-11-11»), и
-            // очищенный от знаков ввод не совпадал с ними НИКОГДА: партнёров с
-            // логином поиск по телефону просто не находил. Ровно этот приём —
-            // «чистим ввод, ищем LIKE в сырой колонке» — уже ломал
-            // антидубль при регистрации.
-            $phoneLike = '%' . preg_replace('/\D/', '', $request->phone) . '%';
-            $normalize = "regexp_replace(coalesce(%s, ''), '[^0-9]', '', 'g')";
-            $query->where(function ($q) use ($phoneLike, $normalize) {
-                $q->whereIn('webUser', function ($sub) use ($phoneLike, $normalize) {
-                    $sub->select('id')->from('WebUser')
-                        ->whereRaw(sprintf($normalize, '"phone"') . ' ilike ?', [$phoneLike]);
-                })->orWhereRaw(sprintf($normalize, 'phone') . ' ilike ?', [$phoneLike]);
-            });
+        // Фильтры и сборка строк живут в PartnerListingService: метод занимал
+        // 146 строк и мешал в одну кучу разбор запроса, семь фильтров, три
+        // пакетные подгрузки и маппинг из двадцати полей. Контроллеру
+        // оставлено своё — запрос, сортировка, пагинация, ответ.
+        //
+        // `filled` остаётся здесь: «пустое значение = фильтр не применён» —
+        // это правило HTTP-слоя, сервис получает уже только заполненное.
+        $filters = [];
+        foreach (PartnerListingService::FILTERS as $key) {
+            if ($request->filled($key)) {
+                $filters[$key] = $request->input($key);
+            }
         }
 
+        $query = $this->partnerListing->query($filters);
+
+        // total считаем ДО пагинации и по отфильтрованному запросу.
         $total = $query->count();
+
         // Postgres + camelCase legacy-таблицы → колонки в whitelist
         // обязаны быть в двойных кавычках (applySorting кладёт их
         // буквально в orderByRaw, без авто-квотинга).
@@ -161,86 +132,10 @@ class AdminDataController extends Controller
             ->limit($this->paginationPerPage($request))
             ->get();
 
-        // Batch load WebUser data
-        $webUserIds = $rows->pluck('webUser')->filter()->unique();
-        $webUsers = $webUserIds->isNotEmpty()
-            ? DB::table('WebUser')->whereIn('id', $webUserIds)->get()->keyBy('id')
-            : collect();
-
-        // Признак «партнёр является и клиентом» — по явной связи
-        // client.partner_consultant_id (заполняет clients:link-partners).
-        // Прежде считался через общий person: связь оказалась неверной у 30 пар
-        // и не определялась вовсе у партнёров без person.
-        $partnerClients = $rows->isNotEmpty()
-            ? DB::table('client')->whereIn('partner_consultant_id', $rows->pluck('id'))
-                ->whereNull('dateDeleted')
-                ->pluck('partner_consultant_id')->unique()->flip()
-            : collect();
-
-        // Batch load status titles
-        $statusIds = $rows->pluck('status')->filter()->unique();
-        $statusTitles = $statusIds->isNotEmpty()
-            ? DB::table('status')->whereIn('id', $statusIds)->pluck('title', 'id')
-            : collect();
-
-        $partners = $rows->map(function ($c) use ($webUsers, $partnerClients, $statusTitles) {
-                $webUser = $c->webUser ? ($webUsers[$c->webUser] ?? null) : null;
-                $isClient = isset($partnerClients[$c->id]);
-                $platformAccess = $webUser && ! ($webUser->isBlocked ?? false);
-
-                // «Дата смены статуса» (per spec ✅Партнеры §1.2):
-                // - Активен → +12 мес от dateActivity
-                // - Зарегистрирован → +окно активации от dateCreated
-                //   (настройка activation.window_days, с 13.08.2026 — 120 дней)
-                $statusChangeDate = null;
-                $activityValue = $c->activity?->value;
-                if ($activityValue == 1 && $c->dateActivity) { // Active
-                    $statusChangeDate = \Carbon\Carbon::parse($c->dateActivity)->addYear()->format('Y-m-d');
-                } elseif ($activityValue == 4) { // Registered
-                    // Реальный дедлайн лежит в activationDeadline (его могли
-                    // продлить), расчёт от даты регистрации — только фолбэк.
-                    $statusChangeDate = $c->activationDeadline
-                        ? \Carbon\Carbon::parse($c->activationDeadline)->format('Y-m-d')
-                        : ($c->dateCreated
-                            ? \Carbon\Carbon::parse($c->dateCreated)
-                                ->addDays(\App\Enums\PartnerActivity::activationDays())->format('Y-m-d')
-                            : null);
-                }
-
-                return [
-                    'id' => $c->id,
-                    'personName' => $c->personName,
-                    'active' => $c->active,
-                    'activityName' => $c->activityLabel(),
-                    'activityId' => $c->activity?->value,
-                    'statusName' => $c->status ? ($statusTitles[$c->status] ?? null) : null,
-                    'personalVolume' => round((float) ($c->personalVolume ?? 0), 2),
-                    'groupVolumeCumulative' => round((float) ($c->groupVolumeCumulative ?? 0), 2),
-                    'participantCode' => $c->participantCode,
-                    'dateCreated' => $c->dateCreated?->format('d.m.Y'),
-                    'createdAt' => $c->dateCreated?->format('d.m.Y'),
-                    'statusChangeDate' => $statusChangeDate,
-                    'terminationCount' => $c->terminationCount ?? 0,
-                    // Самовосстановления партнёра: сколько потрачено из лимита
-                    // и не запрещено ли ему возвращаться самому.
-                    'reinstatementCount' => (int) ($c->reinstatement_count ?? 0),
-                    'reinstateLimit' => \App\Enums\PartnerActivity::selfReinstateLimit(),
-                    'reinstateBlocked' => (bool) ($c->reinstate_blocked ?? false),
-                    // WebUser важнее: он канон для владельцев логина и меняется,
-                    // когда партнёр правит профиль. Собственные колонки — для
-                    // 897 импортированных ФК без логина (перенесены из person
-                    // командой partners:backfill-contacts).
-                    'email' => $webUser?->email ?? $c->email ?? null,
-                    'phone' => $webUser?->phone ?? $c->phone ?? null,
-                    'birthDate' => $webUser?->birthDate ?? $c->birthDate ?? null,
-                    'inviterName' => $c->inviterName,
-                    'inviterId' => $c->inviter,
-                    'isClient' => $isClient,
-                    'platformAccess' => $platformAccess,
-                ];
-            });
-
-        return response()->json(['data' => $partners, 'total' => $total]);
+        return response()->json([
+            'data' => $this->partnerListing->present($rows),
+            'total' => $total,
+        ]);
     }
 
     /**
