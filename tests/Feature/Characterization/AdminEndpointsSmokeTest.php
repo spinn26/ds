@@ -221,6 +221,60 @@ class AdminEndpointsSmokeTest extends TestCase
     }
 
     // ================================================================
+    // Правка транзакции: деньги + пересчёт
+    // ================================================================
+
+    /**
+     * Правка суммы пересчитывает цепочку комиссий и честно об этом сообщает.
+     */
+    #[Test]
+    public function editing_a_transaction_recalculates_commissions(): void
+    {
+        DB::table('programs_catalog')->where('id', self::PROGRAM)->update(['ds_percent' => 40]);
+
+        $r = $this->actingAs($this->admin, 'sanctum')
+            ->putJson('/api/v1/admin/transactions/950041', ['amount' => 300_000]);
+
+        $r->assertOk();
+        $this->assertTrue($r->json('recalculated'), 'пересчёт состоялся');
+
+        $this->assertEqualsWithDelta(
+            300_000.0,
+            (float) DB::table('transaction')->where('id', 950041)->value('amountRUB'),
+            0.01,
+            'amountRUB пересчитан от новой суммы'
+        );
+    }
+
+    /**
+     * Пересчёт не удался — эндпоинт сообщает об этом, а ранее начисленные
+     * комиссии остаются на месте.
+     *
+     * ⚠ Регресс-тест: раньше комиссии сносились ДО вызова калькулятора, а его
+     * ответ не проверялся вовсе — оператор видел «Транзакция обновлена» при
+     * фактически обнулённых начислениях.
+     */
+    #[Test]
+    public function failed_recalculation_is_reported_and_keeps_commissions(): void
+    {
+        // Тарифа %ДС нет ни в каталоге, ни в dsCommission → расчёт не пройдёт.
+        $before = DB::table('commission')->whereNull('deletedAt')->count();
+
+        $r = $this->actingAs($this->admin, 'sanctum')
+            ->putJson('/api/v1/admin/transactions/950041', ['amount' => 300_000]);
+
+        $r->assertOk();
+        $this->assertFalse($r->json('recalculated'));
+        $this->assertStringContainsString('не пересчитаны', (string) $r->json('message'));
+
+        $this->assertSame(
+            $before,
+            DB::table('commission')->whereNull('deletedAt')->count(),
+            'начисленное не стёрто'
+        );
+    }
+
+    // ================================================================
     // Доступ
     // ================================================================
 

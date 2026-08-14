@@ -207,6 +207,45 @@ class CommissionCascadeCharacterizationTest extends TestCase
         );
     }
 
+    /**
+     * Неудавшийся пересчёт НЕ должен стирать уже начисленные комиссии.
+     *
+     * ⚠ Регресс-тест. Soft-delete прежней цепочки стоял ВЫШЕ проверок
+     * контракта, консультанта, НДС и тарифа. Метод возвращает ошибку обычным
+     * return, то есть внешняя DB::transaction коммитится — и любая из этих
+     * ошибок оставляла транзакцию вообще без комиссий. Партнёр молча терял
+     * начисление: TransactionImportController::update, например, писал такую
+     * ошибку в лог и отвечал «Транзакция обновлена».
+     */
+    #[Test]
+    public function failed_recalculation_keeps_previously_accrued_commissions(): void
+    {
+        $calc = app(CommissionCalculator::class);
+        $calc->calculateForTransaction(self::TRANSACTION);
+
+        $before = DB::table('commission')
+            ->where('transaction', self::TRANSACTION)
+            ->whereNull('deletedAt')
+            ->pluck('amountRUB', 'chainOrder')
+            ->all();
+        $this->assertCount(3, $before, 'предусловие: цепочка начислена');
+
+        // Ломаем данные так, чтобы пересчёт не смог завершиться.
+        DB::table('vat')->delete();
+        \App\Support\VatRate::flush();
+
+        $result = $calc->calculateForTransaction(self::TRANSACTION);
+        $this->assertArrayHasKey('error', $result);
+
+        $after = DB::table('commission')
+            ->where('transaction', self::TRANSACTION)
+            ->whereNull('deletedAt')
+            ->pluck('amountRUB', 'chainOrder')
+            ->all();
+
+        $this->assertSame($before, $after, 'начисленное осталось на месте');
+    }
+
     #[Test]
     public function missing_ds_rate_is_an_error(): void
     {

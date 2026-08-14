@@ -681,19 +681,39 @@ class TransactionImportController extends Controller
 
         DB::table('transaction')->where('id', $id)->update($update);
 
-        // Пересчёт комиссий после правки: удаляем старые и вызываем calculator.
-        try {
-            DB::table('commission')->where('transaction', $id)->update([
-                'deletedAt' => now(),
-            ]);
-            app(\App\Services\CommissionCalculator::class)->calculateForTransaction($id);
-        } catch (\Throwable $e) {
+        // Пересчёт комиссий после правки.
+        //
+        // ⚠ Здесь было ДВА изъяна, оба тихих:
+        //   1. перед вызовом калькулятора комиссии сносились вручную. Калькулятор
+        //      делает это сам и только после всех проверок — а внешний снос
+        //      срабатывал безусловно, и при любой ошибке расчёта транзакция
+        //      оставалась вообще без начислений;
+        //   2. результат не проверялся вовсе. calculateForTransaction возвращает
+        //      ['error' => …] (закрытый период, нет тарифа, нет ставки НДС) — не
+        //      бросает. Такой ответ проходил мимо catch, и оператор видел
+        //      «Транзакция обновлена», хотя комиссии не пересчитались.
+        //
+        // Теперь снос — забота калькулятора, а ошибку расчёта возвращаем
+        // вызывающему: сумма изменена, но начисления требуют внимания.
+        $calc = app(\App\Services\CommissionCalculator::class)->calculateForTransaction($id);
+
+        if (! empty($calc['error'])) {
             \Illuminate\Support\Facades\Log::warning('transaction recalc after edit failed', [
-                'id' => $id, 'error' => $e->getMessage(),
+                'id' => $id, 'error' => $calc['error'],
             ]);
+
+            return response()->json([
+                'message' => 'Транзакция обновлена, но комиссии не пересчитаны: ' . $calc['error'],
+                'id' => $id,
+                'recalculated' => false,
+            ], 200);
         }
 
-        return response()->json(['message' => 'Транзакция обновлена', 'id' => $id]);
+        return response()->json([
+            'message' => 'Транзакция обновлена',
+            'id' => $id,
+            'recalculated' => true,
+        ]);
     }
 
     /**
