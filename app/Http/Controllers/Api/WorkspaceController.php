@@ -17,9 +17,16 @@ class WorkspaceController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
-        $userRoles = array_map('trim', explode(',', $user->role ?? ''));
-        $isConsultant = in_array('consultant', $userRoles);
-        $isStaff = array_intersect($userRoles, ['admin', 'backoffice', 'support', 'finance', 'head', 'calculations', 'corrections', 'invest']);
+        $isConsultant = $user->hasAnyRole(['consultant']);
+        // ⚠ Список НЕ совпадает с User::isStaff(): здесь нет education и
+        // content. Расхождение сохранено осознанно — на проде три аккаунта с
+        // ролью education, и переход на общий канон дал бы им staff-данные
+        // рабочего стола. Это решение владельца, а не задача рефакторинга.
+        // Разбор строки роли заменён на hasAnyRole: он приводит регистр,
+        // ручной explode — нет.
+        $isStaff = $user->hasAnyRole([
+            'admin', 'backoffice', 'support', 'finance', 'head', 'calculations', 'corrections', 'invest',
+        ]);
 
         $consultant = Consultant::where('webUser', $user->id)->first();
 

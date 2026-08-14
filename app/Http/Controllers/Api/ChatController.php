@@ -55,13 +55,15 @@ class ChatController extends Controller
             });
         } else {
             // Staff: видимость по своим категориям + личное участие.
-            $roles = array_map('trim', explode(',', $user->role ?? ''));
+            // getRolesArray() — тот же массив, но с приведением регистра;
+            // ручной explode его не делал (см. канон в User).
+            $roles = $user->getRolesArray();
             $allowed = TicketService::visibleCategoriesForRoles($roles);
             $expanded = $allowed;
             foreach (TicketService::CATEGORY_ALIASES as $legacy => $modern) {
                 if (in_array($modern, $allowed, true)) $expanded[] = $legacy;
             }
-            $isAdmin = in_array('admin', $roles, true);
+            $isAdmin = $user->isAdmin();
             // Руководитель отдела видит ВСЕ тикеты своих категорий, включая
             // взятые подчинёнными: ему нужна работа отдела целиком, а не
             // только неразобранное (запрос 2026-08-10 по бэк-офису).
@@ -2415,13 +2417,15 @@ class ChatController extends Controller
             // это исходящий канал к собственнику, не его тикет (см. index()).
             $query->where(fn ($q) => $q->where('department', '!=', 'owner')->orWhereNull('department'));
         } else {
-            $roles = array_map('trim', explode(',', $user->role ?? ''));
+            // getRolesArray() — тот же массив, но с приведением регистра;
+            // ручной explode его не делал (см. канон в User).
+            $roles = $user->getRolesArray();
             $allowed = TicketService::visibleCategoriesForRoles($roles);
             $expanded = $allowed;
             foreach (TicketService::CATEGORY_ALIASES as $legacy => $modern) {
                 if (in_array($modern, $allowed, true)) $expanded[] = $legacy;
             }
-            $isAdmin = in_array('admin', $roles, true);
+            $isAdmin = $user->isAdmin();
             // Тот же признак руководителя отдела, что и в index(): счётчик
             // непрочитанных обязан считать ровно то, что видно в списке —
             // иначе вернётся баг «бейдж есть, тикета нет».
@@ -2750,8 +2754,7 @@ class ChatController extends Controller
         ]);
 
         $user = $request->user();
-        $roles = array_map('trim', explode(',', $user->role ?? ''));
-        if (! array_intersect($roles, ['admin', 'support', 'head'])) {
+        if (! $user->hasAnyRole(['admin', 'support', 'head'])) {
             return response()->json([
                 'message' => 'Фиксация инцидентов — только техподдержка/админ',
             ], 403);
@@ -2819,8 +2822,7 @@ class ChatController extends Controller
     public function resolveIncident(Request $request, int $id): JsonResponse
     {
         $user = $request->user();
-        $roles = array_map('trim', explode(',', $user->role ?? ''));
-        if (! in_array('admin', $roles, true)) {
+        if (! $user->isAdmin()) {
             return response()->json(['message' => 'Закрытие инцидента доступно только администратору'], 403);
         }
 
@@ -2897,8 +2899,7 @@ class ChatController extends Controller
     public function supportDesk(Request $request): JsonResponse
     {
         $user = $request->user();
-        $roles = array_map('trim', explode(',', $user->role ?? ''));
-        if (! array_intersect($roles, ['admin', 'support', 'head'])) {
+        if (! $user->hasAnyRole(['admin', 'support', 'head'])) {
             return response()->json(['message' => 'Только для техподдержки/админа'], 403);
         }
 

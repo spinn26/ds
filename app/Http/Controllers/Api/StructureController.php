@@ -39,7 +39,6 @@ class StructureController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
-        $userRoles = array_map('trim', explode(',', $user->role ?? ''));
         // Канон «кто сотрудник» — User::isStaff() (вкл. invest/finance/education),
         // а не локальный хардкод-список. Инвестор (напр. Жарков, role=invest)
         // должен видеть структуру как сотрудник, а не «свою команду».
@@ -48,7 +47,7 @@ class StructureController extends Controller
         $hasFilters = $this->hasActiveFilters($request);
 
         // Staff without consultant role → top-level (no inviter) или flat-поиск
-        if ($isStaff && ! in_array('consultant', $userRoles)) {
+        if ($isStaff && ! $user->hasAnyRole(['consultant'])) {
             // Если активен ЛЮБОЙ фильтр — flat search across all consultants.
             // Раньше срабатывало только на `search`, а фильтры
             // qualification/status/ЛП/ГП/НГП/город применялись поверх
@@ -288,13 +287,12 @@ class StructureController extends Controller
     public function exportFiltered(Request $request): StreamedResponse
     {
         $user = $request->user();
-        $userRoles = array_map('trim', explode(',', $user->role ?? ''));
         // Канон «кто сотрудник» — User::isStaff() (см. index()).
         $isStaff = $user->isStaff();
         $consultant = Consultant::where('webUser', $user->id)->first();
         $hasFilters = $this->hasActiveFilters($request);
 
-        if ($isStaff && ! in_array('consultant', $userRoles)) {
+        if ($isStaff && ! $user->hasAnyRole(['consultant'])) {
             $query = Consultant::whereNull('dateDeleted')
                 ->whereNotIn('id', $this->systemConsultantIds());
             if ($request->filled('search')) {
