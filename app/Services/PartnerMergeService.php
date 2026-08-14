@@ -208,12 +208,17 @@ class PartnerMergeService
             return [];
         }
 
+        // Только схема public: мёртвый слой Directual вынесен в схему legacy
+        // (миграция 2026_08_14_001100) и в search_path не входит, поэтому
+        // DB::table() его не откроет. Историю там мы и не двигаем — она
+        // заморожена на момент консолидации.
         $refs = DB::select(<<<'SQL'
             SELECT src.relname AS tablica, a.attname AS kolonka
             FROM pg_constraint con
             JOIN pg_class src ON src.oid = con.conrelid
             JOIN pg_attribute a ON a.attrelid = con.conrelid AND a.attnum = con.conkey[1]
             WHERE con.contype = 'f' AND con.confrelid = to_regclass(?)
+              AND src.relnamespace = 'public'::regnamespace
             SQL, ['"'.$table.'"']);
 
         foreach ($refs as $ref) {

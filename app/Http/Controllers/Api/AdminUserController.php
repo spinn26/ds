@@ -400,7 +400,8 @@ class AdminUserController extends Controller
                ON tc.constraint_name = kcu.constraint_name
              JOIN information_schema.constraint_column_usage ccu
                ON tc.constraint_name = ccu.constraint_name
-             WHERE tc.constraint_type = 'FOREIGN KEY' AND ccu.table_name = 'WebUser'"
+             WHERE tc.constraint_type = 'FOREIGN KEY' AND ccu.table_name = 'WebUser'
+               AND tc.table_schema = 'public'"
         );
 
         return array_map(fn ($r) => [$r->t, $r->c], $rows);

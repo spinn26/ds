@@ -50,6 +50,16 @@ SET row_security = off;
 -- Name: public; Type: SCHEMA; Schema: -; Owner: -
 --
 
+-- ⚠ Схема legacy сносится перед загрузкой.
+--
+-- Миграция move_dead_directual_tables_to_legacy_schema переносит мёртвые
+-- Directual-таблицы из public в legacy. migrate:fresh дропает таблицы только
+-- в public, поэтому при ПОВТОРНОМ прогоне на той же тестовой БД таблица
+-- существует уже в обеих схемах, и ALTER TABLE ... SET SCHEMA падает
+-- «отношение уже существует». В CI не воспроизводится: там БД свежая, а
+-- RefreshDatabase мигрирует один раз за процесс.
+DROP SCHEMA IF EXISTS legacy CASCADE;
+
 CREATE SCHEMA IF NOT EXISTS public;
 
 

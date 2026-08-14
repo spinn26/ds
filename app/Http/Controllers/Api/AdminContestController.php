@@ -237,6 +237,7 @@ class AdminContestController extends Controller
             JOIN pg_class child  ON child.oid  = con.conrelid
             JOIN pg_attribute att ON att.attrelid = con.conrelid AND att.attnum = ANY(con.conkey)
             WHERE con.contype='f' AND parent.relname = ?
+              AND child.relnamespace = 'public'::regnamespace
         SQL, [$table]);
         return array_map(fn ($r) => [$r->t, $r->c], $rows);
     }
@@ -253,6 +254,7 @@ class AdminContestController extends Controller
             JOIN pg_attribute patt ON patt.attrelid = con.confrelid AND patt.attnum = ANY(con.confkey)
             WHERE con.contype='f'
               AND child.relname = ? AND parent.relname = ? AND patt.attname = ?
+              AND child.relnamespace = 'public'::regnamespace
             LIMIT 1
         SQL, [$table, $parentTable, $parentColumn]);
         return $rows[0]->c ?? null;
@@ -278,6 +280,7 @@ class AdminContestController extends Controller
             WHERE con.contype = 'f'
               AND parent.relname = ?
               AND patt.attname = ?
+              AND child.relnamespace = 'public'::regnamespace
 SQL, [$table, $column]);
 
         foreach ($refs as $r) {
