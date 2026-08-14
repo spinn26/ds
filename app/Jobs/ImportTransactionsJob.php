@@ -610,7 +610,18 @@ class ImportTransactionsJob implements ShouldQueue
         $headers = fgetcsv($handle, 0, $delimiter);
         if (! $headers) { fclose($handle); return []; }
 
-        $headers = array_map(fn ($h) => strtolower(trim(str_replace(["\xEF\xBB\xBF", '"'], '', (string) $h))), $headers);
+        // ⚠ mb_strtolower, НЕ strtolower: последний работает побайтово и
+        // кириллицу не трогает. Из-за этого «Сумма» и «Дата» — самые обычные
+        // заголовки русской выгрузки — не совпадали с ключевыми словами ниже
+        // НИКОГДА: колонки терялись молча, сумма уходила в 0 (ноль разрешён
+        // осознанно, для сделок без движения денег), дата подменялась
+        // сегодняшней, а импорт при этом рапортовал success. Совпадение
+        // случалось, только если ключевое слово стояло внутри заголовка уже
+        // строчным («Общая сумма» проходило, «Сумма» — нет).
+        $headers = array_map(
+            fn ($h) => mb_strtolower(trim(str_replace(["\xEF\xBB\xBF", '"'], '', (string) $h))),
+            $headers
+        );
 
         $headerMap = [];
         foreach ($headers as $i => $h) {
