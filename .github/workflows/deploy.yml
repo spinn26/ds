@@ -22,14 +22,17 @@ on:
   workflow_dispatch:   # ручной запуск из GitHub UI
 
 jobs:
-  # Гейт перед деплоем: статический анализ. Стиль (Pint) и полный
-  # `artisan test` сюда НЕ включены намеренно:
-  #   - Pint: код ещё не приведён к стилю целиком → red на каждом пуше;
-  #   - artisan test: 286 легаси-таблиц без миграций, feature-тесты по
-  #     "WebUser"/"person" в чистой CI-базе всегда красные.
+  # Гейт перед деплоем: статический анализ. Стиль (Pint) сюда НЕ включён
+  # намеренно — код ещё не приведён к стилю целиком, был бы red на каждом пуше.
   # PHPStan (level 5 + baseline) детерминирован и ловит реальные баги
   # (тип-ошибки, cast-и, nullsafe) — новые ошибки блокируют деплой,
   # существующий долг заморожен в phpstan-baseline.neon.
+  #
+  # Тесты вынесены в отдельный job `tests` ниже. Раньше их не было вовсе:
+  # 286 легаси-таблиц не создаются миграциями (схема пришла дампом из
+  # Directual), поэтому в чистой CI-базе всё было красным. Решено дампом
+  # прод-схемы в database/schema/pgsql-schema.sql — Laravel поднимает из него
+  # тестовую БД сам.
   quality:
     runs-on: ubuntu-latest
     # Приложение бутстрапится и на composer package:discover, и внутри
@@ -72,8 +75,67 @@ jobs:
       - name: PHPStan (static analysis)
         run: php -d memory_limit=1G vendor/bin/phpstan analyse --no-progress
 
+  # Тесты на настоящем Postgres: legacy-схема поднимается из
+  # database/schema/pgsql-schema.sql (дамп прода), поверх неё Laravel
+  # догоняет миграции. Версия сервиса совпадает с продовой (16.x).
+  tests:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: newds_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      APP_ENV: testing
+      APP_KEY: base64:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+      # Хост/порт/имя БД задаёт phpunit.xml; пароль намеренно только здесь
+      # (PHPUnit не разворачивает шелл-переменные в <env value>).
+      DB_PASSWORD: postgres
+      CACHE_STORE: array
+      SESSION_DRIVER: array
+      QUEUE_CONNECTION: sync
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+          tools: composer:v2
+
+      # psql нужен самому Laravel: PostgresSchemaState::load() грузит
+      # schema-файл внешним клиентом, а не через PDO.
+      - name: Install psql client
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+
+      - name: Cache Composer packages
+        uses: actions/cache@v4
+        with:
+          path: vendor
+          key: composer-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-
+
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: PHPUnit
+        run: vendor/bin/phpunit
+
   deploy:
-    needs: quality
+    needs: [quality, tests]
     runs-on: ubuntu-latest
 
     steps:

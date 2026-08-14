@@ -28,11 +28,15 @@
         <env name="DB_PORT" value="5432"/>
         <env name="DB_DATABASE" value="newds_test"/>
         <env name="DB_USERNAME" value="postgres"/>
-        <!-- Пароль НЕ хардкодим в репо. Установить через переменную
-             окружения (CI/CD secret или локальный shell):
-                 export DB_PASSWORD_TEST=...
-             Если не задан, тесты упадут на connection error — это намеренно. -->
-        <env name="DB_PASSWORD" value="${DB_PASSWORD_TEST}"/>
+        <!-- DB_PASSWORD здесь НЕ задаём намеренно.
+             ⚠ PHPUnit не разворачивает шелл-переменные в value: прежний
+             `${DB_PASSWORD_TEST}` уходил в PDO как литеральная строка, и тесты
+             с БД падали на «password authentication failed» при любом
+             окружении — то есть не запускались никогда.
+             Пароль берётся из окружения: локально из .env, в CI — из env
+             workflow (см. .github/workflows/deploy.yml, job `tests`).
+             Схема тестовой БД поднимается из database/schema/pgsql-schema.sql
+             (дамп прод-схемы) — миграции legacy-таблицы не создают. -->
         <env name="DB_URL" value=""/>
         <env name="MAIL_MAILER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
