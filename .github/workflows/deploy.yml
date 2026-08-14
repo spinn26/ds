@@ -99,8 +99,15 @@ jobs:
     env:
       APP_ENV: testing
       APP_KEY: base64:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
-      # Хост/порт/имя БД задаёт phpunit.xml; пароль намеренно только здесь
-      # (PHPUnit не разворачивает шелл-переменные в <env value>).
+      # Дублируем подключение из phpunit.xml на уровне job: composer install
+      # дёргает package:discover, а он бутстрапит приложение ДО phpunit и
+      # читает только настоящее окружение. Без этих переменных он уходил в
+      # sqlite по умолчанию и падал на отсутствующем файле БД.
+      DB_CONNECTION: pgsql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      DB_DATABASE: newds_test
+      DB_USERNAME: postgres
       DB_PASSWORD: postgres
       CACHE_STORE: array
       SESSION_DRIVER: array
