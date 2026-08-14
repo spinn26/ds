@@ -87,28 +87,15 @@ class ReassignTerminatedContracts extends Command
         return 0;
     }
 
-    /** Ближайший активный вышестоящий для dry-run отчёта. */
+    /**
+     * Ближайший активный вышестоящий для dry-run отчёта.
+     *
+     * Тот же резолвер, что использует боевой перенос (PartnerStatusService),
+     * — иначе dry-run показывал бы не ту цель, что получится при прогоне.
+     */
     private function previewTarget(int $consultantId): ?int
     {
-        $rows = DB::select(
-            'WITH RECURSIVE up AS (
-                SELECT id, inviter, activity, 0 AS depth FROM consultant WHERE id = ?
-                UNION ALL
-                SELECT c.id, c.inviter, c.activity, up.depth + 1
-                FROM consultant c JOIN up ON c.id = up.inviter
-                WHERE up.depth < 25
-             )
-             SELECT id, activity FROM up WHERE depth > 0 ORDER BY depth',
-            [$consultantId]
-        );
-        foreach ($rows as $r) {
-            if (! in_array((int) $r->activity, [
-                PartnerActivity::Terminated->value,
-                PartnerActivity::Excluded->value,
-            ], true)) {
-                return (int) $r->id;
-            }
-        }
-        return null;
+        return app(\App\Services\ConsultantTreeService::class)
+            ->nearestActiveUplineId($consultantId);
     }
 }

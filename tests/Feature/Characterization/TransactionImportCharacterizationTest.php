@@ -35,12 +35,7 @@ class TransactionImportCharacterizationTest extends TestCase
     private const RUB = 67;
     private const USD = 5;
 
-    /**
-     * ⚠ Заголовки подобраны так, чтобы ключевое слово стояло в НИЖНЕМ регистре.
-     * parseCsv приводит шапку байтовым strtolower(), который кириллицу не
-     * трогает, поэтому «Сумма» и «Дата» не распознаются НИКОГДА. Отдельный тест
-     * ниже фиксирует это как есть — см. отчёт по Этапу 0.
-     */
+    /** Типовая шапка выгрузки. Регистр значения не имеет — см. тесты ниже. */
     private const HEADERS = ['Номер контракта', 'Общая сумма', 'Плановая дата'];
 
     private string $csvPath;
@@ -265,20 +260,17 @@ class TransactionImportCharacterizationTest extends TestCase
     }
 
     /**
-     * ⚠ ФИКСАЦИЯ ЖИВОГО БАГА, а не желаемого поведения.
+     * Заголовки с заглавной кириллической буквы распознаются наравне со
+     * строчными.
      *
-     * parseCsv приводит шапку через байтовый strtolower(), который кириллицу
-     * не трогает. Поэтому «Сумма» и «Дата» — самые естественные заголовки
-     * русской выгрузки — не распознаются: колонки теряются молча. Сумма
-     * становится 0 (ноль разрешён осознанно, для сделок без движения денег),
-     * дата — сегодняшней. Импорт при этом рапортует success.
-     *
-     * Тест закрепляет текущее поведение, чтобы рефакторинг его не сдвинул
-     * незаметно. Когда баг починят (mb_strtolower), тест обязан покраснеть —
-     * и его надо будет переписать на ожидаемый результат.
+     * ⚠ Регресс-тест: parseCsv приводил шапку побайтовым strtolower(), который
+     * кириллицу не трогает, и «Сумма»/«Дата» не совпадали с ключевыми словами
+     * НИКОГДА. Колонки терялись молча: сумма уходила в 0, дата подменялась
+     * сегодняшней, импорт рапортовал success. Совпадение случалось, только
+     * если ключевое слово стояло внутри заголовка уже строчным.
      */
     #[Test]
-    public function capitalised_cyrillic_headers_are_silently_ignored(): void
+    public function capitalised_cyrillic_headers_are_recognised(): void
     {
         $this->writeCsv([
             ['Номер контракта', 'Сумма', 'Дата'],
@@ -287,12 +279,29 @@ class TransactionImportCharacterizationTest extends TestCase
 
         $this->runImport();
 
-        $this->assertSame('success', $this->log()->status, 'импорт не жалуется');
+        $this->assertSame('success', $this->log()->status);
 
         $row = DB::table('transaction')->first();
         $this->assertNotNull($row);
-        $this->assertEqualsWithDelta(0.0, (float) $row->amount, 0.01, 'колонка «Сумма» потеряна');
-        $this->assertSame(now()->format('Y-m'), $row->dateMonth, 'колонка «Дата» потеряна → сегодня');
+        $this->assertEqualsWithDelta(7_500.0, (float) $row->amount, 0.01, 'колонка «Сумма» прочитана');
+        $this->assertSame('2026-07', $row->dateMonth, 'колонка «Дата» прочитана');
+    }
+
+    /** Заголовки в ВЕРХНЕМ регистре — тоже валидный случай выгрузки. */
+    #[Test]
+    public function uppercase_headers_are_recognised(): void
+    {
+        $this->writeCsv([
+            ['НОМЕР КОНТРАКТА', 'СУММА', 'ДАТА'],
+            ['IMP-A', '1234', '15.07.2026'],
+        ]);
+
+        $this->runImport();
+
+        $this->assertSame('success', $this->log()->status);
+        $row = DB::table('transaction')->first();
+        $this->assertEqualsWithDelta(1_234.0, (float) $row->amount, 0.01);
+        $this->assertSame('2026-07', $row->dateMonth);
     }
 
     /** Исходный CSV удаляется после импорта — файлы не копятся в temp. */
