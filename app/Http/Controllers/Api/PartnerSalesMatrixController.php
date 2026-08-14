@@ -378,16 +378,7 @@ class PartnerSalesMatrixController extends Controller
 
         $fcQuery = DB::table('consultant')->whereNull('dateDeleted');
         if (! empty($structureIds)) {
-            $ids = implode(',', $structureIds);
-            $desc = DB::select("
-                WITH RECURSIVE tree AS (
-                    SELECT id FROM consultant WHERE id IN ($ids) AND \"dateDeleted\" IS NULL
-                    UNION ALL
-                    SELECT c.id FROM consultant c JOIN tree ON c.inviter = tree.id WHERE c.\"dateDeleted\" IS NULL
-                )
-                SELECT id FROM tree
-            ");
-            $fcQuery->whereIn('id', array_map(fn ($r) => $r->id, $desc));
+            $fcQuery->whereIn('id', $this->tree()->subtreeIds($structureIds));
         }
         $fcs = $fcQuery->orderBy('personName')->limit(3000)->get(['id', 'personName as name']);
 
@@ -447,20 +438,13 @@ class PartnerSalesMatrixController extends Controller
      */
     private function subtreeIds(array $structureIds): array
     {
-        $ids = array_filter(array_map('intval', $structureIds));
-        if (empty($ids)) return [];
-        $list = implode(',', array_unique($ids));
+        return $this->tree()->subtreeIds($structureIds);
+    }
 
-        $rows = DB::select("
-            WITH RECURSIVE tree AS (
-                SELECT id FROM consultant WHERE id IN ($list) AND \"dateDeleted\" IS NULL
-                UNION ALL
-                SELECT c.id FROM consultant c JOIN tree ON c.inviter = tree.id
-                WHERE c.\"dateDeleted\" IS NULL
-            )
-            SELECT id FROM tree
-        ");
-        return array_map(fn ($r) => (int) $r->id, $rows);
+    /** Единственная реализация обхода дерева по consultant.inviter. */
+    private function tree(): \App\Services\ConsultantTreeService
+    {
+        return app(\App\Services\ConsultantTreeService::class);
     }
 
     /**
