@@ -225,14 +225,15 @@ class CalculatorController extends Controller
         // калькулятор использует курс, относящийся к периоду расчёта). Раньше
         // брался «последний в справочнике» — то же значение, пока месяц текущий,
         // но формула теперь одна на всю платформу (см. CurrencyRates).
-        $currencyRate = \App\Support\CurrencyRates::forDate($currencyId);
+        // OrDefault, а не forDate(): партнёрский калькулятор — справочный
+        // инструмент, ронять его 500-й из-за дыры в справочнике курсов нельзя.
+        // Отсутствие курса уйдёт в лог (см. CurrencyRates).
+        $currencyRate = \App\Support\CurrencyRates::forDateOrDefault($currencyId);
 
-        // НДС из справочника на текущую дату.
-        $vat = DB::table('vat')
-            ->where('dateFrom', '<=', now())
-            ->where('dateTo',   '>=', now())
-            ->first();
-        $vatPercent = (float) ($vat->value ?? 0);
+        // НДС из справочника на текущую дату. Отсутствие ставки логируется
+        // (см. App\Support\VatRate): молча взятый 0% завышает «доход ДС» и
+        // баллы в калькуляторе партнёра на всю ставку.
+        $vatPercent = \App\Support\VatRate::percentOrDefault();
 
         $amountRub   = $amount * $currencyRate;
         $amountNoVat = $amountRub / (1 + $vatPercent / 100);

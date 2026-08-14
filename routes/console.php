@@ -62,6 +62,16 @@ Schedule::command('platform:health-check')
 
 // === Cleanup-задачи (предотвращают рост служебных таблиц) ===
 
+// Гигиена БД: снимки отчётов, старые бэкап-таблицы, ретеншн health_check.
+// ⚠ Докблок команды обещал еженедельный запуск, но зарегистрирована она нигде
+// не была — ретеншн health_check не работал вовсе. Идёт БЕЗ --apply: команда
+// показывает, что бы удалила, а фактический дроп остаётся ручным решением
+// (она сносит таблицы, автозапуск такого не заслуживает доверия по умолчанию).
+Schedule::command('db:housekeep')
+    ->weeklyOn(1, '03:40')
+    ->withoutOverlapping(30)
+    ->runInBackground();
+
 // Истёкшие Sanctum-токены: с SANCTUM_TOKEN_EXPIRATION=43200 (30 дней)
 // токены копятся в personal_access_tokens. Чистим раз в сутки.
 $tokenHours = (int) \App\Models\SystemSetting::value('maintenance.sanctum_token_retention_hours', 24);
@@ -115,46 +125,5 @@ Schedule::command('health:queue-check-heartbeat')->everyMinute();
 // Health::schedule heartbeat — фиксирует «scheduler сейчас работает».
 Schedule::command('health:schedule-check-heartbeat')->everyMinute();
 
-// === Напоминания о дедлайнах задач ===
-// Ежедневно в 09:00: исполнителю напоминаем о задачах, у которых дедлайн
-// наступает сегодня и которые ещё не выполнены/отклонены. Идемпотентно в
-// рамках суток (запуск раз в день).
-Schedule::call(function () {
-    if (! \Illuminate\Support\Facades\Schema::hasTable('tasks')) {
-        return;
-    }
-    $tasks = \App\Models\Task::query()
-        ->whereNotNull('assignee_id')
-        ->whereNotNull('deadline')
-        ->whereDate('deadline', today())
-        ->whereNotIn('status', ['done', 'rejected'])
-        ->get();
-    foreach ($tasks as $task) {
-        \App\Http\Controllers\Api\NotificationController::create(
-            (int) $task->assignee_id,
-            'status',
-            'Сегодня дедлайн задачи',
-            $task->title,
-            $task->project_id ? "/projects/{$task->project_id}" : '/tasks',
-        );
-    }
-})->dailyAt('09:00')->name('tasks:remind-deadlines');
-
-// === Повторяющиеся задачи по шаблонам ===
-// Каждый час: для активных шаблонов с наступившим next_run_at создаём задачу
-// и сдвигаем next_run_at на следующий период.
-Schedule::call(function () {
-    if (! \Illuminate\Support\Facades\Schema::hasTable('task_templates')) {
-        return;
-    }
-    $due = \App\Models\TaskTemplate::where('active', true)
-        ->where('recurrence_freq', '!=', 'none')
-        ->whereNotNull('next_run_at')
-        ->where('next_run_at', '<=', now())
-        ->get();
-    foreach ($due as $tpl) {
-        \App\Services\TaskTemplateRunner::instantiate($tpl, (int) $tpl->created_by);
-        $tpl->next_run_at = $tpl->computeNextRun(now());
-        $tpl->save();
-    }
-})->hourly()->name('tasks:recurring');
+// Крон-задачи модуля «Задачи» (tasks:remind-deadlines, tasks:recurring)
+// удалены вместе с самим модулем 2026-08-14.

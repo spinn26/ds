@@ -20,15 +20,19 @@ class CheckRole
             return response()->json(['message' => 'Не авторизован'], 401);
         }
 
-        $userRoles = array_map('trim', explode(',', $user->role ?? ''));
+        // Регистр не значим: User::getRolesArray() и все Restrict*-гарды
+        // приводят роли к нижнему регистру, и этот гард обязан вести себя так
+        // же — иначе роль «Admin» из legacy-данных получала 403 там, где
+        // остальной код считал её админской.
+        $userRoles = $user->getRolesArray();
 
         // admin имеет доступ ко всему
-        if (in_array('admin', $userRoles)) {
+        if (in_array('admin', $userRoles, true)) {
             return $next($request);
         }
 
         foreach ($roles as $role) {
-            if (in_array($role, $userRoles)) {
+            if (in_array(strtolower(trim($role)), $userRoles, true)) {
                 return $next($request);
             }
         }

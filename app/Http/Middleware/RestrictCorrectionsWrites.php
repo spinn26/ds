@@ -21,8 +21,11 @@ class RestrictCorrectionsWrites
     /** Роли, при которых гард не активен — права от другой staff-роли. */
     private const STAFF_OVERRIDES = ['admin', 'backoffice', 'finance', 'calculations'];
 
-    /** Подстроки пути, в которые чистый corrections может писать. */
-    private const WRITE_ALLOW = ['admin/instructions'];
+    /**
+     * Префиксы пути, в которые чистый corrections может писать. ⚠ Префиксы, а
+     * не подстроки: str_contains пропускал бы совпадение в любом месте пути.
+     */
+    private const WRITE_ALLOW = ['api/v1/admin/instructions'];
 
     public function handle(Request $request, Closure $next): Response
     {
@@ -45,7 +48,7 @@ class RestrictCorrectionsWrites
 
         $path = $request->path();
         foreach (self::WRITE_ALLOW as $allowed) {
-            if (str_contains($path, $allowed)) {
+            if (str_starts_with($path, $allowed)) {
                 return $next($request);
             }
         }

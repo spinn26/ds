@@ -968,8 +968,7 @@ const baseMenuItems = [
   // ---- Partner menu (consultant) ----
   // Shown to everyone (partner and staff) — leads to Workspace
   { label: 'Главная', icon: 'mdi-home-outline', path: '/' },
-  // Раздел «Задачи» убран с платформы (2026-07-16). Бэкенд/данные сохранены;
-  // при необходимости вернуть — восстановить пункт меню + роут /tasks.
+  // Модуль «Задачи и проекты» удалён целиком 2026-08-14 вместе с таблицами.
 
   { group: 'Обзор', partner: true },
   { label: 'Дашборд', icon: 'mdi-view-dashboard-outline', path: '/dashboard', partner: true },

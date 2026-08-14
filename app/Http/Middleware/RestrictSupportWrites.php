@@ -29,8 +29,17 @@ class RestrictSupportWrites
     /** Роли, при которых support-гард не активен — права от другой staff-роли. */
     private const STAFF_OVERRIDES = ['admin', 'backoffice', 'finance', 'calculations', 'corrections'];
 
-    /** Подстроки пути, в которые чистый support может писать (products + instructions). */
-    private const WRITE_ALLOW = ['admin/products', 'admin/programs-catalog', 'admin/instructions'];
+    /**
+     * Префиксы пути, в которые чистый support может писать (products +
+     * instructions). ⚠ Именно ПРЕФИКСЫ и именно с 'api/v1/': прежний
+     * str_contains по подстроке пропускал бы любой путь, где эти сегменты
+     * встречаются не с начала.
+     */
+    private const WRITE_ALLOW = [
+        'api/v1/admin/products',
+        'api/v1/admin/programs-catalog',
+        'api/v1/admin/instructions',
+    ];
 
     public function handle(Request $request, Closure $next): Response
     {
@@ -53,7 +62,7 @@ class RestrictSupportWrites
 
         $path = $request->path();
         foreach (self::WRITE_ALLOW as $allowed) {
-            if (str_contains($path, $allowed)) {
+            if (str_starts_with($path, $allowed)) {
                 return $next($request);
             }
         }

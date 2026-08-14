@@ -5,8 +5,10 @@
     </div>
     <v-card v-else-if="page" class="ds-card pa-5" elevation="0">
       <h1 class="text-h5 font-weight-bold mb-4">{{ page.title }}</h1>
-      <!-- Контент авторства админа (доверенный источник). -->
-      <div class="content-body" v-html="page.body"></div>
+      <!-- Контент авторства админа, но v-html без чистки — это XSS с правами
+           любого читателя страницы: достаточно одной скомпрометированной
+           админской сессии. Прогоняем через тот же whitelist, что новости. -->
+      <div class="content-body" v-html="safeHtml(page.body)"></div>
     </v-card>
     <EmptyState v-else icon="mdi-file-remove-outline" title="Страница не найдена" />
   </div>
@@ -17,6 +19,7 @@ import { ref, watch, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import api from '../api';
 import EmptyState from '../components/EmptyState.vue';
+import { safeHtml } from '../composables/useSafeHtml';
 
 const route = useRoute();
 const loading = ref(true);

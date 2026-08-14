@@ -274,9 +274,7 @@ class PartnerSalesMatrixController extends Controller
         [$from, $to] = [$params['from'], $params['to']];
         $toExclusive = $this->monthExclusiveStart($to);
 
-        $vatPercent = (float) (DB::table('vat')
-            ->where('dateFrom', '<=', now())->where('dateTo', '>=', now())
-            ->value('value') ?? 0);
+        $vatPercent = \App\Support\VatRate::percentOrDefault();
         $defaultDs = (float) \App\Models\SystemSetting::value('commission.default_ds_percent', 100);
 
         $contracts = DB::table('contract as co')

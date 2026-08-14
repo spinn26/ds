@@ -147,6 +147,21 @@ class AdminOpsController extends Controller
         ]);
     }
 
+    /**
+     * Массовая терминация просроченных «Зарегистрирован».
+     *
+     * ⚠ Раньше здесь стоял голый `UPDATE consultant SET activity=3`, мимо
+     * PartnerStatusService. Мимо проходило всё, что делает штатная терминация:
+     * terminationCount не рос (ломались лестница «терминация → исключение» и
+     * лимит самовосстановлений), в chageConsultanStatusLog не попадало ничего,
+     * а главное — контракты и клиенты НЕ уезжали на ближайшего активного
+     * вышестоящего. Контракт оставался висеть на терминированном ФК, а
+     * CommissionCalculator таким партнёрам комиссию не начисляет — доля молча
+     * оставалась компании вместо перехода наставнику.
+     *
+     * Теперь на каждого партнёра зовётся PartnerStatusService::terminate(),
+     * то есть ровно тот же путь, что у одиночной терминации из карточки.
+     */
     private function terminateExpired(Request $request): JsonResponse
     {
         $dryRun = $request->boolean('dryRun', true);
@@ -168,20 +183,45 @@ class AdminOpsController extends Controller
             return response()->json(['dryRun' => true, 'count' => $ids->count()]);
         }
 
-        DB::table('consultant')->whereIn('id', $ids)->update([
-            'activity' => 3,   // Терминирован
-            'active' => false,
-            'dateDeactivity' => now(),
-        ]);
+        $service = app(\App\Services\PartnerStatusService::class);
+        $reason = 'Массовая терминация: не набрал ЛП='
+            . \App\Enums\PartnerActivity::activationPoints() . ' за '
+            . \App\Enums\PartnerActivity::activationDays() . ' дней';
+
+        $done = 0;
+        $failed = [];
+        foreach ($ids as $id) {
+            $consultant = \App\Models\Consultant::find($id);
+            if (! $consultant) {
+                continue;
+            }
+            try {
+                $service->terminate($consultant, $reason);
+                $done++;
+            } catch (\Throwable $e) {
+                // Один сбойный партнёр не должен ронять всю пачку — собираем
+                // и отдаём оператору, остальных дорабатываем.
+                $failed[] = ['id' => (int) $id, 'error' => $e->getMessage()];
+                \Log::warning('Массовая терминация: партнёр не обработан', [
+                    'consultant' => (int) $id, 'error' => $e->getMessage(),
+                ]);
+            }
+        }
 
         NotificationController::notifyStaff(
             'status',
-            sprintf('Массовая терминация: %d партнёров', $ids->count()),
-            'Просроченная активация по 90-дневному окну',
+            sprintf('Массовая терминация: %d партнёров', $done),
+            'Просроченная активация по окну ' . \App\Enums\PartnerActivity::activationDays() . ' дней',
             '/manage/partners/statuses',
         );
 
-        return response()->json(['dryRun' => false, 'count' => $ids->count(), 'message' => "Терминировано {$ids->count()} партнёров"]);
+        return response()->json([
+            'dryRun' => false,
+            'count' => $done,
+            'failed' => $failed,
+            'message' => "Терминировано {$done} партнёров"
+                . ($failed ? ', с ошибкой: ' . count($failed) : ''),
+        ]);
     }
 
     private function recalcPeriod(Request $request): JsonResponse

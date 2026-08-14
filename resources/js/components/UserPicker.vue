@@ -63,7 +63,10 @@ const items = computed(() => {
 async function fetchUsers(search) {
   loading.value = true;
   try {
-    const { data } = await api.get('/tasks/assignable-users', { params: { search: search || undefined } });
+    // Раньше ходили в /tasks/assignable-users (модуль «Задачи»). Он удалён
+    // 2026-08-14; /org/users отдаёт тот же формат и вдобавок отсекает
+    // мягко-удалённых пользователей.
+    const { data } = await api.get('/org/users', { params: { search: search || undefined } });
     results.value = data.users || [];
     results.value.forEach((u) => cache.set(u.id, u));
   } catch { /* ignore */ }

@@ -13,10 +13,16 @@ import re
 
 csv.field_size_limit(10 * 1024 * 1024)
 
-DB_NAME = "newds"
-DB_USER = "newds"
-DB_HOST = "127.0.0.1"
-DB_PASSWORD = "Rfghbtkjd%22"
+# Реквизиты — из окружения. Раньше пароль лежал здесь открытым текстом в
+# трекаемом файле; в git-истории он остаётся, поэтому пароль надо ротировать,
+# а не просто удалить отсюда.
+DB_NAME = os.environ.get("DB_DATABASE", "newds")
+DB_USER = os.environ.get("DB_USERNAME", "newds")
+DB_HOST = os.environ.get("DB_HOST", "127.0.0.1")
+DB_PASSWORD = os.environ.get("DB_PASSWORD")
+
+if not DB_PASSWORD:
+    sys.exit("DB_PASSWORD не задан в окружении. Пример: DB_PASSWORD=... python3 database/import_csv.py")
 
 BASE_DIR = "/var/www/newds/Db/Db"
 

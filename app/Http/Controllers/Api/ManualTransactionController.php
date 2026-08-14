@@ -194,11 +194,9 @@ class ManualTransactionController extends Controller
         // Текущий НДС отдаём вместе со списком — фронту он нужен ДО расчёта,
         // чтобы конвертация «Своя комиссия» (С НДС → без НДС) была стабильной
         // (иначе при вводе до «Рассчитать» vatPercent=0 и сумма «улетает» в без-НДС).
-        $vat = DB::table('vat')->where('dateFrom', '<=', now())->where('dateTo', '>=', now())->first();
-
         return response()->json([
             'data' => $data,
-            'vatPercent' => (float) ($vat->value ?? 0),
+            'vatPercent' => \App\Support\VatRate::percentOrDefault(),
         ]);
     }
 
@@ -253,7 +251,10 @@ class ManualTransactionController extends Controller
             if ($request->filled('currency')) {
                 $update['currency'] = $currencyId;
             }
-            $update['currencyRate'] = \App\Support\CurrencyRates::forDate($currencyId, $effectiveDate);
+            // Курс в черновике — справочное поле (реальный берётся заново при
+            // фиксации, см. calculateDrafts). Дыру в справочнике показываем
+            // нулём и логом, а не 500-й на каждое редактирование черновика.
+            $update['currencyRate'] = \App\Support\CurrencyRates::forDateOrDefault($currencyId, $effectiveDate, 0.0);
         }
 
         // Любое изменение полей инвалидирует ранее рассчитанное превью.
@@ -596,19 +597,32 @@ class ManualTransactionController extends Controller
         // Курс — по дате сделки, тем же резолвером, что и при фиксации: иначе
         // превью и факт разъедутся (курс в черновике мог быть проставлен до того,
         // как оператор поставил дату).
-        $rate = \App\Support\CurrencyRates::forDate(
-            $draft->currency ? (int) $draft->currency : null,
-            $draft->date
-        );
+        // Превью отдаёт ошибку строкой, а не 500-й: список черновиков
+        // сериализуется целиком, и один черновик без курса не должен уносить
+        // всю страницу.
+        try {
+            $rate = \App\Support\CurrencyRates::forDate(
+                $draft->currency ? (int) $draft->currency : null,
+                $draft->date
+            );
+        } catch (\RuntimeException $e) {
+            return ['ready' => false, 'error' => $e->getMessage()];
+        }
         $amountRub = (float) $draft->amount * $rate;
 
         // НДС — по дате самой транзакции (draft.date), не now(): превью должно
         // совпадать с фактическим начислением по ставке на дату сделки.
-        $vat = DB::table('vat')
-            ->where('dateFrom', '<=', $draft->date)
-            ->where('dateTo', '>=', $draft->date)
-            ->first();
-        $vatPercent = (float) ($vat->value ?? 0);
+        // Нет ставки на дату — превью не «считаем по 0%», а показываем ту же
+        // ошибку, которой ответит расчёт: иначе оператор видит завышенный на
+        // всю ставку доход ДС и фиксирует сделку вслепую.
+        $vatPercent = \App\Support\VatRate::percent($draft->date);
+        if ($vatPercent === null) {
+            return [
+                'ready' => false,
+                'error' => 'Не найдена ставка НДС на ' . $draft->date
+                    . ' — заведите период в справочнике НДС.',
+            ];
+        }
         $amountNoVat = $amountRub / (1 + $vatPercent / 100);
 
         $programRow = $contract->program
@@ -948,7 +962,8 @@ class ManualTransactionController extends Controller
      */
     private function fetchCurrencyRate(int $currencyId, $date = null): float
     {
-        return \App\Support\CurrencyRates::forDate($currencyId, $date);
+        // См. updateDraft: поле черновика справочное, фиксация берёт курс заново.
+        return \App\Support\CurrencyRates::forDateOrDefault($currencyId, $date, 0.0);
     }
 
     private function loadDraftWithRefs(int $id): ?object

@@ -61,10 +61,12 @@ class InsmartController extends Controller
                     'body' => $response->body(),
                     'partner_id' => $consultant->id,
                 ]);
+                // Тело ответа стороннего API партнёру не отдаём — оно может
+                // содержать наши идентификаторы/диагностику. Подробности уже
+                // в логе выше, туда и смотрит поддержка.
                 return response()->json([
                     'message' => 'InSmart API вернул ошибку',
                     'status' => $response->status(),
-                    'detail' => $response->json() ?? $response->body(),
                 ], 502);
             }
 
@@ -78,7 +80,6 @@ class InsmartController extends Controller
             ]);
             return response()->json([
                 'message' => 'Не удалось получить токен InSmart',
-                'detail' => $e->getMessage(),
             ], 502);
         }
     }

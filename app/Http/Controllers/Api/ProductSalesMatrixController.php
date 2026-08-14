@@ -944,10 +944,7 @@ class ProductSalesMatrixController extends Controller
      */
     private function injectInWorkPoints(callable $base, array &$assembled, string $periodCol = 'createDate'): void
     {
-        $vatPercent = (float) (DB::table('vat')
-            ->where('dateFrom', '<=', now())
-            ->where('dateTo', '>=', now())
-            ->value('value') ?? 0);
+        $vatPercent = \App\Support\VatRate::percentOrDefault();
         $defaultDs = (float) \App\Models\SystemSetting::value('commission.default_ds_percent', 100);
 
         $contracts = $base()
@@ -1056,8 +1053,7 @@ class ProductSalesMatrixController extends Controller
      */
     private function injectForecastBreakdown(callable $base, array &$payload, string $periodCol, string $bucketCol, string $targetKey = 'forecast'): void
     {
-        $vatPercent = (float) (DB::table('vat')
-            ->where('dateFrom', '<=', now())->where('dateTo', '>=', now())->value('value') ?? 0);
+        $vatPercent = \App\Support\VatRate::percentOrDefault();
         $defaultDs = (float) \App\Models\SystemSetting::value('commission.default_ds_percent', 100);
 
         $rows = $base()
@@ -1826,7 +1822,7 @@ class ProductSalesMatrixController extends Controller
         }
 
         // Прогноз выручки/баллов из контракта (как injectInWorkPoints).
-        $vat = (float) (DB::table('vat')->where('dateFrom', '<=', now())->where('dateTo', '>=', now())->value('value') ?? 0);
+        $vat = \App\Support\VatRate::percentOrDefault();
         $defaultDs = (float) \App\Models\SystemSetting::value('commission.default_ds_percent', 100);
         $contracts = $base()
             ->select([

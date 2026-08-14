@@ -353,9 +353,6 @@
         <!-- Кто сейчас онлайн из коллег (только staff) -->
         <WhosOnlineWidget v-if="isStaff" class="mb-4" />
 
-        <!-- Личные задачи: TODO-чек-лист (staff-only модуль — у ФК скрыт) -->
-        <MyTasksWidget v-if="isStaff" class="mb-4" />
-
         <!-- Заметка-scratchpad с автосохранением -->
         <MyNoteWidget class="mb-4" />
 
@@ -454,7 +451,6 @@ import { ref, computed, onMounted } from 'vue';
 import { useDisplay } from 'vuetify';
 import { useAuthStore } from '../stores/auth';
 import api from '../api';
-import MyTasksWidget from '../components/MyTasksWidget.vue';
 import MyNoteWidget from '../components/MyNoteWidget.vue';
 import MyDayWidget from '../components/MyDayWidget.vue';
 import WhosOnlineWidget from '../components/WhosOnlineWidget.vue';

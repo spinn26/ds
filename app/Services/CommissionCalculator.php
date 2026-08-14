@@ -380,12 +380,18 @@ class CommissionCalculator
         // после смены ставки НДС база всех комиссий (amountNoVat) должна
         // считаться по ставке, действовавшей на дату сделки. Закрытые периоды
         // при этом не пересчитываются (защита period_closures/HISTORICAL_CUTOFF).
+        //
+        // Отсутствие ставки на дату — ошибка данных, а не «ставка 0»: раньше
+        // `?? 0` превращал amountRUB в «сумму без НДС», завышая базу на всю
+        // ставку, и это уезжало в доход ДС, ЛП, комиссии всей цепочки и базу
+        // пула. Молчать здесь нельзя ровно по той же причине, по которой ниже
+        // отключён фолбэк «%ДС = 100%».
         $vatDate = $tx->date ?? now();
-        $vat = DB::table('vat')
-            ->where('dateFrom', '<=', $vatDate)
-            ->where('dateTo', '>=', $vatDate)
-            ->first();
-        $vatPercent = (float) ($vat->value ?? 0);
+        try {
+            $vatPercent = \App\Support\VatRate::percentOrFail($vatDate);
+        } catch (\RuntimeException $e) {
+            return ['error' => $e->getMessage()];
+        }
         $amountNoVat = $amountRub / (1 + $vatPercent / 100);
 
         // Program row — holds the BackOffice-editable fields:
@@ -534,7 +540,14 @@ class CommissionCalculator
             if (! $inviterId || in_array($inviterId, $visited)) break;
             $visited[] = $inviterId;
 
-            $inviter = DB::table('consultant')->where('id', $inviterId)->first();
+            // whereNull('dateDeleted'): мягко удалённый наставник — это
+            // удалённая запись, а не «проходной» участник цепочки. Без фильтра
+            // он получал строку commission (и деньги, если activity ∉ {3,5}),
+            // хотя во всех выборках платформы его уже нет.
+            $inviter = DB::table('consultant')
+                ->where('id', $inviterId)
+                ->whereNull('dateDeleted')
+                ->first();
             if (! $inviter) break;
 
             $inviterLevel = $this->getQualificationLevel($inviterId, $tx->date);
@@ -665,8 +678,12 @@ class CommissionCalculator
      */
     public function calculateForImport(int $importId): array
     {
+        // whereNull('deletedAt') — удалённые строки импорта считать нечего:
+        // calculateInTransaction их всё равно отбросит, но раньше они падали
+        // в счётчик 'errors' и оператор видел мнимые ошибки импорта.
         $transactions = DB::table('transaction')
             ->where('comment', 'Импорт #' . $importId)
+            ->whereNull('deletedAt')
             ->pluck('id');
 
         $results = ['total' => $transactions->count(), 'success' => 0, 'errors' => 0];
@@ -974,6 +991,9 @@ class CommissionCalculator
             'commissionsAmountUSD' => $incomeDsUsd,
             'commissionsAmountCurrency' => $incomeDsCurrency,
             'netRevenueRUB' => round($amountNoVat, 2),   // остаток (комиссий 0)
+            // netRevenueUSD раньше здесь не обновлялся — оставалось устаревшее
+            // значение с прошлого расчёта, хотя рублёвое перезаписывалось.
+            'netRevenueUSD' => $usdRate > 0 ? round($amountNoVat / $usdRate, 2) : 0,
             'profitRUB' => $incomeDsRub,                 // прибыль = Доход ДС без НДС
             'commissionAmountRubBeforeGapReduction' => 0,
             'profitRubBeforeGapReduction' => $incomeDsRub,

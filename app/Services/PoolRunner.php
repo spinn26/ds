@@ -38,14 +38,14 @@ class PoolRunner
      * }
      */
     /**
-     * До этой границы (включительно) пул выводится как историческая
-     * выгрузка — snapshot из poolLog (БД), либо fallback на CSV
-     * `Db/Pool/poolLog.csv`. Live-расчёт по новой формуле начинается
-     * с месяца LIVE_CALC_FROM (включительно).
+     * Всё, что РАНЬШЕ этой границы, выводится как историческая выгрузка —
+     * snapshot из poolLog (БД), либо fallback на CSV `Db/Pool/poolLog.csv`.
+     * Live-расчёт по новой формуле работает с этого месяца включительно.
      *
-     * Февраль 2026 — последний месяц зафиксированной истории.
-     * Март 2026 граница (если ещё не закрыт) — оператор сам решает
-     * переходить на live или нет, для этого freeze-логика остаётся.
+     * Граница совпадает с CommissionCalculator::HISTORICAL_CUTOFF: май 2026 —
+     * последний месяц зафиксированной истории, июнь 2026 — первый live.
+     * Разморозка периода (period_closures.reopened_at) — явный сигнал
+     * «нужен live-пересчёт», она снимает эту блокировку точечно.
      */
     public const HISTORICAL_BEFORE = ['year' => 2026, 'month' => 6]; // < июнь 2026 (HISTORICAL_CUTOFF)
 
@@ -70,7 +70,7 @@ class PoolRunner
                 'totalPaid' => 0.0, 'totalForfeited' => 0.0,
                 'written' => 0, 'frozen' => true,
                 'message' => sprintf(
-                    'Период %02d.%d — исторический (до апреля 2026). '.
+                    'Период %02d.%d — исторический (раньше июня 2026). '.
                     'Чтобы пересчитать пул, админу нужно сначала явно разморозить период '.
                     '(POST /admin/pool/reopen).',
                     $month, $year,
@@ -104,7 +104,7 @@ class PoolRunner
             return $this->emptyResult($year, $month, $revenue);
         }
 
-        // Исторический период (до апреля 2026): обычно snapshot.
+        // Исторический период (раньше июня 2026): обычно snapshot.
         // Сначала пытаемся БД (poolLog), если пусто — читаем CSV
         // (Db/Pool/poolLog.csv). Это точная выгрузка из старой Directual.
         //
@@ -113,9 +113,9 @@ class PoolRunner
         // увидеть LIVE-пересчёт, чтобы знать, что именно запишется в
         // poolLog при фиксации. Snapshot тут вводит в заблуждение.
         if ($isHistorical && ! $this->periodFreeze->wasReopened($year, $month)) {
-            $logged = $this->participantsFromPoolLog($year, $month, $revenue);
+            $logged = $this->participantsFromPoolLog($year, $month);
             if ($logged !== null) return $logged;
-            $fromCsv = $this->participantsFromCsv($year, $month, $revenue);
+            $fromCsv = $this->participantsFromCsv($year, $month);
             if ($fromCsv !== null) return $fromCsv;
             // Ни в БД, ни в CSV нет данных — отдаём пустой результат.
             return $this->emptyResult($year, $month, $revenue);
@@ -278,7 +278,6 @@ class PoolRunner
         // >90% и со снятой галочкой «Участвует». Дисквалификация влияет
         // только на выплату: доля forfeited остаётся в компании и НЕ
         // перераспределяется между остальными.
-        $considered = [];
         $nominalCounts = array_fill_keys(array_keys($leaderLevelIds), 0);
         $rowsForUi = [];
 
@@ -369,7 +368,6 @@ class PoolRunner
                 $disqualifyReason = 'Снята галочка «Участвует»';
             }
 
-            $considered[] = (int) $consultantId;
             $rowsForUi[] = (object) [
                 'id' => (int) $consultantId,
                 'level' => $level,
@@ -504,14 +502,13 @@ class PoolRunner
     }
 
     /**
-     * Ежемесячная выручка ДС без НДС.
+     * Ежемесячная выручка ДС без НДС = Σ дохода ДС (commissionsAmountRUB).
      *
-     * В transaction поле netRevenueRUB уже содержит чистую выручку ДС.
-     * Однако legacy-импортированные строки часто хранят netRevenueRUB=NULL,
-     * поэтому используем COALESCE: либо записанное значение, либо
-     * расчёт «на лету» = amountRUB × dsCommissionPercentage / 105.
-     * Для совсем grace-fallback (нет ни netRevenue, ни %DS) считаем
-     * amountRUB / 1.05 (предполагая дефолтный VAT 5%).
+     * Для legacy-строк, где commissionsAmountRUB=NULL, считаем на лету:
+     * amountRUB × dsCommissionPercentage / 105 (÷1.05 — НДС 5% — и ×%ДС/100).
+     * ⚠ Если и %ДС нет, слагаемое даёт 0: строка без тарифа в фонд не идёт.
+     * Это осознанно — фолбэк «взять всю сумму» завысил бы фонд в разы,
+     * ровно как отключённый в CommissionCalculator дефолт «%ДС = 100».
      */
     private function monthlyVatExclusiveRevenue(int $year, int $month): float
     {
@@ -546,7 +543,7 @@ class PoolRunner
      * consultant.status_and_lvl мог измениться. Реальный выплаченный
      * пул лежит только в poolLog.
      */
-    private function participantsFromPoolLog(int $year, int $month, float $revenue): ?array
+    private function participantsFromPoolLog(int $year, int $month): ?array
     {
         $start = sprintf('%04d-%02d-01', $year, $month);
         $end = date('Y-m-t', strtotime($start));
@@ -764,7 +761,7 @@ class PoolRunner
      * Формат CSV: `id;consultant;poolBonus;networkGroupBonus;date;createdAt;@dateCreated;@dateChanged`
      * Возвращает null если файл не найден / пуст / нет строк за период.
      */
-    private function participantsFromCsv(int $year, int $month, float $revenue): ?array
+    private function participantsFromCsv(int $year, int $month): ?array
     {
         $path = base_path('Db/Pool/poolLog.csv');
         if (! is_file($path)) return null;

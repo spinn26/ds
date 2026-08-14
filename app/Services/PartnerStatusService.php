@@ -245,8 +245,7 @@ class PartnerStatusService
         // переезжают на ближайшего активного вышестоящего (Directual делал это
         // заливкой — теперь обязана платформа). Вне транзакции статуса, чтобы
         // RecomputeTransferChainJob диспатчился по уже зафиксированному статусу.
-        $this->reassignContractsToUpline($consultant, "Авто-перенос при терминации #{$newCount}");
-        $this->reassignClientsToUpline($consultant, "Авто-перенос при терминации #{$newCount}");
+        $this->reassignPortfolioSafely($consultant, "Авто-перенос при терминации #{$newCount}");
 
         return $result;
     }
@@ -275,8 +274,55 @@ class PartnerStatusService
             "Форс-терминация (сверка файла). {$reason}"
         );
 
-        $this->reassignContractsToUpline($consultant, 'Авто-перенос при форс-терминации');
-        $this->reassignClientsToUpline($consultant, 'Авто-перенос при форс-терминации');
+        $this->reassignPortfolioSafely($consultant, 'Авто-перенос при форс-терминации');
+    }
+
+    /**
+     * Перенос контрактов и клиентов наверх с изоляцией сбоев.
+     *
+     * Перенос идёт ПОСЛЕ коммита статуса и раньше был без обработки ошибок:
+     * исключение внутри (например, отсутствующий «Неизвестный консультант»
+     * #536, на которого падает фолбэк) оставляло партнёра терминированным с
+     * портфелем на руках — а комиссию по этим контрактам каскад ему уже не
+     * начисляет, доля молча остаётся компании. Теперь сбой не роняет смену
+     * статуса, но громко пишется в лог и в аудит: это состояние требует
+     * ручного разбора.
+     *
+     * @return array{contracts:array,clients:array,errors:list<string>}
+     */
+    private function reassignPortfolioSafely(Consultant $consultant, string $triggeredBy): array
+    {
+        $out = ['contracts' => [], 'clients' => [], 'errors' => []];
+
+        foreach (['contracts' => 'reassignContractsToUpline', 'clients' => 'reassignClientsToUpline'] as $kind => $method) {
+            try {
+                $out[$kind] = $this->{$method}($consultant, $triggeredBy);
+            } catch (\Throwable $e) {
+                $out['errors'][] = "{$kind}: {$e->getMessage()}";
+                Log::error('Перенос портфеля при смене статуса не выполнен', [
+                    'consultant' => $consultant->id,
+                    'kind' => $kind,
+                    'triggeredBy' => $triggeredBy,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        if ($out['errors']) {
+            NotificationController::notifyStaff(
+                'status',
+                'Портфель терминированного партнёра не перенесён',
+                sprintf(
+                    '%s (#%d): %s. Контракты/клиенты остались на терминированном ФК — нужен ручной перенос.',
+                    $consultant->personName ?? '—',
+                    $consultant->id,
+                    implode('; ', $out['errors']),
+                ),
+                '/manage/partners/statuses',
+            );
+        }
+
+        return $out;
     }
 
     /**
@@ -300,8 +346,7 @@ class PartnerStatusService
             "Исключение вручную. {$reason}"
         );
 
-        $this->reassignContractsToUpline($consultant, 'Авто-перенос при исключении');
-        $this->reassignClientsToUpline($consultant, 'Авто-перенос при исключении');
+        $this->reassignPortfolioSafely($consultant, 'Авто-перенос при исключении');
     }
 
     /**
@@ -338,6 +383,14 @@ class PartnerStatusService
             $triggeredBy .= ' (нет вышестоящего → Неизвестный консультант)';
         }
         $newCons = DB::table('consultant')->where('id', $targetId)->first();
+        // Плейсхолдер «Неизвестный консультант» может отсутствовать в БД
+        // (свежая база, ручная чистка). Без явной проверки дальше был бы
+        // фатал на $newCons->id уже ПОСЛЕ коммита статуса.
+        if (! $newCons) {
+            throw new \RuntimeException(
+                "Целевой консультант #{$targetId} не найден — перенос контрактов невозможен."
+            );
+        }
 
         $moved = 0;
         foreach ($contracts as $c) {
@@ -400,6 +453,11 @@ class PartnerStatusService
             $triggeredBy .= ' (нет вышестоящего → Неизвестный консультант)';
         }
         $newCons = DB::table('consultant')->where('id', $targetId)->first();
+        if (! $newCons) {
+            throw new \RuntimeException(
+                "Целевой консультант #{$targetId} не найден — перенос клиентов невозможен."
+            );
+        }
 
         $moved = 0;
         foreach ($clients as $cl) {
@@ -840,8 +898,17 @@ class PartnerStatusService
                 $this->terminate($consultant, 'ЛП < 500 за годовой период');
                 $count++;
             } else {
-                // Продлеваем на следующий год, обнуляем ЛП периода
+                // Продлеваем на следующий год И обнуляем ЛП периода.
+                //
+                // ⚠ Обнуление тут раньше только декларировалось комментарием.
+                // personalVolume пересчитывается лишь в
+                // recomputeVolumeAndActivate(), а тот вызывается после расчёта
+                // комиссии — то есть у партнёра БЕЗ единой сделки за год он не
+                // пересчитывался никогда. Поле оставалось с прошлогодним
+                // значением >= 500, следующая проверка снова его продлевала, и
+                // терминация за неактивность не наступала в принципе.
                 $consultant->yearPeriodEnd = Carbon::now()->addYear();
+                $consultant->personalVolume = 0;
                 $consultant->save();
             }
         }

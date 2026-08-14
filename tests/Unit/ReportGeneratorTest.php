@@ -26,7 +26,7 @@ class ReportGeneratorTest extends TestCase
 
         $expected = [
             'revenue_expenses' => 3,             // Продукт, Доход, Расход
-            'partner_status' => 4,                // ФИО, Статус, фактическая, плановая
+            'partner_status' => 5,                // ФИО, Email, Статус, фактическая дата, плановая дата терминации
             'payment_registry' => 18,             // ФИО+Активность+8 баланс+5 реквизиты+4 банк
             'qualifications' => 10,               // База(2) + 4 prev + 4 cur
             'commissions' => 15,                  // Сделка(7) + Эконом ДС(2) + Эконом партнёра(4) + Аналитика(2)

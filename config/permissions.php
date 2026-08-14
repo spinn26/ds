@@ -45,7 +45,7 @@ return [
         ['key' => 'homework',                'label' => 'Проверка домашек'],
         ['key' => 'kb',                      'label' => 'База знаний'],
         ['key' => 'workspace',               'label' => 'Рабочий стол staff'],
-        ['key' => 'tasks',                   'label' => 'Задачи и проекты'],
+        // Секция 'tasks' убрана вместе с модулем «Задачи и проекты» (2026-08-14).
         ['key' => 'org-structure',           'label' => 'Структура компании'],
         ['key' => 'partner-questionnaires',  'label' => 'Анкеты партнёров'],
         ['key' => 'communication',           'label' => 'Чат / Тикеты'],

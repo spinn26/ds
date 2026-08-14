@@ -29,9 +29,37 @@ class TwoFactorController extends Controller
         return new Google2FA();
     }
 
+    /**
+     * Одноразовость TOTP-кода. verifyKey() принимает код всё окно (±30с), то
+     * есть подсмотренный/перехваченный код можно предъявить повторно. Держим
+     * использованные коды в кэше на 2 минуты (окно + запас) и второй раз не
+     * пускаем. Ключ — на пользователя, чужие коды друг друга не блокируют.
+     */
+    private function consumeCode(int $userId, string $code): bool
+    {
+        return \Illuminate\Support\Facades\Cache::add("2fa:used:{$userId}:{$code}", 1, 120);
+    }
+
+    /**
+     * Перевыпуск секрета = сброс 2FA (enabled уходит в false до confirm).
+     * Поэтому пароль тут обязателен ровно так же, как в disable(): иначе
+     * угнанного Bearer-токена хватало, чтобы снять второй фактор одним
+     * запросом — гейт на disable() при этом просто обходился стороной.
+     */
     public function setup(Request $request): JsonResponse
     {
         $user = $request->user();
+
+        // Первичная настройка (2FA ещё не подтверждена) пароля не требует —
+        // защищать нечего, а лишний ввод ломает онбординг.
+        if ($user->two_factor_enabled) {
+            $request->validate(['password' => 'required|string']);
+            if (! $user->validatePassword($request->input('password'))) {
+                Audit::log('2fa_setup_bad_password', 'WebUser', $user->id);
+                return response()->json(['message' => 'Неверный пароль'], 422);
+            }
+        }
+
         $secret = $this->ga()->generateSecretKey(32);
         $user->two_factor_secret = Crypt::encryptString($secret);
         $user->two_factor_enabled = false;
@@ -59,6 +87,9 @@ class TwoFactorController extends Controller
         $secret = Crypt::decryptString($user->two_factor_secret);
         if (! $this->ga()->verifyKey($secret, $request->input('code'))) {
             return response()->json(['message' => 'Неверный код'], 422);
+        }
+        if (! $this->consumeCode((int) $user->id, (string) $request->input('code'))) {
+            return response()->json(['message' => 'Этот код уже использован — дождитесь следующего'], 422);
         }
         $user->two_factor_enabled = true;
         $user->two_factor_confirmed_at = now();
@@ -126,6 +157,9 @@ class TwoFactorController extends Controller
         $secret = Crypt::decryptString($user->two_factor_secret);
         if (! $this->ga()->verifyKey($secret, $request->input('code'))) {
             return response()->json(['message' => 'Неверный код'], 422);
+        }
+        if (! $this->consumeCode((int) $user->id, (string) $request->input('code'))) {
+            return response()->json(['message' => 'Этот код уже использован — дождитесь следующего'], 422);
         }
 
         $token = $user->createToken('spa')->plainTextToken;

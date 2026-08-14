@@ -140,7 +140,9 @@ class User extends Authenticatable
         // BcryptHasher::check() бросает RuntimeException на не-bcrypt
         // хэше, поэтому вызывать его на MD5-строке нельзя.
         if (strlen($this->password) === 32 && ctype_xdigit($this->password)) {
-            if ($this->password === md5($password)) {
+            // hash_equals, а не === : сравнение хэшей должно быть
+            // constant-time, иначе по времени ответа утекает префикс.
+            if (hash_equals($this->password, md5($password))) {
                 $this->password = Hash::make($password);
                 $this->saveQuietly();
                 \Log::info("MD5 password migrated to bcrypt for user {$this->id} ({$this->email})");

@@ -31,7 +31,9 @@ class PoolRunnerTest extends TestCase
         $freeze->method('isFrozen')->willReturn(true);
 
         $runner = new PoolRunner(new PoolCalculator(), $freeze);
-        $r = $runner->run(2026, 4, applyWrite: true);
+        // Месяц ПОСЛЕ HISTORICAL_CUTOFF (2026-06-01), иначе срабатывает
+        // отдельный historical-гард с другим сообщением, а не мок isFrozen.
+        $r = $runner->run(2026, 7, applyWrite: true);
 
         $this->assertTrue($r['frozen']);
         $this->assertSame(0, $r['written']);

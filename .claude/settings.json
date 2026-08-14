@@ -1,17 +1,23 @@
 {
   "permissions": {
     "allow": [
-      "Bash(*)",
       "Read(*)",
-      "Edit(*)",
-      "Write(*)",
       "Glob(*)",
       "Grep(*)",
-      "Agent(*)",
       "TodoWrite(*)",
-      "WebFetch(*)",
-      "WebSearch(*)"
+      "Bash(git status*)",
+      "Bash(git log*)",
+      "Bash(git show*)",
+      "Bash(git diff*)",
+      "Bash(git branch*)",
+      "Bash(git ls-files*)",
+      "Bash(ls *)",
+      "Bash(php artisan route:list*)",
+      "Bash(php artisan about*)",
+      "Bash(composer show*)",
+      "Bash(npm run lint*)"
     ],
+
     "deny": [
       "Bash(rm -rf /)",
       "Bash(sudo rm -rf *)"

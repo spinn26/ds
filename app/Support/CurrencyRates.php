@@ -59,13 +59,53 @@ class CurrencyRates
             ->orderByRaw("date_trunc('month', date::timestamp) DESC")
             ->value('rate');
 
-        return self::$cache[$key] = $rate !== null ? (float) $rate : 1.0;
+        if ($rate === null) {
+            // ⚠ Раньше здесь молча возвращалась 1.0 — «1 доллар = 1 рубль».
+            // Для не-RUB это занижает amountRUB примерно в 80 раз, и ошибка
+            // уезжает дальше по цепочке: доход ДС → ЛП → комиссии наставников
+            // → база пула. Курса за месяц И ЗА ВСЕ ПРЕДЫДУЩИЕ нет — это дыра
+            // в справочнике, а не «курс единица».
+            throw new \RuntimeException(
+                "Не найден курс валюты #{$currencyId} на {$month} и ранее. "
+                . 'Заведите курсы месяца (Финансы → Валюты и НДС, кнопка «Добавить курсы») — '
+                . 'расчёт по курсу 1:1 отключён.'
+            );
+        }
+
+        return self::$cache[$key] = (float) $rate;
     }
 
-    /** Курс USD на дату операции — для колонок amountUSD / доход ДС в USD. */
+    /**
+     * Как forDate(), но вместо исключения — $fallback и предупреждение в лог.
+     * Для отчётных/справочных мест, где падать нельзя, а тихо считать 1:1 —
+     * нельзя тем более.
+     */
+    public static function forDateOrDefault(?int $currencyId, $date = null, float $fallback = 1.0): float
+    {
+        try {
+            return self::forDate($currencyId, $date);
+        } catch (\RuntimeException $e) {
+            Log::warning('CurrencyRates: курс не найден, взят фолбэк', [
+                'currency' => $currencyId,
+                'date' => is_string($date) ? $date : null,
+                'fallback' => $fallback,
+            ]);
+
+            return $fallback;
+        }
+    }
+
+    /**
+     * Курс USD на дату операции — для колонок amountUSD / доход ДС в USD.
+     *
+     * Намеренно НЕ бросает: USD-колонки — зеркало для отчётности, а не база
+     * расчёта, и все вызывающие уже проверяют `$rate > 0` и пишут 0/null.
+     * Отсутствие курса вернёт 0 (а не 1.0, при котором доллар молча
+     * приравнивался к рублю) и оставит след в логе.
+     */
     public static function usdForDate($date = null): float
     {
-        return self::forDate(self::USD_CURRENCY_ID, $date);
+        return self::forDateOrDefault(self::USD_CURRENCY_ID, $date, 0.0);
     }
 
     /** Сбросить кэш (нужно после правки курса — иначе пересчёт возьмёт старое значение). */

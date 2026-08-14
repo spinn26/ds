@@ -704,7 +704,24 @@ class MonthlyPenaltyRunner
             $applyToRow($c, 1.0);
         }
 
-        $gapBranchKey = array_search(0.5, $detachMults, true);
+        // Ветка(и), попавшие под отрыв = множитель < 1. Раньше стояло
+        // array_search(0.5, …, true) — жёсткая привязка к дефолтному штрафу,
+        // хотя detachment.penalty редактируется из админки. Стоило поменять
+        // ставку — и снимок писал gap=false / gapValuePercentage=null при
+        // фактически урезанных деньгах, а «Расчёт пула» видел gapOk=true
+        // (gapPct <= 90) и платил пул оштрафованному за отрыв.
+        // Строгое сравнение с float здесь тоже не годилось само по себе.
+        $gapBranchKeys = array_keys(array_filter($detachMults, fn ($m) => $m < 1.0));
+        // В снимок пишем самую крупную ветку: при пороге ниже 50% под отрыв
+        // может попасть больше одной, и «первая попавшаяся» вводила в
+        // заблуждение. Поля gapValue*/branchWithGap — одиночные (legacy-схема).
+        $gapBranchKey = false;
+        foreach ($gapBranchKeys as $k) {
+            if ($gapBranchKey === false
+                || ($branchVolumes[$k] ?? 0) > ($branchVolumes[$gapBranchKey] ?? 0)) {
+                $gapBranchKey = $k;
+            }
+        }
         if ($applyWrite) {
             // Идемпотентность: повторный прогон финализа за тот же месяц не
             // должен плодить дубли penalty-строк. Penalty-строка живёт на
@@ -831,7 +848,12 @@ class MonthlyPenaltyRunner
     {
         $parts = [];
         if ($gapBranchKey !== false) {
-            $parts[] = 'Отрыв >70%';
+            // Порог настраивается (detachment.threshold) — подпись не должна
+            // врать «>70%», когда в настройках стоит другое значение.
+            $threshold = (float) \App\Models\SystemSetting::value(
+                'detachment.threshold', MonthlyFinaliser::DETACHMENT_THRESHOLD
+            );
+            $parts[] = sprintf('Отрыв >%s%%', rtrim(rtrim(number_format($threshold * 100, 2, '.', ''), '0'), '.'));
         }
         if ($opMult < 1.0) {
             $parts[] = 'Недобор ОП';

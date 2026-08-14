@@ -25,30 +25,6 @@ parameters:
 			path: app/Console/Commands/NotifyOverdueRequisites.php
 
 		-
-			message: '#^Anonymous function has an unused use \$candidates\.$#'
-			identifier: closure.unusedUse
-			count: 1
-			path: app/Console/Commands/SyncProductsFromSheet.php
-
-		-
-			message: '#^Anonymous function has an unused use \$counterpartyLower\.$#'
-			identifier: closure.unusedUse
-			count: 1
-			path: app/Console/Commands/SyncProductsFromSheet.php
-
-		-
-			message: '#^Anonymous function has an unused use \$currencyMap\.$#'
-			identifier: closure.unusedUse
-			count: 1
-			path: app/Console/Commands/SyncProductsFromSheet.php
-
-		-
-			message: '#^Called ''env'' outside of the config directory which returns null when the config is cached, use ''config''\.$#'
-			identifier: larastan.noEnvCallsOutsideOfConfig
-			count: 2
-			path: app/Console/Commands/SyncProductsFromSheet.php
-
-		-
 			message: '#^Strict comparison using \=\=\= between non\-empty\-string and null will always evaluate to false\.$#'
 			identifier: identical.alwaysFalse
 			count: 1
@@ -263,12 +239,6 @@ parameters:
 			identifier: parameter.notFound
 			count: 1
 			path: app/Http/Controllers/Api/AdminQuestionnaireController.php
-
-		-
-			message: '#^Offset ''change_deadline''\|''change_responsible''\|''change_status''\|''comment''\|''delete''\|''edit''\|''view'' on array\{view\: true, edit\: false, change_status\: false, change_deadline\: false, change_responsible\: false, comment\: true, delete\: false\}\|array\{view\: true, edit\: true, change_status\: true, change_deadline\: bool, change_responsible\: false, comment\: true, delete\: false\}\|array\{view\: true, edit\: true, change_status\: true, change_deadline\: true, change_responsible\: true, comment\: true, delete\: true\} on left side of \?\? always exists and is not nullable\.$#'
-			identifier: nullCoalesce.offset
-			count: 1
-			path: app/Http/Controllers/Api/AdminTaskPermissionController.php
 
 		-
 			message: '#^Parameter \#1 \$array of function array_intersect expects array, string given\.$#'
@@ -497,18 +467,6 @@ parameters:
 			identifier: argument.unresolvableType
 			count: 1
 			path: app/Http/Controllers/Api/ProfileController.php
-
-		-
-			message: '#^Offset ''change_deadline''\|''change_responsible''\|''change_status''\|''edit'' on array\{view\: ''Просмотр'', edit\: ''Редактирование'', change_status\: ''Менять статус'', change_deadline\: ''Менять сроки'', change_responsible\: ''Менять исполнителя'', comment\: ''Комментировать'', delete\: ''Удалять''\} on left side of \?\? always exists and is not nullable\.$#'
-			identifier: nullCoalesce.offset
-			count: 1
-			path: app/Http/Controllers/Api/TaskController.php
-
-		-
-			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,Illuminate\\Database\\Eloquent\\Model\>\:\:map\(\) contains unresolvable type\.$#'
-			identifier: argument.unresolvableType
-			count: 1
-			path: app/Http/Controllers/Api/TaskController.php
 
 		-
 			message: '#^Using nullsafe property access "\?\-\>telegram_chat_id" in empty\(\) is unnecessary\. Use \-\> instead\.$#'

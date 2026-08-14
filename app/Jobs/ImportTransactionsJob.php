@@ -99,8 +99,6 @@ class ImportTransactionsJob implements ShouldQueue
             // майских выплат в июле конвертировал их по июльскому курсу.
             // CurrencyRates сам кэширует по (валюта, месяц).
             $rateFor = fn (?int $cur, $date = null): float => \App\Support\CurrencyRates::forDate($cur, $date);
-            // Курс импорт-уровня (fallback, если у строки нет ни валюты, ни даты).
-            $currencyRate = $rateFor($resolvedCurrency);
 
             // Batch-загрузка контрактов: 1 SELECT вместо 1267 (раньше каждая
             // строка делала отдельный exact SELECT — горлышко валидации).
@@ -218,7 +216,16 @@ class ImportTransactionsJob implements ShouldQueue
                 // валюта импорта. Раньше всегда бралась одна валюта импорта →
                 // Trust (USD/EUR) грузился в RUB, суммы в рублях были неверны.
                 $rowCurrency = ($row['currency'] ?? null) ?: $resolvedCurrency;
-                $rowRate = $rateFor($rowCurrency, $date);
+                // Нет курса на месяц строки — это ошибка СТРОКИ, а не повод
+                // грузить её по курсу 1:1 (прежний тихий фолбэк CurrencyRates
+                // занижал amountRUB примерно в 80 раз для USD/EUR) и не повод
+                // ронять весь импорт.
+                try {
+                    $rowRate = $rateFor($rowCurrency, $date);
+                } catch (\RuntimeException $e) {
+                    $errors[] = "Строка {$lineNo}: {$e->getMessage()}";
+                    continue;
+                }
                 $amountRub = $amount * $rowRate;
                 $rowUsdRate = \App\Support\CurrencyRates::usdForDate($date);
                 $amountUsd = $rowUsdRate > 0 ? $amountRub / $rowUsdRate : 0;

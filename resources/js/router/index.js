@@ -36,8 +36,8 @@ const routes = [
             { path: 'structure', component: () => import('../pages/Structure.vue') },
             { path: 'my-payments', component: () => import('../pages/MyPayments.vue') },
             { path: 'products', component: () => import('../pages/Products.vue') },
-            // Раздел «Задачи» убран с платформы (2026-07-16). Компоненты
-            // pages/Tasks/* и бэкенд-роуты /tasks, /projects сохранены.
+            // Модуль «Задачи и проекты» удалён целиком 2026-08-14 (из меню был
+            // убран 2026-07-16): страницы, контроллеры, роуты и таблицы.
             { path: 'insmart-widget', component: () => import('../pages/InsmartWidget.vue') },
             { path: 'contests', component: () => import('../pages/Contests.vue') },
             { path: 'chat', component: () => import('../pages/Chat/PartnerChat.vue') },

@@ -1466,6 +1466,10 @@ class AdminFinanceController extends Controller
             ]);
         });
 
+        // Кэш ставок живёт в пределах запроса, но пересчёт может пойти сразу
+        // следом в этом же процессе — сбрасываем, как и с курсами валют.
+        \App\Support\VatRate::flush();
+
         return response()->json(['message' => 'Ставка НДС добавлена']);
     }
 
