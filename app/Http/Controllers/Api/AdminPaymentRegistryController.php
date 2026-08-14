@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
+use App\Http\Requests\Api\Admin\AddPaymentRequest;
+use App\Http\Requests\Api\Admin\UpdatePaymentRequest;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -366,13 +368,9 @@ class AdminPaymentRegistryController extends Controller
      * PATCH /admin/payment-registry/payments/{paymentId}
      * Изменить статус / сумму / комментарий платежа + пересчёт балансa.
      */
-    public function updatePayment(Request $request, int $paymentId): JsonResponse
+    public function updatePayment(UpdatePaymentRequest $request, int $paymentId): JsonResponse
     {
-        $data = $request->validate([
-            'amount' => 'nullable|numeric|min:0',
-            'status' => 'nullable|integer|in:1,2,3',
-            'comment' => 'nullable|string|max:500',
-        ]);
+        $data = $request->validated();
 
         $payment = DB::table('consultantPayment')->where('id', $paymentId)->first();
         if (! $payment) {
@@ -441,12 +439,9 @@ class AdminPaymentRegistryController extends Controller
     }
 
     /** POST /admin/payment-registry/{id}/payments — добавить платёж. */
-    public function addPayment(Request $request, int $id): JsonResponse
+    public function addPayment(AddPaymentRequest $request, int $id): JsonResponse
     {
-        $data = $request->validate([
-            'amount' => 'required|numeric|min:0.01',
-            'comment' => 'nullable|string|max:500',
-        ]);
+        $data = $request->validated();
 
         $balance = DB::table('consultantBalance')->where('id', $id)->first();
         if (! $balance) {
