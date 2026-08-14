@@ -12,6 +12,7 @@ use App\Models\Requisite;
 use App\Support\Audit;
 use App\Support\LegacyId;
 use App\Services\PartnerListingService;
+use App\Services\PartnerStatusesListingService;
 use App\Services\PartnerStatusService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -51,6 +52,7 @@ class AdminDataController extends Controller
     public function __construct(
         private readonly PartnerStatusService $statusService,
         private readonly PartnerListingService $partnerListing,
+        private readonly PartnerStatusesListingService $partnerStatuses,
     ) {}
 
     /**
@@ -1190,43 +1192,22 @@ class AdminDataController extends Controller
     /** Статусы партнёров — сводка + детальный список */
     public function partnerStatuses(Request $request): JsonResponse
     {
-        // Сводка по статусам
-        $counts = DB::table('consultant')
-            ->whereNull('dateDeleted')
-            ->select('activity', DB::raw('count(*) as cnt'))
-            ->groupBy('activity')
-            ->pluck('cnt', 'activity')
-            ->toArray();
-
-        $statuses = DB::table('directory_of_activities')->orderBy('id')->get()
-            ->map(fn ($s) => [
-                'id' => $s->id,
-                'name' => $s->name,
-                'count' => $counts[$s->id] ?? 0,
-            ]);
-
-        // Детальный список с дедлайнами
-        $detailQuery = DB::table('consultant')->whereNull('dateDeleted');
-
-        if ($request->filled('search')) {
-            $detailQuery->where('personName', 'ilike', '%' . $request->search . '%');
+        // Сводка, фильтры и сборка строк — в PartnerStatusesListingService.
+        // Метод занимал 138 строк: десять фильтров (восемь из них — границы
+        // диапазонов по четырём разным колонкам дат), три пакетные подгрузки
+        // и рекурсивный batch-SUM по ЛП от даты активации.
+        $filters = [];
+        foreach (PartnerStatusesListingService::FILTERS as $key) {
+            if ($request->filled($key)) {
+                $filters[$key] = $request->input($key);
+            }
         }
-        if ($request->filled('activity')) {
-            $detailQuery->where('activity', $request->activity);
-        }
-        // 4 диапазона дат per spec ✅Статусы партнеров §1
-        if ($request->filled('created_from')) $detailQuery->where('dateCreated', '>=', $request->created_from);
-        if ($request->filled('created_to')) $detailQuery->where('dateCreated', '<=', $request->created_to . ' 23:59:59');
-        if ($request->filled('activity_from')) $detailQuery->where('dateActivity', '>=', $request->activity_from);
-        if ($request->filled('activity_to')) $detailQuery->where('dateActivity', '<=', $request->activity_to . ' 23:59:59');
-        if ($request->filled('plan_from')) $detailQuery->where('dateDeterministicPlan', '>=', $request->plan_from);
-        if ($request->filled('plan_to')) $detailQuery->where('dateDeterministicPlan', '<=', $request->plan_to . ' 23:59:59');
-        if ($request->filled('term_from')) $detailQuery->where('dateDeterministic', '>=', $request->term_from);
-        if ($request->filled('term_to')) $detailQuery->where('dateDeterministic', '<=', $request->term_to . ' 23:59:59');
 
-        $detailTotal = $detailQuery->count();
+        $query = $this->partnerStatuses->query($filters);
+        $total = $query->count();
+
         // camelCase колонки квотируем — см. partners() выше.
-        $this->applySorting($detailQuery, $request, [
+        $this->applySorting($query, $request, [
             'personName'            => '"personName"',
             'activityName'          => 'activity',
             'dateCreated'           => '"dateCreated"',
@@ -1236,94 +1217,15 @@ class AdminDataController extends Controller
             'personalVolume'        => '"personalVolume"',
         ], '"personName"', 'asc');
 
-        $detailRows = $detailQuery
+        $rows = $query
             ->offset($this->paginationOffset($request))
             ->limit($this->paginationPerPage($request))
             ->get();
 
-        // Batch load activity names
-        $activityIds = $detailRows->pluck('activity')->filter()->unique();
-        $activityNames = $activityIds->isNotEmpty()
-            ? DB::table('directory_of_activities')->whereIn('id', $activityIds)->pluck('name', 'id')
-            : collect();
-
-        // Email партнёра: основной источник — WebUser (consultant.webUser →
-        // WebUser.email). У legacy/терминированных логина нет — берём
-        // собственную колонку партнёра (перенесена из person 13.08.2026),
-        // она и держит те же ~97% покрытия, что раньше давал фолбэк.
-        $webUserIds = $detailRows->pluck('webUser')->filter()->unique();
-        $emailByWebUser = $webUserIds->isNotEmpty()
-            ? DB::table('WebUser')->whereIn('id', $webUserIds)->pluck('email', 'id')
-            : collect();
-
-        // Per spec ✅Статусы партнеров §2 col.7: «Сумма ЛП от даты активации
-        // (каждый год обнуляется)». Считаем ЛП за текущий годовой цикл,
-        // отсчитывая от dateActivity. Один batch-SUM по commission, чтобы
-        // не плодить N+1 на 1k+ строках.
-        $consultantIds = $detailRows->pluck('id')->filter()->unique()->values();
-        $lpFromActivation = collect();
-        if ($consultantIds->isNotEmpty()) {
-            $rows = DB::select('
-                WITH window_start AS (
-                    SELECT
-                        c.id,
-                        c."dateActivity"
-                          + make_interval(years => FLOOR(EXTRACT(YEAR FROM AGE(NOW(), c."dateActivity")))::int)
-                          AS year_start
-                    FROM consultant c
-                    WHERE c.id = ANY(?::int[]) AND c."dateActivity" IS NOT NULL
-                )
-                SELECT w.id, COALESCE(SUM(cm."personalVolume"), 0) AS lp
-                FROM window_start w
-                LEFT JOIN commission cm
-                  ON cm.consultant = w.id
-                 AND cm."deletedAt" IS NULL
-                 AND cm.date >= w.year_start
-                GROUP BY w.id
-            ', ['{' . $consultantIds->implode(',') . '}']);
-            foreach ($rows as $r) {
-                $lpFromActivation[$r->id] = (float) $r->lp;
-            }
-        }
-
-        $details = $detailRows->map(function ($c) use ($activityNames, $lpFromActivation, $emailByWebUser) {
-                $activityName = $c->activity ? ($activityNames[$c->activity] ?? '—') : '—';
-
-                // Рассчитать "будет терминирован" для активных
-                $willTerminate = null;
-                if ($c->activity == 1 && $c->dateActivity) { // Активный
-                    $willTerminate = \Carbon\Carbon::parse($c->dateActivity)->addYear()->format('Y-m-d');
-                }
-
-                return [
-                    'id' => $c->id,
-                    'personName' => $c->personName,
-                    'email' => ($c->webUser ? ($emailByWebUser[$c->webUser] ?? null) : null)
-                        ?: ($c->email ?: null),
-                    'activityId' => $c->activity,
-                    'activityName' => $activityName,
-                    'dateCreated' => $c->dateCreated,
-                    'dateActivity' => $c->dateActivity,
-                    'dateDeactivity' => $c->dateDeactivity,
-                    'dateDeterministic' => $c->dateDeterministic,
-                    'dateDeterministicPlan' => $c->dateDeterministicPlan,
-                    'willTerminate' => $willTerminate,
-                    'terminationCount' => $c->terminationCount ?? 0,
-                    'reinstatementCount' => (int) ($c->reinstatement_count ?? 0),
-                    'reinstateLimit' => \App\Enums\PartnerActivity::selfReinstateLimit(),
-                    'reinstateBlocked' => (bool) ($c->reinstate_blocked ?? false),
-                    'lastReinstateAt' => $c->last_reinstate_at ?? null,
-                    // ЛП «глобальное» из consultant.personalVolume (для совместимости).
-                    'personalVolume' => round((float) ($c->personalVolume ?? 0), 2),
-                    // ЛП с даты активации, обнуляющееся раз в год — то самое поле из спеки.
-                    'lpFromActivation' => round((float) ($lpFromActivation[$c->id] ?? 0), 2),
-                ];
-            });
-
         return response()->json([
-            'summary' => $statuses,
-            'data' => $details,
-            'total' => $detailTotal,
+            'summary' => $this->partnerStatuses->summary(),
+            'data' => $this->partnerStatuses->present($rows),
+            'total' => $total,
         ]);
     }
 
