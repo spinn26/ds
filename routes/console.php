@@ -107,6 +107,21 @@ Schedule::call(function () {
     }
 })->monthlyOn(1, '03:45')->name('mail-log:prune');
 
+// История health-check — хранить N дней (настройка «Обслуживание», фолбэк 14).
+// health:check идёт каждую минуту (три команды ниже), поэтому таблица растёт
+// на ~4 тыс. строк в сутки. Ретеншн формально был в db:housekeep, но та
+// зарегистрирована без --apply, т.е. не чистила ничего. Здесь только DELETE
+// данных — никаких дропов таблиц, автозапуску это доверить можно.
+Schedule::call(function () {
+    if (! \Illuminate\Support\Facades\Schema::hasTable('health_check_result_history_items')) {
+        return;
+    }
+    $days = (int) \App\Models\SystemSetting::value('maintenance.health_history_retention_days', 14);
+    \Illuminate\Support\Facades\DB::table('health_check_result_history_items')
+        ->where('created_at', '<', now()->subDays(max(1, $days)))
+        ->delete();
+})->dailyAt('03:35')->name('health-history:prune');
+
 // Прогноз начисления (contract.accrual_forecast) — НЕ финансовый расчёт,
 // а производное поле: месяц активации + N (из продукта) либо факт по
 // транзакции. Ночной пересчёт подхватывает появившиеся транзакции и статусы.

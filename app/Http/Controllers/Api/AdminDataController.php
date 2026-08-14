@@ -13,6 +13,7 @@ use App\Support\Audit;
 use App\Support\LegacyId;
 use App\Services\PartnerListingService;
 use App\Services\PartnerStatusesListingService;
+use App\Services\RequisitesListingService;
 use App\Services\PartnerStatusService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -53,6 +54,7 @@ class AdminDataController extends Controller
         private readonly PartnerStatusService $statusService,
         private readonly PartnerListingService $partnerListing,
         private readonly PartnerStatusesListingService $partnerStatuses,
+        private readonly RequisitesListingService $requisitesListing,
     ) {}
 
     /**
@@ -1817,100 +1819,23 @@ class AdminDataController extends Controller
     /** Реквизиты — список для верификации */
     public function requisites(Request $request): JsonResponse
     {
-        $query = Requisite::whereNull('deletedAt');
-
-        if ($request->filled('verified')) {
-            $query->where('verified', $request->verified === 'true');
-        }
-        // Per spec ✅Реквизиты партнёров: status фильтр от UI присылается
-        // как 'verified' / 'pending' / 'rejected'. Маппим на колонки
-        // `verified` (boolean) + `status` (1=backoffice, 2=consultant-возврат, 3=verified).
-        if ($request->filled('status')) {
-            switch ($request->status) {
-                case 'verified':
-                    $query->where('verified', true);
-                    break;
-                case 'rejected':
-                    // Отклонено = есть причина отказа (rejection_reason) и не
-                    // верифицировано. NB: status=2 ставится на ЛЮБОЕ сохранение
-                    // (и «на проверке» тоже) — отличаем именно по причине отказа.
-                    $query->where('verified', false)
-                          ->whereNotNull('rejection_reason')->where('rejection_reason', '!=', '');
-                    break;
-                case 'pending':
-                    // На проверке = не верифицировано и БЕЗ причины отказа.
-                    $query->where('verified', false)->where(function ($q) {
-                        $q->whereNull('rejection_reason')->orWhere('rejection_reason', '');
-                    });
-                    break;
-            }
-        }
-        // Фильтр по статусу партнёра (consultant.activity): 1 Активен,
-        // 3 Терминирован, 4 Зарегистрирован, 5 Исключён. Legacy 2 = «Активен».
-        if ($request->filled('partner_status')) {
-            $statuses = array_map('intval', (array) $request->input('partner_status'));
-            if (in_array(1, $statuses, true)) {
-                $statuses[] = 2;
-            }
-            $ids = DB::table('consultant')->whereIn('activity', $statuses)->pluck('id')->all();
-            $query->whereIn('consultant', $ids ?: [-1]);
-        }
-        // Фильтр по приостановке выплат: 'request' — партнёр сам подал запрос на
-        // смену реквизитов (есть pending-запрос), 'manual' — Катя проставила
-        // галочку вручную (приостановлен, но активного запроса нет).
-        if ($request->filled('suspend')) {
-            $pendingIds = DB::table('bank_requisite_change_requests')
-                ->where('status', 'pending')->distinct()->pluck('consultant')->all();
-            if ($request->input('suspend') === 'request') {
-                $query->whereIn('consultant', $pendingIds ?: [-1]);
-            } elseif ($request->input('suspend') === 'manual') {
-                $manualIds = DB::table('consultant')
-                    ->where('payments_suspended', true)
-                    ->when(! empty($pendingIds), fn ($q) => $q->whereNotIn('id', $pendingIds))
-                    ->pluck('id')->all();
-                $query->whereIn('consultant', $manualIds ?: [-1]);
-            }
-        }
-        if ($request->filled('search')) {
-            $s = trim((string) $request->search);
-            $isNumericLike = preg_match('/^\d{4,}$/', $s) === 1;
-            if ($isNumericLike) {
-                // Похоже на ИНН → ищем строго по нему.
-                $query->where('inn', 'ilike', "%{$s}%");
-            } else {
-                // Текст → ищем ТОЛЬКО по ФИО консультанта-владельца.
-                // Раньше OR'или с individualEntrepreneur, что давало дубли:
-                // если ИП Зарипова используют 5 партнёров, поиск «Зарипов»
-                // возвращал все 5 строк, а нужно только Зарипова. По правкам
-                // 2026-05-05 — только ФИО владельца ИП.
-                $consultantIds = DB::table('consultant')
-                    ->where('personName', 'ilike', "%{$s}%")
-                    ->pluck('id');
-                if ($consultantIds->isNotEmpty()) {
-                    $query->whereIn('consultant', $consultantIds);
-                } else {
-                    // Не нашли консультанта — пустой результат, чтобы фильтр
-                    // не «съезжал» на другие совпадения.
-                    $query->whereRaw('1 = 0');
-                }
+        // Фильтры, дедуп и сборка строк — в RequisitesListingService.
+        // Метод занимал 195 строк: пять фильтров (три из них ходят в соседние
+        // таблицы), дедуп через DISTINCT ON и четыре пакетные подгрузки.
+        $filters = [];
+        foreach (RequisitesListingService::FILTERS as $key) {
+            if ($request->filled($key)) {
+                $filters[$key] = $request->input($key);
             }
         }
 
-        // Дедуп: один реквизит на консультанта. Приоритет — verified=true,
-        // затем самая новая запись (по id DESC). Раньше у Зарипова было
-        // 4 строки в списке (3 unverified + 1 verified) — теперь 1.
-        // Берём id-белый список через подзапрос, чтобы пагинация и
-        // count работали корректно с фильтрами выше.
-        $primaryIds = (clone $query)
-            ->select(DB::raw('DISTINCT ON (consultant) id'))
-            ->orderBy('consultant')
-            ->orderByDesc('verified')
-            ->orderByDesc('id')
-            ->pluck('id');
+        // ⚠ Сначала фильтры, потом дедуп — порядок влияет на выдачу.
+        $query = $this->requisitesListing->deduplicate(
+            $this->requisitesListing->query($filters)
+        );
+        $total = $query->count();
 
-        $query2 = Requisite::whereIn('id', $primaryIds);
-        $total = $query2->count();
-        $this->applySorting($query2, $request, [
+        $this->applySorting($query, $request, [
             'individualEntrepreneur' => '"individualEntrepreneur"',
             'inn' => 'inn',
             'verified' => 'verified',
@@ -1918,90 +1843,16 @@ class AdminDataController extends Controller
             // Дата поступления на проверку = последнее изменение реквизита.
             'submittedAt' => '"dateChange"',
         ], 'id', 'desc');
-        $rows = $query2
+
+        $rows = $query
             ->offset($this->paginationOffset($request))
             ->limit($this->paginationPerPage($request))
             ->get();
 
-        // Batch load consultant names + флаг приостановки выплат (для подсветки)
-        $consultantIds = $rows->pluck('consultant')->filter()->unique();
-        $consultantNames = $consultantIds->isNotEmpty()
-            ? DB::table('consultant')->whereIn('id', $consultantIds)->pluck('personName', 'id')
-            : collect();
-        $suspendedMap = $consultantIds->isNotEmpty()
-            ? DB::table('consultant')->whereIn('id', $consultantIds)->pluck('payments_suspended', 'id')
-            : collect();
-        // Партнёры с активным запросом на смену реквизитов (сами подали).
-        $pendingChangeSet = $consultantIds->isNotEmpty()
-            ? DB::table('bank_requisite_change_requests')->where('status', 'pending')
-                ->whereIn('consultant', $consultantIds)->distinct()->pluck('consultant')->flip()
-            : collect();
-
-        // Batch load bank requisites
-        $reqIds = $rows->pluck('id')->filter()->unique();
-        $bankReqs = $reqIds->isNotEmpty()
-            ? BankRequisite::whereIn('requisites', $reqIds)->whereNull('deletedAt')->get()->keyBy('requisites')
-            : collect();
-
-        $requisites = $rows->map(function ($r) use ($consultantNames, $bankReqs, $suspendedMap, $pendingChangeSet) {
-                $bankReq = $bankReqs[$r->id] ?? null;
-
-                // Резолвим verificationStatus для UI: verified / pending / rejected.
-                // «Отклонено» — только когда есть причина отказа (rejection_reason),
-                // т.к. status=2 ставится и при обычном сохранении («на проверке»).
-                $verificationStatus = 'pending';
-                if ($r->verified) {
-                    $verificationStatus = 'verified';
-                } elseif (filled($r->rejection_reason)) {
-                    $verificationStatus = 'rejected';
-                }
-
-                // Дата поступления на проверку = последняя отправка реквизитов
-                // (dateChange); для старых записей без dateChange — createdAt.
-                $submittedAt = $r->dateChange
-                    ?: ($r->createdAt ? \Illuminate\Support\Carbon::parse($r->createdAt) : null);
-                // Просрочка считается только пока реквизиты «на проверке».
-                $overdue = $verificationStatus === 'pending'
-                    && \App\Support\RequisiteSla::isOverdue($submittedAt);
-
-                return [
-                    'id' => $r->id,
-                    'consultant' => $r->consultant,
-                    'consultantId' => $r->consultant,
-                    'consultantName' => $r->consultant ? ($consultantNames[$r->consultant] ?? null) : null,
-                    'partnerName' => $r->consultant ? ($consultantNames[$r->consultant] ?? null) : null,
-                    'individualEntrepreneur' => $r->individualEntrepreneur,
-                    'inn' => $r->inn,
-                    // Полные поля ИП — диалог верификации читает их из строки
-                    // списка. Раньше не отдавались → ОГРН/Адрес/Email/Телефон и
-                    // банк показывались прочерками даже при заполненных данных.
-                    'ogrn' => $r->ogrn,
-                    'address' => $r->address,
-                    'email' => $r->email,
-                    'phone' => $r->phone,
-                    'taxRegime' => $r->tax_regime,
-                    'bankName' => $bankReq?->bankName,
-                    'bankBik' => $bankReq?->bankBik,
-                    'accountNumber' => $bankReq?->accountNumber,
-                    'correspondentAccount' => $bankReq?->correspondentAccount,
-                    'beneficiaryName' => $bankReq?->beneficiaryName,
-                    'verified' => (bool) $r->verified,
-                    'verificationStatus' => $verificationStatus,
-                    'rejectionReason' => $r->rejection_reason,
-                    'hasBankRequisites' => $bankReq !== null,
-                    'bankVerified' => $bankReq?->verified ?? false,
-                    'submittedAt' => $submittedAt?->toIso8601String(),
-                    'overdue' => $overdue,
-                    'paymentsSuspended' => (bool) ($suspendedMap[$r->consultant] ?? false),
-                    // Источник приостановки: 'request' — партнёр сам подал запрос
-                    // на смену; 'manual' — Катя проставила вручную; null — нет.
-                    'suspendSource' => $pendingChangeSet->has($r->consultant)
-                        ? 'request'
-                        : (($suspendedMap[$r->consultant] ?? false) ? 'manual' : null),
-                ];
-            });
-
-        return response()->json(['data' => $requisites, 'total' => $total]);
+        return response()->json([
+            'data' => $this->requisitesListing->present($rows),
+            'total' => $total,
+        ]);
     }
 
     /**
