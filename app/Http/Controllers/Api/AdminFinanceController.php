@@ -7,6 +7,8 @@ use App\Http\Controllers\Api\Concerns\PaginatesRequests;
 use App\Http\Controllers\Controller;
 use App\Support\LegacyId;
 use Illuminate\Http\JsonResponse;
+use App\Http\Requests\Api\Admin\StoreChargeRequest;
+use App\Http\Requests\Api\Admin\StoreCurrencyRatesRequest;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -1045,18 +1047,8 @@ class AdminFinanceController extends Controller
      * "не должны генерировать финансовую комиссию для вышестоящих
      * наставников, как это происходит при обычной продаже".
      */
-    public function storeCharge(Request $request): JsonResponse
+    public function storeCharge(StoreChargeRequest $request): JsonResponse
     {
-        $request->validate([
-            'consultant' => 'required|integer|exists:consultant,id',
-            // Per spec ✅Прочие начисления §3: тип = Рубли | Баллы.
-            // Старые типы (bonus/penalty/compensation) тоже принимаются для
-            // обратной совместимости — они мапятся в 'rub' семантику.
-            'type' => 'required|in:rub,points,bonus,penalty,compensation',
-            'amount' => 'required|numeric',
-            'comment' => 'required|string|max:2000',
-        ]);
-
         $consultantId = (int) $request->consultant;
         $type = $request->type;
         $value = (float) $request->amount;
@@ -1098,19 +1090,12 @@ class AdminFinanceController extends Controller
      * Обновить начисление. Если баллы изменились — корректируем
      * personalVolume/groupVolumeCumulative на разницу (delta).
      */
-    public function updateCharge(Request $request, int $id): JsonResponse
+    public function updateCharge(StoreChargeRequest $request, int $id): JsonResponse
     {
         $row = DB::table('other_accruals')->where('id', $id)->first();
         if (! $row) {
             return response()->json(['message' => 'Начисление не найдено'], 404);
         }
-
-        $request->validate([
-            'consultant' => 'required|integer|exists:consultant,id',
-            'type' => 'required|in:rub,points,bonus,penalty,compensation',
-            'amount' => 'required|numeric',
-            'comment' => 'required|string|max:2000',
-        ]);
 
         $type = $request->type;
         $value = (float) $request->amount;
@@ -1365,17 +1350,9 @@ class AdminFinanceController extends Controller
      * Идемпотентно: существующие пары (валюта, месяц) не трогаем и возвращаем
      * в skipped — кнопка не должна затирать уже проставленный курс.
      */
-    public function storeCurrencyRates(Request $request): JsonResponse
+    public function storeCurrencyRates(StoreCurrencyRatesRequest $request): JsonResponse
     {
-        $data = $request->validate([
-            'period' => 'required|date_format:Y-m',
-            'rates' => 'required|array|min:1',
-            'rates.*.currencyId' => 'required|integer|exists:currency,id',
-            'rates.*.rate' => 'required|numeric|min:0',
-        ], [
-            'period.date_format' => 'Период указывается как ГГГГ-ММ.',
-            'rates.required' => 'Укажите хотя бы один курс.',
-        ]);
+        $data = $request->validated();
 
         $monthStart = $data['period'] . '-01';
 
