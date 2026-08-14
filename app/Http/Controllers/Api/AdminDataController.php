@@ -121,11 +121,22 @@ class AdminDataController extends Controller
             });
         }
         if ($request->filled('phone')) {
+            // ⚠ Обе ветки сравнивают ЦИФРЫ с ЦИФРАМИ.
+            //
+            // Раньше по собственной колонке партнёра шла нормализация
+            // (regexp_replace), а по WebUser — сырой `phone ilike`. Телефоны в
+            // WebUser хранятся отформатированными («+7 (911) 111-11-11»), и
+            // очищенный от знаков ввод не совпадал с ними НИКОГДА: партнёров с
+            // логином поиск по телефону просто не находил. Ровно этот приём —
+            // «чистим ввод, ищем LIKE в сырой колонке» — уже ломал
+            // антидубль при регистрации.
             $phoneLike = '%' . preg_replace('/\D/', '', $request->phone) . '%';
-            $query->where(function ($q) use ($phoneLike) {
-                $q->whereIn('webUser', function ($sub) use ($phoneLike) {
-                    $sub->select('id')->from('WebUser')->where('phone', 'ilike', $phoneLike);
-                })->orWhereRaw("regexp_replace(coalesce(phone,''), '\\D', '', 'g') ilike ?", [$phoneLike]);
+            $normalize = "regexp_replace(coalesce(%s, ''), '[^0-9]', '', 'g')";
+            $query->where(function ($q) use ($phoneLike, $normalize) {
+                $q->whereIn('webUser', function ($sub) use ($phoneLike, $normalize) {
+                    $sub->select('id')->from('WebUser')
+                        ->whereRaw(sprintf($normalize, '"phone"') . ' ilike ?', [$phoneLike]);
+                })->orWhereRaw(sprintf($normalize, 'phone') . ' ilike ?', [$phoneLike]);
             });
         }
 
