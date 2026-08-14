@@ -345,15 +345,6 @@ class CommissionCalculator
             return ['error' => "Период {$tx->dateMonth} закрыт — комиссии не пересчитываются"];
         }
 
-        // Удаляем ранее посчитанные commission по этой транзакции — иначе
-        // повторный вызов calculateForTransaction (после правки тх, бэкфилла
-        // или ручного «Пересчитать») плодит дубли (наблюдалось: 6 commission
-        // вместо 3 на tx#60708 после backfill 2026-05-23).
-        DB::table('commission')
-            ->where('transaction', $transactionId)
-            ->whereNull('deletedAt')
-            ->update(['deletedAt' => now()]);
-
         $contract = DB::table('contract')->where('id', $tx->contract)->whereNull('deletedAt')->first();
         if (! $contract) return ['error' => 'Контракт не найден или удалён'];
 
@@ -465,6 +456,26 @@ class CommissionCalculator
             // а не молча оплачена.
             return ['error' => 'Не найден тариф %ДС (программа/свойство/срок). Заведите тариф — расчёт по умолчанию 100% отключён.'];
         }
+
+        // ⚠ ТОЛЬКО ЗДЕСЬ удаляем ранее посчитанные commission — после ВСЕХ
+        // проверок, ни одной строкой раньше.
+        //
+        // Нужно это против дублей: повторный вызов (правка транзакции, бэкфилл,
+        // ручное «Пересчитать») иначе плодит вторую цепочку — наблюдалось 6
+        // строк вместо 3 на tx#60708 после бэкфилла 2026-05-23.
+        //
+        // А стояло удаление ВЫШЕ проверок контракта, консультанта, НДС и
+        // тарифа. Метод возвращает ошибку обычным return, то есть внешняя
+        // DB::transaction КОММИТИТСЯ — и любая из этих ошибок оставляла
+        // транзакцию вообще без комиссий: партнёр молча терял начисление, а
+        // вызывающий получал строку с ошибкой, которую, например,
+        // TransactionImportController::update просто писал в лог.
+        // Ровно этот класс бага уже чинили для заморозки и истории (см. выше),
+        // но остальные проверки тогда не тронули.
+        DB::table('commission')
+            ->where('transaction', $transactionId)
+            ->whereNull('deletedAt')
+            ->update(['deletedAt' => now()]);
 
         // ЛП per program.pointsMethod, same switch as CalculatorController::computePoints.
         $personalVolume = $this->computePointsForProgram(
