@@ -22,11 +22,29 @@ class SystemSetting extends Model
 
     private const CACHE_KEY = 'system_settings:map';
 
+    /**
+     * Мемо для schema-guard'а. Кэшируем ТОЛЬКО положительный ответ: таблица,
+     * однажды появившись, в пределах процесса не исчезает, а вот отрицательный
+     * ответ бывает временным — приложение бутстрапится и до миграций (например,
+     * на composer package:discover), и запомненный false запер бы настройки
+     * навсегда.
+     */
+    private static ?bool $tableExists = null;
+
     /** Полная карта key => raw row (кэш навсегда, сбрасывается на put). */
     public static function map(): array
     {
         // Schema-guard: до миграции таблицы нет — возвращаем пусто, фолбэки спасают.
-        if (! Schema::hasTable('system_settings')) {
+        //
+        // ⚠ Проверка мемоизирована не ради красоты: Schema::hasTable() — это
+        // запрос к pg_class, а value() зовут из сборки КАЖДОЙ строки списков
+        // (пороги активации в /admin/partners и /admin/partner-statuses).
+        // Замер: страница на 15 строках стоила 23 запроса против 11 на трёх —
+        // весь прирост давал этот guard.
+        if (self::$tableExists !== true) {
+            self::$tableExists = Schema::hasTable('system_settings');
+        }
+        if (! self::$tableExists) {
             return [];
         }
 
