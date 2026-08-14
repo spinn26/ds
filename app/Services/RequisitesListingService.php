@@ -205,7 +205,11 @@ class RequisitesListingService
                     'verificationStatus' => $verificationStatus,
                     'rejectionReason' => $r->rejection_reason,
                     'hasBankRequisites' => $bankReq !== null,
-                    'bankVerified' => $bankReq?->verified ?? false,
+                    // Без `?->`: слева от `??` он лишний (обращение к свойству
+                    // null внутри `??` безопасно), и анализатор на это ругается.
+                    // Приведение к bool НЕ добавляем — значение отдаётся как
+                    // было, иначе поменялся бы тип в JSON.
+                    'bankVerified' => $bankReq->verified ?? false,
                     'submittedAt' => $submittedAt?->toIso8601String(),
                     'overdue' => $overdue,
                     'paymentsSuspended' => (bool) ($suspendedMap[$r->consultant] ?? false),
