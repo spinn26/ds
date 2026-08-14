@@ -734,8 +734,7 @@ class TransactionImportController extends Controller
         \App\Services\CommissionCalculator $calculator
     ): JsonResponse {
         $user = $request->user();
-        $roles = array_map('trim', explode(',', $user->role ?? ''));
-        if (! array_intersect($roles, ['admin', 'calculations'])) {
+        if (! $user->hasAnyRole(['admin', 'calculations'])) {
             return response()->json([
                 'message' => 'Удаление зафиксированных транзакций доступно только администратору и руководителю по расчётам',
             ], 403);

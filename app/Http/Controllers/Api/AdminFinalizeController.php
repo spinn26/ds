@@ -107,8 +107,7 @@ class AdminFinalizeController extends Controller
     private function denyIfNotFinalizer(Request $request): ?JsonResponse
     {
         $user = $request->user();
-        $roles = array_map('trim', explode(',', $user->role ?? ''));
-        if (! array_intersect($roles, ['admin', 'calculations'])) {
+        if (! $user->hasAnyRole(['admin', 'calculations'])) {
             return response()->json([
                 'message' => 'Перерасчёт штрафов доступен только администратору и руководителю по расчётам',
             ], 403);

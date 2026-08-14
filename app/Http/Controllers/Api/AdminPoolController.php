@@ -190,8 +190,7 @@ class AdminPoolController extends Controller
         ]);
 
         $user = $request->user();
-        $roles = array_map('trim', explode(',', $user->role ?? ''));
-        if (! in_array('admin', $roles, true)) {
+        if (! $user->isAdmin()) {
             return response()->json([
                 'message' => 'Разморозка периода доступна только администратору',
             ], 403);
