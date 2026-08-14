@@ -136,11 +136,11 @@
     <!-- Blocking dialog #1: Requisites — показывается сразу при входе,
          если реквизиты не верифицированы. Пока не заполнены — не даёт
          листать витрину. -->
-    <v-dialog v-model="reqDialog" max-width="560" persistent>
+    <v-dialog v-model="reqDialog" max-width="560" persistent scrollable>
       <v-card>
-        <v-card-title class="d-flex align-center ga-2">
+        <v-card-title class="d-flex align-center ga-2 gate-title">
           <v-icon color="warning">mdi-shield-account</v-icon>
-          <span>Шаг 1: Юридические реквизиты</span>
+          <span class="gate-title__text">Шаг 1: Юридические реквизиты</span>
           <v-spacer />
           <v-btn icon="mdi-close" size="small" variant="text"
             title="Закрыть и вернуться позже" @click="reqDialog = false" />
@@ -186,6 +186,10 @@
           <v-text-field v-model="accountNumber" label="Расчётный счёт" variant="outlined" density="comfortable" />
         </v-card-text>
         <v-card-actions class="pa-3">
+          <!-- Явный выход. Кнопка «Сохранить» задизейблена, пока форма пустая,
+               а диалог persistent (нет Esc/клика мимо) — без этой кнопки на
+               мобильном партнёр запирался в окне. -->
+          <v-btn variant="text" @click="reqDialog = false">Позже</v-btn>
           <v-spacer />
           <v-btn color="primary" :loading="savingReq"
             :disabled="!canSaveReq" @click="saveRequisites"
@@ -199,11 +203,11 @@
     <!-- Pending-плашка: реквизиты заполнены, но Катя ещё не верифицировала.
          Показываем вместо диалога подписания — акцепт доступен только
          после ручной верификации (решение от 2026-05-27). -->
-    <v-dialog v-model="pendingDialog" max-width="520" persistent>
+    <v-dialog v-model="pendingDialog" max-width="520" persistent scrollable>
       <v-card>
-        <v-card-title class="d-flex align-center ga-2">
+        <v-card-title class="d-flex align-center ga-2 gate-title">
           <v-icon color="warning">mdi-clock-outline</v-icon>
-          <span>Ожидайте проверки документов</span>
+          <span class="gate-title__text">Ожидайте проверки документов</span>
           <v-spacer />
           <v-btn icon="mdi-close" size="small" variant="text"
             title="Закрыть и вернуться позже" @click="pendingDialog = false" />
@@ -491,5 +495,18 @@ onMounted(() => { loadProducts(); });
 }
 .program-row:hover {
   background: rgba(var(--v-theme-primary), 0.08);
+}
+
+/* .v-card-title у Vuetify — nowrap + overflow:hidden. Во flex-строке
+   длинный заголовок не сжимается (min-width:auto = ширина текста) и
+   выдавливает крестик за границу карточки, где он обрезается. На узком
+   экране крестик становился невидимым и некликабельным. */
+.gate-title__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gate-title .v-btn {
+  flex: 0 0 auto;
 }
 </style>

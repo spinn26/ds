@@ -14,10 +14,11 @@
         :class="titleClass"
       >
         <v-icon v-if="icon" :color="iconColor" class="me-2">{{ icon }}</v-icon>
-        <span class="text-h6">
+        <span class="text-h6 dialog-shell__text">
           <slot name="title">{{ title }}</slot>
         </span>
-        <span v-if="subtitle || $slots.subtitle" class="text-body-2 text-medium-emphasis ms-3">
+        <span v-if="subtitle || $slots.subtitle"
+          class="text-body-2 text-medium-emphasis ms-3 dialog-shell__text">
           <slot name="subtitle">{{ subtitle }}</slot>
         </span>
         <v-spacer />
@@ -98,3 +99,19 @@ const close = () => {
   emit('close');
 };
 </script>
+
+<style scoped>
+/* .v-card-title у Vuetify — nowrap + overflow:hidden. Во flex-строке
+   длинный заголовок не сжимается (min-width:auto = ширина текста) и
+   выдавливает крестик за границу карточки, где тот обрезается: на узком
+   экране закрыть диалог становится нечем. */
+.dialog-shell__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.v-card-title > .v-btn,
+.v-card-title > .v-icon {
+  flex: 0 0 auto;
+}
+</style>
