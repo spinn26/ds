@@ -255,19 +255,7 @@ class StructureController extends Controller
      */
     private function descendantIds(int $rootId): array
     {
-        $rows = DB::select(
-            'WITH RECURSIVE descendants AS (
-                SELECT id FROM consultant
-                 WHERE inviter = ? AND "dateDeleted" IS NULL
-                UNION ALL
-                SELECT c.id FROM consultant c
-                JOIN descendants d ON c.inviter = d.id
-                WHERE c."dateDeleted" IS NULL
-            )
-            SELECT id FROM descendants',
-            [$rootId]
-        );
-        return array_map(fn ($r) => (int) $r->id, $rows);
+        return app(\App\Services\ConsultantTreeService::class)->descendantIds($rootId);
     }
 
     public function children(Request $request, int $consultantId): JsonResponse

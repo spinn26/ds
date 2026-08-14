@@ -35,6 +35,8 @@ class AdminEndpointsSmokeTest extends TestCase
     private const CLIENT_B = 950021;
     private const CONTRACT_A = 950030;
     private const CONTRACT_B = 950031;
+    private const PRODUCT = 950050;
+    private const PROGRAM = 950060;
 
     private User $admin;
 
@@ -164,6 +166,38 @@ class AdminEndpointsSmokeTest extends TestCase
             ->assertJsonStructure(['period', 'rows', 'grandTotals']);
     }
 
+    #[Test]
+    public function partner_matrix_fact_returns_its_shape(): void
+    {
+        $this->admin('/admin/reports/partner-matrix/fact?from=2026-06&to=2026-07')
+            ->assertOk()
+            ->assertJsonStructure(['months', 'structures', 'grand']);
+    }
+
+    /**
+     * Фильтр по структуре режет выдачу по ПОДДЕРЕВУ корня, а не по точному id.
+     * Обход дерева здесь общий (ConsultantTreeService::subtreeIds), поэтому
+     * тест сторожит и его.
+     */
+    #[Test]
+    public function partner_matrix_structure_filter_uses_the_subtree(): void
+    {
+        $r = $this->admin(
+            '/admin/reports/partner-matrix/fact?from=2026-06&to=2026-07'
+            . '&structures[]=' . self::PARTNER_A
+        );
+
+        $r->assertOk();
+        $fcIds = [];
+        foreach ($r->json('structures') as $structure) {
+            foreach ($structure['fcs'] ?? [] as $fc) {
+                $fcIds[] = (int) $fc['fcId'];
+            }
+        }
+        $this->assertContains(self::PARTNER_A, $fcIds, 'сам корень входит в поддерево');
+        $this->assertNotContains(self::PARTNER_B, $fcIds, 'чужая структура отфильтрована');
+    }
+
     // ================================================================
     // Фильтры: контракт «параметр → выборка» тоже под замком
     // ================================================================
@@ -253,17 +287,30 @@ class AdminEndpointsSmokeTest extends TestCase
             ],
         ]);
 
+        // ⚠ legacy product/program — это ПРЕДСТАВЛЕНИЯ над каталогом, писать
+        // надо в таблицы. Отчёты-матрицы джойнят их INNER JOIN'ом: без
+        // продукта и программы контракт в выдачу не попадает вовсе.
+        DB::table('products_catalog')->insert([
+            'id' => self::PRODUCT, 'name' => 'Тестовый продукт',
+        ]);
+        DB::table('programs_catalog')->insert([
+            'id' => self::PROGRAM, 'product_id' => self::PRODUCT,
+            'name' => 'Тестовая программа', 'provider_name' => 'Тестовый поставщик',
+        ]);
+
         DB::table('contract')->insert([
             [
                 'id' => self::CONTRACT_A, 'consultant' => self::PARTNER_A,
                 'client' => self::CLIENT_A, 'consultantName' => 'Первый Партнёр',
                 'clientName' => 'Клиент Первый', 'number' => 'SM-0001',
+                'product' => self::PRODUCT, 'program' => self::PROGRAM,
                 'openDate' => '2026-06-01',
             ],
             [
                 'id' => self::CONTRACT_B, 'consultant' => self::PARTNER_B,
                 'client' => self::CLIENT_B, 'consultantName' => 'Второй Партнёр',
                 'clientName' => 'Клиент Второй', 'number' => 'SM-0002',
+                'product' => self::PRODUCT, 'program' => self::PROGRAM,
                 'openDate' => '2026-07-01',
             ],
         ]);

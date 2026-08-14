@@ -73,6 +73,68 @@ class ConsultantTreeService
         );
     }
 
+    /**
+     * Поддерево от указанных корней, ВКЛЮЧАЯ сами корни.
+     *
+     * Мягко удалённые отсекаются и в корнях, и на каждом шаге вглубь — иначе
+     * через soft-deleted родителя протаскивается живая orphan-ветка.
+     *
+     * ⚠ Лимита глубины здесь нет: так вели себя обе сведённые копии
+     * (PartnerSalesMatrixController). Циклов в проде нет (замер 2026-08-14,
+     * максимальная глубина 10), но при их появлении запрос уйдёт в вечный
+     * цикл — это осознанно сохранённое поведение, а не рекомендация.
+     *
+     * @param  list<int>  $rootIds
+     * @return list<int>
+     */
+    public function subtreeIds(array $rootIds): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $rootIds))));
+        if (! $ids) {
+            return [];
+        }
+
+        $rows = DB::select(
+            'WITH RECURSIVE tree AS (
+                SELECT id FROM consultant
+                 WHERE id = ANY(?::int[]) AND "dateDeleted" IS NULL
+                UNION ALL
+                SELECT c.id FROM consultant c
+                  JOIN tree ON c.inviter = tree.id
+                 WHERE c."dateDeleted" IS NULL
+            )
+            SELECT id FROM tree',
+            ['{' . implode(',', $ids) . '}']
+        );
+
+        return array_map(fn ($r) => (int) $r->id, $rows);
+    }
+
+    /**
+     * Все потомки корня, БЕЗ самого корня. Мягко удалённые отсекаются, лимита
+     * глубины нет — семантика StructureController::descendantIds, откуда метод
+     * и переехал.
+     *
+     * @return list<int>
+     */
+    public function descendantIds(int $rootId): array
+    {
+        $rows = DB::select(
+            'WITH RECURSIVE descendants AS (
+                SELECT id FROM consultant
+                 WHERE inviter = ? AND "dateDeleted" IS NULL
+                UNION ALL
+                SELECT c.id FROM consultant c
+                  JOIN descendants d ON c.inviter = d.id
+                 WHERE c."dateDeleted" IS NULL
+            )
+            SELECT id FROM descendants',
+            [$rootId]
+        );
+
+        return array_map(fn ($r) => (int) $r->id, $rows);
+    }
+
     /** Терминирован (3) или исключён (5) — такой партнёр цель переноса не принимает. */
     private function isInactive(?int $activity): bool
     {
