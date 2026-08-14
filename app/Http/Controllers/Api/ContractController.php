@@ -176,36 +176,22 @@ class ContractController extends Controller
             return response()->json(['message' => 'Консультант не входит в вашу команду'], 403);
         }
 
-        $chain = [];
-        $visited = [];
-        $currentId = $id;
+        // Вся цепочка с названиями квалификаций — одним запросом вместо
+        // двух на каждый уровень (см. ConsultantTreeService::chainFrom).
         // Глубина structure ограничена; 30 — заведомо больше реальной.
-        for ($i = 0; $i < 30; $i++) {
-            if (in_array($currentId, $visited, true)) break;
-            $visited[] = $currentId;
-
-            $row = DB::table('consultant')
-                ->where('id', $currentId)
-                ->select(['id', 'personName', 'inviter', 'status_and_lvl'])
-                ->first();
-            if (! $row) break;
-
-            $levelTitle = $row->status_and_lvl
-                ? DB::table('status_levels')->where('id', $row->status_and_lvl)->value('title')
-                : null;
-
+        $chain = [];
+        foreach (app(\App\Services\ConsultantTreeService::class)->chainFrom($id, 30) as $row) {
+            $isViewer = (int) $row->id === (int) $viewer->id;
             $chain[] = [
                 'id' => $row->id,
                 'personName' => $row->personName,
-                'level' => $levelTitle,
-                'depth' => count($chain),
-                'isViewer' => (int) $row->id === (int) $viewer->id,
+                'level' => $row->level,
+                'depth' => (int) $row->depth,
+                'isViewer' => $isViewer,
             ];
 
             // Дошли до текущего партнёра — выше его ветку не показываем.
-            if ((int) $row->id === (int) $viewer->id) break;
-            if (! $row->inviter) break;
-            $currentId = (int) $row->inviter;
+            if ($isViewer) break;
         }
 
         return response()->json(['chain' => $chain]);

@@ -1564,33 +1564,16 @@ class AdminDataController extends Controller
      */
     public function consultantChain(int $id): JsonResponse
     {
-        $chain = [];
-        $visited = [];
-        $currentId = $id;
-        for ($i = 0; $i < 20; $i++) {
-            if (in_array($currentId, $visited, true)) break;
-            $visited[] = $currentId;
-
-            $row = DB::table('consultant')
-                ->where('id', $currentId)
-                ->select(['id', 'personName', 'inviter', 'status_and_lvl'])
-                ->first();
-            if (! $row) break;
-
-            $levelTitle = $row->status_and_lvl
-                ? DB::table('status_levels')->where('id', $row->status_and_lvl)->value('title')
-                : null;
-
-            $chain[] = [
-                'id' => $row->id,
-                'personName' => $row->personName,
-                'level' => $levelTitle,
-                'depth' => count($chain),
-            ];
-
-            if (! $row->inviter) break;
-            $currentId = (int) $row->inviter;
-        }
+        // Раньше здесь был цикл с ДВУМЯ запросами на уровень (строка
+        // консультанта + название квалификации): десять уровней стоили два
+        // десятка round-trip. Теперь вся цепочка с названиями приходит одним
+        // рекурсивным запросом, стоимость не зависит от глубины.
+        $chain = array_map(fn ($r) => [
+            'id' => $r->id,
+            'personName' => $r->personName,
+            'level' => $r->level,
+            'depth' => (int) $r->depth,
+        ], app(\App\Services\ConsultantTreeService::class)->chainFrom($id, 20));
 
         return response()->json(['chain' => $chain]);
     }
