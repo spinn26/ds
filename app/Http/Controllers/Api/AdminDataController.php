@@ -675,15 +675,26 @@ class AdminDataController extends Controller
                         if ((int) $data['inviter'] === $cid) {
                             throw new \InvalidArgumentException('Нельзя назначить самого себя');
                         }
-                        $prevInvId = $c->inviter;
-                        $prevInvName = $c->inviterName;
-                        $c->inviter = $data['inviter'];
-                        $c->inviterName = DB::table('consultant')
-                            ->where('id', $data['inviter'])->value('personName');
-                        $c->save();
-                        // Массовая смена наставника = перестановка: пишем в
-                        // Историю перестановок + пересчёт (как createTransfer/форма).
-                        if ((int) $prevInvId !== (int) $data['inviter']) {
+                        // Смена наставника и запись в Историю перестановок —
+                        // одно неделимое действие. Раньше save() и insert шли
+                        // по отдельности: падение вставки лога (например,
+                        // коллизия id из LegacyId::next) оставляло структуру
+                        // ПЕРЕСТРОЕННОЙ, но без записи в истории и без
+                        // попадания в $transferredIds — значит и без пересчёта
+                        // комиссий по новой цепочке. Ровно этот разрыв уже
+                        // ловили на форме смены наставника.
+                        DB::transaction(function () use ($c, $data, $request, &$transferredIds) {
+                            $prevInvId = $c->inviter;
+                            $prevInvName = $c->inviterName;
+                            $c->inviter = $data['inviter'];
+                            $c->inviterName = DB::table('consultant')
+                                ->where('id', $data['inviter'])->value('personName');
+                            $c->save();
+
+                            if ((int) $prevInvId === (int) $data['inviter']) {
+                                return;
+                            }
+
                             DB::table('changeConsultantInviterLog')->insert([
                                 'id'             => LegacyId::next('changeConsultantInviterLog'),
                                 'dateCreated'    => now(),
@@ -697,7 +708,7 @@ class AdminDataController extends Controller
                                 'triggeredBy'    => 'Массовое действие',
                             ]);
                             $transferredIds[] = $c->id;
-                        }
+                        });
                         $ok++;
                         break;
                     case 'block':

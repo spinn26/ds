@@ -101,9 +101,22 @@ class InsmartIntegrationService
 
             // 4) Контракт «Активирован»
             $contractNumber = strtoupper(substr($externalId ?? uniqid('', true), 0, 8));
-            $contractId = LegacyId::next('contract');
-            DB::table('contract')->insert([
-                'id' => $contractId,
+            // ⚠ id выдаёт СИКВЕНС, а не LegacyId::next.
+            //
+            // LegacyId::next берёт MAX(id)+1 и оставляет сиквенс нетронутым.
+            // Для таблиц без сиквенса это единственный способ, но у contract он
+            // ЕСТЬ — и каждая запись из этого вебхука уводила сиквенс в
+            // отставание. Следующий insert, полагающийся на сиквенс (импорт
+            // контрактов), врезался в занятый id и падал «duplicate key».
+            // Ровно так в августе 2026 слёг импорт транзакций: там источником
+            // лага был этот же приём, применённый к transaction.
+            //
+            // syncSequence перед вставкой — та же защита, что в
+            // ImportTransactionsJob::bulkInsertChunk: сиквенс уже отстал от
+            // прежних записей вебхука, и без выравнивания первый же insertGetId
+            // врезался бы в занятый id. Идемпотентно и дёшево.
+            LegacyId::syncSequence('contract');
+            $contractId = DB::table('contract')->insertGetId([
                 'number' => $contractNumber,
                 'counterpartyContractId' => $externalId,
                 'status' => $this->activatedStatusId(),
