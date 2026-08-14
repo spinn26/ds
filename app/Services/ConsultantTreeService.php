@@ -135,6 +135,44 @@ class ConsultantTreeService
         return array_map(fn ($r) => (int) $r->id, $rows);
     }
 
+    /**
+     * Цепочка «сам узел → его наставник → … → корень» ОДНИМ запросом, вместе
+     * с названием квалификации каждого уровня.
+     *
+     * Заменяет ручной цикл, который на каждый уровень делал два обращения к БД
+     * (строка консультанта + название уровня): десять уровней стоили два
+     * десятка round-trip. Теперь стоимость постоянная.
+     *
+     * Защита от циклов та же, что была в цикле: путь накапливается в массиве,
+     * и узел, уже встречавшийся в пути, обход обрывает — плюс жёсткий лимит
+     * глубины. Порядок и состав полей совпадают с прежним выводом.
+     *
+     * @return list<object{id:int, personName:?string, inviter:?int, level:?string, depth:int}>
+     */
+    public function chainFrom(int $startId, int $maxDepth = self::MAX_DEPTH): array
+    {
+        return DB::select(
+            'WITH RECURSIVE chain AS (
+                SELECT c.id, c."personName", c.inviter, c.status_and_lvl,
+                       0 AS depth, ARRAY[c.id] AS path
+                  FROM consultant c
+                 WHERE c.id = ?
+                UNION ALL
+                SELECT c.id, c."personName", c.inviter, c.status_and_lvl,
+                       ch.depth + 1, ch.path || c.id
+                  FROM consultant c
+                  JOIN chain ch ON c.id = ch.inviter
+                 WHERE ch.depth + 1 < ?
+                   AND NOT c.id = ANY(ch.path)
+            )
+            SELECT ch.id, ch."personName", ch.inviter, sl.title AS level, ch.depth
+              FROM chain ch
+              LEFT JOIN status_levels sl ON sl.id = ch.status_and_lvl
+             ORDER BY ch.depth',
+            [$startId, $maxDepth]
+        );
+    }
+
     /** Терминирован (3) или исключён (5) — такой партнёр цель переноса не принимает. */
     private function isInactive(?int $activity): bool
     {
