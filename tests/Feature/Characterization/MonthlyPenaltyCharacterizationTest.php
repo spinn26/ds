@@ -107,10 +107,9 @@ class MonthlyPenaltyCharacterizationTest extends TestCase
         $log = $this->monthEndSnapshot(self::MENTOR);
 
         $this->assertTrue((bool) $log->gap);
-        // ⚠ Фиксируем как есть: сюда пишется id КОНСУЛЬТАНТА (ветка первой
-        // линии, не продавец), хотя колонка объявлена FK на qualificationLog.
-        // Это баг схемы/кода, описан в отчёте по Этапу 0 — тест его не чинит,
-        // а закрепляет текущее поведение, чтобы рефакторинг его не сдвинул.
+        // В branchWithGap лежит id КОНСУЛЬТАНТА — ветки первой линии, а не
+        // продавца. Так же его читают DashboardService и FinanceReportService.
+        // Ошибочный FK на сам журнал снят миграцией 2026_08_14_000200.
         $this->assertSame(self::BRANCH_A, (int) $log->branchWithGap, 'ветка-нарушитель — первая линия, не продавец');
         $this->assertEqualsWithDelta(83.33, (float) $log->gapValuePercentage, 0.01, '10 000 / 12 000');
         $this->assertEqualsWithDelta(10_000.0, (float) $log->gapValue, 0.01);
@@ -366,26 +365,6 @@ class MonthlyPenaltyCharacterizationTest extends TestCase
             ]);
         }
 
-        // ⚠ КОСТЫЛЬ ПОД ЖИВОЙ БАГ, а не под тест.
-        //
-        // qualificationLog.branchWithGap объявлен внешним ключом на саму
-        // qualificationLog(id), а MonthlyPenaltyRunner пишет туда id
-        // КОНСУЛЬТАНТА (ветку первой линии). На проде это проходит случайно:
-        // id консультантов (до ~2100) почти всегда существуют среди id журнала
-        // (1..54566), и FK совпадает по совпадению, сохраняя бессмысленную
-        // ссылку. В чистой тестовой БД журнала нет — и вставка честно падает.
-        //
-        // Чтобы тест характеризовал РАСЧЁТ, а не спотыкался о схему, повторяем
-        // прод-ситуацию: заводим строки журнала с id, равными id веток.
-        // Убрать сразу, как только баг будет починен (см. отчёт по Этапу 0).
-        foreach ([self::BRANCH_A, self::BRANCH_B] as $branchId) {
-            DB::table('qualificationLog')->insert([
-                'id' => $branchId,
-                'consultant' => $branchId,
-                'date' => '2026-01-31 23:59:59',
-                'consultantPersonName' => 'FK-заглушка',
-            ]);
-        }
     }
 
     /** Личные продажи наставника: строка chainOrder=1 на него самого. */
