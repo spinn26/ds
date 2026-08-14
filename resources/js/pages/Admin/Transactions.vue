@@ -240,11 +240,20 @@
                     <template v-else-if="h.key === 'amount'">
                       <!-- Отрицательная сумма = СТОРНО (возврат): подсвечиваем, чтобы
                            оператор не зафиксировал минус по ошибке, не заметив знак. -->
-                      <v-text-field :model-value="fmtAmt(d.amount)" inputmode="decimal"
+                      <!-- Пока поле в фокусе, показываем «сырой» ввод оператора и
+                           НЕ форматируем: раньше model-value на каждое нажатие
+                           прогонялся через fmtAmt → разделитель дробной части
+                           съедался, каретка прыгала, и вместо набранного числа
+                           получалось другое. Формат возвращаем на blur. -->
+                      <v-text-field :model-value="amtDisplay(d)" inputmode="decimal"
                         density="compact" hide-details variant="plain"
                         :class="Number(d.amount) < 0 ? 'tx-amount-negative' : ''"
                         :title="Number(d.amount) < 0 ? 'Сторно: доход ДС, баллы и комиссии всей цепочки уйдут в минус' : ''"
-                        reverse @update:model-value="v => patchField(d, 'amount', parseAmt(v))" />
+                        reverse
+                        @focus="amtFocus(d)"
+                        @update:model-value="v => amtBuffer = v"
+                        @blur="amtCommit(d)"
+                        @keyup.enter="amtCommit(d)" />
                     </template>
                     <template v-else-if="h.key === 'currency'">
                       <v-select :model-value="d.currencyId" :items="currencyOptions" item-title="symbol" item-value="id"
@@ -737,6 +746,38 @@ function parseAmt(v) {
   const n = parseFloat(String(v).replace(/[\s ]/g, '').replace(',', '.'));
   return isNaN(n) ? null : n;
 }
+
+// Ввод суммы черновика. Форматирование (разделители разрядов, запятая) прямо
+// во время набора ломало ввод: fmtAmt отбрасывал незавершённую дробную часть
+// («3188.» → «3 188»), а перерисовка сбивала позицию каретки, из-за чего
+// следующие цифры уезжали не туда и вместо набранного числа сохранялось
+// другое. Пока поле в фокусе — держим строку как есть, разбираем и сохраняем
+// только по blur/Enter.
+const amtEditingId = ref(null);
+const amtBuffer = ref('');
+
+function amtDisplay(d) {
+  return amtEditingId.value === d.id ? amtBuffer.value : fmtAmt(d.amount);
+}
+
+function amtFocus(d) {
+  amtEditingId.value = d.id;
+  // Без разделителей разрядов — иначе оператор правит число вперемешку с
+  // пробелами. Дробную часть отдаём запятой, как принято при вводе.
+  amtBuffer.value = d.amount == null || d.amount === '' ? '' : String(d.amount).replace('.', ',');
+}
+
+function amtCommit(d) {
+  if (amtEditingId.value !== d.id) return;
+  const parsed = parseAmt(amtBuffer.value);
+  amtEditingId.value = null;
+  amtBuffer.value = '';
+  // Патчим только при реальном изменении — иначе каждый заход в поле дёргал
+  // бы бэкенд и пересчёт комиссий.
+  const before = d.amount == null || d.amount === '' ? null : Number(d.amount);
+  if (parsed !== before) patchField(d, 'amount', parsed);
+}
+
 import { usePermissions } from '../../composables/usePermissions';
 
 // Все кнопки расчётов/финализации — только у руководителя расчётов (canCalc).
