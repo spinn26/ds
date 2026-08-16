@@ -386,7 +386,10 @@ class StructureController extends Controller
                 SELECT c.id, t.depth + 1
                 FROM consultant c
                 JOIN tree t ON c.inviter = t.id
-                WHERE c."dateDeleted" IS NULL
+                -- Лимит глубины — страховка от циклов: структуру правят руками,
+                -- а UNION ALL при цикле уходит в бесконечность. Реальная
+                -- глубина дерева — около десяти уровней.
+                WHERE c."dateDeleted" IS NULL AND t.depth < 25
             )
             SELECT id, depth FROM tree ORDER BY depth, id',
             [$consultantId],

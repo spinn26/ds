@@ -472,14 +472,17 @@ class PartnerSalesMatrixController extends Controller
 
         $rows = DB::select("
             WITH RECURSIVE chain AS (
-                SELECT id AS node, id AS cur, inviter
+                SELECT id AS node, id AS cur, inviter, 0 AS depth
                 FROM consultant
                 WHERE id IN ($ids)
                 UNION ALL
-                SELECT ch.node, c.id, c.inviter
+                SELECT ch.node, c.id, c.inviter, ch.depth + 1
                 FROM chain ch
                 JOIN consultant c ON c.id = ch.inviter
-                WHERE ch.inviter IS NOT NULL AND ch.inviter <> 0
+                -- Лимит глубины — страховка от циклов: соседний запрос выше
+                -- его уже имеет, здесь он отсутствовал, и цикл в структуре
+                -- увёл бы подъём по цепочке в бесконечность.
+                WHERE ch.inviter IS NOT NULL AND ch.inviter <> 0 AND ch.depth < 50
             )
             SELECT ch.node AS consultant_id, ch.cur AS root_id, c.\"personName\" AS root_name
             FROM chain ch
