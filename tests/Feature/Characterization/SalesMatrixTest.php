@@ -161,6 +161,54 @@ class SalesMatrixTest extends TestCase
             $this->inWork('2026-05', '2026-05')['grandTotals']['monthly']['2026-05']['forecast'][0]['revenue'], 0.01);
     }
 
+    /**
+     * Собственная выручка ячейки «В работе» считается тем же правилом, что и
+     * разбивка: сумма без НДС × %ДС / 100. Это отдельный проход по контрактам,
+     * и он умеет разойтись с разбивкой, если правку внести только в одном.
+     */
+    #[Test]
+    public function in_work_cell_revenue_matches_the_breakdown(): void
+    {
+        $this->setVat(20);
+        $this->contract([
+            'status' => 2, 'ammount' => 1_200_000,
+            'activation_forecast' => '2026-05-10',
+            'createDate' => '2026-05-01 00:00:00',
+        ]);
+
+        $grand = $this->inWork('2026-05', '2026-05')['grandTotals'];
+
+        $this->assertEqualsWithDelta(100_000, $grand['revenue'], 0.01);
+        $this->assertEqualsWithDelta(100_000, $grand['monthly']['2026-05']['revenue'], 0.01);
+    }
+
+    /**
+     * Валютный контракт пересчитывается управленческим курсом. Без него
+     * доллары считались бы как рубли — то есть примерно в восемьдесят раз
+     * дешевле.
+     */
+    #[Test]
+    public function in_work_converts_currency_by_the_management_rate(): void
+    {
+        $this->setVat(0);
+        DB::table('currency')->updateOrInsert(['id' => 2000050],
+            ['symbol' => '$', 'nameRu' => 'Доллар тестовый', 'selectable' => false]);
+        DB::table('management_currency_rate')->insert([
+            'currency' => 2000050, 'date' => '2026-05-01', 'rate' => 80,
+        ]);
+
+        $this->contract([
+            'status' => 2, 'ammount' => 1_000, 'currency' => 2000050,
+            'activation_forecast' => '2026-05-10',
+            'createDate' => '2026-05-01 00:00:00',
+        ]);
+
+        $bucket = $this->inWork('2026-05', '2026-05')['grandTotals']['monthly']['2026-05']['forecast'][0];
+
+        $this->assertEqualsWithDelta(80_000, $bucket['volume'], 0.01, '1000 × курс 80');
+        $this->assertEqualsWithDelta(8_000, $bucket['revenue'], 0.01, 'выручка от рублёвой суммы');
+    }
+
     /** По умолчанию берутся только статусы «Сбор документов» и «Комплайнс». */
     #[Test]
     public function forecast_defaults_to_the_two_pipeline_statuses(): void
