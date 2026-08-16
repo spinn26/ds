@@ -31,7 +31,11 @@ class ChatTicketPolicy
 
         if (! $user->isStaff()) return false;
 
-        $roles = array_map('trim', explode(',', $user->role ?? ''));
+        // ⚠ Ровно getRolesArray(), а не ручной explode: канон приводит роли к
+        // нижнему регистру. Пока политика разбирала `role` сама, роль с
+        // заглавной буквы («Support») разводила два канала — тикет был виден
+        // в списке и отдавал 403 по прямой ссылке.
+        $roles = $user->getRolesArray();
         if (! TicketService::staffCanSeeCategory($roles, $ticket->department)) return false;
 
         // Admin-override: админ видит ВСЕ тикеты техподдержки (даже после
@@ -71,7 +75,6 @@ class ChatTicketPolicy
      */
     public function delete(User $user, ChatTicket $ticket): bool
     {
-        $roles = array_map('trim', explode(',', $user->role ?? ''));
-        return in_array('admin', $roles, true);
+        return $user->hasAnyRole(['admin']);
     }
 }

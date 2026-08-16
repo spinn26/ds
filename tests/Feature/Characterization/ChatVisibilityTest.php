@@ -169,23 +169,20 @@ class ChatVisibilityTest extends TestCase
     }
 
     /**
-     * 🐞 Роль с заглавной буквы разводит список и политику: список приводит
-     * роли к нижнему регистру (User::getRolesArray), а ChatTicketPolicy
-     * разбирает `role` вручную и регистр не трогает. Итог — тикет виден в
-     * списке, но по прямой ссылке отдаёт 403.
+     * Роль с заглавной буквы даёт тот же доступ, что и с маленькой.
      *
-     * Тест фиксирует поведение как есть, чтобы вынос правил в сервис был
-     * проверяемо равносильным; починка идёт отдельным коммитом, который эту
-     * проверку и перевернёт.
+     * Раньше не давала: список приводил роли к нижнему регистру
+     * (User::getRolesArray), а политика разбирала `role` вручную — тикет был
+     * виден в списке и отдавал 403 по прямой ссылке.
      */
     #[Test]
-    public function a_capitalised_role_splits_the_list_from_the_policy(): void
+    public function a_capitalised_role_works_like_a_lowercase_one(): void
     {
         $this->user(1900008, 'Support', 'Заглавнов');
         $t = $this->ticket(['created_by' => self::PARTNER, 'department' => 'support']);
 
         $this->assertTrue($this->inList(1900008, $t), 'в списке тикет есть');
-        $this->assertFalse($this->canOpen(1900008, $t), 'а по ссылке — отказ');
+        $this->assertTrue($this->canOpen(1900008, $t), 'и по ссылке открывается');
     }
 
     // ================================================================
