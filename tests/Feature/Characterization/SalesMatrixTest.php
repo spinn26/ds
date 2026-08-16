@@ -208,6 +208,89 @@ class SalesMatrixTest extends TestCase
             ->assertStatus(422);
     }
 
+    // ---------------- Активировано (/period) ----------------
+
+    /**
+     * ⚠ Контракт, по которому УЖЕ есть транзакция, в «Активировано» не идёт:
+     * он учитывается в «Факте». Правило исключает двойной счёт — сними его,
+     * и выручка задвоится в режиме «Итого».
+     */
+    #[Test]
+    public function activated_skips_contracts_that_already_have_a_transaction(): void
+    {
+        $this->contract(['status' => 1, 'openDate' => '2026-03-10 00:00:00']);
+        $paid = $this->contract(['status' => 1, 'openDate' => '2026-03-10 00:00:00']);
+        $this->transaction(['dateMonth' => '2026-03', 'commissionsAmountRUB' => 1_000], $paid);
+
+        $this->assertSame(1, $this->period('2026-03', '2026-03')['grandTotals']['count'],
+            'из двух активированных контрактов остался только неоплаченный');
+    }
+
+    /** Удалённая транзакция контракт не «занимает» — он снова активированный. */
+    #[Test]
+    public function a_deleted_transaction_does_not_hold_the_contract(): void
+    {
+        $c = $this->contract(['status' => 1, 'openDate' => '2026-03-10 00:00:00']);
+        $this->transaction([
+            'dateMonth' => '2026-03', 'commissionsAmountRUB' => 1_000,
+            'deletedAt' => '2026-03-11 00:00:00',
+        ], $c);
+
+        $this->assertSame(1, $this->period('2026-03', '2026-03')['grandTotals']['count']);
+    }
+
+    /** Берутся только активированные, по дате активации, правая граница исключительная. */
+    #[Test]
+    public function activated_uses_the_open_date_window(): void
+    {
+        $this->contract(['status' => 1, 'openDate' => '2026-03-31 23:00:00']);
+        $this->contract(['status' => 1, 'openDate' => '2026-04-01 00:00:00']);
+        $this->contract(['status' => 2, 'openDate' => '2026-03-10 00:00:00']);
+
+        $this->assertSame(1, $this->period('2026-03', '2026-03')['grandTotals']['count']);
+        $this->assertSame(2, $this->period('2026-03', '2026-04')['grandTotals']['count']);
+    }
+
+    // ---------------- Итого (/total) ----------------
+
+    /**
+     * «Итого» складывает три слоя, и ни один контракт не должен попасть в два
+     * сразу: «в работе» — неактивированные по дате создания, «активировано» —
+     * status=1 без транзакций, «факт» — транзакции.
+     */
+    #[Test]
+    public function the_total_layers_do_not_double_count(): void
+    {
+        // Один и тот же контракт: активирован и оплачен → только «Факт».
+        $paid = $this->contract(['status' => 1, 'openDate' => '2026-03-10 00:00:00']);
+        $this->transaction(['dateMonth' => '2026-03', 'commissionsAmountRUB' => 5_000], $paid);
+
+        $total = $this->total('2026-03', '2026-03')['grandTotals'];
+
+        $this->assertEqualsWithDelta(5_000, $total['revenue'], 0.01,
+            'выручка учтена один раз, слоем «Факт»');
+    }
+
+    // ---------------- Матрица ФК (/fc) ----------------
+
+    /**
+     * 🐞 Матрица по ФК соединяется с WebUser ВНУТРЕННИМ join, поэтому продажи
+     * партнёров без логина в неё не попадают вовсе — а таких партнёров на
+     * платформе сотни (импортированные ФК). Тест фиксирует поведение как есть;
+     * менять его — решение владельца отчёта, не рефакторинга.
+     */
+    #[Test]
+    public function the_fc_matrix_drops_partners_without_a_login(): void
+    {
+        $this->transaction(['dateMonth' => '2026-03', 'commissionsAmountRUB' => 7_000]);
+
+        $fact = $this->fact('2026-03', '2026-03')['grandTotals'];
+        $fc = $this->fc('2026-03', '2026-03');
+
+        $this->assertEqualsWithDelta(7_000, $fact['revenue'], 0.01, 'в «Факте» продажа есть');
+        $this->assertSame([], $fc['rows'], 'а в матрице ФК её нет — у партнёра нет WebUser');
+    }
+
     // ================================================================
 
     /**
@@ -235,6 +318,33 @@ class SalesMatrixTest extends TestCase
     }
 
     /** Ставка НДС живёт в справочнике с интервалом дат и статически кэшируется. */
+    /** @return array<string, mixed> */
+    private function period(string $from, string $to): array
+    {
+        return $this->matrix('period', $from, $to);
+    }
+
+    /** @return array<string, mixed> */
+    private function total(string $from, string $to): array
+    {
+        return $this->matrix('total', $from, $to);
+    }
+
+    /** @return array<string, mixed> */
+    private function fc(string $from, string $to): array
+    {
+        return $this->matrix('fc', $from, $to);
+    }
+
+    /** @return array<string, mixed> */
+    private function matrix(string $slug, string $from, string $to): array
+    {
+        return $this->actingAs($this->admin, 'sanctum')
+            ->getJson('/api/v1/admin/reports/sales-matrix/' . $slug . '?' . http_build_query([
+                'from' => $from, 'to' => $to,
+            ]))->assertOk()->json();
+    }
+
     /** @return array<string, mixed> */
     private function inWork(string $from, string $to): array
     {
