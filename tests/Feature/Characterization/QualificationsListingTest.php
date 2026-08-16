@@ -19,6 +19,9 @@ use Tests\TestCase;
  *   - НГП держится carry-forward: строка финализа Отрыв/ОП приходит с датой
  *     конца месяца и ПУСТЫМ накопительным ГП, и, будучи самой свежей, иначе
  *     обнуляла бы НГП на экране;
+ *   - границы месяца — полуинтервал [первое число, первое число следующего):
+ *     в колонке лежит timestamp, и сравнение с «последним днём месяца» и
+ *     теряло строки со временем, и уводило полуночные в чужую колонку;
  *   - открытый месяц показывается ЖИВЫМ (считается из транзакций), закрытый
  *     и исторический — зафиксированным снимком.
  */
@@ -116,31 +119,49 @@ class QualificationsListingTest extends TestCase
     }
 
     /**
-     * 🐞 Строка, датированная ПОСЛЕДНИМ днём месяца, попадает в колонку
-     * ПРЕДЫДУЩЕГО месяца, а не текущего.
+     * ⚠ Строка ПОСЛЕДНЕГО дня месяца принадлежит этому месяцу — и полуночная,
+     * и со временем.
      *
-     * Причина: принадлежность месяцу определяется сравнением СТРОК —
-     * `$l->date >= $start && $l->date <= $end`, где `$end` это «2026-04-30»
-     * без времени, а в колонке лежит timestamp «2026-04-30 00:00:00». Строка
-     * с временем длиннее, поэтому оказывается «больше» границы.
-     *
-     * Задевает это ровно те строки, которые пишет финализ Отрыв/ОП: он
-     * датирует их концом месяца. На проде так датированы 1714 из 1716 строк
-     * июля и 1826 из 3693 строк июня.
-     *
-     * Тест фиксирует поведение как есть: починка сдвигает цифры на финансовом
-     * экране, это решение владельца, а не рефакторинга.
+     * Раньше не принадлежала. Границей был «последний день» без времени, а в
+     * колонке лежит timestamp: полуночная строка при сравнении как строк
+     * оказывалась «больше» границы и уезжала в колонку предыдущего месяца, а
+     * строка со временем не проходила даже отбор в SQL и пропадала совсем.
+     * Задевало это ровно те строки, что пишет финализ Отрыв/ОП: он датирует
+     * их концом месяца (на проде — 1714 из 1716 строк июля).
      */
     #[Test]
-    public function a_row_dated_the_last_day_lands_in_the_previous_month(): void
+    public function a_row_dated_the_last_day_belongs_to_that_month(): void
     {
         $this->log(self::PARTNER, self::OLD_MONTH . '-30', ['personalVolume' => 111]);
 
         $row = $this->row(self::OLD_MONTH);
 
-        $this->assertNull($row['current'], 'в текущем месяце пусто');
-        $this->assertEqualsWithDelta(111, $row['previous']['personalVolume'], 0.01,
-            'а строка ушла в предыдущий');
+        $this->assertNotNull($row['current'], 'строка последнего дня — это текущий месяц');
+        $this->assertEqualsWithDelta(111, $row['current']['personalVolume'], 0.01);
+    }
+
+    /** Та же строка со временем — раньше пропадала из выдачи вовсе. */
+    #[Test]
+    public function a_last_day_row_with_a_time_is_not_lost(): void
+    {
+        $this->log(self::PARTNER, self::OLD_MONTH . '-30 23:59:59', ['personalVolume' => 222]);
+
+        $row = $this->row(self::OLD_MONTH);
+
+        $this->assertNotNull($row['current']);
+        $this->assertEqualsWithDelta(222, $row['current']['personalVolume'], 0.01);
+    }
+
+    /** Первый день следующего месяца в текущий уже не попадает. */
+    #[Test]
+    public function the_first_day_of_the_next_month_stays_out(): void
+    {
+        $this->log(self::PARTNER, '2026-05-01', ['personalVolume' => 333]);
+
+        $rows = collect($this->list(['month' => self::OLD_MONTH])['data'])->keyBy('consultant');
+
+        $this->assertArrayNotHasKey(self::PARTNER, $rows,
+            'у партнёра нет строк ни за апрель, ни за март');
     }
 
     // ---------------- Уровень ----------------
@@ -261,7 +282,8 @@ class QualificationsListingTest extends TestCase
             'groupVolumeCumulative' => 30,
             'nominalLevel' => 1,
             'calculationLevel' => 1,
-            'createdAt' => $date . ' 00:00:00',
+            // Дата может прийти уже со временем — не дописываем полночь вслепую.
+            'createdAt' => str_contains($date, ':') ? $date : $date . ' 00:00:00',
         ], $attrs));
     }
 
