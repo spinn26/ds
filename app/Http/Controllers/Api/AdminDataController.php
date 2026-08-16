@@ -14,7 +14,9 @@ use App\Support\LegacyId;
 use App\Services\PartnerListingService;
 use App\Services\PartnerStatusesListingService;
 use App\Services\RequisitesListingService;
+use App\Services\ContractHistoryService;
 use App\Services\ContractsListingService;
+use App\Services\PartnerChangeLogService;
 use App\Services\PartnerStatusService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -57,6 +59,8 @@ class AdminDataController extends Controller
         private readonly PartnerStatusesListingService $partnerStatuses,
         private readonly RequisitesListingService $requisitesListing,
         private readonly ContractsListingService $contractsListing,
+        private readonly ContractHistoryService $contractHistory,
+        private readonly PartnerChangeLogService $partnerChangeLog,
     ) {}
 
     /**
@@ -820,139 +824,8 @@ class AdminDataController extends Controller
      */
     public function partnerChangeLog(int $id): JsonResponse
     {
-        // --- 1. Spatie activity_log (Consultant) ---
-        $spatieRows = DB::table('activity_log')
-            ->where('subject_type', \App\Models\Consultant::class)
-            ->where('subject_id', $id)
-            ->orderByDesc('created_at')
-            ->limit(200)
-            ->get();
-
-        // --- 2. audit_log (partner_update + статус-смены через сервис) ---
-        $auditRows = DB::table('audit_log')
-            ->where('entity', 'consultant')
-            ->where('entity_id', (string) $id)
-            ->orderByDesc('created_at')
-            ->limit(200)
-            ->get();
-
-        // Авторы — собираем все WebUser id одним запросом, без N+1.
-        $causerIds = $spatieRows->pluck('causer_id')->filter()
-            ->merge($auditRows->pluck('user_id')->filter())
-            ->unique();
-        $causers = $causerIds->isNotEmpty()
-            ? DB::table('WebUser')->whereIn('id', $causerIds)
-                ->select(['id', 'firstName', 'lastName', 'patronymic'])->get()->keyBy('id')
-            : collect();
-        $authorOf = function ($uid) use ($causers) {
-            if (! $uid) return 'Система';
-            $u = $causers[$uid] ?? null;
-            if (! $u) return "Пользователь #{$uid}";
-            $name = trim("{$u->lastName} {$u->firstName} {$u->patronymic}");
-            return $name !== '' ? $name : "Пользователь #{$uid}";
-        };
-
-        // Лейблы полей (англ. → русский) для UI. Что не покрыто — показываем как есть.
-        $fieldLabels = [
-            'firstName' => 'Имя', 'lastName' => 'Фамилия', 'patronymic' => 'Отчество',
-            'email' => 'Email', 'phone' => 'Телефон', 'nicTG' => 'Telegram',
-            'gender' => 'Пол', 'birthDate' => 'Дата рождения', 'role' => 'Роль(и)',
-            'isBlocked' => 'Блокировка', 'password' => 'Пароль',
-            'participantCode' => 'Реф. код', 'inviter' => 'Пригласивший',
-            'activity' => 'Статус активности', 'status' => 'Квалификация',
-            'active' => 'Активен', 'acceptance' => 'Согласие',
-            'webUser' => 'WebUser',
-            'activationDeadline' => 'Дедлайн активации',
-            'yearPeriodEnd' => 'Конец годового периода',
-            'terminationCount' => 'Кол-во терминаций',
-            'reinstatement_count' => 'Самовосстановлений',
-            'reinstate_blocked' => 'Запрет самовосстановления',
-            'dateActivity' => 'Дата активации',
-            'dateDeactivity' => 'Дата деактивации',
-            'dateDeleted' => 'Дата удаления (soft)',
-            'status_and_lvl' => 'Статус + уровень',
-            'qualificationLocked' => 'Квалификация заблок.',
-            'personName' => 'ФИО',
-        ];
-        $activityLabel = function ($v) {
-            if ($v === null || $v === '') return null;
-            $enum = PartnerActivity::tryFrom((int) $v);
-            return $enum ? $enum->label() : (string) $v;
-        };
-        $renderValue = function ($field, $val) use ($activityLabel) {
-            if ($val === null || $val === '') return null;
-            if ($field === 'activity') return $activityLabel($val);
-            if (is_bool($val)) return $val ? 'да' : 'нет';
-            return (string) $val;
-        };
-
-        $entries = [];
-
-        foreach ($spatieRows as $r) {
-            $props = json_decode($r->properties ?: '{}', true);
-            $newAttrs = $props['attributes'] ?? [];
-            $oldAttrs = $props['old'] ?? [];
-            $changes = [];
-            $keys = array_unique(array_merge(array_keys($newAttrs), array_keys($oldAttrs)));
-            foreach ($keys as $k) {
-                $oldV = $oldAttrs[$k] ?? null;
-                $newV = $newAttrs[$k] ?? null;
-                if ((string) $oldV === (string) $newV) continue;
-                $changes[] = [
-                    'field' => $k,
-                    'fieldLabel' => $fieldLabels[$k] ?? $k,
-                    'from' => $renderValue($k, $oldV),
-                    'to' => $renderValue($k, $newV),
-                ];
-            }
-            // Override-логи проходят с пустыми атрибутами (logged через activity()->log).
-            // Покажем их как отдельные события с комментарием.
-            $action = $r->event ?: ($r->description ?: 'change');
-            if (empty($changes) && empty($props['comment'])) {
-                continue;
-            }
-            $entries[] = [
-                'id' => 'a' . $r->id,
-                'source' => 'activity',
-                'createdAt' => $r->created_at,
-                'author' => $authorOf($r->causer_id),
-                'action' => $action,
-                'comment' => $props['comment'] ?? null,
-                'changes' => $changes,
-            ];
-        }
-
-        foreach ($auditRows as $r) {
-            $payload = json_decode($r->payload ?: '{}', true);
-            $diff = $payload['diff'] ?? [];
-            // Пропускаем старые partner_update-записи без diff'а — они
-            // содержали только список названий полей и ничего не дают UI.
-            if ($r->action === 'partner_update' && empty($diff)) continue;
-            $changes = [];
-            foreach ($diff as $field => $pair) {
-                $changes[] = [
-                    'field' => $field,
-                    'fieldLabel' => $fieldLabels[$field] ?? $field,
-                    'from' => $renderValue($field, $pair['from'] ?? null),
-                    'to' => $renderValue($field, $pair['to'] ?? null),
-                ];
-            }
-            $entries[] = [
-                'id' => 'u' . $r->id,
-                'source' => 'audit',
-                'createdAt' => $r->created_at,
-                'author' => $authorOf($r->user_id) ?: ($r->user_email ?: 'Система'),
-                'action' => $r->action,
-                'comment' => $payload['comment'] ?? null,
-                'changes' => $changes,
-            ];
-        }
-
-        // Сортировка по дате убыв., обрезаем до 100 — больше в UI не нужно.
-        usort($entries, fn ($a, $b) => strcmp((string) $b['createdAt'], (string) $a['createdAt']));
-        $entries = array_slice($entries, 0, 100);
-
-        return response()->json(['data' => $entries]);
+        // Сборка ленты — в PartnerChangeLogService (метод занимал 136 строк).
+        return response()->json(['data' => $this->partnerChangeLog->forPartner($id)]);
     }
 
     public function partnerStatusHistory(int $id): JsonResponse
@@ -1049,148 +922,8 @@ class AdminDataController extends Controller
      */
     public function contractHistory(int $id): JsonResponse
     {
-        $rows = DB::table('activity_log')
-            ->where('subject_type', \App\Models\Contract::class)
-            ->where('subject_id', $id)
-            ->orderByDesc('created_at')
-            ->limit(200)
-            ->get();
-
-        $causerIds = $rows->pluck('causer_id')->filter()->unique();
-        $causers = $causerIds->isNotEmpty()
-            ? DB::table('WebUser')->whereIn('id', $causerIds)->select(['id', 'firstName', 'lastName', 'patronymic'])->get()->keyBy('id')
-            : collect();
-
-        $fieldLabels = [
-            'number' => '№ контракта',
-            'counterpartyContractId' => 'ИД контрагента',
-            'client' => 'Клиент', 'consultant' => 'Партнёр',
-            'product' => 'Продукт', 'program' => 'Программа',
-            'status' => 'Статус', 'currency' => 'Валюта',
-            'ammount' => 'Сумма', 'amount' => 'Сумма',
-            'country' => 'Страна оформления',
-            'createDate' => 'Дата создания',
-            'openDate' => 'Дата открытия',
-            'closeDate' => 'Дата закрытия',
-            'riskProfile' => 'Риск-профиль',
-            'setup' => 'Сетап',
-            'type' => 'Тип (страх.)',
-            'comment' => 'Комментарий',
-        ];
-
-        // Собираем все ID, чтобы резолвить human-friendly значения FK одним батчем.
-        $idsByField = [
-            'client' => [], 'consultant' => [], 'product' => [], 'program' => [],
-            'status' => [], 'currency' => [], 'country' => [], 'riskProfile' => [], 'setup' => [],
-        ];
-        foreach ($rows as $r) {
-            $props = json_decode($r->properties ?: '{}', true);
-            foreach (['old', 'attributes'] as $bucket) {
-                foreach ($props[$bucket] ?? [] as $field => $val) {
-                    if (isset($idsByField[$field]) && $val !== null && $val !== '') {
-                        $idsByField[$field][] = (int) $val;
-                    }
-                }
-            }
-        }
-        $resolveFn = function (string $table, string $col, array $ids): array {
-            $ids = array_values(array_unique(array_filter($ids)));
-            if (! $ids) return [];
-            return DB::table($table)->whereIn('id', $ids)->pluck($col, 'id')->toArray();
-        };
-        $maps = [
-            'client'      => $resolveFn('client', 'personName', $idsByField['client']),
-            'consultant'  => $resolveFn('consultant', 'personName', $idsByField['consultant']),
-            'product'     => $resolveFn('product', 'name', $idsByField['product']),
-            'program'     => $resolveFn('program', 'name', $idsByField['program']),
-            'status'      => $resolveFn('contractStatus', 'name', $idsByField['status']),
-            'currency'    => $resolveFn('currency', 'symbol', $idsByField['currency']),
-            'country'     => $resolveFn('country', 'countryNameRu', $idsByField['country']),
-            'riskProfile' => $resolveFn('riskProfile', 'name', $idsByField['riskProfile']),
-            'setup'       => $resolveFn('setup', 'setup', $idsByField['setup']),
-        ];
-
-        $humanize = function ($field, $val) use ($maps) {
-            if ($val === null || $val === '') return null;
-            if (isset($maps[$field][$val])) return $maps[$field][$val];
-            // Даты приводим к Y-m-d
-            if (in_array($field, ['createDate', 'openDate', 'closeDate'], true)) {
-                try { return (new \DateTimeImmutable((string) $val))->format('Y-m-d'); } catch (\Throwable) { return $val; }
-            }
-            return $val;
-        };
-
-        $data = $rows->map(function ($r) use ($causers, $fieldLabels, $humanize) {
-            $props = json_decode($r->properties ?: '{}', true);
-            $changes = [];
-            $oldValues = $props['old'] ?? [];
-            $newValues = $props['attributes'] ?? [];
-            foreach ($newValues as $field => $newVal) {
-                $oldVal = $oldValues[$field] ?? null;
-                if ($oldVal === $newVal) continue;
-                $changes[] = [
-                    'field' => $field,
-                    'fieldLabel' => $fieldLabels[$field] ?? $field,
-                    'old' => $humanize($field, $oldVal),
-                    'new' => $humanize($field, $newVal),
-                ];
-            }
-
-            $causer = $r->causer_id ? ($causers[$r->causer_id] ?? null) : null;
-            $author = $causer
-                ? trim("{$causer->lastName} {$causer->firstName} {$causer->patronymic}")
-                : 'Система';
-
-            return [
-                'id' => $r->id,
-                'createdAt' => $r->created_at,
-                'description' => $r->description,
-                'event' => $r->event,
-                'author' => $author,
-                'changes' => $changes,
-            ];
-        });
-
-        // Смена партнёра пишется напрямую в changeConsultantContractLog (в обход
-        // Eloquent-модели, поэтому её нет в activity_log). Вливаем эти события в
-        // единое окно истории — per spec §4 «все изменения контракта».
-        $transfers = DB::table('changeConsultantContractLog')
-            ->where('contract', $id)
-            ->orderByDesc('dateCreated')
-            ->limit(200)
-            ->get();
-
-        if ($transfers->isNotEmpty()) {
-            $tUserIds = $transfers->pluck('webUser')->filter()->unique();
-            $tUsers = $tUserIds->isNotEmpty()
-                ? DB::table('WebUser')->whereIn('id', $tUserIds)->select(['id', 'firstName', 'lastName', 'patronymic'])->get()->keyBy('id')
-                : collect();
-
-            $transferRows = $transfers->map(function ($t) use ($tUsers) {
-                $u = $t->webUser ? ($tUsers[$t->webUser] ?? null) : null;
-                $author = $u
-                    ? trim("{$u->lastName} {$u->firstName} {$u->patronymic}")
-                    : 'Система';
-
-                return [
-                    'id' => 'transfer-' . $t->id,
-                    'createdAt' => $t->dateCreated,
-                    'description' => 'Смена партнёра',
-                    'event' => 'reassign',
-                    'author' => $author,
-                    'changes' => [[
-                        'field' => 'consultant',
-                        'fieldLabel' => 'Партнёр',
-                        'old' => $t->consultantOldName,
-                        'new' => $t->consultantNewName,
-                    ]],
-                ];
-            });
-
-            $data = $data->concat($transferRows)->sortByDesc('createdAt')->values();
-        }
-
-        return response()->json(['data' => $data]);
+        // Сборка ленты — в ContractHistoryService (метод занимал 145 строк).
+        return response()->json(['data' => $this->contractHistory->forContract($id)]);
     }
 
     /** Статусы партнёров — сводка + детальный список */
