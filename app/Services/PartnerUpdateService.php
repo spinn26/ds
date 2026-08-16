@@ -92,112 +92,13 @@ class PartnerUpdateService
         $authorId = $request->user()?->id;
 
         DB::transaction(function () use ($consultant, $data, &$diff, &$inviterTransfer, $authorId) {
-            // --- consultant columns ---
-            $consultantFields = ['participantCode', 'inviter'];
-            foreach ($consultantFields as $col) {
-                if (! array_key_exists($col, $data)) continue;
-                $old = $consultant->{$col};
-                $new = $data[$col] ?: null;
-                if ((string) $old !== (string) $new) {
-                    $diff[$col] = ['from' => $old, 'to' => $new];
-                }
-            }
-            if (array_key_exists('participantCode', $data)) {
-                $consultant->participantCode = $data['participantCode'] ?: null;
-            }
-            if (array_key_exists('inviter', $data)) {
-                $prevInviterId = $consultant->inviter;
-                $prevInviterName = $consultant->inviterName;
-                $newInviterId = $data['inviter'] ?: null;
-                $consultant->inviter = $newInviterId;
-                // Денорм-имя пригласителя держим в синхроне с FK — иначе
-                // мини-профиль/списки показывают старого пригласителя.
-                $consultant->inviterName = $newInviterId
-                    ? DB::table('consultant')->where('id', $newInviterId)->value('personName')
-                    : null;
-                // Смена наставника через форму = перестановка. Фиксируем, чтобы
-                // ниже записать в Историю перестановок и запустить пересчёт —
-                // иначе перевод «теряется» (инцидент Салькова 2026-08).
-                if ((int) $prevInviterId !== (int) $newInviterId) {
-                    $inviterTransfer = [
-                        'oldId' => $prevInviterId, 'oldName' => $prevInviterName,
-                        'newId' => $newInviterId, 'newName' => $consultant->inviterName,
-                    ];
-                }
-            }
+            $this->applyConsultantFields($consultant, $data, $diff, $inviterTransfer);
 
-            // --- WebUser columns ---
+            // Контакты живут либо в WebUser, либо в самой карточке.
             if ($consultant->webUser) {
-                $current = DB::table('WebUser')->where('id', $consultant->webUser)->first();
-
-                $userUpdates = [];
-                $map = ['firstName', 'lastName', 'patronymic', 'email', 'phone', 'nicTG', 'gender', 'birthDate', 'role'];
-                foreach ($map as $col) {
-                    if (! array_key_exists($col, $data)) continue;
-                    $new = $data[$col] ?: null;
-                    $old = $current->{$col} ?? null;
-                    if ((string) $old !== (string) $new) {
-                        $diff[$col] = ['from' => $old, 'to' => $new];
-                    }
-                    $userUpdates[$col] = $new;
-                }
-                if (array_key_exists('isBlocked', $data)) {
-                    $newBlocked = (bool) $data['isBlocked'];
-                    $oldBlocked = (bool) ($current->isBlocked ?? false);
-                    if ($newBlocked !== $oldBlocked) {
-                        $diff['isBlocked'] = ['from' => $oldBlocked, 'to' => $newBlocked];
-                    }
-                    $userUpdates['isBlocked'] = $newBlocked;
-                }
-                if (! empty($data['newPassword'])) {
-                    $userUpdates['password'] = \Illuminate\Support\Facades\Hash::make($data['newPassword']);
-                    $diff['password'] = ['from' => '***', 'to' => '***'];
-                }
-                if (! empty($userUpdates)) {
-                    DB::table('WebUser')->where('id', $consultant->webUser)->update($userUpdates);
-                }
-
-                // При блокировке отзываем токены — иначе залогиненный партнёр
-                // работает до истечения токена (≤7 дней).
-                if (! empty($userUpdates['isBlocked'])) {
-                    \App\Models\User::find($consultant->webUser)?->tokens()->delete();
-                }
-
-                // Keep consultant.personName in sync with WebUser name parts
-                if (isset($userUpdates['firstName']) || isset($userUpdates['lastName']) || isset($userUpdates['patronymic'])) {
-                    $u = DB::table('WebUser')->where('id', $consultant->webUser)->first();
-                    $consultant->personName = trim("{$u->lastName} {$u->firstName} {$u->patronymic}");
-                }
+                $this->applyWebUserFields($consultant, $data, $diff);
             } else {
-                // Партнёр без логина: WebUser'а, куда писать контакты, нет —
-                // ведём их в собственных колонках. Раньше вся эта ветка
-                // отсутствовала, и правка карточки такого партнёра молча
-                // не сохранялась (893 импортированных ФК).
-                foreach (['email', 'phone', 'birthDate'] as $col) {
-                    if (! array_key_exists($col, $data)) continue;
-                    $new = $data[$col] ?: null;
-                    $old = $consultant->{$col};
-                    if ((string) $old !== (string) $new) {
-                        $diff[$col] = ['from' => $old, 'to' => $new];
-                    }
-                    $consultant->{$col} = $new;
-                }
-
-                $hasNameEdit = array_key_exists('lastName', $data)
-                    || array_key_exists('firstName', $data)
-                    || array_key_exists('patronymic', $data);
-                if ($hasNameEdit) {
-                    $parts = preg_split('/\s+/u', trim((string) $consultant->personName)) ?: [];
-                    $name = trim(implode(' ', array_filter([
-                        $data['lastName'] ?? ($parts[0] ?? null),
-                        $data['firstName'] ?? ($parts[1] ?? null),
-                        $data['patronymic'] ?? ($parts[2] ?? null),
-                    ])));
-                    if ($name !== '' && $name !== (string) $consultant->personName) {
-                        $diff['personName'] = ['from' => $consultant->personName, 'to' => $name];
-                        $consultant->personName = $name;
-                    }
-                }
+                $this->applyCardFields($consultant, $data, $diff);
             }
 
             $consultant->save();
@@ -274,5 +175,147 @@ class PartnerUpdateService
             ->update(['consultantName' => $newName]);
         DB::table('client')->where('consultant', $consultantId)
             ->update(['consultantName' => $newName]);
+    }
+
+    /**
+     * Колонки самой карточки: реф-код и наставник.
+     *
+     * ⚠ Смена наставника через форму — это перестановка: её надо занести в
+     * Историю перестановок и пересчитать цепочку, иначе перевод «теряется».
+     * Денормализованное имя наставника держим в синхроне с FK.
+     *
+     * @param array<string, mixed> $data
+     * @param array<string, mixed> $diff
+     */
+    private function applyConsultantFields(object $consultant, array $data, array &$diff, ?array &$inviterTransfer): void
+    {
+        // --- consultant columns ---
+        $consultantFields = ['participantCode', 'inviter'];
+        foreach ($consultantFields as $col) {
+            if (! array_key_exists($col, $data)) continue;
+            $old = $consultant->{$col};
+            $new = $data[$col] ?: null;
+            if ((string) $old !== (string) $new) {
+                $diff[$col] = ['from' => $old, 'to' => $new];
+            }
+        }
+        if (array_key_exists('participantCode', $data)) {
+            $consultant->participantCode = $data['participantCode'] ?: null;
+        }
+        if (array_key_exists('inviter', $data)) {
+            $prevInviterId = $consultant->inviter;
+            $prevInviterName = $consultant->inviterName;
+            $newInviterId = $data['inviter'] ?: null;
+            $consultant->inviter = $newInviterId;
+            // Денорм-имя пригласителя держим в синхроне с FK — иначе
+            // мини-профиль/списки показывают старого пригласителя.
+            $consultant->inviterName = $newInviterId
+                ? DB::table('consultant')->where('id', $newInviterId)->value('personName')
+                : null;
+            // Смена наставника через форму = перестановка. Фиксируем, чтобы
+            // ниже записать в Историю перестановок и запустить пересчёт —
+            // иначе перевод «теряется» (инцидент Салькова 2026-08).
+            if ((int) $prevInviterId !== (int) $newInviterId) {
+                $inviterTransfer = [
+                    'oldId' => $prevInviterId, 'oldName' => $prevInviterName,
+                    'newId' => $newInviterId, 'newName' => $consultant->inviterName,
+                ];
+            }
+        }
+
+    }
+
+    /**
+     * Контакты партнёра С логином: они живут в WebUser.
+     *
+     * ⚠ Блокировка отзывает токены — иначе залогиненный партнёр продолжает
+     * работать до их истечения. Правка ФИО каскадом уходит в personName.
+     *
+     * @param array<string, mixed> $data
+     * @param array<string, mixed> $diff
+     */
+    private function applyWebUserFields(object $consultant, array $data, array &$diff): void
+    {
+            $current = DB::table('WebUser')->where('id', $consultant->webUser)->first();
+
+            $userUpdates = [];
+            $map = ['firstName', 'lastName', 'patronymic', 'email', 'phone', 'nicTG', 'gender', 'birthDate', 'role'];
+            foreach ($map as $col) {
+                if (! array_key_exists($col, $data)) continue;
+                $new = $data[$col] ?: null;
+                $old = $current->{$col} ?? null;
+                if ((string) $old !== (string) $new) {
+                    $diff[$col] = ['from' => $old, 'to' => $new];
+                }
+                $userUpdates[$col] = $new;
+            }
+            if (array_key_exists('isBlocked', $data)) {
+                $newBlocked = (bool) $data['isBlocked'];
+                $oldBlocked = (bool) ($current->isBlocked ?? false);
+                if ($newBlocked !== $oldBlocked) {
+                    $diff['isBlocked'] = ['from' => $oldBlocked, 'to' => $newBlocked];
+                }
+                $userUpdates['isBlocked'] = $newBlocked;
+            }
+            if (! empty($data['newPassword'])) {
+                $userUpdates['password'] = \Illuminate\Support\Facades\Hash::make($data['newPassword']);
+                $diff['password'] = ['from' => '***', 'to' => '***'];
+            }
+            if (! empty($userUpdates)) {
+                DB::table('WebUser')->where('id', $consultant->webUser)->update($userUpdates);
+            }
+
+            // При блокировке отзываем токены — иначе залогиненный партнёр
+            // работает до истечения токена (≤7 дней).
+            if (! empty($userUpdates['isBlocked'])) {
+                \App\Models\User::find($consultant->webUser)?->tokens()->delete();
+            }
+
+            // Keep consultant.personName in sync with WebUser name parts
+            if (isset($userUpdates['firstName']) || isset($userUpdates['lastName']) || isset($userUpdates['patronymic'])) {
+                $u = DB::table('WebUser')->where('id', $consultant->webUser)->first();
+                $consultant->personName = trim("{$u->lastName} {$u->firstName} {$u->patronymic}");
+            }
+    }
+
+    /**
+     * Контакты партнёра БЕЗ логина: WebUser нет, всё пишется в собственные
+     * колонки карточки. Раньше этой ветки не было вовсе, и правка карточки
+     * такого партнёра молча не сохранялась (893 импортированных ФК).
+     *
+     * @param array<string, mixed> $data
+     * @param array<string, mixed> $diff
+     */
+    private function applyCardFields(object $consultant, array $data, array &$diff): void
+    {
+            // Партнёр без логина: WebUser'а, куда писать контакты, нет —
+            // ведём их в собственных колонках. Раньше вся эта ветка
+            // отсутствовала, и правка карточки такого партнёра молча
+            // не сохранялась (893 импортированных ФК).
+            foreach (['email', 'phone', 'birthDate'] as $col) {
+                if (! array_key_exists($col, $data)) continue;
+                $new = $data[$col] ?: null;
+                $old = $consultant->{$col};
+                if ((string) $old !== (string) $new) {
+                    $diff[$col] = ['from' => $old, 'to' => $new];
+                }
+                $consultant->{$col} = $new;
+            }
+
+            $hasNameEdit = array_key_exists('lastName', $data)
+                || array_key_exists('firstName', $data)
+                || array_key_exists('patronymic', $data);
+            if ($hasNameEdit) {
+                $parts = preg_split('/\s+/u', trim((string) $consultant->personName)) ?: [];
+                $name = trim(implode(' ', array_filter([
+                    $data['lastName'] ?? ($parts[0] ?? null),
+                    $data['firstName'] ?? ($parts[1] ?? null),
+                    $data['patronymic'] ?? ($parts[2] ?? null),
+                ])));
+                if ($name !== '' && $name !== (string) $consultant->personName) {
+                    $diff['personName'] = ['from' => $consultant->personName, 'to' => $name];
+                    $consultant->personName = $name;
+                }
+            }
     }
 }
