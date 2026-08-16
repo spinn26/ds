@@ -30,6 +30,24 @@ class TransactionsListingService
      */
     public function build(Request $request, PeriodFreezeService $freeze, callable $sorter, callable $paginator): array
     {
+        $query = $this->filtered($request);
+
+        // Считаем ДО пагинации и по всему отфильтрованному набору.
+        $total = $query->count();
+        $totals = $this->totals($query);
+
+        $rows = $this->page($query, $request, $sorter, $paginator);
+
+        return [
+            'data' => $this->present($rows, $freeze),
+            'total' => $total,
+            'aggregates' => $totals,
+        ];
+    }
+
+    /** Запрос со всеми фильтрами, без сортировки и пагинации. */
+    private function filtered(Request $request)
+    {
         $query = DB::table('transaction as t')
             ->leftJoin('contract as c', 'c.id', '=', 't.contract')
             ->whereNull('t.deletedAt');
@@ -109,7 +127,21 @@ class TransactionsListingService
             }
         }
 
-        $total = $query->count();
+
+        return $query;
+    }
+
+    /**
+     * Итоги панели над таблицей — по всему отфильтрованному набору.
+     *
+     * ⚠ «Прибыль» здесь живая (доход ДС минус сумма цепочки), а не из
+     * денормализованной колонки: та отстаёт после ночных штрафов. «Комиссия»
+     * считается по ВСЕЙ цепочке, «Комиссия ФК» — только по прямому партнёру.
+     *
+     * @return array<string, float>
+     */
+    private function totals($query): array
+    {
 
         // Агрегаты по всем строкам фильтра (не только видимая страница) —
         // для итоговой панели сверху таблицы. Запрос отдельный, чтобы
@@ -156,6 +188,28 @@ class TransactionsListingService
 
         // Базовый SELECT — фиксируем заранее, чтобы потом можно было
         // addSelect() для commission-полей при сортировке по ним.
+        return [
+            'amountRUB' => round((float) ($aggregates->amount_rub ?? 0), 2),
+            'commissionsAmountGrossRUB' => round((float) ($aggregates->commissions_gross_rub ?? 0), 2),
+            'commissionsAmountRUB' => round((float) ($aggregates->commissions_rub ?? 0), 2),
+            'commissionsAmountUSD' => round((float) ($aggregates->commissions_usd ?? 0), 2),
+            'netRevenueRUB' => round((float) ($aggregates->net_rub ?? 0), 2),
+            'netRevenueUSD' => round((float) ($aggregates->net_usd ?? 0), 2),
+            // Live итог «Прибыль» = Σ Доход ДС без НДС − Σ комиссий цепочки
+            // (совпадает с суммой per-row live-прибыли; denorm profit_rub
+            // может отставать после ночных штрафов).
+            'profitRUB' => round((float) ($aggregates->commissions_rub ?? 0) - $commissionTotal, 2),
+            // Итог колонки «Комиссия ФК» = Σ комиссий прямых партнёров
+            // (chainOrder=1) за отфильтрованные транзакции.
+            'partnerCommissionRUB' => round($directCommissionTotal, 2),
+            // Итог колонки «Комиссия» = Σ по всей цепочке (прямой + отрыв).
+            'dsWithholdingRUB' => round($commissionTotal, 2),
+        ];
+    }
+
+    /** Страница строк: select, сортировка по запросу, пагинация. */
+    private function page($query, Request $request, callable $sorter, callable $paginator)
+    {
         $query->select([
             't.*',
             'c.number as contractNumber',
@@ -246,6 +300,17 @@ class TransactionsListingService
         }
 
         $rows = $paginator($query)->get();
+
+        return $rows;
+    }
+    /**
+     * Всё связанное — одной пачкой на страницу: справочники, каталог,
+     * цепочка комиссий и признак заморозки периода.
+     *
+     * @return array<string, mixed>
+     */
+    private function related($rows, PeriodFreezeService $freeze): array
+    {
 
         $currencyIds = $rows->pluck('currency')->filter()->unique();
         $currencies = $currencyIds->isNotEmpty()
@@ -343,6 +408,15 @@ class TransactionsListingService
                 $frozenSet->put("$y-$m", true);
             }
         }
+
+
+        return ['currencies' => $currencies, 'properties' => $properties, 'productFlags' => $productFlags, 'programMeta' => $programMeta, 'productCatalog' => $productCatalog, 'programCatalog' => $programCatalog, 'commissionByTx' => $commissionByTx, 'partnerRowByTx' => $partnerRowByTx, 'frozenSet' => $frozenSet];
+    }
+
+    /** Строки страницы → массив для ответа. */
+    private function present($rows, PeriodFreezeService $freeze)
+    {
+        ['currencies' => $currencies, 'properties' => $properties, 'productFlags' => $productFlags, 'programMeta' => $programMeta, 'productCatalog' => $productCatalog, 'programCatalog' => $programCatalog, 'commissionByTx' => $commissionByTx, 'partnerRowByTx' => $partnerRowByTx, 'frozenSet' => $frozenSet] = $this->related($rows, $freeze);
 
         $data = $rows->map(function ($t) use ($currencies, $properties, $frozenSet, $productFlags, $programMeta, $productCatalog, $programCatalog, $commissionByTx, $partnerRowByTx) {
             $month = (int) substr((string) $t->dateMonth, -2);
@@ -451,26 +525,7 @@ class TransactionsListingService
             ];
         });
 
-        return [
-            'data' => $data,
-            'total' => $total,
-            'aggregates' => [
-                'amountRUB' => round((float) ($aggregates->amount_rub ?? 0), 2),
-                'commissionsAmountGrossRUB' => round((float) ($aggregates->commissions_gross_rub ?? 0), 2),
-                'commissionsAmountRUB' => round((float) ($aggregates->commissions_rub ?? 0), 2),
-                'commissionsAmountUSD' => round((float) ($aggregates->commissions_usd ?? 0), 2),
-                'netRevenueRUB' => round((float) ($aggregates->net_rub ?? 0), 2),
-                'netRevenueUSD' => round((float) ($aggregates->net_usd ?? 0), 2),
-                // Live итог «Прибыль» = Σ Доход ДС без НДС − Σ комиссий цепочки
-                // (совпадает с суммой per-row live-прибыли; denorm profit_rub
-                // может отставать после ночных штрафов).
-                'profitRUB' => round((float) ($aggregates->commissions_rub ?? 0) - $commissionTotal, 2),
-                // Итог колонки «Комиссия ФК» = Σ комиссий прямых партнёров
-                // (chainOrder=1) за отфильтрованные транзакции.
-                'partnerCommissionRUB' => round($directCommissionTotal, 2),
-                // Итог колонки «Комиссия» = Σ по всей цепочке (прямой + отрыв).
-                'dsWithholdingRUB' => round($commissionTotal, 2),
-            ],
-        ];
+
+        return $data;
     }
 }
