@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Services\SalesMatrixSupport;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -19,7 +20,11 @@ use Illuminate\Support\Facades\DB;
  */
 class ProductSalesMatrixController extends Controller
 {
-    /**
+        public function __construct(
+        private readonly SalesMatrixSupport $matrixSupport,
+    ) {}
+
+/**
      * GET /admin/reports/sales-matrix
      *
      * Params:
@@ -65,7 +70,7 @@ class ProductSalesMatrixController extends Controller
 
         // Фильтр по поставщику
         if (! empty($params['suppliers'])) {
-            $q->whereIn(DB::raw($this->resolvedSupplierSql()), $params['suppliers']);
+            $q->whereIn(DB::raw($this->matrixSupport->resolvedSupplierSql()), $params['suppliers']);
         }
         // Фильтр по продукту
         if (! empty($params['products'])) {
@@ -155,7 +160,7 @@ class ProductSalesMatrixController extends Controller
             ->whereNull('t.deletedAt');
 
         if (! empty($params['suppliers'])) {
-            $totalsQ->whereIn(DB::raw($this->resolvedSupplierSql()), $params['suppliers']);
+            $totalsQ->whereIn(DB::raw($this->matrixSupport->resolvedSupplierSql()), $params['suppliers']);
         }
         if (! empty($params['products'])) {
             $totalsQ->whereIn('co.product', $params['products']);
@@ -238,18 +243,6 @@ class ProductSalesMatrixController extends Controller
         ]);
     }
 
-    /**
-     * Канонический SQL «Поставщика» для sales-matrix: Insmart-продукты
-     * (product.name ~ ins+mart) сворачиваются в «Insmart», у остальных —
-     * program.providerName. Одно выражение для фильтра И для списка (lookups),
-     * иначе выбранное значение не совпадает с выдачей. Требует алиасы co
-     * (contract) и pg (program) в запросе.
-     */
-    private function resolvedSupplierSql(): string
-    {
-        return "CASE WHEN (SELECT pr.name FROM product pr WHERE pr.id = co.product) ~* 'ins+mart'"
-            . " THEN 'Insmart' ELSE COALESCE(pg.\"providerName\", '—') END";
-    }
 
     /**
      * Оставить только месяцы с данными (у grand.monthly есть запись). Иначе
@@ -288,7 +281,7 @@ class ProductSalesMatrixController extends Controller
         $suppliers = DB::table('contract as co')
             ->join('program as pg', 'pg.id', '=', 'co.program')
             ->whereNull('co.deletedAt')
-            ->selectRaw($this->resolvedSupplierSql() . ' as supplier')
+            ->selectRaw($this->matrixSupport->resolvedSupplierSql() . ' as supplier')
             ->distinct()
             ->orderBy('supplier')
             ->pluck('supplier')
@@ -352,7 +345,7 @@ class ProductSalesMatrixController extends Controller
             ->orderBy('p.id')->orderBy('pg.id')->orderBy('t.dateMonth');
 
         if (! empty($params['suppliers'])) {
-            $q->whereIn(DB::raw($this->resolvedSupplierSql()), $params['suppliers']);
+            $q->whereIn(DB::raw($this->matrixSupport->resolvedSupplierSql()), $params['suppliers']);
         }
         if (! empty($params['products'])) {
             $q->whereIn('p.id', $params['products']);
@@ -409,7 +402,7 @@ class ProductSalesMatrixController extends Controller
         $from = $params['from'];
         $to   = $params['to'];
 
-        $months = $this->monthRange($from, $to);
+        $months = $this->matrixSupport->monthRange($from, $to);
 
         $q = DB::table('transaction as t')
             ->join('contract as co', 'co.id', '=', 't.contract')
@@ -609,7 +602,7 @@ class ProductSalesMatrixController extends Controller
         $to     = $params['to'];
         $fcFrom = $params['fcFrom'] ?? null;
         $fcTo   = $params['fcTo']   ?? null;
-        $months = $this->monthRange($from, $to);
+        $months = $this->matrixSupport->monthRange($from, $to);
 
         // Вычисляем границы периода по openDate (исключительная правая граница)
         [$ty, $tm] = explode('-', $to);
@@ -632,7 +625,7 @@ class ProductSalesMatrixController extends Controller
             ->when($fcFrom, fn ($q) => $q->whereDate('co.accrual_forecast', '>=', $fcFrom))
             ->when($fcTo, fn ($q) => $q->whereDate('co.accrual_forecast', '<=', $fcTo))
             ->when(! empty($params['suppliers']), fn ($q) =>
-                $q->whereIn(DB::raw($this->resolvedSupplierSql()), $params['suppliers'])
+                $q->whereIn(DB::raw($this->matrixSupport->resolvedSupplierSql()), $params['suppliers'])
             )
             ->when(! empty($params['products']), fn ($q) =>
                 $q->whereIn('co.product', $params['products'])
@@ -654,7 +647,7 @@ class ProductSalesMatrixController extends Controller
                 'pg.id   as program_id',
                 'pg.name as program_name',
                 $periodExpr,
-                DB::raw('SUM(COALESCE(co.ammount, 0) * '.$this->rateExpr('openDate').') as volume'),
+                DB::raw('SUM(COALESCE(co.ammount, 0) * '.$this->matrixSupport->rateExpr('openDate').') as volume'),
                 DB::raw('COUNT(DISTINCT co.id)                              as cnt'),
                 DB::raw('0                                                  as revenue'),
                 DB::raw('0                                                  as points'),
@@ -853,9 +846,9 @@ class ProductSalesMatrixController extends Controller
 
         $from   = $params['from'];
         $to     = $params['to'];
-        $months = $this->monthRange($from, $to);
+        $months = $this->matrixSupport->monthRange($from, $to);
 
-        $toExclusive = $this->monthExclusiveStart($to);
+        $toExclusive = $this->matrixSupport->monthExclusiveStart($to);
 
         // Доп. фильтр по прогнозу активации (SmartRangeFilter — даты Y-m-d,
         // границы независимы и инклюзивны по дню).
@@ -875,7 +868,7 @@ class ProductSalesMatrixController extends Controller
             ->when($fcFrom, fn ($q) => $q->whereDate('co.activation_forecast', '>=', $fcFrom))
             ->when($fcTo, fn ($q) => $q->whereDate('co.activation_forecast', '<=', $fcTo))
             ->when(! empty($params['suppliers']), fn ($q) =>
-                $q->whereIn(DB::raw($this->resolvedSupplierSql()), $params['suppliers'])
+                $q->whereIn(DB::raw($this->matrixSupport->resolvedSupplierSql()), $params['suppliers'])
             )
             ->when(! empty($params['products']), fn ($q) =>
                 $q->whereIn('co.product', $params['products'])
@@ -895,7 +888,7 @@ class ProductSalesMatrixController extends Controller
                 'pg.id   as program_id',
                 'pg.name as program_name',
                 $periodExpr,
-                DB::raw('SUM(COALESCE(co.ammount, 0) * '.$this->rateExpr('createDate').') as volume'),
+                DB::raw('SUM(COALESCE(co.ammount, 0) * '.$this->matrixSupport->rateExpr('createDate').') as volume'),
                 DB::raw('COUNT(DISTINCT co.id)             as cnt'),
                 DB::raw('0                                 as revenue'),
                 DB::raw('0                                 as points'),
@@ -956,7 +949,7 @@ class ProductSalesMatrixController extends Controller
                 'co.ammount',
                 'co.term',
                 'pg.dsPercent as program_ds',
-                DB::raw($this->rateExpr($periodCol).' as rate'),
+                DB::raw($this->matrixSupport->rateExpr($periodCol).' as rate'),
             ])
             ->get();
 
@@ -1066,7 +1059,7 @@ class ProductSalesMatrixController extends Controller
                 'co.term',
                 'pg.dsPercent as program_ds',
                 DB::raw('co."'.$periodCol.'"::date as cdate'),
-                DB::raw($this->rateExpr($periodCol).' as rate'),
+                DB::raw($this->matrixSupport->rateExpr($periodCol).' as rate'),
             ])
             ->get();
 
@@ -1203,7 +1196,7 @@ class ProductSalesMatrixController extends Controller
                 })
             )
             ->when(! empty($params['suppliers']), fn ($q) =>
-                $q->whereIn(DB::raw($this->resolvedSupplierSql()), $params['suppliers'])
+                $q->whereIn(DB::raw($this->matrixSupport->resolvedSupplierSql()), $params['suppliers'])
             )
             ->when(! empty($params['products']), fn ($q) =>
                 $q->whereIn('co.product', $params['products'])
@@ -1340,7 +1333,7 @@ class ProductSalesMatrixController extends Controller
 
         // Колонки месяцев: при заданном периоде показываем весь диапазон (включая пустые)
         if ($hasPeriod) {
-            $months = $this->monthRange($from, $to);
+            $months = $this->matrixSupport->monthRange($from, $to);
         } else {
             sort($months);
         }
@@ -1397,7 +1390,7 @@ class ProductSalesMatrixController extends Controller
 
         $from   = $params['from'];
         $to     = $params['to'];
-        $months = $this->monthRange($from, $to);
+        $months = $this->matrixSupport->monthRange($from, $to);
 
         // Базовый builder: транзакции внутри периода по месяцу транзакции (dateMonth).
         // amountRUB/netRevenueRUB уже в рублях — конвертация валют не нужна.
@@ -1409,7 +1402,7 @@ class ProductSalesMatrixController extends Controller
             ->whereNull('co.deletedAt')
             ->whereNull('t.deletedAt')
             ->when(! empty($params['suppliers']), fn ($q) =>
-                $q->whereIn(DB::raw($this->resolvedSupplierSql()), $params['suppliers'])
+                $q->whereIn(DB::raw($this->matrixSupport->resolvedSupplierSql()), $params['suppliers'])
             )
             ->when(! empty($params['products']), fn ($q) =>
                 $q->whereIn('co.product', $params['products'])
@@ -1642,14 +1635,14 @@ class ProductSalesMatrixController extends Controller
         ]);
         $from = $params['from'];
         $to   = $params['to'];
-        $months = $this->monthRange($from, $to);
-        $toExclusive = $this->monthExclusiveStart($to);
+        $months = $this->matrixSupport->monthRange($from, $to);
+        $toExclusive = $this->matrixSupport->monthExclusiveStart($to);
         $sup = $params['suppliers'] ?? [];
         $prod = $params['products'] ?? [];
 
         $applyFilters = function ($q) use ($sup, $prod) {
             return $q
-                ->when(! empty($sup), fn ($qq) => $qq->whereIn(DB::raw($this->resolvedSupplierSql()), $sup))
+                ->when(! empty($sup), fn ($qq) => $qq->whereIn(DB::raw($this->matrixSupport->resolvedSupplierSql()), $sup))
                 ->when(! empty($prod), fn ($qq) => $qq->whereIn('co.product', $prod));
         };
 
@@ -1804,7 +1797,7 @@ class ProductSalesMatrixController extends Controller
             ->select([
                 'co.product as pid',
                 DB::raw($periodExpr.' as m'),
-                DB::raw('SUM(COALESCE(co.ammount,0) * '.$this->rateExpr($periodCol).') as volume'),
+                DB::raw('SUM(COALESCE(co.ammount,0) * '.$this->matrixSupport->rateExpr($periodCol).') as volume'),
                 DB::raw('COUNT(DISTINCT co.id) as cnt'),
                 DB::raw('COUNT(DISTINCT co.client) as cl'),
                 DB::raw('COUNT(DISTINCT co.consultant) as fc'),
@@ -1830,7 +1823,7 @@ class ProductSalesMatrixController extends Controller
                 DB::raw($periodExpr.' as m'),
                 'co.ammount', 'co.term', 'pg.dsPercent as program_ds',
                 DB::raw('co."'.$periodCol.'"::date as cdate'),
-                DB::raw($this->rateExpr($periodCol).' as rate'),
+                DB::raw($this->matrixSupport->rateExpr($periodCol).' as rate'),
             ])
             ->get();
         $dsCache = [];
@@ -1934,32 +1927,7 @@ class ProductSalesMatrixController extends Controller
         return compact('pm', 'p', 'mo', 'g', 'pl');
     }
 
-    /**
-     * SQL-выражение курса RUB из НОВОГО справочника management_currency_rate.
-     * Берём «эффективный» курс: последний с датой ≤ месяца контракта; если для
-     * валюты нет курса до этой даты — самый ранний из имеющихся; иначе 1.
-     * Старый справочник currencyRate здесь НЕ используется. $dateCol — колонка
-     * даты контракта, по месяцу которой берём курс (createDate / openDate).
-     */
-    private function rateExpr(string $dateCol): string
-    {
-        $month = 'DATE_TRUNC(\'month\', co."'.$dateCol.'"::date)::date';
 
-        return '(COALESCE('
-            .'(SELECT m.rate FROM management_currency_rate m WHERE m.currency = co.currency AND m.date <= '.$month.' ORDER BY m.date DESC LIMIT 1),'
-            .'(SELECT m.rate FROM management_currency_rate m WHERE m.currency = co.currency ORDER BY m.date ASC LIMIT 1),'
-            .'1))';
-    }
-
-    /** Начало месяца, следующего за $ym (исключительная правая граница), 'YYYY-MM-01'. */
-    private function monthExclusiveStart(string $ym): string
-    {
-        [$y, $m] = explode('-', $ym);
-        $m = (int) $m + 1;
-        if ($m > 12) { $m = 1; $y = (int) $y + 1; }
-
-        return sprintf('%04d-%02d-01', (int) $y, $m);
-    }
 
     /**
      * Общая сборка матрицы продукт×программа×месяц из строк агрегации
@@ -2094,19 +2062,6 @@ class ProductSalesMatrixController extends Controller
         ];
     }
 
-    private function monthRange(string $from, string $to): array
-    {
-        $months = [];
-        $cur    = $from;
-        while ($cur <= $to) {
-            $months[] = $cur;
-            [$y, $m]  = explode('-', $cur);
-            $m = (int) $m + 1;
-            if ($m > 12) { $m = 1; $y = (int) $y + 1; }
-            $cur = sprintf('%04d-%02d', (int) $y, $m);
-        }
-        return $months;
-    }
 
     /**
      * Drill-down: список контрактов конкретной ячейки матрицы (продукт × месяц ×
@@ -2134,7 +2089,7 @@ class ProductSalesMatrixController extends Controller
         $programId = $params['program'] ?? null;
         $suppliers = $params['suppliers'] ?? [];
         $monthStart     = $month.'-01';
-        $monthExclusive = $this->monthExclusiveStart($month);
+        $monthExclusive = $this->matrixSupport->monthExclusiveStart($month);
 
         // Общие фильтры ячейки: пригвождаем продукт (+опц. программу) и поставщика.
         $common = function ($q) use ($suppliers, $productId, $programId) {
@@ -2142,7 +2097,7 @@ class ProductSalesMatrixController extends Controller
                 ->where('co.product', $productId)
                 ->when($programId, fn ($qq) => $qq->where('co.program', $programId))
                 ->when(! empty($suppliers), fn ($qq) =>
-                    $qq->whereIn(DB::raw($this->resolvedSupplierSql()), $suppliers));
+                    $qq->whereIn(DB::raw($this->matrixSupport->resolvedSupplierSql()), $suppliers));
         };
 
         $inworkQ = fn () => $common(DB::table('contract as co')

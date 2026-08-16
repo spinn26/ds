@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Services\SalesMatrixSupport;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -30,7 +31,11 @@ use Illuminate\Support\Facades\DB;
  */
 class PartnerSalesMatrixController extends Controller
 {
-    /**
+        public function __construct(
+        private readonly SalesMatrixSupport $matrixSupport,
+    ) {}
+
+/**
      * GET /admin/reports/partner-matrix/fact
      * Params: from, to (Y-m), suppliers[], products[], structures[] (root consultant ids), fcs[] (consultant ids)
      */
@@ -69,7 +74,7 @@ class PartnerSalesMatrixController extends Controller
      */
     private function buildResponse(array $params, string $mode): array
     {
-        $months = $this->monthRange($params['from'], $params['to']);
+        $months = $this->matrixSupport->monthRange($params['from'], $params['to']);
         $result = $this->assemblePartnerTree($this->rowsForMode($params, $mode), $months, $params, $mode === 'total');
         $result['denominators'] = $this->denominators($params, $mode, $months);
 
@@ -124,17 +129,6 @@ class PartnerSalesMatrixController extends Controller
         ];
     }
 
-    /**
-     * Канонический SQL «Поставщика»: Insmart-продукты (product.name ~ ins+mart)
-     * → «Insmart», остальные → program.providerName. То же выражение, что в
-     * продуктовом отчёте и в списке фильтра (manual-tx lookups), иначе выбор
-     * «Insmart» не совпадает с выдачей. Требует алиасы co (contract), pg (program).
-     */
-    private function resolvedSupplierSql(): string
-    {
-        return "CASE WHEN (SELECT pr.name FROM product pr WHERE pr.id = co.product) ~* 'ins+mart'"
-            . " THEN 'Insmart' ELSE COALESCE(pg.\"providerName\", '—') END";
-    }
 
     /** Плоские строки состояния «Факт» (по транзакциям). */
     private function factRows(array $params)
@@ -155,7 +149,7 @@ class PartnerSalesMatrixController extends Controller
             ->whereNull('co.deletedAt')
             ->whereNull('t.deletedAt')
             ->when(! empty($params['suppliers']), fn ($q) =>
-                $q->whereIn(DB::raw($this->resolvedSupplierSql()), $params['suppliers']))
+                $q->whereIn(DB::raw($this->matrixSupport->resolvedSupplierSql()), $params['suppliers']))
             ->when(! empty($params['products']), fn ($q) =>
                 $q->whereIn('co.product', $params['products']))
             ->when(! empty($params['structures']), fn ($q) =>
@@ -194,7 +188,7 @@ class PartnerSalesMatrixController extends Controller
     private function contractRows(array $params, string $mode)
     {
         [$from, $to] = [$params['from'], $params['to']];
-        $toExclusive = $this->monthExclusiveStart($to);
+        $toExclusive = $this->matrixSupport->monthExclusiveStart($to);
 
         if ($mode === 'inwork') {
             // «В работе»: по дате создания, ещё не активированные. Исключаем
@@ -215,7 +209,7 @@ class PartnerSalesMatrixController extends Controller
 
         $periodExpr = DB::raw("TO_CHAR(DATE_TRUNC('month', co.\"$dateCol\"::date), 'YYYY-MM') as period_month");
         $periodTrunc = DB::raw("DATE_TRUNC('month', co.\"$dateCol\"::date)");
-        $volumeExpr = DB::raw('SUM(COALESCE(co.ammount, 0) * ' . $this->rateExpr($dateCol) . ') as volume');
+        $volumeExpr = DB::raw('SUM(COALESCE(co.ammount, 0) * ' . $this->matrixSupport->rateExpr($dateCol) . ') as volume');
 
         return DB::table('contract as co')
             ->join('consultant as cons', 'cons.id', '=', 'co.consultant')
@@ -227,7 +221,7 @@ class PartnerSalesMatrixController extends Controller
             ->whereRaw("co.\"$dateCol\"::date < ?", [$toExclusive])
             ->where($statusFn)
             ->when(! empty($params['suppliers']), fn ($q) =>
-                $q->whereIn(DB::raw($this->resolvedSupplierSql()), $params['suppliers']))
+                $q->whereIn(DB::raw($this->matrixSupport->resolvedSupplierSql()), $params['suppliers']))
             ->when(! empty($params['products']), fn ($q) =>
                 $q->whereIn('co.product', $params['products']))
             ->when(! empty($params['structures']), fn ($q) =>
@@ -272,7 +266,7 @@ class PartnerSalesMatrixController extends Controller
                 ->whereNotExists(fn ($sub) => $sub->select(DB::raw(1))->from('transaction as tx')
                     ->whereColumn('tx.contract', 'co.id')->whereNull('tx.deletedAt'));
         [$from, $to] = [$params['from'], $params['to']];
-        $toExclusive = $this->monthExclusiveStart($to);
+        $toExclusive = $this->matrixSupport->monthExclusiveStart($to);
 
         $vatPercent = \App\Support\VatRate::percentOrDefault();
         $defaultDs = (float) \App\Models\SystemSetting::value('commission.default_ds_percent', 100);
@@ -285,7 +279,7 @@ class PartnerSalesMatrixController extends Controller
             ->whereRaw("co.\"$dateCol\"::date < ?", [$toExclusive])
             ->where($statusFn)
             ->when(! empty($params['suppliers']), fn ($q) =>
-                $q->whereIn(DB::raw($this->resolvedSupplierSql()), $params['suppliers']))
+                $q->whereIn(DB::raw($this->matrixSupport->resolvedSupplierSql()), $params['suppliers']))
             ->when(! empty($params['products']), fn ($q) =>
                 $q->whereIn('co.product', $params['products']))
             ->when(! empty($params['structures']), fn ($q) =>
@@ -301,7 +295,7 @@ class PartnerSalesMatrixController extends Controller
                 'co.ammount',
                 'co.term',
                 'pg.dsPercent as program_ds',
-                DB::raw($this->rateExpr($dateCol) . ' as rate'),
+                DB::raw($this->matrixSupport->rateExpr($dateCol) . ' as rate'),
             ])
             ->get();
 
@@ -339,23 +333,7 @@ class PartnerSalesMatrixController extends Controller
         }
     }
 
-    /** Корреляционное курсовое выражение (как в продуктовом отчёте). */
-    private function rateExpr(string $dateCol): string
-    {
-        $month = 'DATE_TRUNC(\'month\', co."' . $dateCol . '"::date)::date';
-        return '(COALESCE('
-            . '(SELECT m.rate FROM management_currency_rate m WHERE m.currency = co.currency AND m.date <= ' . $month . ' ORDER BY m.date DESC LIMIT 1),'
-            . '(SELECT m.rate FROM management_currency_rate m WHERE m.currency = co.currency ORDER BY m.date ASC LIMIT 1),'
-            . '1))';
-    }
 
-    /** Первое число месяца, следующего за $ym (Y-m). */
-    private function monthExclusiveStart(string $ym): string
-    {
-        [$y, $m] = array_map('intval', explode('-', $ym));
-        if (++$m > 12) { $m = 1; $y++; }
-        return sprintf('%04d-%02d-01', $y, $m);
-    }
 
     /**
      * GET /admin/reports/partner-matrix/lookups
@@ -415,19 +393,6 @@ class PartnerSalesMatrixController extends Controller
         return $p;
     }
 
-    /** YYYY-MM список месяцев включительно. */
-    private function monthRange(string $from, string $to): array
-    {
-        $out = [];
-        [$fy, $fm] = array_map('intval', explode('-', $from));
-        [$ty, $tm] = array_map('intval', explode('-', $to));
-        $y = $fy; $m = $fm;
-        while ($y < $ty || ($y === $ty && $m <= $tm)) {
-            $out[] = sprintf('%04d-%02d', $y, $m);
-            if (++$m > 12) { $m = 1; $y++; }
-        }
-        return $out;
-    }
 
     /**
      * Все ФК поддерева выбранных структур: сами структуры + все нижестоящие
