@@ -60,6 +60,8 @@ class SalesMatrixTest extends TestCase
         $this->assertEqualsWithDelta(50_000, $grand['revenue'], 0.01, 'выручка = доход ДС');
         $this->assertEqualsWithDelta(1_000_000, $grand['volume'], 0.01, 'объём = сумма контрактов');
         $this->assertEqualsWithDelta(500, $grand['points'], 0.01, 'баллы = personalVolume');
+        // Средний чек — производное поле: объём делится на число транзакций.
+        $this->assertEqualsWithDelta(1_000_000, $grand['avgCheck'], 0.01);
     }
 
     /** Строки раскладываются по месяцу транзакции, а не контракта. */
