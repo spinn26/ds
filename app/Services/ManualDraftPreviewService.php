@@ -99,52 +99,8 @@ class ManualDraftPreviewService
             }
         }
 
-        // %ДС: override → Medlife: первая транзакция → программа → справочник → 100%
-        $dsPercent = (float) ($draft->dsCommissionPercentage ?? 0);
+        $dsPercent = $this->resolveDsPercent($draft, $contract, $programRow, $isMedlife, $resolvedParameter);
 
-        // Medlife: если override не задан явно — наследуем от первой
-        // зафиксированной транзакции на этом контракте (per spec §2.2 «Изменить»).
-        if ($dsPercent <= 0 && $isMedlife && $contract->id) {
-            $firstTx = DB::table('transaction')
-                ->where('contract', $contract->id)
-                ->whereNull('deletedAt')
-                ->whereNotNull('dsCommissionPercentage')
-                ->orderBy('date')
-                ->orderBy('id')
-                ->first(['dsCommissionPercentage']);
-            if ($firstTx && $firstTx->dsCommissionPercentage > 0) {
-                $dsPercent = (float) $firstTx->dsCommissionPercentage;
-            }
-        }
-
-        // Property-specific тариф побеждает scalar program.dsPercent при заданном
-        // свойстве — превью=факт (см. CommissionCalculator::calculateInTransaction).
-        // Иначе Апфронт (IB) получал бы ставку МФ 30% вместо 1.8%.
-        if ($dsPercent <= 0 && $resolvedParameter !== null && $contract->program) {
-            $byProperty = \App\Services\CommissionCalculator::resolveLegacyDsCommission(
-                (int) $contract->program,
-                $contract->term ?? null,
-                $resolvedParameter,
-                $draft->date ?? null,
-            );
-            if ($byProperty !== null && $byProperty > 0) {
-                $dsPercent = (float) $byProperty;
-            }
-        }
-        if ($dsPercent <= 0 && $programRow && $programRow->dsPercent !== null) {
-            $dsPercent = (float) $programRow->dsPercent;
-        }
-        if ($dsPercent <= 0 && $contract->program) {
-            // Fallback без свойства. Тот же резолвер, что в каскаде
-            // (program × term × год КВ × дата). $resolvedParameter =
-            // commissionCalcProperty.id (для has_year_kv выведен из yearKV выше).
-            $dsPercent = (float) (\App\Services\CommissionCalculator::resolveLegacyDsCommission(
-                (int) $contract->program,
-                $contract->term ?? null,
-                $resolvedParameter ?? null,
-                $draft->date ?? null,
-            ) ?? 0);
-        }
         // Своя комиссия: пользователь сам ввёл сумму ДохДС → %ДС обратным расчётом.
         // Сравнение с нулём по модулю: у сторно и сумма, и доход ДС отрицательные
         // (см. тот же гард в CommissionCalculator) — иначе превью показывало бы 0%.
@@ -205,66 +161,7 @@ class ManualDraftPreviewService
             ];
         }
 
-        $directQual = $this->resolveQual($consultantId, $draft->date);
-        $directPercent = $directQual['percent'];
-
-        // Терминированного (3) / исключённого (5) прямого партнёра НЕ начисляем —
-        // паритет с CommissionCalculator: его «доля» остаётся у компании, но
-        // проценты/ЛП посчитаны как база для каскада вверх. Иначе превью
-        // показывало комиссию терминированному (кейс Шефер А.П., activity=3).
-        $directRow = DB::table('consultant')->where('id', $consultantId)->first();
-        $directInactive = $this->isInactiveActivity($directRow->activity ?? null);
-
-        $chain = [];
-        $chain[] = [
-            'consultantId' => $consultantId,
-            'name' => $directRow->personName ?? null,
-            'percent' => $directPercent,
-            'lp' => round($points, 2),       // ЛП у прямого партнёра
-            'gp' => 0,                       // ГП у прямого = 0 (его собственная продажа не ГП)
-            'points' => $directInactive ? 0 : round($points * $directPercent / 100, 2),
-            'sum' => $directInactive ? 0 : round($points * $directPercent, 2),
-            'isDirect' => true,
-            'inactive' => $directInactive,
-        ];
-
-        $current = $consultantId;
-        $prevPercent = $directPercent;
-        $visited = [$consultantId];
-        for ($i = 0; $i < 20; $i++) {
-            $row = DB::table('consultant')->where('id', $current)->first();
-            $inviterId = $row->inviter ?? null;
-            if (! $inviterId || in_array($inviterId, $visited)) break;
-            $visited[] = $inviterId;
-
-            $inviter = DB::table('consultant')->where('id', $inviterId)->first();
-            if (! $inviter) break;
-
-            $invQual = $this->resolveQual($inviterId, $draft->date);
-            $margin = $invQual['percent'] - $prevPercent;
-
-            // Терминированного/исключённого наставника не начисляем (паритет с
-            // CommissionCalculator): маржа не выплачивается, его «слой»
-            // поглощается компанией. prevPercent всё равно сдвигаем на его % —
-            // следующий активный наставник получает свой обычный инкремент.
-            $invInactive = $this->isInactiveActivity($inviter->activity ?? null);
-            $paid = $margin > 0 && ! $invInactive;
-
-            $chain[] = [
-                'consultantId' => $inviterId,
-                'name' => $inviter->personName,
-                'percent' => $invQual['percent'],
-                'lp' => 0,                       // ЛП у наставника = 0 (продажа не его)
-                'gp' => round($points, 2),       // ГП у наставника = объём, поднявшийся снизу
-                'points' => $paid ? round($points * $margin / 100, 2) : 0,
-                'sum' => $paid ? round($points * $margin, 2) : 0,
-                'isDirect' => false,
-                'inactive' => $invInactive,
-            ];
-
-            $prevPercent = max($prevPercent, $invQual['percent']);
-            $current = $inviterId;
-        }
+        $chain = $this->buildChain($consultantId, $draft, $points);
 
         $partnersTotal = array_sum(array_column($chain, 'sum'));
         $profitDS = round($incomeDS - $partnersTotal, 2);
@@ -372,5 +269,141 @@ class ManualDraftPreviewService
     private function resolveQual(int $consultantId, ?string $date): array
     {
         return $this->calculator->resolveLevelForPreview($consultantId, $date);
+    }
+
+    /**
+     * %ДС по приоритету: явный override → наследование у первой транзакции
+     * контракта (Medlife) → тариф по свойству → ставка программы → тарифная
+     * сетка. Ничего не нашли — остаётся ноль, и это отдельный признак:
+     * подставлять сто процентов нельзя, доход ДС становился равен всей сумме
+     * без НДС.
+     */
+    private function resolveDsPercent(object $draft, object $contract, ?object $programRow, bool $isMedlife, $resolvedParameter): float
+    {
+        // %ДС: override → Medlife: первая транзакция → программа → справочник → 100%
+        $dsPercent = (float) ($draft->dsCommissionPercentage ?? 0);
+
+        // Medlife: если override не задан явно — наследуем от первой
+        // зафиксированной транзакции на этом контракте (per spec §2.2 «Изменить»).
+        if ($dsPercent <= 0 && $isMedlife && $contract->id) {
+            $firstTx = DB::table('transaction')
+                ->where('contract', $contract->id)
+                ->whereNull('deletedAt')
+                ->whereNotNull('dsCommissionPercentage')
+                ->orderBy('date')
+                ->orderBy('id')
+                ->first(['dsCommissionPercentage']);
+            if ($firstTx && $firstTx->dsCommissionPercentage > 0) {
+                $dsPercent = (float) $firstTx->dsCommissionPercentage;
+            }
+        }
+
+        // Property-specific тариф побеждает scalar program.dsPercent при заданном
+        // свойстве — превью=факт (см. CommissionCalculator::calculateInTransaction).
+        // Иначе Апфронт (IB) получал бы ставку МФ 30% вместо 1.8%.
+        if ($dsPercent <= 0 && $resolvedParameter !== null && $contract->program) {
+            $byProperty = \App\Services\CommissionCalculator::resolveLegacyDsCommission(
+                (int) $contract->program,
+                $contract->term ?? null,
+                $resolvedParameter,
+                $draft->date ?? null,
+            );
+            if ($byProperty !== null && $byProperty > 0) {
+                $dsPercent = (float) $byProperty;
+            }
+        }
+        if ($dsPercent <= 0 && $programRow && $programRow->dsPercent !== null) {
+            $dsPercent = (float) $programRow->dsPercent;
+        }
+        if ($dsPercent <= 0 && $contract->program) {
+            // Fallback без свойства. Тот же резолвер, что в каскаде
+            // (program × term × год КВ × дата). $resolvedParameter =
+            // commissionCalcProperty.id (для has_year_kv выведен из yearKV выше).
+            $dsPercent = (float) (\App\Services\CommissionCalculator::resolveLegacyDsCommission(
+                (int) $contract->program,
+                $contract->term ?? null,
+                $resolvedParameter ?? null,
+                $draft->date ?? null,
+            ) ?? 0);
+        }
+
+        return $dsPercent;
+    }
+
+    /**
+     * Цепочка выплат: прямой партнёр и наставники вверх по inviter.
+     *
+     * ⚠ Наставник получает МАРЖУ — разницу процентов, а планка не опускается
+     * (max с достигнутым). Терминированным не начисляется, но их процент
+     * планку всё равно сдвигает: следующий активный получает свой обычный
+     * инкремент, а не расширенный.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function buildChain(int $consultantId, object $draft, float $points): array
+    {
+        $directQual = $this->resolveQual($consultantId, $draft->date);
+        $directPercent = $directQual['percent'];
+
+        // Терминированного (3) / исключённого (5) прямого партнёра НЕ начисляем —
+        // паритет с CommissionCalculator: его «доля» остаётся у компании, но
+        // проценты/ЛП посчитаны как база для каскада вверх. Иначе превью
+        // показывало комиссию терминированному (кейс Шефер А.П., activity=3).
+        $directRow = DB::table('consultant')->where('id', $consultantId)->first();
+        $directInactive = $this->isInactiveActivity($directRow->activity ?? null);
+
+        $chain = [];
+        $chain[] = [
+            'consultantId' => $consultantId,
+            'name' => $directRow->personName ?? null,
+            'percent' => $directPercent,
+            'lp' => round($points, 2),       // ЛП у прямого партнёра
+            'gp' => 0,                       // ГП у прямого = 0 (его собственная продажа не ГП)
+            'points' => $directInactive ? 0 : round($points * $directPercent / 100, 2),
+            'sum' => $directInactive ? 0 : round($points * $directPercent, 2),
+            'isDirect' => true,
+            'inactive' => $directInactive,
+        ];
+
+        $current = $consultantId;
+        $prevPercent = $directPercent;
+        $visited = [$consultantId];
+        for ($i = 0; $i < 20; $i++) {
+            $row = DB::table('consultant')->where('id', $current)->first();
+            $inviterId = $row->inviter ?? null;
+            if (! $inviterId || in_array($inviterId, $visited)) break;
+            $visited[] = $inviterId;
+
+            $inviter = DB::table('consultant')->where('id', $inviterId)->first();
+            if (! $inviter) break;
+
+            $invQual = $this->resolveQual($inviterId, $draft->date);
+            $margin = $invQual['percent'] - $prevPercent;
+
+            // Терминированного/исключённого наставника не начисляем (паритет с
+            // CommissionCalculator): маржа не выплачивается, его «слой»
+            // поглощается компанией. prevPercent всё равно сдвигаем на его % —
+            // следующий активный наставник получает свой обычный инкремент.
+            $invInactive = $this->isInactiveActivity($inviter->activity ?? null);
+            $paid = $margin > 0 && ! $invInactive;
+
+            $chain[] = [
+                'consultantId' => $inviterId,
+                'name' => $inviter->personName,
+                'percent' => $invQual['percent'],
+                'lp' => 0,                       // ЛП у наставника = 0 (продажа не его)
+                'gp' => round($points, 2),       // ГП у наставника = объём, поднявшийся снизу
+                'points' => $paid ? round($points * $margin / 100, 2) : 0,
+                'sum' => $paid ? round($points * $margin, 2) : 0,
+                'isDirect' => false,
+                'inactive' => $invInactive,
+            ];
+
+            $prevPercent = max($prevPercent, $invQual['percent']);
+            $current = $inviterId;
+        }
+
+
+        return $chain;
     }
 }

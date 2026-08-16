@@ -43,6 +43,22 @@ class PaymentRegistryService
         $month = (int) $params['month'];
         $dm = sprintf('%04d-%02d', $year, $month);
 
+        $rows = $this->rows($params, $year, $month, $dm);
+        $items = $this->present($rows, $year, $month, $dm);
+
+        return [
+            'year' => $year,
+            'month' => $month,
+            'items' => $items,
+            'totals' => $this->totals($items),
+            'activityOptions' => DB::table('directory_of_activities')->get()
+                ->map(fn ($a) => ['title' => $a->name, 'value' => $a->id])->values(),
+        ];
+    }
+
+    /** Строки реестра: фильтры и выборка. */
+    private function rows(array $params, int $year, int $month, string $dm)
+    {
         $q = DB::table('consultantBalance as b')
             ->leftJoin('consultant as c', 'c.id', '=', 'b.consultant')
             // Soft-deleted ФК не участвуют в реестре выплат — единообразно с
@@ -132,7 +148,20 @@ class PaymentRegistryService
             });
         }
 
-        $rows = $q->orderByDesc('b.totalPayable')->limit(2000)->get();
+        return $q->orderByDesc('b.totalPayable')->limit(2000)->get();
+    }
+
+    /**
+     * Всё связанное одной пачкой.
+     *
+     * ⚠ Сальдо — остаток ПРЕДЫДУЩЕГО периода, а удержания месяца берутся
+     * построчно из commission: одноимённые колонки снимка не пишет ни один
+     * раннер, они всегда нулевые.
+     *
+     * @return array<string, mixed>
+     */
+    private function related($rows, int $year, int $month, string $dm): array
+    {
 
         // Прочие начисления (other_accruals) — отдельная таблица для ручных
         // бонусов/штрафов, заведённых через /manage/charges. consultantBalance
@@ -220,6 +249,15 @@ class PaymentRegistryService
         // Activity name lookup for partner-status filter UI.
         $activityNames = DB::table('directory_of_activities')->pluck('name', 'id');
 
+
+        return ['extraByCons' => $extraByCons, 'incomingByCons' => $incomingByCons, 'verified' => $verified, 'suspended' => $suspended, 'withheldByCons' => $withheldByCons, 'activityNames' => $activityNames];
+    }
+
+    /** Строки → массив ответа. */
+    private function present($rows, int $year, int $month, string $dm)
+    {
+        ['extraByCons' => $extraByCons, 'incomingByCons' => $incomingByCons, 'verified' => $verified, 'suspended' => $suspended, 'withheldByCons' => $withheldByCons, 'activityNames' => $activityNames] = $this->related($rows, $year, $month, $dm);
+
         $items = $rows->map(function ($r) use ($verified, $suspended, $activityNames, $extraByCons, $incomingByCons, $withheldByCons) {
             $wh = $withheldByCons[$r->consultant] ?? null;
             $withheldGap = (float) ($wh->gap ?? 0);
@@ -270,6 +308,18 @@ class PaymentRegistryService
 
         // Totals агрегируем из items (которые уже содержат live-корректировки),
         // а не из исходных rows — иначе цифры в шапке расходятся со строками.
+
+        return $items;
+    }
+
+    /**
+     * Итоги шапки. Считаются из СТРОК, а не из исходной выборки — иначе
+     * шапка расходится с таблицей.
+     *
+     * @return array<string, mixed>
+     */
+    private function totals($items): array
+    {
         $totals = [
             'rows' => $items->count(),
             'balance' => (float) $items->sum('balance'),
@@ -285,12 +335,6 @@ class PaymentRegistryService
             'withheldForCommissions' => (float) $items->sum('withheldForCommissions'),
         ];
 
-        return [
-            'year' => $year,
-            'month' => $month,
-            'items' => $items,
-            'totals' => $totals,
-            'activityOptions' => $activityNames->map(fn ($name, $id) => ['title' => $name, 'value' => $id])->values(),
-        ];
+        return $totals;
     }
 }
