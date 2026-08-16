@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Controller;
 use App\Models\ChatTicket;
+use App\Services\ChatTicketVisibility;
 use App\Services\TicketService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -14,7 +15,11 @@ use Illuminate\Support\Facades\URL;
 
 class ChatController extends Controller
 {
-    // Kept here (not in User) because staffList() builds a SQL LIKE over
+        public function __construct(
+        private readonly ChatTicketVisibility $visibility,
+    ) {}
+
+// Kept here (not in User) because staffList() builds a SQL LIKE over
     // the comma-separated role column; the flat list is the shape it needs.
     private static array $staffRoles = ['admin', 'backoffice', 'support', 'finance', 'head', 'calculations', 'corrections', 'education', 'invest'];
 
@@ -34,71 +39,12 @@ class ChatController extends Controller
 
         $query = DB::table('chat_tickets');
 
-        // Тикеты, где юзер — дополнительный участник (chat_ticket_participants).
-        $participantTicketIds = DB::table('chat_ticket_participants')
-            ->where('user_id', $user->id)
-            ->pluck('ticket_id')
-            ->all();
+        // Правила видимости — в ChatTicketVisibility: они обязаны совпадать
+        // со счётчиком непрочитанных, иначе возвращается баг «тикет в списке
+        // есть, а бейдж ноль» (и наоборот).
+        $this->visibility->apply($query, $user);
 
-        if (! $isStaff) {
-            // Партнёр видит только свои (автор / получатель) + где приглашён.
-            // «Написать собственнику» (department=owner) — двусторонний канал:
-            // партнёр видит тикет в «Мои обращения» под «Собственнику» и получает
-            // ответ собственника как обычное сообщение (собственник отвечает из
-            // /manage/chat). Спец-исключения owner для партнёра НЕТ.
-            $query->where(function ($q) use ($user, $participantTicketIds) {
-                $q->where('created_by', $user->id)
-                  ->orWhere('recipient_id', $user->id);
-                if (! empty($participantTicketIds)) {
-                    $q->orWhereIn('id', $participantTicketIds);
-                }
-            });
-        } else {
-            // Staff: видимость по своим категориям + личное участие.
-            // getRolesArray() — тот же массив, но с приведением регистра;
-            // ручной explode его не делал (см. канон в User).
-            $roles = $user->getRolesArray();
-            $allowed = TicketService::visibleCategoriesForRoles($roles);
-            $expanded = $allowed;
-            foreach (TicketService::CATEGORY_ALIASES as $legacy => $modern) {
-                if (in_array($modern, $allowed, true)) $expanded[] = $legacy;
-            }
-            $isAdmin = $user->isAdmin();
-            // Руководитель отдела видит ВСЕ тикеты своих категорий, включая
-            // взятые подчинёнными: ему нужна работа отдела целиком, а не
-            // только неразобранное (запрос 2026-08-10 по бэк-офису).
-            $isLead = (bool) ($user->chat_department_lead ?? false);
-            $query->where(function ($q) use ($user, $expanded, $participantTicketIds, $isAdmin, $isLead) {
-                // Claim & hide: тикеты отдела видны staff ТОЛЬКО пока никто
-                // не взял их в работу (assigned_to IS NULL). Как только staff
-                // отправляет первое сообщение — sendMessage() выставляет
-                // assigned_to=он, и тикет исчезает из списков остальных
-                // сотрудников того же отдела. Свои назначенные / созданные /
-                // recipient / приглашённые продолжают быть видны через OR-ветки.
-                if (! empty($expanded)) {
-                    $q->where(function ($q2) use ($expanded, $isLead) {
-                        $q2->whereIn('department', $expanded);
-                        if (! $isLead) {
-                            $q2->whereNull('assigned_to');
-                        }
-                    });
-                }
-                // Admin-override: админы видят ВСЕ тикеты техподдержки
-                // независимо от claim & hide — для контроля работы support-
-                // команды. По запросу 2026-05-26: «админ видит все чаты тех
-                // поддержки». Legacy-ключ technical добавлен для тикетов,
-                // созданных до унификации категорий.
-                if ($isAdmin) {
-                    $q->orWhereIn('department', ['support', 'technical']);
-                }
-                $q->orWhere('created_by', $user->id)
-                  ->orWhere('recipient_id', $user->id)
-                  ->orWhere('assigned_to', $user->id);
-                if (! empty($participantTicketIds)) {
-                    $q->orWhereIn('id', $participantTicketIds);
-                }
-            });
-        }
+        $participantTicketIds = $this->visibility->participantTicketIds($user->id);
 
         // Filters
         if ($request->filled('status')) {
@@ -2391,71 +2337,15 @@ class ChatController extends Controller
         $userId = $user->id;
         $isStaff = $user->isStaff();
 
-        // Видимость тикетов должна совпадать со списком /chat/tickets index:
-        //  - staff видит тикеты своих категорий + где автор/получатель/agent
-        //    + где приглашён в chat_ticket_participants;
-        //  - партнёр — где автор/получатель + где приглашён.
-        // Раньше unread фильтровался ТОЛЬКО по автор/получатель/agent —
-        // отсюда баг «тикет пришёл, виден в списке, бейдж 0»: для staff
-        // тикета в общей категории (recipient_id=NULL, assigned_to=NULL)
-        // /chat/unread-count его не считал, хотя в списке он отображается.
-        $participantTicketIds = DB::table('chat_ticket_participants')
-            ->where('user_id', $userId)
-            ->pluck('ticket_id')
-            ->all();
-
+        // Видимость — тот же ChatTicketVisibility, что и у списка: счётчик
+        // обязан считать ровно то, что видно в /chat/tickets. Расхождение
+        // между двумя копиями этих правил уже дважды давало баг «бейдж есть,
+        // а тикета нет» и обратный ему.
+        //
+        // Единственное умышленное отличие — owner-канал: «Написать
+        // собственнику» партнёр видит в списке, но в бейдж он не идёт.
         $query = DB::table('chat_tickets');
-        if (! $isStaff) {
-            $query->where(function ($q) use ($userId, $participantTicketIds) {
-                $q->where('created_by', $userId)
-                  ->orWhere('recipient_id', $userId);
-                if (! empty($participantTicketIds)) {
-                    $q->orWhereIn('id', $participantTicketIds);
-                }
-            });
-            // owner-тикеты («Написать собственнику») у партнёра не считаем —
-            // это исходящий канал к собственнику, не его тикет (см. index()).
-            $query->where(fn ($q) => $q->where('department', '!=', 'owner')->orWhereNull('department'));
-        } else {
-            // getRolesArray() — тот же массив, но с приведением регистра;
-            // ручной explode его не делал (см. канон в User).
-            $roles = $user->getRolesArray();
-            $allowed = TicketService::visibleCategoriesForRoles($roles);
-            $expanded = $allowed;
-            foreach (TicketService::CATEGORY_ALIASES as $legacy => $modern) {
-                if (in_array($modern, $allowed, true)) $expanded[] = $legacy;
-            }
-            $isAdmin = $user->isAdmin();
-            // Тот же признак руководителя отдела, что и в index(): счётчик
-            // непрочитанных обязан считать ровно то, что видно в списке —
-            // иначе вернётся баг «бейдж есть, тикета нет».
-            $isLead = (bool) ($user->chat_department_lead ?? false);
-            $query->where(function ($q) use ($userId, $expanded, $participantTicketIds, $isAdmin, $isLead) {
-                // Claim & hide: видим тикеты отдела только пока никто
-                // не взял их в работу. Раньше тут не было whereNull —
-                // отсюда баг «у меня бейдж 2, а в списке тикетов нет»:
-                // staff из того же отдела уже забрал тикет, в index()
-                // он спрятался, а в unreadCount продолжал считаться.
-                if (! empty($expanded)) {
-                    $q->where(function ($q2) use ($expanded, $isLead) {
-                        $q2->whereIn('department', $expanded);
-                        if (! $isLead) {
-                            $q2->whereNull('assigned_to');
-                        }
-                    });
-                }
-                // Admin-override: те же тикеты техподдержки, что и в index().
-                if ($isAdmin) {
-                    $q->orWhereIn('department', ['support', 'technical']);
-                }
-                $q->orWhere('created_by', $userId)
-                  ->orWhere('recipient_id', $userId)
-                  ->orWhere('assigned_to', $userId);
-                if (! empty($participantTicketIds)) {
-                    $q->orWhereIn('id', $participantTicketIds);
-                }
-            });
-        }
+        $this->visibility->apply($query, $user, excludeOwnerChannel: true);
 
         $ticketIds = $query->pluck('id');
         if ($ticketIds->isEmpty()) {
