@@ -389,7 +389,10 @@ class ProductSalesMatrixController extends Controller
         $q = DB::table('transaction as t')
             ->join('contract as co', 'co.id', '=', 't.contract')
             ->join('consultant as cons', 'cons.id', '=', 'co.consultant')
-            ->join(DB::raw('"WebUser" as wu'), DB::raw('wu.id'), '=', DB::raw('cons."webUser"'))
+            // LEFT, а не INNER: у сотен импортированных ФК логина нет вовсе, и
+            // внутреннее соединение выбрасывало их продажи из отчёта целиком,
+            // хотя в «Факте» они присутствуют.
+            ->leftJoin(DB::raw('"WebUser" as wu'), DB::raw('wu.id'), '=', DB::raw('cons."webUser"'))
             ->join('product as p', 'p.id', '=', 'co.product')
             ->join('program as pg', 'pg.id', '=', 'co.program')
             ->whereBetween('t.dateMonth', [$from, $to])
@@ -398,7 +401,10 @@ class ProductSalesMatrixController extends Controller
             ->whereNull('t.deletedAt')
             ->select([
                 'co.consultant                                           as fc_id',
-                DB::raw('wu."lastName" || \' \' || wu."firstName"       as fc_name'),
+                // Имя из логина, а без логина — из карточки партнёра. Склейка
+                // через || даёт NULL, если пуста любая часть, поэтому пустой
+                // результат тоже уступает карточке.
+                DB::raw('COALESCE(NULLIF(TRIM(COALESCE(wu."lastName", \'\') || \' \' || COALESCE(wu."firstName", \'\')), \'\'), cons."personName") as fc_name'),
                 'p.id                                                   as product_id',
                 'p.name                                                 as product_name',
                 'pg.id                                                  as program_id',
@@ -412,11 +418,15 @@ class ProductSalesMatrixController extends Controller
             ])
             ->groupBy(
                 'co.consultant',
-                DB::raw('wu."lastName"'), DB::raw('wu."firstName"'),
+                // personName участвует в имени наравне с частями логина —
+                // значит, обязан быть и в группировке.
+                DB::raw('wu."lastName"'), DB::raw('wu."firstName"'), DB::raw('cons."personName"'),
                 'p.id', 'p.name', 'pg.id', 'pg.name', 't.dateMonth'
             )
-            ->orderBy(DB::raw('wu."lastName"'))
-            ->orderBy(DB::raw('wu."firstName"'))
+            // Сортируем по тому же выражению, что и показываем: у ФК без
+            // логина части имени пусты, и сортировка по ним ставила бы их
+            // всех в одну кучу.
+            ->orderBy(DB::raw('COALESCE(NULLIF(TRIM(COALESCE(wu."lastName", \'\') || \' \' || COALESCE(wu."firstName", \'\')), \'\'), cons."personName")'))
             ->orderBy('p.name')
             ->orderBy('pg.name')
             ->orderBy('t.dateMonth');
