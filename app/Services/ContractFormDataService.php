@@ -78,12 +78,26 @@ class ContractFormDataService
             }
         }
         // Источник 2: programs_catalog.vendor (новый каталог).
-        DB::table('programs_catalog')
+        //
+        // ⚠ Раньше здесь стоял `->each(fn ($v) => $supSet[$v] = true)`, и блок
+        // не делал НИЧЕГО: замыкание захватывает массив по значению, поэтому
+        // записи ложились в его копию и терялись. Вендоры, заведённые только в
+        // новом каталоге, в фильтр поставщиков не попадали вовсе. Обычный
+        // foreach эту ловушку убирает.
+        $catalogVendors = DB::table('programs_catalog')
             ->whereNotNull('vendor')
             ->where('vendor', '!=', '')
             ->distinct()
-            ->pluck('vendor')
-            ->each(fn ($v) => $supSet[$v] = true);
+            ->pluck('vendor');
+        foreach ($catalogVendors as $v) {
+            // Insmart и здесь схлопывается в одну строку — иначе он появился бы
+            // в списке дважды, отдельной записью каталога.
+            if (preg_match('/ins+mart/i', (string) $v)) {
+                $hasInsmart = true;
+                continue;
+            }
+            $supSet[$v] = true;
+        }
 
         // products_catalog.provider_name в список НЕ добавляем: у части продуктов
         // там лежит конечный страховщик («Ренессанс»), а поставщик — канал («ГГА»).

@@ -70,17 +70,33 @@ class ContractFormDataTest extends TestCase
     }
 
     /**
-     * 🐞 Вендор из нового каталога в список НЕ попадает — и это баг, а не
-     * замысел: источник 2 складывает значения через `each(fn ($v) => $supSet[$v]
-     * = true)`, а замыкание захватывает массив ПО ЗНАЧЕНИЮ, так что весь блок
-     * ничего не делает. Тест фиксирует поведение как есть, чтобы вынос метода
-     * в сервис был проверяемо равносильным; починка идёт отдельным коммитом,
-     * который эту проверку и перевернёт.
+     * Вендор, заведённый только в новом каталоге, попадает в список наравне с
+     * legacy.
+     *
+     * Раньше не попадал: источник 2 складывал значения через
+     * `each(fn ($v) => $supSet[$v] = true)`, а замыкание захватывает массив по
+     * значению — блок молча не делал ничего.
      */
     #[Test]
-    public function catalog_vendor_is_lost(): void
+    public function catalog_vendor_is_included(): void
     {
-        $this->assertNotContains('Каталожный вендор', $this->formData()['suppliers']);
+        $this->assertContains('Каталожный вендор', $this->formData()['suppliers']);
+    }
+
+    /** Insmart из каталога тоже схлопывается, а не задваивает список. */
+    #[Test]
+    public function catalog_insmart_vendor_does_not_duplicate(): void
+    {
+        DB::table('programs_catalog')->insert([
+            'id' => 1700098, 'product_id' => self::PRODUCT,
+            'name' => 'Программа каталожного Insmart', 'active' => true,
+            'provider_name' => null, 'vendor' => 'Inssmart',
+        ]);
+
+        $suppliers = $this->formData()['suppliers'];
+
+        $this->assertSame('Insmart', $suppliers[0]);
+        $this->assertSame(1, count(array_filter($suppliers, fn ($s) => stripos($s, 'smart') !== false)));
     }
 
     /**
