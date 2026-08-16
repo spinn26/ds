@@ -111,22 +111,28 @@ class ConsultantTreeService
     }
 
     /**
-     * Все потомки корня, БЕЗ самого корня. Мягко удалённые отсекаются, лимита
-     * глубины нет — семантика StructureController::descendantIds, откуда метод
-     * и переехал.
+     * Все потомки корня, БЕЗ самого корня. Мягко удалённые отсекаются.
+     * Семантика StructureController::descendantIds, откуда метод и переехал.
+     *
+     * $maxDepth по умолчанию null — обход без ограничения, как было у
+     * прежнего вызова. Вызывающим, которым важна защита от уже существующих
+     * в legacy циклов, стоит передавать self::MAX_DEPTH: без лимита цикл в
+     * данных уводит запрос в бесконечность.
      *
      * @return list<int>
      */
-    public function descendantIds(int $rootId): array
+    public function descendantIds(int $rootId, ?int $maxDepth = null): array
     {
+        $limit = $maxDepth !== null ? ' AND d.depth < ' . (int) $maxDepth : '';
+
         $rows = DB::select(
             'WITH RECURSIVE descendants AS (
-                SELECT id FROM consultant
+                SELECT id, 0 AS depth FROM consultant
                  WHERE inviter = ? AND "dateDeleted" IS NULL
                 UNION ALL
-                SELECT c.id FROM consultant c
+                SELECT c.id, d.depth + 1 FROM consultant c
                   JOIN descendants d ON c.inviter = d.id
-                 WHERE c."dateDeleted" IS NULL
+                 WHERE c."dateDeleted" IS NULL' . $limit . '
             )
             SELECT id FROM descendants',
             [$rootId]

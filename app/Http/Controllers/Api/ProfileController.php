@@ -18,6 +18,7 @@ use App\Models\BankRequisite;
 use App\Models\Consultant;
 use App\Models\Requisite;
 use App\Services\PartnerAcceptanceService;
+use App\Services\ConsultantTreeService;
 use App\Services\PartnerStatusService;
 use App\Services\DadataService;
 use App\Services\CheckoService;
@@ -31,6 +32,7 @@ class ProfileController extends Controller
 {
     public function __construct(
         private readonly PartnerStatusService $statusService,
+        private readonly ConsultantTreeService $tree,
     ) {}
 
     /**
@@ -782,19 +784,14 @@ class ProfileController extends Controller
      */
     private function isDescendantOf(int $candidateId, int $rootId): bool
     {
-        $rows = DB::select(
-            'WITH RECURSIVE down AS (
-                SELECT id, 0 AS depth FROM consultant WHERE inviter = ? AND "dateDeleted" IS NULL
-                UNION ALL
-                SELECT c.id, d.depth + 1
-                FROM consultant c JOIN down d ON c.inviter = d.id
-                WHERE c."dateDeleted" IS NULL AND d.depth < 25
-             )
-             SELECT 1 FROM down WHERE id = ? LIMIT 1',
-            [$rootId, $candidateId]
+        // Обход дерева живёт в ConsultantTreeService — здесь была седьмая по
+        // счёту копия рекурсивного CTE. Лимит глубины передаём явно: он и был
+        // в прежнем запросе, и защищает от уже существующих в legacy циклов.
+        return in_array(
+            $candidateId,
+            $this->tree->descendantIds($rootId, ConsultantTreeService::MAX_DEPTH),
+            true
         );
-
-        return ! empty($rows);
     }
 
     /**

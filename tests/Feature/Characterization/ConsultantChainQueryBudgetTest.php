@@ -46,6 +46,11 @@ class ConsultantChainQueryBudgetTest extends TestCase
         $shallow = $this->seedChain(3);
         $deep = $this->seedChain(10, offset: 100);
 
+        // Прогрев: первый запрос за сессию оплачивает разовые подгрузки
+        // (права, настройки), и без него счётчик зависел бы от того, в каком
+        // порядке PHPUnit добрался до этого теста, а не от глубины цепочки.
+        $this->admin('/admin/consultants/' . $shallow . '/chain')->assertOk();
+
         $shallowQueries = $this->countQueries(
             fn () => $this->admin('/admin/consultants/' . $shallow . '/chain')->assertOk()
         );

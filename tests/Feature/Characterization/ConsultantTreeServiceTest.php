@@ -111,6 +111,24 @@ class ConsultantTreeServiceTest extends TestCase
         $this->assertSame([self::A, self::A1, self::A2], $ids, 'сам корень не входит');
     }
 
+    /**
+     * Необязательный лимит глубины: без него обход идёт до конца (как было),
+     * с ним — обрывается. Лимит нужен вызывающим, которые защищаются от уже
+     * существующих в legacy циклов.
+     */
+    #[Test]
+    public function descendants_respect_the_optional_depth_limit(): void
+    {
+        // ⚠ Отсчёт идёт от нуля у ПРЯМЫХ приглашённых, как в прежнем запросе:
+        // лимит 0 оставляет только их, лимит 1 добавляет следующий уровень.
+        $this->assertSame([self::A], $this->tree->descendantIds(self::ROOT, 0));
+        $this->assertSame([self::A, self::A1], $this->tree->descendantIds(self::ROOT, 1));
+
+        $unlimited = $this->tree->descendantIds(self::ROOT);
+        sort($unlimited);
+        $this->assertSame([self::A, self::A1, self::A2], $unlimited);
+    }
+
     #[Test]
     public function descendants_of_a_leaf_are_empty(): void
     {
