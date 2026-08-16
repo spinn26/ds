@@ -30,17 +30,23 @@ class QualificationsListingService
     public function build(Request $request): array
     {
         $month = $request->input('month', now()->format('Y-m'));
+        // Границы месяца — полуинтервал [первое число, первое число
+        // следующего). Верхней границей был «последний день месяца» без
+        // времени, а в колонке date лежит timestamp: строка финализа Отрыв/ОП,
+        // датированная концом месяца, при сравнении не проходила отбор вовсе
+        // (если со временем) либо уезжала в колонку предыдущего месяца (если
+        // полуночная). На проде так датированы почти все строки месяца.
         $start = $month . '-01';
-        $end = date('Y-m-t', strtotime($start));
+        $endEx = date('Y-m-01', strtotime($start . ' +1 month'));
         $prevStart = date('Y-m-01', strtotime($start . ' -1 month'));
-        $prevEnd = date('Y-m-t', strtotime($prevStart));
+        $prevEndEx = $start;
 
         // Все consultant_id с записью за выбранный или предыдущий месяц
         $consultantQuery = DB::table('qualificationLog')
             ->whereNull('dateDeleted')
-            ->where(function ($w) use ($start, $end, $prevStart, $prevEnd) {
-                $w->whereBetween('date', [$start, $end])
-                  ->orWhereBetween('date', [$prevStart, $prevEnd]);
+            ->where(function ($w) use ($start, $endEx, $prevStart) {
+                $w->where(fn ($q) => $q->where('date', '>=', $prevStart)->where('date', '<', $start))
+                  ->orWhere(fn ($q) => $q->where('date', '>=', $start)->where('date', '<', $endEx));
             });
 
         if ($request->filled('search')) {
@@ -97,9 +103,9 @@ class QualificationsListingService
         $logs = DB::table('qualificationLog')
             ->whereNull('dateDeleted')
             ->whereIn('consultant', $pageIds)
-            ->where(function ($w) use ($start, $end, $prevStart, $prevEnd) {
-                $w->whereBetween('date', [$start, $end])
-                  ->orWhereBetween('date', [$prevStart, $prevEnd]);
+            ->where(function ($w) use ($start, $endEx, $prevStart) {
+                $w->where(fn ($q) => $q->where('date', '>=', $prevStart)->where('date', '<', $start))
+                  ->orWhere(fn ($q) => $q->where('date', '>=', $start)->where('date', '<', $endEx));
             })
             ->get();
 
@@ -122,7 +128,10 @@ class QualificationsListingService
 
         $byConsultant = [];
         foreach ($logs as $l) {
-            $isCurrent = $l->date >= $start && $l->date <= $end;
+            // Сравниваем МЕСЯЦ, а не строки с датами: в колонке timestamp,
+            // и посимвольное сравнение с границей уводило строки последнего
+            // дня в чужую колонку.
+            $isCurrent = substr((string) $l->date, 0, 7) === $month;
             $bucket = $isCurrent ? 'current' : 'previous';
             $level = $resolveLevel($l->nominalLevel, $l->calculationLevel);
             // НГП (cumulative) держим как последний НЕ-NULL (carry-forward):
