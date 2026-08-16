@@ -442,12 +442,13 @@ class DashboardService
             if (! $top || (float) ($top->gv ?? 0) <= 0) {
                 $top = DB::selectOne('
                     WITH RECURSIVE descendants AS (
-                        SELECT id FROM consultant
+                        SELECT id, 0 AS depth FROM consultant
                         WHERE inviter = ? AND "dateDeleted" IS NULL
                         UNION ALL
-                        SELECT c.id FROM consultant c
+                        SELECT c.id, d.depth + 1 FROM consultant c
                         JOIN descendants d ON c.inviter = d.id
-                        WHERE c."dateDeleted" IS NULL
+                        -- Лимит глубины — страховка от циклов в структуре.
+                        WHERE c."dateDeleted" IS NULL AND d.depth < 25
                     )
                     SELECT c.id, c."personName", ql."groupVolumeCumulative" AS gv
                     FROM descendants d

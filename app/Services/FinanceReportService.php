@@ -300,10 +300,11 @@ class FinanceReportService
         // groupVolume из qualificationLog (уже с баллами). Инцидент Морозов 2026-06.
         $downlineManualPoints = (float) (DB::selectOne('
             WITH RECURSIVE sub AS (
-                SELECT id FROM consultant WHERE inviter = ? AND "dateDeleted" IS NULL' . $exclSeedId . '
+                SELECT id, 0 AS depth FROM consultant WHERE inviter = ? AND "dateDeleted" IS NULL' . $exclSeedId . '
                 UNION ALL
-                SELECT c.id FROM consultant c JOIN sub ON c.inviter = sub.id
-                WHERE c."dateDeleted" IS NULL' . $exclC . '
+                SELECT c.id, sub.depth + 1 FROM consultant c JOIN sub ON c.inviter = sub.id
+                -- Лимит глубины — страховка от циклов в структуре.
+                WHERE c."dateDeleted" IS NULL AND sub.depth < 25' . $exclC . '
             )
             SELECT COALESCE(SUM(oa.points), 0) AS pts
             FROM other_accruals oa JOIN sub ON sub.id = oa.consultant
@@ -396,12 +397,13 @@ class FinanceReportService
                 if (! $top || (float) ($top->gv ?? 0) <= 0) {
                     $top = DB::selectOne('
                         WITH RECURSIVE descendants AS (
-                            SELECT id FROM consultant
+                            SELECT id, 0 AS depth FROM consultant
                             WHERE inviter = ? AND "dateDeleted" IS NULL' . $exclSeedId . '
                             UNION ALL
-                            SELECT c.id FROM consultant c
+                            SELECT c.id, d.depth + 1 FROM consultant c
                             JOIN descendants d ON c.inviter = d.id
-                            WHERE c."dateDeleted" IS NULL' . $exclC . '
+                            -- Лимит глубины — страховка от циклов в структуре.
+                            WHERE c."dateDeleted" IS NULL AND d.depth < 25' . $exclC . '
                         )
                         SELECT c.id, c."personName", ql."groupVolume" AS gv
                         FROM descendants d
