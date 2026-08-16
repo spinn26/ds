@@ -14,6 +14,7 @@ use App\Support\LegacyId;
 use App\Services\PartnerListingService;
 use App\Services\PartnerStatusesListingService;
 use App\Services\RequisitesListingService;
+use App\Services\ContractsListingService;
 use App\Services\PartnerStatusService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -55,6 +56,7 @@ class AdminDataController extends Controller
         private readonly PartnerListingService $partnerListing,
         private readonly PartnerStatusesListingService $partnerStatuses,
         private readonly RequisitesListingService $requisitesListing,
+        private readonly ContractsListingService $contractsListing,
     ) {}
 
     /**
@@ -2323,85 +2325,19 @@ class AdminDataController extends Controller
     /** Менеджер контрактов */
     public function contracts(Request $request): JsonResponse
     {
-        $query = DB::table('contract as c')
-            ->leftJoin('program as pr', 'c.program', '=', 'pr.id')
-            ->whereNull('c.deletedAt');
+        // Фильтры и сборка строк — в ContractsListingService.
+        // Метод занимал 156 строк при девятнадцати фильтрах.
+        $filters = [];
+        foreach (ContractsListingService::FILTERS as $key) {
+            if ($request->filled($key)) {
+                $filters[$key] = $request->input($key);
+            }
+        }
 
-        if ($request->filled('search')) {
-            $s = $request->search;
-            // Generic search = partner (consultant) name + contract number.
-            // Client has a dedicated `client_name` filter — keep it out of the OR.
-            $query->where(function ($q) use ($s) {
-                $q->where('c.consultantName', 'ilike', "%{$s}%")
-                  ->orWhere('c.number', 'ilike', "%{$s}%");
-            });
-        }
-        // Точный фильтр по клиенту (id) — используется при переходе из списка
-        // клиентов по клику на счётчик контрактов. Надёжнее, чем по ФИО
-        // (нет коллизий тёзок). contract.client → client.id.
-        if ($request->filled('client')) {
-            $query->where('c.client', $request->client);
-        }
-        if ($request->filled('client_name')) {
-            $query->where('c.clientName', 'ilike', '%' . $request->client_name . '%');
-        }
-        if ($request->filled('consultant_name')) {
-            $query->where('c.consultantName', 'ilike', '%' . $request->consultant_name . '%');
-        }
-        if ($request->filled('status')) $query->whereIn('c.status', (array) $request->input('status'));
-        if ($request->filled('number')) $query->where('c.number', 'ilike', '%' . $request->number . '%');
-        if ($request->filled('comment')) $query->where('c.comment', 'ilike', '%' . $request->comment . '%');
-        // Продукт: историчесские контракты (Directual) хранят productName,
-        // а не FK. Резолвим имя и матчим по productName — та же схема что
-        // для программы ниже. Отрицательный id → catalog-only продукт.
-        if ($request->filled('product')) {
-            $productId = (int) $request->product;
-            $productName = $productId < 0
-                ? DB::table('products_catalog')->where('id', -$productId)->value('name')
-                : DB::table('product')->where('id', $productId)->value('name');
-            if ($productName) {
-                $query->where('c.productName', $productName);
-            } else {
-                $query->where('c.product', $productId);
-            }
-        }
-        // Программа: дропдаун дедуплицирован (один id-представитель на
-        // имя), поэтому фильтр матчит по contract.programName, чтобы
-        // выбор «Жизнь+» поднимал ВСЕ варианты этой программы. Если
-        // имя не разрезолвилось (id невалидный) — fallback на FK.
-        // Отрицательный id → catalog-only программа (нет legacy-строки).
-        if ($request->filled('program')) {
-            $programId = (int) $request->program;
-            $programName = $programId < 0
-                ? DB::table('programs_catalog')->where('id', -$programId)->value('name')
-                : DB::table('program')->where('id', $programId)->value('name');
-            if ($programName) {
-                $query->where('c.programName', $programName);
-            } else {
-                $query->where('c.program', $programId);
-            }
-        }
-        if ($request->filled('setup')) $query->where('c.setup', $request->setup);
-        if ($request->filled('supplier')) {
-            // Каноническое выражение — то же, которым ниже собирается колонка.
-            \App\Support\SupplierResolver::applyFilter(
-                $query,
-                (string) $request->supplier,
-                'c."productName"',
-                \App\Support\SupplierResolver::sqlProviderExpr('pr', null)
-            );
-        }
-        if ($request->filled('created_from')) $query->where('c.createDate', '>=', $request->created_from);
-        if ($request->filled('created_to')) $query->where('c.createDate', '<=', $request->created_to . ' 23:59:59');
-        if ($request->filled('opened_from')) $query->where('c.openDate', '>=', $request->opened_from);
-        if ($request->filled('opened_to')) $query->where('c.openDate', '<=', $request->opened_to . ' 23:59:59');
-        if ($request->filled('closed_from')) $query->where('c.closeDate', '>=', $request->closed_from);
-        if ($request->filled('closed_to')) $query->where('c.closeDate', '<=', $request->closed_to . ' 23:59:59');
-        // Прогноз активации — date-only колонка (без времени).
-        if ($request->filled('forecast_from')) $query->where('c.activation_forecast', '>=', $request->forecast_from);
-        if ($request->filled('forecast_to')) $query->where('c.activation_forecast', '<=', $request->forecast_to);
+        $query = $this->contractsListing->query($filters);
 
         $total = $query->count();
+
 
         // Итоговая сумма по контрактам (по текущим фильтрам, до пагинации) —
         // Алла сверяет ею корректность заливки из «Паруса». Просто сумма по
@@ -2435,41 +2371,11 @@ class AdminDataController extends Controller
             ])
             ->get();
 
-        // Batch load contract statuses
-        $statusIds = $rows->pluck('status')->filter()->unique();
-        $contractStatuses = $statusIds->isNotEmpty()
-            ? DB::table('contractStatus')->whereIn('id', $statusIds)->pluck('name', 'id')
-            : collect();
-
-        // Batch load currencies
-        $currencyIds = $rows->pluck('currency')->filter()->unique();
-        $currencies = $currencyIds->isNotEmpty()
-            ? DB::table('currency')->whereIn('id', $currencyIds)->pluck('symbol', 'id')
-            : collect();
-
-        $contracts = $rows->map(fn ($c) => [
-                'id' => $c->id,
-                'number' => $c->number,
-                'counterpartyContractId' => $c->counterpartyContractId,
-                'clientName' => $c->clientName,
-                'consultant' => $c->consultant ?? null,
-                'consultantName' => $c->consultantName,
-                'productName' => $c->productName,
-                'programName' => $c->programName,
-                'supplierName' => \App\Support\SupplierResolver::resolve($c->productName, $c->supplierName),
-                // Реальный страховщик-партнёр для Insmart-продуктов
-                // (для тултипа / детальной формы — UI может его игнорировать).
-                'supplierSubName' => \App\Support\SupplierResolver::subProvider($c->productName, $c->supplierName),
-                'comment' => $c->comment,
-                'statusName' => $c->status ? ($contractStatuses[$c->status] ?? null) : null,
-                'ammount' => $c->ammount,
-                'currencySymbol' => $c->currency ? ($currencies[$c->currency] ?? null) : null,
-                'openDate' => $c->openDate,
-                // Y-m-d, иначе date-only уезжает на день назад под МСК.
-                'activationForecast' => $c->activation_forecast ? substr((string) $c->activation_forecast, 0, 10) : null,
-            ]);
-
-        return response()->json(['data' => $contracts, 'total' => $total, 'amountSum' => $amountSum]);
+        return response()->json([
+            'data' => $this->contractsListing->present($rows),
+            'total' => $total,
+            'amountSum' => round($amountSum, 2),
+        ]);
     }
 
     /**
