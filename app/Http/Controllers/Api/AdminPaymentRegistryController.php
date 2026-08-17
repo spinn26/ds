@@ -35,6 +35,76 @@ class AdminPaymentRegistryController extends Controller
         return response()->json($this->registry->build($request));
     }
 
+    /**
+     * POST /admin/payment-registry/recalc — пересобрать снимок за месяц.
+     *
+     * Кнопка «Пересчитать» раньше только перезагружала таблицу (фронтовый
+     * `load()`), то есть перечитывала тот же снимок — отсюда «нажал, ничего не
+     * изменилось». Реестр по решению 2026-06-05 читает деньги ТОЛЬКО из
+     * `consultantBalance`, а его после финализации/правок комиссий кто-то
+     * должен пересобрать. Теперь это делает сама кнопка.
+     *
+     * Пересборка идемпотентна: начисления ← `commission`, пул ← `poolLog`.
+     * Исторические месяцы (< HISTORICAL_CUTOFF) метод не трогает.
+     */
+    public function recalc(Request $request, \App\Services\CommissionCalculator $calculator): JsonResponse
+    {
+        $data = $request->validate([
+            'year' => 'required|integer|min:2020|max:2099',
+            'month' => 'required|integer|min:1|max:12',
+        ]);
+        $ym = sprintf('%04d-%02d', $data['year'], $data['month']);
+
+        if (\App\Services\CommissionCalculator::isHistorical($ym)) {
+            return response()->json([
+                'message' => "Период {$ym} исторический — снимок неизменен.",
+            ], 422);
+        }
+
+        // Тот же lock-неймспейс, что у финализации: она пересобирает снимок
+        // тем же методом, и одновременный запуск переписывал бы одни строки.
+        $lock = \Illuminate\Support\Facades\Cache::lock("finalize:apply:{$ym}", 300);
+        if (! $lock->get()) {
+            return response()->json([
+                'message' => 'Пересчёт за этот месяц уже выполняется. Подождите минуту.',
+            ], 423);
+        }
+
+        $before = $this->monthTotals($ym);
+        try {
+            $result = $calculator->resyncMonth($ym);
+        } finally {
+            $lock->release();
+        }
+        $after = $this->monthTotals($ym);
+
+        return response()->json([
+            'message' => sprintf(
+                'Пересчитано партнёров: %d. Начислено: %s → %s ₽, пул: %s ₽.',
+                $result['consultants'],
+                number_format($before['accrued'], 2, '.', ' '),
+                number_format($after['accrued'], 2, '.', ' '),
+                number_format($after['pool'], 2, '.', ' '),
+            ),
+            'consultants' => $result['consultants'],
+            'accruedBefore' => $before['accrued'],
+            'accruedAfter' => $after['accrued'],
+            'poolAfter' => $after['pool'],
+        ]);
+    }
+
+    /** @return array{accrued: float, pool: float} */
+    private function monthTotals(string $ym): array
+    {
+        $r = DB::table('consultantBalance')
+            ->where('dateMonth', $ym)
+            ->selectRaw('COALESCE(SUM(COALESCE("accruedTransactional",0) + COALESCE("accruedNonTransactional",0)),0) AS accrued,
+                         COALESCE(SUM(COALESCE("accruedPool",0)),0) AS pool')
+            ->first();
+
+        return ['accrued' => (float) ($r->accrued ?? 0), 'pool' => (float) ($r->pool ?? 0)];
+    }
+
     /** GET /admin/payment-registry/{id}/requisites — для попапа реквизитов в строке. */
     public function requisites(int $id): JsonResponse
     {

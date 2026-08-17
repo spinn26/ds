@@ -3,7 +3,9 @@
     <PageHeader title="Реестр выплат" icon="mdi-cash-multiple">
       <template #actions>
         <ColumnVisibilityMenu :headers="headers" v-model:visible="columnVisible" storage-key="payment-registry-cols" />
-        <v-btn v-if="canFull('payments')" variant="text" prepend-icon="mdi-refresh" :loading="loading" @click="load">Пересчитать</v-btn>
+        <v-btn v-if="canFull('payments')" variant="text" prepend-icon="mdi-refresh"
+          :loading="recalculating || loading" @click="recalc"
+          title="Пересобрать начисления и пул за выбранный месяц из комиссий">Пересчитать</v-btn>
       </template>
     </PageHeader>
 
@@ -574,6 +576,28 @@ async function load() {
 }
 
 const { debounced: debouncedLoad } = useDebounce(load, 400);
+
+const recalculating = ref(false);
+
+/**
+ * «Пересчитать» = пересобрать снимок consultantBalance за выбранный месяц
+ * (начисления из commission, пул из poolLog) и перечитать таблицу.
+ *
+ * Раньше кнопка звала просто load() — перечитывала тот же снимок, и после
+ * финализации ОП/отрыва цифры не менялись: «нажал — не помогло».
+ */
+async function recalc() {
+  recalculating.value = true;
+  try {
+    const { data } = await api.post('/admin/payment-registry/recalc', {
+      year: Number(filters.year),
+      month: Number(filters.month),
+    });
+    showSuccess(data.message || 'Пересчитано');
+    await load();
+  } catch (e) { showError(e.response?.data?.message || 'Не удалось пересчитать'); }
+  recalculating.value = false;
+}
 
 function openPayment(item) {
   paymentTarget.value = item;

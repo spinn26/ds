@@ -208,12 +208,6 @@ class MonthlyPenaltyRunner
         $stats = [];
         $affectedTotal = 0;
 
-        // ID партнёров, у которых реально применили штраф — после цикла
-        // пересчитаем им consultantBalance, иначе snapshot останется
-        // со старыми (до-штрафа) суммами amountRUB, и Реестр выплат
-        // покажет неправильные «к выплате».
-        $affectedConsultantIds = [];
-
         foreach ($candidates as $cons) {
             // Per-consultant atomarity: при applyWrite все записи одного
             // партнёра (UPDATE commission + delete/insert qualificationLog)
@@ -236,9 +230,6 @@ class MonthlyPenaltyRunner
             if ($result['affectedCommissions'] > 0) {
                 $stats[] = $result;
                 $affectedTotal += $result['affectedCommissions'];
-                if ($applyWrite) {
-                    $affectedConsultantIds[] = (int) $cons->id;
-                }
             }
         }
 
@@ -255,23 +246,27 @@ class MonthlyPenaltyRunner
             );
         }
 
-        // Пересчёт consultantBalance для затронутых партнёров —
-        // commission.amountRUB снижены штрафами, но snapshot в
-        // consultantBalance.accruedTransactional остаётся старым,
-        // если его не пересчитать. Иначе Реестр выплат покажет
-        // «к выплате» БЕЗ учёта штрафов до следующего ручного rebuild'а.
-        // Делаем после всех processConsultant — батчем по уникальным id.
-        if ($applyWrite && $affectedConsultantIds) {
-            foreach (array_unique($affectedConsultantIds) as $cid) {
-                try {
-                    $this->calculator->rebuildBalanceFor($cid, $dateMonth, $dateYear);
-                } catch (\Throwable $e) {
-                    \Log::warning('rebuildBalance after penalty failed', [
-                        'consultant' => $cid,
-                        'month' => $dateMonth,
-                        'error' => $e->getMessage(),
-                    ]);
-                }
+        // Пересчёт consultantBalance — commission.amountRUB снижены штрафами,
+        // но снимок в consultantBalance.accruedTransactional остаётся старым,
+        // если его не пересобрать. Иначе Реестр выплат и отчёт партнёра
+        // показывают «Итого начислено» БЕЗ учёта удержаний.
+        //
+        // ⚠ Пересобираем ВЕСЬ месяц, а не только $affectedConsultantIds.
+        // Раннер идемпотентный: строки с reduction=true он больше не трогает,
+        // поэтому на ПОВТОРНОМ пересчёте affected=0 — и прежняя версия не
+        // пересобирала снимок вообще. Партнёр, у которого снимок разошёлся
+        // раньше (сбой rebuild'а в первом прогоне, ручная правка commission,
+        // пересчёт цепочки после финализации), так и оставался с доштрафным
+        // «Итого начислено», сколько кнопку ни жми. resyncMonth заодно
+        // подтягивает пул из poolLog.
+        if ($applyWrite) {
+            try {
+                $this->calculator->resyncMonth($dateMonth);
+            } catch (\Throwable $e) {
+                \Log::warning('resyncMonth after penalty failed', [
+                    'month' => $dateMonth,
+                    'error' => $e->getMessage(),
+                ]);
             }
         }
 

@@ -20,7 +20,10 @@ use Illuminate\Support\Facades\DB;
  * Команда для каждой пары (consultant, dateMonth) пересобирает снимок из
  * актуальных commission (та же формула, что rebuildBalance / кнопка пересчёта):
  * accruedTransactional ← SUM(amountRUB WHERE type='transaction') и т.д.
- * Идемпотентно; НЕ трогает payed/accruedPool/balance. Исторические периоды
+ * Заодно синхронизирует пул: accruedPool ← SUM(poolLog за месяц). Пул писался
+ * только внутри PoolRunner::persist(), и если фиксация обрывалась после записи
+ * poolLog, он оставался там — в реестре выплат у партнёра «Пул 0».
+ * Идемпотентно; НЕ трогает payed/balance. Исторические периоды
  * (< HISTORICAL_CUTOFF) защищены внутри rebuildBalance и пропускаются.
  */
 class ResyncConsultantBalances extends Command
@@ -110,9 +113,9 @@ class ResyncConsultantBalances extends Command
                 continue;
             }
 
-            foreach ($consultants as $cid) {
-                $calculator->rebuildBalanceFor($cid, $ym);
-            }
+            // Пересобираем и начисления (commission), и пул (poolLog) —
+            // единым методом, тем же, что зовёт финализация месяца.
+            $calculator->resyncMonth($ym);
 
             $after = (float) DB::table('consultantBalance')
                 ->where('dateMonth', $ym)

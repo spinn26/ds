@@ -727,6 +727,9 @@ Route::prefix('v1')->group(function () {
         Route::get('/admin/payment-registry', [\App\Http\Controllers\Api\AdminPaymentRegistryController::class, 'index']);
         Route::get('/admin/payment-registry/{id}/requisites', [\App\Http\Controllers\Api\AdminPaymentRegistryController::class, 'requisites'])->whereNumber('id');
         Route::get('/admin/payment-registry/{id}/payments', [\App\Http\Controllers\Api\AdminPaymentRegistryController::class, 'listPayments'])->whereNumber('id');
+        // Пересчёт снимка за месяц (кнопка «Пересчитать» в шапке реестра) —
+        // деньги трогает, поэтому те же роли, что у проведения выплат.
+        Route::post('/admin/payment-registry/recalc', [\App\Http\Controllers\Api\AdminPaymentRegistryController::class, 'recalc'])->middleware('role:admin,finance,calculations');
         // Проведение/правка/отмена выплаты — только финблок и расчёты.
         Route::post('/admin/payment-registry/{id}/payments', [\App\Http\Controllers\Api\AdminPaymentRegistryController::class, 'addPayment'])->whereNumber('id')->middleware('role:admin,finance,calculations');
         Route::patch('/admin/payment-registry/payments/{paymentId}', [\App\Http\Controllers\Api\AdminPaymentRegistryController::class, 'updatePayment'])->whereNumber('paymentId')->middleware('role:admin,finance,calculations');

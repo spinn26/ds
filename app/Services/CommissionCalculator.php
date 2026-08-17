@@ -247,6 +247,66 @@ class CommissionCalculator
         ]);
     }
 
+    /**
+     * Пересобрать снимок `consultantBalance` за ВЕСЬ месяц: и начисления из
+     * `commission`, и пул из `poolLog`.
+     *
+     * Зачем отдельным методом: снимок обновлялся только точечно —
+     *   • финализация (ОП/отрыв) пересобирала только тех, у кого В ЭТОТ ПРОГОН
+     *     появились новые удержания. Раннер идемпотентный: на повторном
+     *     «пересчёте» affected=0, пересборки нет — и если снимок разошёлся
+     *     раньше (сбой rebuild'а, ручная правка commission, пересчёт цепочки),
+     *     он таким и оставался: удержания в строках есть, «Итого начислено» —
+     *     доштрафное;
+     *   • пул писался только внутри PoolRunner::persist(). Если фиксация пула
+     *     упала после записи poolLog (или строку баланса создали позже), пул
+     *     оставался в poolLog и не доезжал ни до реестра, ни до отчёта.
+     *
+     * Источник истины: commission (начисления) + poolLog (пул). Идемпотентно.
+     * Исторические периоды (< HISTORICAL_CUTOFF) не трогает.
+     *
+     * @return array{consultants:int, pool:float}
+     */
+    public function resyncMonth(string $ym): array
+    {
+        if (self::isHistorical($ym)) {
+            return ['consultants' => 0, 'pool' => 0.0];
+        }
+
+        $dateYear = substr($ym, 0, 4);
+
+        // Пул месяца из poolLog — по границам месяца, как его пишет PoolRunner.
+        $from = \Carbon\Carbon::createFromFormat('Y-m-d', $ym . '-01')->startOfMonth();
+        $poolByCons = DB::table('poolLog')
+            ->whereBetween('date', [$from->toDateTimeString(), $from->copy()->endOfMonth()->toDateTimeString()])
+            ->selectRaw('consultant, COALESCE(SUM("poolBonus"), 0) AS s')
+            ->groupBy('consultant')
+            ->pluck('s', 'consultant');
+
+        // Партнёры месяца: у кого есть commission, строка снимка или пул.
+        // Строка снимка — обязательно: только так обнуляется завышенный
+        // снимок партнёра, чьи commission уже soft-deleted.
+        $consultants = collect(DB::select(
+            'SELECT DISTINCT consultant FROM commission
+               WHERE "deletedAt" IS NULL AND "dateMonth" = ? AND consultant IS NOT NULL
+             UNION
+             SELECT DISTINCT consultant FROM "consultantBalance"
+               WHERE "dateMonth" = ? AND consultant IS NOT NULL',
+            [$ym, $ym]
+        ))->pluck('consultant')->map(fn ($v) => (int) $v)
+            ->merge($poolByCons->keys()->map(fn ($v) => (int) $v))
+            ->unique()->values();
+
+        foreach ($consultants as $cid) {
+            $this->rebuildBalance($cid, $ym, $dateYear);
+            // Пул проставляем всегда, в том числе нулём: partнёр мог выпасть из
+            // делителя при пересчёте, и старое значение нужно снять.
+            $this->applyPoolToBalance($cid, $ym, $dateYear, (float) ($poolByCons[$cid] ?? 0));
+        }
+
+        return ['consultants' => $consultants->count(), 'pool' => (float) $poolByCons->sum()];
+    }
+
     private function rebuildBalance(int $consultantId, string $dateMonth, string $dateYear): void
     {
         // Исторический баланс (< HISTORICAL_CUTOFF) неизменен — не перезаписываем.
