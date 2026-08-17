@@ -272,8 +272,13 @@ class SalesMatrixTest extends TestCase
         $paid = $this->contract(['status' => 1, 'openDate' => '2026-03-10 00:00:00']);
         $this->transaction(['dateMonth' => '2026-03', 'commissionsAmountRUB' => 1_000], $paid);
 
-        $this->assertSame(1, $this->period('2026-03', '2026-03')['grandTotals']['count'],
+        $grand = $this->period('2026-03', '2026-03')['grandTotals'];
+
+        $this->assertSame(1, $grand['count'],
             'из двух активированных контрактов остался только неоплаченный');
+        // Средний чек — производное поле, при правках теряется незаметно.
+        $this->assertEqualsWithDelta($grand['volume'], $grand['avgCheck'], 0.01,
+            'один контракт — средний чек равен его объёму');
     }
 
     /** Удалённая транзакция контракт не «занимает» — он снова активированный. */
@@ -319,6 +324,37 @@ class SalesMatrixTest extends TestCase
 
         $this->assertEqualsWithDelta(5_000, $total['revenue'], 0.01,
             'выручка учтена один раз, слоем «Факт»');
+    }
+
+    // ---------------- Сводная матрица (/sales-matrix) ----------------
+
+    /**
+     * Сводная матрица за год: строки по продуктам с выручкой, баллами и
+     * счётчиками уникальных ФК и клиентов.
+     *
+     * ⚠ Счётчики уникальных считаются ОТДЕЛЬНЫМ запросом и подмешиваются к
+     * строкам по продукту — при правках их легко потерять, а из выдачи это
+     * видно только как нули.
+     */
+    #[Test]
+    public function the_overview_carries_per_product_totals_and_counts(): void
+    {
+        // ⚠ Сводка фильтрует по dateYear, а не по dateMonth — колонки разные.
+        $this->transaction(['dateMonth' => '2026-03', 'dateYear' => '2026',
+            'amountRUB' => 500_000, 'commissionsAmountRUB' => 20_000,
+            'personalVolume' => 200]);
+
+        $body = $this->overview(2026);
+        $row = collect($body['rows'])->firstWhere('productId', self::PRODUCT);
+
+        $this->assertNotNull($row, 'продукт есть в сводке');
+        $this->assertEqualsWithDelta(20_000, $row['revenue'], 0.01);
+        $this->assertEqualsWithDelta(200, $row['points'], 0.01);
+        $this->assertSame(1, $row['fcCount'], 'уникальный ФК посчитан');
+        $this->assertSame(1, $row['clientCount'], 'уникальный клиент посчитан');
+
+        $this->assertEqualsWithDelta(500_000, $body['grandTotals']['volume'], 0.01);
+        $this->assertEqualsWithDelta(500_000, $body['grandTotals']['avgCheck'], 0.01);
     }
 
     // ---------------- Матрица ФК (/fc) ----------------
@@ -387,6 +423,14 @@ class SalesMatrixTest extends TestCase
     private function fc(string $from, string $to): array
     {
         return $this->matrix('fc', $from, $to);
+    }
+
+    /** @return array<string, mixed> */
+    private function overview(int $year): array
+    {
+        return $this->actingAs($this->admin, 'sanctum')
+            ->getJson('/api/v1/admin/reports/sales-matrix?year=' . $year)
+            ->assertOk()->json();
     }
 
     /** @return array<string, mixed> */
