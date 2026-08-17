@@ -50,6 +50,123 @@ class AdminDashboardController extends Controller
             ->whereNull('deletedAt')
             ->sum('amountRUB');
 
+        ['partnersByStatus' => $partnersByStatus, 'revenueTrend' => $revenueTrend, 'partnersTrend' => $partnersTrend, 'topConsultants' => $topConsultants, 'qualDistribution' => $qualDistribution, 'registered' => $registered, 'activated' => $activated, 'withContract' => $withContract, 'topLevel' => $topLevel, 'revenueByProduct' => $revenueByProduct] = $this->buildCharts();
+
+        ['totalPartnersPrev' => $totalPartnersPrev, 'activePartnersPrev' => $activePartnersPrev, 'newPartnersPrevMonth' => $newPartnersPrevMonth, 'totalContractsPrev' => $totalContractsPrev] = $this->buildKpiDeltas($prevMonthEnd, $prevMonthStart);
+
+        $recentActivity = $this->buildRecentActivity();
+
+        return [
+            'kpi' => [
+                'totalPartners' => $totalPartners,
+                'totalPartnersPrev' => $totalPartnersPrev,
+                'activePartners' => $activePartners,
+                'activePartnersPrev' => $activePartnersPrev,
+                'newPartnersMonth' => $newPartnersMonth,
+                'newPartnersPrevMonth' => $newPartnersPrevMonth,
+                'totalClients' => $totalClients,
+                'totalContracts' => $totalContracts,
+                'totalContractsPrev' => $totalContractsPrev,
+                'openTickets' => $openTickets,
+                'revenueMonth' => round((float) $revenueMonth, 0),
+                'revenuePrevMonth' => round((float) $revenuePrevMonth, 0),
+            ],
+            'charts' => [
+                'partnersByStatus' => $partnersByStatus,
+                'revenueTrend' => $revenueTrend,
+                'partnersTrend' => $partnersTrend,
+                'topConsultants' => $topConsultants,
+                'qualDistribution' => $qualDistribution,
+                'revenueByProduct' => $revenueByProduct,
+                'funnel' => [
+                    ['stage' => 'Регистрация', 'count' => $registered],
+                    ['stage' => 'Активация', 'count' => $activated],
+                    ['stage' => 'Первый контракт', 'count' => $withContract],
+                    ['stage' => 'TOP FC и выше', 'count' => $topLevel],
+                ],
+            ],
+            'recentActivity' => $recentActivity,
+        ];
+    }
+
+    /**
+     * Лента последних событий: тикеты и импорты, слитые по времени.
+     *
+     * @return mixed
+     */
+    private function buildRecentActivity()
+    {
+        // Recent activity (last 10 events)
+        $recentActivity = collect();
+
+        // Recent tickets
+        $recentTickets = DB::table('tickets')
+            ->orderByDesc('created_at')
+            ->limit(5)
+            ->get()
+            ->map(fn ($t) => [
+                'type' => 'ticket',
+                'icon' => 'mdi-ticket',
+                'color' => 'info',
+                'text' => "Новый тикет: {$t->subject}",
+                'date' => $t->created_at,
+            ]);
+
+        // Recent imports
+        $recentImports = DB::table('transaction_import_log')
+            ->orderByDesc('created_at')
+            ->limit(3)
+            ->get()
+            ->map(fn ($i) => [
+                'type' => 'import',
+                'icon' => 'mdi-upload',
+                'color' => 'success',
+                'text' => "Импорт: {$i->success_count} транзакций",
+                'date' => $i->created_at,
+            ]);
+
+        $recentActivity = $recentTickets->merge($recentImports)
+            ->sortByDesc('date')
+            ->values()
+            ->take(10);
+
+
+        return $recentActivity;
+    }
+
+    /**
+     * Показатели ПРОШЛОГО периода — из них выводится процент роста.
+     *
+     * ⚠ У каждого свой период: подмена его текущим даёт правдоподобный,
+     * но неверный тренд.
+     *
+     * @return mixed
+     */
+    private function buildKpiDeltas($prevMonthEnd, $prevMonthStart)
+    {
+        // KPI deltas: previous vs current (for period-over-period %)
+        $totalPartnersPrev = DB::table('consultant')->whereNull('dateDeleted')
+            ->where('dateCreated', '<=', $prevMonthEnd)->count();
+        $activePartnersPrev = DB::table('consultant')->whereNull('dateDeleted')
+            ->where('activity', 1)
+            ->where('dateCreated', '<=', $prevMonthEnd)
+            ->count();
+        $newPartnersPrevMonth = DB::table('consultant')->whereNull('dateDeleted')
+            ->whereBetween('dateCreated', [$prevMonthStart, $prevMonthEnd])->count();
+        $totalContractsPrev = DB::table('contract')->whereNull('deletedAt')
+            ->where('createDate', '<=', $prevMonthEnd)->count();
+
+
+        return ['totalPartnersPrev' => $totalPartnersPrev, 'activePartnersPrev' => $activePartnersPrev, 'newPartnersPrevMonth' => $newPartnersPrevMonth, 'totalContractsPrev' => $totalContractsPrev];
+    }
+
+    /**
+     * Данные графиков сводки.
+     *
+     * @return mixed
+     */
+    private function buildCharts()
+    {
         // === Charts Data ===
 
         // Partners by status
@@ -146,82 +263,7 @@ class AdminDashboardController extends Controller
                 'total' => round((float) ($r->total ?? 0), 0),
             ]);
 
-        // KPI deltas: previous vs current (for period-over-period %)
-        $totalPartnersPrev = DB::table('consultant')->whereNull('dateDeleted')
-            ->where('dateCreated', '<=', $prevMonthEnd)->count();
-        $activePartnersPrev = DB::table('consultant')->whereNull('dateDeleted')
-            ->where('activity', 1)
-            ->where('dateCreated', '<=', $prevMonthEnd)
-            ->count();
-        $newPartnersPrevMonth = DB::table('consultant')->whereNull('dateDeleted')
-            ->whereBetween('dateCreated', [$prevMonthStart, $prevMonthEnd])->count();
-        $totalContractsPrev = DB::table('contract')->whereNull('deletedAt')
-            ->where('createDate', '<=', $prevMonthEnd)->count();
 
-        // Recent activity (last 10 events)
-        $recentActivity = collect();
-
-        // Recent tickets
-        $recentTickets = DB::table('tickets')
-            ->orderByDesc('created_at')
-            ->limit(5)
-            ->get()
-            ->map(fn ($t) => [
-                'type' => 'ticket',
-                'icon' => 'mdi-ticket',
-                'color' => 'info',
-                'text' => "Новый тикет: {$t->subject}",
-                'date' => $t->created_at,
-            ]);
-
-        // Recent imports
-        $recentImports = DB::table('transaction_import_log')
-            ->orderByDesc('created_at')
-            ->limit(3)
-            ->get()
-            ->map(fn ($i) => [
-                'type' => 'import',
-                'icon' => 'mdi-upload',
-                'color' => 'success',
-                'text' => "Импорт: {$i->success_count} транзакций",
-                'date' => $i->created_at,
-            ]);
-
-        $recentActivity = $recentTickets->merge($recentImports)
-            ->sortByDesc('date')
-            ->values()
-            ->take(10);
-
-        return [
-            'kpi' => [
-                'totalPartners' => $totalPartners,
-                'totalPartnersPrev' => $totalPartnersPrev,
-                'activePartners' => $activePartners,
-                'activePartnersPrev' => $activePartnersPrev,
-                'newPartnersMonth' => $newPartnersMonth,
-                'newPartnersPrevMonth' => $newPartnersPrevMonth,
-                'totalClients' => $totalClients,
-                'totalContracts' => $totalContracts,
-                'totalContractsPrev' => $totalContractsPrev,
-                'openTickets' => $openTickets,
-                'revenueMonth' => round((float) $revenueMonth, 0),
-                'revenuePrevMonth' => round((float) $revenuePrevMonth, 0),
-            ],
-            'charts' => [
-                'partnersByStatus' => $partnersByStatus,
-                'revenueTrend' => $revenueTrend,
-                'partnersTrend' => $partnersTrend,
-                'topConsultants' => $topConsultants,
-                'qualDistribution' => $qualDistribution,
-                'revenueByProduct' => $revenueByProduct,
-                'funnel' => [
-                    ['stage' => 'Регистрация', 'count' => $registered],
-                    ['stage' => 'Активация', 'count' => $activated],
-                    ['stage' => 'Первый контракт', 'count' => $withContract],
-                    ['stage' => 'TOP FC и выше', 'count' => $topLevel],
-                ],
-            ],
-            'recentActivity' => $recentActivity,
-        ];
+        return ['partnersByStatus' => $partnersByStatus, 'revenueTrend' => $revenueTrend, 'partnersTrend' => $partnersTrend, 'topConsultants' => $topConsultants, 'qualDistribution' => $qualDistribution, 'registered' => $registered, 'activated' => $activated, 'withContract' => $withContract, 'topLevel' => $topLevel, 'revenueByProduct' => $revenueByProduct];
     }
 }
