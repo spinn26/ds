@@ -160,34 +160,7 @@ class ChatController extends Controller
         // (was N+1: one COUNT per ticket).
         ['unreadMap' => $unreadMap, 'lastMsgMap' => $lastMsgMap, 'newForMeSet' => $newForMeSet, 'avatarMap' => $avatarMap, 'creatorNameMap' => $creatorNameMap, 'participantsMap' => $participantsMap] = $this->ticketRelations($participantTicketIds, $tickets, $user);
 
-        $data = $tickets->map(function ($t) use ($unreadMap, $lastMsgMap, $user, $newForMeSet, $avatarMap, $creatorNameMap, $participantsMap) {
-            $t->unread = $unreadMap[$t->id] ?? 0;
-            $t->is_new_for_me = $newForMeSet->contains($t->id);
-            $t->creator_name = ! empty($t->created_by) ? ($creatorNameMap[$t->created_by] ?? null) : null;
-            $t->participants = ($participantsMap[$t->id] ?? collect())->map(fn ($p) => [
-                'user_id'   => $p->user_id,
-                'user_name' => $p->user_name,
-            ])->values()->all();
-            $t->customer_avatar = (! empty($t->created_by) && isset($avatarMap[$t->created_by]))
-                ? '/storage/' . $avatarMap[$t->created_by]
-                : null;
-            $lm = $lastMsgMap[$t->id] ?? null;
-            if ($lm) {
-                $preview = $lm->content
-                    ? mb_substr($lm->content, 0, 80)
-                    : ($lm->attachment_name ? '📎 ' . $lm->attachment_name : '');
-                $t->last_message_preview = $preview;
-                $t->last_message_from_me = (int) $lm->sender_id === (int) $user->id;
-                $t->last_message_is_system = (bool) $lm->is_system;
-                $t->last_message_sender = $lm->sender_name;
-            } else {
-                $t->last_message_preview = null;
-                $t->last_message_from_me = false;
-                $t->last_message_is_system = false;
-                $t->last_message_sender = null;
-            }
-            return $t;
-        });
+        $data = $this->presentTickets($avatarMap, $creatorNameMap, $lastMsgMap, $newForMeSet, $participantsMap, $tickets, $unreadMap, $user);
 
         return response()->json([
             'data' => $data,
@@ -2943,5 +2916,46 @@ class ChatController extends Controller
 
             return $id;
         });
+    }
+
+    /**
+     * Строки списка тикетов: к каждому тикету подмешиваются непрочитанные,
+     * последнее сообщение, автор и наблюдатели.
+     *
+     * @return \Illuminate\Support\Collection<int, array<string, mixed>>
+     */
+    private function presentTickets($avatarMap, $creatorNameMap, $lastMsgMap, $newForMeSet, $participantsMap, $tickets, $unreadMap, $user)
+    {
+        $data = $tickets->map(function ($t) use ($unreadMap, $lastMsgMap, $user, $newForMeSet, $avatarMap, $creatorNameMap, $participantsMap) {
+            $t->unread = $unreadMap[$t->id] ?? 0;
+            $t->is_new_for_me = $newForMeSet->contains($t->id);
+            $t->creator_name = ! empty($t->created_by) ? ($creatorNameMap[$t->created_by] ?? null) : null;
+            $t->participants = ($participantsMap[$t->id] ?? collect())->map(fn ($p) => [
+                'user_id'   => $p->user_id,
+                'user_name' => $p->user_name,
+            ])->values()->all();
+            $t->customer_avatar = (! empty($t->created_by) && isset($avatarMap[$t->created_by]))
+                ? '/storage/' . $avatarMap[$t->created_by]
+                : null;
+            $lm = $lastMsgMap[$t->id] ?? null;
+            if ($lm) {
+                $preview = $lm->content
+                    ? mb_substr($lm->content, 0, 80)
+                    : ($lm->attachment_name ? '📎 ' . $lm->attachment_name : '');
+                $t->last_message_preview = $preview;
+                $t->last_message_from_me = (int) $lm->sender_id === (int) $user->id;
+                $t->last_message_is_system = (bool) $lm->is_system;
+                $t->last_message_sender = $lm->sender_name;
+            } else {
+                $t->last_message_preview = null;
+                $t->last_message_from_me = false;
+                $t->last_message_is_system = false;
+                $t->last_message_sender = null;
+            }
+            return $t;
+        });
+
+
+        return $data;
     }
 }
