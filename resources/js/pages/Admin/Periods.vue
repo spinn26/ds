@@ -31,12 +31,15 @@
         <v-icon v-else color="error" title="Отчёты скрыты от партнёров">mdi-minus-circle</v-icon>
       </template>
       <template #item.visibilityToggle="{ item }">
-        <v-btn v-if="canCalc && !item.isFrozen && !item.isVisibleToPartners"
+        <!-- Видимостью управляем и у закрытых периодов: решение админа теперь
+             главнее закрытия (раньше закрытый месяц принудительно показывался
+             партнёрам, и скрыть его было нечем — кнопка пряталась). -->
+        <v-btn v-if="canCalc && !item.isVisibleToPartners"
           size="x-small" color="success" variant="tonal" prepend-icon="mdi-eye"
           @click="toggleVisibility(item, true)">
           Сделать доступным
         </v-btn>
-        <v-btn v-else-if="canCalc && !item.isFrozen && item.isVisibleToPartners"
+        <v-btn v-else-if="canCalc && item.isVisibleToPartners"
           size="x-small" color="error" variant="tonal" prepend-icon="mdi-eye-off"
           @click="toggleVisibility(item, false)">
           Сделать недоступным

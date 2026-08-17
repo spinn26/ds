@@ -99,17 +99,19 @@ class AdminPoolController extends Controller
     }
 
     /**
-     * POST /admin/pool/apply — одноразовая фиксация пула за месяц.
+     * POST /admin/pool/apply — фиксация пула за месяц.
      *
      * Поведение:
      *   - Если период УЖЕ закрыт (period_closures) → 422.
      *     Перезапись зафиксированного периода невозможна; для редких
      *     корректировок есть отдельный flow «Разморозка периода» (reopen).
-     *   - Иначе: пересчитываем пул на лету по текущему qualificationLog,
-     *     пишем в poolLog (DELETE-then-INSERT в транзакции) и СРАЗУ
-     *     закрываем период через PeriodFreezeService::close.
-     *     После этого poolLog/transaction/commission/qualificationLog за
-     *     период становятся read-only через PeriodFreezeService::guard.
+     *   - Иначе: пересчитываем пул на лету по текущему qualificationLog и
+     *     пишем в poolLog (DELETE-then-INSERT в транзакции).
+     *
+     * ⚠ Период при этом НЕ закрывается (изменено 2026-08-17). Раньше фиксация
+     * пула сразу звала PeriodFreezeService::close — месяц оказывался закрыт до
+     * окончания сверки, и это же закрытие раскрывало партнёрам намеренно
+     * скрытые отчёты. Закрытие — отдельное действие на /admin/periods.
      */
     public function apply(Request $request): JsonResponse
     {
