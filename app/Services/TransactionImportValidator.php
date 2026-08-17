@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Services\SheetProfiles;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -26,13 +27,6 @@ use Illuminate\Support\Facades\DB;
 class TransactionImportValidator
 {
     /**
-     * Кэшируем lookup commissionCalcProperty.title → id на время импорта.
-     * Размер справочника ~30 строк, читаем целиком при первом обращении —
-     * иначе на 1267 строк × ILIKE-запрос даём ненужную нагрузку.
-     */
-    private ?array $propertyTitleMap = null;
-
-    /**
      * @param list<array<string, mixed>> $rows строки источника
      * @param ?int $resolvedCurrency валюта импорта (перебивается колонкой строки)
      * @param ?string $profileWarning расхождение шапки листа с профилем
@@ -50,21 +44,7 @@ class TransactionImportValidator
         // CurrencyRates сам кэширует по (валюта, месяц).
         $rateFor = fn (?int $cur, $date = null): float => \App\Support\CurrencyRates::forDate($cur, $date);
 
-        // Batch-загрузка контрактов: 1 SELECT вместо 1267 (раньше каждая
-        // строка делала отдельный exact SELECT — горлышко валидации).
-        $allNumbers = [];
-        foreach ($rows as $row) {
-            $n = trim((string) ($row['contract_number'] ?? $row['number'] ?? $row['номер_контракта'] ?? $row['contract'] ?? ''));
-            if ($n !== '') $allNumbers[$n] = true;
-        }
-        $allNumbers = array_keys($allNumbers);
-        $contractMap = $allNumbers
-            ? DB::table('contract')
-                ->whereIn('number', $allNumbers)
-                ->whereNull('deletedAt')
-                ->get(['id', 'number', 'clientName'])
-                ->keyBy('number')
-            : collect();
+        $contractMap = $this->contractsByNumber($rows);
 
         // Локальный кэш period-freeze: для 1267 строк одного-двух
         // периодов вместо 1267 SELECT'ов делаем 1-2.
@@ -202,7 +182,7 @@ class TransactionImportValidator
                 if (is_numeric($propertyRaw)) {
                     $propertyId = (int) $propertyRaw;
                 } else {
-                    $propertyId = $this->resolvePropertyId((string) $propertyRaw);
+                    $propertyId = SheetProfiles::resolvePropertyId($propertyRaw);
                     // Значение свойства есть, но не распознано — не роняем в
                     // NULL молча (иначе МФ/Апфронт незаметно теряется), а
                     // предупреждаем оператора с указанием строки и значения.
@@ -213,6 +193,16 @@ class TransactionImportValidator
                         );
                     }
                 }
+            }
+
+            // «Своя комиссия» включена для строки, но суммы комиссии в отчёте
+            // нет — строка уйдёт по тарифу из «Продуктов». Для МФ (Робо) тариф
+            // заведомо расходится с фактом оплаты, поэтому предупреждаем.
+            if (! empty($row['custom_commission_missing'])) {
+                $warnings[] = sprintf(
+                    'Строка %d: пустая сумма комиссии — транзакция посчитана по тарифу из «Продуктов», а не по факту оплаты.',
+                    $lineNo,
+                );
             }
 
             $prepared[] = [
@@ -244,26 +234,34 @@ class TransactionImportValidator
         return ['prepared' => $prepared, 'errors' => $errors, 'warnings' => $warnings];
     }
 
-    private function resolvePropertyId(string $title): ?int
-    {
-        if ($this->propertyTitleMap === null) {
-            $this->propertyTitleMap = [];
-            foreach (DB::table('commissionCalcProperty')->get(['id', 'title']) as $p) {
-                $this->propertyTitleMap[mb_strtolower(trim((string) $p->title))] = (int) $p->id;
-            }
-        }
-        $key = mb_strtolower(trim($title));
-        if (isset($this->propertyTitleMap[$key])) return $this->propertyTitleMap[$key];
 
-        // Лёгкие алиасы: «MF», «UP» — английские варианты МФ/Апфронт.
-        $aliases = [
-            'mf' => 'мф',
-            'up' => 'апфронт',
-            'upfront' => 'апфронт',
-        ];
-        if (isset($aliases[$key], $this->propertyTitleMap[$aliases[$key]])) {
-            return $this->propertyTitleMap[$aliases[$key]];
+    /**
+     * Контракты всех строк источника — одним запросом.
+     *
+     * ⚠ Раньше на каждую строку шёл отдельный SELECT: на выгрузке в 1267
+     * строк это было горлышко всей валидации.
+     *
+     * @param list<array<string, mixed>> $rows
+     */
+    private function contractsByNumber(array $rows)
+    {
+        // Batch-загрузка контрактов: 1 SELECT вместо 1267 (раньше каждая
+        // строка делала отдельный exact SELECT — горлышко валидации).
+        $allNumbers = [];
+        foreach ($rows as $row) {
+            $n = trim((string) ($row['contract_number'] ?? $row['number'] ?? $row['номер_контракта'] ?? $row['contract'] ?? ''));
+            if ($n !== '') $allNumbers[$n] = true;
         }
-        return null;
+        $allNumbers = array_keys($allNumbers);
+        $contractMap = $allNumbers
+            ? DB::table('contract')
+                ->whereIn('number', $allNumbers)
+                ->whereNull('deletedAt')
+                ->get(['id', 'number', 'clientName'])
+                ->keyBy('number')
+            : collect();
+
+
+        return $contractMap;
     }
 }

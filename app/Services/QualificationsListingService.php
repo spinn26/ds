@@ -126,71 +126,9 @@ class QualificationsListingService
             return ($a->level >= $b->level) ? $a : $b;
         };
 
-        $byConsultant = [];
-        foreach ($logs as $l) {
-            // Сравниваем МЕСЯЦ, а не строки с датами: в колонке timestamp,
-            // и посимвольное сравнение с границей уводило строки последнего
-            // дня в чужую колонку.
-            $isCurrent = substr((string) $l->date, 0, 7) === $month;
-            $bucket = $isCurrent ? 'current' : 'previous';
-            $level = $resolveLevel($l->nominalLevel, $l->calculationLevel);
-            // НГП (cumulative) держим как последний НЕ-NULL (carry-forward):
-            // penalty-строка финализа Отрыв/ОП имеет date=конец месяца и NULL
-            // cumulative, и, будучи самой свежей в выборке, иначе занулила бы
-            // НГП на админ-странице финансов. Остальные поля берём из текущей
-            // строки (last-wins, как раньше). Sticky-логика order-independent.
-            $prevCum = $byConsultant[$l->consultant][$bucket]['groupVolumeCumulative'] ?? null;
-            $rowCum = $l->groupVolumeCumulative !== null ? (float) $l->groupVolumeCumulative : null;
-            $byConsultant[$l->consultant][$bucket] = [
-                'id' => $l->id,
-                'personalVolume' => round((float) ($l->personalVolume ?? 0), 2),
-                'groupVolume' => round((float) ($l->groupVolume ?? 0), 2),
-                'groupVolumeCumulative' => round((float) ($rowCum ?? $prevCum ?? 0), 2),
-                'levelId' => $level?->id,
-                'levelTitle' => $level?->title,
-                'levelNum' => $level?->level,
-                'mandatoryGP' => (float) ($level->mandatoryGP ?? 0),
-                'date' => $l->date,
-            ];
-        }
+        $byConsultant = $this->buildSnapshots($logs, $month, $resolveLevel);
 
-        // LIVE-режим для ОТКРЫТОГО месяца (спека «Открытый период», Сценарий А):
-        // раздел «Квалификации» = живой мониторинг, показатели считаются на лету
-        // из транзакций. Для ЗАКРЫТОГО месяца остаётся зафиксированный снимок
-        // ($byConsultant) — он же кормит раздел «Комиссии» (Сценарий Б).
-        //
-        // Разделение с решением 2026-06-05 «расчёты по кнопке»: по кнопке остаются
-        // ДЕНЬГИ (комиссии, удержания, пул). Мониторинг НГП/ЛП/ГП — живой.
-        $isFrozen = app(\App\Services\PeriodFreezeService::class)
-            ->isFrozen((int) substr($month, 0, 4), (int) substr($month, 5, 2));
-        $isHistorical = \App\Services\CommissionCalculator::isHistorical($month);
-        if (! $isFrozen && ! $isHistorical) {
-            $live = $this->liveQualificationVolumes($pageIds, $month);
-            $calc = app(\App\Services\CommissionCalculator::class);
-            foreach ($live as $cid => $vals) {
-                // Уровень месяца = ВХОДНОЙ уровень (итог предыдущего), тем же
-                // резолвером, что и комиссии (getQualificationLevel). Не выводим по
-                // НГП: повышение зависит и от ОП/отрыва. Если снимок current уже
-                // есть — оставляем его уровень; иначе резолвим входной.
-                $snap = $byConsultant[$cid]['current'] ?? null;
-                if ($snap && $snap['levelId']) {
-                    $levelBlock = [
-                        'levelId' => $snap['levelId'], 'levelTitle' => $snap['levelTitle'],
-                        'levelNum' => $snap['levelNum'], 'mandatoryGP' => $snap['mandatoryGP'],
-                    ];
-                } else {
-                    $lvId = $calc->resolveLevelForPreview((int) $cid, $month . '-01')['levelId'] ?? null;
-                    $lv = $lvId ? ($levels[$lvId] ?? null) : null;
-                    $levelBlock = [
-                        'levelId' => $lv?->id, 'levelTitle' => $lv?->title,
-                        'levelNum' => $lv?->level, 'mandatoryGP' => $lv ? (float) $lv->mandatoryGP : 0.0,
-                    ];
-                }
-                $byConsultant[$cid]['current'] = array_merge(
-                    ['date' => $month . '-01'], $levelBlock, $vals, ['live' => true]
-                );
-            }
-        }
+        $this->applyLiveVolumes($byConsultant, $pageIds, $month, $levels);
 
         $activityMap = [1 => 'active', 3 => 'terminated', 4 => 'registered', 5 => 'excluded'];
 
@@ -321,5 +259,101 @@ class QualificationsListingService
         }
 
         return $out;
+    }
+
+    /**
+     * Живой пересчёт показателей ОТКРЫТОГО месяца прямо из транзакций.
+     *
+     * ⚠ Закрытый и исторический месяцы остаются зафиксированным снимком —
+     * их цифрами кормится раздел «Комиссии», и пересчитывать их нельзя.
+     * Под запрет «деньги считаются по кнопке» это не попадает: мониторинг
+     * НГП, ЛП и ГП — не расчёт денег.
+     *
+     * @param array<int, mixed> $byConsultant снимки по партнёрам, дополняется
+     */
+    private function applyLiveVolumes(array &$byConsultant, array $pageIds, string $month, $levels): void
+    {
+        // LIVE-режим для ОТКРЫТОГО месяца (спека «Открытый период», Сценарий А):
+        // раздел «Квалификации» = живой мониторинг, показатели считаются на лету
+        // из транзакций. Для ЗАКРЫТОГО месяца остаётся зафиксированный снимок
+        // ($byConsultant) — он же кормит раздел «Комиссии» (Сценарий Б).
+        //
+        // Разделение с решением 2026-06-05 «расчёты по кнопке»: по кнопке остаются
+        // ДЕНЬГИ (комиссии, удержания, пул). Мониторинг НГП/ЛП/ГП — живой.
+        $isFrozen = app(\App\Services\PeriodFreezeService::class)
+            ->isFrozen((int) substr($month, 0, 4), (int) substr($month, 5, 2));
+        $isHistorical = \App\Services\CommissionCalculator::isHistorical($month);
+        if (! $isFrozen && ! $isHistorical) {
+            $live = $this->liveQualificationVolumes($pageIds, $month);
+            $calc = app(\App\Services\CommissionCalculator::class);
+            foreach ($live as $cid => $vals) {
+                // Уровень месяца = ВХОДНОЙ уровень (итог предыдущего), тем же
+                // резолвером, что и комиссии (getQualificationLevel). Не выводим по
+                // НГП: повышение зависит и от ОП/отрыва. Если снимок current уже
+                // есть — оставляем его уровень; иначе резолвим входной.
+                $snap = $byConsultant[$cid]['current'] ?? null;
+                if ($snap && $snap['levelId']) {
+                    $levelBlock = [
+                        'levelId' => $snap['levelId'], 'levelTitle' => $snap['levelTitle'],
+                        'levelNum' => $snap['levelNum'], 'mandatoryGP' => $snap['mandatoryGP'],
+                    ];
+                } else {
+                    $lvId = $calc->resolveLevelForPreview((int) $cid, $month . '-01')['levelId'] ?? null;
+                    $lv = $lvId ? ($levels[$lvId] ?? null) : null;
+                    $levelBlock = [
+                        'levelId' => $lv?->id, 'levelTitle' => $lv?->title,
+                        'levelNum' => $lv?->level, 'mandatoryGP' => $lv ? (float) $lv->mandatoryGP : 0.0,
+                    ];
+                }
+                $byConsultant[$cid]['current'] = array_merge(
+                    ['date' => $month . '-01'], $levelBlock, $vals, ['live' => true]
+                );
+            }
+        }
+
+    }
+
+    /**
+     * Снимок показателей по партнёрам: строки лога раскладываются по
+     * колонкам «текущий» и «предыдущий месяц».
+     *
+     * ⚠ НГП держится carry-forward: строка финализа Отрыв/ОП приходит с
+     * пустым накопительным ГП и иначе обнуляла бы показатель. Правило
+     * устойчиво к порядку строк.
+     *
+     * @return array<int, mixed>
+     */
+    private function buildSnapshots($logs, string $month, callable $resolveLevel): array
+    {
+        $byConsultant = [];
+        foreach ($logs as $l) {
+            // Сравниваем МЕСЯЦ, а не строки с датами: в колонке timestamp,
+            // и посимвольное сравнение с границей уводило строки последнего
+            // дня в чужую колонку.
+            $isCurrent = substr((string) $l->date, 0, 7) === $month;
+            $bucket = $isCurrent ? 'current' : 'previous';
+            $level = $resolveLevel($l->nominalLevel, $l->calculationLevel);
+            // НГП (cumulative) держим как последний НЕ-NULL (carry-forward):
+            // penalty-строка финализа Отрыв/ОП имеет date=конец месяца и NULL
+            // cumulative, и, будучи самой свежей в выборке, иначе занулила бы
+            // НГП на админ-странице финансов. Остальные поля берём из текущей
+            // строки (last-wins, как раньше). Sticky-логика order-independent.
+            $prevCum = $byConsultant[$l->consultant][$bucket]['groupVolumeCumulative'] ?? null;
+            $rowCum = $l->groupVolumeCumulative !== null ? (float) $l->groupVolumeCumulative : null;
+            $byConsultant[$l->consultant][$bucket] = [
+                'id' => $l->id,
+                'personalVolume' => round((float) ($l->personalVolume ?? 0), 2),
+                'groupVolume' => round((float) ($l->groupVolume ?? 0), 2),
+                'groupVolumeCumulative' => round((float) ($rowCum ?? $prevCum ?? 0), 2),
+                'levelId' => $level?->id,
+                'levelTitle' => $level?->title,
+                'levelNum' => $level?->level,
+                'mandatoryGP' => (float) ($level->mandatoryGP ?? 0),
+                'date' => $l->date,
+            ];
+        }
+
+
+        return $byConsultant;
     }
 }
