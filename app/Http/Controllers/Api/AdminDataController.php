@@ -208,7 +208,9 @@ class AdminDataController extends Controller
             'lastName' => ['required', 'string', 'max:255', 'regex:' . $cyrillicRegex],
             'patronymic' => ['nullable', 'string', 'max:255', 'regex:' . $cyrillicRegex],
             'email' => ['nullable', 'email', 'max:255', 'unique:WebUser,email'],
-            'phone' => ['nullable', 'string', 'max:64'],
+            // Формат телефона проверяем и здесь: карточку заводят руками, а
+            // фронтовая проверка (PhoneInput) в API-запрос не попадает.
+            'phone' => ['nullable', 'string', 'max:64', new \App\Rules\ValidPhone],
             'birthDate' => ['nullable', 'date'],
             'activity' => ['required', 'integer', 'in:1,3,4,5'],
             'inviter' => ['nullable', 'integer', 'exists:consultant,id'],

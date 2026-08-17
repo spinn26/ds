@@ -9,14 +9,14 @@
        не умеет одновременно держать «+7» в чипе и не показывать его
        (или «8») в поле — формат жёстко задан libphonenumber-js. -->
   <div class="phone-input-wrap">
-    <div class="phone-input-prefix" :class="{ 'is-focused': focused }">
+    <div v-if="!foreign" class="phone-input-prefix" :class="{ 'is-focused': focused }">
       <span class="flag">🇷🇺</span>
       <span class="dial">+7</span>
     </div>
     <v-text-field
       v-model="display"
       :label="label"
-      :placeholder="placeholder"
+      :placeholder="foreign ? '+971 50 123 4567' : placeholder"
       :density="density"
       :variant="variant"
       :error-messages="errorMessages"
@@ -24,6 +24,7 @@
       :disabled="disabled"
       :readonly="readonly"
       class="phone-input-field"
+      :class="{ 'no-prefix': foreign }"
       type="tel"
       inputmode="tel"
       autocomplete="tel"
@@ -55,6 +56,16 @@ const emit = defineEmits(['update:modelValue', 'validate']);
 const display = ref('');
 const focused = ref(false);
 const touched = ref(false);
+// Иностранный номер (код страны ≠ 7) держим как есть: маска «+7 (XXX)…» ему
+// не подходит. Раньше её применяли ко всему подряд — реальный «+971 50 832
+// 2870» (ОАЭ) показывался как «🇷🇺 +7 (150) 832-28-70» с ошибкой «Неверный
+// номер», а Сохранить записало бы в базу именно этот испорченный «+7150…».
+const foreign = ref(false);
+
+function looksForeign(raw) {
+  const s = String(raw || '').trim();
+  return s.startsWith('+') && s[1] !== '7';
+}
 
 // «+79991234567» / «79991234567» / «89991234567» / «9991234567» → 10 цифр
 function toTenDigits(raw) {
@@ -90,8 +101,45 @@ function emitValidate(tenDigits) {
   });
 }
 
+// Иностранный номер: ни маски, ни обрезки — валидируем целиком.
+function emitValidateForeign(e164) {
+  emit('validate', {
+    valid: e164.length > 3 ? isValidPhoneNumber(e164) : false,
+    possible: e164.length > 1,
+    country: null,
+    countryCode: null,
+    nationalNumber: e164.replace(/\D/g, ''),
+    formatted: e164,
+  });
+}
+
+// Приводит любое входящее значение к состоянию компонента.
+function applyValue(raw) {
+  if (looksForeign(raw)) {
+    foreign.value = true;
+    const e164 = '+' + String(raw).replace(/\D/g, '');
+    display.value = String(raw).trim();
+    emitValidateForeign(e164);
+    return;
+  }
+  foreign.value = false;
+  const ten = toTenDigits(raw);
+  display.value = formatNational(ten);
+  emitValidate(ten);
+}
+
 function onInput(e) {
-  const ten = toTenDigits(e?.target?.value ?? display.value);
+  const raw = e?.target?.value ?? display.value;
+  if (looksForeign(raw)) {
+    foreign.value = true;
+    const e164 = '+' + String(raw).replace(/\D/g, '');
+    display.value = raw;               // не мешаем набирать
+    emit('update:modelValue', e164.length > 1 ? e164 : '');
+    emitValidateForeign(e164);
+    return;
+  }
+  foreign.value = false;
+  const ten = toTenDigits(raw);
   display.value = formatNational(ten);
   emit('update:modelValue', ten.length ? `+7${ten}` : '');
   emitValidate(ten);
@@ -99,19 +147,21 @@ function onInput(e) {
 
 // Внешние изменения modelValue (загрузка профиля, reset формы).
 watch(() => props.modelValue, (val) => {
-  const ten = toTenDigits(val);
-  const next = formatNational(ten);
-  if (next !== display.value) {
-    display.value = next;
-    emitValidate(ten);
+  // Сравниваем по цифрам: в foreign-режиме display хранит номер как набран,
+  // и посимвольное сравнение с modelValue давало бы лишние перерисовки.
+  const same = looksForeign(val) === foreign.value && (
+    foreign.value
+      ? String(val || '').replace(/\D/g, '') === display.value.replace(/\D/g, '')
+      : toTenDigits(val) === toTenDigits(display.value)
+  );
+  if (! same) {
+    applyValue(val);
   }
 }, { immediate: false });
 
 onMounted(() => {
-  const ten = toTenDigits(props.modelValue);
-  display.value = formatNational(ten);
   // Первый @validate — чтобы родитель сразу знал статус валидности.
-  emitValidate(ten);
+  applyValue(props.modelValue);
 });
 </script>
 
@@ -164,5 +214,11 @@ onMounted(() => {
 .phone-input-field :deep(.v-field__outline__start) {
   border-top-left-radius: 0;
   border-bottom-left-radius: 0;
+}
+/* Иностранный номер: префикса «🇷🇺 +7» нет — возвращаем полю свой левый угол. */
+.phone-input-field.no-prefix :deep(.v-field),
+.phone-input-field.no-prefix :deep(.v-field__outline__start) {
+  border-top-left-radius: 4px;
+  border-bottom-left-radius: 4px;
 }
 </style>

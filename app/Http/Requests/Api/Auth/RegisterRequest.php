@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Api\Auth;
 
+use App\Rules\ValidPhone;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rules\Password;
 
@@ -10,6 +11,18 @@ class RegisterRequest extends FormRequest
     public function authorize(): bool
     {
         return true;
+    }
+
+    /**
+     * Почту приводим к нижнему регистру ещё до валидации: логин по email
+     * регистрозависим, и «Ivan@x.ru» в базе означает партнёра, который не
+     * может войти под тем, что сам набирает.
+     */
+    protected function prepareForValidation(): void
+    {
+        if ($this->has('email')) {
+            $this->merge(['email' => mb_strtolower(trim((string) $this->input('email')))]);
+        }
     }
 
     public function rules(): array
@@ -21,8 +34,39 @@ class RegisterRequest extends FormRequest
             'firstName' => ['required', 'string', 'max:255', 'regex:' . $cyrillic],
             'lastName' => ['required', 'string', 'max:255', 'regex:' . $cyrillic],
             'patronymic' => ['required', 'string', 'max:255', 'regex:' . $cyrillic],
-            'email' => ['required', 'email', 'unique:WebUser,email'],
-            'phone' => ['required', 'string', 'max:50'],
+            // Почта: сверка РЕГИСТРОНЕЗАВИСИМАЯ. `unique:WebUser,email` в
+            // Postgres сравнивает байт-в-байт, поэтому «Ivan@x.ru» проходил
+            // мимо уже занятого «ivan@x.ru» — а логин по почте
+            // регистрозависим, и такой партнёр остаётся без входа.
+            'email' => [
+                'required', 'email',
+                function ($attribute, $value, $fail) {
+                    $exists = \App\Models\User::whereRaw('lower(btrim(email)) = ?', [mb_strtolower(trim((string) $value))])
+                        ->exists();
+                    if ($exists) {
+                        $fail('Партнёр с такой почтой уже зарегистрирован. Войдите в свой кабинет.');
+                    }
+                },
+            ],
+            // Телефон: формат + уникальность. Раньше на бэкенде не было ни
+            // того, ни другого — вся проверка жила на фронте (@validate у
+            // vue-tel-input) и в /auth/check-duplicates, а этот шаг
+            // необязателен: автозаполнение не поднимает @validate, прямой POST
+            // на /auth/register проходит мимо обоих. Отсюда и «+7 (150)…» в
+            // базе, и дубли по номеру.
+            'phone' => [
+                'required', 'string', 'max:50', new ValidPhone,
+                function ($attribute, $value, $fail) {
+                    // Сверка по последним 10 цифрам (канон App\Support\Phone):
+                    // в колонке номер лежит отформатированным, LIKE по сырой
+                    // строке не совпадал никогда.
+                    $norm = \App\Support\Phone::norm($value);
+                    $exists = \App\Models\User::whereRaw(\App\Support\Phone::sql('phone') . ' = ?', [$norm])->exists();
+                    if ($exists) {
+                        $fail('Партнёр с таким номером телефона уже зарегистрирован. Войдите в свой кабинет.');
+                    }
+                },
+            ],
             'telegram' => ['required', 'string', 'max:100'],
             'birthDate' => ['required', 'date'],
             'city' => ['required', 'string', 'max:255', 'regex:' . $cyrillic],

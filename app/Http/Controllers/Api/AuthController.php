@@ -314,18 +314,23 @@ class AuthController extends Controller
      */
     private function excludedContactMatch(?string $email, ?string $phone): bool
     {
-        $email = $email ? trim($email) : null;
-        $phone = $phone ? trim($phone) : null;
-        if (! $email && ! $phone) {
+        // Почта — регистронезависимо, телефон — по последним 10 цифрам
+        // (App\Support\Phone). Точное сравнение строк не ловило ничего:
+        // в колонке номер лежит отформатированным («+7 937 286 03 66»),
+        // а с формы приходит в другом виде — реестр исключённых по телефону
+        // молча пропускал всех.
+        $email = $email ? mb_strtolower(trim($email)) : null;
+        $normPhone = Phone::norm($phone);
+        if (! $email && ! $normPhone) {
             return false;
         }
 
         return DB::table('consultant as c')
             ->join('WebUser as w', 'w.id', '=', 'c.webUser')
             ->where('c.activity', PartnerActivity::Excluded->value)
-            ->where(function ($q) use ($email, $phone) {
-                if ($email) $q->orWhere('w.email', $email);
-                if ($phone) $q->orWhere('w.phone', $phone);
+            ->where(function ($q) use ($email, $normPhone) {
+                if ($email) $q->orWhereRaw('lower(btrim(w.email)) = ?', [$email]);
+                if ($normPhone) $q->orWhereRaw(Phone::sql('w.phone') . ' = ?', [$normPhone]);
             })
             ->exists();
     }

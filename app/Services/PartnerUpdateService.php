@@ -63,7 +63,7 @@ class PartnerUpdateService
             'email' => array_filter(['sometimes', 'nullable', 'email', 'max:255',
                 $consultant->webUser ? "unique:WebUser,email,{$consultant->webUser},id" : null,
             ]),
-            'phone' => ['sometimes', 'nullable', 'string', 'max:64'],
+            'phone' => ['sometimes', 'nullable', 'string', 'max:64', new \App\Rules\ValidPhone],
             'nicTG' => ['sometimes', 'nullable', 'string', 'max:128'],
             'gender' => ['sometimes', 'nullable', 'in:male,female'],
             'birthDate' => ['sometimes', 'nullable', 'date'],
