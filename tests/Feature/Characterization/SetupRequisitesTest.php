@@ -103,21 +103,24 @@ class SetupRequisitesTest extends TestCase
     }
 
     /**
-     * 🐞 Ответ реестра БЕЗ ОГРН роняет запрос пятисоткой: текст тикета
-     * финменеджеру подставляет $fns['ogrn'] без защиты. Партнёр в этот
-     * момент видит ошибку, хотя реквизиты уже сохранены.
+     * Ответ реестра БЕЗ ОГРН обрабатывается штатно.
      *
-     * Тест фиксирует дефект как есть; починка — следующим коммитом.
+     * Раньше ронял запрос пятисоткой: текст тикета финменеджеру подставлял
+     * ОГРН без защиты — уже ПОСЛЕ сохранения реквизитов, так что партнёр
+     * видел ошибку на успешно сохранённых данных.
      */
     #[Test]
-    public function an_answer_without_ogrn_currently_fails(): void
+    public function an_answer_without_ogrn_is_handled(): void
     {
         $this->fakeDadata([
             'found' => true, 'type' => 'INDIVIDUAL', 'status' => 'ACTIVE',
             'name' => 'Реквизитов Партнёр Тестович', 'inn' => '770708389765',
         ]);
 
-        $this->submit()->assertStatus(500);
+        $this->submit()->assertOk();
+
+        $this->assertSame(1, DB::table('requisites')
+            ->where('consultant', self::PARTNER)->count());
     }
 
     // ================================================================

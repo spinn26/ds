@@ -331,7 +331,10 @@ class ProductController extends Controller
             \Illuminate\Support\Facades\DB::table('tickets')->insert([
                 'subject' => 'Проверка реквизитов партнёра: ' . ($manualReason ?? 'ручная сверка'),
                 'context_info' => "Партнёр {$consultant->personName} (ID {$consultant->id}) ввёл ИНН {$innClean}.\n"
-                    . "ФНС: {$fns['name']} (ОГРН {$fns['ogrn']})\n"
+                    // ОГРН и название приходят не всегда: в ответе реестра их
+                    // может не быть, и подстановка без защиты роняла запрос
+                    // пятисоткой — уже ПОСЛЕ сохранения реквизитов.
+                    . 'ФНС: ' . ($fns['name'] ?? '—') . ' (ОГРН ' . ($fns['ogrn'] ?? '—') . ")\n"
                     . "Причина: {$manualReason}",
                 'category' => 'accruals',
                 'status' => 'open',
