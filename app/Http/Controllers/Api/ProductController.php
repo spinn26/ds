@@ -140,130 +140,7 @@ class ProductController extends Controller
             ->get(['id', 'nameRu', 'nameEn', 'symbol'])
             ->keyBy('id');
 
-        $products = $productRows->map(function ($p) use ($consultant, $hasAccess, $includeDrafts, $coursesByLegacy, $completedSet, $legacyPrograms, $catalogProgs, $currencyMap, $typeToId) {
-            $legacyId = $p->legacy_product_id ? (int) $p->legacy_product_id : null;
-
-            $linkedCourses = $legacyId ? ($coursesByLegacy[$legacyId] ?? collect()) : collect();
-
-            // «Тест пройден» = все курсы продукта пройдены (тот же источник,
-            // что и `available` — education_course_completions). Раньше брали
-            // из consultant.soldProducts, который submitTest НЕ заполняет, из-за
-            // чего флаг навсегда оставался false после успешной сдачи теста.
-            $testPassed = $linkedCourses->isNotEmpty()
-                && $linkedCourses->every(fn ($c) => isset($completedSet[$c->id]));
-            // Партнёр в статусе ФК (2) / Резидент (3) НЕ проходит курсы —
-            // витрина открыта по активности. Это покрывает и текущих, и тех,
-            // кто станет партнёром позже. education_exempt оставлен как
-            // grandfather-флаг (например, для не-партнёрских кейсов).
-            // Клиент (status=1) — ещё не партнёр, для него гейт по курсам жив.
-            $isPartnerStatus = $consultant && in_array((int) ($consultant->status ?? 0), [2, 3], true);
-            $exempt = $consultant && ((bool) ($consultant->education_exempt ?? false) || $isPartnerStatus);
-            if ($exempt) {
-                // Текущие партнёры (education_exempt / статус ФК-Резидент):
-                // витрина открыта ВСЯ — без курсов и без проверки активности,
-                // продукт можно открыть сразу.
-                $available = true;
-            } elseif ($linkedCourses->isNotEmpty()) {
-                $available = $linkedCourses->every(fn ($c) => isset($completedSet[$c->id]));
-            } else {
-                $available = $hasAccess;
-            }
-
-            // InSmart — доступен сразу после акцепта документов, без обучения.
-            if (mb_stripos((string) $p->name, 'insmart') !== false) {
-                $available = $consultant && (bool) $consultant->acceptance;
-            }
-
-            // Staff-preview (?includeDrafts) — витрина «как у партнёра», но ВСЁ
-            // открыто: реквизиты/документы/курсы/активность игнорируются (QA).
-            if ($includeDrafts) {
-                $available = true;
-            }
-
-            // Программы: приоритет programs_catalog (там админ правит,
-            // включая formLink и visible_to_resident — см. AdminProductCatalogController).
-            // Legacy `program` остаётся fallback'ом только для тех
-            // продуктов, у которых в каталоге программ ещё нет вовсе
-            // (например, импорт не покрыл).
-            $catProgs = $catalogProgs[$p->id] ?? collect();
-            if ($catProgs->isNotEmpty()) {
-                $programs = $catProgs->map(fn ($pr) => [
-                    'id' => self::CATALOG_ID_OFFSET + (int) $pr->id,
-                    'name' => $pr->name,
-                    'formLink' => $pr->form_link ?? null,
-                    'providerName' => $pr->vendor,
-                    'categoryName' => $pr->category,
-                    'currencySymbol' => $pr->currency,
-                ])->values();
-                $currencies = $catProgs->pluck('currency')->filter()->unique()->values()
-                    ->map(fn ($s) => ['id' => null, 'nameRu' => $s, 'nameEn' => $s, 'symbol' => $s]);
-            } elseif ($legacyId && isset($legacyPrograms[$legacyId])) {
-                $programs = $legacyPrograms[$legacyId]->map(function ($pr) use ($currencyMap) {
-                    $cur = $pr->currency ? ($currencyMap[$pr->currency] ?? null) : null;
-                    return [
-                        'id' => $pr->id,
-                        'name' => $pr->name,
-                        'formLink' => $pr->formLink ?? null,
-                        'providerName' => $pr->providerName ?? null,
-                        'categoryName' => $pr->categoryName ?? null,
-                        'currencySymbol' => $cur->symbol ?? null,
-                    ];
-                })->values();
-                $currencies = $legacyPrograms[$legacyId]
-                    ->pluck('currency')->filter()->unique()->values()
-                    ->map(function ($cid) use ($currencyMap) {
-                        $c = $currencyMap[$cid] ?? null;
-                        return $c ? ['id' => $c->id, 'nameRu' => $c->nameRu, 'nameEn' => $c->nameEn, 'symbol' => $c->symbol] : null;
-                    })->filter()->values();
-            } else {
-                $programs = collect();
-                $currencies = collect();
-            }
-
-            // ID для фронта: предпочитаем legacy.product_id (там сидят FK
-            // soldProducts / education_courses), для catalog-only — оффсет.
-            $apiId = $legacyId ?? (self::CATALOG_ID_OFFSET + (int) $p->id);
-
-            return [
-                'id' => $apiId,
-                'name' => $p->name,
-                'description' => $p->description ?? null,
-                'typeName' => $p->type ?? null,
-                'isPrimary' => (bool) ($p->is_primary ?? true),
-                'active' => (bool) $p->active,
-                'accessible' => $available,
-                'available' => $available,
-                'url' => $p->open_product_url ?? null,
-                'imageUrl' => $p->image_url ?? null,
-                'heroImage' => $p->hero_image ?? null,
-                'publishStatus' => $p->active ? 'published' : 'draft',
-                'educationUrl' => null,
-                'instructionUrl' => null,
-                'testPassed' => $testPassed,
-                'category' => $p->type ? ['id' => $typeToId[$p->type] ?? null, 'name' => $p->type] : null,
-                'currencies' => $currencies,
-                'programs' => $programs,
-                'requiredCourses' => $linkedCourses->map(fn ($c) => [
-                    'id' => $c->id,
-                    'title' => $c->title,
-                    'completed' => isset($completedSet[$c->id]),
-                ])->values(),
-            ];
-        });
-
-        // Categories list для фильтра витрины — используем тот же $typeToId,
-        // что и в product.category, чтобы id-ы совпадали и фильтр
-        // «Категория» реально работал (раньше у product.category.id=null,
-        // а у categories[].id=1..N — селект показывал «Отсутствуют данные»).
-        $categories = collect($typeToId)
-            ->map(fn ($id, $name) => ['id' => $id, 'name' => $name])
-            ->values();
-
-        return response()->json([
-            'products' => $products,
-            'categories' => $categories,
-            'accessCheck' => $accessCheck,
-        ]);
+        return response()->json($this->assembleShowcase($accessCheck, $catalogProgs, $completedSet, $consultant, $coursesByLegacy, $currencyMap, $hasAccess, $includeDrafts, $legacyPrograms, $productRows, $typeToId));
     }
 
     /**
@@ -559,6 +436,144 @@ class ProductController extends Controller
             'documentsAccepted' => $documentsAccepted,
             'needsRequisites' => false,
             'needsAcceptance' => false,
+        ];
+    }
+
+    /**
+     * Сборка витрины: строки продуктов с гейтом доступности и программами.
+     *
+     * ⚠ Гейт: партнёр в статусе ФК или Резидент курсы не проходит, у клиента
+     * гейт по курсам жив, а Insmart открывается акцептом документов. «Тест
+     * пройден» считается по журналу прохождений — consultant.soldProducts
+     * сдача теста не заполняет, и флаг навсегда оставался ложным.
+     *
+     * @return array<string, mixed>
+     */
+    private function assembleShowcase($accessCheck, $catalogProgs, $completedSet, $consultant, $coursesByLegacy, $currencyMap, $hasAccess, $includeDrafts, $legacyPrograms, $productRows, $typeToId): array
+    {
+        $products = $productRows->map(function ($p) use ($consultant, $hasAccess, $includeDrafts, $coursesByLegacy, $completedSet, $legacyPrograms, $catalogProgs, $currencyMap, $typeToId) {
+            $legacyId = $p->legacy_product_id ? (int) $p->legacy_product_id : null;
+
+            $linkedCourses = $legacyId ? ($coursesByLegacy[$legacyId] ?? collect()) : collect();
+
+            // «Тест пройден» = все курсы продукта пройдены (тот же источник,
+            // что и `available` — education_course_completions). Раньше брали
+            // из consultant.soldProducts, который submitTest НЕ заполняет, из-за
+            // чего флаг навсегда оставался false после успешной сдачи теста.
+            $testPassed = $linkedCourses->isNotEmpty()
+                && $linkedCourses->every(fn ($c) => isset($completedSet[$c->id]));
+            // Партнёр в статусе ФК (2) / Резидент (3) НЕ проходит курсы —
+            // витрина открыта по активности. Это покрывает и текущих, и тех,
+            // кто станет партнёром позже. education_exempt оставлен как
+            // grandfather-флаг (например, для не-партнёрских кейсов).
+            // Клиент (status=1) — ещё не партнёр, для него гейт по курсам жив.
+            $isPartnerStatus = $consultant && in_array((int) ($consultant->status ?? 0), [2, 3], true);
+            $exempt = $consultant && ((bool) ($consultant->education_exempt ?? false) || $isPartnerStatus);
+            if ($exempt) {
+                // Текущие партнёры (education_exempt / статус ФК-Резидент):
+                // витрина открыта ВСЯ — без курсов и без проверки активности,
+                // продукт можно открыть сразу.
+                $available = true;
+            } elseif ($linkedCourses->isNotEmpty()) {
+                $available = $linkedCourses->every(fn ($c) => isset($completedSet[$c->id]));
+            } else {
+                $available = $hasAccess;
+            }
+
+            // InSmart — доступен сразу после акцепта документов, без обучения.
+            if (mb_stripos((string) $p->name, 'insmart') !== false) {
+                $available = $consultant && (bool) $consultant->acceptance;
+            }
+
+            // Staff-preview (?includeDrafts) — витрина «как у партнёра», но ВСЁ
+            // открыто: реквизиты/документы/курсы/активность игнорируются (QA).
+            if ($includeDrafts) {
+                $available = true;
+            }
+
+            // Программы: приоритет programs_catalog (там админ правит,
+            // включая formLink и visible_to_resident — см. AdminProductCatalogController).
+            // Legacy `program` остаётся fallback'ом только для тех
+            // продуктов, у которых в каталоге программ ещё нет вовсе
+            // (например, импорт не покрыл).
+            $catProgs = $catalogProgs[$p->id] ?? collect();
+            if ($catProgs->isNotEmpty()) {
+                $programs = $catProgs->map(fn ($pr) => [
+                    'id' => self::CATALOG_ID_OFFSET + (int) $pr->id,
+                    'name' => $pr->name,
+                    'formLink' => $pr->form_link ?? null,
+                    'providerName' => $pr->vendor,
+                    'categoryName' => $pr->category,
+                    'currencySymbol' => $pr->currency,
+                ])->values();
+                $currencies = $catProgs->pluck('currency')->filter()->unique()->values()
+                    ->map(fn ($s) => ['id' => null, 'nameRu' => $s, 'nameEn' => $s, 'symbol' => $s]);
+            } elseif ($legacyId && isset($legacyPrograms[$legacyId])) {
+                $programs = $legacyPrograms[$legacyId]->map(function ($pr) use ($currencyMap) {
+                    $cur = $pr->currency ? ($currencyMap[$pr->currency] ?? null) : null;
+                    return [
+                        'id' => $pr->id,
+                        'name' => $pr->name,
+                        'formLink' => $pr->formLink ?? null,
+                        'providerName' => $pr->providerName ?? null,
+                        'categoryName' => $pr->categoryName ?? null,
+                        'currencySymbol' => $cur->symbol ?? null,
+                    ];
+                })->values();
+                $currencies = $legacyPrograms[$legacyId]
+                    ->pluck('currency')->filter()->unique()->values()
+                    ->map(function ($cid) use ($currencyMap) {
+                        $c = $currencyMap[$cid] ?? null;
+                        return $c ? ['id' => $c->id, 'nameRu' => $c->nameRu, 'nameEn' => $c->nameEn, 'symbol' => $c->symbol] : null;
+                    })->filter()->values();
+            } else {
+                $programs = collect();
+                $currencies = collect();
+            }
+
+            // ID для фронта: предпочитаем legacy.product_id (там сидят FK
+            // soldProducts / education_courses), для catalog-only — оффсет.
+            $apiId = $legacyId ?? (self::CATALOG_ID_OFFSET + (int) $p->id);
+
+            return [
+                'id' => $apiId,
+                'name' => $p->name,
+                'description' => $p->description ?? null,
+                'typeName' => $p->type ?? null,
+                'isPrimary' => (bool) ($p->is_primary ?? true),
+                'active' => (bool) $p->active,
+                'accessible' => $available,
+                'available' => $available,
+                'url' => $p->open_product_url ?? null,
+                'imageUrl' => $p->image_url ?? null,
+                'heroImage' => $p->hero_image ?? null,
+                'publishStatus' => $p->active ? 'published' : 'draft',
+                'educationUrl' => null,
+                'instructionUrl' => null,
+                'testPassed' => $testPassed,
+                'category' => $p->type ? ['id' => $typeToId[$p->type] ?? null, 'name' => $p->type] : null,
+                'currencies' => $currencies,
+                'programs' => $programs,
+                'requiredCourses' => $linkedCourses->map(fn ($c) => [
+                    'id' => $c->id,
+                    'title' => $c->title,
+                    'completed' => isset($completedSet[$c->id]),
+                ])->values(),
+            ];
+        });
+
+        // Categories list для фильтра витрины — используем тот же $typeToId,
+        // что и в product.category, чтобы id-ы совпадали и фильтр
+        // «Категория» реально работал (раньше у product.category.id=null,
+        // а у categories[].id=1..N — селект показывал «Отсутствуют данные»).
+        $categories = collect($typeToId)
+            ->map(fn ($id, $name) => ['id' => $id, 'name' => $name])
+            ->values();
+
+        return [
+            'products' => $products,
+            'categories' => $categories,
+            'accessCheck' => $accessCheck,
         ];
     }
 }
