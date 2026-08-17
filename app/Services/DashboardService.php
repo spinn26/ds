@@ -73,43 +73,7 @@ class DashboardService
         $levelQLog = $periodQLog ?: $currentQLog;
 
         // Batch-load all status_levels in one query (instead of 3 separate)
-        $nominalStatusLevel = null;
-        $calcStatusLevel = null;
-        $nextLevel = null;
-        if ($levelQLog) {
-            $levelIds = array_filter([
-                $levelQLog->nominalLevel ?? null,
-                $levelQLog->calculationLevel ?? null,
-            ]);
-            $allLevels = DB::table('status_levels')->get()->keyBy('id');
-
-            if ($levelQLog->nominalLevel) {
-                $nominalStatusLevel = $allLevels[$levelQLog->nominalLevel] ?? null;
-            }
-            if ($levelQLog->calculationLevel) {
-                $calcStatusLevel = $allLevels[$levelQLog->calculationLevel] ?? null;
-            }
-
-            if (!$nominalStatusLevel && $calcStatusLevel) $nominalStatusLevel = $calcStatusLevel;
-            if (!$calcStatusLevel && $nominalStatusLevel) $calcStatusLevel = $nominalStatusLevel;
-
-            // Per .claude/specs/✅Квалификации.md Part 2 §2: «Единая квалификация».
-            // Directual's legacy split (nominalLevel vs calculationLevel) is
-            // retired — partners get one level per month. Prefer the higher
-            // of the two; it's what the partner actually earned by НГП.
-            // Keeping both fields in the response for backward compat, but
-            // they're now always equal.
-            if ($nominalStatusLevel && $calcStatusLevel
-                && ($nominalStatusLevel->level ?? 0) > ($calcStatusLevel->level ?? 0)
-            ) {
-                $calcStatusLevel = $nominalStatusLevel;
-            }
-
-            if ($nominalStatusLevel) {
-                $nextLevelNum = ($nominalStatusLevel->level ?? 0) + 1;
-                $nextLevel = $allLevels->first(fn ($l) => $l->level === $nextLevelNum);
-            }
-        }
+        ['calc' => $calcStatusLevel, 'next' => $nextLevel] = $this->resolveLevels($levelQLog);
 
         $statusLevel = $calcStatusLevel;
 
@@ -229,47 +193,13 @@ class DashboardService
         }
 
         // Mandatory GP plan fulfillment (ОП по ГП) — from Expert onwards
-        $mandatoryPlan = null;
-        if ($statusLevel && ($statusLevel->mandatoryGP ?? 0) > 0) {
-            $mandatoryGP = (float) $statusLevel->mandatoryGP;
-            $currentGP = round((float) $groupVolume, 2);
-            $fulfillment = $mandatoryGP > 0 ? min($currentGP / $mandatoryGP, 1.0) : 1.0;
-            $fulfilled = $currentGP >= $mandatoryGP;
-
-            // Commission reduction when plan not met: 20% reduction from ОП
-            $commissionReduction = 0;
-            if (!$fulfilled) {
-                $commissionReduction = 20;
-            }
-
-            $mandatoryPlan = [
-                'mandatoryGP' => $mandatoryGP,
-                'currentGP' => $currentGP,
-                'fulfillment' => round($fulfillment * 100, 1),
-                'fulfilled' => $fulfilled,
-                'commissionReduction' => $commissionReduction,
-            ];
-        }
+        ['mandatoryPlan' => $mandatoryPlan] = $this->buildMandatoryPlan($groupVolume, $statusLevel);
 
         // Pool eligibility (from TOP FC = level 6 onwards).
         // Per spec ✅Расчет пула §6.4: пул не выплачивается если
         //   (а) ОП по ГП не выполнен на 100% — или
         //   (б) у партнёра отрыв ≥ 90% (одна ветка занимает >90% от ГП).
-        $poolInfo = null;
-        if ($statusLevel && ($statusLevel->pool ?? 0) > 0) {
-            $opFulfilled = $mandatoryPlan ? (bool) $mandatoryPlan['fulfilled'] : true;
-            $gapPct = (float) ($currentQLog->gapValuePercentage ?? 0);
-            $gapDisqualifies = $gapPct > 90.0;
-            $poolEligible = $opFulfilled && ! $gapDisqualifies;
-            $reason = null;
-            if (! $opFulfilled)         $reason = 'ОП по ГП не выполнен на 100%';
-            elseif ($gapDisqualifies)   $reason = sprintf('Отрыв %.0f%% > 90%%', $gapPct);
-            $poolInfo = [
-                'poolPercent' => (float) $statusLevel->pool,
-                'eligible' => $poolEligible,
-                'reason' => $reason,
-            ];
-        }
+        ['poolInfo' => $poolInfo] = $this->buildPoolInfo($currentQLog, $mandatoryPlan, $statusLevel);
 
         // Breakaway rules (отрыв) — structured info
         $breakawayRules = null;
@@ -487,5 +417,123 @@ class DashboardService
             'gpHeld'      => $gapPct >= 70,
             'poolBlocked' => $gapPct >= 90,
         ];
+    }
+
+    /**
+     * Уровень месяца и следующая ступень.
+     *
+     * ⚠ «Единая квалификация» (спека §2): из номинального и расчётного
+     * уровня берётся СТАРШИЙ. Раздельные значения остались в схеме с
+     * legacy-времён, когда расчётный мог быть ниже при штрафе отрыва;
+     * теперь штрафы применяются отдельным шагом, а не подменой уровня.
+     *
+     * @return array{calc: ?object, next: ?object}
+     */
+    private function resolveLevels($levelQLog): array
+    {
+        $nominalStatusLevel = null;
+        $calcStatusLevel = null;
+        $nextLevel = null;
+        if ($levelQLog) {
+            $levelIds = array_filter([
+                $levelQLog->nominalLevel ?? null,
+                $levelQLog->calculationLevel ?? null,
+            ]);
+            $allLevels = DB::table('status_levels')->get()->keyBy('id');
+
+            if ($levelQLog->nominalLevel) {
+                $nominalStatusLevel = $allLevels[$levelQLog->nominalLevel] ?? null;
+            }
+            if ($levelQLog->calculationLevel) {
+                $calcStatusLevel = $allLevels[$levelQLog->calculationLevel] ?? null;
+            }
+
+            if (!$nominalStatusLevel && $calcStatusLevel) $nominalStatusLevel = $calcStatusLevel;
+            if (!$calcStatusLevel && $nominalStatusLevel) $calcStatusLevel = $nominalStatusLevel;
+
+            // Per .claude/specs/✅Квалификации.md Part 2 §2: «Единая квалификация».
+            // Directual's legacy split (nominalLevel vs calculationLevel) is
+            // retired — partners get one level per month. Prefer the higher
+            // of the two; it's what the partner actually earned by НГП.
+            // Keeping both fields in the response for backward compat, but
+            // they're now always equal.
+            if ($nominalStatusLevel && $calcStatusLevel
+                && ($nominalStatusLevel->level ?? 0) > ($calcStatusLevel->level ?? 0)
+            ) {
+                $calcStatusLevel = $nominalStatusLevel;
+            }
+
+            if ($nominalStatusLevel) {
+                $nextLevelNum = ($nominalStatusLevel->level ?? 0) + 1;
+                $nextLevel = $allLevels->first(fn ($l) => $l->level === $nextLevelNum);
+            }
+        }
+
+
+        return ['calc' => $calcStatusLevel, 'next' => $nextLevel];
+    }
+
+    /**
+     * Выполнение обязательного плана по ГП — с уровня «Эксперт».
+     *
+     * @return array<string, mixed>
+     */
+    private function buildMandatoryPlan($groupVolume, $statusLevel): array
+    {
+        $mandatoryPlan = null;
+        if ($statusLevel && ($statusLevel->mandatoryGP ?? 0) > 0) {
+            $mandatoryGP = (float) $statusLevel->mandatoryGP;
+            $currentGP = round((float) $groupVolume, 2);
+            $fulfillment = $mandatoryGP > 0 ? min($currentGP / $mandatoryGP, 1.0) : 1.0;
+            $fulfilled = $currentGP >= $mandatoryGP;
+
+            // Commission reduction when plan not met: 20% reduction from ОП
+            $commissionReduction = 0;
+            if (!$fulfilled) {
+                $commissionReduction = 20;
+            }
+
+            $mandatoryPlan = [
+                'mandatoryGP' => $mandatoryGP,
+                'currentGP' => $currentGP,
+                'fulfillment' => round($fulfillment * 100, 1),
+                'fulfilled' => $fulfilled,
+                'commissionReduction' => $commissionReduction,
+            ];
+        }
+
+
+        return ['mandatoryPlan' => $mandatoryPlan];
+    }
+
+    /**
+     * Право на пул — с уровня «ТОП ФК».
+     *
+     * ⚠ Пул не выплачивается, если не выполнен план по ГП ИЛИ если у
+     * партнёра отрыв ≥ 90 % (одна ветка занимает больше девяти десятых
+     * группового объёма).
+     *
+     * @return array<string, mixed>
+     */
+    private function buildPoolInfo($currentQLog, $mandatoryPlan, $statusLevel): array
+    {
+        $poolInfo = null;
+        if ($statusLevel && ($statusLevel->pool ?? 0) > 0) {
+            $opFulfilled = $mandatoryPlan ? (bool) $mandatoryPlan['fulfilled'] : true;
+            $gapPct = (float) ($currentQLog->gapValuePercentage ?? 0);
+            $gapDisqualifies = $gapPct > 90.0;
+            $poolEligible = $opFulfilled && ! $gapDisqualifies;
+            $reason = null;
+            if (! $opFulfilled)         $reason = 'ОП по ГП не выполнен на 100%';
+            elseif ($gapDisqualifies)   $reason = sprintf('Отрыв %.0f%% > 90%%', $gapPct);
+            $poolInfo = [
+                'poolPercent' => (float) $statusLevel->pool,
+                'eligible' => $poolEligible,
+                'reason' => $reason,
+            ];
+        }
+
+
+        return ['poolInfo' => $poolInfo];
     }
 }

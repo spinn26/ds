@@ -111,6 +111,22 @@ class PartnerDashboardTest extends TestCase
             'один балл равен ста рублям');
     }
 
+    /** У прошлого месяца свой объём первой линии — он считается отдельно. */
+    #[Test]
+    public function the_previous_first_line_volume_is_counted_separately(): void
+    {
+        $this->commission(self::FIRST_LINE, ['chainOrder' => 1, 'personalVolume' => 100]);
+        $this->commission(self::FIRST_LINE, [
+            'chainOrder' => 1, 'personalVolume' => 40,
+            'dateMonth' => '2026-06', 'createdAt' => '2026-06-15 00:00:00',
+        ]);
+
+        $v = $this->dashboard()['volumes'];
+
+        $this->assertEqualsWithDelta(100, $v['firstLineVolume'], 0.01);
+        $this->assertEqualsWithDelta(40, $v['prevFirstLineVolume'], 0.01);
+    }
+
     // ---------------- Команда ----------------
 
     /**
