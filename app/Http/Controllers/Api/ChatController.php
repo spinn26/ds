@@ -158,94 +158,7 @@ class ChatController extends Controller
 
         // Batch unread counts with a single LEFT JOIN to chat_read_status
         // (was N+1: one COUNT per ticket).
-        $ticketIds = $tickets->pluck('id')->filter();
-        $unreadMap = collect();
-        $lastMsgMap = collect();
-        // is_new_for_me: тикеты, где юзер ДОБАВЛЕН через
-        // chat_ticket_participants И ни разу не открывал чат
-        // (нет записи в chat_read_status). UI вешает явный бейдж
-        // «Новый для вас» — иначе только bell-уведомление, которое
-        // легко пропустить (попросила Алла 2026-05-28).
-        $newForMeSet = collect();
-        if ($ticketIds->isNotEmpty() && ! empty($participantTicketIds)) {
-            $invitedHere = $ticketIds->intersect($participantTicketIds);
-            if ($invitedHere->isNotEmpty()) {
-                $readSomeIds = DB::table('chat_read_status')
-                    ->where('user_id', $user->id)
-                    ->whereIn('ticket_id', $invitedHere)
-                    ->whereNotNull('last_read_at')
-                    ->pluck('ticket_id')
-                    ->all();
-                $newForMeSet = $invitedHere->diff($readSomeIds);
-            }
-        }
-
-        if ($ticketIds->isNotEmpty()) {
-            $unreadMap = DB::table('chat_messages as cm')
-                ->leftJoin('chat_read_status as rs', function ($join) use ($user) {
-                    $join->on('rs.ticket_id', '=', 'cm.ticket_id')
-                         ->where('rs.user_id', '=', $user->id);
-                })
-                ->whereIn('cm.ticket_id', $ticketIds)
-                ->where('cm.sender_id', '!=', $user->id)
-                ->where('cm.is_system', false)
-                ->where(function ($q) {
-                    $q->whereNull('rs.last_read_at')
-                      ->orWhereColumn('cm.created_at', '>', 'rs.last_read_at');
-                })
-                ->groupBy('cm.ticket_id')
-                ->select('cm.ticket_id', DB::raw('count(*) as unread'))
-                ->pluck('unread', 'cm.ticket_id');
-
-            // Last message preview per ticket — для отображения карточки в
-            // sidebar в стиле Telegram/Slack: subject + первые 80 символов
-            // последнего сообщения + кто его автор.
-            $latestIds = DB::table('chat_messages')
-                ->whereIn('ticket_id', $ticketIds)
-                ->selectRaw('MAX(id) as id')
-                ->groupBy('ticket_id')
-                ->pluck('id');
-            if ($latestIds->isNotEmpty()) {
-                $lastMsgMap = DB::table('chat_messages')
-                    ->whereIn('id', $latestIds)
-                    ->select('ticket_id', 'sender_id', 'sender_name', 'content', 'is_agent', 'attachment_name', 'is_system', 'created_at')
-                    ->get()
-                    ->keyBy('ticket_id');
-            }
-        }
-
-        // Аватар автора запроса (created_by → WebUser.avatar) для карточки
-        // тикета: показываем лицо партнёра, а не общую иконку категории.
-        // customer_name остаётся для инициалов-фоллбэка.
-        $avatarMap = collect();
-        $createdByIds = $tickets->pluck('created_by')->filter()->unique();
-        if ($createdByIds->isNotEmpty()) {
-            $avatarMap = DB::table('WebUser')
-                ->whereIn('id', $createdByIds)
-                ->whereNotNull('avatar')
-                ->where('avatar', '<>', '')
-                ->pluck('avatar', 'id');
-        }
-
-        // Имя постановщика (created_by → WebUser) батчом
-        $creatorNameMap = collect();
-        if ($createdByIds->isNotEmpty()) {
-            $creatorNameMap = DB::table('WebUser')
-                ->whereIn('id', $createdByIds)
-                ->selectRaw('id, TRIM(COALESCE("lastName",\'\') || \' \' || COALESCE("firstName",\'\')) as full_name')
-                ->get()
-                ->pluck('full_name', 'id');
-        }
-
-        // Наблюдатели (chat_ticket_participants) батчом — группируем по ticket_id
-        $participantsMap = collect();
-        if ($ticketIds->isNotEmpty()) {
-            $participantsMap = DB::table('chat_ticket_participants')
-                ->whereIn('ticket_id', $ticketIds)
-                ->select('ticket_id', 'user_id', 'user_name')
-                ->get()
-                ->groupBy('ticket_id');
-        }
+        ['unreadMap' => $unreadMap, 'lastMsgMap' => $lastMsgMap, 'newForMeSet' => $newForMeSet, 'avatarMap' => $avatarMap, 'creatorNameMap' => $creatorNameMap, 'participantsMap' => $participantsMap] = $this->ticketRelations($participantTicketIds, $tickets, $user);
 
         $data = $tickets->map(function ($t) use ($unreadMap, $lastMsgMap, $user, $newForMeSet, $avatarMap, $creatorNameMap, $participantsMap) {
             $t->unread = $unreadMap[$t->id] ?? 0;
@@ -2886,5 +2799,108 @@ class ChatController extends Controller
             ->first();
         $n = ((int) ($maxRow->n ?? 0)) + 1;
         return $prefix . str_pad((string) $n, 4, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * Всё связанное с тикетами страницы — одной пачкой: непрочитанные,
+     * последнее сообщение, аватары и имена постановщиков, наблюдатели.
+     *
+     * ⚠ Раньше это был N+1: по COUNT на каждый тикет.
+     *
+     * @return array<string, mixed>
+     */
+    private function ticketRelations($participantTicketIds, $tickets, $user): array
+    {
+        $ticketIds = $tickets->pluck('id')->filter();
+        $unreadMap = collect();
+        $lastMsgMap = collect();
+        // is_new_for_me: тикеты, где юзер ДОБАВЛЕН через
+        // chat_ticket_participants И ни разу не открывал чат
+        // (нет записи в chat_read_status). UI вешает явный бейдж
+        // «Новый для вас» — иначе только bell-уведомление, которое
+        // легко пропустить (попросила Алла 2026-05-28).
+        $newForMeSet = collect();
+        if ($ticketIds->isNotEmpty() && ! empty($participantTicketIds)) {
+            $invitedHere = $ticketIds->intersect($participantTicketIds);
+            if ($invitedHere->isNotEmpty()) {
+                $readSomeIds = DB::table('chat_read_status')
+                    ->where('user_id', $user->id)
+                    ->whereIn('ticket_id', $invitedHere)
+                    ->whereNotNull('last_read_at')
+                    ->pluck('ticket_id')
+                    ->all();
+                $newForMeSet = $invitedHere->diff($readSomeIds);
+            }
+        }
+
+        if ($ticketIds->isNotEmpty()) {
+            $unreadMap = DB::table('chat_messages as cm')
+                ->leftJoin('chat_read_status as rs', function ($join) use ($user) {
+                    $join->on('rs.ticket_id', '=', 'cm.ticket_id')
+                         ->where('rs.user_id', '=', $user->id);
+                })
+                ->whereIn('cm.ticket_id', $ticketIds)
+                ->where('cm.sender_id', '!=', $user->id)
+                ->where('cm.is_system', false)
+                ->where(function ($q) {
+                    $q->whereNull('rs.last_read_at')
+                      ->orWhereColumn('cm.created_at', '>', 'rs.last_read_at');
+                })
+                ->groupBy('cm.ticket_id')
+                ->select('cm.ticket_id', DB::raw('count(*) as unread'))
+                ->pluck('unread', 'cm.ticket_id');
+
+            // Last message preview per ticket — для отображения карточки в
+            // sidebar в стиле Telegram/Slack: subject + первые 80 символов
+            // последнего сообщения + кто его автор.
+            $latestIds = DB::table('chat_messages')
+                ->whereIn('ticket_id', $ticketIds)
+                ->selectRaw('MAX(id) as id')
+                ->groupBy('ticket_id')
+                ->pluck('id');
+            if ($latestIds->isNotEmpty()) {
+                $lastMsgMap = DB::table('chat_messages')
+                    ->whereIn('id', $latestIds)
+                    ->select('ticket_id', 'sender_id', 'sender_name', 'content', 'is_agent', 'attachment_name', 'is_system', 'created_at')
+                    ->get()
+                    ->keyBy('ticket_id');
+            }
+        }
+
+        // Аватар автора запроса (created_by → WebUser.avatar) для карточки
+        // тикета: показываем лицо партнёра, а не общую иконку категории.
+        // customer_name остаётся для инициалов-фоллбэка.
+        $avatarMap = collect();
+        $createdByIds = $tickets->pluck('created_by')->filter()->unique();
+        if ($createdByIds->isNotEmpty()) {
+            $avatarMap = DB::table('WebUser')
+                ->whereIn('id', $createdByIds)
+                ->whereNotNull('avatar')
+                ->where('avatar', '<>', '')
+                ->pluck('avatar', 'id');
+        }
+
+        // Имя постановщика (created_by → WebUser) батчом
+        $creatorNameMap = collect();
+        if ($createdByIds->isNotEmpty()) {
+            $creatorNameMap = DB::table('WebUser')
+                ->whereIn('id', $createdByIds)
+                ->selectRaw('id, TRIM(COALESCE("lastName",\'\') || \' \' || COALESCE("firstName",\'\')) as full_name')
+                ->get()
+                ->pluck('full_name', 'id');
+        }
+
+        // Наблюдатели (chat_ticket_participants) батчом — группируем по ticket_id
+        $participantsMap = collect();
+        if ($ticketIds->isNotEmpty()) {
+            $participantsMap = DB::table('chat_ticket_participants')
+                ->whereIn('ticket_id', $ticketIds)
+                ->select('ticket_id', 'user_id', 'user_name')
+                ->get()
+                ->groupBy('ticket_id');
+        }
+
+
+        return ['unreadMap' => $unreadMap, 'lastMsgMap' => $lastMsgMap, 'newForMeSet' => $newForMeSet, 'avatarMap' => $avatarMap, 'creatorNameMap' => $creatorNameMap, 'participantsMap' => $participantsMap];
     }
 }
