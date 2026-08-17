@@ -1932,71 +1932,7 @@ class ChatController extends Controller
 
         $avg = fn ($arr) => count($arr) > 0 ? round(array_sum($arr) / count($arr), 1) : 0;
 
-        // Breakdown by category (department)
-        $byCategory = (clone $ticketsInPeriod)
-            ->select('department', DB::raw('count(*) as cnt'))
-            ->groupBy('department')
-            ->orderByDesc('cnt')
-            ->get()
-            ->map(fn ($r) => ['category' => $r->department ?: 'general', 'count' => (int) $r->cnt]);
-
-        // Breakdown by priority
-        $byPriority = (clone $ticketsInPeriod)
-            ->select('priority', DB::raw('count(*) as cnt'))
-            ->groupBy('priority')
-            ->get()
-            ->map(fn ($r) => ['priority' => $r->priority ?: 'medium', 'count' => (int) $r->cnt]);
-
-        // Staff load: resolved tickets per assignee with avg response time
-        $staffLoad = DB::table('chat_tickets')
-            ->whereNotNull('assigned_to')
-            ->where('created_at', '>=', $from)
-            ->where('created_at', '<=', $to)
-            ->select('assigned_to', 'assigned_name',
-                DB::raw('count(*) as total'),
-                DB::raw("count(*) filter (where status = 'resolved' or status = 'closed') as resolved"))
-            ->groupBy('assigned_to', 'assigned_name')
-            ->orderByDesc('total')
-            ->get()
-            ->map(fn ($r) => [
-                'userId' => $r->assigned_to,
-                'name' => $r->assigned_name ?: 'Неизвестно',
-                'total' => (int) $r->total,
-                'resolved' => (int) $r->resolved,
-            ]);
-
-        // Daily trend: new vs resolved (or closed) per day
-        $dailyRaw = DB::table('chat_tickets')
-            ->where('created_at', '>=', $from)
-            ->where('created_at', '<=', $to)
-            ->selectRaw("to_char(created_at, 'YYYY-MM-DD') as day, count(*) as cnt")
-            ->groupBy('day')
-            ->orderBy('day')
-            ->pluck('cnt', 'day')
-            ->toArray();
-
-        $dailyResolvedRaw = DB::table('chat_tickets')
-            ->whereNotNull('closed_at')
-            ->where('closed_at', '>=', $from)
-            ->where('closed_at', '<=', $to)
-            ->selectRaw("to_char(closed_at, 'YYYY-MM-DD') as day, count(*) as cnt")
-            ->groupBy('day')
-            ->orderBy('day')
-            ->pluck('cnt', 'day')
-            ->toArray();
-
-        $days = [];
-        $cursor = strtotime($from);
-        $end = strtotime($to);
-        while ($cursor <= $end) {
-            $d = date('Y-m-d', $cursor);
-            $days[] = [
-                'day' => $d,
-                'new' => (int) ($dailyRaw[$d] ?? 0),
-                'resolved' => (int) ($dailyResolvedRaw[$d] ?? 0),
-            ];
-            $cursor += 86400;
-        }
+        ['byCategory' => $byCategory, 'byPriority' => $byPriority, 'staffLoad' => $staffLoad, 'days' => $days] = $this->analyticsBreakdowns($from, $ticketsInPeriod, $to);
 
         return response()->json([
             'period' => [
@@ -2957,5 +2893,86 @@ class ChatController extends Controller
 
 
         return $data;
+    }
+
+    /**
+     * Разрезы и ряды аналитики: по категории, по приоритету, нагрузка на
+     * сотрудников и дневной тренд.
+     *
+     * ⚠ Дневной ряд строится ПОДРЯД по датам периода, включая дни без
+     * тикетов: пропуск пустых дней сжимает график и рисует ложную динамику.
+     *
+     * @return array<string, mixed>
+     */
+    private function analyticsBreakdowns($from, $ticketsInPeriod, $to): array
+    {
+        // Breakdown by category (department)
+        $byCategory = (clone $ticketsInPeriod)
+            ->select('department', DB::raw('count(*) as cnt'))
+            ->groupBy('department')
+            ->orderByDesc('cnt')
+            ->get()
+            ->map(fn ($r) => ['category' => $r->department ?: 'general', 'count' => (int) $r->cnt]);
+
+        // Breakdown by priority
+        $byPriority = (clone $ticketsInPeriod)
+            ->select('priority', DB::raw('count(*) as cnt'))
+            ->groupBy('priority')
+            ->get()
+            ->map(fn ($r) => ['priority' => $r->priority ?: 'medium', 'count' => (int) $r->cnt]);
+
+        // Staff load: resolved tickets per assignee with avg response time
+        $staffLoad = DB::table('chat_tickets')
+            ->whereNotNull('assigned_to')
+            ->where('created_at', '>=', $from)
+            ->where('created_at', '<=', $to)
+            ->select('assigned_to', 'assigned_name',
+                DB::raw('count(*) as total'),
+                DB::raw("count(*) filter (where status = 'resolved' or status = 'closed') as resolved"))
+            ->groupBy('assigned_to', 'assigned_name')
+            ->orderByDesc('total')
+            ->get()
+            ->map(fn ($r) => [
+                'userId' => $r->assigned_to,
+                'name' => $r->assigned_name ?: 'Неизвестно',
+                'total' => (int) $r->total,
+                'resolved' => (int) $r->resolved,
+            ]);
+
+        // Daily trend: new vs resolved (or closed) per day
+        $dailyRaw = DB::table('chat_tickets')
+            ->where('created_at', '>=', $from)
+            ->where('created_at', '<=', $to)
+            ->selectRaw("to_char(created_at, 'YYYY-MM-DD') as day, count(*) as cnt")
+            ->groupBy('day')
+            ->orderBy('day')
+            ->pluck('cnt', 'day')
+            ->toArray();
+
+        $dailyResolvedRaw = DB::table('chat_tickets')
+            ->whereNotNull('closed_at')
+            ->where('closed_at', '>=', $from)
+            ->where('closed_at', '<=', $to)
+            ->selectRaw("to_char(closed_at, 'YYYY-MM-DD') as day, count(*) as cnt")
+            ->groupBy('day')
+            ->orderBy('day')
+            ->pluck('cnt', 'day')
+            ->toArray();
+
+        $days = [];
+        $cursor = strtotime($from);
+        $end = strtotime($to);
+        while ($cursor <= $end) {
+            $d = date('Y-m-d', $cursor);
+            $days[] = [
+                'day' => $d,
+                'new' => (int) ($dailyRaw[$d] ?? 0),
+                'resolved' => (int) ($dailyResolvedRaw[$d] ?? 0),
+            ];
+            $cursor += 86400;
+        }
+
+
+        return ['byCategory' => $byCategory, 'byPriority' => $byPriority, 'staffLoad' => $staffLoad, 'days' => $days];
     }
 }
