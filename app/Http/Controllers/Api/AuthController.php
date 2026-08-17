@@ -34,7 +34,16 @@ class AuthController extends Controller
         // детерминированно: сначала строки с консультантом, затем не удалённые
         // (dateDeleted IS NULL), затем по id. Пароль проверяем в этом же порядке
         // и берём первую подходящую строку.
-        $candidates = User::where('email', $request->input('email'))->get();
+        // Почту сверяем РЕГИСТРОНЕЗАВИСИМО. Postgres сравнивает байт-в-байт, и
+        // при двух строках WebUser с одной почтой в разном регистре
+        // («ivan@x.ru» с карточкой партнёра и «Ivan@x.ru», заведённой вручную)
+        // сюда попадала только та, чей регистр совпал с набранным. Человек
+        // оказывался в пустом аккаунте без карточки, и весь кабинет отвечал
+        // «Консультант не найден» (инцидент 17.08.2026). Теперь кандидаты
+        // собираются все, а порядок ниже сам выбирает аккаунт с карточкой.
+        $candidates = User::whereRaw('lower(btrim(email)) = ?', [
+            mb_strtolower(trim((string) $request->input('email'))),
+        ])->get();
 
         $withConsultant = $candidates->isEmpty()
             ? collect()
@@ -51,6 +60,18 @@ class AuthController extends Controller
 
         if (! $user) {
             return response()->json(['message' => 'Неверный email или пароль'], 401);
+        }
+
+        // Вошли в аккаунт без карточки партнёра, хотя рядом есть аккаунт с той
+        // же почтой и карточкой — значит пароли у дублей разные и выбрать за
+        // человека нельзя. Пишем предупреждение: иначе такой случай виден
+        // только как «Консультант не найден» в кабинете, без следов.
+        if (! $withConsultant->has($user->id) && $withConsultant->isNotEmpty()) {
+            \Illuminate\Support\Facades\Log::warning('login: аккаунт без карточки партнёра при наличии дубля с карточкой', [
+                'webUser' => $user->id,
+                'email' => $user->email,
+                'withConsultant' => $withConsultant->keys()->all(),
+            ]);
         }
 
         // Заблокированный аккаунт не пускаем — ни токен, ни 2FA-challenge.
@@ -91,7 +112,11 @@ class AuthController extends Controller
      */
     public function checkDuplicates(CheckDuplicatesRequest $request): JsonResponse
     {
-        $existingUser = User::where('email', $request->input('email'))->first();
+        // Регистронезависимо — как и в login()/RegisterRequest: иначе дубль
+        // «Ivan@x.ru» проходит мимо занятого «ivan@x.ru».
+        $existingUser = User::whereRaw('lower(btrim(email)) = ?', [
+            mb_strtolower(trim((string) $request->input('email'))),
+        ])->first();
 
         if ($existingUser) {
             $consultant = Consultant::where('webUser', $existingUser->id)->first();

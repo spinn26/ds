@@ -21,12 +21,16 @@ use Illuminate\Support\Facades\DB;
  */
 class CheckOrphanLogins extends Command
 {
-    protected $signature = 'partners:check-orphan-logins {--limit=50}';
+    protected $signature = 'partners:check-orphan-logins {--limit=50} {--email= : разобрать одну почту}';
 
     protected $description = 'Найти логины (WebUser) без карточки партнёра — «Консультант не найден» в кабинете';
 
     public function handle(): int
     {
+        if ($email = $this->option('email')) {
+            return $this->explainEmail((string) $email);
+        }
+
         $rows = DB::select(<<<'SQL'
             SELECT w.id, w.email, w."lastName", w."firstName", w.role, w."dateDeleted",
                    (SELECT c.id FROM consultant c
@@ -97,6 +101,72 @@ class CheckOrphanLogins extends Command
         $this->newLine();
         $this->comment('Привязка правится в карточке партнёра (поле webUser) — вручную, после сверки ФИО и почты.');
         $this->comment('«Карточки нет» у роли client/сотрудника — норма: партнёрская карточка им не нужна.');
+
+        return self::SUCCESS;
+    }
+
+    /**
+     * Разбор одной почты: все логины с ней (регистр не важен) и их карточки.
+     * Отвечает на вопрос «карточка есть, почему кабинет её не видит».
+     */
+    private function explainEmail(string $email): int
+    {
+        $needle = mb_strtolower(trim($email));
+
+        $users = DB::select(<<<'SQL'
+            SELECT w.id, w.email, w."lastName", w."firstName", w.patronymic, w.role,
+                   w."dateDeleted", w."isBlocked", (w.password IS NOT NULL) AS has_password
+              FROM "WebUser" w
+             WHERE lower(btrim(w.email)) = ?
+             ORDER BY w.id
+        SQL, [$needle]);
+
+        if (! $users) {
+            $this->error("Логинов с почтой {$email} не найдено.");
+
+            return self::SUCCESS;
+        }
+
+        $this->info('Логинов с этой почтой: ' . count($users)
+            . (count($users) > 1 ? '  ⚠ дубль — вход зависит от того, к какой строке подошёл пароль' : ''));
+
+        foreach ($users as $u) {
+            $cards = DB::table('consultant')
+                ->where('webUser', $u->id)
+                ->get(['id', 'personName', 'activity', 'dateDeleted']);
+            $this->line(sprintf(
+                "\nWebUser %d  <%s>  %s %s %s\n  роль: %s | пароль: %s | %s%s",
+                $u->id, $u->email, $u->lastName, $u->firstName, $u->patronymic,
+                $u->role ?: '—',
+                $u->has_password ? 'есть' : 'НЕТ (войти нельзя)',
+                $u->dateDeleted ? 'помечен удалённым (вход всё равно разрешён)' : 'живой',
+                $u->isBlocked ? ' | ЗАБЛОКИРОВАН' : '',
+            ));
+            if ($cards->isEmpty()) {
+                $this->warn('  карточки партнёра НЕТ → кабинет ответит «Консультант не найден»');
+                continue;
+            }
+            foreach ($cards as $c) {
+                $this->line(sprintf('  карточка %d «%s» activity=%s%s',
+                    $c->id, $c->personName, $c->activity,
+                    $c->dateDeleted ? ' ⚠ УДАЛЕНА' : ''));
+            }
+        }
+
+        // Карточки с этой же почтой, но привязанные к другому логину или ни к
+        // какому — обычный источник расхождения.
+        $cards = DB::table('consultant')
+            ->whereRaw('lower(btrim(email)) = ?', [$needle])
+            ->get(['id', 'personName', 'webUser', 'dateDeleted']);
+        if ($cards->isNotEmpty()) {
+            $this->newLine();
+            $this->info('Карточки партнёра с этой почтой:');
+            foreach ($cards as $c) {
+                $this->line(sprintf('  карточка %d «%s» → логин %s%s',
+                    $c->id, $c->personName, $c->webUser ?: 'НЕ ПРИВЯЗАН',
+                    $c->dateDeleted ? ' ⚠ УДАЛЕНА' : ''));
+            }
+        }
 
         return self::SUCCESS;
     }
