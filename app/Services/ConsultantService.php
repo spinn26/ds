@@ -16,120 +16,7 @@ class ConsultantService
             return collect();
         }
 
-        $ids = $consultants->pluck('id')->filter()->unique();
-
-        // Batch load status_levels
-        $statusLevelIds = $consultants->pluck('status_and_lvl')->filter()->unique();
-        $statusLevels = $statusLevelIds->isNotEmpty()
-            ? DB::table('status_levels')->whereIn('id', $statusLevelIds)->get()->keyBy('id')
-            : collect();
-
-        // Batch load latest qualificationLog per consultant
-        $qLogLatestIds = DB::table('qualificationLog')
-            ->whereIn('consultant', $ids)
-            ->whereNull('dateDeleted')
-            ->selectRaw('MAX(id) as id')
-            ->groupBy('consultant')
-            ->pluck('id');
-        $qLogs = $qLogLatestIds->isNotEmpty()
-            ? DB::table('qualificationLog')->whereIn('id', $qLogLatestIds)->get()->keyBy('consultant')
-            : collect();
-
-        // НГП (накопительный) — последний НЕ-NULL groupVolumeCumulative.
-        // Самая свежая строка может быть penalty-строкой финализа Отрыв/ОП с
-        // NULL cumulative; она не должна ронять НГП на stale consultant-поле.
-        $cumulativeLatestIds = DB::table('qualificationLog')
-            ->whereIn('consultant', $ids)
-            ->whereNull('dateDeleted')
-            ->whereNotNull('groupVolumeCumulative')
-            ->selectRaw('MAX(id) as id')
-            ->groupBy('consultant')
-            ->pluck('id');
-        $cumulativeByConsultant = $cumulativeLatestIds->isNotEmpty()
-            ? DB::table('qualificationLog')->whereIn('id', $cumulativeLatestIds)->pluck('groupVolumeCumulative', 'consultant')
-            : collect();
-
-        // Batch count clients per consultant.
-        // Критерий — НЕ удалён, а не active=true: у 4256 из 8149 клиентов флаг
-        // active пуст (наследие Directual), и по нему колонка «Клиенты» в
-        // структуре занижалась — партнёр с единственным клиентом видел 0.
-        $clientCounts = DB::table('client')
-            ->whereIn('consultant', $ids)
-            ->whereNull('dateDeleted')
-            ->select('consultant', DB::raw('count(*) as cnt'))
-            ->groupBy('consultant')
-            ->pluck('cnt', 'consultant');
-
-        // Batch count contracts per consultant
-        $contractCounts = DB::table('contract')
-            ->whereIn('consultant', $ids)
-            ->whereNull('deletedAt')
-            ->select('consultant', DB::raw('count(*) as cnt'))
-            ->groupBy('consultant')
-            ->pluck('cnt', 'consultant');
-
-        // Batch count children (by inviter)
-        $subCounts = DB::table('consultant')
-            ->whereIn('inviter', $ids)
-            ->whereNull('dateDeleted')
-            ->select('inviter', DB::raw('count(*) as cnt'))
-            ->groupBy('inviter')
-            ->pluck('cnt', 'inviter');
-
-        // Batch load activity names
-        $activityIds = $consultants->map(fn ($c) => is_object($c->activity) ? $c->activity->value : $c->activity)->filter()->unique();
-        $activityNames = $activityIds->isNotEmpty()
-            ? DB::table('directory_of_activities')->whereIn('id', $activityIds)->pluck('name', 'id')
-            : collect();
-
-
-        // Batch: накопленный ЛП с даты активации (chainOrder=1 = личная комиссия)
-        // Возвращаем одним запросом все комиссии ветки и суммируем в PHP
-        // только после consultant.dateActivity. Так избегаем коррелированного
-        // подзапроса и остаёмся совместимы с любой СУБД.
-        $activationMap = $consultants->pluck('dateActivity', 'id');
-        $cumulativeLpByConsultant = [];
-        $activeIds = $activationMap->filter()->keys()->all();
-        if (! empty($activeIds)) {
-            $rows = DB::table('commission')
-                ->whereIn('consultant', $activeIds)
-                ->where('chainOrder', 1)
-                ->whereNull('deletedAt')
-                ->get(['consultant', 'date', 'personalVolume']);
-
-            foreach ($rows as $r) {
-                $activation = $activationMap[$r->consultant] ?? null;
-                if (! $activation) continue;
-                $commissionDate = $r->date ? \Carbon\Carbon::parse($r->date) : null;
-                if (! $commissionDate) continue;
-                $actDate = $activation instanceof \Carbon\Carbon
-                    ? $activation
-                    : \Carbon\Carbon::parse($activation);
-                if ($commissionDate->lt($actDate)) continue;
-
-                $cumulativeLpByConsultant[$r->consultant] =
-                    ($cumulativeLpByConsultant[$r->consultant] ?? 0) + (float) ($r->personalVolume ?? 0);
-            }
-        }
-
-        // Batch load WebUser name parts (firstName/lastName/patronymic)
-        // Used as source of truth for name parts per project rules
-        $webUserIds = $consultants->pluck('webUser')->filter()->unique();
-        $webUsers = $webUserIds->isNotEmpty()
-            ? DB::table('WebUser')->whereIn('id', $webUserIds)
-                ->get(['id', 'firstName', 'lastName', 'patronymic', 'email', 'phone', 'nicTG'])
-                ->keyBy('id')
-            : collect();
-
-        // Город — собственная колонка партнёра (перенесена из person
-        // 13.08.2026); хранит и legacy-код справочника, и название.
-        $cityIds = $consultants->pluck('city')->filter()->unique();
-        $cities = $cityIds->isNotEmpty()
-            ? DB::table('city')->whereIn('id', $cityIds)->pluck('cityNameRu', 'id')
-            : collect();
-
-        // Index status_levels by level number for qualificationLog fallback
-        $statusLevelsByLevel = $statusLevels->keyBy('level');
+        ['ids' => $ids, 'statusLevels' => $statusLevels, 'qLogs' => $qLogs, 'cumulativeByConsultant' => $cumulativeByConsultant, 'clientCounts' => $clientCounts, 'contractCounts' => $contractCounts, 'subCounts' => $subCounts, 'activityIds' => $activityIds, 'activityNames' => $activityNames, 'cumulativeLpByConsultant' => $cumulativeLpByConsultant, 'webUsers' => $webUsers, 'cities' => $cities, 'statusLevelsByLevel' => $statusLevelsByLevel] = $this->memberRelations($consultants);
 
         return $consultants->map(function ($c) use ($statusLevels, $statusLevelsByLevel, $qLogs, $cumulativeByConsultant, $clientCounts, $contractCounts, $subCounts, $activityNames, $cities, $webUsers, $cumulativeLpByConsultant) {
             $statusLevel = $c->status_and_lvl ? ($statusLevels[$c->status_and_lvl] ?? null) : null;
@@ -454,5 +341,136 @@ class ConsultantService
         $ids = $this->getAllDescendants($consultantId);
         $ids[] = $consultantId;
         return $ids;
+    }
+
+    /**
+     * Всё связанное со строками структуры — одной пачкой.
+     *
+     * ⚠ Журнал квалификаций берётся дважды и по-разному: ЛП и ГП — из самой
+     * свежей записи, а НГП — из последней с НЕПУСТЫМ накопительным ГП.
+     * Строка финализа Отрыв/ОП приходит позже и с пустым значением, и
+     * взять её для НГП значит обнулить показатель.
+     *
+     * @return array<string, mixed>
+     */
+    private function memberRelations(Collection $consultants): array
+    {
+        $ids = $consultants->pluck('id')->filter()->unique();
+
+        // Batch load status_levels
+        $statusLevelIds = $consultants->pluck('status_and_lvl')->filter()->unique();
+        $statusLevels = $statusLevelIds->isNotEmpty()
+            ? DB::table('status_levels')->whereIn('id', $statusLevelIds)->get()->keyBy('id')
+            : collect();
+
+        // Batch load latest qualificationLog per consultant
+        $qLogLatestIds = DB::table('qualificationLog')
+            ->whereIn('consultant', $ids)
+            ->whereNull('dateDeleted')
+            ->selectRaw('MAX(id) as id')
+            ->groupBy('consultant')
+            ->pluck('id');
+        $qLogs = $qLogLatestIds->isNotEmpty()
+            ? DB::table('qualificationLog')->whereIn('id', $qLogLatestIds)->get()->keyBy('consultant')
+            : collect();
+
+        // НГП (накопительный) — последний НЕ-NULL groupVolumeCumulative.
+        // Самая свежая строка может быть penalty-строкой финализа Отрыв/ОП с
+        // NULL cumulative; она не должна ронять НГП на stale consultant-поле.
+        $cumulativeLatestIds = DB::table('qualificationLog')
+            ->whereIn('consultant', $ids)
+            ->whereNull('dateDeleted')
+            ->whereNotNull('groupVolumeCumulative')
+            ->selectRaw('MAX(id) as id')
+            ->groupBy('consultant')
+            ->pluck('id');
+        $cumulativeByConsultant = $cumulativeLatestIds->isNotEmpty()
+            ? DB::table('qualificationLog')->whereIn('id', $cumulativeLatestIds)->pluck('groupVolumeCumulative', 'consultant')
+            : collect();
+
+        // Batch count clients per consultant.
+        // Критерий — НЕ удалён, а не active=true: у 4256 из 8149 клиентов флаг
+        // active пуст (наследие Directual), и по нему колонка «Клиенты» в
+        // структуре занижалась — партнёр с единственным клиентом видел 0.
+        $clientCounts = DB::table('client')
+            ->whereIn('consultant', $ids)
+            ->whereNull('dateDeleted')
+            ->select('consultant', DB::raw('count(*) as cnt'))
+            ->groupBy('consultant')
+            ->pluck('cnt', 'consultant');
+
+        // Batch count contracts per consultant
+        $contractCounts = DB::table('contract')
+            ->whereIn('consultant', $ids)
+            ->whereNull('deletedAt')
+            ->select('consultant', DB::raw('count(*) as cnt'))
+            ->groupBy('consultant')
+            ->pluck('cnt', 'consultant');
+
+        // Batch count children (by inviter)
+        $subCounts = DB::table('consultant')
+            ->whereIn('inviter', $ids)
+            ->whereNull('dateDeleted')
+            ->select('inviter', DB::raw('count(*) as cnt'))
+            ->groupBy('inviter')
+            ->pluck('cnt', 'inviter');
+
+        // Batch load activity names
+        $activityIds = $consultants->map(fn ($c) => is_object($c->activity) ? $c->activity->value : $c->activity)->filter()->unique();
+        $activityNames = $activityIds->isNotEmpty()
+            ? DB::table('directory_of_activities')->whereIn('id', $activityIds)->pluck('name', 'id')
+            : collect();
+
+
+        // Batch: накопленный ЛП с даты активации (chainOrder=1 = личная комиссия)
+        // Возвращаем одним запросом все комиссии ветки и суммируем в PHP
+        // только после consultant.dateActivity. Так избегаем коррелированного
+        // подзапроса и остаёмся совместимы с любой СУБД.
+        $activationMap = $consultants->pluck('dateActivity', 'id');
+        $cumulativeLpByConsultant = [];
+        $activeIds = $activationMap->filter()->keys()->all();
+        if (! empty($activeIds)) {
+            $rows = DB::table('commission')
+                ->whereIn('consultant', $activeIds)
+                ->where('chainOrder', 1)
+                ->whereNull('deletedAt')
+                ->get(['consultant', 'date', 'personalVolume']);
+
+            foreach ($rows as $r) {
+                $activation = $activationMap[$r->consultant] ?? null;
+                if (! $activation) continue;
+                $commissionDate = $r->date ? \Carbon\Carbon::parse($r->date) : null;
+                if (! $commissionDate) continue;
+                $actDate = $activation instanceof \Carbon\Carbon
+                    ? $activation
+                    : \Carbon\Carbon::parse($activation);
+                if ($commissionDate->lt($actDate)) continue;
+
+                $cumulativeLpByConsultant[$r->consultant] =
+                    ($cumulativeLpByConsultant[$r->consultant] ?? 0) + (float) ($r->personalVolume ?? 0);
+            }
+        }
+
+        // Batch load WebUser name parts (firstName/lastName/patronymic)
+        // Used as source of truth for name parts per project rules
+        $webUserIds = $consultants->pluck('webUser')->filter()->unique();
+        $webUsers = $webUserIds->isNotEmpty()
+            ? DB::table('WebUser')->whereIn('id', $webUserIds)
+                ->get(['id', 'firstName', 'lastName', 'patronymic', 'email', 'phone', 'nicTG'])
+                ->keyBy('id')
+            : collect();
+
+        // Город — собственная колонка партнёра (перенесена из person
+        // 13.08.2026); хранит и legacy-код справочника, и название.
+        $cityIds = $consultants->pluck('city')->filter()->unique();
+        $cities = $cityIds->isNotEmpty()
+            ? DB::table('city')->whereIn('id', $cityIds)->pluck('cityNameRu', 'id')
+            : collect();
+
+        // Index status_levels by level number for qualificationLog fallback
+        $statusLevelsByLevel = $statusLevels->keyBy('level');
+
+
+        return ['ids' => $ids, 'statusLevels' => $statusLevels, 'qLogs' => $qLogs, 'cumulativeByConsultant' => $cumulativeByConsultant, 'clientCounts' => $clientCounts, 'contractCounts' => $contractCounts, 'subCounts' => $subCounts, 'activityIds' => $activityIds, 'activityNames' => $activityNames, 'cumulativeLpByConsultant' => $cumulativeLpByConsultant, 'webUsers' => $webUsers, 'cities' => $cities, 'statusLevelsByLevel' => $statusLevelsByLevel];
     }
 }
