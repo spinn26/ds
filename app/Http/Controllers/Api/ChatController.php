@@ -618,85 +618,7 @@ class ChatController extends Controller
             return $msgId;
         });
 
-        // Socket emit ПОСЛЕ commit. Фронт дедуплицирует через clientMessageId.
-        try {
-            app(\App\Services\SocketService::class)->emit('chat:new-message', "ticket:{$id}", [
-                'id' => $msgId,
-                'clientMessageId' => $clientMessageId !== '' ? $clientMessageId : null,
-                'ticketId' => $id,
-                'senderId' => $user->id,
-                'senderName' => $name,
-                'content' => $request->message,
-                'isAgent' => $isAgent,
-                'createdAt' => $now->toIso8601String(),
-            ]);
-        } catch (\Exception $e) {
-            Log::warning('chat socket emit failed: new-message', ['ticket_id' => $id, 'message_id' => $msgId, 'exception' => $e->getMessage()]);
-        }
-
-        // Если внутри транзакции произошёл auto-claim или смена статуса (new→open) —
-        // рассылаем chat:ticket-updated глобально, без targeting'а к комнате
-        // тикета. Это критично для модели claim & hide: остальные staff отдела
-        // должны увидеть, что тикет назначен, и убрать его из своего списка
-        // (см. обработчик в StaffChat.vue). Без этого их локальный chats.value
-        // остаётся со старым assigned_to=null и тикет «висит».
-        if ($claimChange || $statusChangedTo) {
-            $payload = ['ticketId' => $id];
-            if ($claimChange) {
-                $payload['assignedTo'] = $claimChange['assigned_to'];
-                $payload['assignedName'] = $claimChange['assigned_name'];
-            }
-            if ($statusChangedTo) {
-                $payload['status'] = $statusChangedTo;
-            }
-            try {
-                app(\App\Services\SocketService::class)->emit('chat:ticket-updated', null, $payload);
-            } catch (\Exception $e) {
-                Log::warning('chat socket emit failed: ticket-updated (auto-claim)', [
-                    'ticket_id' => $id, 'exception' => $e->getMessage(),
-                ]);
-            }
-        }
-
-        // Broadcast: «где-то поменялся unread» → каждый онлайн-клиент
-        // (с debounce) дёрнет /chat/unread-count и обновит свой бейдж.
-        // Это покрывает кейсы, где личное `notification` не уходит:
-        // тикет в общей категории без recipient_id/assigned_to, или
-        // адресат отключён от ticket-комнаты. Без целевого targeting'а
-        // payload не содержит ничего чувствительного (только ticketId).
-        try {
-            app(\App\Services\SocketService::class)->emit('chat:unread-changed', null, [
-                'ticketId' => $id,
-            ]);
-        } catch (\Exception $e) {
-            Log::debug('chat socket emit failed: unread-changed', ['ticket_id' => $id, 'exception' => $e->getMessage()]);
-        }
-
-        // Personal notification to the other side of the ticket.
-        // Раньше тут было $ticket->user_id — этого поля не существует в
-        // chat_tickets, поэтому уведомления партнёру никогда не уходили.
-        // Реальные поля схемы: created_by (автор), recipient_id (другая
-        // сторона приватного staff↔partner), assigned_to (назначенный staff).
-        if ($isAgent) {
-            // Staff отвечает → шлём партнёру: автор тикета, либо вторая сторона
-            // приватного диалога если автор это сам staff.
-            $recipientId = (int) ($ticket->created_by ?? 0);
-            if ($recipientId === (int) $user->id) {
-                $recipientId = (int) ($ticket->recipient_id ?? 0);
-            }
-        } else {
-            // Партнёр пишет → шлём назначенному staff, либо в личный диалог.
-            $recipientId = (int) ($ticket->assigned_to ?? $ticket->recipient_id ?? 0);
-        }
-        if ($recipientId && $recipientId !== (int) $user->id) {
-            NotificationController::create(
-                $recipientId,
-                'chat',
-                $isAgent ? 'Ответ по обращению' : 'Новое сообщение в чате',
-                mb_substr($request->message ?? '', 0, 120) ?: 'Отправлено вложение',
-                $isAgent ? "/chat?ticket={$id}" : "/manage/chat?ticket={$id}"
-            );
-        }
+        $this->notifyMessageSent($claimChange, $clientMessageId, $id, $isAgent, $msgId, $name, $now, $request, $statusChangedTo, $ticket, $user);
 
         return response()->json(['id' => $msgId]);
     }
@@ -2902,5 +2824,100 @@ class ChatController extends Controller
 
 
         return ['unreadMap' => $unreadMap, 'lastMsgMap' => $lastMsgMap, 'newForMeSet' => $newForMeSet, 'avatarMap' => $avatarMap, 'creatorNameMap' => $creatorNameMap, 'participantsMap' => $participantsMap];
+    }
+
+    /**
+     * Оповещения после сохранения сообщения: сокет-события и личное
+     * уведомление другой стороне.
+     *
+     * ⚠ Событие о взятии тикета в работу рассылается ГЛОБАЛЬНО, а не в
+     * комнату тикета: остальные сотрудники отдела должны увидеть назначение
+     * и убрать тикет из своего списка. Без этого он у них «висит».
+     *
+     * Всё здесь — побочные эффекты, и падение сокета не должно ронять
+     * отправку: вызовы обёрнуты в try/catch, как и были.
+     */
+    private function notifyMessageSent($claimChange, $clientMessageId, $id, $isAgent, $msgId, $name, $now, $request, $statusChangedTo, $ticket, $user): void
+    {
+        // Socket emit ПОСЛЕ commit. Фронт дедуплицирует через clientMessageId.
+        try {
+            app(\App\Services\SocketService::class)->emit('chat:new-message', "ticket:{$id}", [
+                'id' => $msgId,
+                'clientMessageId' => $clientMessageId !== '' ? $clientMessageId : null,
+                'ticketId' => $id,
+                'senderId' => $user->id,
+                'senderName' => $name,
+                'content' => $request->message,
+                'isAgent' => $isAgent,
+                'createdAt' => $now->toIso8601String(),
+            ]);
+        } catch (\Exception $e) {
+            Log::warning('chat socket emit failed: new-message', ['ticket_id' => $id, 'message_id' => $msgId, 'exception' => $e->getMessage()]);
+        }
+
+        // Если внутри транзакции произошёл auto-claim или смена статуса (new→open) —
+        // рассылаем chat:ticket-updated глобально, без targeting'а к комнате
+        // тикета. Это критично для модели claim & hide: остальные staff отдела
+        // должны увидеть, что тикет назначен, и убрать его из своего списка
+        // (см. обработчик в StaffChat.vue). Без этого их локальный chats.value
+        // остаётся со старым assigned_to=null и тикет «висит».
+        if ($claimChange || $statusChangedTo) {
+            $payload = ['ticketId' => $id];
+            if ($claimChange) {
+                $payload['assignedTo'] = $claimChange['assigned_to'];
+                $payload['assignedName'] = $claimChange['assigned_name'];
+            }
+            if ($statusChangedTo) {
+                $payload['status'] = $statusChangedTo;
+            }
+            try {
+                app(\App\Services\SocketService::class)->emit('chat:ticket-updated', null, $payload);
+            } catch (\Exception $e) {
+                Log::warning('chat socket emit failed: ticket-updated (auto-claim)', [
+                    'ticket_id' => $id, 'exception' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        // Broadcast: «где-то поменялся unread» → каждый онлайн-клиент
+        // (с debounce) дёрнет /chat/unread-count и обновит свой бейдж.
+        // Это покрывает кейсы, где личное `notification` не уходит:
+        // тикет в общей категории без recipient_id/assigned_to, или
+        // адресат отключён от ticket-комнаты. Без целевого targeting'а
+        // payload не содержит ничего чувствительного (только ticketId).
+        try {
+            app(\App\Services\SocketService::class)->emit('chat:unread-changed', null, [
+                'ticketId' => $id,
+            ]);
+        } catch (\Exception $e) {
+            Log::debug('chat socket emit failed: unread-changed', ['ticket_id' => $id, 'exception' => $e->getMessage()]);
+        }
+
+        // Personal notification to the other side of the ticket.
+        // Раньше тут было $ticket->user_id — этого поля не существует в
+        // chat_tickets, поэтому уведомления партнёру никогда не уходили.
+        // Реальные поля схемы: created_by (автор), recipient_id (другая
+        // сторона приватного staff↔partner), assigned_to (назначенный staff).
+        if ($isAgent) {
+            // Staff отвечает → шлём партнёру: автор тикета, либо вторая сторона
+            // приватного диалога если автор это сам staff.
+            $recipientId = (int) ($ticket->created_by ?? 0);
+            if ($recipientId === (int) $user->id) {
+                $recipientId = (int) ($ticket->recipient_id ?? 0);
+            }
+        } else {
+            // Партнёр пишет → шлём назначенному staff, либо в личный диалог.
+            $recipientId = (int) ($ticket->assigned_to ?? $ticket->recipient_id ?? 0);
+        }
+        if ($recipientId && $recipientId !== (int) $user->id) {
+            NotificationController::create(
+                $recipientId,
+                'chat',
+                $isAgent ? 'Ответ по обращению' : 'Новое сообщение в чате',
+                mb_substr($request->message ?? '', 0, 120) ?: 'Отправлено вложение',
+                $isAgent ? "/chat?ticket={$id}" : "/manage/chat?ticket={$id}"
+            );
+        }
+
     }
 }
