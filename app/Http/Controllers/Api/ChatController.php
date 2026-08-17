@@ -309,69 +309,8 @@ class ChatController extends Controller
 
         // Transaction: the ticket row is meaningless without its first message,
         // so either both land or neither does.
-        $ticketId = DB::transaction(function () use ($request, $user, $name, $recipientId, $recipientName, $now, $messageBody, $isSupport, $silent) {
-            $incidentNo = null;
-            if ($isSupport) {
-                DB::statement("SELECT pg_advisory_xact_lock(hashtext('chat-incident-number'))");
-                $incidentNo = $this->nextIncidentNumber();
-            }
-
-            $id = DB::table('chat_tickets')->insertGetId([
-                'subject' => $request->subject,
-                'description' => $request->description,
-                'status' => $isSupport ? 'open' : 'new',
-                'priority' => $request->input('priority', 'medium'),
-                'department' => $request->department,
-                'created_by' => $user->id,
-                'customer_name' => $name,
-                'customer_email' => $user->email,
-                'recipient_id' => $recipientId,
-                'recipient_name' => $recipientName,
-                'context_type' => $request->input('context_type'),
-                'context_id' => $request->input('context_id'),
-                'tags' => $request->tags ? json_encode($request->tags) : null,
-                'messages_count' => 1,
-                'is_incident' => $isSupport,
-                'incident_no' => $incidentNo,
-                'incident_severity' => $isSupport ? 'medium' : null,
-                'incident_logged_at' => $isSupport ? $now : null,
-                'incident_logged_by' => $isSupport ? $user->id : null,
-                'last_message_at' => $now,
-                'created_at' => $now,
-                'updated_at' => $now,
-            ]);
-
-            // silent=true: первое сообщение — системная строка ("Чат
-            // создан администратором X"). Без бабла в ленте (is_system=true),
-            // тикет имеет хотя бы одну запись для last_message_at/preview.
-            $firstContent = $silent
-                ? "Чат создан администратором {$name}"
-                : $messageBody;
-            DB::table('chat_messages')->insert([
-                'ticket_id' => $id,
-                'sender_id' => $user->id,
-                'sender_name' => $name,
-                'content' => $firstContent,
-                'is_agent' => $request->user()->isStaff(),
-                'is_system' => $silent,
-                'created_at' => $now,
-                'updated_at' => $now,
-            ]);
-
-            return $id;
-        });
-
-        // Notify via socket
-        try {
-            app(\App\Services\SocketService::class)->emit('chat:new-ticket', null, [
-                'ticketId' => $ticketId,
-                'subject' => $request->subject,
-                'department' => $request->department,
-                'customerName' => $name,
-            ]);
-        } catch (\Exception $e) {
-            Log::warning('chat socket emit failed: new-ticket', ['ticket_id' => $ticketId, 'exception' => $e->getMessage()]);
-        }
+        $ticketId = $this->createTicketRecord($isSupport, $messageBody, $name, $now, $recipientId, $recipientName, $request, $silent, $user);
+        $this->notifyTicketCreated($name, $request, $ticketId);
 
         $ticket = DB::table('chat_tickets')->where('id', $ticketId)->first();
 
@@ -2919,5 +2858,90 @@ class ChatController extends Controller
             );
         }
 
+    }
+
+    /**
+     * Оповещение о новом тикете: сокет-событие сотрудникам категории.
+     *
+     * Побочный эффект — падение сокета не должно ронять создание тикета,
+     * поэтому вызов обёрнут в try/catch, как и был.
+     */
+    private function notifyTicketCreated($name, $request, $ticketId): void
+    {
+
+        // Notify via socket
+        try {
+            app(\App\Services\SocketService::class)->emit('chat:new-ticket', null, [
+                'ticketId' => $ticketId,
+                'subject' => $request->subject,
+                'department' => $request->department,
+                'customerName' => $name,
+            ]);
+        } catch (\Exception $e) {
+            Log::warning('chat socket emit failed: new-ticket', ['ticket_id' => $ticketId, 'exception' => $e->getMessage()]);
+        }
+
+    }
+
+    /**
+     * Запись тикета и его первого сообщения — одной транзакцией.
+     *
+     * ⚠ Тикет и первое сообщение обязаны появляться вместе: обращение без
+     * текста выглядит в списке пустой строкой, и оператор не понимает, что
+     * от него хотят.
+     */
+    private function createTicketRecord($isSupport, $messageBody, $name, $now, $recipientId, $recipientName, $request, $silent, $user): int
+    {
+        return DB::transaction(function () use ($request, $user, $name, $recipientId, $recipientName, $now, $messageBody, $isSupport, $silent) {
+            $incidentNo = null;
+            if ($isSupport) {
+                DB::statement("SELECT pg_advisory_xact_lock(hashtext('chat-incident-number'))");
+                $incidentNo = $this->nextIncidentNumber();
+            }
+
+            $id = DB::table('chat_tickets')->insertGetId([
+                'subject' => $request->subject,
+                'description' => $request->description,
+                'status' => $isSupport ? 'open' : 'new',
+                'priority' => $request->input('priority', 'medium'),
+                'department' => $request->department,
+                'created_by' => $user->id,
+                'customer_name' => $name,
+                'customer_email' => $user->email,
+                'recipient_id' => $recipientId,
+                'recipient_name' => $recipientName,
+                'context_type' => $request->input('context_type'),
+                'context_id' => $request->input('context_id'),
+                'tags' => $request->tags ? json_encode($request->tags) : null,
+                'messages_count' => 1,
+                'is_incident' => $isSupport,
+                'incident_no' => $incidentNo,
+                'incident_severity' => $isSupport ? 'medium' : null,
+                'incident_logged_at' => $isSupport ? $now : null,
+                'incident_logged_by' => $isSupport ? $user->id : null,
+                'last_message_at' => $now,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+
+            // silent=true: первое сообщение — системная строка ("Чат
+            // создан администратором X"). Без бабла в ленте (is_system=true),
+            // тикет имеет хотя бы одну запись для last_message_at/preview.
+            $firstContent = $silent
+                ? "Чат создан администратором {$name}"
+                : $messageBody;
+            DB::table('chat_messages')->insert([
+                'ticket_id' => $id,
+                'sender_id' => $user->id,
+                'sender_name' => $name,
+                'content' => $firstContent,
+                'is_agent' => $request->user()->isStaff(),
+                'is_system' => $silent,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+
+            return $id;
+        });
     }
 }
