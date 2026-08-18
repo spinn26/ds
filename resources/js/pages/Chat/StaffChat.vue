@@ -240,10 +240,19 @@
                 @mousedown.prevent="cancelEditSubject" />
             </div>
             <div v-else class="d-flex align-center ga-2 chat-subject-row">
-              <div class="text-subtitle-1 font-weight-bold">{{ activeChat.subject }}</div>
+              <!-- Заголовок в ОДНУ строку с многоточием: длинные темы вроде
+                   «смена резидентства и Вывод ITA / T25W041212 / Фамилия Имя»
+                   раньше переносились на шесть строк и выдавливали переписку
+                   за пределы экрана. Полный текст — в подсказке. -->
+              <div class="text-subtitle-1 font-weight-bold chat-subject-text"
+                :title="activeChat.subject">{{ activeChat.subject }}</div>
               <v-btn icon="mdi-pencil" size="x-small" variant="tonal" color="primary"
                 title="Переименовать чат (Enter — сохранить, Esc — отмена)"
                 @click="startEditSubject" />
+              <v-btn :icon="rolesExpanded ? 'mdi-chevron-up' : 'mdi-chevron-down'"
+                size="x-small" variant="text"
+                :title="rolesExpanded ? 'Свернуть участников' : 'Показать участников'"
+                @click="toggleRoles" />
             </div>
             <div class="d-flex flex-wrap align-center ga-2 mt-1">
               <span class="text-caption text-medium-emphasis">{{ activeChat.customer_name }}</span>
@@ -266,8 +275,29 @@
                 {{ slaLabel }}
               </v-chip>
             </div>
-            <!-- Роли: постановщик / исполнитель / наблюдатели -->
-            <div class="roles-grid mt-2">
+            <!-- Роли: постановщик / исполнитель / наблюдатели.
+                 Свёрнуто — одна строка с аватарами, развёрнуто — таблица. -->
+            <div v-if="!rolesExpanded" class="roles-compact mt-1" @click="toggleRoles">
+              <span class="role-label">Участники</span>
+              <span class="d-flex align-center ga-1 flex-wrap">
+                <v-chip v-if="chatAccessRow.find(p => p.kind === 'assignee')"
+                  size="x-small" variant="tonal" color="primary"
+                  @click.stop="openParticipantsDialog">
+                  <template #prepend>
+                    <v-avatar size="16" color="primary" class="text-caption font-weight-bold">
+                      {{ pInitials(chatAccessRow.find(p => p.kind === 'assignee').name) }}
+                    </v-avatar>
+                  </template>
+                  {{ chatAccessRow.find(p => p.kind === 'assignee').name }}
+                </v-chip>
+                <span v-else class="text-disabled text-caption">Исполнитель не назначен</span>
+                <span v-if="chatAccessRow.filter(p => p.kind !== 'assignee').length"
+                  class="text-caption text-medium-emphasis">
+                  +{{ chatAccessRow.filter(p => p.kind !== 'assignee').length }} наблюдателей
+                </span>
+              </span>
+            </div>
+            <div v-else class="roles-grid mt-2">
               <!-- Постановщик -->
               <span class="role-label">Постановщик</span>
               <span class="role-value">
@@ -1326,6 +1356,25 @@ const messages = ref([]);
 
 // Inline-редактирование названия. Поиск по списку идёт только по subject,
 // поэтому staff подбирает удобный ключ — это критично для большой ленты.
+/**
+ * Шапка тикета (постановщик / исполнитель / наблюдатели) занимает до трети
+ * высоты окна, и на ноутбуках с невысоким экраном на переписку оставалось
+ * несколько строк. Блок ролей теперь сворачивается, а решение запоминается.
+ *
+ * По умолчанию развёрнут только на высоких экранах: 900px — примерно граница,
+ * ниже которой (13-14" ноутбуки) шапка начинает мешать.
+ */
+const ROLES_STORAGE_KEY = 'staff-chat-roles-expanded';
+const rolesExpanded = ref((() => {
+  const stored = localStorage.getItem(ROLES_STORAGE_KEY);
+  if (stored !== null) return stored === '1';
+  return window.innerHeight >= 900;
+})());
+function toggleRoles() {
+  rolesExpanded.value = !rolesExpanded.value;
+  try { localStorage.setItem(ROLES_STORAGE_KEY, rolesExpanded.value ? '1' : '0'); } catch (_) { /* quota */ }
+}
+
 const editingSubject = ref(false);
 const editedSubject = ref('');
 const savingSubject = ref(false);
@@ -2925,6 +2974,11 @@ onUnmounted(() => {
 .chat-item-bottom .recipient { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .chat-item-bottom .chat-item-status-chip { flex-shrink: 0; }
 .roles-grid { display: grid; grid-template-columns: 90px 1fr; align-items: center; gap: 5px 8px; }
+/* Свёрнутый вид: одна строка вместо таблицы на три ряда. */
+.roles-compact { display: flex; align-items: center; gap: 8px; cursor: pointer; min-width: 0; }
+/* Тема — одна строка с многоточием. Без этого длинные темы переносились
+   на несколько строк и вместе с блоком ролей съедали пол-экрана. */
+.chat-subject-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .role-label { font-size: 11px; font-weight: 600; color: rgba(var(--v-theme-on-surface), 0.45); text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; }
 .role-value { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; min-width: 0; }
 .role-person { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: rgba(var(--v-theme-on-surface), 0.85); }
