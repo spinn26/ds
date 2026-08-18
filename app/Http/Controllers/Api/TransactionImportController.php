@@ -733,12 +733,8 @@ class TransactionImportController extends Controller
         \App\Services\PeriodFreezeService $freeze,
         \App\Services\CommissionCalculator $calculator
     ): JsonResponse {
-        $user = $request->user();
-        if (! $user->hasAnyRole(['admin', 'calculations'])) {
-            return response()->json([
-                'message' => 'Удаление зафиксированных транзакций доступно только администратору и руководителю по расчётам',
-            ], 403);
-        }
+        // Доступ решает сетка на маршруте (permission:import,full). Прежняя
+        // проверка по имени роли стояла второй и перебивала её.
 
         $tx = DB::table('transaction')->where('id', $id)->whereNull('deletedAt')->first();
         if (! $tx) {
