@@ -460,12 +460,19 @@ Route::prefix('v1')->group(function () {
         Route::get('/admin/requisites/{id}/partner', [\App\Http\Controllers\Api\AdminDataController::class, 'requisitePartner'])->whereNumber('id');
         Route::post('/admin/requisites/{id}/check-inn', [\App\Http\Controllers\Api\AdminDataController::class, 'checkRequisiteInn'])->whereNumber('id')->middleware('throttle:60,1');
         Route::post('/admin/requisites/{id}/verify', [\App\Http\Controllers\Api\AdminDataController::class, 'verifyRequisites'])->middleware('permission:requisites,edit');
-        // Смена банковских реквизитов (проверка Катей) + приостановка выплат.
+        // Смена банковских реквизитов (ручная проверка) + приостановка выплат.
         // Подтверждение смены счёта — вектор payout-fraud, гейт обязателен.
+        //
+        // ⚠ Гейт идёт через СЕТКУ прав (permission:bank-changes,full), а не
+        // через список ролей. Прежний `role:admin,finance` игнорировал раздел
+        // «Смена реквизитов» в /admin/permissions целиком: что бы там ни
+        // стояло, доступ не менялся — и расходился в обе стороны. Уровень
+        // full выбран намеренно: это подтверждение платёжных реквизитов,
+        // «Правки» для него мало.
         Route::get('/admin/bank-change-requests', [\App\Http\Controllers\Api\BankRequisiteChangeController::class, 'index']);
-        Route::post('/admin/bank-change-requests/{id}/accept', [\App\Http\Controllers\Api\BankRequisiteChangeController::class, 'accept'])->whereNumber('id')->middleware('role:admin,finance');
-        Route::post('/admin/bank-change-requests/{id}/reject', [\App\Http\Controllers\Api\BankRequisiteChangeController::class, 'reject'])->whereNumber('id')->middleware('role:admin,finance');
-        Route::post('/admin/partners/{consultant}/suspend-payments', [\App\Http\Controllers\Api\BankRequisiteChangeController::class, 'suspendPayments'])->whereNumber('consultant')->middleware('role:admin,finance');
+        Route::post('/admin/bank-change-requests/{id}/accept', [\App\Http\Controllers\Api\BankRequisiteChangeController::class, 'accept'])->whereNumber('id')->middleware('permission:bank-changes,full');
+        Route::post('/admin/bank-change-requests/{id}/reject', [\App\Http\Controllers\Api\BankRequisiteChangeController::class, 'reject'])->whereNumber('id')->middleware('permission:bank-changes,full');
+        Route::post('/admin/partners/{consultant}/suspend-payments', [\App\Http\Controllers\Api\BankRequisiteChangeController::class, 'suspendPayments'])->whereNumber('consultant')->middleware('permission:bank-changes,full');
         Route::get('/admin/acceptance', [\App\Http\Controllers\Api\AdminDataController::class, 'acceptance']);
         Route::get('/admin/contracts', [\App\Http\Controllers\Api\AdminDataController::class, 'contracts']);
         Route::get('/admin/contracts/check-number', [\App\Http\Controllers\Api\AdminDataController::class, 'checkContractNumber']);
