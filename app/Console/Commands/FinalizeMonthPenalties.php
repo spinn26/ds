@@ -29,7 +29,8 @@ class FinalizeMonthPenalties extends Command
     protected $signature = 'finalize:apply
                             {year? : Год (default: текущий)}
                             {month? : Месяц 1-12 (default: текущий)}
-                            {--dry-run : Только превью, без записи}';
+                            {--dry-run : Только превью, без записи}
+                            {--force : Разрешить незавершённый месяц (по умолчанию запрещено)}';
 
     protected $description = 'Применить отрыв + недобор ОП к commission-строкам месяца';
 
@@ -38,6 +39,20 @@ class FinalizeMonthPenalties extends Command
         $year = (int) ($this->argument('year') ?: now()->year);
         $month = (int) ($this->argument('month') ?: now()->month);
         $dryRun = (bool) $this->option('dry-run');
+
+        // ⚠ Незавершённый месяц по умолчанию не применяем. Инцидент июля
+        // 2026: команду за июль выполнили 14 ИЮЛЯ, продаж ещё не было, и
+        // снимки записались с нулевыми ЛП/ГП — НГП замер у 147 партнёров.
+        // Тот же гард стоит на кнопке в интерфейсе. --force оставлен для
+        // осознанных прогонов (отладка, разбор инцидента).
+        $period = sprintf('%04d-%02d', $year, $month);
+        if (! $dryRun && ! $this->option('force') && $period >= now()->format('Y-m')) {
+            $this->error("Месяц {$period} ещё не завершён — применять финализацию нельзя: "
+                . 'снимок зафиксирует неполные объёмы и НГП перестанет расти.');
+            $this->line('Посмотреть прогноз: --dry-run. Всё равно применить: --force.');
+
+            return self::FAILURE;
+        }
 
         $this->info(sprintf(
             '%s финализация за %04d-%02d ...',
