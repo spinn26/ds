@@ -122,6 +122,22 @@ class AdminPoolController extends Controller
 
         $year = (int) $data['year'];
         $month = (int) $data['month'];
+        $period = sprintf('%04d-%02d', $year, $month);
+
+        // ⚠ Тот же гард, что и у финализации: незавершённый месяц считать
+        // нельзя, объёмы за него ещё неполные. Инцидент июля 2026 — снимки с
+        // нулями, записанные в середине месяца, и замерший НГП.
+        if ($period >= now()->format('Y-m')) {
+            \App\Support\Audit::log('pool_refused', 'period', $period, [
+                'period' => $period,
+                'reason' => 'месяц не завершён',
+            ]);
+
+            return response()->json([
+                'message' => "Месяц {$period} ещё не завершён — расчёт пула применять нельзя: "
+                    . 'объёмы за месяц неполные. Посмотрите «Превью».',
+            ], 422);
+        }
 
         if ($this->freeze->isFrozen($year, $month)) {
             return response()->json([
@@ -145,6 +161,12 @@ class AdminPoolController extends Controller
         ], now()->addMinutes(30));
 
         \App\Jobs\ApplyPoolJob::dispatch($batchId, $year, $month, $request->user()?->id);
+
+        // След в журнале — кто и за какой период запустил расчёт пула.
+        \App\Support\Audit::log('pool_apply', 'period', $period, [
+            'period' => $period,
+            'batchId' => $batchId,
+        ]);
 
         return response()->json([
             'message' => 'Расчёт пула запущен в фоне',

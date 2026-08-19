@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Support\Audit;
 use App\Http\Controllers\Controller;
 use App\Services\MonthlyPenaltyRunner;
 use Illuminate\Http\JsonResponse;
@@ -47,6 +48,27 @@ class AdminFinalizeController extends Controller
     public function apply(Request $request): JsonResponse
     {
         $data = $this->validatedPeriod($request);
+        $period = sprintf('%04d-%02d', $data['year'], $data['month']);
+
+        // ⚠ Незавершённый месяц применять нельзя. Инцидент июля 2026:
+        // финализацию за июль запустили 14 ИЮЛЯ, продаж за месяц ещё не было,
+        // и она записала снимки с нулевыми ЛП/ГП. НГП считается как «база до
+        // месяца + ГП месяца», поэтому у 147 партнёров он замер на июньском
+        // значении — а когда в августе комиссии посчитали, полный прогон
+        // повторить забыли. Превью по текущему месяцу остаётся доступным:
+        // запрет касается только записи.
+        if ($period >= now()->format('Y-m')) {
+            Audit::log('finalize_refused', 'period', $period, [
+                'period' => $period,
+                'reason' => 'месяц не завершён',
+            ]);
+
+            return response()->json([
+                'message' => "Месяц {$period} ещё не завершён — применять финализацию нельзя: "
+                    . 'снимок зафиксирует неполные объёмы и НГП перестанет расти. '
+                    . 'Посмотрите прогноз через «Превью».',
+            ], 422);
+        }
 
         // Блокировка против гонки: ночной cron (`finalize:apply` в 04:00) и
         // UI-кнопка (Транзакции/Пул/КарточкаПериода) могут попасть в один
@@ -68,6 +90,15 @@ class AdminFinalizeController extends Controller
         } finally {
             $lock->release();
         }
+
+        // След в журнале: раньше запуски пересчётов не фиксировались вовсе, и
+        // на вопрос «кто и что запускал» ответить было нечем — в audit_log
+        // лежали только входы и правки сущностей.
+        Audit::log('finalize_apply', 'period', $period, [
+            'period' => $period,
+            'processed' => $result['processed'],
+            'affected' => $result['affected'],
+        ]);
 
         if ($result['frozen'] ?? false) {
             return response()->json($result, 422);
