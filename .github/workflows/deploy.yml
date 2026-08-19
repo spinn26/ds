@@ -125,8 +125,26 @@ jobs:
 
       # psql нужен самому Laravel: PostgresSchemaState::load() грузит
       # schema-файл внешним клиентом, а не через PDO.
+      # psql нужен Laravel'у, чтобы загрузить схему из database/schema/pgsql-schema.sql.
+      # ⚠ Шаг дважды вис на apt-зеркале и держал прогон больше часа, блокируя
+      # деплой. Поэтому: короткий таймаут, повтор и проверка на уже
+      # установленный клиент — в образе раннера он часто уже есть.
       - name: Install psql client
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+        timeout-minutes: 3
+        run: |
+          if command -v psql >/dev/null 2>&1; then
+            echo "psql уже установлен: $(psql --version)"
+            exit 0
+          fi
+          for attempt in 1 2 3; do
+            echo "Попытка $attempt установить postgresql-client..."
+            if sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client; then
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Не удалось установить psql-клиент" >&2
+          exit 1
 
       - name: Cache Composer packages
         uses: actions/cache@v4
