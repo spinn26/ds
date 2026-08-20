@@ -12,9 +12,11 @@ use Illuminate\Support\Facades\DB;
  * кабинет открывается, но отчёты/клиенты/структура пустые, а окно акцепта
  * документов до 17.08.2026 намертво блокировало вход (принять было нельзя).
  *
- * Две типовые причины, и команда их различает:
+ * Типовые причины, и команда их различает:
  *   • «дубль почты» — есть ДРУГОЙ WebUser с той же почтой, и карточка привязана
  *     к нему (человек входит не в тот аккаунт);
+ *   • «карточка удалена» — привязка на месте, но все карточки soft-deleted:
+ *     партнёра убрали из структуры, а вход оставили (Тарасенко, WebUser 505);
  *   • «карточки нет вовсе» — привязку потеряли или партнёра не заводили.
  *
  *   php artisan partners:check-orphan-logins
@@ -62,12 +64,26 @@ class CheckOrphanLogins extends Command
                        AND lower(btrim(split_part(c."personName", ' ', 1))) = lower(btrim(w."lastName"))
                        AND lower(btrim(split_part(c."personName", ' ', 2))) = lower(btrim(w."firstName"))
                      LIMIT 1) AS card_surname_name,
+                   -- Карточки у логина есть, но ВСЕ удалены. Для кабинета это
+                   -- то же самое, что карточки нет: Consultant-запросы идут с
+                   -- фильтром dateDeleted. Партнёра убрали из структуры, а
+                   -- вход не забрали (WebUser 505, Тарасенко: карточки
+                   -- 1065 и 1519 обе soft-deleted).
+                   (SELECT string_agg(c.id::text, ', ' ORDER BY c.id) FROM consultant c
+                     WHERE c."webUser" = w.id AND c."dateDeleted" IS NOT NULL) AS deleted_cards,
                    (SELECT w2.id FROM "WebUser" w2
                      JOIN consultant c2 ON c2."webUser" = w2.id AND c2."dateDeleted" IS NULL
                     WHERE lower(btrim(w2.email)) = lower(btrim(w.email)) AND w2.id <> w.id
                     LIMIT 1) AS twin_web_user
               FROM "WebUser" w
-             WHERE NOT EXISTS (SELECT 1 FROM consultant c WHERE c."webUser" = w.id)
+             -- ⚠ ЖИВОЙ карточки нет. Фильтр dateDeleted здесь обязателен:
+             -- без него логин, у которого все карточки удалены, считался
+             -- «с карточкой» и в отчёт не попадал — а кабинет у него ровно
+             -- такой же пустой (дыра найдена 2026-08-20 на Тарасенко).
+             WHERE NOT EXISTS (
+                     SELECT 1 FROM consultant c
+                      WHERE c."webUser" = w.id AND c."dateDeleted" IS NULL
+                   )
                -- ⚠ dateDeleted НЕ фильтруем: вход по нему не запрещён (это
                -- артефакт Directual-экспорта, по нему когда-то запирали живых
                -- людей). Под таким «удалённым» дублем человек спокойно входит и
@@ -189,6 +205,10 @@ class CheckOrphanLogins extends Command
 
         if ($r->card_surname_name) {
             return "похоже на второй аккаунт: карточка {$r->card_surname_name} с той же фамилией и именем — сверить (отчество в логине не заполнено)";
+        }
+
+        if ($r->deleted_cards) {
+            return "карточка {$r->deleted_cards} привязана, но УДАЛЕНА — вход остался, кабинет пустой: забрать логин или вернуть карточку";
         }
 
         return 'карточки партнёра нет вовсе';
