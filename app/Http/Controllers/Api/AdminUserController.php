@@ -172,11 +172,9 @@ class AdminUserController extends Controller
         $request->validate([
             // Дубль только среди живых строк — soft-deleted Directual-сироты
             // по email не должны блокировать создание (см. update()).
-            'email' => [
-                'required', 'email',
-                \Illuminate\Validation\Rule::unique('WebUser', 'email')
-                    ->whereNull('dateDeleted'),
-            ],
+            // Сверка регистронезависимая: вход по почте регистрозависим, и
+            // «Ivan@x.ru» рядом с «ivan@x.ru» = логин, которым не войти.
+            'email' => ['required', 'email', new \App\Rules\UniqueLiveEmail],
             'password' => ['required', 'string', \Illuminate\Validation\Rules\Password::min(8)->letters()->numbers()],
             'firstName' => 'required|string',
             'lastName' => 'required|string',
@@ -213,12 +211,7 @@ class AdminUserController extends Controller
             // (напр. Булка Л.А.: активная 394 + удалённая 409) — без
             // whereNull('dateDeleted') правило спотыкается о сироту и не даёт
             // сохранить живую запись («Этот email уже зарегистрирован»).
-            'email' => [
-                'required', 'email',
-                \Illuminate\Validation\Rule::unique('WebUser', 'email')
-                    ->ignore($id)
-                    ->whereNull('dateDeleted'),
-            ],
+            'email' => ['required', 'email', new \App\Rules\UniqueLiveEmail($id, $user->email)],
             'password' => ['sometimes', 'nullable', 'string',
                 \Illuminate\Validation\Rules\Password::min(8)->letters()->numbers(),
             ],

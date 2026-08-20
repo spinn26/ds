@@ -44,6 +44,12 @@ class PartnerUpdateService
             $request->merge(['gender' => $this->normalizeGender($request->input('gender'))]);
         }
 
+        // Текущая почта логина — правило уникальности пропускает запрос, если
+        // почту не меняли (форма шлёт её при любой правке карточки).
+        $currentEmail = $consultant->webUser
+            ? DB::table('WebUser')->where('id', $consultant->webUser)->value('email')
+            : null;
+
         $cyrillicRegex = '/^[А-Яа-яЁё][А-Яа-яЁё\s\-]*$/u';
         $data = $request->validate([
             // consultant fields
@@ -60,8 +66,12 @@ class PartnerUpdateService
             // правило запрещало сохранить карточку, если такая почта есть у
             // чьего-то логина, — блокируя ровно те записи без входа, ради
             // которых колонку и заводили.
+            // ⚠ НЕ `unique:WebUser,email,{id},id`: он упирался в soft-deleted
+            // дубли и сравнивал регистрозависимо — см. App\Rules\UniqueLiveEmail.
             'email' => array_filter(['sometimes', 'nullable', 'email', 'max:255',
-                $consultant->webUser ? "unique:WebUser,email,{$consultant->webUser},id" : null,
+                $consultant->webUser
+                    ? new \App\Rules\UniqueLiveEmail((int) $consultant->webUser, $currentEmail)
+                    : null,
             ]),
             'phone' => ['sometimes', 'nullable', 'string', 'max:64', new \App\Rules\ValidPhone],
             'nicTG' => ['sometimes', 'nullable', 'string', 'max:128'],

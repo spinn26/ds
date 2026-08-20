@@ -207,7 +207,10 @@ class AdminDataController extends Controller
             'firstName' => ['required', 'string', 'max:255', 'regex:' . $cyrillicRegex],
             'lastName' => ['required', 'string', 'max:255', 'regex:' . $cyrillicRegex],
             'patronymic' => ['nullable', 'string', 'max:255', 'regex:' . $cyrillicRegex],
-            'email' => ['nullable', 'email', 'max:255', 'unique:WebUser,email'],
+            // Живые логины, регистронезависимо — см. App\Rules\UniqueLiveEmail.
+            // Прежний `unique:WebUser,email` спотыкался о soft-deleted сирот и
+            // пропускал дубли, отличающиеся только регистром.
+            'email' => ['nullable', 'email', 'max:255', new \App\Rules\UniqueLiveEmail],
             // Формат телефона проверяем и здесь: карточку заводят руками, а
             // фронтовая проверка (PhoneInput) в API-запрос не попадает.
             'phone' => ['nullable', 'string', 'max:64', new \App\Rules\ValidPhone],
