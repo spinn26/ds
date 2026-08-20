@@ -35,6 +35,10 @@ class UpdatePartnerTest extends TestCase
     private const INVITEE = 1800005;
 
     private const PARTNER_WEBUSER = 1800100;
+    /** Soft-deleted WebUser — его почта занятой НЕ считается. */
+    private const DELETED_TWIN = 1800102;
+    /** Живой клиентский логин с почтой партнёра, отличающейся регистром. */
+    private const LIVE_TWIN = 1800103;
 
     private const CONTRACT = 1800200;
     private const CLIENT = 1800300;
@@ -269,6 +273,54 @@ class UpdatePartnerTest extends TestCase
 
     // ================================================================
 
+    // ---------------- Уникальность почты ----------------
+
+    /**
+     * Почту удалённой записи можно занять: soft-deleted строки в проверке не
+     * участвуют. Прежнее `unique:WebUser,email,{id},id` о них спотыкалось.
+     */
+    #[Test]
+    public function email_of_a_soft_deleted_login_is_free_to_take(): void
+    {
+        $this->save($this->admin, self::PARTNER, ['email' => 'freed@test.local'])->assertOk();
+
+        $this->assertSame('freed@test.local',
+            DB::table('WebUser')->where('id', self::PARTNER_WEBUSER)->value('email'));
+    }
+
+    /**
+     * Карточка сохраняется, даже если почта партнёра конфликтует с чужим ЖИВЫМ
+     * логином: форма шлёт email при любой правке, и проверка на неизменённом
+     * значении не запускается вовсе. Иначе правка отчества или наставника была
+     * бы навсегда заперта («Этот email уже зарегистрирован» — ФК 588 и ещё 10).
+     */
+    #[Test]
+    public function unchanged_email_saves_despite_a_conflicting_live_twin(): void
+    {
+        $this->save($this->admin, self::PARTNER, [
+            'email' => 'partner@test.local', 'patronymic' => 'Обновлёнович',
+        ])->assertOk();
+
+        $this->assertSame('Обновлёнович',
+            DB::table('WebUser')->where('id', self::PARTNER_WEBUSER)->value('patronymic'));
+    }
+
+    /**
+     * Почта ЖИВОГО чужого логина занята, причём независимо от регистра: вход по
+     * почте регистрозависим, и «Staff@Test.Local» рядом с «staff@test.local» —
+     * это логин, которым не войти.
+     */
+    #[Test]
+    public function email_of_another_live_login_is_rejected_case_insensitively(): void
+    {
+        $this->save($this->admin, self::PARTNER, ['email' => 'Staff@Test.Local'])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('email');
+
+        $this->assertSame('partner@test.local',
+            DB::table('WebUser')->where('id', self::PARTNER_WEBUSER)->value('email'));
+    }
+
     /** @param array<string, mixed> $payload */
     private function save(User $as, int $id, array $payload)
     {
@@ -284,6 +336,16 @@ class UpdatePartnerTest extends TestCase
             'Партнёров', 'Партнёр', 'Партнёрович', [
                 'phone' => '+79990000000', 'nicTG' => '@partner', 'birthDate' => '1990-01-01',
             ]);
+
+        // Удалённая строка — наследство Directual-экспорта. Её почта занятой
+        // не считается (ФК 588 / WebUser 319-388).
+        $this->webUser(self::DELETED_TWIN, 'consultant', 'freed@test.local',
+            'Удалённый', 'Дубль', '', ['dateDeleted' => '2025-01-29 19:00:00']);
+
+        // Живой клиентский логин с почтой партнёра в другом регистре
+        // (реальные пары WebUser 511/687, 668/726).
+        $this->webUser(self::LIVE_TWIN, 'client', 'PARTNER@TEST.LOCAL',
+            'Клиентов', 'Клиент');
 
         DB::table('consultant')->insert([
             [
