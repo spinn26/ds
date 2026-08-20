@@ -23,6 +23,7 @@ class RequisitesListingTest extends TestCase
     private const ACTIVE_PARTNER = 1400001;
     private const TERMINATED_PARTNER = 1400002;
     private const SUSPENDED_PARTNER = 1400003;
+    private const BANK_PENDING_PARTNER = 1400004;
 
     /** У активного партнёра ТРИ реквизита — проверяем дедуп. */
     private const REQ_OLD_UNVERIFIED = 1400010;
@@ -31,6 +32,8 @@ class RequisitesListingTest extends TestCase
 
     private const REQ_REJECTED = 1400020;
     private const REQ_PENDING = 1400030;
+    /** ИП подтверждён, а банковский счёт партнёр сменил — ждёт перепроверки. */
+    private const REQ_BANK_PENDING = 1400040;
 
     private User $admin;
 
@@ -49,7 +52,7 @@ class RequisitesListingTest extends TestCase
     {
         $rows = collect($this->list('')->json('data'));
 
-        $this->assertSame(3, $rows->count(), 'по одной строке на каждого из трёх партнёров');
+        $this->assertSame(4, $rows->count(), 'по одной строке на каждого из четырёх партнёров');
         $forActive = $rows->firstWhere('consultantId', self::ACTIVE_PARTNER);
         $this->assertSame(
             self::REQ_VERIFIED,
@@ -69,7 +72,7 @@ class RequisitesListingTest extends TestCase
     #[Test]
     public function dedup_runs_after_the_filter(): void
     {
-        $this->assertOnly('verified=true', [self::REQ_VERIFIED]);
+        $this->assertOnly('verified=true', [self::REQ_VERIFIED, self::REQ_BANK_PENDING]);
         $this->assertOnly('verified=false', [
             self::REQ_NEW_UNVERIFIED, self::REQ_REJECTED, self::REQ_PENDING,
         ]);
@@ -85,7 +88,30 @@ class RequisitesListingTest extends TestCase
         $this->assertOnly('status=verified', [self::REQ_VERIFIED]);
         $this->assertOnly('status=rejected', [self::REQ_REJECTED]);
         // Тоже после фильтра: у активного партнёра остаётся свежий без причины.
-        $this->assertOnly('status=pending', [self::REQ_NEW_UNVERIFIED, self::REQ_PENDING]);
+        $this->assertOnly('status=pending', [
+            self::REQ_NEW_UNVERIFIED, self::REQ_PENDING, self::REQ_BANK_PENDING,
+        ]);
+    }
+
+    /**
+     * ИП подтверждён, но партнёр сменил банковский счёт → строка ОБЯЗАНА
+     * считаться «на проверке», иначе она прячется в «Подтверждено» и её никто
+     * не разбирает, а выплаты партнёру стоят (баг 2026-08-20, 8 партнёров).
+     */
+    #[Test]
+    public function verified_requisite_with_unverified_bank_counts_as_pending(): void
+    {
+        $rows = collect($this->list('')->json('data'))->keyBy('id');
+
+        $bankPending = $rows[self::REQ_BANK_PENDING];
+        $this->assertTrue($bankPending['verified'], 'сам ИП остаётся подтверждённым');
+        $this->assertSame('pending', $bankPending['verificationStatus']);
+        $this->assertSame('bank', $bankPending['pendingScope'], 'на проверке только счёт');
+        $this->assertFalse($bankPending['bankVerified']);
+
+        // Полностью подтверждённый (ИП + счёт) в очередь не попадает.
+        $this->assertSame('verified', $rows[self::REQ_VERIFIED]['verificationStatus']);
+        $this->assertNull($rows[self::REQ_VERIFIED]['pendingScope']);
     }
 
     #[Test]
@@ -106,7 +132,7 @@ class RequisitesListingTest extends TestCase
         // не фильтрует вовсе — выдача возвращается полной.
         $this->assertOnly('suspend=request', [self::REQ_PENDING]);
         $this->assertOnly('suspend=manual', [self::REQ_VERIFIED]);
-        $this->assertSame(3, count($this->list('suspend=нечто')->json('data')),
+        $this->assertSame(4, count($this->list('suspend=нечто')->json('data')),
             'неизвестное значение фильтра не сужает выдачу');
     }
 
@@ -179,6 +205,10 @@ class RequisitesListingTest extends TestCase
             'id' => self::SUSPENDED_PARTNER, 'personName' => 'Ждущий Партнёр',
             'activity' => 1, 'dateCreated' => '2026-01-01 00:00:00',
         ]);
+        DB::table('consultant')->insert([
+            'id' => self::BANK_PENDING_PARTNER, 'personName' => 'Сменивший Счёт',
+            'activity' => 1, 'dateCreated' => '2026-01-01 00:00:00',
+        ]);
 
         // Три реквизита одного партнёра: дедуп обязан оставить подтверждённый.
         DB::table('requisites')->insert([
@@ -197,6 +227,17 @@ class RequisitesListingTest extends TestCase
         DB::table('requisites')->insert([
             'id' => self::REQ_PENDING, 'consultant' => self::SUSPENDED_PARTNER,
             'inn' => '5011111111', 'verified' => false,
+        ]);
+        DB::table('requisites')->insert([
+            'id' => self::REQ_BANK_PENDING, 'consultant' => self::BANK_PENDING_PARTNER,
+            'inn' => '6022222222', 'verified' => true,
+        ]);
+
+        // Банковские строки: у подтверждённого партнёра счёт тоже подтверждён,
+        // у BANK_PENDING_PARTNER — сменён и ждёт проверки.
+        DB::table('bankrequisites')->insert([
+            ['requisites' => self::REQ_VERIFIED, 'accountNumber' => '40802810000000000001', 'verified' => true],
+            ['requisites' => self::REQ_BANK_PENDING, 'accountNumber' => '40802810000000000002', 'verified' => false],
         ]);
 
         // Активный запрос на смену реквизитов — «приостановлен по запросу».

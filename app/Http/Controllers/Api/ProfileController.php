@@ -567,11 +567,19 @@ class ProfileController extends Controller
             'WebUser' => $user->id,
         ];
 
-        DB::transaction(function () use ($bankReq, $data, $consultant) {
+        DB::transaction(function () use ($bankReq, $data, $consultant, $requisite) {
             if ($bankReq) {
                 $bankReq->update($data);
             } else {
                 BankRequisite::create($data);
+            }
+
+            // Новый цикл проверки счёта → перевзводим SLA-таймер, иначе
+            // requisites:notify-overdue не напомнит о нём повторно (см.
+            // RequisiteSla и NotifyOverdueRequisites).
+            if ($requisite->overdue_notified_at !== null) {
+                $requisite->overdue_notified_at = null;
+                $requisite->save();
             }
 
             // Меняется ТОЛЬКО банковский счёт → на повторную проверку уходит

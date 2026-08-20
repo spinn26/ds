@@ -29,21 +29,42 @@ class NotifyOverdueRequisites extends Command
 
     public function handle(): int
     {
-        // Кандидаты: «на проверке» (verified=false, без причины отказа),
-        // не удалённые, ещё не уведомлённые в текущем цикле.
+        // Кандидаты: «на проверке» (verified=false, без причины отказа) ЛИБО
+        // ИП подтверждён, а партнёр сменил банковский счёт и тот ждёт
+        // перепроверки (баг 2026-08-20: такие висели месяцами незамеченными).
+        // Не удалённые, ещё не уведомлённые в текущем цикле.
+        $listing = app(\App\Services\RequisitesListingService::class);
+
         $candidates = Requisite::whereNull('deletedAt')
-            ->where('verified', false)
-            ->where(function ($q) {
-                $q->whereNull('rejection_reason')->orWhere('rejection_reason', '');
-            })
             ->whereNull('overdue_notified_at')
+            ->where(function ($outer) use ($listing) {
+                $outer->where(function ($q) {
+                    $q->where('verified', false)->where(function ($q2) {
+                        $q2->whereNull('rejection_reason')->orWhere('rejection_reason', '');
+                    });
+                })->orWhere(function ($q) use ($listing) {
+                    $q->where('verified', true);
+                    $listing->whereBankPending($q);
+                });
+            })
             ->get();
 
-        $overdue = $candidates->filter(function ($r) {
-            $submittedAt = $r->dateChange
-                ?: ($r->createdAt ? Carbon::parse($r->createdAt) : null);
+        // Для «ждёт только счёт» SLA считаем от смены счёта, а не от давней
+        // верификации ИП — иначе строка просрочена уже в момент появления.
+        $bankChangedAt = DB::table('bankrequisites')
+            ->whereIn('requisites', $candidates->pluck('id')->all() ?: [-1])
+            ->whereNull('deletedAt')
+            ->whereRaw('verified IS NOT TRUE')
+            ->pluck('dateChange', 'requisites');
 
-            return RequisiteSla::isOverdue($submittedAt);
+        $overdue = $candidates->filter(function ($r) use ($bankChangedAt) {
+            $submittedAt = ($r->verified ? ($bankChangedAt[$r->id] ?? null) : null)
+                ?: $r->dateChange
+                ?: $r->createdAt;
+
+            return RequisiteSla::isOverdue(
+                $submittedAt instanceof Carbon ? $submittedAt : ($submittedAt ? Carbon::parse($submittedAt) : null)
+            );
         })->values();
 
         if ($overdue->isEmpty()) {
@@ -73,11 +94,15 @@ class NotifyOverdueRequisites extends Command
                 continue;
             }
 
+            $what = $r->verified
+                ? 'сменил банковский счёт — счёт ждёт перепроверки более 1 рабочего дня (выплаты приостановлены)'
+                : 'реквизиты на ручной верификации более 1 рабочего дня';
+
             NotificationController::create(
                 $recipientId,
                 'requisites',
                 'Реквизиты ждут проверки больше суток',
-                "«{$name}» — реквизиты на ручной верификации более 1 рабочего дня.",
+                "«{$name}» — {$what}.",
                 '/admin/requisites?status=pending',
             );
 

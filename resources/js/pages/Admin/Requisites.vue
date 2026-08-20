@@ -55,8 +55,9 @@
         <span v-else class="text-medium-emphasis">—</span>
       </template>
       <template #item.hasBankRequisites="{ item }">
-        <v-icon v-if="item.hasBankRequisites" color="success" size="18">mdi-check-circle</v-icon>
-        <v-icon v-else color="grey" size="18">mdi-minus-circle-outline</v-icon>
+        <v-icon :color="bankIcon(item).color" size="18" :title="bankIcon(item).title">
+          {{ bankIcon(item).icon }}
+        </v-icon>
       </template>
       <template #item.submittedAt="{ item }">
         <template v-if="item.submittedAt">
@@ -74,8 +75,8 @@
       </template>
       <template #item.verificationStatus="{ item }">
         <v-chip size="x-small" :color="verifyColor(item.verificationStatus)"
-          :title="item.verificationStatus === 'rejected' && item.rejectionReason ? item.rejectionReason : undefined">
-          {{ verifyLabel(item.verificationStatus) }}
+          :title="statusTitle(item)">
+          {{ verifyLabel(item.verificationStatus, item.pendingScope) }}
         </v-chip>
       </template>
       <template #item.suspend="{ item }">
@@ -112,9 +113,15 @@
             <div class="text-h6">{{ selectedItem.partnerName }}</div>
             <v-btn icon="mdi-close" size="small" variant="text" @click="drawerOpen = false" />
           </div>
-          <v-chip size="small" :color="verifyColor(selectedItem.verificationStatus)" class="mb-4">
-            {{ verifyLabel(selectedItem.verificationStatus) }}
+          <v-chip size="small" :color="verifyColor(selectedItem.verificationStatus)" class="mb-4"
+            :title="statusTitle(selectedItem)">
+            {{ verifyLabel(selectedItem.verificationStatus, selectedItem.pendingScope) }}
           </v-chip>
+          <v-alert v-if="selectedItem.pendingScope === 'bank'" type="warning" variant="tonal"
+            density="compact" class="mb-4" icon="mdi-bank-transfer">
+            ИП подтверждён, но партнёр сменил банковский счёт — счёт ждёт перепроверки,
+            выплаты приостановлены. Кнопка «Верифицировать» подтвердит новый счёт.
+          </v-alert>
 
           <!-- 1. Partner data -->
           <div class="text-subtitle-2 font-weight-bold mb-2">Данные партнёра</div>
@@ -656,10 +663,29 @@ function verifyColor(s) {
   return 'warning';
 }
 
-function verifyLabel(s) {
+function verifyLabel(s, scope) {
   if (s === 'verified') return 'Подтверждено';
   if (s === 'rejected') return 'Отклонено';
-  return 'На проверке';
+  // scope='bank' — ИП подтверждён, ждёт перепроверки только счёт (партнёр
+  // сменил банковские реквизиты в профиле). Раньше такие строки показывались
+  // как «Подтверждено» и никто их не разбирал.
+  return scope === 'bank' ? 'Банк на проверке' : 'На проверке';
+}
+
+function statusTitle(item) {
+  if (item.verificationStatus === 'rejected' && item.rejectionReason) return item.rejectionReason;
+  if (item.pendingScope === 'bank') {
+    return 'ИП подтверждён, партнёр сменил банковский счёт — нужна перепроверка. Выплаты приостановлены до подтверждения.';
+  }
+  return undefined;
+}
+
+// Банковская строка: нет / на проверке / подтверждена. Раньше галочка стояла
+// по одному факту НАЛИЧИЯ строки и не отличала подтверждённый счёт от ждущего.
+function bankIcon(item) {
+  if (!item.hasBankRequisites) return { icon: 'mdi-minus-circle-outline', color: 'grey', title: 'Банковские реквизиты не заполнены' };
+  if (!item.bankVerified) return { icon: 'mdi-clock-alert-outline', color: 'warning', title: 'Счёт ждёт проверки финменеджером' };
+  return { icon: 'mdi-check-circle', color: 'success', title: 'Счёт подтверждён' };
 }
 
 // Красим строку красным для отклонённых реквизитов (в т.ч. после

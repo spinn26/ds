@@ -43,7 +43,11 @@ class RequisitesListingService
         if (isset($filters['status'])) {
             switch ($filters['status']) {
                 case 'verified':
-                    $query->where('verified', true);
+                    // Подтверждён = И ИП, И банковская строка. Иначе строка с
+                    // «банк на перепроверке» пряталась бы в «Подтверждено» и
+                    // никогда не попадала в работу (баг 2026-08-20).
+                    $query->where('verified', true)
+                          ->whereNot(fn ($q) => $this->whereBankPending($q));
                     break;
                 case 'rejected':
                     // Отклонено = есть причина отказа (rejection_reason) и не
@@ -53,9 +57,18 @@ class RequisitesListingService
                           ->whereNotNull('rejection_reason')->where('rejection_reason', '!=', '');
                     break;
                 case 'pending':
-                    // На проверке = не верифицировано и БЕЗ причины отказа.
-                    $query->where('verified', false)->where(function ($q) {
-                        $q->whereNull('rejection_reason')->orWhere('rejection_reason', '');
+                    // На проверке = ИП не верифицирован и БЕЗ причины отказа,
+                    // ЛИБО ИП уже подтверждён, а банковский счёт партнёр сменил
+                    // и он ждёт перепроверки (см. whereBankPending).
+                    $query->where(function ($outer) {
+                        $outer->where(function ($q) {
+                            $q->where('verified', false)->where(function ($q2) {
+                                $q2->whereNull('rejection_reason')->orWhere('rejection_reason', '');
+                            });
+                        })->orWhere(function ($q) {
+                            $q->where('verified', true);
+                            $this->whereBankPending($q);
+                        });
                     });
                     break;
             }
@@ -116,6 +129,27 @@ class RequisitesListingService
     }
 
     /**
+     * «У реквизита есть живая банковская строка, ждущая проверки».
+     *
+     * NULL в bankrequisites.verified трактуем как «не подтверждён» (колонка
+     * nullable), поэтому IS NOT TRUE, а не `= false`.
+     *
+     * Публичный: этим же условием NotifyOverdueRequisites добирает кандидатов
+     * на SLA-уведомление — определение должно быть одно.
+     *
+     * @param \Illuminate\Database\Eloquent\Builder<Requisite>|\Illuminate\Database\Query\Builder $query
+     */
+    public function whereBankPending($query): void
+    {
+        $query->whereExists(function ($sub) {
+            $sub->from('bankrequisites')
+                ->whereColumn('bankrequisites.requisites', 'requisites.id')
+                ->whereNull('bankrequisites.deletedAt')
+                ->whereRaw('bankrequisites.verified IS NOT TRUE');
+        });
+    }
+
+    /**
      * Дедуп: один реквизит на партнёра. Приоритет — verified=true, затем самая
      * свежая запись (id DESC). Раньше у одного партнёра висело четыре строки
      * (3 неподтверждённых + 1 подтверждённая).
@@ -165,17 +199,40 @@ class RequisitesListingService
                 // Резолвим verificationStatus для UI: verified / pending / rejected.
                 // «Отклонено» — только когда есть причина отказа (rejection_reason),
                 // т.к. status=2 ставится и при обычном сохранении («на проверке»).
+                // Банк ждёт проверки: строка есть, но не подтверждена. NULL в
+                // verified — тоже «не подтверждён» (колонка nullable).
+                $bankPending = $bankReq !== null && $bankReq->verified !== true;
+
                 $verificationStatus = 'pending';
+                // Что именно на проверке: 'full' — вся карточка, 'bank' — только
+                // счёт (ИП уже подтверждён, партнёр сменил банковские реквизиты
+                // через форму профиля — ProfileController::updateBankRequisites
+                // сбрасывает verified и закрывает платёжный гейт). Раньше такая
+                // строка показывалась как «Подтверждено» и выпадала из очереди:
+                // партнёр вечно видел «проверяется финменеджером», а выплаты
+                // стояли (баг 2026-08-20, 8 партнёров).
+                $pendingScope = 'full';
                 if ($r->verified) {
-                    $verificationStatus = 'verified';
+                    $verificationStatus = $bankPending ? 'pending' : 'verified';
+                    $pendingScope = $bankPending ? 'bank' : null;
                 } elseif (filled($r->rejection_reason)) {
                     $verificationStatus = 'rejected';
+                    $pendingScope = null;
                 }
 
                 // Дата поступления на проверку = последняя отправка реквизитов
                 // (dateChange); для старых записей без dateChange — createdAt.
-                $submittedAt = $r->dateChange
+                // Для «на проверке только банк» отсчёт SLA идёт от смены счёта,
+                // иначе таймер считался бы от давней верификации ИП и строка
+                // была бы просрочена в момент появления в очереди.
+                $submittedAt = $pendingScope === 'bank'
+                    ? ($bankReq->dateChange ?: $r->dateChange)
+                    : $r->dateChange;
+                $submittedAt = $submittedAt
                     ?: ($r->createdAt ? \Illuminate\Support\Carbon::parse($r->createdAt) : null);
+                if (is_string($submittedAt)) {
+                    $submittedAt = \Illuminate\Support\Carbon::parse($submittedAt);
+                }
                 // Просрочка считается только пока реквизиты «на проверке».
                 $overdue = $verificationStatus === 'pending'
                     && \App\Support\RequisiteSla::isOverdue($submittedAt);
@@ -203,6 +260,8 @@ class RequisitesListingService
                     'beneficiaryName' => $bankReq?->beneficiaryName,
                     'verified' => (bool) $r->verified,
                     'verificationStatus' => $verificationStatus,
+                    // 'full' | 'bank' | null — см. выше.
+                    'pendingScope' => $pendingScope,
                     'rejectionReason' => $r->rejection_reason,
                     'hasBankRequisites' => $bankReq !== null,
                     // Без `?->`: слева от `??` он лишний (обращение к свойству
