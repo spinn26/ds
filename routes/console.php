@@ -53,6 +53,15 @@ Schedule::command('requisites:notify-overdue')
     ->hourly()
     ->between('9:00', '19:00');
 
+// Утренний дайджест задач финменеджера: курсы месяца, реквизиты и заявки на
+// смену счёта старше 1 рабочего дня, забытые приостановки выплат.
+// ⚠ Дополняет requisites:notify-overdue, а не дублирует его: тот напоминает
+// про запись ОДИН раз (стампит overdue_notified_at), этот — каждое утро,
+// пока работа висит. Если задач нет, уведомление не отправляется вовсе.
+Schedule::command('alerts:pending-actions')
+    ->weekdays()
+    ->dailyAt('9:30');
+
 // Health-check платформы (БД/Cache/Socket.IO) — каждые 5 минут.
 // Алерт в Telegram шлётся только при переходе up↔down, чтобы не спамить.
 Schedule::command('platform:health-check')
