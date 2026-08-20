@@ -11,7 +11,8 @@ use Illuminate\Support\Facades\Http;
 /**
  * Проверка здоровья платформы. Запускается по расписанию (каждые 5 минут).
  *
- * Проверяет: PostgreSQL, Cache, Socket.IO. Любой компонент down → шлёт
+ * Проверяет: PostgreSQL, Cache, Socket.IO, success-rate интеграций и свежесть
+ * ночного бэкапа БД. Любой компонент down → шлёт
  * алерт в Telegram. Состояние кэшируется, чтобы слать только edge-ы
  * (переход up→down и down→up), а не каждые 5 минут дублировать.
  *
@@ -71,7 +72,54 @@ class PlatformHealthCheck extends Command
             $this->checkCache(),
             $this->checkSocketIo(),
             $this->checkIntegrationSuccessRate(),
+            $this->checkDatabaseBackup(),
         ];
+    }
+
+    /**
+     * Свежесть ночного бэкапа БД (scripts/newds-db-backup.sh, cron 02:30).
+     *
+     * Тихо сломавшийся бэкап опаснее отсутствующего: все считают, что копия
+     * есть, а её нет. Сам скрипт при сбое возвращает ненулевой код и пишет в
+     * /var/log/newds-backup.log — но этого никто не видит, поэтому свежесть
+     * файла проверяем отсюда.
+     *
+     * Порога 36 часов хватает, чтобы одна пропущенная ночь не будила, а две
+     * подряд — разбудили. Каталога нет: на проде это авария (бэкапы снесли),
+     * вне прода — норма, там их и не бывает.
+     */
+    private function checkDatabaseBackup(): array
+    {
+        try {
+            $dir = (string) config('services.db_backup.dir');
+            $maxAge = (int) config('services.db_backup.max_age_hours', 36);
+
+            if (! is_dir($dir)) {
+                return app()->environment('production')
+                    ? ['name' => 'db-backup', 'ok' => false, 'details' => "каталог {$dir} отсутствует"]
+                    : ['name' => 'db-backup', 'ok' => true, 'details' => 'skip (не production)'];
+            }
+
+            $files = glob(rtrim($dir, '/').'/*.dump') ?: [];
+            if (! $files) {
+                return ['name' => 'db-backup', 'ok' => false, 'details' => 'дампов нет вовсе'];
+            }
+
+            usort($files, fn ($a, $b) => filemtime($b) <=> filemtime($a));
+            $newest = $files[0];
+            $ageHours = (int) round((time() - filemtime($newest)) / 3600);
+            $sizeMb = (int) round(filesize($newest) / 1048576);
+
+            return [
+                'name' => 'db-backup',
+                'ok' => $ageHours <= $maxAge,
+                'details' => $ageHours <= $maxAge
+                    ? "последний {$ageHours} ч назад, {$sizeMb} МБ"
+                    : "последний {$ageHours} ч назад (порог {$maxAge} ч) — бэкап не делается",
+            ];
+        } catch (\Throwable $e) {
+            return ['name' => 'db-backup', 'ok' => false, 'details' => $e->getMessage()];
+        }
     }
 
     private function checkPostgres(): array
@@ -166,10 +214,19 @@ class PlatformHealthCheck extends Command
         }
     }
 
+    /** Компоненты, без которых платформа реально лежит. */
+    private const CRITICAL = ['postgres', 'cache', 'socket.io'];
+
     private function sendDownAlert(array $checks): void
     {
         $failed = collect($checks)->reject(fn ($c) => $c['ok']);
-        $lines = ["🔴 <b>Платформа недоступна</b>", ''];
+
+        // «Недоступна» — только когда лёг критичный компонент. Просевшая
+        // интеграция или несделанный бэкап требуют внимания, но платформа при
+        // этом работает, и кричать «недоступна» — врать дежурному.
+        $isOutage = $failed->contains(fn ($c) => in_array($c['name'], self::CRITICAL, true));
+
+        $lines = [$isOutage ? '🔴 <b>Платформа недоступна</b>' : '⚠️ <b>Платформа требует внимания</b>', ''];
         $lines[] = 'Время: ' . now()->format('d.m.Y H:i:s');
         $lines[] = '';
         $lines[] = '<b>Проблемы:</b>';
@@ -181,7 +238,7 @@ class PlatformHealthCheck extends Command
 
     private function sendUpAlert(): void
     {
-        $text = "🟢 <b>Платформа восстановлена</b>\n\nВремя: " . now()->format('d.m.Y H:i:s');
+        $text = "🟢 <b>Всё в норме</b>\n\nВремя: " . now()->format('d.m.Y H:i:s');
         $this->telegram->send($text);
     }
 }

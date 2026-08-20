@@ -95,4 +95,13 @@ return [
         'overdue_notify_email' => env('REQUISITES_OVERDUE_NOTIFY_EMAIL', 'ekaterina.bogdanova@ds-finance.ru'),
     ],
 
+    // Ночной бэкап БД (scripts/newds-db-backup.sh, cron 02:30 от postgres).
+    // platform:health-check следит за свежестью последнего дампа: тихо
+    // сломавшийся бэкап опаснее отсутствующего — все думают, что он есть.
+    // Порог 36 часов, а не 24: одна пропущенная ночь не должна будить, две — да.
+    'db_backup' => [
+        'dir' => env('DB_BACKUP_DIR', '/var/backups/newds/auto'),
+        'max_age_hours' => (int) env('DB_BACKUP_MAX_AGE_HOURS', 36),
+    ],
+
 ];
