@@ -209,7 +209,7 @@ class CommissionCalculator
      * означает «в этом месяце пула у партнёра больше нет» (пересчёт после
      * снятия галочки участия) — строку надо занулить, а не пропустить.
      */
-    public function applyPoolToBalance(int $consultantId, string $dateMonth, string $dateYear, float $poolRub): void
+    public function applyPoolToBalance(int $consultantId, string $dateMonth, string $dateYear, float $poolRub, bool $cascade = true): void
     {
         if (self::isHistorical($dateMonth)) {
             return;
@@ -223,7 +223,7 @@ class CommissionCalculator
         // Строки за месяц может не быть вовсе: лидер мог не иметь ни одной
         // собственной комиссии и получать только пул.
         if (! $row) {
-            $this->rebuildBalance($consultantId, $dateMonth, $dateYear);
+            $this->rebuildBalance($consultantId, $dateMonth, $dateYear, false);
             $row = DB::table('consultantBalance')
                 ->where('consultant', $consultantId)
                 ->where('dateMonth', $dateMonth)
@@ -245,6 +245,12 @@ class CommissionCalculator
             'totalPayable' => $totalPayable,
             'remaining' => $totalPayable - (float) ($row->payed ?? 0),
         ]);
+
+        if ($cascade) {
+            $ym = str_contains($dateMonth, '-') ? $dateMonth
+                : sprintf('%04d-%02d', (int) $dateYear, (int) substr($dateMonth, -2));
+            $this->cascadeCarryForward([$consultantId], $ym);
+        }
     }
 
     /**
@@ -298,16 +304,26 @@ class CommissionCalculator
             ->unique()->values();
 
         foreach ($consultants as $cid) {
-            $this->rebuildBalance($cid, $ym, $dateYear);
+            $this->rebuildBalance($cid, $ym, $dateYear, false);
             // Пул проставляем всегда, в том числе нулём: partнёр мог выпасть из
             // делителя при пересчёте, и старое значение нужно снять.
-            $this->applyPoolToBalance($cid, $ym, $dateYear, (float) ($poolByCons[$cid] ?? 0));
+            $this->applyPoolToBalance($cid, $ym, $dateYear, (float) ($poolByCons[$cid] ?? 0), false);
         }
+
+        // Одна протяжка на всех разом (cascade=false выше): иначе каждый
+        // партнёр каскадировал бы дважды — после rebuild и после пула.
+        $this->cascadeCarryForward($consultants->all(), $ym);
 
         return ['consultants' => $consultants->count(), 'pool' => (float) $poolByCons->sum()];
     }
 
-    private function rebuildBalance(int $consultantId, string $dateMonth, string $dateYear): void
+    /**
+     * @param  bool  $cascade  протянуть новое сальдо на последующие месяцы.
+     *                         resyncMonth передаёт false и делает одну общую
+     *                         протяжку после цикла — иначе каждый партнёр
+     *                         каскадировал бы дважды (rebuild + пул).
+     */
+    private function rebuildBalance(int $consultantId, string $dateMonth, string $dateYear, bool $cascade = true): void
     {
         // Исторический баланс (< HISTORICAL_CUTOFF) неизменен — не перезаписываем.
         $ym = str_contains($dateMonth, '-') ? $dateMonth
@@ -385,6 +401,10 @@ class CommissionCalculator
                 'dateCreated' => now(),
             ]);
         }
+
+        if ($cascade) {
+            $this->cascadeCarryForward([$consultantId], $ym);
+        }
     }
 
     /**
@@ -402,6 +422,92 @@ class CommissionCalculator
         );
 
         return (float) ($row->remaining ?? 0);
+    }
+
+    /**
+     * Протянуть изменившееся сальдо ВПЕРЁД по всем последующим периодам
+     * партнёра: balance ← remaining предыдущего месяца, затем totalPayable
+     * и remaining пересчитываются от него.
+     *
+     * Зачем: любая правка месяца M (пересчёт комиссии, пул, запись выплаты)
+     * меняет remaining месяца M, но balance месяца M+1 оставался прежним —
+     * снимок расходился с цепочкой до следующего полного ресинка. Реестр
+     * выплат читает сохранённый remaining прошлого месяца, поэтому протухание
+     * тянулось дальше по цепочке.
+     *
+     * ⚠ Начисления НЕ трогаем — accruedTransactional/NonTransactional/Pool и
+     * accruedTotal берутся как есть. Это чисто бухгалтерская протяжка переноса,
+     * а не пересчёт денег: принцип «деньги считаются по кнопке» не нарушается.
+     *
+     * ⚠ `status` тоже не трогаем: он ведётся платёжным контуром
+     * (AdminPaymentRegistryController::recalcBalance), и перезапись его отсюда
+     * пометила бы «В обработке» месяцы, к которым выплат никто не касался.
+     *
+     * Затравка — сохранённый remaining последнего периода <= $afterYm, а не
+     * пересчёт цепочки с нуля: исторические месяцы (< HISTORICAL_CUTOFF)
+     * заморожены и остаются источником истины для первого открытого месяца.
+     *
+     * @param  int[]  $consultantIds
+     * @return int    сколько строк обновлено
+     */
+    public function cascadeCarryForward(array $consultantIds, string $afterYm): int
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $consultantIds))));
+        if (! $ids || ! preg_match('/^\d{4}-\d{2}$/', $afterYm)) {
+            return 0;
+        }
+
+        $cutoffYm = substr(self::HISTORICAL_CUTOFF, 0, 7);
+        $updated = 0;
+
+        foreach (array_chunk($ids, 5000) as $chunk) {
+            $ph = implode(',', array_fill(0, count($chunk), '?'));
+
+            // Одним set-based запросом на всю пачку партнёров: оконная сумма
+            // (accruedTotal - payed) по месяцам ПОСЛЕ $afterYm, сдвинутая на
+            // строку назад, — это и есть входящее сальдо каждого периода.
+            $updated += DB::update("
+                WITH seed AS (
+                    SELECT DISTINCT ON (consultant) consultant, COALESCE(remaining, 0) AS rem
+                      FROM \"consultantBalance\"
+                     WHERE consultant IN ($ph)
+                       AND \"dateMonth\" LIKE '____-__'
+                       AND \"dateMonth\" <= ?
+                     ORDER BY consultant, \"dateMonth\" DESC
+                ), later AS (
+                    SELECT id, consultant, \"dateMonth\",
+                           COALESCE(\"accruedTotal\", 0) AS acc,
+                           COALESCE(payed, 0) AS pay
+                      FROM \"consultantBalance\"
+                     WHERE consultant IN ($ph)
+                       AND \"dateMonth\" LIKE '____-__'
+                       AND \"dateMonth\" > ?
+                ), chain AS (
+                    SELECT l.id, l.\"dateMonth\", l.acc, l.pay,
+                           COALESCE(s.rem, 0) + COALESCE(SUM(l.acc - l.pay) OVER (
+                               PARTITION BY l.consultant ORDER BY l.\"dateMonth\"
+                               ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+                           ), 0) AS incoming
+                      FROM later l
+                      LEFT JOIN seed s ON s.consultant = l.consultant
+                )
+                UPDATE \"consultantBalance\" b
+                   SET balance = c.incoming,
+                       \"totalPayable\" = c.incoming + c.acc,
+                       remaining = c.incoming + c.acc - c.pay
+                  FROM chain c
+                 WHERE b.id = c.id
+                   AND c.\"dateMonth\" >= ?
+                   -- Допуск в полкопейки: колонки numeric, но PHP пишет в них
+                   -- float, и round-trip даёт хвосты ~1e-10. Без допуска каскад
+                   -- переписывал бы десятки строк «изменениями» на 0.0000000001.
+                   AND (abs(COALESCE(b.balance, 0) - c.incoming) > 0.005
+                     OR abs(COALESCE(b.\"totalPayable\", 0) - (c.incoming + c.acc)) > 0.005
+                     OR abs(COALESCE(b.remaining, 0) - (c.incoming + c.acc - c.pay)) > 0.005)
+            ", [...$chunk, $afterYm, ...$chunk, $afterYm, $cutoffYm]);
+        }
+
+        return $updated;
     }
 
     private function calculateInTransaction(int $transactionId): array

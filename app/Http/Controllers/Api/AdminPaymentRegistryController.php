@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Services\CommissionCalculator;
 use App\Services\PaymentRegistryService;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
@@ -25,6 +26,7 @@ class AdminPaymentRegistryController extends Controller
 {
         public function __construct(
         private readonly PaymentRegistryService $registry,
+        private readonly CommissionCalculator $calculator,
     ) {}
 
 /** GET /admin/payment-registry?year=&month=&search=&status=&activity=&nonZero= */
@@ -250,6 +252,25 @@ class AdminPaymentRegistryController extends Controller
             'remaining' => $remaining,
             'status' => $newStatus,
         ]);
+
+        $this->carryForward($balance);
+    }
+
+    /**
+     * Выплата меняет remaining своего месяца — значит, входящее сальдо всех
+     * последующих периодов партнёра тоже поехало. Без протяжки снимок расходился
+     * с цепочкой до следующего полного `commission:resync-balances`, а реестр
+     * читает сохранённый remaining прошлого месяца и тянул расхождение дальше.
+     */
+    private function carryForward(object $balance): void
+    {
+        $ym = (string) ($balance->dateMonth ?? '');
+        if (! str_contains($ym, '-')) {
+            // Легаси-формат: dateMonth = 'MM' при отдельном dateYear.
+            $ym = sprintf('%04d-%02d', (int) ($balance->dateYear ?? 0), (int) substr($ym, -2));
+        }
+
+        $this->calculator->cascadeCarryForward([(int) $balance->consultant], $ym);
     }
 
     /** POST /admin/payment-registry/{id}/payments — добавить платёж. */
@@ -289,6 +310,8 @@ class AdminPaymentRegistryController extends Controller
                 'remaining' => $newRemaining,
                 'status' => $newStatus,
             ]);
+
+            $this->carryForward($balance);
         });
 
         // Notify the consultant directly (their WebUser id is on the balance row).
