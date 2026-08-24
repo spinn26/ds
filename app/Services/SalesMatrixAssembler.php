@@ -157,8 +157,10 @@ class SalesMatrixAssembler
 
         $dsCache = [];
         // [metric][pid][pgid][mo], [metric][pid][mo], [metric][pid], [metric][mo], [metric]
-        $prog = $prodM = $prodT = $grandM = ['points' => [], 'revenue' => []];
-        $grandT = ['points' => 0.0, 'revenue' => 0.0];
+        // noTariff — счётчик контрактов без %ДС в этой же нарезке: фронт вешает
+        // по нему подсказку на «Выручку» (0 ₽ без пояснения читается как «продаж нет»).
+        $prog = $prodM = $prodT = $grandM = ['points' => [], 'revenue' => [], 'noTariff' => []];
+        $grandT = ['points' => 0.0, 'revenue' => 0.0, 'noTariff' => 0.0];
 
         foreach ($contracts as $r) {
             $amountRub   = (float) $r->ammount * (float) $r->rate;
@@ -169,8 +171,9 @@ class SalesMatrixAssembler
             $ds = $this->resolveDs($r, $dsCache);
             $rev = $ds === null ? 0.0 : $amountNoVat * $ds / 100;
             $vals = [
-                'points'  => $rev / 100,
-                'revenue' => $rev,
+                'points'   => $rev / 100,
+                'revenue'  => $rev,
+                'noTariff' => $ds === null ? 1 : 0,
             ];
 
             $pid = $r->product_id; $pgid = $r->program_id; $mo = $r->period_month;
@@ -183,7 +186,7 @@ class SalesMatrixAssembler
             }
         }
 
-        $keys = ['points', 'revenue'];
+        $keys = ['points', 'revenue', 'noTariff'];
         foreach ($assembled['rows'] as &$prodRow) {
             $pid = $prodRow['productId'];
             foreach ($keys as $k) {
@@ -197,7 +200,7 @@ class SalesMatrixAssembler
             unset($cell);
             foreach ($prodRow['programs'] as &$pg) {
                 $pgid = $pg['programId'];
-                $sum = ['points' => 0.0, 'revenue' => 0.0];
+                $sum = ['points' => 0.0, 'revenue' => 0.0, 'noTariff' => 0.0];
                 foreach ($pg['monthly'] as $mo => &$cell) {
                     foreach ($keys as $k) {
                         $cell[$k] = round($prog[$k][$pid][$pgid][$mo] ?? 0, 2);

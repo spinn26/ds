@@ -473,7 +473,7 @@
                   </td>
                   <template v-for="mo in displayMonths" :key="`p${prod.productId}-${mo}`">
                     <td v-for="(m, mi) in activeMetrics" :key="m.key"
-                      class="td-num" :class="{ 'td-sep': mi === activeMetrics.length - 1, 'td-fc': cellTitle(prod.monthly[mo], m.key), 'cell-clickable': (m.key === 'volume' || m.key === 'count') && (prod.monthly[mo]?.volume || prod.monthly[mo]?.count) }"
+                      class="td-num" :class="{ 'td-sep': mi === activeMetrics.length - 1, 'td-fc': cellTitle(prod.monthly[mo], m.key), 'td-no-tariff': noTariffCell(prod.monthly[mo], m.key), 'cell-clickable': (m.key === 'volume' || m.key === 'count') && (prod.monthly[mo]?.volume || prod.monthly[mo]?.count) }"
                       :title="cellTitle(prod.monthly[mo], m.key)"
                       @click="onCellClick(prod.monthly[mo], m.key, prod.productName, mo, prod.productId, null)">
                       <span :class="fmtClass(prod.monthly[mo]?.[m.key])">
@@ -511,7 +511,7 @@
                     </td>
                     <template v-for="mo in displayMonths" :key="`pg${pg.programId}-${mo}`">
                       <td v-for="(m, mi) in activeMetrics" :key="m.key"
-                        class="td-num td-dim" :class="{ 'td-sep': mi === activeMetrics.length - 1, 'td-fc': cellTitle(pg.monthly[mo], m.key), 'cell-clickable': (m.key === 'volume' || m.key === 'count') && (pg.monthly[mo]?.volume || pg.monthly[mo]?.count) }"
+                        class="td-num td-dim" :class="{ 'td-sep': mi === activeMetrics.length - 1, 'td-fc': cellTitle(pg.monthly[mo], m.key), 'td-no-tariff': noTariffCell(pg.monthly[mo], m.key), 'cell-clickable': (m.key === 'volume' || m.key === 'count') && (pg.monthly[mo]?.volume || pg.monthly[mo]?.count) }"
                         :title="cellTitle(pg.monthly[mo], m.key)"
                         @click="onCellClick(pg.monthly[mo], m.key, pg.programName, mo, prod.productId, pg.programId)">
                         <span :class="fmtClass(pg.monthly[mo]?.[m.key])">
@@ -1080,6 +1080,29 @@ function cellTitle(cell, metricKey) {
   if (reportMode.value === 'fact') return undefined;
   if (!['volume', 'count', 'revenue', 'points'].includes(metricKey)) return undefined;
 
+  // Тариф %ДС не заведён → выручку считать не из чего, в ячейке 0. Без пояснения
+  // это читается как «продаж нет», поэтому объясняем прямо на ячейке.
+  const noTariff = Number(cell?.noTariff || 0);
+  if (noTariff > 0 && (metricKey === 'revenue' || metricKey === 'points')) {
+    const head = `Не указан % ДС в продукте — ${noTariff} `
+      + plural(noTariff, 'контракт', 'контракта', 'контрактов')
+      + ' не учтено.\nЗаведите тариф в карточке продукта.';
+    const rest = cellForecastTitle(cell, metricKey);
+    return rest ? head + '\n\n' + rest : head;
+  }
+
+  return cellForecastTitle(cell, metricKey);
+}
+
+/** true, если в ячейке есть контракты без тарифа %ДС (метрики денег). */
+function noTariffCell(cell, metricKey) {
+  return reportMode.value !== 'fact'
+    && (metricKey === 'revenue' || metricKey === 'points')
+    && Number(cell?.noTariff || 0) > 0;
+}
+
+/** Разбивка ячейки по месяцам прогноза (то, что показывалось раньше). */
+function cellForecastTitle(cell, metricKey) {
   const inwork = reportMode.value === 'inwork';
   // В «В работе» деньги/баллы берут отдельную разбивку по прогнозу начислений.
   const useAccrual = inwork && (metricKey === 'revenue' || metricKey === 'points');
@@ -1430,6 +1453,11 @@ onMounted(() => { loadMatrixLookups(); loadData(); });
 .detail-table td, .detail-table th { font-variant-numeric: tabular-nums; }
 .detail-total td { border-top: 1px solid rgba(var(--v-theme-on-surface), 0.15); }
 .td-fc span { border-bottom: 1px dotted rgba(var(--v-theme-primary), 0.5); }
+
+/* Нет тарифа %ДС → в ячейке 0, и это не «нет продаж». Помечаем, чтобы
+   ноль не читался как факт; текст причины — в title ячейки. */
+.td-no-tariff { background: rgba(var(--v-theme-warning), 0.10); }
+.td-no-tariff span { border-bottom: 1px dashed rgba(var(--v-theme-warning), 0.9); }
 
 /* Тултип «Факт»: детальная выборка по транзакциям (№ контракта + tx) */
 .fact-detail { max-height: 420px; overflow-y: auto; font-size: 11px; }
