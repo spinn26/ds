@@ -103,10 +103,10 @@ class CommissionCalculator
      *   totalPayable ← balance + accruedTotal
      *   remaining ← totalPayable - payed
      *
-     * Если строки за этот месяц для консультанта ещё нет — создаём
-     * минимальную (balance=0, payed=0, accruedPool=0). Старые строки
-     * никогда не трогает поля, которые ведёт отдельная логика (payed,
-     * accruedPool, balance).
+     * Если строки за этот месяц для консультанта ещё нет — создаём её,
+     * ПЕРЕНОСЯ входящее сальдо: balance ← remaining предыдущего периода
+     * (payed=0, accruedPool=0). Старые строки никогда не трогает поля,
+     * которые ведёт отдельная логика (payed, accruedPool).
      */
     private function rebuildBalancesForTransaction(int $transactionId): void
     {
@@ -334,9 +334,20 @@ class CommissionCalculator
             ->where('dateMonth', $dateMonth)
             ->first();
 
+        // Входящее сальдо = remaining ПРЕДЫДУЩЕГО периода — тот же канон, что
+        // в PaymentRegistryService ($incomingByCons) и PaymentRegistryReport.
+        // Раньше снимок нового месяца создавался с balance=0, а у существующей
+        // строки balance не пересчитывался вовсе: с июля 2026 (первые месяцы,
+        // строки за которые создаёт платформа, а не Directual) накопленный
+        // остаток терялся — totalPayable/remaining в снимке падали до суммы
+        // одного месяца. Реестр выплат этого не показывал, потому что считает
+        // сальдо живьём, а кабинет партнёра («История по периодам») читает
+        // снимок как есть — и показывал остаток без прошлых периодов.
+        $incoming = $this->incomingBalance($consultantId, $ym);
+
         if ($row) {
             $accruedPool = (float) ($row->accruedPool ?? 0);
-            $balance = (float) ($row->balance ?? 0);
+            $balance = $incoming;
             $payed = (float) ($row->payed ?? 0);
             $accruedTotal = $accruedTransactional + $accruedNonTransactional + $accruedPool;
             $totalPayable = $balance + $accruedTotal;
@@ -349,13 +360,15 @@ class CommissionCalculator
                 'accruedTransactional' => $accruedTransactional,
                 'accruedNonTransactional' => $accruedNonTransactional,
                 'accruedTotal' => $accruedTotal,
+                'balance' => $balance,
                 'totalPayable' => $totalPayable,
                 'remaining' => $remaining,
             ]);
         } else {
             // Новый месяц без записи — создаём минимальную, чтобы реестр
-            // выплат и отчёт могли её прочитать. accruedPool/balance/payed
-            // = 0 по умолчанию, их при необходимости проставит пул-runner.
+            // выплат и отчёт могли её прочитать. accruedPool/payed = 0 по
+            // умолчанию, их при необходимости проставит пул-runner; balance
+            // переносим из предыдущего периода (см. $incoming выше).
             $accruedTotal = $accruedTransactional + $accruedNonTransactional;
             DB::table('consultantBalance')->insert([
                 'consultant' => $consultantId,
@@ -365,13 +378,30 @@ class CommissionCalculator
                 'accruedNonTransactional' => $accruedNonTransactional,
                 'accruedPool' => 0,
                 'accruedTotal' => $accruedTotal,
-                'balance' => 0,
+                'balance' => $incoming,
                 'payed' => 0,
-                'totalPayable' => $accruedTotal,
-                'remaining' => $accruedTotal,
+                'totalPayable' => $incoming + $accruedTotal,
+                'remaining' => $incoming + $accruedTotal,
                 'dateCreated' => now(),
             ]);
         }
+    }
+
+    /**
+     * Входящее сальдо периода = remaining последнего периода СТРОГО ДО $ym.
+     * DISTINCT ON — один проход вместо коррелированного подзапроса (тот же
+     * приём, что в PaymentRegistryService).
+     */
+    private function incomingBalance(int $consultantId, string $ym): float
+    {
+        $row = DB::selectOne(
+            'SELECT remaining FROM "consultantBalance"
+              WHERE consultant = ? AND "dateMonth" < ? AND "dateMonth" LIKE \'____-__\'
+              ORDER BY "dateMonth" DESC LIMIT 1',
+            [$consultantId, $ym]
+        );
+
+        return (float) ($row->remaining ?? 0);
     }
 
     private function calculateInTransaction(int $transactionId): array

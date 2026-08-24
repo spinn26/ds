@@ -31,7 +31,18 @@ class FinrezTransactionsReport extends AbstractReportType
             // «Тип выплаты» = свойство расчёта программы (Стандарт / МФ /
             // Апфронт / n-й год). Раньше сюда шёл t.score — он пуст почти у
             // всех транзакций, а у единиц хранит год выплаты КВ, а не тип.
-            ->leftJoin('commissionCalcProperty as ccp', 'ccp.id', '=', 'pr.commissionCalcProperty')
+            // ⚠ Каст обязателен: program."commissionCalcProperty" — legacy
+            // varchar (единственная такая FK-колонка; в transaction/dsCommission
+            // она integer), а commissionCalcProperty.id — integer. Без каста
+            // Postgres валит весь отчёт: 42883 «operator does not exist:
+            // integer = character varying». Сравниваем как text — колонка может
+            // содержать пустую строку, а ::int на ней падает.
+            ->leftJoin(
+                'commissionCalcProperty as ccp',
+                DB::raw('ccp.id::text'),
+                '=',
+                DB::raw('pr."commissionCalcProperty"')
+            )
             ->whereNull('t.deletedAt')
             ->whereBetween('t.date', [$from, $to])
             ->orderByDesc('t.date')

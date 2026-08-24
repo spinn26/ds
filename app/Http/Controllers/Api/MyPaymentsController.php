@@ -60,46 +60,67 @@ class MyPaymentsController extends Controller
                 ->toArray();
         }
 
-        // Сальдо = remaining прошлого периода (как в AdminPaymentRegistryController)
-        $incoming = (float) (DB::table('consultantBalance')
+        // История по периодам + входящее сальдо выбранного месяца.
+        //
+        // ⚠ «Остаток» НЕ берём из снимка: consultantBalance.remaining у месяцев,
+        // строку за которые создала платформа, считался без входящего сальдо
+        // (в снимке balance=0) — партнёр видел остаток одного месяца вместо
+        // накопленного. Считаем цепочку так же, как реестр выплат:
+        //     остаток = входящее сальдо + начислено(тр. + прочее + пул) − оплачено
+        // где входящее сальдо = остаток предыдущего периода. Идём от самого
+        // первого периода партнёра, поэтому цепочка не зависит от того, какие
+        // строки снимка успели пересчитать.
+        $allRows = DB::table('consultantBalance')
             ->where('consultant', $consultant->id)
-            ->where('dateMonth', '<', $dm)
-            ->orderByDesc('dateMonth')
-            ->value('remaining') ?? 0);
+            ->where('dateMonth', 'like', '____-__')
+            ->orderBy('dateMonth')
+            ->get(['dateMonth', 'accruedTransactional', 'accruedPool', 'accruedNonTransactional', 'payed', 'status']);
 
-        // Ручные начисления (other_accruals) — читаем live, не из снимка
-        $periodFrom = sprintf('%04d-%02d-01 00:00:00', $year, $month);
-        $periodTo   = \Carbon\Carbon::parse($periodFrom)->endOfMonth()->format('Y-m-d 23:59:59');
-        $extra = (float) (DB::table('other_accruals')
+        // Ручные начисления (other_accruals) — читаем live, не из снимка.
+        $extraByMonth = DB::table('other_accruals')
             ->where('consultant', $consultant->id)
-            ->whereBetween('accrual_date', [$periodFrom, $periodTo])
-            ->sum('amount') ?? 0);
+            ->selectRaw("to_char(accrual_date, 'YYYY-MM') as ym, SUM(COALESCE(amount, 0)) as extra")
+            ->groupBy(DB::raw("to_char(accrual_date, 'YYYY-MM')"))
+            ->pluck('extra', 'ym');
 
-        // Только снимок (как в AdminPaymentRegistryController — live-пересчёт убран 2026-06-05)
+        $running  = 0.0;
+        $incoming = 0.0;   // остаток последнего периода СТРОГО ДО выбранного
+        $history  = $allRows->map(function ($r) use (&$running, &$incoming, $extraByMonth, $dm) {
+            $accrued = (float) ($r->accruedTransactional ?? 0);
+            $pool    = (float) ($r->accruedPool ?? 0);
+            $other   = (float) ($r->accruedNonTransactional ?? 0)
+                + (float) ($extraByMonth[$r->dateMonth] ?? 0);
+            $payed   = (float) ($r->payed ?? 0);
+
+            $running += $accrued + $pool + $other - $payed;
+
+            if ($r->dateMonth < $dm) {
+                $incoming = $running;
+            }
+
+            return [
+                'dateMonth' => $r->dateMonth,
+                'accrued'   => $accrued,
+                'pool'      => $pool,
+                'other'     => $other,
+                'payed'     => $payed,
+                'remaining' => round($running, 2),
+                'status'    => $r->status,
+            ];
+        })->reverse()->take(12)->values();
+
+        $incoming = round($incoming, 2);
+
+        // Начисления выбранного месяца — только снимок (live-пересчёт убран
+        // 2026-06-05), плюс live-чтение введённых вручную other_accruals.
+        $extra        = (float) ($extraByMonth[$dm] ?? 0);
         $accrued      = (float) ($balance?->accruedTransactional ?? 0);
         $pool         = (float) ($balance?->accruedPool ?? 0);
         $other        = (float) ($balance?->accruedNonTransactional ?? 0) + $extra;
         $accruedTotal = $accrued + $other + $pool;
         $totalPayable = $incoming + $accruedTotal;
         $payed        = (float) ($balance?->payed ?? 0);
-        $remaining    = $totalPayable - $payed;
-
-        // Краткая история по всем периодам (последние 12), для графика/таблицы
-        $historyRows = DB::table('consultantBalance')
-            ->where('consultant', $consultant->id)
-            ->orderByDesc('dateMonth')
-            ->limit(12)
-            ->get(['dateMonth', 'accruedTransactional', 'accruedPool', 'accruedNonTransactional', 'payed', 'remaining', 'status']);
-
-        $history = $historyRows->map(fn ($r) => [
-            'dateMonth' => $r->dateMonth,
-            'accrued'   => (float) ($r->accruedTransactional ?? 0),
-            'pool'      => (float) ($r->accruedPool ?? 0),
-            'other'     => (float) ($r->accruedNonTransactional ?? 0),
-            'payed'     => (float) ($r->payed ?? 0),
-            'remaining' => (float) ($r->remaining ?? 0),
-            'status'    => $r->status,
-        ])->values();
+        $remaining    = round($totalPayable - $payed, 2);
 
         return response()->json([
             'year'    => $year,
