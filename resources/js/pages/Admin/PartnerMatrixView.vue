@@ -1,5 +1,25 @@
 <template>
   <div>
+    <!-- Тариф %ДС не заведён → выручку по этим контрактам посчитать не из чего.
+         Раньше подставлялось 100% и в «Выручку» уходила вся сумма контракта. -->
+    <v-alert v-if="missingTariff?.contracts" type="warning" variant="tonal"
+      density="compact" icon="mdi-alert-outline" class="mb-3">
+      <div class="font-weight-medium">
+        «Выручка» неполная: у {{ missingTariff.contracts }}
+        {{ plural(missingTariff.contracts, 'контракта', 'контрактов', 'контрактов') }}
+        не заведён тариф %ДС — они не учтены.
+      </div>
+      <div class="text-caption mt-1">
+        Заведите тариф программы, чтобы выручка попала в отчёт:
+        <span v-for="(p, i) in missingTariff.programs.slice(0, 5)" :key="p.id ?? i">
+          <b>{{ p.name }}</b> ({{ p.contracts }}){{ i < Math.min(missingTariff.programs.length, 5) - 1 ? ', ' : '' }}
+        </span>
+        <span v-if="missingTariff.programs.length > 5">
+          и ещё {{ missingTariff.programs.length - 5 }}
+        </span>
+      </div>
+    </v-alert>
+
     <!-- Состояния (как в продуктовом отчёте) -->
     <div class="d-flex flex-wrap align-center ga-2 mb-3">
       <v-btn-toggle v-model="reportMode" density="compact" variant="outlined" mandatory color="primary">
@@ -349,6 +369,13 @@ const productOptions = ref([]);
 const loading = ref(false);
 const data = ref({ months: [], structures: [], grand: null });
 const grand = computed(() => data.value.grand);
+const missingTariff = ref(null);
+
+function plural(n, one, few, many) {
+  if (n % 10 === 1 && n % 100 !== 11) return one;
+  if ([2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100)) return few;
+  return many;
+}
 
 // ─── Раскрытие ───
 const expandedStructs = ref(new Set());
@@ -449,6 +476,9 @@ async function loadData() {
     if (filterProducts.value.length) params.products = filterProducts.value;
     const { data: res } = await api.get(`/admin/reports/partner-matrix/${reportMode.value}`, { params });
     data.value = { months: res.months || [], structures: res.structures || [], grand: res.grand || null, denominators: res.denominators || null };
+    // Контракты без тарифа %ДС: их выручка НЕ учтена (фолбэк 100% убран — он
+    // приравнивал выручку ко всей сумме контракта). Показываем явно.
+    missingTariff.value = res.missingTariff || null;
     // авто-раскрытие первого уровня
     expandedStructs.value = new Set(data.value.structures.map(s => s.structureId));
   } catch {

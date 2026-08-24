@@ -35,6 +35,9 @@ class PartnerSalesMatrixController extends Controller
         private readonly SalesMatrixSupport $matrixSupport,
     ) {}
 
+    /** [programId => сколько контрактов без тарифа %ДС] за текущий запрос. */
+    private array $missingTariff = [];
+
 /**
      * GET /admin/reports/partner-matrix/fact
      * Params: from, to (Y-m), suppliers[], products[], structures[] (root consultant ids), fcs[] (consultant ids)
@@ -75,10 +78,45 @@ class PartnerSalesMatrixController extends Controller
     private function buildResponse(array $params, string $mode): array
     {
         $months = $this->matrixSupport->monthRange($params['from'], $params['to']);
+        $this->missingTariff = [];
         $result = $this->assemblePartnerTree($this->rowsForMode($params, $mode), $months, $params, $mode === 'total');
+        // Снимаем ДО denominators(): он повторно гоняет rowsForMode() без
+        // фильтров по ФК/структуре, и счётчик задвоился бы.
+        $missing = $this->missingTariffPayload();
         $result['denominators'] = $this->denominators($params, $mode, $months);
+        $result['missingTariff'] = $missing;
 
         return $result;
+    }
+
+    /**
+     * Контракты, по которым %ДС не резолвится — их выручка НЕ учтена в
+     * прогнозных разрезах (см. injectContractForecast). Пусто в «Факте»:
+     * там выручка берётся из транзакций, а не из тарифа.
+     *
+     * @return array{contracts:int, programs:list<array{id:int|null,name:string,contracts:int}>}
+     */
+    private function missingTariffPayload(): array
+    {
+        if (! $this->missingTariff) {
+            return ['contracts' => 0, 'programs' => []];
+        }
+
+        $names = DB::table('program')
+            ->whereIn('id', array_keys($this->missingTariff))
+            ->pluck('name', 'id');
+
+        $programs = [];
+        foreach ($this->missingTariff as $pid => $cnt) {
+            $programs[] = [
+                'id' => $pid ?: null,
+                'name' => $names[$pid] ?? 'Программа не указана',
+                'contracts' => $cnt,
+            ];
+        }
+        usort($programs, fn ($a, $b) => $b['contracts'] <=> $a['contracts']);
+
+        return ['contracts' => array_sum($this->missingTariff), 'programs' => $programs];
     }
 
     /** Плоские строки для режима (fact / inwork / forecast / total). */
@@ -269,7 +307,6 @@ class PartnerSalesMatrixController extends Controller
         $toExclusive = $this->matrixSupport->monthExclusiveStart($to);
 
         $vatPercent = \App\Support\VatRate::percentOrDefault();
-        $defaultDs = (float) \App\Models\SystemSetting::value('commission.default_ds_percent', 100);
 
         $contracts = DB::table('contract as co')
             ->join('program as pg', 'pg.id', '=', 'co.program')
@@ -305,19 +342,32 @@ class PartnerSalesMatrixController extends Controller
             $amountRub   = (float) $r->ammount * (float) $r->rate;
             $amountNoVat = $vatPercent > 0 ? $amountRub / (1 + $vatPercent / 100) : $amountRub;
 
-            $ds = $r->program_ds !== null ? (float) $r->program_ds : 0.0;
-            if ($ds <= 0) {
+            // %ДС: program.dsPercent → тарифная сетка dsCommission. Тарифа нет —
+            // выручки нет. ⚠ Раньше здесь подставлялся фолбэк
+            // commission.default_ds_percent (=100 на проде), и «Выручка»
+            // становилась равна всей сумме контракта без НДС. Тот же фолбэк уже
+            // убран из боевого расчёта (CommissionCalculator, «кейс Брокер+»):
+            // отсутствие тарифа — ошибка данных, она должна быть видна.
+            // Счётчик таких контрактов уходит на фронт в missingTariff.
+            $ds = $r->program_ds !== null && (float) $r->program_ds > 0
+                ? (float) $r->program_ds
+                : null;
+            if ($ds === null) {
                 $key = $r->program_id . '|' . $r->term . '|' . $r->cdate;
                 if (! array_key_exists($key, $dsCache)) {
                     $dsCache[$key] = \App\Services\CommissionCalculator::resolveLegacyDsCommission(
                         (int) $r->program_id, $r->term, null, (string) $r->cdate
                     );
                 }
-                $ds = (float) ($dsCache[$key] ?? 0);
+                $resolved = (float) ($dsCache[$key] ?? 0);
+                $ds = $resolved > 0 ? $resolved : null;
             }
-            if ($ds <= 0) $ds = $defaultDs;
+            if ($ds === null) {
+                $this->missingTariff[(int) $r->program_id] =
+                    ($this->missingTariff[(int) $r->program_id] ?? 0) + 1;
+            }
 
-            $rev = $amountNoVat * $ds / 100;
+            $rev = $ds === null ? 0.0 : $amountNoVat * $ds / 100;
             $fcId = (int) $r->fc_id; $pid = (int) $r->product_id; $mo = $r->period_month;
             $agg[$fcId][$pid][$mo]['revenue'] = ($agg[$fcId][$pid][$mo]['revenue'] ?? 0) + $rev;
             $agg[$fcId][$pid][$mo]['points']  = ($agg[$fcId][$pid][$mo]['points'] ?? 0) + $rev / 100;

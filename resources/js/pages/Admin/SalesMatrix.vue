@@ -58,6 +58,26 @@
       <span class="font-weight-medium">{{ modeLabel }}.</span> {{ modeHint }}
     </v-alert>
 
+    <!-- Тариф %ДС не заведён → выручку по этим контрактам посчитать не из чего.
+         Раньше подставлялось 100% и в «Выручку» уходила вся сумма контракта. -->
+    <v-alert v-if="missingTariff?.contracts" type="warning" variant="tonal"
+      density="compact" icon="mdi-alert-outline" class="mb-3">
+      <div class="font-weight-medium">
+        «Выручка» неполная: у {{ missingTariff.contracts }}
+        {{ plural(missingTariff.contracts, 'контракта', 'контрактов', 'контрактов') }}
+        не заведён тариф %ДС — они не учтены.
+      </div>
+      <div class="text-caption mt-1">
+        Объём и количество по ним показаны. Заведите тариф программы, чтобы выручка попала в отчёт:
+        <span v-for="(p, i) in missingTariff.programs.slice(0, 5)" :key="p.id ?? i">
+          <b>{{ p.name }}</b> ({{ p.contracts }}){{ i < Math.min(missingTariff.programs.length, 5) - 1 ? ', ' : '' }}
+        </span>
+        <span v-if="missingTariff.programs.length > 5">
+          и ещё {{ missingTariff.programs.length - 5 }}
+        </span>
+      </div>
+    </v-alert>
+
     <!-- Заглушка для неопределённых разрезов: Начисление выручки (весь отчёт)
          и Итого (в любом отчёте). По указанию Лены — «оставить пустыми», пока
          не описана логика. -->
@@ -798,6 +818,15 @@ const loading          = ref(false);
 const rows             = ref([]);
 const grandTotals      = ref(null);
 const months           = ref([]);
+// Контракты без тарифа %ДС: их выручка НЕ учтена (фолбэк 100% убран — он
+// приравнивал выручку ко всей сумме контракта). Показываем явно.
+const missingTariff    = ref(null);
+
+function plural(n, one, few, many) {
+  if (n % 10 === 1 && n % 100 !== 11) return one;
+  if ([2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100)) return few;
+  return many;
+}
 // Помесячная разбивка во всех режимах, включая «Итого» (период-фильтры
 // единые с остальными отчётами — решение владельца 24.06.2026).
 const displayMonths     = computed(() => months.value);
@@ -878,6 +907,7 @@ async function loadData({ updateOptions = true } = {}) {
     rows.value        = data.rows           ?? [];
     months.value      = data.period?.months ?? [];
     grandTotals.value = data.grandTotals    ?? null;
+    missingTariff.value = data.missingTariff ?? null;
     // Опции фильтров грузим отдельно (loadMatrixLookups) — полный справочник
     // по всем контрактам, а не только продукты/поставщики текущего периода.
   } catch (e) { console.error('matrix load failed', e); }

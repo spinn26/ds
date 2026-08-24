@@ -473,6 +473,10 @@ class ProductSalesMatrixController extends Controller
         // фронт показывает его на всех 4 метриках.
         $this->assembler->injectForecastBreakdown($base, $payload, 'openDate', 'accrual_forecast', 'forecast');
 
+        // Контракты без тарифа %ДС: их выручка не начислена (фолбэк 100% убран),
+        // фронт показывает предупреждение — иначе метрика молча неполна.
+        $payload['missingTariff'] = $this->assembler->missingTariffSummary($base, 'openDate');
+
         return response()->json($payload);
     }
 
@@ -568,6 +572,10 @@ class ProductSalesMatrixController extends Controller
         //  - выручка/баллы → по месяцу ПРОГНОЗА НАЧИСЛЕНИЙ (accrual_forecast).
         $this->assembler->injectForecastBreakdown($base, $assembled, 'createDate', 'activation_forecast', 'forecast');
         $this->assembler->injectForecastBreakdown($base, $assembled, 'createDate', 'accrual_forecast', 'forecastAccrual');
+
+        // Контракты без тарифа %ДС: их выручка не начислена (фолбэк 100% убран),
+        // фронт показывает предупреждение — иначе метрика молча неполна.
+        $assembled['missingTariff'] = $this->assembler->missingTariffSummary($base, 'createDate');
 
         return response()->json($assembled);
     }

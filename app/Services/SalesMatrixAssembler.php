@@ -44,6 +44,86 @@ class SalesMatrixAssembler
     }
 
     /**
+     * %ДС контракта: program.dsPercent → тарифная сетка dsCommission
+     * (program × term × дата; год КВ у контракта отсутствует, поэтому null —
+     * каскад ослабляет сам). Тарифа нет → **null**, а НЕ фолбэк 100%.
+     *
+     * ⚠ Раньше здесь стоял `commission.default_ds_percent` (=100 на проде), и
+     * формула «Выручка = Сумма_без_НДС × %ДС / 100» вырождалась в «Выручка =
+     * Сумма_без_НДС»: в выручку попадала вся сумма контракта. По апрелю 2026
+     * отчёт показывал 61,5 млн вместо ~6,7 млн (9×), «В работе» — 21 контракт
+     * из 101 без тарифа.
+     *
+     * Тот же фолбэк уже убран из боевого расчёта (CommissionCalculator, «кейс
+     * Брокер+», завышение в 10-30 раз) с формулировкой «отсутствие тарифа —
+     * это ошибка данных, и она должна быть видна, а не молча оплачена».
+     * Отчёт падать не может, поэтому здесь эквивалент: выручка не начисляется,
+     * а количество таких контрактов уезжает на фронт через
+     * {@see missingTariffSummary()} и показывается предупреждением.
+     *
+     * @param  array<string,float|null>  $dsCache
+     */
+    private function resolveDs(object $r, array &$dsCache): ?float
+    {
+        if ($r->program_ds !== null && (float) $r->program_ds > 0) {
+            return (float) $r->program_ds;
+        }
+
+        $key = $r->program_id.'|'.$r->term.'|'.$r->cdate;
+        if (! array_key_exists($key, $dsCache)) {
+            $dsCache[$key] = \App\Services\CommissionCalculator::resolveLegacyDsCommission(
+                (int) $r->program_id, $r->term, null, (string) $r->cdate
+            );
+        }
+        $ds = (float) ($dsCache[$key] ?? 0);
+
+        return $ds > 0 ? $ds : null;
+    }
+
+    /**
+     * Контракты, по которым %ДС не резолвится ни из одного источника, —
+     * их выручка НЕ учтена в прогнозных вкладках. Считается отдельным
+     * проходом, чтобы не зависеть от того, сколько инжекторов отработало.
+     *
+     * @return array{contracts:int, programs:list<array{id:int|null,name:string,contracts:int}>}
+     */
+    public function missingTariffSummary(callable $base, string $periodCol): array
+    {
+        $rows = $base()
+            ->select([
+                'co.program as program_id',
+                'pg.name as program_name',
+                'co.term',
+                DB::raw('co."'.$periodCol.'"::date as cdate'),
+                'pg.dsPercent as program_ds',
+            ])
+            ->get();
+
+        $dsCache = [];
+        $byProgram = [];
+        $total = 0;
+        foreach ($rows as $r) {
+            if ($this->resolveDs($r, $dsCache) !== null) {
+                continue;
+            }
+            $total++;
+            $pid = $r->program_id === null ? 0 : (int) $r->program_id;
+            if (! isset($byProgram[$pid])) {
+                $byProgram[$pid] = [
+                    'id' => $r->program_id === null ? null : (int) $r->program_id,
+                    'name' => $r->program_name ?: 'Программа не указана',
+                    'contracts' => 0,
+                ];
+            }
+            $byProgram[$pid]['contracts']++;
+        }
+
+        usort($byProgram, fn ($a, $b) => $b['contracts'] <=> $a['contracts']);
+
+        return ['contracts' => $total, 'programs' => array_values($byProgram)];
+    }
+
+    /**
      * «В работе»: пересчитать баллы (ЛП) и прогнозную выручку ДС каждой ячейки
      * прямо из контрактов — транзакций ещё нет. Это прогноз: фактические
      * значения начислятся при активации.
@@ -51,10 +131,8 @@ class SalesMatrixAssembler
      * - Баллы: CommissionCalculator::computePoints (методика программы).
      * - Выручка (прогноз дохода ДС): amountNoVat × %ДС / 100 (gross-комиссия ДС).
      *
-     * %ДС резолвится тем же приоритетом, что и в боевом расчёте:
-     * program.dsPercent → тарифная сетка dsCommission (program × term × дата;
-     * год КВ у контракта отсутствует, поэтому null — каскад ослабляет сам) →
-     * фолбэк commission.default_ds_percent.
+     * %ДС резолвится через {@see resolveDs()}; контракт без тарифа даёт нулевую
+     * выручку и попадает в {@see missingTariffSummary()}.
      *
      * Курс: управленческий курс на месяц создания, при его отсутствии —
      * последний курс из currencyRate (валютные контракты иначе считались бы
@@ -63,7 +141,6 @@ class SalesMatrixAssembler
     public function injectInWorkPoints(callable $base, array &$assembled, string $periodCol = 'createDate'): void
     {
         $vatPercent = \App\Support\VatRate::percentOrDefault();
-        $defaultDs = (float) \App\Models\SystemSetting::value('commission.default_ds_percent', 100);
 
         $contracts = $base()
             ->select([
@@ -87,22 +164,10 @@ class SalesMatrixAssembler
             $amountRub   = (float) $r->ammount * (float) $r->rate;
             $amountNoVat = $vatPercent > 0 ? $amountRub / (1 + $vatPercent / 100) : $amountRub;
 
-            $ds = $r->program_ds !== null ? (float) $r->program_ds : 0.0;
-            if ($ds <= 0) {
-                $key = $r->program_id.'|'.$r->term.'|'.$r->cdate;
-                if (! array_key_exists($key, $dsCache)) {
-                    $dsCache[$key] = \App\Services\CommissionCalculator::resolveLegacyDsCommission(
-                        (int) $r->program_id, $r->term, null, (string) $r->cdate
-                    );
-                }
-                $ds = (float) ($dsCache[$key] ?? 0);
-            }
-            if ($ds <= 0) {
-                $ds = $defaultDs;
-            }
-
             // Выручка ДС = amountNoVat × %ДС / 100; баллы = выручка / 100.
-            $rev = $amountNoVat * $ds / 100;
+            // Без тарифа выручки нет — см. resolveDs().
+            $ds = $this->resolveDs($r, $dsCache);
+            $rev = $ds === null ? 0.0 : $amountNoVat * $ds / 100;
             $vals = [
                 'points'  => $rev / 100,
                 'revenue' => $rev,
@@ -172,7 +237,6 @@ class SalesMatrixAssembler
     public function injectForecastBreakdown(callable $base, array &$payload, string $periodCol, string $bucketCol, string $targetKey = 'forecast'): void
     {
         $vatPercent = \App\Support\VatRate::percentOrDefault();
-        $defaultDs = (float) \App\Models\SystemSetting::value('commission.default_ds_percent', 100);
 
         $rows = $base()
             ->select([
@@ -201,22 +265,10 @@ class SalesMatrixAssembler
             $amountRub   = (float) $r->ammount * (float) $r->rate;
             $amountNoVat = $vatPercent > 0 ? $amountRub / (1 + $vatPercent / 100) : $amountRub;
 
-            $ds = $r->program_ds !== null ? (float) $r->program_ds : 0.0;
-            if ($ds <= 0) {
-                $key = $r->program_id.'|'.$r->term.'|'.$r->cdate;
-                if (! array_key_exists($key, $dsCache)) {
-                    $dsCache[$key] = \App\Services\CommissionCalculator::resolveLegacyDsCommission(
-                        (int) $r->program_id, $r->term, null, (string) $r->cdate
-                    );
-                }
-                $ds = (float) ($dsCache[$key] ?? 0);
-            }
-            if ($ds <= 0) {
-                $ds = $defaultDs;
-            }
-
             // Выручка ДС = amountNoVat × %ДС / 100; баллы = выручка / 100.
-            $rev = $amountNoVat * $ds / 100;
+            // Без тарифа выручки нет — см. resolveDs().
+            $ds = $this->resolveDs($r, $dsCache);
+            $rev = $ds === null ? 0.0 : $amountNoVat * $ds / 100;
             $pts = $rev / 100;
 
             $pid = $r->product_id; $pgid = $r->program_id; $cm = $r->period_month; $bm = $r->bucket_month ?? '—';
@@ -423,7 +475,6 @@ class SalesMatrixAssembler
 
         // Прогноз выручки/баллов из контракта (как injectInWorkPoints).
         $vat = \App\Support\VatRate::percentOrDefault();
-        $defaultDs = (float) \App\Models\SystemSetting::value('commission.default_ds_percent', 100);
         $contracts = $base()
             ->select([
                 'co.product as pid', 'co.program as program_id',
@@ -437,20 +488,9 @@ class SalesMatrixAssembler
         foreach ($contracts as $c) {
             $amountRub = (float) $c->ammount * (float) $c->rate;
             $amountNoVat = $vat > 0 ? $amountRub / (1 + $vat / 100) : $amountRub;
-            $ds = $c->program_ds !== null ? (float) $c->program_ds : 0.0;
-            if ($ds <= 0) {
-                $key = $c->program_id.'|'.$c->term.'|'.$c->cdate;
-                if (! array_key_exists($key, $dsCache)) {
-                    $dsCache[$key] = \App\Services\CommissionCalculator::resolveLegacyDsCommission(
-                        (int) $c->program_id, $c->term, null, (string) $c->cdate
-                    );
-                }
-                $ds = (float) ($dsCache[$key] ?? 0);
-            }
-            if ($ds <= 0) {
-                $ds = $defaultDs;
-            }
-            $rev = $amountNoVat * $ds / 100;
+            // Без тарифа выручки нет — см. resolveDs().
+            $ds = $this->resolveDs($c, $dsCache);
+            $rev = $ds === null ? 0.0 : $amountNoVat * $ds / 100;
             if (isset($map[$c->pid]['m'][$c->m])) {
                 $map[$c->pid]['m'][$c->m]['revenue'] += $rev;
                 $map[$c->pid]['m'][$c->m]['points'] += $rev / 100;
