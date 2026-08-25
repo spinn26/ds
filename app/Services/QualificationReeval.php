@@ -103,6 +103,10 @@ class QualificationReeval
             FROM latest l
             JOIN consultant c ON c.id = l.consultant AND c."dateDeleted" IS NULL
             WHERE l.cur_lvl >= 1
+              -- ⚠ «Зарегистрирован» (4) исключён: партнёр ещё в активационном
+              -- окне, квалификации у него нет — присваивать её нельзя даже по
+              -- НГП (решение владельца 25.08.2026, случай Тернер).
+              AND c.activity <> 4
               AND $target $direction l.cur_lvl
             ORDER BY target DESC, l.ngp DESC
         SQL);

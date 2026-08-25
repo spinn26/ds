@@ -428,7 +428,7 @@ class MonthlyPenaltyRunner
         $consultants = DB::table('consultant')
             ->whereNull('dateDeleted')
             ->when($candidateIds, fn ($q) => $q->whereNotIn('id', $candidateIds))
-            ->get(['id', 'personName', 'status_and_lvl']);
+            ->get(['id', 'personName', 'status_and_lvl', 'activity']);
 
         if ($consultants->isEmpty()) {
             return;
@@ -492,7 +492,15 @@ class MonthlyPenaltyRunner
             // «Про», и выглядело это как «понижение в августе», хотя НГП не
             // менялся (разбор 25.08.2026: Лебедев, Кутлугалямов, Рудин, Иванова,
             // Виноградов).
-            $level = QualificationReeval::levelForNgp($ngp);
+            //
+            // ⚠ Кроме статуса «Зарегистрирован»: партнёр ещё в активационном
+            // окне, квалификации у него нет вовсе — уровень остаётся пустым.
+            // Иначе каждый новичок с первой же продажей получал бы «Старт», а
+            // тот, кому история досталась при слиянии дублей, — свой прежний
+            // уровень (случай Тернер, решение владельца 25.08.2026).
+            $level = (int) ($c->activity ?? 0) === \App\Enums\PartnerActivity::Registered->value
+                ? null
+                : QualificationReeval::levelForNgp($ngp);
 
             $rows[] = [
                 'consultant' => (int) $c->id,
@@ -510,7 +518,9 @@ class MonthlyPenaltyRunner
                 'changedAt' => $now,
             ];
 
-            if ((int) ($c->status_and_lvl ?? 0) !== $level) {
+            // NULL-уровень (Зарегистрирован) карточке не навязываем: там он и
+            // так пуст, а если админ выставил его руками — это его решение.
+            if ($level !== null && (int) ($c->status_and_lvl ?? 0) !== $level) {
                 $levelUpdates[$level][] = (int) $c->id;
             }
         }
