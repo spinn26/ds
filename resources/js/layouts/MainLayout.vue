@@ -582,6 +582,14 @@ async function onReinstated() {
     const { data } = await api.get('/profile');
     statusInfo.value = { ...statusInfo.value, ...data.statusInfo };
   } catch {}
+
+  // ⚠ Окно закрывается, а РОУТ остаётся прежним. Гард уводит терминированного
+  // НА /terminated и никогда обратно, поэтому после успешного возврата партнёр
+  // оставался на «Доступ ограничен» с закрывшимся окном — выглядело как
+  // «восстановился, но ничего не изменилось». Уводим на рабочий стол сами.
+  if (router.currentRoute.value.path.includes('terminated')) {
+    router.replace('/');
+  }
 }
 
 function logout() {

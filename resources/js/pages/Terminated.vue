@@ -74,11 +74,20 @@
 </template>
 
 <script setup>
-import { computed, ref, onMounted } from 'vue';
+import { computed, ref, onMounted, watch } from 'vue';
+import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import api from '../api';
 
 const auth = useAuthStore();
+const router = useRouter();
+
+// Подстраховка: роутер уводит СЮДА, но обратно не уводит никогда. Если статус
+// уже снят (восстановились в этой вкладке или в соседней), страница не должна
+// продолжать показывать «Доступ ограничен».
+watch(() => auth.user?.termination?.terminated, (terminated) => {
+  if (terminated === false) router.replace('/');
+}, { immediate: true });
 
 // Блок termination из /auth/me — тот же, по которому MainLayout показывает
 // окно возврата. Здесь он нужен, чтобы страница не обещала восстановление
