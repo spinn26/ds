@@ -27,7 +27,8 @@ use Illuminate\Support\Facades\DB;
  */
 class SyncDsCommissionFromCatalog extends Command
 {
-    protected $signature = 'products:sync-dscommission {--apply : применить изменения (иначе dry-run)} {--program= : только одна legacy-программа} {--fill-gaps : достраивать недостающие ключи и у программ, где строки уже есть (МЕНЯЕТ действующие ставки)}';
+    protected $signature = 'products:sync-dscommission {--apply : применить изменения (иначе dry-run)} {--program= : только одна legacy-программа} {--fill-gaps : достраивать недостающие ключи и у программ, где строки уже есть (МЕНЯЕТ действующие ставки)}
+        {--prune : гасить строки расчёта, которых нет в карточке продукта (программы с пустой карточкой не трогаются)}';
 
     protected $description = 'Синхронизировать %ДС из каталога Продуктов в dsCommission (источник расчёта комиссий)';
 
@@ -36,6 +37,7 @@ class SyncDsCommissionFromCatalog extends Command
         $apply = (bool) $this->option('apply');
         $onlyProgram = $this->option('program') !== null ? (int) $this->option('program') : null;
         $fillGaps = (bool) $this->option('fill-gaps');
+        $prune = (bool) $this->option('prune');
 
         $programs = DB::table('programs_catalog')
             ->whereNotNull('legacy_program_id')
@@ -45,6 +47,7 @@ class SyncDsCommissionFromCatalog extends Command
 
         $updated = 0;
         $created = 0;
+        $pruned = 0;
         $diffs = [];
         $skips = [];
 
@@ -54,10 +57,11 @@ class SyncDsCommissionFromCatalog extends Command
                 continue;
             }
 
-            $res = DsCommissionSync::syncFromTariffs((int) $pr->legacy_program_id, $tariffs, $apply, $fillGaps);
+            $res = DsCommissionSync::syncFromTariffs((int) $pr->legacy_program_id, $tariffs, $apply, $fillGaps, $prune);
 
             $updated += $res['updated'];
             $created += $res['created'];
+            $pruned += $res['pruned'] ?? 0;
             $name = mb_substr($pr->name, 0, 28);
             foreach ($res['diffs'] as $d) {
                 $diffs[] = sprintf('%-28s %s', $name, $d);
@@ -67,7 +71,7 @@ class SyncDsCommissionFromCatalog extends Command
             }
         }
 
-        $this->info(($apply ? 'ПРИМЕНЕНО' : 'DRY-RUN') . " — обновлено: {$updated}, создано: {$created}");
+        $this->info(($apply ? 'ПРИМЕНЕНО' : 'DRY-RUN') . " — обновлено: {$updated}, создано: {$created}, погашено: {$pruned}");
         foreach ($diffs as $d) {
             $this->line('  ' . $d);
         }

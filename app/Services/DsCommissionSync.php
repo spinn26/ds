@@ -51,9 +51,16 @@ class DsCommissionSync
      *     они сильно (напр. «Стиль Жизни»: dsPercent 4.28 vs каталог 34–77).
      *   В обоих случаях достройка МЕНЯЕТ действующие ставки — это отдельное
      *   решение, только через products:sync-dscommission --fill-gaps.
-     * @return array{updated:int, created:int, diffs:array<int,string>, skips:array<int,string>}
+     * @param  bool  $prune  гасить активные строки dsCommission, которым НЕ
+     *   соответствует ни одна строка карточки. Нужно потому, что синк умел
+     *   только добавлять и обновлять: строка, стёртая из карточки, оставалась
+     *   в расчёте навсегда и могла быть выбрана резолвером (кейс РАНКС «РФ
+     *   СТАНДАРТ» — невидимая МФ 0,25% перебивала апфронт 1,5% и СФ 10%).
+     *   ⚠ Программы с ПУСТОЙ карточкой не трогаем вовсе: там зеркалить нечего,
+     *   и гашение оставило бы расчёт без тарифа.
+     * @return array{updated:int, created:int, pruned:int, diffs:array<int,string>, skips:array<int,string>}
      */
-    public static function syncFromTariffs(int $legacyProgramId, array $tariffs, bool $apply, bool $fillGaps = false): array
+    public static function syncFromTariffs(int $legacyProgramId, array $tariffs, bool $apply, bool $fillGaps = false, bool $prune = false): array
     {
         $ccpByTitle = DB::table('commissionCalcProperty')->pluck('id', 'title');
         $now = now()->toDateTimeString();
@@ -68,8 +75,11 @@ class DsCommissionSync
 
         $updated = 0;
         $created = 0;
+        $pruned = 0;
         $diffs = [];
         $skips = [];
+        $matchedIds = [];
+        $usableTariffs = 0;
 
         foreach ($tariffs as $t) {
             if (! empty($t['is_red'])) {
@@ -79,6 +89,7 @@ class DsCommissionSync
             if ($pct === null) {
                 continue;
             }
+            $usableTariffs++;
 
             $term = isset($t['term']) && $t['term'] !== '' ? (int) $t['term'] : null;
 
@@ -138,6 +149,7 @@ class DsCommissionSync
                     // Чтобы следующие строки тарифа видели уже созданную и не
                     // плодили дубли по тому же ключу.
                     $rows->push($newRow);
+                    $matchedIds[] = (int) $newRow->id;
                 }
                 $created++;
                 continue;
@@ -149,6 +161,7 @@ class DsCommissionSync
             }
 
             $row = $match->first();
+            $matchedIds[] = (int) $row->id;
             if (round((float) $row->comission, 2) !== round($pct, 2)) {
                 $diffs[] = "term=" . ($term ?? '—') . " ccp=" . ($ccpId ?? '—') . ": {$row->comission} → " . round($pct, 2);
                 if ($apply) {
@@ -158,7 +171,24 @@ class DsCommissionSync
             }
         }
 
-        return ['updated' => $updated, 'created' => $created, 'diffs' => $diffs, 'skips' => $skips];
+        // Гашение «сирот»: активные строки расчёта, которых нет в карточке.
+        // Условие $usableTariffs > 0 обязательно — у программы с пустой
+        // карточкой зеркалить нечего, и погасить всё означало бы сломать расчёт
+        // (напр. «Тинькофф портфель», 2030 контрактов на единственной строке).
+        if ($prune && $usableTariffs > 0) {
+            $orphans = $rows->reject(fn ($r) => in_array((int) $r->id, $matchedIds, true));
+            foreach ($orphans as $o) {
+                $diffs[] = "PRUNE id={$o->id} ccp=" . ($o->commissionCalcProperty ?? '—') . ": {$o->comission} — нет в карточке";
+                $pruned++;
+            }
+            if ($apply && $orphans->isNotEmpty()) {
+                DB::table('dsCommission')
+                    ->whereIn('id', $orphans->pluck('id')->all())
+                    ->update(['active' => false, 'dateDeleted' => now()]);
+            }
+        }
+
+        return ['updated' => $updated, 'created' => $created, 'pruned' => $pruned, 'diffs' => $diffs, 'skips' => $skips];
     }
 
     /**
