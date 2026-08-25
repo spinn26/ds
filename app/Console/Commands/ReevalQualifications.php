@@ -29,17 +29,20 @@ use Illuminate\Console\Command;
  */
 class ReevalQualifications extends Command
 {
-    protected $signature = 'partners:reeval-qualifications {--apply : применить (по умолчанию dry-run — только показать)}';
+    protected $signature = 'partners:reeval-qualifications
+        {--apply : применить (по умолчанию dry-run — только показать)}
+        {--promote-only : прежнее поведение — только повышать, легаси-уровень из карточки не опускать}';
 
-    protected $description = 'Промоут-онли переоценка квалификации по НГП: добирает пропущенные повышения (последний снимок лога + status_and_lvl). Пустые уровни не трогает.';
+    protected $description = 'Переоценка квалификации по НГП: приводит уровень последнего снимка и карточки к порогам status_levels. Пустые уровни не трогает.';
 
     public function handle(): int
     {
         $apply = (bool) $this->option('apply');
-        $rows = \App\Services\QualificationReeval::candidates();
+        $promoteOnly = (bool) $this->option('promote-only');
+        $rows = \App\Services\QualificationReeval::candidates($promoteOnly);
 
         if (empty($rows)) {
-            $this->info('Нет партнёров к повышению — все уровни соответствуют НГП.');
+            $this->info('Расхождений нет — все уровни соответствуют НГП.');
 
             return self::SUCCESS;
         }
@@ -51,7 +54,12 @@ class ReevalQualifications extends Command
                 $r->cur_lvl, $r->ngp_lvl, $r->legacy_lvl, $r->target,
             ], $rows)
         );
-        $this->info(count($rows) . ' партнёров к повышению.');
+        $up = count(array_filter($rows, fn ($r) => $r->target > $r->cur_lvl));
+        $down = count($rows) - $up;
+        $this->info(count($rows) . " партнёров к изменению: повышений {$up}, понижений {$down}.");
+        if ($down > 0) {
+            $this->warn('Понижения затрагивают % группового бонуса со следующего месяца. --promote-only отключает их.');
+        }
 
         if (! $apply) {
             $this->warn('DRY-RUN — ничего не изменено. Для применения: --apply (снимите бэкап БД до этого).');
@@ -60,7 +68,7 @@ class ReevalQualifications extends Command
         }
 
         $n = \App\Services\QualificationReeval::apply($rows);
-        $this->info("Применено: {$n} повышений. Новый % действует со следующего месяца.");
+        $this->info("Применено изменений: {$n}. Новый % действует со следующего месяца.");
 
         return self::SUCCESS;
     }

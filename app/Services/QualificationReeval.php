@@ -27,15 +27,64 @@ use Illuminate\Support\Facades\DB;
  */
 class QualificationReeval
 {
+    /** @var array<int,int>|null кэш порогов: уровень => требуемый НГП */
+    private static ?array $thresholds = null;
+
     /**
-     * Кандидаты на повышение (последний снимок ниже target). READ-ONLY.
+     * Уровень по НГП: максимальный, чей порог `groupVolumeCumulative` взят.
      *
+     * ⚠ `status_levels.mandatoryGP` (обязательный ГП месяца) НЕ применяется —
+     * так работала платформа всегда, и владелец подтвердил это правило на пяти
+     * разборах 25.08.2026 (Лебедев/Кутлугалямов/Рудин/Иванова/Виноградов).
+     * Если mandatoryGP решат включить — это меняет уровни, менять надо здесь.
+     */
+    public static function levelForNgp(float $ngp): int
+    {
+        if (self::$thresholds === null) {
+            self::$thresholds = DB::table('status_levels')
+                ->orderBy('level')
+                ->pluck('groupVolumeCumulative', 'level')
+                ->map(fn ($v) => (float) $v)
+                ->all();
+        }
+
+        $level = 1;
+        foreach (self::$thresholds as $lvl => $required) {
+            if ($ngp >= $required) {
+                $level = max($level, (int) $lvl);
+            }
+        }
+
+        return $level;
+    }
+
+    /** Сбросить кэш порогов (после правки матрицы квалификаций). */
+    public static function flushThresholds(): void
+    {
+        self::$thresholds = null;
+    }
+
+    /**
+     * Кандидаты на изменение уровня. READ-ONLY.
+     *
+     * @param  bool  $promoteOnly  true — только повышения (прежнее поведение)
      * @return array<int, object{ql_id:int, consultant:int, name:string, ngp:float, cur_lvl:int, legacy_lvl:int, ngp_lvl:int, target:int}>
      */
-    public static function candidates(): array
+    public static function candidates(bool $promoteOnly = false): array
     {
         $ngpLevelExpr = '(SELECT max(sl.level) FROM status_levels sl'
             . ' WHERE sl."groupVolumeCumulative" <= COALESCE(l.ngp, 0))';
+
+        // ⚠ Раньше target = GREATEST(уровень_по_НГП, status_and_lvl) — легаси-
+        // грандфазер из Directual не давал уровню опуститься НИКОГДА. Из-за
+        // этого партнёр с НГП 11,7 годами висел на «Про», а исправить это было
+        // нечем: другого инструмента понижения в платформе нет. Теперь target =
+        // строго уровень по НГП; прежнее поведение — флагом $promoteOnly.
+        $target = $promoteOnly
+            ? "GREATEST($ngpLevelExpr, COALESCE(c.status_and_lvl, 0))"
+            : $ngpLevelExpr;
+
+        $direction = $promoteOnly ? '>' : '<>';
 
         return DB::select(<<<SQL
             WITH latest AS (
@@ -50,11 +99,11 @@ class QualificationReeval
                    round(l.ngp::numeric, 0) AS ngp, l.cur_lvl,
                    COALESCE(c.status_and_lvl, 0) AS legacy_lvl,
                    $ngpLevelExpr AS ngp_lvl,
-                   GREATEST($ngpLevelExpr, COALESCE(c.status_and_lvl, 0)) AS target
+                   $target AS target
             FROM latest l
             JOIN consultant c ON c.id = l.consultant AND c."dateDeleted" IS NULL
             WHERE l.cur_lvl >= 1
-              AND GREATEST($ngpLevelExpr, COALESCE(c.status_and_lvl, 0)) > l.cur_lvl
+              AND $target $direction l.cur_lvl
             ORDER BY target DESC, l.ngp DESC
         SQL);
     }
@@ -76,12 +125,10 @@ class QualificationReeval
                 DB::table('qualificationLog')
                     ->where('id', $r->ql_id)
                     ->update(['nominalLevel' => $r->target, 'calculationLevel' => $r->target]);
+                // Карточку ведём к тому же target, что и снимок — иначе они
+                // разъедутся, а месячный раннер стал брать уровень из снимка.
                 DB::table('consultant')
                     ->where('id', $r->consultant)
-                    ->where(function ($q) use ($r) {
-                        // promote-only: не понижаем существующий status_and_lvl
-                        $q->whereNull('status_and_lvl')->orWhere('status_and_lvl', '<', $r->target);
-                    })
                     ->update(['status_and_lvl' => $r->target]);
                 $count++;
             }
@@ -95,9 +142,9 @@ class QualificationReeval
      *
      * @return array{candidates: array<int, object>, promoted: int}
      */
-    public static function run(bool $apply): array
+    public static function run(bool $apply, bool $promoteOnly = false): array
     {
-        $rows = self::candidates();
+        $rows = self::candidates($promoteOnly);
 
         return [
             'candidates' => $rows,

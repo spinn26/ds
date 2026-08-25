@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Services\QualificationReeval;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -474,10 +475,24 @@ class MonthlyPenaltyRunner
 
         $now = now();
         $rows = [];
+        $levelUpdates = [];
         foreach ($consultants as $c) {
             $lp = (float) ($personal[$c->id] ?? 0) + (float) ($manualPoints[$c->id] ?? 0);
             // ГП = ЛП + downline commission + ручные баллы нижестоящих (по цепочке).
             $gp = $lp + (float) ($downline[$c->id] ?? 0) + (float) ($downlineManualTotal[$c->id] ?? 0);
+            $ngp = (float) ($carry[$c->id] ?? 0) + $gp;
+
+            // ⚠ Уровень СЧИТАЕТСЯ по НГП, а не копируется из карточки.
+            //
+            // Раньше здесь стояло `'nominalLevel' => $c->status_and_lvl` — снимок
+            // был зеркалом карточки. А карточку двигала только ручная команда
+            // partners:reeval-qualifications (не в расписании, promote-only), и
+            // между её запусками снимки каждый месяц штамповали устаревшее
+            // значение. Партнёр с НГП 2000 висел на «Старте», а с НГП 11,7 — на
+            // «Про», и выглядело это как «понижение в августе», хотя НГП не
+            // менялся (разбор 25.08.2026: Лебедев, Кутлугалямов, Рудин, Иванова,
+            // Виноградов).
+            $level = QualificationReeval::levelForNgp($ngp);
 
             $rows[] = [
                 'consultant' => (int) $c->id,
@@ -485,15 +500,19 @@ class MonthlyPenaltyRunner
                 'savingDate' => $now,
                 'gap' => false,
                 'result' => 'newEntry',
-                'calculationLevel' => $c->status_and_lvl,
-                'nominalLevel' => $c->status_and_lvl,
+                'calculationLevel' => $level,
+                'nominalLevel' => $level,
                 'personalVolume' => $lp,
                 'groupVolume' => $gp,
-                'groupVolumeCumulative' => (float) ($carry[$c->id] ?? 0) + $gp,
+                'groupVolumeCumulative' => $ngp,
                 'consultantPersonName' => $c->personName,
                 'createdAt' => $now,
                 'changedAt' => $now,
             ];
+
+            if ((int) ($c->status_and_lvl ?? 0) !== $level) {
+                $levelUpdates[$level][] = (int) $c->id;
+            }
         }
 
         DB::table('qualificationLog')
@@ -503,6 +522,15 @@ class MonthlyPenaltyRunner
 
         foreach (array_chunk($rows, 500) as $chunk) {
             DB::table('qualificationLog')->insert($chunk);
+        }
+
+        // Карточку ведём за снимком: дашборды, пул, штрафы и отчёты читают
+        // consultant.status_and_lvl, и без этого они остались бы на старом
+        // уровне, пока кто-нибудь не запустит переоценку руками.
+        foreach ($levelUpdates as $level => $ids) {
+            foreach (array_chunk($ids, 500) as $chunk) {
+                DB::table('consultant')->whereIn('id', $chunk)->update(['status_and_lvl' => $level]);
+            }
         }
     }
 
