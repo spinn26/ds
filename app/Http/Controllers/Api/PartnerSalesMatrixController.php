@@ -336,32 +336,20 @@ class PartnerSalesMatrixController extends Controller
             ])
             ->get();
 
-        $dsCache = [];
         $agg = []; // [fcId][productId][month] => ['revenue'=>, 'points'=>]
         foreach ($contracts as $r) {
             $amountRub   = (float) $r->ammount * (float) $r->rate;
             $amountNoVat = $vatPercent > 0 ? $amountRub / (1 + $vatPercent / 100) : $amountRub;
 
-            // %ДС: program.dsPercent → тарифная сетка dsCommission. Тарифа нет —
-            // выручки нет. ⚠ Раньше здесь подставлялся фолбэк
-            // commission.default_ds_percent (=100 на проде), и «Выручка»
-            // становилась равна всей сумме контракта без НДС. Тот же фолбэк уже
-            // убран из боевого расчёта (CommissionCalculator, «кейс Брокер+»):
-            // отсутствие тарифа — ошибка данных, она должна быть видна.
-            // Счётчик таких контрактов уходит на фронт в missingTariff.
-            $ds = $r->program_ds !== null && (float) $r->program_ds > 0
-                ? (float) $r->program_ds
-                : null;
-            if ($ds === null) {
-                $key = $r->program_id . '|' . $r->term . '|' . $r->cdate;
-                if (! array_key_exists($key, $dsCache)) {
-                    $dsCache[$key] = \App\Services\CommissionCalculator::resolveLegacyDsCommission(
-                        (int) $r->program_id, $r->term, null, (string) $r->cdate
-                    );
-                }
-                $resolved = (float) ($dsCache[$key] ?? 0);
-                $ds = $resolved > 0 ? $resolved : null;
-            }
+            // %ДС прогноза берём ИЗ КАРТОЧКИ ПРОДУКТА (ForecastDsRate) — она
+            // источник истины по процентам. Тарифа нет — выручки нет.
+            // ⚠ Здесь подряд убраны два неверных источника: фолбэк
+            // commission.default_ds_percent (=100 на проде — «Выручка»
+            // становилась равна всей сумме контракта) и legacy-сетка
+            // dsCommission, которая при неизвестном свойстве отдавала строку
+            // по наибольшему id, то есть по порядку вставки.
+            // Счётчик контрактов без тарифа уходит на фронт в missingTariff.
+            $ds = \App\Services\ForecastDsRate::forProgram($r->program_id);
             if ($ds === null) {
                 $this->missingTariff[(int) $r->program_id] =
                     ($this->missingTariff[(int) $r->program_id] ?? 0) + 1;

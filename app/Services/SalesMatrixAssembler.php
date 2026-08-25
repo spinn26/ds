@@ -65,19 +65,12 @@ class SalesMatrixAssembler
      */
     private function resolveDs(object $r, array &$dsCache): ?float
     {
-        if ($r->program_ds !== null && (float) $r->program_ds > 0) {
-            return (float) $r->program_ds;
-        }
-
-        $key = $r->program_id.'|'.$r->term.'|'.$r->cdate;
-        if (! array_key_exists($key, $dsCache)) {
-            $dsCache[$key] = \App\Services\CommissionCalculator::resolveLegacyDsCommission(
-                (int) $r->program_id, $r->term, null, (string) $r->cdate
-            );
-        }
-        $ds = (float) ($dsCache[$key] ?? 0);
-
-        return $ds > 0 ? $ds : null;
+        // ⚠ Прогноз берёт %ДС ИЗ КАРТОЧКИ ПРОДУКТА, а не из legacy-сетки
+        // dsCommission. Раньше здесь звался resolveLegacyDsCommission с годом
+        // = null (транзакции ещё нет, свойство неизвестно) — каскад отбрасывал
+        // фильтр по свойству и брал строку по наибольшему id, то есть ставку
+        // выбирал порядок вставки. См. ForecastDsRate.
+        return \App\Services\ForecastDsRate::forProgram($r->program_id);
     }
 
     /**
