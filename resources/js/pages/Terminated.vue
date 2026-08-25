@@ -11,7 +11,13 @@
 
       <h2 class="ds-headline-m text-error mt-4">Доступ ограничен</h2>
       <div class="ds-body-l ds-muted mt-2">
-        Ваш аккаунт находится в статусе «Терминирован». Доступ к разделам платформы временно закрыт.
+        <template v-if="excluded">
+          Ваш аккаунт находится в статусе «Исключён». Доступ к разделам платформы закрыт.
+        </template>
+        <template v-else>
+          Ваш аккаунт находится в статусе «Терминирован»: условия активационного
+          периода не выполнены. Доступ к разделам платформы временно закрыт.
+        </template>
       </div>
 
       <v-divider class="my-6" />
@@ -20,16 +26,37 @@
         <div>
           <div class="ds-title-s mb-2">Что это значит:</div>
           <ul class="t-bullets">
-            <li>Условия активационного периода не выполнены</li>
-            <li>Накопленные баллы обнулены, клиенты и контракты переданы вышестоящему партнёру</li>
-            <li>Повторная регистрация возможна не более 3 раз</li>
+            <li>Накопленные баллы обнулены</li>
+            <li>Клиенты и контракты переданы вышестоящему партнёру и остаются за ним</li>
           </ul>
         </div>
-        <div>
-          <div class="ds-title-s mb-2">Для восстановления доступа:</div>
+
+        <!-- Попытки ещё есть: возврат делается в кабинете, а не через поддержку.
+             Раньше страница отправляла в техподдержку и к наставнику — она
+             писалась до появления самовосстановления и разошлась с ним. -->
+        <div v-if="!excluded">
+          <div class="ds-title-s mb-2">Как вернуться в работу:</div>
           <ul class="t-bullets">
-            <li>Свяжитесь с техподдержкой через раздел «Обратная связь»</li>
-            <li>Обсудите план активации с наставником</li>
+            <li>
+              Восстановить участие можно самостоятельно — окно возврата
+              открывается при входе в кабинет
+            </li>
+            <li>
+              Доступно
+              <strong>{{ attemptsLeft }}</strong>
+              {{ plural(attemptsLeft, 'попытка', 'попытки', 'попыток') }}
+              из {{ limit }}
+            </li>
+            <li>После восстановления снова даётся {{ windowDays }} дней на набор {{ minLp }} ЛП</li>
+          </ul>
+        </div>
+
+        <!-- Попытки исчерпаны: кнопки возврата нет, и это надо объяснить. -->
+        <div v-else>
+          <div class="ds-title-s mb-2">Почему возврат недоступен:</div>
+          <ul class="t-bullets">
+            <li>Все {{ limit }} {{ plural(limit, 'попытка', 'попытки', 'попыток') }} восстановления использованы</li>
+            <li>Если считаете, что произошла ошибка, напишите в поддержку — решение принимается индивидуально</li>
           </ul>
         </div>
       </div>
@@ -45,6 +72,41 @@
     </v-card>
   </div>
 </template>
+
+<script setup>
+import { computed, ref, onMounted } from 'vue';
+import { useAuthStore } from '../stores/auth';
+import api from '../api';
+
+const auth = useAuthStore();
+
+// Блок termination из /auth/me — тот же, по которому MainLayout показывает
+// окно возврата. Здесь он нужен, чтобы страница не обещала восстановление
+// тому, у кого попытки кончились, и наоборот.
+const termination = computed(() => auth.user?.termination || {});
+const excluded = computed(() => termination.value.excluded === true);
+const attemptsLeft = computed(() => Number(termination.value.attemptsLeft ?? 3));
+const limit = computed(() => Number(termination.value.limit ?? 3));
+
+// Пороги активации берём из профиля, а не хардкодим: они настраиваются
+// в system_settings (activation.window_days / activation.min_lp).
+const statusInfo = ref(null);
+const windowDays = computed(() => statusInfo.value?.windowDays ?? 120);
+const minLp = computed(() => statusInfo.value?.activationPoints ?? 500);
+
+onMounted(async () => {
+  try {
+    const { data } = await api.get('/profile');
+    statusInfo.value = data.statusInfo || null;
+  } catch { /* дефолты устава выше — страница информационная, падать нечему */ }
+});
+
+function plural(n, one, few, many) {
+  if (n % 10 === 1 && n % 100 !== 11) return one;
+  if ([2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100)) return few;
+  return many;
+}
+</script>
 
 <style scoped>
 .terminated-page {
