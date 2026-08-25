@@ -28,7 +28,7 @@ use Illuminate\Support\Facades\DB;
 class SyncDsCommissionFromCatalog extends Command
 {
     protected $signature = 'products:sync-dscommission {--apply : применить изменения (иначе dry-run)} {--program= : только одна legacy-программа} {--fill-gaps : достраивать недостающие ключи и у программ, где строки уже есть (МЕНЯЕТ действующие ставки)}
-        {--prune : гасить строки расчёта, которых нет в карточке продукта (программы с пустой карточкой не трогаются)}';
+        {--prune : ОТЧЁТ о строках расчёта, которых нет в карточке (запись НЕ делается — матчер пока неточен)}';
 
     protected $description = 'Синхронизировать %ДС из каталога Продуктов в dsCommission (источник расчёта комиссий)';
 
