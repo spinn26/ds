@@ -605,7 +605,11 @@ class CommissionCalculator
             && abs((float) ($tx->dsCommissionAbsolute ?? 0)) > 0.000001
             && abs($amountNoVat) > 0.000001
         ) {
-            $dsComPercent = round((float) $tx->dsCommissionAbsolute / $amountNoVat * 100, 4);
+            // ⚠ 8 знаков, а не 4. Доход ДС считается обратно из этой ставки
+            // (commissionsAmountRUB = amountNoVat × %ДС / 100), поэтому грубое
+            // округление уводит введённую вручную сумму: на базе 262 658 ₽
+            // четыре знака давали 999,94 ₽ вместо ровных 1 000,00 ₽.
+            $dsComPercent = round((float) $tx->dsCommissionAbsolute / $amountNoVat * 100, 8);
         }
 
         // Property-specific тариф ДОЛЖЕН побеждать scalar program.dsPercent,

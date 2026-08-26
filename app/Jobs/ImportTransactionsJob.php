@@ -378,14 +378,32 @@ class ImportTransactionsJob implements ShouldQueue
                     }
                     $customMissing = false;
                     if (! empty($profile['custom_commission']) || $customByProperty) {
-                        $comm = \App\Support\Numbers::decimal($a['commission'] ?? null, 0);
+                        $commRaw = \App\Support\Numbers::decimal($a['commission'] ?? null, 0);
                         $base = \App\Support\Numbers::decimal($rowAmount, 0);
+
+                        // ⚠ dsCommissionAbsolute хранится БЕЗ НДС (так его
+                        // читает CommissionCalculator). У ГГА сумма в отчёте
+                        // уже без НДС, а у робо — С НДС: брокер платит доход ДС
+                        // целиком. Без снятия НДС файловая 1 000 ₽ ложилась в
+                        // «Доход ДС без НДС», а «Доход ДС» раздувался до 1 050 ₽.
+                        $comm = $commRaw;
+                        if (! empty($profile['custom_commission_gross'])) {
+                            $vat = \App\Support\VatRate::percentOrDefault($a['date'] ?? null);
+                            if ($vat > 0) {
+                                $comm = $commRaw / (1 + $vat / 100);
+                            }
+                        }
+
                         if (abs($comm) > 0.000001) {
                             $customCommission = true;
                             $commissionAbs = $comm;
                             // %ДС по ТЗ: (сумма комиссии / сумма контракта) × 100.
+                            // Для «с НДС» берём исходные величины отчёта: НДС
+                            // сокращается (доход_без_НДС / база_без_НДС), а
+                            // делить снятую сумму на базу С НДС было бы неверно.
+                            $pctNum = ! empty($profile['custom_commission_gross']) ? $commRaw : $comm;
                             $dsPercent = abs($base) > 0.000001
-                                ? round($comm / $base * 100, 6)
+                                ? round($pctNum / $base * 100, 6)
                                 : null;
                         } else {
                             // Пустая/нулевая сумма комиссии — строка уходит на
