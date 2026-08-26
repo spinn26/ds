@@ -53,6 +53,13 @@ class SheetProfiles
             // IB MF/IB UP, но не этот лист). Бэкфилл существующих —
             // artisan finance:backfill-tinkoff-property.
             'commissionCalcProperty' => 9,
+            // МФ грузим «Своей комиссией» (ТЗ 2026-08-17): брокер платит МФ
+            // пропорционально времени нахождения активов на счёте за квартал,
+            // поэтому фактическая «Сумма, руб.» (30 ₽ = 0,3%) не совпадает со
+            // ставкой из продуктовой сетки (0,5% = 50 ₽). Доход ДС берём из
+            // отчёта как есть, ставку выводим: сумма / база × 100.
+            // Апфронт не трогаем — он идёт по тарифу 2% из «Продуктов».
+            'custom_commission_properties' => [9],
         ],
         'IB MF' => [
             'counterpartyName' => 'Interactive Brokers',
@@ -281,6 +288,38 @@ class SheetProfiles
             ->orderByDesc('selectable')   // предпочитаем selectable=true
             ->value('id');
         return $row ?? $default;
+    }
+
+    /** @var array<string,int>|null кэш commissionCalcProperty.title → id */
+    private static ?array $propertyTitleMap = null;
+
+    /**
+     * Резолвинг commissionCalcProperty.id по значению из листа: id числом,
+     * название («МФ», «Апфронт», «5 год») или английский алиас (mf/up/upfront).
+     * Канон для импорта — используется и джобой, и валидатором.
+     */
+    public static function resolvePropertyId($value): ?int
+    {
+        if ($value === null || $value === '') return null;
+        if (is_numeric($value)) return (int) $value;
+
+        if (self::$propertyTitleMap === null) {
+            self::$propertyTitleMap = [];
+            foreach (DB::table('commissionCalcProperty')->get(['id', 'title']) as $p) {
+                self::$propertyTitleMap[mb_strtolower(trim((string) $p->title))] = (int) $p->id;
+            }
+        }
+
+        // NBSP/двойные пробелы из Sheets схлопываем — иначе «мф » мимо карты.
+        $key = preg_replace('/[\pZ\s]+/u', ' ', mb_strtolower(trim((string) $value)));
+        if (isset(self::$propertyTitleMap[$key])) return self::$propertyTitleMap[$key];
+
+        // Лёгкие алиасы: «MF», «UP» — английские варианты МФ/Апфронт.
+        $aliases = ['mf' => 'мф', 'up' => 'апфронт', 'upfront' => 'апфронт'];
+        if (isset($aliases[$key], self::$propertyTitleMap[$aliases[$key]])) {
+            return self::$propertyTitleMap[$aliases[$key]];
+        }
+        return null;
     }
 
     /**

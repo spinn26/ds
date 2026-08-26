@@ -362,12 +362,22 @@ class ImportTransactionsJob implements ShouldQueue
                     }
                     $rowAmount ??= ($a['commission'] ?? 0);
 
-                    // «Своя комиссия» (профиль с custom_commission): сумма
-                    // комиссии из отчёта — это доход ДС как есть, а ставка
-                    // выводится из неё, а не берётся из отчёта.
+                    // «Своя комиссия»: сумма комиссии из отчёта — это доход ДС
+                    // как есть, а ставка выводится из неё, а не берётся из
+                    // отчёта. Включается либо на весь профиль
+                    // ('custom_commission' — ГГА), либо только для отдельных
+                    // свойств ('custom_commission_properties' — Робо: МФ идёт
+                    // по факту оплаты, Апфронт остаётся на тарифе 2%).
                     $customCommission = false;
                     $commissionAbs = null;
-                    if (! empty($profile['custom_commission'])) {
+                    $customByProperty = false;
+                    if (empty($profile['custom_commission']) && ! empty($profile['custom_commission_properties'])) {
+                        $pid = SheetProfiles::resolvePropertyId($rowProperty);
+                        $customByProperty = $pid !== null
+                            && in_array($pid, (array) $profile['custom_commission_properties'], true);
+                    }
+                    $customMissing = false;
+                    if (! empty($profile['custom_commission']) || $customByProperty) {
                         $comm = \App\Support\Numbers::decimal($a['commission'] ?? null, 0);
                         $base = \App\Support\Numbers::decimal($rowAmount, 0);
                         if (abs($comm) > 0.000001) {
@@ -377,6 +387,11 @@ class ImportTransactionsJob implements ShouldQueue
                             $dsPercent = abs($base) > 0.000001
                                 ? round($comm / $base * 100, 6)
                                 : null;
+                        } else {
+                            // Пустая/нулевая сумма комиссии — строка уходит на
+                            // тариф из «Продуктов». Молча это делать нельзя:
+                            // для МФ тариф заведомо расходится с фактом оплаты.
+                            $customMissing = true;
                         }
                     }
 
@@ -392,6 +407,7 @@ class ImportTransactionsJob implements ShouldQueue
                         'year' => $a['year'] ?? null,
                         'custom_commission' => $customCommission,
                         'commission_abs' => $commissionAbs,
+                        'custom_commission_missing' => $customMissing,
                     ];
                 }
                 return [$rows, (int) $counterpartyId, (int) $currencyId, $profile];

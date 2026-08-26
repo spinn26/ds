@@ -27,13 +27,6 @@ use Illuminate\Support\Facades\DB;
 class TransactionImportValidator
 {
     /**
-     * Кэшируем lookup commissionCalcProperty.title → id на время импорта.
-     * Размер справочника ~30 строк, читаем целиком при первом обращении —
-     * иначе на 1267 строк × ILIKE-запрос даём ненужную нагрузку.
-     */
-    private ?array $propertyTitleMap = null;
-
-    /**
      * @param list<array<string, mixed>> $rows строки источника
      * @param ?int $resolvedCurrency валюта импорта (перебивается колонкой строки)
      * @param ?string $profileWarning расхождение шапки листа с профилем
@@ -189,7 +182,7 @@ class TransactionImportValidator
                 if (is_numeric($propertyRaw)) {
                     $propertyId = (int) $propertyRaw;
                 } else {
-                    $propertyId = $this->resolvePropertyId((string) $propertyRaw);
+                    $propertyId = SheetProfiles::resolvePropertyId($propertyRaw);
                     // Значение свойства есть, но не распознано — не роняем в
                     // NULL молча (иначе МФ/Апфронт незаметно теряется), а
                     // предупреждаем оператора с указанием строки и значения.
@@ -270,28 +263,5 @@ class TransactionImportValidator
 
 
         return $contractMap;
-    }
-
-    private function resolvePropertyId(string $title): ?int
-    {
-        if ($this->propertyTitleMap === null) {
-            $this->propertyTitleMap = [];
-            foreach (DB::table('commissionCalcProperty')->get(['id', 'title']) as $p) {
-                $this->propertyTitleMap[mb_strtolower(trim((string) $p->title))] = (int) $p->id;
-            }
-        }
-        $key = mb_strtolower(trim($title));
-        if (isset($this->propertyTitleMap[$key])) return $this->propertyTitleMap[$key];
-
-        // Лёгкие алиасы: «MF», «UP» — английские варианты МФ/Апфронт.
-        $aliases = [
-            'mf' => 'мф',
-            'up' => 'апфронт',
-            'upfront' => 'апфронт',
-        ];
-        if (isset($aliases[$key], $this->propertyTitleMap[$aliases[$key]])) {
-            return $this->propertyTitleMap[$aliases[$key]];
-        }
-        return null;
     }
 }
