@@ -848,7 +848,12 @@ class CommissionCalculator
         DB::table('transaction')->where('id', $transactionId)->update([
             'personalVolume' => round($personalVolume, 6),
             'groupVolume' => round($personalVolume, 6),
-            'dsCommissionPercentage' => round($dsComPercent, 4),
+            // ⚠ 8 знаков, а не 4: «Доход ДС» (до НДС) в списке комиссий и в
+            // отчётах считается ОБРАТНО из этой колонки —
+            // amountRUB × %ДС / 100. При 4 знаках введённая вручную сумма
+            // теряла копейки: на базе 262 658 ₽ вместо 1 000,00 ₽ выходило
+            // 999,94 ₽, хотя доход без НДС (952,38 ₽) был записан верно.
+            'dsCommissionPercentage' => round($dsComPercent, 8),
             'commissionsAmountRUB' => $incomeDsRub,
             'commissionsAmountUSD' => $incomeDsUsd,
             'commissionsAmountCurrency' => $incomeDsCurrency,
@@ -1197,7 +1202,12 @@ class CommissionCalculator
         DB::table('transaction')->where('id', $transactionId)->update([
             'personalVolume' => 0,
             'groupVolume' => 0,
-            'dsCommissionPercentage' => round($dsComPercent, 4),
+            // ⚠ 8 знаков, а не 4: «Доход ДС» (до НДС) в списке комиссий и в
+            // отчётах считается ОБРАТНО из этой колонки —
+            // amountRUB × %ДС / 100. При 4 знаках введённая вручную сумма
+            // теряла копейки: на базе 262 658 ₽ вместо 1 000,00 ₽ выходило
+            // 999,94 ₽, хотя доход без НДС (952,38 ₽) был записан верно.
+            'dsCommissionPercentage' => round($dsComPercent, 8),
             'commissionsAmountRUB' => $incomeDsRub,      // Доход ДС без НДС
             'commissionsAmountUSD' => $incomeDsUsd,
             'commissionsAmountCurrency' => $incomeDsCurrency,
