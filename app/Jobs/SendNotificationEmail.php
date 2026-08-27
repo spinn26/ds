@@ -36,6 +36,23 @@ class SendNotificationEmail implements ShouldQueue
 
     public int $tries = 2;
 
+    /**
+     * Плашка в шапке письма: [подпись, цвет текста, фон]. Чтобы «Терминация» и
+     * «Пул зафиксирован» не выглядели одинаково — по цвету видно, срочное это
+     * или информационное.
+     *
+     * @var array<string, array{0:string,1:string,2:string}>
+     */
+    private const STYLES = [
+        'status'     => ['Статус',    '#C62828', '#FDECEA'],
+        'payment'    => ['Выплаты',   '#2E7D32', '#E8F5E9'],
+        'requisites' => ['Реквизиты', '#0277BD', '#E3F2FD'],
+        'import'     => ['Импорт',    '#5A6B5C', '#EEF1EE'],
+        'ticket'     => ['Обращение', '#0277BD', '#E3F2FD'],
+        'mail'       => ['Почта',     '#5A6B5C', '#EEF1EE'],
+        'system'     => ['Система',   '#ED6C02', '#FFF4E5'],
+    ];
+
     public function __construct(
         public int $userId,
         public string $type,
@@ -65,26 +82,42 @@ class SendNotificationEmail implements ShouldQueue
         $greeting = $name !== '' ? "Здравствуйте, {$name}!" : 'Здравствуйте!';
 
         $subject = 'DS Consulting: ' . $this->title;
-        $base = rtrim((string) config('app.url'), '/');
+        // frontend_url первым — как в ResetPasswordNotification: письмо должно
+        // вести туда же, куда ведёт восстановление пароля.
+        $base = rtrim(config('app.frontend_url') ?: config('app.url') ?: '', '/');
         $url = $this->link ? $base . '/' . ltrim($this->link, '/') : $base;
 
-        $html = '<p>' . e($greeting) . '</p>'
-            . '<p><strong>' . e($this->title) . '</strong></p>'
-            . ($this->message ? '<p>' . nl2br(e($this->message)) . '</p>' : '')
-            . '<p><a href="' . e($url) . '">Открыть в личном кабинете</a></p>'
-            . '<p style="color:#888;font-size:12px">Это автоматическое уведомление платформы DS Consulting.</p>';
+        [$typeLabel, $accent, $accentBg] = self::STYLES[$this->type] ?? self::STYLES['system'];
+
+        $data = [
+            'subject' => $subject,
+            'title' => $this->title,
+            'message' => $this->message,
+            'greeting' => $greeting,
+            'url' => $url,
+            'logoUrl' => $base . '/email/ds-logo.png',
+            'typeLabel' => $typeLabel,
+            'accent' => $accent,
+            'accentBg' => $accentBg,
+        ];
 
         $tid = (string) Str::uuid();
 
         try {
-            Mail::send([], [], function ($msg) use ($user, $subject, $html, $tid, $tracker) {
-                $msg->to($user->email)->subject($subject)->html($html);
-                $tracker->headers($msg->getSymfonyMessage(), [
-                    'tracking_id' => $tid,
-                    'mail_type' => 'notification:' . $this->type,
-                    'user_id' => $this->userId,
-                ]);
-            });
+            // Двусоставное письмо (html + text): Gmail и Yandex прямо
+            // рекомендуют multipart/alternative, оно снижает spam-score.
+            Mail::send(
+                ['emails.notification', 'emails.notification-text'],
+                $data,
+                function ($msg) use ($user, $subject, $tid, $tracker) {
+                    $msg->to($user->email)->subject($subject);
+                    $tracker->headers($msg->getSymfonyMessage(), [
+                        'tracking_id' => $tid,
+                        'mail_type' => 'notification:' . $this->type,
+                        'user_id' => $this->userId,
+                    ]);
+                }
+            );
         } catch (\Throwable $e) {
             Log::warning('Notification email failed', [
                 'user' => $this->userId, 'type' => $this->type, 'error' => $e->getMessage(),
