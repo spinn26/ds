@@ -12,6 +12,15 @@ use Illuminate\Support\Facades\Schedule;
 // Schedule::command('partners:check-statuses')->dailyAt('02:00');
 // Schedule::command('finalize:apply')->dailyAt('04:00')->withoutOverlapping(60)->runInBackground();
 
+// Предупреждение партнёру за 30 дней до терминации (кабинет + Telegram).
+// Под запрет авто-пересчётов НЕ попадает: команда ничего не считает и не
+// меняет статусы, только рассылает. Терминирует по-прежнему
+// `partners:check-statuses` по кнопке.
+//
+// Ежедневно, но каждому партнёру уходит ОДНО сообщение: отметка
+// consultant.termination_warning_for хранит дедлайн, под который уже слали.
+Schedule::command('partners:notify-termination-soon')->dailyAt('09:00');
+
 // Постоянная выгрузка платформы в Google-таблицу (Контракты/Клиенты/
 // Консультанты) — инкремент по changedAt (upsert по ID). Это НЕ расчёт, а
 // зеркало данных, поэтому под запрет авто-пересчётов не попадает. Запускается,
