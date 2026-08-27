@@ -25,12 +25,12 @@ class AdminEducationController extends Controller
      *
      * Query: search (по ФИО), course_id, page (по умолчанию 1), per (25).
      */
-    public function analytics(Request $request): JsonResponse
+    public function analytics(Request $request, int $maxPer = 100): JsonResponse
     {
         $search = trim((string) $request->input('search', ''));
         $courseId = (int) $request->input('course_id', 0);
         $page = max(1, (int) $request->input('page', 1));
-        $per = min(100, max(10, (int) $request->input('per', 25)));
+        $per = min($maxPer, max(10, (int) $request->input('per', 25)));
 
         // База — все WebUser с ролью consultant (потенциальные обучающиеся).
         $usersQuery = DB::table('WebUser')
@@ -125,8 +125,10 @@ class AdminEducationController extends Controller
      */
     public function analyticsExport(Request $request, XlsxExportService $xlsx): \Symfony\Component\HttpFoundation\StreamedResponse
     {
+        // Экспорт без пагинации: клэмп per (100 в UI-эндпоинте) снимаем явно,
+        // иначе в файл уезжает только первая страница.
         $request->merge(['per' => 100000, 'page' => 1]);
-        $data = $this->analytics($request)->getData(true)['data'] ?? [];
+        $data = $this->analytics($request, 100000)->getData(true)['data'] ?? [];
 
         $headers = [
             'Партнёр', 'E-mail',
