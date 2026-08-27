@@ -88,7 +88,7 @@ class NotifyTerminationSoon extends Command
                 mb_substr($r->personName ?? '—', 0, 30),
                 (int) $r->activity === PartnerActivity::Registered->value ? 'Зарегистрирован' : 'Активен',
                 $r->deadline,
-                Carbon::parse($r->deadline)->diffInDays($today),
+                (int) $today->diffInDays(Carbon::parse($r->deadline)),
                 round((float) ($r->personalVolume ?? 0), 2),
                 $r->telegram_chat_id ? 'да' : '—',
             ])->all()
@@ -102,7 +102,10 @@ class NotifyTerminationSoon extends Command
 
         $sent = 0;
         foreach ($rows as $r) {
-            $left = Carbon::parse($r->deadline)->diffInDays($today);
+            // ⚠ Направление важно: $deadline->diffInDays($today) в Carbon 3
+            // знаковый и даёт ОТРИЦАТЕЛЬНОЕ число для будущей даты — в текст
+            // уходило бы «До терминации -34 дней».
+            $left = (int) $today->diffInDays(Carbon::parse($r->deadline));
             $lp = round((float) ($r->personalVolume ?? 0), 2);
 
             $title = "До терминации {$left} " . $this->plural($left, 'день', 'дня', 'дней');
