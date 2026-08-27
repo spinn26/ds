@@ -6,12 +6,36 @@
       </template>
     </PageHeader>
 
-    <!-- Status Info Alert (activation period countdown) -->
+    <!-- Обратный отсчёт до терминации.
+         ⚠ На последнем месяце текст МЕНЯЕТСЯ и баннер перестаёт закрываться:
+         раньше он всегда говорил «активационный период», но не говорил, ЧТО
+         будет, если его не пройти — партнёр видел счётчик и не понимал, что на
+         кону расторжение договора. -->
     <v-alert v-if="data.statusInfo && data.statusInfo.daysRemaining != null"
-      :type="data.statusInfo.daysRemaining <= 30 ? 'warning' : 'info'"
-      variant="tonal" class="mb-4" closable>
+      :type="deadlineSoon ? 'error' : 'info'"
+      variant="tonal" class="mb-4" :closable="!deadlineSoon">
       <div class="d-flex justify-space-between align-center flex-wrap ga-2">
-        <div>
+        <div v-if="deadlineSoon">
+          <div class="font-weight-bold">
+            До терминации {{ data.statusInfo.daysRemaining }}
+            {{ plural(data.statusInfo.daysRemaining, 'день', 'дня', 'дней') }}
+          </div>
+          <div class="text-body-2">
+            Если к {{ deadlineDate }} не набрать
+            <strong>{{ fmt(data.statusInfo.requiredPoints) }}</strong> ЛП, агентский договор
+            будет расторгнут: баллы обнулятся, клиенты и контракты перейдут наставнику.
+            <template v-if="data.statusInfo.reinstate?.limit">
+              Восстановить участие можно будет самостоятельно — доступно
+              {{ data.statusInfo.reinstate.limit }}
+              {{ plural(data.statusInfo.reinstate.limit, 'попытка', 'попытки', 'попыток') }}.
+            </template>
+          </div>
+          <div class="text-body-2 mt-1">
+            Сейчас у вас <strong>{{ fmt(data.statusInfo.currentPoints) }}</strong> из
+            <strong>{{ fmt(data.statusInfo.requiredPoints) }}</strong> ЛП.
+          </div>
+        </div>
+        <div v-else>
           <div class="font-weight-bold">Активационный период</div>
           <div class="text-body-2">
             Осталось <strong>{{ data.statusInfo.daysRemaining }}</strong> дней.
@@ -21,7 +45,7 @@
         </div>
       </div>
       <v-progress-linear :model-value="statusProgress" height="8" rounded
-        :color="data.statusInfo.daysRemaining <= 30 ? 'warning' : 'primary'" class="mt-2" />
+        :color="deadlineSoon ? 'error' : 'primary'" class="mt-2" />
     </v-alert>
 
     <!-- Hero квалификации — primary-tinted, выделяется среди остальных
@@ -384,6 +408,28 @@ const statusProgress = computed(() => {
   if (!si || !si.requiredPoints) return 0;
   return Math.min((si.currentPoints / si.requiredPoints) * 100, 100);
 });
+
+// Последний месяц перед терминацией: тот же порог 30 дней, что и у рассылки
+// partners:notify-termination-soon — чтобы письмо и баннер не расходились.
+const deadlineSoon = computed(() => {
+  const d = data.value.statusInfo?.daysRemaining;
+  return d != null && d <= 30;
+});
+
+// Дата срока: у «Зарегистрирован» — окно активации, у «Активен» — годовой период.
+const deadlineDate = computed(() => {
+  const si = data.value.statusInfo || {};
+  const raw = si.activationDeadline || si.yearPeriodEnd;
+  if (!raw) return '';
+  const d = new Date(raw);
+  return isNaN(d.getTime()) ? '' : d.toLocaleDateString('ru-RU');
+});
+
+function plural(n, one, few, many) {
+  if (n % 10 === 1 && n % 100 !== 11) return one;
+  if ([2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100)) return few;
+  return many;
+}
 
 /**
  * Per spec ✅Дашборд.md §2 + ✅Квалификации.md §2:
