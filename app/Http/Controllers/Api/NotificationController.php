@@ -141,6 +141,24 @@ class NotificationController extends Controller
         } catch (\Throwable) {
             // Telegram is best-effort — never let it break the notification flow.
         }
+
+        // Дублируем на почту. Telegram привязан у единиц (3 партнёра из 112 на
+        // 27.08.2026), а e-mail есть у всех — без этого уведомление доходит
+        // только до тех, кто заходит в кабинет.
+        //
+        // ⚠ Чат исключён намеренно: 5877 сообщений за 30 дней против 193 по
+        // всем остальным типам вместе. Письмо на каждую реплику — это спам,
+        // после которого отпишутся и от важного.
+        //
+        // Через очередь: create() зовётся прямо в запросах (запись выплаты,
+        // смена реквизитов), ждать там SMTP нельзя.
+        if ($type !== 'chat') {
+            try {
+                \App\Jobs\SendNotificationEmail::dispatch($userId, $type, $title, $message, $link);
+            } catch (\Throwable) {
+                // Почта best-effort, как и Telegram: уведомление в кабинете уже создано.
+            }
+        }
     }
 
     /**
