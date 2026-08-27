@@ -303,6 +303,30 @@ class CommissionCalculator
             ->merge($poolByCons->keys()->map(fn ($v) => (int) $v))
             ->unique()->values();
 
+        // ⚠ ЧЕТВЁРТЫЙ источник: партнёры с НЕПОГАШЕННЫМ остатком прошлых
+        // периодов, но без движения в этом месяце.
+        //
+        // Без них строка за месяц не создавалась вовсе, и партнёр ПРОПАДАЛ из
+        // реестра выплат — вместе с деньгами, которые компания ему должна.
+        // Кейс Шалаевой (508): остаток 7 140,19 ₽ тянулся с 2024 года, в июле
+        // 2026 начислений не было — строки нет, в реестре партнёра нет. Всего
+        // по июлю так выпало 408 партнёров на 1 950 582 ₽.
+        //
+        // Берём только живые карточки: удалённая не должна плодить новые
+        // месячные строки.
+        $carried = collect(DB::select(
+            'SELECT p.consultant
+               FROM (SELECT DISTINCT ON (consultant) consultant, remaining
+                       FROM "consultantBalance"
+                      WHERE "dateMonth" LIKE \'____-__\' AND "dateMonth" < ?
+                      ORDER BY consultant, "dateMonth" DESC) p
+               JOIN consultant c ON c.id = p.consultant AND c."dateDeleted" IS NULL
+              WHERE COALESCE(p.remaining, 0) <> 0',
+            [$ym]
+        ))->pluck('consultant')->map(fn ($v) => (int) $v);
+
+        $consultants = $consultants->merge($carried)->unique()->values();
+
         foreach ($consultants as $cid) {
             $this->rebuildBalance($cid, $ym, $dateYear, false);
             // Пул проставляем всегда, в том числе нулём: partнёр мог выпасть из
