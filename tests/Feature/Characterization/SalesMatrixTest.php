@@ -40,6 +40,8 @@ class SalesMatrixTest extends TestCase
     {
         parent::setUp();
         $this->seedFixture();
+        // Карта ставок кэшируется в static и переживает RefreshDatabase.
+        \App\Services\ForecastDsRate::flush();
     }
 
     // ---------------- Факт ----------------
@@ -524,8 +526,12 @@ class SalesMatrixTest extends TestCase
             'legacy_product_id' => self::PRODUCT,
         ]);
         // ds_percent = 10 — на нём и проверяется формула выручки прогноза.
+        // ⚠ legacy_program_id обязателен: ForecastDsRate строит карту ставок
+        // именно по нему (contract.program — legacy id), а строки без него
+        // отбрасывает — тогда %ДС = null и вся выручка прогноза уходит в ноль.
         DB::table('programs_catalog')->insert([
             'id' => self::PROGRAM, 'product_id' => self::PRODUCT,
+            'legacy_program_id' => self::PROGRAM,
             'name' => 'Матричная программа', 'active' => true,
             'provider_name' => 'Матричный поставщик', 'ds_percent' => 10,
         ]);
