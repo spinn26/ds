@@ -46,8 +46,18 @@
             «Исключён». Вернуть участие через личный кабинет больше нельзя.
           </p>
           <v-alert type="info" density="compact" variant="tonal">
-            {{ info.blockedReason
-              || 'Если считаете, что произошла ошибка, напишите в поддержку — решение принимается индивидуально.' }}
+            <div>
+              {{ info.blockedReason
+                || 'Если считаете, что произошла ошибка, напишите в поддержку — решение принимается индивидуально.' }}
+            </div>
+            <!-- Кликабельная ссылка, а не просто слово «поддержка»: возврата
+                 через кабинет у исключённого нет, и это единственный путь. -->
+            <div class="mt-2">
+              <v-btn :href="SUPPORT_TG" target="_blank" rel="noopener"
+                size="small" variant="flat" color="primary" prepend-icon="mdi-send">
+                Написать в поддержку
+              </v-btn>
+            </div>
           </v-alert>
         </template>
 
@@ -128,6 +138,9 @@ const emit = defineEmits(['reinstated', 'logout']);
 const confirmed = ref(false);
 const submitting = ref(false);
 const error = ref('');
+
+// Тот же адрес, что в меню «Тех. поддержка» и на форме регистрации.
+const SUPPORT_TG = 'https://t.me/DS_Helpdesk';
 
 function plural(n, one, few, many) {
   if (n % 10 === 1 && n % 100 !== 11) return one;

@@ -3,7 +3,11 @@
        центрированная карточка max-width 560, 88px lock-кружок в
        error-container фоне, два списка "Что это значит" / "Для
        восстановления", две кнопки внизу (filled + outlined). -->
-  <div class="terminated-page">
+  <!-- ⚠ Пока показывается блокирующее окно возврата (MainLayout →
+       ReinstateDialog), эта карточка ничего не даёт: окно persistent, закрыть
+       его нельзя, и «Доступ ограничен» просто просвечивает сзади, дублируя и
+       противореча тексту окна. Показываем карточку только если окна нет. -->
+  <div v-if="!blockingDialog" class="terminated-page">
     <v-card class="terminated-card pa-9 text-center">
       <div class="t-icon">
         <v-icon size="42" color="error">mdi-lock</v-icon>
@@ -98,6 +102,12 @@ watch(() => auth.user?.termination?.terminated, (terminated) => {
 // тому, у кого попытки кончились, и наоборот.
 const termination = computed(() => auth.user?.termination || {});
 const excluded = computed(() => termination.value.excluded === true);
+
+// Условие показа ReinstateDialog из MainLayout. Держим синхронно: пока окно
+// висит, карточку страницы не рисуем.
+const blockingDialog = computed(() =>
+  !auth.isStaff && (termination.value.terminated === true || termination.value.mentorPending === true)
+);
 const attemptsLeft = computed(() => Number(termination.value.attemptsLeft ?? 3));
 const limit = computed(() => Number(termination.value.limit ?? 3));
 
