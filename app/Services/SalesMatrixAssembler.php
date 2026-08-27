@@ -113,7 +113,8 @@ class SalesMatrixAssembler
 
         usort($byProgram, fn ($a, $b) => $b['contracts'] <=> $a['contracts']);
 
-        return ['contracts' => $total, 'programs' => array_values($byProgram)];
+        // usort уже переиндексировал $byProgram — array_values здесь лишний.
+        return ['contracts' => $total, 'programs' => $byProgram];
     }
 
     /**

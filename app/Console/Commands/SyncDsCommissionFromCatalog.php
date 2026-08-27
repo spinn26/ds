@@ -61,7 +61,7 @@ class SyncDsCommissionFromCatalog extends Command
 
             $updated += $res['updated'];
             $created += $res['created'];
-            $pruned += $res['pruned'] ?? 0;
+            $pruned += $res['pruned'];
             $name = mb_substr($pr->name, 0, 28);
             foreach ($res['diffs'] as $d) {
                 $diffs[] = sprintf('%-28s %s', $name, $d);

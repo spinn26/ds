@@ -27,7 +27,7 @@ use Illuminate\Support\Facades\DB;
  */
 class QualificationReeval
 {
-    /** @var array<int,int>|null кэш порогов: уровень => требуемый НГП */
+    /** @var array<int,float>|null кэш порогов: уровень => требуемый НГП */
     private static ?array $thresholds = null;
 
     /**
