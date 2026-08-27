@@ -45,9 +45,9 @@
             <p style="margin:0 0 6px; font-size:14px; line-height:1.5; color:#5A6B5C;">
               {{ $greeting }}
             </p>
-            @if (!empty($message))
+            @if (!empty($bodyText))
               <p style="margin:0; font-size:15px; line-height:1.6; color:#0A2B10;">
-                {!! nl2br(e($message)) !!}
+                {!! nl2br(e($bodyText)) !!}
               </p>
             @endif
           </td>

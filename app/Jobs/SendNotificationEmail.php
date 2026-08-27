@@ -92,7 +92,10 @@ class SendNotificationEmail implements ShouldQueue
         $data = [
             'subject' => $subject,
             'title' => $this->title,
-            'message' => $this->message,
+            // ⚠ НЕ 'message': Laravel подмешивает в данные письма свой
+            // $message (Illuminate\Mail\Message) и затирает нашу переменную —
+            // Blade получал объект вместо строки и падал на htmlspecialchars().
+            'bodyText' => $this->message,
             'greeting' => $greeting,
             'url' => $url,
             'logoUrl' => $base . '/email/ds-logo.png',

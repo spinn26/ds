@@ -3,9 +3,9 @@ DS Consulting — {{ $typeLabel }}
 {{ $greeting }}
 
 {{ $title }}
-@if (!empty($message))
+@if (!empty($bodyText))
 
-{{ $message }}
+{{ $bodyText }}
 @endif
 
 Открыть в личном кабинете:
