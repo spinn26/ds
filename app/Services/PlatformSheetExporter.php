@@ -16,6 +16,14 @@ use Illuminate\Support\Facades\DB;
  * ⚠ «Свойство» и «Срок выплаты КВ» для контракта берутся best-effort из
  * последней транзакции (эти поля транзакционные, у контракта могут различаться
  * между транзакциями) — уточнить при необходимости.
+ *
+ * ⚠ Строки из таблицы НЕ удаляются (по ним контрагенты держат ссылки на номера
+ * строк), вместо этого у каждой вкладки есть колонки «Дата удаления» + «Удалён»
+ * (Да/Нет) — фильтровать по ним. Soft-delete на платформе НЕ трогает
+ * dateChanged, поэтому одного инкремента по watermark мало: каждый прогон
+ * дополнительно сверяет колонку «Удалён» по всем строкам листа
+ * (reconcileDeleted) — ловит и soft-delete, и строки, физически исчезнувшие
+ * из БД.
  */
 class PlatformSheetExporter
 {
@@ -31,8 +39,13 @@ class PlatformSheetExporter
                     'Название программы', 'Название продукта', 'Название поставщика', 'Свойство',
                     'Срок контракта', 'Срок выплаты КВ', 'Название статуса', 'Название риск-профиля',
                     'Страна', 'ФИО клиента', 'ФИО консультанта', 'Дата создания', 'Дата открытия',
-                    'Дата закрытия', 'Дата изменения', 'Дата удаления'],
+                    // ⚠ «Комментарий» дописан В КОНЕЦ намеренно: контрагенты
+                    // ссылаются на колонки листа по буквам, и вставка в
+                    // середину сдвинула бы все даты вправо, поломав их формулы.
+                    'Дата закрытия', 'Дата изменения', 'Дата удаления', 'Удалён', 'Комментарий'],
                 'changedColumn' => 'c."changedAt"',
+                'idTable' => 'contract',
+                'deletedColumn' => '"deletedAt"',
                 'sql' => <<<'SQL'
                     SELECT c.id,
                         c.number,
@@ -50,7 +63,9 @@ class PlatformSheetExporter
                         ctry."countryNameRu" AS country,
                         c."clientName",
                         c."consultantName",
-                        c."createDate", c."openDate", c."closeDate", c."changedAt", c."deletedAt"
+                        c."createDate", c."openDate", c."closeDate", c."changedAt", c."deletedAt",
+                        CASE WHEN c."deletedAt" IS NULL THEN 'Нет' ELSE 'Да' END AS is_deleted,
+                        c.comment
                     FROM contract c
                     LEFT JOIN currency cur ON cur.id = c.currency
                     LEFT JOIN program pr ON pr.id = c.program
@@ -66,30 +81,38 @@ class PlatformSheetExporter
                         ORDER BY t.date DESC NULLS LAST LIMIT 1
                     ) tx ON true
                     LEFT JOIN "commissionCalcProperty" prop ON prop.id = tx."commissionCalcProperty"
-                    WHERE (:since::timestamp IS NULL OR c."changedAt" > :since2::timestamp)
+                    WHERE (:since::timestamp IS NULL OR c."changedAt" > :since2::timestamp
+                           OR c."deletedAt" > :since3::timestamp)
                     ORDER BY c.id
                     SQL,
             ],
             'clients' => [
                 'title' => 'Клиенты',
                 'headers' => ['Айди', 'Дата создания', 'Дата удаления', 'Дата изменения',
-                    'ФИО клиента', 'ФИО консультанта', 'Почта', 'Телефон', 'Источник создания'],
+                    'ФИО клиента', 'ФИО консультанта', 'Почта', 'Телефон', 'Источник создания', 'Удалён'],
                 'changedColumn' => 'cl."dateChanged"',
+                'idTable' => 'client',
+                'deletedColumn' => '"dateDeleted"',
                 'sql' => <<<'SQL'
                     SELECT cl.id, cl."dateCreated", cl."dateDeleted", cl."dateChanged",
                         cl."personName" AS client_name, cl."consultantName",
                         cl.email, cl.phone,
-                        cl.source
+                        cl.source,
+                        CASE WHEN cl."dateDeleted" IS NULL THEN 'Нет' ELSE 'Да' END AS is_deleted
                     FROM client cl
-                    WHERE (:since::timestamp IS NULL OR cl."dateChanged" > :since2::timestamp)
+                    WHERE (:since::timestamp IS NULL OR cl."dateChanged" > :since2::timestamp
+                           OR cl."dateDeleted" > :since3::timestamp)
                     ORDER BY cl.id
                     SQL,
             ],
             'consultants' => [
                 'title' => 'Консультанты',
                 'headers' => ['Айди', 'Статус', 'ФИО консультанта', 'ФИО наставника',
-                    'Партнёрский код', 'Почта', 'Телефон', 'Ник ТГ', 'Дата рождения', 'Страна', 'Город'],
+                    'Партнёрский код', 'Почта', 'Телефон', 'Ник ТГ', 'Дата рождения', 'Страна', 'Город',
+                    'Дата удаления', 'Удалён'],
                 'changedColumn' => 'c."dateChanged"',
+                'idTable' => 'consultant',
+                'deletedColumn' => '"dateDeleted"',
                 'sql' => <<<'SQL'
                     SELECT c.id,
                         act.name AS status,
@@ -99,12 +122,15 @@ class PlatformSheetExporter
                         COALESCE(wu.telegram_username, wu."nicTG", c."nicTG") AS tg,
                         COALESCE(wu."birthDate"::text, c."birthDate") AS birth_date,
                         ctry."countryNameRu" AS country,
-                        c.city AS city
+                        c.city AS city,
+                        c."dateDeleted",
+                        CASE WHEN c."dateDeleted" IS NULL THEN 'Нет' ELSE 'Да' END AS is_deleted
                     FROM consultant c
                     LEFT JOIN "WebUser" wu ON wu.id = c."webUser"
                     LEFT JOIN directory_of_activities act ON act.id = c.activity
                     LEFT JOIN country ctry ON ctry.id = c.country
-                    WHERE (:since::timestamp IS NULL OR c."dateChanged" > :since2::timestamp)
+                    WHERE (:since::timestamp IS NULL OR c."dateChanged" > :since2::timestamp
+                           OR c."dateDeleted" > :since3::timestamp)
                     ORDER BY c.id
                     SQL,
             ],
@@ -151,7 +177,7 @@ class PlatformSheetExporter
         $since = $full ? null : SystemSetting::value($settingKey, null);
         $startedAt = now();
 
-        $rows = DB::select($tab['sql'], ['since' => $since, 'since2' => $since]);
+        $rows = DB::select($tab['sql'], ['since' => $since, 'since2' => $since, 'since3' => $since]);
 
         $updates = [];  // batchUpdate diapазоны
         $appends = [];  // новые строки
@@ -180,9 +206,95 @@ class PlatformSheetExporter
             $this->writer->appendValues($spreadsheetId, $tab['title'], $chunk);
         }
 
+        // Сверка признака удаления по ВСЕМ строкам листа (независимо от watermark).
+        $marked = $this->reconcileDeleted($spreadsheetId, $tab, $existing);
+
         SystemSetting::put($settingKey, $startedAt->toDateTimeString());
 
-        return ['updated' => count($updates), 'appended' => count($appends), 'since' => $since];
+        return [
+            'updated' => count($updates),
+            'appended' => count($appends),
+            'deleted' => $marked,
+            'since' => $since,
+        ];
+    }
+
+    /**
+     * Проставить «Удалён»/«Дата удаления» у строк, которые УЖЕ лежат в листе.
+     *
+     * Нужен потому, что soft-delete на платформе не двигает dateChanged, а
+     * физически удалённые строки инкремент вообще никогда не увидит. Пишем две
+     * колонки целиком (2 диапазона на вкладку), значения берём из БД; для строк,
+     * которых в БД больше нет, ставим «Да», а дату оставляем как была.
+     *
+     * @param array $existing снимок листа ДО записи этого прогона (строки 1..N)
+     * @return int сколько строк помечено удалёнными
+     */
+    private function reconcileDeleted(string $spreadsheetId, array $tab, array $existing): int
+    {
+        $flagIdx = array_search('Удалён', $tab['headers'], true);
+        $dateIdx = array_search('Дата удаления', $tab['headers'], true);
+        if ($flagIdx === false || empty($tab['idTable']) || count($existing) < 2) {
+            return 0;
+        }
+
+        $state = [];
+        foreach (DB::select("SELECT id, {$tab['deletedColumn']} AS del FROM {$tab['idTable']}") as $r) {
+            $state[(string) $r->id] = $r->del;
+        }
+
+        $flagCol = [];
+        $dateCol = [];
+        $marked = 0;
+
+        for ($i = 1; $i < count($existing); $i++) {
+            $id = (string) ($existing[$i][0] ?? '');
+            $curFlag = (string) ($existing[$i][$flagIdx] ?? '');
+            $curDate = $dateIdx === false ? '' : (string) ($existing[$i][$dateIdx] ?? '');
+
+            if ($id === '') {                     // пустая/служебная строка — не трогаем
+                $flagCol[] = [$curFlag];
+                $dateCol[] = [$curDate];
+                continue;
+            }
+
+            if (! array_key_exists($id, $state)) { // строки в БД больше нет
+                $flagCol[] = ['Да'];
+                $dateCol[] = [$curDate];
+                $marked++;
+                continue;
+            }
+
+            $del = $state[$id];
+            $flagCol[] = [$del === null ? 'Нет' : 'Да'];
+            $dateCol[] = [$del === null ? '' : $this->fmt($del)];
+            if ($del !== null) $marked++;
+        }
+
+        $lastRow = count($existing);
+        $data = [[
+            'range' => $tab['title'] . '!' . $this->colLetter($flagIdx + 1) . '2:' . $this->colLetter($flagIdx + 1) . $lastRow,
+            'majorDimension' => 'ROWS',
+            'values' => $flagCol,
+        ]];
+        if ($dateIdx !== false) {
+            $data[] = [
+                'range' => $tab['title'] . '!' . $this->colLetter($dateIdx + 1) . '2:' . $this->colLetter($dateIdx + 1) . $lastRow,
+                'majorDimension' => 'ROWS',
+                'values' => $dateCol,
+            ];
+        }
+        $this->writer->batchUpdateValues($spreadsheetId, $data);
+
+        return $marked;
+    }
+
+    /** Значение даты из БД → строка листа (PDO отдаёт строкой, но подстрахуемся). */
+    private function fmt($v): string
+    {
+        if ($v === null) return '';
+        if ($v instanceof \DateTimeInterface) return $v->format('Y-m-d H:i:s');
+        return (string) $v;
     }
 
     /** Значения строки в порядке колонок запроса (id первым). Даты — ISO, null → ''. */

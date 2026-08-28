@@ -33,8 +33,8 @@ class ExportPlatformToSheet extends Command
         }
 
         foreach ($res as $tab => $r) {
-            $this->line(sprintf('  %s: обновлено %d, добавлено %d%s',
-                $tab, $r['updated'], $r['appended'],
+            $this->line(sprintf('  %s: обновлено %d, добавлено %d, помечено удалёнными %d%s',
+                $tab, $r['updated'], $r['appended'], $r['deleted'] ?? 0,
                 $r['since'] ? " (с {$r['since']})" : ' (полная)'));
         }
         $this->info('Готово.');
