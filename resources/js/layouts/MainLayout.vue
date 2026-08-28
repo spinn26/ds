@@ -41,7 +41,7 @@
           <!-- Regular item -->
           <v-list-item v-if="!item.group && (rail || !isGroupCollapsed(item._groupKey))" :to="item.path || null" :prepend-icon="item.icon"
             :active="isActivePath(item.path)"
-            :color="item.adminSection ? 'brand' : 'primary'"
+            :color="item.adminSection ? 'secondary' : 'primary'"
             :title="item.label"
             class="menu-item" @click="onMenuClick(item)">
             <template #append v-if="!rail">
@@ -1364,16 +1364,20 @@ const navMenu = computed(() => {
 }
 
 /* Active item — macOS-style: subtle mint fill + читаемый on-surface
-   текст. Без зелёного шрифта (низкий контраст на mint fone). */
+   текст. Без зелёного шрифта (низкий контраст на mint fone).
+   !important обязателен: Vuetify вешает цвет из prop `color` ИНЛАЙНОМ на
+   корень активного item — без !important мятный brand побеждал и текст
+   сливался с подложкой в светлой теме. */
 .main-nav-list :deep(.v-list-item--active) {
   background: rgba(var(--v-theme-primary), 0.1);
-  color: rgb(var(--v-theme-on-surface));
+  color: rgb(var(--v-theme-on-surface)) !important;
   font-weight: 600;
 }
 .main-nav-list :deep(.v-list-item--active .v-icon) {
-  color: rgb(var(--v-theme-primary));
+  color: rgb(var(--v-theme-primary)) !important;
 }
 .main-nav-list :deep(.v-list-item--active .v-list-item-title) {
+  color: rgb(var(--v-theme-on-surface)) !important;
   font-weight: 600 !important;
 }
 

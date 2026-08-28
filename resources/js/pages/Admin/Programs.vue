@@ -14,7 +14,8 @@
           density="compact" hide-details variant="outlined" clearable
           style="max-width:180px" @update:model-value="load" />
         <v-checkbox-btn v-model="needsSetup" label="без расчётных параметров"
-          density="compact" hide-details class="flex-grow-0" @update:model-value="load" />
+          density="compact" hide-details class="flex-grow-0 flex-shrink-0 text-no-wrap"
+          style="width:auto" @update:model-value="load" />
         <v-btn size="small" variant="tonal" @click="load">Найти</v-btn>
         <v-spacer />
         <span class="text-caption text-medium-emphasis">{{ total }} программ</span>

@@ -59,6 +59,9 @@ backups/
 # Local-only Claude Code settings (per-machine permissions etc.)
 .claude/settings.local.json
 
+# Секреты интеграций (вебхук Bitrix24)
+.bitrix.env
+
 # Local sandbox for ad-hoc XLSX experiments
 .tmp_xlsx/
 
