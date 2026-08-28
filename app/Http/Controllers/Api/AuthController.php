@@ -19,6 +19,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
 
@@ -324,6 +325,10 @@ class AuthController extends Controller
         // чтобы staff мог проверить возможную попытку обхода реестра.
         $this->alertIfExcludedNamesake($consultant->personName, (int) $consultant->id);
 
+        // Наставник узнаёт, что по его ссылке зарегистрировался партнёр
+        // (задача 830995). Раньше он видел это, только зайдя в «Структуру».
+        $this->notifyInviterAboutRegistration($consultant);
+
         $token = $user->createToken('spa')->plainTextToken;
 
         return response()->json([
@@ -361,6 +366,40 @@ class AuthController extends Controller
     }
 
     /** Логирует warning, если ФИО совпадает с исключённым партнёром (тёзка). */
+    /**
+     * Уведомить наставника о регистрации нижестоящего.
+     *
+     * Best-effort: падение уведомления не должно ронять саму регистрацию —
+     * партнёр уже создан и токен ему выдан.
+     */
+    private function notifyInviterAboutRegistration(Consultant $consultant): void
+    {
+        try {
+            if (! $consultant->inviter) {
+                return;
+            }
+            $inviterWebUser = DB::table('consultant')->where('id', $consultant->inviter)->value('webUser');
+            if (! $inviterWebUser) {
+                return;
+            }
+
+            NotificationController::create(
+                (int) $inviterWebUser,
+                'status',
+                'По вашей ссылке зарегистрировался партнёр',
+                $consultant->personName . ' зарегистрирован в вашей структуре. На активацию у него '
+                    . PartnerActivity::activationDays() . ' дней и '
+                    . PartnerActivity::activationPoints() . ' ЛП.',
+                '/structure'
+            );
+        } catch (\Throwable $e) {
+            Log::warning('Не удалось уведомить наставника о регистрации', [
+                'consultant' => $consultant->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
     private function alertIfExcludedNamesake(string $fio, int $newConsultantId): void
     {
         $fio = trim($fio);

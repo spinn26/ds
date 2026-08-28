@@ -247,7 +247,39 @@ class PartnerStatusService
         // RecomputeTransferChainJob диспатчился по уже зафиксированному статусу.
         $this->reassignPortfolioSafely($consultant, "Авто-перенос при терминации #{$newCount}");
 
+        // Наставник узнаёт о терминации нижестоящего (задача 832737): его
+        // портфель только что переехал наверх, и это его деньги и его клиенты.
+        // Раньше уведомляли только при ВОЗВРАТЕ партнёра, а про уход — молчали.
+        $this->notifyInviterAboutTermination($consultant, $result);
+
         return $result;
+    }
+
+    /**
+     * Уведомить наставника, что нижестоящий терминирован/исключён.
+     *
+     * Шлём ПОСЛЕ переноса портфеля: к этому моменту контракты и клиенты уже
+     * у наставника, и сообщение соответствует тому, что он увидит в кабинете.
+     */
+    private function notifyInviterAboutTermination(Consultant $consultant, PartnerActivity $to): void
+    {
+        if (! $consultant->inviter) {
+            return;
+        }
+        $inviterWebUser = DB::table('consultant')->where('id', $consultant->inviter)->value('webUser');
+        if (! $inviterWebUser) {
+            return;
+        }
+
+        $what = $to === PartnerActivity::Excluded ? 'исключён' : 'терминирован';
+        NotificationController::create(
+            (int) $inviterWebUser,
+            'status',
+            'Партнёр вашей структуры ' . $what,
+            "{$consultant->personName} — статус «" . $to->label() . '». '
+                . 'Клиенты и контракты этого партнёра перешли к вам.',
+            '/structure'
+        );
     }
 
     /**

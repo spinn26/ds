@@ -122,6 +122,19 @@
         <template #item.payed="{ value }"><MoneyCell :value="value" currency="₽" :decimals="true" /></template>
         <template #item.remaining="{ value }"><MoneyCell :value="value" currency="₽" :colored="true" :decimals="true" /></template>
 
+        <template #item.verifiedRequisites="{ item }">
+          <v-chip :color="item.verifiedRequisites ? 'success' : 'error'" size="x-small" variant="tonal">
+            {{ item.verifiedRequisites ? 'Верифицированы' : 'Нет' }}
+          </v-chip>
+        </template>
+        <template #item.birthDate="{ value }">
+          <span v-if="value" class="text-no-wrap">{{ fmtBirth(value) }}</span>
+          <span v-else class="text-medium-emphasis">—</span>
+        </template>
+        <template #item.taxRegime="{ value }">
+          <span v-if="value">{{ value }}</span>
+          <span v-else class="text-medium-emphasis">—</span>
+        </template>
         <template #item.status="{ value }">
           <v-chip size="x-small" :color="statusColor(value)">{{ value || '—' }}</v-chip>
         </template>
@@ -496,8 +509,20 @@ const headers = [
   { title: 'Оплачено', key: 'payed', align: 'end', width: 110 },
   { title: 'Остаток', key: 'remaining', align: 'end', width: 110 },
   { title: 'Статус', key: 'status', width: 170 },
+  // Три колонки по запросу финансистов (задача 832705). Скрываются через
+  // меню колонок; у тех, кто уже настраивал набор, появятся видимыми —
+  // visibleHeaders прячет только явное false.
+  { title: 'Верификация', key: 'verifiedRequisites', sortable: false, width: 120 },
+  { title: 'Дата рождения', key: 'birthDate', sortable: true, width: 130 },
+  { title: 'Налоговый режим', key: 'taxRegime', sortable: true, width: 160 },
   { title: '', key: 'actions', sortable: false, width: 60 },
 ];
+
+/** Дата рождения приходит как «1990-05-17» или как легаси-строка Directual. */
+function fmtBirth(v) {
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? String(v) : d.toLocaleDateString('ru-RU');
+}
 
 const columnVisible = ref({});
 const visibleHeaders = computed(() => headers.filter(h => columnVisible.value[h.key] !== false));

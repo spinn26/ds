@@ -93,7 +93,12 @@ class PaymentRegistryService
                 'b.withheldForCommissions',
                 'c.activity as activityId',
                 'c.personName',
-            ]);
+                // Дата рождения — приоритет WebUser, фолбэк на легаси-колонку
+                // consultant (там varchar из Directual). Тем же COALESCE её
+                // берёт выгрузка в Google Sheets, чтобы значения совпадали.
+                DB::raw('COALESCE(wu."birthDate"::text, c."birthDate") AS birth_date'),
+            ])
+            ->leftJoin('WebUser as wu', 'wu.id', '=', 'c.webUser');
 
         if ($params['search'] ?? false) {
             $s = '%' . mb_strtolower($params['search']) . '%';
@@ -202,13 +207,22 @@ class PaymentRegistryService
         // Batch-load requisite verification for every partner in the result.
         $consultantIds = $rows->pluck('consultant')->filter()->unique()->values()->all();
         $verified = [];
+        // Налоговый режим — из тех же реквизитов. Берём ВЕРИФИЦИРОВАННЫЕ:
+        // именно по ним идёт выплата, а у партнёра может лежать ещё и черновик
+        // на перепроверке с другим режимом.
+        $taxRegime = [];
         if ($consultantIds) {
-            $verified = DB::table('requisites')
+            foreach (DB::table('requisites')
                 ->whereIn('consultant', $consultantIds)
                 ->whereNull('deletedAt')
                 ->where('verified', true)
-                ->pluck('consultant', 'consultant')
-                ->toArray();
+                ->orderBy('id')
+                ->get(['consultant', 'tax_regime']) as $rq) {
+                $verified[$rq->consultant] = $rq->consultant;
+                if ($rq->tax_regime !== null && trim((string) $rq->tax_regime) !== '') {
+                    $taxRegime[$rq->consultant] = (string) $rq->tax_regime;
+                }
+            }
         }
 
         // Partners with suspended payouts — their requisites must NOT surface in
@@ -250,15 +264,15 @@ class PaymentRegistryService
         $activityNames = DB::table('directory_of_activities')->pluck('name', 'id');
 
 
-        return ['extraByCons' => $extraByCons, 'incomingByCons' => $incomingByCons, 'verified' => $verified, 'suspended' => $suspended, 'withheldByCons' => $withheldByCons, 'activityNames' => $activityNames];
+        return ['extraByCons' => $extraByCons, 'incomingByCons' => $incomingByCons, 'verified' => $verified, 'taxRegime' => $taxRegime, 'suspended' => $suspended, 'withheldByCons' => $withheldByCons, 'activityNames' => $activityNames];
     }
 
     /** Строки → массив ответа. */
     private function present($rows, int $year, int $month, string $dm)
     {
-        ['extraByCons' => $extraByCons, 'incomingByCons' => $incomingByCons, 'verified' => $verified, 'suspended' => $suspended, 'withheldByCons' => $withheldByCons, 'activityNames' => $activityNames] = $this->related($rows, $year, $month, $dm);
+        ['extraByCons' => $extraByCons, 'incomingByCons' => $incomingByCons, 'verified' => $verified, 'taxRegime' => $taxRegime, 'suspended' => $suspended, 'withheldByCons' => $withheldByCons, 'activityNames' => $activityNames] = $this->related($rows, $year, $month, $dm);
 
-        $items = $rows->map(function ($r) use ($verified, $suspended, $activityNames, $extraByCons, $incomingByCons, $withheldByCons) {
+        $items = $rows->map(function ($r) use ($verified, $taxRegime, $suspended, $activityNames, $extraByCons, $incomingByCons, $withheldByCons) {
             $wh = $withheldByCons[$r->consultant] ?? null;
             $withheldGap = (float) ($wh->gap ?? 0);
             $withheldOp = (float) ($wh->op ?? 0);
@@ -302,6 +316,10 @@ class PaymentRegistryService
                 // «Комиссии» (transaction.commissionAmountRubBeforeGapReduction).
                 'accruedBeforeGap' => $accrued + $withheldGap + $withheldOp,
                 'verifiedRequisites' => isset($verified[$r->consultant]),
+                // Три колонки по запросу финансистов (задача 832705): отметка
+                // о верификации уже была флагом у ФИО, теперь выведена явно.
+                'birthDate' => $r->birth_date ?: null,
+                'taxRegime' => $taxRegime[$r->consultant] ?? null,
                 'paymentsSuspended' => isset($suspended[$r->consultant]),
             ];
         });
