@@ -87,6 +87,22 @@
           <div class="text-h4 font-weight-bold text-success">{{ fmt(result.personalVolume) }} баллов</div>
         </v-col>
       </v-row>
+      <!-- Переход к оформлению прямо из расчёта (задача 831825): агенты
+           считали объём и потом искали витрину продуктов через меню.
+           Ведём на раздел целиком: витрина на входе показывает блокирующие
+           окна по реквизитам, и подставлять ей продукт мимо этой проверки
+           нельзя. -->
+      <v-divider class="my-4" />
+      <div class="d-flex align-center flex-wrap ga-3">
+        <v-btn color="primary" variant="flat" prepend-icon="mdi-file-document-plus-outline"
+          to="/products">
+          Открыть продукт
+        </v-btn>
+        <span class="text-body-2 text-medium-emphasis">
+          <template v-if="selectedProduct">Оформить «{{ selectedProduct.name }}» на клиента</template>
+          <template v-else>Перейти к оформлению продукта клиенту</template>
+        </span>
+      </div>
     </v-card>
     <v-alert v-if="result?.error && !isReadOnly('calculator')" type="error" density="compact" class="mb-4">{{ result.error }}</v-alert>
 

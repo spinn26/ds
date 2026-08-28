@@ -1012,6 +1012,10 @@ const baseMenuItems = [
 
   { group: 'Работа', partner: true },
   { label: 'Калькулятор объёмов', icon: 'mdi-calculator', path: '/finance/calculator', partner: true },
+  // Витрина открытия продуктов поднята из «Развития» в «Работу» и стоит
+  // сразу за калькулятором: агенты просили (задача 831823) — раздел
+  // ежедневный, а лежал среди обучающих.
+  { label: 'Продукты', icon: 'mdi-package-variant-closed', path: '/products', partner: true },
   { label: 'Мои клиенты', icon: 'mdi-account-group-outline', path: '/clients', partner: true },
   { label: 'Контракты клиентов', icon: 'mdi-file-document-outline', path: '/contracts', partner: true },
   { label: 'Контракты команды', icon: 'mdi-folder-account-outline', path: '/contracts/team', partner: true },
@@ -1022,7 +1026,6 @@ const baseMenuItems = [
   { label: 'База знаний', icon: 'mdi-book-education-outline', path: '/education/kb', partner: true },
   { label: 'Инструкции', icon: 'mdi-book-open-variant', path: '/instructions', partner: true },
   { label: 'Статус системы', icon: 'mdi-monitor-dashboard', path: '/status', partner: true },
-  { label: 'Продукты', icon: 'mdi-package-variant-closed', path: '/products', partner: true },
   { label: 'Программы', icon: 'mdi-format-list-bulleted-type', path: '/manage/products/programs', adminSection: 'products' },
   // Внешний сервис «ФинРывок» — открывается в новой вкладке.
   { label: 'ФинРывок', icon: 'mdi-rocket-launch-outline', path: '', partner: true,

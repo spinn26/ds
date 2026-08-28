@@ -219,8 +219,11 @@ class PaymentRegistryService
                 ->orderBy('id')
                 ->get(['consultant', 'tax_regime']) as $rq) {
                 $verified[$rq->consultant] = $rq->consultant;
-                if ($rq->tax_regime !== null && trim((string) $rq->tax_regime) !== '') {
-                    $taxRegime[$rq->consultant] = (string) $rq->tax_regime;
+                // trim обязателен: в данных встречаются «УСН» и «УСН » — без него
+                // фильтр по режиму дробит один режим на два значения.
+                $tr = trim((string) ($rq->tax_regime ?? ''));
+                if ($tr !== '') {
+                    $taxRegime[$rq->consultant] = $tr;
                 }
             }
         }

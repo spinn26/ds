@@ -24,6 +24,11 @@
         <v-text-field v-model="month" type="month" label="Отчётный месяц"
           density="compact" variant="outlined" hide-details style="max-width:200px"
           @update:model-value="loadParticipants" />
+        <v-select v-model="levelFilter" :items="levelOptions" multiple chips closable-chips
+          label="Квалификация" density="compact" variant="outlined" hide-details clearable
+          placeholder="6–10" style="max-width:260px" />
+        <v-checkbox v-model="onlyEligible" label="Только выполнившие условия"
+          density="compact" hide-details color="success" />
         <v-spacer />
         <v-btn variant="text" size="small" prepend-icon="mdi-filter-remove" @click="resetFilters">
           Очистить фильтры
@@ -47,7 +52,8 @@
       </v-card-title>
 
       <v-data-table :items="filteredParticipants" :headers="visibleParticipantHeaders"
-        :items-per-page="50" density="compact" hover :loading="loadingParticipants">
+        :items-per-page="50" density="compact" hover :loading="loadingParticipants"
+        :row-props="rowProps">
         <template #item.participates="{ item }">
           <v-checkbox :model-value="item.participates" hide-details density="compact" color="success"
             :loading="toggling[item.id]" :disabled="isFrozen"
@@ -350,13 +356,40 @@ function levelColor(lvl) {
   return map[lvl] || 'default';
 }
 
+// Фильтр по квалификации: пул считается только для уровней 6–10, поэтому
+// список фиксированный, а не собранный из данных — иначе при пустом месяце
+// фильтр схлопывался бы в ничто.
+const levelOptions = [
+  { title: '6 — ТОП ФК', value: 6 },
+  { title: '7 — Сильвер ДС', value: 7 },
+  { title: '8 — Голд ДС', value: 8 },
+  { title: '9 — Платинум ДС', value: 9 },
+  { title: '10 — Кофаундер', value: 10 },
+];
+const levelFilter = ref([]);
+const onlyEligible = ref(false);
+
 const filteredParticipants = computed(() => {
-  if (!search.value) return participants.value;
-  const term = search.value.toLowerCase();
-  return participants.value.filter(p =>
-    (p.personName || '').toLowerCase().includes(term)
-  );
+  let list = participants.value;
+  if (search.value) {
+    const term = search.value.toLowerCase();
+    list = list.filter(p => (p.personName || '').toLowerCase().includes(term));
+  }
+  if (levelFilter.value.length) {
+    list = list.filter(p => levelFilter.value.includes(Number(p.level)));
+  }
+  if (onlyEligible.value) {
+    list = list.filter(p => p.eligible !== false);
+  }
+  return list;
 });
+
+// Подсветка строк: зелёная — условия пула выполнены, приглушённая красная —
+// нет. Смотреть на чип в правой колонке при 50 строках неудобно, а глазами
+// по цвету видно сразу, кто попадает в выплату.
+function rowProps({ item }) {
+  return { class: item.eligible === false ? 'pool-row-out' : 'pool-row-ok' };
+}
 
 // Историческая выгрузка vs live-расчёт. Backend ставит fromPoolLog=true
 // (либо fromCsv=true) для закрытых периодов — там shareValues пустой,
@@ -489,6 +522,8 @@ const totalRowSum = computed(() =>
 
 function resetFilters() {
   search.value = '';
+  levelFilter.value = [];
+  onlyEligible.value = false;
   month.value = defaultMonth;
   loadParticipants();
 }
@@ -663,4 +698,10 @@ onMounted(loadParticipants);
   border-top: 2px solid rgba(var(--v-theme-success), 0.4) !important;
   border-bottom: 2px solid rgba(var(--v-theme-success), 0.4) !important;
 }
+
+/* Подсветка участников пула: цвет несёт то же, что чип «Условие выплаты»,
+   но читается при беглом просмотре списка. Оттенки приглушённые — строк
+   много, и насыщенный фон превратил бы таблицу в светофор. */
+.pool-row-ok  td { background: rgba(var(--v-theme-success), 0.055); }
+.pool-row-out td { background: rgba(var(--v-theme-error), 0.055); }
 </style>
