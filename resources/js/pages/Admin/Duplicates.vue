@@ -143,8 +143,11 @@
             <v-btn value="phone" size="small">По телефону</v-btn>
             <v-btn value="email" size="small">По почте</v-btn>
           </v-btn-toggle>
+          <!-- flex:0 0 auto — см. Programs.vue: с flex-grow-0 базис остаётся
+               0% и лейбл разваливается по букве в строку. -->
           <v-checkbox-btn v-model="onlySameName" label="только с одинаковым ФИО"
-            density="compact" hide-details class="flex-grow-0" />
+            density="compact" hide-details class="text-no-wrap"
+            style="flex:0 0 auto" />
           <div class="text-caption text-medium-emphasis" style="max-width:520px">
             Один телефон и одна почта сплошь общие у семьи — родитель оформляет полисы
             на детей. Группа по контакту это сигнал посмотреть, а не команда сливать.

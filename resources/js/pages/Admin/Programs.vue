@@ -13,9 +13,13 @@
         <v-select v-model="activeFilter" :items="ACTIVE_OPTIONS" label="Активность"
           density="compact" hide-details variant="outlined" clearable
           style="max-width:180px" @update:model-value="load" />
+        <!-- flex:0 0 auto обязателен: у .v-selection-control в Vuetify стоит
+             `flex: 1 0` (= basis 0%), и один лишь класс flex-grow-0 давал
+             `flex: 0 0 0%` — нулевую ширину, из-за чего лейбл разваливался
+             по одной букве в строку. Базис надо вернуть в auto. -->
         <v-checkbox-btn v-model="needsSetup" label="без расчётных параметров"
-          density="compact" hide-details class="flex-grow-0 flex-shrink-0 text-no-wrap"
-          style="width:auto" @update:model-value="load" />
+          density="compact" hide-details class="text-no-wrap"
+          style="flex:0 0 auto" @update:model-value="load" />
         <v-btn size="small" variant="tonal" @click="load">Найти</v-btn>
         <v-spacer />
         <span class="text-caption text-medium-emphasis">{{ total }} программ</span>

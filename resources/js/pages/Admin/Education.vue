@@ -370,7 +370,9 @@
                 <div v-for="(answer, idx) in editTest.answers" :key="idx"
                   class="d-flex align-center ga-2 mb-2 px-2 py-1 rounded answer-row"
                   :class="{ 'answer-correct': editTest.correct_answer === idx }">
-                  <v-radio :value="idx" color="success" hide-details class="flex-grow-0" />
+                  <!-- flex:0 0 auto — см. Programs.vue: у .v-selection-control
+                       базис 0%, с flex-grow-0 контрол схлопывается в ноль. -->
+                  <v-radio :value="idx" color="success" hide-details style="flex:0 0 auto" />
                   <v-text-field v-model="editTest.answers[idx]" :label="'Вариант ' + (idx + 1)"
                     density="compact" hide-details class="flex-grow-1" />
                   <v-btn icon="mdi-close" size="x-small" variant="text" color="error"
