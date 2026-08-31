@@ -130,6 +130,16 @@ class DashboardService
         $prevGroupVolume = $prevQLog->groupVolume ?? 0;
         $prevGroupVolumeCumulative = $cumulativeAsOf($prevPeriodEnd);
 
+        // «Хвост» месяца — продажи, прошедшие ПОСЛЕ последнего снимка. Это
+        // чтение, а не расчёт: складываем уже проставленные баллы транзакций,
+        // ничего не пишем и не трогаем уровень/комиссии/пул. Снимок остаётся
+        // единственной цифрой, по которой считаются деньги; pending живёт
+        // отдельным полем, чтобы фронт показал его как прогноз.
+        $pendingVolumes = $this->buildPendingVolumes(
+            $month, $consultant->id, $teamConsultantIds,
+            (float) $personalVolume, (float) $groupVolume, $groupVolumeCumulative, $periodQLog,
+        );
+
         // Partner counts by activity status
         $partnerCounts = $this->consultantService->getPartnerCountsByStatus($consultant->id, $teamConsultantIds);
 
@@ -293,6 +303,8 @@ class DashboardService
                 'firstLineVolume' => $firstLineVolume,
                 'firstLineVolumeRub' => round($firstLineVolume * 100, 2),
                 'prevFirstLineVolume' => $prevFirstLineVolume,
+                // null, если снимок актуален (или месяц исторический).
+                'pending' => $pendingVolumes,
             ],
             'team' => [
                 'myClients' => $myClientsCount,
@@ -313,6 +325,82 @@ class DashboardService
             'mandatoryPlan' => $mandatoryPlan,
             'poolInfo' => $poolInfo,
             'period' => $month,
+        ];
+    }
+
+    /**
+     * Продажи месяца, ещё НЕ вошедшие в снимок qualificationLog.
+     *
+     * Зачем: дашборд с 2026-06-05 читает только снимок (коммит 98092e8), а
+     * снимок обновляется кнопкой пересчёта. Между нажатиями партнёр не видит
+     * своих свежих продаж и идёт в поддержку — так было с ФК 891 в августе
+     * 2026: снимок сняли 19.08, контракт пришёл 27.08, в НГП его не стало.
+     *
+     * Это НЕ возврат к `max(снимок, live)`: снимок отдаётся как есть и
+     * остаётся единственной цифрой для денег, а дельта уходит отдельным
+     * полем `pending` — фронт рисует её как прогноз «после закрытия месяца».
+     * Ничего не пишется, уровень/комиссии/пул не пересчитываются.
+     *
+     * Баллы (`transaction.personalVolume`) проставляются при заведении
+     * транзакции, поэтому их сумма — чтение готовых данных. Сверено на проде:
+     * live-ГП ФК 891 за июнь (17.957333) и июль (35.12125) совпал со снимком
+     * до знака.
+     *
+     * @param  list<int>  $teamConsultantIds  всё поддерево, включая самого партнёра
+     * @return array{
+     *   personalVolume:float, groupVolume:float,
+     *   projectedPersonalVolume:float, projectedGroupVolume:float,
+     *   projectedGroupVolumeCumulative:float, snapshotAt:?string
+     * }|null
+     */
+    private function buildPendingVolumes(
+        string $month,
+        int $consultantId,
+        array $teamConsultantIds,
+        float $snapshotPersonal,
+        float $snapshotGroup,
+        float $snapshotCumulative,
+        ?QualificationLog $periodQLog,
+    ): ?array {
+        // Историю (< HISTORICAL_CUTOFF) не пересчитывают и не досчитывают:
+        // там снимок — канон, а транзакции пришли из Directual.
+        if (CommissionCalculator::isHistorical($month)) {
+            return null;
+        }
+
+        $sumPoints = function (array $ids) use ($month): float {
+            if ($ids === []) return 0.0;
+
+            return (float) DB::table('transaction as t')
+                ->join('contract as c', 'c.id', '=', 't.contract')
+                ->whereIn('c.consultant', $ids)
+                ->where('t.dateMonth', $month)
+                ->whereNull('t.deletedAt')
+                ->whereNull('c.deletedAt')
+                ->sum('t.personalVolume');
+        };
+
+        $deltaPersonal = round($sumPoints([$consultantId]) - $snapshotPersonal, 2);
+        $deltaGroup = round($sumPoints($teamConsultantIds) - $snapshotGroup, 2);
+
+        // Отрицательная дельта = снимок больше живой суммы (ручная корректировка
+        // расчётчиком, удержания). Снимок главнее — молчим.
+        $deltaPersonal = max(0.0, $deltaPersonal);
+        $deltaGroup = max(0.0, $deltaGroup);
+
+        if ($deltaPersonal <= 0 && $deltaGroup <= 0) {
+            return null;
+        }
+
+        return [
+            'personalVolume' => $deltaPersonal,
+            'groupVolume' => $deltaGroup,
+            'projectedPersonalVolume' => round($snapshotPersonal + $deltaPersonal, 2),
+            'projectedGroupVolume' => round($snapshotGroup + $deltaGroup, 2),
+            'projectedGroupVolumeCumulative' => round($snapshotCumulative + $deltaGroup, 2),
+            'snapshotAt' => $periodQLog?->changedAt
+                ? \Carbon\Carbon::parse($periodQLog->changedAt)->format('Y-m-d H:i')
+                : null,
         ];
     }
 

@@ -93,6 +93,16 @@
           </span>
         </div>
         <v-progress-linear :model-value="nqpProgress" height="10" rounded color="primary" />
+        <!-- Снимок обновляется кнопкой пересчёта. Пока он не пересобран,
+             свежие продажи в шкалу не попадают — говорим об этом прямо,
+             иначе партнёр считает, что сделку потеряли. -->
+        <div v-if="pending" class="d-flex align-center ga-1 mt-1 text-caption pending-hint">
+          <v-icon size="13" color="info">mdi-clock-outline</v-icon>
+          <span>
+            +{{ fmt(pending.groupVolume) }} в этом месяце ещё не в снимке →
+            <strong>{{ fmt(pending.projectedGroupVolumeCumulative) }}</strong> после закрытия месяца<template v-if="pending.snapshotAt">, снимок от {{ pending.snapshotAt }}</template>
+          </span>
+        </div>
       </div>
 
       <!-- Per spec ✅Дашборд.md §2: «Логика разделения на закрытую/расчётную упразднена.
@@ -141,6 +151,12 @@
                 <div class="text-h3 font-weight-bold mt-2 mb-1 tabular-nums">{{ fmt(card.value) }}</div>
                 <div v-if="card.subValue" class="text-body-2 font-weight-medium text-medium-emphasis mb-1 tabular-nums">
                   {{ card.subValue }}
+                </div>
+                <!-- Продажи, ещё не вошедшие в снимок. Основную цифру не
+                     подменяем — она остаётся расчётной. -->
+                <div v-if="card.pending > 0" class="d-flex align-center ga-1 mb-1 text-caption tabular-nums pending-hint">
+                  <v-icon size="13" color="info">mdi-clock-outline</v-icon>
+                  <span>+{{ fmt(card.pending) }} → {{ fmt(card.projected) }} после закрытия месяца</span>
                 </div>
                 <div class="d-flex align-center ga-1">
                   <v-icon :color="card.changeType === 'up' ? 'success' : card.changeType === 'down' ? 'error' : 'grey'" size="14">
@@ -384,7 +400,7 @@ const levels = ref([]);
 const empty = {
   consultant: { id: 0, personName: '—', statusName: 'Партнёр', participantCode: null, active: false, ambassadorProducts: null, activityName: null },
   qualification: { nominalLevel: null, nextLevel: null },
-  volumes: { personalVolume: 0, groupVolume: 0, groupVolumeCumulative: 0, prevPersonalVolume: 0, prevGroupVolume: 0, prevGroupVolumeCumulative: 0, firstLineVolume: 0, firstLineVolumeRub: 0, prevFirstLineVolume: 0 },
+  volumes: { personalVolume: 0, groupVolume: 0, groupVolumeCumulative: 0, prevPersonalVolume: 0, prevGroupVolume: 0, prevGroupVolumeCumulative: 0, firstLineVolume: 0, firstLineVolumeRub: 0, prevFirstLineVolume: 0, pending: null },
   team: { myClients: 0, teamClients: 0, firstLineAll: 0, firstLineActive: 0, totalPartners: 0, totalPartnersActive: 0, capitalUsd: 0 },
   statusInfo: null,
   partners: { total: 0, registered: 0, active: 0, terminated: 0 },
@@ -449,19 +465,28 @@ const currentLevel = computed(() => {
 
 // Per spec ✅Дашборд §3: остаются ТОЛЬКО ЛП и НГП (ГП — обязательный плановый
 // показатель внутри расчёта, на дашборде партнёра не выводится).
+// Продажи месяца, ещё не попавшие в снимок. Снимок обновляется кнопкой
+// пересчёта, поэтому между нажатиями партнёр не видел своих свежих сделок.
+// Показываем их отдельно как прогноз — цифра снимка (по которой считаются
+// деньги) не подменяется. null, когда снимок актуален.
+const pending = computed(() => data.value.volumes?.pending || null);
+
 const volumeCards = computed(() => {
   const v = data.value.volumes;
   const lp = pct(v.personalVolume, v.prevPersonalVolume);
   const ngp = pct(v.groupVolumeCumulative, v.prevGroupVolumeCumulative);
   const fl = pct(v.firstLineVolume, v.prevFirstLineVolume);
+  const p = v.pending;
   // Каждая карточка кликабельна — открывает Финансовый отчёт за тот же
   // период с подсветкой соответствующей метрики (frontend читает `metric`).
   return [
     { title: 'Личные продажи (ЛП)', value: v.personalVolume, change: lp.value, changeType: lp.type, icon: 'mdi-bank', color: 'green',
       hint: glossary.lp,
+      pending: p?.personalVolume || 0, projected: p?.projectedPersonalVolume || 0,
       link: { path: '/finance/report', query: { month: period.value, metric: 'lp' } } },
     { title: 'НГП', value: v.groupVolumeCumulative, change: ngp.value, changeType: ngp.type, icon: 'mdi-trending-up', color: 'orange',
       hint: glossary.ngp,
+      pending: p?.groupVolume || 0, projected: p?.projectedGroupVolumeCumulative || 0,
       link: { path: '/finance/report', query: { month: period.value, metric: 'ngp' } } },
     // Объём продаж первой линии: баллы (основное значение) + деньги (подпись).
     { title: 'Объём 1 линии', value: v.firstLineVolume, subValue: fmtMoney(v.firstLineVolumeRub),
@@ -604,6 +629,14 @@ onMounted(async () => {
 }
 
 /* === KPI icon orb — круглая «таблетка» с иконкой в primary-tint === */
+/* Подпись «ещё не в снимке» — info-тон, но приглушённый: это прогноз,
+   он не должен спорить с основной цифрой. */
+.pending-hint {
+  color: rgb(var(--v-theme-info));
+  opacity: 0.85;
+  line-height: 1.3;
+}
+
 .kpi-icon-orb {
   width: 44px; height: 44px;
   border-radius: 50%;
