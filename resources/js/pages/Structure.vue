@@ -322,9 +322,14 @@
           </div>
         </div>
 
+        <!-- Комментарии — служебные заметки staff о партнёре. Роут
+             /partner-comments закрыт для партнёров (приватность), поэтому
+             блок им НЕ показываем: иначе карточка каждый раз открывалась с
+             красным «Недостаточно прав», хотя партнёр ничего не нарушал.
+             Список ролей совпадает с middleware роута. -->
+        <template v-if="auth.isStaff">
         <v-divider class="my-3" />
 
-        <!-- Комментарии -->
         <div class="text-caption text-medium-emphasis mb-2 d-flex align-center ga-1">
           <v-icon size="14">mdi-comment-text-outline</v-icon>
           Комментарии
@@ -359,6 +364,7 @@
             <v-icon>mdi-send</v-icon>
           </v-btn>
         </div>
+        </template>
       </v-card-text>
     </v-card>
   </v-dialog>
@@ -395,6 +401,12 @@ function fmtDate(d) {
 }
 
 async function loadComments(consultantId) {
+  // Партнёру роут отдаёт 403 — не дёргаем его вовсе, чтобы не ловить тост.
+  if (!auth.isStaff) {
+    comments.value = [];
+
+    return;
+  }
   commentsLoading.value = true;
   comments.value = [];
   try {
