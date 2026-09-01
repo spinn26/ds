@@ -96,9 +96,17 @@
       </template>
       <template #item.cur.ngp="{ item }">{{ fmt(item.current?.groupVolumeCumulative) }}</template>
 
+      <!-- Точка входа для присвоения — здесь, а не в карточке партнёра:
+           месяц уже выбран фильтром страницы, а рядом видны ЛП/ГП/ОП/НГП
+           за оба месяца, то есть всё основание для решения. -->
       <template #item.actions="{ item }">
-        <v-btn icon="mdi-history" size="x-small" variant="text" :title="'История ' + item.consultantName"
-          @click="openHistory(item)" />
+        <div class="d-flex align-center">
+          <v-btn icon="mdi-history" size="x-small" variant="text" :title="'История ' + item.consultantName"
+            @click="openHistory(item)" />
+          <v-btn v-if="isAdmin" icon="mdi-medal-outline" size="x-small" variant="text" color="primary"
+            :title="'Присвоить квалификацию — ' + item.consultantName"
+            @click="openAssign(item)" />
+        </div>
       </template>
 
       <template #no-data><EmptyState message="Нет данных" /></template>
@@ -109,10 +117,36 @@
         <v-card-title>
           История квалификаций {{ historyContext?.consultantName || '' }}
         </v-card-title>
+
+        <!-- Вторая точка входа: оператор посмотрел помесячную динамику и
+             решает менять уровень, не закрывая drawer. -->
+        <v-card-text v-if="isAdmin" class="pb-0">
+          <v-btn variant="tonal" color="primary" prepend-icon="mdi-medal-outline"
+            @click="openAssign(historyContext)">Присвоить уровень</v-btn>
+        </v-card-text>
+
         <v-card-text>
           <v-data-table :items="historyRows" :headers="historyHeaders" density="compact" :items-per-page="50">
             <template #item.level="{ item }">
-              <span v-if="item.levelNum">{{ item.levelNum }} {{ item.levelTitle }}</span>
+              <div v-if="item.levelNum" class="d-flex flex-column ga-1 py-1">
+                <div class="d-flex align-center ga-2 flex-wrap">
+                  <span>{{ item.levelNum }} {{ item.levelTitle }}</span>
+                  <!-- Ручное присвоение помечаем явно: иначе подменённый
+                       уровень читается как результат расчёта, и расхождение
+                       начинают искать в CommissionCalculator. -->
+                  <v-chip v-if="item.manual" size="x-small" color="warning" variant="flat"
+                    prepend-icon="mdi-alert-outline">вручную</v-chip>
+                </div>
+                <div v-if="item.manual && item.previousLevelNum" class="text-caption text-medium-emphasis">
+                  было
+                  <span class="text-decoration-line-through">{{ item.previousLevelNum }} {{ item.previousLevelTitle }}</span>
+                  →
+                  <span class="font-weight-medium">{{ item.levelNum }} {{ item.levelTitle }}</span>
+                </div>
+                <div v-if="item.manual && item.comment" class="text-caption text-medium-emphasis">
+                  {{ item.comment }}
+                </div>
+              </div>
               <span v-else class="text-medium-emphasis">—</span>
             </template>
             <template #no-data>
@@ -122,6 +156,51 @@
         </v-card-text>
       </v-card>
     </v-navigation-drawer>
+
+    <!-- Ручное присвоение квалификации. Пишет открывающую строку
+         qualificationLog за выбранный месяц — оттуда CommissionCalculator
+         берёт ставку комиссии. Только admin, бэкенд дублирует гард. -->
+    <v-dialog v-model="assignOpen" max-width="620" scrollable>
+      <v-card>
+        <v-card-title class="d-flex align-center ga-2">
+          <v-icon color="primary">mdi-medal-outline</v-icon>
+          <span>Присвоить квалификацию</span>
+        </v-card-title>
+
+        <v-card-text>
+          <div class="d-flex ga-4 flex-wrap mb-4">
+            <v-text-field :model-value="assignForm.consultantName" label="Партнёр" readonly
+              density="compact" variant="outlined" hide-details style="min-width:240px; flex:1 1 240px" />
+            <v-text-field v-model="assignForm.month" label="Месяц" type="month"
+              density="compact" variant="outlined" style="min-width:180px"
+              hint="Подставлен из фильтра страницы" persistent-hint
+              :error-messages="assignErrors.month" />
+          </div>
+
+          <v-select v-model="assignForm.level" :items="levelOptions" item-title="label" item-value="id"
+            label="Квалификация" density="compact" variant="outlined"
+            :error-messages="assignErrors.level" class="mb-4" />
+
+          <v-textarea v-model="assignForm.comment" label="Комментарий" rows="3"
+            density="compact" variant="outlined"
+            hint="Попадёт в журнал аудита и в историю квалификаций" persistent-hint
+            :error-messages="assignErrors.comment" class="mb-4" />
+
+          <!-- Обязательное предупреждение: сервис возвращает recalcRequired,
+               уже начисленные комиссии месяца остаются со старой ставкой. -->
+          <v-alert type="warning" variant="tonal" density="comfortable" icon="mdi-alert-outline">
+            <div class="font-weight-bold">Уже начисленные комиссии за месяц не пересчитываются</div>
+            <div class="text-body-2">Новая ставка применится при следующем пересчёте — запустите его отдельно.</div>
+          </v-alert>
+        </v-card-text>
+
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="assignOpen = false">Отмена</v-btn>
+          <v-btn color="primary" :loading="assigning" @click="submitAssign">Присвоить</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
@@ -138,7 +217,7 @@ import { useSnackbar } from '../../composables/useSnackbar';
 
 // Пересчёт доступен только роли расчётов (calculations) / admin — как и
 // прочие кнопки финализации (Транзакции/Пул/КарточкаПериода).
-const { canCalc } = usePermissions();
+const { canCalc, userRoles } = usePermissions();
 const { showSuccess, showError } = useSnackbar();
 const recomputing = ref(false);
 
@@ -228,7 +307,8 @@ const headers = computed(() => ([
   { title: 'ГП', key: 'cur.gp', align: 'end', width: 90 },
   { title: 'ОП', key: 'cur.op', align: 'end', width: 130 },
   { title: 'НГП', key: 'cur.ngp', align: 'end', width: 110 },
-  { title: '', key: 'actions', sortable: false, width: 50 },
+  // 72, а не 50: в колонке две иконки — история и ручное присвоение.
+  { title: '', key: 'actions', sortable: false, width: 72 },
 ]));
 
 const columnVisible = ref({});
@@ -292,6 +372,78 @@ const historyHeaders = [
   { title: 'НГП', key: 'groupVolumeCumulative', align: 'end', width: 110 },
   { title: 'Квалификация', key: 'level' },
 ];
+
+// ── Ручное присвоение квалификации ──────────────────────────────────
+// Роут на бэке в группе role:admin; здесь тот же гард, чтобы не
+// показывать кнопку тем, кто получит 403.
+const isAdmin = computed(() => userRoles.value.includes('admin'));
+
+const assignOpen = ref(false);
+const assigning = ref(false);
+const assignErrors = ref({});
+const assignForm = ref({ consultant: null, consultantName: '', month: '', level: null, comment: '' });
+
+const levels = ref([]);
+const levelOptions = computed(() => levels.value.map(l => ({
+  id: l.id,
+  // Процент в подписи обязателен: без него оператор не видит, на сколько
+  // меняет ставку комиссии.
+  label: `${l.level} ${l.title} — ${l.percent}%`,
+})));
+
+async function loadLevels() {
+  if (levels.value.length) return;
+  try {
+    const { data } = await api.get('/status-levels');
+    levels.value = Array.isArray(data) ? data : (data.data || []);
+  } catch {
+    showError('Не удалось загрузить список квалификаций');
+  }
+}
+
+function openAssign(item) {
+  if (!item) return;
+  assignErrors.value = {};
+  assignForm.value = {
+    consultant: item.consultant,
+    consultantName: item.consultantName || '',
+    // Месяц берём из фильтра страницы — присвоение всегда привязано к
+    // месяцу, и подставлять «сегодня» здесь было бы ловушкой.
+    month: month.value,
+    level: null,
+    comment: '',
+  };
+  loadLevels();
+  assignOpen.value = true;
+}
+
+async function submitAssign() {
+  assigning.value = true;
+  assignErrors.value = {};
+  try {
+    const { data } = await api.post(`/admin/qualifications/${assignForm.value.consultant}/assign`, {
+      level: assignForm.value.level,
+      month: assignForm.value.month,
+      comment: assignForm.value.comment || null,
+    });
+    assignOpen.value = false;
+    showSuccess(`Присвоено: ${data.level} ${data.title} (${data.percent}%) за ${data.month}`);
+    await loadData();
+    // Drawer открыт на этом же партнёре — обновляем, чтобы правка была
+    // видна сразу, вместе с пометкой «вручную».
+    if (historyOpen.value && historyContext.value?.consultant === assignForm.value.consultant) {
+      await openHistory(historyContext.value);
+    }
+  } catch (e) {
+    if (e.response?.status === 422 && e.response.data?.errors) {
+      assignErrors.value = e.response.data.errors;
+      showError('Проверьте поля формы');
+    } else {
+      showError(e.response?.data?.message || 'Не удалось присвоить квалификацию');
+    }
+  }
+  assigning.value = false;
+}
 
 async function openHistory(item) {
   historyContext.value = item;
