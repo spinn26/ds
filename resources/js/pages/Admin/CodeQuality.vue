@@ -1,19 +1,23 @@
 <template>
   <div class="pa-4">
     <PageHeader title="Качество кода"
-      subtitle="Полный аудит прод-кодовой базы (5 подсистем) + аудит данных каталога продуктов + статус исправлений. Обновлено 01.09.2026: перепроверены все high-находки, часть переехала в «Исправлено»." />
+      subtitle="Реестр находок аудита. Живёт в БД — статус меняется здесь, без релиза.">
+      <template #actions>
+        <v-btn color="primary" prepend-icon="mdi-plus" @click="openCreate">Добавить</v-btn>
+      </template>
+    </PageHeader>
 
     <!-- Сводка -->
     <v-row class="mb-2" dense>
       <v-col cols="6" sm="3">
         <v-card variant="tonal" color="success" class="pa-3">
-          <div class="text-h4 font-weight-bold">{{ fixedCount }}</div>
-          <div class="text-body-2">Исправлено в этой сессии</div>
+          <div class="text-h4 font-weight-bold">{{ counts.fixed }}</div>
+          <div class="text-body-2">Исправлено</div>
         </v-card>
       </v-col>
       <v-col v-for="s in severityOrder" :key="s" cols="6" sm="3">
         <v-card variant="tonal" :color="sevColor(s)" class="pa-3">
-          <div class="text-h4 font-weight-bold" style="font-variant-numeric:tabular-nums">{{ openBySeverity[s] || 0 }}</div>
+          <div class="text-h4 font-weight-bold" style="font-variant-numeric:tabular-nums">{{ counts.openBySeverity[s] || 0 }}</div>
           <div class="text-body-2">Открыто · {{ sevLabel(s) }}</div>
         </v-card>
       </v-col>
@@ -25,21 +29,21 @@
         <v-card variant="outlined" class="pa-3 h-100">
           <div class="d-flex align-center ga-2 mb-1"><v-icon color="warning">mdi-code-braces</v-icon>
             <span class="text-subtitle-2 font-weight-bold">PHPStan / larastan</span></div>
-          <div class="text-body-2 text-medium-emphasis">Baseline: <strong>230</strong> ошибок в 192 блоках (66 nullsafe.neverNull, 50 property.notFound, 18 nullCoalesce.offset — в основном косметика). CI-гейт на деплой активен. Ложные property.notFound на json-castах — не трогать (larastan не читает casts()). Отдельно: phpstan.neon глушит property.notFound и method.notFound глобально по app/ — шире baseline, см. INF-2.</div>
+          <div class="text-body-2 text-medium-emphasis">Baseline: <strong>230</strong> ошибок в 192 блоках (66 nullsafe.neverNull, 50 property.notFound, 18 nullCoalesce.offset — в основном косметика). Гейтит деплой. Отдельно: phpstan.neon глушит property.notFound и method.notFound глобально по app/ — шире baseline, см. INF-2.</div>
         </v-card>
       </v-col>
       <v-col cols="12" md="4">
         <v-card variant="outlined" class="pa-3 h-100">
           <div class="d-flex align-center ga-2 mb-1"><v-icon color="info">mdi-format-paint</v-icon>
             <span class="text-subtitle-2 font-weight-bold">Pint (стиль)</span></div>
-          <div class="text-body-2 text-medium-emphasis"><strong>~306</strong> файлов с отклонениями стиля (косметика). Фикс: <code>vendor/bin/pint</code> отдельным коммитом + <code>pint --test</code> в CI.</div>
+          <div class="text-body-2 text-medium-emphasis"><strong>~306</strong> файлов с отклонениями стиля (косметика). В CI намеренно не включён. Фикс: <code>vendor/bin/pint</code> отдельным коммитом + <code>pint --test</code> в CI.</div>
         </v-card>
       </v-col>
       <v-col cols="12" md="4">
         <v-card variant="outlined" class="pa-3 h-100">
-          <div class="d-flex align-center ga-2 mb-1"><v-icon color="error">mdi-test-tube</v-icon>
+          <div class="d-flex align-center ga-2 mb-1"><v-icon color="success">mdi-test-tube</v-icon>
             <span class="text-subtitle-2 font-weight-bold">Тесты</span></div>
-          <div class="text-body-2 text-medium-emphasis"><strong>61 из 62</strong> падают локально (БД newds_test / пароль). CI не гейтит регрессии денежных путей. Приоритет: поднять тестовую БД.</div>
+          <div class="text-body-2 text-medium-emphasis"><strong>436</strong> тест-методов, 11 480 строк (18% от кода). 41 characterization-тест закрывает денежные пути: каскад комиссий, пул, штрафы, статусы, импорт. Гейтит деплой наравне с PHPStan (<code>deploy: needs [quality, tests]</code>). Тестовая БД поднимается из <code>database/schema/pgsql-schema.sql</code>.</div>
         </v-card>
       </v-col>
     </v-row>
@@ -48,8 +52,8 @@
     <v-card class="mb-4 pa-3" variant="tonal">
       <div class="d-flex align-center flex-wrap ga-3">
         <v-btn-toggle v-model="view" mandatory density="comfortable" color="primary">
-          <v-btn value="open" size="small">Открытые ({{ openCount }})</v-btn>
-          <v-btn value="fixed" size="small">Исправленные ({{ fixedCount }})</v-btn>
+          <v-btn value="open" size="small">Открытые ({{ counts.open }})</v-btn>
+          <v-btn value="fixed" size="small">Исправленные ({{ counts.fixed }})</v-btn>
         </v-btn-toggle>
         <v-select v-model="filterCategory" :items="categories" label="Категория" density="compact"
           variant="outlined" hide-details clearable multiple chips style="min-width:240px;max-width:420px"
@@ -61,8 +65,10 @@
       </div>
     </v-card>
 
+    <v-progress-linear v-if="loading" indeterminate color="primary" class="mb-4" />
+
     <!-- Топ-приоритет (только для открытых) -->
-    <v-alert v-if="view === 'open' && !filterActive" type="error" variant="tonal" class="mb-4"
+    <v-alert v-if="view === 'open' && !filterActive && topPriority.length" type="error" variant="tonal" class="mb-4"
       density="comfortable" icon="mdi-alert-octagon">
       <div class="font-weight-bold mb-1">Топ-приоритет (исправить в первую очередь)</div>
       <ul class="ms-4">
@@ -79,12 +85,13 @@
       </div>
       <v-card variant="outlined" class="mb-2">
         <v-expansion-panels multiple variant="accordion">
-          <v-expansion-panel v-for="f in grouped[cat]" :key="f.id">
+          <v-expansion-panel v-for="f in grouped[cat]" :key="f.rowId">
             <v-expansion-panel-title>
               <div class="d-flex align-center ga-3 flex-wrap" style="width:100%">
                 <v-chip :color="f.status === 'fixed' ? 'success' : sevColor(f.severity)" size="small" variant="flat" label>
                   <v-icon v-if="f.status === 'fixed'" start size="14">mdi-check</v-icon>{{ f.status === 'fixed' ? 'Исправлено' : sevLabel(f.severity) }}
                 </v-chip>
+                <code class="text-caption text-medium-emphasis">{{ f.id }}</code>
                 <span class="font-weight-medium">{{ f.title }}</span>
                 <v-spacer />
                 <code class="text-caption text-medium-emphasis">{{ f.file }}</code>
@@ -93,379 +100,263 @@
             <v-expansion-panel-text>
               <div class="mb-2"><div class="text-caption text-medium-emphasis mb-1">{{ f.status === 'fixed' ? 'Что было' : 'Проблема' }}</div>
                 <div class="text-body-2">{{ f.problem }}</div></div>
-              <div><div class="text-caption text-medium-emphasis mb-1">{{ f.status === 'fixed' ? 'Как исправлено' : 'Рекомендация' }}</div>
+              <div class="mb-3"><div class="text-caption text-medium-emphasis mb-1">{{ f.status === 'fixed' ? 'Как исправлено' : 'Рекомендация' }}</div>
                 <div class="text-body-2" :class="f.status === 'fixed' ? 'text-success' : 'text-info'">{{ f.recommendation }}</div></div>
+              <div class="d-flex align-center ga-2 flex-wrap">
+                <v-btn size="small" variant="tonal"
+                  :color="f.status === 'fixed' ? 'warning' : 'success'"
+                  :prepend-icon="f.status === 'fixed' ? 'mdi-undo' : 'mdi-check'"
+                  :loading="busyId === f.rowId" @click="toggle(f)">
+                  {{ f.status === 'fixed' ? 'Вернуть в открытые' : 'Отметить исправленной' }}
+                </v-btn>
+                <v-btn size="small" variant="text" prepend-icon="mdi-pencil" @click="openEdit(f)">Править</v-btn>
+                <v-btn size="small" variant="text" color="error" prepend-icon="mdi-delete" @click="askRemove(f)">Удалить</v-btn>
+                <v-spacer />
+                <span v-if="f.closedAt" class="text-caption text-medium-emphasis">Закрыто: {{ fmtDate(f.closedAt) }}</span>
+              </div>
             </v-expansion-panel-text>
           </v-expansion-panel>
         </v-expansion-panels>
       </v-card>
     </template>
 
+    <EmptyState v-if="!loading && !filtered.length" icon="mdi-clipboard-check-outline"
+      title="Находок нет" text="По текущему фильтру ничего не найдено." />
+
     <div class="text-caption text-medium-emphasis mt-6">
-      Отчёт: ручной аудит 5 подсистем (безопасность, контроллеры, бизнес-логика, frontend, БД) + известные пункты сессии 08.07.2026.
-      Денежные пункты помечены — их правка требует подтверждения финансов. «Исправлено» = задеплоено на прод в этой сессии.
+      Реестр хранится в таблице <code>code_findings</code>. Стартовый снимок — <code>database/data/code-findings.json</code>.
+      Денежные пункты помечены категорией — их правка требует подтверждения финансов.
     </div>
+
+    <!-- Диалог создания/правки -->
+    <v-dialog v-model="dialog" max-width="720" scrollable>
+      <v-card>
+        <v-card-title>{{ form.rowId ? 'Правка находки' : 'Новая находка' }}</v-card-title>
+        <v-card-text>
+          <div class="d-flex ga-3 flex-wrap">
+            <v-text-field v-model="form.code" label="Код (SEC-1)" density="compact" variant="outlined"
+              style="min-width:160px" :error-messages="errors.code" />
+            <v-select v-model="form.severity" :items="severityOrder" label="Важность" density="compact"
+              variant="outlined" style="min-width:160px" :error-messages="errors.severity" />
+            <v-select v-model="form.status" :items="statusItems" label="Статус" density="compact"
+              variant="outlined" style="min-width:160px" :error-messages="errors.status" />
+          </div>
+          <v-combobox v-model="form.category" :items="categories" label="Категория" density="compact"
+            variant="outlined" class="mt-2" :error-messages="errors.category" />
+          <v-text-field v-model="form.title" label="Заголовок" density="compact" variant="outlined"
+            class="mt-2" :error-messages="errors.title" />
+          <v-text-field v-model="form.file" label="Файл и строки (необязательно)" density="compact"
+            variant="outlined" class="mt-2" :error-messages="errors.file" />
+          <v-textarea v-model="form.problem" label="Проблема" rows="4" density="compact" variant="outlined"
+            class="mt-2" :error-messages="errors.problem" />
+          <v-textarea v-model="form.recommendation" label="Рекомендация" rows="3" density="compact"
+            variant="outlined" class="mt-2" :error-messages="errors.recommendation" />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="dialog = false">Отмена</v-btn>
+          <v-btn color="primary" :loading="saving" @click="save">Сохранить</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Подтверждение удаления -->
+    <v-dialog v-model="removeDialog" max-width="460">
+      <v-card>
+        <v-card-title>Удалить находку?</v-card-title>
+        <v-card-text>
+          <strong>{{ pendingRemove?.id }}</strong> — {{ pendingRemove?.title }}.
+          Действие необратимо.
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="removeDialog = false">Отмена</v-btn>
+          <v-btn color="error" :loading="saving" @click="remove">Удалить</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <v-snackbar v-model="snack.open" :color="snack.color" timeout="3000">{{ snack.text }}</v-snackbar>
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
-import PageHeader from '../../components/PageHeader.vue';
+import { ref, reactive, computed, onMounted } from 'vue';
+import api from '../../api';
+import { PageHeader, EmptyState } from '../../components';
 
 const severityOrder = ['critical', 'high', 'medium', 'low'];
-const sevLabelMap = { critical: 'Критично', high: 'Высокая', medium: 'Средняя', low: 'Низкая' };
-const sevColorMap = { critical: 'error', high: 'deep-orange', medium: 'warning', low: 'info' };
-function sevLabel(s) { return sevLabelMap[s] || s; }
-function sevColor(s) { return sevColorMap[s] || 'grey'; }
+const statusItems = [
+  { title: 'Открыта', value: 'open' },
+  { title: 'Исправлена', value: 'fixed' },
+];
 
-const catIconMap = {
-  'Безопасность': 'mdi-shield-alert', 'Контроллеры / API': 'mdi-api',
-  'Бизнес-логика (деньги)': 'mdi-calculator-variant', 'Frontend (Vue)': 'mdi-vuejs',
-  'БД и модели': 'mdi-database', 'Деньги · ждут финансов': 'mdi-cash-alert',
-  'Импорт транзакций': 'mdi-file-import', 'Инфраструктура': 'mdi-cog-sync',
-  'Данные · каталог продуктов': 'mdi-package-variant-closed',
+const sevLabels = { critical: 'Критично', high: 'Высокий', medium: 'Средний', low: 'Низкий' };
+const sevColors = { critical: 'error', high: 'error', medium: 'warning', low: 'info' };
+const sevLabel = (s) => sevLabels[s] || s;
+const sevColor = (s) => sevColors[s] || 'grey';
+
+const catIcons = {
+  'Безопасность': 'mdi-shield-alert',
+  'Контроллеры / API': 'mdi-api',
+  'Бизнес-логика (деньги)': 'mdi-cash-multiple',
+  'Frontend (Vue)': 'mdi-language-javascript',
+  'БД и модели': 'mdi-database',
+  'Деньги · ждут финансов': 'mdi-account-cash',
+  'Импорт транзакций': 'mdi-file-import',
+  'Инфраструктура': 'mdi-server',
+  'Данные · каталог продуктов': 'mdi-package-variant',
 };
-function catIcon(c) { return catIconMap[c] || 'mdi-file-code'; }
+const catIcon = (c) => catIcons[c] || 'mdi-alert-circle-outline';
 
-// ── ОТКРЫТЫЕ находки (аудит 08.07.2026) ──
-const openFindings = [
-  // Безопасность
-  { id: 'SEC-2', severity: 'medium', category: 'Безопасность', title: 'role принимается как свободная строка (без whitelist)',
-    file: 'AdminUserController.php:249, AdminDataController.php:378',
-    problem: 'role валидируется как string|max:255 без списка допустимых. Опечатка/произвольное значение молча портит WebUser.role, от которого зависит isStaff()/права → потеря или получение доступа.',
-    recommendation: 'Validate против enum допустимых ролей (Rule::in).' },
-  { id: 'SEC-3', severity: 'low', category: 'Безопасность', title: 'ChatController: смена статуса/назначения без view-policy',
-    file: 'ChatController.php updateStatus/assign/updateSubject/togglePin (~1110)',
-    problem: 'Гейт по isStaff(), но без ре-проверки policy view → любой staff любого отдела может менять статус/тему/пин любого тикета (не только своих). Партнёры заблокированы; риск внутристафный.',
-    recommendation: 'Добавить проверку policy view/участия в тикете.' },
-  { id: 'SEC-4', severity: 'low', category: 'Безопасность', title: 'admin v-html без санитайза (Инструкции/контент-страницы)',
-    file: 'Instructions.vue:78, ContentPageView.vue:9, Admin/Documentation.vue:22',
-    problem: 'Stored-XSS поверхность: авторство инструкций в staff-группе включает роль education, а инструкции рендерятся всем партнёрам → менее доверенный staffer может внедрить скрипт.',
-    recommendation: 'DOMPurify для контента/инструкций или ограничить авторство ролью admin.' },
-  { id: 'SEC-5', severity: 'low', category: 'Безопасность', title: 'User.role в $fillable (латентная эскалация)',
-    file: 'Models/User.php:48',
-    problem: 'Сейчас безопасно (все пути пишут role явно/за admin-гейтом), но любой будущий User::create($request->all()) = мгновенная эскалация прав.',
-    recommendation: 'Убрать role из $fillable, ставить явно.' },
-  { id: 'SEC-6', severity: 'low', category: 'Безопасность', title: 'AdminUserController::destroy без явного admin-гейта',
-    file: 'AdminUserController.php:311',
-    problem: 'Soft-delete WebUser достижим широкой staff-группой (в отличие от forceDelete/role-правок с hasAnyRole([admin])); смягчено restrict.*-middleware.',
-    recommendation: 'Подтвердить, что restrict.* блокирует DELETE не-админам, или добавить admin-проверку.' },
-  { id: 'SEC-7', severity: 'low', category: 'Безопасность', title: 'InSmart shared-secret в ?secret= (URL)',
-    file: 'InsmartWebhookController.php:87-98',
-    problem: 'Fallback авторизует по query ?secret= — секрет утекает в логи nginx/прокси/referrer (в отличие от HMAC-заголовка). В логах приложения маскируется, но не в upstream.',
-    recommendation: 'Оставить только HMAC X-Insmart-Signature, query-fallback убрать.' },
-  { id: 'SEC-8', severity: 'low', category: 'Безопасность', title: 'User enumeration (forgot-password / check-duplicates)',
-    file: 'AuthController.php:322-352, 91-141',
-    problem: 'forgot-password даёт 404 для неизвестного email, check-duplicates подтверждает наличие email/phone. Осознанное решение владельца — остаточный риск.',
-    recommendation: 'Принять как риск или вернуть единообразный ответ.' },
-
-  // Контроллеры / API
-  { id: 'API-1', severity: 'medium', category: 'Контроллеры / API', title: 'Дублирование staff-ролей вместо User::isStaff()',
-    file: 'AdminFinalizeController:93, AdminPoolController:193, AnnouncementController:24, ChatController:54,1919',
-    problem: 'explode(",", role)+in_array вместо канона isStaff()/hasAnyRole(). ChatController:1919 регэксп без роли invest → неверный deep-link /chat вместо /manage/chat для инвесторов.',
-    recommendation: 'Централизовать на модельные хелперы isStaff().' },
-  { id: 'API-2', severity: 'medium', category: 'Контроллеры / API', title: 'Проглоченные исключения в импорте (пустой catch)',
-    file: 'ContractImportController.php:719, AdminDataController.php:1193',
-    problem: 'catch (\\Throwable) {} прячет построчные сбои импорта от оператора и логов.',
-    recommendation: 'Как минимум Log::warning с контекстом.' },
-  { id: 'API-3', severity: 'medium', category: 'Контроллеры / API', title: 'Жирные контроллеры (бизнес-логика внутри)',
-    file: 'AdminDataController (3445 стр.), ChatController (2975), ProductSalesMatrixController (2031)',
-    problem: 'Мутация комиссий/баланса, дедуп контрактов, роутинг чата — в контроллерах, а не в app/Services (против правила «тонкие контроллеры»).',
-    recommendation: 'Выносить сервисы постепенно.' },
-  { id: 'API-4', severity: 'medium', category: 'Контроллеры / API', title: 'Хардкод legacy status-id в логике контракта',
-    file: 'AdminDataController.php:2705,2751 ([1,6,8,9,10], status===1)',
-    problem: 'Магические id contractStatus зашиты, тогда как ContractController:113 резолвит статус динамически.',
-    recommendation: 'Резолвить по названию или вынести в config/settings.' },
-  { id: 'API-5', severity: 'medium', category: 'Контроллеры / API', title: 'Арифметика баланса через интерполяцию в DB::raw',
-    file: 'AdminFinanceController.php:898-1012',
-    problem: 'DB::raw("… + {$points}") — инъекции нет ((float)-касты), но паттерн хрупкий.',
-    recommendation: 'increment()/decrement() или биндинги.' },
-  { id: 'API-6', severity: 'low', category: 'Контроллеры / API', title: 'Неконсистентные формы API-ответов',
-    file: 'ContractController::statuses/products vs {data,total} vs {message}',
-    problem: 'Часть эндпоинтов — голые массивы, часть — {data,total}, записи — {message}. Усложняет SPA-потребителей.',
-    recommendation: 'API Resources + стабильный конверт.' },
-  { id: 'API-7', severity: 'low', category: 'Контроллеры / API', title: 'Мёртвый маршрут upload-history',
-    file: 'routes/api.php:496',
-    problem: 'Заглушка /admin/contracts/upload-history → response()->json([]).',
-    recommendation: 'Удалить или реализовать.' },
-
-  // Бизнес-логика (деньги)
-  { id: 'BIZ-1', severity: 'high', category: 'Бизнес-логика (деньги)', title: 'InSmart: contract/transaction без выравнивания сиквенса',
-    file: 'InsmartIntegrationService.php:101,144',
-    problem: 'contract/transaction вставляются через LegacyId::next() (MAX+1), но у таблиц есть serial-сиквенс. Ручная генерация НЕ двигает сиквенс → следующий serial-INSERT (bulk-импорт) врежется в занятый id → duplicate _pkey. (Для client уже добавлен syncSequence, для contract/transaction здесь — нет.)',
-    recommendation: 'Вставлять через insertGetId или вызвать LegacyId::syncSequence(contract/transaction).' },
-  { id: 'BIZ-3', severity: 'medium', category: 'Бизнес-логика (деньги)', title: 'InSmart: гонка идемпотентности (нет unique-индекса)',
-    file: 'InsmartIntegrationService.php:57-68',
-    problem: 'Проверка counterpartyContractId exists() до транзакции, без unique-индекса. Два одновременных вебхука → дубль контракта+транзакции+комиссий.',
-    recommendation: 'Partial-unique на counterpartyContractId + обработка конфликта.' },
-  { id: 'BIZ-4', severity: 'medium', category: 'Бизнес-логика (деньги)', title: 'Превью ↔ факт: уровень и стартовый %',
-    file: 'ManualTransactionController.php:834,844,845',
-    problem: 'Превью: уровень = nominalLevel ?? calculationLevel (приоритет номиналу), факт = MAX из двух; стартовый % захардкожен 15 vs SystemSetting в каскаде. Превью и начисление расходятся.',
-    recommendation: 'Использовать общий резолвер уровня + ту же настройку startup_percent.' },
-  { id: 'BIZ-5', severity: 'medium', category: 'Бизнес-логика (деньги)', title: 'Штрафы: уровень берётся текущий, не за расчётный месяц',
-    file: 'MonthlyPenaltyRunner.php:86,113',
-    problem: 'mandatoryGP/otrif/percent из текущего consultant.status_and_lvl, а не уровня месяца. Пересчёт прошлого периода после апгрейда партнёра применит штрафы по сегодняшнему уровню.',
-    recommendation: 'Резолвить уровень месяца из qualificationLog (как PoolRunner).' },
-  { id: 'BIZ-6', severity: 'medium', category: 'Бизнес-логика (деньги)', title: 'Знаменатель «отрыва» несогласован',
-    file: 'MonthlyPenaltyRunner.php:352 vs MonthlyFinaliser.php:48-50',
-    problem: 'Решение о штрафе (>70%) = branchVolume/Σ веток (без ЛП), а сохранённый gapValuePercentage = branchVolume/totalGroupVolume (с ЛП). Ветка может быть >70% по одному и <70% по показанному.',
-    recommendation: 'Считать оба от одной базы.' },
-  { id: 'BIZ-8', severity: 'medium', category: 'Бизнес-логика (деньги)', title: 'Каскад комиссий: N+1 по цепочке',
-    file: 'CommissionCalculator.php:374,380,383',
-    problem: 'На каждый уровень цепочки (до 20) — отдельные запросы consultant×2 + getQualificationLevel. На импорте тысяч транзакций — классический N+1.',
-    recommendation: 'Предзагрузить inviter-map и уровни (как в MonthlyPenaltyRunner).' },
-  { id: 'BIZ-9', severity: 'medium', category: 'Бизнес-логика (деньги)', title: 'calculateForImport: матч по строке comment, без deletedAt',
-    file: 'CommissionCalculator.php:498-505',
-    problem: "Выбор транзакций по comment='Импорт #N' без whereNull(deletedAt) и чанкинга. Ручная tx с таким же комментарием попадёт под пересчёт; удалённые гоняются впустую.",
-    recommendation: 'Выбирать по явному import-id + фильтр deletedAt.' },
-  { id: 'BIZ-10', severity: 'low', category: 'Бизнес-логика (деньги)', title: 'Неизвестный ФК: не пишется netRevenueUSD; computePoints дублируется',
-    file: 'CommissionCalculator.php:747-757, 545 + ManualTransactionController.php:802',
-    problem: 'В ветке неизвестного ФК USD-остаток устаревает (netRevenueUSD не пишется). computePoints продублирован в 2 классах — риск дрейфа формулы ЛП.',
-    recommendation: 'Дописать netRevenueUSD; свести превью на статический CommissionCalculator::computePoints.' },
-  { id: 'BIZ-11', severity: 'low', category: 'Бизнес-логика (деньги)', title: 'InSmart: resolveConsultant без фильтра удалённых/терминированных; валюта не конвертируется',
-    file: 'InsmartIntegrationService.php:148-152,180',
-    problem: 'resolveConsultant без whereNull(dateDeleted) и без гейта терминированных → контракт может уйти на soft-deleted/терминированного. amountRUB=txAmount при currency=USD/EUR остаётся неконвертированным.',
-    recommendation: 'Фильтровать удалённых/терминированных; конвертировать по курсу или форсить RUB.' },
-
-  // Frontend
-  { id: 'FE-2', severity: 'medium', category: 'Frontend (Vue)', title: 'Незачищенные таймеры (Pool/Mail/SystemStatus/Profile)',
-    file: 'Pool.vue:650-682, Mail.vue:694,931, SystemStatus.vue:170, Profile.vue:1315',
-    problem: 'applyPollTimer/progressTimer/setInterval/tgPollTimer чистятся только по завершении операции, onUnmounted отсутствует → фоновые запросы после ухода со страницы (пул — каждые 1.5с).',
-    recommendation: 'onUnmounted(() => clearInterval/Timeout) в каждой странице.' },
-  { id: 'FE-3', severity: 'medium', category: 'Frontend (Vue)', title: 'isStaff без роли invest (Workspace/StaffChat)',
-    file: 'Workspace.vue:471, StaffChat.vue:2475, MainLayout.vue:901',
-    problem: 'Локальные isStaff/STAFF_ROLES_RE без роли invest, тогда как канон auth.isStaff включает education+invest. Сотрудник только с invest получает партнёрский workspace / неверные права.',
-    recommendation: 'Использовать auth.isStaff.' },
-  { id: 'FE-4', severity: 'medium', category: 'Frontend (Vue)', title: 'Массовое проглатывание ошибок загрузки',
-    file: 'MyPayments.vue:215, Dashboard.vue:487, Currencies.vue:232, Partners.vue:701 (~200 мест)',
-    problem: 'catch {} без обратной связи: сбой GET рисует пустое состояние как «нет данных», ошибка DELETE не видна.',
-    recommendation: 'Пропускать через useSnackbar().showError (как useCrud).' },
-  { id: 'FE-5', severity: 'low', category: 'Frontend (Vue)', title: 'Дублирование палитр/хардкод hex вместо useDesign/токенов',
-    file: 'Tasks/TasksHome.vue:327, ProjectBoard.vue:172, EducationCourse.vue:228, SystemStatus.vue:185',
-    problem: 'Захардкоженные palette[]/STATUS_HEX и градиенты (#hex) не адаптируются под тему; дублируются в 2 файлах.',
-    recommendation: 'Вынести в useDesign; градиенты — в rgb(var(--v-theme-*)).' },
-  { id: 'FE-6', severity: 'low', category: 'Frontend (Vue)', title: 'Инлайн-парсинг сортировки + фронт-N+1 в bulk',
-    file: 'Transactions.vue:1421, StaffChat.vue:1797-1832',
-    problem: 'Своя реализация sortBy→sort_by вместо useTableSort; bulk-операции чата — по запросу на каждый id (await в цикле).',
-    recommendation: 'useTableSort; батч-эндпоинт или Promise.all для bulk.' },
-
-  // БД и модели
-  { id: 'DB-1', severity: 'high', category: 'БД и модели', title: 'Денежные модели без SoftDeletes / global scope',
-    file: 'Models/{Contract,Transaction,Commission,Client,Consultant,QualificationLog}.php',
-    problem: 'Ни одна денежная модель не использует SoftDeletes/scope; фильтрация deletedAt/dateDeleted — ручной whereNull в каждом вызове. Один забытый фильтр = удалённые строки в суммах/отчётах.',
-    recommendation: 'Трейт-scope alive() (с учётом имени колонки) или global scope.' },
-  { id: 'DB-2', severity: 'high', category: 'БД и модели', title: 'Раскол имён soft-delete колонок',
-    file: 'deletedAt (Contract/Transaction/Commission) vs dateDeleted (Client/Consultant/WebUser/QualificationLog)',
-    problem: 'При join между этими таблицами легко подставить не ту колонку и молча получить удалённые строки.',
-    recommendation: 'Централизовать (scope, кодирующий верную колонку) + карта таблица→колонка.' },
-  { id: 'DB-4', severity: 'medium', category: 'БД и модели', title: '$guarded=[id] на денежных моделях + нет deletedAt-каста у Commission',
-    file: 'Models/{Contract,Transaction,Commission,Client,Consultant}.php',
-    problem: '$guarded=[id] открывает mass-assignment всех денежных колонок (сейчас пишут через DB::table(), но любой будущий create($request->all()) пишет суммы). Commission без deletedAt-каста/scope.',
-    recommendation: 'Явный $fillable; добавить deletedAt cast+scope Commission.' },
-  { id: 'DB-5', severity: 'medium', category: 'БД и модели', title: 'contract.counterpartyContractId без уникального индекса',
-    file: 'contract (таблица)',
-    problem: 'Идемпотентность импорта/вебхуков держится на app-проверке по number, а Inssmart-номера не уникальны по клиенту (уже была потеря 18481). Повторный postback дублирует контракт.',
-    recommendation: 'Partial unique (counterpartyContractId) WHERE NOT NULL.' },
-  { id: 'DB-6', severity: 'low', category: 'БД и модели', title: 'Trust-миграция: down() сносит ВСЕ тарифы продукта 102',
-    file: 'database/migrations/2026_07_07_000200_configure_investors_trust_tariffs.php:115',
-    problem: 'down() делает DELETE FROM dsCommission WHERE product=102 — снесёт и ручные правки после миграции; флаги has_* безусловно в false.',
-    recommendation: 'Отслеживать вставленные id (диапазон от MAX(id)); снимать флаги только если их выставила миграция.' },
-
-  // Деньги — ждут финансов
-  { id: 'FIN-1', severity: 'high', category: 'Деньги · ждут финансов', title: 'Пул: делитель доли (кумулятивный vs ровно уровень)',
-    file: 'PoolCalculator.php:46-51',
-    problem: 'Код делит фонд уровня на кумулятивное число партнёров (уровень L и выше), обе спеки — на число ровно этого уровня. Пример спеки (TOP FC=fund/20) не воспроизводится → доли отличаются в разы.',
-    recommendation: 'Подтвердить у финансов; привести к спеке (fund / count ровно уровня).' },
-  { id: 'FIN-2', severity: 'high', category: 'Деньги · ждут финансов', title: 'Отчёт «Выручка и расходы»: вероятная инверсия метрик',
-    file: 'Reports/RevenueExpensesReport.php:24',
-    problem: '«Доход» = валовый amountRUB, «Расход» = commissionsAmountRUB (а это Доход ДС в отчёте Комиссии). Выручка компании ушла в «Расход».',
-    recommendation: 'Подтвердить определения; поменять местами при необходимости.' },
-  { id: 'FIN-3', severity: 'medium', category: 'Деньги · ждут финансов', title: 'Co-founder порог ОП: 100k (код) vs 150k (спека)',
-    file: 'MonthlyPenaltyRunner.php:252 / status_levels',
-    problem: 'Код/status_levels = 100 000, спека «Расчет вознаграждений» = 150 000. Спеки между собой не согласованы.',
-    recommendation: 'Решение финансов, какой порог верен.' },
-  { id: 'FIN-4', severity: 'medium', category: 'Деньги · ждут финансов', title: 'Калькулятор объёмов: последний курс + игнор pointsMethod',
-    file: 'CalculatorController.php:219,240',
-    problem: 'Берёт последний курс вместо курса предыдущего месяца; ЛП жёстко amountNoVat×%ДС/10000, игнорируя program.pointsMethod → расходится с каскадом для нестандартных программ.',
-    recommendation: 'Курс предыдущего месяца; учитывать pointsMethod.' },
-
-  // Импорт
-  { id: 'IMP-1', severity: 'medium', category: 'Импорт транзакций', title: 'БКС ПИФ: возможный swap amount ↔ commission',
-    file: 'SheetProfiles.php (БКС ПИФ)',
-    problem: "amount='Выручка MF', commission='Сумма взноса' — похоже на перепутанные (взнос обычно = сумма контракта, выручка MF = комиссия). Проверить по реальному листу.",
-    recommendation: 'Подтвердить у бизнеса и поправить маппинг.' },
-  { id: 'IMP-2', severity: 'medium', category: 'Импорт транзакций', title: 'Axevil / Woodville: колонка даты без заголовка → дата=now()',
-    file: 'SheetProfiles.php (Axevil, Woodville)',
-    problem: 'В листах дата в неозаглавленной колонке → профиль её не мапит → транзакции получают дату импорта вместо реальной.',
-    recommendation: 'Добавить заголовок в лист или позиционный маппинг даты.' },
-  { id: 'IMP-3', severity: 'low', category: 'Импорт транзакций', title: 'GoogleSheetsReader::normalizeRow: «База для начисления комиссии» → ds_percent',
-    file: 'GoogleSheetsReader.php:129-139',
-    problem: 'В превью-пути колонка со словом «комисс» уходит в ds_percent (робо «База для начисления комиссии»). Импорт (alignRow) не затронут, но превью может показывать неверные колонки.',
-    recommendation: 'Уточнить приоритет ключей нормализации или отказаться от normalizeRow в пользу профиля.' },
-
-  // Инфраструктура
-  { id: 'INFRA-1', severity: 'high', category: 'Инфраструктура', title: 'Тестовая БД не поднимается — CI не гейтит регрессии',
-    file: 'phpunit.xml / .env.testing (newds_test)',
-    problem: '61 из 62 тестов падают на подключении к БД. Автотесты не защищают денежные пути.',
-    recommendation: 'Поднять newds_test (или SQLite для не-PG тестов), включить в CI.' },
-  { id: 'INFRA-2', severity: 'low', category: 'Инфраструктура', title: 'Гонка авто-деплоя (git pull vs webhook, битый build)',
-    file: 'deploy webhook (prod)',
-    problem: 'При push webhook и ручной pull конкурируют за ref-lock; параллельный npm build ловит rollup «invalid resolved id», оставляет старый CSS.',
-    recommendation: 'Сериализовать деплой (lock): pull → дождаться HEAD → build.' },
-  { id: 'INFRA-3', severity: 'low', category: 'Инфраструктура', title: 'Стиль: ~306 файлов с отклонениями Pint',
-    file: 'app/** (Pint)',
-    problem: 'Косметика (отступы/пробелы), зашумляет диффы.',
-    recommendation: 'Прогнать vendor/bin/pint отдельным коммитом + pint --test в CI.' },
-
-  // Данные — каталог продуктов (аудит БД 09.07.2026)
-  { id: 'DATA-1', severity: 'medium', category: 'Данные · каталог продуктов', title: 'Флаги active/visibility каталога устарели относительно реальности',
-    file: 'products_catalog / programs_catalog',
-    problem: '1352 контракта, созданных в 2026, привязаны к программам с active=false в каталоге; 44 из 65 продуктов помечены неактивными. Каталог заполнили один раз (майский аудит) и он не догоняет жизнь — цифры активности вводят в заблуждение.',
-    recommendation: 'Пересобрать active из фактического использования (есть контракты за последние N месяцев → активно), отдельной командой-синком.' },
-  { id: 'DATA-2', severity: 'medium', category: 'Данные · каталог продуктов', title: '«ИИ ДС»: продукт живых контрактов без legacy-якоря',
-    file: 'contract.productName = «ИИ ДС» (10 контрактов)',
-    problem: 'Имя продукта есть на 10 живых контрактах, но его нет ни в products_catalog, ни в legacy product — бэкфилл каталога его пропускает (нечего привязать). Не фильтруется/не ведётся в UI.',
-    recommendation: 'Решить вручную: к какому legacy-продукту отнести (переименование в контрактах) или завести новый продукт с нуля.' },
-  { id: 'DATA-3', severity: 'low', category: 'Данные · каталог продуктов', title: 'has_red — шумный импортный артефакт, не сигнал деактивации',
-    file: 'programs_catalog.has_red',
-    problem: '36 red-программ активны, 26 red видны резиденту — но среди них ядровые ГГА-линейки (ВИП, Азбука защиты, Защита +, Золотая Пора). Трактовать red как «выключить» (предположение майского аудита) нельзя.',
-    recommendation: 'Не завязывать UI/деактивацию на has_red; переосмыслить флаг как «на ревью» или убрать.' },
-  { id: 'DATA-4', severity: 'low', category: 'Данные · каталог продуктов', title: 'Программы: видимы резиденту, но неактивны',
-    file: 'programs_catalog (visible_to_resident AND NOT active)',
-    problem: '6 программ помечены visible_to_resident=true при active=false — витрина показывает выключенные позиции.',
-    recommendation: 'Синхронизировать: невидимость для выключенных, либо активировать, если реально продаются.' },
-
-  // ── Добавлено аудитом 01.09.2026 ──
-  { id: 'INF-2', severity: 'medium', category: 'Инфраструктура', title: 'PHPStan глушит property.notFound / method.notFound глобально по app/',
-    file: 'phpstan.neon:11-30',
-    problem: 'Помимо baseline (230 ошибок) конфиг отключает property.notFound и method.notFound для app/Http/Controllers/*, app/Services/*, app/Models/*, app/Jobs/*, app/Console/*. Для магии Eloquent это оправдано, но под тем же правилом молча проходят настоящие опечатки в именах свойств — а таблицы вроде consultant (78 колонок в camelCase) к опечаткам располагают.',
-    recommendation: 'Сузить до конкретных путей/классов, где реально нужна магия, либо описать свойства моделей через @property в докблоках и снять глушилку. Снимать по одной категории за раз: разово прогнать phpstan без правила и оценить объём.' },
-  { id: 'SEC-9', severity: 'low', category: 'Безопасность', title: 'MD5-хэши остаются у аккаунтов, не заходивших после миграции',
-    file: 'User.php:134-155',
-    problem: 'validatePassword сделан аккуратно: сравнение constant-time (hash_equals), при успешном входе хэш апгрейдится до bcrypt. Но апгрейд происходит ТОЛЬКО при входе — у аккаунтов, не логинившихся с миграции, в WebUser.password по-прежнему лежит MD5 без соли. Утечка дампа = мгновенный перебор по радужным таблицам.',
-    recommendation: 'Прогнать users:md5-report, для остатка — users:expire-md5 (сброс хэша + принудительное восстановление пароля). После нуля в отчёте удалить MD5-ветку из validatePassword.' },
-  { id: 'BIZ-12', severity: 'low', category: 'Бизнес-логика (деньги)', title: 'Превью черновиков ручного ввода: НДС по now(), а не по дате черновика',
-    file: 'ManualTransactionController.php:203',
-    problem: 'Остаток от BIZ-2: список черновиков отдаёт vatPercent через VatRate::percentOrDefault() без даты, то есть по текущему дню. На деньги не влияет — итог считает CommissionCalculator по tx->date, — но у черновика задним числом (до смены ставки) поле «Своя комиссия С НДС → без НДС» на фронте пересчитается по неверной ставке, и оператор увидит не ту сумму, что получится после расчёта.',
-    recommendation: 'Отдавать vatPercent по дате черновика; для списка — по дате каждой строки, а не одним числом на весь ответ.' },
-];
-
-// ── ИСПРАВЛЕНО в этой сессии (08.07.2026) ──
-const fixedFindings = [
-  // ── Закрыто и перепроверено 01.09.2026 ──
-  { id: 'SEC-1', category: 'Безопасность', title: 'IDOR: внутренние комментарии о партнёрах доступны любому',
-    problem: 'GET/POST /partner-comments висели в блоке auth:sanctum без staff-гейта: любой авторизованный партнёр перебором consultantId читал служебные заметки о ком угодно и писал комментарии на чужую карточку.',
-    recommendation: 'Три маршрута перенесены в staff-группу (role:admin,backoffice,support,finance,head,calculations,corrections,education,invest + restrict.invest) — routes/v1/cabinet.php:158-162. Перепроверено 01.09.2026.' },
-  { id: 'BIZ-2', category: 'Бизнес-логика (деньги)', title: 'НДС берётся по now(), а не по дате транзакции',
-    problem: 'Ставка НДС резолвилась по текущему дню. При пересчёте пост-cutoff сделки после смены ставки amountNoVat — база ВСЕХ комиссий цепочки и дохода ДС — считалась по неверному проценту.',
-    recommendation: 'CommissionCalculator:610 резолвит ставку по $tx->date (фолбэк на now() только если у транзакции нет даты). Перепроверено 01.09.2026. Остаток по превью черновиков вынесен в BIZ-12.' },
-  { id: 'BIZ-7', category: 'Бизнес-логика (деньги)', title: 'HISTORICAL_CUTOFF задан дважды по-разному',
-    problem: "CommissionCalculator::HISTORICAL_CUTOFF='2026-06-01' и PoolRunner::HISTORICAL_BEFORE=['year'=>2026,'month'=>6] описывали одну и ту же границу независимо: сдвиг одной не трогал вторую, и движки пула и комиссий разошлись бы в том, какие месяцы неизменны.",
-    recommendation: 'HISTORICAL_BEFORE удалена, PoolRunner::isHistoricalMonth() вызывает CommissionCalculator::isHistorical(). Эквивалентность старой и новой проверки прогнана на всех месяцах 2000-2100 — расхождений нет.' },
-  { id: 'FE-1', category: 'Frontend (Vue)', title: 'Утечка сокета и слушателя в MainLayout',
-    problem: 'onUnmounted чистил только unreadInterval. visibilitychange-обработчик не снимался, notifSocket с reconnectionAttempts: Infinity не отключался — при logout→login соединения накапливались, и каждое продолжало дёргать /auth/me на socket-сервере.',
-    recommendation: 'Ссылки на сокет и обработчик подняты в scope компонента; onUnmounted снимает listener, делает removeAllListeners() + disconnect() и чистит window.__notifSocket.' },
-  { id: 'FX-ENV', category: 'Инфраструктура', title: 'env() в рантайме молча ломался после config:cache',
-    problem: 'Деплой выполняет artisan optimize (config:cache), после чего Laravel не читает .env и env() в рантайме возвращает null. ApiSettingsService резолвил ключи интеграций как БД → env → default, и среднее звено на проде было мертво: ключ, заданный только в .env, тихо схлопывался в default, а диагностика в админке показывала «в env не задано» для реально заданных ключей. Тот же дефект — local_domain в MailSettingsService.',
-    recommendation: 'Заведён config/api_settings.php: 14 env-фолбэков читаются на этапе сборки конфига и попадают в кэш. ApiSettingsService и listForUi читают config(api_settings.env.*). MailSettingsService берёт local_domain из config/mail.php ДО перезаписи секции smtp.' },
-  { id: 'FX-SOCK', category: 'Инфраструктура', title: 'socket-server: сравнение emit-секрета не constant-time',
-    problem: 'checkEmitAuth сравнивал заголовок Authorization с секретом обычным !==. Оператор выходит на первом различии, поэтому по времени ответа секрет восстанавливается посимвольно. Единственное место в кодовой базе, где сравнение секрета было не защищено — в PHP везде hash_equals.',
-    recommendation: 'Добавлен safeEqual() на crypto.timingSafeEqual с предварительной сверкой длин (длина и так утекает через размер запроса).' },
-  { id: 'FX-LOG', category: 'Безопасность', title: 'E-mail пользователя в логе миграции пароля',
-    problem: 'При апгрейде MD5→bcrypt в лог писалась строка с id И e-mail пользователя. ПДн из логов разъезжаются по ротациям, Sentry и бэкапам, где живут дольше и охраняются слабее.',
-    recommendation: 'В сообщении остался только id пользователя.' },
-
-  { id: 'FX-P1', category: 'БД и модели', title: 'Таблица person удалена — данные живут в карточках',
-    problem: 'Контакты клиента и партнёра лежали в отдельной legacy-таблице person из Directual. Указатель client.person мог вести на ДРУГОГО человека (id разошлись при консолидации), и карточка показывала чужие почту и телефон; у партнёров person был заполнен лишь у половины.',
-    recommendation: 'Данные перенесены в client и consultant (контакты, ДР, город, телеграм, пол, резидентство, пометки), признак «клиент = партнёр» — в явную связь client.partner_consultant_id. Чтения и записи сняты, внешний ключ снят, таблица удалена 13.08.2026. Соответствие карточка→запись сохранено в person_legacy_map, полный дамп снят до работ.' },
-  { id: 'FX-P2', category: 'БД и модели', title: 'Consultant::person() → WebUser (чужое id-пространство)',
-    problem: 'belongsTo(User, "person") связывал consultant.person с WebUser — разные id-пространства, отношение вернуло бы чужого пользователя. Латентная ловушка, в коде не использовалась.',
-    recommendation: 'Отношение убрано вместе с колонкой при удалении таблицы person.' },
-  { id: 'FX-1', category: 'Бизнес-логика (деньги)', title: 'Брокер+: своя комиссия слетала в 100% после фиксации',
-    problem: 'calculateForTransaction не учитывал dsCommissionAbsolute и падал на тариф/100%.',
-    recommendation: 'Калькулятор выводит %ДС из dsCommissionAbsolute. Пересчёт июня: Доход ДС 30,4М→144К.' },
-  { id: 'FX-2', category: 'Бизнес-логика (деньги)', title: 'ЛП база: Аксвил считал с НДС, Медлайф без НДС',
-    problem: 'amount_x_dsPercent брал amountRub (с НДС), default — amountNoVat.',
-    recommendation: 'amount_x_dsPercent → amountNoVat (ЛП от Дохода ДС без НДС для всех).' },
-  { id: 'FX-3', category: 'Бизнес-логика (деньги)', title: 'Неизвестный ФК: Доход ДС/прибыль не считались',
-    problem: 'writeZeroForUnknownConsultant не писал commissionsAmountRUB/profit.',
-    recommendation: 'Пишем Доход ДС без НДС; прибыль = Доход ДС без НДС, комиссия 0.' },
-  { id: 'FX-4', category: 'Бизнес-логика (деньги)', title: 'Цепочка комиссий: проходные наставники скрывались',
-    problem: 'Каскад создавал строку только при марже>0 → одноуровневые наставники (маржа 0) пропадали из «Цепочки выплат».',
-    recommendation: 'Строка создаётся для каждого наставника (маржа 0 → комиссия 0, ГП учтён). Деньги не изменились.' },
-  { id: 'FX-5', category: 'БД и модели', title: 'Рекуррентные duplicate_pkey (лаг сиквенсов)',
-    problem: 'insertGetId contract/client врезался в существующий id после restore.',
-    recommendation: 'LegacyId::syncSequence() перед вставкой в storeContract/createClient + выравнивание на проде.' },
-  { id: 'FX-6', category: 'Безопасность', title: 'Ban-list исключённых при регистрации',
-    problem: 'register() не проверял контакты исключённого партнёра.',
-    recommendation: 'Жёсткий блок по email/телефону activity=Excluded + warning-лог тёзки.' },
-  { id: 'FX-7', category: 'Импорт транзакций', title: 'Робо=Райт: поставщик Тинькофф + кривой тариф/баллы',
-    problem: 'Профиль → Тинькофф; программы робо на amount_div_100 + flat 0,5% → минус прибыль.',
-    recommendation: 'Поставщик RG.HT; программы 1653/1654/1656 → per-property МФ 0,5%/Апфронт 2% + верные баллы.' },
-  { id: 'FX-8', category: 'Импорт транзакций', title: 'IB MF не импортировался (нет строки заголовков)',
-    problem: 'Лист без шапки → alignRow не мапил → «0/187 ош.».',
-    recommendation: 'Профиль объявляет headerless (позиционные заголовки).' },
-  { id: 'FX-9', category: 'Импорт транзакций', title: 'Год КВ не проставлялся при импорте',
-    problem: 'ImportTransactionsJob ронял колонку «Год», не писал score.',
-    recommendation: 'Год тащится в score.' },
-  { id: 'FX-10', category: 'Контроллеры / API', title: 'Дубль номера контракта: ошибка без деталей + дубли транзакций',
-    problem: 'Сообщение о дубле без ФИО/продукта; ручной ввод не проверял дубль транзакции.',
-    recommendation: 'Ошибка с ФИО+продуктом; анти-дубль по контракт+дата+сумма+валюта.' },
-  { id: 'FX-11', category: 'Контроллеры / API', title: 'Статус «Закрыто» требовал прогноз активации',
-    problem: 'noForecastStatuses=[1,6,10] без статусов 8 «Закрыто»/9 «Возврат».',
-    recommendation: 'Добавлены 8,9 — терминальные статусы прогноз не требуют.' },
-  { id: 'FX-12', category: 'Frontend (Vue)', title: 'Обратные слэши в путях API → битый URL',
-    problem: "api.get('\\admin\\...') — \\b = backspace.",
-    recommendation: 'Прямые слэши.' },
-  { id: 'FX-13', category: 'Контроллеры / API', title: 'Мёртвые заглушки отчётов + чистка мёртвых инструментов',
-    problem: 'reports()/reportAvailability() «В разработке»; 17 завершённых команд + разовые скрипты.',
-    recommendation: 'Заглушки и мёртвые команды/скрипты удалены.' },
-  { id: 'FX-14', category: 'БД и модели', title: 'InSmart июнь: перепутанные ФИО клиентов',
-    problem: 'Дедуп-по-номеру перезаписал ФИО чужими; 29/45 июньских.',
-    recommendation: 'Восстановлено по карте ext→ФИО (repair-june-client-names).' },
-  { id: 'FX-15', category: 'Данные · каталог продуктов', title: 'Каталог не покрывал продаваемые продукты (13 линеек)',
-    problem: '13 линеек на ~1100 живых контрактов (ОСАГО/Медицинское/Ипотека/ВЗР/Имущество/Мини КАСКО Inssmart, ITI Capital, ICN, IPO, СПФК, «Второе мнение», «Резиденство и гражданство», «Юр. сопровождение») были только в legacy product + в contract.productName, но отсутствовали в products_catalog → не управлялись/не фильтровались через UI.',
-    recommendation: 'Заведены в products_catalog с legacy_product_id командой products:backfill-catalog (идемпотентно, дубли legacy схлопнуты, active=true, витрина off). Прогнано на локали и проде. Осталась сирота «ИИ ДС» (DATA-2).' },
-];
+const findings = ref([]);
+const categories = ref([]);
+const counts = ref({ open: 0, fixed: 0, openBySeverity: {} });
+const loading = ref(false);
+const saving = ref(false);
+const busyId = ref(null);
 
 const view = ref('open');
 const filterCategory = ref([]);
 const search = ref('');
 
-const categories = ['Безопасность', 'Контроллеры / API', 'Бизнес-логика (деньги)', 'Frontend (Vue)', 'БД и модели', 'Деньги · ждут финансов', 'Импорт транзакций', 'Инфраструктура', 'Данные · каталог продуктов'];
-
-const allOpen = openFindings.map(f => ({ ...f, status: 'open' }));
-const allFixed = fixedFindings.map(f => ({ ...f, status: 'fixed', severity: 'low' }));
-
-const openCount = allOpen.length;
-const fixedCount = allFixed.length;
-
-const openBySeverity = computed(() => {
-  const c = {};
-  for (const f of allOpen) c[f.severity] = (c[f.severity] || 0) + 1;
-  return c;
+const dialog = ref(false);
+const removeDialog = ref(false);
+const pendingRemove = ref(null);
+const errors = reactive({});
+const form = reactive({
+  rowId: null, code: '', severity: 'medium', category: '',
+  title: '', file: '', problem: '', recommendation: '', status: 'open',
 });
 
+const snack = ref({ open: false, color: 'success', text: '' });
+function notify(text, color = 'success') { snack.value = { open: true, color, text }; }
+
+function fmtDate(v) {
+  if (!v) return '';
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('ru-RU');
+}
+
+async function load() {
+  loading.value = true;
+  try {
+    const { data } = await api.get('/admin/code-findings');
+    findings.value = data.data || [];
+    categories.value = data.categories || [];
+    counts.value = data.counts || { open: 0, fixed: 0, openBySeverity: {} };
+  } catch (e) {
+    notify(e.response?.data?.message || 'Не удалось загрузить реестр', 'error');
+  }
+  loading.value = false;
+}
+
 const filterActive = computed(() => filterCategory.value.length || (search.value || '').trim());
-const sevRank = { critical: 0, high: 1, medium: 2, low: 3 };
 
 const filtered = computed(() => {
-  const src = view.value === 'open' ? allOpen : allFixed;
-  const q = (search.value || '').toLowerCase().trim();
-  return src.filter(f => {
+  const q = (search.value || '').trim().toLowerCase();
+  return findings.value.filter((f) => {
+    if (f.status !== view.value) return false;
     if (filterCategory.value.length && !filterCategory.value.includes(f.category)) return false;
-    if (q && !(`${f.title} ${f.problem} ${f.recommendation} ${f.file || ''} ${f.id}`.toLowerCase().includes(q))) return false;
-    return true;
+    if (!q) return true;
+    return [f.id, f.title, f.file, f.problem, f.recommendation]
+      .some((v) => (v || '').toLowerCase().includes(q));
   });
 });
 
 const grouped = computed(() => {
   const g = {};
   for (const f of filtered.value) (g[f.category] ||= []).push(f);
-  for (const cat of Object.keys(g)) g[cat].sort((a, b) => sevRank[a.severity] - sevRank[b.severity]);
   return g;
 });
-const groupedCategories = computed(() => categories.filter(c => grouped.value[c]?.length));
 
-const topPriority = computed(() => allOpen.filter(f => f.severity === 'high' || f.severity === 'critical').slice(0, 8));
+const groupedCategories = computed(() => Object.keys(grouped.value).sort());
+
+const topPriority = computed(() => findings.value
+  .filter((f) => f.status === 'open' && (f.severity === 'high' || f.severity === 'critical'))
+  .slice(0, 8));
+
+function resetErrors() { Object.keys(errors).forEach((k) => delete errors[k]); }
+
+function openCreate() {
+  resetErrors();
+  Object.assign(form, {
+    rowId: null, code: '', severity: 'medium', category: '',
+    title: '', file: '', problem: '', recommendation: '', status: 'open',
+  });
+  dialog.value = true;
+}
+
+function openEdit(f) {
+  resetErrors();
+  Object.assign(form, {
+    rowId: f.rowId, code: f.id, severity: f.severity, category: f.category,
+    title: f.title, file: f.file || '', problem: f.problem,
+    recommendation: f.recommendation, status: f.status,
+  });
+  dialog.value = true;
+}
+
+async function save() {
+  saving.value = true;
+  resetErrors();
+  const payload = {
+    code: form.code,
+    severity: form.severity,
+    category: form.category,
+    title: form.title,
+    file: form.file || null,
+    problem: form.problem,
+    recommendation: form.recommendation,
+    status: form.status,
+  };
+  try {
+    if (form.rowId) await api.put(`/admin/code-findings/${form.rowId}`, payload);
+    else await api.post('/admin/code-findings', payload);
+    dialog.value = false;
+    notify('Сохранено');
+    await load();
+  } catch (e) {
+    // 422 — показываем ошибки прямо у полей, остальное в снекбар.
+    if (e.response?.status === 422) {
+      const bag = e.response.data?.errors || {};
+      Object.keys(bag).forEach((k) => { errors[k] = bag[k]; });
+      notify('Проверьте поля формы', 'error');
+    } else {
+      notify(e.response?.data?.message || 'Ошибка сохранения', 'error');
+    }
+  }
+  saving.value = false;
+}
+
+function askRemove(f) {
+  pendingRemove.value = f;
+  removeDialog.value = true;
+}
+
+async function remove() {
+  saving.value = true;
+  try {
+    await api.delete(`/admin/code-findings/${pendingRemove.value.rowId}`);
+    removeDialog.value = false;
+    notify('Удалено');
+    await load();
+  } catch (e) {
+    notify(e.response?.data?.message || 'Ошибка удаления', 'error');
+  }
+  saving.value = false;
+}
+
+async function toggle(f) {
+  busyId.value = f.rowId;
+  try {
+    await api.post(`/admin/code-findings/${f.rowId}/toggle`);
+    await load();
+  } catch (e) {
+    notify(e.response?.data?.message || 'Не удалось изменить статус', 'error');
+  }
+  busyId.value = null;
+}
+
+onMounted(load);
 </script>

@@ -24,6 +24,14 @@ Route::middleware('role:admin')->group(function () {
     // Диагностика: скрытые (soft-deleted) клиенты с живыми контрактами — только admin.
     Route::get('/admin/hidden-clients', [\App\Http\Controllers\Api\AdminHiddenClientController::class, 'index']);
 
+    // Реестр находок аудита кода (страница «Качество кода»). Раньше данные
+    // жили прямо в CodeQuality.vue и закрытие находки стоило релиза.
+    Route::get('/admin/code-findings', [\App\Http\Controllers\Api\AdminCodeQualityController::class, 'index']);
+    Route::post('/admin/code-findings', [\App\Http\Controllers\Api\AdminCodeQualityController::class, 'store']);
+    Route::put('/admin/code-findings/{id}', [\App\Http\Controllers\Api\AdminCodeQualityController::class, 'update'])->whereNumber('id');
+    Route::delete('/admin/code-findings/{id}', [\App\Http\Controllers\Api\AdminCodeQualityController::class, 'destroy'])->whereNumber('id');
+    Route::post('/admin/code-findings/{id}/toggle', [\App\Http\Controllers\Api\AdminCodeQualityController::class, 'toggleStatus'])->whereNumber('id');
+
     // Раздел «Настройки» (system_settings) — только admin.
     Route::get('/admin/settings', [\App\Http\Controllers\Api\AdminSettingsController::class, 'index']);
     Route::put('/admin/settings', [\App\Http\Controllers\Api\AdminSettingsController::class, 'update']);
