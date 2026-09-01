@@ -85,6 +85,7 @@ class NotificationController extends Controller
             'import' => 'mdi-upload',
             'mail' => 'mdi-email-fast',
             'chat' => 'mdi-message-text',
+            'birthday' => 'mdi-cake-variant',
             'system' => 'mdi-bell',
         ];
         $colors = [
@@ -95,6 +96,7 @@ class NotificationController extends Controller
             'import' => 'primary',
             'mail' => 'info',
             'chat' => 'info',
+            'birthday' => 'pink',
             'system' => 'grey',
         ];
 
