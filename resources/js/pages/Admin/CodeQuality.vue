@@ -1,7 +1,7 @@
 <template>
   <div class="pa-4">
     <PageHeader title="Качество кода"
-      subtitle="Полный аудит прод-кодовой базы (5 подсистем) + аудит данных каталога продуктов + статус исправлений. Обновлено 09.07.2026." />
+      subtitle="Полный аудит прод-кодовой базы (5 подсистем) + аудит данных каталога продуктов + статус исправлений. Обновлено 01.09.2026: перепроверены все high-находки, часть переехала в «Исправлено»." />
 
     <!-- Сводка -->
     <v-row class="mb-2" dense>
@@ -25,7 +25,7 @@
         <v-card variant="outlined" class="pa-3 h-100">
           <div class="d-flex align-center ga-2 mb-1"><v-icon color="warning">mdi-code-braces</v-icon>
             <span class="text-subtitle-2 font-weight-bold">PHPStan / larastan</span></div>
-          <div class="text-body-2 text-medium-emphasis">Baseline заморожен (~238). CI-гейт на деплой активен. Ложные property.notFound на json-castах — не трогать (larastan не читает casts()).</div>
+          <div class="text-body-2 text-medium-emphasis">Baseline: <strong>230</strong> ошибок в 192 блоках (66 nullsafe.neverNull, 50 property.notFound, 18 nullCoalesce.offset — в основном косметика). CI-гейт на деплой активен. Ложные property.notFound на json-castах — не трогать (larastan не читает casts()). Отдельно: phpstan.neon глушит property.notFound и method.notFound глобально по app/ — шире baseline, см. INF-2.</div>
         </v-card>
       </v-col>
       <v-col cols="12" md="4">
@@ -130,10 +130,6 @@ function catIcon(c) { return catIconMap[c] || 'mdi-file-code'; }
 // ── ОТКРЫТЫЕ находки (аудит 08.07.2026) ──
 const openFindings = [
   // Безопасность
-  { id: 'SEC-1', severity: 'high', category: 'Безопасность', title: 'IDOR: внутренние комментарии о партнёрах доступны любому',
-    file: 'PartnerCommentsController.php (routes/api.php:261-263)',
-    problem: 'GET/POST /partner-comments в блоке auth:sanctum без staff-гейта: любой авторизованный партнёр перебором consultantId читает staff-заметки о любом и пишет комментарии на чужую карточку. index без проверки владельца, store только ставит author_id.',
-    recommendation: 'Перенести 3 маршрута в staff-role группу (role:… / permission:) + скоуп по команде.' },
   { id: 'SEC-2', severity: 'medium', category: 'Безопасность', title: 'role принимается как свободная строка (без whitelist)',
     file: 'AdminUserController.php:249, AdminDataController.php:378',
     problem: 'role валидируется как string|max:255 без списка допустимых. Опечатка/произвольное значение молча портит WebUser.role, от которого зависит isStaff()/права → потеря или получение доступа.',
@@ -198,10 +194,6 @@ const openFindings = [
     file: 'InsmartIntegrationService.php:101,144',
     problem: 'contract/transaction вставляются через LegacyId::next() (MAX+1), но у таблиц есть serial-сиквенс. Ручная генерация НЕ двигает сиквенс → следующий serial-INSERT (bulk-импорт) врежется в занятый id → duplicate _pkey. (Для client уже добавлен syncSequence, для contract/transaction здесь — нет.)',
     recommendation: 'Вставлять через insertGetId или вызвать LegacyId::syncSequence(contract/transaction).' },
-  { id: 'BIZ-2', severity: 'high', category: 'Бизнес-логика (деньги)', title: 'НДС берётся по now(), а не по дате транзакции',
-    file: 'CommissionCalculator.php:259-262, ManualTransactionController.php:582-585',
-    problem: 'Ставка vat резолвится по now(). При пересчёте пост-cutoff сделки после смены НДС amountNoVat (база ВСЕХ комиссий и дохода ДС) считается по неверной ставке.',
-    recommendation: 'Резолвить vat по tx->date.' },
   { id: 'BIZ-3', severity: 'medium', category: 'Бизнес-логика (деньги)', title: 'InSmart: гонка идемпотентности (нет unique-индекса)',
     file: 'InsmartIntegrationService.php:57-68',
     problem: 'Проверка counterpartyContractId exists() до транзакции, без unique-индекса. Два одновременных вебхука → дубль контракта+транзакции+комиссий.',
@@ -218,10 +210,6 @@ const openFindings = [
     file: 'MonthlyPenaltyRunner.php:352 vs MonthlyFinaliser.php:48-50',
     problem: 'Решение о штрафе (>70%) = branchVolume/Σ веток (без ЛП), а сохранённый gapValuePercentage = branchVolume/totalGroupVolume (с ЛП). Ветка может быть >70% по одному и <70% по показанному.',
     recommendation: 'Считать оба от одной базы.' },
-  { id: 'BIZ-7', severity: 'medium', category: 'Бизнес-логика (деньги)', title: 'HISTORICAL_CUTOFF задан дважды по-разному',
-    file: 'CommissionCalculator.php:37 vs PoolRunner.php:50',
-    problem: "HISTORICAL_CUTOFF='2026-06-01' и HISTORICAL_BEFORE=['year'=>2026,'month'=>6] — изменение одной не тронет другую → рассинхрон движков.",
-    recommendation: 'Единый источник (одна константа/настройка).' },
   { id: 'BIZ-8', severity: 'medium', category: 'Бизнес-логика (деньги)', title: 'Каскад комиссий: N+1 по цепочке',
     file: 'CommissionCalculator.php:374,380,383',
     problem: 'На каждый уровень цепочки (до 20) — отдельные запросы consultant×2 + getQualificationLevel. На импорте тысяч транзакций — классический N+1.',
@@ -240,10 +228,6 @@ const openFindings = [
     recommendation: 'Фильтровать удалённых/терминированных; конвертировать по курсу или форсить RUB.' },
 
   // Frontend
-  { id: 'FE-1', severity: 'high', category: 'Frontend (Vue)', title: 'Утечка сокета и слушателя в MainLayout',
-    file: 'MainLayout.vue:704,811-813',
-    problem: 'onUnmounted чистит только unreadInterval; visibilitychange-listener не снимается, window.__notifSocket не disconnect()-ится → дублирование при logout→login.',
-    recommendation: 'Сохранять handler, removeEventListener + disconnect() на unmount.' },
   { id: 'FE-2', severity: 'medium', category: 'Frontend (Vue)', title: 'Незачищенные таймеры (Pool/Mail/SystemStatus/Profile)',
     file: 'Pool.vue:650-682, Mail.vue:694,931, SystemStatus.vue:170, Profile.vue:1315',
     problem: 'applyPollTimer/progressTimer/setInterval/tgPollTimer чистятся только по завершении операции, onUnmounted отсутствует → фоновые запросы после ухода со страницы (пул — каждые 1.5с).',
@@ -350,10 +334,47 @@ const openFindings = [
     file: 'programs_catalog (visible_to_resident AND NOT active)',
     problem: '6 программ помечены visible_to_resident=true при active=false — витрина показывает выключенные позиции.',
     recommendation: 'Синхронизировать: невидимость для выключенных, либо активировать, если реально продаются.' },
+
+  // ── Добавлено аудитом 01.09.2026 ──
+  { id: 'INF-2', severity: 'medium', category: 'Инфраструктура', title: 'PHPStan глушит property.notFound / method.notFound глобально по app/',
+    file: 'phpstan.neon:11-30',
+    problem: 'Помимо baseline (230 ошибок) конфиг отключает property.notFound и method.notFound для app/Http/Controllers/*, app/Services/*, app/Models/*, app/Jobs/*, app/Console/*. Для магии Eloquent это оправдано, но под тем же правилом молча проходят настоящие опечатки в именах свойств — а таблицы вроде consultant (78 колонок в camelCase) к опечаткам располагают.',
+    recommendation: 'Сузить до конкретных путей/классов, где реально нужна магия, либо описать свойства моделей через @property в докблоках и снять глушилку. Снимать по одной категории за раз: разово прогнать phpstan без правила и оценить объём.' },
+  { id: 'SEC-9', severity: 'low', category: 'Безопасность', title: 'MD5-хэши остаются у аккаунтов, не заходивших после миграции',
+    file: 'User.php:134-155',
+    problem: 'validatePassword сделан аккуратно: сравнение constant-time (hash_equals), при успешном входе хэш апгрейдится до bcrypt. Но апгрейд происходит ТОЛЬКО при входе — у аккаунтов, не логинившихся с миграции, в WebUser.password по-прежнему лежит MD5 без соли. Утечка дампа = мгновенный перебор по радужным таблицам.',
+    recommendation: 'Прогнать users:md5-report, для остатка — users:expire-md5 (сброс хэша + принудительное восстановление пароля). После нуля в отчёте удалить MD5-ветку из validatePassword.' },
+  { id: 'BIZ-12', severity: 'low', category: 'Бизнес-логика (деньги)', title: 'Превью черновиков ручного ввода: НДС по now(), а не по дате черновика',
+    file: 'ManualTransactionController.php:203',
+    problem: 'Остаток от BIZ-2: список черновиков отдаёт vatPercent через VatRate::percentOrDefault() без даты, то есть по текущему дню. На деньги не влияет — итог считает CommissionCalculator по tx->date, — но у черновика задним числом (до смены ставки) поле «Своя комиссия С НДС → без НДС» на фронте пересчитается по неверной ставке, и оператор увидит не ту сумму, что получится после расчёта.',
+    recommendation: 'Отдавать vatPercent по дате черновика; для списка — по дате каждой строки, а не одним числом на весь ответ.' },
 ];
 
 // ── ИСПРАВЛЕНО в этой сессии (08.07.2026) ──
 const fixedFindings = [
+  // ── Закрыто и перепроверено 01.09.2026 ──
+  { id: 'SEC-1', category: 'Безопасность', title: 'IDOR: внутренние комментарии о партнёрах доступны любому',
+    problem: 'GET/POST /partner-comments висели в блоке auth:sanctum без staff-гейта: любой авторизованный партнёр перебором consultantId читал служебные заметки о ком угодно и писал комментарии на чужую карточку.',
+    recommendation: 'Три маршрута перенесены в staff-группу (role:admin,backoffice,support,finance,head,calculations,corrections,education,invest + restrict.invest) — routes/v1/cabinet.php:158-162. Перепроверено 01.09.2026.' },
+  { id: 'BIZ-2', category: 'Бизнес-логика (деньги)', title: 'НДС берётся по now(), а не по дате транзакции',
+    problem: 'Ставка НДС резолвилась по текущему дню. При пересчёте пост-cutoff сделки после смены ставки amountNoVat — база ВСЕХ комиссий цепочки и дохода ДС — считалась по неверному проценту.',
+    recommendation: 'CommissionCalculator:610 резолвит ставку по $tx->date (фолбэк на now() только если у транзакции нет даты). Перепроверено 01.09.2026. Остаток по превью черновиков вынесен в BIZ-12.' },
+  { id: 'BIZ-7', category: 'Бизнес-логика (деньги)', title: 'HISTORICAL_CUTOFF задан дважды по-разному',
+    problem: "CommissionCalculator::HISTORICAL_CUTOFF='2026-06-01' и PoolRunner::HISTORICAL_BEFORE=['year'=>2026,'month'=>6] описывали одну и ту же границу независимо: сдвиг одной не трогал вторую, и движки пула и комиссий разошлись бы в том, какие месяцы неизменны.",
+    recommendation: 'HISTORICAL_BEFORE удалена, PoolRunner::isHistoricalMonth() вызывает CommissionCalculator::isHistorical(). Эквивалентность старой и новой проверки прогнана на всех месяцах 2000-2100 — расхождений нет.' },
+  { id: 'FE-1', category: 'Frontend (Vue)', title: 'Утечка сокета и слушателя в MainLayout',
+    problem: 'onUnmounted чистил только unreadInterval. visibilitychange-обработчик не снимался, notifSocket с reconnectionAttempts: Infinity не отключался — при logout→login соединения накапливались, и каждое продолжало дёргать /auth/me на socket-сервере.',
+    recommendation: 'Ссылки на сокет и обработчик подняты в scope компонента; onUnmounted снимает listener, делает removeAllListeners() + disconnect() и чистит window.__notifSocket.' },
+  { id: 'FX-ENV', category: 'Инфраструктура', title: 'env() в рантайме молча ломался после config:cache',
+    problem: 'Деплой выполняет artisan optimize (config:cache), после чего Laravel не читает .env и env() в рантайме возвращает null. ApiSettingsService резолвил ключи интеграций как БД → env → default, и среднее звено на проде было мертво: ключ, заданный только в .env, тихо схлопывался в default, а диагностика в админке показывала «в env не задано» для реально заданных ключей. Тот же дефект — local_domain в MailSettingsService.',
+    recommendation: 'Заведён config/api_settings.php: 14 env-фолбэков читаются на этапе сборки конфига и попадают в кэш. ApiSettingsService и listForUi читают config(api_settings.env.*). MailSettingsService берёт local_domain из config/mail.php ДО перезаписи секции smtp.' },
+  { id: 'FX-SOCK', category: 'Инфраструктура', title: 'socket-server: сравнение emit-секрета не constant-time',
+    problem: 'checkEmitAuth сравнивал заголовок Authorization с секретом обычным !==. Оператор выходит на первом различии, поэтому по времени ответа секрет восстанавливается посимвольно. Единственное место в кодовой базе, где сравнение секрета было не защищено — в PHP везде hash_equals.',
+    recommendation: 'Добавлен safeEqual() на crypto.timingSafeEqual с предварительной сверкой длин (длина и так утекает через размер запроса).' },
+  { id: 'FX-LOG', category: 'Безопасность', title: 'E-mail пользователя в логе миграции пароля',
+    problem: 'При апгрейде MD5→bcrypt в лог писалась строка с id И e-mail пользователя. ПДн из логов разъезжаются по ротациям, Sentry и бэкапам, где живут дольше и охраняются слабее.',
+    recommendation: 'В сообщении остался только id пользователя.' },
+
   { id: 'FX-P1', category: 'БД и модели', title: 'Таблица person удалена — данные живут в карточках',
     problem: 'Контакты клиента и партнёра лежали в отдельной legacy-таблице person из Directual. Указатель client.person мог вести на ДРУГОГО человека (id разошлись при консолидации), и карточка показывала чужие почту и телефон; у партнёров person был заполнен лишь у половины.',
     recommendation: 'Данные перенесены в client и consultant (контакты, ДР, город, телеграм, пол, резидентство, пометки), признак «клиент = партнёр» — в явную связь client.partner_consultant_id. Чтения и записи сняты, внешний ключ снят, таблица удалена 13.08.2026. Соответствие карточка→запись сохранено в person_legacy_map, полный дамп снят до работ.' },
