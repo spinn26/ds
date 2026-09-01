@@ -286,6 +286,13 @@ class AuthController extends Controller
             // про split id-spaces). Корректная связка — через webUser FK.
             $consultant->webUser = $user->id;
             $consultant->personName = trim("{$request->input('lastName')} {$request->input('firstName')} {$request->input('patronymic')}");
+            // Город проживания. Поле обязательно на форме и в RegisterRequest,
+            // но до 01.09.2026 нигде не сохранялось: партнёр его вводил, а
+            // карточка оставалась пустой, и город приходилось добирать из
+            // входной анкеты. Пишем в consultant.city (varchar) — это и есть
+            // «карточка партнёра»; WebUser.city для этого не подходит, там
+            // внешний ключ на справочник city(id), а не свободный текст.
+            $consultant->city = trim((string) $request->input('city')) ?: null;
             $consultant->active = false;
             $consultant->status = 1;
             $consultant->activity = PartnerActivity::Registered;
