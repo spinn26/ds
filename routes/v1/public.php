@@ -54,10 +54,6 @@ Route::middleware('throttle:60,1')->group(function () {
     // Сервис пишет person+client+contract+transaction в одной транзакции,
     // id для product/program/contract/transaction берутся через LegacyId::next.
     Route::post('/webhooks/insmart/paid', [\App\Http\Controllers\Api\InsmartWebhookController::class, 'paid']);
-    // Zammad-вебхук закомментирован — интеграция не используется
-    // (по запросу 2026-05-12). Включить обратно — добавить
-    // shared-secret через api_settings, раскомментировать.
-    // Route::post('/webhooks/zammad', [\App\Http\Controllers\Api\ZammadWebhookController::class, 'handle']);
 });
 
 // 2FA verify — БЕЗ auth (это шаг 2 логина: юзер прошёл email+пароль,

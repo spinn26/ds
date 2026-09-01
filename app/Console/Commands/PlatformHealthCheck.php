@@ -169,7 +169,7 @@ class PlatformHealthCheck extends Command
     /**
      * Просадка success-rate в integration_events за последний час.
      * Алерт если у любого внешнего сервиса (insmart/google_sheets/telegram/
-     * smtp/zammad) success-rate < 80% при минимум 5 событиях.
+     * smtp) success-rate < 80% при минимум 5 событиях.
      */
     private function checkIntegrationSuccessRate(): array
     {
@@ -181,7 +181,7 @@ class PlatformHealthCheck extends Command
 
             $rows = DB::table('integration_events')
                 ->where('created_at', '>=', now()->subHour())
-                ->whereIn('service', ['insmart', 'google_sheets', 'telegram', 'smtp', 'zammad'])
+                ->whereIn('service', ['insmart', 'google_sheets', 'telegram', 'smtp'])
                 ->selectRaw("
                     service,
                     COUNT(*) AS total,

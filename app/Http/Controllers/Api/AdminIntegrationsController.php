@@ -66,12 +66,6 @@ class AdminIntegrationsController extends Controller
             'category' => 'realtime',
             'settings' => [], // адрес в .env (SOCKET_HOST/SOCKET_API_PORT)
         ],
-        'zammad' => [
-            'label' => 'Zammad Helpdesk',
-            'icon' => 'mdi-headset',
-            'category' => 'incoming',
-            'settings' => ['zammad.base_url', 'zammad.token', 'zammad.webhook_secret'],
-        ],
     ];
 
     public function __construct(
