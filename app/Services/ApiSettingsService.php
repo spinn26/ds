@@ -8,9 +8,12 @@ use Illuminate\Support\Facades\Cache;
 /**
  * Read/write для ключей интеграций.
  *
- * Порядок резолвинга get(): сначала БД → потом env() → потом default.
+ * Порядок резолвинга get(): сначала БД → потом env → потом default.
  * Это даёт возможность переопределить env через UI без перезапуска, но
  * сохраняет совместимость со старым кодом, который читал env().
+ *
+ * Env-звено читается через config('api_settings.env.*'), а не env(): на
+ * проде выполняется config:cache, и env() в рантайме возвращает null.
  */
 class ApiSettingsService
 {
@@ -80,7 +83,10 @@ class ApiSettingsService
 
         $envKey = self::CATALOG[$key]['envFallback'] ?? null;
         if ($envKey) {
-            $envVal = env($envKey);
+            // config('api_settings.env.*), а не env(): деплой делает
+            // config:cache, после чего .env не загружается и env() в
+            // рантайме всегда null — фолбэк молча схлопывался в default.
+            $envVal = config('api_settings.env.' . $envKey);
             if ($envVal) return (string) $envVal;
         }
 
@@ -134,7 +140,7 @@ class ApiSettingsService
             $meta = self::CATALOG[$s->key] ?? ['envFallback' => null];
             $hasValue = ! empty($s->value);
             $envFallback = $meta['envFallback'] ?? null;
-            $envPresent = $envFallback && env($envFallback);
+            $envPresent = $envFallback && config('api_settings.env.' . $envFallback);
 
             $out[] = [
                 'key' => $s->key,

@@ -125,6 +125,12 @@ class MailSettingsService
             return false;
         }
 
+        // Читаем ДО перезаписи mail.mailers.smtp — иначе значение уже стёрто.
+        // Через config(), а не env(): после config:cache .env не загружается
+        // и env('MAIL_EHLO_DOMAIN') всегда null. В config/mail.php у ключа
+        // есть дефолт — хост из APP_URL.
+        $localDomain = config('mail.mailers.smtp.local_domain');
+
         Config::set('mail.default', 'smtp');
         Config::set('mail.mailers.smtp', [
             'transport' => 'smtp',
@@ -134,7 +140,7 @@ class MailSettingsService
             'username' => $s->username,
             'password' => $s->password,
             'timeout' => null,
-            'local_domain' => env('MAIL_EHLO_DOMAIN'),
+            'local_domain' => $localDomain,
         ]);
         Config::set('mail.from', [
             'address' => $s->from_address,
