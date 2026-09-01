@@ -642,6 +642,12 @@ const isDark = computed(() => theme.global.current.value.dark);
 const notifCount = ref(0);
 const notifications = ref([]);
 let unreadInterval = null;
+// Держим ссылки на сокет и visibilitychange-обработчик, чтобы снять их в
+// onUnmounted. Без этого при logout→login лейаут монтируется заново, а
+// прежний сокет остаётся жив с reconnectionAttempts: Infinity — соединения
+// накапливались, и каждое дёргало /auth/me на socket-сервере.
+let notifSocket = null;
+let onVisibilityChange = null;
 
 const chatUnread = ref(0);
 
@@ -774,7 +780,7 @@ onMounted(async () => {
   startPolling();
 
   let lastHiddenAt = null;
-  document.addEventListener('visibilitychange', () => {
+  onVisibilityChange = () => {
     if (document.visibilityState === 'visible') {
       // Если пауза > 60 сек — принудительно перезапрашиваем всё сразу
       // и реконнектим сокет (если он отвалился при спящей вкладке).
@@ -783,14 +789,15 @@ onMounted(async () => {
       if (paused > 60000) {
         loadNotifications();
         loadChatUnread();
-        if (window.__notifSocket && !window.__notifSocket.connected) {
-          try { window.__notifSocket.connect(); } catch {}
+        if (notifSocket && !notifSocket.connected) {
+          try { notifSocket.connect(); } catch {}
         }
       }
     } else {
       lastHiddenAt = Date.now();
     }
-  });
+  };
+  document.addEventListener('visibilitychange', onVisibilityChange);
 
   // Real-time notifications via Socket.IO
   try {
@@ -803,7 +810,7 @@ onMounted(async () => {
     const host = window.__SOCKET_URL__ || defaultHost;
     const token = auth.token;
     if (!token) return;
-    const notifSocket = io(host, {
+    notifSocket = io(host, {
       auth: { token },
       transports: ['websocket', 'polling'],
       reconnection: true,
@@ -884,6 +891,23 @@ onMounted(async () => {
 onUnmounted(() => {
   if (unreadInterval) clearInterval(unreadInterval);
   window.removeEventListener('chat:unread-refresh', loadChatUnread);
+
+  if (onVisibilityChange) {
+    document.removeEventListener('visibilitychange', onVisibilityChange);
+    onVisibilityChange = null;
+  }
+
+  // Сокет обязателен к отключению: reconnectionAttempts: Infinity означает,
+  // что брошенное соединение продолжит переподключаться до перезагрузки
+  // страницы.
+  if (notifSocket) {
+    try {
+      notifSocket.removeAllListeners();
+      notifSocket.disconnect();
+    } catch {}
+    notifSocket = null;
+    if (window.__notifSocket) delete window.__notifSocket;
+  }
 });
 
 const statusColor = computed(() => {
