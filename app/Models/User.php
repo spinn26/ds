@@ -145,7 +145,9 @@ class User extends Authenticatable
             if (hash_equals($this->password, md5($password))) {
                 $this->password = Hash::make($password);
                 $this->saveQuietly();
-                \Log::info("MD5 password migrated to bcrypt for user {$this->id} ({$this->email})");
+                // Только id: e-mail в логе — лишние ПДн, которые потом
+                // разъезжаются по ротациям, Sentry и бэкапам логов.
+                \Log::info("MD5 password migrated to bcrypt for user {$this->id}");
                 return true;
             }
             return false;

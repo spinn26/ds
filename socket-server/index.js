@@ -24,6 +24,7 @@ try { require('dotenv').config(); } catch {}
 
 const { Server } = require('socket.io');
 const http = require('http');
+const crypto = require('crypto');
 
 const PORT = process.env.SOCKET_PORT || 3001;
 const API_PORT = parseInt(PORT) + 1; // 3002
@@ -296,11 +297,23 @@ io.on('connection', (socket) => {
 });
 
 // === HTTP API for Laravel to emit events ===
+/**
+ * Constant-time сравнение строк. Обычное !== выходит на первом различии,
+ * и по времени ответа секрет восстанавливается посимвольно. Длины сначала
+ * сравниваем обычным способом — она и так утекает через размер запроса.
+ */
+function safeEqual(a, b) {
+  const ab = Buffer.from(String(a));
+  const bb = Buffer.from(String(b));
+  if (ab.length !== bb.length) return false;
+  return crypto.timingSafeEqual(ab, bb);
+}
+
 function checkEmitAuth(req, res) {
   // No fallback: if secret isn't configured the endpoint must reject
   // (prevents an unconfigured dev instance from acting as an open relay).
   const auth = req.headers.authorization || '';
-  if (!EMIT_SECRET || auth !== `Bearer ${EMIT_SECRET}`) {
+  if (!EMIT_SECRET || !safeEqual(auth, `Bearer ${EMIT_SECRET}`)) {
     res.writeHead(401);
     res.end(JSON.stringify({ error: 'Unauthorized' }));
     return false;
