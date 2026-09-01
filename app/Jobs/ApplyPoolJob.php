@@ -56,7 +56,7 @@ class ApplyPoolJob implements ShouldQueue
 
             if ($result['frozen'] ?? false) {
                 // PoolRunner возвращает frozen=true в двух случаях:
-                //   • период исторический (< HISTORICAL_BEFORE) → message
+                //   • период исторический (< CommissionCalculator::HISTORICAL_CUTOFF) → message
                 //     «Период %02d.%d — исторический...»
                 //   • период закрыт между dispatch и run() (race) → message
                 //     «Период %02d.%d закрыт — пул не переписывается»

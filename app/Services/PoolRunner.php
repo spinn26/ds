@@ -47,7 +47,10 @@ class PoolRunner
      * Разморозка периода (period_closures.reopened_at) — явный сигнал
      * «нужен live-пересчёт», она снимает эту блокировку точечно.
      */
-    public const HISTORICAL_BEFORE = ['year' => 2026, 'month' => 6]; // < июнь 2026 (HISTORICAL_CUTOFF)
+    // Отдельной константы здесь больше нет: граница живёт в одном месте —
+    // CommissionCalculator::HISTORICAL_CUTOFF. Раньше дублировалась как
+    // ['year' => 2026, 'month' => 6], и сдвиг одной из двух рассинхронизировал
+    // движки пула и комиссий. См. isHistoricalMonth().
 
     public function run(int $year, int $month, bool $applyWrite = false): array
     {
@@ -743,14 +746,16 @@ class PoolRunner
     }
 
     /**
-     * true, если период <= февраля 2026 (исторический Directual-импорт).
-     * Live-расчёт работает с марта 2026 включительно (HISTORICAL_BEFORE).
+     * true, если период раньше CommissionCalculator::HISTORICAL_CUTOFF —
+     * то есть относится к зафиксированному импорту из Directual.
+     *
+     * При текущем cutoff '2026-06-01' это май 2026 и раньше; live-расчёт
+     * начинается с июня 2026. Сдвиг границы делается ровно в одном месте —
+     * в самой константе, оба движка поедут за ней синхронно.
      */
     private function isHistoricalMonth(int $year, int $month): bool
     {
-        $border = self::HISTORICAL_BEFORE;
-        return ($year < $border['year'])
-            || ($year === $border['year'] && $month < $border['month']);
+        return CommissionCalculator::isHistorical(sprintf('%04d-%02d', $year, $month));
     }
 
     /**

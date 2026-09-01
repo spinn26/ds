@@ -30,7 +30,7 @@ class PeriodFreezeService
      * (period_closures.reopened_at IS NOT NULL).
      *
      * Используется как escape-hatch для исторических периодов: обычно
-     * < HISTORICAL_BEFORE = read-only, но если админ явно разморозил —
+     * < CommissionCalculator::HISTORICAL_CUTOFF = read-only, но если админ разморозил —
      * разрешаем live-пересчёт и фиксацию заново.
      */
     public function wasReopened(int $year, int $month): bool
