@@ -261,13 +261,17 @@ class AdminIntegrationsController extends Controller
             $request->ip(), $request->user()?->id);
 
         try {
+            // Ветки покрывают ВСЕ ключи self::SERVICES — вход сюда уже
+            // отфильтрован isset() выше, поэтому default был бы мёртвым кодом.
+            // Добавляешь сервис в SERVICES — добавь и ветку: иначе
+            // UnhandledMatchError уйдёт в catch ниже и вернётся 500 с логом
+            // в integration_events, а не тихий «тест не реализован».
             [$ok, $summary, $details] = match ($service) {
                 'insmart' => $this->testInsmart(),
                 'google_sheets' => $this->testGoogleSheets(),
                 'telegram' => $this->testTelegram(),
                 'smtp' => $this->testSmtp($request),
                 'socket_io' => $this->testSocket(),
-                default => [false, 'Тест не реализован', []],
             };
             $this->logger->finish($event, $ok ? 'success' : 'error', $summary, $details);
             return response()->json(['ok' => $ok, 'summary' => $summary, 'details' => $details]);
