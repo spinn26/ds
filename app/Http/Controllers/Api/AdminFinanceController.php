@@ -140,6 +140,34 @@ class AdminFinanceController extends Controller
     }
 
 
+    /**
+     * POST /admin/qualifications/{consultantId}/assign — присвоить уровень вручную.
+     *
+     * Пишет в qualificationLog (открывающая строка месяца) — именно оттуда
+     * CommissionCalculator берёт ставку. Историю и закрытые месяцы сервис не
+     * пропускает. Уже начисленные комиссии месяца НЕ пересчитываются: ответ
+     * возвращает recalcRequired, оператор запускает пересчёт осознанно.
+     */
+    public function assignQualification(
+        Request $request,
+        int $consultantId,
+        \App\Services\ManualQualificationService $service,
+    ): JsonResponse {
+        $data = $request->validate([
+            'level' => ['required', 'integer', 'exists:status_levels,id'],
+            'month' => ['required', 'string', 'regex:/^\d{4}-(0[1-9]|1[0-2])$/'],
+            'comment' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        return response()->json($service->assign(
+            $consultantId,
+            (int) $data['level'],
+            $data['month'],
+            $data['comment'] ?? null,
+            $request->user()?->id,
+        ));
+    }
+
     /** История квалификаций партнёра — все месяцы по убыванию даты. */
     public function qualificationHistory(int $consultantId): JsonResponse
     {

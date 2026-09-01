@@ -92,6 +92,11 @@ Route::middleware('role:admin')->group(function () {
     Route::get('/admin/qualification-matrix', [\App\Http\Controllers\Api\AdminQualificationMatrixController::class, 'index']);
     Route::put('/admin/qualification-matrix', [\App\Http\Controllers\Api\AdminQualificationMatrixController::class, 'update']);
 
+    // Ручное присвоение квалификации партнёру. Только admin: пишется
+    // открывающая строка qualificationLog, из которой CommissionCalculator
+    // берёт ставку комиссии — это прямое вмешательство в деньги.
+    Route::post('/admin/qualifications/{consultantId}/assign', [\App\Http\Controllers\Api\AdminFinanceController::class, 'assignQualification'])->whereNumber('consultantId');
+
     // Исходящие вебхуки.
     Route::get('/admin/webhooks', [\App\Http\Controllers\Api\AdminWebhookController::class, 'index']);
     Route::post('/admin/webhooks', [\App\Http\Controllers\Api\AdminWebhookController::class, 'store']);
