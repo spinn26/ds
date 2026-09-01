@@ -56,6 +56,19 @@ class AdminEducationController extends Controller
         $totalCourses = $courseId > 0 ? 1
             : (int) DB::table('education_courses')->where('active', true)->count();
 
+        // Знаменатель для «просмотрено N из M». Считаем только активные уроки,
+        // а без фильтра по курсу — ещё и только из активных курсов: иначе
+        // выключенный курс раздувает знаменатель, и у партнёра, прошедшего
+        // всё доступное, прогресс никогда не сходится.
+        $lessonsQuery = DB::table('education_lessons as l')->where('l.active', true);
+        if ($courseId > 0) {
+            $lessonsQuery->where('l.course_id', $courseId);
+        } else {
+            $lessonsQuery->join('education_courses as c', 'c.id', '=', 'l.course_id')
+                ->where('c.active', true);
+        }
+        $totalLessons = (int) $lessonsQuery->count();
+
         // Просмотренные уроки.
         $viewQ = DB::table('education_lesson_views as v')
             ->join('education_lessons as l', 'l.id', '=', 'v.lesson_id')
@@ -92,7 +105,7 @@ class AdminEducationController extends Controller
                 ->get()->keyBy('user_id');
         }
 
-        $data = $users->map(function ($u) use ($views, $completions, $attempts, $totalCourses) {
+        $data = $users->map(function ($u) use ($views, $completions, $attempts, $totalCourses, $totalLessons) {
             $v = $views[$u->id] ?? null;
             $c = $completions[$u->id] ?? null;
             $a = $attempts[$u->id] ?? null;
@@ -105,6 +118,7 @@ class AdminEducationController extends Controller
                 'name' => trim(($u->lastName ?? '') . ' ' . ($u->firstName ?? '')) ?: ($u->email ?? '—'),
                 'email' => $u->email,
                 'lessons_viewed' => (int) ($v->cnt ?? 0),
+                'lessons_total' => $totalLessons,
                 'courses_completed' => (int) ($c->cnt ?? 0),
                 'courses_total' => $totalCourses,
                 'avg_score_pct' => $c && $c->avg_pct !== null ? round($c->avg_pct * 100, 1) : null,
@@ -132,14 +146,15 @@ class AdminEducationController extends Controller
 
         $headers = [
             'Партнёр', 'E-mail',
-            'Просмотрено уроков', 'Пройдено курсов', 'Всего курсов',
+            'Просмотрено уроков', 'Всего уроков', 'Пройдено курсов', 'Всего курсов',
             'Средний балл, %',
             'Попыток тестов', 'Сдач из попыток',
             'Последняя активность',
         ];
         $rows = array_map(fn ($r) => [
             $r['name'], $r['email'] ?? '',
-            $r['lessons_viewed'], $r['courses_completed'], $r['courses_total'],
+            $r['lessons_viewed'], $r['lessons_total'] ?? 0,
+            $r['courses_completed'], $r['courses_total'],
             $r['avg_score_pct'],
             $r['test_attempts'] ?? 0, $r['test_passed'] ?? 0,
             $r['last_activity'] ?? '',
@@ -151,9 +166,10 @@ class AdminEducationController extends Controller
             $headers,
             $rows,
             [
-                'numericColumns' => [3, 4, 5, 7, 8],
-                'percentColumns' => [6],
-                'dateColumns' => [9],
+                // Индексы сдвинуты на единицу после «Всего уроков» (колонка 4).
+                'numericColumns' => [3, 4, 5, 6, 8, 9],
+                'percentColumns' => [7],
+                'dateColumns' => [10],
             ]
         );
     }

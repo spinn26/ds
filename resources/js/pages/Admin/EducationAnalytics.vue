@@ -32,10 +32,13 @@
       <v-data-table-server v-model:items-per-page="perPage" v-model:page="page"
         :items="rows" :headers="headers" :items-length="total" :loading="loading"
         density="comfortable" hover @update:options="loadServer">
+        <!-- Прогресс, а не голое число: без знаменателя «12 уроков» ничего
+             не говорит — 12 из 12 и 12 из 120 выглядели одинаково. Формат
+             тот же, что у курсов ниже. -->
         <template #item.lessons_viewed="{ item }">
-          <v-chip size="x-small" :color="item.lessons_viewed > 0 ? 'success' : 'default'" variant="tonal">
-            {{ item.lessons_viewed }}
-          </v-chip>
+          <span :class="item.lessons_viewed > 0 ? 'text-success font-weight-medium' : 'text-medium-emphasis'">
+            {{ item.lessons_viewed }} / {{ item.lessons_total }}
+          </span>
         </template>
         <template #item.courses_completed="{ item }">
           <span :class="item.courses_completed > 0 ? 'text-success font-weight-medium' : 'text-medium-emphasis'">
