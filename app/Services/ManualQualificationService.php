@@ -83,17 +83,24 @@ class ManualQualificationService
                 // Строка месяца уже есть — правим её, а не добавляем вторую:
                 // две открывающие строки на один день сделали бы выбор уровня
                 // зависимым от порядка сортировки.
-                DB::table('qualificationLog')
-                    ->where('id', $existing->id)
-                    ->update([
-                        'nominalLevel' => $level->id,
-                        'calculationLevel' => $level->id,
-                        'comment' => $note,
-                        'savingDate' => now(),
-                    ]);
+                $previousLevelId = $existing->nominalLevel ?? $existing->calculationLevel ?? null;
+
+                // levelPrevious сохраняет то, что стояло ДО правки. Без этого
+                // прежний уровень оставался бы только в audit_log, и в истории
+                // квалификаций подмена выглядела бы как штатный расчёт.
+                $patch = [
+                    'nominalLevel' => $level->id,
+                    'calculationLevel' => $level->id,
+                    'comment' => $note,
+                    'savingDate' => now(),
+                ];
+                if ($previousLevelId !== null && (int) $previousLevelId !== (int) $level->id) {
+                    $patch['levelPrevious'] = $previousLevelId;
+                }
+
+                DB::table('qualificationLog')->where('id', $existing->id)->update($patch);
 
                 $created = false;
-                $previousLevelId = $existing->nominalLevel ?? $existing->calculationLevel ?? null;
             } else {
                 // Объёмы берём из последнего снимка до этого месяца, чтобы
                 // карточка не показала нули там, где партнёр уже что-то набрал.

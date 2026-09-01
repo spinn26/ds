@@ -183,6 +183,13 @@ class AdminFinanceController extends Controller
             $a = $r->nominalLevel ? ($levels[$r->nominalLevel] ?? null) : null;
             $b = $r->calculationLevel ? ($levels[$r->calculationLevel] ?? null) : null;
             $level = (! $a) ? $b : ((! $b) ? $a : (($a->level >= $b->level) ? $a : $b));
+            // Ручное присвоение помечаем явно и показываем, что стояло до него.
+            // Без этого подменённый оператором уровень выглядит в истории как
+            // штатный результат расчёта, и расхождение потом ищут в движке.
+            $comment = (string) ($r->comment ?? '');
+            $manual = str_starts_with($comment, 'Ручное присвоение уровня');
+            $prev = $r->levelPrevious ? ($levels[$r->levelPrevious] ?? null) : null;
+
             return [
                 'date' => substr((string) $r->date, 0, 7),
                 'personalVolume' => round((float) ($r->personalVolume ?? 0), 2),
@@ -190,6 +197,10 @@ class AdminFinanceController extends Controller
                 'groupVolumeCumulative' => round((float) ($r->groupVolumeCumulative ?? 0), 2),
                 'levelNum' => $level?->level,
                 'levelTitle' => $level?->title,
+                'manual' => $manual,
+                'comment' => $comment !== '' ? $comment : null,
+                'previousLevelNum' => $prev?->level,
+                'previousLevelTitle' => $prev?->title,
             ];
         });
 
