@@ -167,7 +167,14 @@
                   </span>
                 </div>
               </div>
-              <div class="kpi-icon-orb" :style="{ background: `rgba(var(--v-theme-${card.color}), 0.12)` }">
+              <!-- Иконка — отдельная точка входа: карточка целиком ведёт в
+                   финотчёт за период, а орб открывает динамику по времени
+                   (за месяц / за год). Клик по орбу гасим, иначе сработает
+                   router-link родителя. -->
+              <div class="kpi-icon-orb" :class="{ 'kpi-icon-orb--clickable': card.dynamics }"
+                :style="{ background: `rgba(var(--v-theme-${card.color}), 0.12)` }"
+                :title="card.dynamics ? 'Динамика по времени' : null"
+                @click.prevent.stop="card.dynamics && openDynamics()">
                 <v-icon size="22" :color="card.color">{{ card.icon }}</v-icon>
               </div>
             </div>
@@ -372,6 +379,53 @@
       </v-card>
     </v-dialog>
 
+    <!-- Динамика личных продаж по времени. Открывается кликом по иконке
+         карточки ЛП. Два разреза: месяцы года и дни месяца. -->
+    <v-dialog v-model="showDynamics" max-width="980" scrollable>
+      <v-card>
+        <v-card-title class="d-flex align-center ga-2 flex-wrap">
+          <v-icon color="green">mdi-chart-line</v-icon>
+          <span>Динамика личных продаж</span>
+          <v-spacer />
+          <v-btn-toggle v-model="dynScope" mandatory density="compact" color="primary" @update:model-value="loadDynamics">
+            <v-btn value="year" size="small">За год</v-btn>
+            <v-btn value="month" size="small">За месяц</v-btn>
+          </v-btn-toggle>
+        </v-card-title>
+
+        <v-card-text>
+          <div class="d-flex align-center ga-3 flex-wrap mb-4">
+            <v-text-field v-if="dynScope === 'year'" v-model="dynYear" label="Год" type="number"
+              density="compact" variant="outlined" hide-details style="max-width:140px"
+              @change="loadDynamics" />
+            <v-text-field v-else v-model="dynMonth" label="Месяц" type="month"
+              density="compact" variant="outlined" hide-details style="max-width:200px"
+              @change="loadDynamics" />
+            <v-spacer />
+            <div class="text-body-2 text-medium-emphasis">
+              Поступило: <strong class="text-high-emphasis tabular-nums">{{ fmtMoney(dynTotals.amountRub) }}</strong>
+              · ЛП: <strong class="text-high-emphasis tabular-nums">{{ fmt(dynTotals.points) }}</strong>
+              · Сделок: <strong class="text-high-emphasis tabular-nums">{{ dynTotals.deals }}</strong>
+            </div>
+          </div>
+
+          <v-progress-linear v-if="dynLoading" indeterminate color="primary" class="mb-3" />
+
+          <div v-if="dynChart" style="height: 340px">
+            <Line :data="dynChart.data" :options="dynChart.options" />
+          </div>
+          <div v-else-if="!dynLoading" class="text-medium-emphasis text-body-2 py-8 text-center">
+            За выбранный период продаж не было.
+          </div>
+        </v-card-text>
+
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="showDynamics = false">Закрыть</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- Loading: top progress bar instead of full-page overlay so the page skeleton stays visible -->
     <v-progress-linear v-if="loading" indeterminate color="primary"
       style="position: fixed; top: 0; left: 0; right: 0; z-index: 9; height: 3px;" />
@@ -380,6 +434,12 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
+import { Line } from 'vue-chartjs';
+import {
+  Chart as ChartJS,
+  Title, Tooltip, Legend, Filler,
+  LineElement, PointElement, CategoryScale, LinearScale,
+} from 'chart.js';
 import api from '../api';
 import MonthPicker from '../components/MonthPicker.vue';
 import PageHeader from '../components/PageHeader.vue';
@@ -387,10 +447,118 @@ import InfoHint from '../components/InfoHint.vue';
 import { fmt } from '../composables/useDesign';
 import { glossary } from '../composables/useGlossary';
 
+ChartJS.register(
+  Title, Tooltip, Legend, Filler,
+  LineElement, PointElement, CategoryScale, LinearScale,
+);
+
 // Деньги для подписей: «1 234 ₽» (разряды по-русски, без копеек).
 function fmtMoney(v) {
   return (Number(v) || 0).toLocaleString('ru-RU', { maximumFractionDigits: 0 }) + ' ₽';
 }
+
+// ── Динамика личных продаж (диалог по клику на иконку карточки ЛП) ──
+const showDynamics = ref(false);
+const dynLoading = ref(false);
+const dynScope = ref('year');
+const dynYear = ref(String(new Date().getFullYear()));
+const dynMonth = ref(new Date().toISOString().slice(0, 7));
+const dynSeries = ref([]);
+const dynTotals = ref({ amountRub: 0, points: 0, deals: 0 });
+
+function openDynamics() {
+  showDynamics.value = true;
+  loadDynamics();
+}
+
+async function loadDynamics() {
+  dynLoading.value = true;
+  try {
+    const { data: res } = await api.get('/dashboard/dynamics', {
+      params: {
+        scope: dynScope.value,
+        period: dynScope.value === 'year' ? dynYear.value : dynMonth.value,
+      },
+    });
+    dynSeries.value = res.series || [];
+    dynTotals.value = res.totals || { amountRub: 0, points: 0, deals: 0 };
+  } catch {
+    dynSeries.value = [];
+    dynTotals.value = { amountRub: 0, points: 0, deals: 0 };
+  }
+  dynLoading.value = false;
+}
+
+// Подписи оси: за год — месяцы словами, за месяц — только число дня,
+// иначе тридцать полных дат не помещаются и ось становится нечитаемой.
+const MONTHS_SHORT = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+function dynLabel(label) {
+  return dynScope.value === 'year'
+    ? MONTHS_SHORT[Number(label.slice(5, 7)) - 1] || label
+    : String(Number(label.slice(8, 10)));
+}
+
+const dynChart = computed(() => {
+  const s = dynSeries.value;
+  // Ось без единой продажи — это не график, а прямая по нулю: показываем текст.
+  if (!s.length || !s.some((p) => p.amountRub > 0 || p.points > 0)) return null;
+
+  return {
+    data: {
+      labels: s.map((p) => dynLabel(p.label)),
+      datasets: [
+        {
+          label: 'Поступило, ₽',
+          data: s.map((p) => p.amountRub),
+          borderColor: 'rgb(76, 175, 80)',
+          backgroundColor: 'rgba(76, 175, 80, 0.15)',
+          fill: true,
+          tension: 0.3,
+          yAxisID: 'y',
+        },
+        {
+          label: 'ЛП, баллы',
+          data: s.map((p) => p.points),
+          borderColor: 'rgb(255, 152, 0)',
+          backgroundColor: 'rgba(255, 152, 0, 0.1)',
+          fill: false,
+          tension: 0.3,
+          yAxisID: 'yPoints',
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { position: 'bottom' },
+        tooltip: {
+          callbacks: {
+            // Деньги и баллы в одной подсказке легко перепутать — подписываем.
+            label: (ctx) => ctx.datasetIndex === 0
+              ? `Поступило: ${fmtMoney(ctx.parsed.y)}`
+              : `ЛП: ${fmt(ctx.parsed.y)}`,
+          },
+        },
+      },
+      scales: {
+        // Две шкалы: рубли и баллы отличаются на порядки, на одной оси
+        // линия баллов легла бы в пол.
+        y: {
+          position: 'left',
+          beginAtZero: true,
+          ticks: { callback: (v) => (Number(v) || 0).toLocaleString('ru-RU') },
+        },
+        yPoints: {
+          position: 'right',
+          beginAtZero: true,
+          grid: { drawOnChartArea: false },
+        },
+      },
+    },
+  };
+});
 
 const loading = ref(true);
 const period = ref(new Date().toISOString().slice(0, 7));
@@ -483,6 +651,10 @@ const volumeCards = computed(() => {
     { title: 'Личные продажи (ЛП)', value: v.personalVolume, change: lp.value, changeType: lp.type, icon: 'mdi-bank', color: 'green',
       hint: glossary.lp,
       pending: p?.personalVolume || 0, projected: p?.projectedPersonalVolume || 0,
+      // Динамика есть только здесь: эндпоинт считает СВОИ продажи партнёра.
+      // Вешать тот же график на НГП или объём первой линии нельзя — это
+      // другие величины, и цифры под иконкой были бы неверными.
+      dynamics: true,
       link: { path: '/finance/report', query: { month: period.value, metric: 'lp' } } },
     { title: 'НГП', value: v.groupVolumeCumulative, change: ngp.value, changeType: ngp.type, icon: 'mdi-trending-up', color: 'orange',
       hint: glossary.ngp,
@@ -644,6 +816,17 @@ onMounted(async () => {
   flex-shrink: 0;
 }
 .kpi-icon-orb--lg { width: 56px; height: 56px; }
+
+/* Орб с динамикой — вторая точка входа внутри кликабельной карточки.
+   Без подсказки её не найти, поэтому даём курсор и заметный отклик. */
+.kpi-icon-orb--clickable {
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.kpi-icon-orb--clickable:hover {
+  transform: scale(1.08);
+  box-shadow: 0 0 0 3px rgba(var(--v-theme-primary), 0.18);
+}
 
 .text-decoration-none { text-decoration: none; color: inherit; }
 .min-w-0 { min-width: 0; }

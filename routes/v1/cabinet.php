@@ -148,6 +148,9 @@ Route::post('/chat/tickets/{id}/incident', [\App\Http\Controllers\Api\ChatContro
 Route::post('/chat/tickets/{id}/incident/resolve', [\App\Http\Controllers\Api\ChatController::class, 'resolveIncident'])->whereNumber('id');
 Route::get('/support/desk', [\App\Http\Controllers\Api\ChatController::class, 'supportDesk']);
 Route::get('/dashboard', [DashboardController::class, 'index']);
+// Динамика личных продаж: помесячно за год или по дням внутри месяца.
+// Открывается кликом по иконке карточки объёмов на дашборде.
+Route::get('/dashboard/dynamics', [DashboardController::class, 'dynamics']);
 Route::get('/status-levels', [DashboardController::class, 'statusLevels']);
 
 Route::get('/clients', [ClientController::class, 'index']);
