@@ -319,20 +319,31 @@ class StructureController extends Controller
         }
         $members = $this->applySort($members, $request);
 
+        // Набор колонок совпадает с exportSubtree (там сверху ещё «Уровень
+        // дерева»): выгрузка всей структуры и выгрузка одной ветки должны
+        // давать одинаковые листы, иначе их не свести в Excel.
+        // Контакты не расширяют доступ: телефон, почта и Telegram уже видны
+        // партнёру в карточке участника на странице «Структура».
         $headers = [
             'ФИО',
             'Квалификация',
             'Статус активности',
             'ЛП',
+            'ЛП с активации',
             'ГП',
             'НГП',
             'Клиенты',
             'Контракты',
             'Партнёры',
+            'E-mail',
+            'Телефон',
+            'Telegram',
             'Город',
             'Дата рождения',
             'Дата активации',
             'Дата смены статуса',
+            'Окончание годового периода',
+            'Дедлайн активации',
             'Пригласитель',
         ];
 
@@ -343,15 +354,21 @@ class StructureController extends Controller
                 : null,
             $m['activityName'] ?? null,
             $m['personalVolume'] ?? 0,
+            $m['personalVolumeSinceActivation'] ?? 0,
             $m['groupVolume'] ?? 0,
             $m['groupVolumeCumulative'] ?? 0,
             $m['clientCount'] ?? 0,
             $m['contractCount'] ?? 0,
             $m['partnersCount'] ?? 0,
+            $m['email'] ?? null,
+            $m['phone'] ?? null,
+            $m['nicTG'] ?? null,
             $m['city'] ?? null,
             $m['birthDate'] ?? null,
             $m['dateActivity'] ?? null,
             $m['dateDeterministic'] ?? null,
+            $m['yearPeriodEnd'] ?? null,
+            $m['activationDeadline'] ?? null,
             $m['inviterName'] ?? null,
         ]);
 
@@ -362,7 +379,10 @@ class StructureController extends Controller
             'Структура',
             $headers,
             $exportRows,
-            ['numericColumns' => [4, 5, 6, 7, 8, 9]],
+            [
+                'numericColumns' => [4, 5, 6, 7, 8, 9, 10],
+                'dateColumns' => [15, 16, 17, 18, 19],
+            ],
         );
     }
 
@@ -405,39 +425,62 @@ class StructureController extends Controller
             ->get();
         $members = $this->consultantService->formatMembers($consultants);
 
+        // Колонки те же, что в exportFiltered, плюс «Уровень дерева» первой.
+        //
+        // ⚠ До 01.09.2026 этот лист врал: читались ключи qualificationTitle,
+        // cumulativeLp, cumulativeGp и cumulativeNgp, которых formatMembers
+        // не отдаёт и никогда не отдавал. Через `?? null` / `?? 0` это не
+        // падало — квалификация уходила пустой, а ЛП/ГП/НГП нулями во ВСЕХ
+        // строках. Читаем реальные ключи.
         $headers = [
             'Уровень дерева',
             'ФИО',
-            'Email',
-            'Телефон',
-            'Город',
-            'Дата рождения',
             'Квалификация',
             'Статус активности',
-            'ЛП накопл.',
-            'ГП накопл.',
-            'НГП накопл.',
-            'Контрактов',
-            'Клиентов',
+            'ЛП',
+            'ЛП с активации',
+            'ГП',
+            'НГП',
+            'Клиенты',
+            'Контракты',
+            'Партнёры',
+            'E-mail',
+            'Телефон',
+            'Telegram',
+            'Город',
+            'Дата рождения',
             'Дата активации',
+            'Дата смены статуса',
+            'Окончание годового периода',
+            'Дедлайн активации',
+            'Пригласитель',
         ];
 
         $rows = $members->map(function ($m) use ($depthById) {
             return [
                 $depthById[$m['id']] ?? null,
                 $m['personName'] ?? null,
+                $m['qualification']
+                    ? ($m['qualification']['level'] . ' [' . $m['qualification']['title'] . ']')
+                    : null,
+                $m['activityName'] ?? null,
+                $m['personalVolume'] ?? 0,
+                $m['personalVolumeSinceActivation'] ?? 0,
+                $m['groupVolume'] ?? 0,
+                $m['groupVolumeCumulative'] ?? 0,
+                $m['clientCount'] ?? 0,
+                $m['contractCount'] ?? 0,
+                $m['partnersCount'] ?? 0,
                 $m['email'] ?? null,
                 $m['phone'] ?? null,
+                $m['nicTG'] ?? null,
                 $m['city'] ?? null,
                 $m['birthDate'] ?? null,
-                $m['qualificationTitle'] ?? null,
-                $m['activityName'] ?? null,
-                $m['cumulativeLp'] ?? 0,
-                $m['cumulativeGp'] ?? 0,
-                $m['cumulativeNgp'] ?? 0,
-                $m['contractCount'] ?? 0,
-                $m['clientCount'] ?? 0,
                 $m['dateActivity'] ?? null,
+                $m['dateDeterministic'] ?? null,
+                $m['yearPeriodEnd'] ?? null,
+                $m['activationDeadline'] ?? null,
+                $m['inviterName'] ?? null,
             ];
         });
 
@@ -450,8 +493,8 @@ class StructureController extends Controller
             $headers,
             $rows,
             [
-                'numericColumns' => [9, 10, 11, 12, 13],
-                'dateColumns' => [6, 14],
+                'numericColumns' => [1, 5, 6, 7, 8, 9, 10, 11],
+                'dateColumns' => [16, 17, 18, 19, 20],
             ],
         );
     }
