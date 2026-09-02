@@ -3,9 +3,12 @@
     <!-- Hero (left half on desktop, hidden/collapsed on mobile) -->
     <aside class="auth-hero">
       <div class="hero-waves">
-        <BrandWaves :width="900" :height="900"
+        <!-- Пропорция вытянута под панель (было 900×900 — квадрат в широкой
+             полосе), плотность поднята: на большом экране редкая сетка
+             читалась как случайные линии, а не как узор. -->
+        <BrandWaves :width="1600" :height="900"
           bg-color="transparent" stroke-color="#ffffff"
-          :rows="18" :columns="22" :amplitude="6" :frequency="1.2"
+          :rows="22" :columns="34" :amplitude="6" :frequency="1.2"
           :stroke-width="0.8" :stroke-opacity="0.35" />
       </div>
 
@@ -282,11 +285,34 @@ function cancelVerify() {
 }
 .auth-page--mobile .auth-hero { display: none; }
 
+/* Живой фон, но нарочно тихий: медленный дрейф самой фирменной сетки.
+   Ни blur, ни hue-rotate — только transform, поэтому браузер двигает
+   готовый слой на видеокарте и ничего не перерисовывает. Слой растянут
+   с запасом (-10% по краям), чтобы при сдвиге не открывался угол. */
 .hero-waves {
   position: absolute;
-  inset: 0;
+  inset: -10%;
   opacity: 0.45;
   pointer-events: none;
+  will-change: transform;
+  animation: waves-drift 90s ease-in-out infinite alternate;
+}
+/* Сетка тянется на всю панель: у BrandWaves viewBox без жёстких размеров,
+   а preserveAspectRatio по умолчанию slice — узор кроется по краям, а не
+   сжимается в квадрат посреди полосы. */
+.hero-waves :deep(.brand-waves) {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+@keyframes waves-drift {
+  0%   { transform: translate3d(0, 0, 0) scale(1); }
+  100% { transform: translate3d(2.5%, -2%, 0) scale(1.06); }
+}
+/* Полторы минуты на цикл — движение на грани заметности: экран не
+   выглядит застывшим, но и не отвлекает от формы входа. */
+@media (prefers-reduced-motion: reduce) {
+  .hero-waves { animation: none; }
 }
 
 .hero-brand {
