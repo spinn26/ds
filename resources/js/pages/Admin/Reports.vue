@@ -63,8 +63,18 @@
         <template #item.type="{ item }">
           <v-chip size="x-small" variant="tonal">{{ reportLabel(item.type) }}</v-chip>
         </template>
-        <template #item.status="{ value }">
-          <v-chip size="x-small" :color="statusColor(value)" variant="tonal">{{ statusLabel(value) }}</v-chip>
+        <!-- Причина ошибки приходит с бэкенда в errorMessage, но раньше
+             нигде не показывалась: оператор видел красную плашку «Ошибка»
+             и шёл спрашивать, а разбираться приходилось по логам сервера.
+             Теперь текст виден прямо в строке. -->
+        <template #item.status="{ item, value }">
+          <div class="d-flex flex-column ga-1 py-1">
+            <v-chip size="x-small" :color="statusColor(value)" variant="tonal">{{ statusLabel(value) }}</v-chip>
+            <div v-if="value === 'error' && item.errorMessage"
+              class="text-caption text-error report-error" :title="item.errorMessage">
+              {{ item.errorMessage }}
+            </div>
+          </div>
         </template>
         <template #item.file="{ item }">
           <v-btn v-if="item.status === 'ready'" size="x-small" variant="tonal" color="info"
@@ -147,7 +157,7 @@ function fmtDateTime(d) {
 
 const archiveHeaders = [
   { title: 'Тип отчёта', key: 'type', width: 220 },
-  { title: 'Статус', key: 'status', width: 200 },
+  { title: 'Статус', key: 'status', width: 280 },
   { title: 'Файл', key: 'file', width: 130 },
   { title: 'Период с', key: 'dateFrom', width: 130 },
   { title: 'Период по', key: 'dateTo', width: 130 },
@@ -238,3 +248,16 @@ function parseFilenameFromCD(cd) {
 
 onMounted(loadArchive);
 </script>
+
+<style scoped>
+/* Текст ошибки может быть длинным (трейс из джоба) — показываем три
+   строки, полный текст остаётся в title при наведении. */
+.report-error {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-height: 1.35;
+  word-break: break-word;
+}
+</style>
