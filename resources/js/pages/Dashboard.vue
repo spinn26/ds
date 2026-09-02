@@ -174,7 +174,7 @@
               <div class="kpi-icon-orb" :class="{ 'kpi-icon-orb--clickable': card.dynamics }"
                 :style="{ background: `rgba(var(--v-theme-${card.color}), 0.12)` }"
                 :title="card.dynamics ? 'Динамика по времени' : null"
-                @click.prevent.stop="card.dynamics && openDynamics()">
+                @click.prevent.stop="card.dynamics && openDynamics(card.dynamics)">
                 <v-icon size="22" :color="card.color">{{ card.icon }}</v-icon>
               </div>
             </div>
@@ -385,7 +385,7 @@
       <v-card>
         <v-card-title class="d-flex align-center ga-2 flex-wrap">
           <v-icon color="green">mdi-chart-line</v-icon>
-          <span>Динамика личных продаж</span>
+          <span>Динамика · {{ dynTitle }}</span>
           <v-spacer />
           <v-btn-toggle v-model="dynScope" mandatory density="compact" color="primary" @update:model-value="loadDynamics">
             <v-btn value="year" size="small">За год</v-btn>
@@ -466,7 +466,12 @@ const dynMonth = ref(new Date().toISOString().slice(0, 7));
 const dynSeries = ref([]);
 const dynTotals = ref({ amountRub: 0, points: 0, deals: 0 });
 
-function openDynamics() {
+const dynMetric = ref('lp');
+const dynTitle = ref('Личные продажи');
+
+function openDynamics(cfg) {
+  dynMetric.value = cfg?.metric || 'lp';
+  dynTitle.value = cfg?.title || 'Личные продажи';
   showDynamics.value = true;
   loadDynamics();
 }
@@ -477,6 +482,7 @@ async function loadDynamics() {
     const { data: res } = await api.get('/dashboard/dynamics', {
       params: {
         scope: dynScope.value,
+        metric: dynMetric.value,
         period: dynScope.value === 'year' ? dynYear.value : dynMonth.value,
       },
     });
@@ -651,19 +657,21 @@ const volumeCards = computed(() => {
     { title: 'Личные продажи (ЛП)', value: v.personalVolume, change: lp.value, changeType: lp.type, icon: 'mdi-bank', color: 'green',
       hint: glossary.lp,
       pending: p?.personalVolume || 0, projected: p?.projectedPersonalVolume || 0,
-      // Динамика есть только здесь: эндпоинт считает СВОИ продажи партнёра.
-      // Вешать тот же график на НГП или объём первой линии нельзя — это
-      // другие величины, и цифры под иконкой были бы неверными.
-      dynamics: true,
+      // У каждой карточки своя метрика: график считает по контрактам того
+      // круга, о котором карточка. Один общий график был бы неверным —
+      // под НГП показывались бы личные продажи партнёра.
+      dynamics: { metric: 'lp', title: 'Личные продажи' },
       link: { path: '/finance/report', query: { month: period.value, metric: 'lp' } } },
     { title: 'НГП', value: v.groupVolumeCumulative, change: ngp.value, changeType: ngp.type, icon: 'mdi-trending-up', color: 'orange',
       hint: glossary.ngp,
       pending: p?.groupVolume || 0, projected: p?.projectedGroupVolumeCumulative || 0,
+      dynamics: { metric: 'team', title: 'Продажи команды' },
       link: { path: '/finance/report', query: { month: period.value, metric: 'ngp' } } },
     // Объём продаж первой линии: баллы (основное значение) + деньги (подпись).
     { title: 'Объём 1 линии', value: v.firstLineVolume, subValue: fmtMoney(v.firstLineVolumeRub),
       change: fl.value, changeType: fl.type, icon: 'mdi-account-arrow-right', color: 'blue',
       hint: glossary.firstLineVolume,
+      dynamics: { metric: 'first_line', title: 'Объём первой линии' },
       link: { path: '/structure', query: { line: '1' } } },
   ];
 });

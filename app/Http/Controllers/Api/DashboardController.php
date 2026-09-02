@@ -13,6 +13,7 @@ class DashboardController extends Controller
 {
     public function __construct(
         private readonly DashboardService $dashboardService,
+        private readonly \App\Services\ConsultantService $consultantService,
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -55,9 +56,36 @@ class DashboardController extends Controller
 
         $scope = $request->input('scope') === 'month' ? 'month' : 'year';
 
+        // Какая карточка дашборда открыла график — от этого зависит, по чьим
+        // контрактам считать. Метрика обязана совпадать с подписью карточки,
+        // иначе под иконкой окажутся чужие цифры.
+        $metric = $request->input('metric');
+        $metric = in_array($metric, ['lp', 'first_line', 'team'], true) ? $metric : 'lp';
+
+        $ids = match ($metric) {
+            // Личные продажи — только свои контракты.
+            'lp' => [$consultant->id],
+            // Объём первой линии — контракты прямых приглашённых, без себя.
+            'first_line' => DB::table('consultant')
+                ->where('inviter', $consultant->id)
+                ->whereNull('dateDeleted')
+                ->pluck('id')->all(),
+            // НГП растёт из продаж всей команды, включая собственные.
+            'team' => array_merge(
+                $this->consultantService->getAllDescendants($consultant->id),
+                [$consultant->id],
+            ),
+        };
+
+        if ($ids === []) {
+            // Нет первой линии — отдаём пустой ряд, а не молчание: фронт
+            // покажет «продаж не было», а не бесконечную загрузку.
+            $ids = [0];
+        }
+
         $base = fn () => DB::table('transaction as t')
             ->join('contract as c', 'c.id', '=', 't.contract')
-            ->where('c.consultant', $consultant->id)
+            ->whereIn('c.consultant', $ids)
             ->whereNull('t.deletedAt')
             ->whereNull('c.deletedAt');
 
@@ -112,6 +140,7 @@ class DashboardController extends Controller
 
         return response()->json([
             'scope' => $scope,
+            'metric' => $metric,
             'period' => $period,
             'series' => $series,
             'totals' => [
