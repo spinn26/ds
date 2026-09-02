@@ -127,6 +127,10 @@ class ManualDraftPreviewService
 
         // Spec ✅Бизнес-логика «Неизвестного консультанта»: 0% и без каскада.
         if ($consultantId === \App\Services\CommissionCalculator::UNKNOWN_CONSULTANT_ID) {
+            $unknownCurrency = $rate > 0 ? round($incomeDS / $rate, 2) : null;
+            [$unknownGross, $unknownManual] =
+                $this->currencyIncomeGross($draft, $unknownCurrency, $vatPercent);
+
             return [
                 'ready' => true,
                 'tariffMissing' => $tariffMissing,
@@ -139,7 +143,9 @@ class ManualDraftPreviewService
                 // Доход ДС в валюте — и в ветке неизвестного ФК: сумма та же,
                 // просто вся остаётся компании. Без этих полей колонка
                 // «Доход ДС (валюта)» у таких строк молча пустовала бы.
-                'incomeDSCurrency' => $rate > 0 ? round($incomeDS / $rate, 2) : null,
+                'incomeDSCurrency' => $unknownCurrency,
+                'incomeDSCurrencyGross' => $unknownGross,
+                'incomeDSCurrencyManual' => $unknownManual,
                 'currencySymbol' => $this->currencyInfo($draft->currency ? (int) $draft->currency : null)['symbol'],
                 'isForeignCurrency' => $this->currencyInfo($draft->currency ? (int) $draft->currency : null)['isForeign'],
                 'currencyRate' => round($rate, 6),
@@ -177,6 +183,13 @@ class ManualDraftPreviewService
         $currencyInfo = $this->currencyInfo($draft->currency ? (int) $draft->currency : null);
         $incomeDsCurrency = $rate > 0 ? round($incomeDS / $rate, 2) : null;
 
+        // Показываем С НДС: в счёте поставщика сумма приходит именно такой,
+        // и оператор сверяет колонку с бумагой, а не с расчётной базой.
+        // Ручное значение вводится в той же величине — иначе при переходе
+        // «авто → вручную» цифра прыгала бы на размер НДС.
+        [$incomeDsCurrencyGross, $currencyManual] =
+            $this->currencyIncomeGross($draft, $incomeDsCurrency, $vatPercent);
+
         return [
             'ready' => true,
             'tariffMissing' => $tariffMissing,
@@ -191,6 +204,9 @@ class ManualDraftPreviewService
             // Доход ДС в валюте контракта + чем его подписать. isForeign=false
             // для рублёвых — фронт по нему решает, показывать ли колонку.
             'incomeDSCurrency' => $incomeDsCurrency,
+            // Значение для колонки: с НДС, ручное имеет приоритет над расчётом.
+            'incomeDSCurrencyGross' => $incomeDsCurrencyGross,
+            'incomeDSCurrencyManual' => $currencyManual,
             'currencySymbol' => $currencyInfo['symbol'],
             'isForeignCurrency' => $currencyInfo['isForeign'],
             'currencyRate' => round($rate, 6),
@@ -209,6 +225,33 @@ class ManualDraftPreviewService
      *
      * @return array{symbol:string, isForeign:bool}
      */
+    /**
+     * «Доход ДС (валюта)» для колонки — с НДС, с приоритетом ручного ввода.
+     *
+     * По части валютных сделок сумма приходит от поставщика готовой, и с
+     * курсом платформы не сходится: округления, комиссия банка, другая дата
+     * фиксации. Тогда оператор вписывает её как есть, и пересчитывать это
+     * значение нельзя — иначе следующий пересчёт затрёт введённое.
+     *
+     * NULL в dsIncomeCurrencyManual означает «оператор не вмешивался», а не
+     * «ноль дохода»: пустое поле возвращает колонку к автоматическому расчёту.
+     *
+     * @return array{0: float|null, 1: bool}  [значение с НДС, введено вручную]
+     */
+    private function currencyIncomeGross(object $draft, ?float $autoNoVat, float $vatPercent): array
+    {
+        $manual = $draft->dsIncomeCurrencyManual ?? null;
+        if ($manual !== null && $manual !== '') {
+            return [round((float) $manual, 2), true];
+        }
+
+        if ($autoNoVat === null) {
+            return [null, false];
+        }
+
+        return [round($autoNoVat * (1 + $vatPercent / 100), 2), false];
+    }
+
     private function currencyInfo(?int $currencyId): array
     {
         $rubId = \App\Support\CurrencyRates::RUB_CURRENCY_ID;

@@ -229,6 +229,9 @@ class ManualTransactionController extends Controller
             // У сторно доход ДС тоже отрицательный — «своя комиссия» должна это
             // позволять, иначе возврат нельзя завести с ручным доходом ДС.
             'dsCommissionAbsolute' => ['nullable', 'numeric'],
+            // Доход ДС в валюте, введённый руками. Пусто = считаем сами.
+            // Отрицательные допустимы по той же причине, что и выше: сторно.
+            'dsIncomeCurrencyManual' => ['nullable', 'numeric'],
         ]);
 
         $draft = DB::table('transaction_draft')->where('id', $id)->first();
@@ -240,6 +243,9 @@ class ManualTransactionController extends Controller
             'amount', 'currency', 'date', 'comment', 'parameter', 'yearKV',
             'dsCommissionPercentage', 'commissionOverride',
             'customCommission', 'dsCommissionAbsolute',
+            // Присутствует в запросе даже со значением null — так фронт
+            // возвращает колонку к автоматическому расчёту, очистив поле.
+            'dsIncomeCurrencyManual',
         ]);
 
         // Курс зависит от МЕСЯЦА СДЕЛКИ, поэтому пересчитываем его и при смене
@@ -702,6 +708,8 @@ class ManualTransactionController extends Controller
             'commissionOverride' => (bool) $r->commissionOverride,
             'customCommission' => (bool) $r->customCommission,
             'dsCommissionAbsolute' => $r->dsCommissionAbsolute !== null ? (float) $r->dsCommissionAbsolute : null,
+            // null = оператор не вмешивался, колонка считается автоматически.
+            'dsIncomeCurrencyManual' => $r->dsIncomeCurrencyManual !== null ? (float) $r->dsIncomeCurrencyManual : null,
             'preview' => $r->previewCalc ? json_decode($r->previewCalc, true) : null,
         ];
     }

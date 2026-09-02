@@ -324,13 +324,34 @@
                       </template>
                     </template>
                     <template v-else-if="h.key === 'incomeDsCurrency'">
-                      <!-- Доход ДС в валюте контракта. Показываем только по
-                           валютным строкам: у рублёвых он равен рублёвому. -->
+                      <!-- Доход ДС в валюте контракта, С НДС — в такой величине
+                           сумма приходит в счёте поставщика, и оператор сверяет
+                           колонку с бумагой.
+
+                           Ручной ввод: по части валютных сделок сумма приходит
+                           готовой и с курсом платформы не сходится (округления,
+                           комиссия банка, другая дата фиксации). Введённое
+                           значение пересчётом НЕ затирается; очистка поля
+                           возвращает автоматический расчёт. -->
                       <template v-if="d.preview?.ready && d.preview?.isForeignCurrency">
-                        <span class="text-no-wrap"
-                          :title="`По курсу ${fmt2(d.preview.currencyRate)} на месяц сделки`">
-                          {{ fmt2(d.preview.incomeDSCurrency) }} {{ d.preview.currencySymbol }}
-                        </span>
+                        <template v-if="d.dsIncomeCurrencyManual != null">
+                          <v-text-field :model-value="d.dsIncomeCurrencyManual" type="number"
+                            density="compact" hide-details variant="underlined"
+                            placeholder="0.00" style="max-width:110px; display:inline-block"
+                            reverse
+                            :title="'Введено вручную. Очистите поле, чтобы вернуть автоматический расчёт'"
+                            @update:model-value="v => patchField(d, 'dsIncomeCurrencyManual', v === '' || v == null ? null : Number(v))" />
+                          {{ d.preview.currencySymbol }}
+                        </template>
+                        <template v-else>
+                          <span class="text-no-wrap"
+                            :title="`Автоматически: по курсу ${fmt2(d.preview.currencyRate)} на месяц сделки, с НДС ${d.preview.vatPercent || 0}%`">
+                            {{ fmt2(d.preview.incomeDSCurrencyGross) }} {{ d.preview.currencySymbol }}
+                          </span>
+                          <v-btn icon="mdi-pencil" size="x-small" variant="text" class="ml-1"
+                            title="Ввести доход ДС в валюте вручную"
+                            @click="patchField(d, 'dsIncomeCurrencyManual', Number(d.preview.incomeDSCurrencyGross || 0))" />
+                        </template>
                       </template>
                       <span v-else class="text-medium-emphasis">—</span>
                     </template>
