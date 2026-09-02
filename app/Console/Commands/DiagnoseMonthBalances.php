@@ -3,7 +3,9 @@
 namespace App\Console\Commands;
 
 use App\Services\CommissionCalculator;
+use App\Services\TelegramNotifier;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -23,9 +25,16 @@ class DiagnoseMonthBalances extends Command
     protected $signature = 'finance:diagnose-month
         {ym : период YYYY-MM}
         {--consultant= : только этот consultant.id}
-        {--limit=25 : сколько строк расхождений печатать}';
+        {--limit=25 : сколько строк расхождений печатать}
+        {--notify : отправить в Telegram, если картина расхождений изменилась}';
 
     protected $description = 'Показать расхождения снимка consultantBalance с commission/poolLog за месяц (только чтение)';
+
+    public function __construct(
+        private readonly TelegramNotifier $telegram,
+    ) {
+        parent::__construct();
+    }
 
     public function handle(): int
     {
@@ -127,7 +136,82 @@ class DiagnoseMonthBalances extends Command
             $this->comment("Починка: php artisan commission:resync-balances --month={$ym}");
         }
 
+        if ($this->option('notify')) {
+            $this->notify($ym, $drifted, $poolDrift, $dupPartners);
+        }
+
         return self::SUCCESS;
+    }
+
+    /**
+     * Оповещение о дрейфе снимка — по фронту, а не по факту.
+     *
+     * Расхождение может держаться неделями (никто не нажал кнопку пересчёта),
+     * и ежедневное «всё ещё расходится» люди перестают читать через три дня.
+     * Поэтому отправляем только когда картина ИЗМЕНИЛАСЬ: дрейф появился,
+     * вырос, уменьшился или ушёл. Слепок сравнения — число партнёров с
+     * расхождением плюс суммарная величина, округлённая до рубля.
+     */
+    private function notify(string $ym, array $drifted, int $poolDrift, int $dupPartners): void
+    {
+        $total = 0.0;
+        foreach ($drifted as $d) {
+            $total += abs((float) $d[1]);
+        }
+
+        $fingerprint = count($drifted) . ':' . round($total) . ':' . $poolDrift . ':' . $dupPartners;
+        $cacheKey = 'balance-drift:' . $ym;
+        $previous = Cache::get($cacheKey);
+
+        // Держим слепок дольше, чем интервал запуска, иначе истёкший кэш
+        // выглядит как «изменилось» и шлёт повтор на ровном месте.
+        Cache::put($cacheKey, $fingerprint, now()->addDays(7));
+
+        if ($fingerprint === $previous) {
+            $this->line('Уведомление не отправлено: картина не изменилась с прошлого запуска.');
+
+            return;
+        }
+
+        if (! $drifted) {
+            // Молчим, если и раньше было чисто: первый запуск не должен
+            // рапортовать «всё хорошо» по каждому месяцу.
+            if ($previous !== null) {
+                $this->telegram->send(
+                    "✅ <b>Снимок начислений сошёлся</b>\n\nПериод: {$ym}\nРасхождений больше нет."
+                );
+            }
+
+            return;
+        }
+
+        $lines = [
+            '⚠️ <b>Расхождение снимка начислений</b>',
+            '',
+            "Период: <b>{$ym}</b>",
+            'Партнёров с расхождением: <b>' . count($drifted) . '</b>',
+            'Суммарно: <b>' . $this->n($total) . ' ₽</b>',
+        ];
+        if ($poolDrift > 0) {
+            $lines[] = "Пул разошёлся у: <b>{$poolDrift}</b>";
+        }
+        if ($dupPartners > 0) {
+            $lines[] = "Дубли commission у: <b>{$dupPartners}</b>";
+        }
+
+        // Три крупнейших — чтобы по сообщению было видно масштаб, а не только факт.
+        $lines[] = '';
+        foreach (array_slice($drifted, 0, 3) as $d) {
+            $name = mb_substr((string) ($d[0]->personName ?? ('ID ' . $d[0]->consultant)), 0, 30);
+            $lines[] = '• ' . $name . ' — ' . $this->n((float) $d[1]) . ' ₽';
+        }
+
+        $lines[] = '';
+        $lines[] = 'Реестр выплат показывает снимок, а не текущие комиссии.';
+        $lines[] = "Починка: <code>php artisan commission:resync-balances --month={$ym}</code>";
+
+        $this->telegram->send(implode("\n", $lines));
+        $this->info('Уведомление отправлено в Telegram.');
     }
 
     private function n(float $v): string

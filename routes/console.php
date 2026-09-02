@@ -77,6 +77,27 @@ Schedule::command('alerts:pending-actions')
     ->weekdays()
     ->dailyAt('9:30');
 
+// Сторож расхождений снимка начислений.
+//
+// Реестр выплат читает НЕ живые commission, а снимок consultantBalance,
+// который пересобирается «по кнопке». Пересчёт комиссий обновляет снимок
+// только по тем, кто остался в цепочке: выбывший партнёр остаётся в реестре
+// со старым завышенным начислением, добавленный не через calculate() — с
+// заниженным. Раньше об этом узнавали от партнёра, увидевшего не ту сумму,
+// а искали руками через finance:diagnose-month.
+//
+// Команда только ЧИТАЕТ и ничего не чинит — ставить её в расписание
+// безопасно даже при отключённых авто-пересчётах. Чинит отдельная
+// commission:resync-balances, и её по-прежнему запускает человек.
+//
+// Два месяца: текущий (свежие правки) и прошлый (закрывается и уезжает
+// в выплаты — там ошибка дороже всего).
+Schedule::call(function () {
+    foreach ([now()->format('Y-m'), now()->subMonthNoOverflow()->format('Y-m')] as $ym) {
+        Artisan::call('finance:diagnose-month', ['ym' => $ym, '--notify' => true]);
+    }
+})->weekdays()->dailyAt('9:40')->name('balance-drift-watch')->withoutOverlapping();
+
 // Health-check платформы (БД/Cache/Socket.IO) — каждые 5 минут.
 // Алерт в Telegram шлётся только при переходе up↔down, чтобы не спамить.
 Schedule::command('platform:health-check')
