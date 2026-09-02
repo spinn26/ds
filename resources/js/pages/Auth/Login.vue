@@ -291,11 +291,13 @@ function cancelVerify() {
    с запасом (-10% по краям), чтобы при сдвиге не открывался угол. */
 .hero-waves {
   position: absolute;
-  inset: -10%;
+  /* Запас по краям больше, чем амплитуда сдвига вместе со scale — иначе
+     на пике движения из-под слоя открылся бы угол панели. */
+  inset: -18%;
   opacity: 0.45;
   pointer-events: none;
   will-change: transform;
-  animation: waves-drift 90s ease-in-out infinite alternate;
+  animation: waves-drift 34s ease-in-out infinite alternate;
 }
 /* Сетка тянется на всю панель: у BrandWaves viewBox без жёстких размеров,
    а preserveAspectRatio по умолчанию slice — узор кроется по краям, а не
@@ -306,11 +308,14 @@ function cancelVerify() {
   display: block;
 }
 @keyframes waves-drift {
-  0%   { transform: translate3d(0, 0, 0) scale(1); }
-  100% { transform: translate3d(2.5%, -2%, 0) scale(1.06); }
+  0%   { transform: translate3d(-3%, 2%, 0) scale(1); }
+  50%  { transform: translate3d(2%, -3%, 0) scale(1.08); }
+  100% { transform: translate3d(6%, -5%, 0) scale(1.14); }
 }
-/* Полторы минуты на цикл — движение на грани заметности: экран не
-   выглядит застывшим, но и не отвлекает от формы входа. */
+/* 34 секунды на проход вместо полутора минут, амплитуда втрое больше:
+   движение теперь читается глазом, но остаётся плавным. Анимируется
+   по-прежнему только transform — слой двигает видеокарта, перерисовки
+   узора не происходит. */
 @media (prefers-reduced-motion: reduce) {
   .hero-waves { animation: none; }
 }
