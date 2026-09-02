@@ -1,20 +1,11 @@
 <template>
-  <div class="register-page" @mousemove="onMouseMove">
+  <!-- Фон намеренно статичный. Раньше здесь жили пять размытых пятен с
+       hue-rotate, дрейфом и параллаксом по мыши — язык лендинга, а не
+       финансовой платформы. Это первый экран, который видит консультант
+       перед тем, как доверить системе свои выплаты: он должен выглядеть
+       спокойно и надёжно, а не «дышать». -->
+  <div class="register-page">
     <div class="bg-base"></div>
-    <div class="parallax">
-      <div class="blob blob-a" :style="layerStyle(0.02, 0.03)"></div>
-      <div class="blob blob-b" :style="layerStyle(-0.035, 0.02)"></div>
-      <div class="blob blob-c" :style="layerStyle(0.025, -0.03)"></div>
-      <div class="blob blob-d" :style="layerStyle(-0.015, -0.02)"></div>
-      <div class="blob blob-e" :style="layerStyle(0.04, 0.015)"></div>
-      <div class="sphere" :style="layerStyle(0.012, 0.008)">
-        <BrandWaves shape="circle" :width="420" :height="420"
-          bg-color="#6EE87A" stroke-color="#ffffff"
-          :rows="14" :columns="18" :amplitude="4" :frequency="1.0"
-          :stroke-width="0.9" :stroke-opacity="0.55" />
-      </div>
-    </div>
-    <div class="vignette"></div>
   <v-container class="fill-height position-relative" fluid style="z-index:2">
     <v-row justify="center" align="center">
       <v-col cols="12" sm="10" md="7" lg="5">
@@ -219,7 +210,6 @@ import { ref, computed, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useAuthStore } from '../../stores/auth';
 import api from '../../api';
-import BrandWaves from '../../components/BrandWaves.vue';
 import {
   cyrillicRequiredRules,
   emailRequiredRules,
@@ -298,19 +288,6 @@ onMounted(async () => {
     refChecking.value = false;
   }
 });
-
-// Parallax mouse tracking
-const mx = ref(0);
-const my = ref(0);
-function onMouseMove(e) {
-  const w = window.innerWidth;
-  const h = window.innerHeight;
-  mx.value = (e.clientX - w / 2) / (w / 2);
-  my.value = (e.clientY - h / 2) / (h / 2);
-}
-function layerStyle(sx, sy) {
-  return { transform: `translate3d(${mx.value * sx * 100}px, ${my.value * sy * 100}px, 0)` };
-}
 
 const reviewItems = computed(() => [
   { label: 'Фамилия', value: form.value.lastName },
@@ -394,84 +371,21 @@ function goToCabinet() {
   overflow: hidden;
   background: #0B1210;
 }
+/* Один спокойный градиент вместо пяти анимированных слоёв. Тёмная
+   зелёная подложка остаётся — она фирменная, — но не движется. */
 .bg-base {
   position: fixed;
   inset: 0;
   z-index: 0;
-  background:
-    radial-gradient(1200px 800px at 15% 20%, rgba(110, 232, 122, 0.18), transparent 60%),
-    radial-gradient(900px 700px at 85% 85%, rgba(46, 125, 50, 0.22), transparent 65%),
-    linear-gradient(135deg, #0B1F14 0%, #0E2C1B 50%, #081510 100%);
-  animation: bg-shift 24s ease-in-out infinite alternate;
+  background: linear-gradient(160deg, #0E2C1B 0%, #0B1F14 55%, #081510 100%);
 }
-.parallax {
-  position: fixed;
-  inset: -60px;
-  z-index: 1;
-  pointer-events: none;
-}
-.blob {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(60px);
-  opacity: 0.7;
-  transition: transform 0.18s ease-out;
-  will-change: transform, filter;
-  animation: blob-drift 18s ease-in-out infinite alternate;
-}
-.blob-a { width: 520px; height: 520px; top: -60px; left: -80px;
-  background: radial-gradient(circle, rgba(110, 232, 122, 0.75) 0%, transparent 70%);
-  animation-duration: 16s; }
-.blob-b { width: 440px; height: 440px; bottom: -100px; right: -80px;
-  background: radial-gradient(circle, rgba(110, 232, 122, 0.55) 0%, transparent 70%);
-  animation-duration: 22s; animation-delay: -4s; }
-.blob-c { width: 340px; height: 340px; top: 40%; right: 10%;
-  background: radial-gradient(circle, rgba(46, 125, 50, 0.55) 0%, transparent 70%);
-  animation-duration: 19s; animation-delay: -8s; }
-.blob-d { width: 260px; height: 260px; bottom: 15%; left: 10%;
-  background: radial-gradient(circle, rgba(168, 244, 180, 0.45) 0%, transparent 70%);
-  animation-duration: 24s; animation-delay: -2s; }
-.blob-e { width: 380px; height: 380px; top: 15%; left: 55%;
-  background: radial-gradient(circle, rgba(94, 220, 107, 0.35) 0%, transparent 70%);
-  animation-duration: 20s; animation-delay: -10s; }
-
-@keyframes blob-drift {
-  0%   { filter: blur(60px) hue-rotate(0deg); opacity: 0.55; transform: scale(1) translate(0, 0); }
-  50%  { filter: blur(72px) hue-rotate(18deg); opacity: 0.8; transform: scale(1.08) translate(14px, -10px); }
-  100% { filter: blur(64px) hue-rotate(-14deg); opacity: 0.65; transform: scale(0.96) translate(-10px, 12px); }
-}
-
-@keyframes bg-shift {
-  0%   { filter: hue-rotate(0deg) brightness(1); }
-  50%  { filter: hue-rotate(12deg) brightness(1.05); }
-  100% { filter: hue-rotate(-8deg) brightness(0.98); }
-}
-.sphere {
-  position: absolute;
-  right: -120px;
-  bottom: -80px;
-  width: 420px;
-  height: 420px;
-  opacity: 0.35;
-  transition: transform 0.18s ease-out;
-  will-change: transform;
-}
-.vignette {
-  position: fixed;
-  inset: 0;
-  z-index: 1;
-  pointer-events: none;
-  background: radial-gradient(ellipse at center, transparent 50%, rgba(0, 0, 0, 0.45) 100%);
-}
+/* Карточка держится границей и одной тенью, без стекла: backdrop-filter
+   на весь экран заставлял браузер перерисовывать размытие при каждом
+   скролле формы. */
 .register-card {
-  backdrop-filter: blur(16px);
-  background: rgba(var(--v-theme-surface), 0.95) !important;
-  border: 1px solid rgba(var(--v-theme-brand), 0.3);
+  background: rgb(var(--v-theme-surface)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--ds-radius-xl, 16px) !important;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
-}
-@media (prefers-reduced-motion: reduce) {
-  .blob, .sphere { transition: none !important; transform: none !important; animation: none !important; }
-  .bg-base { animation: none !important; }
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
 }
 </style>
