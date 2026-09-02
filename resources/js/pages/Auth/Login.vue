@@ -24,8 +24,20 @@
         <h1 class="hero-headline">{{ design.config.loginTitle || 'Партнёрский кабинет для финансовых консультантов' }}</h1>
         <p class="hero-lead">
           Клиенты, контракты, комиссии и обучение — в одном месте.
-          Real-time чат с поддержкой и кураторами.
         </p>
+
+        <!-- Раньше под заголовком было две строки и много пустоты. Список
+             конкретных разделов кабинета объясняет, что человек получит
+             после входа, и заполняет полосу содержанием, а не декором. -->
+        <ul class="hero-points">
+          <li v-for="p in heroPoints" :key="p.title">
+            <v-icon :icon="p.icon" size="20" />
+            <div>
+              <div class="hero-point-title">{{ p.title }}</div>
+              <div class="hero-point-text">{{ p.text }}</div>
+            </div>
+          </li>
+        </ul>
       </div>
 
       <footer class="hero-footer">© DS Consulting · 2026 · 152-ФЗ</footer>
@@ -142,6 +154,20 @@ import { useDesignStore } from '../../stores/design';
 import BrandWaves from '../../components/BrandWaves.vue';
 
 const design = useDesignStore();
+
+// Разделы кабинета, а не рекламные обещания: всё перечисленное реально
+// открывается после входа. Никаких цифр вроде «2000 партнёров» — их
+// пришлось бы поддерживать вручную, и они устареют первыми.
+const heroPoints = [
+  { icon: 'mdi-account-multiple-outline', title: 'Клиенты и контракты',
+    text: 'Свои сделки и договоры команды в одном списке' },
+  { icon: 'mdi-cash-multiple', title: 'Комиссии и выплаты',
+    text: 'Начисления по месяцам и реестр выплат' },
+  { icon: 'mdi-sitemap-outline', title: 'Структура команды',
+    text: 'Дерево партнёров, объёмы и квалификации' },
+  { icon: 'mdi-school-outline', title: 'Обучение',
+    text: 'Курсы, база знаний и поддержка кураторов' },
+];
 const { mobile } = useDisplay();
 
 // Chrome-автозаполнение не триггерит input-событие → Vuetify не обновляет
@@ -230,7 +256,11 @@ function cancelVerify() {
 <style scoped>
 .auth-page {
   display: grid;
-  grid-template-columns: 1fr 480px;
+  /* Было `1fr 480px`: на широком мониторе герой получал почти весь экран
+     (на 3800px — больше 3300px под три строки текста), а форма оставалась
+     зажатой полосой. Теперь колонка формы растёт вместе с окном, но не
+     разъезжается: доля с потолком. */
+  grid-template-columns: 1fr clamp(420px, 34%, 640px);
   min-height: 100vh;
   background: rgb(var(--v-theme-surface));
 }
@@ -285,7 +315,9 @@ function cancelVerify() {
 .hero-brand-title { font-size: 18px; font-weight: 600; line-height: 1.2; }
 .hero-brand-sub { font-size: 13px; opacity: 0.82; margin-top: 2px; }
 
-.hero-pitch { position: relative; max-width: 540px; }
+/* Ширина по строке текста, а не по колонке: на широком мониторе заголовок
+   в 3000px нечитаем — глаз теряет начало следующей строки. */
+.hero-pitch { position: relative; max-width: 620px; }
 .hero-headline {
   font-size: 38px;
   line-height: 1.12;
@@ -293,6 +325,21 @@ function cancelVerify() {
   letter-spacing: -0.5px;
   margin: 0 0 18px;
 }
+.hero-points {
+  list-style: none;
+  margin: 32px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 18px;
+}
+.hero-points li {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+.hero-points .v-icon { opacity: 0.85; margin-top: 2px; flex: none; }
+.hero-point-title { font-size: 15px; font-weight: 600; line-height: 1.35; }
+.hero-point-text { font-size: 13px; line-height: 1.45; opacity: 0.72; margin-top: 2px; }
 .hero-lead {
   font-size: 16px;
   line-height: 1.5;
