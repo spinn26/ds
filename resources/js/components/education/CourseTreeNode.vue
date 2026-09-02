@@ -137,7 +137,7 @@ function onClick() {
   white-space: nowrap;
 }
 .tree-mini {
-  font-size: 10.5px;
+  font-size: 11px;
   color: rgba(var(--v-theme-on-surface), 0.55);
   font-variant-numeric: tabular-nums;
 }

@@ -777,7 +777,7 @@ onBeforeUnmount(() => {
 }
 
 .block { width: 100%; }
-.block-text { font-size: 14.5px; line-height: 1.6; color: rgb(var(--v-theme-on-surface)); white-space: pre-wrap; }
+.block-text { font-size: 15px; line-height: 1.6; color: rgb(var(--v-theme-on-surface)); white-space: pre-wrap; }
 .block-caption { font-size: 12px; font-weight: 600; color: rgba(var(--v-theme-on-surface), 0.55); }
 .block-image { width: 100%; border-radius: var(--ds-radius-md, 8px); }
 .block-file, .block-link {

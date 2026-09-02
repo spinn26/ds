@@ -196,7 +196,7 @@ onMounted(load);
   height: 100%;
 }
 .hw-answer {
-  font-size: 13.5px;
+  font-size: 14px;
   line-height: 1.55;
   background: rgba(var(--v-theme-on-surface), 0.04);
   padding: 10px 12px;

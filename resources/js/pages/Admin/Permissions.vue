@@ -436,7 +436,7 @@ onMounted(load);
   padding: 8px 6px !important;
 }
 .th-section__title {
-  font-size: 10.5px;
+  font-size: 11px;
   line-height: 1.2;
   white-space: nowrap;
   overflow: hidden;

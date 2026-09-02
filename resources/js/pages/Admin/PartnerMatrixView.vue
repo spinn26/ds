@@ -544,9 +544,9 @@ onMounted(() => { loadLookups(); loadSuppliers(); loadData(); });
 .pm-row.pm-total .pm-name {
   background: linear-gradient(rgba(var(--v-theme-on-surface), 0.04), rgba(var(--v-theme-on-surface), 0.04)), rgb(var(--v-theme-surface));
 }
-.pm-grid td { padding: 6px 7px; border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.05); font-size: 12.5px; vertical-align: middle; }
+.pm-grid td { padding: 6px 7px; border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.05); font-size: 13px; vertical-align: middle; }
 .pm-num { font-variant-numeric: tabular-nums; white-space: nowrap; }
-.pm-sub { font-size: 10.5px; color: rgba(var(--v-theme-on-surface), 0.55); line-height: 1.1; margin-top: 1px;
+.pm-sub { font-size: 11px; color: rgba(var(--v-theme-on-surface), 0.55); line-height: 1.1; margin-top: 1px;
   cursor: help; border-bottom: 1px dotted rgba(var(--v-theme-on-surface), 0.35); display: inline-block; }
 .pm-th-lbl { display: inline-flex; align-items: center; gap: 3px; }
 .pm-th-i { color: rgba(var(--v-theme-on-surface), 0.4); cursor: help; }

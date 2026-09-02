@@ -181,21 +181,21 @@ const groups = [
 .eyebrow{font-size:12px;letter-spacing:.15em;text-transform:uppercase;color:var(--doc-accent);font-weight:700;margin:0 0 8px}
 .doc-h1{font-size:clamp(24px,4vw,34px);line-height:1.1;letter-spacing:-.02em;margin:0 0 10px;font-weight:760;color:var(--doc-ink)}
 .lede{color:var(--doc-muted);max-width:66ch;margin:0;font-size:15px;line-height:1.55}
-.meta{font-size:12.5px;color:var(--doc-faint);margin-top:12px}
+.meta{font-size:13px;color:var(--doc-faint);margin-top:12px}
 .doc-h2{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--doc-muted);font-weight:700;margin:34px 0 4px;display:flex;align-items:center;gap:9px}
 .doc-h2 .dot{width:8px;height:8px;border-radius:2px;flex:none}
 .item{background:var(--doc-surface);border:1px solid var(--doc-border);border-radius:14px;padding:16px 18px;margin-top:12px;box-shadow:var(--doc-shadow)}
-.item h3{margin:0 0 3px;font-size:15.5px;letter-spacing:-.01em;color:var(--doc-ink);display:flex;gap:9px;align-items:baseline;flex-wrap:wrap;font-weight:650}
-.tag{font-size:10.5px;font-weight:700;letter-spacing:.03em;padding:2px 7px;border-radius:6px;text-transform:uppercase;white-space:nowrap}
+.item h3{margin:0 0 3px;font-size:15px;letter-spacing:-.01em;color:var(--doc-ink);display:flex;gap:9px;align-items:baseline;flex-wrap:wrap;font-weight:650}
+.tag{font-size:11px;font-weight:700;letter-spacing:.03em;padding:2px 7px;border-radius:6px;text-transform:uppercase;white-space:nowrap}
 .t-code{background:var(--doc-accent-soft);color:var(--doc-accent)}
 .t-data{background:var(--doc-data-soft);color:var(--doc-data)}
 .t-new{background:var(--doc-feat-soft);color:var(--doc-feat)}
-.what{color:var(--doc-muted);font-size:13.5px;margin:2px 0 10px;line-height:1.55}
+.what{color:var(--doc-muted);font-size:14px;margin:2px 0 10px;line-height:1.55}
 .check{border-top:1px dashed var(--doc-line);padding-top:10px}
 .check .lbl{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--doc-accent);margin-bottom:5px}
-ol.steps{margin:0;padding-left:20px;font-size:13.5px;color:var(--doc-ink)}
+ol.steps{margin:0;padding-left:20px;font-size:14px;color:var(--doc-ink)}
 ol.steps li{margin:3px 0;line-height:1.5}
 ol.steps li::marker{color:var(--doc-faint)}
-.item :deep(code),.what :deep(code){font-family:var(--doc-mono);font-size:12.5px;background:var(--doc-surface-2);padding:1px 6px;border-radius:5px;color:var(--doc-code);word-break:break-word}
-.foot{margin-top:34px;padding-top:16px;border-top:1px solid var(--doc-border);color:var(--doc-faint);font-size:12.5px}
+.item :deep(code),.what :deep(code){font-family:var(--doc-mono);font-size:13px;background:var(--doc-surface-2);padding:1px 6px;border-radius:5px;color:var(--doc-code);word-break:break-word}
+.foot{margin-top:34px;padding-top:16px;border-top:1px solid var(--doc-border);color:var(--doc-faint);font-size:13px}
 </style>

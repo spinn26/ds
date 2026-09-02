@@ -507,7 +507,7 @@ onMounted(load);
   padding: 14px 18px;
   display: flex;
   align-items: flex-start;
-  font-size: 13.5px;
+  font-size: 14px;
   line-height: 1.55;
   color: rgba(var(--v-theme-on-surface), 0.85);
   animation: fadeUp 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;

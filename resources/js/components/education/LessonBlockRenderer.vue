@@ -291,7 +291,7 @@ function renderBlock(b) {
   font-size: 14px;
 }
 .block-file-sub {
-  font-size: 11.5px;
+  font-size: 12px;
   color: rgba(var(--v-theme-on-surface), 0.55);
   margin-top: 2px;
   overflow: hidden;

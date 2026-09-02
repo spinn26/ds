@@ -213,7 +213,7 @@ function onDrop(e) {
 .node-row:hover .actions-btn { opacity: 1; }
 
 .lesson-row {
-  font-size: 12.5px;
+  font-size: 13px;
   padding: 4px 6px 4px 4px;
   color: rgba(var(--v-theme-on-surface), 0.78);
 }
