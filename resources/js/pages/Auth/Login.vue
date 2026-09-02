@@ -388,6 +388,15 @@ function cancelVerify() {
   padding: 48px 56px;
   background: rgb(var(--v-theme-surface));
 }
+/* В тёмной теме панель формы была почти чёрной (#161A17) и рядом с
+   зелёным героем читалась как чужой кусок. Здесь — тот же зелёный род,
+   но много глубже: экран становится цельным, а форма всё равно остаётся
+   отдельной плоскостью, а не продолжением героя.
+   Поля outlined, фона у них нет — смена подложки их не задевает. */
+.v-theme--dark .auth-form-wrap {
+  background: #0D1F14;
+  border-left: 1px solid rgba(255, 255, 255, 0.06);
+}
 .auth-page--mobile .auth-form-wrap { padding: 32px 20px; }
 
 .auth-form {
