@@ -73,9 +73,10 @@
               </v-icon>
             </span>
           </v-list-subheader>
-          <!-- В свёрнутом сайдбаре у группы остаётся подпись, а не безымянная
-               черта: по одним иконкам ориентироваться не по чему. -->
-          <div v-else-if="item.group && rail" class="menu-rail-cap" :title="item.group">{{ item.group }}</div>
+          <!-- В свёрнутом сайдбаре группы разделяем чертой, без подписей:
+               8-пиксельный текст в 72px рельсе только зашумлял колонку
+               (просьба 03.09.2026). Название видно при наведении на иконку. -->
+          <v-divider v-else-if="item.group && rail" class="my-1" />
           <!-- Regular item -->
           <v-list-item v-if="!item.group && (rail || !isGroupCollapsed(item._groupKey))" :to="item.path || null" :prepend-icon="item.icon"
             :active="isActivePath(item.path)"
@@ -1741,21 +1742,6 @@ watch(
   font-weight: 500;
 }
 
-/* Подписи групп в свёрнутом сайдбаре. Длинные обрезаем многоточием, а не
-   вручную по букве: «Инстру.» читалось плохо. Полное название — в title. */
-.menu-rail-cap {
-  font-size: 0.53rem;
-  letter-spacing: 0.3px;
-  text-transform: uppercase;
-  text-align: center;
-  opacity: 0.5;
-  margin: 10px 0 2px;
-  padding: 0 4px;
-  user-select: none;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 
 /* Кнопка закрепления — проявляется на наведении, у закреплённых видна всегда,
    чтобы было понятно, чем строка держится наверху. */
