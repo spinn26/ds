@@ -177,9 +177,9 @@ jobs:
     # «Vite manifest not found».
     #
     # cancel-in-progress: false — начатую выкладку не рвём на середине.
-    # В очереди GitHub держит только самый свежий прогон, и это правильно:
-    # скрипт катит origin/main, поэтому пропущенный промежуточный коммит
-    # всё равно уезжает вместе со следующим.
+    # В очереди GitHub держит только самый свежий прогон: отменённый
+    # промежуточный коммит на прод не попадёт, но и не потеряется — он
+    # входит в историю того, который выложится.
     concurrency:
       group: deploy-production
       cancel-in-progress: false
@@ -203,7 +203,24 @@ jobs:
 
             echo "::group::Pull"
             git fetch origin main
-            git reset --hard origin/main
+
+            # Катим ИМЕННО тот коммит, который прошёл quality и tests, а не
+            # текущую голову main. С `reset --hard origin/main` гейт обходился:
+            # красный коммит уезжал на прод соседней зелёной выкладкой — так
+            # ef7a8f1c попал в прод вместе с чужим 87367b79.
+            TARGET="${{ github.sha }}"
+            CURRENT="$(git rev-parse HEAD)"
+
+            # Назад прод не откатываем. Очередь выкладок упорядочена по тому,
+            # кто раньше дошёл до deploy, а не по времени коммита: если
+            # тесты более старого коммита отработали дольше, он доедет вторым
+            # и снёс бы уже выложенное новое.
+            if [ "$TARGET" != "$CURRENT" ] && git merge-base --is-ancestor "$TARGET" "$CURRENT"; then
+              echo "Пропуск: $TARGET уже позади выложенного $CURRENT — прод назад не откатываем."
+              exit 0
+            fi
+
+            git reset --hard "$TARGET"
             git log -1 --oneline
             echo "::endgroup::"
 
