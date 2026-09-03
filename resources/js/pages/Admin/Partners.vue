@@ -431,7 +431,7 @@
          нарисовано; Vuetify остаётся на меню, диалогах и кнопках. -->
     <v-card class="p-tablecard">
       <div class="p-scroll">
-        <table class="p-table">
+        <table ref="tableEl" class="p-table">
           <thead>
             <tr>
               <th class="p-th p-th--check p-sticky" :style="stickyLeft(0)">
@@ -517,6 +517,35 @@
                     {{ fmtDate(item.statusChangeDate) }}
                   </span>
                   <span v-else class="p-muted">—</span>
+                </template>
+
+                <!-- Квалификация: уровень числом, без уровня — прочерк -->
+                <template v-else-if="c.key === 'qualLevel'">
+                  <span v-if="item.qualLevel" class="p-num">{{ item.qualLevel }} ур.</span>
+                  <span v-else class="p-muted">—</span>
+                </template>
+
+                <!-- Объёмы и пул: моноширинные цифры, ноль приглушён —
+                     иначе колонка нулей перетягивает внимание с реальных сумм. -->
+                <template v-else-if="c.key === 'groupVolume' || c.key === 'groupVolumeCumulative'
+                  || c.key === 'poolBonus' || c.key === 'contractsCount' || c.key === 'clientsCount'">
+                  <span :class="['p-num', Number(item[c.key]) ? '' : 'p-muted']">
+                    {{ item[c.key] != null ? fmtNum(Math.round(item[c.key])) : '—' }}
+                  </span>
+                </template>
+
+                <!-- Доступ: открытый замок — вход есть; закрытый — логина нет,
+                     вход заблокирован или партнёр отключён от системы. -->
+                <template v-else-if="c.key === 'access'">
+                  <v-icon :size="16" :color="accessState(item).color"
+                    :title="accessState(item).title">
+                    {{ accessState(item).open ? 'mdi-lock-open-variant' : 'mdi-lock' }}
+                  </v-icon>
+                </template>
+
+                <template v-else-if="c.key === 'lastSeenAt'">
+                  <span v-if="item.lastSeenAt" class="p-nowrap">{{ fmtDateTime(item.lastSeenAt) }}</span>
+                  <span v-else class="p-muted">не заходил</span>
                 </template>
 
                 <!-- Код — приглушённым: он служебный, а не то, что читают -->
@@ -1103,7 +1132,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue';
 import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
 import { useTableSort } from '../../composables/useTableSort';
@@ -1519,14 +1548,26 @@ const allColumns = [
   { title: 'Партнёр',          key: 'personName',     width: 320, always: true },
   { title: 'Статус',           key: 'activityName',   width: 160, always: true },
   { title: 'Код',              key: 'participantCode', width: 100, default: true },
-  // Без width: эта колонка забирает свободный простор, чтобы пустота не
-  // копилась в «Партнёре» — там имя короткое и растягивать его нечем.
-  { title: 'Пригласивший',     key: 'inviterName',    default: true },
+  { title: 'Квалификация',     key: 'qualLevel',      width: 130, default: true },
+  { title: 'ГП за месяц',      key: 'groupVolume',    width: 130, default: true },
+  { title: 'НГП',              key: 'groupVolumeCumulative', width: 130, default: true },
+  { title: 'Пул',              key: 'poolBonus',      width: 120, default: true },
+  { title: 'Контрактов',       key: 'contractsCount', width: 115, default: true },
+  { title: 'Клиентов',         key: 'clientsCount',   width: 105, default: true },
+  { title: 'Доступ',           key: 'access',         width: 100, sortable: false, default: true },
+  // «Наставник первой линии» и «Пригласивший» — одно и то же поле: партнёр
+  // закрепляется за наставником при регистрации, и дерево строится по
+  // `inviter` (см. ✅Бизнес-логика). Отдельной колонкой это был бы дубль,
+  // поэтому колонка одна — под тем названием, которым её называет бэкофис.
+  // Без width: забирает свободный простор, чтобы пустота не копилась в
+  // «Партнёре» — там имя короткое и растягивать его нечем.
+  { title: 'Наставник (1-я линия)', key: 'inviterName', default: true },
   { title: 'Дата рождения',    key: 'birthDate',      width: 130 },
   // Колонки «Куратор» здесь больше нет: поле curatorName никогда не приходило
   // с сервера (в PartnerListingService::present его нет), и ячейка была пустой
   // у всех 1968 партнёров.
   { title: 'Регистрация',      key: 'createdAt',      width: 130, default: true },
+  { title: 'Последний вход',   key: 'lastSeenAt',     width: 150, default: true },
   { title: 'Смена статуса',    key: 'statusChangeDate', width: 140, default: true },
   { title: '',                 key: 'actions',        sortable: false, width: 92, always: true },
 ];
@@ -1538,13 +1579,21 @@ const toggleableColumns = computed(() => allColumns.filter(c => !c.always && c.t
 // column choice survives refreshes.
 const COL_STORAGE_KEY = 'admin.partners.visibleColumns';
 const columnVisible = ref((() => {
+  // Умолчания кладём ПЕРВЫМИ, сохранённый выбор накрывает их сверху.
+  // Раньше сохранённый объект возвращался целиком, и колонка, добавленная
+  // после того как человек однажды открыл страницу, у него не появлялась
+  // никогда: в его localStorage такого ключа просто нет.
+  const merged = {};
+  for (const c of allColumns) if (!c.always) merged[c.key] = !!c.default;
   try {
     const saved = JSON.parse(localStorage.getItem(COL_STORAGE_KEY) || 'null');
-    if (saved) return saved;
+    if (saved) {
+      for (const [key, on] of Object.entries(saved)) {
+        if (key in merged) merged[key] = !!on;
+      }
+    }
   } catch {}
-  const initial = {};
-  for (const c of allColumns) if (!c.always) initial[c.key] = !!c.default;
-  return initial;
+  return merged;
 })());
 
 // Persist on change.
@@ -1682,20 +1731,41 @@ const { sortBy, sortDir, applyParams } = useTableSort('id', 'desc');
 // а не по nth-child: ID выключается в «Колонках», и позиционный расчёт после
 // этого разъезжался.
 const STICKY_KEYS = ['id', 'personName'];
-const CHECK_W = 44;
-const ID_W = 92;
 
 const isSticky = i => STICKY_KEYS.includes(visibleHeaders.value[i]?.key);
 const isLastSticky = i => visibleHeaders.value[i]?.key === 'personName';
+
+// Смещения меряем по фактической ширине шапки, а не константами. С
+// константами колонка «Партнёр» уезжала левее своего места и накрывала
+// соседнюю: браузер даёт колонке ту ширину, которую сочтёт нужной, а
+// заявленный width — только пожелание.
+const tableEl = ref(null);
+const stickyOffsets = ref([]);
+
+function measureSticky() {
+  const ths = tableEl.value?.querySelectorAll('thead th');
+  if (!ths?.length) return;
+  const offs = [];
+  let acc = 0;
+  for (const th of ths) { offs.push(acc); acc += th.offsetWidth; }
+  stickyOffsets.value = offs;
+}
 
 /** idx: 0 — колонка чекбокса, дальше индекс видимой колонки + 1. */
 function stickyLeft(idx) {
   if (idx === 0) return { left: '0px' };
   const c = visibleHeaders.value[idx - 1];
   if (!c || !STICKY_KEYS.includes(c.key)) return null;
-  if (c.key === 'id') return { left: `${CHECK_W}px` };
-  return { left: `${CHECK_W + (columnVisible.value.id ? ID_W : 0)}px` };
+  return { left: `${stickyOffsets.value[idx] ?? 0}px` };
 }
+
+// Пересчитываем, когда меняется состав строк, набор колонок или ширина окна.
+watch([items, visibleHeaders], () => nextTick(measureSticky), { deep: true });
+onMounted(() => {
+  nextTick(measureSticky);
+  window.addEventListener('resize', measureSticky);
+});
+onBeforeUnmount(() => window.removeEventListener('resize', measureSticky));
 
 // Сервер сортирует по своему списку колонок (AdminDataController::partners).
 // Чего в нём нет — не даём щёлкать, чтобы клик не оборачивался пустотой.
@@ -1705,6 +1775,9 @@ const SORT_KEYS = {
   activityName: 'activityName',
   participantCode: 'participantCode',
   inviterName: 'inviterName',
+  // Сервер умеет сортировать по НГП; по квалификации, пулу, счётчикам и
+  // последнему входу — нет, они собираются пачками уже после выборки.
+  groupVolumeCumulative: 'groupVolumeCumulative',
   createdAt: 'dateCreated',
 };
 const sortKeyOf = c => SORT_KEYS[c.key] || null;
@@ -2545,8 +2618,42 @@ onMounted(() => {
 .p-status__dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: 0 0 auto; }
 .p-status--1 { color: rgb(var(--v-theme-success)); background: rgba(var(--v-theme-success), 0.14); }
 .p-status--3 { color: rgb(var(--v-theme-warning)); background: rgba(var(--v-theme-warning), 0.14); }
-.p-status--4 { color: var(--ds-on-surface-variant); background: var(--ds-surface-container-high); }
 .p-status--5 { color: rgb(var(--v-theme-error)); background: rgba(var(--v-theme-error), 0.14); }
+
+/* «Зарегистрирован» — синим и с пульсирующей точкой: это единственное
+   состояние, которое ЖДЁТ действия (партнёр ещё не активирован, у него тикает
+   срок). Серый читался как «всё в порядке, смотреть нечего». */
+.p-status--4 { color: rgb(var(--v-theme-info)); background: rgba(var(--v-theme-info), 0.14); }
+.p-status--4 .p-status__dot {
+  position: relative;
+  animation: p-pulse-dot 2s ease-in-out infinite;
+}
+.p-status--4 .p-status__dot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: currentColor;
+  animation: p-pulse-ring 2s ease-out infinite;
+}
+@keyframes p-pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+@keyframes p-pulse-ring {
+  0% { transform: scale(1); opacity: 0.55; }
+  70%, 100% { transform: scale(2.6); opacity: 0; }
+}
+/* Уважаем системную настройку «меньше движения»: анимация в списке из двух
+   тысяч строк — это две тысячи пульсаций одновременно. */
+@media (prefers-reduced-motion: reduce) {
+  .p-status--4 .p-status__dot,
+  .p-status--4 .p-status__dot::after { animation: none; }
+  .p-status--4 .p-status__dot::after { display: none; }
+}
+
+/* Цифры в колонках — моноширинные, чтобы разряды стояли столбиком. */
+.p-num { font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 .p-actions { display: flex; align-items: center; justify-content: flex-end; gap: 2px; white-space: nowrap; }
 
@@ -2695,20 +2802,10 @@ onMounted(() => {
   align-self: center;
 }
 
-/* Статус: цветная точка + слово. Читается периферийным зрением при
-   прокрутке — именно так бэкофис и просматривает список. */
-.p-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  white-space: nowrap;
-  font-size: 0.82rem;
-}
-.p-status__dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: 0 0 auto; }
-.p-status--1 { color: rgb(var(--v-theme-success)); }
-.p-status--3 { color: rgb(var(--v-theme-warning)); }
-.p-status--4 { color: var(--ds-on-surface-variant); }
-.p-status--5 { color: rgb(var(--v-theme-error)); }
+/* Дубль правил .p-status удалён: он лежал ниже основного блока и перебивал
+   его — «Зарегистрирован» оставался серым и без подложки, сколько бы раз
+   выше он ни красился. Единственное описание статусов — в блоке «Таблица
+   списка». */
 
 /* ============ Карточка партнёра ============
    Цвета берём из ds-токенов (resources/js/styles/ds-tokens.css) — они уже

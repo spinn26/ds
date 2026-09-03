@@ -154,10 +154,46 @@ class PartnerListingService
         // client.partner_consultant_id (заполняет clients:link-partners).
         // Прежде считался через общий person: связь оказалась неверной у 30 пар
         // и не определялась вовсе у партнёров без person.
-        $partnerClients = $rows->isNotEmpty()
-            ? DB::table('client')->whereIn('partner_consultant_id', $rows->pluck('id'))
+        // Считаем клиентов, а не просто наличие: список показывает их числом,
+        // а признак «партнёр является клиентом» — это тот же ответ > 0.
+        $ids = $rows->pluck('id');
+        $clientCounts = $ids->isNotEmpty()
+            ? DB::table('client')->whereIn('partner_consultant_id', $ids)
                 ->whereNull('dateDeleted')
-                ->pluck('partner_consultant_id')->unique()->flip()
+                ->groupBy('partner_consultant_id')
+                ->selectRaw('partner_consultant_id, count(*) as n')
+                ->pluck('n', 'partner_consultant_id')
+            : collect();
+
+        // Показатели строки: квалификация с ГП и пул. DISTINCT ON берёт
+        // последнюю запись журнала по каждому партнёру — один запрос на
+        // страницу вместо запроса на строку.
+        $quals = $ids->isNotEmpty()
+            ? DB::table('qualificationLog')
+                ->selectRaw('distinct on (consultant) consultant, "levelNew", "nominalLevel",'
+                    . ' "calculationLevel", "groupVolume"')
+                ->whereIn('consultant', $ids)
+                ->whereNull('dateDeleted')
+                ->orderBy('consultant')
+                ->orderByDesc('date')
+                ->get()->keyBy('consultant')
+            : collect();
+
+        $pools = $ids->isNotEmpty()
+            ? DB::table('poolLog')
+                ->selectRaw('distinct on (consultant) consultant, "poolBonus"')
+                ->whereIn('consultant', $ids)
+                ->orderBy('consultant')
+                ->orderByDesc('date')
+                ->get()->keyBy('consultant')
+            : collect();
+
+        $contractCounts = $ids->isNotEmpty()
+            ? DB::table('contract')->whereIn('consultant', $ids)
+                ->whereNull('deletedAt')
+                ->groupBy('consultant')
+                ->selectRaw('consultant, count(*) as n')
+                ->pluck('n', 'consultant')
             : collect();
 
         $statusIds = $rows->pluck('status')->filter()->unique();
@@ -173,9 +209,12 @@ class PartnerListingService
         // Замыкание, а не стрелочная функция: строка ссылается на WebUser
         // трижды, и резолвить его на каждое поле — лишняя работа.
         return $rows->map(function ($c) use (
-            $webUsers, $partnerClients, $statusTitles, $reinstateLimit, $activationDays
+            $webUsers, $clientCounts, $statusTitles, $reinstateLimit, $activationDays,
+            $quals, $pools, $contractCounts
         ) {
             $webUser = $webUsers->get($c->webUser);
+            $qual = $quals->get($c->id);
+            $pool = $pools->get($c->id);
 
             return [
                 'id' => $c->id,
@@ -205,7 +244,16 @@ class PartnerListingService
                 'birthDate' => $webUser->birthDate ?? $c->birthDate ?? null,
                 'inviterName' => $c->inviterName,
                 'inviterId' => $c->inviter,
-                'isClient' => isset($partnerClients[$c->id]),
+                // Квалификация: levelNew заполнен не везде, поэтому спускаемся
+                // к номинальному и расчётному уровню.
+                'qualLevel' => $qual->levelNew ?? $qual->nominalLevel ?? $qual->calculationLevel ?? null,
+                'groupVolume' => isset($qual->groupVolume) ? round((float) $qual->groupVolume, 2) : null,
+                'poolBonus' => isset($pool->poolBonus) ? round((float) $pool->poolBonus, 2) : null,
+                'contractsCount' => (int) ($contractCounts[$c->id] ?? 0),
+                'clientsCount' => (int) ($clientCounts[$c->id] ?? 0),
+                // dateLastActivity в базе пуст у всех — живой признак только этот.
+                'lastSeenAt' => $webUser->last_seen_at ?? null,
+                'isClient' => (int) ($clientCounts[$c->id] ?? 0) > 0,
                 'platformAccess' => $webUser && ! ($webUser->isBlocked ?? false),
                 // ⚠ Не то же самое, что !platformAccess. Тот false и у 897
                 // партнёров БЕЗ логина — «доступа нет, потому что и входить
