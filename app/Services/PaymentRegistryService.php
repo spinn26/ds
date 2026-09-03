@@ -15,7 +15,8 @@ use Illuminate\Support\Facades\DB;
  * бухгалтерским экспортом, — их нельзя трогать без сверки с
  * PaymentRegistryTest:
  *   - «Сальдо» = остаток ПРЕДЫДУЩЕГО периода, а не balance текущего месяца:
- *     ночной перенос remaining в balance запаздывает;
+ *     ночной перенос remaining в balance запаздывает; в него входят и ручные
+ *     начисления прошлых месяцев — считает IncomingBalance, общий с выгрузкой;
  *   - «Начислено» и «Пул» читаются ТОЛЬКО из снимка consultantBalance,
  *     который обновляется кнопкой пересчёта (решение 2026-06-05 «деньги
  *     считаются по кнопке»); живьём читаются лишь ручные начисления;
@@ -188,21 +189,15 @@ class PaymentRegistryService
         // Ручные other_accruals (extraByCons) остаются live — это не расчёт, а
         // отображение введённых начислений.
 
-        // Сальдо (входящий остаток) = remaining последнего периода ДО выбранного
-        // месяца — per spec ✅Реестр выплат и единообразно с экспортным
-        // PaymentRegistryReport. Раньше брали b.balance текущего месяца, но
-        // ночной перенос remaining→balance запаздывает (напр. июнь: balance=0
-        // при remaining≈50k у прошлого месяца) → UI показывал Сальдо=0,
-        // расходясь с бухгалтерским экспорт-отчётом.
-        // DISTINCT ON — single-pass instead of N correlated subqueries (prev version timed out on prod).
-        // Picks the most recent row per consultant where dateMonth < selected month.
-        $incomingByCons = collect(DB::select(
-            'SELECT DISTINCT ON (consultant) consultant, remaining
-             FROM "consultantBalance"
-             WHERE "dateMonth" < ?
-             ORDER BY consultant, "dateMonth" DESC',
-            [$dm]
-        ))->pluck('remaining', 'consultant');
+        // Сальдо (входящий остаток) = остаток последнего периода ДО выбранного
+        // месяца ПЛЮС ручные корректировки прошлых месяцев, которых нет в
+        // снимке — единообразно с экспортным PaymentRegistryReport и кабинетом
+        // партнёра. Раньше брали b.balance текущего месяца, но ночной перенос
+        // remaining→balance запаздывает (напр. июнь: balance=0 при
+        // remaining≈50k у прошлого месяца) → UI показывал Сальдо=0.
+        // Про добавку other_accruals — см. IncomingBalance: без неё правка
+        // «Прочих начислений» за прошлый месяц не гасила сальдо следующего.
+        $incomingByCons = IncomingBalance::forMonth($dm);
 
         // Batch-load requisite verification for every partner in the result.
         $consultantIds = $rows->pluck('consultant')->filter()->unique()->values()->all();

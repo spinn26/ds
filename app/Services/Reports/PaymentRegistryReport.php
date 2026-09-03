@@ -62,15 +62,12 @@ class PaymentRegistryReport extends AbstractReportType
             ->groupBy('cb.consultant')->pluck('paid', 'consultant');
 
         // Сальдо = входящий остаток с прошлых периодов (per spec ✅Отчет Реестр Выплат):
-        // последний consultantBalance.balance до начала отчётного периода.
+        // остаток последнего снимка до начала отчётного периода ПЛЮС ручные
+        // корректировки прошлых месяцев, которых в снимке нет. Считается тем же
+        // IncomingBalance, что и колонка «Сальдо» в реестре: расхождение между
+        // экраном и выгрузкой здесь уже случалось, держим один источник.
         $balanceFromMonth = \Carbon\Carbon::parse($from)->format('Y-m');
-        $balanceByCons = DB::table('consultantBalance as cb1')
-            ->whereRaw('cb1.id = (SELECT cb2.id FROM "consultantBalance" cb2
-                WHERE cb2.consultant = cb1.consultant
-                  AND cb2."dateMonth" < ?
-                ORDER BY cb2."dateMonth" DESC LIMIT 1)', [$balanceFromMonth])
-            ->select('cb1.consultant', 'cb1.remaining')
-            ->pluck('remaining', 'consultant');
+        $balanceByCons = \App\Services\IncomingBalance::forMonth($balanceFromMonth);
 
         // Реальные имена таблиц в legacy-схеме: `requisites` (юр) + `bankrequisites` (банк).
         // bankrequisites привязаны к requisites через requisites.id (FK), не к consultant напрямую.

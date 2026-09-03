@@ -16,6 +16,9 @@ use Tests\TestCase;
  * бухгалтерским экспортом:
  *   - «Сальдо» = остаток ПРЕДЫДУЩЕГО периода, а не b.balance текущего: ночной
  *     перенос remaining→balance запаздывает, и сальдо показывалось нулём;
+ *   - в «Сальдо» входят и ручные начисления прошлых месяцев: снимок про
+ *     other_accruals не знает, и без добавки правка за прошлый месяц не
+ *     гасила сальдо следующего;
  *   - «Начислено» и «Пул» читаются ТОЛЬКО из снимка, без живого пересчёта
  *     (решение 2026-06-05 «деньги считаются по кнопке»);
  *   - удержания месяца берутся построчно из commission, а не из колонок
@@ -66,6 +69,50 @@ class PaymentRegistryTest extends TestCase
         $this->balance(self::PARTNER, '2026-06', ['balance' => 0]);
 
         $this->assertEqualsWithDelta(50_000, $this->row(2026, 6)['balance'], 0.01);
+    }
+
+    /**
+     * ⚠ Ручные начисления прошлых месяцев ВХОДЯТ в сальдо.
+     *
+     * Снимок consultantBalance собирается только из commission и про
+     * other_accruals не знает. Пока сальдо читалось из одного снимка, правка
+     * «Прочих начислений» за прошлый месяц не гасила сальдо следующего:
+     * у Лунина (03.09.2026) +7 500 «возврат за стратсессию» за 30.06.2026
+     * стоял в начислениях, а июль всё равно открывался с −7 500.
+     */
+    #[Test]
+    public function manual_accruals_of_earlier_months_land_in_the_opening_balance(): void
+    {
+        $this->balance(self::PARTNER, '2026-06', ['remaining' => -7_500]);
+        $this->balance(self::PARTNER, '2026-07', ['balance' => 0]);
+        DB::table('other_accruals')->insert([
+            'consultant' => self::PARTNER, 'amount' => 7_500, 'points' => 0,
+            'type' => 'rub', 'accrual_date' => '2026-06-30 00:00:00',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $this->assertEqualsWithDelta(0, $this->row(2026, 7)['balance'], 0.01);
+    }
+
+    /**
+     * ...а начисление САМОГО выбранного месяца в сальдо не попадает: оно уже
+     * посчитано в «Прочем». Иначе те же рубли легли бы в строку дважды.
+     */
+    #[Test]
+    public function manual_accruals_of_the_selected_month_stay_out_of_the_opening_balance(): void
+    {
+        $this->balance(self::PARTNER, '2026-06', ['remaining' => 1_000]);
+        $this->balance(self::PARTNER, '2026-07', ['balance' => 0]);
+        DB::table('other_accruals')->insert([
+            'consultant' => self::PARTNER, 'amount' => 500, 'points' => 0,
+            'type' => 'rub', 'accrual_date' => '2026-07-10 00:00:00',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $row = $this->row(2026, 7);
+
+        $this->assertEqualsWithDelta(1_000, $row['balance'], 0.01);
+        $this->assertEqualsWithDelta(500, $row['other'], 0.01);
     }
 
     // ---------------- Начислено: только снимок ----------------
