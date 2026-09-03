@@ -201,117 +201,197 @@
     </DialogShell>
 
     <!-- Edit dialog -->
-    <v-dialog v-model="editDialog" max-width="880" persistent scrollable>
-      <v-card v-if="editForm">
-        <v-card-title class="d-flex align-center ga-2">
-          <span class="text-truncate">
-            Редактировать{{ editForm.personName ? ` «${editForm.personName}»` : ' партнёра' }}
-          </span>
-          <v-chip size="small" :color="editActivityColor">{{ editForm.activityName || '—' }}</v-chip>
-          <v-spacer />
-          <span class="text-caption text-medium-emphasis">ID {{ editForm.id }}</span>
-        </v-card-title>
-        <v-card-text style="max-height:70vh">
+    <v-dialog v-model="editDialog" max-width="920" persistent scrollable>
+      <v-card v-if="editForm" class="pf-dialog">
+        <!-- Шапка: кто редактируется и в каком он состоянии. Аватар + чипы
+             статуса/реквизитов отвечают на «того ли я открыл» без прокрутки. -->
+        <div class="pf-head">
+          <v-avatar size="44" color="primary" variant="tonal">
+            <span class="text-subtitle-2 font-weight-bold">{{ getInitials(editForm.personName) }}</span>
+          </v-avatar>
+          <div class="pf-head__main">
+            <div class="pf-head__name text-truncate">
+              {{ editForm.personName || 'Партнёр' }}
+            </div>
+            <div class="pf-head__meta">
+              <v-chip size="x-small" variant="tonal" :color="editActivityColor">
+                {{ editForm.activityName || '—' }}
+              </v-chip>
+              <v-chip size="x-small" variant="tonal"
+                :color="editForm.requisitesVerified ? 'success' : 'warning'"
+                :prepend-icon="editForm.requisitesVerified ? 'mdi-shield-check' : 'mdi-shield-alert-outline'">
+                {{ editForm.requisitesVerified ? 'Реквизиты подтверждены' : 'Реквизиты не подтверждены' }}
+              </v-chip>
+              <span class="pf-head__id">ID {{ editForm.id }}</span>
+              <v-btn icon="mdi-content-copy" size="x-small" variant="text"
+                aria-label="Скопировать ID" @click="copyValue(editForm.id, 'ID партнёра')" />
+            </div>
+          </div>
+          <v-btn icon="mdi-close" variant="text" size="small"
+            aria-label="Закрыть" @click="editDialog = false" />
+        </div>
+        <v-divider />
+
+        <v-card-text class="pf-body">
           <div v-if="editLoading" class="text-center pa-6">
             <v-progress-circular indeterminate />
           </div>
           <template v-else>
             <v-form v-model="editFormValid">
-            <v-row dense>
-              <v-col cols="12"><div class="text-subtitle-2 font-weight-bold mb-2">ФИО (WebUser)</div></v-col>
-              <v-col cols="12" sm="4"><v-text-field v-model="editForm.lastName" :rules="cyrillicOptionalRules" label="Фамилия" variant="outlined" density="compact" :error-messages="editErrors.lastName" /></v-col>
-              <v-col cols="12" sm="4"><v-text-field v-model="editForm.firstName" :rules="cyrillicOptionalRules" label="Имя" variant="outlined" density="compact" :error-messages="editErrors.firstName" /></v-col>
-              <v-col cols="12" sm="4"><v-text-field v-model="editForm.patronymic" :rules="cyrillicOptionalRules" label="Отчество" variant="outlined" density="compact" :error-messages="editErrors.patronymic" /></v-col>
+            <!-- Спека «Верификация реквизитов Партнёра», Контур 3: ИП должно
+                 быть оформлено на то же имя, что в профиле, поэтому смена ФИО
+                 снимает верификацию. Предупреждаем ДО сохранения — иначе
+                 сотрудник узнаёт о закрытом гейте выплат от партнёра. -->
+            <v-alert v-if="editForm.requisitesVerified"
+              :type="editNameChanged ? 'warning' : 'info'" density="compact"
+              variant="tonal" class="mb-4"
+              :icon="editNameChanged ? 'mdi-shield-off-outline' : 'mdi-shield-check-outline'">
+              <div class="text-body-2">
+                <strong>Реквизиты партнёра верифицированы.</strong>
+                {{ editNameChanged
+                  ? 'Сохранение снимет верификацию: партнёру откроется повторный ввод и отправка реквизитов, выплаты и «Продукты» — до новой проверки.'
+                  : 'Изменение ФИО снимет верификацию — партнёру придётся отправить реквизиты повторно.' }}
+              </div>
+            </v-alert>
 
-              <!-- Спека «Верификация реквизитов Партнёра», Контур 3: ИП должно
-                   быть оформлено на то же имя, что в профиле, поэтому смена ФИО
-                   снимает верификацию. Предупреждаем ДО сохранения — иначе
-                   сотрудник узнаёт о закрытом гейте выплат от партнёра. -->
-              <v-col v-if="editForm.requisitesVerified" cols="12">
-                <v-alert :type="editNameChanged ? 'warning' : 'info'" density="compact"
-                  variant="tonal" class="text-caption">
-                  Реквизиты партнёра верифицированы.
-                  {{ editNameChanged
-                    ? 'Сохранение снимет верификацию: партнёру откроется повторный ввод и отправка реквизитов, выплаты и «Продукты» — до новой проверки.'
-                    : 'Изменение ФИО снимет верификацию — партнёру придётся отправить реквизиты повторно.' }}
-                </v-alert>
-              </v-col>
+            <section class="pf-sec">
+              <header class="pf-sec__head">
+                <v-icon size="18" class="pf-sec__icon">mdi-account-outline</v-icon>
+                <span class="pf-sec__title">ФИО</span>
+                <span class="pf-sec__hint">Новое имя разойдётся по контрактам, клиентам и структуре</span>
+              </header>
+              <v-row dense>
+                <v-col cols="12" sm="4"><v-text-field v-model="editForm.lastName" :rules="cyrillicOptionalRules" label="Фамилия" variant="outlined" density="compact" :error-messages="editErrors.lastName" /></v-col>
+                <v-col cols="12" sm="4"><v-text-field v-model="editForm.firstName" :rules="cyrillicOptionalRules" label="Имя" variant="outlined" density="compact" :error-messages="editErrors.firstName" /></v-col>
+                <v-col cols="12" sm="4"><v-text-field v-model="editForm.patronymic" :rules="cyrillicOptionalRules" label="Отчество" variant="outlined" density="compact" :error-messages="editErrors.patronymic" /></v-col>
+              </v-row>
+            </section>
 
-              <v-col cols="12" class="mt-2"><div class="text-subtitle-2 font-weight-bold mb-2">Контакты</div></v-col>
-              <v-col cols="12" md="4"><v-text-field v-model="editForm.email" :rules="emailRules" label="Email" type="email" variant="outlined" density="compact" :error-messages="editErrors.email" /></v-col>
-              <v-col cols="12" md="4">
-                <!-- PhoneInput: статичный префикс «🇷🇺 +7» + маска (XXX) XXX-XX-XX.
-                     v-model хранит «+79991234567» — формат сохранения не изменился. -->
-                <PhoneInput v-model="editForm.phone" label="Телефон"
-                  :error-messages="editPhoneShowError ? 'Неверный номер телефона' : (editErrors.phone || [])"
-                  @validate="onEditPhoneValidate" />
-              </v-col>
-              <v-col cols="12" md="4"><v-text-field v-model="editForm.nicTG" label="Telegram" variant="outlined" density="compact" :error-messages="editErrors.nicTG" /></v-col>
-
-              <v-col cols="12" class="mt-2"><div class="text-subtitle-2 font-weight-bold mb-2">Персональные данные</div></v-col>
-              <v-col cols="12" sm="4"><v-select v-model="editForm.gender" :items="genderOptions" label="Пол" variant="outlined" density="compact" clearable :error-messages="editErrors.gender" /></v-col>
-              <v-col cols="12" sm="4"><v-text-field v-model="editBirthDate" type="date" label="Дата рождения" variant="outlined" density="compact" :error-messages="editErrors.birthDate" /></v-col>
-              <v-col cols="12" sm="4">
-                <!-- Роли в БД — CSV-строка; в UI — массив. Список ролей —
-                     зеркало Admin/Users.vue (источник: config/cabinetPermissions.js). -->
-                <v-select v-model="editFormRoles" :items="roleOptions"
-                  label="Роль(и)" variant="outlined" density="compact"
-                  multiple chips closable-chips clearable
-                  :error-messages="editErrors.role" />
-              </v-col>
-
-              <v-col cols="12" class="mt-2"><div class="text-subtitle-2 font-weight-bold mb-2">Сеть</div></v-col>
-              <v-col cols="12" sm="4">
-                <v-text-field v-model="editForm.participantCode" label="Реф. код"
-                  variant="outlined" density="compact" :error-messages="editErrors.participantCode" />
-              </v-col>
-              <v-col cols="12" sm="4">
-                <!-- Автокомплит по ФИО: ищем по personName / participantCode,
-                     отдаём наверх consultant.id. В подсказке — ID и реф. код
-                     текущего выбора, чтобы оператор видел всё нужное. -->
-                <v-autocomplete
-                  v-model="editForm.inviter"
-                  :items="inviterOptions"
-                  item-title="personName"
-                  item-value="id"
-                  label="Пригласивший"
-                  placeholder="Поиск по ФИО или коду"
-                  prepend-inner-icon="mdi-account-search"
-                  variant="outlined" density="compact"
-                  clearable hide-no-data
-                  :loading="inviterLoading"
-                  :hint="inviterHint" persistent-hint
-                  :error-messages="editErrors.inviter"
-                  @update:search="onInviterSearch"
-                >
-                  <template #item="{ props: itemProps, item }">
-                    <v-list-item v-bind="itemProps">
-                      <template #subtitle>
-                        ID {{ item.raw.id }}<span v-if="item.raw.participantCode"> · код {{ item.raw.participantCode }}</span>
-                      </template>
-                    </v-list-item>
-                  </template>
-                </v-autocomplete>
-              </v-col>
-              <v-col cols="12" sm="4">
-                <v-checkbox v-model="editForm.isBlocked" label="Заблокирован" density="compact" hide-details />
-              </v-col>
-
-              <template v-if="auth.isAdmin">
-                <v-col cols="12" class="mt-2"><div class="text-subtitle-2 font-weight-bold mb-2">Смена пароля</div></v-col>
-                <v-col cols="12" sm="6">
-                  <v-text-field v-model="editForm.newPassword" type="password"
-                    label="Новый пароль (пусто — не менять)"
-                    variant="outlined" density="compact" :error-messages="editErrors.newPassword" />
+            <section class="pf-sec">
+              <header class="pf-sec__head">
+                <v-icon size="18" class="pf-sec__icon">mdi-card-account-mail-outline</v-icon>
+                <span class="pf-sec__title">Контакты</span>
+                <span class="pf-sec__hint">Email — это логин в кабинет</span>
+              </header>
+              <v-row dense>
+                <v-col cols="12" md="4"><v-text-field v-model="editForm.email" :rules="emailRules" label="Email" type="email" variant="outlined" density="compact" prepend-inner-icon="mdi-email-outline" :error-messages="editErrors.email" /></v-col>
+                <v-col cols="12" md="4">
+                  <!-- PhoneInput: статичный префикс «🇷🇺 +7» + маска (XXX) XXX-XX-XX.
+                       v-model хранит «+79991234567» — формат сохранения не изменился. -->
+                  <PhoneInput v-model="editForm.phone" label="Телефон"
+                    :error-messages="editPhoneShowError ? 'Неверный номер телефона' : (editErrors.phone || [])"
+                    @validate="onEditPhoneValidate" />
                 </v-col>
-              </template>
-            </v-row>
+                <v-col cols="12" md="4"><v-text-field v-model="editForm.nicTG" label="Telegram" variant="outlined" density="compact" prepend-inner-icon="mdi-send-outline" placeholder="@username" :error-messages="editErrors.nicTG" /></v-col>
+              </v-row>
+            </section>
+
+            <section class="pf-sec">
+              <header class="pf-sec__head">
+                <v-icon size="18" class="pf-sec__icon">mdi-badge-account-horizontal-outline</v-icon>
+                <span class="pf-sec__title">Персональные данные</span>
+              </header>
+              <v-row dense>
+                <v-col cols="12" sm="4"><v-select v-model="editForm.gender" :items="genderOptions" label="Пол" variant="outlined" density="compact" clearable :error-messages="editErrors.gender" /></v-col>
+                <v-col cols="12" sm="4"><v-text-field v-model="editBirthDate" type="date" label="Дата рождения" variant="outlined" density="compact" :error-messages="editErrors.birthDate" /></v-col>
+                <v-col cols="12" sm="4">
+                  <!-- Роли в БД — CSV-строка; в UI — массив. Список ролей —
+                       зеркало Admin/Users.vue (источник: config/cabinetPermissions.js). -->
+                  <v-select v-model="editFormRoles" :items="roleOptions"
+                    label="Роль(и)" variant="outlined" density="compact"
+                    multiple chips closable-chips clearable
+                    hint="Определяет доступные разделы" persistent-hint
+                    :error-messages="editErrors.role" />
+                </v-col>
+              </v-row>
+            </section>
+
+            <section class="pf-sec">
+              <header class="pf-sec__head">
+                <v-icon size="18" class="pf-sec__icon">mdi-file-tree-outline</v-icon>
+                <span class="pf-sec__title">Сеть</span>
+                <span class="pf-sec__hint">Смена наставника = перестановка: попадёт в историю и пересчитает комиссии</span>
+              </header>
+              <v-row dense>
+                <v-col cols="12" sm="5">
+                  <v-text-field v-model="editForm.participantCode" label="Реф. код"
+                    variant="outlined" density="compact" prepend-inner-icon="mdi-pound"
+                    hint="Уникальный код в ссылке-приглашении" persistent-hint
+                    :error-messages="editErrors.participantCode" />
+                </v-col>
+                <v-col cols="12" sm="7">
+                  <!-- Автокомплит по ФИО: ищем по personName / participantCode,
+                       отдаём наверх consultant.id. В подсказке — ID и реф. код
+                       текущего выбора, чтобы оператор видел всё нужное. -->
+                  <v-autocomplete
+                    v-model="editForm.inviter"
+                    :items="inviterOptions"
+                    item-title="personName"
+                    item-value="id"
+                    label="Пригласивший"
+                    placeholder="Поиск по ФИО или коду"
+                    prepend-inner-icon="mdi-account-search"
+                    variant="outlined" density="compact"
+                    clearable hide-no-data
+                    :loading="inviterLoading"
+                    :hint="inviterHint" persistent-hint
+                    :error-messages="editErrors.inviter"
+                    @update:search="onInviterSearch"
+                  >
+                    <template #item="{ props: itemProps, item }">
+                      <v-list-item v-bind="itemProps">
+                        <template #subtitle>
+                          ID {{ item.raw.id }}<span v-if="item.raw.participantCode"> · код {{ item.raw.participantCode }}</span>
+                        </template>
+                      </v-list-item>
+                    </template>
+                  </v-autocomplete>
+                </v-col>
+              </v-row>
+            </section>
+
+            <!-- Доступ в кабинет: блокировка и пароль — про вход, а не про
+                 структуру. Раньше «Заблокирован» стоял чекбоксом в «Сети»
+                 рядом с наставником и читался как свойство дерева. -->
+            <section class="pf-sec">
+              <header class="pf-sec__head">
+                <v-icon size="18" class="pf-sec__icon">mdi-lock-outline</v-icon>
+                <span class="pf-sec__title">Доступ в кабинет</span>
+              </header>
+              <v-row dense align="center">
+                <v-col cols="12" :sm="auth.isAdmin ? 5 : 12">
+                  <v-switch v-model="editForm.isBlocked" color="error"
+                    density="compact" hide-details inset
+                    :label="editForm.isBlocked ? 'Заблокирован' : 'Доступ открыт'" />
+                  <div class="pf-hint">
+                    <v-icon size="13">mdi-information-outline</v-icon>
+                    Блокировка отзывает активные сессии — партнёра выкинет из кабинета сразу.
+                  </div>
+                </v-col>
+                <v-col v-if="auth.isAdmin" cols="12" sm="7">
+                  <v-text-field v-model="editForm.newPassword"
+                    :type="showNewPassword ? 'text' : 'password'"
+                    label="Новый пароль"
+                    placeholder="Пусто — не менять"
+                    variant="outlined" density="compact"
+                    prepend-inner-icon="mdi-key-variant"
+                    :append-inner-icon="showNewPassword ? 'mdi-eye-off-outline' : 'mdi-eye-outline'"
+                    hint="Минимум 8 символов, буквы и цифры" persistent-hint
+                    autocomplete="new-password"
+                    :error-messages="editErrors.newPassword"
+                    @click:append-inner="showNewPassword = !showNewPassword" />
+                </v-col>
+              </v-row>
+            </section>
             </v-form>
 
             <!-- Кастомные поля пользователя (определяются в /admin/custom-fields). -->
-            <template v-if="pcfFields.length">
-              <v-divider class="my-4" />
-              <div class="text-subtitle-2 font-weight-bold mb-2">Дополнительные сведения</div>
+            <section v-if="pcfFields.length" class="pf-sec">
+              <header class="pf-sec__head">
+                <v-icon size="18" class="pf-sec__icon">mdi-form-select</v-icon>
+                <span class="pf-sec__title">Дополнительные сведения</span>
+                <span class="pf-sec__hint">Поля из раздела «Кастомные поля»</span>
+              </header>
               <v-row dense>
                 <v-col v-for="pf in pcfFields" :key="pf.id" cols="12" sm="6">
                   <v-text-field v-if="pf.type === 'text' || pf.type === 'number'"
@@ -327,23 +407,27 @@
                     :label="pf.label + (pf.required ? ' *' : '')" density="compact" hide-details />
                 </v-col>
               </v-row>
-            </template>
+            </section>
 
             <!-- Блок «Смена статуса» — по праву statuses=full (admin получает
                  full на все секции). Раньше был жёстко auth.isAdmin, из-за чего
                  руководитель по расчётам блок не видел. Бэкенд гейтит тем же
                  правом: permission:statuses,full на /admin/partners/{id}/status. -->
-            <template v-if="canFull('statuses')">
-              <v-divider class="my-4" />
-              <div class="d-flex align-center mb-2 ga-2">
-                <div class="text-subtitle-2 font-weight-bold">Смена статуса</div>
+            <section v-if="canFull('statuses')" class="pf-sec pf-sec--action">
+              <header class="pf-sec__head">
+                <v-icon size="18" class="pf-sec__icon">mdi-account-switch-outline</v-icon>
+                <span class="pf-sec__title">Смена статуса</span>
+                <span class="pf-sec__hint">Применяется сразу и требует причины</span>
+                <v-spacer />
                 <!-- История смены статуса: иконка с попапом по наведению.
                      Источник — Spatie Activitylog, поле activity у Consultant. -->
                 <v-menu open-on-hover open-on-focus :close-on-content-click="false"
-                  location="bottom start" offset="6">
+                  location="bottom end" offset="6">
                   <template #activator="{ props: tipProps }">
-                    <v-btn v-bind="tipProps" icon="mdi-history" size="x-small"
-                      variant="text" color="info" aria-label="История смены статуса" />
+                    <v-btn v-bind="tipProps" size="x-small" variant="text" color="info"
+                      prepend-icon="mdi-history" aria-label="История смены статуса">
+                      История статусов
+                    </v-btn>
                   </template>
                   <v-card min-width="320" max-width="460" class="pa-2">
                     <div class="text-subtitle-2 px-2 py-1">История смены статуса</div>
@@ -373,49 +457,55 @@
                     </v-list>
                   </v-card>
                 </v-menu>
-              </div>
+              </header>
+
+              <!-- Набор действий собирается в скрипте (statusActions): у каждой
+                   кнопки своя подсказка о последствиях — «терминировать» и
+                   «исключить» двигают портфель и деньги, и оператор должен
+                   понимать разницу до клика, а не из истории после. -->
               <div class="d-flex ga-2 flex-wrap">
-                <v-btn size="small" variant="tonal" color="success" prepend-icon="mdi-account-check"
-                  :disabled="editForm.activityId === 1"
-                  @click="changeStatus('activate')">Активировать</v-btn>
-                <v-btn size="small" variant="tonal" color="warning" prepend-icon="mdi-account-cancel"
-                  @click="changeStatus('terminate')">Терминировать</v-btn>
-                <v-btn size="small" variant="tonal" color="error" prepend-icon="mdi-account-remove"
-                  @click="changeStatus('exclude')">Исключить</v-btn>
-                <v-btn size="small" variant="tonal" color="info" prepend-icon="mdi-account-reactivate"
-                  @click="changeStatus('re-register')">Перерегистрировать</v-btn>
-                <!-- Отмена ошибочной терминации: в отличие от «Активировать»
-                     возвращает и портфель (контракты/клиенты), уехавший вверх
-                     по структуре в момент терминации. -->
-                <v-btn v-if="editForm.activityId === 3 || editForm.activityId === 5"
-                  size="small" variant="tonal" color="primary" prepend-icon="mdi-undo-variant"
-                  @click="changeStatus('restore-termination')">Отменить терминацию (вернуть портфель)</v-btn>
-                <!-- Самовосстановление: партнёр возвращается сам из окна при
-                     входе. Запрет статус не меняет — только закрывает эту дверь. -->
-                <v-btn size="small" variant="tonal"
-                  :color="editForm.reinstateBlocked ? 'success' : 'warning'"
-                  :prepend-icon="editForm.reinstateBlocked ? 'mdi-lock-open-variant' : 'mdi-lock'"
-                  @click="changeStatus(editForm.reinstateBlocked ? 'unblock-reinstate' : 'block-reinstate')">
-                  {{ editForm.reinstateBlocked ? 'Разрешить самовосстановление' : 'Запретить самовосстановление' }}
-                </v-btn>
+                <v-tooltip v-for="a in statusActions" :key="a.action"
+                  :text="a.tip" location="top" max-width="320">
+                  <template #activator="{ props: tipProps }">
+                    <div v-bind="tipProps">
+                      <v-btn size="small" variant="tonal" :color="a.color"
+                        :prepend-icon="a.icon" :disabled="a.disabled"
+                        @click="changeStatus(a.action)">{{ a.label }}</v-btn>
+                    </div>
+                  </template>
+                </v-tooltip>
               </div>
-              <div class="text-caption text-medium-emphasis mt-2">
-                Самовосстановлений использовано:
-                {{ editForm.reinstatementCount ?? 0 }} из {{ editForm.reinstateLimit ?? 3 }}
-                <template v-if="editForm.reinstateBlocked"> · запрещено администратором</template>
+
+              <!-- Самовосстановление: партнёр возвращается сам из окна при
+                   входе. Лимит показываем шкалой — «2 из 3» текстом терялось. -->
+              <div class="pf-reinstate">
+                <span class="text-caption text-medium-emphasis">Самовосстановления</span>
+                <v-progress-linear :model-value="reinstatePercent" height="6" rounded
+                  :color="reinstatePercent >= 100 ? 'error' : 'warning'"
+                  bg-opacity="0.15" class="pf-reinstate__bar" />
+                <span class="text-caption font-weight-medium">
+                  {{ editForm.reinstatementCount ?? 0 }} из {{ editForm.reinstateLimit ?? 3 }}
+                </span>
+                <v-chip v-if="editForm.reinstateBlocked" size="x-small" color="warning"
+                  variant="tonal" prepend-icon="mdi-lock">
+                  запрещено администратором
+                </v-chip>
               </div>
+
               <v-alert v-if="statusMsg" :type="statusMsgType" density="compact" class="mt-3" closable @click:close="statusMsg = ''">
                 {{ statusMsg }}
               </v-alert>
+            </section>
 
-              <!-- История изменений: объединённый поток
-                   activity_log (Spatie, изменения Consultant) + audit_log
-                   (partner_update с diff'ом полей WebUser).
-                   Показываем кто, когда и что менял с указанием поля и
-                   значений «было → стало». -->
-              <v-divider class="my-4" />
-              <div class="d-flex align-center mb-2 ga-2">
-                <div class="text-subtitle-2 font-weight-bold">История изменений</div>
+            <!-- История изменений: объединённый поток
+                 activity_log (Spatie, изменения Consultant) + audit_log
+                 (partner_update с diff'ом полей WebUser).
+                 Показываем кто, когда и что менял с указанием поля и
+                 значений «было → стало». -->
+            <section v-if="canFull('statuses')" class="pf-sec">
+              <header class="pf-sec__head">
+                <v-icon size="18" class="pf-sec__icon">mdi-history</v-icon>
+                <span class="pf-sec__title">История изменений</span>
                 <v-chip v-if="changeLog.length" size="x-small" variant="tonal">
                   {{ changeLog.length }}
                 </v-chip>
@@ -424,54 +514,66 @@
                   :loading="changeLogLoading" @click="loadChangeLog(editForm.id)">
                   Обновить
                 </v-btn>
-              </div>
+              </header>
 
               <div v-if="changeLogLoading && !changeLog.length" class="text-center pa-4">
                 <v-progress-circular indeterminate size="22" />
               </div>
-              <div v-else-if="!changeLog.length"
-                class="pa-3 text-caption text-medium-emphasis text-center">
-                Изменений пока нет
+              <div v-else-if="!changeLog.length" class="pf-empty">
+                <v-icon size="28" class="pf-empty__icon">mdi-clipboard-text-clock-outline</v-icon>
+                <div>Изменений пока нет</div>
+                <div class="text-caption">Здесь появятся правки карточки с автором и основанием</div>
               </div>
-              <v-list v-else density="compact" lines="two"
-                class="change-log-list py-0" style="max-height:320px;overflow:auto">
-                <v-list-item v-for="entry in changeLog" :key="entry.id">
-                  <template #prepend>
-                    <v-icon size="18" :color="changeIconColor(entry)">
-                      {{ changeIcon(entry) }}
-                    </v-icon>
-                  </template>
-                  <v-list-item-title class="text-body-2">
+              <!-- Лента-таймлайн: вертикальная направляющая слева и точка на
+                   каждом событии. Плоский v-list не показывал, что записи
+                   идут одна за другой во времени. -->
+              <div v-else class="pf-log">
+                <div v-for="entry in changeLog" :key="entry.id" class="pf-log__item">
+                  <span class="pf-log__dot" :class="`text-${changeIconColor(entry)}`">
+                    <v-icon size="12">{{ changeIcon(entry) }}</v-icon>
+                  </span>
+                  <div class="pf-log__title">
                     <strong>{{ entry.author }}</strong>
                     <span class="text-medium-emphasis"> · {{ fmtDateTime(entry.createdAt) }}</span>
-                  </v-list-item-title>
-                  <v-list-item-subtitle class="text-caption" style="white-space:normal">
-                    <!-- Основание правки: сотрудник указывает его при
-                         сохранении карточки, отдельной строкой — по нему
-                         через полгода и отвечают «почему поменяли». -->
-                    <div v-if="entry.comment" class="mb-1 font-italic">
-                      «{{ entry.comment }}»
+                  </div>
+                  <!-- Основание правки: сотрудник указывает его при
+                       сохранении карточки, отдельной строкой — по нему
+                       через полгода и отвечают «почему поменяли». -->
+                  <div v-if="entry.comment" class="pf-log__reason">
+                    <v-icon size="13">mdi-comment-quote-outline</v-icon>
+                    {{ entry.comment }}
+                  </div>
+                  <div v-if="entry.changes && entry.changes.length" class="pf-log__changes">
+                    <div v-for="(c, i) in entry.changes" :key="i" class="pf-log__change">
+                      <span class="pf-log__field">{{ c.fieldLabel }}</span>
+                      <span class="pf-log__from">{{ c.from || '—' }}</span>
+                      <v-icon size="12" class="mx-1">mdi-arrow-right</v-icon>
+                      <span class="pf-log__to">{{ c.to || '—' }}</span>
                     </div>
-                    <template v-if="entry.changes && entry.changes.length">
-                      <div v-for="(c, i) in entry.changes" :key="i" class="mb-1">
-                        <strong>{{ c.fieldLabel }}:</strong>
-                        <span class="text-medium-emphasis">{{ c.from || '—' }}</span>
-                        <v-icon size="12" class="mx-1">mdi-arrow-right</v-icon>
-                        <span>{{ c.to || '—' }}</span>
-                      </div>
-                    </template>
-                    <span v-else class="text-medium-emphasis">{{ entry.action }}</span>
-                  </v-list-item-subtitle>
-                </v-list-item>
-              </v-list>
-            </template>
+                  </div>
+                  <div v-else class="text-caption text-medium-emphasis">{{ entry.action }}</div>
+                </div>
+              </div>
+            </section>
           </template>
         </v-card-text>
-        <v-card-actions>
+
+        <v-divider />
+        <v-card-actions class="pf-foot">
+          <!-- Индикатор несохранённого: диалог длинный, и без него неясно,
+               осталось ли что-то нажать после правки поля вверху формы. -->
+          <div class="pf-foot__state">
+            <template v-if="editHasAnyChanges">
+              <v-icon size="16" color="warning">mdi-circle-medium</v-icon>
+              <span class="text-caption">Есть несохранённые изменения</span>
+            </template>
+            <span v-else class="text-caption text-medium-emphasis">Изменений нет</span>
+          </div>
           <v-spacer />
-          <v-btn @click="editDialog = false">Отмена</v-btn>
-          <v-btn color="primary" :loading="saving"
-            :disabled="editFormValid === false || (!phoneIsEmpty(editForm.phone) && !editPhoneValid)"
+          <v-btn variant="text" @click="editDialog = false">Отмена</v-btn>
+          <v-btn color="primary" variant="flat" prepend-icon="mdi-content-save-outline"
+            :loading="saving"
+            :disabled="!editHasAnyChanges || editFormValid === false || (!phoneIsEmpty(editForm.phone) && !editPhoneValid)"
             @click="saveEdit">Сохранить</v-btn>
         </v-card-actions>
       </v-card>
@@ -629,7 +731,7 @@ function onAddPhoneValidate(obj) {
   addPhoneValid.value = !addForm.value?.phone ? true : !!obj?.valid;
 }
 import { useConfirm } from '../../composables/useConfirm';
-import { fmtDate, fmtDateTime, getActivityColorByName } from '../../composables/useDesign';
+import { fmtDate, fmtDateTime, getActivityColorByName, getInitials } from '../../composables/useDesign';
 
 const confirm = useConfirm();
 
@@ -969,6 +1071,74 @@ const editHasChanges = computed(() =>
   !!editForm.value && !!editSnapshot.value
   && JSON.stringify(editPayload(editForm.value)) !== editSnapshot.value);
 
+// Кастомные поля уходят отдельным запросом, но кнопкой «Сохранить» той же
+// формы — в «есть что сохранять» они обязаны учитываться, иначе правка
+// только доп. поля упирается в заблокированную кнопку.
+const editPcfSnapshot = ref('');
+// Слепок не снялся (карточка не догрузилась) — «изменений нет» утверждать
+// нельзя, иначе кнопка «Сохранить» останется заблокированной навсегда.
+const editSnapshotReady = computed(() => !!editSnapshot.value);
+const editHasAnyChanges = computed(() =>
+  !editSnapshotReady.value
+  || editHasChanges.value
+  || JSON.stringify(pcfValues.value) !== editPcfSnapshot.value);
+
+const showNewPassword = ref(false);
+
+// Доля израсходованных самовосстановлений — для шкалы в блоке статуса.
+const reinstatePercent = computed(() => {
+  const limit = editForm.value?.reinstateLimit || 3;
+  const used = editForm.value?.reinstatementCount || 0;
+  return Math.min(100, Math.round((used / limit) * 100));
+});
+
+/**
+ * Кнопки смены статуса. Держим списком, а не разметкой: у каждого действия
+ * своя подсказка о последствиях, а состав зависит от текущего статуса —
+ * «Отменить терминацию» показываем только терминированному/исключённому.
+ */
+const statusActions = computed(() => {
+  const f = editForm.value || {};
+  const list = [
+    { action: 'activate', label: 'Активировать', icon: 'mdi-account-check', color: 'success',
+      disabled: f.activityId === 1,
+      tip: 'Ручная активация без проверки порога ЛП. Причина уйдёт в историю статусов.' },
+    { action: 'terminate', label: 'Терминировать', icon: 'mdi-account-cancel', color: 'warning',
+      tip: 'Баллы обнуляются, клиенты и контракты уходят вверх по структуре.' },
+    { action: 'exclude', label: 'Исключить', icon: 'mdi-account-remove', color: 'error',
+      tip: 'Карточка помечается удалённой, партнёр выпадает из структуры и отчётов.' },
+    { action: 're-register', label: 'Перерегистрировать', icon: 'mdi-account-reactivate', color: 'info',
+      tip: 'Новый стартовый период с нуля. Счётчик перерегистраций растёт.' },
+  ];
+  // Отмена ошибочной терминации: в отличие от «Активировать» возвращает и
+  // портфель (контракты/клиенты), уехавший вверх в момент терминации.
+  if (f.activityId === 3 || f.activityId === 5) {
+    list.push({ action: 'restore-termination', label: 'Отменить терминацию',
+      icon: 'mdi-undo-variant', color: 'primary',
+      tip: 'Возвращает и статус, и портфель — контракты с клиентами, уехавшие вверх при терминации.' });
+  }
+  // Самовосстановление: партнёр возвращается сам из окна при входе.
+  // Запрет статус не меняет — только закрывает эту дверь.
+  list.push(f.reinstateBlocked
+    ? { action: 'unblock-reinstate', label: 'Разрешить самовосстановление',
+      icon: 'mdi-lock-open-variant', color: 'success',
+      tip: 'Партнёр снова сможет вернуться сам из окна при входе, пока не исчерпан лимит.' }
+    : { action: 'block-reinstate', label: 'Запретить самовосстановление',
+      icon: 'mdi-lock', color: 'warning',
+      tip: 'Закрывает партнёру возможность вернуться самому. Текущий статус не меняется.' });
+  return list;
+});
+
+/** Копирование в буфер: ID из шапки карточки. */
+async function copyValue(value, label) {
+  try {
+    await navigator.clipboard.writeText(String(value ?? ''));
+    showSuccess(`${label} скопирован`);
+  } catch {
+    showError('Буфер обмена недоступен');
+  }
+}
+
 // Иконка по типу события — статус-смены отдельно от обычных правок,
 // чтобы оператор сразу видел «крупные» изменения в потоке.
 function changeIcon(entry) {
@@ -1181,6 +1351,9 @@ async function openEdit(item) {
         pcfValues.value = vals;
       } catch {}
     }
+    // Слепок доп. полей — как и по основной форме, чтобы кнопка «Сохранить»
+    // знала, что менялось. Ставим ПОСЛЕ загрузки, иначе слепок пустой.
+    editPcfSnapshot.value = JSON.stringify(pcfValues.value);
   } catch {}
   editLoading.value = false;
 }
@@ -1196,7 +1369,7 @@ async function saveEdit() {
   // Смена ФИО у партнёра с подтверждёнными реквизитами тут же сбрасывает
   // верификацию — предупреждаем об этом в том же окне, а не отдельным.
   let comment = '';
-  if (editHasChanges.value) {
+  if (editHasChanges.value || !editSnapshotReady.value) {
     const resetsVerification = editNameChanged.value && f.requisitesVerified;
     const res = await confirm.ask({
       title: resetsVerification ? 'Сменить ФИО и сбросить верификацию?' : 'Сохранить изменения?',
@@ -1425,4 +1598,149 @@ onMounted(() => { loadData(); loadSegments(); });
 .partners-table :deep(tr.row-activity-3 > td:first-child) { box-shadow: inset 3px 0 0 rgb(var(--v-theme-error)); }
 .partners-table :deep(tr.row-activity-4 > td:first-child) { box-shadow: inset 3px 0 0 rgb(var(--v-theme-info)); }
 .partners-table :deep(tr.row-activity-5 > td:first-child) { box-shadow: inset 3px 0 0 rgb(var(--v-theme-error)); }
+
+/* ============ Карточка партнёра ============
+   Цвета берём из ds-токенов (resources/js/styles/ds-tokens.css) — они уже
+   переопределены для тёмной темы, поэтому отдельных .v-theme--dark правил
+   здесь не нужно. */
+
+/* Шапка и подвал липнут к краям: форма длинная, и «кто это» с «Сохранить»
+   должны оставаться на виду при прокрутке. */
+.pf-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--ds-surface);
+}
+.pf-head__main { min-width: 0; flex: 1 1 auto; }
+.pf-head__name { font-size: 1.05rem; font-weight: 600; line-height: 1.3; }
+.pf-head__meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+.pf-head__id { font-size: 0.72rem; color: var(--ds-on-surface-muted); }
+
+.pf-body { max-height: 68vh; padding: 16px; }
+
+/* Секция = блок полей на своей поверхности. Раньше разделами служили
+   голые жирные подписи, и границы групп читались только по отступам. */
+.pf-sec {
+  border: 1px solid var(--ds-outline-variant);
+  border-radius: 12px;
+  background: var(--ds-surface-container-low);
+  padding: 12px 14px 4px;
+  margin-bottom: 14px;
+}
+.pf-sec--action { padding-bottom: 14px; }
+.pf-sec__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.pf-sec__icon { color: var(--ds-on-surface-variant); }
+.pf-sec__title { font-size: 0.85rem; font-weight: 700; letter-spacing: 0.01em; }
+.pf-sec__hint {
+  font-size: 0.72rem;
+  color: var(--ds-on-surface-muted);
+  min-width: 0;
+}
+.pf-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: var(--ds-on-surface-muted);
+  margin: 6px 0 10px;
+}
+
+.pf-reinstate {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+.pf-reinstate__bar { flex: 0 1 160px; }
+
+/* Пустое состояние истории — вместо одинокой серой строки. */
+.pf-empty {
+  text-align: center;
+  padding: 18px 8px;
+  color: var(--ds-on-surface-muted);
+  font-size: 0.82rem;
+}
+.pf-empty__icon { color: var(--ds-on-surface-faint); margin-bottom: 6px; }
+
+/* Лента изменений: направляющая слева + точка на каждом событии. */
+.pf-log {
+  position: relative;
+  max-height: 320px;
+  overflow: auto;
+  padding-left: 22px;
+}
+.pf-log::before {
+  content: '';
+  position: absolute;
+  left: 7px;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--ds-outline-variant);
+}
+.pf-log__item { position: relative; padding: 8px 0 10px; }
+.pf-log__item + .pf-log__item { border-top: 1px dashed var(--ds-outline-soft); }
+.pf-log__dot {
+  position: absolute;
+  left: -22px;
+  top: 10px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--ds-surface);
+  border: 1px solid var(--ds-outline-variant);
+}
+.pf-log__title { font-size: 0.82rem; }
+.pf-log__reason {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  margin: 4px 0;
+  font-size: 0.76rem;
+  font-style: italic;
+  color: var(--ds-on-surface-variant);
+}
+.pf-log__changes { display: flex; flex-direction: column; gap: 2px; margin-top: 2px; }
+.pf-log__change { font-size: 0.75rem; }
+.pf-log__field { font-weight: 600; margin-right: 6px; }
+.pf-log__from { color: var(--ds-on-surface-muted); text-decoration: line-through; }
+.pf-log__to { font-weight: 500; }
+
+.pf-foot {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  background: var(--ds-surface);
+  padding: 10px 14px;
+  gap: 6px;
+}
+.pf-foot__state { display: flex; align-items: center; gap: 2px; }
+
+@media (max-width: 600px) {
+  .pf-sec__hint { display: none; }
+  .pf-body { max-height: none; }
+}
 </style>
