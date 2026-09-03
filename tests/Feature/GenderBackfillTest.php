@@ -64,7 +64,9 @@ class GenderBackfillTest extends TestCase
         $this->assertSame('female', $this->genderOf(self::EMPTY_WITH_PATRONYMIC + 700));
         $this->assertSame('male', $this->genderOf(self::LEGACY_VALUE + 700), 'русское значение приведено к канону');
         $this->assertSame('female', $this->genderOf(self::ALREADY_CANONICAL + 700), 'канонический не тронут');
-        $this->assertNull($this->genderOf(self::UNRESOLVABLE + 700), 'гадать по имени не пытаемся');
+        // Значение осталось ровно таким, каким было (в фикстуре — пустая
+        // строка): по имени не гадаем и мусор на null не подменяем.
+        $this->assertSame('', $this->genderOf(self::UNRESOLVABLE + 700), 'гадать по имени не пытаемся');
     }
 
     /** Удалённые партнёры в заливку не попадают. */
