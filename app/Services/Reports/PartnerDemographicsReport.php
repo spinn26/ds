@@ -2,35 +2,24 @@
 
 namespace App\Services\Reports;
 
-use App\Support\Age;
+use App\Services\PartnerDemographicsService;
 use App\Support\Gender;
-use Illuminate\Support\Facades\DB;
 
 /**
- * Демография партнёрской сети: пол и возраст по каждому партнёру.
+ * Демография сети — СПИСОК партнёров: по строке на человека.
  *
- * Выгрузка сделана списком, а не сводкой, намеренно: проценты и разбивку по
- * возрастным группам в Excel собирают сводной таблицей за минуту, а вот
- * обратно из готовых процентов данные не достанешь. Колонки «Пол» и
- * «Возрастная группа» уже нормализованы — по ним сводная строится сразу.
+ * Нужен, чтобы посчитать срез, которого нет в сводке: демография по статусу,
+ * по наставнику, по году регистрации. Сама аналитика — проценты и
+ * распределение — во втором отчёте, PartnerDemographicsSummaryReport.
  *
- * ⚠ Период НЕ участвует в выборке: демография — снимок всей сети на сегодня,
- * а не события за интервал. Отчёт всегда отдаёт всех живых партнёров, какой бы
- * диапазон ни пришёл (границы всё равно приходят: report_archive.date_from и
- * date_to объявлены NOT NULL, а UI для этого типа шлёт текущую дату). Дата
- * регистрации осталась отдельной колонкой — по ней в Excel сводится приход
- * партнёров по годам.
- *
- * Откуда берутся данные:
- *   - пол — WebUser.gender, а если он пуст (или логина нет вовсе) —
- *     определяется по отчеству, см. App\Support\Gender. В колонке
- *     «Источник пола» видно, что именно произошло: значение из профиля
- *     нельзя путать с вычисленным;
- *   - дата рождения — WebUser.birthDate, фоллбэк на consultant.birthDate
- *     (у партнёров без логина она только там, и там же varchar).
+ * ⚠ Период не участвует в выборке: демография — снимок всей сети на сегодня,
+ * а не события за интервал. Границы всё равно приходят (в запросе и в
+ * report_archive они NOT NULL, UI шлёт текущую дату) и игнорируются.
  */
 class PartnerDemographicsReport extends AbstractReportType
 {
+    public function __construct(private readonly PartnerDemographicsService $data) {}
+
     public function key(): string { return 'partner_demographics'; }
 
     public function headers(): array
@@ -44,53 +33,16 @@ class PartnerDemographicsReport extends AbstractReportType
 
     public function rows(string $from, string $to, array $filters): array
     {
-        // $from и $to не используются — см. докблок класса.
-        $query = DB::table('consultant')->whereNull('dateDeleted');
-
-        if (! empty($filters['activity'])) {
-            $query->where('activity', $filters['activity']);
-        }
-
-        $partners = $query
-            ->orderBy('personName')
-            ->get(['id', 'personName', 'activity', 'webUser', 'birthDate', 'dateCreated', 'email']);
-
-        $webUserIds = $partners->pluck('webUser')->filter()->unique();
-        $users = $webUserIds->isNotEmpty()
-            ? DB::table('WebUser')->whereIn('id', $webUserIds)
-                ->get(['id', 'gender', 'birthDate', 'patronymic', 'email'])->keyBy('id')
-            : collect();
-
-        $activityNames = DB::table('directory_of_activities')->pluck('name', 'id');
-
-        $rows = [];
-        foreach ($partners as $c) {
-            $user = $c->webUser ? ($users[$c->webUser] ?? null) : null;
-
-            $stored = $user->gender ?? null;
-            $gender = Gender::resolve($stored, $user->patronymic ?? null, $c->personName);
-            $source = match (true) {
-                Gender::normalize($stored) !== null => 'Профиль',
-                $gender !== null => 'По отчеству',
-                default => 'Нет данных',
-            };
-
-            $birthDate = $user->birthDate ?? $c->birthDate;
-            $years = Age::years($birthDate);
-
-            $rows[] = [
-                $c->personName,
-                $c->activity ? ($activityNames[$c->activity] ?? '') : '',
-                Gender::label($gender),
-                $source,
-                Age::date($birthDate) ?? '',
-                $years ?? '',
-                Age::bucket($years),
-                $c->dateCreated ? substr((string) $c->dateCreated, 0, 10) : '',
-                (($user->email ?? null) ?: ($c->email ?: '')),
-            ];
-        }
-
-        return $rows;
+        return $this->data->records($filters)->map(fn (array $r) => [
+            $r['personName'],
+            $r['activityName'],
+            Gender::label($r['gender']),
+            $r['genderSource'],
+            $r['birthDate'] ?? '',
+            $r['years'] ?? '',
+            $r['bucket'],
+            $r['dateCreated'] ?? '',
+            $r['email'] ?? '',
+        ])->all();
     }
 }

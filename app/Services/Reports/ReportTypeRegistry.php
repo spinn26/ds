@@ -20,8 +20,9 @@ class ReportTypeRegistry
         FinrezCommissionsReport $finrezCm,
         PaymentRegistryReport $paymentRegistry,
         PartnerDemographicsReport $demographics,
+        PartnerDemographicsSummaryReport $demographicsSummary,
     ) {
-        foreach ([$revenueExpenses, $partnerStatus, $qualifications, $commissions, $finrezTx, $finrezCm, $paymentRegistry, $demographics] as $t) {
+        foreach ([$revenueExpenses, $partnerStatus, $qualifications, $commissions, $finrezTx, $finrezCm, $paymentRegistry, $demographics, $demographicsSummary] as $t) {
             $this->types[$t->key()] = $t;
         }
     }

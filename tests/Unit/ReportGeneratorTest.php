@@ -35,6 +35,8 @@ class ReportGeneratorTest extends TestCase
             // Партнёр, Статус, Пол, Источник пола, Дата рождения, Возраст,
             // Возрастная группа, Зарегистрирован, Email
             'partner_demographics' => 9,
+            // Раздел, Показатель, Партнёров, Доля %, Мужчины, Женщины
+            'partner_demographics_summary' => 6,
         ];
 
         foreach ($expected as $type => $count) {

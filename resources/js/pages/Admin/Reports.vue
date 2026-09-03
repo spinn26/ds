@@ -119,8 +119,9 @@ const archive = ref([]);
 const archiveFilter = ref(null);
 
 // Per spec ✅Отчеты.md §1.1: список из 7 типов отчётов.
-// «Демография сети» — восьмой, вне спеки: запрос от 03.09.2026, разбивка
-// партнёров по полу и возрасту для сводной таблицы в Excel.
+// Демография — вне спеки, запрос от 03.09.2026. Два типа: сводка отвечает на
+// вопрос «какой процент и как распределён возраст», список нужен для срезов,
+// которых в сводке нет (по статусу, наставнику, году регистрации).
 const reportTypes = [
   { label: 'Реестр выплат', value: 'payment_registry' },
   { label: 'Квалификации', value: 'qualifications' },
@@ -129,8 +130,9 @@ const reportTypes = [
   { label: '[Финрез] Транзакции', value: 'finrez_transactions' },
   { label: '[Финрез] Комиссии по ФК', value: 'finrez_commissions' },
   { label: 'Статусы партнёров', value: 'partner_status' },
-  // periodless: отчёт — снимок всей сети, диапазон в выборке не участвует.
-  { label: 'Демография сети (пол и возраст)', value: 'partner_demographics', periodless: true },
+  // periodless: снимок всей сети, диапазон в выборке не участвует.
+  { label: 'Демография сети — сводка (проценты и возраст)', value: 'partner_demographics_summary', periodless: true },
+  { label: 'Демография сети — список партнёров', value: 'partner_demographics', periodless: true },
 ];
 
 const activityOptions = [
