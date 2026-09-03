@@ -516,12 +516,16 @@ class UpdatePartnerTest extends TestCase
                 'webUser' => null, 'activity' => 1,
                 'inviter' => null, 'inviterName' => null,
                 'dateCreated' => '2026-01-01 00:00:00',
+                // ⚠ Ключ обязателен во ВСЕХ строках пачки: Postgres требует
+                // кортежи VALUES одной длины, иначе синтаксическая ошибка.
+                'statusRequisites' => null,
             ],
             [
                 'id' => self::INVITEE, 'personName' => 'Приглашённый Партнёр',
                 'webUser' => null, 'activity' => 1,
                 'inviter' => self::PARTNER, 'inviterName' => 'Партнёров Партнёр Партнёрович',
                 'dateCreated' => '2026-01-01 00:00:00',
+                'statusRequisites' => null,
             ],
         ]);
 
