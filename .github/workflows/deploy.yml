@@ -170,8 +170,12 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           password: ${{ secrets.SERVER_PASSWORD }}
-          script_stop: true
           command_timeout: 15m
+          # ⚠ Прерывание на первой ошибке даёт ТОЛЬКО `set -euo pipefail` ниже.
+          # Параметра script_stop у ssh-action@v1 больше нет: он молча
+          # игнорировался («Unexpected input(s) 'script_stop'» в логе) и
+          # создавал ложное ощущение защиты. Убирать set -e из скрипта нельзя —
+          # иначе упавший composer/npm доедет до «Deploy OK» с зелёным job'ом.
           script: |
             set -euo pipefail
             cd /var/www/newds
