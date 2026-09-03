@@ -140,7 +140,33 @@ class AdminDataController extends Controller
         // Без логина части ФИО брать неоткуда, кроме денорм-имени.
         $nameParts = preg_split('/\s+/u', trim((string) $consultant->personName)) ?: [];
 
+        // Сводка для карточки партнёра в списке: квалификация, групповой объём
+        // и остаток к выплате. В списке (/admin/partners) этих полей нет и быть
+        // не должно — их пришлось бы считать на 1968 строк ради трёх чисел,
+        // которые видны только в открытой карточке.
+        $balance = DB::table('consultantBalance')
+            ->where('consultant', $consultant->id)
+            ->where('dateMonth', 'like', '____-__')
+            ->orderByDesc('dateMonth')
+            ->first(['dateMonth', 'remaining']);
+
+        // levelNew заполнен не везде (у части строк он NULL), поэтому
+        // спускаемся к номинальному и расчётному уровню.
+        $qual = DB::table('qualificationLog')
+            ->where('consultant', $consultant->id)
+            ->whereNull('dateDeleted')
+            ->orderByDesc('date')
+            ->first(['levelNew', 'nominalLevel', 'calculationLevel', 'groupVolume', 'date']);
+
         return response()->json([
+            'snapshot' => [
+                'month' => $balance?->dateMonth,
+                'level' => $qual->levelNew ?? $qual->nominalLevel ?? $qual->calculationLevel ?? null,
+                'groupVolume' => $qual?->groupVolume !== null ? (float) $qual->groupVolume : null,
+                'remaining' => $balance?->remaining !== null ? (float) $balance->remaining : null,
+                'personalVolume' => round((float) ($consultant->personalVolume ?? 0), 2),
+                'groupVolumeCumulative' => round((float) ($consultant->groupVolumeCumulative ?? 0), 2),
+            ],
             'consultant' => [
                 'id' => $consultant->id,
                 'personName' => $consultant->personName,

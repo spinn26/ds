@@ -15,7 +15,7 @@
         <v-text-field v-model="q" placeholder="Имя, ID, email, телефон или код…"
           density="compact" variant="outlined" hide-details clearable
           prepend-inner-icon="mdi-magnify"
-          class="p-search" style="max-width: 430px; flex: 1 1 280px"
+          class="p-search" style="min-width: 280px; flex: 1 1 420px"
           @update:model-value="debouncedLoad">
           <template #append-inner>
             <span v-if="qKindLabel" class="p-qhint">ищу по: {{ qKindLabel }}</span>
@@ -119,7 +119,7 @@
       <section class="p-fsec">
         <h4 class="p-fsec__title">Дата регистрации</h4>
         <v-btn-toggle v-model="draft.dateMode" mandatory density="compact"
-          variant="outlined" divided class="mb-4">
+          variant="outlined" divided color="primary" class="mb-4 p-datemode">
           <v-btn value="quick" size="small">Быстро</v-btn>
           <v-btn value="year" size="small">Год</v-btn>
           <v-btn value="month" size="small">Месяц</v-btn>
@@ -251,18 +251,29 @@
         </div>
 
         <div v-else class="p-card__body">
+          <!-- Три числа, как в макете. В списке их нет: они приходят отдельным
+               запросом карточки (/admin/partners/{id} → snapshot), иначе их
+               пришлось бы считать на все 1968 строк ради открытой одной. -->
           <div class="p-card__stats">
             <div class="p-card__stat">
-              <div class="p-card__stat-l">Личный объём</div>
-              <div class="p-card__stat-v">{{ fmtNum(cardItem.personalVolume) }}</div>
+              <div class="p-card__stat-l">Квалификация</div>
+              <div class="p-card__stat-v">
+                {{ cardSnapshot?.level ? cardSnapshot.level + ' ур.' : '—' }}
+              </div>
             </div>
             <div class="p-card__stat">
-              <div class="p-card__stat-l">НГП</div>
-              <div class="p-card__stat-v">{{ fmtNum(cardItem.groupVolumeCumulative) }}</div>
+              <div class="p-card__stat-l">ГП за месяц</div>
+              <div class="p-card__stat-v">
+                {{ cardSnapshot?.groupVolume != null ? fmtNum(Math.round(cardSnapshot.groupVolume)) : '—' }}
+              </div>
             </div>
             <div class="p-card__stat">
-              <div class="p-card__stat-l">Терминаций</div>
-              <div class="p-card__stat-v">{{ cardItem.terminationCount || 0 }}</div>
+              <div class="p-card__stat-l">Остаток</div>
+              <div class="p-card__stat-v"
+                :class="(cardSnapshot?.remaining ?? 0) < 0 ? 'p-card__stat-v--neg' : ''">
+                {{ cardSnapshot?.remaining != null
+                  ? fmtNum(Math.round(cardSnapshot.remaining)) + ' ₽' : '—' }}
+              </div>
             </div>
           </div>
 
@@ -303,6 +314,18 @@
             </span>
             <v-icon v-if="cardItem.inviterName" class="p-card__act" size="14"
               icon="mdi-filter-outline" title="Показать всех, кого он пригласил" />
+          </div>
+          <div class="p-card__row">
+            <span class="p-card__k">Личный объём</span>
+            <span class="p-card__v">{{ fmtNum(cardItem.personalVolume) }}</span>
+          </div>
+          <div class="p-card__row">
+            <span class="p-card__k">НГП</span>
+            <span class="p-card__v">{{ fmtNum(cardItem.groupVolumeCumulative) }}</span>
+          </div>
+          <div class="p-card__row">
+            <span class="p-card__k">Терминаций</span>
+            <span class="p-card__v">{{ cardItem.terminationCount || 0 }}</span>
           </div>
           <div class="p-card__row">
             <span class="p-card__k">Регистрация</span>
@@ -462,6 +485,14 @@
                   <span v-else class="p-muted">—</span>
                 </template>
 
+                <!-- Код — приглушённым: он служебный, а не то, что читают -->
+                <template v-else-if="c.key === 'participantCode'">
+                  <span v-if="item.participantCode" class="p-muted p-nowrap">
+                    {{ item.participantCode }}
+                  </span>
+                  <span v-else class="p-muted">—</span>
+                </template>
+
                 <template v-else-if="c.key === 'birthDate' || c.key === 'createdAt'">
                   <span v-if="item[c.key]">{{ fmtDate(item[c.key]) }}</span>
                   <span v-else class="p-muted">—</span>
@@ -494,6 +525,16 @@
                       </v-list>
                     </v-menu>
                   </div>
+                </template>
+
+                <!-- Пригласивший — «Фамилия Имя»: полное ФИО переносилось на
+                     две строки и растягивало всю строку таблицы. Полное имя
+                     остаётся в подсказке и в карточке. -->
+                <template v-else-if="c.key === 'inviterName'">
+                  <span v-if="item.inviterName" class="p-nowrap" :title="item.inviterName">
+                    {{ shortInviter(item.inviterName) }}
+                  </span>
+                  <span v-else class="p-muted">—</span>
                 </template>
 
                 <template v-else>
@@ -1441,12 +1482,12 @@ const activityOptions = [
 // `default` = shown out of the box; others are opt-in via the «Колонки» menu.
 const allColumns = [
   { title: 'ID',               key: 'id',             width: 92,  default: true },
-  { title: 'Партнёр',          key: 'personName',     always: true },
+  { title: 'Партнёр',          key: 'personName',     width: 320, always: true },
   { title: 'Статус',           key: 'activityName',   width: 160, always: true },
   { title: 'Код',              key: 'participantCode', width: 100, default: true },
-  // Ширина задана, иначе колонка без width забирает весь свободный простор
-  // широкого экрана и между ней и датами зияет пустота.
-  { title: 'Пригласивший',     key: 'inviterName',    width: 240, default: true },
+  // Без width: эта колонка забирает свободный простор, чтобы пустота не
+  // копилась в «Партнёре» — там имя короткое и растягивать его нечем.
+  { title: 'Пригласивший',     key: 'inviterName',    default: true },
   { title: 'Дата рождения',    key: 'birthDate',      width: 130 },
   // Колонки «Куратор» здесь больше нет: поле curatorName никогда не приходило
   // с сервера (в PartnerListingService::present его нет), и ячейка была пустой
@@ -1491,6 +1532,11 @@ function shortName(full) {
   return [last, first ? `${first[0]}.` : '', mid ? `${mid[0]}.` : ''].filter(Boolean).join(' ');
 }
 
+/** «Полозова Людмила Александровна» → «Полозова Людмила». */
+function shortInviter(full) {
+  return String(full ?? '').trim().split(/\s+/).slice(0, 2).join(' ');
+}
+
 /** Второй этаж строки — вместо отдельных колонок Email и Телефон. */
 function contactLine(item) {
   return [item?.email, item?.phone].filter(Boolean).join(' · ');
@@ -1512,10 +1558,21 @@ const cardOpen = ref(false);
 const cardItem = ref(null);
 const cardTab = ref('main');
 
-function openCard(item) {
+// Сводка (квалификация, ГП за месяц, остаток) приходит отдельным запросом:
+// в списке этих полей нет намеренно — считать их на 1968 строк ради трёх
+// чисел в открытой карточке незачем.
+const cardSnapshot = ref(null);
+
+async function openCard(item) {
   cardItem.value = item;
   cardTab.value = 'main';
+  cardSnapshot.value = null;
   cardOpen.value = true;
+  try {
+    const { data } = await api.get(`/admin/partners/${item.id}`);
+    // Пока запрос идёт, карточку могли переключить на другого партнёра.
+    if (cardItem.value?.id === item.id) cardSnapshot.value = data.snapshot || null;
+  } catch {}
 }
 
 // Хронология выводится из полей самой строки: отдельного журнала событий в
@@ -2388,12 +2445,11 @@ onMounted(() => {
 .p-th.p-sticky { z-index: 3; }
 .p-edge { box-shadow: 1px 0 0 var(--ds-outline-variant); }
 
-/* Цветной торец строки по активности — тот же словарь, что у точки статуса. */
-.p-tr.row-activity-1 .p-td--check { box-shadow: inset 3px 0 0 rgb(var(--v-theme-success)); }
-.p-tr.row-activity-3 .p-td--check { box-shadow: inset 3px 0 0 rgb(var(--v-theme-warning)); }
-.p-tr.row-activity-4 .p-td--check { box-shadow: inset 3px 0 0 var(--ds-outline); }
-.p-tr.row-activity-5 .p-td--check { box-shadow: inset 3px 0 0 rgb(var(--v-theme-error)); }
+/* Цветного торца строки нет намеренно: в макете его не было, а вместе с
+   точкой статуса он давал два разных сигнала об одном и том же — и на
+   «Зарегистрирован» превращался в еле заметную полоску-артефакт. */
 
+.p-nowrap { white-space: nowrap; }
 .p-check { width: 15px; height: 15px; cursor: pointer; accent-color: rgb(var(--v-theme-primary)); }
 .p-muted { color: var(--ds-on-surface-muted); }
 .p-soon { color: rgb(var(--v-theme-error)); font-weight: 600; }
@@ -2474,6 +2530,7 @@ onMounted(() => {
   text-transform: uppercase;
   color: var(--ds-on-surface-muted);
 }
+.p-card__stat-v--neg { color: rgb(var(--v-theme-error)); }
 .p-card__stat-v {
   font-size: 1.05rem;
   font-weight: 700;
@@ -2523,6 +2580,12 @@ onMounted(() => {
   font-size: 0.76rem;
   line-height: 1.35;
   color: var(--ds-on-surface-muted);
+}
+/* Выбранный способ выбора даты — залитый фирменным, как в макете: серая
+   заливка Vuetify по умолчанию не читалась как «выбрано». */
+.p-datemode :deep(.v-btn--active) {
+  background: rgb(var(--v-theme-primary));
+  color: rgb(var(--v-theme-on-primary));
 }
 .p-fsec__cnt {
   margin-left: 7px;
