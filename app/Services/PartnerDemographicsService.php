@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Support\Age;
 use App\Support\Gender;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -25,12 +24,14 @@ use Illuminate\Support\Facades\DB;
 class PartnerDemographicsService
 {
     /**
-     * Тип значения расписан поимённо: у Collection он инвариантен, и запись
-     * «array<string, mixed>» анализатор не принимает — конкретный shape в неё
-     * не приводится. Заодно это документация полей для обоих отчётов.
+     * ⚠ Отдаём массив, а не Collection, намеренно: значение у Collection
+     * инвариантно, и любое уточнение типа поля (non-empty-string вместо
+     * string и подобное) делает вывод подтипом объявленного — анализатор
+     * валит сборку, а сообщение обрезает как раз то поле, где расхождение.
+     * У массивов такой ловушки нет. Кому нужен Collection API — collect().
      *
      * @param array<string, mixed> $filters поддерживается activity
-     * @return Collection<int, array{
+     * @return list<array{
      *     personName: string,
      *     activityName: string,
      *     gender: string|null,
@@ -42,7 +43,7 @@ class PartnerDemographicsService
      *     email: string|null,
      * }>
      */
-    public function records(array $filters = []): Collection
+    public function records(array $filters = []): array
     {
         $query = DB::table('consultant')->whereNull('dateDeleted');
 
@@ -85,7 +86,7 @@ class PartnerDemographicsService
                 'dateCreated' => $c->dateCreated ? substr((string) $c->dateCreated, 0, 10) : null,
                 'email' => $this->email($user->email ?? null, $c->email),
             ];
-        });
+        })->values()->all();
     }
 
     /**

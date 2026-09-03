@@ -42,7 +42,9 @@ class PartnerDemographicsSummaryReport extends AbstractReportType
 
     public function rows(string $from, string $to, array $filters): array
     {
-        $records = $this->data->records($filters);
+        // Сборщик отдаёт массив (см. его докблок про инвариантность
+        // Collection); для агрегатов оборачиваем обратно.
+        $records = collect($this->data->records($filters));
         $total = $records->count();
         if ($total === 0) {
             return [['Итого', 'Всего партнёров', 0, 0, 0, 0]];

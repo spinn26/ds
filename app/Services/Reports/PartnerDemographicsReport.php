@@ -33,7 +33,7 @@ class PartnerDemographicsReport extends AbstractReportType
 
     public function rows(string $from, string $to, array $filters): array
     {
-        return $this->data->records($filters)->map(fn (array $r) => [
+        return array_map(fn (array $r) => [
             $r['personName'],
             $r['activityName'],
             Gender::label($r['gender']),
@@ -43,6 +43,6 @@ class PartnerDemographicsReport extends AbstractReportType
             $r['bucket'],
             $r['dateCreated'] ?? '',
             $r['email'] ?? '',
-        ])->all();
+        ], $this->data->records($filters));
     }
 }
