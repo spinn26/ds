@@ -29,7 +29,7 @@ class GlobalSearchService
     ) {}
 
     /**
-     * @return array{query: string, groups: list<array<string, mixed>>, total: int}
+     * @return array<string, mixed>
      */
     public function search(string $query, User $user): array
     {
@@ -56,25 +56,29 @@ class GlobalSearchService
             $groups[] = $this->group('Контракты', 'mdi-file-document-outline', $this->contracts($like, $asId));
         }
 
-        $groups = array_values(array_filter($groups, static fn ($g) => $g['items'] !== []));
+        $out = [];
+        $total = 0;
+        foreach ($groups as $group) {
+            if ($group['items'] === []) {
+                continue;
+            }
+            $out[] = $group;
+            $total += count($group['items']);
+        }
 
-        return [
-            'query' => $q,
-            'groups' => $groups,
-            'total' => array_sum(array_map(static fn ($g) => count($g['items']), $groups)),
-        ];
+        return ['query' => $q, 'groups' => $out, 'total' => $total];
     }
 
     /**
-     * @param  list<array<string, mixed>>  $items
-     * @return array<string, mixed>
+     * @param  array<int, array<string, mixed>>  $items
+     * @return array{title: string, icon: string, items: array<int, array<string, mixed>>}
      */
     private function group(string $title, string $icon, array $items): array
     {
         return ['title' => $title, 'icon' => $icon, 'items' => $items];
     }
 
-    /** @return list<array<string, mixed>> */
+    /** @return array<int, array<string, mixed>> */
     private function partners(string $like, ?int $asId): array
     {
         // Подпись статуса берём из энума, а не join'ом: справочной таблицы
@@ -100,7 +104,7 @@ class GlobalSearchService
             ->all();
     }
 
-    /** @return list<array<string, mixed>> */
+    /** @return array<int, array<string, mixed>> */
     private function clients(string $like, ?int $asId): array
     {
         return DB::table('client')
@@ -122,7 +126,7 @@ class GlobalSearchService
             ->all();
     }
 
-    /** @return list<array<string, mixed>> */
+    /** @return array<int, array<string, mixed>> */
     private function contracts(string $like, ?int $asId): array
     {
         return DB::table('contract')
