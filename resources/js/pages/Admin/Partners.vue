@@ -320,8 +320,28 @@
             <span class="p-card__v">{{ fmtNum(cardItem.personalVolume) }}</span>
           </div>
           <div class="p-card__row">
+            <span class="p-card__k">ГП за месяц</span>
+            <span class="p-card__v">
+              {{ cardSnapshot?.groupVolume != null ? fmtNum(Math.round(cardSnapshot.groupVolume)) : '—' }}
+            </span>
+          </div>
+          <div class="p-card__row">
             <span class="p-card__k">НГП</span>
             <span class="p-card__v">{{ fmtNum(cardItem.groupVolumeCumulative) }}</span>
+          </div>
+          <div class="p-card__row">
+            <span class="p-card__k">Контрактов</span>
+            <span class="p-card__v">
+              {{ cardSnapshot?.contracts != null ? fmtNum(cardSnapshot.contracts) : '—' }}
+            </span>
+          </div>
+          <div class="p-card__row">
+            <span class="p-card__k">Клиентов</span>
+            <span class="p-card__v">
+              <template v-if="cardSnapshot?.clients">{{ fmtNum(cardSnapshot.clients) }}</template>
+              <span v-else-if="cardSnapshot" class="p-muted">нет</span>
+              <span v-else class="p-muted">—</span>
+            </span>
           </div>
           <div class="p-card__row">
             <span class="p-card__k">Терминаций</span>
@@ -341,10 +361,21 @@
           <h5 class="p-card__sec">Доступ</h5>
           <div class="p-card__row">
             <span class="p-card__k">Кабинет</span>
+            <span class="p-card__v d-inline-flex align-center ga-2">
+              <v-icon :size="15" :color="accessState(cardItem).color">
+                {{ accessState(cardItem).open ? 'mdi-lock-open-variant' : 'mdi-lock' }}
+              </v-icon>
+              {{ accessState(cardItem).title }}
+            </span>
+          </div>
+          <div class="p-card__row">
+            <span class="p-card__k">Последний вход</span>
             <span class="p-card__v">
-              <span v-if="cardItem.isBlocked" class="text-error">заблокирован</span>
-              <span v-else-if="cardItem.platformAccess" class="text-success">открыт</span>
-              <span v-else class="text-medium-emphasis">логина нет</span>
+              <template v-if="cardSnapshot?.lastSeenAt">
+                {{ fmtDateTime(cardSnapshot.lastSeenAt) }}
+              </template>
+              <span v-else-if="cardSnapshot" class="text-medium-emphasis">не заходил</span>
+              <span v-else class="text-medium-emphasis">—</span>
             </span>
           </div>
           <div class="p-card__row">
@@ -457,11 +488,14 @@
                     </span>
                     <v-icon v-if="item.isClient" size="14" color="secondary"
                       title="Партнёр является клиентом">mdi-account-tie</v-icon>
-                    <!-- Именно isBlocked, а не !platformAccess: последний false
-                         и у партнёров без логина — замок висел бы на каждом
-                         импортированном. -->
-                    <v-icon v-if="item.isBlocked" size="14" color="error"
-                      title="Доступ в кабинет заблокирован">mdi-lock</v-icon>
+                    <!-- Замок показываем всегда, в обоих состояниях: открыт —
+                         вход в кабинет есть; закрыт — логина нет, вход
+                         заблокирован или партнёр отключён от системы
+                         (терминирован / исключён). -->
+                    <v-icon :size="14" :color="accessState(item).color"
+                      :title="accessState(item).title">
+                      {{ accessState(item).open ? 'mdi-lock-open-variant' : 'mdi-lock' }}
+                    </v-icon>
                   </div>
                   <div v-if="contactLine(item)" class="p-name__contact">
                     {{ contactLine(item) }}
@@ -1532,6 +1566,30 @@ function shortName(full) {
   return [last, first ? `${first[0]}.` : '', mid ? `${mid[0]}.` : ''].filter(Boolean).join(' ');
 }
 
+/**
+ * Состояние доступа в кабинет — одно правило на список и на карточку.
+ *
+ * Логин есть тогда, когда есть WebUser: сервер отдаёт platformAccess (логин
+ * есть И не заблокирован) и isBlocked (логин есть И заблокирован), поэтому
+ * их дизъюнкция и означает «логин заведён».
+ *
+ * Закрыт, если: логина нет вовсе; вход заблокирован; партнёр отключён от
+ * системы — терминирован (3) или исключён (5).
+ */
+function accessState(item) {
+  const hasLogin = !!(item?.platformAccess || item?.isBlocked);
+  if (!hasLogin) {
+    return { open: false, color: 'medium-emphasis', title: 'Логина в платформе нет' };
+  }
+  if (item.isBlocked) {
+    return { open: false, color: 'error', title: 'Вход в кабинет заблокирован' };
+  }
+  if (item.activityId === 3 || item.activityId === 5) {
+    return { open: false, color: 'warning', title: `Доступ закрыт: ${activityLabel(item).toLowerCase()}` };
+  }
+  return { open: true, color: 'success', title: 'Вход в кабинет открыт' };
+}
+
 /** «Полозова Людмила Александровна» → «Полозова Людмила». */
 function shortInviter(full) {
   return String(full ?? '').trim().split(/\s+/).slice(0, 2).join(' ');
@@ -2473,14 +2531,22 @@ onMounted(() => {
   margin-top: 1px;
 }
 
-/* Статус: цветная точка + слово. Читается периферийным зрением при
-   прокрутке — именно так бэкофис и просматривает список. */
-.p-status { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+/* Статус: точка + слово на своей подложке. Без подложки он терялся среди
+   остальных ячеек и читался как обычный текст, а не как метка состояния. */
+.p-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+  padding: 3px 10px 3px 8px;
+  border-radius: 999px;
+  background: var(--ds-surface-container-high);
+}
 .p-status__dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: 0 0 auto; }
-.p-status--1 { color: rgb(var(--v-theme-success)); }
-.p-status--3 { color: rgb(var(--v-theme-warning)); }
-.p-status--4 { color: var(--ds-on-surface-variant); }
-.p-status--5 { color: rgb(var(--v-theme-error)); }
+.p-status--1 { color: rgb(var(--v-theme-success)); background: rgba(var(--v-theme-success), 0.14); }
+.p-status--3 { color: rgb(var(--v-theme-warning)); background: rgba(var(--v-theme-warning), 0.14); }
+.p-status--4 { color: var(--ds-on-surface-variant); background: var(--ds-surface-container-high); }
+.p-status--5 { color: rgb(var(--v-theme-error)); background: rgba(var(--v-theme-error), 0.14); }
 
 .p-actions { display: flex; align-items: center; justify-content: flex-end; gap: 2px; white-space: nowrap; }
 

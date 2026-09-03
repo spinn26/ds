@@ -166,6 +166,17 @@ class AdminDataController extends Controller
                 'remaining' => $balance?->remaining !== null ? (float) $balance->remaining : null,
                 'personalVolume' => round((float) ($consultant->personalVolume ?? 0), 2),
                 'groupVolumeCumulative' => round((float) ($consultant->groupVolumeCumulative ?? 0), 2),
+                'contracts' => DB::table('contract')
+                    ->where('consultant', $consultant->id)
+                    ->whereNull('deletedAt')
+                    ->count(),
+                'clients' => DB::table('client')
+                    ->where('partner_consultant_id', $consultant->id)
+                    ->whereNull('dateDeleted')
+                    ->count(),
+                // dateLastActivity в базе пустой у всех — живой признак только
+                // last_seen_at, его и показываем как «последний вход».
+                'lastSeenAt' => $webUser->last_seen_at ?? null,
             ],
             'consultant' => [
                 'id' => $consultant->id,
