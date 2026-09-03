@@ -71,7 +71,6 @@ class PartnerDemographicsService
 
             $birthDate = $user->birthDate ?? $c->birthDate;
             $years = Age::years($birthDate);
-            $email = ($user->email ?? null) ?: ($c->email ?: null);
 
             // Приведение к скалярам — не косметика: строки приходят из
             // DB::table() как mixed, и без него shape в @return не сходится.
@@ -84,7 +83,7 @@ class PartnerDemographicsService
                 'years' => $years,
                 'bucket' => Age::bucket($years),
                 'dateCreated' => $c->dateCreated ? substr((string) $c->dateCreated, 0, 10) : null,
-                'email' => $email !== null ? (string) $email : null,
+                'email' => $this->email($user->email ?? null, $c->email),
             ];
         });
     }
@@ -97,6 +96,19 @@ class PartnerDemographicsService
      * значения — union из трёх литералов, и он не сходится с shape в @return
      * (у Collection значение инвариантно).
      */
+    /**
+     * Почта: логин партнёра, а если его нет — собственная колонка карточки.
+     *
+     * Тоже отдельным методом: «?:» сужает тип до non-empty-string, и он
+     * перестаёт совпадать со `string|null` из shape в @return.
+     */
+    private function email(mixed $login, mixed $card): ?string
+    {
+        $email = ($login ?: null) ?: ($card ?: null);
+
+        return $email !== null ? (string) $email : null;
+    }
+
     private function genderSource(mixed $stored, ?string $resolved): string
     {
         if (Gender::normalize($stored) !== null) {
