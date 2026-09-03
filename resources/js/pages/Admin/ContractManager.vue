@@ -5,11 +5,121 @@
         <v-chip v-if="readOnly" size="small" color="info" variant="tonal" prepend-icon="mdi-eye">
           Только просмотр
         </v-chip>
-        <v-btn v-else color="success" prepend-icon="mdi-plus" @click="openCreate">
-          Новый контракт
-        </v-btn>
+        <template v-else>
+          <!-- Забор итогов сверки из таблицы «Парус/Акцент». -->
+          <v-btn variant="outlined" color="primary" prepend-icon="mdi-tray-arrow-down"
+            :loading="syncChecking" @click="checkSheetSync">
+            Забрать из таблицы
+          </v-btn>
+          <v-btn color="success" prepend-icon="mdi-plus" @click="openCreate">
+            Новый контракт
+          </v-btn>
+        </template>
       </template>
     </PageHeader>
+
+    <!-- Отчёт по обратной синхронизации -->
+    <v-dialog v-model="syncOpen" max-width="900" scrollable>
+      <v-card>
+        <v-card-title class="d-flex align-center ga-2">
+          <v-icon :color="syncResult?.status === 'name_mismatch' ? 'error' : 'primary'">
+            {{ syncResult?.status === 'name_mismatch' ? 'mdi-alert-circle' : 'mdi-tray-arrow-down' }}
+          </v-icon>
+          Данные из таблицы «Парус/Акцент»
+          <v-spacer />
+          <v-btn icon="mdi-close" size="small" variant="text" @click="syncOpen = false" />
+        </v-card-title>
+
+        <v-divider />
+
+        <v-card-text>
+          <v-alert
+            :type="syncResult?.status === 'name_mismatch' ? 'error' : (syncApplied ? 'success' : 'info')"
+            variant="tonal" density="compact" class="mb-4">
+            {{ syncResult?.message }}
+          </v-alert>
+
+          <!-- ФИО: блокирующее расхождение, правится только руками -->
+          <template v-if="syncResult?.nameMismatches?.length">
+            <div class="text-subtitle-2 mb-2">
+              Расходятся ФИО — исправьте на платформе вручную, затем запустите снова
+            </div>
+            <v-table density="compact" class="mb-4">
+              <thead>
+                <tr>
+                  <th>Строка</th><th>Контракт</th><th>Поле</th>
+                  <th>В таблице</th><th>На платформе</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(m, i) in syncResult.nameMismatches" :key="'nm' + i">
+                  <td>{{ m.line }}</td>
+                  <td>#{{ m.contractId }} {{ m.number }}</td>
+                  <td>ФИО {{ m.field }}</td>
+                  <td class="text-error">{{ m.sheet }}</td>
+                  <td>{{ m.platform }}</td>
+                </tr>
+              </tbody>
+            </v-table>
+          </template>
+
+          <template v-if="syncResult?.changes?.length">
+            <div class="text-subtitle-2 mb-2">
+              {{ syncApplied ? 'Применено' : 'Будет применено' }}: {{ syncResult.changes.length }}
+            </div>
+            <v-table density="compact" class="mb-4">
+              <thead>
+                <tr><th>Строка</th><th>Контракт</th><th>Что произойдёт</th></tr>
+              </thead>
+              <tbody>
+                <tr v-for="c in syncResult.changes" :key="'ch' + c.line">
+                  <td>{{ c.line }}</td>
+                  <td>#{{ c.contractId }} {{ c.number }}</td>
+                  <td>
+                    <div v-for="(f, key) in c.fields" :key="key" class="text-body-2">
+                      {{ f.label }}: <span class="text-medium-emphasis">{{ f.from ?? '—' }}</span>
+                      → <strong>{{ f.to }}</strong>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </v-table>
+          </template>
+
+          <template v-if="syncResult?.unmatched?.length || syncResult?.errors?.length">
+            <div class="text-subtitle-2 mb-2">
+              Пропущено: {{ (syncResult.unmatched?.length || 0) + (syncResult.errors?.length || 0) }}
+            </div>
+            <v-table density="compact">
+              <thead>
+                <tr><th>Строка</th><th>ID</th><th>Номер</th><th>Клиент</th><th>Причина</th></tr>
+              </thead>
+              <tbody>
+                <tr v-for="(u, i) in [...(syncResult.unmatched || []), ...(syncResult.errors || [])]" :key="'un' + i">
+                  <td>{{ u.line }}</td>
+                  <td>{{ u.id || '—' }}</td>
+                  <td>{{ u.number || '—' }}</td>
+                  <td>{{ u.client || '—' }}</td>
+                  <td class="text-warning">{{ u.reason }}</td>
+                </tr>
+              </tbody>
+            </v-table>
+          </template>
+        </v-card-text>
+
+        <v-divider />
+
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="syncOpen = false">Закрыть</v-btn>
+          <v-btn v-if="!syncApplied && syncResult?.status === 'ok' && syncResult?.changes?.length"
+            color="success" variant="flat" prepend-icon="mdi-content-save"
+            :loading="syncApplying" @click="applySheetSync">
+            Применить {{ syncResult.changes.length }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
     <v-tabs v-model="contractsTab" color="primary" class="mb-3" density="compact">
       <v-tab value="list" prepend-icon="mdi-file-document">Контракты</v-tab>
@@ -613,6 +723,50 @@ watch(() => form.value.status, (s) => {
 
 const snack = ref({ open: false, color: 'success', text: '' });
 function notify(text, color = 'success') { snack.value = { open: true, color, text }; }
+
+// ---- Забор данных из Google-таблицы «Парус/Акцент» ----
+// В два шага: сверка без записи, затем подтверждение. Таблица перезаписывает
+// платформу, поэтому сотрудник сперва видит список правок.
+const syncOpen = ref(false);
+const syncChecking = ref(false);
+const syncApplying = ref(false);
+const syncApplied = ref(false);
+const syncResult = ref(null);
+
+async function runSheetSync(dryRun) {
+  try {
+    const { data } = await api.post('/admin/contracts/sheet-sync', null, { params: { dry_run: dryRun ? 1 : 0 } });
+    syncResult.value = data;
+    return data;
+  } catch (e) {
+    // 422 с расхождением ФИО — штатный исход со списком, а не сбой.
+    if (e?.response?.status === 422 && e.response.data?.nameMismatches) {
+      syncResult.value = e.response.data;
+      return e.response.data;
+    }
+    notify(e?.response?.data?.message || 'Ошибка подключения к таблице, попробуйте позже', 'error');
+    return null;
+  }
+}
+
+async function checkSheetSync() {
+  syncChecking.value = true;
+  syncApplied.value = false;
+  const data = await runSheetSync(true);
+  syncChecking.value = false;
+  if (data) syncOpen.value = true;
+}
+
+async function applySheetSync() {
+  syncApplying.value = true;
+  const data = await runSheetSync(false);
+  syncApplying.value = false;
+  if (data?.status === 'ok') {
+    syncApplied.value = true;
+    notify(data.message);
+    loadData();
+  }
+}
 
 function openCreate() {
   editingId.value = null;

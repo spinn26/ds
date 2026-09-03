@@ -17,6 +17,15 @@ class Contract extends Model
 
     protected $guarded = ['id'];
 
+    /**
+     * Причина правки для ленты «История изменений». Не колонка БД — живёт
+     * только на время запроса. Ставится там, где контракт меняет не человек
+     * руками, а процесс: синхронизация с таблицей Парус/Акцент проставляет
+     * сюда своё пояснение, чтобы в истории было видно основание правки, а не
+     * безликое «Contract updated».
+     */
+    public ?string $activityReason = null;
+
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()
@@ -29,6 +38,14 @@ class Contract extends Model
             ])
             ->logOnlyDirty()
             ->setDescriptionForEvent(fn (string $eventName) => "Contract {$eventName}");
+    }
+
+    /** Spatie зовёт этот хук перед записью в activity_log. */
+    public function tapActivity(\Spatie\Activitylog\Models\Activity $activity, string $eventName): void
+    {
+        if ($this->activityReason !== null) {
+            $activity->description = $this->activityReason;
+        }
     }
 
     protected function casts(): array

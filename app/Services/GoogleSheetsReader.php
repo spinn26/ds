@@ -33,6 +33,51 @@ class GoogleSheetsReader
     }
 
     /**
+     * Прочитать лист КАК ЕСТЬ: список строк, каждая — список ячеек по порядку.
+     *
+     * readSheet() приводит шапку к своим именам (`номер` → contract_number,
+     * `сумма` → amount и т.д.) — это удобно импорту транзакций, но не годится,
+     * когда столбцы заданы буквами. Синхронизация контрактов адресует ячейки
+     * позиционно (A..J per ТЗ), поэтому шапку не трогаем вовсе: переименование
+     * или лишний пробел в заголовке не должны ломать разбор.
+     *
+     * Первая строка (шапка) НЕ отбрасывается — вызывающий решает сам.
+     *
+     * @return list<list<string>>
+     */
+    public function readRawRows(string $spreadsheetId, string $sheetName, ?string $apiKey = null): array
+    {
+        $apiKey ??= $this->settings?->get('google.sheets.api_key');
+        if (! $apiKey) {
+            throw new \RuntimeException('Не настроен ключ Google Sheets API');
+        }
+
+        $url = sprintf(
+            'https://sheets.googleapis.com/v4/spreadsheets/%s/values/%s',
+            $spreadsheetId,
+            urlencode($sheetName),
+        );
+
+        $response = Http::timeout(30)->get($url, ['key' => $apiKey]);
+        if (! $response->ok()) {
+            throw new \RuntimeException('Google Sheets API error: ' . $response->status() . ' ' . $response->body());
+        }
+
+        $values = $response->json('values') ?? [];
+
+        // Sheets обрезает хвостовые пустые ячейки: у строки, где заполнены
+        // только A и B, придёт массив из двух элементов. Дополняем строки до
+        // равной длины, чтобы обращение по индексу столбца не падало.
+        return array_map(
+            static fn ($row) => array_map(
+                static fn ($cell) => is_string($cell) ? trim($cell) : (string) $cell,
+                array_pad(is_array($row) ? $row : [], 10, ''),
+            ),
+            $values,
+        );
+    }
+
+    /**
      * Получить список листов таблицы.
      */
     public function getSheetNames(string $spreadsheetId, ?string $apiKey = null): array

@@ -220,6 +220,10 @@ Route::get('/admin/contracts/upload-history', fn () => response()->json([]));
 // Разбор неверных привязок client (наследие дедуп-склеек): список
 // контрактов, где ФИО в контракте ≠ имени привязанной карточки.
 Route::get('/admin/contracts/client-mismatches', [\App\Http\Controllers\Api\AdminDataController::class, 'clientMismatches']);
+// Забрать данные из Google-таблицы «Парус/Акцент» (только вручную, кнопкой).
+// Статический сегмент — ДО параметрических /admin/contracts/{id} ниже.
+Route::post('/admin/contracts/sheet-sync', \App\Http\Controllers\Api\ContractSheetSyncController::class)
+    ->middleware(['throttle:10,1', 'permission:contracts,edit']);
 Route::post('/admin/contracts', [\App\Http\Controllers\Api\AdminDataController::class, 'storeContract'])->middleware('permission:contracts,edit');
 Route::get('/admin/contracts/{id}', [\App\Http\Controllers\Api\AdminDataController::class, 'contractDetails'])->whereNumber('id');
 Route::put('/admin/contracts/{id}', [\App\Http\Controllers\Api\AdminDataController::class, 'updateContract'])->whereNumber('id')->middleware('permission:contracts,edit');
