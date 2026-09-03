@@ -2756,10 +2756,19 @@ onMounted(() => {
 }
 /* Выбранный способ выбора даты — залитый фирменным, как в макете: серая
    заливка Vuetify по умолчанию не читалась как «выбрано». */
+/* Выбранный способ выбора даты — залитый фирменным.
+   ! color обязан идти с !important и дублироваться на .v-btn__content:
+   из-за color="primary" Vuetify красит текст активной кнопки в тот же
+   primary своей utility-классой с !important — подпись «Год» становилась
+   зелёной на зелёном и исчезала совсем. Оверлей гасим, иначе размывает. */
 .p-datemode :deep(.v-btn--active) {
   background: rgb(var(--v-theme-primary));
-  color: rgb(var(--v-theme-on-primary));
+  color: rgb(var(--v-theme-on-primary)) !important;
 }
+.p-datemode :deep(.v-btn--active .v-btn__content) {
+  color: rgb(var(--v-theme-on-primary)) !important;
+}
+.p-datemode :deep(.v-btn--active .v-btn__overlay) { opacity: 0 !important; }
 .p-fsec__cnt {
   margin-left: 7px;
   font-size: 0.7rem;

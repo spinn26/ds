@@ -163,6 +163,27 @@ jobs:
     needs: [quality, tests]
     runs-on: ubuntu-latest
 
+    # Выкладки идут по очереди, а не наперегонки.
+    #
+    # Скрипт ниже работает в ОДНОМ каталоге /var/www/newds и по дороге делает
+    # git reset --hard, затем сносит public/build_new и public/build_old и
+    # переставляет public/build. Когда это выполняют два прогона сразу, второй
+    # не находит каталог, set -euo pipefail убивает job — и выкладка падает
+    # при полностью рабочем коде. Случалось дважды за день: 1e47948a и
+    # ef7a8f1c, оба стартовали в те же секунды, что и соседний пуш.
+    #
+    # Опаснее другое: гонка может застать каталог в момент подмены сборки —
+    # тогда на проде нет manifest.json, и весь сайт отдаёт 500
+    # «Vite manifest not found».
+    #
+    # cancel-in-progress: false — начатую выкладку не рвём на середине.
+    # В очереди GitHub держит только самый свежий прогон, и это правильно:
+    # скрипт катит origin/main, поэтому пропущенный промежуточный коммит
+    # всё равно уезжает вместе со следующим.
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+
     steps:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1
