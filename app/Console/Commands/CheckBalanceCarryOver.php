@@ -32,6 +32,18 @@ use Illuminate\Support\Facades\DB;
  *   2. totalPayable(M) == balance + accruedTotal
  *   3. remaining(M)    == totalPayable − payed
  *
+ * И две вещи, которые эта арифметика пропускает (найдены 02.09.2026 руками,
+ * когда сама проверка показала ноль расхождений):
+ *   4. ДВОЙНИКИ — несколько строк на одну пару (consultant, dateMonth).
+ *      Суммы в паре совпадают, поэтому пункты 1–3 сходятся, но пересчёт
+ *      обновляет только одну строку (`->first()` без сортировки), а
+ *      incomingBalance берёт из пары произвольную. Ищутся по всей таблице:
+ *      дубль в любом месяце отравляет сальдо всех последующих.
+ *   5. ПРОПУЩЕННЫЕ МЕСЯЦЫ — в цепочке нет строки за месяц. LAG сравнивает
+ *      с предыдущей ПО ПОРЯДКУ строкой, а не с календарным M−1, поэтому
+ *      разрыв «июнь → август» пункт 1 проходит. Разрыв важен только при
+ *      непустом остатке: при нулевом строка не создаётся, и это норма.
+ *
  * По умолчанию только ЧИТАЕТ. С --fix протягивает перенос через
  * CommissionCalculator::cascadeCarryForward — это бухгалтерская протяжка,
  * а не пересчёт денег: начисления (accrued*) не трогаются вовсе.
@@ -104,10 +116,29 @@ class CheckBalanceCarryOver extends Command
         $bad = [];
         $byKind = ['carry' => 0, 'payable' => 0, 'remaining' => 0];
         $partners = [];
+        $gaps = [];
+        $gapsEmpty = 0;
 
         foreach ($rows as $r) {
             if ($only && (int) $r->consultant !== $only) {
                 continue;
+            }
+
+            // Пропуск месяца в цепочке. LAG сравнивает со СЛЕДУЮЩЕЙ по порядку
+            // строкой, а не с календарно предыдущим месяцем, — поэтому разрыв
+            // «июнь → август» проходит проверку переноса незамеченным.
+            // Опасен он только когда в пропущенный месяц было что переносить:
+            // при нулевом остатке строка просто не создавалась, и это штатно.
+            if ($r->prev_month !== null && $r->prev_month !== $r->dateMonth) {
+                $expectedPrev = date('Y-m', (int) strtotime($r->dateMonth . '-01 -1 month'));
+                if ($r->prev_month !== $expectedPrev) {
+                    if (abs((float) $r->prev_remaining) > self::EPS) {
+                        $gaps[] = $r;
+                        $partners[(int) $r->consultant] = true;
+                    } else {
+                        $gapsEmpty++;
+                    }
+                }
             }
 
             // Первый месяц партнёра: предыдущего нет, входящее обязано быть 0.
@@ -128,14 +159,64 @@ class CheckBalanceCarryOver extends Command
             }
         }
 
+        // Двойники ищем по ВСЕЙ таблице, а не с $from: дубль в любом месяце
+        // отравляет входящее сальдо всех последующих (см. incomingBalance —
+        // ORDER BY "dateMonth" DESC LIMIT 1 выбирает из пары произвольную).
+        $dups = $this->duplicates($only);
+        foreach ($dups as $d) {
+            $partners[(int) $d->consultant] = true;
+        }
+
         $this->info('Проверено строк: ' . count($rows) . ' (с ' . $from . '), партнёров с расхождением: ' . count($partners));
         $this->line("  перенос balance≠remaining(M−1): {$byKind['carry']}");
         $this->line("  totalPayable ≠ balance+accrued: {$byKind['payable']}");
         $this->line("  remaining ≠ totalPayable−payed: {$byKind['remaining']}");
+        $this->line('  пропущен месяц с непустым остатком: ' . count($gaps));
+        $this->line('  двойники (consultant, dateMonth): ' . count($dups) . ' (по всей таблице)');
 
-        if (! $bad) {
+        if ($gapsEmpty > 0) {
+            $this->line("  пропусков с нулевым остатком: {$gapsEmpty} — норма, строка не создавалась");
+        }
+
+        if (! $bad && ! $gaps && ! $dups) {
             $this->info('Расхождений нет — остатки переходят корректно.');
 
+            return self::SUCCESS;
+        }
+
+        if ($dups) {
+            $this->newLine();
+            $this->warn('Двойники: одна пара (партнёр, месяц) — несколько строк.');
+            $this->table(
+                ['ID', 'Партнёр', 'Месяц', 'Строк', 'id строк'],
+                array_map(fn ($d) => [
+                    $d->consultant,
+                    mb_substr((string) ($d->personName ?? '—'), 0, 26),
+                    $d->dateMonth,
+                    $d->n,
+                    $d->ids,
+                ], array_slice($dups, 0, $limit))
+            );
+            $this->comment('Чинится миграцией дедупликации, не этой командой: строки надо не пересчитать, а удалить.');
+        }
+
+        if ($gaps) {
+            $this->newLine();
+            $this->warn('Пропущенные месяцы: остаток был непустой, а строки за месяц нет.');
+            $this->table(
+                ['ID', 'Партнёр', 'Месяц', 'Предыдущий', 'Остаток на входе'],
+                array_map(fn ($r) => [
+                    $r->consultant,
+                    mb_substr((string) ($r->personName ?? '—'), 0, 26),
+                    $r->dateMonth,
+                    $r->prev_month,
+                    $this->n((float) $r->prev_remaining),
+                ], array_slice($gaps, 0, $limit))
+            );
+            $this->comment('Строку за пропущенный месяц создаёт пересчёт: php artisan commission:resync-balances --month=<YYYY-MM>');
+        }
+
+        if (! $bad) {
             return self::SUCCESS;
         }
 
@@ -194,6 +275,40 @@ class CheckBalanceCarryOver extends Command
         $this->info("Обновлено строк: {$updated}. Перепроверьте: php artisan finance:check-carryover --from={$from}");
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Пары (consultant, dateMonth) с несколькими строками.
+     *
+     * Уникального индекса на эту пару не было до 02.09.2026, и месячная задача
+     * успевала создать двойника (гонка внутри одного прогона). Суммы в паре
+     * совпадают, поэтому арифметические сверки их не видят.
+     *
+     * @return list<object>
+     */
+    private function duplicates(?int $only): array
+    {
+        $sql = <<<'SQL'
+            SELECT b.consultant,
+                   b."dateMonth",
+                   c."personName",
+                   count(*)                        AS n,
+                   array_agg(b.id ORDER BY b.id)   AS ids
+              FROM "consultantBalance" b
+              LEFT JOIN consultant c ON c.id = b.consultant
+             WHERE b.consultant IS NOT NULL
+             GROUP BY b.consultant, b."dateMonth", c."personName"
+            HAVING count(*) > 1
+             ORDER BY b."dateMonth" DESC, b.consultant
+        SQL;
+
+        $rows = DB::select($sql);
+
+        if ($only !== null) {
+            $rows = array_values(array_filter($rows, fn ($r) => (int) $r->consultant === $only));
+        }
+
+        return $rows;
     }
 
     private function n(float $v): string
