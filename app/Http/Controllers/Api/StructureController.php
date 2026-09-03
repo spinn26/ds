@@ -213,48 +213,50 @@ class StructureController extends Controller
     }
 
     /**
-     * SQL-двойник ConsultantService::statusChangeDate() — «Дата смены статуса»
-     * так, как её рисует колонка (per spec ✅Структура §4).
+     * Предфильтр по «Дате смены статуса» — РАСШИРЯЮЩИЙ, как и требует контракт
+     * applySqlPrefilters: отдать лишнее можно, потерять совпадение — нет.
      *
-     * ⚠ Менять только вместе с PHP-версией: предфильтр сужает выборку в SQL,
-     * а добивает её applyFilters уже в памяти. Разойдутся — фильтр начнёт
-     * молча терять строки.
+     * Какая именно дата у какого статуса, решает ОДНО место —
+     * ConsultantService::statusChangeDate(), и оно же добивает выборку в
+     * памяти. Здесь мы намеренно не повторяем это правило: берём все колонки-
+     * кандидаты и пропускаем строку, если в диапазон попадает хоть одна.
+     *
+     * Так две половины не могут разойтись по смыслу. Раньше SQL повторял
+     * правило целиком, и цена расхождения была молча потерянная строка; теперь
+     * максимум, что грозит, — лишние строки, которые всё равно отсеются в PHP.
+     *
+     * Совсем убрать предфильтр нельзя: flatResponse режет выборку по
+     * MAX_FLAT_ROWS, и без сужения подходящий партнёр может не дожить до среза.
      */
-    private function statusChangeDateSql(): string
-    {
-        return sprintf(
-            'CASE
-                WHEN activity IN (%d, %d) THEN "dateDeterministic"
-                WHEN activity = %d THEN "activationDeadline"
-                WHEN activity IN (%d, %d) THEN COALESCE("yearPeriodEnd", "dateActivity" + interval \'12 months\')
-                ELSE "dateActivity"
-            END',
-            PartnerActivity::Terminated->value,
-            PartnerActivity::Excluded->value,
-            PartnerActivity::Registered->value,
-            PartnerActivity::Active->value,
-            PartnerActivity::Inactive->value,
-        );
-    }
-
     private function applyDateRangePrefilter($query, Request $request): void
     {
-        if (! $request->filled('termination_from') && ! $request->filled('termination_to')) {
+        $from = $request->input('termination_from');
+        $to = $request->input('termination_to');
+
+        if (! filled($from) && ! filled($to)) {
             return;
         }
 
-        // Раньше выборка жёстко сужалась до терминированных и исключённых по
-        // dateDeterministic. У зарегистрированных это поле NULL, а дата в
-        // колонке берётся из activationDeadline — поэтому фильтр по месяцу
-        // отдавал «Данные не найдены» там, где на экране строки были.
-        $expr = $this->statusChangeDateSql();
+        // Все даты, которые статус-схема может показать в этой колонке.
+        $candidates = [
+            '"dateDeterministic"',
+            '"activationDeadline"',
+            'COALESCE("yearPeriodEnd", "dateActivity" + interval \'12 months\')',
+            '"dateActivity"',
+        ];
 
-        if ($request->filled('termination_from')) {
-            $query->whereRaw("({$expr})::date >= ?", [$request->input('termination_from')]);
-        }
-        if ($request->filled('termination_to')) {
-            $query->whereRaw("({$expr})::date <= ?", [$request->input('termination_to')]);
-        }
+        $query->where(function ($outer) use ($candidates, $from, $to) {
+            foreach ($candidates as $expr) {
+                $outer->orWhere(function ($sub) use ($expr, $from, $to) {
+                    if (filled($from)) {
+                        $sub->whereRaw("({$expr})::date >= ?", [$from]);
+                    }
+                    if (filled($to)) {
+                        $sub->whereRaw("({$expr})::date <= ?", [$to]);
+                    }
+                });
+            }
+        });
     }
 
     /**

@@ -151,6 +151,24 @@ class StructureMembersTest extends TestCase
         $this->assertNotContains(self::CHILD, $ids);
     }
 
+    /**
+     * У активного дата берётся из конца годового цикла, а при пустом
+     * yearPeriodEnd (legacy-партнёры) — из dateActivity плюс год.
+     */
+    #[Test]
+    public function an_active_partner_is_found_by_the_end_of_the_year_cycle(): void
+    {
+        DB::table('consultant')->where('id', self::CHILD)->update([
+            'activity' => 1,
+            'yearPeriodEnd' => null,
+            'dateActivity' => '2025-10-07 00:00:00', // + год = 07.10.2026
+        ]);
+
+        $ids = $this->memberIds(['termination_from' => '2026-10-01', 'termination_to' => '2026-10-31']);
+
+        $this->assertContains(self::CHILD, $ids);
+    }
+
     /** Терминированные по-прежнему ищутся по своей дате — их не потеряли. */
     #[Test]
     public function terminated_partners_are_still_found_by_their_own_date(): void
