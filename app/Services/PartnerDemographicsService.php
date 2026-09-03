@@ -25,8 +25,22 @@ use Illuminate\Support\Facades\DB;
 class PartnerDemographicsService
 {
     /**
+     * Тип значения расписан поимённо: у Collection он инвариантен, и запись
+     * «array<string, mixed>» анализатор не принимает — конкретный shape в неё
+     * не приводится. Заодно это документация полей для обоих отчётов.
+     *
      * @param array<string, mixed> $filters поддерживается activity
-     * @return Collection<int, array<string, mixed>>
+     * @return Collection<int, array{
+     *     personName: string,
+     *     activityName: string,
+     *     gender: string|null,
+     *     genderSource: string,
+     *     birthDate: string|null,
+     *     years: int|null,
+     *     bucket: string,
+     *     dateCreated: string|null,
+     *     email: string|null,
+     * }>
      */
     public function records(array $filters = []): Collection
     {
@@ -53,28 +67,42 @@ class PartnerDemographicsService
 
             $stored = $user->gender ?? null;
             $gender = Gender::resolve($stored, $user->patronymic ?? null, $c->personName);
-            // Факт из профиля и вычисленное по отчеству нельзя смешивать:
-            // в сводке доля вычисленных показывается отдельной строкой.
-            $source = match (true) {
-                Gender::normalize($stored) !== null => 'Профиль',
-                $gender !== null => 'По отчеству',
-                default => 'Нет данных',
-            };
+            $source = $this->genderSource($stored, $gender);
 
             $birthDate = $user->birthDate ?? $c->birthDate;
             $years = Age::years($birthDate);
+            $email = ($user->email ?? null) ?: ($c->email ?: null);
 
+            // Приведение к скалярам — не косметика: строки приходят из
+            // DB::table() как mixed, и без него shape в @return не сходится.
             return [
-                'personName' => $c->personName,
-                'activityName' => $c->activity ? ($activityNames[$c->activity] ?? '') : '',
+                'personName' => (string) $c->personName,
+                'activityName' => (string) ($c->activity ? ($activityNames[$c->activity] ?? '') : ''),
                 'gender' => $gender,
                 'genderSource' => $source,
                 'birthDate' => Age::date($birthDate),
                 'years' => $years,
                 'bucket' => Age::bucket($years),
                 'dateCreated' => $c->dateCreated ? substr((string) $c->dateCreated, 0, 10) : null,
-                'email' => (($user->email ?? null) ?: ($c->email ?: null)),
+                'email' => $email !== null ? (string) $email : null,
             ];
         });
+    }
+
+    /**
+     * Откуда взялся пол. Факт из профиля и вычисленное по отчеству смешивать
+     * нельзя: в сводке доля вычисленных показывается отдельной строкой.
+     *
+     * Отдельным методом с явным `string`, а не match'ем по месту: иначе тип
+     * значения — union из трёх литералов, и он не сходится с shape в @return
+     * (у Collection значение инвариантно).
+     */
+    private function genderSource(mixed $stored, ?string $resolved): string
+    {
+        if (Gender::normalize($stored) !== null) {
+            return 'Профиль';
+        }
+
+        return $resolved !== null ? 'По отчеству' : 'Нет данных';
     }
 }

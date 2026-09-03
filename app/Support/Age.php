@@ -68,7 +68,11 @@ final class Age
         return 'Не указан';
     }
 
-    /** Подписи групп в порядке возрастания — для осей и сводок. */
+    /**
+     * Подписи групп в порядке возрастания — для осей и сводок.
+     *
+     * @return list<string>
+     */
     public static function bucketLabels(): array
     {
         return array_merge(array_column(self::BUCKETS, 0), ['Не указан']);
