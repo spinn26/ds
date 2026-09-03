@@ -14,9 +14,12 @@ use Illuminate\Support\Facades\DB;
  * обратно из готовых процентов данные не достанешь. Колонки «Пол» и
  * «Возрастная группа» уже нормализованы — по ним сводная строится сразу.
  *
- * Период фильтрует ДАТУ РЕГИСТРАЦИИ партнёра (consultant.dateCreated): чтобы
- * получить всю сеть, берётся заведомо широкий диапазон. Соответствующая
- * подпись есть в колонке «Зарегистрирован».
+ * ⚠ Период НЕ участвует в выборке: демография — снимок всей сети на сегодня,
+ * а не события за интервал. Отчёт всегда отдаёт всех живых партнёров, какой бы
+ * диапазон ни пришёл (границы всё равно приходят: report_archive.date_from и
+ * date_to объявлены NOT NULL, а UI для этого типа шлёт текущую дату). Дата
+ * регистрации осталась отдельной колонкой — по ней в Excel сводится приход
+ * партнёров по годам.
  *
  * Откуда берутся данные:
  *   - пол — WebUser.gender, а если он пуст (или логина нет вовсе) —
@@ -41,9 +44,8 @@ class PartnerDemographicsReport extends AbstractReportType
 
     public function rows(string $from, string $to, array $filters): array
     {
-        $query = DB::table('consultant')
-            ->whereNull('dateDeleted')
-            ->whereBetween('dateCreated', [$from, $to]);
+        // $from и $to не используются — см. докблок класса.
+        $query = DB::table('consultant')->whereNull('dateDeleted');
 
         if (! empty($filters['activity'])) {
             $query->where('activity', $filters['activity']);

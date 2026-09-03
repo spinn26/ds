@@ -115,14 +115,26 @@ class PartnerDemographicsReportTest extends TestCase
         $this->assertSame('45–54', $row[6]);
     }
 
-    /** Период фильтрует дату регистрации партнёра. */
+    /**
+     * ⚠ Период в выборке не участвует: демография — снимок ВСЕЙ сети, а не
+     * события за интервал. Даже однодневный диапазон отдаёт всех партнёров,
+     * включая зарегистрированных за его пределами.
+     */
     #[Test]
-    public function the_period_filters_by_registration_date(): void
+    public function the_period_is_ignored(): void
     {
-        $names = array_keys($this->rows('2026-01-01', '2026-12-31'));
+        $narrow = array_keys($this->rows('2026-09-03', '2026-09-03'));
 
-        $this->assertContains('Петрова Мария Сергеевна', $names);
-        $this->assertNotContains('Иванов Иван Петрович', $names, 'зарегистрирован в 2025-м');
+        $this->assertCount(4, $narrow);
+        $this->assertContains('Иванов Иван Петрович', $narrow, 'зарегистрирован в 2025-м, но в сети есть');
+        $this->assertSame(array_keys($this->rows()), $narrow, 'выдача не зависит от границ');
+    }
+
+    /** Дата регистрации осталась колонкой — по ней сводят приход по годам. */
+    #[Test]
+    public function the_registration_date_is_still_a_column(): void
+    {
+        $this->assertSame('2025-04-10', $this->rows()['Иванов Иван Петрович'][7]);
     }
 
     // ================================================================

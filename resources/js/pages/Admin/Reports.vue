@@ -11,8 +11,16 @@
       <v-card-text>
         <v-row dense>
           <v-col cols="12" sm="6">
-            <SmartRangeFilter label="Период" kind="date"
+            <!-- Периодless-типы (демография) строятся по всей сети на
+                 сегодня — диапазон для них не спрашиваем, иначе оператор
+                 гадает, какие даты вписать, чтобы попали все. -->
+            <SmartRangeFilter v-if="!typeIsPeriodless" label="Период" kind="date"
               v-model:from="form.dateFrom" v-model:to="form.dateTo" />
+            <div v-else class="text-caption text-medium-emphasis d-flex align-center ga-2"
+              style="min-height:40px">
+              <v-icon size="16">mdi-earth</v-icon>
+              Строится по всей сети на сегодня — период не нужен
+            </div>
           </v-col>
           <v-col cols="12" sm="6">
             <v-select v-model="form.type" :items="reportTypes" item-title="label" item-value="value"
@@ -36,7 +44,7 @@
              зелёную кнопку и не понимает, что от него ждут. -->
         <div v-if="!canGenerate" class="text-caption text-medium-emphasis mt-2">
           <v-icon size="14" class="mr-1">mdi-information-outline</v-icon>
-          Заполните период (с / по) и выберите тип отчёта
+          {{ typeIsPeriodless ? 'Выберите тип отчёта' : 'Заполните период (с / по) и выберите тип отчёта' }}
         </div>
       </v-card-text>
     </v-card>
@@ -121,7 +129,8 @@ const reportTypes = [
   { label: '[Финрез] Транзакции', value: 'finrez_transactions' },
   { label: '[Финрез] Комиссии по ФК', value: 'finrez_commissions' },
   { label: 'Статусы партнёров', value: 'partner_status' },
-  { label: 'Демография сети (пол и возраст)', value: 'partner_demographics' },
+  // periodless: отчёт — снимок всей сети, диапазон в выборке не участвует.
+  { label: 'Демография сети (пол и возраст)', value: 'partner_demographics', periodless: true },
 ];
 
 const activityOptions = [
@@ -133,11 +142,19 @@ const activityOptions = [
 
 const form = ref({ dateFrom: '', dateTo: '', type: null, activity: null });
 
-const canGenerate = computed(() => form.value.dateFrom && form.value.dateTo && form.value.type);
+// Тип, который строится по всей сети: период у него ни о чём.
+const typeIsPeriodless = computed(() =>
+  !!reportTypes.find(r => r.value === form.value.type)?.periodless);
+
+const canGenerate = computed(() =>
+  !!form.value.type && (typeIsPeriodless.value || (form.value.dateFrom && form.value.dateTo)));
 
 const generateLabel = computed(() => {
   if (!form.value.type) return 'Сгенерировать отчёт';
   const t = reportLabel(form.value.type);
+  if (typeIsPeriodless.value) {
+    return `Сгенерировать «${t}» по всей сети`;
+  }
   if (form.value.dateFrom && form.value.dateTo) {
     return `Сгенерировать «${t}» за период с ${fmtDate(form.value.dateFrom)} по ${fmtDate(form.value.dateTo)}`;
   }
@@ -184,10 +201,14 @@ async function generate() {
   if (!canGenerate.value) return;
   generating.value = true;
   try {
+    // Границы обязательны на бэке и в report_archive (NOT NULL), поэтому для
+    // periodless-типов подставляем сегодняшнюю дату: в выборке она не
+    // участвует, а в архиве видно, когда снимок сделан.
+    const today = new Date().toISOString().slice(0, 10);
     const { data } = await api.post('/admin/reports/generate', {
       type: form.value.type,
-      date_from: form.value.dateFrom,
-      date_to: form.value.dateTo,
+      date_from: typeIsPeriodless.value ? today : form.value.dateFrom,
+      date_to: typeIsPeriodless.value ? today : form.value.dateTo,
       activity: form.value.activity,
     });
     notify(data.message || 'Отчёт поставлен в очередь');
