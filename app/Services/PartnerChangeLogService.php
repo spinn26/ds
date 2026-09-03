@@ -76,6 +76,8 @@ class PartnerChangeLogService
             'status_and_lvl' => 'Статус + уровень',
             'qualificationLocked' => 'Квалификация заблок.',
             'personName' => 'ФИО',
+            // Сброс верификации при смене ФИО (Контур 3 спеки по верификации).
+            'requisitesVerified' => 'Верификация реквизитов',
         ];
         $activityLabel = function ($v) {
             if ($v === null || $v === '') return null;

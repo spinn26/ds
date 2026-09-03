@@ -156,6 +156,9 @@ class AdminDataController extends Controller
                 'reinstatementCount' => (int) ($consultant->reinstatement_count ?? 0),
                 'reinstateLimit' => \App\Enums\PartnerActivity::selfReinstateLimit(),
                 'reinstateBlocked' => (bool) ($consultant->reinstate_blocked ?? false),
+                // Форма предупреждает о сбросе верификации до сохранения ФИО:
+                // 3 = реквизиты подтверждены, гейт продуктов/выплат открыт.
+                'requisitesVerified' => ((int) ($consultant->statusRequisites ?? 0)) === 3,
             ],
             'webUser' => $webUser ? [
                 'id' => $webUser->id,
@@ -265,13 +268,22 @@ class AdminDataController extends Controller
     /**
      * Редактирование партнёра: обновляем Consultant и связанный WebUser.
      * Все поля опциональны — обновляются только присланные.
+     *
+     * Смена ФИО снимает верификацию реквизитов (спека «Верификация реквизитов
+     * Партнёра», Контур 3) — сообщаем об этом отдельно, иначе сотрудник узнает
+     * о закрытом платёжном гейте только от партнёра.
      */
     public function updatePartner(Request $request, int $id): JsonResponse
     {
         // Валидация и сохранение — в PartnerUpdateService (215 строк).
+        $result = $this->partnerUpdate->update($request, $id);
+
         return response()->json([
-            'message' => 'Обновлён',
-            'id' => $this->partnerUpdate->update($request, $id),
+            'message' => $result['requisitesReset']
+                ? 'Обновлён. Смена ФИО сняла верификацию реквизитов — партнёру открыт повторный ввод и отправка.'
+                : 'Обновлён',
+            'id' => $result['id'],
+            'requisitesReset' => $result['requisitesReset'],
         ]);
     }
 

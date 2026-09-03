@@ -42,6 +42,9 @@ class UpdatePartnerTest extends TestCase
 
     private const CONTRACT = 1800200;
     private const CLIENT = 1800300;
+    /** Подтверждённые реквизиты партнёра — их снимает смена ФИО. */
+    private const REQUISITE = 1800400;
+    private const BANK_REQUISITE = 1800500;
 
     private User $admin;
     private User $staff;
@@ -192,6 +195,74 @@ class UpdatePartnerTest extends TestCase
         $this->assertSame($expected, DB::table('client')->where('id', self::CLIENT)->value('consultantName'));
     }
 
+    // ---------------- Сброс верификации реквизитов ----------------
+
+    /**
+     * Per spec ✅Верификация реквизитов Партнёра.md, Контур 3: партнёром ДС
+     * может быть только ИП, оформленное на то же имя, что в профиле. Значит
+     * смена ФИО снимает «Верифицировано» — и с ИП, и с банковской строки, —
+     * закрывает платёжный гейт и открывает партнёру повторный ввод.
+     */
+    #[Test]
+    public function renaming_a_partner_drops_the_requisites_verification(): void
+    {
+        $this->save($this->admin, self::PARTNER, ['lastName' => 'Переименов'])->assertOk();
+
+        $req = DB::table('requisites')->where('id', self::REQUISITE)->first();
+        $bank = DB::table('bankrequisites')->where('id', self::BANK_REQUISITE)->first();
+
+        $this->assertFalse((bool) $req->verified, 'верификация ИП обязана слететь');
+        $this->assertSame(2, (int) $req->status, 'реквизиты возвращены партнёру');
+        $this->assertNotEmpty($req->rejection_reason, 'партнёр должен видеть причину');
+        $this->assertFalse((bool) $bank->verified, 'банковская строка тоже на перепроверку');
+        // Гейт продуктов/выплат закрыт: 3 = подтверждено, всё меньшее — нет.
+        $this->assertSame(2, (int) DB::table('consultant')
+            ->where('id', self::PARTNER)->value('statusRequisites'));
+    }
+
+    /** Партнёру уходит уведомление — иначе он не узнает, что надо отправить заново. */
+    #[Test]
+    public function the_partner_is_notified_about_the_reverification(): void
+    {
+        $this->save($this->admin, self::PARTNER, ['firstName' => 'Переимён'])->assertOk();
+
+        $this->assertSame(1, DB::table('notifications')
+            ->where('user_id', self::PARTNER_WEBUSER)
+            ->where('type', 'requisites')->count());
+    }
+
+    /** Сброс попадает и в историю карточки (diff), и в аудит отдельной записью. */
+    #[Test]
+    public function the_reset_is_written_to_the_history(): void
+    {
+        $this->save($this->admin, self::PARTNER, ['lastName' => 'Переименов'])->assertOk();
+
+        $update = DB::table('audit_log')->where('action', 'partner_update')
+            ->where('entity_id', (string) self::PARTNER)->first();
+        $diff = json_decode($update->payload, true)['diff'];
+        $this->assertFalse($diff['requisitesVerified']['to']);
+
+        $reset = DB::table('audit_log')->where('action', 'requisites_reverification')
+            ->where('entity', 'requisites')->first();
+        $this->assertNotNull($reset, 'сброс обязан попасть в аудит');
+        $this->assertSame((string) self::REQUISITE, $reset->entity_id);
+        $this->assertSame(self::PARTNER, json_decode($reset->payload, true)['consultant']);
+    }
+
+    /** Правка без смены ФИО верификацию не трогает. */
+    #[Test]
+    public function a_save_without_a_name_change_keeps_the_verification(): void
+    {
+        $this->save($this->admin, self::PARTNER, ['phone' => '+79991112233'])->assertOk();
+
+        $this->assertTrue((bool) DB::table('requisites')
+            ->where('id', self::REQUISITE)->value('verified'));
+        $this->assertSame(3, (int) DB::table('consultant')
+            ->where('id', self::PARTNER)->value('statusRequisites'));
+        $this->assertSame(0, DB::table('audit_log')
+            ->where('action', 'requisites_reverification')->count());
+    }
+
     // ---------------- Смена наставника ----------------
 
     /**
@@ -255,6 +326,62 @@ class UpdatePartnerTest extends TestCase
 
         $this->assertSame(0, DB::table('audit_log')->where('entity', 'consultant')
             ->where('entity_id', (string) self::PARTNER)->count());
+    }
+
+    /**
+     * Основание правки обязательно — через полгода на вопрос «почему у
+     * партнёра другое ФИО» отвечает только этот комментарий. Гард дублирует
+     * UI: прямой PUT без основания тоже не проходит.
+     */
+    #[Test]
+    public function a_real_change_without_a_reason_is_rejected(): void
+    {
+        $this->actingAs($this->admin, 'sanctum')
+            ->putJson('/api/v1/admin/partners/' . self::PARTNER, ['phone' => '+79991112233'])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('comment');
+
+        // Отказ откатывает всё: телефон остался прежним, журнал пуст.
+        $this->assertSame('+79990000000', DB::table('WebUser')
+            ->where('id', self::PARTNER_WEBUSER)->value('phone'));
+        $this->assertSame(0, DB::table('audit_log')->where('entity', 'consultant')
+            ->where('entity_id', (string) self::PARTNER)->count());
+    }
+
+    /** Правка «ничего не поменялось» проходит и без основания. */
+    #[Test]
+    public function a_no_op_save_needs_no_reason(): void
+    {
+        $this->actingAs($this->admin, 'sanctum')
+            ->putJson('/api/v1/admin/partners/' . self::PARTNER, ['phone' => '+79990000000'])
+            ->assertOk();
+    }
+
+    /** Основание ложится в ту же запись журнала, что и diff полей. */
+    #[Test]
+    public function the_reason_is_stored_with_the_diff(): void
+    {
+        $this->actingAs($this->admin, 'sanctum')->putJson(
+            '/api/v1/admin/partners/' . self::PARTNER,
+            ['phone' => '+79991112233', 'comment' => 'Заявление партнёра от 03.09.2026'],
+        )->assertOk();
+
+        $row = DB::table('audit_log')->where('action', 'partner_update')
+            ->where('entity_id', (string) self::PARTNER)->first();
+        $payload = json_decode($row->payload, true);
+
+        $this->assertSame('Заявление партнёра от 03.09.2026', $payload['comment']);
+        $this->assertSame('+79991112233', $payload['diff']['phone']['to']);
+    }
+
+    /** Отписка в один символ не проходит — основание должно быть по существу. */
+    #[Test]
+    public function a_too_short_reason_is_rejected(): void
+    {
+        $this->actingAs($this->admin, 'sanctum')->putJson(
+            '/api/v1/admin/partners/' . self::PARTNER,
+            ['phone' => '+79991112233', 'comment' => 'x'],
+        )->assertStatus(422)->assertJsonValidationErrors('comment');
     }
 
     /** Пароль в журнале маскируется. */
@@ -321,10 +448,19 @@ class UpdatePartnerTest extends TestCase
             DB::table('WebUser')->where('id', self::PARTNER_WEBUSER)->value('email'));
     }
 
-    /** @param array<string, mixed> $payload */
+    /**
+     * Правка карточки требует основания — оно уходит в Историю изменений.
+     * Здесь подставляем дежурное, чтобы тесты про остальную механику не
+     * повторяли его в каждом вызове; проверки самого правила — отдельно.
+     *
+     * @param array<string, mixed> $payload
+     */
     private function save(User $as, int $id, array $payload)
     {
-        return $this->actingAs($as, 'sanctum')->putJson('/api/v1/admin/partners/' . $id, $payload);
+        return $this->actingAs($as, 'sanctum')->putJson(
+            '/api/v1/admin/partners/' . $id,
+            $payload + ['comment' => 'Тестовое основание правки'],
+        );
     }
 
     private function seedFixture(): void
@@ -347,6 +483,15 @@ class UpdatePartnerTest extends TestCase
         $this->webUser(self::LIVE_TWIN, 'client', 'PARTNER@TEST.LOCAL',
             'Клиентов', 'Клиент');
 
+        // Справочник статусов реквизитов: на него смотрят внешние ключи
+        // consultant.statusRequisites и requisites.status, а в схему-фикстуру
+        // он не попал (как в SetupRequisitesTest).
+        DB::table('status_requisites')->insert([
+            ['id' => 1, 'level' => 1, 'name' => 'backoffice'],
+            ['id' => 2, 'level' => 2, 'name' => 'consultant'],
+            ['id' => 3, 'level' => 3, 'name' => 'verified'],
+        ]);
+
         DB::table('consultant')->insert([
             [
                 'id' => self::INVITER_OLD, 'personName' => 'Наставник Старый',
@@ -363,6 +508,8 @@ class UpdatePartnerTest extends TestCase
                 'webUser' => self::PARTNER_WEBUSER, 'activity' => 1,
                 'inviter' => self::INVITER_OLD, 'inviterName' => 'Наставник Старый',
                 'dateCreated' => '2026-01-01 00:00:00',
+                // 3 = реквизиты подтверждены, гейт продуктов/выплат открыт.
+                'statusRequisites' => 3,
             ],
             [
                 'id' => self::NO_LOGIN, 'personName' => 'Безлогинов Безлогинович Отчествович',
@@ -382,6 +529,26 @@ class UpdatePartnerTest extends TestCase
             'id' => self::CLIENT, 'consultant' => self::PARTNER,
             'consultantName' => 'Партнёров Партнёр Партнёрович', 'personName' => 'Клиент Клиентов',
         ]);
+        // Подтверждённая пара «ИП + банк»: ровно то состояние, которое обязана
+        // снять смена ФИО (Контур 3 спеки по верификации реквизитов).
+        DB::table('requisites')->insert([
+            'id' => self::REQUISITE, 'consultant' => self::PARTNER,
+            'webUser' => self::PARTNER_WEBUSER,
+            'individualEntrepreneur' => 'ИП Партнёров Партнёр Партнёрович',
+            'inn' => '770000000012', 'ogrn' => '312770000000123',
+            'address' => 'г. Москва, ул. Тестовая, 1',
+            'email' => 'partner@test.local', 'phone' => '+79990000000',
+            'verified' => true, 'status' => 3, 'dateChange' => '2026-02-01 00:00:00',
+        ]);
+        DB::table('bankrequisites')->insert([
+            'id' => self::BANK_REQUISITE, 'requisites' => self::REQUISITE,
+            'bankName' => 'Тестбанк', 'bankBik' => '044525000',
+            'accountNumber' => '40802810000000000001',
+            'correspondentAccount' => '30101810000000000001',
+            'beneficiaryName' => 'ИП Партнёров Партнёр Партнёрович',
+            'verified' => true, 'dateChange' => '2026-02-01 00:00:00',
+        ]);
+
         DB::table('contract')->insert([
             'id' => self::CONTRACT, 'consultant' => self::PARTNER,
             'consultantName' => 'Партнёров Партнёр Партнёрович',

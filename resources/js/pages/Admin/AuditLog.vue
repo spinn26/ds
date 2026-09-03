@@ -90,12 +90,15 @@ const ACTION_LABELS = {
   role_change: 'Смена роли', create: 'Создание', update: 'Изменение', delete: 'Удаление',
   restore: 'Восстановление', export: 'Экспорт', import: 'Импорт', impersonate: 'Вход под пользователем',
   block: 'Блокировка', unblock: 'Разблокировка', verify: 'Верификация', settings_update: 'Изменение настроек',
+  partner_update: 'Правка карточки партнёра',
+  requisites_reverification: 'Сброс верификации реквизитов',
 };
 const ACTION_COLORS = {
   login: 'success', login_blocked: 'error', login_2fa_challenge: 'info', logout: 'grey',
   password_reset: 'warning', password_change: 'warning', role_change: 'warning',
   create: 'success', update: 'info', delete: 'error', restore: 'success',
   export: 'info', import: 'info', impersonate: 'warning', block: 'error', unblock: 'success',
+  partner_update: 'info', requisites_reverification: 'warning',
 };
 const ENTITY_LABELS = {
   WebUser: 'Пользователь', person: 'Контакт (архив Directual)', contract: 'Контракт', client: 'Клиент',

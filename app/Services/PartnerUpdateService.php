@@ -21,13 +21,24 @@ use Illuminate\Support\Facades\DB;
  *   - у партнёра с логином контакты живут в WebUser, у партнёра БЕЗ логина —
  *     в собственных колонках consultant (893 импортированных ФК);
  *   - новое ФИО каскадом расходится по видимым денорм-копиям;
+ *   - новое ФИО снимает верификацию реквизитов (спека «Верификация реквизитов
+ *     Партнёра», Контур 3): ИП должно быть оформлено на то же имя;
+ *   - правка, которая что-то меняет, требует основания (comment): оно уходит
+ *     в audit_log и показывается в «Истории изменений» карточки;
  *   - смена наставника через форму = перестановка: запись в Историю
  *     перестановок плюс пересчёт цепочки, иначе перевод «теряется».
  */
 class PartnerUpdateService
 {
-    /** Возвращает id сохранённого партнёра. */
-    public function update(Request $request, int $id): int
+    public function __construct(
+        private readonly RequisiteReverificationService $reverification,
+    ) {}
+
+    /**
+     * @return array{id: int, requisitesReset: bool} id сохранённого партнёра и
+     *         признак того, что смена ФИО сняла верификацию реквизитов.
+     */
+    public function update(Request $request, int $id): array
     {
         $consultant = Consultant::findOrFail($id);
         // Strict: только роль admin может менять role/password/isBlocked.
@@ -82,10 +93,14 @@ class PartnerUpdateService
             'newPassword' => ['sometimes', 'nullable', 'string',
                 'min:8', \Illuminate\Validation\Rules\Password::min(8)->letters()->numbers(),
             ],
+            // Основание правки. Обязательность проверяем ниже, по факту diff'а:
+            // «нажал Сохранить, ничего не поменяв» комментария не требует.
+            'comment' => ['sometimes', 'nullable', 'string', 'min:3', 'max:500'],
         ], [
             'firstName.regex' => 'Имя — только русские буквы',
             'lastName.regex' => 'Фамилия — только русские буквы',
             'patronymic.regex' => 'Отчество — только русские буквы',
+            'comment.min' => 'Основание слишком короткое — опишите его по существу.',
         ]);
 
         // Critical поля доступны только admin'у — иначе любой staff
@@ -99,9 +114,11 @@ class PartnerUpdateService
         // снимаем ДО апдейта, новые — после нормализации.
         $diff = [];
         $inviterTransfer = null;
+        $requisitesReset = null;
         $authorId = $request->user()?->id;
+        $comment = trim((string) ($data['comment'] ?? ''));
 
-        DB::transaction(function () use ($consultant, $data, &$diff, &$inviterTransfer, $authorId) {
+        DB::transaction(function () use ($consultant, $data, $comment, &$diff, &$inviterTransfer, &$requisitesReset, $authorId) {
             $this->applyConsultantFields($consultant, $data, $diff, $inviterTransfer);
 
             // Контакты живут либо в WebUser, либо в самой карточке.
@@ -109,6 +126,19 @@ class PartnerUpdateService
                 $this->applyWebUserFields($consultant, $data, $diff);
             } else {
                 $this->applyCardFields($consultant, $data, $diff);
+            }
+
+            // Основание обязательно, как только правка что-то меняет: через
+            // полгода на вопрос «почему у партнёра другое ФИО/наставник»
+            // отвечает только этот комментарий в Истории изменений. Гард
+            // дублирует UI — прямой PUT без основания тоже не пройдёт.
+            // Проверяем ПОСЛЕ сборки diff'а (иначе не отличить пустое
+            // «нажал Сохранить») и ДО save() — исключение откатит транзакцию,
+            // включая уже записанные поля WebUser.
+            if ($diff && $comment === '') {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'comment' => 'Укажите основание изменения — оно попадёт в историю карточки.',
+                ]);
             }
 
             $consultant->save();
@@ -119,6 +149,19 @@ class PartnerUpdateService
             // не трогаем — их переписывают раннеры, часть заморожена cutoff'ом.
             if ($consultant->wasChanged('personName')) {
                 $this->propagateConsultantName($consultant->id, $consultant->personName);
+
+                // Per spec ✅Верификация реквизитов Партнёра.md, Контур 3:
+                // сменилось ФИО → «Верифицировано» снимается, партнёру снова
+                // открывается ввод реквизитов и повторная отправка. Сам факт
+                // сброса кладём в diff, чтобы он попал в Историю изменений
+                // рядом с правкой ФИО, из-за которой случился.
+                $requisitesReset = $this->reverification->reset(
+                    $consultant,
+                    RequisiteReverificationService::NAME_CHANGE_REASON,
+                );
+                if ($requisitesReset) {
+                    $diff['requisitesVerified'] = ['from' => true, 'to' => false];
+                }
             }
 
             // Смена наставника → запись в Историю перестановок (формат createTransfer).
@@ -148,10 +191,25 @@ class PartnerUpdateService
         if (! empty($diff)) {
             Audit::log('partner_update', 'consultant', $consultant->id, [
                 'diff' => $diff,
+                // Основание правки — PartnerChangeLogService показывает его
+                // строкой события в «Истории изменений» карточки.
+                'comment' => $comment,
             ]);
         }
 
-        return $consultant->id;
+        // Отдельная запись по реквизитам: в разделе Аудит она ищется по
+        // сущности «Реквизиты», а не только в карточке партнёра.
+        if ($requisitesReset) {
+            Audit::log('requisites_reverification', 'requisites', $requisitesReset['requisiteId'], [
+                'consultant' => $consultant->id,
+                'comment' => RequisiteReverificationService::NAME_CHANGE_REASON,
+                // Основание, которое сотрудник указал при смене ФИО.
+                'basis' => $comment,
+                'diff' => ['verified' => ['from' => $requisitesReset['wasVerified'], 'to' => false]],
+            ]);
+        }
+
+        return ['id' => $consultant->id, 'requisitesReset' => $requisitesReset !== null];
     }
 
     /**

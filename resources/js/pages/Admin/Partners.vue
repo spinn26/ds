@@ -223,6 +223,20 @@
               <v-col cols="12" sm="4"><v-text-field v-model="editForm.firstName" :rules="cyrillicOptionalRules" label="Имя" variant="outlined" density="compact" :error-messages="editErrors.firstName" /></v-col>
               <v-col cols="12" sm="4"><v-text-field v-model="editForm.patronymic" :rules="cyrillicOptionalRules" label="Отчество" variant="outlined" density="compact" :error-messages="editErrors.patronymic" /></v-col>
 
+              <!-- Спека «Верификация реквизитов Партнёра», Контур 3: ИП должно
+                   быть оформлено на то же имя, что в профиле, поэтому смена ФИО
+                   снимает верификацию. Предупреждаем ДО сохранения — иначе
+                   сотрудник узнаёт о закрытом гейте выплат от партнёра. -->
+              <v-col v-if="editForm.requisitesVerified" cols="12">
+                <v-alert :type="editNameChanged ? 'warning' : 'info'" density="compact"
+                  variant="tonal" class="text-caption">
+                  Реквизиты партнёра верифицированы.
+                  {{ editNameChanged
+                    ? 'Сохранение снимет верификацию: партнёру откроется повторный ввод и отправка реквизитов, выплаты и «Продукты» — до новой проверки.'
+                    : 'Изменение ФИО снимет верификацию — партнёру придётся отправить реквизиты повторно.' }}
+                </v-alert>
+              </v-col>
+
               <v-col cols="12" class="mt-2"><div class="text-subtitle-2 font-weight-bold mb-2">Контакты</div></v-col>
               <v-col cols="12" md="4"><v-text-field v-model="editForm.email" :rules="emailRules" label="Email" type="email" variant="outlined" density="compact" :error-messages="editErrors.email" /></v-col>
               <v-col cols="12" md="4">
@@ -430,11 +444,14 @@
                   <v-list-item-title class="text-body-2">
                     <strong>{{ entry.author }}</strong>
                     <span class="text-medium-emphasis"> · {{ fmtDateTime(entry.createdAt) }}</span>
-                    <span v-if="entry.comment" class="text-caption text-medium-emphasis">
-                      · {{ entry.comment }}
-                    </span>
                   </v-list-item-title>
                   <v-list-item-subtitle class="text-caption" style="white-space:normal">
+                    <!-- Основание правки: сотрудник указывает его при
+                         сохранении карточки, отдельной строкой — по нему
+                         через полгода и отвечают «почему поменяли». -->
+                    <div v-if="entry.comment" class="mb-1 font-italic">
+                      «{{ entry.comment }}»
+                    </div>
                     <template v-if="entry.changes && entry.changes.length">
                       <div v-for="(c, i) in entry.changes" :key="i" class="mb-1">
                         <strong>{{ c.fieldLabel }}:</strong>
@@ -912,6 +929,45 @@ const statusHistory = ref([]);
 const statusHistoryLoading = ref(false);
 const changeLog = ref([]);
 const changeLogLoading = ref(false);
+// ФИО на момент открытия карточки + флаг «реквизиты подтверждены»: вместе
+// дают предупреждение и подтверждение перед сбросом верификации.
+const editNameBefore = ref({ lastName: '', firstName: '', patronymic: '' });
+// Слепок карточки «как открыли» — по нему понимаем, есть ли что сохранять
+// (и надо ли спрашивать основание правки).
+const editSnapshot = ref('');
+
+const editNameChanged = computed(() => {
+  const f = editForm.value;
+  if (!f) return false;
+  const b = editNameBefore.value;
+  return (f.lastName || '') !== b.lastName
+    || (f.firstName || '') !== b.firstName
+    || (f.patronymic || '') !== b.patronymic;
+});
+
+// Полезная нагрузка карточки: одна функция и для слепка, и для запроса —
+// иначе сравнение «изменилось ли» и то, что реально уходит, разъедутся.
+function editPayload(f) {
+  return {
+    participantCode: f.participantCode || null,
+    inviter: f.inviter || null,
+    firstName: f.firstName || null,
+    lastName: f.lastName || null,
+    patronymic: f.patronymic || null,
+    email: f.email || null,
+    phone: phoneIsEmpty(f.phone) ? null : f.phone,
+    nicTG: f.nicTG || null,
+    gender: f.gender || null,
+    birthDate: f.birthDate || null,
+    role: f.role || null,
+    isBlocked: !!f.isBlocked,
+    newPassword: f.newPassword || null,
+  };
+}
+
+const editHasChanges = computed(() =>
+  !!editForm.value && !!editSnapshot.value
+  && JSON.stringify(editPayload(editForm.value)) !== editSnapshot.value);
 
 // Иконка по типу события — статус-смены отдельно от обычных правок,
 // чтобы оператор сразу видел «крупные» изменения в потоке.
@@ -920,11 +976,13 @@ function changeIcon(entry) {
   if (entry?.changes?.some(c => c.field === 'activity')) return 'mdi-account-switch';
   if (entry?.changes?.some(c => c.field === 'role')) return 'mdi-account-key';
   if (entry?.changes?.some(c => c.field === 'password')) return 'mdi-lock-reset';
+  if (entry?.changes?.some(c => c.field === 'requisitesVerified')) return 'mdi-credit-card-off';
   if (entry?.action === 'partner_update') return 'mdi-pencil';
   return 'mdi-circle-small';
 }
 function changeIconColor(entry) {
   if (entry?.changes?.some(c => c.field === 'activity')) return 'warning';
+  if (entry?.changes?.some(c => c.field === 'requisitesVerified')) return 'warning';
   if (entry?.changes?.some(c => c.field === 'role')) return 'info';
   return 'primary';
 }
@@ -1103,7 +1161,14 @@ async function openEdit(item) {
       isBlocked: !!u.isBlocked,
       newPassword: '',
       webUserId: u.id || null,
+      requisitesVerified: !!c.requisitesVerified,
     };
+    // Слепок ФИО на момент открытия: по нему перед сохранением решаем,
+    // спрашивать ли подтверждение сброса верификации реквизитов.
+    editNameBefore.value = {
+      lastName: u.lastName || '', firstName: u.firstName || '', patronymic: u.patronymic || '',
+    };
+    editSnapshot.value = JSON.stringify(editPayload(editForm.value));
     // Кастомные поля пользователя (по WebUser.id).
     pcfFields.value = [];
     pcfValues.value = {};
@@ -1121,30 +1186,54 @@ async function openEdit(item) {
 }
 
 async function saveEdit() {
+  const f = editForm.value;
+  if (!f) return;
+
+  // Правка карточки обязана быть объяснена: основание уходит в «Историю
+  // изменений» и в аудит (бэк без него сохранять откажется). Спрашиваем
+  // только когда есть что сохранять — «нажал Сохранить, ничего не поменяв»
+  // не должно требовать комментария.
+  // Смена ФИО у партнёра с подтверждёнными реквизитами тут же сбрасывает
+  // верификацию — предупреждаем об этом в том же окне, а не отдельным.
+  let comment = '';
+  if (editHasChanges.value) {
+    const resetsVerification = editNameChanged.value && f.requisitesVerified;
+    const res = await confirm.ask({
+      title: resetsVerification ? 'Сменить ФИО и сбросить верификацию?' : 'Сохранить изменения?',
+      message: (resetsVerification
+        ? 'Реквизиты партнёра верифицированы. После сохранения статус будет снят: '
+          + 'партнёр получит уведомление, сможет заново ввести и отправить реквизиты, '
+          + 'а выплаты и раздел «Продукты» будут закрыты до повторной проверки. '
+        : '')
+        + 'Укажите основание — оно попадёт в «Историю изменений» карточки и в аудит.',
+      confirmText: 'Сохранить',
+      confirmColor: resetsVerification ? 'warning' : 'primary',
+      maxWidth: 520,
+      input: {
+        label: 'Основание изменения',
+        placeholder: 'Например: заявление партнёра от 03.09.2026',
+        required: true, rows: 3,
+      },
+    });
+    if (!res?.confirmed) return;
+    comment = res.value;
+  }
+
   saving.value = true;
   editErrors.value = {};
   try {
-    const f = editForm.value;
-    await api.put(`/admin/partners/${f.id}`, {
-      participantCode: f.participantCode || null,
-      inviter: f.inviter || null,
-      firstName: f.firstName || null,
-      lastName: f.lastName || null,
-      patronymic: f.patronymic || null,
-      email: f.email || null,
-      phone: phoneIsEmpty(f.phone) ? null : f.phone,
-      nicTG: f.nicTG || null,
-      gender: f.gender || null,
-      birthDate: f.birthDate || null,
-      role: f.role || null,
-      isBlocked: !!f.isBlocked,
-      newPassword: f.newPassword || null,
+    const { data } = await api.put(`/admin/partners/${f.id}`, {
+      ...editPayload(f),
+      comment: comment || null,
     });
     // Кастомные поля пользователя — отдельным запросом (если есть WebUser).
     if (f.webUserId && pcfFields.value.length) {
       try {
         await api.put(`/admin/users/${f.webUserId}/custom-fields`, { values: { ...pcfValues.value } });
       } catch { /* не критично для основного сохранения */ }
+    }
+    if (data?.requisitesReset) {
+      showSuccess(data.message);
     }
     editDialog.value = false;
     loadData();
@@ -1154,6 +1243,9 @@ async function saveEdit() {
       const mapped = {};
       for (const k of Object.keys(raw)) mapped[k] = raw[k][0];
       editErrors.value = mapped;
+      // У основания нет своего поля в форме (оно спрашивается в диалоге) —
+      // показываем ошибку снекбаром, иначе она осталась бы невидимой.
+      if (mapped.comment) showError(mapped.comment);
     }
   }
   saving.value = false;
