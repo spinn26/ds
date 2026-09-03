@@ -248,6 +248,80 @@ class ContractSheetSyncTest extends TestCase
         $this->assertSame('137АК', DB::table('contract')->where('id', self::CONTRACT)->value('number'));
     }
 
+    // ---------------- Откат ----------------
+
+    /** Откат возвращает контракту значения, которые были до прогона. */
+    #[Test]
+    public function a_run_can_be_rolled_back(): void
+    {
+        $this->sheet([
+            ['Активирован', '15.08.2026', '', '137АК',
+                'Флерина Ирина Александровна', 'Литвинов Юрий Геннадьевич',
+                'ЗПИФ Акцент', 'Акцент-4', '2 836,00', '₽'],
+        ]);
+
+        $runId = $this->sync()->assertOk()->json('runId');
+
+        $this->actingAs($this->admin, 'sanctum')
+            ->postJson("/api/v1/admin/contracts/sheet-sync/runs/{$runId}/rollback")
+            ->assertOk()
+            ->assertJsonPath('restored', 1);
+
+        $c = DB::table('contract')->where('id', self::CONTRACT)->first();
+        $this->assertEqualsWithDelta(100.0, (float) $c->ammount, 0.01, 'сумма вернулась');
+        $this->assertSame(3, (int) $c->status, 'статус вернулся в «Комплайнс»');
+        $this->assertNull($c->openDate, 'дата открытия вернулась в пустую');
+    }
+
+    /**
+     * ⛔ Поле, поправленное руками ПОСЛЕ синхронизации, откат не трогает:
+     * иначе он затёр бы более свежую правку человека.
+     */
+    #[Test]
+    public function a_rollback_skips_fields_edited_after_the_sync(): void
+    {
+        $this->sheet([
+            ['Активирован', '', '', '137АК',
+                'Флерина Ирина Александровна', 'Литвинов Юрий Геннадьевич',
+                'ЗПИФ Акцент', 'Акцент-4', '2 836,00', '₽'],
+        ]);
+
+        $runId = $this->sync()->assertOk()->json('runId');
+
+        // Человек поправил сумму уже после прогона.
+        DB::table('contract')->where('id', self::CONTRACT)->update(['ammount' => 7777]);
+
+        $this->actingAs($this->admin, 'sanctum')
+            ->postJson("/api/v1/admin/contracts/sheet-sync/runs/{$runId}/rollback")
+            ->assertOk()
+            ->assertJsonPath('skipped.0.reason', 'значение меняли после синхронизации');
+
+        $this->assertEqualsWithDelta(7777.0,
+            (float) DB::table('contract')->where('id', self::CONTRACT)->value('ammount'), 0.01,
+            'ручная правка уцелела');
+    }
+
+    /** Повторный откат того же прогона запрещён. */
+    #[Test]
+    public function a_run_cannot_be_rolled_back_twice(): void
+    {
+        $this->sheet([
+            ['Активирован', '', '', '137АК',
+                'Флерина Ирина Александровна', 'Литвинов Юрий Геннадьевич',
+                'ЗПИФ Акцент', 'Акцент-4', '2 836,00', '₽'],
+        ]);
+
+        $runId = $this->sync()->assertOk()->json('runId');
+
+        $this->actingAs($this->admin, 'sanctum')
+            ->postJson("/api/v1/admin/contracts/sheet-sync/runs/{$runId}/rollback")->assertOk();
+
+        $this->actingAs($this->admin, 'sanctum')
+            ->postJson("/api/v1/admin/contracts/sheet-sync/runs/{$runId}/rollback")
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Этот прогон уже откачен');
+    }
+
     /** Недоступное API — понятный текст, а не стектрейс (§5). */
     #[Test]
     public function an_unreachable_sheets_api_returns_a_readable_message(): void

@@ -11,12 +11,65 @@
             :loading="syncChecking" @click="checkSheetSync">
             Забрать из таблицы
           </v-btn>
+          <v-btn variant="text" icon="mdi-history" title="Прогоны синхронизации и откат"
+            @click="openSyncRuns" />
           <v-btn color="success" prepend-icon="mdi-plus" @click="openCreate">
             Новый контракт
           </v-btn>
         </template>
       </template>
     </PageHeader>
+
+    <!-- Прогоны синхронизации и откат -->
+    <v-dialog v-model="runsOpen" max-width="820" scrollable>
+      <v-card>
+        <v-card-title class="d-flex align-center ga-2">
+          <v-icon color="primary">mdi-history</v-icon>
+          Синхронизации с таблицей
+          <v-spacer />
+          <v-btn icon="mdi-close" size="small" variant="text" @click="runsOpen = false" />
+        </v-card-title>
+        <v-divider />
+        <v-card-text>
+          <v-alert type="info" variant="tonal" density="compact" class="mb-4">
+            Откат вернёт контрактам значения, которые были до прогона. Поле, которое
+            после синхронизации правили вручную, не трогается — оно попадёт в список
+            пропущенных.
+          </v-alert>
+          <EmptyState v-if="!runsLoading && !syncRuns.length"
+            icon="mdi-history" title="Синхронизаций ещё не было" />
+          <v-table v-else density="compact">
+            <thead>
+              <tr>
+                <th>Когда</th><th>Кто</th><th>Проверено</th>
+                <th>Обновлено</th><th>Состояние</th><th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="r in syncRuns" :key="r.id">
+                <td>{{ fmtDate(r.createdAt) }}</td>
+                <td>{{ r.author }}</td>
+                <td>{{ r.checked }}</td>
+                <td>{{ r.updated }}</td>
+                <td>
+                  <v-chip v-if="r.status === 'rolled_back'" size="x-small" color="warning" variant="tonal">
+                    откачен
+                  </v-chip>
+                  <v-chip v-else size="x-small" color="success" variant="tonal">применён</v-chip>
+                </td>
+                <td class="text-right">
+                  <v-btn v-if="r.status !== 'rolled_back' && r.updated > 0"
+                    size="x-small" color="warning" variant="tonal"
+                    :loading="rollingBack === r.id" @click="rollbackRun(r.id)">
+                    Откатить
+                  </v-btn>
+                </td>
+              </tr>
+            </tbody>
+          </v-table>
+        </v-card-text>
+      </v-card>
+    </v-dialog>
 
     <!-- Отчёт по обратной синхронизации -->
     <v-dialog v-model="syncOpen" max-width="900" scrollable>
@@ -765,6 +818,39 @@ async function applySheetSync() {
     syncApplied.value = true;
     notify(data.message);
     loadData();
+  }
+}
+
+// ---- Журнал прогонов и откат ----
+const runsOpen = ref(false);
+const runsLoading = ref(false);
+const syncRuns = ref([]);
+const rollingBack = ref(null);
+
+async function openSyncRuns() {
+  runsOpen.value = true;
+  runsLoading.value = true;
+  try {
+    const { data } = await api.get('/admin/contracts/sheet-sync/runs');
+    syncRuns.value = data.data || [];
+  } catch {
+    syncRuns.value = [];
+  } finally {
+    runsLoading.value = false;
+  }
+}
+
+async function rollbackRun(id) {
+  rollingBack.value = id;
+  try {
+    const { data } = await api.post(`/admin/contracts/sheet-sync/runs/${id}/rollback`);
+    notify(data.message, data.skipped?.length ? 'warning' : 'success');
+    await openSyncRuns();
+    loadData();
+  } catch (e) {
+    notify(e?.response?.data?.message || 'Не удалось откатить прогон', 'error');
+  } finally {
+    rollingBack.value = null;
   }
 }
 

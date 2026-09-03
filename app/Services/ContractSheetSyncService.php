@@ -211,13 +211,123 @@ class ContractSheetSyncService
             }
         }
 
+        // Журнал прогона — по нему катится откат, если в лист попали неверные
+        // данные. Пишем даже нулевой прогон: в истории должно быть видно, что
+        // кнопку жали и ничего не изменилось.
+        $runId = DB::table('contract_sheet_sync_log')->insertGetId([
+            'status' => 'success',
+            'checked_count' => $checked,
+            'updated_count' => $updated,
+            'changes' => json_encode($changes, JSON_UNESCAPED_UNICODE),
+            'created_by' => auth()->id(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
         // Формулировка из ТЗ §5.
         $message = sprintf('Синхронизация завершена. Обновлено %d контрактов.', $updated);
         if ($idWriteError) {
             $message .= ' Данные применены, но проставить ID обратно в таблицу не удалось.';
         }
 
-        return $this->report('ok', $message, $updated, $checked, $changes, [], $errors);
+        return $this->report('ok', $message, $updated, $checked, $changes, [], $errors) + ['runId' => $runId];
+    }
+
+    /**
+     * Откатить прогон: вернуть контрактам значения, которые были до него.
+     *
+     * ⚠ Поле, которое после синхронизации успели поправить руками, НЕ
+     * трогаем: у него текущее значение уже не то, что мы записали, и вернуть
+     * «как было до синхронизации» значило бы затереть более свежую правку
+     * человека. Такие поля перечисляются в ответе — с ними разбираются глазами.
+     *
+     * @return array{status: string, message: string, restored: int, skipped: list<array<string, mixed>>}
+     */
+    public function rollback(int $runId): array
+    {
+        $run = DB::table('contract_sheet_sync_log')->where('id', $runId)->first();
+
+        if (! $run) {
+            return ['status' => 'error', 'message' => 'Прогон не найден', 'restored' => 0, 'skipped' => []];
+        }
+        if ($run->status === 'rolled_back') {
+            return ['status' => 'error', 'message' => 'Этот прогон уже откачен', 'restored' => 0, 'skipped' => []];
+        }
+
+        $changes = json_decode((string) $run->changes, true) ?: [];
+        $restored = 0;
+        $skipped = [];
+
+        DB::transaction(function () use ($changes, $runId, &$restored, &$skipped) {
+            foreach ($changes as $change) {
+                $contract = Contract::find($change['contractId'] ?? 0);
+                if (! $contract) {
+                    $skipped[] = ['contractId' => $change['contractId'] ?? null, 'reason' => 'контракт удалён'];
+                    continue;
+                }
+
+                $restore = [];
+                foreach ($change['fields'] ?? [] as $field => $f) {
+                    if (! $this->stillHasSyncedValue($contract, $field, $f['value'] ?? null)) {
+                        $skipped[] = [
+                            'contractId' => $contract->id,
+                            'number' => $contract->number,
+                            'field' => $f['label'] ?? $field,
+                            'reason' => 'значение меняли после синхронизации',
+                        ];
+                        continue;
+                    }
+                    $restore[$field] = $f['old'] ?? null;
+                }
+
+                if ($restore === []) {
+                    continue;
+                }
+
+                $contract->activityReason = sprintf('Откат синхронизации с таблицей Парус/Акцент (прогон #%d)', $runId);
+                $contract->fill($restore);
+                $contract->save();
+                $this->forecast->recomputeForContract($contract->id);
+                $restored++;
+            }
+
+            DB::table('contract_sheet_sync_log')->where('id', $runId)->update([
+                'status' => 'rolled_back',
+                'rolled_back_at' => now(),
+                'rolled_back_by' => auth()->id(),
+                'updated_at' => now(),
+            ]);
+        });
+
+        return [
+            'status' => 'ok',
+            'message' => $skipped
+                ? sprintf('Откат выполнен. Возвращено контрактов: %d, пропущено полей: %d.', $restored, count($skipped))
+                : sprintf('Откат выполнен. Возвращено контрактов: %d.', $restored),
+            'restored' => $restored,
+            'skipped' => $skipped,
+        ];
+    }
+
+    /**
+     * Осталось ли у контракта то значение, которое записала синхронизация.
+     * Если нет — поле трогали после неё, и откатывать его нельзя.
+     */
+    private function stillHasSyncedValue(Contract $contract, string $field, mixed $written): bool
+    {
+        $current = $contract->getAttribute($field);
+
+        if ($field === 'openDate') {
+            return ($current?->format('Y-m-d')) === $written;
+        }
+        if ($field === 'ammount') {
+            return abs((float) $current - (float) $written) < 0.005;
+        }
+        if (in_array($field, ['product', 'program', 'currency', 'status'], true)) {
+            return (int) $current === (int) $written;
+        }
+
+        return (string) $current === (string) $written;
     }
 
     /**
@@ -320,7 +430,7 @@ class ContractSheetSyncService
      * разные вещи (в базу id, в отчёт название).
      *
      * @param  array<string, mixed>  $parsed
-     * @return array<string, array{value: mixed, from: mixed, to: mixed, label: string}>
+     * @return array<string, array{value: mixed, old: mixed, from: mixed, to: mixed, label: string}>
      */
     private function diffFor(Contract $contract, array $parsed): array
     {
@@ -329,35 +439,35 @@ class ContractSheetSyncService
         // Номер — сверяемое поле по ТЗ §4.2. Расходиться он может только при
         // сопоставлении по ID: при поиске по номеру они равны по определению.
         if ($parsed['number'] !== '' && $parsed['number'] !== (string) $contract->number) {
-            $diff['number'] = ['value' => $parsed['number'], 'from' => $contract->number, 'to' => $parsed['number'], 'label' => 'номер'];
+            $diff['number'] = ['value' => $parsed['number'], 'old' => $contract->number, 'from' => $contract->number, 'to' => $parsed['number'], 'label' => 'номер'];
         }
 
         if (isset($parsed['product']) && $parsed['product'] !== (int) $contract->product) {
-            $diff['product'] = ['value' => $parsed['product'], 'from' => $contract->productName, 'to' => $parsed['productName'], 'label' => 'продукт'];
+            $diff['product'] = ['value' => $parsed['product'], 'old' => (int) $contract->product, 'from' => $contract->productName, 'to' => $parsed['productName'], 'label' => 'продукт'];
             // Денорм-имя обновляем той же правкой: без него карточка покажет
             // старое название.
-            $diff['productName'] = ['value' => $parsed['productName'], 'from' => $contract->productName, 'to' => $parsed['productName'], 'label' => 'продукт (название)'];
+            $diff['productName'] = ['value' => $parsed['productName'], 'old' => $contract->productName, 'from' => $contract->productName, 'to' => $parsed['productName'], 'label' => 'продукт (название)'];
         }
 
         if (isset($parsed['program']) && $parsed['program'] !== (int) $contract->program) {
-            $diff['program'] = ['value' => $parsed['program'], 'from' => $contract->programName, 'to' => $parsed['programName'], 'label' => 'программа'];
-            $diff['programName'] = ['value' => $parsed['programName'], 'from' => $contract->programName, 'to' => $parsed['programName'], 'label' => 'программа (название)'];
+            $diff['program'] = ['value' => $parsed['program'], 'old' => (int) $contract->program, 'from' => $contract->programName, 'to' => $parsed['programName'], 'label' => 'программа'];
+            $diff['programName'] = ['value' => $parsed['programName'], 'old' => $contract->programName, 'from' => $contract->programName, 'to' => $parsed['programName'], 'label' => 'программа (название)'];
         }
 
         if (isset($parsed['ammount']) && abs($parsed['ammount'] - (float) $contract->ammount) > 0.005) {
-            $diff['ammount'] = ['value' => $parsed['ammount'], 'from' => (float) $contract->ammount, 'to' => $parsed['ammount'], 'label' => 'сумма'];
+            $diff['ammount'] = ['value' => $parsed['ammount'], 'old' => (float) $contract->ammount, 'from' => (float) $contract->ammount, 'to' => $parsed['ammount'], 'label' => 'сумма'];
         }
 
         if (isset($parsed['currency']) && $parsed['currency'] !== (int) $contract->currency) {
-            $diff['currency'] = ['value' => $parsed['currency'], 'from' => $contract->currency, 'to' => $parsed['currency'], 'label' => 'валюта'];
+            $diff['currency'] = ['value' => $parsed['currency'], 'old' => (int) $contract->currency, 'from' => $contract->currency, 'to' => $parsed['currency'], 'label' => 'валюта'];
         }
 
         if (isset($parsed['status']) && $parsed['status'] !== (int) $contract->status) {
-            $diff['status'] = ['value' => $parsed['status'], 'from' => $this->statusName((int) $contract->status), 'to' => $this->statusName($parsed['status']), 'label' => 'статус'];
+            $diff['status'] = ['value' => $parsed['status'], 'old' => (int) $contract->status, 'from' => $this->statusName((int) $contract->status), 'to' => $this->statusName($parsed['status']), 'label' => 'статус'];
         }
 
         if (isset($parsed['openDate']) && $parsed['openDate'] !== $contract->openDate?->format('Y-m-d')) {
-            $diff['openDate'] = ['value' => $parsed['openDate'], 'from' => $contract->openDate?->format('d.m.Y'), 'to' => $parsed['openDate'], 'label' => 'дата открытия'];
+            $diff['openDate'] = ['value' => $parsed['openDate'], 'old' => $contract->openDate?->format('Y-m-d'), 'from' => $contract->openDate?->format('d.m.Y'), 'to' => $parsed['openDate'], 'label' => 'дата открытия'];
         }
 
         return $diff;
