@@ -67,12 +67,65 @@ class PartnerStatusesListingTest extends TestCase
         $this->assertOnly('activity_to=2026-12-31', [self::ACTIVE]);
     }
 
-    /** Плановая дата терминации и фактическая — тоже разные колонки. */
+    /**
+     * Плановая и фактическая терминация — разные вещи. Плановая считается
+     * (yearPeriodEnd активного), фактическая лежит колонкой dateDeterministic.
+     *
+     * ⚠ Раньше здесь ожидался REGISTERED: фильтр ходил в
+     * consultant.dateDeterministicPlan, и сетка закрепляла ровно тот баг, на
+     * который пожаловались 03.09.2026 — выбор ноября возвращал строки с
+     * июнем следующего года в колонке «Будет терминирован».
+     */
     #[Test]
     public function plan_and_term_ranges_use_different_columns(): void
     {
-        $this->assertOnly('plan_from=2026-10-01', [self::REGISTERED]);
+        $this->assertOnly('plan_from=2026-10-01', [self::ACTIVE]);
         $this->assertOnly('term_from=2026-07-01', [self::ACTIVE]);
+    }
+
+    /**
+     * Главное свойство фильтра: он отбирает по ТОЙ ЖЕ дате, которую строка
+     * показывает в колонке «Будет терминирован». Иначе оператор выбирает
+     * ноябрь, а в выдаче видит июнь — с чего и начался разбор.
+     */
+    #[Test]
+    public function plan_filter_matches_the_deadline_shown_in_the_row(): void
+    {
+        $this->assertOnly('plan_from=2026-11-01&plan_to=2026-11-30', [self::ACTIVE]);
+
+        $rows = collect($this->list('plan_from=2026-11-01&plan_to=2026-11-30')->json('data'))->keyBy('id');
+        $this->assertSame('2026-11-20', $rows[self::ACTIVE]['willTerminate'],
+            'в выдаче обязана быть та же дата, по которой фильтровали');
+    }
+
+    /**
+     * Legacy-колонка dateDeterministicPlan (окно активации из самоактивации)
+     * в фильтре больше не участвует: у активного она стоит на 2027-01-01, и
+     * запрос по январю не должен возвращать никого.
+     */
+    #[Test]
+    public function the_legacy_plan_column_is_no_longer_used(): void
+    {
+        $this->assertOnly('plan_from=2027-01-01&plan_to=2027-01-31', []);
+    }
+
+    /**
+     * Сортировка по колонке «Будет терминирован» ходит тем же выражением.
+     * Проверяем в первую очередь, что оно вообще валидный SQL в ORDER BY:
+     * сломанный CASE упал бы пятисоткой (ключ willTerminate до этого в
+     * whitelist не входил, и сортировка молча уезжала на ФИО).
+     */
+    #[Test]
+    public function rows_sort_by_the_computed_deadline(): void
+    {
+        foreach (['asc', 'desc'] as $dir) {
+            $ids = array_column(
+                $this->list("sort_by=willTerminate&sort_dir={$dir}")->json('data'), 'id'
+            );
+            // У зарегистрированного дедлайна нет → NULLS LAST уводит его в конец
+            // при любом направлении.
+            $this->assertSame([self::ACTIVE, self::REGISTERED], $ids, "направление {$dir}");
+        }
     }
 
     /**
@@ -94,7 +147,7 @@ class PartnerStatusesListingTest extends TestCase
 
         $this->assertSame('login@status.local', $rows[self::ACTIVE]['email'], 'почта из WebUser');
         $this->assertSame('own@status.local', $rows[self::REGISTERED]['email'], 'без логина — своя колонка');
-        $this->assertSame('2027-03-01', $rows[self::ACTIVE]['willTerminate'], 'активному +год от активации');
+        $this->assertSame('2026-11-20', $rows[self::ACTIVE]['willTerminate'], 'активному — конец годового периода');
         $this->assertNull($rows[self::REGISTERED]['willTerminate'], 'зарегистрированному прогноза нет');
     }
 
@@ -145,6 +198,12 @@ class PartnerStatusesListingTest extends TestCase
             'dateCreated' => '2026-01-15 10:30:00',
             'dateActivity' => '2026-03-01 00:00:00',
             'dateDeterministic' => '2026-07-10 00:00:00',
+            // Годовой период сдвинут раннером — плановая терминация в ноябре,
+            // а не «активация + год» (2027-03-01).
+            'yearPeriodEnd' => '2026-11-20 00:00:00',
+            // Legacy-колонка окна активации: намеренно расходится с реальным
+            // дедлайном, чтобы поймать возврат фильтра на неё.
+            'dateDeterministicPlan' => '2027-01-01 00:00:00',
         ]);
         DB::table('consultant')->insert([
             'id' => self::REGISTERED,

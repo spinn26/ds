@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Enums\PartnerActivity;
+use App\Support\TerminationDeadline;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -32,11 +33,15 @@ class PartnerStatusesListingService
         'term_from', 'term_to',
     ];
 
-    /** Колонка → пара границ диапазона. */
+    /**
+     * Колонка → пара границ диапазона.
+     *
+     * ⚠ Плановой терминации здесь нет: это не колонка, а вычисляемый дедлайн
+     * (App\Support\TerminationDeadline) — см. фильтр plan_from/plan_to ниже.
+     */
     private const DATE_RANGES = [
         'dateCreated' => ['created_from', 'created_to'],
         'dateActivity' => ['activity_from', 'activity_to'],
-        'dateDeterministicPlan' => ['plan_from', 'plan_to'],
         'dateDeterministic' => ['term_from', 'term_to'],
     ];
 
@@ -92,6 +97,17 @@ class PartnerStatusesListingService
             }
         }
 
+        // Плановая терминация — по тому же выражению, которым колонка «Будет
+        // терминирован» рисуется в выдаче. Раньше фильтр брал колонку
+        // dateDeterministicPlan (окно активации из самоактивации), и выбор
+        // «ноябрь 2026» возвращал строки с июнем 2027 в колонке.
+        if (isset($filters['plan_from'])) {
+            $query->whereRaw(TerminationDeadline::SQL . ' >= ?', [$filters['plan_from']]);
+        }
+        if (isset($filters['plan_to'])) {
+            $query->whereRaw(TerminationDeadline::SQL . ' <= ?', [$filters['plan_to'] . ' 23:59:59']);
+        }
+
         return $query;
     }
 
@@ -120,11 +136,13 @@ class PartnerStatusesListingService
         return $rows->map(function ($c) use ($activityNames, $lpFromActivation, $emailByWebUser, $reinstateLimit) {
             $activityName = $c->activity ? ($activityNames[$c->activity] ?? '—') : '—';
 
-            // Прогноз терминации есть только у активных: год от активации.
-            $willTerminate = null;
-            if ($c->activity == 1 && $c->dateActivity) {
-                $willTerminate = \Carbon\Carbon::parse($c->dateActivity)->addYear()->format('Y-m-d');
-            }
+            // Прогноз терминации — общее определение с фильтром и сортировкой
+            // (App\Support\TerminationDeadline). Раньше считался прямо здесь
+            // как dateActivity + 1 год: у партнёра со второго года это давало
+            // дату в прошлом, потому что годовой период двигает yearPeriodEnd.
+            $willTerminate = TerminationDeadline::resolve(
+                $c->activity, $c->yearPeriodEnd ?? null, $c->dateActivity
+            );
 
             return [
                 'id' => $c->id,

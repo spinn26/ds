@@ -708,7 +708,12 @@ class AdminDataController extends Controller
             'activityName'          => 'activity',
             'dateCreated'           => '"dateCreated"',
             'dateActivity'          => '"dateActivity"',
-            'dateDeterministicPlan' => '"dateDeterministicPlan"',
+            // Колонка таблицы называется willTerminate и рисуется вычисляемым
+            // дедлайном — сортируем тем же выражением. Прежний ключ
+            // dateDeterministicPlan фронт не присылал вовсе (такой колонки в
+            // таблице нет), и сортировка по «Будет терминирован» молча
+            // сваливалась на сортировку по ФИО.
+            'willTerminate'         => \App\Support\TerminationDeadline::SQL,
             'dateDeterministic'     => '"dateDeterministic"',
             'personalVolume'        => '"personalVolume"',
         ], '"personName"', 'asc');

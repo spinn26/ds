@@ -2,6 +2,7 @@
 
 namespace App\Services\Reports;
 
+use App\Support\TerminationDeadline;
 use Illuminate\Support\Facades\DB;
 
 /** Per spec ✅Отчеты §3.2 — кадровые изменения и терминация. */
@@ -42,7 +43,13 @@ class PartnerStatusReport extends AbstractReportType
                 ?: ($c->email ?: null)) ?: '',
             $c->activity ? ($names[$c->activity] ?? '') : '',
             $c->dateActivity ?: $c->dateDeterministic ?: '',
-            $c->dateDeterministicPlan ?: '',
+            // Плановая дата — тем же правилом, что в разделе «Статусы
+            // партнёров» (App\Support\TerminationDeadline). Раньше печаталась
+            // колонка dateDeterministicPlan — это окно активации из
+            // самоактивации, а не годовой дедлайн, и отчёт расходился с UI.
+            TerminationDeadline::resolve(
+                $c->activity, $c->yearPeriodEnd ?? null, $c->dateActivity
+            ) ?: '',
         ])->all();
     }
 }
