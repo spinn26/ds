@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Enums\PartnerActivity;
 use App\Models\Consultant;
+use App\Support\TerminationDeadline;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -168,28 +169,28 @@ class PartnerListingService
 
     /**
      * «Дата смены статуса» (per spec ✅Партнеры §1.2):
-     *   - Активен → +12 мес от dateActivity
+     *   - Активен → конец годового периода;
      *   - Зарегистрирован → activationDeadline (его могли продлить), а расчёт
      *     от даты регистрации — только фолбэк.
+     *
+     * Правило общее с разделом «Статусы партнёров» и отчётом по статусам —
+     * App\Support\TerminationDeadline. Раньше активному считалось «dateActivity
+     * + 1 год», но per spec ✅Статусная схема партнёров §«Логика продления»
+     * срок действия статуса каждый год переносится вперёд — в коде это
+     * yearPeriodEnd, который двигает раннер, тогда как dateActivity остаётся
+     * датой первой активации. Со второго года «активация + год» лежала в
+     * прошлом, и список расходился и с деревом структуры (Structure.vue), и с
+     * разделом «Статусы партнёров», и с кабинетом партнёра.
      */
     private function statusChangeDate(Consultant $c, int $activationDays): ?string
     {
-        $activityValue = $c->activity?->value;
-
-        if ($activityValue == 1 && $c->dateActivity) { // Active
-            return \Carbon\Carbon::parse($c->dateActivity)->addYear()->format('Y-m-d');
-        }
-
-        if ($activityValue == 4) { // Registered
-            if ($c->activationDeadline) {
-                return \Carbon\Carbon::parse($c->activationDeadline)->format('Y-m-d');
-            }
-
-            return $c->dateCreated
-                ? \Carbon\Carbon::parse($c->dateCreated)->addDays($activationDays)->format('Y-m-d')
-                : null;
-        }
-
-        return null;
+        return TerminationDeadline::resolve(
+            activity: $c->activity?->value,
+            yearPeriodEnd: $c->yearPeriodEnd,
+            dateActivity: $c->dateActivity,
+            activationDeadline: $c->activationDeadline,
+            dateCreated: $c->dateCreated,
+            activationDays: $activationDays,
+        );
     }
 }

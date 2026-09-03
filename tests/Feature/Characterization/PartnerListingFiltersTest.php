@@ -98,15 +98,20 @@ class PartnerListingFiltersTest extends TestCase
     }
 
     /**
-     * «Дата смены статуса»: активному — +год от активации, зарегистрированному —
-     * его activationDeadline.
+     * «Дата смены статуса»: активному — конец годового периода,
+     * зарегистрированному — его activationDeadline.
+     *
+     * ⚠ Раньше активному ожидался 2027-03-01 («активация + год»). Правило
+     * общее с разделом «Статусы партнёров» (App\Support\TerminationDeadline):
+     * период двигает раннер, и со второго года «активация + год» лежит в
+     * прошлом — две страницы показывали разные даты одному партнёру.
      */
     #[Test]
     public function status_change_date_depends_on_activity(): void
     {
         $rows = collect($this->list('')->json('data'))->keyBy('id');
 
-        $this->assertSame('2027-03-01', $rows[self::WITH_LOGIN]['statusChangeDate']);
+        $this->assertSame('2026-11-20', $rows[self::WITH_LOGIN]['statusChangeDate']);
         $this->assertSame('2026-09-15', $rows[self::NO_LOGIN]['statusChangeDate']);
     }
 
@@ -176,6 +181,9 @@ class PartnerListingFiltersTest extends TestCase
             'activity' => 1,
             'active' => true,
             'dateActivity' => '2026-03-01 00:00:00',
+            // Годовой период сдвинут раннером: «дата смены статуса» обязана
+            // считаться по нему, а не по «активация + год» (2027-03-01).
+            'yearPeriodEnd' => '2026-11-20 00:00:00',
             'dateCreated' => '2026-01-01 00:00:00',
         ]);
         DB::table('consultant')->insert([
