@@ -112,6 +112,72 @@ class StructureMembersTest extends TestCase
 
     // ================================================================
 
+    // ---------------- Фильтр «Дата смены статуса» ----------------
+
+    /**
+     * ⚠ Фильтр обязан искать по ТОЙ ЖЕ дате, что показана в колонке.
+     *
+     * Раньше он жёстко брал только терминированных и исключённых по
+     * dateDeterministic. У зарегистрированного партнёра это поле пустое, а в
+     * колонке стоит activationDeadline — и фильтр по месяцу отдавал «Данные не
+     * найдены» там, где на экране строки были.
+     */
+    #[Test]
+    public function the_status_change_date_filter_finds_registered_partners(): void
+    {
+        DB::table('consultant')->where('id', self::CHILD)->update([
+            'activity' => 4,                               // Зарегистрирован
+            'activationDeadline' => '2026-10-14 22:18:29', // дата в колонке
+            'dateDeterministic' => null,                   // у таких она пуста
+        ]);
+
+        $ids = $this->memberIds(['termination_from' => '2026-10-01', 'termination_to' => '2026-10-31']);
+
+        $this->assertContains(self::CHILD, $ids);
+    }
+
+    /** Дедлайн вне диапазона — партнёра в выдаче быть не должно. */
+    #[Test]
+    public function a_deadline_outside_the_range_is_filtered_out(): void
+    {
+        DB::table('consultant')->where('id', self::CHILD)->update([
+            'activity' => 4,
+            'activationDeadline' => '2026-11-20 22:54:37',
+            'dateDeterministic' => null,
+        ]);
+
+        $ids = $this->memberIds(['termination_from' => '2026-10-01', 'termination_to' => '2026-10-31']);
+
+        $this->assertNotContains(self::CHILD, $ids);
+    }
+
+    /** Терминированные по-прежнему ищутся по своей дате — их не потеряли. */
+    #[Test]
+    public function terminated_partners_are_still_found_by_their_own_date(): void
+    {
+        DB::table('consultant')->where('id', self::CHILD)->update([
+            'activity' => 3,                                // Терминирован
+            'dateDeterministic' => '2026-10-05 00:00:00',
+        ]);
+
+        $ids = $this->memberIds(['termination_from' => '2026-10-01', 'termination_to' => '2026-10-31']);
+
+        $this->assertContains(self::CHILD, $ids);
+    }
+
+    /**
+     * @param  array<string, string>  $filters
+     * @return list<int>
+     */
+    private function memberIds(array $filters): array
+    {
+        $rows = $this->actingAs($this->user, 'sanctum')
+            ->getJson('/api/v1/structure?' . http_build_query($filters))
+            ->assertOk()->json();
+
+        return collect($rows['data'])->pluck('id')->map(fn ($id) => (int) $id)->all();
+    }
+
     /** @return array<string, mixed> */
     private function member(int $id): array
     {

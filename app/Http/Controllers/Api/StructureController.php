@@ -212,20 +212,48 @@ class StructureController extends Controller
         $this->applyDateRangePrefilter($query, $request);
     }
 
+    /**
+     * SQL-двойник ConsultantService::statusChangeDate() — «Дата смены статуса»
+     * так, как её рисует колонка (per spec ✅Структура §4).
+     *
+     * ⚠ Менять только вместе с PHP-версией: предфильтр сужает выборку в SQL,
+     * а добивает её applyFilters уже в памяти. Разойдутся — фильтр начнёт
+     * молча терять строки.
+     */
+    private function statusChangeDateSql(): string
+    {
+        return sprintf(
+            'CASE
+                WHEN activity IN (%d, %d) THEN "dateDeterministic"
+                WHEN activity = %d THEN "activationDeadline"
+                WHEN activity IN (%d, %d) THEN COALESCE("yearPeriodEnd", "dateActivity" + interval \'12 months\')
+                ELSE "dateActivity"
+            END',
+            PartnerActivity::Terminated->value,
+            PartnerActivity::Excluded->value,
+            PartnerActivity::Registered->value,
+            PartnerActivity::Active->value,
+            PartnerActivity::Inactive->value,
+        );
+    }
+
     private function applyDateRangePrefilter($query, Request $request): void
     {
         if (! $request->filled('termination_from') && ! $request->filled('termination_to')) {
             return;
         }
-        $query->whereIn('activity', [
-            PartnerActivity::Terminated->value,
-            PartnerActivity::Excluded->value,
-        ]);
+
+        // Раньше выборка жёстко сужалась до терминированных и исключённых по
+        // dateDeterministic. У зарегистрированных это поле NULL, а дата в
+        // колонке берётся из activationDeadline — поэтому фильтр по месяцу
+        // отдавал «Данные не найдены» там, где на экране строки были.
+        $expr = $this->statusChangeDateSql();
+
         if ($request->filled('termination_from')) {
-            $query->whereDate('dateDeterministic', '>=', $request->input('termination_from'));
+            $query->whereRaw("({$expr})::date >= ?", [$request->input('termination_from')]);
         }
         if ($request->filled('termination_to')) {
-            $query->whereDate('dateDeterministic', '<=', $request->input('termination_to'));
+            $query->whereRaw("({$expr})::date <= ?", [$request->input('termination_to')]);
         }
     }
 

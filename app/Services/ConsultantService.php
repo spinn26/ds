@@ -93,6 +93,49 @@ class ConsultantService
     }
 
     /**
+     * «Дата смены статуса» одного партнёра — ровно та, что рисует колонка в
+     * «Структуре моей команды» (Structure.vue::statusChangeDate), per spec
+     * ✅Структура §4:
+     *   - Активен → конец годового цикла: yearPeriodEnd, а если он пуст
+     *     (legacy-партнёры) — dateActivity + 12 месяцев;
+     *   - Зарегистрирован → activationDeadline, дедлайн активации;
+     *   - Терминирован/Исключён → dateDeterministic;
+     *   - остальные → dateActivity.
+     *
+     * ⚠ Держать в согласии со SQL-предфильтром
+     * StructureController::statusChangeDateSql(): фильтр и колонка обязаны
+     * показывать одну и ту же дату, иначе выдача выглядит пустой без причины.
+     *
+     * @param  array<string, mixed>  $m  строка из formatMembers (даты в 'd.m.Y')
+     */
+    public static function statusChangeDate(array $m): ?\Carbon\Carbon
+    {
+        $parse = static function ($raw): ?\Carbon\Carbon {
+            if (empty($raw)) return null;
+            try {
+                return \Carbon\Carbon::createFromFormat('d.m.Y', (string) $raw)->startOfDay();
+            } catch (\Throwable) {
+                return null;
+            }
+        };
+
+        $activity = (int) ($m['activityId'] ?? 0);
+
+        return match ($activity) {
+            \App\Enums\PartnerActivity::Terminated->value,
+            \App\Enums\PartnerActivity::Excluded->value => $parse($m['dateDeterministic'] ?? null),
+
+            \App\Enums\PartnerActivity::Registered->value => $parse($m['activationDeadline'] ?? null),
+
+            \App\Enums\PartnerActivity::Active->value,
+            \App\Enums\PartnerActivity::Inactive->value => $parse($m['yearPeriodEnd'] ?? null)
+                ?? $parse($m['dateActivity'] ?? null)?->addYear(),
+
+            default => $parse($m['dateActivity'] ?? null),
+        };
+    }
+
+    /**
      * Apply collection-level filters to formatted members.
      */
     public function applyFilters(Collection $members, array $filters): Collection
@@ -181,30 +224,25 @@ class ConsultantService
             $members = $members->filter(fn ($m) => $m['city'] && str_contains(mb_strtolower($m['city']), $city));
         }
 
-        // Дата терминации (range). Используем dateDeterministic — то же поле,
-        // что и на странице «Статусы партнёров». dateActivity для terminated
-        // часто хранит дату последней смены активности (= регистрации),
-        // а не реальную дату терминации.
+        // Дата смены статуса (range). Фильтруем по ТОЙ ЖЕ дате, что показана в
+        // одноимённой колонке, — см. statusChangeDate() ниже. Раньше здесь
+        // жёстко брались только терминированные и исключённые по
+        // dateDeterministic, из-за чего фильтр не находил ни зарегистрированных
+        // (у них дата — activationDeadline), ни активных: у первых
+        // dateDeterministic вообще NULL, и выдача выходила пустой.
         $termFrom = $filters['termination_from'] ?? null;
         $termTo = $filters['termination_to'] ?? null;
         if ($termFrom || $termTo) {
-            $terminatedId = \App\Enums\PartnerActivity::Terminated->value;
-            $excludedId = \App\Enums\PartnerActivity::Excluded->value;
             $parseDate = static function ($s) {
                 if (! $s) return null;
                 try { return \Carbon\Carbon::parse($s); } catch (\Throwable) { return null; }
             };
             $from = $parseDate($termFrom);
             $to = $parseDate($termTo);
-            $members = $members->filter(function ($m) use ($from, $to, $terminatedId, $excludedId) {
-                if (! in_array($m['activityId'], [$terminatedId, $excludedId], true)) return false;
-                if (empty($m['dateDeterministic'])) return false;
-                try {
-                    $d = \Carbon\Carbon::createFromFormat('d.m.Y', $m['dateDeterministic']);
-                } catch (\Throwable) {
-                    return false;
-                }
-                if ($from && $d->lt($from)) return false;
+            $members = $members->filter(function ($m) use ($from, $to) {
+                $d = self::statusChangeDate($m);
+                if (! $d) return false;
+                if ($from && $d->lt($from->copy()->startOfDay())) return false;
                 if ($to && $d->gt($to->copy()->endOfDay())) return false;
                 return true;
             });
