@@ -26,27 +26,74 @@
       </div>
       <v-divider />
 
+      <!-- Поиск по меню. При восьмидесяти пунктах это основной способ
+           навигации: Ctrl+K ставит фокус, Esc очищает. -->
+      <div v-if="!rail" class="px-3 pt-3 pb-2">
+        <v-text-field ref="menuSearchEl" v-model="menuQuery"
+          density="compact" variant="outlined" hide-details rounded="lg"
+          placeholder="Поиск по меню" prepend-inner-icon="mdi-magnify"
+          clearable @keydown.esc="menuQuery = ''">
+          <template v-if="!menuQuery" #append-inner>
+            <span class="menu-kbd">Ctrl K</span>
+          </template>
+        </v-text-field>
+      </div>
+      <div v-else class="d-flex justify-center pt-2">
+        <v-btn icon="mdi-magnify" size="small" variant="text" density="comfortable"
+          title="Поиск по меню" @click="focusMenuSearch" />
+      </div>
+
+      <!-- Переключатель пространств — только тем, у кого есть и кабинет,
+           и управление. Чистый партнёр или чистый сотрудник его не видит. -->
+      <div v-if="!rail && hasBothSpaces && !menuQuery" class="px-3 pb-2">
+        <div class="menu-space-toggle">
+          <button type="button" :class="{ active: activeSpace === 'cabinet' }"
+            @click="setSpace('cabinet')">Кабинет</button>
+          <button type="button" :class="{ active: activeSpace === 'manage' }"
+            @click="setSpace('manage')">Управление</button>
+        </div>
+      </div>
+
+      <v-divider />
+
       <v-list density="compact" nav class="main-nav-list">
         <template v-for="(item, i) in navMenu" :key="i">
-          <!-- Заголовок раздела — кликабельный, сворачивает/разворачивает группу. -->
+          <!-- Заголовок раздела. Кликабельный — сворачивает группу; у
+               служебных («Закреплённое», «Найдено») сворачивать нечего. -->
           <v-list-subheader v-if="item.group && !rail"
-            :class="[item.adminSection ? 'text-medium-emphasis font-weight-bold' : '', 'menu-group-header menu-group-toggle mt-2']"
-            @click="toggleGroup(item.group)">
+            :class="[item.adminSection ? 'text-medium-emphasis font-weight-bold' : '',
+                     'menu-group-header', item._plain ? '' : 'menu-group-toggle', 'mt-2']"
+            @click="item._plain ? null : toggleGroup(item.group)">
             <span>{{ item.group }}</span>
-            <v-icon size="16" class="menu-group-chevron">
-              {{ isGroupCollapsed(item.group) ? 'mdi-chevron-right' : 'mdi-chevron-down' }}
-            </v-icon>
+            <span v-if="item._plain"></span>
+            <span v-else class="d-flex align-center ga-1">
+              <span v-if="isGroupCollapsed(item.group)" class="menu-group-count">{{ item._count }}</span>
+              <v-icon size="16" class="menu-group-chevron">
+                {{ isGroupCollapsed(item.group) ? 'mdi-chevron-right' : 'mdi-chevron-down' }}
+              </v-icon>
+            </span>
           </v-list-subheader>
-          <v-divider v-else-if="item.group && rail" class="my-1" />
+          <!-- В свёрнутом сайдбаре у группы остаётся подпись, а не безымянная
+               черта: по одним иконкам ориентироваться не по чему. -->
+          <div v-else-if="item.group && rail" class="menu-rail-cap">{{ railCap(item.group) }}</div>
           <!-- Regular item -->
           <v-list-item v-if="!item.group && (rail || !isGroupCollapsed(item._groupKey))" :to="item.path || null" :prepend-icon="item.icon"
             :active="isActivePath(item.path)"
             :color="item.adminSection ? 'secondary' : 'primary'"
-            :title="item.label"
+            :title="item.label" :subtitle="item._hint || undefined"
             class="menu-item" @click="onMenuClick(item)">
             <template #append v-if="!rail">
               <v-badge v-if="item.path === '/chat' && chatUnread > 0" :content="chatUnread" color="error" inline />
               <v-badge v-if="item.path === '/manage/chat' && chatUnread > 0" :content="chatUnread" color="error" inline />
+              <v-icon v-if="item.path" size="15" role="button" tabindex="0"
+                :class="['menu-pin', { 'menu-pin-on': isPinned(item) }]"
+                :title="isPinned(item) ? 'Убрать из закреплённых' : 'Закрепить'"
+                :aria-label="isPinned(item) ? 'Убрать из закреплённых' : 'Закрепить'"
+                @click.stop.prevent="togglePin(item)"
+                @keydown.enter.stop.prevent="togglePin(item)"
+                @keydown.space.stop.prevent="togglePin(item)">
+                {{ isPinned(item) ? 'mdi-pin' : 'mdi-pin-outline' }}
+              </v-icon>
             </template>
           </v-list-item>
         </template>
@@ -423,7 +470,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { useDisplay, useTheme } from 'vuetify';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
@@ -1306,8 +1353,84 @@ const visibleMenu = computed(() => menuItems.value.filter((item) => {
   return true;
 }));
 
-// Сворачиваемые разделы бокового меню. По умолчанию все РАЗВЁРНУТЫ (пустое
-// множество свёрнутых); выбор пользователя сохраняется в localStorage.
+// ---- Пространства меню: «Кабинет» и «Управление» ----
+// У сотрудника с партнёрским профилем видимых групп тринадцать, пунктов
+// восемьдесят. Разделение на два пространства оставляет на экране четыре
+// группы или девять вместо всех сразу; переключатель показываем только тем,
+// у кого есть и то и то.
+const SPACE_KEY = 'main-nav-space';
+
+function spaceOf(item) {
+  if (item.partner) return 'cabinet';
+  if (item.adminSection || item.staffOnly || item.adminOnly) return 'manage';
+  return 'both';
+}
+
+const hasBothSpaces = computed(() => isConsultant.value && isStaff.value);
+
+const space = ref((() => {
+  const saved = localStorage.getItem(SPACE_KEY);
+  return saved === 'cabinet' || saved === 'manage' ? saved : null;
+})());
+
+// Пространство по умолчанию зависит от роли: у сотрудника работа в
+// управлении, у чистого партнёра его вообще нет.
+const activeSpace = computed(() => {
+  if (! hasBothSpaces.value) return isStaff.value ? 'manage' : 'cabinet';
+  return space.value ?? 'manage';
+});
+
+function setSpace(next) {
+  space.value = next;
+  localStorage.setItem(SPACE_KEY, next);
+}
+
+// ---- Закреплённые пункты ----
+// Храним пути: они стабильнее подписей и переживают переименование.
+const PINNED_KEY = 'main-nav-pinned';
+const pinnedPaths = ref((() => {
+  try {
+    const raw = JSON.parse(localStorage.getItem(PINNED_KEY) || '[]');
+    return Array.isArray(raw) ? raw.filter((p) => typeof p === 'string') : [];
+  } catch { return []; }
+})());
+
+function isPinned(item) {
+  return !! item.path && pinnedPaths.value.includes(item.path);
+}
+
+function togglePin(item) {
+  if (! item.path) return;
+  const next = pinnedPaths.value.includes(item.path)
+    ? pinnedPaths.value.filter((p) => p !== item.path)
+    : [...pinnedPaths.value, item.path];
+  pinnedPaths.value = next;
+  localStorage.setItem(PINNED_KEY, JSON.stringify(next));
+}
+
+// ---- Поиск по меню ----
+const menuQuery = ref('');
+const menuSearchEl = ref(null);
+
+function focusMenuSearch() {
+  rail.value = false;
+  nextTick(() => menuSearchEl.value?.focus?.());
+}
+
+// Ctrl/Cmd+K — фокус в поиск меню. Вешаем на document, снимаем при уходе.
+function onMenuHotkey(e) {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault();
+    focusMenuSearch();
+  }
+}
+onMounted(() => document.addEventListener('keydown', onMenuHotkey));
+onUnmounted(() => document.removeEventListener('keydown', onMenuHotkey));
+
+// Сворачиваемые разделы бокового меню. Выбор пользователя сохраняется в
+// localStorage; при первом заходе (ключа ещё нет) свёрнуты все, кроме той
+// группы, в которой находится открытая страница — иначе список сразу
+// разъезжается на два экрана.
 // В rail-режиме (узкий сайдбар) сворачивание не применяется — там нет
 // заголовков-кнопок, только иконки-пункты.
 const collapsedGroups = ref(new Set(
@@ -1323,16 +1446,111 @@ function toggleGroup(name) {
   localStorage.setItem('main-nav-collapsed', JSON.stringify([...next]));
 }
 
-// Плоский список меню с проставленным _groupKey у каждого обычного пункта —
-// по последнему предшествующему заголовку. Пункты свёрнутого раздела в
-// шаблоне скрываются по _groupKey.
+// Подпись группы для свёрнутого сайдбара: 72px не вмещают «Закреплённое»,
+// поэтому длинные названия обрезаем — но не выкидываем совсем.
+function railCap(name) {
+  const s = String(name ?? '');
+  return s.length > 8 ? s.slice(0, 6) + '.' : s;
+}
+
+// Меню с проставленным _groupKey у каждого обычного пункта — по последнему
+// предшествующему заголовку. Пункты свёрнутого раздела в шаблоне скрываются
+// по _groupKey; у заголовка есть _count, чтобы у свёрнутой группы был виден
+// объём.
+//
+// Всё, что меняет состав и порядок (пространство, закреплённое, поиск),
+// собрано здесь — шаблон остаётся одним циклом по плоскому списку.
 const navMenu = computed(() => {
-  let currentGroup = null;
-  return visibleMenu.value.map((item) => {
-    if (item.group) { currentGroup = item.group; return item; }
-    return { ...item, _groupKey: currentGroup };
-  });
+  // Поиск идёт по обоим пространствам сразу: искать в том, где пункта нет, —
+  // ровно та проблема, из-за которой поиск и понадобился.
+  if (menuQuery.value.trim()) {
+    const q = menuQuery.value.trim().toLowerCase();
+    let group = null;
+    const out = [];
+    for (const item of visibleMenu.value) {
+      if (item.group) { group = item.group; continue; }
+      if (! item.label || ! item.label.toLowerCase().includes(q)) continue;
+      out.push({
+        ...item,
+        _groupKey: null,           // в поиске ничего не сворачиваем
+        _hint: [spaceOf(item) === 'manage' ? 'Управление' : 'Кабинет', group]
+          .filter(Boolean).join(' · '),
+      });
+    }
+    return [{ group: `Найдено: ${out.length}`, _plain: true }, ...out];
+  }
+
+  const inSpace = (item) => {
+    const s = spaceOf(item);
+    return s === 'both' || s === activeSpace.value;
+  };
+
+  // Верхнеуровневые пункты (до первого заголовка) показываем всегда: это
+  // «Главная» и витрина продуктов, они не принадлежат ни одной группе.
+  const top = [];
+  const rest = [];
+  let seenGroup = false;
+  for (const item of visibleMenu.value) {
+    if (item.group) seenGroup = true;
+    (seenGroup ? rest : top).push(item);
+  }
+
+  const out = [...top];
+
+  // Закреплённое — сразу под верхнеуровневыми, до групп.
+  const pinned = rest.filter((i) => ! i.group && isPinned(i));
+  if (pinned.length) {
+    out.push({ group: 'Закреплённое', _plain: true });
+    out.push(...pinned.map((i) => ({ ...i, _groupKey: null, _pinnedRow: true })));
+  }
+
+  // Группы текущего пространства. Заголовок без пунктов не показываем —
+  // права могли вырезать всё его содержимое.
+  let header = null;
+  let bucket = [];
+  const flush = () => {
+    if (header && bucket.length) {
+      out.push({ ...header, _count: bucket.length });
+      out.push(...bucket);
+    }
+    header = null;
+    bucket = [];
+  };
+
+  for (const item of rest) {
+    if (item.group) {
+      flush();
+      header = inSpace(item) ? item : null;
+      continue;
+    }
+    if (! header || ! inSpace(item)) continue;
+    bucket.push({ ...item, _groupKey: header.group });
+  }
+  flush();
+
+  return out;
 });
+
+// Группа открытой страницы всегда развёрнута: иначе активный пункт не видно.
+// При первом заходе (ключа в localStorage ещё нет) сворачиваем всё остальное.
+watch(
+  () => [route.path, navMenu.value.length],
+  () => {
+    const active = navMenu.value.find((i) => ! i.group && i.path && isActivePath(i.path));
+    const group = active?._groupKey;
+    if (localStorage.getItem('main-nav-collapsed') === null) {
+      const all = navMenu.value.filter((i) => i.group && ! i._plain).map((i) => i.group);
+      collapsedGroups.value = new Set(all.filter((g) => g !== group));
+      return;
+    }
+    if (group && collapsedGroups.value.has(group)) {
+      const next = new Set(collapsedGroups.value);
+      next.delete(group);
+      collapsedGroups.value = next;
+    }
+  },
+  { immediate: true },
+);
 </script>
 
 <style scoped>
@@ -1483,6 +1701,79 @@ const navMenu = computed(() => {
 }
 .menu-group-chevron {
   opacity: 0.55;
+}
+
+/* Счётчик у свёрнутой группы — видно объём, не разворачивая. */
+.menu-group-count {
+  font-size: 0.65rem;
+  opacity: 0.75;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Подсказка горячей клавиши в поле поиска. */
+.menu-kbd {
+  font-size: 0.6rem;
+  line-height: 1;
+  padding: 2px 5px;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.2);
+  border-radius: 3px;
+  opacity: 0.6;
+  white-space: nowrap;
+}
+
+/* Переключатель «Кабинет / Управление». Свой, а не v-btn-toggle: тому нужна
+   высота 36px и он ломает плотность сайдбара. */
+.menu-space-toggle {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 7px;
+  background: rgba(var(--v-theme-on-surface), 0.06);
+}
+.menu-space-toggle button {
+  flex: 1;
+  padding: 5px 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: rgba(var(--v-theme-on-surface), 0.7);
+  font: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+.menu-space-toggle button.active {
+  background: rgb(var(--v-theme-surface));
+  color: rgb(var(--v-theme-primary));
+  font-weight: 500;
+}
+
+/* Подписи групп в свёрнутом сайдбаре. */
+.menu-rail-cap {
+  font-size: 0.53rem;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  text-align: center;
+  opacity: 0.5;
+  margin: 10px 0 2px;
+  user-select: none;
+}
+
+/* Кнопка закрепления — проявляется на наведении, у закреплённых видна всегда,
+   чтобы было понятно, чем строка держится наверху. */
+.menu-pin {
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.menu-item:hover .menu-pin,
+.menu-item:focus-within .menu-pin {
+  opacity: 0.55;
+}
+.menu-pin.menu-pin-on {
+  opacity: 0.9;
+  color: rgb(var(--v-theme-primary));
+}
+.menu-pin:hover {
+  opacity: 1 !important;
 }
 
 /* Mobile bottom navigation */
