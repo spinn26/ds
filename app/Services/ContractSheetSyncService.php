@@ -79,8 +79,14 @@ class ContractSheetSyncService
         $rows = $this->reader->readRawRows($spreadsheetId, $sheet, $this->settings->get('google.sheets.api_key'));
         array_shift($rows); // шапка
 
-        $plan = [];            // строки, готовые к применению
+        // Типы проставлены явно: элементы собираются в цикле ниже, и без
+        // подсказки анализатор не выводит форму массива — phpstan падал с
+        // «unresolvable type» на переборе этих массивов.
+        /** @var list<array<string, mixed>> $plan строки, готовые к применению */
+        $plan = [];
+        /** @var list<array<string, mixed>> $nameMismatches */
         $nameMismatches = [];
+        /** @var list<array<string, mixed>> $errors */
         $errors = [];
         $checked = 0;
 
@@ -163,7 +169,13 @@ class ContractSheetSyncService
                 0, $checked, [], $nameMismatches, $errors);
         }
 
-        $changes = array_values(array_filter($plan, static fn ($p) => $p['fields'] !== []));
+        // Строки, где расхождений не нашлось, в отчёт не идут.
+        $changes = [];
+        foreach ($plan as $step) {
+            if ($step['fields'] !== []) {
+                $changes[] = $step;
+            }
+        }
 
         if ($dryRun) {
             return $this->report('ok',
@@ -173,18 +185,26 @@ class ContractSheetSyncService
 
         // --- Проход 2: запись на платформу. ---
         $updated = 0;
+        /** @var list<array{range: string, majorDimension: string, values: list<list<int>>}> $idCells */
         $idCells = []; // что проставить обратно в столбец C
 
         DB::transaction(function () use ($plan, &$updated, &$idCells, $sheet) {
             foreach ($plan as $step) {
-                if ($step['fields'] !== []) {
-                    $contract = Contract::find($step['contractId']);
+                /** @var array<string, array<string, mixed>> $fields */
+                $fields = $step['fields'];
+
+                if ($fields !== []) {
+                    $contract = Contract::find((int) $step['contractId']);
                     if ($contract) {
+                        $values = [];
+                        foreach ($fields as $field => $f) {
+                            $values[$field] = $f['value'];
+                        }
                         // Через модель, а не DB::update: у Contract подключён
                         // activitylog, и правка должна попасть в историю
                         // карточки — с автором, датой и старым значением.
                         $contract->activityReason = self::REASON;
-                        $contract->fill(array_map(static fn ($f) => $f['value'], $step['fields']));
+                        $contract->fill($values);
                         $contract->save();
                         $this->forecast->recomputeForContract($contract->id);
                         $updated++;
@@ -192,7 +212,11 @@ class ContractSheetSyncService
                 }
 
                 if ($step['needsId']) {
-                    $idCells[] = ['range' => sprintf('%s!C%d', $sheet, $step['line']), 'values' => [[$step['contractId']]]];
+                    $idCells[] = [
+                        'range' => sprintf('%s!C%d', $sheet, $step['line']),
+                        'majorDimension' => 'ROWS',
+                        'values' => [[(int) $step['contractId']]],
+                    ];
                 }
             }
         });
@@ -203,10 +227,8 @@ class ContractSheetSyncService
         $idWriteError = null;
         if ($idCells) {
             try {
-                $this->writer->batchUpdateValues($spreadsheetId, array_map(
-                    static fn ($c) => ['range' => $c['range'], 'majorDimension' => 'ROWS', 'values' => $c['values']],
-                    $idCells,
-                ));
+                // $idCells уже собран в формате запроса — см. проход 2.
+                $this->writer->batchUpdateValues($spreadsheetId, $idCells);
             } catch (\Throwable $e) {
                 $idWriteError = $e->getMessage();
             }
