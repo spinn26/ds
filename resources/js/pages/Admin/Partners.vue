@@ -388,21 +388,26 @@
       <!-- .stop обязателен: строка целиком кликабельна и открывает карточку,
            без этого кнопки в ячейке открывали бы её заодно. -->
       <template #item.actions="{ item }">
-        <span @click.stop>
-          <StartChatButton :partner-id="item.id" :partner-name="item.personName" silent />
-        </span>
-        <v-tooltip text="Редактировать" location="top">
-          <template #activator="{ props: tipProps }">
-            <v-btn v-bind="tipProps" icon="mdi-pencil" size="x-small" variant="text"
-              @click.stop="openEdit(item)" />
-          </template>
-        </v-tooltip>
-        <v-tooltip v-if="canEdit('partners')" text="Удалить" location="top">
-          <template #activator="{ props: tipProps }">
-            <v-btn v-bind="tipProps" icon="mdi-delete" size="x-small" variant="text" color="error"
-              @click.stop="confirmDeletePartner(item)" />
-          </template>
-        </v-tooltip>
+        <!-- Обязательно в одну строку: в колонке 60px три кнопки вставали
+             столбиком и растягивали строку до 90px — выше, чем до редизайна.
+             Появляются по наведению, чтобы не рябить в списке из 1968 строк. -->
+        <div class="p-actions">
+          <span @click.stop>
+            <StartChatButton :partner-id="item.id" :partner-name="item.personName" silent />
+          </span>
+          <v-tooltip text="Редактировать" location="top">
+            <template #activator="{ props: tipProps }">
+              <v-btn v-bind="tipProps" icon="mdi-pencil" size="x-small" variant="text"
+                @click.stop="openEdit(item)" />
+            </template>
+          </v-tooltip>
+          <v-tooltip v-if="canEdit('partners')" text="Удалить" location="top">
+            <template #activator="{ props: tipProps }">
+              <v-btn v-bind="tipProps" icon="mdi-delete" size="x-small" variant="text" color="error"
+                @click.stop="confirmDeletePartner(item)" />
+            </template>
+          </v-tooltip>
+        </div>
       </template>
     </DataTableWrapper>
 
@@ -1255,14 +1260,18 @@ const allColumns = [
   { title: 'Партнёр',          key: 'personName',     always: true },
   { title: 'Статус',           key: 'activityName',   width: 160, always: true },
   { title: 'Код',              key: 'participantCode', width: 100, default: true },
-  { title: 'Пригласивший',     key: 'inviterName',    default: true },
+  // Ширина задана, иначе колонка без width забирает весь свободный простор
+  // широкого экрана и между ней и датами зияет пустота.
+  { title: 'Пригласивший',     key: 'inviterName',    width: 240, default: true },
   { title: 'Дата рождения',    key: 'birthDate',      width: 130 },
   // Колонки «Куратор» здесь больше нет: поле curatorName никогда не приходило
   // с сервера (в PartnerListingService::present его нет), и ячейка была пустой
   // у всех 1968 партнёров.
   { title: 'Регистрация',      key: 'createdAt',      width: 130, default: true },
   { title: 'Смена статуса',    key: 'statusChangeDate', width: 140, default: true },
-  { title: '',                 key: 'actions',        sortable: false, width: 60, always: true },
+  // 120px, а не 60: три кнопки обязаны поместиться в один ряд, иначе строка
+  // растягивается втрое и вся плотность списка теряется.
+  { title: '',                 key: 'actions',        sortable: false, width: 120, always: true },
 ];
 
 // Which columns show in the menu (everything except always-on).
@@ -2094,6 +2103,19 @@ onMounted(() => { loadData(); loadSegments(); });
 .p-id__copy:focus-visible { opacity: 1; }
 
 .p-row-clickable { cursor: pointer; }
+
+/* Кнопки строки строго в один ряд. В колонке 60px они вставали столбиком и
+   растягивали строку до 90px — выше, чем до редизайна, то есть плотность
+   терялась целиком. Прятать их по наведению не стали: ими пользуются
+   постоянно, и исчезающая кнопка мешает больше, чем экономит. */
+.p-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
 
 /* ============ Карточка партнёра (шторка) ============
    Справа во всю высоту: список остаётся виден, людей можно просматривать
