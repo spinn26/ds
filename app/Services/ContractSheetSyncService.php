@@ -66,9 +66,10 @@ class ContractSheetSyncService
     /**
      * @param  bool  $dryRun  посчитать изменения, но ничего не писать —
      *                        ни на платформу, ни в таблицу.
-     * @return array{status: string, message: string, updated: int, checked: int,
-     *               changes: list<array<string, mixed>>,
-     *               nameMismatches: list<array<string, mixed>>, errors: list<array<string, mixed>>}
+     * Ключи ответа: status, message, updated, checked, changes, nameMismatches,
+     * errors и — только у реального прогона — runId для отката.
+     *
+     * @return array<string, mixed>
      */
     public function run(bool $dryRun = false): array
     {
@@ -241,7 +242,9 @@ class ContractSheetSyncService
      * «как было до синхронизации» значило бы затереть более свежую правку
      * человека. Такие поля перечисляются в ответе — с ними разбираются глазами.
      *
-     * @return array{status: string, message: string, restored: int, skipped: list<array<string, mixed>>}
+     * Ключи ответа: status, message, restored, skipped.
+     *
+     * @return array<string, mixed>
      */
     public function rollback(int $runId): array
     {
@@ -254,20 +257,23 @@ class ContractSheetSyncService
             return ['status' => 'error', 'message' => 'Этот прогон уже откачен', 'restored' => 0, 'skipped' => []];
         }
 
+        /** @var list<array<string, mixed>> $changes */
         $changes = json_decode((string) $run->changes, true) ?: [];
         $restored = 0;
         $skipped = [];
 
         DB::transaction(function () use ($changes, $runId, &$restored, &$skipped) {
             foreach ($changes as $change) {
-                $contract = Contract::find($change['contractId'] ?? 0);
+                $contract = Contract::find((int) ($change['contractId'] ?? 0));
                 if (! $contract) {
                     $skipped[] = ['contractId' => $change['contractId'] ?? null, 'reason' => 'контракт удалён'];
                     continue;
                 }
 
                 $restore = [];
-                foreach ($change['fields'] ?? [] as $field => $f) {
+                /** @var array<string, array<string, mixed>> $fields */
+                $fields = $change['fields'] ?? [];
+                foreach ($fields as $field => $f) {
                     if (! $this->stillHasSyncedValue($contract, $field, $f['value'] ?? null)) {
                         $skipped[] = [
                             'contractId' => $contract->id,
