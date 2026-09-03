@@ -369,98 +369,168 @@
       </v-card>
     </v-slide-y-transition>
 
-    <DataTableWrapper
-      v-model:selected="selected"
-      selectable
-      :items="items"
-      :items-length="total"
-      :loading="loading"
-      :headers="visibleHeaders"
-      :items-per-page="perPage"
-      :items-per-page-options="[25, 50, 100, 200]"
-      :row-props="rowProps"
-      server-side
-      empty-icon="mdi-account-search-outline"
-      empty-message="Партнёры не найдены"
-      :class="['partners-table', columnVisible.id ? 'p-sticky-id' : 'p-sticky-noid']"
-      @update:options="onOptions"
-    >
-      <template #item.id="{ item }">
-        <div class="p-id">
-          <span>{{ item.id }}</span>
-          <v-btn class="p-id__copy" icon="mdi-content-copy" size="x-small" variant="text"
-            title="Скопировать ID"
-            @click.stop="copyToClipboard(item.id)" />
-        </div>
-      </template>
+    <!-- ===== Таблица =====
+         Разметка своя, а не v-data-table. Страницу трижды подгоняли под
+         согласованный макет, и каждый раз ломались внутренности таблицы
+         Vuetify: липкие колонки через nth-child, отступы ячеек, типографика
+         заголовков, невидимый статус. Здесь разметка делает ровно то, что
+         нарисовано; Vuetify остаётся на меню, диалогах и кнопках. -->
+    <v-card class="p-tablecard">
+      <div class="p-scroll">
+        <table class="p-table">
+          <thead>
+            <tr>
+              <th class="p-th p-th--check p-sticky" :style="stickyLeft(0)">
+                <input type="checkbox" class="p-check" :checked="allOnPage"
+                  :indeterminate.prop="someOnPage" aria-label="Выбрать всю страницу"
+                  @change="togglePage($event.target.checked)">
+              </th>
+              <th v-for="(c, i) in visibleHeaders" :key="c.key"
+                :class="['p-th', {
+                  'p-sticky': isSticky(i),
+                  'p-edge': isLastSticky(i),
+                  'p-th--sortable': isSortable(c),
+                }]"
+                :style="[stickyLeft(i + 1), c.width ? { width: c.width + 'px' } : null]"
+                @click="isSortable(c) && toggleSort(c)">
+                {{ c.title }}
+                <span v-if="sortBy === sortKeyOf(c)" class="p-sort">
+                  {{ sortDir === 'asc' ? '↑' : '↓' }}
+                </span>
+              </th>
+            </tr>
+          </thead>
 
-      <!-- Имя одной строкой, контакт — вторым этажом. Колонки Email, Телефон,
-           «Клиент» и «Доступ» убраны: при узкой колонке ФИО имя ломалось на три
-           этажа, чип активности на два, и на экран влезало четыре партнёра. -->
-      <template #item.personName="{ item }">
-        <div class="p-name">
-          <div class="p-name__row">
-            <span class="p-name__text" :title="item.personName">{{ shortName(item.personName) }}</span>
-            <v-icon v-if="item.isClient" size="15" color="secondary"
-              title="Партнёр является клиентом">mdi-account-tie</v-icon>
-            <!-- Именно isBlocked, а не !platformAccess: последний false и у
-                 партнёров без логина, замок висел бы на каждом импортированном. -->
-            <v-icon v-if="item.isBlocked" size="15" color="error"
-              title="Доступ в кабинет заблокирован">mdi-lock</v-icon>
-          </div>
-          <div v-if="contactLine(item)" class="p-name__contact">{{ contactLine(item) }}</div>
-        </div>
-      </template>
+          <tbody>
+            <tr v-for="item in items" :key="item.id"
+              :class="['p-tr', `row-activity-${item.activityId || 0}`, { 'p-tr--sel': isSelected(item) }]"
+              @click="openCard(item)">
+              <td class="p-td p-td--check p-sticky" :style="stickyLeft(0)" @click.stop>
+                <input type="checkbox" class="p-check" :checked="isSelected(item)"
+                  :aria-label="`Выбрать ${item.personName}`"
+                  @change="toggleOne(item, $event.target.checked)">
+              </td>
 
-      <!-- Статус цветной точкой: одинаковые по цвету чипы не различались при
-           прокрутке, а именно так список и просматривают. -->
-      <template #item.activityName="{ item }">
-        <span v-if="item.activityName" class="p-status" :class="`p-status--${item.activityId || 0}`">
-          <i class="p-status__dot" />{{ activityLabel(item) }}
-        </span>
-        <span v-else class="text-medium-emphasis">—</span>
-      </template>
+              <td v-for="(c, i) in visibleHeaders" :key="c.key"
+                :class="['p-td', { 'p-sticky': isSticky(i), 'p-edge': isLastSticky(i) }]"
+                :style="stickyLeft(i + 1)">
 
-      <template #item.statusChangeDate="{ item }">
-        <span v-if="item.statusChangeDate" :class="isStatusChangeSoon(item) ? 'text-error font-weight-bold' : ''">
-          {{ fmtDate(item.statusChangeDate) }}
-        </span>
-        <span v-else class="text-medium-emphasis">—</span>
-      </template>
-      <template #item.birthDate="{ value }">{{ fmtDate(value) }}</template>
-      <template #item.createdAt="{ value }">{{ fmtDate(value) }}</template>
-      <!-- .stop обязателен: строка целиком кликабельна и открывает карточку,
-           без этого кнопки в ячейке открывали бы её заодно. -->
-      <!-- Одно меню вместо трёх иконок. Три кнопки в узкой колонке вставали
-           столбиком и растягивали строку втрое, а в списке на 1968 строк
-           тройная иконка в каждой строке — просто рябь. -->
-      <template #item.actions="{ item }">
-        <div class="p-actions" @click.stop>
-          <!-- Чат оставлен снаружи: им пользуются чаще всего, прятать его в
-               меню — лишний клик на каждое обращение. Остальное под «⋯». -->
-          <StartChatButton :partner-id="item.id" :partner-name="item.personName" silent />
-          <v-menu location="bottom end">
-            <template #activator="{ props: menuProps }">
-              <v-btn v-bind="menuProps" icon="mdi-dots-horizontal" size="x-small"
-                variant="text" aria-label="Действия" />
-            </template>
-            <v-list density="compact" min-width="212">
-              <v-list-item prepend-icon="mdi-account-outline" title="Открыть карточку"
-                @click="openCard(item)" />
-              <v-list-item prepend-icon="mdi-pencil" title="Редактировать"
-                @click="openEdit(item)" />
-              <v-list-item prepend-icon="mdi-content-copy" title="Скопировать ID"
-                @click="copyToClipboard(item.id)" />
-              <template v-if="canEdit('partners')">
-                <v-divider class="my-1" />
-                <v-list-item prepend-icon="mdi-delete" title="Удалить" base-color="error"
-                  @click="confirmDeletePartner(item)" />
-              </template>
-            </v-list>
-          </v-menu>
-        </div>
-      </template>
-    </DataTableWrapper>
+                <!-- ID: копирование появляется по наведению на строку -->
+                <template v-if="c.key === 'id'">
+                  <span class="p-id">
+                    <span class="p-id__num">{{ item.id }}</span>
+                    <v-btn class="p-id__copy" icon="mdi-content-copy" size="x-small"
+                      variant="text" title="Скопировать ID"
+                      @click.stop="copyToClipboard(item.id)" />
+                  </span>
+                </template>
+
+                <!-- Имя одной строкой, контакт вторым этажом. Колонки Email,
+                     Телефон, «Клиент» и «Доступ» убраны: они переехали сюда. -->
+                <template v-else-if="c.key === 'personName'">
+                  <div class="p-name__row">
+                    <span class="p-name__text" :title="item.personName">
+                      {{ shortName(item.personName) }}
+                    </span>
+                    <v-icon v-if="item.isClient" size="14" color="secondary"
+                      title="Партнёр является клиентом">mdi-account-tie</v-icon>
+                    <!-- Именно isBlocked, а не !platformAccess: последний false
+                         и у партнёров без логина — замок висел бы на каждом
+                         импортированном. -->
+                    <v-icon v-if="item.isBlocked" size="14" color="error"
+                      title="Доступ в кабинет заблокирован">mdi-lock</v-icon>
+                  </div>
+                  <div v-if="contactLine(item)" class="p-name__contact">
+                    {{ contactLine(item) }}
+                  </div>
+                </template>
+
+                <!-- Статус цветной точкой: одноцветные чипы не различались -->
+                <template v-else-if="c.key === 'activityName'">
+                  <span v-if="item.activityName" class="p-status"
+                    :class="`p-status--${item.activityId || 0}`">
+                    <i class="p-status__dot" />{{ activityLabel(item) }}
+                  </span>
+                  <span v-else class="p-muted">—</span>
+                </template>
+
+                <template v-else-if="c.key === 'statusChangeDate'">
+                  <span v-if="item.statusChangeDate"
+                    :class="isStatusChangeSoon(item) ? 'p-soon' : ''">
+                    {{ fmtDate(item.statusChangeDate) }}
+                  </span>
+                  <span v-else class="p-muted">—</span>
+                </template>
+
+                <template v-else-if="c.key === 'birthDate' || c.key === 'createdAt'">
+                  <span v-if="item[c.key]">{{ fmtDate(item[c.key]) }}</span>
+                  <span v-else class="p-muted">—</span>
+                </template>
+
+                <!-- Действия: чат снаружи (им пользуются чаще всего),
+                     остальное под «⋯». Три иконки в каждой строке на списке
+                     в две тысячи строк превращаются в рябь. -->
+                <template v-else-if="c.key === 'actions'">
+                  <div class="p-actions" @click.stop>
+                    <StartChatButton :partner-id="item.id"
+                      :partner-name="item.personName" silent />
+                    <v-menu location="bottom end">
+                      <template #activator="{ props: menuProps }">
+                        <v-btn v-bind="menuProps" icon="mdi-dots-horizontal"
+                          size="x-small" variant="text" aria-label="Действия" />
+                      </template>
+                      <v-list density="compact" min-width="212">
+                        <v-list-item prepend-icon="mdi-account-outline"
+                          title="Открыть карточку" @click="openCard(item)" />
+                        <v-list-item prepend-icon="mdi-pencil"
+                          title="Редактировать" @click="openEdit(item)" />
+                        <v-list-item prepend-icon="mdi-content-copy"
+                          title="Скопировать ID" @click="copyToClipboard(item.id)" />
+                        <template v-if="canEdit('partners')">
+                          <v-divider class="my-1" />
+                          <v-list-item prepend-icon="mdi-delete" title="Удалить"
+                            base-color="error" @click="confirmDeletePartner(item)" />
+                        </template>
+                      </v-list>
+                    </v-menu>
+                  </div>
+                </template>
+
+                <template v-else>
+                  <span v-if="item[c.key]" class="p-cellwrap">{{ item[c.key] }}</span>
+                  <span v-else class="p-muted">—</span>
+                </template>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div v-if="loading" class="p-state">
+        <v-progress-circular indeterminate size="26" width="3" color="primary" />
+      </div>
+      <div v-else-if="!items.length" class="p-state">
+        <v-icon size="34" class="mb-2" color="disabled">mdi-account-search-outline</v-icon>
+        <div>Партнёры не найдены</div>
+        <div class="p-muted mt-1">Попробуйте снять часть фильтров.</div>
+      </div>
+
+      <!-- Постраничность своя: серверная выдача отдаёт страницу и total. -->
+      <div v-if="items.length" class="p-foot">
+        <span class="p-muted">Строки {{ rowsFrom }}–{{ rowsTo }} из {{ total }}</span>
+        <v-spacer />
+        <span class="p-muted">на странице</span>
+        <v-select v-model="perPage" :items="[25, 50, 100, 200]" density="compact"
+          variant="outlined" hide-details style="max-width: 92px"
+          @update:model-value="() => { page = 1; loadData(); }" />
+        <v-btn icon="mdi-chevron-left" size="small" variant="text" :disabled="page <= 1"
+          aria-label="Предыдущая страница" @click="goPage(page - 1)" />
+        <span class="p-foot__page">{{ page }} / {{ pageCount }}</span>
+        <v-btn icon="mdi-chevron-right" size="small" variant="text"
+          :disabled="page >= pageCount" aria-label="Следующая страница"
+          @click="goPage(page + 1)" />
+      </div>
+    </v-card>
 
     <!-- Delete dialog -->
     <DialogShell
@@ -963,7 +1033,6 @@ import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
 import { useTableSort } from '../../composables/useTableSort';
 import PageHeader from '../../components/PageHeader.vue';
-import DataTableWrapper from '../../components/DataTableWrapper.vue';
 import DialogShell from '../../components/DialogShell.vue';
 import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 import StartChatButton from '../../components/StartChatButton.vue';
@@ -1490,34 +1559,82 @@ const ACTIVITY_COLOR = { 1: 'success', 3: 'warning', 4: 'grey', 5: 'error' };
 const activityColor = item => ACTIVITY_COLOR[item?.activityId] || 'grey';
 const fmtNum = v => Number(v ?? 0).toLocaleString('ru-RU');
 
-/**
- * Per-row accent: left border tinted by activity. Keeps the table
- * scannable even in dense views and works with Vuetify hover.
- *
- * Здесь же обработчик клика: DataTableWrapper не пробрасывает @click:row,
- * а row-props кладёт атрибуты прямо на <tr> — так строка открывает карточку
- * без правки общего компонента.
- */
-function rowProps({ item }) {
-  const activityId = item?.activityId;
-  const cls = activityId ? `row-activity-${activityId}` : '';
-  return {
-    class: `${cls} p-row-clickable`,
-    onClick: (e) => {
-      // Чекбокс выделения и кнопки внутри ячеек карточку открывать не должны.
-      if (e?.target?.closest?.('.v-selection-control, button, a, input')) return;
-      openCard(item);
-    },
-  };
+const { debounced: debouncedLoad } = useDebounce(loadData, 400);
+const { sortBy, sortDir, applyParams } = useTableSort('id', 'desc');
+
+// ===== Таблица: закрепление, сортировка, выделение, страницы =====
+// Липкими делаем чекбокс, ID и «Партнёр». Смещения считаем по ключам колонок,
+// а не по nth-child: ID выключается в «Колонках», и позиционный расчёт после
+// этого разъезжался.
+const STICKY_KEYS = ['id', 'personName'];
+const CHECK_W = 44;
+const ID_W = 92;
+
+const isSticky = i => STICKY_KEYS.includes(visibleHeaders.value[i]?.key);
+const isLastSticky = i => visibleHeaders.value[i]?.key === 'personName';
+
+/** idx: 0 — колонка чекбокса, дальше индекс видимой колонки + 1. */
+function stickyLeft(idx) {
+  if (idx === 0) return { left: '0px' };
+  const c = visibleHeaders.value[idx - 1];
+  if (!c || !STICKY_KEYS.includes(c.key)) return null;
+  if (c.key === 'id') return { left: `${CHECK_W}px` };
+  return { left: `${CHECK_W + (columnVisible.value.id ? ID_W : 0)}px` };
 }
 
-const { debounced: debouncedLoad } = useDebounce(loadData, 400);
-const { applyOptions, applyParams } = useTableSort('id', 'desc');
+// Сервер сортирует по своему списку колонок (AdminDataController::partners).
+// Чего в нём нет — не даём щёлкать, чтобы клик не оборачивался пустотой.
+const SORT_KEYS = {
+  id: 'id',
+  personName: 'personName',
+  activityName: 'activityName',
+  participantCode: 'participantCode',
+  inviterName: 'inviterName',
+  createdAt: 'dateCreated',
+};
+const sortKeyOf = c => SORT_KEYS[c.key] || null;
+const isSortable = c => !!sortKeyOf(c);
 
-function onOptions(opts) {
-  page.value = opts.page;
-  if (opts.itemsPerPage) perPage.value = opts.itemsPerPage;
-  applyOptions(opts);
+function toggleSort(c) {
+  const key = sortKeyOf(c);
+  if (!key) return;
+  if (sortBy.value === key) {
+    sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc';
+  } else {
+    sortBy.value = key;
+    sortDir.value = 'asc';
+  }
+  page.value = 1;
+  loadData();
+}
+
+const isSelected = item => selected.value.some(x => x.id === item.id);
+const allOnPage = computed(() => items.value.length > 0 && items.value.every(isSelected));
+const someOnPage = computed(() => items.value.some(isSelected) && !allOnPage.value);
+
+function toggleOne(item, on) {
+  if (on) {
+    if (!isSelected(item)) selected.value.push(item);
+  } else {
+    selected.value = selected.value.filter(x => x.id !== item.id);
+  }
+}
+function togglePage(on) {
+  if (on) {
+    items.value.forEach(i => { if (!isSelected(i)) selected.value.push(i); });
+  } else {
+    const ids = new Set(items.value.map(i => i.id));
+    selected.value = selected.value.filter(x => !ids.has(x.id));
+  }
+}
+
+const pageCount = computed(() => Math.max(1, Math.ceil(total.value / perPage.value)));
+const rowsFrom = computed(() => (page.value - 1) * perPage.value + 1);
+const rowsTo = computed(() => Math.min(page.value * perPage.value, total.value));
+
+function goPage(n) {
+  if (n < 1 || n > pageCount.value) return;
+  page.value = n;
   loadData();
 }
 
@@ -2219,106 +2336,114 @@ onMounted(() => {
 <style scoped>
 /* Row accent: a 3px left border tinted by activity. Keeps wide tables
    scannable without adding a whole colored cell. */
-/* Цвета акцента и точки статуса — один словарь, иначе строка и её статус
-   спорят друг с другом: раньше терминированный был красным в акценте и
-   синим в чипе. */
-.partners-table :deep(tr.row-activity-1 > td:first-child) { box-shadow: inset 3px 0 0 rgb(var(--v-theme-success)); }
-.partners-table :deep(tr.row-activity-3 > td:first-child) { box-shadow: inset 3px 0 0 rgb(var(--v-theme-warning)); }
-.partners-table :deep(tr.row-activity-4 > td:first-child) { box-shadow: inset 3px 0 0 rgb(var(--v-theme-outline)); }
-.partners-table :deep(tr.row-activity-5 > td:first-child) { box-shadow: inset 3px 0 0 rgb(var(--v-theme-error)); }
+/* ============ Таблица списка ============
+   Перенесена из согласованного прототипа (.design/partners-list.html).
+   Разметка своя, поэтому все размеры здесь и работают предсказуемо — раньше
+   те же правила приходилось продавливать через внутренности v-data-table
+   с !important и nth-child, и статус в ячейке в итоге не отрисовывался.
+   Цвета — токенами, поэтому светлая тема получает то же самое. */
+.p-tablecard { overflow: hidden; }
+.p-scroll { overflow-x: auto; }
 
-/* ============ Одежда таблицы ============
-   Заголовки — мелкие прописные с разрядкой, строки разделены тонкой линией,
-   а не заливкой: на списке в две тысячи строк любая тяжёлая графика мешает
-   читать. Цвета берём токенами, поэтому светлая тема получает то же самое. */
-.partners-table :deep(thead th) {
-  font-size: 0.66rem !important;
+.p-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+  font-size: 0.8125rem;
+}
+
+.p-th {
+  text-align: left;
+  font-size: 0.66rem;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--ds-on-surface-muted) !important;
+  color: var(--ds-on-surface-muted);
+  padding: 12px 14px;
   white-space: nowrap;
-  border-bottom: 1px solid var(--ds-outline-variant) !important;
+  border-bottom: 1px solid var(--ds-outline-variant);
+  background: var(--ds-surface);
+  vertical-align: middle;
 }
-.partners-table :deep(tbody td) { border-bottom: 1px solid var(--ds-outline-soft) !important; }
-.partners-table :deep(tbody tr:last-child td) { border-bottom: 0 !important; }
+.p-th--check { width: 44px; padding-right: 0; }
+.p-th--sortable { cursor: pointer; user-select: none; }
+.p-th--sortable:hover { color: var(--ds-on-surface); }
+.p-sort { color: rgb(var(--v-theme-primary)); margin-left: 4px; }
 
-/* Закреплённые слева: чекбокс, ID и «Партнёр». При прокрутке вправо видно,
-   чья это строка. Смещения фиксированы — ширины этих колонок заданы явно,
-   поэтому считать их в JS не нужно. Когда ID скрыт, «Партнёр» встаёт на его
-   место: класс переключается на таблице. */
-.partners-table :deep(thead th:nth-child(1)),
-.partners-table :deep(tbody td:nth-child(1)) {
-  position: sticky;
-  left: 0;
-  width: 48px;
+.p-td {
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--ds-outline-soft);
+  vertical-align: middle;
   background: var(--ds-surface);
 }
-.partners-table :deep(thead th:nth-child(1)) { z-index: 3; }
-.partners-table :deep(tbody td:nth-child(1)) { z-index: 2; }
+.p-td--check { width: 44px; padding-right: 0; }
+.p-tr:last-child .p-td { border-bottom: 0; }
+.p-tr { cursor: pointer; }
+.p-tr:hover .p-td { background: var(--ds-surface-container-low); }
+.p-tr--sel .p-td { background: var(--ds-primary-soft); }
 
-.p-sticky-id :deep(thead th:nth-child(2)),
-.p-sticky-id :deep(tbody td:nth-child(2)),
-.p-sticky-id :deep(thead th:nth-child(3)),
-.p-sticky-id :deep(tbody td:nth-child(3)),
-.p-sticky-noid :deep(thead th:nth-child(2)),
-.p-sticky-noid :deep(tbody td:nth-child(2)) {
-  position: sticky;
-  background: var(--ds-surface);
-}
-.p-sticky-id :deep(thead th:nth-child(2)),
-.p-sticky-id :deep(tbody td:nth-child(2)) { left: 48px; }
-.p-sticky-id :deep(thead th:nth-child(3)),
-.p-sticky-id :deep(tbody td:nth-child(3)) { left: 140px; box-shadow: 1px 0 0 var(--ds-outline-variant); }
-.p-sticky-noid :deep(thead th:nth-child(2)),
-.p-sticky-noid :deep(tbody td:nth-child(2)) { left: 48px; box-shadow: 1px 0 0 var(--ds-outline-variant); }
-.partners-table :deep(thead th:nth-child(2)),
-.partners-table :deep(thead th:nth-child(3)) { z-index: 3; }
-.partners-table :deep(tbody td:nth-child(2)),
-.partners-table :deep(tbody td:nth-child(3)) { z-index: 2; }
+/* Закреплённые слева колонки. Фон непрозрачный — иначе под ними просвечивают
+   уезжающие ячейки; подсветку строки красим отдельно по той же причине. */
+.p-sticky { position: sticky; z-index: 2; }
+.p-th.p-sticky { z-index: 3; }
+.p-edge { box-shadow: 1px 0 0 var(--ds-outline-variant); }
 
-/* Липкая ячейка со своим фоном не подхватывает подсветку строки — красим её
-   отдельно, иначе первые колонки «выпадают» из наведения. */
-.partners-table :deep(tbody tr:hover td:nth-child(-n + 3)) {
-  background: var(--ds-surface-container-low);
-}
+/* Цветной торец строки по активности — тот же словарь, что у точки статуса. */
+.p-tr.row-activity-1 .p-td--check { box-shadow: inset 3px 0 0 rgb(var(--v-theme-success)); }
+.p-tr.row-activity-3 .p-td--check { box-shadow: inset 3px 0 0 rgb(var(--v-theme-warning)); }
+.p-tr.row-activity-4 .p-td--check { box-shadow: inset 3px 0 0 var(--ds-outline); }
+.p-tr.row-activity-5 .p-td--check { box-shadow: inset 3px 0 0 rgb(var(--v-theme-error)); }
 
-/* ============ Плотная строка списка ============
-   До правки на экран влезало четыре партнёра из двух тысяч: имя ломалось на
-   три этажа, чип активности — на два. Теперь имя одной строкой, контакт под
-   ним, а колонки Email/Телефон/Клиент/Доступ убраны за ненадобностью. */
-.partners-table :deep(td) { padding-top: 6px; padding-bottom: 6px; }
+.p-check { width: 15px; height: 15px; cursor: pointer; accent-color: rgb(var(--v-theme-primary)); }
+.p-muted { color: var(--ds-on-surface-muted); }
+.p-soon { color: rgb(var(--v-theme-error)); font-weight: 600; }
+.p-cellwrap { display: block; overflow: hidden; text-overflow: ellipsis; }
 
+/* ID: копирование не мозолит глаза, появляется по наведению на строку. */
+.p-id { display: inline-flex; align-items: center; gap: 2px; white-space: nowrap; }
+.p-id__num { font-variant-numeric: tabular-nums; color: var(--ds-on-surface-variant); }
+.p-id__copy { opacity: 0; transition: opacity 0.12s; }
+.p-tr:hover .p-id__copy, .p-id__copy:focus-visible { opacity: 1; }
+
+/* Имя одной строкой, контакт вторым этажом: раньше при узкой колонке имя
+   ломалось на три этажа, и на экран влезало четыре партнёра из двух тысяч. */
 .p-name__row { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
 .p-name__text { font-weight: 600; }
 .p-name__contact {
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   line-height: 1.25;
   color: var(--ds-on-surface-muted);
   white-space: nowrap;
   margin-top: 1px;
 }
 
-/* Копирование ID не мозолит глаза: появляется по наведению на строку. */
-.p-id { display: flex; align-items: center; gap: 2px; white-space: nowrap; }
-.p-id__copy { opacity: 0; transition: opacity 0.12s; }
-.partners-table :deep(tr:hover) .p-id__copy,
-.p-id__copy:focus-visible { opacity: 1; }
+/* Статус: цветная точка + слово. Читается периферийным зрением при
+   прокрутке — именно так бэкофис и просматривает список. */
+.p-status { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+.p-status__dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: 0 0 auto; }
+.p-status--1 { color: rgb(var(--v-theme-success)); }
+.p-status--3 { color: rgb(var(--v-theme-warning)); }
+.p-status--4 { color: var(--ds-on-surface-variant); }
+.p-status--5 { color: rgb(var(--v-theme-error)); }
 
-.p-row-clickable { cursor: pointer; }
+.p-actions { display: flex; align-items: center; justify-content: flex-end; gap: 2px; white-space: nowrap; }
 
-/* Кнопки строки строго в один ряд. В колонке 60px они вставали столбиком и
-   растягивали строку до 90px — выше, чем до редизайна, то есть плотность
-   терялась целиком. Прятать их по наведению не стали: ими пользуются
-   постоянно, и исчезающая кнопка мешает больше, чем экономит. */
-.p-actions {
+.p-state {
+  padding: 48px 16px;
+  text-align: center;
+  color: var(--ds-on-surface-muted);
+  font-size: 0.85rem;
+}
+.p-foot {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 2px;
-  flex-wrap: nowrap;
-  white-space: nowrap;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border-top: 1px solid var(--ds-outline-variant);
+  font-size: 0.78rem;
 }
+.p-foot__page { font-variant-numeric: tabular-nums; }
 
 /* ============ Карточка партнёра (шторка) ============
    Справа во всю высоту: список остаётся виден, людей можно просматривать
@@ -2355,7 +2480,6 @@ onMounted(() => {
   margin-top: 3px;
   font-variant-numeric: tabular-nums;
 }
-
 .p-card__sec {
   margin: 22px 0 4px;
   font-size: 0.68rem;
