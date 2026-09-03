@@ -9,9 +9,10 @@
           <!-- Забор итогов сверки из таблицы «Парус/Акцент». -->
           <v-btn variant="outlined" color="primary" prepend-icon="mdi-tray-arrow-down"
             :loading="syncChecking" @click="checkSheetSync">
-            Забрать из таблицы
+            Забрать из таблицы Парус/Акцент
           </v-btn>
-          <v-btn variant="text" icon="mdi-history" title="Прогоны синхронизации и откат"
+          <v-btn variant="text" icon="mdi-history"
+            title="Синхронизации с таблицей Парус/Акцент и откат"
             @click="openSyncRuns" />
           <v-btn color="success" prepend-icon="mdi-plus" @click="openCreate">
             Новый контракт
