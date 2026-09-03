@@ -8,73 +8,288 @@
       </template>
     </PageHeader>
 
-    <!-- Компактный layout: 7 фильтров в одну flex-строку с density=compact.
-         FilterBar с v-row md="2" не использовали — на Mac Air ≤1470px
-         он переносил половину полей на 2-ю строку. -->
+    <!-- Одна строка поиска вместо семи полей. Раньше семь инпутов стояли в ряд
+         с подсказкой вместо подписи: подсказка исчезает при вводе, и через
+         минуту не отличить «ИД» от «Кода». Тип ввода теперь определяется по
+         форме, редкие фильтры уехали в отдельное окно. -->
     <v-card class="mb-3 pa-3">
       <div class="d-flex flex-wrap ga-2 align-center">
-        <v-text-field :model-value="search" placeholder="ФИО партнёра"
+        <v-text-field v-model="q" placeholder="Имя, ID, email, телефон или код…"
           density="compact" variant="outlined" hide-details clearable
           prepend-inner-icon="mdi-magnify"
-          style="max-width: 220px; flex: 1 1 180px"
-          @update:model-value="v => { search = v ?? ''; debouncedLoad(); }" />
-        <v-text-field v-model="filters.partnerId" placeholder="ИД"
-          density="compact" variant="outlined" hide-details clearable
-          style="max-width: 110px; flex: 1 1 80px"
-          @update:model-value="debouncedLoad" />
-        <v-text-field v-model="filters.inviterName" placeholder="ФИО пригласителя"
-          density="compact" variant="outlined" hide-details clearable
-          style="max-width: 200px; flex: 1 1 160px"
-          @update:model-value="debouncedLoad" />
-        <v-text-field v-model="filters.email" placeholder="Email"
-          density="compact" variant="outlined" hide-details clearable
-          style="max-width: 180px; flex: 1 1 140px"
-          @update:model-value="debouncedLoad" />
-        <v-text-field v-model="filters.phone" placeholder="Телефон"
-          density="compact" variant="outlined" hide-details clearable
-          style="max-width: 160px; flex: 1 1 120px"
-          @update:model-value="debouncedLoad" />
-        <v-select v-model="activityFilter" :items="activityOptions" placeholder="Активность"
-          density="compact" variant="outlined" clearable hide-details
-          style="max-width: 160px; flex: 1 1 120px"
-          @update:model-value="loadData" />
-        <v-select v-model="statusFilter" :items="statusOptions" placeholder="Статус"
-          density="compact" variant="outlined" clearable hide-details
-          style="max-width: 160px; flex: 1 1 120px"
-          @update:model-value="loadData" />
+          style="max-width: 430px; flex: 1 1 280px"
+          @update:model-value="debouncedLoad">
+          <template v-if="qKindLabel" #append-inner>
+            <span class="p-qhint">ищу по: {{ qKindLabel }}</span>
+          </template>
+        </v-text-field>
 
-        <v-spacer />
-
-        <v-chip v-if="activeFilterCount > 0" size="small" color="info" variant="tonal">
-          {{ activeFilterCount }} {{ activeFilterCount === 1 ? 'фильтр' : 'фильтра' }}
-        </v-chip>
-        <v-btn v-if="activeFilterCount > 0" size="small" variant="text" color="secondary"
-          prepend-icon="mdi-filter-off-outline" @click="resetFilters">
-          Сбросить
+        <v-btn variant="outlined" prepend-icon="mdi-tune-variant"
+          :color="filterCount ? 'primary' : undefined" @click="openFilters">
+          Фильтры
+          <v-chip v-if="filterCount" size="x-small" color="primary" variant="flat" class="ml-2">
+            {{ filterCount }}
+          </v-chip>
         </v-btn>
-        <!-- Сегменты (сохранённые фильтры) -->
-        <v-select v-model="selectedSegment" :items="segments" item-title="name" item-value="id"
-          placeholder="Сегмент" density="compact" variant="outlined" hide-details clearable
-          prepend-inner-icon="mdi-filter-variant" style="max-width: 200px"
-          @update:model-value="applySegment">
-          <template #append-item>
-            <v-divider />
-            <v-list-item v-for="s in segments" :key="'del-' + s.id" density="compact">
-              <v-list-item-title class="text-caption">{{ s.name }}</v-list-item-title>
+
+        <!-- Применение и сохранение сегмента — в одном меню. Раньше рядом
+             стояли селект «Сегмент» и кнопка «Сегмент»: одно слово, два
+             разных действия. -->
+        <v-menu>
+          <template #activator="{ props: segProps }">
+            <v-btn v-bind="segProps" variant="outlined" append-icon="mdi-chevron-down">
+              Сегменты
+            </v-btn>
+          </template>
+          <v-list density="compact" min-width="240">
+            <v-list-item v-for="s in segments" :key="s.id" :title="s.name"
+              prepend-icon="mdi-filter-outline" @click="applySegment(s.id)">
               <template #append>
-                <v-btn icon="mdi-delete" size="x-small" variant="text" color="error" @click.stop="deleteSegment(s.id)" />
+                <v-btn icon="mdi-delete" size="x-small" variant="text" color="error"
+                  aria-label="Удалить сегмент" @click.stop="deleteSegment(s.id)" />
               </template>
             </v-list-item>
-          </template>
-        </v-select>
-        <v-btn size="small" variant="text" prepend-icon="mdi-content-save-outline"
-          title="Сохранить текущие фильтры как сегмент" @click="saveSegment">Сегмент</v-btn>
+            <v-list-item v-if="!segments.length" disabled
+              title="Сохранённых сегментов нет" class="text-medium-emphasis" />
+            <v-divider class="my-1" />
+            <v-list-item prepend-icon="mdi-content-save-outline"
+              title="Сохранить текущий фильтр" @click="saveSegment" />
+          </v-list>
+        </v-menu>
+
         <ColumnVisibilityMenu
           :headers="toggleableColumns"
           v-model:visible="columnVisible"
           storage-key="partners-cols" />
       </div>
+
+      <!-- «Найдено N» и активные фильтры чипами: раньше число в шапке при
+           включённом фильтре не отвечало, сколько именно нашлось. -->
+      <div class="d-flex align-center flex-wrap ga-2 mt-3">
+        <span class="text-caption text-medium-emphasis">
+          Найдено <strong class="text-high-emphasis">{{ total }}</strong>
+        </span>
+        <v-chip v-for="c in activeChips" :key="c.key" size="small" variant="tonal"
+          closable @click:close="clearChip(c.key)">{{ c.label }}</v-chip>
+        <v-btn v-if="activeChips.length" size="x-small" variant="text" color="secondary"
+          @click="resetFilters">Сбросить всё</v-btn>
+      </div>
     </v-card>
+
+    <!-- ===== Окно фильтров =====
+         Не выпадашка: её сносит краем экрана, и календарь на ноутбуке уже не
+         помещается. В окне влезают и счётчики, и месячная сетка. Меняем копию
+         состояния — «Отмена» откатывает всё, список не дёргается по пути. -->
+    <DialogShell
+      v-model="filtersOpen"
+      title="Фильтры"
+      :max-width="660"
+      @confirm="applyFilters"
+    >
+      <div class="pf-sec">
+        <div class="pf-sec__head"><span class="pf-sec__title">Активность</span></div>
+        <div class="d-flex flex-wrap ga-2 pb-2">
+          <v-chip v-for="o in activityOptions" :key="o.value"
+            :variant="draft.activity.includes(o.value) ? 'flat' : 'outlined'"
+            :color="draft.activity.includes(o.value) ? 'primary' : undefined"
+            size="small" @click="toggleActivity(o.value)">
+            <i class="p-status__dot mr-2" :class="`p-status--${o.value}`" />
+            {{ o.title }}
+          </v-chip>
+        </div>
+      </div>
+
+      <div class="pf-sec">
+        <div class="pf-sec__head"><span class="pf-sec__title">Пригласивший</span></div>
+        <v-autocomplete v-model="draft.inviterName" :items="invFilterItems"
+          :loading="invFilterLoading" v-model:search="invFilterQuery"
+          placeholder="Начните вводить фамилию…" variant="outlined" density="compact"
+          hide-details clearable no-filter hide-no-data
+          class="mb-3" />
+      </div>
+
+      <div class="pf-sec">
+        <div class="pf-sec__head"><span class="pf-sec__title">Дата регистрации</span></div>
+        <v-btn-toggle v-model="draft.dateMode" mandatory density="compact"
+          variant="outlined" divided class="mb-4">
+          <v-btn value="quick" size="small">Быстро</v-btn>
+          <v-btn value="year" size="small">Год</v-btn>
+          <v-btn value="month" size="small">Месяц</v-btn>
+          <v-btn value="range" size="small">Период</v-btn>
+        </v-btn-toggle>
+
+        <div v-if="draft.dateMode === 'quick'" class="d-flex flex-wrap ga-2">
+          <v-chip v-for="p in QUICK_RANGES" :key="p.key" size="small"
+            :variant="draft.datePreset === p.key ? 'flat' : 'outlined'"
+            :color="draft.datePreset === p.key ? 'primary' : undefined"
+            @click="pickQuick(p)">{{ p.title }}</v-chip>
+        </div>
+
+        <div v-else-if="draft.dateMode === 'year'" class="d-flex flex-wrap ga-2">
+          <v-chip v-for="y in yearOptions" :key="y" size="small"
+            :variant="draft.datePreset === String(y) ? 'flat' : 'outlined'"
+            :color="draft.datePreset === String(y) ? 'primary' : undefined"
+            @click="pickYear(y)">{{ y }}</v-chip>
+        </div>
+
+        <div v-else-if="draft.dateMode === 'month'">
+          <div class="d-flex align-center ga-2 mb-3">
+            <v-btn icon="mdi-chevron-left" size="x-small" variant="text"
+              aria-label="Предыдущий год" @click="draft.monthYear--" />
+            <strong>{{ draft.monthYear }}</strong>
+            <v-btn icon="mdi-chevron-right" size="x-small" variant="text"
+              aria-label="Следующий год" @click="draft.monthYear++" />
+            <span class="text-caption text-medium-emphasis">— выберите месяц</span>
+          </div>
+          <div class="d-flex flex-wrap ga-2">
+            <v-chip v-for="(m, i) in MONTHS" :key="m" size="small"
+              :variant="draft.datePreset === monthKey(i) ? 'flat' : 'outlined'"
+              :color="draft.datePreset === monthKey(i) ? 'primary' : undefined"
+              @click="pickMonth(i)">{{ m }}</v-chip>
+          </div>
+        </div>
+
+        <div v-else class="d-flex align-center ga-2">
+          <v-text-field v-model="draft.from" type="date" label="с"
+            variant="outlined" density="compact" hide-details
+            @update:model-value="draft.datePreset = ''" />
+          <span class="text-medium-emphasis">—</span>
+          <v-text-field v-model="draft.to" type="date" label="по"
+            variant="outlined" density="compact" hide-details
+            @update:model-value="draft.datePreset = ''" />
+        </div>
+
+        <p class="pf-hint mt-3 mb-1">
+          <v-icon size="14" icon="mdi-information-outline" />
+          {{ dateSummary }}
+        </p>
+      </div>
+
+      <template #actions>
+        <v-btn variant="text" @click="resetDraft">Сбросить всё</v-btn>
+        <v-spacer />
+        <v-btn variant="text" @click="filtersOpen = false">Отмена</v-btn>
+        <v-btn color="primary" variant="flat" @click="applyFilters">Применить</v-btn>
+      </template>
+    </DialogShell>
+
+    <!-- ===== Карточка партнёра =====
+         Шторка справа, а не модальное окно на весь экран: список остаётся
+         виден, и людей можно просматривать подряд. Редактирование открывает
+         СУЩЕСТВУЮЩУЮ форму — вторую такую же не заводим. -->
+    <v-overlay v-model="cardOpen" scroll-strategy="block"
+      class="d-flex align-stretch justify-end" content-class="p-card">
+      <v-card v-if="cardItem" class="p-card__inner d-flex flex-column" rounded="0">
+        <div class="p-card__head">
+          <div class="d-flex align-start ga-3">
+            <v-avatar :color="activityColor(cardItem)" variant="tonal" size="46">
+              <span class="text-subtitle-2">{{ getInitials(cardItem.personName) }}</span>
+            </v-avatar>
+            <div class="flex-grow-1" style="min-width: 0">
+              <div class="p-card__name">{{ cardItem.personName }}</div>
+              <div class="d-flex align-center ga-2 mt-1 flex-wrap">
+                <span class="p-status" :class="`p-status--${cardItem.activityId || 0}`">
+                  <i class="p-status__dot" />{{ activityLabel(cardItem) }}
+                </span>
+                <span class="text-caption text-medium-emphasis">ID {{ cardItem.id }}</span>
+                <v-btn icon="mdi-content-copy" size="x-small" variant="text"
+                  title="Скопировать ID" @click="copyToClipboard(cardItem.id)" />
+              </div>
+            </div>
+            <v-btn icon="mdi-close" variant="text" size="small"
+              aria-label="Закрыть" @click="cardOpen = false" />
+          </div>
+          <div class="d-flex align-center ga-2 mt-3">
+            <v-btn color="primary" variant="flat" size="small" prepend-icon="mdi-pencil"
+              @click="openEditFromCard">Редактировать</v-btn>
+            <StartChatButton :partner-id="cardItem.id" :partner-name="cardItem.personName" silent />
+          </div>
+        </div>
+
+        <div class="p-card__body">
+          <div class="p-card__stats">
+            <div class="p-card__stat">
+              <div class="p-card__stat-l">Личный объём</div>
+              <div class="p-card__stat-v">{{ fmtNum(cardItem.personalVolume) }}</div>
+            </div>
+            <div class="p-card__stat">
+              <div class="p-card__stat-l">НГП</div>
+              <div class="p-card__stat-v">{{ fmtNum(cardItem.groupVolumeCumulative) }}</div>
+            </div>
+            <div class="p-card__stat">
+              <div class="p-card__stat-l">Терминаций</div>
+              <div class="p-card__stat-v">{{ cardItem.terminationCount || 0 }}</div>
+            </div>
+          </div>
+
+          <h5 class="p-card__sec">Контакты</h5>
+          <div class="p-card__row">
+            <span class="p-card__k">Email</span>
+            <span class="p-card__v">{{ cardItem.email || '—' }}</span>
+            <v-btn v-if="cardItem.email" class="p-card__act" icon="mdi-content-copy"
+              size="x-small" variant="text" title="Скопировать"
+              @click="copyToClipboard(cardItem.email)" />
+          </div>
+          <div class="p-card__row">
+            <span class="p-card__k">Телефон</span>
+            <span class="p-card__v">{{ cardItem.phone || '—' }}</span>
+            <v-btn v-if="cardItem.phone" class="p-card__act" icon="mdi-content-copy"
+              size="x-small" variant="text" title="Скопировать"
+              @click="copyToClipboard(cardItem.phone)" />
+          </div>
+          <div class="p-card__row">
+            <span class="p-card__k">Дата рождения</span>
+            <span class="p-card__v">{{ fmtDate(cardItem.birthDate) || '—' }}</span>
+          </div>
+
+          <h5 class="p-card__sec">Партнёрство</h5>
+          <div class="p-card__row">
+            <span class="p-card__k">Реф. код</span>
+            <span class="p-card__v">
+              {{ cardItem.participantCode || '' }}
+              <span v-if="!cardItem.participantCode" class="text-medium-emphasis">не выдан</span>
+            </span>
+          </div>
+          <div class="p-card__row" :class="cardItem.inviterName ? 'p-card__row--link' : ''"
+            @click="cardItem.inviterName && filterByInviter(cardItem.inviterName)">
+            <span class="p-card__k">Пригласивший</span>
+            <span class="p-card__v">
+              {{ cardItem.inviterName || '' }}
+              <span v-if="!cardItem.inviterName" class="text-medium-emphasis">нет</span>
+            </span>
+            <v-icon v-if="cardItem.inviterName" class="p-card__act" size="14"
+              icon="mdi-filter-outline" title="Показать всех, кого он пригласил" />
+          </div>
+          <div class="p-card__row">
+            <span class="p-card__k">Регистрация</span>
+            <span class="p-card__v">{{ fmtDate(cardItem.createdAt) || '—' }}</span>
+          </div>
+          <div class="p-card__row">
+            <span class="p-card__k">Смена статуса</span>
+            <span class="p-card__v" :class="isStatusChangeSoon(cardItem) ? 'text-error' : ''">
+              {{ fmtDate(cardItem.statusChangeDate) || '—' }}
+            </span>
+          </div>
+
+          <h5 class="p-card__sec">Доступ</h5>
+          <div class="p-card__row">
+            <span class="p-card__k">Кабинет</span>
+            <span class="p-card__v">
+              <span v-if="cardItem.isBlocked" class="text-error">заблокирован</span>
+              <span v-else-if="cardItem.platformAccess" class="text-success">открыт</span>
+              <span v-else class="text-medium-emphasis">логина нет</span>
+            </span>
+          </div>
+          <div class="p-card__row">
+            <span class="p-card__k">Клиент</span>
+            <span class="p-card__v">
+              <span v-if="cardItem.isClient">да, есть контракты</span>
+              <span v-else class="text-medium-emphasis">нет</span>
+            </span>
+          </div>
+        </div>
+      </v-card>
+    </v-overlay>
 
     <!-- Bulk action bar: two primary actions + destructive + overflow menu -->
     <v-slide-y-transition>
@@ -127,45 +342,59 @@
       @update:options="onOptions"
     >
       <template #item.id="{ item }">
-        <div class="d-flex align-center ga-1 text-no-wrap">
+        <div class="p-id">
           <span>{{ item.id }}</span>
-          <v-btn icon="mdi-content-copy" size="x-small" variant="text"
+          <v-btn class="p-id__copy" icon="mdi-content-copy" size="x-small" variant="text"
             title="Скопировать ID"
             @click.stop="copyToClipboard(item.id)" />
         </div>
       </template>
-      <template #item.activityName="{ value }">
-        <StatusChip v-if="value" :value="value" kind="activityName" size="x-small" :text="value" />
-        <span v-else>—</span>
+
+      <!-- Имя одной строкой, контакт — вторым этажом. Колонки Email, Телефон,
+           «Клиент» и «Доступ» убраны: при узкой колонке ФИО имя ломалось на три
+           этажа, чип активности на два, и на экран влезало четыре партнёра. -->
+      <template #item.personName="{ item }">
+        <div class="p-name">
+          <div class="p-name__row">
+            <span class="p-name__text" :title="item.personName">{{ shortName(item.personName) }}</span>
+            <v-icon v-if="item.isClient" size="15" color="secondary"
+              title="Партнёр является клиентом">mdi-account-tie</v-icon>
+            <!-- Именно isBlocked, а не !platformAccess: последний false и у
+                 партнёров без логина, замок висел бы на каждом импортированном. -->
+            <v-icon v-if="item.isBlocked" size="15" color="error"
+              title="Доступ в кабинет заблокирован">mdi-lock</v-icon>
+          </div>
+          <div v-if="contactLine(item)" class="p-name__contact">{{ contactLine(item) }}</div>
+        </div>
       </template>
-      <template #item.isClient="{ item }">
-        <v-icon :color="item.isClient ? 'success' : 'grey-lighten-1'" size="20"
-          :title="item.isClient ? 'Партнёр является клиентом' : 'Не клиент'">
-          {{ item.isClient ? 'mdi-check-circle' : 'mdi-minus-circle-outline' }}
-        </v-icon>
+
+      <!-- Статус цветной точкой: одинаковые по цвету чипы не различались при
+           прокрутке, а именно так список и просматривают. -->
+      <template #item.activityName="{ item }">
+        <span v-if="item.activityName" class="p-status" :class="`p-status--${item.activityId || 0}`">
+          <i class="p-status__dot" />{{ activityLabel(item) }}
+        </span>
+        <span v-else class="text-medium-emphasis">—</span>
       </template>
+
       <template #item.statusChangeDate="{ item }">
         <span v-if="item.statusChangeDate" :class="isStatusChangeSoon(item) ? 'text-error font-weight-bold' : ''">
           {{ fmtDate(item.statusChangeDate) }}
         </span>
         <span v-else class="text-medium-emphasis">—</span>
       </template>
-      <template #item.platformAccess="{ value }">
-        <v-tooltip :text="value ? 'Доступ открыт' : 'Доступ заблокирован'" location="top">
-          <template #activator="{ props: tipProps }">
-            <v-icon v-bind="tipProps" :color="value ? 'success' : 'grey'" size="small">
-              {{ value ? 'mdi-lock-open-variant' : 'mdi-lock' }}
-            </v-icon>
-          </template>
-        </v-tooltip>
-      </template>
       <template #item.birthDate="{ value }">{{ fmtDate(value) }}</template>
       <template #item.createdAt="{ value }">{{ fmtDate(value) }}</template>
+      <!-- .stop обязателен: строка целиком кликабельна и открывает карточку,
+           без этого кнопки в ячейке открывали бы её заодно. -->
       <template #item.actions="{ item }">
-        <StartChatButton :partner-id="item.id" :partner-name="item.personName" silent />
+        <span @click.stop>
+          <StartChatButton :partner-id="item.id" :partner-name="item.personName" silent />
+        </span>
         <v-tooltip text="Редактировать" location="top">
           <template #activator="{ props: tipProps }">
-            <v-btn v-bind="tipProps" icon="mdi-pencil" size="x-small" variant="text" @click="openEdit(item)" />
+            <v-btn v-bind="tipProps" icon="mdi-pencil" size="x-small" variant="text"
+              @click.stop="openEdit(item)" />
           </template>
         </v-tooltip>
         <v-tooltip v-if="canEdit('partners')" text="Удалить" location="top">
@@ -679,7 +908,6 @@ import { useDebounce } from '../../composables/useDebounce';
 import { useTableSort } from '../../composables/useTableSort';
 import PageHeader from '../../components/PageHeader.vue';
 import DataTableWrapper from '../../components/DataTableWrapper.vue';
-import StatusChip from '../../components/StatusChip.vue';
 import DialogShell from '../../components/DialogShell.vue';
 import ColumnVisibilityMenu from '../../components/ColumnVisibilityMenu.vue';
 import StartChatButton from '../../components/StartChatButton.vue';
@@ -731,7 +959,7 @@ function onAddPhoneValidate(obj) {
   addPhoneValid.value = !addForm.value?.phone ? true : !!obj?.valid;
 }
 import { useConfirm } from '../../composables/useConfirm';
-import { fmtDate, fmtDateTime, getActivityColorByName, getInitials } from '../../composables/useDesign';
+import { fmtDate, fmtDateTime, getInitials } from '../../composables/useDesign';
 
 const confirm = useConfirm();
 
@@ -766,14 +994,47 @@ async function performDeletePartner() {
 const items = ref([]);
 const total = ref(0);
 const loading = ref(false);
-const search = ref('');
-const activityFilter = ref(null);
-const statusFilter = ref(null);
-const statusOptions = ref([]);
+const q = ref('');
 const page = ref(1);
 const perPage = ref(25);
-const filters = ref({
-  partnerId: '', inviterName: '', email: '', phone: '',
+
+/** Пустой набор фильтров окна. */
+function emptyFilters() {
+  return {
+    activity: [],
+    inviterName: null,
+    dateMode: 'quick',
+    datePreset: '',
+    from: '',
+    to: '',
+    monthYear: new Date().getFullYear(),
+  };
+}
+
+// Применённое и черновик разделены намеренно: окно правит копию, поэтому
+// «Отмена» откатывает всё разом, а список не дёргается на каждый щелчок.
+const applied = ref(emptyFilters());
+const draft = ref(emptyFilters());
+const filtersOpen = ref(false);
+
+// ===== Единая строка поиска =====
+// Тип ввода определяется по форме, а не отдельным полем: цифры → ID,
+// «@» → email, «+7…» → телефон, латиница с цифрами → код, остальное → ФИО.
+const QUERY_KINDS = { id: 'ID', email: 'email', phone: 'телефон', code: 'код', name: 'ФИО' };
+
+function parseQuery(raw) {
+  const t = String(raw ?? '').trim();
+  if (!t) return null;
+  if (/^\d+$/.test(t)) return { kind: 'id', value: t };
+  if (t.includes('@')) return { kind: 'email', value: t };
+  if (/^[+\d][\d\s()-]{4,}$/.test(t)) return { kind: 'phone', value: t };
+  if (/^[A-Za-z]{2,4}-?\d{2,4}$/.test(t)) return { kind: 'code', value: t };
+  return { kind: 'name', value: t };
+}
+
+const qKindLabel = computed(() => {
+  const p = parseQuery(q.value);
+  return p ? QUERY_KINDS[p.kind] : '';
 });
 
 // Bulk selection
@@ -781,34 +1042,155 @@ const selected = ref([]);
 const bulkMsg = ref('');
 const bulkMsgType = ref('success');
 
-const activeFilterCount = computed(() => {
-  let c = 0;
-  if (search.value) c++;
-  if (activityFilter.value) c++;
-  if (statusFilter.value) c++;
-  Object.values(filters.value).forEach(v => { if (v) c++; });
-  return c;
+// ===== Даты регистрации =====
+const MONTHS = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+const MONTHS_FULL = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь',
+  'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'];
+
+const pad2 = n => String(n).padStart(2, '0');
+const isoDate = d => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+const monthEdges = (y, m) => [new Date(y, m, 1), new Date(y, m + 1, 0)];
+
+const QUICK_RANGES = [
+  { key: 'today', title: 'Сегодня', range: () => [new Date(), new Date()] },
+  { key: 'd7', title: '7 дней', range: () => [addDays(new Date(), -6), new Date()] },
+  { key: 'd30', title: '30 дней', range: () => [addDays(new Date(), -29), new Date()] },
+  { key: 'm', title: 'Этот месяц', range: () => monthEdges(new Date().getFullYear(), new Date().getMonth()) },
+  { key: 'mPrev', title: 'Прошлый месяц', range: () => monthEdges(new Date().getFullYear(), new Date().getMonth() - 1) },
+  { key: 'y', title: 'Этот год', range: () => [new Date(new Date().getFullYear(), 0, 1), new Date(new Date().getFullYear(), 11, 31)] },
+  { key: 'yPrev', title: 'Прошлый год', range: () => [new Date(new Date().getFullYear() - 1, 0, 1), new Date(new Date().getFullYear() - 1, 11, 31)] },
+];
+
+// С 2024-го: раньше данных о регистрациях в платформе нет (выгрузка Directual).
+const yearOptions = computed(() => {
+  const now = new Date().getFullYear();
+  return Array.from({ length: now - 2023 }, (_, i) => 2024 + i);
 });
 
-function resetFilters() {
-  search.value = '';
-  activityFilter.value = null;
-  statusFilter.value = null;
-  filters.value = { partnerId: '', inviterName: '', email: '', phone: '' };
+const monthKey = i => `${draft.value.monthYear}-${pad2(i + 1)}`;
+
+function pickQuick(p) {
+  if (draft.value.datePreset === p.key) return clearDraftDates();
+  const [a, z] = p.range();
+  Object.assign(draft.value, { datePreset: p.key, from: isoDate(a), to: isoDate(z) });
+}
+function pickYear(y) {
+  if (draft.value.datePreset === String(y)) return clearDraftDates();
+  Object.assign(draft.value, { datePreset: String(y), from: `${y}-01-01`, to: `${y}-12-31` });
+}
+function pickMonth(i) {
+  const key = monthKey(i);
+  if (draft.value.datePreset === key) return clearDraftDates();
+  const [a, z] = monthEdges(draft.value.monthYear, i);
+  Object.assign(draft.value, { datePreset: key, from: isoDate(a), to: isoDate(z) });
+}
+function clearDraftDates() {
+  Object.assign(draft.value, { datePreset: '', from: '', to: '' });
+}
+
+const ruDate = s => (s ? s.split('-').reverse().join('.') : '');
+
+/** Человеческая подпись периода: «2026», «июнь 2026», «12.03.2025 — 30.08.2026». */
+function dateChipLabel(f) {
+  if (!f.from && !f.to) return '';
+  if (f.from && f.to && f.from.slice(0, 4) === f.to.slice(0, 4)) {
+    const y = f.from.slice(0, 4);
+    if (f.from.endsWith('-01-01') && f.to.endsWith('-12-31')) return `Регистрация: ${y}`;
+    if (f.from.slice(8) === '01' && f.from.slice(0, 7) === f.to.slice(0, 7)) {
+      return `Регистрация: ${MONTHS_FULL[+f.from.slice(5, 7) - 1]} ${y}`;
+    }
+  }
+  if (f.from && f.to) return `Регистрация: ${ruDate(f.from)} — ${ruDate(f.to)}`;
+  return f.from ? `Регистрация с ${ruDate(f.from)}` : `Регистрация по ${ruDate(f.to)}`;
+}
+
+const dateSummary = computed(() => {
+  const l = dateChipLabel(draft.value);
+  return l ? l.replace(/^Регистрация:?\s*/, 'Выбрано: ') : 'Период не выбран — показываем все даты.';
+});
+
+// ===== Активные фильтры чипами =====
+const activeChips = computed(() => {
+  const out = [];
+  const p = parseQuery(q.value);
+  if (p) out.push({ key: 'q', label: `${QUERY_KINDS[p.kind]}: ${p.value}` });
+
+  for (const a of applied.value.activity) {
+    const o = activityOptions.find(x => x.value === a);
+    out.push({ key: `activity:${a}`, label: `Активность: ${o?.title ?? a}` });
+  }
+  if (applied.value.inviterName) {
+    out.push({ key: 'inviter', label: `Пригласил: ${applied.value.inviterName}` });
+  }
+  const d = dateChipLabel(applied.value);
+  if (d) out.push({ key: 'date', label: d });
+  return out;
+});
+
+// Поиск в счётчик кнопки «Фильтры» не входит: он живёт своей строкой.
+const filterCount = computed(() => activeChips.value.length - (parseQuery(q.value) ? 1 : 0));
+
+function clearChip(key) {
+  if (key === 'q') q.value = '';
+  else if (key.startsWith('activity:')) {
+    applied.value.activity = applied.value.activity.filter(v => v !== key.slice(9));
+  } else if (key === 'inviter') applied.value.inviterName = null;
+  else if (key === 'date') Object.assign(applied.value, { datePreset: '', from: '', to: '' });
   loadData();
 }
+
+function resetFilters() {
+  q.value = '';
+  applied.value = emptyFilters();
+  loadData();
+}
+
+// ===== Окно фильтров =====
+function openFilters() {
+  draft.value = JSON.parse(JSON.stringify(applied.value));
+  filtersOpen.value = true;
+}
+function toggleActivity(v) {
+  const list = draft.value.activity;
+  const i = list.indexOf(v);
+  if (i >= 0) list.splice(i, 1); else list.push(v);
+}
+function resetDraft() {
+  draft.value = emptyFilters();
+}
+function applyFilters() {
+  applied.value = JSON.parse(JSON.stringify(draft.value));
+  filtersOpen.value = false;
+  page.value = 1;
+  loadData();
+}
+
+// Подсказки пригласивших берём из того же lookup, что и форма партнёра.
+const invFilterQuery = ref('');
+const invFilterItems = ref([]);
+const invFilterLoading = ref(false);
+let invFilterTimer;
+watch(invFilterQuery, val => {
+  clearTimeout(invFilterTimer);
+  const term = String(val ?? '').trim();
+  if (term.length < 2) { invFilterItems.value = []; return; }
+  invFilterTimer = setTimeout(async () => {
+    invFilterLoading.value = true;
+    try {
+      const { data } = await api.get('/admin/partners/lookup', { params: { q: term } });
+      invFilterItems.value = [...new Set((data.items || []).map(i => i.personName).filter(Boolean))];
+    } catch {}
+    invFilterLoading.value = false;
+  }, 300);
+});
 
 // ===== Сегменты (сохранённые фильтры) =====
 const segments = ref([]);
 const selectedSegment = ref(null);
 
 function currentCriteria() {
-  return {
-    search: search.value || '',
-    activity: activityFilter.value ?? null,
-    status: statusFilter.value ?? null,
-    ...filters.value,
-  };
+  return { q: q.value || '', ...applied.value };
 }
 
 async function loadSegments() {
@@ -819,13 +1201,28 @@ function applySegment(id) {
   const seg = segments.value.find(s => s.id === id);
   if (!seg) return;
   const c = seg.criteria || {};
-  search.value = c.search || '';
-  activityFilter.value = c.activity ?? null;
-  statusFilter.value = c.status ?? null;
-  filters.value = {
-    partnerId: c.partnerId || '', inviterName: c.inviterName || '',
-    email: c.email || '', phone: c.phone || '',
+
+  // Сегменты, сохранённые ДО редизайна, лежат в старой форме — семь отдельных
+  // полей вместо одной строки поиска. Читаем обе, иначе всё, что бэкофис
+  // насохранял раньше, перестанет применяться.
+  const legacy = !('q' in c);
+  q.value = legacy
+    ? (c.search || c.partnerId || c.email || c.phone || '')
+    : (c.q || '');
+
+  applied.value = {
+    ...emptyFilters(),
+    activity: legacy
+      ? (c.activity ? [String(c.activity)] : [])
+      : (Array.isArray(c.activity) ? c.activity : []),
+    inviterName: c.inviterName || null,
+    dateMode: c.dateMode || 'quick',
+    datePreset: c.datePreset || '',
+    from: c.from || '',
+    to: c.to || '',
+    monthYear: c.monthYear || new Date().getFullYear(),
   };
+  page.value = 1;
   loadData();
 }
 
@@ -846,26 +1243,24 @@ async function deleteSegment(id) {
 const activityOptions = [
   { title: 'Активен', value: '1' },
   { title: 'Терминирован', value: '3' },
-  { title: 'Зарегистрирован-Партнёр', value: '4' },
+  // Подпись короткая: значение уходит на сервер, а «-Партнёр» — жаргон Directual.
+  { title: 'Зарегистрирован', value: '4' },
   { title: 'Исключён', value: '5' },
 ];
 
 // Column metadata: `always` = never hideable (ФИО / Активность / Действия);
 // `default` = shown out of the box; others are opt-in via the «Колонки» menu.
 const allColumns = [
-  { title: 'ID',               key: 'id',             width: 110, default: true },
-  { title: 'ФИО',              key: 'personName',     always: true },
-  { title: 'Активность',       key: 'activityName',   width: 130, always: true },
+  { title: 'ID',               key: 'id',             width: 92,  default: true },
+  { title: 'Партнёр',          key: 'personName',     always: true },
+  { title: 'Статус',           key: 'activityName',   width: 160, always: true },
   { title: 'Код',              key: 'participantCode', width: 100, default: true },
   { title: 'Пригласивший',     key: 'inviterName',    default: true },
-  { title: 'Клиент',           key: 'isClient',       width: 80, default: true,
-    title2: 'Партнёр является клиентом (есть запись в client с тем же email)' },
-  { title: 'Доступ',           key: 'platformAccess', width: 80, sortable: false },
-  { title: 'Email',            key: 'email' },
-  { title: 'Телефон',          key: 'phone',          width: 140 },
   { title: 'Дата рождения',    key: 'birthDate',      width: 130 },
-  { title: 'Куратор',          key: 'curatorName' },
-  { title: 'Дата регистрации', key: 'createdAt',      width: 140 },
+  // Колонки «Куратор» здесь больше нет: поле curatorName никогда не приходило
+  // с сервера (в PartnerListingService::present его нет), и ячейка была пустой
+  // у всех 1968 партнёров.
+  { title: 'Регистрация',      key: 'createdAt',      width: 130, default: true },
   { title: 'Смена статуса',    key: 'statusChangeDate', width: 140, default: true },
   { title: '',                 key: 'actions',        sortable: false, width: 60, always: true },
 ];
@@ -894,13 +1289,76 @@ const visibleHeaders = computed(() =>
 );
 
 /**
+ * «Потемкин Артем Сергеевич» → «Потемкин А. С.».
+ * Полное ФИО остаётся в подсказке: колонка узкая, и полное имя переносилось
+ * на три строки, растягивая строку таблицы втрое.
+ */
+function shortName(full) {
+  const parts = String(full ?? '').trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return '—';
+  const [last, first, mid] = parts;
+  return [last, first ? `${first[0]}.` : '', mid ? `${mid[0]}.` : ''].filter(Boolean).join(' ');
+}
+
+/** Второй этаж строки — вместо отдельных колонок Email и Телефон. */
+function contactLine(item) {
+  return [item?.email, item?.phone].filter(Boolean).join(' · ');
+}
+
+// Короткие подписи статусов: «Зарегистрирован-Партнёр» — жаргон Directual,
+// он не помещался в ячейку и переносился на две строки.
+const ACTIVITY_LABEL = { 1: 'Активен', 3: 'Терминирован', 4: 'Зарегистрирован', 5: 'Исключён' };
+function activityLabel(item) {
+  return ACTIVITY_LABEL[item?.activityId] || item?.activityName || '—';
+}
+
+// ===== Карточка партнёра =====
+// Открывается по клику на строку. Данные берём из уже загруженной строки
+// списка — отдельного запроса не делаем: всё нужное присутствует в ответе
+// /admin/partners, а лишний round-trip на каждый клик по списку из двух
+// тысяч человек не нужен.
+const cardOpen = ref(false);
+const cardItem = ref(null);
+
+function openCard(item) {
+  cardItem.value = item;
+  cardOpen.value = true;
+}
+function openEditFromCard() {
+  const item = cardItem.value;
+  cardOpen.value = false;
+  openEdit(item);
+}
+function filterByInviter(name) {
+  cardOpen.value = false;
+  applied.value.inviterName = name;
+  page.value = 1;
+  loadData();
+}
+
+const ACTIVITY_COLOR = { 1: 'success', 3: 'warning', 4: 'grey', 5: 'error' };
+const activityColor = item => ACTIVITY_COLOR[item?.activityId] || 'grey';
+const fmtNum = v => Number(v ?? 0).toLocaleString('ru-RU');
+
+/**
  * Per-row accent: left border tinted by activity. Keeps the table
  * scannable even in dense views and works with Vuetify hover.
+ *
+ * Здесь же обработчик клика: DataTableWrapper не пробрасывает @click:row,
+ * а row-props кладёт атрибуты прямо на <tr> — так строка открывает карточку
+ * без правки общего компонента.
  */
 function rowProps({ item }) {
   const activityId = item?.activityId;
   const cls = activityId ? `row-activity-${activityId}` : '';
-  return { class: cls };
+  return {
+    class: `${cls} p-row-clickable`,
+    onClick: (e) => {
+      // Чекбокс выделения и кнопки внутри ячеек карточку открывать не должны.
+      if (e?.target?.closest?.('.v-selection-control, button, a, input')) return;
+      openCard(item);
+    },
+  };
 }
 
 const { debounced: debouncedLoad } = useDebounce(loadData, 400);
@@ -930,13 +1388,24 @@ async function loadData() {
   try {
     const params = { page: page.value, per_page: perPage.value };
     applyParams(params);
-    if (search.value) params.search = search.value;
-    if (activityFilter.value) params.activity = activityFilter.value;
-    if (statusFilter.value) params.status = statusFilter.value;
-    if (filters.value.partnerId) params.partner_id = filters.value.partnerId;
-    if (filters.value.inviterName) params.inviter_name = filters.value.inviterName;
-    if (filters.value.email) params.email = filters.value.email;
-    if (filters.value.phone) params.phone = filters.value.phone;
+
+    // Единая строка раскладывается в тот же серверный фильтр, который раньше
+    // заполняло отдельное поле, — контракт API не менялся.
+    const p = parseQuery(q.value);
+    if (p) {
+      if (p.kind === 'id') params.partner_id = p.value;
+      else if (p.kind === 'email') params.email = p.value;
+      else if (p.kind === 'phone') params.phone = p.value;
+      else if (p.kind === 'code') params.code = p.value;
+      else params.search = p.value;
+    }
+
+    const f = applied.value;
+    if (f.activity.length) params.activity = f.activity.join(',');
+    if (f.inviterName) params.inviter_name = f.inviterName;
+    if (f.from) params.registered_from = f.from;
+    if (f.to) params.registered_to = f.to;
+
     const { data } = await api.get('/admin/partners', { params });
     items.value = data.data;
     total.value = data.total;
@@ -1594,10 +2063,121 @@ onMounted(() => { loadData(); loadSegments(); });
 <style scoped>
 /* Row accent: a 3px left border tinted by activity. Keeps wide tables
    scannable without adding a whole colored cell. */
+/* Цвета акцента и точки статуса — один словарь, иначе строка и её статус
+   спорят друг с другом: раньше терминированный был красным в акценте и
+   синим в чипе. */
 .partners-table :deep(tr.row-activity-1 > td:first-child) { box-shadow: inset 3px 0 0 rgb(var(--v-theme-success)); }
-.partners-table :deep(tr.row-activity-3 > td:first-child) { box-shadow: inset 3px 0 0 rgb(var(--v-theme-error)); }
-.partners-table :deep(tr.row-activity-4 > td:first-child) { box-shadow: inset 3px 0 0 rgb(var(--v-theme-info)); }
+.partners-table :deep(tr.row-activity-3 > td:first-child) { box-shadow: inset 3px 0 0 rgb(var(--v-theme-warning)); }
+.partners-table :deep(tr.row-activity-4 > td:first-child) { box-shadow: inset 3px 0 0 rgb(var(--v-theme-outline)); }
 .partners-table :deep(tr.row-activity-5 > td:first-child) { box-shadow: inset 3px 0 0 rgb(var(--v-theme-error)); }
+
+/* ============ Плотная строка списка ============
+   До правки на экран влезало четыре партнёра из двух тысяч: имя ломалось на
+   три этажа, чип активности — на два. Теперь имя одной строкой, контакт под
+   ним, а колонки Email/Телефон/Клиент/Доступ убраны за ненадобностью. */
+.partners-table :deep(td) { padding-top: 6px; padding-bottom: 6px; }
+
+.p-name__row { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.p-name__text { font-weight: 600; }
+.p-name__contact {
+  font-size: 0.75rem;
+  line-height: 1.25;
+  color: var(--ds-on-surface-muted);
+  white-space: nowrap;
+  margin-top: 1px;
+}
+
+/* Копирование ID не мозолит глаза: появляется по наведению на строку. */
+.p-id { display: flex; align-items: center; gap: 2px; white-space: nowrap; }
+.p-id__copy { opacity: 0; transition: opacity 0.12s; }
+.partners-table :deep(tr:hover) .p-id__copy,
+.p-id__copy:focus-visible { opacity: 1; }
+
+.p-row-clickable { cursor: pointer; }
+
+/* ============ Карточка партнёра (шторка) ============
+   Справа во всю высоту: список остаётся виден, людей можно просматривать
+   подряд. Модальное окно на весь экран этого не давало. */
+:global(.p-card) {
+  width: 448px;
+  max-width: 96vw;
+  height: 100%;
+}
+.p-card__inner { height: 100%; }
+.p-card__head {
+  padding: 16px 18px 14px;
+  border-bottom: 1px solid var(--ds-outline-variant);
+}
+.p-card__name { font-size: 1rem; font-weight: 700; line-height: 1.3; }
+.p-card__body { padding: 16px 18px 26px; overflow: auto; flex: 1 1 auto; }
+
+.p-card__stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.p-card__stat {
+  background: var(--ds-surface-container-low);
+  border: 1px solid var(--ds-outline-variant);
+  border-radius: 11px;
+  padding: 10px 12px;
+}
+.p-card__stat-l {
+  font-size: 0.63rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ds-on-surface-muted);
+}
+.p-card__stat-v {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin-top: 3px;
+  font-variant-numeric: tabular-nums;
+}
+
+.p-card__sec {
+  margin: 22px 0 4px;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ds-on-surface-muted);
+  font-weight: 700;
+}
+.p-card__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px;
+  margin: 0 -8px;
+  border-radius: 9px;
+  font-size: 0.82rem;
+}
+.p-card__row:hover { background: var(--ds-surface-container-low); }
+.p-card__row--link { cursor: pointer; }
+.p-card__k { color: var(--ds-on-surface-muted); flex: 0 0 118px; }
+.p-card__v { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.p-card__act { opacity: 0; transition: opacity 0.12s; }
+.p-card__row:hover .p-card__act { opacity: 1; }
+
+/* Подпись «ищу по: телефон» прямо в строке поиска: одно поле на пять типов
+   ввода, и человек должен видеть, как его поняли. */
+.p-qhint {
+  font-size: 0.7rem;
+  white-space: nowrap;
+  color: rgb(var(--v-theme-secondary));
+  align-self: center;
+}
+
+/* Статус: цветная точка + слово. Читается периферийным зрением при
+   прокрутке — именно так бэкофис и просматривает список. */
+.p-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+  font-size: 0.82rem;
+}
+.p-status__dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: 0 0 auto; }
+.p-status--1 { color: rgb(var(--v-theme-success)); }
+.p-status--3 { color: rgb(var(--v-theme-warning)); }
+.p-status--4 { color: var(--ds-on-surface-variant); }
+.p-status--5 { color: rgb(var(--v-theme-error)); }
 
 /* ============ Карточка партнёра ============
    Цвета берём из ds-токенов (resources/js/styles/ds-tokens.css) — они уже

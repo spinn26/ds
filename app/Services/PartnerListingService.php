@@ -30,6 +30,7 @@ class PartnerListingService
      */
     public const FILTERS = [
         'search', 'activity', 'active', 'partner_id', 'inviter_name', 'email', 'phone',
+        'registered_from', 'registered_to', 'code',
     ];
 
     /**
@@ -53,7 +54,23 @@ class PartnerListingService
             $query->where('personName', 'ilike', '%' . $filters['search'] . '%');
         }
         if (isset($filters['activity'])) {
-            $query->where('activity', $filters['activity']);
+            // Список активностей приходит через запятую: в окне фильтров их
+            // выбирают несколько («терминированные и исключённые» — обычный
+            // запрос бэкофиса). Одно значение продолжает работать как раньше.
+            // Значения остаются СТРОКАМИ: так их сравнивал прежний where(),
+            // и приведение к int поменяло бы тип сравнения в Postgres.
+            $ids = array_values(array_filter(
+                array_map('trim', explode(',', (string) $filters['activity'])),
+                static fn ($v) => $v !== ''
+            ));
+            if (count($ids) > 1) {
+                $query->whereIn('activity', $ids);
+            } else {
+                $query->where('activity', $filters['activity']);
+            }
+        }
+        if (isset($filters['code'])) {
+            $query->where('participantCode', 'ilike', '%' . $filters['code'] . '%');
         }
         if (isset($filters['active'])) {
             // ⚠ Сравнение со СТРОКОЙ 'true', а не булево приведение: фронт шлёт
@@ -77,6 +94,15 @@ class PartnerListingService
                     $sub->select('id')->from('WebUser')->where('email', 'ilike', $emailLike);
                 })->orWhere('email', 'ilike', $emailLike);
             });
+        }
+        // Диапазон регистрации. `dateCreated` — timestamp, поэтому сравниваем
+        // по дате: иначе фильтр «по 30.08» терял всех, кто зарегистрировался
+        // в этот день позже полуночи.
+        if (isset($filters['registered_from'])) {
+            $query->whereDate('dateCreated', '>=', $filters['registered_from']);
+        }
+        if (isset($filters['registered_to'])) {
+            $query->whereDate('dateCreated', '<=', $filters['registered_to']);
         }
         if (isset($filters['phone'])) {
             $phoneLike = '%' . preg_replace('/\D/', '', (string) $filters['phone']) . '%';
@@ -163,6 +189,11 @@ class PartnerListingService
                 'inviterId' => $c->inviter,
                 'isClient' => isset($partnerClients[$c->id]),
                 'platformAccess' => $webUser && ! ($webUser->isBlocked ?? false),
+                // ⚠ Не то же самое, что !platformAccess. Тот false и у 897
+                // партнёров БЕЗ логина — «доступа нет, потому что и входить
+                // некому». Список рисует замок только на реально закрытых,
+                // иначе иконка блокировки висела бы на каждом импортированном.
+                'isBlocked' => (bool) ($webUser && ($webUser->isBlocked ?? false)),
             ];
         });
     }
