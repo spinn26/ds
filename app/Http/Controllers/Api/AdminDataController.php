@@ -713,7 +713,7 @@ class AdminDataController extends Controller
             // dateDeterministicPlan фронт не присылал вовсе (такой колонки в
             // таблице нет), и сортировка по «Будет терминирован» молча
             // сваливалась на сортировку по ФИО.
-            'willTerminate'         => \App\Support\TerminationDeadline::SQL,
+            'willTerminate'         => \App\Support\TerminationDeadline::sql(),
             'dateDeterministic'     => '"dateDeterministic"',
             'personalVolume'        => '"personalVolume"',
         ], '"personName"', 'asc');

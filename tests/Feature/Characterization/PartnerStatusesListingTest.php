@@ -68,8 +68,9 @@ class PartnerStatusesListingTest extends TestCase
     }
 
     /**
-     * Плановая и фактическая терминация — разные вещи. Плановая считается
-     * (yearPeriodEnd активного), фактическая лежит колонкой dateDeterministic.
+     * Плановая и фактическая терминация — разные вещи. Плановая вычисляется
+     * (годовой период у активного, окно активации у зарегистрированного),
+     * фактическая лежит колонкой dateDeterministic.
      *
      * ⚠ Раньше здесь ожидался REGISTERED: фильтр ходил в
      * consultant.dateDeterministicPlan, и сетка закрепляла ровно тот баг, на
@@ -99,6 +100,20 @@ class PartnerStatusesListingTest extends TestCase
     }
 
     /**
+     * У «Зарегистрирован» свой срок, ведущий к терминации, — окно набора ЛП
+     * (activationDeadline). Он тоже участвует и в колонке, и в фильтре: та же
+     * пара сроков, по которой предупреждает partners:notify-termination-soon.
+     */
+    #[Test]
+    public function registered_partners_are_filtered_by_their_activation_window(): void
+    {
+        $this->assertOnly('plan_from=2026-09-01&plan_to=2026-09-30', [self::REGISTERED]);
+
+        $rows = collect($this->list('')->json('data'))->keyBy('id');
+        $this->assertSame('2026-09-15', $rows[self::REGISTERED]['willTerminate']);
+    }
+
+    /**
      * Legacy-колонка dateDeterministicPlan (окно активации из самоактивации)
      * в фильтре больше не участвует: у активного она стоит на 2027-01-01, и
      * запрос по январю не должен возвращать никого.
@@ -118,14 +133,17 @@ class PartnerStatusesListingTest extends TestCase
     #[Test]
     public function rows_sort_by_the_computed_deadline(): void
     {
-        foreach (['asc', 'desc'] as $dir) {
-            $ids = array_column(
-                $this->list("sort_by=willTerminate&sort_dir={$dir}")->json('data'), 'id'
-            );
-            // У зарегистрированного дедлайна нет → NULLS LAST уводит его в конец
-            // при любом направлении.
-            $this->assertSame([self::ACTIVE, self::REGISTERED], $ids, "направление {$dir}");
-        }
+        // Сентябрь у зарегистрированного, ноябрь у активного — порядок
+        // обратен алфавитному, поэтому молчаливый откат на сортировку по ФИО
+        // тест бы не прошёл.
+        $this->assertSame(
+            [self::REGISTERED, self::ACTIVE],
+            array_column($this->list('sort_by=willTerminate&sort_dir=asc')->json('data'), 'id'),
+        );
+        $this->assertSame(
+            [self::ACTIVE, self::REGISTERED],
+            array_column($this->list('sort_by=willTerminate&sort_dir=desc')->json('data'), 'id'),
+        );
     }
 
     /**
@@ -148,7 +166,7 @@ class PartnerStatusesListingTest extends TestCase
         $this->assertSame('login@status.local', $rows[self::ACTIVE]['email'], 'почта из WebUser');
         $this->assertSame('own@status.local', $rows[self::REGISTERED]['email'], 'без логина — своя колонка');
         $this->assertSame('2026-11-20', $rows[self::ACTIVE]['willTerminate'], 'активному — конец годового периода');
-        $this->assertNull($rows[self::REGISTERED]['willTerminate'], 'зарегистрированному прогноза нет');
+        $this->assertSame('2026-09-15', $rows[self::REGISTERED]['willTerminate'], 'зарегистрированному — окно активации');
     }
 
     // ================================================================
@@ -212,6 +230,10 @@ class PartnerStatusesListingTest extends TestCase
             'activity' => 4,
             'email' => 'own@status.local',
             'dateCreated' => '2026-05-20 00:00:00',
+            // Окно набора ЛП — его и показывает «Будет терминирован» у
+            // зарегистрированного. Ставим явно, чтобы тест не зависел от
+            // настройки activation.window_days.
+            'activationDeadline' => '2026-09-15 00:00:00',
             'dateDeterministicPlan' => '2026-10-05 00:00:00',
         ]);
     }

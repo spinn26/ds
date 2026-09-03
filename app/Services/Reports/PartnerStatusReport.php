@@ -37,6 +37,9 @@ class PartnerStatusReport extends AbstractReportType
             ? DB::table('WebUser')->whereIn('id', $webIds)->pluck('email', 'id')
             : collect();
 
+        // Окно активации — настройка; резолвим один раз на отчёт.
+        $activationDays = \App\Enums\PartnerActivity::activationDays();
+
         return $rows->map(fn ($c) => [
             $c->personName,
             (($c->webUser ? ($emailByWeb[$c->webUser] ?? null) : null)
@@ -48,7 +51,12 @@ class PartnerStatusReport extends AbstractReportType
             // колонка dateDeterministicPlan — это окно активации из
             // самоактивации, а не годовой дедлайн, и отчёт расходился с UI.
             TerminationDeadline::resolve(
-                $c->activity, $c->yearPeriodEnd ?? null, $c->dateActivity
+                activity: $c->activity,
+                yearPeriodEnd: $c->yearPeriodEnd ?? null,
+                dateActivity: $c->dateActivity,
+                activationDeadline: $c->activationDeadline ?? null,
+                dateCreated: $c->dateCreated,
+                activationDays: $activationDays,
             ) ?: '',
         ])->all();
     }

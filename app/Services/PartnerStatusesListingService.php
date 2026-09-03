@@ -102,10 +102,10 @@ class PartnerStatusesListingService
         // dateDeterministicPlan (окно активации из самоактивации), и выбор
         // «ноябрь 2026» возвращал строки с июнем 2027 в колонке.
         if (isset($filters['plan_from'])) {
-            $query->whereRaw(TerminationDeadline::SQL . ' >= ?', [$filters['plan_from']]);
+            $query->whereRaw(TerminationDeadline::sql() . ' >= ?', [$filters['plan_from']]);
         }
         if (isset($filters['plan_to'])) {
-            $query->whereRaw(TerminationDeadline::SQL . ' <= ?', [$filters['plan_to'] . ' 23:59:59']);
+            $query->whereRaw(TerminationDeadline::sql() . ' <= ?', [$filters['plan_to'] . ' 23:59:59']);
         }
 
         return $query;
@@ -132,16 +132,26 @@ class PartnerStatusesListingService
 
         $lpFromActivation = $this->lpFromActivation($rows->pluck('id')->filter()->unique()->values());
         $reinstateLimit = PartnerActivity::selfReinstateLimit();
+        // Окно активации — настройка; резолвим один раз на страницу, а не на
+        // каждой строке (нужно фоллбэку дедлайна у «Зарегистрирован»).
+        $activationDays = PartnerActivity::activationDays();
 
-        return $rows->map(function ($c) use ($activityNames, $lpFromActivation, $emailByWebUser, $reinstateLimit) {
+        return $rows->map(function ($c) use ($activityNames, $lpFromActivation, $emailByWebUser, $reinstateLimit, $activationDays) {
             $activityName = $c->activity ? ($activityNames[$c->activity] ?? '—') : '—';
 
             // Прогноз терминации — общее определение с фильтром и сортировкой
             // (App\Support\TerminationDeadline). Раньше считался прямо здесь
             // как dateActivity + 1 год: у партнёра со второго года это давало
-            // дату в прошлом, потому что годовой период двигает yearPeriodEnd.
+            // дату в прошлом, потому что годовой период двигает yearPeriodEnd,
+            // а у «Зарегистрирован» прогноза не было вовсе, хотя окно набора
+            // ЛП — такой же срок, ведущий к терминации.
             $willTerminate = TerminationDeadline::resolve(
-                $c->activity, $c->yearPeriodEnd ?? null, $c->dateActivity
+                activity: $c->activity,
+                yearPeriodEnd: $c->yearPeriodEnd ?? null,
+                dateActivity: $c->dateActivity,
+                activationDeadline: $c->activationDeadline ?? null,
+                dateCreated: $c->dateCreated,
+                activationDays: $activationDays,
             );
 
             return [
