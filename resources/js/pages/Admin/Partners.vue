@@ -1,12 +1,10 @@
 <template>
   <div>
-    <PageHeader title="Партнёры" icon="mdi-account-search" :count="total">
-      <template #actions>
-        <v-btn v-if="canEdit('partners')" color="success" prepend-icon="mdi-plus" @click="openAddPartner">
-          Добавить партнёра
-        </v-btn>
-      </template>
-    </PageHeader>
+    <!-- Крупной зелёной кнопки в шапке больше нет: по макету шапка — это имя
+         раздела и счётчик, а не место для призыва к действию. Добавление
+         партнёра осталось доступным — оно переехало в панель управления
+         списком, спокойной кнопкой рядом с фильтрами. -->
+    <PageHeader title="Партнёры" icon="mdi-account-search" :count="total" />
 
     <!-- Одна строка поиска вместо семи полей. Раньше семь инпутов стояли в ряд
          с подсказкой вместо подписи: подсказка исчезает при вводе, и через
@@ -17,10 +15,11 @@
         <v-text-field v-model="q" placeholder="Имя, ID, email, телефон или код…"
           density="compact" variant="outlined" hide-details clearable
           prepend-inner-icon="mdi-magnify"
-          style="max-width: 430px; flex: 1 1 280px"
+          class="p-search" style="max-width: 430px; flex: 1 1 280px"
           @update:model-value="debouncedLoad">
-          <template v-if="qKindLabel" #append-inner>
-            <span class="p-qhint">ищу по: {{ qKindLabel }}</span>
+          <template #append-inner>
+            <span v-if="qKindLabel" class="p-qhint">ищу по: {{ qKindLabel }}</span>
+            <kbd v-else class="p-kbd" title="Нажмите «/», чтобы встать в поиск">/</kbd>
           </template>
         </v-text-field>
 
@@ -61,13 +60,19 @@
           :headers="toggleableColumns"
           v-model:visible="columnVisible"
           storage-key="partners-cols" />
+
+        <v-spacer />
+
+        <v-btn v-if="canEdit('partners')" variant="outlined" prepend-icon="mdi-plus"
+          @click="openAddPartner">Добавить партнёра</v-btn>
       </div>
 
-      <!-- «Найдено N» и активные фильтры чипами: раньше число в шапке при
+      <!-- «Найдено N из M» и активные фильтры чипами: раньше число в шапке при
            включённом фильтре не отвечало, сколько именно нашлось. -->
       <div class="d-flex align-center flex-wrap ga-2 mt-3">
         <span class="text-caption text-medium-emphasis">
           Найдено <strong class="text-high-emphasis">{{ total }}</strong>
+          <template v-if="grandTotal && total !== grandTotal"> из {{ grandTotal }}</template>
         </span>
         <v-chip v-for="c in activeChips" :key="c.key" size="small" variant="tonal"
           closable @click:close="clearChip(c.key)">{{ c.label }}</v-chip>
@@ -86,30 +91,33 @@
       :max-width="660"
       @confirm="applyFilters"
     >
-      <div class="pf-sec">
-        <div class="pf-sec__head"><span class="pf-sec__title">Активность</span></div>
-        <div class="d-flex flex-wrap ga-2 pb-2">
+      <section class="p-fsec">
+        <h4 class="p-fsec__title">Активность</h4>
+        <div class="d-flex flex-wrap ga-2">
           <v-chip v-for="o in activityOptions" :key="o.value"
             :variant="draft.activity.includes(o.value) ? 'flat' : 'outlined'"
             :color="draft.activity.includes(o.value) ? 'primary' : undefined"
             size="small" @click="toggleActivity(o.value)">
             <i class="p-status__dot mr-2" :class="`p-status--${o.value}`" />
             {{ o.title }}
+            <span v-if="activityCounts[o.value] != null" class="p-fsec__cnt">
+              {{ activityCounts[o.value] }}
+            </span>
           </v-chip>
         </div>
-      </div>
+      </section>
 
-      <div class="pf-sec">
-        <div class="pf-sec__head"><span class="pf-sec__title">Пригласивший</span></div>
+      <section class="p-fsec">
+        <h4 class="p-fsec__title">Пригласивший</h4>
         <v-autocomplete v-model="draft.inviterName" :items="invFilterItems"
           :loading="invFilterLoading" v-model:search="invFilterQuery"
           placeholder="Начните вводить фамилию…" variant="outlined" density="compact"
-          hide-details clearable no-filter hide-no-data
-          class="mb-3" />
-      </div>
+          hide-details clearable no-filter hide-no-data />
+        <p class="p-fsec__hint">Ищет по вхождению — можно ввести только фамилию.</p>
+      </section>
 
-      <div class="pf-sec">
-        <div class="pf-sec__head"><span class="pf-sec__title">Дата регистрации</span></div>
+      <section class="p-fsec">
+        <h4 class="p-fsec__title">Дата регистрации</h4>
         <v-btn-toggle v-model="draft.dateMode" mandatory density="compact"
           variant="outlined" divided class="mb-4">
           <v-btn value="quick" size="small">Быстро</v-btn>
@@ -159,17 +167,31 @@
             @update:model-value="draft.datePreset = ''" />
         </div>
 
-        <p class="pf-hint mt-3 mb-1">
-          <v-icon size="14" icon="mdi-information-outline" />
-          {{ dateSummary }}
+        <p class="p-fsec__hint">{{ dateSummary }}</p>
+      </section>
+
+      <section class="p-fsec">
+        <h4 class="p-fsec__title">Признаки</h4>
+        <v-checkbox v-model="draft.onlyClient" density="compact" hide-details
+          color="primary" label="Только клиенты" />
+        <v-checkbox v-model="draft.onlyBlocked" density="compact" hide-details
+          color="primary" label="Только заблокированные" />
+        <p class="p-fsec__hint">
+          Заблокированные — те, у кого закрыт вход в кабинет. Партнёры без логина
+          сюда не попадают: закрывать у них нечего.
         </p>
-      </div>
+      </section>
 
       <template #actions>
         <v-btn variant="text" @click="resetDraft">Сбросить всё</v-btn>
         <v-spacer />
         <v-btn variant="text" @click="filtersOpen = false">Отмена</v-btn>
-        <v-btn color="primary" variant="flat" @click="applyFilters">Применить</v-btn>
+        <!-- «Показать N» считается на сервере по черновику: видно, сколько
+             останется, ещё до применения — и не бывает «нажал, а пусто». -->
+        <v-btn color="primary" variant="flat" :loading="previewLoading"
+          @click="applyFilters">
+          Показать<span v-if="previewCount !== null" class="ml-1">{{ previewCount }}</span>
+        </v-btn>
       </template>
     </DialogShell>
 
@@ -206,7 +228,29 @@
           </div>
         </div>
 
-        <div class="p-card__body">
+        <!-- Вкладки ведут в существующие разделы, а не в заглушки: карточка
+             должна быть входом в них, а не их копией. -->
+        <v-tabs v-model="cardTab" density="compact" class="p-card__tabs">
+          <v-tab value="main">Обзор</v-tab>
+          <v-tab value="log">История</v-tab>
+        </v-tabs>
+
+        <div v-if="cardTab === 'log'" class="p-card__body">
+          <div v-if="cardEvents.length" class="p-tl">
+            <div v-for="(e, i) in cardEvents" :key="i" class="p-tl__row">
+              <i class="p-tl__dot" :style="{ background: e.color }" />
+              <time>{{ e.date }}</time>
+              <span>{{ e.text }}</span>
+            </div>
+          </div>
+          <p v-else class="p-fsec__hint">Событий по этому партнёру не записано.</p>
+          <p class="p-fsec__hint">
+            Хронология собрана из полей карточки. Полный журнал правок — в форме
+            редактирования, вкладка «История».
+          </p>
+        </div>
+
+        <div v-else class="p-card__body">
           <div class="p-card__stats">
             <div class="p-card__stat">
               <div class="p-card__stat-l">Личный объём</div>
@@ -338,7 +382,7 @@
       server-side
       empty-icon="mdi-account-search-outline"
       empty-message="Партнёры не найдены"
-      class="partners-table"
+      :class="['partners-table', columnVisible.id ? 'p-sticky-id' : 'p-sticky-noid']"
       @update:options="onOptions"
     >
       <template #item.id="{ item }">
@@ -387,26 +431,33 @@
       <template #item.createdAt="{ value }">{{ fmtDate(value) }}</template>
       <!-- .stop обязателен: строка целиком кликабельна и открывает карточку,
            без этого кнопки в ячейке открывали бы её заодно. -->
+      <!-- Одно меню вместо трёх иконок. Три кнопки в узкой колонке вставали
+           столбиком и растягивали строку втрое, а в списке на 1968 строк
+           тройная иконка в каждой строке — просто рябь. -->
       <template #item.actions="{ item }">
-        <!-- Обязательно в одну строку: в колонке 60px три кнопки вставали
-             столбиком и растягивали строку до 90px — выше, чем до редизайна.
-             Появляются по наведению, чтобы не рябить в списке из 1968 строк. -->
-        <div class="p-actions">
-          <span @click.stop>
-            <StartChatButton :partner-id="item.id" :partner-name="item.personName" silent />
-          </span>
-          <v-tooltip text="Редактировать" location="top">
-            <template #activator="{ props: tipProps }">
-              <v-btn v-bind="tipProps" icon="mdi-pencil" size="x-small" variant="text"
-                @click.stop="openEdit(item)" />
+        <div class="p-actions" @click.stop>
+          <!-- Чат оставлен снаружи: им пользуются чаще всего, прятать его в
+               меню — лишний клик на каждое обращение. Остальное под «⋯». -->
+          <StartChatButton :partner-id="item.id" :partner-name="item.personName" silent />
+          <v-menu location="bottom end">
+            <template #activator="{ props: menuProps }">
+              <v-btn v-bind="menuProps" icon="mdi-dots-horizontal" size="x-small"
+                variant="text" aria-label="Действия" />
             </template>
-          </v-tooltip>
-          <v-tooltip v-if="canEdit('partners')" text="Удалить" location="top">
-            <template #activator="{ props: tipProps }">
-              <v-btn v-bind="tipProps" icon="mdi-delete" size="x-small" variant="text" color="error"
-                @click.stop="confirmDeletePartner(item)" />
-            </template>
-          </v-tooltip>
+            <v-list density="compact" min-width="212">
+              <v-list-item prepend-icon="mdi-account-outline" title="Открыть карточку"
+                @click="openCard(item)" />
+              <v-list-item prepend-icon="mdi-pencil" title="Редактировать"
+                @click="openEdit(item)" />
+              <v-list-item prepend-icon="mdi-content-copy" title="Скопировать ID"
+                @click="copyToClipboard(item.id)" />
+              <template v-if="canEdit('partners')">
+                <v-divider class="my-1" />
+                <v-list-item prepend-icon="mdi-delete" title="Удалить" base-color="error"
+                  @click="confirmDeletePartner(item)" />
+              </template>
+            </v-list>
+          </v-menu>
         </div>
       </template>
     </DataTableWrapper>
@@ -907,7 +958,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
 import { useTableSort } from '../../composables/useTableSort';
@@ -1013,6 +1064,8 @@ function emptyFilters() {
     from: '',
     to: '',
     monthYear: new Date().getFullYear(),
+    onlyClient: false,
+    onlyBlocked: false,
   };
 }
 
@@ -1041,6 +1094,35 @@ const qKindLabel = computed(() => {
   const p = parseQuery(q.value);
   return p ? QUERY_KINDS[p.kind] : '';
 });
+
+/**
+ * Фильтры → параметры запроса. Одна функция и на список, и на предпросмотр
+ * «Показать N»: иначе счётчик в окне и выдача в таблице разъезжаются.
+ */
+function filterParams(f, query) {
+  const params = {};
+  const p = parseQuery(query);
+  if (p) {
+    if (p.kind === 'id') params.partner_id = p.value;
+    else if (p.kind === 'email') params.email = p.value;
+    else if (p.kind === 'phone') params.phone = p.value;
+    else if (p.kind === 'code') params.code = p.value;
+    else params.search = p.value;
+  }
+  if (f.activity.length) params.activity = f.activity.join(',');
+  if (f.inviterName) params.inviter_name = f.inviterName;
+  if (f.from) params.registered_from = f.from;
+  if (f.to) params.registered_to = f.to;
+  if (f.onlyClient) params.is_client = 1;
+  if (f.onlyBlocked) params.is_blocked = 1;
+  return params;
+}
+
+/** Сколько строк даст такой набор фильтров. Берём total, страницу не тянем. */
+async function countWith(params) {
+  const { data } = await api.get('/admin/partners', { params: { ...params, page: 1, per_page: 1 } });
+  return data.total;
+}
 
 // Bulk selection
 const selected = ref([]);
@@ -1130,6 +1212,8 @@ const activeChips = computed(() => {
   }
   const d = dateChipLabel(applied.value);
   if (d) out.push({ key: 'date', label: d });
+  if (applied.value.onlyClient) out.push({ key: 'client', label: 'Только клиенты' });
+  if (applied.value.onlyBlocked) out.push({ key: 'blocked', label: 'Только заблокированные' });
   return out;
 });
 
@@ -1142,6 +1226,8 @@ function clearChip(key) {
     applied.value.activity = applied.value.activity.filter(v => v !== key.slice(9));
   } else if (key === 'inviter') applied.value.inviterName = null;
   else if (key === 'date') Object.assign(applied.value, { datePreset: '', from: '', to: '' });
+  else if (key === 'client') applied.value.onlyClient = false;
+  else if (key === 'blocked') applied.value.onlyBlocked = false;
   loadData();
 }
 
@@ -1152,9 +1238,36 @@ function resetFilters() {
 }
 
 // ===== Окно фильтров =====
+// Счётчики у активностей и «Показать N» считает сервер: локально их взять
+// неоткуда — на странице лежит 25 строк из 1968.
+const activityCounts = ref({});
+const previewCount = ref(null);
+const previewLoading = ref(false);
+const grandTotal = ref(0);
+let previewTimer;
+
+async function loadActivityCounts() {
+  const pairs = await Promise.all(activityOptions.map(async o => {
+    try { return [o.value, await countWith({ activity: o.value })]; } catch { return [o.value, null]; }
+  }));
+  activityCounts.value = Object.fromEntries(pairs);
+}
+
+watch([draft, q], () => {
+  if (!filtersOpen.value) return;
+  clearTimeout(previewTimer);
+  previewLoading.value = true;
+  previewTimer = setTimeout(async () => {
+    try { previewCount.value = await countWith(filterParams(draft.value, q.value)); } catch {}
+    previewLoading.value = false;
+  }, 350);
+}, { deep: true });
+
 function openFilters() {
   draft.value = JSON.parse(JSON.stringify(applied.value));
   filtersOpen.value = true;
+  previewCount.value = total.value;
+  if (!Object.keys(activityCounts.value).length) loadActivityCounts();
 }
 function toggleActivity(v) {
   const list = draft.value.activity;
@@ -1226,6 +1339,8 @@ function applySegment(id) {
     from: c.from || '',
     to: c.to || '',
     monthYear: c.monthYear || new Date().getFullYear(),
+    onlyClient: !!c.onlyClient,
+    onlyBlocked: !!c.onlyBlocked,
   };
   page.value = 1;
   loadData();
@@ -1269,9 +1384,7 @@ const allColumns = [
   // у всех 1968 партнёров.
   { title: 'Регистрация',      key: 'createdAt',      width: 130, default: true },
   { title: 'Смена статуса',    key: 'statusChangeDate', width: 140, default: true },
-  // 120px, а не 60: три кнопки обязаны поместиться в один ряд, иначе строка
-  // растягивается втрое и вся плотность списка теряется.
-  { title: '',                 key: 'actions',        sortable: false, width: 120, always: true },
+  { title: '',                 key: 'actions',        sortable: false, width: 92, always: true },
 ];
 
 // Which columns show in the menu (everything except always-on).
@@ -1328,11 +1441,39 @@ function activityLabel(item) {
 // тысяч человек не нужен.
 const cardOpen = ref(false);
 const cardItem = ref(null);
+const cardTab = ref('main');
 
 function openCard(item) {
   cardItem.value = item;
+  cardTab.value = 'main';
   cardOpen.value = true;
 }
+
+// Хронология выводится из полей самой строки: отдельного журнала событий в
+// списке нет, а запрос за ним на каждый клик по списку из 1968 человек не
+// оправдан. Полный журнал живёт в форме редактирования.
+const cardEvents = computed(() => {
+  const i = cardItem.value;
+  if (!i) return [];
+  const out = [];
+  if (i.createdAt) {
+    out.push({ date: fmtDate(i.createdAt), text: 'Зарегистрирован в системе', color: 'var(--ds-on-surface-muted)' });
+  }
+  if (i.activityId && i.activityId !== 4) {
+    out.push({ date: '', text: `Текущая активность: ${activityLabel(i)}`, color: `var(--ds-${ACTIVITY_TOKEN[i.activityId] || 'on-surface-muted'})` });
+  }
+  if (i.terminationCount) {
+    out.push({ date: '', text: `Терминаций всего: ${i.terminationCount}`, color: 'var(--ds-warning)' });
+  }
+  if (i.statusChangeDate) {
+    out.push({ date: fmtDate(i.statusChangeDate), text: 'Ближайшая смена статуса', color: 'var(--ds-tertiary)' });
+  }
+  if (i.isBlocked) {
+    out.push({ date: '', text: 'Вход в кабинет закрыт', color: 'var(--ds-error)' });
+  }
+  return out;
+});
+const ACTIVITY_TOKEN = { 1: 'success', 3: 'warning', 4: 'on-surface-muted', 5: 'error' };
 function openEditFromCard() {
   const item = cardItem.value;
   cardOpen.value = false;
@@ -1395,25 +1536,14 @@ function isStatusChangeSoon(item) {
 async function loadData() {
   loading.value = true;
   try {
-    const params = { page: page.value, per_page: perPage.value };
-    applyParams(params);
-
     // Единая строка раскладывается в тот же серверный фильтр, который раньше
     // заполняло отдельное поле, — контракт API не менялся.
-    const p = parseQuery(q.value);
-    if (p) {
-      if (p.kind === 'id') params.partner_id = p.value;
-      else if (p.kind === 'email') params.email = p.value;
-      else if (p.kind === 'phone') params.phone = p.value;
-      else if (p.kind === 'code') params.code = p.value;
-      else params.search = p.value;
-    }
-
-    const f = applied.value;
-    if (f.activity.length) params.activity = f.activity.join(',');
-    if (f.inviterName) params.inviter_name = f.inviterName;
-    if (f.from) params.registered_from = f.from;
-    if (f.to) params.registered_to = f.to;
+    const params = {
+      page: page.value,
+      per_page: perPage.value,
+      ...filterParams(applied.value, q.value),
+    };
+    applyParams(params);
 
     const { data } = await api.get('/admin/partners', { params });
     items.value = data.data;
@@ -2066,7 +2196,24 @@ async function changeStatus(action) {
   }
 }
 
-onMounted(() => { loadData(); loadSegments(); });
+// «/» из любого места ставит курсор в поиск — как в макете. Внутри полей и
+// редакторов клавиша работает как обычный символ.
+function focusSearch(e) {
+  if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
+  const t = e.target;
+  if (t && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName))) return;
+  e.preventDefault();
+  document.querySelector('.p-search input')?.focus();
+}
+onMounted(() => window.addEventListener('keydown', focusSearch));
+onBeforeUnmount(() => window.removeEventListener('keydown', focusSearch));
+
+onMounted(() => {
+  loadData();
+  loadSegments();
+  // Знаменатель для «Найдено N из M» — общее число партнёров без фильтров.
+  countWith({}).then(n => { grandTotal.value = n; }).catch(() => {});
+});
 </script>
 
 <style scoped>
@@ -2079,6 +2226,62 @@ onMounted(() => { loadData(); loadSegments(); });
 .partners-table :deep(tr.row-activity-3 > td:first-child) { box-shadow: inset 3px 0 0 rgb(var(--v-theme-warning)); }
 .partners-table :deep(tr.row-activity-4 > td:first-child) { box-shadow: inset 3px 0 0 rgb(var(--v-theme-outline)); }
 .partners-table :deep(tr.row-activity-5 > td:first-child) { box-shadow: inset 3px 0 0 rgb(var(--v-theme-error)); }
+
+/* ============ Одежда таблицы ============
+   Заголовки — мелкие прописные с разрядкой, строки разделены тонкой линией,
+   а не заливкой: на списке в две тысячи строк любая тяжёлая графика мешает
+   читать. Цвета берём токенами, поэтому светлая тема получает то же самое. */
+.partners-table :deep(thead th) {
+  font-size: 0.66rem !important;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ds-on-surface-muted) !important;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--ds-outline-variant) !important;
+}
+.partners-table :deep(tbody td) { border-bottom: 1px solid var(--ds-outline-soft) !important; }
+.partners-table :deep(tbody tr:last-child td) { border-bottom: 0 !important; }
+
+/* Закреплённые слева: чекбокс, ID и «Партнёр». При прокрутке вправо видно,
+   чья это строка. Смещения фиксированы — ширины этих колонок заданы явно,
+   поэтому считать их в JS не нужно. Когда ID скрыт, «Партнёр» встаёт на его
+   место: класс переключается на таблице. */
+.partners-table :deep(thead th:nth-child(1)),
+.partners-table :deep(tbody td:nth-child(1)) {
+  position: sticky;
+  left: 0;
+  width: 48px;
+  background: var(--ds-surface);
+}
+.partners-table :deep(thead th:nth-child(1)) { z-index: 3; }
+.partners-table :deep(tbody td:nth-child(1)) { z-index: 2; }
+
+.p-sticky-id :deep(thead th:nth-child(2)),
+.p-sticky-id :deep(tbody td:nth-child(2)),
+.p-sticky-id :deep(thead th:nth-child(3)),
+.p-sticky-id :deep(tbody td:nth-child(3)),
+.p-sticky-noid :deep(thead th:nth-child(2)),
+.p-sticky-noid :deep(tbody td:nth-child(2)) {
+  position: sticky;
+  background: var(--ds-surface);
+}
+.p-sticky-id :deep(thead th:nth-child(2)),
+.p-sticky-id :deep(tbody td:nth-child(2)) { left: 48px; }
+.p-sticky-id :deep(thead th:nth-child(3)),
+.p-sticky-id :deep(tbody td:nth-child(3)) { left: 140px; box-shadow: 1px 0 0 var(--ds-outline-variant); }
+.p-sticky-noid :deep(thead th:nth-child(2)),
+.p-sticky-noid :deep(tbody td:nth-child(2)) { left: 48px; box-shadow: 1px 0 0 var(--ds-outline-variant); }
+.partners-table :deep(thead th:nth-child(2)),
+.partners-table :deep(thead th:nth-child(3)) { z-index: 3; }
+.partners-table :deep(tbody td:nth-child(2)),
+.partners-table :deep(tbody td:nth-child(3)) { z-index: 2; }
+
+/* Липкая ячейка со своим фоном не подхватывает подсветку строки — красим её
+   отдельно, иначе первые колонки «выпадают» из наведения. */
+.partners-table :deep(tbody tr:hover td:nth-child(-n + 3)) {
+  background: var(--ds-surface-container-low);
+}
 
 /* ============ Плотная строка списка ============
    До правки на экран влезало четыре партнёра из двух тысяч: имя ломалось на
@@ -2176,6 +2379,59 @@ onMounted(() => { loadData(); loadSegments(); });
 .p-card__v { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .p-card__act { opacity: 0; transition: opacity 0.12s; }
 .p-card__row:hover .p-card__act { opacity: 1; }
+
+/* ============ Секции окна фильтров ============
+   Плоские блоки с мелким прописным заголовком и разделительной линией —
+   как в согласованном макете, без рамок-«карточек» вокруг каждой группы. */
+.p-fsec { padding: 16px 0; border-bottom: 1px solid var(--ds-outline-variant); }
+.p-fsec:first-child { padding-top: 4px; }
+.p-fsec:last-child { border-bottom: 0; }
+.p-fsec__title {
+  margin: 0 0 11px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ds-on-surface-muted);
+}
+.p-fsec__hint {
+  margin: 11px 0 0;
+  font-size: 0.76rem;
+  line-height: 1.35;
+  color: var(--ds-on-surface-muted);
+}
+.p-fsec__cnt {
+  margin-left: 7px;
+  font-size: 0.7rem;
+  opacity: 0.65;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Хронология в карточке: направляющая точка + дата + событие. */
+.p-tl__row {
+  display: grid;
+  grid-template-columns: 10px 84px 1fr;
+  gap: 10px;
+  align-items: start;
+  padding: 7px 0;
+  font-size: 0.8rem;
+  color: var(--ds-on-surface-variant);
+}
+.p-tl__dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; }
+.p-tl__row time { color: var(--ds-on-surface-muted); font-variant-numeric: tabular-nums; }
+
+.p-card__tabs { border-bottom: 1px solid var(--ds-outline-variant); }
+
+/* Подсказка про «/» в пустом поиске — как в макете. */
+.p-kbd {
+  border: 1px solid var(--ds-outline);
+  border-radius: 5px;
+  padding: 0 6px;
+  font-size: 0.68rem;
+  line-height: 1.6;
+  color: var(--ds-on-surface-muted);
+  align-self: center;
+}
 
 /* Подпись «ищу по: телефон» прямо в строке поиска: одно поле на пять типов
    ввода, и человек должен видеть, как его поняли. */

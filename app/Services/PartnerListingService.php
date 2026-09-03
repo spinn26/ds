@@ -30,7 +30,7 @@ class PartnerListingService
      */
     public const FILTERS = [
         'search', 'activity', 'active', 'partner_id', 'inviter_name', 'email', 'phone',
-        'registered_from', 'registered_to', 'code',
+        'registered_from', 'registered_to', 'code', 'is_client', 'is_blocked',
     ];
 
     /**
@@ -71,6 +71,24 @@ class PartnerListingService
         }
         if (isset($filters['code'])) {
             $query->where('participantCode', 'ilike', '%' . $filters['code'] . '%');
+        }
+        // Признак «клиент» — тот же, что в present(): есть живая запись в
+        // client с этим партнёром. Считаем через exists, а не подгрузкой:
+        // фильтр должен работать на всей таблице, а не на странице.
+        if (isset($filters['is_client'])) {
+            $query->whereExists(static function ($sub) {
+                $sub->selectRaw('1')->from('client')
+                    ->whereColumn('client.partner_consultant_id', 'consultant.id')
+                    ->whereNull('client.dateDeleted');
+            });
+        }
+        // «Заблокирован» — именно закрытый вход, а НЕ отсутствие логина:
+        // у 897 импортированных партнёров WebUser нет вовсе, и закрывать
+        // им нечего (см. поле isBlocked в present()).
+        if (isset($filters['is_blocked'])) {
+            $query->whereIn('webUser', static function ($sub) {
+                $sub->select('id')->from('WebUser')->where('isBlocked', true);
+            });
         }
         if (isset($filters['active'])) {
             // ⚠ Сравнение со СТРОКОЙ 'true', а не булево приведение: фронт шлёт
