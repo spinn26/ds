@@ -33,7 +33,7 @@
           density="compact" variant="outlined" hide-details rounded="lg"
           placeholder="Поиск по меню" prepend-inner-icon="mdi-magnify"
           clearable @keydown.esc="menuQuery = ''">
-          <template v-if="!menuQuery" #append-inner>
+          <template v-if="!menuQuery && !isStaff" #append-inner>
             <span class="menu-kbd">Ctrl K</span>
           </template>
         </v-text-field>
@@ -114,6 +114,22 @@
     <v-app-bar flat border="b" class="topbar">
       <v-app-bar-nav-icon v-if="mobile" @click="drawer = !drawer" />
 
+      <!-- Вход под пользователем. Полоса обязана быть заметной: действия под
+           чужой учёткой пишутся в аудит от её имени. Раньше признака не было
+           вовсе, а выйти можно было только полным логаутом. -->
+      <v-chip v-if="impersonatedBy" color="warning" variant="flat"
+        :size="mobile ? 'small' : 'default'" class="mr-2 impersonation-chip"
+        prepend-icon="mdi-account-switch">
+        <span v-if="!mobile" class="mr-2">
+          Вы под учётной записью: <strong>{{ userDisplayName }}</strong>
+        </span>
+        <span v-else class="mr-1">Не вы</span>
+        <v-btn size="x-small" variant="flat" color="surface"
+          :loading="leavingImpersonation" @click="leaveImpersonation">
+          Вернуться к себе
+        </v-btn>
+      </v-chip>
+
       <!-- Статус активности партнёра — слева в topbar. Только для
            consultant'ов и только на desktop (на mobile места нет). -->
       <v-chip v-if="!mobile && isConsultant && statusInfo?.activityName"
@@ -148,6 +164,33 @@
       <!-- Статус системы — мигающий кружок + лейбл; на всех страницах
            всем пользователям, кликом ведёт на /status. -->
       <SystemStatusChip class="mr-2" />
+
+      <!-- Состояние расчётов. Автопересчётов нет с 05.06.2026: цифры не
+           сойдутся, если кнопку никто не нажал, а увидеть это раньше можно
+           было только зайдя в «Периоды». -->
+      <v-chip v-if="calcState && !mobile" size="small" variant="tonal"
+        :color="calcState.reopened > 0 ? 'warning' : undefined"
+        class="mr-2" prepend-icon="mdi-calculator-variant-outline"
+        :title="calcStateHint" to="/manage/periods">
+        {{ calcStateLabel }}
+      </v-chip>
+
+      <!-- Новые обращения: счётчик уже считался для бейджа в меню, но в
+           свёрнутом сайдбаре его не видно. -->
+      <v-btn v-if="isStaff && chatUnread > 0" icon size="small" class="mr-1"
+        title="Новые обращения" to="/manage/chat">
+        <v-badge :content="chatUnread" color="error" floating>
+          <v-icon>mdi-chat-processing-outline</v-icon>
+        </v-badge>
+      </v-btn>
+
+      <!-- Сквозной поиск по данным: партнёр, клиент, контракт из любого
+           места. До него бэкофису приходилось сперва открыть нужный раздел. -->
+      <v-btn v-if="isStaff" size="small" variant="tonal" class="mr-2"
+        prepend-icon="mdi-magnify" @click="openGlobalSearch">
+        Поиск
+        <span v-if="!mobile" class="menu-kbd ml-2">Ctrl K</span>
+      </v-btn>
 
       <template v-if="!mobile">
         <!-- Referral link copy button (only for consultants with active status) -->
@@ -391,6 +434,40 @@
 
     <!-- Глобальный confirm-диалог (per useConfirm()). Mount-once-per-app. -->
     <ConfirmDialog ref="confirmRef" />
+
+    <!-- Сквозной поиск: партнёры, клиенты, контракты -->
+    <v-dialog v-model="gsOpen" max-width="640" scrollable @after-enter="focusGlobalSearch">
+      <v-card>
+        <v-card-text class="pb-2">
+          <v-text-field ref="gsField" v-model="gsQuery" autofocus
+            density="comfortable" variant="outlined" hide-details rounded="lg"
+            placeholder="ФИО партнёра или клиента, номер контракта, ID"
+            prepend-inner-icon="mdi-magnify" clearable
+            :loading="gsLoading" @keydown.esc="gsOpen = false" />
+        </v-card-text>
+
+        <v-divider />
+
+        <v-card-text style="max-height: 60vh" class="pt-2">
+          <div v-if="gsQuery.trim().length < 2" class="text-body-2 text-medium-emphasis py-4 text-center">
+            Введите хотя бы два символа
+          </div>
+          <div v-else-if="!gsLoading && !gsGroups.length" class="text-body-2 text-medium-emphasis py-4 text-center">
+            Ничего не нашлось
+          </div>
+          <template v-for="g in gsGroups" :key="g.title">
+            <div class="text-caption text-medium-emphasis mt-2 mb-1 d-flex align-center ga-2">
+              <v-icon size="14">{{ g.icon }}</v-icon>{{ g.title }}
+            </div>
+            <v-list density="compact" class="pa-0">
+              <v-list-item v-for="it in g.items" :key="g.title + it.id"
+                :title="it.title" :subtitle="it.subtitle"
+                @click="goToResult(it)" />
+            </v-list>
+          </template>
+        </v-card-text>
+      </v-card>
+    </v-dialog>
 
     <!-- Глобальный snackbar (per useSnackbar()). Все .showError/.showSuccess
          из любого компонента отрисуются здесь. -->
@@ -1006,6 +1083,128 @@ function onMenuClick(item) {
 // POST /founder-message создаёт тикет в платформенном чате собственнику (Ламакин),
 // категория «Собственнику»; флаг anonymous скрывает имя отправителя.
 const { showSuccess, showError } = useSnackbar();
+
+// ---- Вход под пользователем ----
+// Признак приходит с сервера (UserResource.impersonatedBy), а не из
+// sessionStorage: иначе в новой вкладке полосы не будет, хотя токен тот же.
+const impersonatedBy = computed(() => auth.user?.impersonatedBy || null);
+const leavingImpersonation = ref(false);
+
+const userDisplayName = computed(() => {
+  const u = auth.user || {};
+  return [u.lastName, u.firstName].filter(Boolean).join(' ') || u.email || '—';
+});
+
+async function leaveImpersonation() {
+  leavingImpersonation.value = true;
+  try {
+    const { data } = await api.post('/impersonate/leave');
+    auth.token = data.token;
+    auth.user = data.user;
+    sessionStorage.removeItem('impersonator_token');
+    // Полная перезагрузка, а не router.push: под чужой учёткой успели
+    // закэшироваться права и состояние страниц, мягкий переход утащил бы их
+    // в админскую сессию.
+    window.location.href = '/admin/users';
+  } catch (e) {
+    showError(e?.response?.data?.message || 'Не удалось вернуться к своей учётной записи');
+    leavingImpersonation.value = false;
+  }
+}
+
+// ---- Состояние расчётов ----
+// Видно администраторам, руководителям и руководителю расчётов (роль
+// calculations) — роли режет бэкенд, здесь только показ.
+const calcState = ref(null);
+
+const CALC_MONTHS = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь',
+  'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'];
+
+function periodLabel(ym) {
+  if (!ym) return '—';
+  const [y, m] = String(ym).split('-');
+  return (CALC_MONTHS[Number(m) - 1] || m) + ' ' + y;
+}
+
+// «сегодня» / «вчера» / «N дн. назад»; точная дата — в подсказке.
+function daysAgoLabel(iso) {
+  if (!iso) return 'не запускался';
+  const d = new Date(String(iso).replace(' ', 'T'));
+  if (Number.isNaN(d.getTime())) return 'не запускался';
+  const days = Math.floor((Date.now() - d.getTime()) / 86400000);
+  if (days <= 0) return 'сегодня';
+  if (days === 1) return 'вчера';
+  return days + ' дн. назад';
+}
+
+const calcStateLabel = computed(() => {
+  const c = calcState.value;
+  if (!c) return '';
+  if (c.reopened > 0) return periodLabel(c.openPeriod) + ' · разморожено: ' + c.reopened;
+  return periodLabel(c.openPeriod) + ' · расчёт ' + daysAgoLabel(c.lastCalcAt);
+});
+
+const calcStateHint = computed(() => {
+  const c = calcState.value;
+  if (!c) return '';
+  const parts = ['Открытый период: ' + periodLabel(c.openPeriod)];
+  if (c.lastClosed) parts.push('Последний закрытый: ' + periodLabel(c.lastClosed));
+  if (c.lastCalcAt) parts.push('Последний расчёт: ' + c.lastCalcAt);
+  if (c.reopened > 0) parts.push('Разморожено периодов: ' + c.reopened);
+  parts.push('Автоматических пересчётов нет — только по кнопке');
+  return parts.join('\n');
+});
+
+async function loadCalcState() {
+  if (!isStaff.value) return;
+  try {
+    const { data } = await api.get('/admin/calc-state');
+    calcState.value = data?.visible ? data : null;
+  } catch { calcState.value = null; }
+}
+onMounted(loadCalcState);
+
+// ---- Сквозной поиск по данным ----
+// Отдельно от поиска по меню: там разделы, здесь люди и договоры. Разделы,
+// на которые у сотрудника нет прав, отсекает бэкенд.
+const gsOpen = ref(false);
+const gsQuery = ref('');
+const gsGroups = ref([]);
+const gsLoading = ref(false);
+const gsField = ref(null);
+let gsTimer = null;
+let gsSeq = 0;
+
+function openGlobalSearch() { gsOpen.value = true; }
+function focusGlobalSearch() { nextTick(() => gsField.value?.focus?.()); }
+
+function goToResult(item) {
+  gsOpen.value = false;
+  gsQuery.value = '';
+  gsGroups.value = [];
+  if (item?.path) router.push(item.path);
+}
+
+watch(gsQuery, (q) => {
+  clearTimeout(gsTimer);
+  const term = (q || '').trim();
+  if (term.length < 2) { gsGroups.value = []; gsLoading.value = false; return; }
+  gsLoading.value = true;
+  gsTimer = setTimeout(async () => {
+    // Порядковый номер: ответы могут прийти не в том порядке, в каком ушли,
+    // и старый затёр бы свежий.
+    const seq = ++gsSeq;
+    try {
+      const { data } = await api.get('/admin/search', { params: { q: term } });
+      if (seq !== gsSeq) return;
+      gsGroups.value = data.groups || [];
+    } catch {
+      if (seq === gsSeq) gsGroups.value = [];
+    } finally {
+      if (seq === gsSeq) gsLoading.value = false;
+    }
+  }, 250);
+});
 const quickMsg = ref({ open: false, subject: '', icon: 'mdi-email-edit', message: '', anonymous: false, sending: false });
 
 function openQuickMsg(subject, icon = 'mdi-email-edit') {
@@ -1422,6 +1621,10 @@ function focusMenuSearch() {
 function onMenuHotkey(e) {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
     e.preventDefault();
+    // У сотрудника Ctrl+K уходит на поиск по ДАННЫМ: разделы он и так помнит,
+    // а людей и договоры ищет весь день. Партнёру искать нечего — ему
+    // сочетание по-прежнему ставит фокус в поиск по меню.
+    if (isStaff.value) { openGlobalSearch(); return; }
     focusMenuSearch();
   }
 }
@@ -1699,6 +1902,12 @@ watch(
 }
 
 /* Счётчик у свёрнутой группы — видно объём, не разворачивая. */
+/* Полоса «вход под пользователем» — единственное место в панели, которое
+   намеренно кричит: перепутать свою сессию с чужой стоит дорого. */
+.impersonation-chip {
+  font-weight: 500;
+}
+
 .menu-group-count {
   font-size: 0.65rem;
   opacity: 0.75;

@@ -57,6 +57,10 @@ class UserResource extends JsonResource
             'activityStatus' => $activityValue,
             'avatarUrl' => $this->avatar ? '/storage/' . $this->avatar : null,
             'questionnaireCompleted' => (bool) $this->questionnaireCompletedAt,
+            // Кто «вошёл как» под этой учёткой, или null. Признак берём из
+            // abilities токена, а не из хранилища браузера: тогда полоса видна
+            // в любой вкладке, а не только в той, где нажали «Войти как».
+            'impersonatedBy' => $this->impersonatedBy($request),
             // verified | rejected | pending | null (не заполнял)
             'requisitesVerificationStatus' => $requisitesStatus,
             // Причина отказа в верификации (если статус rejected) — для плашки.
@@ -125,5 +129,35 @@ class UserResource extends JsonResource
             // Directual, которых нет в casts() (см. reference_static_analysis).
             'inviterName' => $consultant->getAttribute('inviterName'),
         ];
+    }
+
+    /**
+     * Админ, вошедший под этой учёткой через «Войти как», или null.
+     *
+     * ImpersonateController зашивает его id в способность токена
+     * (impersonate:from:{id}) — оттуда и читаем. Тело запроса и хранилище
+     * браузера для этого не годятся: первое подделывается, второе живёт
+     * только в той вкладке, где нажали кнопку.
+     *
+     * @return array{id: int, name: string}|null
+     */
+    private function impersonatedBy(Request $request): ?array
+    {
+        $token = $request->user()?->currentAccessToken();
+
+        foreach ((array) ($token?->abilities ?? []) as $ability) {
+            if (! str_starts_with((string) $ability, 'impersonate:from:')) {
+                continue;
+            }
+
+            $id = (int) substr((string) $ability, strlen('impersonate:from:'));
+            $admin = AppModelsUser::find($id);
+
+            return $admin
+                ? ['id' => $id, 'name' => trim("{$admin->lastName} {$admin->firstName}") ?: $admin->email]
+                : null;
+        }
+
+        return null;
     }
 }

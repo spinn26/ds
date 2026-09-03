@@ -153,6 +153,15 @@ Route::get('/admin/user-segments', [\App\Http\Controllers\Api\AdminUserSegmentCo
 Route::post('/admin/user-segments', [\App\Http\Controllers\Api\AdminUserSegmentController::class, 'store']);
 Route::delete('/admin/user-segments/{id}', [\App\Http\Controllers\Api\AdminUserSegmentController::class, 'destroy'])->whereNumber('id');
 
+// Состояние расчётов для верхней панели: открытый период и свежесть
+// пересчёта. Роли (admin, head, calculations) режутся внутри контроллера.
+Route::get('/admin/calc-state', \App\Http\Controllers\Api\CalcStateController::class);
+
+// Сквозной поиск верхней панели: партнёр, клиент, контракт из любого места.
+// Разделы режутся по правам внутри сервиса.
+Route::get('/admin/search', \App\Http\Controllers\Api\GlobalSearchController::class)
+    ->middleware('throttle:120,1');
+
 Route::get('/admin/partners', [\App\Http\Controllers\Api\AdminDataController::class, 'partners']);
 Route::get('/admin/partners/lookup', [\App\Http\Controllers\Api\AdminDataController::class, 'partnerLookup']);
 Route::post('/admin/partners', [\App\Http\Controllers\Api\AdminDataController::class, 'storePartner'])->middleware('permission:partners,edit');
