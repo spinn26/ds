@@ -75,7 +75,7 @@
           </v-list-subheader>
           <!-- В свёрнутом сайдбаре у группы остаётся подпись, а не безымянная
                черта: по одним иконкам ориентироваться не по чему. -->
-          <div v-else-if="item.group && rail" class="menu-rail-cap">{{ railCap(item.group) }}</div>
+          <div v-else-if="item.group && rail" class="menu-rail-cap" :title="item.group">{{ item.group }}</div>
           <!-- Regular item -->
           <v-list-item v-if="!item.group && (rail || !isGroupCollapsed(item._groupKey))" :to="item.path || null" :prepend-icon="item.icon"
             :active="isActivePath(item.path)"
@@ -1446,12 +1446,6 @@ function toggleGroup(name) {
   localStorage.setItem('main-nav-collapsed', JSON.stringify([...next]));
 }
 
-// Подпись группы для свёрнутого сайдбара: 72px не вмещают «Закреплённое»,
-// поэтому длинные названия обрезаем — но не выкидываем совсем.
-function railCap(name) {
-  const s = String(name ?? '');
-  return s.length > 8 ? s.slice(0, 6) + '.' : s;
-}
 
 // Меню с проставленным _groupKey у каждого обычного пункта — по последнему
 // предшествующему заголовку. Пункты свёрнутого раздела в шаблоне скрываются
@@ -1747,15 +1741,20 @@ watch(
   font-weight: 500;
 }
 
-/* Подписи групп в свёрнутом сайдбаре. */
+/* Подписи групп в свёрнутом сайдбаре. Длинные обрезаем многоточием, а не
+   вручную по букве: «Инстру.» читалось плохо. Полное название — в title. */
 .menu-rail-cap {
   font-size: 0.53rem;
-  letter-spacing: 0.4px;
+  letter-spacing: 0.3px;
   text-transform: uppercase;
   text-align: center;
   opacity: 0.5;
   margin: 10px 0 2px;
+  padding: 0 4px;
   user-select: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Кнопка закрепления — проявляется на наведении, у закреплённых видна всегда,
