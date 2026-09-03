@@ -1027,6 +1027,12 @@ const baseMenuItems = [
   // ---- Partner menu (consultant) ----
   // Shown to everyone (partner and staff) — leads to Workspace
   { label: 'Главная', icon: 'mdi-home-outline', path: '/' },
+  // Витрина продуктов — вторым пунктом кабинета, сразу под «Главной»
+  // (просьба 03.09.2026). Раздел ежедневный, и его уже поднимали однажды из
+  // «Развития» в «Работу»; теперь он вынесен на верхний уровень, выше групп,
+  // чтобы до него не надо было прокручивать «Обзор». Пункты до первого
+  // заголовка не сворачиваются (_groupKey = null) — виден всегда.
+  { label: 'Продукты', icon: 'mdi-package-variant-closed', path: '/products', partner: true },
   // Модуль «Задачи и проекты» удалён целиком 2026-08-14 вместе с таблицами.
 
   { group: 'Обзор', partner: true },
@@ -1036,10 +1042,9 @@ const baseMenuItems = [
 
   { group: 'Работа', partner: true },
   { label: 'Калькулятор объёмов', icon: 'mdi-calculator', path: '/finance/calculator', partner: true },
-  // Витрина открытия продуктов поднята из «Развития» в «Работу» и стоит
-  // сразу за калькулятором: агенты просили (задача 831823) — раздел
-  // ежедневный, а лежал среди обучающих.
-  { label: 'Продукты', icon: 'mdi-package-variant-closed', path: '/products', partner: true },
+  // «Продукты» отсюда подняты на верхний уровень, вторым пунктом меню
+  // (см. выше). Дубля в группе быть не должно: один и тот же путь в двух
+  // местах ломает подсветку активного пункта.
   { label: 'Мои клиенты', icon: 'mdi-account-group-outline', path: '/clients', partner: true },
   { label: 'Контракты клиентов', icon: 'mdi-file-document-outline', path: '/contracts', partner: true },
   { label: 'Контракты команды', icon: 'mdi-folder-account-outline', path: '/contracts/team', partner: true },
@@ -1273,9 +1278,10 @@ const bottomNavItems = computed(() => {
   if (isConsultant.value) {
     return [
       { label: 'Главная', icon: 'mdi-view-dashboard-outline', path: '/' },
+      // Тот же порядок, что и в боковом меню: продукты вторым пунктом.
+      { label: 'Продукты', icon: 'mdi-package-variant', path: '/products' },
       { label: 'Клиенты', icon: 'mdi-account-group', path: '/clients' },
       { label: 'Структура', icon: 'mdi-sitemap', path: '/structure' },
-      { label: 'Продукты', icon: 'mdi-package-variant', path: '/products' },
       { label: 'Профиль', icon: 'mdi-account-circle', path: '/profile' },
     ];
   }
