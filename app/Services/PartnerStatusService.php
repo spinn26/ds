@@ -205,6 +205,16 @@ class PartnerStatusService
             $consultant->terminationCount = $newCount;
             $consultant->active = false;
             $consultant->dateDeactivity = Carbon::now();
+            // НГП терминированного сгорает. Платформа и так считала его
+            // сгоревшим — reRegister()/самовосстановление обнуляли поле при
+            // ВОЗВРАТЕ. Но тот, кто ушёл и не вернулся, оставался в списках и
+            // выгрузках со старым накопленным объёмом. Обнуляем в момент
+            // терминации, а не при возврате.
+            //
+            // Затрагивается только денормализация в карточке партнёра.
+            // Месячные снимки qualificationLog не трогаем: по ним считаются
+            // квалификации и строится история, а история неизменна.
+            $consultant->groupVolumeCumulative = 0;
 
             // Фича выключена → legacy-правило «N терминаций → исключение».
             // Иначе исключаем того, кому возвращаться уже нечем.
@@ -270,6 +280,8 @@ class PartnerStatusService
             $consultant->activity = PartnerActivity::Terminated;
             $consultant->active = false;
             $consultant->dateDeactivity = Carbon::now();
+            // Тот же инвариант, что в terminate(): НГП терминированного = 0.
+            $consultant->groupVolumeCumulative = 0;
             $consultant->save();
         });
 
