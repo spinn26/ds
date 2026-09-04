@@ -54,6 +54,7 @@ class ConsultantService
 
             return [
                 'id' => $c->id,
+                'participantCode' => $c->participantCode,
                 'personName' => $c->personName,
                 'firstName' => $firstName,
                 'lastName' => $lastName,
@@ -79,6 +80,13 @@ class ConsultantService
                 'email' => $webUser?->email ?? null,
                 'phone' => $webUser?->phone ?? null,
                 'nicTG' => $webUser?->nicTG ?? null,
+                'gender' => $webUser ? $webUser->gender : null,
+                // hasLogin отдельно от isBlocked: у 897 импортированных
+                // партнёров WebUser нет вовсе, и «не заблокирован» у них
+                // означает «блокировать нечего», а не «доступ открыт».
+                'hasLogin' => $webUser !== null,
+                'isBlocked' => (bool) ($webUser ? $webUser->isBlocked : false),
+                'lastSeenAt' => $webUser ? $webUser->last_seen_at : null,
                 'inviterName' => $c->inviterName,
                 'birthDate' => $birthDate,
                 'city' => $cityName,
@@ -88,6 +96,8 @@ class ConsultantService
                     : null,
                 'yearPeriodEnd' => $c->yearPeriodEnd?->format('d.m.Y'),
                 'activationDeadline' => $c->activationDeadline?->format('d.m.Y'),
+                'dateCreated' => $c->dateCreated?->format('d.m.Y'),
+                'terminationCount' => (int) ($c->terminationCount ?? 0),
             ];
         });
     }
@@ -495,7 +505,13 @@ class ConsultantService
         $webUserIds = $consultants->pluck('webUser')->filter()->unique();
         $webUsers = $webUserIds->isNotEmpty()
             ? DB::table('WebUser')->whereIn('id', $webUserIds)
-                ->get(['id', 'firstName', 'lastName', 'patronymic', 'email', 'phone', 'nicTG'])
+                // Колонки перечислены явно, поэтому новое поле надо ДОБАВЛЯТЬ и сюда:
+                // без этого обращение к нему даёт Undefined property на stdClass и
+                // молча уезжает в выгрузку пустым.
+                ->get([
+                    'id', 'firstName', 'lastName', 'patronymic',
+                    'email', 'phone', 'nicTG', 'gender', 'isBlocked', 'last_seen_at',
+                ])
                 ->keyBy('id')
             : collect();
 

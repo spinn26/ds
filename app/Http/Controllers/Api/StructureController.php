@@ -349,69 +349,19 @@ class StructureController extends Controller
         }
         $members = $this->applySort($members, $request);
 
-        // Набор колонок совпадает с exportSubtree (там сверху ещё «Уровень
-        // дерева»): выгрузка всей структуры и выгрузка одной ветки должны
-        // давать одинаковые листы, иначе их не свести в Excel.
         // Контакты не расширяют доступ: телефон, почта и Telegram уже видны
         // партнёру в карточке участника на странице «Структура».
-        $headers = [
-            'ФИО',
-            'Квалификация',
-            'Статус активности',
-            'ЛП',
-            'ЛП с активации',
-            'ГП',
-            'НГП',
-            'Клиенты',
-            'Контракты',
-            'Партнёры',
-            'E-mail',
-            'Телефон',
-            'Telegram',
-            'Город',
-            'Дата рождения',
-            'Дата активации',
-            'Дата смены статуса',
-            'Окончание годового периода',
-            'Дедлайн активации',
-            'Пригласитель',
-        ];
-
-        $exportRows = $members->map(fn ($m) => [
-            $m['personName'] ?? null,
-            $m['qualification']
-                ? ($m['qualification']['level'] . ' [' . $m['qualification']['title'] . ']')
-                : null,
-            $m['activityName'] ?? null,
-            $m['personalVolume'] ?? 0,
-            $m['personalVolumeSinceActivation'] ?? 0,
-            $m['groupVolume'] ?? 0,
-            $m['groupVolumeCumulative'] ?? 0,
-            $m['clientCount'] ?? 0,
-            $m['contractCount'] ?? 0,
-            $m['partnersCount'] ?? 0,
-            $m['email'] ?? null,
-            $m['phone'] ?? null,
-            $m['nicTG'] ?? null,
-            $m['city'] ?? null,
-            $m['birthDate'] ?? null,
-            $m['dateActivity'] ?? null,
-            $m['dateDeterministic'] ?? null,
-            $m['yearPeriodEnd'] ?? null,
-            $m['activationDeadline'] ?? null,
-            $m['inviterName'] ?? null,
-        ]);
-
+        $layout = $this->exportLayout();
         $filename = $filenameBase . '-' . now()->format('Y-m-d');
 
         return $this->xlsx->stream(
             $filename,
             'Структура',
-            $headers,
-            $exportRows,
+            $layout['headers'],
+            $members->map($layout['row']),
             [
-                'numericColumns' => [4, 5, 6, 7, 8, 9, 10],
-                'dateColumns' => [15, 16, 17, 18, 19],
+                'numericColumns' => $layout['numeric'],
+                'dateColumns' => $layout['dates'],
             ],
         );
     }
@@ -455,64 +405,8 @@ class StructureController extends Controller
             ->get();
         $members = $this->consultantService->formatMembers($consultants);
 
-        // Колонки те же, что в exportFiltered, плюс «Уровень дерева» первой.
-        //
-        // ⚠ До 01.09.2026 этот лист врал: читались ключи qualificationTitle,
-        // cumulativeLp, cumulativeGp и cumulativeNgp, которых formatMembers
-        // не отдаёт и никогда не отдавал. Через `?? null` / `?? 0` это не
-        // падало — квалификация уходила пустой, а ЛП/ГП/НГП нулями во ВСЕХ
-        // строках. Читаем реальные ключи.
-        $headers = [
-            'Уровень дерева',
-            'ФИО',
-            'Квалификация',
-            'Статус активности',
-            'ЛП',
-            'ЛП с активации',
-            'ГП',
-            'НГП',
-            'Клиенты',
-            'Контракты',
-            'Партнёры',
-            'E-mail',
-            'Телефон',
-            'Telegram',
-            'Город',
-            'Дата рождения',
-            'Дата активации',
-            'Дата смены статуса',
-            'Окончание годового периода',
-            'Дедлайн активации',
-            'Пригласитель',
-        ];
-
-        $rows = $members->map(function ($m) use ($depthById) {
-            return [
-                $depthById[$m['id']] ?? null,
-                $m['personName'] ?? null,
-                $m['qualification']
-                    ? ($m['qualification']['level'] . ' [' . $m['qualification']['title'] . ']')
-                    : null,
-                $m['activityName'] ?? null,
-                $m['personalVolume'] ?? 0,
-                $m['personalVolumeSinceActivation'] ?? 0,
-                $m['groupVolume'] ?? 0,
-                $m['groupVolumeCumulative'] ?? 0,
-                $m['clientCount'] ?? 0,
-                $m['contractCount'] ?? 0,
-                $m['partnersCount'] ?? 0,
-                $m['email'] ?? null,
-                $m['phone'] ?? null,
-                $m['nicTG'] ?? null,
-                $m['city'] ?? null,
-                $m['birthDate'] ?? null,
-                $m['dateActivity'] ?? null,
-                $m['dateDeterministic'] ?? null,
-                $m['yearPeriodEnd'] ?? null,
-                $m['activationDeadline'] ?? null,
-                $m['inviterName'] ?? null,
-            ];
-        });
+        // Смещение 1: перед общими колонками идёт «Уровень дерева».
+        $layout = $this->exportLayout(1);
 
         $rootName = preg_replace('/[^\p{L}\d\s\-]/u', '', $root->personName ?? "consultant-{$consultantId}");
         $filename = 'structure-' . trim($rootName) . '-' . now()->format('Y-m-d');
@@ -520,13 +414,94 @@ class StructureController extends Controller
         return $this->xlsx->stream(
             $filename,
             'Структура ветки',
-            $headers,
-            $rows,
+            array_merge(['Уровень дерева'], $layout['headers']),
+            $members->map(fn ($m) => array_merge(
+                [$depthById[$m['id']] ?? null],
+                $layout['row']($m)
+            )),
             [
-                'numericColumns' => [1, 5, 6, 7, 8, 9, 10, 11],
-                'dateColumns' => [16, 17, 18, 19, 20],
+                'numericColumns' => array_merge([1], $layout['numeric']),
+                'dateColumns' => $layout['dates'],
             ],
         );
+    }
+
+    /**
+     * Колонки выгрузки структуры — ЕДИНСТВЕННЫЙ источник для обеих выгрузок.
+     *
+     * Раньше список был продублирован в exportFiltered и exportSubtree, и они
+     * разъехались: ветка читала ключи, которых formatMembers не отдаёт, и молча
+     * выгружала пустую квалификацию с нулевыми ЛП/ГП/НГП во ВСЕХ строках
+     * (правка 01.09.2026). Один источник делает такое невозможным.
+     *
+     * Номера колонок для форматирования считаются здесь же: пересчитывать их
+     * руками при каждой новой колонке — та же ловушка с другой стороны.
+     *
+     * @param  int  $offset  сколько колонок идёт ПЕРЕД этими («Уровень дерева»)
+     * @return array{headers: list<string>, row: \Closure, numeric: list<int>, dates: list<int>}
+     */
+    private function exportLayout(int $offset = 0): array
+    {
+        // [заголовок, тип, как достать из участника]
+        $columns = [
+            ['ID', 'number', fn ($m) => $m['id'] ?? null],
+            ['ФИО', 'text', fn ($m) => $m['personName'] ?? null],
+            ['Код участника', 'text', fn ($m) => $m['participantCode'] ?? null],
+            ['Квалификация', 'text', fn ($m) => $m['qualification']
+                ? ($m['qualification']['level'] . ' [' . $m['qualification']['title'] . ']')
+                : null],
+            ['Статус активности', 'text', fn ($m) => $m['activityName'] ?? null],
+            ['Уровень в структуре', 'number', fn ($m) => $m['level'] ?? null],
+            ['ЛП', 'number', fn ($m) => $m['personalVolume'] ?? 0],
+            ['ЛП с активации', 'number', fn ($m) => $m['personalVolumeSinceActivation'] ?? 0],
+            ['ГП', 'number', fn ($m) => $m['groupVolume'] ?? 0],
+            ['НГП', 'number', fn ($m) => $m['groupVolumeCumulative'] ?? 0],
+            ['Клиенты', 'number', fn ($m) => $m['clientCount'] ?? 0],
+            ['Контракты', 'number', fn ($m) => $m['contractCount'] ?? 0],
+            ['Партнёры', 'number', fn ($m) => $m['partnersCount'] ?? 0],
+            ['E-mail', 'text', fn ($m) => $m['email'] ?? null],
+            ['Телефон', 'text', fn ($m) => $m['phone'] ?? null],
+            ['Telegram', 'text', fn ($m) => $m['nicTG'] ?? null],
+            ['Пол', 'text', fn ($m) => $m['gender'] ?? null],
+            ['Город', 'text', fn ($m) => $m['city'] ?? null],
+            ['Дата рождения', 'date', fn ($m) => $m['birthDate'] ?? null],
+            ['Дата регистрации', 'date', fn ($m) => $m['dateCreated'] ?? null],
+            ['Дата активации', 'date', fn ($m) => $m['dateActivity'] ?? null],
+            ['Дата смены статуса', 'date', fn ($m) => $m['dateDeterministic'] ?? null],
+            ['Окончание годового периода', 'date', fn ($m) => $m['yearPeriodEnd'] ?? null],
+            ['Дедлайн активации', 'date', fn ($m) => $m['activationDeadline'] ?? null],
+            ['Терминаций', 'number', fn ($m) => $m['terminationCount'] ?? 0],
+            // Три состояния, а не два: у партнёров без логина закрывать нечего,
+            // и «заблокирован» про них сказать нельзя.
+            ['Доступ в кабинет', 'text', fn ($m) => ! ($m['hasLogin'] ?? false)
+                ? 'логина нет'
+                : (($m['isBlocked'] ?? false) ? 'заблокирован' : 'открыт')],
+            ['Последний вход', 'text', fn ($m) => $m['lastSeenAt']
+                ? \Carbon\Carbon::parse($m['lastSeenAt'])->format('d.m.Y H:i')
+                : null],
+            ['Пригласитель', 'text', fn ($m) => $m['inviterName'] ?? null],
+        ];
+
+        $headers = [];
+        $numeric = [];
+        $dates = [];
+        foreach ($columns as $i => $column) {
+            $headers[] = $column[0];
+            // Колонки в xlsx нумеруются с единицы.
+            $position = $offset + $i + 1;
+            if ($column[1] === 'number') {
+                $numeric[] = $position;
+            } elseif ($column[1] === 'date') {
+                $dates[] = $position;
+            }
+        }
+
+        return [
+            'headers' => $headers,
+            'row' => fn ($m) => array_map(fn ($column) => $column[2]($m), $columns),
+            'numeric' => $numeric,
+            'dates' => $dates,
+        ];
     }
 
     /**
