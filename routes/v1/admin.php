@@ -18,8 +18,16 @@ use Illuminate\Support\Facades\Route;
 
 // Admin — all routes require staff role
 Route::middleware('role:admin')->group(function () {
-    Route::post('/impersonate/{user}', [ImpersonateController::class, 'impersonate']);
+    // Статический сегмент — СТРОГО раньше параметрического: роуты матчатся в
+    // порядке регистрации, и POST /impersonate/leave попадал в {user}. Дальше
+    // срабатывало связывание модели, WebUser искали по id = 'leave', и Postgres
+    // валился на приведении к integer — кнопка «Вернуться к себе» отдавала 500.
     Route::post('/impersonate/leave', [ImpersonateController::class, 'leave']);
+
+    // whereNumber — вторая линия защиты: если кто-то снова поменяет порядок,
+    // нечисловой сегмент просто не совпадёт вместо падения в базе.
+    Route::post('/impersonate/{user}', [ImpersonateController::class, 'impersonate'])
+        ->whereNumber('user');
 
     // Диагностика: скрытые (soft-deleted) клиенты с живыми контрактами — только admin.
     Route::get('/admin/hidden-clients', [\App\Http\Controllers\Api\AdminHiddenClientController::class, 'index']);
