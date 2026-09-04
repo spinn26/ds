@@ -4,6 +4,7 @@ namespace App\Http\Resources;
 
 use App\Models\Consultant;
 use App\Models\Requisite;
+use App\Models\User;
 use App\Services\ProfileCompletenessService;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -144,14 +145,15 @@ class UserResource extends JsonResource
     private function impersonatedBy(Request $request): ?array
     {
         $token = $request->user()?->currentAccessToken();
+        $abilities = $token ? (array) $token->abilities : [];
 
-        foreach ((array) ($token?->abilities ?? []) as $ability) {
+        foreach ($abilities as $ability) {
             if (! str_starts_with((string) $ability, 'impersonate:from:')) {
                 continue;
             }
 
             $id = (int) substr((string) $ability, strlen('impersonate:from:'));
-            $admin = AppModelsUser::find($id);
+            $admin = User::find($id);
 
             return $admin
                 ? ['id' => $id, 'name' => trim("{$admin->lastName} {$admin->firstName}") ?: $admin->email]

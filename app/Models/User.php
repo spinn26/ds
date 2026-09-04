@@ -12,6 +12,73 @@ use Laravel\Sanctum\HasApiTokens;
 use Spatie\Activitylog\Traits\LogsActivity;
 use Spatie\Activitylog\LogOptions;
 
+/**
+ * Пользователь платформы. Таблица — `WebUser` (регистр важен: Postgres
+ * регистрозависим, а строчный `webUser` — мёртвый legacy-двойник Directual).
+ *
+ * Колонки перечислены явно: без схемы под рукой larastan не знает полей
+ * Eloquent-модели и считает любое обращение к ним обращением к
+ * несуществующему свойству. На этом уже ломался деплой — `UserResource`
+ * читает lastName/firstName/email при подмене пользователя.
+ *
+ * @property int $id
+ * @property bool|null $test
+ * @property string|null $comment
+ * @property string|null $phone
+ * @property string|null $email
+ * @property string|null $userpic
+ * @property string|null $nicTG
+ * @property string|null $emailOld
+ * @property string|null $role
+ * @property string|null $password
+ * @property string|null $lastName
+ * @property string|null $firstName
+ * @property string|null $patronymic
+ * @property string|null $gender
+ * @property \Illuminate\Support\Carbon|null $birthDate
+ * @property int|null $taxResidency
+ * @property int|null $city
+ * @property string|null $dateCreated
+ * @property \Illuminate\Support\Carbon|null $dateDeleted
+ * @property string|null $dateLastActivity
+ * @property \Illuminate\Support\Carbon|null $dateChanged
+ * @property bool|null $boughtProRost
+ * @property int|null $getCourseRegistrationWebHookData
+ * @property string|null $getCourseUserId
+ * @property string|null $getCourseUserIdarray
+ * @property int|null $getCourseOrderWebHookData
+ * @property string|null $urlData
+ * @property string|null $headers
+ * @property int|null $webUser
+ * @property int|null $status
+ * @property int|null $client
+ * @property int|null $consultant_id
+ * @property bool|null $agreement
+ * @property bool|null $isAuthorization
+ * @property bool|null $isBlocked
+ * @property string|null $avatar
+ * @property string|null $workField
+ * @property string|null $salesExperience
+ * @property string|null $financeExperience
+ * @property string|null $hasPotentialClients
+ * @property string|null $potentialClientsCount
+ * @property string|null $currentIncome
+ * @property string|null $weeklyHours
+ * @property string|null $incomeFactors
+ * @property \Illuminate\Support\Carbon|null $questionnaireCompletedAt
+ * @property string|null $position
+ * @property string|null $two_factor_secret
+ * @property bool $two_factor_enabled
+ * @property string|null $two_factor_confirmed_at
+ * @property string|null $telegram_chat_id
+ * @property string|null $telegram_user_id
+ * @property string|null $telegram_username
+ * @property string|null $telegram_linked_at
+ * @property string|null $last_seen_at
+ * @property bool $chat_department_lead
+ *
+ * @property-read string $name ФИО одной строкой (getNameAttribute)
+ */
 class User extends Authenticatable
 {
     use HasApiTokens, HasFactory, Notifiable, LogsActivity;
