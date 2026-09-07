@@ -606,7 +606,7 @@ const flatRows = computed(() => {
 //  - Активен → dateActivity + 12 месяцев (конец годового цикла, yearPeriodEnd).
 //    Fallback: если yearPeriodEnd пуст (legacy-партнёры), считаем
 //    dateActivity + 12 месяцев на лету.
-//  - Зарегистрирован → activationDeadline (90 дней с регистрации).
+//  - Зарегистрирован → activationDeadline (окно activation.window_days с регистрации).
 //  - Терминирован/Исключён → не отображается.
 function statusChangeDate(row) {
   const name = (row.activityName || '').toLowerCase();

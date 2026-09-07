@@ -825,7 +825,8 @@ class PartnerStatusService
             return [
                 'ok' => true,
                 'message' => 'Участие восстановлено. Статус — «Зарегистрирован», на активацию снова '
-                    . PartnerActivity::activationDays() . ' дней.',
+                    // Ответ читает партнёр — число текстовое (см. DISPLAY_ACTIVATION_DAYS).
+                    . PartnerActivity::displayActivationDays() . ' дней.',
                 'attemptsLeft' => $fresh->reinstatementsLeft(),
             ];
         });
@@ -933,7 +934,10 @@ class PartnerStatusService
             // Пороги активации — нужны и вне статусов Registered/Active
             // (окно восстановления объясняет условия терминированному).
             'activationPoints' => PartnerActivity::activationPoints(),
-            'windowDays' => PartnerActivity::activationDays(),
+            // Число ТОЛЬКО для текста на экранах терминации и восстановления.
+            // Реальное окно (activationDays) не трогаем — по нему считаются
+            // activationDeadline и daysRemaining ниже.
+            'windowDays' => PartnerActivity::displayActivationDays(),
             // Самовосстановление: этим блоком фронт решает, показывать ли
             // блокирующее окно при входе и активна ли в нём кнопка.
             'reinstate' => [
@@ -1055,7 +1059,9 @@ class PartnerStatusService
     private function notifyStatusChange(int $userId, PartnerActivity $to, string $source): void
     {
         $points = PartnerActivity::activationPoints();
-        $days = PartnerActivity::activationDays();
+        // Метод целиком собирает текст для партнёра — число окна берём
+        // текстовое, расчёты сюда не заходят.
+        $days = PartnerActivity::displayActivationDays();
         $limit = PartnerActivity::selfReinstateLimit();
 
         [$title, $message] = match ($to) {
