@@ -650,8 +650,8 @@ class AdminProductCatalogController extends Controller
             // расчёте. Тарифная строка осталась фолбэком для карточек, куда
             // расчётные поля ещё не заполнены: два формата ключей,
             // ds_percent/fixed_cost (sync-from-sheet) и ds_pct/price (аудит).
-            'dsPercent'            => $r->ds_percent ?? $first['ds_percent'] ?? $first['ds_pct'] ?? null,
-            'fixedCost'            => $r->fixed_cost ?? $first['fixed_cost'] ?? $first['price'] ?? null,
+            'dsPercent'            => self::toNumber($r->ds_percent ?? $first['ds_percent'] ?? $first['ds_pct'] ?? null),
+            'fixedCost'            => self::toNumber($r->fixed_cost ?? $first['fixed_cost'] ?? $first['price'] ?? null),
             'pointsMethod'         => $r->points_method ?? null,
             'pointsFormula'        => $r->points_formula ?? $first['formula'] ?? null,
             'pointsMin'            => $r->points_min ?? $first['points'] ?? null,
@@ -730,9 +730,41 @@ class AdminProductCatalogController extends Controller
         return response()->json($data, $response->getStatusCode());
     }
 
+    /**
+     * Легаси-процент в число: «3,20%» → 3.2, «1,5» → 1.5, «» → null.
+     *
+     * Тарифы, перенесённые из Directual, хранят ds_pct СТРОКОЙ в русском
+     * формате — с запятой и знаком процента. Такая строка приезжала в поле
+     * «%ДС программы» как есть, и при сохранении правило nullable|numeric
+     * её отвергало: «Поле ds percent должно быть числом». Оператор при этом
+     * поле не трогал — форма подставляла значение сама (47 программ из 692).
+     */
+    private static function toNumber(mixed $raw): int|float|null
+    {
+        if ($raw === null || $raw === '') {
+            return null;
+        }
+        if (is_int($raw) || is_float($raw)) {
+            return $raw;
+        }
+
+        $s = str_replace('%', '', (string) $raw);
+        $s = AppSupportNumbers::normalizeString($s);
+
+        return $s === '' ? null : (float) $s;
+    }
+
     /** Subset of incoming program payload that maps onto programs_catalog columns. */
     private static function extractProgramPayload(Request $request): array
     {
+        // Приводим числовые поля к точке ДО валидации: оператор может
+        // набрать «1,5», а из легаси-тарифов в форму приезжает «3,20%».
+        foreach (['dsPercent', 'fixedCost', 'pointsMin', 'pointsMax'] as $key) {
+            if ($request->has($key) && is_string($request->input($key))) {
+                $request->merge([$key => self::toNumber($request->input($key))]);
+            }
+        }
+
         $data = $request->validate([
             'name'                => 'required|string|max:255',
             'providerName'        => 'nullable|string|max:255',
