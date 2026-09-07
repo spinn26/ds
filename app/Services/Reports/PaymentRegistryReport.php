@@ -122,7 +122,9 @@ class PaymentRegistryReport extends AbstractReportType
                 $r?->verified ? 'true' : 'false',
                 $b?->accountNumber ?? '', $b?->correspondentAccount ?? '',
                 $b?->bankBik ?? '', $b?->bankName ?? '',
-                $r?->tax_regime ?? '',
+                // Без `?->`: слева от `??` он лишний (обращение к свойству null
+                // внутри `??` безопасно), и анализатор на это ругается.
+                $r->tax_regime ?? '',
                 Age::date($birthRaw) ?? '',
             ];
         }
