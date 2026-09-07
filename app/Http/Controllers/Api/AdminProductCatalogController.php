@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Api\Concerns\AppliesSorting;
 use App\Http\Controllers\Api\Concerns\PaginatesRequests;
 use App\Http\Controllers\Controller;
+use App\Support\Numbers;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -749,7 +750,7 @@ class AdminProductCatalogController extends Controller
         }
 
         $s = str_replace('%', '', (string) $raw);
-        $s = AppSupportNumbers::normalizeString($s);
+        $s = Numbers::normalizeString($s);
 
         return $s === '' ? null : (float) $s;
     }
