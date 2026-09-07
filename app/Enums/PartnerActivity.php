@@ -2,8 +2,6 @@
 
 namespace App\Enums;
 
-use App\Models\SystemSetting;
-
 /**
  * Статусы активности партнёра.
  * 4 статуса по статусной схеме:
@@ -51,44 +49,12 @@ enum PartnerActivity: int
     // Окно активации: было 90 дней, с 13.08.2026 — 120 (решение владельца).
     public const ACTIVATION_DAYS = 120;
     public const ACTIVATION_POINTS = 500;
-
-    /**
-     * Сколько дней окна активации ПОКАЗЫВАЕМ партнёру.
-     *
-     * Реальное окно — ACTIVATION_DAYS (120). Партнёру называем 90: решение
-     * владельца от 07.09.2026. Разница в 30 дней остаётся запасом — на экране
-     * счётчик дойдёт до нуля раньше, чем наступит терминация.
-     *
-     * ⚠ Это ТОЛЬКО про то, что видит партнёр. Расчёты, дедлайны в базе,
-     * отчёты и админские экраны продолжают работать по activationDays().
-     */
-    public const DISPLAY_ACTIVATION_DAYS = 90;
-
-    /**
-     * С какой даты партнёру называем сокращённое окно.
-     *
-     * Кто зарегистрирован РАНЬШЕ — видит свой настоящий отсчёт. Иначе у 27
-     * партнёров, чей дедлайн наступает в ближайший месяц, счётчик в день
-     * выката прыгнул бы на ноль: до терминации у них ещё есть время, а на
-     * экране было бы «срок истёк». Через четыре месяца отсечка станет
-     * неактуальной сама — все зарегистрированные будут уже после неё.
-     */
-    public const DISPLAY_WINDOW_SINCE = '2026-09-07';
     public const SELF_REINSTATE_LIMIT = 3;
 
     /** Порог ЛП для активации (настройка activation.min_lp, фолбэк 500). */
     public static function activationPoints(): int
     {
         return (int) \App\Models\SystemSetting::value('activation.min_lp', self::ACTIVATION_POINTS);
-    }
-
-    /** Окно активации, как оно называется ПАРТНЁРУ (activation.display_window_days). */
-    public static function displayActivationDays(): int
-    {
-        return (int) SystemSetting::value(
-            "activation.display_window_days",
-            self::DISPLAY_ACTIVATION_DAYS,
-        );
     }
 
     /** Окно активации в днях (activation.window_days, фолбэк 120). */

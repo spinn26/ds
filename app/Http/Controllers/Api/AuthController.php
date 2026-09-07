@@ -395,7 +395,7 @@ class AuthController extends Controller
                 'status',
                 'По вашей ссылке зарегистрировался партнёр',
                 $consultant->personName . ' зарегистрирован в вашей структуре. На активацию у него '
-                    . PartnerActivity::displayActivationDays() . ' дней и '
+                    . PartnerActivity::activationDays() . ' дней и '
                     . PartnerActivity::activationPoints() . ' ЛП.',
                 '/structure'
             );

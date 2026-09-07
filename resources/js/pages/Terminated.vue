@@ -114,7 +114,7 @@ const limit = computed(() => Number(termination.value.limit ?? 3));
 // Пороги активации берём из профиля, а не хардкодим: они настраиваются
 // в system_settings (activation.window_days / activation.min_lp).
 const statusInfo = ref(null);
-const windowDays = computed(() => statusInfo.value?.windowDays ?? 90);
+const windowDays = computed(() => statusInfo.value?.windowDays ?? 120);
 const minLp = computed(() => statusInfo.value?.activationPoints ?? 500);
 
 onMounted(async () => {
