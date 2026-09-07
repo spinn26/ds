@@ -923,6 +923,16 @@ class PartnerStatusService
     {
         $activity = $consultant->activity ?? PartnerActivity::Registered;
 
+        // Сокращённое окно показываем только тем, кто зарегистрирован после
+        // отсечки. У остальных экран остаётся прежним — иначе в день выката
+        // их счётчик прыгнул бы на ноль при живом сроке.
+        $registeredAfterCutoff = $consultant->dateCreated
+            && $consultant->dateCreated->gte(Carbon::parse(PartnerActivity::DISPLAY_WINDOW_SINCE));
+        $shownWindow = $registeredAfterCutoff
+            ? PartnerActivity::displayActivationDays()
+            : PartnerActivity::activationDays();
+        $deadlineShift = max(0, PartnerActivity::activationDays() - $shownWindow);
+
         $info = [
             'activityId' => $activity->value,
             'activityName' => $activity->label(),
@@ -933,7 +943,12 @@ class PartnerStatusService
             // Пороги активации — нужны и вне статусов Registered/Active
             // (окно восстановления объясняет условия терминированному).
             'activationPoints' => PartnerActivity::activationPoints(),
-            'windowDays' => PartnerActivity::activationDays(),
+            // Окно, как оно названо ЭТОМУ партнёру: 90 для новых, настоящее
+            // для зарегистрированных до отсечки. Так у каждого на экране
+            // окно и отсчёт согласованы между собой. Админские экраны и
+            // расчёты сюда не ходят — getStatusInfo зовут только профиль и
+            // дашборд кабинета.
+            'windowDays' => $shownWindow,
             // Самовосстановление: этим блоком фронт решает, показывать ли
             // блокирующее окно при входе и активна ли в нём кнопка.
             'reinstate' => [
@@ -947,8 +962,12 @@ class PartnerStatusService
 
         // Обратный отсчёт
         if ($activity === PartnerActivity::Registered && $consultant->activationDeadline) {
-            $info['activationDeadline'] = $consultant->activationDeadline->toIso8601String();
-            $info['daysRemaining'] = max(0, (int) Carbon::now()->diffInDays($consultant->activationDeadline, false));
+            // Показываем дедлайн, сдвинутый на разницу между реальным окном и
+            // объявленным: иначе партнёр вычтет дату регистрации и увидит 120.
+            // В базе и в терминации дата остаётся настоящей.
+            $shown = $consultant->activationDeadline->copy()->subDays($deadlineShift);
+            $info['activationDeadline'] = $shown->toIso8601String();
+            $info['daysRemaining'] = max(0, (int) Carbon::now()->diffInDays($shown, false));
             $info['requiredPoints'] = PartnerActivity::activationPoints();
             $info['currentPoints'] = (float) ($consultant->personalVolume ?? 0);
         }
