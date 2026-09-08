@@ -306,9 +306,12 @@
                         RUB
                       </template>
                       <template v-else>
+                        <!-- Сумму с НДС берём готовой из превью: она округлена
+                             один раз на бэкенде и ровно она же суммируется в
+                             ИТОГО. Пересчёт здесь давал расхождение в копейках. -->
                         <span v-if="d.preview?.ready"
                           :title="`Сумма комиссии с НДС ${d.preview.vatPercent || 0}%`">
-                          {{ fmt2(Number(d.preview.incomeDS || 0) * (1 + Number(d.preview.vatPercent || 0) / 100)) }} RUB
+                          {{ fmt2(previewGross(d)) }} RUB
                         </span>
                         <span v-else class="text-medium-emphasis">—</span>
                       </template>
@@ -1089,8 +1092,11 @@ function parseDate(v) {
 // dsCommissionAbsolute не нужно: бэкенд игнорирует его, если customCommission=false.
 function onCustomCommissionToggle(d, v) {
   patchField(d, 'customCommission', !!v);
-  if (v && (d.dsCommissionAbsolute == null || d.dsCommissionAbsolute === '') && d.preview?.incomeDS != null) {
-    patchField(d, 'dsCommissionAbsolute', Math.round(Number(d.preview.incomeDS) * 100) / 100);
+  // Предзаполняем через тот же путь, что и ручной ввод: из суммы С НДС, с
+  // сохранением точности. Прежняя запись incomeDS, округлённого до копеек,
+  // давала ту же потерю трети копейки, даже если оператор поле не трогал.
+  if (v && (d.dsCommissionAbsolute == null || d.dsCommissionAbsolute === '') && d.preview?.ready) {
+    setGrossCommission(d, previewGross(d));
   }
 }
 
@@ -1108,10 +1114,33 @@ function grossCommission(d) {
   if (d.dsCommissionAbsolute == null || d.dsCommissionAbsolute === '') return null;
   return Math.round(Number(d.dsCommissionAbsolute) * vatMul(d) * 100) / 100;
 }
+
+/**
+ * Доход ДС С НДС для строки и для ИТОГО — ОДНО значение, взятое из превью.
+ *
+ * Превью хранится в черновике (previewCalc) и пересчитывается только по
+ * кнопке, поэтому у строк, заведённых до появления поля incomeDSGross, его
+ * не будет — для них восстанавливаем сами, но округляем так же, один раз.
+ * Иначе такие строки показывали бы пустоту, а итог считал их за ноль.
+ */
+function previewGross(d) {
+  const p = d?.preview;
+  if (!p?.ready) return 0;
+  if (p.incomeDSGross != null) return Number(p.incomeDSGross);
+  return Math.round(Number(p.incomeDS || 0) * (1 + Number(p.vatPercent || 0) / 100) * 100) / 100;
+}
+
+// ⚠ Без-НДС храним с ШЕСТЬЮ знаками, а не с двумя.
+//
+// Оператор вводит ровную сумму из отчёта поставщика (14,00 ₽). При делении на
+// ставку получается 13,3333… — округление до копеек теряло треть копейки, и
+// обратно уже выходило 13,9965 ₽ вместо 14,00. Строка это скрывала (показывала
+// округлённое), а ИТОГО суммировало настоящие значения и не сходилось.
+// Шести знаков хватает, чтобы обратный пересчёт вернул ровно введённое.
 function setGrossCommission(d, gross) {
   if (gross == null || gross === '') { patchField(d, 'dsCommissionAbsolute', null); return; }
   const m = vatMul(d);
-  patchField(d, 'dsCommissionAbsolute', m > 0 ? Math.round(Number(gross) / m * 100) / 100 : Number(gross));
+  patchField(d, 'dsCommissionAbsolute', m > 0 ? Math.round(Number(gross) / m * 1e6) / 1e6 : Number(gross));
 }
 
 function formatYmd(d) {
@@ -1133,7 +1162,10 @@ const totals = computed(() => {
     currencySymbol: sym,
     amount: drafts.value.reduce((s, d) => s + Number(d.amount || 0), 0),
     amountRub: ready.reduce((s, d) => s + Number(d.preview.amountRUB || 0), 0),
-    incomeDS: ready.reduce((s, d) => s + Number(d.preview.incomeDS || 0) * (1 + Number(d.preview.vatPercent || 0) / 100), 0),
+    // ИТОГО суммирует ТУ ЖЕ величину, что показана в строке (округлённую на
+    // бэкенде), а не пересчитывает её заново из без-НДС. Пересчёт копил
+    // «хвосты»: десять ровных строк на 9 500,00 давали итог 9 499,98.
+    incomeDS: ready.reduce((s, d) => s + previewGross(d), 0),
     incomeDsNoVat: ready.reduce((s, d) => s + Number(d.preview.incomeDS || 0), 0),
     lpPoints: ready.reduce((s, d) => s + Number(d.preview.personalVolume || 0), 0),
     pointsCount: ready.reduce((s, d) => s + Number(d.preview.chain?.[0]?.points || 0), 0),

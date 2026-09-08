@@ -140,6 +140,7 @@ class ManualDraftPreviewService
                 'vatPercent' => $vatPercent,
                 'dsCommissionPercentage' => round($dsPercent, 4),
                 'incomeDS' => round($incomeDS, 2),
+                'incomeDSGross' => round($incomeDS * (1 + $vatPercent / 100), 2),
                 // Доход ДС в валюте — и в ветке неизвестного ФК: сумма та же,
                 // просто вся остаётся компании. Без этих полей колонка
                 // «Доход ДС (валюта)» у таких строк молча пустовала бы.
@@ -200,6 +201,15 @@ class ManualDraftPreviewService
             'vatPercent' => $vatPercent,
             'dsCommissionPercentage' => round($dsPercent, 4),
             'incomeDS' => round($incomeDS, 2),
+            // Доход ДС С НДС — считаем ЗДЕСЬ и округляем ОДИН раз.
+            //
+            // ⚠ Раньше фронт восстанавливал эту величину сам: в строке
+            // round(incomeDS × (1+НДС), 2), а в ИТОГО — сумму тех же
+            // произведений БЕЗ построчного округления. Строки показывали
+            // ровные суммы, итог — сумму «хвостов»: десять строк на 9 500,00
+            // давали ИТОГО 9 499,98 (08.09.2026). Одно поле — один источник
+            // истины и для строки, и для итога.
+            'incomeDSGross' => round($incomeDS * (1 + $vatPercent / 100), 2),
             'incomeDSUSD' => $incomeDsUsd,
             // Доход ДС в валюте контракта + чем его подписать. isForeign=false
             // для рублёвых — фронт по нему решает, показывать ли колонку.

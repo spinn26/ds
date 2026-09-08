@@ -157,6 +157,52 @@ class ManualDraftPreviewTest extends TestCase
         $this->assertEqualsWithDelta(5, $p['dsCommissionPercentage'], 0.0001);
     }
 
+    /**
+     * Сумму дохода ДС С НДС отдаёт бэкенд, округлённую ОДИН раз.
+     *
+     * Оператор вводит ровную сумму из отчёта поставщика; в базе она лежит без
+     * НДС и потому дробная. Восстанавливать её на фронте нельзя: строка и
+     * ИТОГО округляли по-разному и расходились в копейках.
+     */
+    #[Test]
+    public function the_gross_ds_income_is_rounded_once_by_the_backend(): void
+    {
+        // 14,00 ₽ с НДС 20 % — это 11,666667 ₽ без НДС.
+        $p = $this->preview([
+            'amount' => 1_000_000,
+            'customCommission' => true,
+            'dsCommissionAbsolute' => 11.666667,
+        ]);
+
+        $this->assertSame(14.0, round((float) $p['incomeDSGross'], 2),
+            'обратно должна получиться ровно введённая оператором сумма');
+    }
+
+    /**
+     * Регресс 08.09.2026: десять ровных сумм давали ИТОГО 9 499,98 вместо
+     * 9 500,00. Строка показывала округлённое до копеек значение, а итог
+     * суммировал неокруглённые произведения и копил «хвосты».
+     */
+    #[Test]
+    public function round_gross_amounts_sum_without_kopeck_drift(): void
+    {
+        $gross = [14, 816, 480, 1472, 3551, 827, 698, 258, 284, 1100];
+
+        $sum = 0.0;
+        foreach ($gross as $g) {
+            $p = $this->preview([
+                'amount' => 1_000_000,
+                'customCommission' => true,
+                // Так же, как это делает форма: делим на ставку и храним
+                // шесть знаков, а не два.
+                'dsCommissionAbsolute' => round($g / 1.2, 6),
+            ]);
+            $sum += (float) $p['incomeDSGross'];
+        }
+
+        $this->assertSame(9_500.0, round($sum, 2), 'итог по ровным суммам обязан быть ровным');
+    }
+
     // ---------------- Цепочка ----------------
 
     /** Наставник получает МАРЖУ — разницу процентов, а не свой процент целиком. */
