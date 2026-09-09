@@ -88,7 +88,10 @@ const routes = [
             { path: 'manage/products', component: () => import('../pages/Admin/Products.vue'), meta: { staff: true } },
             // Все программы одним списком: раньше их можно было увидеть только
             // внутри карточки продукта.
-            { path: 'manage/products/programs', component: () => import('../pages/Admin/Programs.vue'), meta: { staff: true } },
+            // Только админу (2026-09-09): в списке лежат тарифы и методики
+            // расчёта баллов — по ним считаются деньги. Прятать один пункт
+            // меню мало, прямой адрес открывал страницу любому staff.
+            { path: 'manage/products/programs', component: () => import('../pages/Admin/Programs.vue'), meta: { staff: true, admin: true } },
             { path: 'manage/products-preview', component: () => import('../pages/Admin/ProductsPreview.vue'), meta: { staff: true } },
             { path: 'manage/education', component: () => import('../pages/Admin/EducationConstructor.vue'), meta: { staff: true } },
             { path: 'manage/education-legacy', component: () => import('../pages/Admin/Education.vue'), meta: { staff: true } },

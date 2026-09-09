@@ -1302,7 +1302,6 @@ const baseMenuItems = [
   { label: 'База знаний', icon: 'mdi-book-education-outline', path: '/education/kb', partner: true },
   { label: 'Инструкции', icon: 'mdi-book-open-variant', path: '/instructions', partner: true },
   { label: 'Статус системы', icon: 'mdi-monitor-dashboard', path: '/status', partner: true },
-  { label: 'Программы', icon: 'mdi-format-list-bulleted-type', path: '/manage/products/programs', adminSection: 'products' },
   // Внешний сервис «ФинРывок» — открывается в новой вкладке.
   { label: 'ФинРывок', icon: 'mdi-rocket-launch-outline', path: '', partner: true,
     action: () => window.open('https://ds.igron.games/auth/login', '_blank', 'noopener') },
@@ -1386,6 +1385,11 @@ const baseMenuItems = [
   // Прочее
   { group: 'Прочее', adminSection: 'products' },
   { label: 'Продукты', icon: 'mdi-package-variant-closed', path: '/manage/products', adminSection: 'products' },
+  // Программы — только админу: список тарифов и методик расчёта баллов, по
+  // которым считаются деньги. Продукты остаются всему staff.
+  // adminOnly проверяется раньше adminSection (см. visibleMenu), поэтому
+  // права на раздел «Продукты» сюда доступ больше не открывают.
+  { label: 'Программы', icon: 'mdi-format-list-bulleted-type', path: '/manage/products/programs', adminSection: 'products', adminOnly: true },
   { label: 'Конкурсы и события', icon: 'mdi-trophy', path: '/manage/contests', adminSection: 'contests' },
   { label: 'Новости', icon: 'mdi-newspaper', path: '/manage/news', adminSection: 'news' },
   { label: 'Аналитика чата', icon: 'mdi-chart-box-outline', path: '/manage/chat/analytics', adminSection: 'chat-analytics' },

@@ -545,7 +545,14 @@ Route::get('/admin/products-catalog/types',          [\App\Http\Controllers\Api\
 Route::get('/admin/products-catalog/references',     [\App\Http\Controllers\Api\AdminProductCatalogController::class, 'references']);
 // Все программы одним списком — до маршрута с {id}, иначе «programs»
 // будет принят за идентификатор продукта.
-Route::get('/admin/products-catalog/programs',       [\App\Http\Controllers\Api\AdminProductCatalogController::class, 'programsAll']);
+//
+// role:admin (2026-09-09): страница «Программы» закрыта для всех, кроме
+// админа. Одного пункта меню и гарда роутера мало — этот эндпоинт отдаёт
+// тарифы и методики расчёта баллов всей продуктовой сетки, то есть данные,
+// по которым считаются деньги. Соседний /{id}/programs НЕ трогаем: он
+// открывает программы внутри карточки продукта, а «Продукты» остаются
+// доступны всему staff.
+Route::get('/admin/products-catalog/programs',       [\App\Http\Controllers\Api\AdminProductCatalogController::class, 'programsAll'])->middleware('role:admin');
 Route::get('/admin/products-catalog',                [\App\Http\Controllers\Api\AdminProductCatalogController::class, 'indexProducts']);
 Route::post('/admin/products-catalog',               [\App\Http\Controllers\Api\AdminProductCatalogController::class, 'storeProduct']);
 Route::get('/admin/products-catalog/{id}',           [\App\Http\Controllers\Api\AdminProductCatalogController::class, 'showProduct'])->whereNumber('id');
