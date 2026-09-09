@@ -746,7 +746,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
 import { useConfirm } from '../../composables/useConfirm';
@@ -1211,21 +1211,89 @@ async function addContractToDrafts(contractId) {
   adding.value = false;
 }
 
-const debouncedPatch = useDebounce((draft, payload) => doPatch(draft, payload), 500).debounced;
+/**
+ * Автосохранение черновиков: по одному таймеру НА ЧЕРНОВИК, правки копятся.
+ *
+ * ⚠ Раньше здесь был ОДИН debounce на всю страницу:
+ *   const debouncedPatch = useDebounce(..., 500).debounced;
+ * Он держит один таймер, и каждый новый вызов делал clearTimeout предыдущему.
+ * Любые две правки за полсекунды — и первая пропадала БЕЗ СЛЕДА: в строке
+ * значение стояло (patchField пишет его локально), а на сервер не уходило.
+ * Оператор видел, как данные «слетают»:
+ *
+ *   - галка «Своя комиссия» снималась сама. onCustomCommissionToggle шлёт
+ *     ДВА patchField подряд (customCommission, затем предзаполнение суммы),
+ *     и первый гарантированно затирался вторым — customCommission не
+ *     сохранялся никогда, а следующий ответ сервера возвращал галку назад;
+ *   - сумма транзакции пропадала при переходе к следующей строке: правка
+ *     предыдущей отменялась, и её приходилось вводить второй раз.
+ *
+ * Теперь у каждого черновика свой таймер и свой накопленный payload, так что
+ * строки больше не мешают друг другу, а правки одной строки уходят одним
+ * запросом вместо того, чтобы вытеснять друг друга.
+ */
+const pendingPatches = new Map(); // draftId → { payload, timer }
+const patchSeq = new Map();       // draftId → номер последнего отправленного запроса
 
 function patchField(draft, field, value) {
   draft[field] = value;
-  debouncedPatch(draft, { [field]: value });
+
+  const entry = pendingPatches.get(draft.id) || { payload: {}, timer: null };
+  entry.payload[field] = value;
+  clearTimeout(entry.timer);
+  entry.timer = setTimeout(() => {
+    pendingPatches.delete(draft.id);
+    doPatch(draft, entry.payload);
+  }, 500);
+  pendingPatches.set(draft.id, entry);
 }
 
 async function doPatch(draft, payload) {
+  const seq = (patchSeq.get(draft.id) || 0) + 1;
+  patchSeq.set(draft.id, seq);
   try {
     const { data } = await api.patch('/admin/manual-tx/drafts/' + draft.id, payload);
-    Object.assign(draft, data);
+
+    // Ответ на устаревший запрос игнорируем: пока он летел, ушёл следующий,
+    // и его данные свежее.
+    if (patchSeq.get(draft.id) !== seq) return;
+
+    // ⚠ Раньше здесь стоял Object.assign(draft, data) — ответ затирал строку
+    // целиком. Если оператор успевал что-то напечатать, пока запрос летел,
+    // сервер возвращал ЕЩЁ СТАРОЕ значение этого поля и стирал набранное.
+    // Поля, которые правят прямо сейчас, не трогаем.
+    const editing = pendingPatches.get(draft.id)?.payload ?? {};
+    for (const [key, value] of Object.entries(data)) {
+      if (key in editing) continue;
+      draft[key] = value;
+    }
   } catch (e) {
     notify(e.response?.data?.message || 'Ошибка сохранения', 'error');
   }
 }
+
+/**
+ * Дослать всё отложенное и дождаться ответов.
+ *
+ * Нужно перед «Рассчитать» и «Зафиксировать»: между последним нажатием
+ * клавиши и отправкой проходит полсекунды, и без этого сервер считал бы (и
+ * фиксировал) ПРЕДЫДУЩЕЕ значение суммы.
+ */
+async function flushPatches() {
+  const waits = [];
+  for (const [id, entry] of [...pendingPatches.entries()]) {
+    clearTimeout(entry.timer);
+    pendingPatches.delete(id);
+    const draft = drafts.value.find(d => d.id === id);
+    if (draft) waits.push(doPatch(draft, entry.payload));
+  }
+  await Promise.allSettled(waits);
+}
+
+onUnmounted(() => {
+  for (const entry of pendingPatches.values()) clearTimeout(entry.timer);
+  pendingPatches.clear();
+});
 
 async function removeDraft(draft) {
   await api.delete('/admin/manual-tx/drafts/' + draft.id);
@@ -1278,6 +1346,8 @@ const dirtyCount = computed(() =>
 const calculating = ref(false);
 async function calcAll() {
   calculating.value = true;
+  // Сначала дошлём недосохранённые правки — иначе считаем по старым данным.
+  await flushPatches();
   try {
     const { data } = await api.post('/admin/manual-tx/calc', {});
     if (data.calculated) notify(`Рассчитано: ${data.calculated}`);
@@ -1292,6 +1362,25 @@ async function calcAll() {
 async function fixAll() {
   if (!fixableIds.value.length) return;
   fixing.value = true;
+
+  // Досылаем несохранённые правки ДО фиксации: иначе в транзакцию уходит
+  // предыдущее значение суммы, а правка долетает уже после неё.
+  //
+  // Любая правка обнуляет превью на сервере (updateDraft чистит previewCalc),
+  // поэтому строки с недосохранёнными изменениями выпадут из fixableIds. Это
+  // правильно — их нельзя фиксировать по расчёту, сделанному до правки, — но
+  // молча терять их нельзя: кнопка обещала одно число, ушло бы меньше.
+  const intended = [...fixableIds.value];
+  await flushPatches();
+  const dropped = intended.filter(id => !fixableIds.value.includes(id));
+  if (dropped.length) {
+    notify(
+      `${dropped.length} стр. изменились после расчёта — нажмите «Рассчитать» и зафиксируйте их отдельно.`,
+      'warning',
+    );
+  }
+  if (!fixableIds.value.length) { fixing.value = false; return; }
+
   // Запоминаем диапазон дат фиксируемых черновиков — после успеха ведём
   // юзера прямо в Комиссии с этим фильтром. Иначе на /manage/commissions
   // свежая транзакция теряется среди десятков тысяч записей с такой же
