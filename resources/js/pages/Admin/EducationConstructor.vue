@@ -354,6 +354,12 @@ const loadingProducts = ref(false);
 const programOptions = ref([]);
 const loadingPrograms = ref(false);
 
+// ⚠ Объявлено здесь, а не вместе с остальным состоянием ниже: на currentCourse
+// ссылается watch, который стоит выше по файлу. watch вычисляет источник сразу
+// при setup, поэтому объявление ниже давало ReferenceError (temporal dead zone)
+// и страница не открывалась вовсе.
+const currentCourse = ref(null);
+
 async function loadProducts() {
   loadingProducts.value = true;
   try {
@@ -402,7 +408,6 @@ watch(() => currentCourse.value?.product_ids, () => {
 
 const selectedId = ref(null);
 const selectedType = ref(null);   // 'course' | 'lesson'
-const currentCourse = ref(null);
 const currentLesson = ref(null);
 const currentLessonCourseId = ref(null);
 const courseLessons = ref([]);
