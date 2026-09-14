@@ -42,6 +42,7 @@ class InsmartIntegrationService
     public function __construct(
         private readonly CommissionCalculator $calculator,
         private readonly \App\Services\PeriodFreezeService $periodFreeze,
+        private readonly TelegramNotifier $telegram,
     ) {}
 
     /**
@@ -68,7 +69,11 @@ class InsmartIntegrationService
             return ['status' => 'skipped_not_paid'];
         }
 
-        return DB::transaction(function () use ($payload, $externalId) {
+        // Сделка без комиссий запоминается внутри транзакции, а оповещение уходит
+        // только после коммита: откатившийся вебхук ничего не создал.
+        $uncalculated = null;
+
+        $result = DB::transaction(function () use ($payload, $externalId, &$uncalculated) {
             // 1) Resolve consultant (per spec §3.2)
             $consultantId = $this->resolveConsultant($payload);
 
@@ -186,13 +191,38 @@ class InsmartIntegrationService
             // числом (пул/удержания уже применены). Транзакцию всё равно
             // сохраняем (не теряем платёж), комиссии считает оператор вручную.
             $frozen = $this->periodFreeze->isFrozen((int) $paidAt->year, (int) $paidAt->month);
+            $commissionError = null;
             if ($frozen) {
                 \Illuminate\Support\Facades\Log::warning(
                     "InSmart: платёж в ЗАКРЫТЫЙ период {$paidAt->format('Y-m')} — комиссии НЕ пересчитаны автоматически, нужна ручная обработка",
                     ['externalId' => $externalId, 'transactionId' => $txId, 'contractId' => $contractId]
                 );
+                $commissionError = "Период {$paidAt->format('Y-m')} закрыт — комиссии не посчитаны автоматически";
             } else {
-                $this->calculator->calculateForTransaction($txId);
+                // ⚠ Результат расчёта ПРОВЕРЯЕМ. calculateForTransaction не бросает,
+                // а возвращает ['error' => …] (удалённый партнёр, нет ставки НДС,
+                // нет тарифа), и раньше вебхук на это не смотрел: сделка
+                // создавалась без комиссий, а наружу уходил обычный «created».
+                // Цепочка ничего не получала, отчёт «Комиссии» давал по сделке 0,
+                // а пул — оценку дохода: так август 2026 разошёлся на 740 ₽.
+                // Сделку при этом не откатываем — платёж был.
+                $calc = $this->calculator->calculateForTransaction($txId);
+                if (! empty($calc['error'])) {
+                    $commissionError = (string) $calc['error'];
+                    Log::warning('InSmart: сделка создана, комиссии не посчитаны', [
+                        'externalId' => $externalId, 'transactionId' => $txId, 'error' => $commissionError,
+                    ]);
+                }
+            }
+
+            if ($commissionError !== null) {
+                $uncalculated = [
+                    'externalId' => $externalId,
+                    'contractNumber' => $contractNumber,
+                    'transactionId' => $txId,
+                    'period' => $paidAt->format('Y-m'),
+                    'error' => $commissionError,
+                ];
             }
 
             return [
@@ -201,8 +231,47 @@ class InsmartIntegrationService
                 'transactionId' => $txId,
                 'consultantId' => $consultantId,
                 'frozenPeriod' => $frozen,
+                'commissionsCalculated' => $commissionError === null,
+                'commissionError' => $commissionError,
             ];
         });
+
+        if ($uncalculated !== null) {
+            $this->notifyUncalculated($uncalculated);
+        }
+
+        return $result;
+    }
+
+    /**
+     * Сделка записана, а комиссий по ней нет — сказать людям, а не логу.
+     *
+     * Сама такая сделка не всплывёт: партнёр не знает, что ему недоначислили,
+     * а пул и реестр выглядят правдоподобно. Находили её только ручной сверкой
+     * отчёта с пулом. Оповещение не должно ронять вебхук — сделка уже в базе.
+     *
+     * @param  array<string, mixed>  $u
+     */
+    private function notifyUncalculated(array $u): void
+    {
+        $e = fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
+
+        try {
+            $this->telegram->send(implode("\n", [
+                '⚠️ <b>Инсмарт: сделка без комиссий</b>',
+                '',
+                'Заказ: <b>' . $e($u['externalId'] ?? '—') . '</b>, договор ' . $e($u['contractNumber']),
+                'Транзакция: #' . $e($u['transactionId']) . ', период ' . $e($u['period']),
+                'Причина: ' . $e($u['error']),
+                '',
+                'Партнёрам по сделке ничего не начислено, а пул её доход уже учитывает.',
+                'Досчитать: <code>php artisan finance:uncalculated-transactions --month=' . $e($u['period']) . ' --calculate</code>',
+            ]));
+        } catch (\Throwable $ex) {
+            Log::warning('InSmart: оповещение о сделке без комиссий не отправлено', [
+                'transactionId' => $u['transactionId'], 'error' => $ex->getMessage(),
+            ]);
+        }
     }
 
     /** Per spec §3.2: находим consultant по appClientId из payload. */

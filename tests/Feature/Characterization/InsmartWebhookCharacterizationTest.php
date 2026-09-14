@@ -21,9 +21,16 @@ class InsmartWebhookCharacterizationTest extends TestCase
 
     private const PARTNER = 970001;
 
+    /** Удалённый партнёр: вебхук его находит, а калькулятор удалённых не принимает. */
+    private const DELETED_PARTNER = 970002;
+
     protected function setUp(): void
     {
         parent::setUp();
+        // Кэш ставок НДС живёт весь процесс: без сброса «ставки нет» из одного
+        // теста перетекает в другой, где ставка заведена.
+        \App\Support\VatRate::flush();
+        \App\Support\CurrencyRates::flush();
 
         DB::table('consultant')->insert([
             'id' => self::PARTNER,
@@ -106,6 +113,62 @@ class InsmartWebhookCharacterizationTest extends TestCase
             'сиквенс не отстал от записей вебхука'
         );
         $this->assertSame(3, DB::table('contract')->count());
+    }
+
+    /**
+     * ⚠ Регресс-тест: ошибку расчёта комиссий нельзя проглатывать.
+     *
+     * calculateForTransaction не бросает, а возвращает ['error' => …], и вебхук
+     * результат не смотрел: сделка создавалась, комиссии — нет, а наружу уходил
+     * обычный «created». Цепочка ничего не получала, отчёт «Комиссии» давал по
+     * сделке 0, а пул — оценку дохода: так август 2026 разошёлся на 740 ₽.
+     */
+    #[Test]
+    public function commission_error_is_reported_not_swallowed(): void
+    {
+        DB::table('consultant')->insert([
+            'id' => self::DELETED_PARTNER,
+            'personName' => 'Удалённый партнёр',
+            'activity' => 1,
+            'dateCreated' => '2026-01-01 00:00:00',
+            'dateDeleted' => '2026-07-01 00:00:00',
+        ]);
+        $payload = $this->payload('ORDER-6');
+        $payload['appClientId'] = self::DELETED_PARTNER;
+
+        $result = app(InsmartIntegrationService::class)->handlePaidWebhook($payload);
+
+        // Сделку не теряем: платёж был, контракт и транзакция нужны.
+        $this->assertSame('created', $result['status']);
+        $this->assertFalse($result['commissionsCalculated']);
+        $this->assertStringContainsString('удалён', (string) $result['commissionError']);
+
+        $tx = DB::table('transaction')->where('id', $result['transactionId'])->first();
+        $this->assertNotNull($tx, 'транзакция создана');
+        $this->assertNull($tx->commissionsAmountRUB, 'доход ДС не записан — расчёт не прошёл');
+    }
+
+    /** Прошедший расчёт так и отмечается, а доход ДС записан. */
+    #[Test]
+    public function successful_calculation_is_reported(): void
+    {
+        DB::table('vat')->delete();
+        DB::table('vat')->insert([
+            'id' => 970100,
+            'value' => 5,
+            'dateFrom' => '2020-01-01',
+            'dateTo' => '2050-01-01',
+        ]);
+
+        $result = app(InsmartIntegrationService::class)->handlePaidWebhook($this->payload('ORDER-7'));
+
+        $this->assertTrue($result['commissionsCalculated'], (string) ($result['commissionError'] ?? ''));
+        $this->assertNull($result['commissionError']);
+
+        // Премия 100 000 с НДС 5% → база 95 238,10; КВ 20 000 = 20% премии →
+        // доход ДС без НДС = 95 238,10 × 20% = 19 047,62.
+        $income = DB::table('transaction')->where('id', $result['transactionId'])->value('commissionsAmountRUB');
+        $this->assertEqualsWithDelta(19_047.62, (float) $income, 0.01);
     }
 
     private function payload(string $orderId): array

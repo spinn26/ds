@@ -108,8 +108,15 @@ class InsmartWebhookController extends Controller
 
         try {
             $result = $service->handlePaidWebhook($payload);
-            $logger->finish($event, 'success',
-                "Insmart paid: order {$externalId}", $result, $externalId ?: null);
+            // Сделка без комиссий — вебхук при этом отработал, поэтому статус
+            // остаётся success: error опустил бы success-rate и поднял в
+            // PlatformHealthCheck ложную тревогу «интеграция деградировала».
+            // Причину пишем в summary, а людям сервис шлёт отдельное оповещение.
+            $summary = "Insmart paid: order {$externalId}";
+            if (($result['commissionsCalculated'] ?? true) === false) {
+                $summary .= ' — сделка создана, комиссии НЕ посчитаны: ' . $result['commissionError'];
+            }
+            $logger->finish($event, 'success', $summary, $result, $externalId ?: null);
             return response()->json($result);
         } catch (Throwable $e) {
             $logger->finish($event, 'error', $e->getMessage(), null, $externalId ?: null);

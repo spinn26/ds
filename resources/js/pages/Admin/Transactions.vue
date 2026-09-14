@@ -1596,8 +1596,15 @@ async function saveTx() {
       date: editTx.value.date || null,
       comment: editTx.value.comment ?? null,
     };
-    await api.put(`/admin/transactions/${editTx.value.id}`, payload);
-    notify('Транзакция обновлена. Комиссии пересчитаны.', 'success');
+    const { data } = await api.put(`/admin/transactions/${editTx.value.id}`, payload);
+    // Сервер отвечает 200 и тогда, когда сумма сохранена, а комиссии — нет
+    // (закрытый период, нет тарифа, нет ставки НДС): recalculated=false,
+    // причина в message. Раньше здесь всегда писалось «пересчитаны».
+    if (data?.recalculated === false) {
+      notify(data.message || 'Транзакция обновлена, но комиссии не пересчитаны', 'warning');
+    } else {
+      notify('Транзакция обновлена. Комиссии пересчитаны.', 'success');
+    }
     editDialog.value = false;
     await loadLog();
   } catch (e) {
