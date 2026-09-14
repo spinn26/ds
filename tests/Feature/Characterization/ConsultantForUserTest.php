@@ -30,6 +30,13 @@ class ConsultantForUserTest extends TestCase
     {
         parent::setUp();
 
+        // consultant.webUser ссылается на WebUser (consultant_webUser_fkey,
+        // проверяется сразу) — аккаунты заводим раньше карточек.
+        DB::table('WebUser')->insert([
+            ['id' => self::ACCOUNT],
+            ['id' => self::DELETED_ONLY_ACCOUNT],
+        ]);
+
         // Как у Дроздовой: старый удалённый дубль, живая карточка, новый удалённый.
         DB::table('consultant')->insert([
             $this->card(2900011, self::ACCOUNT, '2025-01-25 19:00:00'),

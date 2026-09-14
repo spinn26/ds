@@ -185,6 +185,8 @@ class InsmartWebhookCharacterizationTest extends TestCase
     {
         $account = 970900;
         $live = 969999;
+        // consultant.webUser ссылается на WebUser — аккаунт заводим раньше карточек.
+        DB::table('WebUser')->insert(['id' => $account]);
         DB::table('consultant')->insert([
             [
                 'id' => $live, 'personName' => 'Живая карточка', 'activity' => 1,
