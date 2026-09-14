@@ -349,7 +349,8 @@ class PartnerSalesMatrixController extends Controller
             // dsCommission, которая при неизвестном свойстве отдавала строку
             // по наибольшему id, то есть по порядку вставки.
             // Счётчик контрактов без тарифа уходит на фронт в missingTariff.
-            $ds = \App\Services\ForecastDsRate::forProgram($r->program_id);
+            // Срок договора — ставка первого года у части карточек заведена по сроку.
+            $ds = \App\Services\ForecastDsRate::forProgram($r->program_id, $r->term);
             if ($ds === null) {
                 $this->missingTariff[(int) $r->program_id] =
                     ($this->missingTariff[(int) $r->program_id] ?? 0) + 1;

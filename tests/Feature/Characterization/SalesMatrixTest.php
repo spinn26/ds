@@ -187,6 +187,42 @@ class SalesMatrixTest extends TestCase
     }
 
     /**
+     * ⚠ Регресс-тест: строки тарифа заведены по сроку — ставка берётся по сроку договора.
+     *
+     * Medlife KIP: 1-й год КВ — 26,05% при сроке 10 и 36,96% при сроке 14, в
+     * карточке задан «Год выплаты КВ» = 1. Срок не учитывался, выбиралась
+     * первая строка «1 год» — срок 10, — и все договоры KIP считались по 26,05%:
+     * матрица давала выручку KIP со сроком 14 как 24,8% суммы вместо 35,2%.
+     * Срок, которого в строках нет, выбор не ломает — берётся как раньше.
+     */
+    #[Test]
+    public function in_work_revenue_takes_the_tariff_row_of_the_contract_term(): void
+    {
+        $this->setVat(5);
+        DB::table('programs_catalog')->where('id', self::PROGRAM)->update([
+            'ds_percent' => 26.05,
+            'kv_payout_year' => '1',
+            'tariffs' => json_encode([
+                ['term' => '10', 'year_kv' => '1', 'ds_pct' => '26.05', 'is_red' => false, 'property' => null],
+                ['term' => '10', 'year_kv' => '2', 'ds_pct' => '6.01', 'is_red' => false, 'property' => null],
+                ['term' => '14', 'year_kv' => '1', 'ds_pct' => '36.96', 'is_red' => false, 'property' => null],
+                ['term' => '14', 'year_kv' => '2', 'ds_pct' => '8.53', 'is_red' => false, 'property' => null],
+            ]),
+        ]);
+        \App\Services\ForecastDsRate::flush();
+
+        $this->contract(['status' => 2, 'ammount' => 105_000, 'term' => 14, 'createDate' => '2026-05-01 00:00:00']);
+        $this->contract(['status' => 2, 'ammount' => 105_000, 'term' => 12, 'createDate' => '2026-06-01 00:00:00']);
+
+        $monthly = $this->inWork('2026-05', '2026-06')['grandTotals']['monthly'];
+
+        // Срок 14: 105 000 / 1,05 × 36,96% = 36 960.
+        $this->assertEqualsWithDelta(36_960, $monthly['2026-05']['revenue'], 0.01);
+        // Срока 12 в строках нет — как раньше, первая строка «1 год»: 26,05%.
+        $this->assertEqualsWithDelta(26_050, $monthly['2026-06']['revenue'], 0.01);
+    }
+
+    /**
      * Валютный контракт пересчитывается управленческим курсом. Без него
      * доллары считались бы как рубли — то есть примерно в восемьдесят раз
      * дешевле.

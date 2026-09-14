@@ -70,7 +70,10 @@ class SalesMatrixAssembler
         // = null (транзакции ещё нет, свойство неизвестно) — каскад отбрасывал
         // фильтр по свойству и брал строку по наибольшему id, то есть ставку
         // выбирал порядок вставки. См. ForecastDsRate.
-        return \App\Services\ForecastDsRate::forProgram($r->program_id);
+        // Срок договора обязателен: у Medlife, Зетты, ИТА ставка первого года
+        // заведена по сроку, и без него все договоры программы считались по
+        // строке самого короткого срока (KIP: 26,05% вместо 36,96% при сроке 14).
+        return \App\Services\ForecastDsRate::forProgram($r->program_id, $r->term ?? null);
     }
 
     /**
