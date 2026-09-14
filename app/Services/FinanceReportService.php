@@ -589,14 +589,14 @@ class FinanceReportService
                 'monthEnd' => (function () use ($balance, $otherAccruals, $extraSum, $extraPointsSum, $consultant, $month) {
                     // ⛔ LIVE-ПЕРЕСЧЁТ УБРАН (2026-06-05): «Начислено»/«Пул» только из
                     // снимка consultantBalance, обновляемого по кнопке пересчёта.
-                    // Сальдо (входящий остаток) = remaining прошлого периода —
-                    // единообразно с реестром выплат и экспортным отчётом.
-                    $incoming = DB::table('consultantBalance')
-                        ->where('consultant', $consultant->id)
-                        ->where('dateMonth', '<', $month)
-                        ->orderByDesc('dateMonth')
-                        ->value('remaining');
-                    $balanceStart = (float) ($incoming ?? 0);
+                    //
+                    // Сальдо (входящий остаток) — по общему правилу IncomingBalance,
+                    // как в реестре выплат и его выгрузке: остаток прошлого периода
+                    // ПЛЮС ручные корректировки прошлых месяцев. Раньше здесь читался
+                    // один снимок, а он про other_accruals не знает: за август 2026
+                    // отчёт показал Зарипову 3 611,01 ₽ против 743,56 ₽ в реестре —
+                    // без июньской (−257,97) и июльской (−2 609,48) корректировок.
+                    $balanceStart = IncomingBalance::forConsultant((int) $consultant->id, $month);
                     $payed = $balance ? (float) ($balance->payed ?? 0) : 0.0;
 
                     $accrued = (float) ($balance->accruedTransactional ?? 0);

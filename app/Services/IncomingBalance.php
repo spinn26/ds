@@ -26,9 +26,16 @@ use Illuminate\Support\Facades\DB;
  *
  * ⚠ Если `other_accruals` когда-нибудь начнут агрегироваться в снимок
  * (`accruedNonTransactional`), эту добавку надо убрать — иначе двойной счёт.
- * Тем же правилом связаны PaymentRegistryService (колонка «Сальдо») и
- * PaymentRegistryReport (колонка «Сальдо» в выгрузке): расхождение между
- * ними уже разводило реестр с бухгалтерией, менять только одно место нельзя.
+ * Тем же правилом связаны PaymentRegistryService (колонка «Сальдо»),
+ * PaymentRegistryReport (колонка «Сальдо» в выгрузке) и FinanceReportService
+ * («Остаток на начало месяца» в личном отчёте партнёра и его Excel):
+ * расхождение между ними уже разводило реестр с бухгалтерией, менять только
+ * одно место нельзя.
+ *
+ * Личный отчёт в этот список попал последним. Он читал один снимок и за
+ * август 2026 показал Зарипову (consultant 143) остаток 3 611,01 ₽ против
+ * 743,56 ₽ в реестре — ровно на две корректировки: −257,97 ₽ за июнь (двойная
+ * комиссия) и −2 609,48 ₽ за июль (удержание).
  */
 class IncomingBalance
 {
@@ -39,15 +46,34 @@ class IncomingBalance
      */
     public static function forMonth(string $ym): array
     {
+        return self::compute($ym, null);
+    }
+
+    /**
+     * Сальдо на начало месяца `$ym` одного партнёра — то же правило, что
+     * {@see forMonth()}, без прохода по всей таблице: личный отчёт строится
+     * на одного человека.
+     */
+    public static function forConsultant(int $consultantId, string $ym): float
+    {
+        return self::compute($ym, $consultantId)[$consultantId] ?? 0.0;
+    }
+
+    /**
+     * @param  int|null  $only  один партнёр или null — все
+     * @return array<int, float> consultant id => входящее сальдо
+     */
+    private static function compute(string $ym, ?int $only): array
+    {
         // Остаток последнего снимка строго ДО запрошенного месяца.
         // DISTINCT ON — один проход вместо N коррелированных подзапросов
         // (прошлая версия отваливалась по таймауту на проде).
         $rows = DB::select(
             'SELECT DISTINCT ON (consultant) consultant, COALESCE(remaining, 0) AS remaining
                FROM "consultantBalance"
-              WHERE "dateMonth" < ?
+              WHERE "dateMonth" < ?' . ($only !== null ? ' AND consultant = ?' : '') . '
               ORDER BY consultant, "dateMonth" DESC',
-            [$ym]
+            $only !== null ? [$ym, $only] : [$ym]
         );
 
         $out = [];
@@ -60,6 +86,7 @@ class IncomingBalance
         // кабинет партнёра, и не надо угадывать таймзону accrual_date.
         $extras = DB::table('other_accruals')
             ->whereRaw("to_char(accrual_date, 'YYYY-MM') < ?", [$ym])
+            ->when($only !== null, fn ($q) => $q->where('consultant', $only))
             ->groupBy('consultant')
             ->selectRaw('consultant, SUM(COALESCE(amount, 0)) AS extra')
             ->get();
