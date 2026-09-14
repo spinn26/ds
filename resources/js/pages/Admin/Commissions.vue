@@ -268,12 +268,6 @@
            @click.stop — иначе клик по строке развернёт аккордеон. -->
       <template #item.actions="{ item }">
         <div class="d-flex">
-          <v-btn v-if="canCalc" icon="mdi-calculator-variant-outline" size="x-small"
-            variant="text" color="success"
-            :title="item.periodFrozen ? 'Период закрыт — нельзя рассчитать' : 'Рассчитать комиссии по транзакции'"
-            :disabled="item.periodFrozen || calculatingTxId === item.id"
-            :loading="calculatingTxId === item.id"
-            @click.stop="calculateTx(item)" />
           <v-btn v-if="canCalc" icon="mdi-pencil-outline" size="x-small"
             variant="text" color="primary"
             :title="item.periodFrozen ? 'Период закрыт — нельзя редактировать' : 'Редактировать транзакцию (сумма / %ДС / дата) с пересчётом комиссий'"
@@ -285,6 +279,12 @@
             :disabled="item.periodFrozen || deletingTxId === item.id"
             :loading="deletingTxId === item.id"
             @click.stop="confirmDeleteTx(item)" />
+          <v-btn v-if="canCalc" icon="mdi-calculator-variant-outline" size="x-small"
+            variant="text" color="success"
+            :title="item.periodFrozen ? 'Период закрыт — нельзя пересчитать' : 'Пересчитать комиссии по этой транзакции'"
+            :disabled="item.periodFrozen || calculatingTxId === item.id"
+            :loading="calculatingTxId === item.id"
+            @click.stop="calculateTx(item)" />
         </div>
       </template>
 
@@ -543,7 +543,7 @@ const headers = [
   { title: 'Комиссия', key: 'dsWithholdingRUB', align: 'end', width: 110 },
   { title: 'Комиссия ФК', key: 'partnerCommissionRUB', align: 'end', width: 120 },
   { title: 'Прибыль', key: 'profitRUB', align: 'end', width: 110 },
-  { title: '', key: 'actions', sortable: false, width: 80 },
+  { title: '', key: 'actions', sortable: false, width: 110 },
   { title: '', key: 'data-table-expand', sortable: false, width: 50 },
 ];
 
