@@ -33,7 +33,7 @@
         <v-text-field v-model="filters.consultantName" placeholder="ФИО консультанта"
           density="compact" variant="outlined" hide-details clearable
           style="max-width: 200px; flex: 1 1 160px"
-          @update:model-value="debouncedLoad" />
+          @update:model-value="onConsultantNameInput" />
         <v-select v-model="filters.consultantStatusId" :items="statusLevels"
           item-title="title" item-value="id"
           placeholder="Статус наставника (ФК…)"
@@ -360,7 +360,7 @@ const page = ref(1);
 const perPage = ref(25);
 const sortBy = ref('');
 const sortDir = ref('desc');
-const filters = ref({ id: '', consultantName: '', consultantStatusId: null, comment: '', created_from: '', created_to: '' });
+const filters = ref({ id: '', consultant: null, consultantName: '', consultantStatusId: null, comment: '', created_from: '', created_to: '' });
 const advancedOpen = ref(false);
 // 10-уровневая матрица квалификации — для фильтра «Статус наставника»
 // per memory project_commission_spec. Загружаем разово из GET /status-levels.
@@ -369,7 +369,12 @@ const statusLevels = ref([]);
 const activeFilterCount = computed(() => {
   let c = 0;
   if (search.value) c++;
-  Object.values(filters.value).forEach(v => { if (v) c++; });
+  // Точный id партнёра и его ФИО в поле — один фильтр, а не два.
+  Object.entries(filters.value).forEach(([k, v]) => {
+    if (!v) return;
+    if (k === 'consultant' && filters.value.consultantName) return;
+    c++;
+  });
   return c;
 });
 
@@ -384,9 +389,27 @@ const advancedActiveCount = computed(() => {
 
 function resetFilters() {
   search.value = '';
-  filters.value = { id: '', consultantName: '', consultantStatusId: null, comment: '', created_from: '', created_to: '' };
+  filters.value = { id: '', consultant: null, consultantName: '', consultantStatusId: null, comment: '', created_from: '', created_to: '' };
   loadData();
 }
+
+// Ручной ввод ФИО снимает точный фильтр по партнёру, пришедший из списка
+// партнёров, — иначе поиск по имени молча сужался бы прежним id.
+function onConsultantNameInput() {
+  filters.value.consultant = null;
+  debouncedLoad();
+}
+
+// Deep-link из списка партнёров: /…/clients?consultant=<id>&consultant_name=<ФИО>.
+// consultant (id) — точный фильтр, consultant_name — для отображения в поле.
+// Применяем СИНХРОННО в setup, до монтирования таблицы: иначе
+// v-data-table-server успевает запросить список без фильтра, и этот ответ
+// затирает отфильтрованный (тот же приём, что в Менеджере контрактов).
+(function applyQueryFilters() {
+  const q = route.query;
+  if (q.consultant) filters.value.consultant = String(q.consultant);
+  if (q.consultant_name) filters.value.consultantName = String(q.consultant_name);
+})();
 
 async function loadStatusLevels() {
   try {
@@ -441,7 +464,9 @@ async function loadData() {
     const params = { page: page.value, per_page: perPage.value };
     if (search.value) params.search = search.value;
     if (filters.value.id) params.id = filters.value.id;
-    if (filters.value.consultantName) params.consultant_name = filters.value.consultantName;
+    // Точный id партнёра (переход из списка партнёров) — вместо поиска по ФИО.
+    if (filters.value.consultant) params.consultant = filters.value.consultant;
+    else if (filters.value.consultantName) params.consultant_name = filters.value.consultantName;
     if (filters.value.consultantStatusId) params.consultant_status_id = filters.value.consultantStatusId;
     if (filters.value.comment) params.comment = filters.value.comment;
     if (filters.value.created_from) params.created_from = filters.value.created_from;

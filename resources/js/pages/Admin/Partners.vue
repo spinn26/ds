@@ -525,10 +525,20 @@
                   <span v-else class="p-muted">—</span>
                 </template>
 
+                <!-- Контракты и клиенты: число — ссылка в раздел, отфильтрованный
+                     по этому партнёру. @click.stop — иначе клик откроет карточку. -->
+                <template v-else-if="c.key === 'contractsCount' || c.key === 'clientsCount'">
+                  <router-link v-if="Number(item[c.key])" :to="countLink(item, c.key)"
+                    class="p-num p-count-link"
+                    :title="c.key === 'contractsCount' ? 'Открыть контракты партнёра' : 'Открыть клиентов партнёра'"
+                    @click.stop>{{ fmtNum(item[c.key]) }}</router-link>
+                  <span v-else class="p-num p-muted">0</span>
+                </template>
+
                 <!-- Объёмы и пул: моноширинные цифры, ноль приглушён —
                      иначе колонка нулей перетягивает внимание с реальных сумм. -->
                 <template v-else-if="c.key === 'groupVolume' || c.key === 'groupVolumeCumulative'
-                  || c.key === 'poolBonus' || c.key === 'contractsCount' || c.key === 'clientsCount'">
+                  || c.key === 'poolBonus'">
                   <span :class="['p-num', Number(item[c.key]) ? '' : 'p-muted']">
                     {{ item[c.key] != null ? fmtNum(Math.round(item[c.key])) : '—' }}
                   </span>
@@ -1133,6 +1143,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue';
+import { useRoute } from 'vue-router';
 import api from '../../api';
 import { useDebounce } from '../../composables/useDebounce';
 import { useTableSort } from '../../composables/useTableSort';
@@ -1152,6 +1163,16 @@ import {
 
 const auth = useAuthStore();
 const { canEdit, canFull } = usePermissions();
+const route = useRoute();
+
+// Счётчики контрактов и клиентов ведут в свой раздел с фильтром по партнёру —
+// точно по id (у тёзок и дублей карточек одно ФИО), имя — только для поля
+// фильтра. Контекст сохраняем: из /admin/… → /admin/…, иначе → /manage/…
+function countLink(item, key) {
+  const base = route.path.startsWith('/admin/') ? '/admin' : '/manage';
+  const section = key === 'contractsCount' ? 'contracts' : 'clients';
+  return { path: `${base}/${section}`, query: { consultant: item.id, consultant_name: item.personName || '' } };
+}
 
 // Валидация форм редактирования/добавления партнёра (строгий формат
 // по запросу заказчика 2026-05-13). Edit-форма мягче — поля sometimes,
@@ -2654,6 +2675,8 @@ onMounted(() => {
 
 /* Цифры в колонках — моноширинные, чтобы разряды стояли столбиком. */
 .p-num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.p-count-link { color: rgb(var(--v-theme-primary)); text-decoration: none; }
+.p-count-link:hover { text-decoration: underline; }
 
 .p-actions { display: flex; align-items: center; justify-content: flex-end; gap: 2px; white-space: nowrap; }
 

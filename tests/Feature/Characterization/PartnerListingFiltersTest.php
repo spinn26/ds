@@ -98,6 +98,30 @@ class PartnerListingFiltersTest extends TestCase
     }
 
     /**
+     * «Клиентов» в списке — клиенты партнёра (client.consultant), а не признак
+     * «партнёр сам числится клиентом». Колонка показывала признак (0/1), и
+     * переход в «Клиенты» с фильтром по партнёру давал другое число. Удалённые
+     * не считаются — раздел «Клиенты» их тоже не показывает.
+     */
+    #[Test]
+    public function clients_count_is_the_partners_own_clients(): void
+    {
+        DB::table('client')->insert([
+            ['id' => 1200011, 'consultant' => self::NO_LOGIN, 'personName' => 'Клиент Один', 'dateDeleted' => null],
+            ['id' => 1200012, 'consultant' => self::NO_LOGIN, 'personName' => 'Клиент Два', 'dateDeleted' => null],
+            ['id' => 1200013, 'consultant' => self::NO_LOGIN, 'personName' => 'Удалённый клиент', 'dateDeleted' => '2026-08-01 00:00:00'],
+        ]);
+
+        $rows = collect($this->list('')->json('data'))->keyBy('id');
+
+        $this->assertSame(2, $rows[self::NO_LOGIN]['clientsCount']);
+        $this->assertFalse($rows[self::NO_LOGIN]['isClient'], 'свои клиенты не делают партнёра клиентом');
+        // У WITH_LOGIN одна карточка клиента — он сам, и закреплена она за ним же.
+        $this->assertSame(1, $rows[self::WITH_LOGIN]['clientsCount']);
+        $this->assertTrue($rows[self::WITH_LOGIN]['isClient']);
+    }
+
+    /**
      * «Дата смены статуса»: активному — конец годового периода,
      * зарегистрированному — его activationDeadline.
      *

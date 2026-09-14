@@ -153,9 +153,7 @@ class PartnerListingService
         // Признак «партнёр является и клиентом» — по явной связи
         // client.partner_consultant_id (заполняет clients:link-partners).
         // Прежде считался через общий person: связь оказалась неверной у 30 пар
-        // и не определялась вовсе у партнёров без person.
-        // Считаем клиентов, а не просто наличие: список показывает их числом,
-        // а признак «партнёр является клиентом» — это тот же ответ > 0.
+        // и не определялась вовсе у партнёров без person. Признак — это ответ > 0.
         $ids = $rows->pluck('id');
         $clientCounts = $ids->isNotEmpty()
             ? DB::table('client')->whereIn('partner_consultant_id', $ids)
@@ -163,6 +161,20 @@ class PartnerListingService
                 ->groupBy('partner_consultant_id')
                 ->selectRaw('partner_consultant_id, count(*) as n')
                 ->pluck('n', 'partner_consultant_id')
+            : collect();
+
+        // Число в колонке «Клиентов» — клиенты партнёра (client.consultant), как
+        // в его карточке и в разделе «Клиенты». Колонка раньше показывала счётчик
+        // выше, то есть «партнёр сам числится клиентом»: на проде это 0 или 1,
+        // тогда как у Лунина 102 клиента. Клик по числу ведёт в «Клиенты» с
+        // фильтром consultant=<id>, и выдача обязана совпасть с числом — поэтому
+        // условия те же: удалённых клиентов не считаем.
+        $ownClientCounts = $ids->isNotEmpty()
+            ? DB::table('client')->whereIn('consultant', $ids)
+                ->whereNull('dateDeleted')
+                ->groupBy('consultant')
+                ->selectRaw('consultant, count(*) as n')
+                ->pluck('n', 'consultant')
             : collect();
 
         // Показатели строки: квалификация с ГП и пул. DISTINCT ON берёт
@@ -210,7 +222,7 @@ class PartnerListingService
         // трижды, и резолвить его на каждое поле — лишняя работа.
         return $rows->map(function ($c) use (
             $webUsers, $clientCounts, $statusTitles, $reinstateLimit, $activationDays,
-            $quals, $pools, $contractCounts
+            $quals, $pools, $contractCounts, $ownClientCounts
         ) {
             $webUser = $webUsers->get($c->webUser);
             $qual = $quals->get($c->id);
@@ -250,7 +262,7 @@ class PartnerListingService
                 'groupVolume' => isset($qual->groupVolume) ? round((float) $qual->groupVolume, 2) : null,
                 'poolBonus' => isset($pool->poolBonus) ? round((float) $pool->poolBonus, 2) : null,
                 'contractsCount' => (int) ($contractCounts[$c->id] ?? 0),
-                'clientsCount' => (int) ($clientCounts[$c->id] ?? 0),
+                'clientsCount' => (int) ($ownClientCounts[$c->id] ?? 0),
                 // dateLastActivity в базе пуст у всех — живой признак только этот.
                 'lastSeenAt' => $webUser->last_seen_at ?? null,
                 'isClient' => (int) ($clientCounts[$c->id] ?? 0) > 0,

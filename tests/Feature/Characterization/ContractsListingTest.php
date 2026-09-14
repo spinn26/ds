@@ -64,6 +64,9 @@ class ContractsListingTest extends TestCase
         $this->assertOnly('client=' . self::CLIENT, [self::CONTRACT_A]);
         $this->assertOnly('client_name=' . urlencode('Клиент Первый'), [self::CONTRACT_A]);
         $this->assertOnly('consultant_name=' . urlencode('Второй'), [self::CONTRACT_B]);
+        // Точно по id партнёра — так ведёт клик по счётчику в списке партнёров.
+        $this->assertOnly('consultant=' . self::PARTNER, [self::CONTRACT_A]);
+        $this->assertOnly('consultant=' . self::OTHER_PARTNER, [self::CONTRACT_B]);
     }
 
     #[Test]

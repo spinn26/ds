@@ -195,7 +195,7 @@
       <v-col cols="12" md="2">
         <v-text-field v-model="filters.consultant_name" placeholder="ФИО консультанта"
           density="comfortable" variant="outlined" hide-details clearable
-          @update:model-value="debouncedLoad" />
+          @update:model-value="onConsultantNameInput" />
       </v-col>
       <v-col cols="12" md="2">
         <v-text-field v-model="filters.number" placeholder="№ контракта"
@@ -620,7 +620,7 @@ const statusFilter = ref([]);
 const statusOptions = ref([]);
 const showAdvanced = ref(false);
 const filters = ref({
-  client_name: '', consultant_name: '',
+  client: null, client_name: '', consultant: null, consultant_name: '',
   number: '', comment: '', product: null, program: null,
   setup: null, supplier: null,
   created_from: '', created_to: '',
@@ -1092,7 +1092,13 @@ const activeFilterCount = computed(() => {
   let c = 0;
   if (search.value) c++;
   if (statusFilter.value?.length) c++;
-  Object.values(filters.value).forEach(v => { if (v) c++; });
+  // Точный id и имя в поле — один фильтр, а не два.
+  Object.entries(filters.value).forEach(([k, v]) => {
+    if (!v) return;
+    if (k === 'client' && filters.value.client_name) return;
+    if (k === 'consultant' && filters.value.consultant_name) return;
+    c++;
+  });
   return c;
 });
 
@@ -1100,7 +1106,7 @@ function resetFilters() {
   search.value = '';
   statusFilter.value = [];
   filters.value = {
-    client: null, client_name: '', consultant_name: '',
+    client: null, client_name: '', consultant: null, consultant_name: '',
     number: '', comment: '', product: null, program: null,
     setup: null, supplier: null,
     created_from: '', created_to: '',
@@ -1138,6 +1144,9 @@ async function loadData() {
     if (search.value) params.search = search.value;
     if (statusFilter.value?.length) params.status = statusFilter.value;
     Object.entries(filters.value).forEach(([k, v]) => {
+      // При точном id партнёра имя не шлём: consultantName в договоре — копия
+      // на момент создания и может разойтись с текущим ФИО.
+      if (k === 'consultant_name' && filters.value.consultant) return;
       if (v !== '' && v !== null && v !== undefined) params[k] = v;
     });
     if (sortBy.value) {
@@ -1166,6 +1175,13 @@ function onClientNameInput() {
   debouncedLoad();
 }
 
+// То же для партнёра: ручной ввод ФИО снимает точный фильтр по id,
+// пришедший из списка партнёров.
+function onConsultantNameInput() {
+  filters.value.consultant = null;
+  debouncedLoad();
+}
+
 // Deep-link из списка клиентов: /…/contracts?client=<id>&client_name=<ФИО>.
 // client (id) — точный фильтр, client_name — для отображения в поле.
 // ВАЖНО: применяем СИНХРОННО в setup, до монтирования таблицы. Иначе
@@ -1176,6 +1192,9 @@ function onClientNameInput() {
   const q = route.query;
   if (q.client) filters.value.client = String(q.client);
   if (q.client_name) filters.value.client_name = String(q.client_name);
+  // Из списка партнёров: /…/contracts?consultant=<id>&consultant_name=<ФИО>.
+  if (q.consultant) filters.value.consultant = String(q.consultant);
+  if (q.consultant_name) filters.value.consultant_name = String(q.consultant_name);
 })();
 
 onMounted(() => {

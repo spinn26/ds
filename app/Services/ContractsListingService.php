@@ -22,7 +22,7 @@ class ContractsListingService
 {
     /** @var list<string> */
     public const FILTERS = [
-        'search', 'client', 'client_name', 'consultant_name', 'status', 'number',
+        'search', 'client', 'client_name', 'consultant', 'consultant_name', 'status', 'number',
         'comment', 'product', 'program', 'setup', 'supplier',
         'created_from', 'created_to', 'opened_from', 'opened_to',
         'closed_from', 'closed_to', 'forecast_from', 'forecast_to',
@@ -56,6 +56,12 @@ class ContractsListingService
         }
         if (isset($filters['client_name'])) {
             $query->where('c.clientName', 'ilike', '%' . $filters['client_name'] . '%');
+        }
+        // Точный фильтр по партнёру (id) — переход из списка партнёров по клику
+        // на счётчик контрактов. По ФИО нельзя: consultantName — копия имени на
+        // момент создания договора, а у дублей карточек и тёзок имя общее.
+        if (isset($filters['consultant'])) {
+            $query->where('c.consultant', (int) $filters['consultant']);
         }
         if (isset($filters['consultant_name'])) {
             $query->where('c.consultantName', 'ilike', '%' . $filters['consultant_name'] . '%');
