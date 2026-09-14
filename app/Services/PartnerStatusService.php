@@ -28,8 +28,9 @@ class PartnerStatusService
     }
 
     /**
-     * Recompute consultant.personalVolume from transaction rows for the current
-     * period, and auto-activate if the threshold is crossed. Safe to call after
+     * Recompute consultant.personalVolume from transaction rows plus manual
+     * points (other_accruals) for the current period, and auto-activate if
+     * the threshold is crossed. Safe to call after
      * every commission calculation — it only writes when the value changes,
      * and activate() is a no-op for non-Registered partners.
      *
@@ -63,6 +64,16 @@ class PartnerStatusService
             ->whereNull('c.deletedAt')
             ->where('t.date', '>=', $periodStart)
             ->sum('t.personalVolume');
+
+        // Ручные баллы из «Прочих начислений» — тоже ЛП (✅Прочие начисления
+        // §3: «учитываются для поддержания статуса»). storeCharge кладёт их
+        // прямо в personalVolume, а пересчёт из одних транзакций их затирал:
+        // партнёр без сделок терял начисленные баллы при первом же расчёте
+        // комиссий. accrual_date — дата без времени, граница с начала дня.
+        $lp += (float) DB::table('other_accruals')
+            ->where('consultant', $consultantId)
+            ->where('accrual_date', '>=', Carbon::parse($periodStart)->startOfDay())
+            ->sum('points');
 
         if ((float) ($consultant->personalVolume ?? 0) !== $lp) {
             $consultant->personalVolume = $lp;

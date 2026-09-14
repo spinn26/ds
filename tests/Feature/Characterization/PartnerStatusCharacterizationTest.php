@@ -106,6 +106,52 @@ class PartnerStatusCharacterizationTest extends TestCase
         $this->assertFalse(app(PartnerStatusService::class)->activate($c));
     }
 
+    /**
+     * Ручные баллы из «Прочих начислений» входят в ЛП пересчёта.
+     *
+     * Пересчёт брал ЛП только из транзакций и затирал начисленные баллы:
+     * «Зарегистрирован» без сделок с ручными 500 баллами не активировался
+     * (Русакова, 14.09.2026).
+     */
+    #[Test]
+    public function recompute_counts_manual_points_toward_activation(): void
+    {
+        DB::table('consultant')->where('id', self::PARTNER)->update([
+            'activity' => PartnerActivity::Registered->value,
+            'personalVolume' => 0,
+        ]);
+        $this->manualPoints(PartnerActivity::activationPoints(), now()->startOfDay());
+
+        $this->assertTrue(app(PartnerStatusService::class)->recomputeVolumeAndActivate(self::PARTNER));
+
+        $fresh = $this->consultant(self::PARTNER);
+        $this->assertSame(PartnerActivity::Active, $fresh->activity);
+        $this->assertEqualsWithDelta(
+            PartnerActivity::activationPoints(),
+            (float) $fresh->personalVolume,
+            0.001,
+            'ручные баллы не затёрты пересчётом из транзакций'
+        );
+    }
+
+    /** Ручные баллы до начала периода в ЛП не идут — как и транзакции. */
+    #[Test]
+    public function recompute_ignores_manual_points_before_the_period(): void
+    {
+        DB::table('consultant')->where('id', self::PARTNER)->update([
+            'activity' => PartnerActivity::Registered->value,
+            'personalVolume' => 0,
+        ]);
+        // Период «Зарегистрированного» — с dateCreated (2026-01-01 в сиде).
+        $this->manualPoints(PartnerActivity::activationPoints(), '2025-12-31 00:00:00');
+
+        $this->assertFalse(app(PartnerStatusService::class)->recomputeVolumeAndActivate(self::PARTNER));
+
+        $fresh = $this->consultant(self::PARTNER);
+        $this->assertSame(PartnerActivity::Registered, $fresh->activity);
+        $this->assertEqualsWithDelta(0.0, (float) $fresh->personalVolume, 0.001);
+    }
+
     /** Форс-активация игнорирует и статус, и порог, и чистит следы терминации. */
     #[Test]
     public function force_activation_ignores_status_and_threshold(): void
@@ -434,6 +480,15 @@ class PartnerStatusCharacterizationTest extends TestCase
         $this->assertNotNull($c);
 
         return $c;
+    }
+
+    private function manualPoints(float $points, mixed $accrualDate): void
+    {
+        DB::table('other_accruals')->insert([
+            'consultant' => self::PARTNER, 'amount' => 0, 'points' => $points,
+            'type' => 'points', 'accrual_date' => $accrualDate,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
     }
 
     private function lastStatusLog(int $consultantId): object

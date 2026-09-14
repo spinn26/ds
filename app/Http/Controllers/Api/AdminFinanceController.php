@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Models\Consultant;
+use App\Services\PartnerStatusService;
 use App\Services\QualificationsListingService;
 use App\Services\TransactionsListingService;
 use App\Http\Controllers\Api\Concerns\AppliesSorting;
@@ -374,8 +376,13 @@ class AdminFinanceController extends Controller
      * Баллы НЕ каскадятся по inviter-цепочке по прямому указанию спеки:
      * "не должны генерировать финансовую комиссию для вышестоящих
      * наставников, как это происходит при обычной продаже".
+     *
+     * Баллы засчитываются и в статус: «Зарегистрированный», набравший порог
+     * ЛП, активируется сразу. Раньше порог проверялся только после расчёта
+     * комиссий, и партнёр без сделок с начисленными 500 баллами оставался
+     * «Зарегистрирован» до терминации по окну (Русакова, 14.09.2026).
      */
-    public function storeCharge(StoreChargeRequest $request): JsonResponse
+    public function storeCharge(StoreChargeRequest $request, PartnerStatusService $statuses): JsonResponse
     {
         $consultantId = (int) $request->consultant;
         $type = $request->type;
@@ -411,14 +418,20 @@ class AdminFinanceController extends Controller
             return $id;
         });
 
-        return response()->json(['message' => 'Начисление создано', 'id' => $id], 201);
+        $activated = $points > 0 && $this->activateByManualPoints($statuses, $consultantId);
+
+        return response()->json([
+            'message' => $activated ? 'Начисление создано, партнёр активирован' : 'Начисление создано',
+            'id' => $id,
+            'activated' => $activated,
+        ], 201);
     }
 
     /**
      * Обновить начисление. Если баллы изменились — корректируем
      * personalVolume/groupVolumeCumulative на разницу (delta).
      */
-    public function updateCharge(StoreChargeRequest $request, int $id): JsonResponse
+    public function updateCharge(StoreChargeRequest $request, int $id, PartnerStatusService $statuses): JsonResponse
     {
         $row = DB::table('other_accruals')->where('id', $id)->first();
         if (! $row) {
@@ -470,7 +483,25 @@ class AdminFinanceController extends Controller
             }
         });
 
-        return response()->json(['message' => 'Начисление обновлено']);
+        // Добор до порога правкой — та же активация, что и при создании.
+        $activated = $newPoints > 0 && $this->activateByManualPoints($statuses, (int) $request->consultant);
+
+        return response()->json([
+            'message' => $activated ? 'Начисление обновлено, партнёр активирован' : 'Начисление обновлено',
+            'activated' => $activated,
+        ]);
+    }
+
+    /**
+     * Проверить порог активации после ручных баллов. Решает штатный
+     * activate(): он no-op для всех, кроме «Зарегистрирован» с ЛП >= порога.
+     * Списание баллов статус не откатывает — как и у сделок.
+     */
+    private function activateByManualPoints(PartnerStatusService $statuses, int $consultantId): bool
+    {
+        $consultant = Consultant::find($consultantId);
+
+        return $consultant !== null && $statuses->activate($consultant);
     }
 
     /**
