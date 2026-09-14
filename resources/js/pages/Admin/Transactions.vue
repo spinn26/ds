@@ -1572,6 +1572,8 @@ const logVisibleHeaders = computed(() => logHeaders.filter(h =>
 const editDialog = ref(false);
 const editTx = ref(null);
 const savingTx = ref(false);
+// Значения при открытии формы — чтобы отправить только изменённые поля.
+const editTxOriginal = ref({});
 
 function openEditTx(item) {
   if (item.periodFrozen) return;
@@ -1582,6 +1584,7 @@ function openEditTx(item) {
     date: item.date ? String(item.date).slice(0, 10) : '',
     comment: item.comment ?? '',
   };
+  editTxOriginal.value = { ...editTx.value };
   editDialog.value = true;
 }
 
@@ -1589,13 +1592,19 @@ async function saveTx() {
   if (!editTx.value) return;
   savingTx.value = true;
   try {
-    const payload = {
-      amount: editTx.value.amount === '' ? null : Number(editTx.value.amount),
-      dsCommissionPercentage: editTx.value.dsCommissionPercentage === '' || editTx.value.dsCommissionPercentage == null
-        ? null : Number(editTx.value.dsCommissionPercentage),
-      date: editTx.value.date || null,
-      comment: editTx.value.comment ?? null,
-    };
+    // Шлём только изменённые поля: форма заполнена округлённым %ДС и датой без
+    // времени, и отправка «как есть» переписывала точные значения
+    // (сделка Инсмарта #70368: %ДС 14,9878 → 14,99, время → 00:00).
+    const t = editTx.value;
+    const changed = (key) => String(t[key] ?? '') !== String(editTxOriginal.value[key] ?? '');
+    const payload = {};
+    if (changed('amount')) payload.amount = t.amount === '' ? null : Number(t.amount);
+    if (changed('dsCommissionPercentage')) {
+      payload.dsCommissionPercentage = t.dsCommissionPercentage === '' || t.dsCommissionPercentage == null
+        ? null : Number(t.dsCommissionPercentage);
+    }
+    if (changed('date')) payload.date = t.date || null;
+    if (changed('comment')) payload.comment = t.comment ?? null;
     const { data } = await api.put(`/admin/transactions/${editTx.value.id}`, payload);
     // Сервер отвечает 200 и тогда, когда сумма сохранена, а комиссии — нет
     // (закрытый период, нет тарифа, нет ставки НДС): recalculated=false,

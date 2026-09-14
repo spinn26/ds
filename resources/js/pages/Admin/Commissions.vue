@@ -729,6 +729,8 @@ async function confirmDeleteTx(item) {
 const editDialog = ref(false);
 const savingEdit = ref(false);
 const editForm = ref({ id: null, amount: null, dsCommissionPercentage: null, date: '', comment: '', currencySymbol: '' });
+// Значения при открытии формы — чтобы отправить только изменённые поля.
+const editOriginal = ref({});
 
 function openEditTx(item) {
   if (item.periodFrozen) return;
@@ -740,18 +742,23 @@ function openEditTx(item) {
     comment: item.comment || '',
     currencySymbol: item.currencySymbol || '',
   };
+  editOriginal.value = { ...editForm.value };
   editDialog.value = true;
 }
 
 async function saveEditTx() {
   savingEdit.value = true;
   try {
-    const payload = {
-      amount: editForm.value.amount,
-      dsCommissionPercentage: editForm.value.dsCommissionPercentage,
-      date: editForm.value.date || null,
-      comment: editForm.value.comment,
-    };
+    // Шлём только изменённые поля. Форма заполняется из списка, где %ДС
+    // округлён до 2 знаков, а дата — без времени, и отправка «как есть» молча
+    // переписывала точный %ДС и обнуляла время, даже если оператор правил
+    // только комментарий: у сделки Инсмарта #70368 было 14,9878 → 14,99.
+    const changed = (key) => String(editForm.value[key] ?? '') !== String(editOriginal.value[key] ?? '');
+    const payload = {};
+    if (changed('amount')) payload.amount = editForm.value.amount;
+    if (changed('dsCommissionPercentage')) payload.dsCommissionPercentage = editForm.value.dsCommissionPercentage;
+    if (changed('date')) payload.date = editForm.value.date || null;
+    if (changed('comment')) payload.comment = editForm.value.comment;
     const { data } = await api.put(`/admin/transactions/${editForm.value.id}`, payload);
     // 200 приходит и тогда, когда сумма сохранена, а комиссии — нет
     // (recalculated=false, причина в message). Зелёным это показывать нельзя.
