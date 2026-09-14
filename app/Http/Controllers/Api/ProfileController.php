@@ -41,7 +41,7 @@ class ProfileController extends Controller
     public function show(Request $request): JsonResponse
     {
         $user = $request->user();
-        $consultant = Consultant::where('webUser', $user->id)->first();
+        $consultant = Consultant::forUser($user->id);
 
         $country = $user->taxResidency
             ? DB::table('country')->where('id', $user->taxResidency)->value('countryNameRu')
@@ -328,7 +328,7 @@ class ProfileController extends Controller
     public function updateRequisites(UpdateRequisitesRequest $request): JsonResponse
     {
         $user = $request->user();
-        $consultant = Consultant::where('webUser', $user->id)->first();
+        $consultant = Consultant::forUser($user->id);
 
         if (! $consultant) {
             return response()->json(['message' => 'Консультант не найден'], 404);
@@ -533,7 +533,7 @@ class ProfileController extends Controller
     public function updateBankRequisites(UpdateBankRequisitesRequest $request): JsonResponse
     {
         $user = $request->user();
-        $consultant = Consultant::where('webUser', $user->id)->first();
+        $consultant = Consultant::forUser($user->id);
 
         if (! $consultant) {
             return response()->json(['message' => 'Консультант не найден'], 404);
@@ -620,7 +620,7 @@ class ProfileController extends Controller
      */
     public function acceptOffer(Request $request, PartnerAcceptanceService $acceptance): JsonResponse
     {
-        $consultant = Consultant::where('webUser', $request->user()->id)->first();
+        $consultant = Consultant::forUser($request->user()->id);
         if (! $consultant) {
             return response()->json(['message' => 'Консультант не найден'], 404);
         }
@@ -646,7 +646,7 @@ class ProfileController extends Controller
      */
     public function reinstate(Request $request): JsonResponse
     {
-        $consultant = Consultant::where('webUser', $request->user()->id)->first();
+        $consultant = Consultant::forUser($request->user()->id);
         if (! $consultant) {
             return response()->json(['message' => 'Консультант не найден'], 404);
         }
@@ -680,7 +680,7 @@ class ProfileController extends Controller
             'refCode.required_if' => 'Введите реферальный код нового наставника.',
         ]);
 
-        $consultant = Consultant::where('webUser', $request->user()->id)->first();
+        $consultant = Consultant::forUser($request->user()->id);
         if (! $consultant) {
             return response()->json(['message' => 'Консультант не найден'], 404);
         }

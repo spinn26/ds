@@ -41,7 +41,7 @@ class DocumentController extends Controller
         ]);
 
         $user = $request->user();
-        $consultant = Consultant::where('webUser', $user->id)->first();
+        $consultant = Consultant::forUser($user->id);
 
         if (! $consultant) {
             return response()->json(['message' => 'Консультант не найден'], 404);
@@ -65,7 +65,7 @@ class DocumentController extends Controller
     public function list(Request $request): JsonResponse
     {
         $user = $request->user();
-        $consultant = Consultant::where('webUser', $user->id)->first();
+        $consultant = Consultant::forUser($user->id);
 
         if (! $consultant) {
             return response()->json(['documents' => []]);

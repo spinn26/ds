@@ -41,7 +41,7 @@ class ProfileCompletenessService
      */
     public function evaluate(User $user, ?Consultant $consultant = null): array
     {
-        $consultant ??= Consultant::where('webUser', $user->id)->first();
+        $consultant ??= Consultant::forUser($user->id);
 
         // Гейт не для всех: только активные ФК. Остальные считаются «complete»
         // и НЕ applicable — фронт их не блокирует и не показывает «всё ок».

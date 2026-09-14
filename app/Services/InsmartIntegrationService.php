@@ -283,6 +283,19 @@ class InsmartIntegrationService
         $partner = DB::table('consultant')->where('id', $partnerId)->first();
         if (! $partner) return CommissionCalculator::UNKNOWN_CONSULTANT_ID;
 
+        // ⚠ Удалённая карточка — не повод терять сделку. Виджет получал
+        // partnerId поиском по аккаунту без сортировки и мог выдать удалённый
+        // дубль: у Дроздовой 1478 вместо живой 1422, и договор ложился на
+        // удалённого партнёра без комиссий. Токен виджета живёт у Инсмарта,
+        // поэтому такие ID приходят и после исправления выдачи. Есть у того же
+        // аккаунта живая карточка — сделка её.
+        if ($partner->dateDeleted && $partner->webUser) {
+            $live = \App\Models\Consultant::forUser((int) $partner->webUser);
+            if ($live && ! $live->dateDeleted) {
+                return (int) $live->id;
+            }
+        }
+
         return (int) $partner->id;
     }
 
@@ -318,7 +331,8 @@ class InsmartIntegrationService
         }
         if (! $webUser) return $consultantId;
 
-        $clientConsultant = DB::table('consultant')->where('webUser', $webUser->id)->first();
+        // Та же карточка, что видит сам партнёр: живая раньше удалённой.
+        $clientConsultant = \App\Models\Consultant::forUser($webUser->id);
         if (! $clientConsultant) return $consultantId;
 
         // Клиент — партнёр, но НЕ продавец: обычная продажа другому ФК.

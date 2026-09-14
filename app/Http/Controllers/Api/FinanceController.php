@@ -38,7 +38,7 @@ class FinanceController extends Controller
         if ($consultantId && $user->isStaff()) {
             $consultant = Consultant::where('id', $consultantId)->first();
         } else {
-            $consultant = Consultant::where('webUser', $user->id)->first();
+            $consultant = Consultant::forUser($user->id);
         }
 
         if (! $consultant) {
@@ -98,7 +98,7 @@ class FinanceController extends Controller
     public function calculator(Request $request): JsonResponse
     {
         $user = $request->user();
-        $consultant = Consultant::where('webUser', $user->id)->first();
+        $consultant = Consultant::forUser($user->id);
 
         if (! $consultant) {
             return response()->json(['message' => 'Консультант не найден'], 404);

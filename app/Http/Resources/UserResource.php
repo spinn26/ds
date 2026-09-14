@@ -15,7 +15,7 @@ class UserResource extends JsonResource
 
     public function toArray(Request $request): array
     {
-        $consultant = Consultant::where('webUser', $this->id)->first();
+        $consultant = Consultant::forUser($this->id);
         $activityRaw = $consultant?->activity;
         $activityValue = is_object($activityRaw) ? $activityRaw->value : $activityRaw;
 

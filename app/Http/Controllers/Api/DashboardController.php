@@ -19,7 +19,7 @@ class DashboardController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
-        $consultant = Consultant::where('webUser', $user->id)->first();
+        $consultant = Consultant::forUser($user->id);
 
         if (! $consultant) {
             return response()->json(['message' => 'Консультант не найден'], 404);
@@ -48,7 +48,7 @@ class DashboardController extends Controller
     public function dynamics(Request $request): JsonResponse
     {
         $user = $request->user();
-        $consultant = Consultant::where('webUser', $user->id)->first();
+        $consultant = Consultant::forUser($user->id);
 
         if (! $consultant) {
             return response()->json(['message' => 'Консультант не найден'], 404);

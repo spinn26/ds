@@ -67,9 +67,7 @@ class SearchController extends Controller
             });
         if (! $isStaff) {
             // Партнёр видит только свои контракты.
-            $consId = DB::table('consultant')
-                ->where('webUser', $request->user()->id)
-                ->value('id');
+            $consId = \App\Models\Consultant::forUser($request->user()->id)?->id;
             if ($consId) $contractsQ->where('consultant', $consId);
             else $contractsQ->whereRaw('1=0');
         }

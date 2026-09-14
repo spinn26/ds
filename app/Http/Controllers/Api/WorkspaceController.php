@@ -28,7 +28,7 @@ class WorkspaceController extends Controller
             'admin', 'backoffice', 'support', 'finance', 'head', 'calculations', 'corrections', 'invest',
         ]);
 
-        $consultant = Consultant::where('webUser', $user->id)->first();
+        $consultant = Consultant::forUser($user->id);
 
         $data = [
             'news' => $this->getNews(),

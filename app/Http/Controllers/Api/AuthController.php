@@ -120,7 +120,7 @@ class AuthController extends Controller
         ])->first();
 
         if ($existingUser) {
-            $consultant = Consultant::where('webUser', $existingUser->id)->first();
+            $consultant = Consultant::forUser($existingUser->id);
             $isTerminated = $consultant && $consultant->statusRelation && $consultant->statusRelation->title === 'Терминирован';
 
             if (! $isTerminated) {
@@ -549,7 +549,7 @@ class AuthController extends Controller
             $user->role = 'registered,consultant';
             $user->saveQuietly();
 
-            $consultant = Consultant::where('webUser', $user->id)->first();
+            $consultant = Consultant::forUser($user->id);
             if ($consultant) {
                 $consultant->dateActivity = now();
                 // Окно активации — настройка activation.window_days (с

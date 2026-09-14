@@ -96,6 +96,32 @@ class Consultant extends Model
         return $this->hasMany(Contract::class, 'consultant');
     }
 
+    /**
+     * Карточка партнёра для аккаунта входа (WebUser).
+     *
+     * ⚠ Не `where('webUser', …)->first()`. У аккаунта бывает несколько
+     * карточек — повторная регистрация, дубль, — и лишние мягко удалены. Без
+     * сортировки Postgres отдаёт любую: 14.09.2026 у Дроздовой (webUser 578)
+     * это была удалённая 1478 вместо живой 1422. Кабинет показывал пустую
+     * карточку, а виджет Инсмарта передавал 1478 — договор создавался на
+     * удалённого партнёра, и комиссии по нему не считались.
+     *
+     * Порядок: живая раньше удалённой, среди равных — самая новая. Удалённая
+     * возвращается, только если живой нет: так вели себя все вызывающие места.
+     */
+    public static function forUser(int|string|null $webUserId): ?self
+    {
+        if ($webUserId === null || $webUserId === '') {
+            return null;
+        }
+
+        return static::query()
+            ->where('webUser', $webUserId)
+            ->orderByRaw('"dateDeleted" IS NOT NULL')
+            ->orderByDesc('id')
+            ->first();
+    }
+
     // --- Scopes ---
 
     public function scopeByActivity(Builder $query, PartnerActivity $activity): Builder

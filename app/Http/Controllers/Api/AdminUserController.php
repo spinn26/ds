@@ -201,7 +201,7 @@ class AdminUserController extends Controller
     public function update(Request $request, int $id): JsonResponse
     {
         $user = User::findOrFail($id);
-        $consultant = Consultant::where('webUser', $id)->first();
+        $consultant = Consultant::forUser($id);
         // Strict: только роль admin может править role/password/isBlocked.
         $isAdmin = $request->user()->hasAnyRole(['admin']);
 

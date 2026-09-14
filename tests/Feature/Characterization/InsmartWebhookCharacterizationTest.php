@@ -171,6 +171,39 @@ class InsmartWebhookCharacterizationTest extends TestCase
         $this->assertEqualsWithDelta(19_047.62, (float) $income, 0.01);
     }
 
+    /**
+     * ⚠ Регресс-тест: ID удалённой карточки → живая карточка того же аккаунта.
+     *
+     * Виджет Инсмарта получал partnerId поиском по аккаунту без сортировки и
+     * отдавал удалённый дубль: у Дроздовой (webUser 578) — 1478 вместо живой
+     * 1422. Инсмарт возвращал этот ID в вебхуке, договор ложился на удалённого
+     * партнёра, и комиссии не считались. Живая карточка там старше дубля —
+     * здесь так же.
+     */
+    #[Test]
+    public function deleted_partner_card_resolves_to_live_card_of_same_account(): void
+    {
+        $account = 970900;
+        $live = 969999;
+        DB::table('consultant')->insert([
+            [
+                'id' => $live, 'personName' => 'Живая карточка', 'activity' => 1,
+                'dateCreated' => '2025-01-21 00:00:00', 'dateDeleted' => null, 'webUser' => $account,
+            ],
+            [
+                'id' => self::DELETED_PARTNER, 'personName' => 'Удалённый дубль', 'activity' => 1,
+                'dateCreated' => '2025-02-01 00:00:00', 'dateDeleted' => '2025-02-02 00:00:00', 'webUser' => $account,
+            ],
+        ]);
+        $payload = $this->payload('ORDER-8');
+        $payload['appClientId'] = self::DELETED_PARTNER;
+
+        $result = app(InsmartIntegrationService::class)->handlePaidWebhook($payload);
+
+        $this->assertSame($live, $result['consultantId']);
+        $this->assertSame($live, (int) DB::table('contract')->where('counterpartyContractId', 'ORDER-8')->value('consultant'));
+    }
+
     private function payload(string $orderId): array
     {
         return [

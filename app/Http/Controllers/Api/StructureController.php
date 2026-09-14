@@ -43,7 +43,7 @@ class StructureController extends Controller
         // а не локальный хардкод-список. Инвестор (напр. Жарков, role=invest)
         // должен видеть структуру как сотрудник, а не «свою команду».
         $isStaff = $user->isStaff();
-        $consultant = Consultant::where('webUser', $user->id)->first();
+        $consultant = Consultant::forUser($user->id);
         $hasFilters = $this->hasActiveFilters($request);
 
         // Staff without consultant role → top-level (no inviter) или flat-поиск
@@ -319,7 +319,7 @@ class StructureController extends Controller
         $user = $request->user();
         // Канон «кто сотрудник» — User::isStaff() (см. index()).
         $isStaff = $user->isStaff();
-        $consultant = Consultant::where('webUser', $user->id)->first();
+        $consultant = Consultant::forUser($user->id);
         $hasFilters = $this->hasActiveFilters($request);
 
         if ($isStaff && ! $user->hasAnyRole(['consultant'])) {

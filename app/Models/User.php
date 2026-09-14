@@ -186,10 +186,18 @@ class User extends Authenticatable
         return $this->hasAnyRole(['admin', 'backoffice', 'support', 'finance', 'head', 'calculations', 'corrections', 'education', 'invest', 'content']);
     }
 
-    /** Linked consultant record (null for pure staff accounts). */
+    /**
+     * Linked consultant record (null for pure staff accounts).
+     *
+     * Порядок — тот же, что в Consultant::forUser: у аккаунта бывает несколько
+     * карточек, и без сортировки политики доступа могли взять удалённую.
+     */
     public function consultantRecord(): HasOne
     {
-        return $this->hasOne(Consultant::class, 'webUser');
+        $relation = $this->hasOne(Consultant::class, 'webUser');
+        $relation->orderByRaw('"dateDeleted" IS NOT NULL')->orderByDesc('id');
+
+        return $relation;
     }
 
     /**

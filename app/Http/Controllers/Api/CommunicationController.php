@@ -140,7 +140,7 @@ class CommunicationController extends Controller
 
     private function getConsultant(Request $request): ?Consultant
     {
-        return Consultant::where('webUser', $request->user()->id)->first();
+        return Consultant::forUser($request->user()->id);
     }
 
     private function formatMessage(PlatformCommunication $m): array

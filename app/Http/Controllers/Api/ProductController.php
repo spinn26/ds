@@ -15,7 +15,7 @@ class ProductController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
-        $consultant = Consultant::where('webUser', $user->id)->first();
+        $consultant = Consultant::forUser($user->id);
 
         $accessCheck = $this->checkAccess($consultant);
         $hasAccess = $accessCheck['hasAccess'] ?? false;
@@ -201,7 +201,7 @@ class ProductController extends Controller
             'fioMatched' => 'nullable|boolean',
         ]);
 
-        $consultant = Consultant::where('webUser', $request->user()->id)->first();
+        $consultant = Consultant::forUser($request->user()->id);
         if (! $consultant) {
             return response()->json(['message' => 'Консультант не найден'], 404);
         }

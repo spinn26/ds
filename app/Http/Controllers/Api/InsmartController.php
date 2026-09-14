@@ -28,8 +28,10 @@ class InsmartController extends Controller
     public function widgetToken(Request $request): JsonResponse
     {
         $user = $request->user();
-        $consultant = Consultant::where('webUser', $user->id)->first();
-        if (! $consultant) {
+        $consultant = Consultant::forUser($user->id);
+        // Удалённой карточке токен не выдаём: её ID уйдёт в Инсмарт, вернётся
+        // в вебхуке, и сделка ляжет на партнёра, по которому комиссии не считаются.
+        if (! $consultant || $consultant->dateDeleted) {
             return response()->json(['message' => 'Партнёр не найден'], 404);
         }
 

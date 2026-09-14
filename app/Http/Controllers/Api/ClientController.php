@@ -18,7 +18,7 @@ class ClientController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
-        $consultant = Consultant::where('webUser', $user->id)->first();
+        $consultant = Consultant::forUser($user->id);
 
         if (! $consultant) {
             return response()->json(['data' => [], 'total' => 0]);
