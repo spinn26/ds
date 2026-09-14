@@ -268,6 +268,12 @@
            @click.stop — иначе клик по строке развернёт аккордеон. -->
       <template #item.actions="{ item }">
         <div class="d-flex">
+          <v-btn v-if="canCalc" icon="mdi-calculator-variant-outline" size="x-small"
+            variant="text" color="success"
+            :title="item.periodFrozen ? 'Период закрыт — нельзя рассчитать' : 'Рассчитать комиссии по транзакции'"
+            :disabled="item.periodFrozen || calculatingTxId === item.id"
+            :loading="calculatingTxId === item.id"
+            @click.stop="calculateTx(item)" />
           <v-btn v-if="canCalc" icon="mdi-pencil-outline" size="x-small"
             variant="text" color="primary"
             :title="item.periodFrozen ? 'Период закрыт — нельзя редактировать' : 'Редактировать транзакцию (сумма / %ДС / дата) с пересчётом комиссий'"
@@ -747,13 +753,46 @@ async function saveEditTx() {
       comment: editForm.value.comment,
     };
     const { data } = await api.put(`/admin/transactions/${editForm.value.id}`, payload);
-    showSuccess(data?.message || 'Транзакция обновлена');
+    // 200 приходит и тогда, когда сумма сохранена, а комиссии — нет
+    // (recalculated=false, причина в message). Зелёным это показывать нельзя.
+    if (data?.recalculated === false) {
+      showError(data.message || 'Транзакция обновлена, но комиссии не пересчитаны');
+    } else {
+      showSuccess(data?.message || 'Транзакция обновлена');
+    }
     editDialog.value = false;
     await loadData();
   } catch (e) {
     showError(e.response?.data?.message || 'Не удалось сохранить');
   }
   savingEdit.value = false;
+}
+
+// Точечный расчёт одной транзакции (POST /admin/transactions/{id}/calculate) —
+// тот же расчёт, что запускают импорт и интеграции при создании сделки. Нужен,
+// когда тогда он не прошёл (закрытый месяц, удалённый партнёр, нет ставки НДС):
+// доход ДС пуст, цепочке ничего не начислено, а пул сделку уже учитывает.
+// Бэк отвечает 200 и при ошибке расчёта — причина приходит в data.error.
+const calculatingTxId = ref(null);
+
+async function calculateTx(item) {
+  if (item.periodFrozen) return;
+  calculatingTxId.value = item.id;
+  try {
+    const { data } = await api.post(`/admin/transactions/${item.id}/calculate`);
+    if (data?.error) {
+      showError(`Транзакция #${item.id} не рассчитана: ${data.error}`);
+    } else {
+      showSuccess(`Транзакция #${item.id} рассчитана`);
+      // Раскрытая цепочка закэширована — после расчёта она устарела.
+      const { [item.id]: _stale, ...rest } = chainCache.value;
+      chainCache.value = rest;
+      await loadData();
+    }
+  } catch (e) {
+    showError(e.response?.data?.message || 'Не удалось рассчитать транзакцию');
+  }
+  calculatingTxId.value = null;
 }
 
 // Лениво подгружаем цепочку при раскрытии строки.
