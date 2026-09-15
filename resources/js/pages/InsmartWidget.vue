@@ -16,16 +16,34 @@
       </a>
     </v-alert>
 
-    <v-card class="mb-3 pa-3 d-flex align-center ga-3 flex-wrap">
-      <v-icon color="primary" size="20">mdi-information-outline</v-icon>
-      <div class="text-body-2 flex-grow-1">
-        Вся последующая обработка данных и начисления происходят автоматически.
-        После оплаты страхового полиса контракт и транзакция создаются на платформе
-        без вашего участия.
+    <v-alert type="info" variant="tonal" class="mb-3" icon="mdi-help-circle-outline">
+      <div class="text-body-2">
+        Если у вас возникли вопросы по работе с платформой Инссмарт, воспользуйтесь
+        удобным способом связи:
       </div>
+      <ul class="text-body-2 mt-1 ps-5">
+        <li>
+          <strong>Оформление полисов:</strong> пишите в окно техподдержки прямо внизу
+          страницы оформления.
+        </li>
+        <li>
+          <strong>Действующие полисы и другие вопросы:</strong> отправьте письмо на
+          электронную почту <a :href="`mailto:${SUPPORT_EMAIL}`">{{ SUPPORT_EMAIL }}</a>
+          или позвоните на горячую линию по телефону
+          <a :href="SUPPORT_PHONE_HREF" class="text-no-wrap">{{ SUPPORT_PHONE }}</a>.
+        </li>
+        <li>
+          <strong>База знаний:</strong> изучить информацию обо всех доступных страховых
+          продуктах можно самостоятельно по ссылке
+          <a :href="HELP_URL" target="_blank" rel="noopener">{{ HELP_URL }}</a>.
+        </li>
+      </ul>
+    </v-alert>
+
+    <div class="mb-3">
       <v-btn variant="text" size="small" prepend-icon="mdi-arrow-left"
         @click="$router.push('/products')">К продуктам</v-btn>
-    </v-card>
+    </div>
 
     <v-card class="insmart-frame" elevation="2">
       <!-- Контейнер для виджета. Загрузчик InSmart внутри своей логики
@@ -71,6 +89,12 @@ const INSMART_ORIGIN = 'https://widgets.inssmart.ru';
 
 // URL Google-таблицы с тарифами по продуктам Инсмарт.
 const TARIFFS_URL = 'https://docs.google.com/spreadsheets/d/1Eiye43BvZ4ZKOkTZTpS1edAoU0dclIxPS-sEfT7vGo4/edit?gid=0#gid=0';
+
+// Контакты поддержки самого Инссмарта: по полисам партнёр идёт к ним, не к нам.
+const SUPPORT_EMAIL = 'support@inssmart.ru';
+const SUPPORT_PHONE = '+7 (812) 209-51-18';
+const SUPPORT_PHONE_HREF = 'tel:+78122095118';
+const HELP_URL = 'https://help.inssmart.ru/';
 
 let loaderScript = null;
 
