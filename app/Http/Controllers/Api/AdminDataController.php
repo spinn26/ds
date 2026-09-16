@@ -2090,10 +2090,8 @@ class AdminDataController extends Controller
             'activation_forecast' => 'nullable|date',
         ]);
 
-        // Статусы, для которых прогноз активации не нужен и очищается:
-        // 1 Активирован, 6 Закрыто нереализовано, 8 Закрыто, 9 Возврат, 10 Лапсирован.
-        // Терминальные статусы (8 Закрыто / 9 Возврат) не требуют прогноз активации.
-        $noForecastStatuses = [1, 6, 8, 9, 10];
+        // Статусы, для которых прогноз активации не нужен и очищается.
+        $noForecastStatuses = \App\Models\Contract::NO_FORECAST_STATUSES;
 
         // activation_forecast обязателен только для статусов вне этого набора
         if (! in_array((int) ($data['status'] ?? 0), $noForecastStatuses, true) && empty($data['activation_forecast'])) {
@@ -2199,9 +2197,9 @@ class AdminDataController extends Controller
             'activation_forecast' => 'nullable|date',
         ]);
 
-        // Статусы без прогноза: 1 Активирован, 6 Закрыто нереализовано, 8 Закрыто,
-        // 9 Возврат, 10 Лапсирован. Терминальные (8/9) прогноз активации не требуют.
-        $noForecastStatuses = [1, 6, 8, 9, 10];
+        // Статусы без прогноза. То же правило применяет синхронизация с таблицей
+        // Парус/Акцент (ContractSheetSyncService::diffFor).
+        $noForecastStatuses = \App\Models\Contract::NO_FORECAST_STATUSES;
         $newStatus = $data['status'] ?? (int) $contract->status;
 
         // Прогноз нужен только при переводе в статус вне набора «без прогноза»

@@ -22,6 +22,8 @@ use Tests\TestCase;
  *     останавливает ВСЮ синхронизацию и не пишет ни строчки (§4.2, §5);
  *   - «Активирован» тянет дату открытия из столбца B, пустой B дату не
  *     затирает (§4.3);
+ *   - смена статуса идёт по тем же правилам, что ручная правка: статус без
+ *     прогноза обнуляет прогноз активации;
  *   - каждая правка попадает в историю контракта с основанием.
  */
 class ContractSheetSyncTest extends TestCase
@@ -142,6 +144,55 @@ class ContractSheetSyncTest extends TestCase
 
         $this->assertSame('2026-07-01',
             substr((string) DB::table('contract')->where('id', self::CONTRACT)->value('openDate'), 0, 10));
+    }
+
+    /**
+     * Регресс 16.09.2026: «Активирован» из листа оставлял в реестре прогноз
+     * активации — синхронизация меняла статус мимо правил ручной правки.
+     */
+    #[Test]
+    public function activation_clears_the_activation_forecast(): void
+    {
+        DB::table('contract')->where('id', self::CONTRACT)->update(['activation_forecast' => '2026-09-28']);
+
+        $this->sheet([
+            ['Активирован', '31.08.2026', '', '137АК',
+                'Флерина Ирина Александровна', 'Литвинов Юрий Геннадьевич',
+                'ЗПИФ Акцент', 'Акцент-4', '100,00', '₽'],
+        ]);
+
+        $this->sync()
+            ->assertOk()
+            ->assertJsonPath('changes.0.fields.activation_forecast.from', '28.09.2026');
+
+        $c = DB::table('contract')->where('id', self::CONTRACT)->first();
+        $this->assertNull($c->activation_forecast, 'прогноз активации обнулён');
+        $this->assertSame(now()->toDateString(), (string) $c->activated_at, 'дата активации зафиксирована');
+    }
+
+    /**
+     * Контракт уже «Активирован», но с прогнозом — след прежней версии
+     * синхронизации. Повторный прогон его дочищает, а дату активации задним
+     * числом не выдумывает: это не переход в статус.
+     */
+    #[Test]
+    public function a_rerun_clears_a_stale_forecast_on_an_already_activated_contract(): void
+    {
+        DB::table('contract')->where('id', self::CONTRACT)->update([
+            'status' => 1, 'openDate' => '2026-08-31 00:00:00', 'activation_forecast' => '2026-09-01',
+        ]);
+
+        $this->sheet([
+            ['Активирован', '31.08.2026', '', '137АК',
+                'Флерина Ирина Александровна', 'Литвинов Юрий Геннадьевич',
+                'ЗПИФ Акцент', 'Акцент-4', '100,00', '₽'],
+        ]);
+
+        $this->sync()->assertOk()->assertJsonPath('updated', 1);
+
+        $c = DB::table('contract')->where('id', self::CONTRACT)->first();
+        $this->assertNull($c->activation_forecast);
+        $this->assertNull($c->activated_at);
     }
 
     /** Каждая правка видна в истории контракта с основанием и автором. */
@@ -271,6 +322,31 @@ class ContractSheetSyncTest extends TestCase
         $this->assertEqualsWithDelta(100.0, (float) $c->ammount, 0.01, 'сумма вернулась');
         $this->assertSame(3, (int) $c->status, 'статус вернулся в «Комплайнс»');
         $this->assertNull($c->openDate, 'дата открытия вернулась в пустую');
+    }
+
+    /** Откат к «Комплайнс» возвращает и прогноз активации, обнулённый прогоном. */
+    #[Test]
+    public function a_rollback_restores_the_activation_forecast(): void
+    {
+        DB::table('contract')->where('id', self::CONTRACT)->update(['activation_forecast' => '2026-09-28']);
+
+        $this->sheet([
+            ['Активирован', '31.08.2026', '', '137АК',
+                'Флерина Ирина Александровна', 'Литвинов Юрий Геннадьевич',
+                'ЗПИФ Акцент', 'Акцент-4', '100,00', '₽'],
+        ]);
+
+        $runId = $this->sync()->assertOk()->json('runId');
+
+        $this->actingAs($this->admin, 'sanctum')
+            ->postJson("/api/v1/admin/contracts/sheet-sync/runs/{$runId}/rollback")
+            ->assertOk()
+            ->assertJsonPath('skipped', []);
+
+        $c = DB::table('contract')->where('id', self::CONTRACT)->first();
+        $this->assertSame(3, (int) $c->status);
+        $this->assertSame('2026-09-28', substr((string) $c->activation_forecast, 0, 10));
+        $this->assertNull($c->activated_at);
     }
 
     /**

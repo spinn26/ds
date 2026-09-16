@@ -17,9 +17,9 @@ use Illuminate\Support\Facades\DB;
  *
  * Ключ сопоставления — НОМЕР контракта (столбец D), а не ID: номер бэкофис
  * знает и вводит, ID платформы — нет. Найденному контракту его ID
- * проставляется обратно в столбец C, ненайденный контракт создаётся, и в
- * столбец C уходит ID новой записи. После первого прогона лист оказывается
- * связан с платформой по ID, и дальше сверять становится проще.
+ * проставляется обратно в столбец C; ненайденный уходит в отчёт — контракты
+ * синхронизация не создаёт. После первого прогона лист оказывается связан с
+ * платформой по ID, и дальше сверять становится проще.
  *
  * Таблица — источник истины: при расхождении перезаписывается ПЛАТФОРМА.
  * Каждая правка попадает в «Историю изменений» контракта с автором (кто
@@ -496,6 +496,25 @@ class ContractSheetSyncService
 
         if (isset($parsed['openDate']) && $parsed['openDate'] !== $contract->openDate?->format('Y-m-d')) {
             $diff['openDate'] = ['value' => $parsed['openDate'], 'old' => $contract->openDate?->format('Y-m-d'), 'from' => $contract->openDate?->format('d.m.Y'), 'to' => $parsed['openDate'], 'label' => 'дата открытия'];
+        }
+
+        // Правила смены статуса — те же, что у ручной правки
+        // (AdminDataController::updateContract). Без них «Активирован» из листа
+        // оставлял в реестре прогноз активации.
+        //
+        // Прогноз сверяем с итоговым статусом, а не только со сменой: повторный
+        // прогон дочищает контракты, активированные до этой правки.
+        $status = $parsed['status'] ?? (int) $contract->status;
+        if (in_array($status, Contract::NO_FORECAST_STATUSES, true) && $contract->activation_forecast !== null) {
+            $forecast = (string) $contract->activation_forecast;
+            $diff['activation_forecast'] = ['value' => null, 'old' => $forecast, 'from' => date('d.m.Y', (int) strtotime($forecast)), 'to' => '—', 'label' => 'прогноз активации'];
+        }
+
+        // Дата активации — только при самом переходе в «Активирован». У давно
+        // активированных без неё поле остаётся пустым (см. AccrualForecastService).
+        if ($status === Contract::STATUS_ACTIVATED && (int) $contract->status !== Contract::STATUS_ACTIVATED
+            && empty($contract->activated_at)) {
+            $diff['activated_at'] = ['value' => now()->toDateString(), 'old' => null, 'from' => null, 'to' => now()->format('d.m.Y'), 'label' => 'дата активации'];
         }
 
         return $diff;
