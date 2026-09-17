@@ -97,7 +97,14 @@ class PartnerListingService
         }
         // Доп. фильтры per spec ✅Партнёры §1.1
         if (isset($filters['partner_id'])) {
-            $query->where('id', (int) $filters['partner_id']);
+            // consultant.id — integer: телефон в поле ID (79…) Postgres
+            // отвергает ошибкой вместо пустого результата.
+            $partnerId = (int) $filters['partner_id'];
+            if ($partnerId > 0 && $partnerId <= 2147483647) {
+                $query->where('id', $partnerId);
+            } else {
+                $query->whereRaw('1 = 0');
+            }
         }
         if (isset($filters['inviter_name'])) {
             $query->where('inviterName', 'ilike', '%' . $filters['inviter_name'] . '%');

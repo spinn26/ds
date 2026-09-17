@@ -81,7 +81,9 @@ class ClientController extends Controller
             ->limit($this->paginationPerPage($request))
             ->get();
 
-        $cityIds = $clientRows->pluck('city')->filter()->unique();
+        // Только коды справочника: форма клиента сохраняет название, а оно
+        // в whereIn по integer city.id роняет весь список.
+        $cityIds = $clientRows->pluck('city')->filter(fn ($v) => ctype_digit((string) $v))->unique();
         $cities = $cityIds->isNotEmpty()
             ? DB::table('city')->whereIn('id', $cityIds)->pluck('cityNameRu', 'id')
             : collect();

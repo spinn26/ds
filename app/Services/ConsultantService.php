@@ -517,7 +517,10 @@ class ConsultantService
 
         // Город — собственная колонка партнёра (перенесена из person
         // 13.08.2026); хранит и legacy-код справочника, и название.
-        $cityIds = $consultants->pluck('city')->filter()->unique();
+        // В справочник идут только коды: city.id — integer, и название
+        // в whereIn роняет весь запрос структуры (регистрация с 01.09.2026
+        // пишет город текстом).
+        $cityIds = $consultants->pluck('city')->filter(fn ($v) => ctype_digit((string) $v))->unique();
         $cities = $cityIds->isNotEmpty()
             ? DB::table('city')->whereIn('id', $cityIds)->pluck('cityNameRu', 'id')
             : collect();
