@@ -581,7 +581,11 @@ const route = useRoute();
 const router = useRouter();
 const theme = useTheme();
 const { mobile } = useDisplay();
-const drawer = ref(true);
+// На телефоне меню закрыто и выезжает по ☰ (per design/components/Sidebar.md):
+// при drawer=true панель на 280px открывалась поверх страницы при каждом
+// заходе, и партнёр начинал работу с её закрытия.
+const drawer = ref(!mobile.value);
+watch(mobile, (isMobile) => { drawer.value = ! isMobile; });
 
 // Чат-страницы должны занимать всю доступную высоту v-main без отступов
 // контейнера, иначе при низком вьюпорте поле ввода уходит ниже экрана
