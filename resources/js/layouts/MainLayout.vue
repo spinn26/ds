@@ -1822,6 +1822,15 @@ watch(
   background: rgba(var(--v-theme-background), 1);
 }
 
+/* Колонка контента шириной до 1480px и по центру свободного места
+   (per ds-redesign/design/BRAND.md). Без центрирования на мониторе 2560px
+   страница липнет к левому краю, а половина экрана остаётся пустой.
+   Чат исключён: он занимает всю ширину осознанно. */
+.content-main:not(.content-main--full-bleed) > :deep(.v-container) {
+  max-width: 1480px;
+  margin-inline: auto;
+}
+
 /* Чат-страницы: v-main как flex-контейнер с фиксированной высотой viewport,
    чтобы дочерний .chat-wrap мог занять всё доступное пространство через
    height:100% без жёсткого calc(100vh - X), который ломается при разных
