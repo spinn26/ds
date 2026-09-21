@@ -25,9 +25,19 @@
       </div>
       <v-divider />
 
-      <!-- Поиск по меню переехал в шапку: там же палитра Ctrl K, которая
-           ищет и разделы, и данные (per design/components/Sidebar.md).
-           В меню остаётся только навигация. -->
+      <!-- Поиск живёт в меню, рядом с навигацией: по просьбе 21.09.2026.
+           Открывает ту же палитру Ctrl K — разделы всем, данные сотрудникам. -->
+      <div v-if="!rail" class="px-3 pt-3 pb-1">
+        <button type="button" class="menu-search" @click="openGlobalSearch">
+          <v-icon size="18">mdi-magnify</v-icon>
+          <span class="menu-search-ph">{{ isStaff ? 'Поиск по разделам и данным' : 'Поиск по разделам' }}</span>
+          <span class="menu-kbd">Ctrl K</span>
+        </button>
+      </div>
+      <div v-else class="d-flex justify-center pt-2">
+        <v-btn icon="mdi-magnify" size="small" variant="text" density="comfortable"
+          aria-label="Поиск по разделам" title="Поиск по разделам" @click="openGlobalSearch" />
+      </div>
 
       <!-- Переключатель пространств — только тем, у кого есть и кабинет,
            и управление. Чистый партнёр или чистый сотрудник его не видит. -->
@@ -96,34 +106,32 @@
       </template>
     </v-navigation-drawer>
 
+    <!-- Вход под пользователем — отдельной полосой НАД шапкой, во всю ширину
+         (просьба 21.09.2026). Раньше это был чип внутри шапки: он съедал
+         место и терялся среди кнопок. Полоса обязана кричать — действия под
+         чужой учёткой пишутся в аудит от её имени. -->
+    <v-system-bar v-if="impersonatedBy" :height="mobile ? 44 : 40" class="impersonation-bar" order="-1">
+      <v-icon size="18" class="me-2">mdi-account-switch</v-icon>
+      <span v-if="!mobile">Вы под учётной записью: <strong>{{ userDisplayName }}</strong></span>
+      <span v-else><strong>{{ userDisplayName }}</strong></span>
+      <v-spacer />
+      <v-btn size="small" variant="flat" color="surface" class="impersonation-exit"
+        :loading="leavingImpersonation" @click="leaveImpersonation">
+        Вернуться к себе
+      </v-btn>
+    </v-system-bar>
+
     <!-- Top bar -->
     <v-app-bar flat border="b" class="topbar">
       <v-app-bar-nav-icon v-if="mobile" @click="drawer = !drawer" />
 
-      <!-- Поиск живёт в шапке и открывает палитру (per design/components/Topbar.md).
-           Выглядит полем, а не кнопкой: поле подсказывает, что сюда можно
-           печатать. Сама палитра слушает Ctrl K глобально. -->
-      <button type="button" class="topbar-search" @click="openGlobalSearch">
+      <!-- На мобильном меню скрыто, поэтому поиск дублируется в шапке:
+           иначе до палитры не добраться без бургера. -->
+      <button v-if="mobile" type="button" class="topbar-search" aria-label="Поиск по разделам"
+        @click="openGlobalSearch">
         <v-icon size="18">mdi-magnify</v-icon>
-        <span class="topbar-search-ph">{{ isStaff ? 'Поиск по разделам и данным' : 'Поиск по разделам' }}</span>
-        <span v-if="!mobile" class="menu-kbd">Ctrl K</span>
+        <span class="topbar-search-ph">Поиск</span>
       </button>
-
-      <!-- Вход под пользователем. Полоса обязана быть заметной: действия под
-           чужой учёткой пишутся в аудит от её имени. Раньше признака не было
-           вовсе, а выйти можно было только полным логаутом. -->
-      <v-chip v-if="impersonatedBy" color="warning" variant="flat"
-        :size="mobile ? 'small' : 'default'" class="mr-2 impersonation-chip"
-        prepend-icon="mdi-account-switch">
-        <span v-if="!mobile" class="mr-2">
-          Вы под учётной записью: <strong>{{ userDisplayName }}</strong>
-        </span>
-        <span v-else class="mr-1">Не вы</span>
-        <v-btn size="x-small" variant="flat" color="surface"
-          :loading="leavingImpersonation" @click="leaveImpersonation">
-          Вернуться к себе
-        </v-btn>
-      </v-chip>
 
       <!-- Статус активности партнёра — слева в topbar. Только для
            consultant'ов и только на desktop (на mobile места нет). -->
@@ -1822,13 +1830,47 @@ watch(
   background: rgba(var(--v-theme-background), 1);
 }
 
-/* Колонка контента шириной до 1480px и по центру свободного места
-   (per ds-redesign/design/BRAND.md). Без центрирования на мониторе 2560px
-   страница липнет к левому краю, а половина экрана остаётся пустой.
-   Чат исключён: он занимает всю ширину осознанно. */
-.content-main:not(.content-main--full-bleed) > :deep(.v-container) {
-  max-width: 1480px;
-  margin-inline: auto;
+/* Контент занимает всю ширину окна (просьба 21.09.2026): ограничение в
+   1480px оставляло на большом мониторе пустые поля по краям. */
+.content-main > :deep(.v-container) {
+  max-width: none;
+}
+
+/* Полоса «вход под пользователем»: единственное место в каркасе, которое
+   намеренно кричит — перепутать свою сессию с чужой стоит дорого. */
+.impersonation-bar {
+  background: var(--accent) !important;
+  color: #fff !important;
+  font: 500 13px/18px var(--font-sans);
+  padding-inline: var(--space-5);
+}
+.impersonation-exit {
+  color: var(--accent) !important;
+  font-weight: 600;
+}
+
+/* Поиск в меню: выглядит полем, ведёт себя как кнопка — открывает палитру. */
+.menu-search {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: 8px var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  color: var(--ink-muted);
+  cursor: text;
+}
+.menu-search:hover { background: var(--surface); }
+.menu-search:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.menu-search-ph {
+  flex: 1 1 auto;
+  font: 400 13px/18px var(--font-sans);
+  text-align: start;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Чат-страницы: v-main как flex-контейнер с фиксированной высотой viewport,

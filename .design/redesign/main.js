@@ -74,6 +74,8 @@ const auth = useAuthStore();
 auth.user = {
   id: 101, firstName: 'Любава', lastName: 'Громова', patronymic: 'Сергеевна',
   email: 'lubava@example.com', role: 'consultant', avatarUrl: null, hasConsultant: true,
+  // ?impersonated=1 — чтобы видеть оранжевую полосу над шапкой.
+  impersonatedBy: params.get('impersonated') ? { id: 1, name: 'Админ' } : null,
 };
 // Права нужны, чтобы на стенде были видны кнопки правки в админских списках.
 auth.permissions = { news: 'full' };

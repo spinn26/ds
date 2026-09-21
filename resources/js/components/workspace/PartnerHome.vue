@@ -65,7 +65,7 @@ const messages = computed(() => props.data.recentMessages || []);
 </script>
 
 <style scoped>
-.home { display: flex; flex-direction: column; gap: var(--space-6); max-width: 1480px; }
+.home { display: flex; flex-direction: column; gap: var(--space-6); max-width: none; }
 
 .home-grid {
   display: grid;

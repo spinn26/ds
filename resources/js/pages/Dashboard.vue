@@ -729,7 +729,7 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
-  max-width: 1480px;
+  max-width: none;
   font-family: var(--font-sans);
   color: var(--ink);
 }
