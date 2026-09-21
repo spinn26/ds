@@ -23,6 +23,8 @@ import NewsDetail from '../../resources/js/pages/News/NewsDetail.vue';
 import NewsList from '../../resources/js/pages/News/NewsList.vue';
 import MyPayments from '../../resources/js/pages/MyPayments.vue';
 import Dashboard from '../../resources/js/pages/Dashboard.vue';
+import EducationKb from '../../resources/js/pages/EducationKb.vue';
+import SystemStatus from '../../resources/js/pages/SystemStatus.vue';
 import { useAuthStore } from '../../resources/js/stores/auth';
 
 const params = new URLSearchParams(location.search);
@@ -47,6 +49,8 @@ const router = createRouter({
         { path: 'news/:id', component: NewsDetail },
         { path: 'my-payments', component: MyPayments },
         { path: 'dashboard', component: Dashboard },
+        { path: 'education/kb', component: EducationKb },
+        { path: 'status', component: SystemStatus },
         // Заглушки для ссылок каркаса: без них router-link ругается.
         { path: ':pathMatch(.*)*', component: blank },
       ],

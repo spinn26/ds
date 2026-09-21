@@ -193,6 +193,73 @@ const ROUTES = [
   [/^\/workspace/, () => WORKSPACE],
   [/^\/dashboard\/dynamics/, () => ({ series: [], totals: { amountRub: 0, points: 0, deals: 0 } })],
   [/^\/dashboard/, () => DASHBOARD],
+  // База знаний: разделы с вложенностью и материалами.
+  [/^\/education\/search/, () => ({ results: [
+    { type: 'article', id: 11, title: 'Как заполнить анкету клиента', section: 'Продажи' },
+  ] })],
+  [/^\/education\/kb\/sections\/\d+/, () => ({
+    section: { id: 1, title: 'Продажи', description: 'Скрипты, возражения, разбор сделок', icon: 'mdi-folder' },
+    breadcrumbs: [{ id: 1, title: 'Продажи' }],
+    children: [],
+    articles: [
+      { id: 11, title: 'Как заполнить анкету клиента', description: 'Пошагово, с примерами', tags: ['анкета'] },
+      { id: 12, title: 'Разбор типичных возражений', description: 'Что отвечать и почему', tags: ['скрипты'] },
+    ],
+  })],
+  [/^\/education\/kb\/articles\/\d+/, () => ({
+    article: { id: 11, title: 'Как заполнить анкету клиента', description: 'Пошагово, с примерами', tags: ['анкета'], blocks: [] },
+    breadcrumbs: [{ id: 1, title: 'Продажи' }],
+  })],
+  // Поля — как у EducationController::kbTree: articleCount, children, icon (MDI).
+  [/^\/education\/kb/, () => ({ sections: [
+    { id: 1, title: 'Продажи', description: 'Скрипты, возражения, разбор сделок', icon: 'mdi-folder', slug: 'sales', coverUrl: null, articleCount: 12,
+      children: [
+        { id: 11, title: 'Скрипты звонков', description: '', icon: 'mdi-file-document', slug: 'scripts', coverUrl: null, articleCount: 4, children: [] },
+        { id: 12, title: 'Возражения', description: '', icon: 'mdi-chat', slug: 'objections', coverUrl: null, articleCount: 6, children: [] },
+      ] },
+    { id: 2, title: 'Продукты', description: 'Условия, тарифы, сравнения', icon: 'mdi-file-document', slug: 'products', coverUrl: null, articleCount: 9, children: [] },
+    { id: 3, title: 'Видеоуроки', description: 'Записи вебинаров и разборов', icon: 'mdi-video', slug: 'video', coverUrl: null, articleCount: 5, children: [] },
+    { id: 4, title: 'Регламенты', description: 'Как работает платформа', icon: 'mdi-chart-box', slug: 'rules', coverUrl: null, articleCount: 0, children: [] },
+  ] })],
+  // Статус системы. Форма ответа — как у SystemStatusController::index:
+  // components / active / history / overall, поля в snake_case.
+  [/^\/system-status/, () => ({
+    // overall — объект {status, label}, как у aggregateOverall, а не строка.
+    overall: { status: 'degraded', label: 'Частичное замедление' },
+    components: [
+      { id: 1, name: 'Кабинет партнёра', description: 'Вход, рабочий стол, профиль', status: 'operational' },
+      { id: 2, name: 'Расчёт комиссий', description: 'Начисления и пул', status: 'operational' },
+      { id: 3, name: 'Импорт контрактов', description: 'Загрузка из таблиц поставщиков', status: 'degraded' },
+      { id: 4, name: 'Чат поддержки', description: 'Обращения и уведомления', status: 'operational' },
+    ],
+    active: [
+      {
+        id: 7, title: 'Замедление импорта контрактов', severity: 'minor', status: 'investigating',
+        component_id: 3, started_at: '2026-09-21 08:10:00', resolved_at: null,
+        description: 'Контракты подгружаются дольше обычного.',
+        updates: [
+          { id: 1, incident_id: 7, created_at: '2026-09-21 08:20:00', status: 'investigating', message: 'Разбираемся с причиной.' },
+          { id: 2, incident_id: 7, created_at: '2026-09-21 08:40:00', status: 'identified', message: 'Причина найдена, готовим исправление.' },
+        ],
+      },
+    ],
+    history: [
+      {
+        id: 6, title: 'Плановые работы: обновление платформы', severity: 'maintenance', status: 'completed',
+        component_id: 1, started_at: '2026-09-14 22:00:00', resolved_at: '2026-09-14 23:10:00',
+        description: 'Обновление прошло штатно.', updates: [],
+      },
+    ],
+  })],
+  // Реестр выплат партнёра.
+  [/^\/my-payments/, () => ({
+    data: [
+      { id: 501, period: '2026-08', status: 'paid', amount: 128400, paidAt: '2026-09-05', comment: 'Комиссия за август' },
+      { id: 502, period: '2026-09', status: 'pending', amount: 96500, paidAt: null, comment: 'В обработке' },
+    ],
+    total: 2,
+    summary: { paid: 128400, pending: 96500, balance: 24000 },
+  })],
   [/^\/status-levels/, () => ({ data: [
     { id: 1, level: 1, title: 'Старт', percent: 15, groupVolumeCumulative: 0, mandatoryGP: 0, otrif: 0, pool: 0 },
     { id: 2, level: 2, title: 'Про', percent: 20, groupVolumeCumulative: 2000, mandatoryGP: 0, otrif: 0, pool: 0 },

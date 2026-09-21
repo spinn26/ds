@@ -1,91 +1,90 @@
 <template>
-  <div class="pa-6">
-    <v-breadcrumbs :items="crumbs" density="compact" />
-    <div v-if="loading" class="d-flex justify-center pa-6">
-      <v-progress-circular indeterminate color="primary" />
+  <div class="kb">
+    <nav class="crumbs" aria-label="Хлебные крошки">
+      <router-link to="/education">Обучение</router-link>
+      <ChevronRight :size="14" :stroke-width="1.8" aria-hidden="true" />
+      <router-link to="/education/kb">База знаний</router-link>
+      <template v-for="(b, i) in breadcrumbs" :key="b.id">
+        <ChevronRight :size="14" :stroke-width="1.8" aria-hidden="true" />
+        <router-link v-if="i < breadcrumbs.length - 1" :to="`/education/kb/sections/${b.id}`">
+          {{ b.title }}
+        </router-link>
+        <span v-else aria-current="page">{{ b.title }}</span>
+      </template>
+    </nav>
+
+    <div v-if="loading" class="grid" aria-hidden="true">
+      <div v-for="i in 4" :key="i" class="skeleton"></div>
     </div>
-    <div v-else>
-      <div class="d-flex align-center ga-3 mb-2">
-        <v-avatar v-if="section?.icon" size="40" color="primary-soft" rounded="lg">
-          <v-icon size="22" color="primary">{{ section.icon }}</v-icon>
-        </v-avatar>
-        <h1 class="text-h5 font-weight-bold">{{ section?.title || 'Раздел базы знаний' }}</h1>
-      </div>
-      <div v-if="section?.description" class="text-body-2 text-medium-emphasis mb-4">
-        {{ section.description }}
+
+    <template v-else>
+      <header class="kb-head">
+        <span class="kb-head-ic">
+          <component :is="icon" :size="24" :stroke-width="1.8" aria-hidden="true" />
+        </span>
+        <div class="kb-head-b">
+          <h1>{{ section?.title || 'Раздел базы знаний' }}</h1>
+          <p v-if="section?.description">{{ section.description }}</p>
+          <p class="kb-head-m">{{ meta }}</p>
+        </div>
+      </header>
+
+      <div v-if="!subsections.length && !articles.length" class="state">
+        <span class="state-ic"><FolderOpen :size="20" :stroke-width="1.8" /></span>
+        В этом разделе пока нет материалов — скоро здесь появятся регламенты,
+        инструкции и записи
       </div>
 
-      <EmptyState
-        v-if="!subsections.length && !articles.length"
-        icon="mdi-file-document-outline"
-        title="В этом разделе пока нет материалов"
-        description="Скоро здесь появятся регламенты, инструкции и записи"
-      />
-
-      <div v-if="subsections.length" class="mb-6">
-        <div class="text-subtitle-2 font-weight-bold text-uppercase letter-spacing-1 text-medium-emphasis mb-2">
+      <section v-if="subsections.length" class="block">
+        <h2 class="block-h">
           Подразделы
-        </div>
-        <v-row dense>
-          <v-col
-            v-for="s in subsections"
+          <span>{{ subsections.length }}</span>
+        </h2>
+        <div class="grid">
+          <KbSectionCard
+            v-for="(s, i) in subsections"
             :key="s.id"
-            cols="12" sm="6" md="4"
-          >
-            <v-card
-              class="section-card pa-4 h-100"
-              elevation="0"
-              :to="`/education/kb/sections/${s.id}`"
-            >
-              <div class="d-flex align-center ga-3 mb-2">
-                <v-avatar size="40" color="primary-soft" rounded="lg">
-                  <v-icon size="22" color="primary">{{ s.icon || 'mdi-folder-outline' }}</v-icon>
-                </v-avatar>
-                <div class="flex-grow-1">
-                  <div class="text-subtitle-1 font-weight-bold">{{ s.title }}</div>
-                  <div class="text-caption text-medium-emphasis">
-                    {{ s.articleCount }} материалов
-                    <span v-if="s.childCount"> · {{ s.childCount }} подразделов</span>
-                  </div>
-                </div>
-                <v-icon size="20" color="medium-emphasis">mdi-chevron-right</v-icon>
-              </div>
-              <div v-if="s.description" class="text-body-2 text-medium-emphasis">
-                {{ s.description }}
-              </div>
-            </v-card>
-          </v-col>
-        </v-row>
-      </div>
-
-      <div v-if="articles.length">
-        <div class="text-subtitle-2 font-weight-bold text-uppercase letter-spacing-1 text-medium-emphasis mb-2">
-          Материалы
+            :section="s"
+            :tint="i"
+          />
         </div>
-        <v-list>
-          <v-list-item
+      </section>
+
+      <section v-if="articles.length" class="block">
+        <h2 class="block-h">
+          Материалы
+          <span>{{ articles.length }}</span>
+        </h2>
+        <div class="rows">
+          <router-link
             v-for="a in articles"
             :key="a.id"
-            :title="a.title"
-            :subtitle="a.description"
-            prepend-icon="mdi-file-document-outline"
+            class="row"
             :to="`/education/kb/articles/${a.id}`"
           >
-            <template #append>
-              <v-icon>mdi-chevron-right</v-icon>
-            </template>
-          </v-list-item>
-        </v-list>
-      </div>
-    </div>
+            <span class="row-ic"><FileText :size="18" :stroke-width="1.8" aria-hidden="true" /></span>
+            <span class="row-b">
+              <span class="row-t">{{ a.title }}</span>
+              <span v-if="a.description" class="row-d">{{ a.description }}</span>
+              <span v-if="a.tags?.length" class="row-tags">
+                <span v-for="t in a.tags" :key="t" class="tag">#{{ t }}</span>
+              </span>
+            </span>
+            <ChevronRight class="row-go" :size="18" :stroke-width="1.8" aria-hidden="true" />
+          </router-link>
+        </div>
+      </section>
+    </template>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue';
 import { useRoute } from 'vue-router';
+import { ChevronRight, FileText, FolderOpen } from 'lucide-vue-next';
 import api from '../api';
-import EmptyState from '../components/EmptyState.vue';
+import KbSectionCard from '../components/education/KbSectionCard.vue';
+import { kbIcon, countLabel } from '../utils/kb';
 
 const route = useRoute();
 const loading = ref(true);
@@ -94,17 +93,18 @@ const subsections = ref([]);
 const articles = ref([]);
 const breadcrumbs = ref([]);
 
-const crumbs = computed(() => {
-  const base = [
-    { title: 'Обучение', to: '/education' },
-    { title: 'База знаний', to: '/education/kb' },
-  ];
-  const trail = breadcrumbs.value.map((b, idx) => ({
-    title: b.title,
-    to: `/education/kb/sections/${b.id}`,
-    disabled: idx === breadcrumbs.value.length - 1,
-  }));
-  return [...base, ...trail];
+const icon = computed(() => kbIcon(section.value?.icon));
+
+/** Сколько в разделе своих материалов и подразделов. */
+const meta = computed(() => {
+  const parts = [];
+  if (articles.value.length) {
+    parts.push(countLabel(articles.value.length, 'материал', 'материала', 'материалов'));
+  }
+  if (subsections.value.length) {
+    parts.push(countLabel(subsections.value.length, 'подраздел', 'подраздела', 'подразделов'));
+  }
+  return parts.join(' · ') || 'Пока пусто';
 });
 
 async function load() {
@@ -128,14 +128,174 @@ watch(() => route.params.id, (id) => { if (id) load(); });
 </script>
 
 <style scoped>
-.section-card {
-  border: 1px solid var(--ds-outline-variant, rgba(var(--v-theme-on-surface), 0.08));
-  border-radius: var(--ds-radius-lg, 12px);
-  cursor: pointer;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+.kb {
+  font-family: var(--font-sans);
+  color: var(--ink);
 }
-.section-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
+
+/* ---------- крошки и шапка ---------- */
+.crumbs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: var(--space-4);
+  font: 400 13px/18px var(--font-sans);
+  color: var(--ink-muted);
+}
+.crumbs a { color: var(--ink-muted); text-decoration: none; }
+.crumbs a:hover { color: var(--brand); }
+.crumbs a:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--radius-sm); }
+
+.kb-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+.kb-head-ic {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 52px;
+  height: 52px;
+  border-radius: var(--radius-md);
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+.kb-head-b { min-width: 0; }
+.kb-head h1 {
+  margin: 0;
+  font: 700 28px/34px var(--font-sans);
+  letter-spacing: -0.015em;
+}
+.kb-head p {
+  margin: 6px 0 0;
+  font: 400 14px/22px var(--font-sans);
+  color: var(--ink-muted);
+}
+.kb-head-m { font-weight: 500; font-size: 13px !important; }
+
+/* ---------- блоки ---------- */
+.block + .block { margin-top: var(--space-6); }
+.block-h {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-3);
+  font: 600 17px/24px var(--font-sans);
+  color: var(--ink);
+}
+.block-h span {
+  padding: 0 8px;
+  border-radius: var(--radius-pill);
+  background: var(--brand-soft);
+  color: var(--brand);
+  font: 600 12px/20px var(--font-sans);
+  font-variant-numeric: tabular-nums;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: var(--space-4);
+}
+.skeleton {
+  height: 124px;
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+}
+
+/* ---------- список материалов ---------- */
+.rows {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+.row {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) 18px;
+  gap: var(--space-3);
+  align-items: start;
+  padding: var(--space-4);
+  color: inherit;
+  text-decoration: none;
+}
+.row + .row { border-top: 1px solid var(--border); }
+.row:hover { background: var(--surface-2); }
+.row:hover .row-t { color: var(--brand); }
+.row:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.row-ic {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--ink-muted);
+}
+.row-b { display: flex; flex-direction: column; min-width: 0; }
+.row-t { font: 500 14px/20px var(--font-sans); }
+.row-d {
+  margin-top: 2px;
+  font: 400 13px/19px var(--font-sans);
+  color: var(--ink-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.row-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.tag {
+  padding: 1px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  color: var(--ink-muted);
+  font: 500 11px/18px var(--font-sans);
+}
+.row-go { align-self: center; color: var(--ink-muted); }
+.row:hover .row-go { color: var(--brand); }
+
+/* ---------- пустое состояние ---------- */
+.state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-8);
+  text-align: center;
+  font: 400 14px/22px var(--font-sans);
+  color: var(--ink-muted);
+}
+.state-ic {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+}
+
+@media (max-width: 1320px) {
+  .grid { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+}
+@media (max-width: 1180px) {
+  .grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+}
+@media (max-width: 860px) {
+  .grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+  .kb-head { gap: var(--space-3); }
+  .kb-head-ic { width: 44px; height: 44px; }
+  .kb-head h1 { font: 700 22px/28px var(--font-sans); }
+  .row { padding: var(--space-3); }
+}
+/* Узкий экран: карточка в одну колонку, иначе заголовки рвутся. */
+@media (max-width: 640px) {
+  .grid { grid-template-columns: minmax(0, 1fr); }
 }
 </style>
