@@ -25,6 +25,7 @@ import MyPayments from '../../resources/js/pages/MyPayments.vue';
 import Dashboard from '../../resources/js/pages/Dashboard.vue';
 import EducationKb from '../../resources/js/pages/EducationKb.vue';
 import SystemStatus from '../../resources/js/pages/SystemStatus.vue';
+import AdminNews from '../../resources/js/pages/Admin/News.vue';
 import { useAuthStore } from '../../resources/js/stores/auth';
 
 const params = new URLSearchParams(location.search);
@@ -51,6 +52,7 @@ const router = createRouter({
         { path: 'dashboard', component: Dashboard },
         { path: 'education/kb', component: EducationKb },
         { path: 'status', component: SystemStatus },
+        { path: 'manage/news', component: AdminNews },
         // Заглушки для ссылок каркаса: без них router-link ругается.
         { path: ':pathMatch(.*)*', component: blank },
       ],
@@ -73,7 +75,8 @@ auth.user = {
   id: 101, firstName: 'Любава', lastName: 'Громова', patronymic: 'Сергеевна',
   email: 'lubava@example.com', role: 'consultant', avatarUrl: null, hasConsultant: true,
 };
-auth.permissions = {};
+// Права нужны, чтобы на стенде были видны кнопки правки в админских списках.
+auth.permissions = { news: 'full' };
 
 router.push(startRoute).catch(() => {});
 router.isReady().then(() => app.mount('#app'));

@@ -279,7 +279,32 @@ const ROUTES = [
   ] })],
   [/^\/news\/\d+$/, () => ARTICLE],
   [/^\/news/, () => ({ data: NEWS, total: NEWS.length, unread: 1 })],
-  [/^\/auth\/me\/permissions/, () => ({ permissions: {} })],
+  // Админский список новостей отдаёт сырые строки таблицы: meta приходит
+  // СТРОКОЙ (jsonb), редактор обязан её разбирать.
+  [/^\/admin\/news/, () => ([
+    {
+      id: 1, title: 'Промо «3000+»: +10% к ставке за личные продажи',
+      content: '<p>Условия акции.</p>', excerpt: 'С 1 сентября по 31 декабря…',
+      type: 'info', kind: 'promo', active: true, pinned: true,
+      cover_url: null, published_at: '2026-09-16 09:00:00', created_at: '2026-09-16 09:00:00',
+      meta: JSON.stringify({
+        cover: { eyebrow: 'ПРОМО · СЕН–ДЕК 2026', numeral: '3000+', caption: 'ЛП → +10% К СТАВКЕ' },
+        cta: { url: 'https://docs.google.com/presentation/d/x/edit', label: 'Открыть презентацию', note: 'Презентация конкурса · Google Slides' },
+        promo: {
+          title: 'Промо «3000+»', target: 3000, unit: 'ЛП', bonusLabel: '+10% к ставке',
+          from: '2026-09-01', to: '2026-12-31', monthHint: '+10%',
+          rule: { left: { value: '3 000', caption: 'баллов ЛП за месяц' }, right: { value: '+10%', caption: 'от комиссии DS по вашему ЛП' } },
+          steps: [{ icon: 'users', text: 'Пройдитесь по клиентской базе' }],
+        },
+      }),
+    },
+    {
+      id: 2, title: 'Обновили тест на риск-профиль', content: '<p>Новая версия в таблице ЛФП.</p>',
+      excerpt: null, type: 'info', kind: 'update', active: true, pinned: false,
+      cover_url: null, published_at: '2026-08-13 12:00:00', created_at: '2026-08-13 12:00:00', meta: null,
+    },
+  ])],
+  [/^\/auth\/me\/permissions/, () => ({ permissions: { news: 'full' } })],
   [/^\/auth\/me/, () => ME],
   // referralCode/canInvite шапка берёт из data.referral, а не из statusInfo —
   // ключи должны совпадать с ответом ProfileController, иначе кнопки «Реф.
