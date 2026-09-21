@@ -242,10 +242,18 @@
       <!-- User menu -->
       <v-menu min-width="280" :close-on-content-click="false">
         <template #activator="{ props }">
-          <v-avatar v-bind="props" :color="auth.isAdmin ? 'secondary' : 'primary'" size="36" class="cursor-pointer ml-1">
-            <v-img v-if="auth.user?.avatarUrl" :src="auth.user.avatarUrl" cover />
-            <span v-else class="text-caption font-weight-bold">{{ initials }}</span>
-          </v-avatar>
+          <button v-bind="props" type="button" class="topbar-profile" aria-label="Меню профиля">
+            <v-avatar :color="auth.isAdmin ? 'secondary' : 'primary'" size="36">
+              <v-img v-if="auth.user?.avatarUrl" :src="auth.user.avatarUrl" cover />
+              <span v-else class="text-caption font-weight-bold">{{ initials }}</span>
+            </v-avatar>
+            <!-- Имя и уровень рядом с аватаром (per design/components/Topbar.md).
+                 На мобильном остаётся только аватар — места нет. -->
+            <span v-if="!mobile" class="topbar-profile-text">
+              <span class="topbar-profile-name">{{ shortName }}</span>
+              <span v-if="qualificationLabel" class="topbar-profile-rank">{{ qualificationLabel }}</span>
+            </span>
+          </button>
         </template>
         <v-card rounded="lg" elevation="8">
           <v-card-text class="pa-4">
@@ -781,6 +789,23 @@ function toggleTheme() {
 const initials = computed(() =>
   `${auth.user?.firstName?.[0] || ''}${auth.user?.lastName?.[0] || ''}`.toUpperCase()
 );
+
+// «Любава Г.» — полное ФИО в шапку не влезает, а одни инициалы на аватаре
+// не отвечают на вопрос «под кем я сижу».
+const shortName = computed(() => {
+  const first = auth.user?.firstName || '';
+  const last = auth.user?.lastName || '';
+  return last ? `${first} ${last[0]}.`.trim() : first;
+});
+
+// Квалификация приходит строкой «2 [Про]» — показываем «2 · Про».
+// Пусто у сотрудников без карточки партнёра: тогда строки просто нет.
+const qualificationLabel = computed(() => {
+  const raw = statusInfo.value?.qualification;
+  if (! raw) return '';
+  const m = String(raw).match(/^(\d+)\s*\[(.+)\]$/);
+  return m ? `${m[1]} · ${m[2]}` : String(raw);
+});
 
 // Onboarding questionnaire — shown to consultants who haven't filled it yet.
 // Block navigation via router guard below (persistent dialog already blocks UI).
@@ -1761,6 +1786,27 @@ watch(
 @media (max-width: 860px) {
   .topbar-search { min-width: 0; max-width: none; flex: 1 1 auto; }
 }
+
+.topbar-profile {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-inline-start: var(--space-2);
+  padding: 4px 6px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  cursor: pointer;
+}
+.topbar-profile:hover { background: var(--surface-2); }
+.topbar-profile:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.topbar-profile-text { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
+.topbar-profile-name {
+  font: 500 13px/18px var(--font-sans);
+  color: var(--ink);
+  white-space: nowrap;
+}
+.topbar-profile-rank { font: 400 12px/16px var(--font-sans); color: var(--ink-muted); }
 
 /* Topbar status-chip — фон полупрозрачный, чтобы blur topbar'а
    просвечивал через чип (apple-style). */

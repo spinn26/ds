@@ -3,9 +3,9 @@
     <!-- Статус системы вынесен в шапку (SystemStatusChip в MainLayout)
          — он там виден на всех страницах с мигающим индикатором. -->
 
-    <!-- DS hero — приветствие + текущая дата на полупрозрачном BrandWaves фоне.
-         Соответствует ds-layouts.jsx::PartnerWorkspace hero. -->
-    <v-card class="ds-hero mb-4" elevation="0">
+    <!-- Партнёру приветствие рисует hero «Фокус дня» в PartnerHome; здесь
+         остаётся прежний вариант для сотрудников без карточки партнёра. -->
+    <v-card v-if="!isConsultant" class="ds-hero mb-4" elevation="0">
       <BrandWaves shape="sheet" :width="1200" :height="180"
         preserveAspectRatio="xMidYMid slice"
         bg-color="transparent" stroke-color="#6EE87A" :stroke-opacity="0.2"
@@ -183,7 +183,17 @@
       </v-col>
     </v-row>
 
-    <v-row>
+    <!-- ===== ПАРТНЁР: рабочий стол версии 2 (ds-redesign). Старая
+         двухколоночная раскладка ниже осталась тем, у кого карточки
+         партнёра нет, — то есть чистым сотрудникам. ===== -->
+    <PartnerHome v-if="isConsultant" :data="data" :first-name="auth.user?.firstName || ''">
+      <template v-if="isStaff" #aside-top>
+        <MyDayWidget />
+        <WhosOnlineWidget />
+      </template>
+    </PartnerHome>
+
+    <v-row v-if="!isConsultant">
       <!-- Left column -->
       <v-col cols="12" md="8">
         <!-- Partner stats (consultants only) — DS-сетка KPI-плиток.
@@ -455,6 +465,7 @@ import MyNoteWidget from '../components/MyNoteWidget.vue';
 import MyDayWidget from '../components/MyDayWidget.vue';
 import WhosOnlineWidget from '../components/WhosOnlineWidget.vue';
 import BrandWaves from '../components/BrandWaves.vue';
+import PartnerHome from '../components/workspace/PartnerHome.vue';
 import { StatusChip, MoneyCell } from '../components';
 import TaskCard from './Admin/WorkspaceTaskCard.vue';
 
