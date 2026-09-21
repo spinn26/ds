@@ -162,9 +162,42 @@ const STATUS_INFO = {
   currentPoints: 500,
 };
 
+// Дашборд партнёра: форма ответа /dashboard (DashboardService::getDashboardData).
+const DASHBOARD = {
+  consultant: { id: 2, personName: 'Громова Любава Сергеевна', participantCode: 'DS-2', active: true, activityName: 'Активен', activityId: 2 },
+  statusInfo: { activityName: 'Активен', requiredPoints: 500, currentPoints: 0, daysRemaining: 292, yearPeriodEnd: '2027-07-10' },
+  qualification: {
+    level: { id: 2, level: 2, title: 'Про', percent: 20, groupVolumeCumulative: 2000 },
+    nominalLevel: { id: 2, level: 2, title: 'Про', percent: 20 },
+    calculationLevel: { id: 2, level: 2, title: 'Про', percent: 20 },
+    levelsDontMatch: false,
+    nextLevel: { id: 3, level: 3, title: 'Эксперт', percent: 25, groupVolumeCumulative: 7000, mandatoryGP: 0 },
+  },
+  volumes: {
+    personalVolume: 0, groupVolume: 0, groupVolumeCumulative: 2001.82,
+    prevPersonalVolume: 0, prevGroupVolume: 0, prevGroupVolumeCumulative: 2001.82,
+    firstLineVolume: 0, firstLineVolumeRub: 0, prevFirstLineVolume: 0, pending: null,
+  },
+  team: { firstLineAll: 2, firstLineActive: 0, totalPartners: 3, totalPartnersActive: 1, myClients: 3, myClientsActive: 3, teamClients: 3, teamClientsActive: 3 },
+  partners: { total: 2, registered: 1, active: 0, inactive: 0, terminated: 1, excluded: 0 },
+  prevPartners: { total: 2, registered: 1, active: 0, terminated: 0 },
+  activatedInPeriod: 0,
+  breakaway: { partnerName: null, groupVolume: 0, gapPercentage: 0, gapValue: 0, gpHeld: false, poolBlocked: false },
+  mandatoryPlan: null,
+  poolInfo: null,
+  period: '2026-09',
+};
+
 // URL → ответ. Порядок важен: сначала более длинные пути.
 const ROUTES = [
   [/^\/workspace/, () => WORKSPACE],
+  [/^\/dashboard\/dynamics/, () => ({ series: [], totals: { amountRub: 0, points: 0, deals: 0 } })],
+  [/^\/dashboard/, () => DASHBOARD],
+  [/^\/status-levels/, () => ({ data: [
+    { id: 1, level: 1, title: 'Старт', percent: 15, groupVolumeCumulative: 0, mandatoryGP: 0, otrif: 0, pool: 0 },
+    { id: 2, level: 2, title: 'Про', percent: 20, groupVolumeCumulative: 2000, mandatoryGP: 0, otrif: 0, pool: 0 },
+    { id: 3, level: 3, title: 'Эксперт', percent: 25, groupVolumeCumulative: 7000, mandatoryGP: 0, otrif: 70, pool: 0 },
+  ] })],
   [/^\/news\/\d+$/, () => ARTICLE],
   [/^\/news/, () => ({ data: NEWS, total: NEWS.length, unread: 1 })],
   [/^\/auth\/me\/permissions/, () => ({ permissions: {} })],

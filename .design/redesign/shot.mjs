@@ -22,7 +22,7 @@ const out = path.resolve(here, 'shots');
 fs.mkdirSync(out, { recursive: true });
 
 // Сценарии вместо адресов: см. комментарий выше.
-const SCENARIOS = { home: '/', news: '/news/1' };
+const SCENARIOS = { home: '/', news: '/news/1', dashboard: '/dashboard', payouts: '/my-payments', kb: '/education/kb', status: '/status' };
 const scenario = process.argv[2] || 'home';
 const route = SCENARIOS[scenario] || '/';
 const widths = (process.argv[3] || '1440').split(',').map((w) => parseInt(w, 10));

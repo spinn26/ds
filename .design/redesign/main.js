@@ -21,6 +21,8 @@ import MainLayout from '../../resources/js/layouts/MainLayout.vue';
 import Workspace from '../../resources/js/pages/Workspace.vue';
 import NewsDetail from '../../resources/js/pages/News/NewsDetail.vue';
 import NewsList from '../../resources/js/pages/News/NewsList.vue';
+import MyPayments from '../../resources/js/pages/MyPayments.vue';
+import Dashboard from '../../resources/js/pages/Dashboard.vue';
 import { useAuthStore } from '../../resources/js/stores/auth';
 
 const params = new URLSearchParams(location.search);
@@ -43,6 +45,8 @@ const router = createRouter({
         { path: '', component: Workspace },
         { path: 'news', component: NewsList },
         { path: 'news/:id', component: NewsDetail },
+        { path: 'my-payments', component: MyPayments },
+        { path: 'dashboard', component: Dashboard },
         // Заглушки для ссылок каркаса: без них router-link ругается.
         { path: ':pathMatch(.*)*', component: blank },
       ],
