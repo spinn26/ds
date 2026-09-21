@@ -252,14 +252,25 @@ const ROUTES = [
       },
     ],
   })],
-  // Реестр выплат партнёра.
+  // Реестр выплат. Форма — как у MyPaymentsController::index: summary с
+  // разложением суммы, платежи месяца и история по периодам.
   [/^\/my-payments/, () => ({
-    data: [
-      { id: 501, period: '2026-08', status: 'paid', amount: 128400, paidAt: '2026-09-05', comment: 'Комиссия за август' },
-      { id: 502, period: '2026-09', status: 'pending', amount: 96500, paidAt: null, comment: 'В обработке' },
+    year: 2026,
+    month: 9,
+    summary: {
+      balance: 24000, accrued: 96500, other: 0, pool: 12000,
+      accruedTotal: 108500, totalPayable: 132500, payed: 100000,
+      remaining: 32500, status: 'Оплачено частично',
+    },
+    payments: [
+      { id: 501, amount: 70000, paymentDate: '2026-09-10', status: 2, statusName: 'Проведена', comment: 'Комиссия за август' },
+      { id: 502, amount: 30000, paymentDate: '2026-09-18', status: 1, statusName: 'В обработке', comment: null },
     ],
-    total: 2,
-    summary: { paid: 128400, pending: 96500, balance: 24000 },
+    history: [
+      { dateMonth: '2026-07', accrued: 88000, pool: 9000, other: 0, payed: 97000, remaining: 0, status: 'Оплачено полностью' },
+      { dateMonth: '2026-08', accrued: 92000, pool: 11000, other: 0, payed: 79000, remaining: 24000, status: 'Оплачено частично' },
+      { dateMonth: '2026-09', accrued: 96500, pool: 12000, other: 0, payed: 100000, remaining: 32500, status: 'Оплачено частично' },
+    ],
   })],
   [/^\/status-levels/, () => ({ data: [
     { id: 1, level: 1, title: 'Старт', percent: 15, groupVolumeCumulative: 0, mandatoryGP: 0, otrif: 0, pool: 0 },
