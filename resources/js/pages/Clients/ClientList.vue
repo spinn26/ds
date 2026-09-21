@@ -22,6 +22,11 @@
           prepend-inner-icon="mdi-email" clearable hide-details
           style="max-width: 220px; flex: 1 1 160px"
           @update:model-value="debouncedLoad" />
+        <v-text-field v-model="filters.phone" placeholder="Телефон"
+          density="compact" variant="outlined"
+          prepend-inner-icon="mdi-phone" clearable hide-details
+          style="max-width: 180px; flex: 1 1 140px"
+          @update:model-value="debouncedLoad" />
 
         <v-spacer />
 
@@ -52,6 +57,13 @@
                 density="compact" variant="outlined" hide-details
                 @update:model-value="loadData" />
             </div>
+          </div>
+          <div class="filter-range">
+            <span class="text-caption text-medium-emphasis">Открытый продукт</span>
+            <v-text-field v-model="filters.product" placeholder="Название продукта"
+              density="compact" variant="outlined" clearable hide-details
+              prepend-inner-icon="mdi-package-variant"
+              @update:model-value="debouncedLoad" />
           </div>
         </div>
       </v-expand-transition>
@@ -96,40 +108,43 @@ const items = ref([]);
 const total = ref(0);
 const loading = ref(false);
 // scope=team — клиенты команды (включая нижестоящих), scope=mine — только свои.
-// Передаётся в API как `scope`. Backend различает: scope=mine → только текущий
-// consultant; scope=team → текущий + downline.
-const filters = ref({ search: '', status: null, city: '', email: '', scope: '', birth_date_from: '', birth_date_to: '' });
+// ⚠ Параметр уходит в API, но ClientController::index его НЕ обрабатывает:
+// выборка всегда идёт по `client.consultant = текущий партнёр`. То есть ссылка
+// «Клиенты команды» с дашборда (Dashboard.vue) открывает список своих клиентов,
+// и человек об этом никак не узнаёт. Здесь не чиню: показывать партнёру
+// контакты клиентов нижестоящих — решение про доступ к персональным данным,
+// а не про фильтры. Вынесено отдельным вопросом.
+// status убран вместе с селектом: у клиента нет статуса в бизнес-логике
+// (см. комментарий к headers ниже), а параметр продолжал уезжать в API.
+const emptyFilters = () => ({
+  search: '', city: '', email: '', phone: '', product: '',
+  scope: '', birth_date_from: '', birth_date_to: '',
+});
+const filters = ref(emptyFilters());
 const page = ref(1);
 const perPage = ref(25);
 const sortBy = ref([]);
 
-const statusOptions = [
-  { title: 'Активен', value: 'active' },
-  { title: 'Неактивен', value: 'inactive' },
-];
-
 const advancedOpen = ref(false);
 
-const activeFilterCount = computed(() => {
-  let c = 0;
-  if (filters.value.search) c++;
-  if (filters.value.status) c++;
-  if (filters.value.city) c++;
-  if (filters.value.email) c++;
-  if (filters.value.birth_date_from) c++;
-  if (filters.value.birth_date_to) c++;
-  return c;
-});
+// Поля, которые считаются за фильтр в счётчиках. scope сюда не входит:
+// это не фильтр, а режим выборки, и приходит он только из ссылки.
+const mainFilterKeys = ['search', 'city', 'email', 'phone'];
+const advancedFilterKeys = ['birth_date_from', 'birth_date_to', 'product'];
 
-const advancedActiveCount = computed(() => {
-  let c = 0;
-  if (filters.value.birth_date_from) c++;
-  if (filters.value.birth_date_to) c++;
-  return c;
-});
+const advancedActiveCount = computed(
+  () => advancedFilterKeys.filter(k => filters.value[k]).length
+);
+
+const activeFilterCount = computed(
+  () => [...mainFilterKeys, ...advancedFilterKeys].filter(k => filters.value[k]).length
+);
 
 function resetFilters() {
-  filters.value = { search: '', status: null, city: '', email: '', scope: '', birth_date_from: '', birth_date_to: '' };
+  // scope сохраняем: «Сбросить фильтры» не должно молча переключать
+  // человека с клиентов команды обратно на своих.
+  const { scope } = filters.value;
+  filters.value = { ...emptyFilters(), scope };
   loadData();
 }
 
@@ -138,7 +153,10 @@ function resetFilters() {
 const headers = [
   { title: 'ФИО клиента', key: 'personName', sortable: true },
   { title: 'Дата рождения', key: 'birthDate', width: 140, sortable: true },
-  { title: 'Место жительства', key: 'city', sortable: true },
+  // city не сортируется: в колонке лежит и название города, и legacy-id,
+  // бэкенд такую сортировку не принимает — раньше клик по заголовку молча
+  // отдавал список, отсортированный по ФИО.
+  { title: 'Место жительства', key: 'city', sortable: false },
   { title: 'Телефон', key: 'phone', width: 160, sortable: false },
   { title: 'Email', key: 'email', width: 220, sortable: false },
   { title: 'Открытые продукты', key: 'products', sortable: false },
@@ -160,13 +178,9 @@ async function loadData() {
   loading.value = true;
   try {
     const params = { page: page.value, per_page: perPage.value };
-    if (filters.value.search) params.search = filters.value.search;
-    if (filters.value.status) params.status = filters.value.status;
-    if (filters.value.city) params.city = filters.value.city;
-    if (filters.value.email) params.email = filters.value.email;
-    if (filters.value.birth_date_from) params.birth_date_from = filters.value.birth_date_from;
-    if (filters.value.birth_date_to) params.birth_date_to = filters.value.birth_date_to;
-    if (filters.value.scope) params.scope = filters.value.scope;
+    for (const key of [...mainFilterKeys, ...advancedFilterKeys, 'scope']) {
+      if (filters.value[key]) params[key] = filters.value[key];
+    }
     if (sortBy.value.length) {
       params.sort_by = sortBy.value[0].key;
       params.sort_dir = sortBy.value[0].order || 'asc';
