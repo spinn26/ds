@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\PartnerActivity;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -36,6 +37,32 @@ class ConsultantService
             $subCount = $subCounts[$c->id] ?? 0;
 
             $activityId = is_object($c->activity) ? $c->activity->value : $c->activity;
+
+            // Партнёр выбыл — накопленный ГП показываем нулём.
+            //
+            // Хранилищ НГП два: денормализация consultant."groupVolumeCumulative"
+            // и месячные снимки qualificationLog. PartnerStatusService обнуляет
+            // при терминации только первую (миграция 2026_09_04 почистила
+            // прежние), а снимки не трогает СОЗНАТЕЛЬНО: по ним QualificationReeval
+            // считает уровни и строится история квалификаций.
+            //
+            // Читаем же мы ниже именно снимок ($cumulativeByConsultant), и колонка
+            // остаётся лишь фолбэком. Поэтому обнуление денормализации в выдаче
+            // не видно: на 21.09.2026 в выгрузке структуры 226 терминированных
+            // с суммарными 378 441 баллом НГП.
+            //
+            // Правим на выдаче, а не в данных: снимки, уровни, история, комиссии
+            // и пул остаются нетронутыми. Фильтры ngp_min/ngp_max ниже работают
+            // поверх этого же массива, так что выборка и показ не разойдутся.
+            // Приводим к int намеренно: модель Consultant кастует activity в
+            // PartnerActivity, но сюда приходят и сырые строки выборки, где
+            // значение может быть числом в строке. Строгое сравнение с "3"
+            // молча не сработало бы, и обнуление опять осталось бы незаметным.
+            $hasLeft = in_array((int) $activityId, [
+                PartnerActivity::Terminated->value,
+                PartnerActivity::Excluded->value,
+            ], true);
+
             $activityName = null;
             if ($c->activity) {
                 $activityName = is_object($c->activity) ? $c->activity->label() : ($activityNames[$c->activity] ?? null);
@@ -69,7 +96,9 @@ class ConsultantService
                 'level' => $c->structureLevel,
                 'personalVolume' => round((float) ($qLog->personalVolume ?? $c->personalVolume ?? 0), 2),
                 'groupVolume' => round((float) ($qLog->groupVolume ?? $c->groupVolume ?? 0), 2),
-                'groupVolumeCumulative' => round((float) ($cumulativeByConsultant[$c->id] ?? $c->groupVolumeCumulative ?? 0), 2),
+                'groupVolumeCumulative' => $hasLeft
+                    ? 0.0
+                    : round((float) ($cumulativeByConsultant[$c->id] ?? $c->groupVolumeCumulative ?? 0), 2),
                 'personalVolumeSinceActivation' => round((float) ($cumulativeLpByConsultant[$c->id] ?? 0), 2),
                 'clientCount' => $clientCount,
                 'contractCount' => $contractCount,
