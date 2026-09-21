@@ -687,6 +687,10 @@ const reqLoading = ref(false);
 const formData = ref({ statuses: [], currencies: [], countries: [], riskProfiles: [], setups: [], suppliers: [], programs: [] });
 const productOptions = ref([]);
 const programsByProduct = ref({}); // productId → programs[]
+// Название программы открытого контракта — запасной вариант на случай, если
+// её id не нашёлся в списке продукта (у legacy-контрактов так бывает).
+// Держим отдельно от form, чтобы поле не уехало в тело сохранения.
+const currentProgramName = ref('');
 const clientOptions = ref([]);
 const clientSearching = ref(false);
 let clientSearchTimer;
@@ -724,7 +728,17 @@ const filteredPrograms = computed(() => {
       seen.set(p.name, p);
     }
   }
-  return Array.from(seen.values());
+  const list = Array.from(seen.values());
+
+  // Программы контракта может не оказаться в списке продукта: у части
+  // legacy-контрактов program ссылается на строку, которой в каталоге
+  // продукта уже нет. Без этой подстраховки autocomplete не найдёт value
+  // и покажет сырой id вместо названия. Имя берём из самого контракта.
+  const pid = form.value.program;
+  if (pid && !list.some(p => p.id === pid)) {
+    list.unshift({ id: pid, name: currentProgramName.value || `Программа #${pid}` });
+  }
+  return list;
 });
 
 const autoConsultant = computed(() => {
@@ -857,6 +871,7 @@ async function rollbackRun(id) {
 
 function openCreate() {
   editingId.value = null;
+  currentProgramName.value = '';
   form.value = blankForm();
   chain.value = [];
   numberCheck.value = { exists: false, existing: null, loading: false };
@@ -867,7 +882,9 @@ function openCreate() {
 async function openEdit(item) {
   editingId.value = item.id;
   numberCheck.value = { exists: false, existing: null, loading: false };
-  ensureFormData();
+  // Ждём справочники: без них ветка legacy-продуктов в
+  // loadProgramsForProduct() читала бы ещё пустой formData.programs.
+  await ensureFormData();
   try {
     const { data } = await api.get(`/admin/contracts/${item.id}`);
     const c = data.contract;
@@ -894,7 +911,10 @@ async function openEdit(item) {
     if (c.client) {
       clientOptions.value = [{ id: c.client, personName: c.clientName, consultantName: c.consultantName }];
     }
+    currentProgramName.value = c.programName || '';
     chain.value = data.chain || [];
+    // Список программ продукта: без него поле «Программа» показывало id.
+    await loadProgramsForProduct(c.product);
     editOpen.value = true;
     // После открытия — подгружаем реквизиты прямого партнёра контракта.
     loadPartnerRequisites();
@@ -940,6 +960,18 @@ async function ensureFormData() {
 
 async function onProductChange(pid) {
   form.value.program = null;
+  await loadProgramsForProduct(pid);
+}
+
+/**
+ * Подтянуть список программ продукта — БЕЗ сброса выбранной программы.
+ *
+ * Отдельно от onProductChange потому, что нужна и при открытии существующего
+ * контракта: там продукт проставляется программно, обработчик смены не
+ * срабатывает, список остаётся пустым — и автокомплит показывает сырое
+ * значение, то есть id программы вместо названия.
+ */
+async function loadProgramsForProduct(pid) {
   if (!pid) return;
   if (programsByProduct.value[pid]) return;
   const opt = productOptions.value.find(p => p.id === pid);
