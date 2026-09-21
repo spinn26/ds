@@ -50,6 +50,32 @@ class ClientController extends Controller
         if ($request->filled('email')) {
             $query->where('email', 'ilike', '%' . $request->input('email') . '%');
         }
+        if ($request->filled('phone')) {
+            // Телефон в базе лежит в свободном формате: +7 (999) 123-45-67,
+            // 89991234567, с пробелами и без. Поиск подстрокой по сырому полю
+            // нашёл бы клиента только при совпадении разделителей, поэтому
+            // сравниваем по одним цифрам — и в колонке, и в запросе.
+            $digits = preg_replace('/\D+/', '', (string) $request->input('phone'));
+            if ($digits !== '') {
+                $query->whereRaw(
+                    "regexp_replace(coalesce(phone, ''), '\\D', '', 'g') LIKE ?",
+                    ['%' . $digits . '%']
+                );
+            }
+        }
+        if ($request->filled('product')) {
+            // «Открытые продукты» в выдаче собираются из контрактов клиента
+            // (см. ниже), поэтому и фильтр идёт по ним же — иначе колонка и
+            // фильтр показывали бы разное. Удалённые контракты не в счёт.
+            $productLike = '%' . $request->input('product') . '%';
+            $query->whereExists(function ($sub) use ($productLike) {
+                $sub->select(DB::raw(1))
+                    ->from('contract')
+                    ->whereColumn('contract.client', 'client.id')
+                    ->whereNull('contract.deletedAt')
+                    ->where('contract.productName', 'ilike', $productLike);
+            });
+        }
         if ($request->filled('birth_date_from')) {
             $query->where('birthDate', '>=', $request->input('birth_date_from'));
         }
@@ -73,7 +99,11 @@ class ClientController extends Controller
 
         $sortBy = $request->input('sort_by', 'personName');
         $sortDir = $request->input('sort_dir', 'asc') === 'desc' ? 'desc' : 'asc';
-        $allowedSort = ['personName', 'id'];
+        // birthDate — своя колонка карточки, сортировать по ней безопасно.
+        // city сознательно НЕ добавлен: там лежит и название города, и legacy-id
+        // (см. фильтр выше), поэтому сортировка получилась бы наполовину по
+        // буквам, наполовину по числам — в таблице она выключена.
+        $allowedSort = ['personName', 'id', 'birthDate'];
         $query->orderBy(in_array($sortBy, $allowedSort) ? $sortBy : 'personName', $sortDir);
 
         $clientRows = $query
