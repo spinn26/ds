@@ -411,6 +411,12 @@
             :hint="newCategoryLocked ? 'Категория зафиксирована — обращение пойдёт в эту команду' : ''"
             :persistent-hint="newCategoryLocked"
             class="mb-3" />
+          <v-autocomplete v-if="newForm.category === 'backoffice'"
+            v-model="newForm.product" :items="productOptions"
+            label="Продукт" placeholder="Начните вводить название"
+            clearable hide-details="auto" class="mb-3"
+            hint="Необязательно, но с продуктом бэк-офис ответит быстрее"
+            persistent-hint />
           <v-text-field v-model="newForm.subject" label="Тема" class="mb-3" />
           <v-textarea v-model="newForm.message" label="Ваш вопрос" rows="4" auto-grow />
           <v-alert v-if="newErr" type="error" density="compact" class="mt-2">{{ newErr }}</v-alert>
@@ -684,7 +690,28 @@ const visibleChats = computed(() => {
 const showNew = ref(false);
 const creating = ref(false);
 const newErr = ref('');
-const newForm = ref({ category: 'backoffice', subject: '', message: '' });
+const newForm = ref({ category: 'backoffice', subject: '', message: '', product: null });
+
+// Продукт для категории «Поддержка по продукту». Раньше его нельзя было
+// указать, и бэк-офис выяснял перепиской, о чём вообще речь. Название
+// выбранного продукта уходит в тему обращения — там его видно в списке,
+// не открывая переписку.
+const productOptions = ref([]);
+const productsLoaded = ref(false);
+
+async function loadProductOptions() {
+  if (productsLoaded.value) return;
+  try {
+    const { data } = await api.get('/products');
+    productOptions.value = (data.products || []).map(p => p.name).filter(Boolean);
+  } catch { productOptions.value = []; }
+  // Ставим в любом случае: не смогли загрузить — поле просто останется
+  // пустым, но форму это блокировать не должно.
+  productsLoaded.value = true;
+}
+
+// Список нужен только когда диалог открыт и выбрана продуктовая категория.
+watch(showNew, open => { if (open) loadProductOptions(); });
 // Когда форма открыта через кнопку из меню (?new=backoffice|accruals) —
 // категория зафиксирована и недоступна для смены. Решение встречи 2026-05-26:
 // техподдержка ушла в @DS_Helpdesk, на платформе только 2 профильных
@@ -1104,9 +1131,18 @@ async function createChat() {
   if (!newForm.value.subject?.trim() || !newForm.value.message?.trim()) { newErr.value = 'Заполните все поля'; return; }
   creating.value = true; newErr.value = '';
   try {
-    const { data } = await api.post('/chat/tickets', { ...newForm.value, department: newForm.value.category });
+    // Продукт — поле формы, а не поля тикета: в теме он попадает в список
+    // обращений и виден бэк-офису сразу. Само поле в API не шлём, там его нет.
+    const { product, ...payload } = newForm.value;
+    const subject = product
+      ? `${product} — ${payload.subject.trim()}`
+      : payload.subject;
+
+    const { data } = await api.post('/chat/tickets', {
+      ...payload, subject, department: payload.category,
+    });
     showNew.value = false;
-    newForm.value = { category: 'backoffice', subject: '', message: '' };
+    newForm.value = { category: 'backoffice', subject: '', message: '', product: null };
     newCategoryLocked.value = false;
     await loadChats();
     if (data.ticket) openChat(data.ticket);
@@ -1133,30 +1169,30 @@ function onVisibilityChange() {
 function openNewChat() {
   // Ручное «Новое обращение» (кнопка в шапке сайдбара) — категория
   // выбирается пользователем, поле не залочено.
-  newForm.value = { category: 'general', subject: '', message: '' };
+  newForm.value = { category: 'general', subject: '', message: '', product: null };
   newCategoryLocked.value = false;
   showNew.value = true;
 }
 
 function openFounder() {
-  newForm.value = { category: 'general', subject: 'Сообщение основателю', message: '' };
+  newForm.value = { category: 'general', subject: 'Сообщение основателю', message: '', product: null };
   newCategoryLocked.value = false;
   showNew.value = true;
 }
 
 function openCase() {
-  newForm.value = { category: 'general', subject: 'Кейс', message: '' };
+  newForm.value = { category: 'general', subject: 'Кейс', message: '', product: null };
   newCategoryLocked.value = false;
   showNew.value = true;
 }
 
 function checkQuery() {
   if (route.query.to === 'founder') {
-    newForm.value = { category: 'general', subject: 'Сообщение основателю', message: '' };
+    newForm.value = { category: 'general', subject: 'Сообщение основателю', message: '', product: null };
     newCategoryLocked.value = false;
     showNew.value = true;
   } else if (route.query.type === 'case') {
-    newForm.value = { category: 'general', subject: 'Кейс', message: '' };
+    newForm.value = { category: 'general', subject: 'Кейс', message: '', product: null };
     newCategoryLocked.value = false;
     showNew.value = true;
   } else if (route.query.new) {
@@ -1178,6 +1214,7 @@ function checkQuery() {
       category: cat,
       subject: ctxType && ctxLabel ? `${ctxType} ${ctxLabel}` : '',
       message: '',
+      product: null,
       ...(ctxType && ctxId ? { context_type: ctxType, context_id: ctxId } : {}),
     };
     newCategoryLocked.value = knownCategories.includes(raw);

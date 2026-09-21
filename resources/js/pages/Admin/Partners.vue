@@ -117,6 +117,31 @@
       </section>
 
       <section class="p-fsec">
+        <h4 class="p-fsec__title">Объёмы</h4>
+        <div class="d-flex flex-wrap ga-4">
+          <div style="flex: 1 1 240px">
+            <div class="text-caption text-medium-emphasis mb-1">ЛП — личные продажи</div>
+            <div class="d-flex ga-2">
+              <v-text-field v-model="draft.lpMin" type="number" placeholder="от"
+                variant="outlined" density="compact" hide-details clearable />
+              <v-text-field v-model="draft.lpMax" type="number" placeholder="до"
+                variant="outlined" density="compact" hide-details clearable />
+            </div>
+          </div>
+          <div style="flex: 1 1 240px">
+            <div class="text-caption text-medium-emphasis mb-1">НГП — накопленный групповой</div>
+            <div class="d-flex ga-2">
+              <v-text-field v-model="draft.ngpMin" type="number" placeholder="от"
+                variant="outlined" density="compact" hide-details clearable />
+              <v-text-field v-model="draft.ngpMax" type="number" placeholder="до"
+                variant="outlined" density="compact" hide-details clearable />
+            </div>
+          </div>
+        </div>
+        <p class="p-fsec__hint">Можно заполнить только одну границу — например, «ЛП от 500».</p>
+      </section>
+
+      <section class="p-fsec">
         <h4 class="p-fsec__title">Дата регистрации</h4>
         <v-btn-toggle v-model="draft.dateMode" mandatory density="compact"
           variant="outlined" divided color="primary" class="mb-4 p-datemode">
@@ -1260,6 +1285,13 @@ function emptyFilters() {
     monthYear: new Date().getFullYear(),
     onlyClient: false,
     onlyBlocked: false,
+    // Диапазоны объёмов. Строки, а не числа: пустое поле должно означать
+    // «фильтр не задан», а 0 — настоящий ноль. С number-полями Vuetify
+    // возвращает пустую строку и null вперемешку, на этом легко ошибиться.
+    lpMin: '',
+    lpMax: '',
+    ngpMin: '',
+    ngpMax: '',
   };
 }
 
@@ -1309,6 +1341,15 @@ function filterParams(f, query) {
   if (f.to) params.registered_to = f.to;
   if (f.onlyClient) params.is_client = 1;
   if (f.onlyBlocked) params.is_blocked = 1;
+  // Пустое поле — фильтр не задан. Проверяем именно на пустую строку,
+  // а не на «ложность»: ноль — законная граница («ЛП до 0»).
+  for (const [key, param] of [
+    ['lpMin', 'lp_min'], ['lpMax', 'lp_max'],
+    ['ngpMin', 'ngp_min'], ['ngpMax', 'ngp_max'],
+  ]) {
+    const v = f[key];
+    if (v !== '' && v !== null && v !== undefined) params[param] = v;
+  }
   return params;
 }
 
@@ -1408,6 +1449,17 @@ const activeChips = computed(() => {
   if (d) out.push({ key: 'date', label: d });
   if (applied.value.onlyClient) out.push({ key: 'client', label: 'Только клиенты' });
   if (applied.value.onlyBlocked) out.push({ key: 'blocked', label: 'Только заблокированные' });
+
+  // Диапазоны объёмов — одной фишкой на показатель, чтобы не засорять строку
+  // двумя чипами там, где заданы обе границы.
+  for (const [name, minKey, maxKey] of [['ЛП', 'lpMin', 'lpMax'], ['НГП', 'ngpMin', 'ngpMax']]) {
+    const lo = applied.value[minKey], hi = applied.value[maxKey];
+    const has = v => v !== '' && v !== null && v !== undefined;
+    if (!has(lo) && !has(hi)) continue;
+    const label = has(lo) && has(hi) ? `${name}: ${lo}–${hi}`
+      : has(lo) ? `${name}: от ${lo}` : `${name}: до ${hi}`;
+    out.push({ key: `vol:${minKey}`, label });
+  }
   return out;
 });
 
@@ -1422,6 +1474,11 @@ function clearChip(key) {
   else if (key === 'date') Object.assign(applied.value, { datePreset: '', from: '', to: '' });
   else if (key === 'client') applied.value.onlyClient = false;
   else if (key === 'blocked') applied.value.onlyBlocked = false;
+  else if (key.startsWith('vol:')) {
+    // Фишка одна на показатель, поэтому снимаем сразу обе границы.
+    const pair = key.slice(4) === 'lpMin' ? ['lpMin', 'lpMax'] : ['ngpMin', 'ngpMax'];
+    pair.forEach(k => { applied.value[k] = ''; });
+  }
   loadData();
 }
 

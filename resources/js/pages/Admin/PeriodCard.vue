@@ -37,18 +37,18 @@
         <v-card class="mb-3">
           <v-card-title class="d-flex align-center pa-3">
             <v-icon class="me-2" color="error">mdi-alert-decagram</v-icon>
-            Штрафы (§5): отрыв + ОП
+            Удержания (§5): отрыв + ОП
             <v-spacer />
             <v-btn v-if="canManagePeriod" size="small" color="error" variant="flat"
               prepend-icon="mdi-calculator-variant"
               :disabled="closure?.isFrozen"
               :loading="loadingPenalties || applyingPenalties"
-              @click="recalcPenalties">Пересчитать штрафы</v-btn>
+              @click="recalcPenalties">Рассчитать удержания</v-btn>
           </v-card-title>
           <v-divider />
           <v-card-text class="pa-3">
             <div v-if="!penalties" class="text-medium-emphasis">
-              Нажмите «Пересчитать штрафы», чтобы запустить расчёт §5 за период.
+              Нажмите «Рассчитать удержания», чтобы запустить расчёт §5 за период.
               Перед записью покажем, сколько комиссий будет затронуто.
             </div>
             <v-row v-else dense>
@@ -226,7 +226,7 @@ async function loadPenalties() {
   try {
     const { data } = await api.post('/admin/finalize/preview', { year: year.value, month: month.value });
     penalties.value = data;
-  } catch (e) { showError(e.response?.data?.message || 'Не удалось рассчитать штрафы'); }
+  } catch (e) { showError(e.response?.data?.message || 'Не удалось рассчитать удержания'); }
   loadingPenalties.value = false;
 }
 
@@ -234,9 +234,9 @@ async function applyPenalties() {
   applyingPenalties.value = true;
   try {
     const { data } = await api.post('/admin/finalize/apply', { year: year.value, month: month.value });
-    showSuccess(data.message || 'Штрафы применены');
+    showSuccess(data.message || 'Удержания рассчитаны');
     penalties.value = data.result || penalties.value;
-  } catch (e) { showError(e.response?.data?.message || 'Не удалось применить штрафы'); }
+  } catch (e) { showError(e.response?.data?.message || 'Не удалось применить удержания'); }
   applyingPenalties.value = false;
 }
 
@@ -246,10 +246,13 @@ async function recalcPenalties() {
   await loadPenalties();
   if (!penalties.value) return;
   const ok = await confirm.ask({
-    title: `Пересчитать штрафы за ${periodLabel.value}?`,
+    title: `Рассчитать удержания за ${periodLabel.value}?`,
     message:
-      `Будет затронуто ${penalties.value.affected ?? 0} комиссий ` +
-      `у ${penalties.value.processed ?? 0} партнёров ` +
+      // Числа про разное: проверено партнёров и изменено комиссий. Прежняя
+      // формулировка «затронуто N комиссий у M партнёров» читалась так,
+      // будто затронуты все M.
+      `Проверено партнёров: ${penalties.value.processed ?? 0}. ` +
+      `Будет изменено комиссий: ${penalties.value.affected ?? 0} ` +
       `(отрыв ×0.5 — ${penalties.value.detachmentAffected ?? 0}, ` +
       `ОП ×0.8 — ${penalties.value.opAffected ?? 0}). ` +
       `Изменения будут записаны в комиссии.`,
