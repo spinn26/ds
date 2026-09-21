@@ -12,7 +12,13 @@ use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Api\NotificationController;
 
 /**
- * Финализация месяца — штрафы по спеке §5 (detachment, OP, combo).
+ * Финализация месяца — расчёт удержаний по спеке §5 (detachment, OP, combo).
+ *
+ * В интерфейсе это называется «удержания»: так подписаны кнопки на
+ * «Квалификациях», «Комиссиях» и карточке периода. Слова «штрафы» и
+ * «финализация» из текстов для пользователя убраны (21.09.2026) — один
+ * и тот же расчёт назывался тремя разными словами, и по уведомлению было
+ * не понять, какую кнопку нажимали.
  */
 class AdminFinalizeController extends Controller
 {
@@ -64,7 +70,7 @@ class AdminFinalizeController extends Controller
             ]);
 
             return response()->json([
-                'message' => "Месяц {$period} ещё не завершён — применять финализацию нельзя: "
+                'message' => "Месяц {$period} ещё не завершён — рассчитывать удержания нельзя: "
                     . 'снимок зафиксирует неполные объёмы и НГП перестанет расти. '
                     . 'Посмотрите прогноз через «Превью».',
             ], 422);
@@ -106,7 +112,7 @@ class AdminFinalizeController extends Controller
 
         NotificationController::notifyStaff(
             'system',
-            sprintf('Штрафы применены: %02d.%d', $data['month'], $data['year']),
+            sprintf('Удержания рассчитаны: %02d.%d', $data['month'], $data['year']),
             // Два числа про РАЗНОЕ: processed — сколько партнёров проверили,
             // affected — сколько комиссий реально изменили. Прежняя формулировка
             // «затронуто N комиссий у M партнёров» читалась так, будто затронуты
@@ -121,7 +127,7 @@ class AdminFinalizeController extends Controller
         );
 
         return response()->json([
-            'message' => "Финализация выполнена. Проверено партнёров: {$result['processed']}, изменено комиссий: {$result['affected']}",
+            'message' => "Расчёт удержаний выполнен. Проверено партнёров: {$result['processed']}, изменено комиссий: {$result['affected']}",
             'result' => $result,
         ]);
     }
