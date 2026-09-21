@@ -31,6 +31,7 @@ class PartnerListingService
     public const FILTERS = [
         'search', 'activity', 'active', 'partner_id', 'inviter_name', 'email', 'phone',
         'registered_from', 'registered_to', 'code', 'is_client', 'is_blocked',
+        'lp_min', 'lp_max', 'ngp_min', 'ngp_max',
     ];
 
     /**
@@ -137,6 +138,20 @@ class PartnerListingService
                         ->whereRaw(sprintf(self::PHONE_DIGITS, '"phone"') . ' ilike ?', [$phoneLike]);
                 })->orWhereRaw(sprintf(self::PHONE_DIGITS, 'phone') . ' ilike ?', [$phoneLike]);
             });
+        }
+        // Диапазоны объёмов. Фильтруем по тем же колонкам consultant, из
+        // которых present() берёт значения для колонок «ЛП» и «НГП», —
+        // иначе фильтр и таблица разошлись бы. Пустая строка и мусор
+        // отбрасываются: is_numeric оставляет только настоящие числа.
+        foreach ([
+            'lp_min' => ['personalVolume', '>='],
+            'lp_max' => ['personalVolume', '<='],
+            'ngp_min' => ['groupVolumeCumulative', '>='],
+            'ngp_max' => ['groupVolumeCumulative', '<='],
+        ] as $key => [$column, $op]) {
+            if (isset($filters[$key]) && is_numeric($filters[$key])) {
+                $query->where($column, $op, (float) $filters[$key]);
+            }
         }
 
         return $query;
