@@ -248,8 +248,11 @@ async function recalcPenalties() {
   const ok = await confirm.ask({
     title: `Пересчитать штрафы за ${periodLabel.value}?`,
     message:
-      `Будет затронуто ${penalties.value.affected ?? 0} комиссий ` +
-      `у ${penalties.value.processed ?? 0} партнёров ` +
+      // Числа про разное: проверено партнёров и изменено комиссий. Прежняя
+      // формулировка «затронуто N комиссий у M партнёров» читалась так,
+      // будто затронуты все M.
+      `Проверено партнёров: ${penalties.value.processed ?? 0}. ` +
+      `Будет изменено комиссий: ${penalties.value.affected ?? 0} ` +
       `(отрыв ×0.5 — ${penalties.value.detachmentAffected ?? 0}, ` +
       `ОП ×0.8 — ${penalties.value.opAffected ?? 0}). ` +
       `Изменения будут записаны в комиссии.`,

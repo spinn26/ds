@@ -107,12 +107,21 @@ class AdminFinalizeController extends Controller
         NotificationController::notifyStaff(
             'system',
             sprintf('Штрафы применены: %02d.%d', $data['month'], $data['year']),
-            sprintf('Затронуто %d комиссий у %d партнёров', $result['affected'] ?? 0, $result['processed'] ?? 0),
+            // Два числа про РАЗНОЕ: processed — сколько партнёров проверили,
+            // affected — сколько комиссий реально изменили. Прежняя формулировка
+            // «затронуто N комиссий у M партнёров» читалась так, будто затронуты
+            // все M. Двоеточия заодно снимают вопрос со склонением: «изменено
+            // 1 комиссия / 4 комиссии / 5 комиссий» одним шаблоном не покрыть.
+            sprintf(
+                'Проверено партнёров: %d · изменено комиссий: %d',
+                $result['processed'] ?? 0,
+                $result['affected'] ?? 0
+            ),
             sprintf('/manage/periods/%d-%02d', $data['year'], $data['month']),
         );
 
         return response()->json([
-            'message' => "Финализация выполнена: затронуто {$result['affected']} комиссий у {$result['processed']} партнёров",
+            'message' => "Финализация выполнена. Проверено партнёров: {$result['processed']}, изменено комиссий: {$result['affected']}",
             'result' => $result,
         ]);
     }
