@@ -1,0 +1,105 @@
+/* tokens-v2.css — токены редизайна «Рабочего стола» (ds-redesign/design/tokens.css).
+   Источник правды по цветам v2: правится вместе с дизайн-пакетом, руками
+   значения не подкручиваем — контраст в обеих темах уже проверен.
+
+   Тема берётся с атрибута <html data-theme="light|dark">; его проставляет
+   app.js по выбранной теме Vuetify. Старый ds-tokens.css (--ds-*) остаётся
+   для всех прежних страниц, имена не пересекаются.
+
+   Шрифт Onest подключён <link>-ом в resources/views/app.blade.php, поэтому
+   @import из исходного файла здесь убран — иначе грузился бы дважды. */
+
+
+:root, [data-theme="light"] {
+  --bg: #f3f5f2;  /* Фон страницы под всеми карточками и за сайдбаром. */
+  --surface: #ffffff;  /* Карточки, виджеты, сайдбар, топбар. */
+  --surface-2: #eef2ed;  /* Утопленные области внутри карточки: поле заметки, hover пункта меню, плитки быстрых действий, KPI-плитки. */
+  --border: #e2e8e1;  /* Hairline-граница карточек и разделителей (1px). Декоративная, не несёт смысла. */
+  --border-strong: #8a988f;  /* Граница полей ввода и контролов — 3:1 на surface в обеих темах. */
+  --ink: #132019;  /* Основной текст и цифры на bg, surface, surface-2. */
+  --ink-muted: #56655c;  /* Подписи, даты, роли, плейсхолдеры на bg, surface, surface-2 и brand-soft (≥5:1). */
+  --brand: #1b7a3b;  /* Фирменный зелёный: активный пункт меню, ссылки, основная кнопка, иконки акцента. Как текст — на surface, surface-2, brand-soft. */
+  --brand-hover: #146430;  /* Hover/pressed основной кнопки и ссылок. */
+  --brand-soft: #e2f2e6;  /* Фон активного пункта меню, чипов-контактов, выноски с правилом акции. */
+  --on-brand: #ffffff;  /* Текст и иконки на заливке brand (в тёмной теме зелёный светлый — текст на нём тёмный). */
+  --brand-deep: #0f3b21;  /* Фон hero-блока «Фокус дня» и обложек новостей. */
+  --on-brand-deep: #eafbef;  /* Текст и цифры на обложках brand-deep. */
+  --on-brand-deep-muted: #a9c4b1;  /* Вторичный текст на brand-deep и brand-deep-2 (≥5.5:1): дата и подписи в hero. */
+  --brand-deep-2: #17492b;  /* Панель внутри hero (прогресс акции), трек прогресс-бара на brand-deep. */
+  --brand-glow: #4ade80;  /* Яркий зелёный только на brand-deep / brand-deep-2: eyebrow, заливка прогресса, текущий месяц (текст на нём — on-brand в тёмном значении #05210f). */
+  --on-brand-glow: #05210f;  /* Текст на заливке brand-glow. */
+  --accent-glow: #fdba74;  /* Оранжевый акцент на brand-deep: тег акции в hero. */
+  --scrim: rgba(8,14,11,0.45);  /* Затемнение под модальными окнами: палитра поиска, выезжающее меню. */
+  --accent: #b93c0a;  /* Оранжевый: НГП, промо-акции, счётчики внимания. Текст — на surface, surface-2, accent-soft. */
+  --accent-soft: #fdebdf;  /* Фон тега «Промо» и плашки «Важно». */
+  --info: #1c5fc0;  /* Синий: баллы ЛП и ГП, тег «Обновление». Текст — на surface, surface-2, info-soft. */
+  --info-soft: #e3edfb;  /* Фон тега «Обновление». */
+  --danger: #b42318;  /* Ошибки и бейдж непрочитанных уведомлений (с числом, не только цветом). */
+  --on-danger: #ffffff;  /* Число на бейдже danger. */
+  --focus: #1c5fc0;  /* Кольцо фокуса 2px с отступом 2px — ≥3:1 на всех поверхностях. */
+  --shadow-card: 0 1px 2px rgba(19,32,25,0.05), 0 6px 20px rgba(19,32,25,0.05);
+  --shadow-hover: 0 2px 4px rgba(19,32,25,0.06), 0 14px 32px rgba(19,32,25,0.10);
+  --shadow-pop: 0 12px 40px rgba(19,32,25,0.18), 0 2px 6px rgba(19,32,25,0.08);
+}
+
+[data-theme="dark"] {
+  --bg: #0b0f0d;
+  --surface: #131915;
+  --surface-2: #1a221d;
+  --border: #232d27;
+  --border-strong: #5f6e65;
+  --ink: #e7efe9;
+  --ink-muted: #98a79e;
+  --brand: #4ade80;
+  --brand-hover: #6ee79a;
+  --brand-soft: #15301f;
+  --on-brand: #05210f;
+  --brand-deep: #0f2b19;
+  --on-brand-deep: #eafbef;
+  --on-brand-deep-muted: #a9c4b1;
+  --brand-deep-2: #153a23;
+  --brand-glow: #4ade80;
+  --on-brand-glow: #05210f;
+  --accent-glow: #fdba74;
+  --scrim: rgba(0,0,0,0.6);
+  --accent: #fb923c;
+  --accent-soft: #35200f;
+  --info: #6aa8ff;
+  --info-soft: #15243b;
+  --danger: #f87171;
+  --on-danger: #2a0606;
+  --focus: #8fbcff;
+  --shadow-card: 0 1px 2px rgba(0,0,0,0.4);
+  --shadow-hover: 0 8px 28px rgba(0,0,0,0.55);
+  --shadow-pop: 0 16px 48px rgba(0,0,0,0.7);
+}
+
+:root {
+  --space-1: 4px;  /* Зазор иконка–текст в чипе. */
+  --space-2: 8px;  /* Зазор между чипами, пунктами меню. */
+  --space-3: 12px;  /* Внутренний отступ плиток, зазор в сетке KPI. */
+  --space-4: 16px;  /* Зазор между карточками на мобильном, отступ заголовка виджета. */
+  --space-5: 20px;  /* Внутренний отступ карточки. */
+  --space-6: 24px;  /* Зазор между карточками на десктопе, поля main. */
+  --space-8: 32px;  /* Отступы hero и страницы новости. */
+  --radius-sm: 8px;  /* Чипы-контакты, пункты меню, поля. */
+  --radius-md: 12px;  /* Кнопки, KPI-плитки, плитки быстрых действий. */
+  --radius-lg: 16px;  /* Карточки и виджеты. */
+  --radius-xl: 20px;  /* Hero и обложка новости. */
+  --radius-pill: 999px;  /* Теги, статус-пилюли, бейджи. */
+  --font-sans: Onest, "Segoe UI", system-ui, sans-serif;
+}
+
+.t-display { font: 700 30px/36px var(--font-sans); letter-spacing: -0.02em; }  /* Приветствие в hero, одно на странице. */
+.t-h1 { font: 700 28px/34px var(--font-sans); letter-spacing: -0.015em; }  /* Заголовок страницы новости. */
+.t-h2 { font: 600 17px/24px var(--font-sans); }  /* Заголовок виджета / секции. */
+.t-h3 { font: 600 15px/22px var(--font-sans); }  /* Заголовок карточки новости, имя в карточке контакта. */
+.t-body-lg { font: 400 16px/26px var(--font-sans); }  /* Текст статьи на странице новости. */
+.t-body { font: 400 14px/22px var(--font-sans); }  /* Основной текст интерфейса, анонсы. */
+.t-label { font: 500 13px/18px var(--font-sans); }  /* Пункты меню, кнопки, чипы. */
+.t-caption { font: 400 12px/16px var(--font-sans); }  /* Даты, роли, вспомогательные подписи. */
+.t-overline { font: 600 11px/14px var(--font-sans); letter-spacing: 0.08em; }  /* Заголовки групп меню, eyebrow в hero. Всегда ПРОПИСНЫМИ. */
+.t-metric { font: 700 26px/32px var(--font-sans); letter-spacing: -0.02em; }  /* Значение KPI-плитки. Всегда font-variant-numeric: tabular-nums. */
+.t-art-numeral { font: 800 64px/64px var(--font-sans); letter-spacing: -0.04em; }  /* Крупная цифра на обложке промо-новости. */
+.t-overline { text-transform: uppercase; }
+.t-metric, .t-art-numeral { font-variant-numeric: tabular-nums; }

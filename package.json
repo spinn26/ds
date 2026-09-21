@@ -26,6 +26,7 @@
         "dayjs": "^1.11.20",
         "exceljs": "^4.4.0",
         "libphonenumber-js": "^1.13.6",
+        "lucide-vue-next": "^1.0.0",
         "maska": "^3.2.0",
         "md-editor-v3": "^6.5.4",
         "pinia": "^3.0.4",

@@ -1,4 +1,4 @@
-import { createApp } from 'vue';
+import { createApp, watch } from 'vue';
 import { createPinia } from 'pinia';
 import piniaPluginPersistedstate from 'pinia-plugin-persistedstate';
 import { VueQueryPlugin } from '@tanstack/vue-query';
@@ -14,6 +14,7 @@ import 'vuetify/styles';
 import VueTelInput from 'vue-tel-input';
 import 'vue-tel-input/vue-tel-input.css';
 import './styles/ds-tokens.css';
+import './styles/tokens-v2.css';
 import './styles/global.css';
 import router from './router';
 import App from './App.vue';
@@ -32,8 +33,16 @@ if (import.meta.env.PROD && import.meta.env.VITE_SENTRY_DSN) {
 }
 
 // Safari private mode throws SecurityError on localStorage — fall back to defaults.
-let savedTheme = 'light';
-try { savedTheme = localStorage.getItem('theme') || 'light'; } catch {}
+// Без сохранённого выбора идём за системной темой (per ds-redesign/design/BRAND.md),
+// а не за light: раньше пользователь с тёмной ОС получал светлый кабинет и
+// переключал тему руками при каждом заходе с нового устройства.
+function systemTheme() {
+    try {
+        return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    } catch { return 'light'; }
+}
+let savedTheme = systemTheme();
+try { savedTheme = localStorage.getItem('theme') || savedTheme; } catch {}
 
 
 const vuetify = createVuetify({
@@ -166,6 +175,27 @@ const i18n = createI18n({
     fallbackLocale: 'ru',
     messages: { ru, en },
 });
+
+// Тема хранится в Vuetify (theme.global.name), а токены редизайна читают
+// <html data-theme>. Синхронизация здесь одна на всё приложение: любой код,
+// который переключает тему Vuetify (шапка кабинета, AdminLayout с его
+// принудительным dark), автоматически перекрашивает и новые компоненты.
+// Второго источника правды не заводим — разъедутся.
+const applyThemeAttribute = (name) => {
+    document.documentElement.setAttribute('data-theme', name === 'dark' ? 'dark' : 'light');
+};
+applyThemeAttribute(savedTheme);
+watch(() => vuetify.theme.global.name.value, applyThemeAttribute);
+
+// Пока пользователь не выбрал тему сам, следуем за системной и на лету.
+try {
+    if (!localStorage.getItem('theme')) {
+        window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change', (e) => {
+            try { if (localStorage.getItem('theme')) return; } catch { return; }
+            vuetify.theme.global.name.value = e.matches ? 'dark' : 'light';
+        });
+    }
+} catch { /* приватный режим — остаёмся на стартовой теме */ }
 
 const app = createApp(App);
 app.use(pinia);

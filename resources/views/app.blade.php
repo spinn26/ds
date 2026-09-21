@@ -23,6 +23,15 @@
     <meta name="msapplication-TileColor" content="#43A047">
 
     <title>DS Consulting Platform</title>
+
+    {{-- Onest — шрифт интерфейса per ds-redesign/design/BRAND.md (кириллица есть).
+         Подключён здесь, а не @import-ом в CSS: так браузер начинает качать
+         шрифт, не дожидаясь разбора бандла. Начертания — те, что использует
+         шкала t-* в tokens-v2.css. --}}
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
     @vite('resources/js/app.js')
 </head>
 <body>
