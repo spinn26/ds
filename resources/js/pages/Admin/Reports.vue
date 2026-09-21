@@ -130,6 +130,9 @@ const reportTypes = [
   { label: '[Финрез] Транзакции', value: 'finrez_transactions' },
   { label: '[Финрез] Комиссии по ФК', value: 'finrez_commissions' },
   { label: 'Статусы партнёров', value: 'partner_status' },
+  // Когорта по дате регистрации: период здесь фильтрует ДАТУ РЕГИСТРАЦИИ,
+  // поэтому periodless не ставим — без периода отчёт теряет смысл.
+  { label: 'Зарегистрированные партнёры — контракты, баллы, активация', value: 'registered_partners' },
   // periodless: снимок всей сети, диапазон в выборке не участвует.
   { label: 'Демография сети — сводка (проценты и возраст)', value: 'partner_demographics_summary', periodless: true },
   { label: 'Демография сети — список партнёров', value: 'partner_demographics', periodless: true },
