@@ -49,9 +49,14 @@ class NewsService
         ];
     }
 
-    /** Одна новость со всем, что нужно странице: текст, акция, CTA, соседи. */
+    /**
+     * Одна новость со всем, что нужно странице: текст, акция, CTA, соседи.
+     *
+     * @return array<string, mixed>|null
+     */
     public function article(int $id, ?int $userId, ?float $promoCurrent = null): ?array
     {
+        /** @var News|null $news */
         $news = News::query()->where('active', true)->find($id);
         if (! $news) {
             return null;
@@ -70,11 +75,11 @@ class NewsService
 
         return $this->card($news, $readIds) + [
             'content' => $news->content,
-            'cta' => $news->meta['cta'] ?? null,
+            'cta' => $this->metaSection($news, 'cta') ?: null,
             // promo — посчитанная панель прогресса, promoMeta — то, что задал
             // редактор: правило, пример, оговорка, советы. Страница рисует по
             // ним блоки вместо того, чтобы верстать их руками в тексте.
-            'promoMeta' => $news->isPromo() ? ($news->meta['promo'] ?? null) : null,
+            'promoMeta' => $news->isPromo() ? ($this->metaSection($news, 'promo') ?: null) : null,
             'promo' => $news->isPromo() ? $this->promoFrom($news, $promoCurrent) : null,
             'others' => $others->map(fn (News $n) => $this->card($n, $otherReadIds))->all(),
         ];
@@ -127,17 +132,32 @@ class NewsService
         return $news ? $this->promoFrom($news, $current, $now) : null;
     }
 
+    /**
+     * Параметры из meta: там лежит всё, что задал редактор, и строгого типа у
+     * содержимого нет. Достаём только массивы — иначе кривая запись в jsonb
+     * уронит страницу обращением к строке как к массиву.
+     *
+     * @return array<string, mixed>
+     */
+    private function metaSection(News $news, string $key): array
+    {
+        $meta = $news->meta;
+        $section = is_array($meta) ? ($meta[$key] ?? null) : null;
+
+        return is_array($section) ? $section : [];
+    }
+
     /** Идёт ли акция этой новости прямо сейчас. */
     private function promoIsRunning(News $news, Carbon $now): bool
     {
-        $promo = $news->meta['promo'] ?? null;
-        if (! $promo || empty($promo['from']) || empty($promo['to'])) {
+        $promo = $this->metaSection($news, 'promo');
+        if ($promo === [] || empty($promo['from']) || empty($promo['to'])) {
             return false;
         }
 
         return $now->betweenIncluded(
-            Carbon::parse($promo['from'])->startOfDay(),
-            Carbon::parse($promo['to'])->endOfDay()
+            Carbon::parse((string) $promo['from'])->startOfDay(),
+            Carbon::parse((string) $promo['to'])->endOfDay()
         );
     }
 
@@ -147,14 +167,14 @@ class NewsService
      */
     private function promoFrom(News $news, ?float $current, ?Carbon $now = null): ?array
     {
-        $promo = $news->meta['promo'] ?? null;
-        if (! $promo) {
+        $promo = $this->metaSection($news, 'promo');
+        if ($promo === []) {
             return null;
         }
 
         $now ??= now();
-        $from = ! empty($promo['from']) ? Carbon::parse($promo['from']) : null;
-        $to = ! empty($promo['to']) ? Carbon::parse($promo['to']) : null;
+        $from = ! empty($promo['from']) ? Carbon::parse((string) $promo['from']) : null;
+        $to = ! empty($promo['to']) ? Carbon::parse((string) $promo['to']) : null;
 
         return [
             'active' => $this->promoIsRunning($news, $now),
@@ -194,10 +214,15 @@ class NewsService
         return $months;
     }
 
-    /** Карточка новости для ленты: без полного текста, он — на странице. */
+    /**
+     * Карточка новости для ленты: без полного текста, он — на странице.
+     *
+     * @param  array<int, int>  $readIds
+     * @return array<string, mixed>
+     */
     private function card(News $news, array $readIds): array
     {
-        $cover = $news->meta['cover'] ?? [];
+        $cover = $this->metaSection($news, 'cover');
         $published = $news->publishedAt();
 
         return [
@@ -223,7 +248,9 @@ class NewsService
      */
     private function excerptFrom(?string $content): string
     {
-        $text = trim(preg_replace('/\s+/u', ' ', strip_tags((string) $content)));
+        // Приведение обязательно: preg_replace отдаёт null при ошибке разбора,
+        // а trim(null) в PHP 8.2 — deprecation.
+        $text = trim((string) preg_replace('/\s+/u', ' ', strip_tags((string) $content)));
         if ($text === '') {
             return '';
         }
@@ -235,7 +262,9 @@ class NewsService
     {
         // Считаем регуляркой по юникоду: str_word_count работает побайтово и
         // на кириллице в UTF-8 даёт мусор.
-        $words = preg_match_all('/\p{L}+/u', strip_tags((string) $content));
+        // preg_match_all при ошибке отдаёт false — приводим, иначе деление
+        // на скорость чтения работает с false.
+        $words = (int) preg_match_all('/\p{L}+/u', strip_tags((string) $content));
 
         return max(1, (int) ceil($words / self::WORDS_PER_MINUTE));
     }

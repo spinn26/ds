@@ -13,6 +13,24 @@ use Illuminate\Database\Eloquent\Model;
  *
  * `meta` хранит то, что у каждой новости своё и меняется редактором, а не
  * кодом: параметры акции, подписи сгенерированной обложки и внешнюю ссылку.
+ *
+ * Поля перечислены аннотациями: анализатор не ходит в базу и без них считает
+ * обращение к любой колонке обращением к несуществующему свойству.
+ *
+ * @property int $id
+ * @property string $title
+ * @property string|null $content
+ * @property string|null $excerpt
+ * @property string $type
+ * @property string|null $kind
+ * @property string|null $cover_url
+ * @property bool $active
+ * @property bool $pinned
+ * @property array<string, mixed>|null $meta
+ * @property int|null $created_by
+ * @property \Illuminate\Support\Carbon|null $published_at
+ * @property \Illuminate\Support\Carbon|null $created_at
+ * @property \Illuminate\Support\Carbon|null $updated_at
  */
 class News extends Model
 {
@@ -33,8 +51,14 @@ class News extends Model
         return $this->kind === 'promo';
     }
 
-    /** Дата публикации; у старых записей её нет — берём дату создания. */
-    public function publishedAt(): ?\Illuminate\Support\Carbon
+    /**
+     * Дата публикации; у старых записей её нет — берём дату создания.
+     *
+     * Тип CarbonInterface, а не Illuminate\Support\Carbon: каст published_at
+     * даёт один класс даты, штатный created_at — другой, и жёсткий тип
+     * расходится с тем, что реально возвращается.
+     */
+    public function publishedAt(): ?\Carbon\CarbonInterface
     {
         return $this->published_at ?? $this->created_at;
     }
